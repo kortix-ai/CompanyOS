@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { PromoNavRow } from './promo-nav-row';
 
@@ -15,7 +17,7 @@ const subscribeNoop = () => () => {};
 
 function readDismissed(): boolean {
   try {
-    return window.localStorage.getItem(MCP_PROMO_DISMISSED_KEY) === '1';
+    return safeGetItem(MCP_PROMO_DISMISSED_KEY) === '1';
   } catch {
     return false;
   }
@@ -39,7 +41,7 @@ export function ProjectMcpNavItem({ onOpenConnect }: { onOpenConnect: () => void
   const dismiss = useCallback(() => {
     setDismissed(true);
     try {
-      window.localStorage.setItem(MCP_PROMO_DISMISSED_KEY, '1');
+      safeSetItem(MCP_PROMO_DISMISSED_KEY, '1');
     } catch {
       // Private mode or blocked storage: dismissed for this page view only.
     }

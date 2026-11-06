@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useEffect, useState } from 'react';
 
@@ -11,7 +13,7 @@ const KEY = 'marketplace:list-href';
 
 export function rememberMarketplaceListHref(href: string): void {
   try {
-    sessionStorage.setItem(KEY, href);
+    safeSessionSetItem(KEY, href);
   } catch {
     // Back falls back to the bare list.
   }
@@ -22,7 +24,7 @@ export function useMarketplaceListHref(): string {
   const [href, setHref] = useState('/marketplace');
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem(KEY);
+      const stored = safeSessionGetItem(KEY);
       if (stored?.startsWith('/')) setHref(stored);
     } catch {
       // Keep the bare list.

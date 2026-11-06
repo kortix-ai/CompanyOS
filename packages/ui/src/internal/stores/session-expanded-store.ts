@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -61,3 +63,5 @@ export const useSessionExpandedStore = create<State>()(
 );
 
 registerPersistedStore(STORAGE_KEY, () => resetPersistedStore(useSessionExpandedStore));
+
+onManagedStorageAdoption(() => { void useSessionExpandedStore.persist.rehydrate(); });

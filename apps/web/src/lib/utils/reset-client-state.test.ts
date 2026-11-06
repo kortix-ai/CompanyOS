@@ -172,14 +172,15 @@ describe('resetClientState resets the SDK identity state', () => {
 });
 
 describe('resetClientState with an IndexedDB purge that never settles', () => {
-  test('still resolves, on the clock', async () => {
+  test('does not wait for an origin-wide purge that would delete sibling copies', async () => {
     const started = Date.now();
     await resetClientState({ idbTimeoutMs: 20 });
     const elapsed = Date.now() - started;
 
     // The assertion that matters is that it resolved AT ALL — without the
     // bound this test does not fail, it times out.
-    expect(elapsed).toBeGreaterThanOrEqual(15);
+    // The owner-scoped device purge runs above. Never start a global purge.
+    expect(elapsed).toBeLessThan(500);
     expect(elapsed).toBeLessThan(2_000);
   });
 

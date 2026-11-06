@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { Button } from '@kortix/ui/button';
 import { Checkbox } from '@kortix/ui/checkbox';
@@ -139,7 +141,7 @@ export function AppsView({
   // render must match it.
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(backgroundKey);
+      const stored = safeGetItem(backgroundKey);
       if (stored !== null) setBackgroundChoice(stored === '1');
     } catch {
       // Blocked storage: keep the default.
@@ -149,7 +151,7 @@ export function AppsView({
   const setBackgroundOpen = (next: boolean) => {
     setBackgroundChoice(next);
     try {
-      window.localStorage.setItem(backgroundKey, next ? '1' : '0');
+      safeSetItem(backgroundKey, next ? '1' : '0');
     } catch {
       // Private window or blocked storage: the choice lasts until reload.
     }

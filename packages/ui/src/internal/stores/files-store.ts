@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '../lib/storage/managed-storage';
+
 
 import { stripTrailingSlashes } from '@kortix/sdk';
 import { createContext, createElement, useContext, useRef, type ReactNode } from 'react';
@@ -183,14 +185,14 @@ const initialState: FilesStoreState = {
   rootPath: null,
   viewMode:
     (typeof window !== 'undefined'
-      ? (localStorage.getItem('files-view-mode') as ViewMode)
+      ? (safeGetItem('files-view-mode') as ViewMode)
       : null) || 'grid',
   sortBy:
-    (typeof window !== 'undefined' ? (localStorage.getItem('files-sort-by') as SortField) : null) ||
+    (typeof window !== 'undefined' ? (safeGetItem('files-sort-by') as SortField) : null) ||
     'name',
   sortOrder:
     (typeof window !== 'undefined'
-      ? (localStorage.getItem('files-sort-order') as SortOrder)
+      ? (safeGetItem('files-sort-order') as SortOrder)
       : null) || 'asc',
   expandedDirs: new Set(['/workspace']),
   isSidebarCollapsed: false,
@@ -448,7 +450,7 @@ export function createFilesStore(): FilesStoreApi {
     setViewMode: (mode: ViewMode) => {
       set({ viewMode: mode });
       try {
-        localStorage.setItem('files-view-mode', mode);
+        safeSetItem('files-view-mode', mode);
       } catch {}
     },
 
@@ -456,21 +458,21 @@ export function createFilesStore(): FilesStoreApi {
       const next = get().viewMode === 'grid' ? 'list' : 'grid';
       set({ viewMode: next });
       try {
-        localStorage.setItem('files-view-mode', next);
+        safeSetItem('files-view-mode', next);
       } catch {}
     },
 
     setSortBy: (field: SortField) => {
       set({ sortBy: field });
       try {
-        localStorage.setItem('files-sort-by', field);
+        safeSetItem('files-sort-by', field);
       } catch {}
     },
 
     setSortOrder: (order: SortOrder) => {
       set({ sortOrder: order });
       try {
-        localStorage.setItem('files-sort-order', order);
+        safeSetItem('files-sort-order', order);
       } catch {}
     },
 
@@ -478,7 +480,7 @@ export function createFilesStore(): FilesStoreApi {
       const next = get().sortOrder === 'asc' ? 'desc' : 'asc';
       set({ sortOrder: next });
       try {
-        localStorage.setItem('files-sort-order', next);
+        safeSetItem('files-sort-order', next);
       } catch {}
     },
   }));

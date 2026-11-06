@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { createSafeJSONStorage } from '../lib/storage/managed-storage';
 import { useKortixComputerStore } from './kortix-computer-store';
@@ -209,3 +211,5 @@ export function openFileInSessionPanel(sessionId: string, path: string, line?: n
 
   useKortixComputerStore.getState().setIsSidePanelOpen(true);
 }
+
+onManagedStorageAdoption(() => { void useSessionBrowserStore.persist.rehydrate(); });

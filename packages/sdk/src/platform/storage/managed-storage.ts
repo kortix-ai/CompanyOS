@@ -30,6 +30,7 @@
  * deliberately NOT registered, so they survive a reclaim.
  */
 
+import { createIdentityStorage } from './identity-storage';
 import { createJSONStorage, type StateStorage } from 'zustand/middleware';
 
 /** Registered prefixes for caches that are safe to evict to reclaim quota. */
@@ -71,10 +72,53 @@ export function registerDisposableKey(key: string): void {
 function resolveStorage(name: 'localStorage' | 'sessionStorage'): Storage | null {
   if (typeof window === 'undefined') return null;
   try {
-    return window[name] ?? null;
+    const raw = window[name] ?? null;
+    if (!raw || !selectedDocument()) return raw;
+    return scopedStorage(name, raw);
   } catch {
     return null;
   }
+}
+
+function selectedDocument(): boolean {
+  return typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '');
+}
+const scopes = new Map<string, ReturnType<typeof createIdentityStorage>>();
+let verifiedOwner: string | null = null;
+let attached = false;
+const hydration = new Set<() => void>();
+export function onManagedStorageAdoption(hydrate: () => void): void { hydration.add(hydrate); }
+function scopedStorage(name: string, raw: Storage): Storage {
+  let scope = scopes.get(name);
+  if (!scope) {
+    scope = createIdentityStorage(raw);
+    if (attached && verifiedOwner) scope.adopt(verifiedOwner);
+    scopes.set(name, scope);
+  }
+  const adapter = scope.storage;
+  const keys = () => {
+    if (!attached || !verifiedOwner) return [];
+    const prefix = `identity-storage:${encodeURIComponent(verifiedOwner)}:`;
+    return Array.from({ length: raw.length }, (_, index) => raw.key(index))
+      .filter((key): key is string => key !== null && key.startsWith(prefix))
+      .map(key => key.slice(prefix.length));
+  };
+  return { get length() { return keys().length; }, key: index => keys()[index] ?? null,
+    clear() { for (const key of keys()) adapter.removeItem(key); }, ...adapter };
+}
+/** Host calls only after verifying the selected document's subject. */
+export function adoptManagedStorage(userId: string): void {
+  if (!selectedDocument()) return;
+  if (verifiedOwner && verifiedOwner !== userId) throw new Error('Document storage owner changed');
+  const first = !verifiedOwner;
+  verifiedOwner = userId;
+  attached = true;
+  for (const scope of scopes.values()) scope.adopt(userId);
+  if (first) for (const hydrate of hydration) hydrate();
+}
+export function detachManagedStorage(): void {
+  attached = false;
+  for (const scope of scopes.values()) scope.detach();
 }
 
 /**

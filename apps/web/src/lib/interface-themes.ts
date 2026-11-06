@@ -1,3 +1,4 @@
+import { safeGetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 /**
  * Interface themes = a `next-themes` mode plus one chosen palette per mode.
  *
@@ -195,4 +196,4 @@ export const INTERFACE_THEME_INIT_SCRIPT = `(function(){try{var d=document.docum
   THEMED_ROUTE_SOURCE,
 )}).test(location.pathname))return;var L=${scriptLiteral(LIGHT_THEME_IDS)},D=${scriptLiteral(
   DARK_THEME_IDS,
-)},s={};try{var r=localStorage.getItem('${USER_PREFERENCES_STORAGE_KEY}'),p=r?JSON.parse(r):null;s=(p&&p.state&&p.state.preferences)||{};}catch(e){}d.setAttribute('data-light-theme',L.indexOf(s.lightTheme)>=0?s.lightTheme:'${DEFAULT_LIGHT_THEME}');d.setAttribute('data-dark-theme',D.indexOf(s.darkTheme)>=0?s.darkTheme:'${DEFAULT_DARK_THEME}');}catch(e){}})();`;
+)},s={};try{var r=safeGetItem('${USER_PREFERENCES_STORAGE_KEY}'),p=r?JSON.parse(r):null;s=(p&&p.state&&p.state.preferences)||{};}catch(e){}d.setAttribute('data-light-theme',L.indexOf(s.lightTheme)>=0?s.lightTheme:'${DEFAULT_LIGHT_THEME}');d.setAttribute('data-dark-theme',D.indexOf(s.darkTheme)>=0?s.darkTheme:'${DEFAULT_DARK_THEME}');}catch(e){}})();`;

@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -65,9 +67,9 @@ export default function ProjectIndexPage() {
     if (resolveBillingState(accountState) !== 'no_subscription') return;
 
     const storageKey = `${FREE_ONBOARDING_UPGRADE_MODAL_KEY}:${projectAccountId}`;
-    if (window.localStorage.getItem(storageKey) === '1') return;
+    if (safeGetItem(storageKey) === '1') return;
 
-    window.localStorage.setItem(storageKey, '1');
+    safeSetItem(storageKey, '1');
     openUpgradeDialog(
       billingDialogArgs('no_subscription', accountState, projectAccountId, tI18nComplete),
     );

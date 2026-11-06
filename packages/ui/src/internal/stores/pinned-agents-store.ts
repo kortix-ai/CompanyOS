@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -40,3 +42,5 @@ export function usePinnedAgents(projectId: string): string[] {
 }
 
 registerPersistedStore(STORAGE_KEY, () => resetPersistedStore(usePinnedAgentsStore));
+
+onManagedStorageAdoption(() => { void usePinnedAgentsStore.persist.rehydrate(); });

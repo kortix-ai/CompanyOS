@@ -105,6 +105,7 @@ let adopted: {
   queries: PersistedQueryCache;
   copies: SavedCopyStore | null;
   detach: () => void;
+  purgeCopies: () => Promise<void>;
 } | null = null;
 
 /** Restore `userId`'s caches into the shared query client and keep them current. */
@@ -112,7 +113,7 @@ export function adoptDeviceCaches(userId: string): void {
   if (adopted?.userId === userId) return;
   // Never two users at once: the previous persister would write this user's
   // queries under its own key.
-  if (adopted) void clearDeviceCaches();
+  if (adopted) detachDeviceCaches();
   const storage = browserKeyValueStorage();
   if (!storage) return;
   try {
@@ -125,7 +126,13 @@ export function adoptDeviceCaches(userId: string): void {
     //
     // No IndexedDB (a blocked or partitioned context): sessions open from the
     // server's copy, as before the device kept one.
-    const indexed = indexedDBKeyValueStorage();
+    let live = true;
+    const rawIndexed = indexedDBKeyValueStorage();
+    const indexed = rawIndexed ? {
+      getItem: (key: string) => live ? rawIndexed.getItem(key) : null,
+      setItem: (key: string, value: string) => live ? rawIndexed.setItem(key, value) : undefined,
+      removeItem: (key: string) => rawIndexed.removeItem(key),
+    } : null;
     const copyStorage = indexed ? withFirstReadFromMemory(indexed) : null;
     const copies = copyStorage ? createSavedCopyStore({ storage: copyStorage, userId }) : null;
     const opensOn = sessionInUrl();
@@ -164,7 +171,9 @@ export function adoptDeviceCaches(userId: string): void {
       userId,
       queries,
       copies,
+      purgeCopies: () => rawIndexed ? createSavedCopyStore({ storage: rawIndexed, userId }).clear() : Promise.resolve(),
       detach: () => {
+        live = false;
         stopFollowing();
         stopPersisting();
         window.removeEventListener('pagehide', flush);
@@ -194,6 +203,14 @@ export function adoptDeviceCaches(userId: string): void {
   }
 }
 
+/** Detach this document without deleting another tab's persisted copies. */
+export function detachDeviceCaches(): void {
+  const current = adopted;
+  adopted = null;
+  current?.detach();
+  setSavedCopyStore(null);
+}
+
 /**
  * Stop writing, then forget, the adopted user's caches. The stop is
  * synchronous: once this returns, nothing can write the next user's data under
@@ -208,7 +225,7 @@ export function clearDeviceCaches(): Promise<void> {
   // so the clear also removes a copy written while it was queued, and no
   // write can start after it.
   setSavedCopyStore(null);
-  return Promise.all([current.queries.clear(), current.copies?.clear()]).then(() => undefined);
+  return Promise.all([current.queries.clear(), current.purgeCopies()]).then(() => undefined);
 }
 
 /** Key prefixes of the retired session caches: the runtime lists and the localStorage saved copies. */

@@ -153,6 +153,7 @@ let queue: Promise<void> = Promise.resolve();
  * a time, in call order. Never rejects.
  */
 export function syncWebPush(want: boolean): Promise<void> {
+  if (typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '')) return Promise.resolve();
   if (!want) registeredFor = null;
   queue = queue.then(want ? subscribe : unsubscribe).catch(warnOnce);
   return queue;
@@ -163,6 +164,7 @@ export function syncWebPush(want: boolean): Promise<void> {
  * remount of the host for the same person sends nothing.
  */
 export function ensureWebPush(userId: string): Promise<void> {
+  if (typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '')) return Promise.resolve();
   if (registeredFor === userId) return queue;
   registeredFor = userId;
   queue = queue.then(subscribe).catch((error: unknown) => {
@@ -177,6 +179,7 @@ export function ensureWebPush(userId: string): Promise<void> {
  * at aal2. A browser that never subscribed sends nothing.
  */
 export function reregisterWebPush(): Promise<void> {
+  if (typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '')) return Promise.resolve();
   queue = queue
     .then(async () => {
       const registration = await navigator.serviceWorker.getRegistration();
@@ -207,5 +210,6 @@ export function detectWebPush(): Promise<void> {
 
 /** Sign-out: the next person on this browser must not get this person's notifications. */
 export function stopWebPush(): Promise<void> {
+  if (typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '')) return Promise.resolve();
   return webPushSupported() ? syncWebPush(false) : Promise.resolve();
 }

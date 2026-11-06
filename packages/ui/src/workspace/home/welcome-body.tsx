@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 
@@ -102,13 +104,13 @@ export function ProjectHomeWelcomeBody({
   const [greeting, setGreeting] = useState(HOME_GREETINGS[0]);
   useLayoutEffect(() => {
     try {
-      const stored = window.localStorage.getItem(HOME_GREETING_STORAGE_KEY);
+      const stored = safeGetItem(HOME_GREETING_STORAGE_KEY);
       // A layout effect on purpose: the swap has to land before first paint,
       // and the value cannot be read during render (no window on the server).
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setGreeting(HOME_GREETINGS[greetingIndexFor(stored)]);
       const n = Number.parseInt(stored ?? '', 10);
-      window.localStorage.setItem(
+      safeSetItem(
         HOME_GREETING_STORAGE_KEY,
         String(Number.isFinite(n) && n >= 0 ? n + 1 : 1),
       );

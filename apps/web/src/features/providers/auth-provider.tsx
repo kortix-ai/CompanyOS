@@ -1,10 +1,15 @@
 'use client';
+import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
 import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
 import { IDENTITY_MARKER_KEY, shouldResetClientState } from '@/lib/auth/identity-marker';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
 import { isDefinitiveSessionRejection } from '@/lib/auth/session-rejection';
+import { adoptManagedStorage, detachManagedStorage } from '@kortix/ui/internal/lib/storage/managed-storage';
+import { detachDeviceCaches } from '@/lib/device-caches';
+import { getSharedQueryClient } from '@kortix/ui/internal/lib/query-client-singleton';
+import { resetIdentityState } from '@kortix/sdk/react';
 import { adoptDeviceCaches } from '@/lib/device-caches';
 import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 import { createClient } from '@/lib/supabase/client';
@@ -40,6 +45,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const supabase = useMemo(() => createClient(), []);
+  const [selectedDocument, setSelectedDocument] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,27 +68,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let active = true;
     const selected = browserDocumentIdentity();
     if (selected) {
-      const unsubscribe = selected.subscribe(() => {
-        if (!active) return;
-        setSession(null);
-        setUser(null);
-        setBootstrapError(new Error('Saved sign-in is unavailable. Retry authentication.'));
-        setIsLoading(false);
+      setSelectedDocument(true);
+      let validating = false;
+      const lifecycle = createBrowserLifecycle({
+        validate: async () => {
+          validating = true;
+          selected.getToken.invalidate();
+          validating = false;
+          return withAuthBootstrapTimeout(selectedDocumentSession(), AUTH_BOOTSTRAP_TIMEOUT_MS);
+        },
+        clear: () => {
+          detachManagedStorage();
+          detachDeviceCaches();
+          getSharedQueryClient()?.clear();
+          resetIdentityState();
+          setSession(null);
+          setUser(null);
+          setIsLoading(true);
+        },
+        publish: (verified) => {
+          adoptManagedStorage(verified.user.id);
+          adoptDeviceCaches(verified.user.id);
+          setSession(verified);
+          setUser(verified.user);
+          setBootstrapError(null);
+          setIsLoading(false);
+        },
+        error: (error) => {
+          if ([401, 404].includes((error as { status?: number })?.status ?? 0)) selected.select(null);
+          setBootstrapError(error instanceof Error ? error : new Error('Browser identity unavailable'));
+          setIsLoading(false);
+        },
       });
-      selectedDocumentSession().then((verified) => {
-        if (!active) return;
-        setSession(verified);
-        setUser(verified.user);
-        setIsLoading(false);
-      }).catch((error) => {
-        if (!active) return;
-        setSession(null);
-        setUser(null);
-        setBootstrapError(error instanceof Error ? error : new Error('Browser identity unavailable'));
-        setIsLoading(false);
-      });
-      return () => { active = false; unsubscribe(); };
+      // Self-initiated cache invalidation is not another validation request.
+      const revalidate = () => lifecycle.revalidate();
+      const unsubscribe = selected.subscribe(() => { if (!validating) lifecycle.revalidate(); });
+      const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('kortix-browser-roster');
+      if (channel) channel.onmessage = (event) => {
+        if (event.data?.slot === selected.getSlot()) revalidate();
+      };
+      window.addEventListener('focus', revalidate);
+      window.addEventListener('pageshow', revalidate);
+      window.addEventListener('online', revalidate);
+      const heartbeat = window.setInterval(() => lifecycle.revalidate(false), 30_000);
+      revalidate();
+      return () => {
+        active = false;
+        lifecycle.dispose();
+        unsubscribe();
+        channel?.close();
+        window.clearInterval(heartbeat);
+        window.removeEventListener('focus', revalidate);
+        window.removeEventListener('pageshow', revalidate);
+        window.removeEventListener('online', revalidate);
+      };
     }
+
     /**
      * Make the client state safe to hand to `nextUserId`, then record that it
      * belongs to them. Resolves only once any wipe has finished, so callers can
@@ -283,7 +324,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [supabase, session, user, isLoading, bootstrapError, retryAuth],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{selectedDocument && (!user || isLoading) ? <div role="status">{bootstrapError ? 'Saved sign-in is unavailable. Retry authentication.' : 'Validating saved sign-in…'}{bootstrapError && <button onClick={retryAuth}>Retry</button>}</div> : children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

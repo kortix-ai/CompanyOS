@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import type { CaptureDevice } from '@kortix/sdk';
 import { useCaptureWorkspace } from '@kortix/sdk/react';
@@ -57,7 +59,7 @@ const LAST_ACCOUNT_KEY = 'kortix.capture.account';
 
 export function rememberCaptureAccount(accountId: string) {
   try {
-    localStorage.setItem(LAST_ACCOUNT_KEY, accountId);
+    safeSetItem(LAST_ACCOUNT_KEY, accountId);
   } catch {
     // A private window or blocked storage: `/capture` falls back to the first account.
   }
@@ -65,7 +67,7 @@ export function rememberCaptureAccount(accountId: string) {
 
 export function lastCaptureAccount(): string | null {
   try {
-    return localStorage.getItem(LAST_ACCOUNT_KEY);
+    return safeGetItem(LAST_ACCOUNT_KEY);
   } catch {
     return null;
   }

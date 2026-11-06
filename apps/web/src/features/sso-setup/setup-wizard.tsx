@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { HubLink, useHubSearchParams } from '@kortix/ui/internal/account-hub/account-hub-location';
 import { hubTarget, openAccountPanel } from '@kortix/ui/internal/stores/account-panel-store';
@@ -112,7 +114,7 @@ function storageKey(flow: Flow, accountId: string, provider: string) {
 
 function loadCompleted(flow: Flow, accountId: string, provider: string): string[] {
   try {
-    const raw = window.localStorage.getItem(storageKey(flow, accountId, provider));
+    const raw = safeGetItem(storageKey(flow, accountId, provider));
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
   } catch {
@@ -122,7 +124,7 @@ function loadCompleted(flow: Flow, accountId: string, provider: string): string[
 
 function saveCompleted(flow: Flow, accountId: string, provider: string, ids: string[]) {
   try {
-    window.localStorage.setItem(storageKey(flow, accountId, provider), JSON.stringify(ids));
+    safeSetItem(storageKey(flow, accountId, provider), JSON.stringify(ids));
   } catch {
     // Non-critical — the wizard still works, progress just isn't remembered.
   }
@@ -139,7 +141,7 @@ function metadataStashKey(accountId: string, provider: string) {
 
 function loadMetadataStash(accountId: string, provider: string): MetadataStash | null {
   try {
-    const raw = window.localStorage.getItem(metadataStashKey(accountId, provider));
+    const raw = safeGetItem(metadataStashKey(accountId, provider));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if ((parsed?.kind === 'url' || parsed?.kind === 'xml') && typeof parsed.value === 'string') {
@@ -153,7 +155,7 @@ function loadMetadataStash(accountId: string, provider: string): MetadataStash |
 
 function saveMetadataStash(accountId: string, provider: string, stash: MetadataStash) {
   try {
-    window.localStorage.setItem(metadataStashKey(accountId, provider), JSON.stringify(stash));
+    safeSetItem(metadataStashKey(accountId, provider), JSON.stringify(stash));
   } catch {
     // Non-critical — the import step just won't prefill.
   }
@@ -1653,7 +1655,7 @@ function WizardCore({ accountId, flow }: { accountId: string; flow: Flow }) {
     setScimMinted(null);
     ssoBaselineRef.current = null;
     try {
-      window.localStorage.removeItem(metadataStashKey(accountId, guide.id));
+      safeRemoveItem(metadataStashKey(accountId, guide.id));
     } catch {
       /* non-critical */
     }

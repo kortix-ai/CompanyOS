@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import {
   DEFAULT_DARK_THEME,
@@ -175,3 +177,5 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
     },
   ),
 );
+
+onManagedStorageAdoption(() => { void useUserPreferencesStore.persist.rehydrate(); });

@@ -78,7 +78,7 @@ function sweepStorage(storage: Storage): void {
     if (key !== null) keys.push(key);
   }
   for (const key of keys) {
-    if (isAppOwnedStorageKey(key) && !isKeptStorageKey(key)) {
+    if (!key.startsWith('identity-storage:') && !key.startsWith('kortix.query-cache:') && isAppOwnedStorageKey(key) && !isKeptStorageKey(key)) {
       storage.removeItem(key);
     }
   }

@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { safeLocalStorage } from '../lib/storage/managed-storage';
 import { withoutAppAccessToken } from '../lib/utils/app-access-token';
@@ -308,3 +310,5 @@ export function openTabAndNavigate(
     router.push(href);
   }
 }
+
+onManagedStorageAdoption(() => { void useTabStore.persist.rehydrate(); });

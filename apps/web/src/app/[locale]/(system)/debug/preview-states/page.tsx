@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { SessionDotMatrix } from '@kortix/ui/dot-matrix/session-dot-matrix';
 import type { ShowCarouselItem } from '@kortix/ui/file-viewer';
@@ -46,7 +48,7 @@ function statePageHtml(state: PreviewState, gaveUp = false): string {
   });
   // The give-up branch runs after 40 reloads. Start the counter there.
   return gaveUp
-    ? html.replace("var n = parseInt(sessionStorage.getItem(KEY) || '0', 10) || 0;", 'var n = 40;')
+    ? html.replace("var n = parseInt(safeSessionGetItem(KEY) || '0', 10) || 0;", 'var n = 40;')
     : html;
 }
 

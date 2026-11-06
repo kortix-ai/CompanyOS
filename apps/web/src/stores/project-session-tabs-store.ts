@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { createSafeJSONStorage } from '@kortix/ui/internal/lib/storage/managed-storage';
 import { registerPersistedStore, resetPersistedStore } from '@kortix/ui/internal/stores/persisted-store-registry';
@@ -182,3 +184,5 @@ export const useProjectSessionTabsStore = create<State & Actions>()(
 // Registers this store for `resetClientState()`'s sign-out sweep without
 // `reset-client-state.ts` importing this file — see `persisted-store-registry.ts`.
 registerPersistedStore(STORAGE_KEY, () => resetPersistedStore(useProjectSessionTabsStore));
+
+onManagedStorageAdoption(() => { void useProjectSessionTabsStore.persist.rehydrate(); });

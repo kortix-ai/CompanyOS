@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { stripTrailingSlashes } from '@kortix/sdk';
 import { create } from 'zustand';
@@ -74,3 +76,5 @@ export const useBrowserRecentsStore = create<BrowserRecentsState>()(
 // Registers this store for `resetClientState()`'s sign-out sweep without
 // `reset-client-state.ts` importing this file — see `persisted-store-registry.ts`.
 registerPersistedStore('kortix-browser-recents', () => resetPersistedStore(useBrowserRecentsStore));
+
+onManagedStorageAdoption(() => { void useBrowserRecentsStore.persist.rehydrate(); });

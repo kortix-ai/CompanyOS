@@ -478,3 +478,96 @@ Required continuation before this milestone can be called complete:
 5. Two private project markers, cache/draft isolation, soft/hard/new-tab/back/focus, legacy auth events,
    runtime streams, notification attribution and IndexedDB acceptance remain required.
 6. Preview/menu/callback/chooser work and final kickoff reviews remain outside this continuation.
+
+## Revoked-document lifecycle and persistent ownership continuation, 2026-11-06
+
+Status: implementation advanced; bounded milestone acceptance INCOMPLETE. Default flag remains OFF.
+No push, PR, merge, publication, deployment, new branch, checkout, or delegated work occurred.
+Canonical branch remains multi-account-login-plan, starting at 694eec08f9. Original untracked plans remain untouched.
+
+### Ownership and lifecycle
+
+- AuthProvider now serializes selected-document validation. A generation fence rejects late bootstrap publication.
+  Requests during validation coalesce. Failed acquisition does not recursively retry its own invalidation.
+  Focus, pageshow (including persisted pageshow), and online trigger validation. A 30-second heartbeat
+  detects removals outside this document; each validation has a 15-second bootstrap deadline.
+  Timer scheduling can be suspended by the browser. Focus/pageshow validates on return.
+  The nominal foreground detection bound is 45 seconds (30-second interval plus 15-second deadline).
+- Explicit validation hides private children, detaches persistence, clears this document's QueryClient,
+  and resets SDK session controllers/state before publishing. Background heartbeat keeps the verified
+  view during its request, then clears it on failure. Successful verification republishes the user.
+  401/404 clears the selected SDK slot permanently for this document. Token getters cannot borrow
+  the legacy session. Network/5xx errors remain retryable and do not remove the broker identity.
+- Added host removeBrowserDocumentLogin: SDK broker removal, own matching invalidation, and a
+  token-free BroadcastChannel message carrying only the affected slot. Receiving documents compare
+  only their own slot. No selected identity or token is broadcast. Direct broker calls outside this
+  host helper are detected by authorization failure, focus, or heartbeat.
+- Managed localStorage and sessionStorage now resolve selected documents through an immutable
+  verified-user adapter. Physical keys: identity-storage:<encoded-user-id>:<original-key>.
+  localStorage persists user-owned state across that user's documents. sessionStorage retains its
+  browser tab scope as well as the user namespace. Project/session/workspace scope remains in each
+  original key. Selected documents never read unowned legacy keys. Writes/removals stop on detach.
+  A document cannot adopt another user. Namespace enumeration and cache pruning see only its owner.
+- Current account and all persisted Zustand store modules register adoption rehydration. Drafts use
+  the same managed ScopedCache. First-party direct localStorage/sessionStorage operations in web/UI
+  now use the existing managed adapter, including settings, workspace dismissal state and markers.
+  These are storage substitutions, not a menu/navigation/preview implementation sweep.
+- Selected AuthProvider adopts query and saved-copy stores only after SDK subject verification.
+  Query and IndexedDB saved-copy keys retain their existing user owner. detachDeviceCaches stops
+  the document's persisters without deleting copies. clearDeviceCaches purges only its adopted owner.
+  Retained saved-copy handles stop reads/writes after detach. Purge uses a separate owner-bound index.
+  Legacy reset no longer clears all IndexedDB records or sweeps sibling query-cache entries.
+- Selected documents do not initialize PostHog or modify shared Web Push registrations. This narrow
+  disablement prevents attribution and endpoint reassignment until their complete migration lands.
+  Legacy paths retain their existing registration and analytics behavior.
+
+### RED/GREEN and local checks
+
+All commands use this canonical worktree. Raw evidence remains in ignored output/.
+
+- RED: bun test ./apps/web/src/lib/auth/browser-lifecycle.test.ts: missing lifecycle module.
+  GREEN final: 3 pass, 0 fail, 7 assertions, 3 ms. Covers stale bootstrap, terminal revocation,
+  503 recovery, and concurrent invalidation coalescing. Microtask flushing uses no real-time sleeps.
+- RED: bun test ./packages/sdk/src/platform/storage/identity-storage.test.ts: missing storage adapter.
+  GREEN final via SDK named runner: 1 pass, 0 fail, 4 assertions, 11 ms. Covers ambiguous legacy read,
+  sibling drafts, detached write/removal, immutable ownership, and same-owner reattachment.
+- Named host run: browser-lifecycle.test.ts, browser-consumer.test.ts, device-caches.test.ts,
+  reset-client-state.test.ts: 30 pass, 0 fail, 68 assertions, 87 ms.
+  The device purge test first caught the detached index-read defect; owner-scoped purge fixes it.
+  The old reset timing assertion expected a global purge delay. It now asserts the global purge
+  cannot delay reset; sibling namespaces must survive. The hanging-global-purge mock remains installed.
+- pnpm --filter @kortix/sdk test with explicit files: platform/storage/identity-storage.test.ts,
+  platform/storage/managed-storage.test.ts, core/auth/browser-identity.test.ts,
+  react/reset-identity-state.test.ts, index.isomorphic.test.ts, root-canonical.test.ts: all pass.
+  SDK root/public names and version remain unchanged. New methods are on the existing internal storage entry.
+- pnpm --filter @kortix/sdk typecheck: exit 0. Includes executable examples.
+- pnpm --filter @kortix/sdk run smoke:install: exit 0; packed ESM import and construction pass.
+- pnpm --filter Kortix-Computer-Frontend typecheck and pnpm --filter @kortix/ui typecheck: exit 0.
+- Changed-file web ESLint: 0 errors, 25 warnings. Changed-file UI ESLint: 0 errors, 2 warnings.
+  Includes pre-existing hook/ref warnings and the selected gate's effect state warning.
+- pnpm --filter @kortix/ui test src/internal/notifications/web-push.test.ts: 22 pass, 0 fail,
+  51 assertions, 17 ms. An initial missing-location test-environment error was fixed with optional access.
+- git diff --check: exit 0. No package-wide/full suite ran.
+
+### Real browser evidence and remaining acceptance
+
+- Own assembled API 17708, actual Next 17700, branch database, real local GoTrue, one synthetic vault,
+  and same-profile A/B documents. Local proxy explicitly targets 17708. No mock AuthProvider.
+- B rendered its synthetic identity before actual POST broker removal returned 200. At the 20,672 ms
+  observation, B's token requests included 404, its identity was absent, and only retry UI remained.
+  Focus and synthetic persisted pageshow did not restore B. B had zero input/textarea controls.
+  A still rendered its identity. Actual A token and authenticated accounts requests both returned 200.
+  Synthetic screenshot: output/lifecycle-B-revoked.png. Sanitized summary: output/lifecycle-browser-summary.json.
+- Earlier browser failures exposed self-invalidation during concurrent validation and SSR/client gate
+  mismatch. Validation now invalidates only when a serialized request starts; the selected gate mounts
+  after hydration. The final revocation observation above follows those fixes.
+- Project creation was attempted through the actual authenticated HTTP API for BOTH synthetic users.
+  Both requests returned 409, GitHub App installation required for this account. No production
+  installation was borrowed. Two disjoint private projects, actual composer drafts, query saved copies,
+  and IndexedDB read-back were therefore NOT verified. Existing owner adapter/cache tests do not replace it.
+- Actual browser Back/BFCache journey, injected expired/5xx browser-token recovery, active runtime
+  SSE/socket teardown, late asynchronous IndexedDB completion, and cross-tab legacy Supabase event
+  acceptance remain UNVERIFIED. The synthetic pageshow event is not an actual BFCache navigation.
+- The broader feature remains NOT YET shippable. This bounded milestone must not be marked accepted
+  until the missing project/draft/IDB and lifecycle browser scenarios run. Parent UI/menu/preview/navigation
+  and final reviews remain outstanding. No enablement claim is made.

@@ -1,7 +1,6 @@
 import { clearDeviceCaches } from '@/lib/device-caches';
 import { getSharedQueryClient } from '@kortix/ui/internal/lib/query-client-singleton';
 import { clearUserLocalStorage } from '@/lib/utils/clear-local-storage';
-import { withTimeBudget } from '@kortix/ui/internal/lib/utils/time-budget';
 // A sanctioned reach into an SDK internal module. Sign-out must purge
 // the saved session copies the device keeps in IndexedDB, and that
 // cache is browser-only: it cannot be re-exported from `@kortix/sdk`, whose
@@ -12,7 +11,7 @@ import { useCurrentAccountStore } from '@kortix/ui/internal/stores/current-accou
 import { resetAllRegisteredPersistedStores } from '@kortix/ui/internal/stores/persisted-store-registry';
 import { clearImpersonationSession } from '@kortix/sdk';
 import { resetIdentityState } from '@kortix/sdk/react';
-import { clearSessionIDBCache } from '@kortix/sdk/internal/idb-sync-cache'; // eslint-disable-line no-restricted-imports
+
 
 /**
  * Wipe ALL client-side state tied to the signed-in user.
@@ -35,28 +34,15 @@ import { clearSessionIDBCache } from '@kortix/sdk/internal/idb-sync-cache'; // e
  *      not a delete-list; see `clear-local-storage.ts`. Runs AFTER step 3 so a
  *      store that just had its in-memory state reset has nothing left to
  *      re-persist.
- *   5. Every saved session copy in IndexedDB (`clearSessionIDBCache`), for
- *      every user, beyond the adopted user's copies step 0 clears.
+ *   5. Sibling IndexedDB namespaces survive. Step 0 purges only the adopted owner.
  *
  * Safe to call from anywhere (no React context needed) — the QueryClient is
  * read from the module-level singleton, so AuthProvider (mounted above the
  * React Query provider) can use it too.
  *
- * **Steps 0-4 are SYNCHRONOUS and always complete. Step 5 is bounded and may
- * be outrun.** That distinction is the contract, not an implementation detail:
- * callers await this before publishing a new identity, and `clearSessionIDBCache()`
- * could hang FOREVER — before database version 4, `openDB()` in
- * `packages/sdk/src/browser/cache/idb-sync-cache.ts` had no `onblocked`
- * handler, so an `indexedDB.open` needing a version upgrade while a stale tab
- * held the old version fired neither `success` nor `error`, and the memoized
- * promise parked every later caller. Unbounded, that meant a user could not
- * sign out AND the app could park on its loading frame at sign-in, with no
- * error shown either way. The bound stays: nothing else bounds IndexedDB.
- *
- * Outrunning step 5 is safe because every saved copy names its user, and the
- * saved-copy store refuses a copy written for another user, so the next
- * account cannot read them even if the purge never lands. Everything that would actually leak
- * across identities is already gone by then.
+ * The owner-scoped device purge starts in step 0. It cannot block publication
+ * of the next identity. Every saved copy validates its owner on read.
+ * No origin-wide IndexedDB purge runs: sibling documents own those copies.
  *
  * Does NOT clear `kortix_last_project`. That cookie is owner-bound
  * (`<userId>:<projectId>`) and deliberately survives sign-out — the
@@ -140,8 +126,7 @@ export async function resetClientState({
     console.error('Failed to clear per-user localStorage:', error);
   }
 
-  const purged = await withTimeBudget(clearSessionIDBCache(), idbTimeoutMs);
-  if (purged.status !== 'settled') {
-    console.error('[resetClientState] session IDB purge did not complete:', purged);
-  }
+  // clearDeviceCaches purges only this document's adopted owner. A database-wide
+  // clear would delete saved copies belonging to selected sibling documents.
+  void idbTimeoutMs;
 }

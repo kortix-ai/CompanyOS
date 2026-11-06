@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 /**
  * `/panel`: the new chat in the Kortix in Chrome side panel. It opens fresh
@@ -70,7 +72,7 @@ const projectKey = (userId: string) => `kortix.panel.project.${userId}`;
 
 function rememberedProject(userId: string): string | null {
   try {
-    return window.localStorage.getItem(projectKey(userId));
+    return safeGetItem(projectKey(userId));
   } catch {
     return null;
   }
@@ -78,7 +80,7 @@ function rememberedProject(userId: string): string | null {
 
 function rememberProject(userId: string, projectId: string) {
   try {
-    window.localStorage.setItem(projectKey(userId), projectId);
+    safeSetItem(projectKey(userId), projectId);
   } catch {
     // A blocked store only loses the remembered project.
   }

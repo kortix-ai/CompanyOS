@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -37,7 +39,7 @@ export function useRollSound() {
   useEffect(() => {
     let initial = prefersReducedMotion();
     try {
-      const stored = window.localStorage.getItem(MUTE_PREFERENCE_ID);
+      const stored = safeGetItem(MUTE_PREFERENCE_ID);
       if (stored !== null) initial = stored === '1';
     } catch {
       // localStorage can throw in private modes — fall back to the media query.
@@ -189,7 +191,7 @@ export function useRollSound() {
     mutedRef.current = next;
     setMuted(next);
     try {
-      window.localStorage.setItem(MUTE_PREFERENCE_ID, next ? '1' : '0');
+      safeSetItem(MUTE_PREFERENCE_ID, next ? '1' : '0');
     } catch {
       // Non-fatal: the preference just will not survive a reload.
     }

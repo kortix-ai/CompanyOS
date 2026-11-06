@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useChromeConnections } from '@kortix/sdk/react';
 import { XIcon } from '@phosphor-icons/react';
@@ -18,7 +20,7 @@ export const CHROME_PROMO_DISMISSED_KEY = 'kortix.chrome-promo.dismissed';
 
 function readDismissed(): boolean {
   try {
-    return window.localStorage.getItem(CHROME_PROMO_DISMISSED_KEY) === '1';
+    return safeGetItem(CHROME_PROMO_DISMISSED_KEY) === '1';
   } catch {
     return false;
   }
@@ -39,7 +41,7 @@ export function ProjectChromeNavItem({ onOpenConnect }: { onOpenConnect: () => v
   const dismiss = useCallback(() => {
     setDismissed(true);
     try {
-      window.localStorage.setItem(CHROME_PROMO_DISMISSED_KEY, '1');
+      safeSetItem(CHROME_PROMO_DISMISSED_KEY, '1');
     } catch {
       // Private mode or blocked storage: dismissed for this page view only.
     }

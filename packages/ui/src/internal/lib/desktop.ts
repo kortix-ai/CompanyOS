@@ -1,3 +1,4 @@
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
 /**
  * Desktop runtime detection + native window helpers.
  *
@@ -146,7 +147,7 @@ const clampZoom = (n: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n));
  * new default is invisible.
  */
 function readStoredZoom(): number | null {
-  const raw = window.localStorage.getItem(ZOOM_KEY);
+  const raw = safeGetItem(ZOOM_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as { scale?: number; base?: number };
@@ -185,7 +186,7 @@ export async function setDesktopZoom(scale: number): Promise<number> {
   const next = clampZoom(scale);
   try {
     // Stamped with the base it was chosen against — see readStoredZoom.
-    window.localStorage.setItem(ZOOM_KEY, JSON.stringify({ scale: next, base: DESKTOP_BASE_ZOOM }));
+    safeSetItem(ZOOM_KEY, JSON.stringify({ scale: next, base: DESKTOP_BASE_ZOOM }));
   } catch {
     /* private mode */
   }

@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 import { createSafeJSONStorage } from '../lib/storage/managed-storage';
 import { create } from 'zustand';
@@ -103,3 +105,5 @@ export const useSoundStore = create<SoundState>()(
     },
   ),
 );
+
+onManagedStorageAdoption(() => { void useSoundStore.persist.rehydrate(); });

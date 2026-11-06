@@ -1,4 +1,6 @@
 'use client';
+import { safeSessionGetItem, safeSessionRemoveItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -32,7 +34,7 @@ export default function GitHubOAuthPopup() {
     let cancelled = false;
 
     // Get return URL from sessionStorage (set by parent component)
-    const returnUrl = sessionStorage.getItem('github-returnUrl') || appHome;
+    const returnUrl = safeSessionGetItem('github-returnUrl') || appHome;
 
     const postMessage = (message: AuthMessage) => {
       try {
@@ -160,7 +162,7 @@ export default function GitHubOAuthPopup() {
 
     // Cleanup sessionStorage when popup closes
     const handleBeforeUnload = () => {
-      sessionStorage.removeItem('github-returnUrl');
+      safeSessionRemoveItem('github-returnUrl');
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);

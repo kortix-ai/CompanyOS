@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { EnvelopeIcon, PhoneIcon, XIcon } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
@@ -51,7 +53,7 @@ export function PersonalOnboardingWelcome({ projectId }: { projectId?: string } 
   const wizardPending = !!projectId && onboarding.hydrated && onboarding.status === 'pending';
 
   useEffect(() => {
-    setDismissed(localStorage.getItem(STORAGE_KEY) === '1');
+    setDismissed(safeGetItem(STORAGE_KEY) === '1');
     setHydrated(true);
   }, []);
 
@@ -67,7 +69,7 @@ export function PersonalOnboardingWelcome({ projectId }: { projectId?: string } 
 
   const dismiss = () => {
     setDismissed(true);
-    localStorage.setItem(STORAGE_KEY, '1');
+    safeSetItem(STORAGE_KEY, '1');
   };
 
   const copyEmail = async () => {

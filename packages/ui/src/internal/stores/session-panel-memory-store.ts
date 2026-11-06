@@ -1,4 +1,6 @@
 'use client';
+import { onManagedStorageAdoption } from '@kortix/sdk/internal/managed-storage'; // eslint-disable-line no-restricted-imports
+
 
 /**
  * What a session's side panel was showing, kept per chat session across
@@ -117,3 +119,5 @@ export const useSessionPanelMemoryStore = create<SessionPanelMemoryState>()(
 registerPersistedStore('kortix-session-panel-memory', () =>
   resetPersistedStore(useSessionPanelMemoryStore),
 );
+
+onManagedStorageAdoption(() => { void useSessionPanelMemoryStore.persist.rehydrate(); });

@@ -6,7 +6,7 @@
 // sessionStorage access goes through the never-throwing accessors from
 // managed-storage: in storage-disabled in-app WebViews (e.g. the Dola Android
 // `wv` browser) `window.sessionStorage` is `null`, so a bare
-// `sessionStorage.getItem(...)` throws `TypeError: Cannot read properties of
+// `safeSessionGetItem(...)` throws `TypeError: Cannot read properties of
 // null (reading 'getItem')`. This module runs on every route (the root-layout
 // RouteChangeTracker), so an unguarded access would crash analytics on the
 // marketing site for those browsers.

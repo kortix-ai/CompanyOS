@@ -16,7 +16,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { ModelKey } from '../core/models/model-key';
 import { computeLatestSet, createModelVisibility } from '../core/models/model-visibility';
-import { safeSetItem } from '../platform/storage/managed-storage';
+import { safeSetItem, safeGetItem, safeRemoveItem } from '../platform/storage/managed-storage';
 import { registerIdentityReset } from './identity-reset-registry';
 import type { FlatModel } from './model-flatten';
 import { shouldSetSessionAgentName } from './session-agent-name-guard';
@@ -114,7 +114,7 @@ function loadStore(): ModelStore {
     return { user: [], recent: [], variant: {} };
   }
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = safeGetItem(STORE_KEY);
     if (raw) return sanitizeModelStore(JSON.parse(raw));
   } catch {
     // ignore
@@ -148,7 +148,7 @@ function setStore(next: ModelStore) {
 registerIdentityReset(() => {
   _store = { user: [], recent: [], variant: {} };
   try {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(STORE_KEY);
+    if (typeof localStorage !== 'undefined') safeRemoveItem(STORE_KEY);
   } catch {
     // Storage-blocked context: the in-memory reset above is what matters.
   }

@@ -1,4 +1,6 @@
 'use client';
+import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -90,7 +92,7 @@ export function MaintenanceBanner({ config }: MaintenanceBannerProps) {
     setIsMounted(true);
     if (canDismiss) {
       try {
-        if (localStorage.getItem(dismissKey) === 'true') {
+        if (safeGetItem(dismissKey) === 'true') {
           setIsDismissed(true);
         }
       } catch {
@@ -140,7 +142,7 @@ export function MaintenanceBanner({ config }: MaintenanceBannerProps) {
   const handleDismiss = () => {
     setIsDismissed(true);
     try {
-      localStorage.setItem(dismissKey, 'true');
+      safeSetItem(dismissKey, 'true');
     } catch {
       // ignore
     }

@@ -89,3 +89,13 @@ test("expired handle returns authoritative 401; capability discovery reports han
   );
   expect((await fetch(base, { headers: { cookie } })).status).toBe(401);
 });
+
+test('minted empty handles share a cold IP budget and do not receive authenticated budgets', async () => {
+  const a=await initialize(), b=await initialize();
+  const clock=spyOn(Date,'now').mockReturnValue(Date.now());
+  try {
+    const userUrl=new URL('/v1/auth/user',base);
+    for(let i=0;i<300;i++) expect((await fetch(userUrl,{headers:{...headers(i%2?a:b),'X-Forwarded-For':'192.0.2.56'}})).status).toBe(404);
+    expect((await fetch(userUrl,{headers:{...headers(a),'X-Forwarded-For':'192.0.2.56'}})).status).toBe(429);
+  } finally { clock.mockRestore(); }
+});

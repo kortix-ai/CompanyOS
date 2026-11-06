@@ -80,3 +80,18 @@ it('accepts the configured loopback origin and refuses a different port', () => 
     ),
   ).toBe(false);
 });
+
+it('accepts only this environment compressed partitioned hostname', () => {
+  expect(
+    isServablePreviewUrl('https://d-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com/open', TEMPLATE),
+  ).toBe(true);
+  expect(
+    isServablePreviewUrl('https://s-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com/open', TEMPLATE),
+  ).toBe(false);
+  expect(
+    isServablePreviewUrl(
+      'https://d-p3000-sbx--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com:444/open',
+      TEMPLATE,
+    ),
+  ).toBe(false);
+});

@@ -60,9 +60,14 @@ export function isServablePreviewUrl(candidate: string, template: string | null)
   const parts = trusted.hostname.split(marker);
   if (parts.length !== 2) return false;
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escape(parts[0])}\\d{1,5}-[a-z0-9-]+${escape(parts[1])}$`).test(
-    url.hostname,
-  );
+  const compact = (
+    { 'dev-p': 'd-p', 'staging-p': 's-p', 'prod-p': 'p-p', 'preview-p': 'r-p' } as Record<
+      string,
+      string
+    >
+  )[parts[0]];
+  const prefix = compact ? `(?:${escape(parts[0])}|${escape(compact)})` : escape(parts[0]);
+  return new RegExp(`^${prefix}\\d{1,5}-[a-z0-9-]+${escape(parts[1])}$`).test(url.hostname);
 }
 
 export default function PreviewAuthorizePage() {

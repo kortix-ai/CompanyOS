@@ -217,7 +217,7 @@ test('invented browser handles cannot shard the anonymous auth budget', async ()
     }),
   );
   app.all('*', (c) => c.json({}, 401));
-  for (let i = 0; i < 30; i++)
+  for (let i = 0; i < 300; i++)
     expect(
       (
         await app.request('/v1/auth/user', {

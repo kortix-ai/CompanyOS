@@ -70,18 +70,12 @@ export function createVault(codec: Codec) {
           }>
         ).map((row) => {
           const { credential, ...slot } = row;
-          const session = JSON.parse(
-            codec.open(
-              String(credential),
-              binding(h, String(row.slot), String(row.user_id)),
-            ),
-          );
-          return {
-            ...slot,
-            needs_sign_in: Boolean(
-              session.refresh_uncertain || session.refresh_owner,
-            ),
-          };
+          let needsSignIn = true;
+          try {
+            const session = JSON.parse(codec.open(String(credential), binding(h, String(row.slot), String(row.user_id))));
+            needsSignIn = Boolean(session.refresh_uncertain || session.refresh_owner);
+          } catch { /* One unreadable slot must not hide the other saved identities. */ }
+          return { ...slot, needs_sign_in: needsSignIn };
         });
       });
     },

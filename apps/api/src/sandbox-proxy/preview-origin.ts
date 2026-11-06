@@ -351,6 +351,8 @@ export async function resolvePreviewSession(
 > {
   // Preserve ambient cookie precedence for legacy hosts. Selected hosts require explicit authority.
   if (!target.identityPartition) {
+    const ticket = verifyPreviewSession(url.searchParams.get('preview_ticket'), target, 'ticket');
+    if (ticket) return { session: ticket, fresh: true };
     const session = sessionFromCookies(req, target);
     if (session) return { session, fresh: false };
   }

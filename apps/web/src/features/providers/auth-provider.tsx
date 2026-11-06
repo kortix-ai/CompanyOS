@@ -3,6 +3,7 @@
 import { useTranslations } from '@/i18n/use-translations';
 import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
 import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
+import { stripBrowserSelector } from '@/lib/auth/browser-route';
 import { Button } from '@kortix/ui/button';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
 import Loading from '@kortix/ui/loading';
@@ -82,9 +83,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const lifecycle = createBrowserLifecycle({
         validate: async () => {
           validating = true;
-          selected.getToken.invalidate();
-          validating = false;
-          return withAuthBootstrapTimeout(selectedDocumentSession(), AUTH_BOOTSTRAP_TIMEOUT_MS);
+          try {
+            selected.getToken.invalidate();
+            return await withAuthBootstrapTimeout(
+              selectedDocumentSession(),
+              AUTH_BOOTSTRAP_TIMEOUT_MS,
+            );
+          } finally {
+            validating = false;
+          }
         },
         clear: () => {
           detachManagedStorage();
@@ -116,8 +123,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const revalidate = () => lifecycle.revalidate();
       const backgroundRevalidate = () => lifecycle.revalidate(false);
       const pageshow = (event: PageTransitionEvent) => lifecycle.revalidate(event.persisted);
+      let identityKey = selected.getToken.identityKey();
       const unsubscribe = selected.subscribe(() => {
-        if (!validating) lifecycle.revalidate();
+        const nextKey = selected.getToken.identityKey();
+        const changed = nextKey !== identityKey;
+        identityKey = nextKey;
+        if (!validating) lifecycle.revalidate(changed);
       });
       const channel =
         typeof BroadcastChannel === 'undefined'
@@ -365,7 +376,16 @@ export function BrowserIdentityGate({ children }: { children: ReactNode }) {
           <div className="flex flex-col gap-2">
             <Button onClick={retryAuth}>{tAccounts('retryIdentity')}</Button>
             <Button variant="outline" asChild>
-              <a href="/auth/browser-logins">{tAccounts('text10')}</a>
+              <a
+                href={
+                  '/auth/browser-logins?returnTo=' +
+                  encodeURIComponent(
+                    stripBrowserSelector(window.location.pathname + window.location.search),
+                  )
+                }
+              >
+                {tAccounts('text10')}
+              </a>
             </Button>
           </div>
         )}

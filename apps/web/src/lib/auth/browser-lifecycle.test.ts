@@ -101,3 +101,120 @@ test('coalesced background validation does not clear the mounted document', asyn
   await Promise.resolve();
   expect(cleared).toBe(0);
 });
+
+test('background transient failures keep a working document; authoritative rejection revokes it', async () => {
+  let status = 0,
+    clears = 0,
+    errors = 0;
+  const lifecycle = createBrowserLifecycle({
+    validate: async () => {
+      if (status) throw { status };
+      return 'verified';
+    },
+    clear() {
+      clears++;
+    },
+    publish() {},
+    error() {
+      errors++;
+    },
+  });
+  lifecycle.revalidate();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  clears = 0;
+  for (const code of [503, 429, 0]) {
+    status = code;
+    lifecycle.revalidate(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(clears).toBe(0);
+    expect(errors).toBe(0);
+  }
+  status = 403;
+  lifecycle.revalidate(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(clears).toBeGreaterThan(0);
+  expect(errors).toBe(1);
+});
+
+test('a hidden validation queued after background failure still settles the gate', async () => {
+  const pending: Array<(error: unknown) => void> = [];
+  let errors = 0;
+  const lifecycle = createBrowserLifecycle({
+    validate: () => new Promise<string>((_resolve, reject) => pending.push(reject)),
+    clear() {},
+    publish() {},
+    error() {
+      errors++;
+    },
+  });
+  lifecycle.revalidate(false);
+  lifecycle.revalidate(true);
+  pending[0]({ status: 503 });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(pending.length).toBe(2);
+  pending[1]({ status: 503 });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(errors).toBe(1);
+});
+
+test('background work queued during initial validation still reports a cold failure', async () => {
+  const pending: Array<(error: unknown) => void> = [];
+  let errors = 0;
+  const lifecycle = createBrowserLifecycle({
+    validate: () => new Promise<string>((_r, reject) => pending.push(reject)),
+    clear() {},
+    publish() {},
+    error() {
+      errors++;
+    },
+  });
+  lifecycle.revalidate();
+  lifecycle.revalidate(false);
+  pending[0]({ status: 503 });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  pending[1]({ status: 503 });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(errors).toBe(1);
+});
+
+test('a disposed request cannot clear its replacement after a late rejection', async () => {
+  let reject!: (error: unknown) => void;
+  let errors = 0,
+    clears = 0;
+  const lifecycle = createBrowserLifecycle({
+    validate: () =>
+      new Promise<string>((_r, r) => {
+        reject = r;
+      }),
+    clear() {
+      clears++;
+    },
+    publish() {},
+    error() {
+      errors++;
+    },
+  });
+  lifecycle.revalidate();
+  lifecycle.dispose();
+  const initial = clears;
+  reject({ status: 401 });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(clears).toBe(initial);
+  expect(errors).toBe(0);
+});

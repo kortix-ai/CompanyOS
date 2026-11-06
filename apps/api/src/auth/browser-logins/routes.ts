@@ -47,8 +47,7 @@ function registerIngress() {
       c.res.status < 400 &&
       raw &&
       /^[A-Za-z0-9_-]{43}$/.test(raw) &&
-      !c.req.path.endsWith("/initialize") &&
-      !c.req.path.endsWith("/remove-all")
+      /\/(?:token|resolve|complete)$/.test(c.req.path)
     )
       rememberBrowserBudgetHandle(hashBrowserHandle(raw));
     void recordAuditEvent({
@@ -135,7 +134,6 @@ function registerFlowRoutes() {
     }
     const raw = createBrowserHandle();
     await vault!.init(hashBrowserHandle(raw));
-    rememberBrowserBudgetHandle(hashBrowserHandle(raw));
     setCookie(c, cookie, raw, {
       httpOnly: true,
       secure: new URL(config.FRONTEND_URL).protocol === "https:",

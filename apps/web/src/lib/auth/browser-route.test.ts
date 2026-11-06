@@ -65,3 +65,9 @@ test('explicit private selectors survive and public selectors are removed', () =
   expect(browserIdentityPath('/u/slot_B/projects?q=1', '/u/slot_A/projects')).toBe('/u/slot_B/projects?q=1');
   expect(browserIdentityPath('/de/u/slot_B/share/p', '/u/slot_A/projects')).toBe('/de/share/p');
 });
+
+test('Slack and Teams marketing pages stay public while their private handoffs keep selectors', () => {
+  for (const path of ['/slack','/slack/','/teams','/teams/']) expect(browserIdentityPath(path,'/u/slot_A/projects')).toBe(path);
+  expect(browserIdentityPath('/slack/login/synthetic','/u/slot_A/projects')).toBe('/u/slot_A/slack/login/synthetic');
+  expect(browserIdentityPath('/teams/install?state=synthetic','/u/slot_A/projects')).toBe('/u/slot_A/teams/install?state=synthetic');
+});

@@ -27,3 +27,19 @@ export function accountHref(slot: string, destination: string) {
     ? scoped
     : `/u/${encodeURIComponent(slot)}/projects`;
 }
+
+/** OAuth destinations belong to exactly one attempt; legacy or foreign state is discarded. */
+export function loginAttemptDestination(
+  stored: string | null,
+  attempt: string,
+  fallback: string,
+): string {
+  try {
+    const value = JSON.parse(stored ?? 'null');
+    if (value?.attempt === attempt && typeof value.destination === 'string')
+      return loginDestination(value.destination);
+  } catch {
+    /* A prior unbound value cannot select a new attempt's destination. */
+  }
+  return loginDestination(fallback);
+}

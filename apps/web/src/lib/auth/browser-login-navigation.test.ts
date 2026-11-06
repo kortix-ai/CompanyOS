@@ -26,3 +26,20 @@ test('authorization and installation handoffs retain their selected identity and
   }
   expect(loginDestination('/de/auth/callback?code=synthetic')).toBe('/projects');
 });
+
+test('an OAuth destination belongs to its exact attempt and rejects unbound old state', async () => {
+  const { loginAttemptDestination } = await import('./browser-login-navigation');
+  const stored = JSON.stringify({
+    attempt: 'google-one',
+    destination: '/cli/authorize?code=synthetic',
+  });
+  expect(loginAttemptDestination(stored, 'google-one', '/projects')).toBe(
+    '/cli/authorize?code=synthetic',
+  );
+  expect(loginAttemptDestination(stored, 'password-two', '/settings/profile')).toBe(
+    '/settings/profile',
+  );
+  expect(
+    loginAttemptDestination('/cli/authorize?code=old', 'password-two', '/teams/install?state=new'),
+  ).toBe('/teams/install?state=new');
+});

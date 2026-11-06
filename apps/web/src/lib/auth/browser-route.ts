@@ -3,7 +3,7 @@ import { locales } from '../../i18n/catalog.mjs';
 export const BROWSER_SLOT_HEADER = 'x-kortix-browser-slot';
 const SLOT = /^[A-Za-z0-9_-]{1,128}$/;
 const PRIVATE_PATH =
-  /^\/(?:projects|dashboard|settings|admin|onboarding|billing|invites|notifications|new|p|setup|connections|connectors|capture|github|cli|oauth|tunnel|approve|panel|slack|teams|preview)(?:\/|$)/;
+  /^\/(?:projects|dashboard|settings|admin|onboarding|billing|invites|notifications|new|p|setup|connections|connectors|capture|github|cli|oauth|tunnel|approve|panel|preview|(?:slack|teams)\/(?:install|login))(?:\/|$)/;
 
 export function stripBrowserIdentityHeaders(headers: Headers): void {
   for (const key of [...headers.keys()]) {

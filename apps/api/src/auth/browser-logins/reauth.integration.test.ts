@@ -161,3 +161,16 @@ test("uncertain expired removal revokes only its exact session and permits signi
   ).toBe(true);
   expect(await add(identity)).toBeString();
 });
+
+test('an unreadable saved credential leaves its sibling discoverable and usable', async () => {
+  cookie='';const initialized=await request('/initialize');cookie=initialized.headers.get('set-cookie')!.split(';')[0]!;
+  const a=await add(await user('unreadable')), b=await add(await user('healthy'));
+  const h=hashBrowserHandle(cookie.split('=')[1]!);
+  await db.execute(sql`update kortix.browser_login_slots set credential='invalid-envelope' where handle_hash=${h} and slot=${a}`);
+  const response=await fetch(base,{headers:{cookie}});expect(response.status).toBe(200);
+  const {slots}=await response.json() as any;
+  expect(slots.find((s:any)=>s.slot===a).needs_sign_in).toBe(true);
+  expect(slots.find((s:any)=>s.slot===b).needs_sign_in).toBe(false);
+  expect((await request('/initialize')).status).toBe(200);
+  expect((await request(`/slots/${b}/token`)).status).toBe(200);
+});

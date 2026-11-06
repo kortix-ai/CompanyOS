@@ -1144,3 +1144,35 @@ Final budget checks: 9 pass, 0 fail, 1523 assertions, 136 ms. Anonymous fabricat
 Cleanup final check: no listeners on 17700,17708,17821,17822,17825,17826,17731; owned auth container absent. Formatting-only churn was reduced before review. Original source conventions were retained. No full or package-wide suite ran.
 
 Verified-handle rate budgets also include roster/capability reads. RED: 8 pass/1 fail; GREEN: 9 pass/0 fail. Invented handles remain on the anonymous budget. This avoids a second shared-address bottleneck during account discovery.
+
+## Parent final council corrections, 2026-11-06
+
+Round 2: Sol code8/UI9; Opus code7/UI7. Final-round response is in multi-account-login-review.md. No SDK source changes in this round; prior SDK gates cover the unchanged SDK tree.
+
+- Named preview-origin test: 49 pass, 0 fail, 148 assertions, 91 ms. Corrected the test's initial incorrect mint helper; a subsequent valid-ticket RED run reproduces the old cookie precedence before GREEN. Ticket B plus cookie A produces a B cookie.
+- Named web lifecycle/preview/destination checks: initial 64 pass/3 failures across the mixed targeted batch; focused host GREEN 21 pass/0 fail. Additional lifecycle tests now report 8 pass/0 fail, 22 assertions, 511 ms. Includes cold queued failure and disposed late rejection.
+- HTTP/PG recovery tests with the outer limiter: 4 pass/0 fail, 378 assertions, 755 ms. Newly minted empty handles share one cold IP budget. Their old promotion rule fails this test.
+- Outer limiter named tests: 9 pass/0 fail, 1873 assertions, 171 ms. Cold shaped cookies share 300/min per IP, without bypassing ordinary authentication budgets.
+- Reauthentication HTTP/PG tests: 3 pass/0 fail, 36 assertions, 2.62 s. Includes unreadable slot isolation, healthy sibling token200, roster200 and initialize200.
+- Named navigation tests: public Slack/Teams landing pages initially fail; corrected classifier yields 11 pass/0 fail, 48 assertions, 63 ms. Private install/login handoffs stay selected.
+- API and frontend typechecks pass. Changed-file lint has zero errors. I18n and brand allowlist audits pass. No full or whole-package suite ran.
+
+Actual browser contracts and evidence under ignored output/:
+- Five real saved identities, one uncertain credential: explicit reauthentication reaches candidate confirmation, confirms successfully and retains five slots. A controlled OAuth denial clears return state; subsequent password recovery lands on /settings/profile, never the stale CLI consent destination. council-r3-five-result.json records count5, current_destination=true, old_return_absent=true, stored_return_cleared=true.
+- A sixth candidate authenticates, but confirmation returns429. Cancel returns200 and roster stays5 (council-r3-sixth-result.json).
+- A real token503 on focus keeps the same mounted DOM node. No error gate appears. A subsequent token200 check retains that node (council-r3-background-result.json).
+- Error gate from a controlled browser token503 hides private content, preserves selector-free returnTo, and Retry recovers after the fault clears. Controlled latency captures the validating gate.
+- Desktop/mobile layout and overflow/menu/dialog states are captured in both themes. A controlled remove503 displays inside the open dialog; Cancel remains usable and all five identities stay saved. council-r3-states-result.json records eight successful assertions.
+- Current artifact prefixes: council-r3-desktop-*, mobile-*, needs-*, gate-error-*, gate-validating-*, overflow-*, remove-dialog-*, remove-error-*.png. Emails are synthetic. Full-address tooltips remain available on truncated rows.
+
+Fixture limits and corrections: unsupported Node26 and a stale Turbopack cache interrupted early runs. Webpack exposed an existing node:util client-bundle incompatibility. Final browser proofs use Node22/Turbopack with a clean worktree cache; no build configuration changed. An offscreen submit click required explicit scrolling. One URL-pattern wait and one expanded-ref parser stalled tooling; direct URL assertions and resumed fresh snapshot controls establish the recorded outcomes. The recording is not certified as a clean complete two-tab movie.
+
+Remaining exclusions: genuine external Google, deployed edge/TLS, observed BFCache persisted=true, combined delayed callback browser race, positive preview handoff in this final round, native/side-panel flows, and production enablement. Earlier real-cloud preview/runtime proofs remain separate. The Supabase JWT stays in a request header; the preview URL carries its short-lived preview ticket.
+
+## Original-requirement check: legacy adoption remains a rollout blocker
+
+Source inspection after council corrections finds no legacy-session import. BrowserAccountsPage only initializes an empty handle and authenticates the newly supplied identity. The roster lists only vault rows. Therefore an existing ordinary A session is preserved, but adding B first does not automatically list A. The approved security research explicitly planned moving the legacy session into the vault and expiring the legacy cookie.
+
+This is not a completed migration. Do not enable the feature or call the original already-signed-in adoption journey complete. Research the credential handoff, browser refresh ownership, concurrent legacy tabs, cookie cleanup and rollback before implementing it. The final council round is deferred until this original requirement is implemented and verified. The completed five-vault-account proofs do not establish legacy adoption.
+
+Parent cleanup after the council-fix proofs: remaining owned synthetic users 0; owned listeners on 17700/17708/17821/17822/17825/17826 are absent; owned auth container absent. No cloud resources created in this stage.

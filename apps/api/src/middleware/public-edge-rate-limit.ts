@@ -36,6 +36,8 @@ export function createPublicEdgeRateLimitMiddleware(
 ): MiddlewareHandler {
   // replica-local: budget scales with API replicas; this is abuse protection, not a quota.
   const authLimiter = new TokenBucketRateLimiter('public-auth-edge');
+  // replica-local: cold handles share one bounded address budget until slot authentication succeeds.
+  const coldBrowserLimiter = new TokenBucketRateLimiter('browser-cold-edge');
   // replica-local: general abuse budget, independent of the stricter auth budget.
   const apiLimiter = new TokenBucketRateLimiter('public-api-edge');
   return async (c, next) => {
@@ -77,7 +79,10 @@ export function createPublicEdgeRateLimitMiddleware(
         ? `browser:${createHash('sha256').update(handle).digest('base64url')}`
         : null;
     const key = browserKey ?? budgetKey(c, clientKey);
-    const result = isAuth
+    const coldBrowser = handle && /^[A-Za-z0-9_-]{43}$/.test(handle) && !browserKey;
+    const result = coldBrowser
+      ? coldBrowserLimiter.check(`browser-cold:${clientKey}`, { limit: 300, windowMs: 60_000 })
+      : isAuth
       ? authLimiter.check(key, {
           limit: browserKey ? 300 : 30,
           windowMs: 60_000,

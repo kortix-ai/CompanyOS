@@ -1,11 +1,11 @@
 # Browser sign-ins: experimental operator and user guide
 
-Status: local implementation; parent review and remaining browser acceptance required. Keep disabled outside isolated proofs.
+Status: local implementation; initial adoption of an existing ordinary sign-in is unfinished. Parent review and remaining acceptance are required. Keep disabled outside isolated proofs.
 
 ## Configuration
 
 The API reads these variables at process startup. Restart every API replica after changes.
-`KORTIX_BROWSER_LOGINS_ENABLED=false` is the default. Set `true` only for an approved cohort.
+`KORTIX_BROWSER_LOGINS_ENABLED=false` is the default. Set `true` only on an approved deployment. This environment flag is not a per-user allowlist.
 Set `KORTIX_BROWSER_LOGINS_ACTIVE_KEY=synthetic-key-v2` and
 `KORTIX_BROWSER_LOGINS_KEYS={"synthetic-key-v2":"<BASE64_32_RANDOM_BYTES>","synthetic-key-v1":"<PREVIOUS_BASE64_32_RANDOM_BYTES>"}`.
 These are synthetic placeholders, not working credentials. Each value must encode exactly 32 random bytes as standard base64.
@@ -28,14 +28,32 @@ Remove all to sign out all saved accounts in this browser. Other devices remain 
 An upstream revocation failure is shown as pending. Local access is removed first; the server retries revocation.
 Handles expire after 30 idle days or 90 absolute days. Authentication attempts expire after five minutes.
 Use separate browser profiles on shared devices. Saved sign-ins share a cookie partition; they are not a device-security boundary.
-Local HTTP cookies use the development cookie path. Cookies do not isolate localhost ports: use the worktree's configured origin consistently.
+Local HTTP uses a port-specific vault cookie name. Cookies do not isolate localhost ports: use the worktree's configured origin consistently.
 
 Profile/password edits and authenticator enrollment are explicitly gated for selected sign-ins.
 Use the ordinary sign-in page and explicitly authenticate the account to edit. That route may already contain a legacy login:
 verify the displayed account before changing settings. Manage browser sign-ins supports verification of an existing authenticator.
 Browser push notifications and shared PostHog attribution remain disabled for selected sign-ins.
 Check session pages for updates. No background notification delivery is promised.
-Native clients are outside this initial feature. Existing extension and desktop legacy authentication behavior is unchanged.
+Native clients are outside this initial feature. Keep the flag off on deployments serving unverified native/side-panel flows.
+
+## Recovery and transient failures
+
+Reauthentication of an existing identity remains available at five saved accounts. The server still rejects a sixth identity.
+OAuth return destinations are bound to their attempt. A denied or replaced attempt cannot select a later password/email destination.
+A normal in-flight refresh owner can briefly show Sign in again. This conservative recovery indication is accepted for the experiment.
+An unreadable credential marks only its own row for recovery. Restore retained encryption keys before recovering an unreadable slot.
+
+A verified, mounted tab survives transient background 429/503/network failures. The next check retries.
+Initial validation, explicit revocation, and persisted-page restoration keep private content hidden until verification succeeds.
+Authoritative 401/403/404 responses clear the affected document. A loading gate with no prior verified identity reports transient failures too.
+
+Renewal/discovery requests with a cold well-formed handle share a 300/minute IP budget.
+Only successful token/resolve or candidate authentication promotes a handle into the bounded per-replica verified budget cache.
+Initialization and empty rosters never promote a handle. Ordinary authentication requests keep their existing IP budget.
+The broker additionally limits token/resolve requests to 60/minute per handle. These are abuse budgets, not account quotas.
+Legacy preview origins prefer a valid navigation ticket over an existing cookie, then fall back to the cookie.
+Partitioned origins reject invalid explicit credentials. Already partitioned deployed URLs accept only their configured environment alias.
 
 ## Measurement and acceptance
 

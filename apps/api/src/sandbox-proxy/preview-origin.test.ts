@@ -788,3 +788,14 @@ describe('partition authority at HTTP and websocket boundaries', () => {
   expect(wsUpstreamResolutions).toBe(0);
  });
 });
+
+test('a valid legacy navigation ticket for B replaces an existing A cookie', async () => {
+  const { mintPreviewSession, verifyPreviewSession } = await import('./preview-session');
+  const ticket = mintPreviewSession({kind:'principal',sandboxLabel:'sbx-known',sandboxId:'sbx_KNOWN',port:8081,userId:'user-2',callerSessionId:null,sandboxAuthored:false},60,'ticket');
+  const response = await handlePreviewOriginRequest(...request('/?preview_ticket='+encodeURIComponent(ticket),{headers:{cookie:mintCookieFor('sbx-known',8081),'sec-fetch-dest':'document'}}));
+  expect(response?.status).toBe(302);
+  const cookie=response!.headers.getSetCookie().find(x=>x.startsWith('__kortix_preview='));
+  expect(cookie).toBeDefined();
+  const token=cookie!.split(';')[0]!.slice('__kortix_preview='.length);
+  expect(verifyPreviewSession(token,{sandboxLabel:'sbx-known',port:8081})).toMatchObject({kind:'principal',userId:'user-2'});
+});

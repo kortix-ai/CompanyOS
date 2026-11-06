@@ -21,11 +21,16 @@ import {
 } from '@kortix/ui/dropdown-menu';
 import { Input } from '@kortix/ui/input';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
+import { KortixLogo } from '@kortix/ui/kortix-logo';
 import { Label } from '@kortix/ui/label';
 import { ArrowRightIcon, CheckIcon, DotsThreeIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 
-import { accountHref, loginDestination } from '@/lib/auth/browser-login-navigation';
+import {
+  accountHref,
+  loginAttemptDestination,
+  loginDestination,
+} from '@/lib/auth/browser-login-navigation';
 function useRoster() {
   const [slots, setSlots] = useState<BrowserLoginSlot[]>([]);
   const [enabled, setEnabled] = useState(false);
@@ -114,6 +119,7 @@ export function SignedInAccounts() {
 export function BrowserAccountsPage({ callback = false }: { callback?: boolean }) {
   const t = useTranslations('browserLogins');
   const callbackStarted = useRef(false);
+  const attemptDestination = useRef<string | null>(null);
   const removalTrigger = useRef<HTMLButtonElement | null>(null);
   const heading = useRef<HTMLHeadingElement | null>(null);
   const roster = useRoster();
@@ -170,9 +176,18 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     const providerCode = params.get('code');
     const stored = sessionStorage.getItem('kortix-login-attempt');
     if (!id || !providerCode || stored !== id) {
+      sessionStorage.removeItem('kortix-login-return');
+      sessionStorage.removeItem('kortix-login-attempt');
+      setFailed(true);
       setMessage(t('text13'));
       return;
     }
+    attemptDestination.current = loginAttemptDestination(
+      sessionStorage.getItem('kortix-login-return'),
+      id,
+      destination(),
+    );
+    sessionStorage.removeItem('kortix-login-return');
     sessionStorage.removeItem('kortix-login-attempt');
     setAttempt(id);
     void run(async () => {
@@ -183,6 +198,9 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     });
   }, [callback]);
   const begin = async (kind: 'password' | 'email' | 'google') => {
+    attemptDestination.current = destination();
+    sessionStorage.removeItem('kortix-login-return');
+    sessionStorage.removeItem('kortix-login-attempt');
     await browserLogins.initialize();
     const result = await browserLogins.begin({ method: kind });
     setAttempt(result.attempt);
@@ -193,13 +211,14 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     const result = await browserLogins.confirm(attempt);
     if (result.duplicate_candidate) await browserLogins.cancel(result.duplicate_candidate);
     await browserLogins.token(result.slot);
-    const target = sessionStorage.getItem('kortix-login-return') ?? destination();
+    const target = attemptDestination.current ?? destination();
+    attemptDestination.current = null;
     sessionStorage.removeItem('kortix-login-return');
     sessionStorage.removeItem('kortix-login-attempt');
     window.location.assign(accountHref(result.slot, target));
   };
   return (
-    <AuthFrame footerVariant="continue">
+    <AuthFrame footerVariant={add || candidate ? 'continue' : 'none'}>
       <section className="space-y-6" aria-busy={pending}>
         <ConfirmDialog
           open={removing !== null}
@@ -243,7 +262,12 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             })
           }
         />
-        <h1 ref={heading} tabIndex={-1} className="text-xl font-medium">
+        <KortixLogo variant="icon" size={22} className="text-foreground hidden md:block" />
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="text-foreground text-2xl font-medium tracking-tight text-balance md:mt-6"
+        >
           {candidate ? t('text15') : t('text1')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('text16')}</p>
@@ -273,11 +297,11 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                   <Avatar className="size-9 shrink-0">
                     <AvatarFallback>{(slot.email ?? '?').slice(0, 1).toUpperCase()}</AvatarFallback>
                   </Avatar>
-                  <span className="min-w-0 flex-1 text-sm font-medium break-all">
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm font-medium"
+                    title={slot.email ?? undefined}
+                  >
                     {slot.email ?? t('text5')}
-                    {slot.needs_sign_in && (
-                      <span className="text-muted-foreground block font-normal">{t('text6')}</span>
-                    )}
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-sm">
                     {t(slot.needs_sign_in ? 'text42' : 'openAccount')}
@@ -343,8 +367,8 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             {t('text25')}
           </Button>
         )}
-        {roster.slots.length >= 5 && <p>{t('text26')}</p>}
-        {add && roster.enabled && !candidate && roster.slots.length < 5 && (
+        {roster.slots.length >= 5 && !add && <p>{t('text26')}</p>}
+        {add && roster.enabled && !candidate && (
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -426,7 +450,10 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                   const result = await begin('google');
                   if (!result.url) throw Error('Missing provider URL');
                   sessionStorage.setItem('kortix-login-attempt', result.attempt);
-                  sessionStorage.setItem('kortix-login-return', destination());
+                  sessionStorage.setItem(
+                    'kortix-login-return',
+                    JSON.stringify({ attempt: result.attempt, destination: destination() }),
+                  );
                   window.location.assign(result.url);
                 })
               }
@@ -478,6 +505,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             onClick={() =>
               void run(async () => {
                 if (attempt) await browserLogins.cancel(attempt);
+                attemptDestination.current = null;
                 setAttempt(null);
                 setCandidate(null);
                 setMfa(null);

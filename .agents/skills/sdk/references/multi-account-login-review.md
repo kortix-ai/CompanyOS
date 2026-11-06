@@ -74,3 +74,25 @@ No reviewer ran a suite or edited production source. Opus ran and deleted a thro
 No usage totals exposed. Feature remains off; no push, PR, merge, publish or deployment.
 
 Budget hardening: only hashes of recently broker-verified or minted handles can partition the outer edge budget. A bounded 10,000-entry, ten-minute positive cache stores no raw handle and grants no authorization. Invented cookies remain on the anonymous IP bucket. The route still validates live handle/slot authority on every request. Cold replicas use the original IP budget until a broker success verifies that handle.
+
+## Council round 2 and final response
+
+Reviewed head b804810f3b. GPT Sol: CHANGES, code 8/10, UI 9/10. Claude Opus 5.5: CHANGES, code 7/10, UI 7/10. Both high effort; usage not exposed.
+
+- Sol-C1: preview recovery accepts only the configured environment's long or compressed prefix, with the same exact scheme/domain/port checks. Named deployed partition URL test covers acceptance and foreign-environment/port rejection.
+- Sol/Opus-C7: explicit reauthentication remains available at five accounts; backend still rejects a sixth. Actual browser recovery preserves five slots. Actual sixth confirmation returns 429 and candidate cancellation returns 200.
+- Sol/Opus-C10: OAuth return state is JSON bound to its attempt; new password/email attempts capture the current destination and clear old state. Denial clears stored state. Browser denial followed by password recovery lands on current settings destination, not stale CLI consent.
+- Opus R2-C1: legacy valid ticket wins over cookie, invalid ticket falls back to cookie. Signed ticket B plus cookie A now mints B's cookie. Selected strict authority behavior stays intact.
+- Opus R2-C2: transient background errors preserve a verified mounted document. Cold/initial or explicit-hidden failures show the gate. Own SDK invalidations stay suppressed for the entire async validation. Changed identity keys still hide; ordinary token invalidations validate in the background. Queued validation preserves hidden work and ignores disposed/stale failures.
+- Opus R2-C3: initialization/roster successes do not promote rate budgets. Only successful token/resolve/complete can promote authenticated handles.
+- Opus R2-C4: cold well-formed handles use a separate shared 300/minute IP budget; rotating fabricated or empty handles cannot split it. Authentication/password budgets stay unchanged.
+- Opus R2-C5: roster decryption failure marks only that row needs_sign_in. Real HTTP proves sibling discovery/token and initialization remain usable. Unreadable ciphertext still requires restoring retained keys; no refresh credential is replayed.
+- Opus R2-C6 accepted: a normal in-flight owner can briefly display Sign in again. Operations guide records this conservative indication. No automatic owner expiry added.
+- Opus R2-C7: gate manage link retains the selector-free current destination and query. Actual error-gate browser assertion verifies it.
+- U1/U2/U3/U4: truncate with full title, shared desktop logo/auth heading, remove duplicate middot subtitle, omit agreement footer in account management.
+- U5: current light/dark artifacts include validating gate, error gate, overflow menu, remove dialog and in-dialog error. Needs-sign-in and desktop/mobile layouts are also captured. Synthetic accounts only.
+- Parent navigation check: bare Slack/Teams marketing pages remain public; only install/login handoffs acquire selectors. RED then GREEN named route test.
+
+Final-round checks and bounded acceptance remain in the progress ledger. No push, PR, merge, publication or deployment. Flag stays off.
+
+Final council round deferred: original-requirement inspection found that ordinary legacy A is not imported into the vault before B is added. Preserving A's cookie is insufficient to list both accounts. The approved migration design remains unimplemented. Keep the flag off while this handoff is researched, implemented and verified.

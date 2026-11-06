@@ -266,7 +266,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                   className="focus-visible:ring-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg focus-visible:ring-2 focus-visible:outline-none"
                   href={
                     slot.needs_sign_in
-                      ? '/auth/browser-logins?add=1'
+                      ? '/auth/browser-logins?add=1&returnTo=' + encodeURIComponent(destination())
                       : accountHref(slot.slot, destination())
                   }
                 >

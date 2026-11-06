@@ -9669,6 +9669,8 @@ export const browserLoginHandles = kortixSchema.table('browser_login_handles', {
   removedAt: timestamp('removed_at', { withTimezone: true }),
 }).enableRLS();
 export const browserLoginSlots = kortixSchema.table('browser_login_slots', {
+  revokeAttempts: integer('revoke_attempts').notNull().default(0),
+  revokeAfter: timestamp('revoke_after', { withTimezone: true }).notNull().defaultNow(),
   handleHash: text('handle_hash').notNull().references(() => browserLoginHandles.handleHash, { onDelete: 'cascade' }),
   slot: text('slot').notNull(),
   userId: uuid('user_id').notNull(),
@@ -9680,6 +9682,8 @@ export const browserLoginSlots = kortixSchema.table('browser_login_slots', {
   revokePending: boolean('revoke_pending').notNull().default(false),
 }, table => [primaryKey({columns:[table.handleHash,table.slot]}),unique("browser_login_slots_handle_hash_user_id_key").on(table.handleHash,table.userId)]).enableRLS();
 export const browserLoginAttempts = kortixSchema.table('browser_login_attempts', {
+  revokeAttempts: integer('revoke_attempts').notNull().default(0),
+  revokeAfter: timestamp('revoke_after', { withTimezone: true }).notNull().defaultNow(),
   handleHash: text('handle_hash').notNull().references(() => browserLoginHandles.handleHash, { onDelete: 'cascade' }),
   attempt: text('attempt').notNull(),
   method: text('method').notNull(),

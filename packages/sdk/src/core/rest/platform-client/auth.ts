@@ -234,6 +234,7 @@ export function signOut(accessToken: string, input: { scope?: 'global' | 'local'
  * emit otherwise fails with TS2742 pointing at this file's path.
  */
 export interface HeadlessAuthApi {
+  browserLogins: typeof import('./browser-logins').browserLogins;
   signUp: typeof signUp;
   signInWithPassword: typeof signInWithPassword;
   sendMagicLink: typeof sendMagicLink;

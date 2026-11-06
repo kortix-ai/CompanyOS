@@ -1,3 +1,6 @@
+import { browserLoginAssuranceRequired } from "../../iam/membership-read";
+import { canSignUp } from "../../shared/access-control-cache";
+import { ssoEnforcedForEmail } from "../../repositories/sso";
 import { sql } from "drizzle-orm";
 import { db } from "../../shared/db";
 import { createBrowserHandle } from "./credentials";
@@ -6,18 +9,27 @@ import { gotrue, sessionFrom } from "../gotrue";
 type Codec = NonNullable<ReturnType<typeof browserLoginConfig>["codec"]>;
 export class VaultError extends Error {
   constructor(
-    public status: 401 | 404 | 409 | 429 | 503,
+    public status: 400 | 403 | 401 | 404 | 409 | 429 | 503,
     public code: string,
   ) {
     super(code);
   }
 }
+const binding = (handleHash: string, slot: string, userId = "attempt") => ({
+  handleHash,
+  slot,
+  userId,
+});
 export function createVault(codec: Codec) {
-  const binding = (handleHash: string, slot: string, userId = "attempt") => ({
-    handleHash,
-    slot,
-    userId,
-  });
+  async function requireAssurance(tx: any, userId: string, session: any) {
+    const claims = JSON.parse(
+      Buffer.from(session.access_token.split(".")[1], "base64url").toString(),
+    );
+    if (claims.aal === "aal2") return;
+    const required = await browserLoginAssuranceRequired(tx, userId);
+    if (required.length)
+      throw new VaultError(403, "browser_login_mfa_required");
+  }
   return {
     async init(h: string) {
       await db.execute(
@@ -112,6 +124,22 @@ export function createVault(codec: Codec) {
         await tx.execute(
           sql`update kortix.browser_login_attempts set consumed=true,candidate=${codec.seal(JSON.stringify(session), binding(h, a, userId))},user_id=${userId}::uuid,session_id=${claims.session_id}::uuid where handle_hash=${h} and attempt=${a}`,
         );
+        // Keep denied sessions encrypted for revocation; throwing here would roll back retention.
+        const email =
+          typeof verified.body.email === "string" ? verified.body.email : "";
+        const ssoDenied = email && (await ssoEnforcedForEmail(email));
+        const created = await tx.execute(
+          sql`select 1 from auth.users where id=${userId}::uuid and created_at > ${row.expires_at}::timestamptz-interval '5 minutes'`,
+        );
+        if (
+          ssoDenied ||
+          (row.method === "google" && created.length && !canSignUp(email))
+        ) {
+          await tx.execute(
+            sql`update kortix.browser_login_attempts set expires_at=now() where handle_hash=${h} and attempt=${a}`,
+          );
+          return { error: ssoDenied ? "sso_required" : "signup_closed" };
+        }
         return {
           candidate: a,
           user: { id: userId, email: verified.body.email },
@@ -143,6 +171,7 @@ export function createVault(codec: Codec) {
         const session = JSON.parse(
           codec.open(row.candidate, binding(h, a, row.user_id)),
         );
+        await requireAssurance(tx, row.user_id, session);
         const slot = createBrowserHandle().slice(0, 16);
         await tx.execute(
           sql`insert into kortix.browser_login_slots(handle_hash,slot,user_id,session_id,credential,expires_at) values (${h},${slot},${row.user_id}::uuid,${row.session_id}::uuid,${codec.seal(JSON.stringify(session), binding(h, slot, row.user_id))},to_timestamp(${session.expires_at})) on conflict(handle_hash,user_id) do update set slot=excluded.slot,session_id=excluded.session_id,credential=excluded.credential,expires_at=excluded.expires_at,removed_at=null,revoke_pending=false,revision=kortix.browser_login_slots.revision+1 where not kortix.browser_login_slots.revoke_pending`,
@@ -152,6 +181,15 @@ export function createVault(codec: Codec) {
         );
         return { slot };
       });
+    },
+    mfa(
+      h: string,
+      kind: "attempt" | "slot",
+      id: string,
+      factor?: string,
+      verify?: { challenge_id: string; code: string },
+    ) {
+      return brokerMfa(codec, this.run.bind(this), h, kind, id, factor, verify);
     },
     async token(h: string, slot: string) {
       const owner = createBrowserHandle();
@@ -173,6 +211,7 @@ export function createVault(codec: Codec) {
       for (let attempt = 0; attempt < 30; attempt++) {
         const claimed = await this.run(h, async (tx) => {
           const { row, session } = await read(tx);
+          await requireAssurance(tx, row.user_id, session);
           if (session.refresh_uncertain)
             throw new VaultError(
               503,
@@ -226,4 +265,86 @@ export function createVault(codec: Codec) {
       throw new VaultError(503, "browser_login_refresh_pending");
     },
   };
+}
+
+async function brokerMfa(
+  codec: Codec,
+  run: <T>(
+    h: string,
+    operation: (tx: any) => Promise<T>,
+    recovery?: boolean,
+  ) => Promise<T>,
+  h: string,
+  kind: "attempt" | "slot",
+  id: string,
+  factor?: string,
+  verify?: { challenge_id: string; code: string },
+) {
+  return run(h, async (tx) => {
+    const rows =
+      kind === "attempt"
+        ? await tx.execute(
+            sql`select candidate as credential,user_id,session_id from kortix.browser_login_attempts where handle_hash=${h} and attempt=${id} and consumed and candidate is not null and expires_at>now() for update`,
+          )
+        : await tx.execute(
+            sql`select credential,user_id,session_id from kortix.browser_login_slots where handle_hash=${h} and slot=${id} and removed_at is null for update`,
+          );
+    const row = rows[0];
+    if (!row) throw new VaultError(404, "browser_login_slot_unavailable");
+    const session = JSON.parse(
+      codec.open(row.credential, binding(h, id, row.user_id)),
+    );
+    if (!factor) {
+      const user = await gotrue("/user", { bearer: session.access_token });
+      if (!user.ok || user.body.id !== row.user_id)
+        throw new VaultError(403, "browser_login_mfa_failed");
+      const factors = Array.isArray(user.body.factors) ? user.body.factors : [];
+      return {
+        factors: factors
+          .filter((f: any) => typeof f.id === "string")
+          .map((f: any) => ({
+            id: f.id as string,
+            factor_type: String(f.factor_type),
+            status: String(f.status),
+          })),
+      };
+    }
+    const result = await gotrue(
+      `/factors/${encodeURIComponent(factor)}/${verify ? "verify" : "challenge"}`,
+      { method: "POST", bearer: session.access_token, body: verify ?? {} },
+    );
+    if (!result.ok)
+      throw new VaultError(
+        result.status === 429 ? 429 : result.status >= 500 ? 503 : 400,
+        "browser_login_mfa_failed",
+      );
+    if (!verify)
+      return { id: result.body.id, expires_at: result.body.expires_at };
+    const next = sessionFrom(result.body);
+    if (!next) throw new VaultError(503, "browser_login_unavailable");
+    const user = await gotrue("/user", { bearer: next.access_token });
+    const claims = JSON.parse(
+      Buffer.from(next.access_token.split(".")[1]!, "base64url").toString(),
+    );
+    if (
+      !user.ok ||
+      user.body.id !== row.user_id ||
+      claims.session_id !== row.session_id ||
+      claims.aal !== "aal2"
+    )
+      throw new VaultError(403, "browser_login_mfa_failed");
+    const sealed = codec.seal(
+      JSON.stringify(next),
+      binding(h, id, row.user_id),
+    );
+    if (kind === "attempt")
+      await tx.execute(
+        sql`update kortix.browser_login_attempts set candidate=${sealed} where handle_hash=${h} and attempt=${id}`,
+      );
+    else
+      await tx.execute(
+        sql`update kortix.browser_login_slots set credential=${sealed},expires_at=to_timestamp(${next.expires_at}),revision=revision+1 where handle_hash=${h} and slot=${id}`,
+      );
+    return { verified: true };
+  });
 }

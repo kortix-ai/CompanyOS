@@ -419,3 +419,13 @@ export function accountMemberAuthRows(accountId: string) {
 export function accountMemberJoin(accountId: string, userId: string) {
   return [accountMembers, and(eq(accountMembers.accountId, accountId), eq(accountMembers.userId, userId))] as const;
 }
+
+/** Browser confirmation/token gates enforce the user's enrolled factors and account requirements. */
+export function browserLoginAssuranceRequired(
+  tx: Pick<typeof db, "execute">,
+  userId: string,
+) {
+  return tx.execute(
+    sql`select 1 where exists(select 1 from auth.mfa_factors where user_id=${userId}::uuid and status='verified') or exists(select 1 from kortix.account_memberships m join kortix.accounts a using(account_id) where m.user_id=${userId}::uuid and a.mfa_required and not m.is_super_admin)`,
+  );
+}

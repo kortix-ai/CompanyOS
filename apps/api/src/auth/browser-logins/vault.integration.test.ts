@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../../shared/db";
-import { browserLoginRouter } from "./routes";
+import { browserLoginRouter, registerBrowserLoginRoutes } from "./routes";
 import { config } from "../../config";
 import {
   createBrowserCredentialCodec,
@@ -11,15 +11,18 @@ import {
   hashBrowserHandle,
 } from "./credentials";
 import { browserLoginConfig } from "./config";
+registerBrowserLoginRoutes();
 const app = new Hono().route("/v1/auth/browser-logins", browserLoginRouter);
 const server = Bun.serve({ port: 0, fetch: app.fetch });
 const base = `http://localhost:${server.port}/v1/auth/browser-logins`;
 let cookie = "";
+let fixtureProxyChain = "192.0.2.1, 192.0.2.254";
 const users: string[] = [];
 async function request(path: string, body: unknown = {}) {
   return fetch(base + path, {
     method: "POST",
     headers: {
+      "x-forwarded-for": fixtureProxyChain,
       origin: config.FRONTEND_URL,
       "x-kortix-browser-login": "1",
       "content-type": "application/json",
@@ -201,9 +204,25 @@ test("PostgreSQL denies client roles for all vault tables", async () => {
 });
 
 test("controlled Google authorize boundary keeps PKCE server-side and requests account choice", async () => {
-  const { __setGoTrueFetch } = await import("../gotrue");
+  const { __setGoTrueFetch, gotrue } = await import("../gotrue");
+  const login = await gotrue("/token", {
+    body: await user("pkce"),
+    query: { grant_type: "password" },
+  });
+  expect(login.ok).toBe(true);
   let authorize: URL | undefined;
-  __setGoTrueFetch(async (input) => {
+  let exchanges = 0;
+  __setGoTrueFetch(async (input, init) => {
+    if (input.includes("/token")) {
+      exchanges++;
+      const body = JSON.parse(String(init.body));
+      const { createHash } = await import("node:crypto");
+      expect(
+        createHash("sha256").update(body.code_verifier).digest("base64url"),
+      ).toBe(authorize!.searchParams.get("code_challenge")!);
+      return Response.json(login.body);
+    }
+    if (input.includes("/user")) return fetch(input, init);
     authorize = new URL(input);
     return new Response(null, {
       status: 302,
@@ -214,6 +233,22 @@ test("controlled Google authorize boundary keeps PKCE server-side and requests a
     const response = await request("/begin", { method: "google" });
     expect(response.status).toBe(200);
     const body = (await response.json()) as any;
+    expect(
+      (
+        await request(`/attempts/${body.attempt}/complete`, {
+          code: "controlled-code",
+          code_verifier: "attacker-override",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(`/attempts/${body.attempt}/complete`, {
+          code: "controlled-code",
+        })
+      ).status,
+    ).toBe(409);
+    expect(exchanges).toBe(1);
     expect(body.code_verifier).toBeUndefined();
     expect(authorize?.searchParams.get("prompt")).toBe("select_account");
     expect(authorize?.searchParams.get("code_challenge_method")).toBe("s256");
@@ -331,5 +366,357 @@ test("refresh ownership commits before upstream; ambiguous failure is never retr
     expect(calls).toBe(1);
   } finally {
     __setGoTrueFetch(null);
+  }
+});
+
+test("malformed JSON is invalid input and initialization replaces stale cookies", async () => {
+  const response = await fetch(base + "/begin", {
+    method: "POST",
+    headers: {
+      origin: config.FRONTEND_URL,
+      "x-kortix-browser-login": "1",
+      "content-type": "application/json",
+      cookie,
+    },
+    body: "{",
+  });
+  expect(response.status).toBe(400);
+  const previous = cookie;
+  for (const value of ["malformed", createBrowserHandle()]) {
+    cookie = previous.split("=")[0] + "=" + value;
+    const recovered = await request("/initialize");
+    expect(recovered.status).toBe(200);
+    expect(recovered.headers.get("set-cookie")).toContain("HttpOnly");
+  }
+  cookie = previous;
+});
+
+test("failed revocation persists backoff and does not starve another expired attempt", async () => {
+  const h = hashBrowserHandle(cookie.split("=")[1]!);
+  const { sweepBrowserLogins } = await import("./service");
+  const rows = await db.execute(
+    sql`select attempt from kortix.browser_login_attempts where handle_hash=${h}`,
+  );
+  for (const row of rows) await request(`/attempts/${row.attempt}/cancel`);
+  const begin = await request("/begin", { method: "password" });
+  const { attempt } = (await begin.json()) as any;
+  const identity = await user("retry");
+  expect(
+    (await request(`/attempts/${attempt}/complete`, identity)).status,
+  ).toBe(200);
+  await db.execute(
+    sql`update kortix.browser_login_attempts set expires_at=now()-interval '1 minute' where handle_hash=${h} and attempt=${attempt}`,
+  );
+  const { __setGoTrueFetch } = await import("../gotrue");
+  __setGoTrueFetch(async () =>
+    Response.json({ error: "synthetic" }, { status: 502 }),
+  );
+  try {
+    await sweepBrowserLogins();
+    const retained = await db.execute(
+      sql`select revoke_attempts,revoke_after>now() as delayed,candidate from kortix.browser_login_attempts where handle_hash=${h} and attempt=${attempt}`,
+    );
+    expect(retained[0]?.delayed).toBe(true);
+    expect(Number(retained[0]?.revoke_attempts)).toBe(1);
+    expect(typeof retained[0]?.candidate).toBe("string");
+    const restarted = Bun.spawn(
+      [
+        "bun",
+        "--no-env-file",
+        import.meta.dir + "/../../__tests__/helpers/browser-login-replica.ts",
+      ],
+      {
+        cwd: resolve(import.meta.dir, "../../../../.."),
+        env: { ...process.env, BROWSER_LOGIN_SWEEP_ONCE: "1" },
+        stdout: "ignore",
+        stderr: "ignore",
+      },
+    );
+    expect(await restarted.exited).toBe(0);
+    const afterRestart = await db.execute(
+      sql`select revoke_attempts from kortix.browser_login_attempts where handle_hash=${h} and attempt=${attempt}`,
+    );
+    expect(Number(afterRestart[0]?.revoke_attempts)).toBe(1);
+
+    const later = await request("/begin", { method: "password" });
+    const next = (await later.json()) as any;
+    await db.execute(
+      sql`update kortix.browser_login_attempts set expires_at=now()-interval '1 minute' where handle_hash=${h} and attempt=${next.attempt}`,
+    );
+    await sweepBrowserLogins();
+    const remaining = await db.execute(
+      sql`select attempt from kortix.browser_login_attempts where handle_hash=${h} and attempt=${next.attempt}`,
+    );
+    expect(remaining.length).toBe(0);
+  } finally {
+    __setGoTrueFetch(null);
+  }
+});
+
+test("public SDK broker and identity adapter use real cookie HTTP boundaries", async () => {
+  const { browserLogins, createBrowserIdentity } =
+    await import("../../../../../packages/sdk/src/index");
+  const fetchWithCookie = (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(base + String(input).replace("/v1/auth/browser-logins", ""), {
+      ...init,
+      headers: {
+        ...Object.fromEntries(new Headers(init?.headers)),
+        origin: config.FRONTEND_URL,
+        cookie,
+      },
+    });
+  const identity = await user("sdk");
+  const options = { fetch: fetchWithCookie };
+  const { attempt } = await browserLogins.begin(
+    { method: "password" },
+    options,
+  );
+  const candidate = await browserLogins.complete(attempt, identity, options);
+  const { slot } = await browserLogins.confirm(attempt, options);
+  const adapter = createBrowserIdentity(options);
+  adapter.select(slot);
+  expect(typeof (await adapter.getToken())).toBe("string");
+  expect(await adapter.getUserId()).toBe(candidate.user.id);
+  expect(
+    (await browserLogins.roster(options)).slots.some((s) => s.slot === slot),
+  ).toBe(true);
+  expect((await browserLogins.remove(slot, options)).removed).toBe(true);
+  adapter.invalidateRoster();
+  expect(await adapter.getUserId()).toBeNull();
+  await expect(adapter.getToken()).rejects.toMatchObject({ status: 404 });
+});
+
+
+test("candidate MFA challenge is browser-bound and verification never exposes credentials", async () => {
+  const identity = await user("mfa");
+  const { attempt } = (await (
+    await request("/begin", { method: "password" })
+  ).json()) as any;
+  expect(
+    (await request(`/attempts/${attempt}/complete`, identity)).status,
+  ).toBe(200);
+  const { __setGoTrueFetch } = await import("../gotrue");
+  __setGoTrueFetch(async (input) => {
+    expect(String(input)).toContain("/factors/synthetic-factor/challenge");
+    return Response.json({ id: "synthetic-challenge", expires_at: 9999999999 });
+  });
+  try {
+    const challenge = await request(`/attempts/${attempt}/mfa/challenge`, {
+      factor_id: "synthetic-factor",
+    });
+    expect(challenge.status).toBe(200);
+    expect(await challenge.json()).toEqual({
+      id: "synthetic-challenge",
+      expires_at: 9999999999,
+    });
+  } finally {
+    __setGoTrueFetch(null);
+  }
+});
+
+test("enforced SSO cannot be bypassed by controlled Google completion", async () => {
+  fixtureProxyChain = "192.0.2.3, 192.0.2.254";
+  const identity = await user("sso");
+  const { gotrue, __setGoTrueFetch } = await import("../gotrue");
+  const session = await gotrue("/token", {
+    body: identity,
+    query: { grant_type: "password" },
+  });
+  expect(session.ok).toBe(true);
+  const account = crypto.randomUUID();
+  await db.execute(
+    sql`insert into kortix.accounts(account_id,name) values(${account}::uuid,'Synthetic broker policy')`,
+  );
+  try {
+    await db.execute(
+      sql`insert into kortix.account_sso_providers(account_id,supabase_sso_provider_id,name,primary_domain,enforce_sso,domain_verified_at) values(${account}::uuid,${crypto.randomUUID()}::uuid,'Synthetic SSO','example.test',true,now())`,
+    );
+    const denied = await request("/begin", { method: "password" });
+    const passwordAttempt = (await denied.json()) as any;
+    expect(
+      (await request(`/attempts/${passwordAttempt.attempt}/complete`, identity))
+        .status,
+    ).toBe(409);
+    __setGoTrueFetch(async (input, init) =>
+      String(input).includes("/authorize")
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://accounts.example.test/authorize" },
+          })
+        : String(input).includes("/token")
+          ? Response.json(session.body)
+          : fetch(input, init),
+    );
+    const { attempt } = (await (
+      await request("/begin", { method: "google" })
+    ).json()) as any;
+    expect(
+      (
+        await request(`/attempts/${attempt}/complete`, {
+          code: "synthetic-code",
+        })
+      ).status,
+    ).toBe(403);
+  } finally {
+    __setGoTrueFetch(null);
+    await db.execute(
+      sql`delete from kortix.accounts where account_id=${account}::uuid`,
+    );
+  }
+});
+
+test("SIGKILL at refresh boundary leaves durable owner and restart never reuses token", async () => {
+  fixtureProxyChain = "192.0.2.4, 192.0.2.254";
+  const slot = await add(await user("kill"));
+  const h = hashBrowserHandle(cookie.split("=")[1]!);
+  const codec = browserLoginConfig(config).codec!;
+  const [row] = await db.execute(
+    sql`select * from kortix.browser_login_slots where handle_hash=${h} and slot=${slot}`,
+  );
+  const binding = { handleHash: h, slot, userId: String(row!.user_id) };
+  const session = JSON.parse(codec.open(String(row!.credential), binding));
+  session.expires_at = 1;
+  await db.execute(
+    sql`update kortix.browser_login_slots set credential=${codec.seal(JSON.stringify(session), binding)} where handle_hash=${h} and slot=${slot}`,
+  );
+  const child = Bun.spawn(
+    [
+      "bun",
+      "--no-env-file",
+      import.meta.dir + "/../../__tests__/helpers/browser-login-replica.ts",
+    ],
+    {
+      cwd: resolve(import.meta.dir, "../../../../.."),
+      env: { ...process.env, BROWSER_LOGIN_KILL_DRILL: "1" },
+      stdout: "pipe",
+      stderr: "ignore",
+    },
+  );
+  const reader = child.stdout.getReader();
+  let buffer = "";
+  async function line() {
+    while (!buffer.includes("\n")) {
+      const next = await reader.read();
+      if (next.done) throw Error("Replica exited");
+      buffer += new TextDecoder().decode(next.value);
+    }
+    const i = buffer.indexOf("\n");
+    const raw = buffer.slice(0, i);
+    buffer = buffer.slice(i + 1);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return line();
+    }
+  }
+  try {
+    const { port } = await line();
+    const pending = fetch(
+      `http://localhost:${port}/v1/auth/browser-logins/slots/${slot}/token`,
+      {
+        method: "POST",
+        headers: {
+          origin: config.FRONTEND_URL,
+          "x-kortix-browser-login": "1",
+          cookie,
+        },
+      },
+    ).catch(() => null);
+    expect((await line()).refreshEntered).toBe(true);
+    child.kill("SIGKILL");
+    await child.exited;
+    await pending;
+    const { __setGoTrueFetch } = await import("../gotrue");
+    let calls = 0;
+    __setGoTrueFetch(async () => {
+      calls++;
+      return Response.json({}, { status: 502 });
+    });
+    try {
+      expect((await request(`/slots/${slot}/token`)).status).toBe(503);
+      expect(calls).toBe(0);
+    } finally {
+      __setGoTrueFetch(null);
+    }
+  } finally {
+    child.kill();
+    await child.exited;
+  }
+});
+
+test("real TOTP broker upgrades candidate before AAL2-required confirmation", async () => {
+  fixtureProxyChain = "192.0.2.5, 192.0.2.254";
+  const identity = await user("totp");
+  const { attempt } = (await (
+    await request("/begin", { method: "password" })
+  ).json()) as any;
+  const completed = (await (
+    await request(`/attempts/${attempt}/complete`, identity)
+  ).json()) as any;
+  const uid = completed.user.id;
+  const account = crypto.randomUUID();
+  await db.execute(
+    sql`insert into kortix.accounts(account_id,name,mfa_required) values(${account}::uuid,'Synthetic MFA',true)`,
+  );
+  await db.execute(
+    sql`insert into kortix.account_memberships(user_id,account_id) values(${uid}::uuid,${account}::uuid)`,
+  );
+  try {
+    expect((await request(`/attempts/${attempt}/confirm`)).status).toBe(403);
+    const h = hashBrowserHandle(cookie.split("=")[1]!);
+    const [row] = await db.execute(
+      sql`select candidate from kortix.browser_login_attempts where handle_hash=${h} and attempt=${attempt}`,
+    );
+    const session = JSON.parse(
+      browserLoginConfig(config).codec!.open(String(row!.candidate), {
+        handleHash: h,
+        slot: attempt,
+        userId: uid,
+      }),
+    );
+    const { gotrue } = await import("../gotrue");
+    const enrolled = await gotrue("/factors", {
+      method: "POST",
+      bearer: session.access_token,
+      body: { factor_type: "totp", friendly_name: "Synthetic test factor" },
+    });
+    expect(enrolled.ok).toBe(true);
+    const factor = enrolled.body as any;
+    const factors = await request(`/attempts/${attempt}/mfa/factors`);
+    expect(factors.status).toBe(200);
+    expect((await factors.json() as any).factors.some((f:any)=>f.id===factor.id)).toBe(true);
+
+    const challenge = await request(`/attempts/${attempt}/mfa/challenge`, {
+      factor_id: factor.id,
+    });
+    expect(challenge.status).toBe(200);
+    const { id } = (await challenge.json()) as any;
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = "";
+    for (const char of factor.totp.secret.replace(/=+$/, ""))
+      bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
+    const key = Buffer.from(
+      bits.match(/.{8}/g)!.map((b: string) => parseInt(b, 2)),
+    );
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+    const { createHmac } = await import("node:crypto");
+    const digest = createHmac("sha1", key).update(counter).digest();
+    const offset = digest[19]! & 15;
+    const code = String(
+      (digest.readUInt32BE(offset) & 0x7fffffff) % 1000000,
+    ).padStart(6, "0");
+    const verified = await request(`/attempts/${attempt}/mfa/verify`, {
+      factor_id: factor.id,
+      challenge_id: id,
+      code,
+    });
+    expect(verified.status).toBe(200);
+    expect(await verified.json()).toEqual({ verified: true });
+    expect((await request(`/attempts/${attempt}/confirm`)).status).toBe(200);
+  } finally {
+    await db.execute(
+      sql`delete from kortix.accounts where account_id=${account}::uuid`,
+    );
   }
 });

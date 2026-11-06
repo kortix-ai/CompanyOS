@@ -222,9 +222,14 @@ export async function send(
       : withDefaultTimeout(input, init, timeoutMs);
   if (signal?.aborted) throw createAbortError();
 
+  const tokenGetter = platformConfig().getToken;
+  const identityKey = tokenGetter.identityKey?.();
   const token = await (signal ? abortable(currentToken(), signal) : currentToken());
   if (!token) throw new AuthError();
 
+  const identity = await platformConfig().getUserId?.();
+  const identityChanged = () => platformConfig().getToken !== tokenGetter || (tokenGetter.identityKey !== undefined && tokenGetter.identityKey() !== identityKey);
+  if (identityChanged()) throw new AuthError();
   const canRetry =
     retryOnAuthError && !hasOneShotBody(init) && !hasHeader(callerHeaders(input, init), 'authorization');
   const retryInput = canRetry && input instanceof Request ? input.clone() : input;
@@ -232,8 +237,11 @@ export async function send(
   const response = await dispatch(fetchImpl, input, init, token, signal);
   if (response.status !== 401 || !canRetry) return response;
 
+  if (identityChanged()) return response;
   const fresh = await refreshedToken(token);
   if (!fresh || fresh === token) return response;
+  if (identityChanged()) return response;
+  if (platformConfig().getUserId && (!identity || await platformConfig().getUserId!() !== identity)) return response;
   return dispatch(fetchImpl, retryInput, init, fresh, signal);
 }
 

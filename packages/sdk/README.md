@@ -1982,3 +1982,25 @@ CLI: `kortix sessions model get [session-id]`, `set [session-id] <model>`,
 and `switch [session-id] <model> --prompt "Continue verification" --idempotency-key verification-model-1`.
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
+
+### Browser identity broker (experimental, disabled by default)
+
+`kortix.auth.browserLogins` (also exported as `browserLogins`) calls the same-origin
+`/v1/auth/browser-logins` cookie broker. It exposes initialize, roster, begin,
+sendEmail, complete, confirm, cancel, token, remove, removeAll, mfaFactors, challengeMfa, and verifyMfa. Completion
+creates a candidate; confirmation returns a slot. No method returns a refresh token.
+
+```ts
+import { createKortix, createBrowserIdentity } from '@kortix/sdk';
+const identity = createBrowserIdentity({ saveSlot: slot => saveThisTabSlot(slot) });
+identity.select(loadThisTabSlot());
+const kortix = createKortix({ backendUrl: '/v1', getToken: identity.getToken, getUserId: identity.getUserId });
+```
+
+The host injects slot persistence scoped to one tab. It never stores credentials.
+The adapter caches access tokens in memory, discards pending results after selection
+changes, and exposes a token-free `subscribe`/`invalidateRoster` seam. Host roster
+notifications call `invalidateRoster`; they never synchronize active selection.
+A 401 replay checks `getUserId` before reissuing a request with a refreshed token.
+The host must clear identity-scoped caches and stop streams when selection changes.
+Full browser acceptance remains in implementation. Keep the flag off.

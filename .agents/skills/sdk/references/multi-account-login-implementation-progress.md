@@ -5,6 +5,10 @@ Status: NOT COMPLETE. Feature is not available or safe to enable.
 User prohibits push, PR, merge, publication, and deployment.
 Preserve the existing untracked plan and security research.
 
+## Historical baseline (superseded)
+
+The backend and SDK continuation below supersedes setup, wiring, acceptance, and remaining-gap claims in the earlier sections.
+
 ## Baseline
 
 - Fetched `origin/dev` and fast-forwarded the canonical branch to `c68799e4cf`.
@@ -188,3 +192,111 @@ with the revision predicate. Other processes wait for bounded polling or return 
 An uncertain response persists a reauthentication-required state. A crashed owner cannot cause
 a future automatic refresh of the original credential. Removal still commits its tombstone first.
 No ownership marker is an in-memory lock.
+
+
+## Backend and typed SDK continuation, 2026-11-06
+
+Status: backend/SDK stage implemented and locally verified. Entire feature remains NOT COMPLETE.
+Canonical checkout and branch remain unchanged. No push, PR, merge, publish, or deploy.
+The original plan and security research remain untracked and unchanged.
+
+### Backend decisions and contracts
+
+- Additive migration `20261106141242777_browser_login_revocation_schedule.sql` adds
+  `revoke_attempts` and `revoke_after` to attempts and slots. Applied only to the existing branch DB.
+  Drizzle snapshot and schema agree. The previously applied vault migration was not edited.
+- Cleanup selects due rows in deterministic schedule order. It commits the next schedule before I/O.
+  Backoff starts at 30 seconds and caps at one hour. A tick selects at most ten rows per kind.
+  Twelve scheduled attempts exhaust automatic retries; encrypted credentials remain retained.
+  Explicit cancel/remove can retry retained rows. Operators can requeue exhausted rows by resetting
+  retry metadata. Exhaustion is not a revocation-success receipt.
+- Removal refresh also commits encrypted ownership before sending a rotating credential.
+  An interrupted owner fails closed; it never automatically reuses the old refresh token.
+- Password/email handlers share the original request context and existing throttle/policy functions.
+  Broker candidates suppress premature login analytics. There is no nested router request.
+  The existing trusted-proxy client-IP helper remains the authority; no new XFF interpretation exists.
+- Complete verifies the provider identity and enforces SSO for every alternate flow.
+  Newly created Google identities also use the existing signup policy. Denied acquired sessions remain
+  encrypted in consumed, expired attempts for revocation instead of being rolled back and lost.
+- `POST /attempts/:id/mfa/factors`, `/mfa/challenge`, `/mfa/verify` and the corresponding
+  `/slots/:id/mfa/*` routes bind factor operations to that browser's candidate or saved session.
+  Factors returns only `{factors:[{id,factor_type,status}]}`. Challenge returns `{id,expires_at}`.
+  Verify requires `{factor_id,challenge_id,code}` and returns only `{verified:true}`.
+  Verify checks the returned user, session association, and AAL2 before replacing encrypted credentials.
+  Confirmation and token resolution reject AAL1 when factors or account policy require AAL2.
+  Account membership reads live in the existing IAM read model.
+- Initialization replaces malformed, unknown, or expired cookies. Infrastructure failures still fail closed.
+  Malformed JSON/schema input returns 400. Authentication rejection remains redacted; unavailable
+  upstreams return 503. Throttles preserve 429 and Retry-After where supplied.
+- Each broker operation uses the existing audit writer with route templates/status and no credentials,
+  cookie, slot value, email, or user-provided error text in operation metadata.
+- Routes register explicitly through `registerBrowserLoginRoutes`. OpenAPI describes all 17 broker
+  routes with typed input/response schemas. Standard inventory generation reports 1,076 total routes.
+  The generated audit-route catalog is synchronized.
+- The feature flag remains OFF in machine configuration. Controlled test processes enable it only locally.
+  Existing token, MFA recovery, cancellation, and removal remain usable after flag disable.
+
+### SDK public contract
+
+- Additive root exports: `browserLogins`, `createBrowserIdentity`, `BrowserBrokerOptions`,
+  `BrowserIdentityOptions`, `BrowserLoginCompletion`, `BrowserLoginSlot`, `BrowserLoginToken`.
+  No subpath was added; package export maps remain unchanged. Runtime/type snapshots were updated
+  additively; root canonical, package export, and framework import guards pass. No version bump.
+- `kortix.auth.browserLogins` references the same broker object. Methods: initialize, roster, begin,
+  sendEmail, complete, confirm, cancel, token, remove, removeAll, mfaFactors, challengeMfa, verifyMfa.
+  Requests use fixed same-origin `/v1/auth/browser-logins`, credentialed cookies, no-store, the broker
+  custom header, injected fetch, and no bearer. Errors preserve `HeadlessAuthError.status`, including 429.
+- `createBrowserIdentity({fetch,saveSlot,now})` exposes getToken/getUserId/select/getSlot,
+  invalidateRoster/subscribe. Access tokens exist only in memory. The host may persist only the opaque
+  slot in per-tab storage through saveSlot. No browser globals, refresh token, localStorage, or channel.
+- getToken coalesces acquisition and rejects stale completions after generation changes. getUserId
+  returns the same cached identity snapshot. Host roster invalidation subscriptions contain no tokens.
+- The existing getToken function contract accepts an optional `identityKey` method. The adapter supplies
+  its slot/selection generation. Transport checks this scope before dispatch and before/after 401 refresh.
+  It also checks the user snapshot before replay. Old mutations never replay after slot/user changes,
+  including changing slots for the same user. Legacy getters without identityKey remain compatible.
+- SDK README and developer reference describe this seam. Web wiring, identity-scoped caches and stream
+  cleanup remain the parent's next stage. Keep one createKortix client per host.
+
+### Verification (all commands use this canonical worktree)
+
+- TDD red evidence remains under ignored output/: malformed JSON returned 503 before correction;
+  SDK missing export, missing broker/MFA methods, cross-user replay, same-user generation replay,
+  initial-dispatch generation race, missing retry scheduling and SSO alternate-flow bypass each failed
+  before implementation. No test assertion was weakened to obtain green.
+- `bun output/launch-test.ts`: 14 pass, 0 fail, 112 assertions across named vault/capacity HTTP/PG files.
+  The runner names both files explicitly. Capacity is standalone to keep each file below roughly ten seconds.
+  Uses real local GoTrue, branch PostgreSQL, HTTP, synthetic identities, and independent Bun replicas.
+  Covers five-identity cap with six concurrent confirmations; forced refresh/removal race; expiry;
+  failed revocation retention, persisted backoff across process restart, and later-row fairness;
+  SIGKILL during upstream refresh with zero old-token reuse afterward; controlled Google PKCE exchange
+  and consumed-attempt replay; enforced SSO alternate-flow denial; real TOTP challenge/verification
+  with rejected AAL1 confirmation; typed SDK cookie HTTP round trip; prior A/B and RLS boundaries.
+- `bun test apps/api/src/__tests__/unit-auth-headless.test.ts`: 26 pass, 0 fail, 117 assertions.
+- `bun output/launch-proxy-proof.ts`: full assembled API app on own port 17708 plus actual Next server
+  on own port 17700. PASS initialize/add/token/disabled-after-use recovery/remove; every response no-store.
+  PASS persisted per-operation audit metadata excludes cookie/slot values. No primary process was used.
+- `pnpm --filter @kortix/sdk typecheck`: exit 0, SDK and executable examples.
+- `pnpm --filter @kortix/sdk test` with explicit files: core/auth/browser-identity.test.ts,
+  core/http/transport.test.ts, index.isomorphic.test.ts, root-canonical.test.ts,
+  package-exports.test.ts, public-surface.test.ts, public-type-surface.test.ts.
+  All named files pass; no full package/suite run occurred.
+- `pnpm --filter @kortix/sdk run smoke:install`: packed install imports and constructs successfully.
+- API and DB typecheck: exit 0. Targeted API ESLint: exit 0.
+  DB migration lint: Found 0 issues in 373 files. Standard runner: Migration exit 0.
+- `bun output/dump-broker-routes.ts`: standard route dumper, synthetic managed-mode configuration,
+  1,076 routes. Standard web audit catalog generator: 1,076 routes.
+- Private launchers and raw logs stay in ignored output/. No secrets or real identity records were committed.
+
+### Parent acceptance and limits
+
+- No real Google provider login or external email delivery is claimed. Google exchange is controlled;
+  password, email OTP, and TOTP use real local GoTrue. Browser UI/provider journeys remain the next stage.
+- No UI/SSR/RSC/action/cache/preview isolation proof follows from the HTTP proxy test.
+  No CDN/IIFE browser execution claim follows from the installed Node ESM smoke.
+- A Hono timeout bounds the response; cancellation of already-running work remains unproved.
+  Ambiguous refresh and terminated owners fail closed and require reauthentication.
+- The known unrelated schema index drift remains unchanged.
+- Parent must finish web identity routing/cache/preview/UI, real browser journeys, and the requested
+  kickoff review delegation. No subagent or review delegation ran in this implementation stage.
+- Shippable to production: NOT YET. The flag stays off until the entire acceptance plan passes.

@@ -4845,6 +4845,16 @@ next call.
 
 #### Errors and limits
 
+The experimental `kortix.auth.browserLogins` uses the same-origin cookie broker.
+It supports initialize, roster, begin, sendEmail, complete, confirm, cancel, token,
+remove, removeAll, mfaFactors, challengeMfa, and verifyMfa. Completion creates a provisional
+candidate. Confirmation returns a saved slot after assurance checks.
+`createBrowserIdentity({ fetch, saveSlot })` provides `getToken` and `getUserId`
+for the existing client. Access tokens remain in memory. Persist only the slot
+in tab-scoped storage. Call `select(slot)` when the user changes identity and
+`invalidateRoster()` on token-free roster notifications. Never synchronize the
+active slot between tabs. This feature remains disabled pending web acceptance.
+
 Every `kortix.auth.*` call throws `HeadlessAuthError` with `code`, `message` and
 `status`.
 

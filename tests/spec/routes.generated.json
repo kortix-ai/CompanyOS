@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1059,
+  "count": 1076,
   "routes": [
     {
       "method": "GET",
@@ -941,6 +941,74 @@
     {
       "method": "GET",
       "path": "/v1/artifacts/s/:token/*"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/auth/browser-logins"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:attempt/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:attempt/complete"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:attempt/confirm"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:attempt/email"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:id/mfa/challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:id/mfa/factors"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/attempts/:id/mfa/verify"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/begin"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/initialize"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/remove-all"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:id/mfa/challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:id/mfa/factors"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:id/mfa/verify"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:slot/remove"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:slot/resolve"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/browser-logins/slots/:slot/token"
     },
     {
       "method": "GET",

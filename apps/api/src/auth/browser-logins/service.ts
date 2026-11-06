@@ -1,9 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../shared/db";
 import { config } from "../../config";
-import { gotrue } from "../gotrue";
-import { revokeLocalSession } from "../revoke-session";
-import { createBrowserHandle } from "./credentials";
+import { revokeLocalSession, revokeStoredAuthSession } from "../revoke-session";
 import { browserLoginConfig } from "./config";
 import { createVault, VaultError } from "./store";
 export const settings = browserLoginConfig(config);
@@ -40,7 +38,7 @@ export async function removeBrowserLogin(
         const encrypted =
           row.kind === "attempt" ? row.candidate : row.credential;
         if (encrypted) {
-          let session = JSON.parse(
+          const session = JSON.parse(
             settings.codec!.open(encrypted, {
               handleHash: h,
               slot: row.slot ?? row.attempt,
@@ -50,60 +48,19 @@ export async function removeBrowserLogin(
           const live = await db.execute(
             sql`select id from auth.sessions where id=${row.session_id}::uuid and user_id=${row.user_id}::uuid`,
           );
-          if (
-            live.length &&
-            session.expires_at * 1000 < Date.now() &&
-            (session.refresh_uncertain || session.refresh_owner)
-          ) {
-            pending = true;
-            continue;
-          }
-          if (live.length && session.expires_at * 1000 < Date.now()) {
-            // Revocation also owns refresh durably before sending the rotating credential.
-            session.refresh_owner = createBrowserHandle();
-            const owned = settings.codec!.seal(JSON.stringify(session), {
-              handleHash: h,
-              slot: row.slot ?? row.attempt,
-              userId: row.user_id,
-            });
-            if (row.kind === "slot")
-              await db.execute(
-                sql`update kortix.browser_login_slots set credential=${owned} where handle_hash=${h} and slot=${row.slot}`,
-              );
-            else
-              await db.execute(
-                sql`update kortix.browser_login_attempts set candidate=${owned} where handle_hash=${h} and attempt=${row.attempt}`,
-              );
-            const refreshed = await gotrue("/token", {
-              body: { refresh_token: session.refresh_token },
-              query: { grant_type: "refresh_token" },
-            });
-            if (!refreshed.ok) {
-              pending = true;
-              continue;
-            }
-            session = refreshed.body;
-            const next = settings.codec!.seal(JSON.stringify(session), {
-              handleHash: h,
-              slot: row.slot ?? row.attempt,
-              userId: row.user_id,
-            });
-            if (row.kind === "slot")
-              await db.execute(
-                sql`update kortix.browser_login_slots set credential=${next} where handle_hash=${h} and slot=${row.slot} and removed_at is not null`,
-              );
-            else
-              await db.execute(
-                sql`update kortix.browser_login_attempts set candidate=${next} where handle_hash=${h} and attempt=${row.attempt}`,
-              );
-          }
-          const result = live.length
-            ? await revokeLocalSession(
-                session.access_token,
-                row.user_id,
-                row.session_id,
-              )
-            : { ok: true };
+          // Never replay a rotating refresh credential to obtain logout authority.
+          // The stored user/session pair is server verified and scoped to this vault.
+          const result = !live.length
+            ? { ok: true }
+            : session.expires_at * 1000 < Date.now() ||
+                session.refresh_uncertain ||
+                session.refresh_owner
+              ? await revokeStoredAuthSession(row.user_id, row.session_id)
+              : await revokeLocalSession(
+                  session.access_token,
+                  row.user_id,
+                  row.session_id,
+                );
           if (!result.ok) {
             pending = true;
             continue;

@@ -159,10 +159,29 @@ export function createVault(codec: Codec) {
         );
         await requireAssurance(tx, row.user_id, session);
         const existing = await tx.execute(
-          sql`select slot from kortix.browser_login_slots where handle_hash=${h} and user_id=${row.user_id}::uuid and removed_at is null`,
+          sql`select * from kortix.browser_login_slots where handle_hash=${h} and user_id=${row.user_id}::uuid and removed_at is null`,
         );
-        if (existing.length)
-          return { slot: existing[0].slot, duplicate_candidate: a };
+        if (existing.length) {
+          const saved = existing[0];
+          const previous = JSON.parse(
+            codec.open(saved.credential, binding(h, saved.slot, row.user_id)),
+          );
+          if (
+            !previous.refresh_uncertain &&
+            !previous.refresh_owner &&
+            previous.expires_at * 1000 > Date.now()
+          )
+            return { slot: saved.slot, duplicate_candidate: a };
+          // Keep this browser's stable selector while replacing unusable credentials.
+          // Retire the old session in the consumed attempt for independent cleanup.
+          await tx.execute(
+            sql`update kortix.browser_login_slots set session_id=${row.session_id}::uuid,credential=${codec.seal(JSON.stringify(session), binding(h, saved.slot, row.user_id))},expires_at=to_timestamp(${session.expires_at}),revision=revision+1 where handle_hash=${h} and slot=${saved.slot} and removed_at is null`,
+          );
+          await tx.execute(
+            sql`update kortix.browser_login_attempts set candidate=${codec.seal(JSON.stringify(previous), binding(h, a, row.user_id))},session_id=${saved.session_id}::uuid,expires_at=now(),revoke_after=now(),revoke_attempts=0 where handle_hash=${h} and attempt=${a}`,
+          );
+          return { slot: saved.slot };
+        }
         const pending = await tx.execute(
           sql`select slot from kortix.browser_login_slots where handle_hash=${h} and user_id=${row.user_id}::uuid and revoke_pending`,
         );

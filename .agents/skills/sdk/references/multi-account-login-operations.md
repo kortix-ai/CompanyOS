@@ -1,6 +1,6 @@
 # Browser sign-ins: experimental operator and user guide
 
-Status: local implementation; initial adoption of an existing ordinary sign-in is unfinished. Parent review and remaining acceptance are required. Keep disabled outside isolated proofs.
+Status: local implementation and ordinary sign-in adoption are implemented and locally verified. Final source review approves the default-off stage. Rollout acceptance remains incomplete; keep the feature disabled outside isolated proofs.
 
 ## Configuration
 

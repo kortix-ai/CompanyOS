@@ -1251,3 +1251,9 @@ Final post-council static/build result and cleanup:
 - Common-egress budget proof uses a controlled forwarded address on Node auth requests. It does not claim deployed ingress verification.
 - All four owned agent-browser sessions and the owned Playwright recorder close. Remaining owned synthetic users: 0. All proof listeners and the owned auth container stop. No cloud resources are created. CLI artifacts move into ignored output. The transient auth fixture environment file is removed.
 - The 30.067-second account-management-demo.webm is an edited local UI walkthrough. The raw complete two-tab recording remains uncertified. Final Sol round 3 follows the source commit. Flag OFF; production shippable NOT YET.
+
+## Default-off local stage closeout, 2026-11-07
+
+Final Sol round 3 approves runtime source at 15cff7d886: code 9/10 and UI 9/10, no blocking findings in review scope. Its only P3 is the stale operator introduction, now corrected. This closeout changes documentation only; no check rerun is necessary. Prior real checks and cleanup remain valid. The review ledger records every round and the unmet all-reviewer UI target under the three-round cap.
+
+Local feature implementation and default-off review stage: complete. Production enablement: NOT YET. Flag remains OFF. Remaining acceptance exclusions and the expired-credential limitation remain explicit. No push, PR, merge, deploy or publication.

@@ -121,3 +121,20 @@ Corrections after the Opus review:
 - U1–U6: full-width form actions, visibly disabled current email, adoption-specific heading, specific removal error in destructive styling, muted capacity notice, gate logo and heading. Updated desktop/mobile light/dark and dialog/gate screenshots are in ignored output.
 
 Video correction: the original 49.7-second video and subsequent agent-browser captures are uncertified. They freeze or omit transitions. Their DOM/network assertions remain separate evidence. A Playwright CLI recording captures the actual management form, modal failure, successful removal, remaining A, and A profile. The edited account-management-demo.webm removes an idle interval using raw ranges 0–26 and 172–176.067 seconds. Contact sheets were visually inspected. This is a single-page UI walkthrough, not a raw two-tab recording. No claim of certified full two-tab video remains.
+
+## Council round 3: Sol final verdict, 2026-11-07
+
+GPT-6.1 Sol, high reasoning effort: APPROVE for default-off stage. Code 9/10, UI 9/10 at 15cff7d886. No blocking findings in scope. Read-only source review of b804810f3b..15cff7d886, surrounding contracts, ledgers, ten screenshots and both Playwright contact sheets. No checks or services rerun. F1–F8 supported by source inspection. F9 remains documented.
+
+One P3 documentation finding: the operator guide introduction incorrectly called ordinary adoption unfinished. Corrected without changing rollout exclusions. Runtime source remains unchanged after the reviewed head.
+
+Council scores (code/UI; both providers at high effort):
+
+| Delegate | Round 1 | Round 2 | Round 3 |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 7/7.5 | 8/9 | 9/9 |
+| Claude Opus 5.5 | 6/4 | 7/7 | 8/8 |
+
+Opus round 3 precedes the final corrections; Sol round 3 covers them. The target of UI 9 from every reviewer is not met. The three-round cap stops further council iteration. Only two providers are available. Earlier Sol medium loop completes three rounds with backend/focus approval. Usage totals are unavailable.
+
+Approval does not authorize production enablement. Genuine Google/SAML, deployed TLS/edge, persisted BFCache, combined delayed browser callback race, native/side-panel and a certified complete raw two-tab video remain unverified. The edited one-page walkthrough is separate from two-tab DOM/network evidence. No push, PR, merge, deployment or publication.

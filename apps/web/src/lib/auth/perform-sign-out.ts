@@ -1,4 +1,5 @@
 'use client';
+import { browserDocumentIdentity } from '@/lib/auth/browser-document';
 
 import { stopWebPush } from '@kortix/ui/internal/notifications/web-push';
 import { finalizeServerSignOut } from '@/lib/auth/finalize-sign-out';
@@ -84,6 +85,7 @@ export function signOutDestination(returnUrl?: string): string {
  * `sign-out-sequence.ts`.
  */
 export async function performSignOut(options?: { returnUrl?: string }): Promise<void> {
+  if (browserDocumentIdentity()) throw new Error('Saved sign-in removal is unavailable in this stage');
   const destination = signOutDestination(options?.returnUrl);
   let left = false;
   try {

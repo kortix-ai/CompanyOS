@@ -340,3 +340,83 @@ translations, analytics, help; browser A/B/runtime/preview/terminal/download acc
 No new UI, screenshot, recording, or complete web journey exists from this continuation.
 The original plan and security-research files remain unchanged and untracked.
 Parent kickoff Sol loop and council remain unrun. Feature enablement remains unsafe.
+
+## Production consumer wiring continuation, 2026-11-06
+
+Status: consumers connected and real Next SSR/RSC verified; milestone acceptance remains INCOMPLETE.
+Feature remains unsafe to enable. No push, PR, merge, deploy, or publication occurred.
+Original untracked plan/research remain untouched. SDK source was not changed.
+
+### Production changes
+
+- Middleware strips inbound browser identity headers before processing. Explicit locale/slot page URLs
+  resolve the vault handle through the SDK broker, then verify the same subject with SDK `authUser`.
+  Selected protected pages rewrite onto existing locale routes with request-only slot/access-token
+  headers. Responses declare private/no-store. Missing/foreign/unavailable selections return a generic
+  401 at the original URL; they never enter legacy authentication. Unsupported selected paths return 404.
+  Existing slots resolve after flag disable. Unselected routes retain legacy behavior.
+- `supabase/server.ts` selected getUser/getSession use the selected bearer and SDK user endpoint with
+  request-local state. Selected cookie reads are empty; credential operations reject. No selected
+  credential writes or process-global SDK configuration occur. `/projects` now verifies the selected
+  server user before rendering its existing ProjectSelector. Session metadata inherits selected
+  getSession through the same server factory.
+- Server factory inventory: session-tab-title-server, auth actions, auth/mobile callbacks,
+  maintenance route/bypass, and sign-out-actions import this factory. Callbacks at unselected URLs
+  remain legacy. Selected credential methods fail closed. Maintenance API URLs are unselected;
+  migrating non-page selected API/action routing still needs explicit acceptance.
+- `browser-document.ts` creates one memory-only SDK identity per selected document. SDK configuration
+  receives getToken/getUserId from that identity. Legacy token helpers also delegate selected reads.
+  URL slot changes invalidate the old generation and replace the document. Losing a selector in the
+  same document throws instead of adopting a legacy identity.
+- AuthProvider selected bootstrap verifies SDK user against the token snapshot. It skips legacy
+  Supabase initialization/listeners, marker adoption, and global cache reset. Broker invalidation
+  removes published user/session and enters the existing retry error boundary. Cleanup unsubscribes
+  its own listener. Selected sessions contain an empty refresh-token compatibility field, no credential.
+- Selected browser Supabase clients have no storage, automatic refresh, or URL credential detection.
+  Auth reads use SDK; shared auth events have no subscription; other auth controls reject. Shared
+  performSignOut rejects selected documents before invoking any global reset or legacy sign-out.
+- RouterBridge propagates selection on push/replace and captures ordinary private anchor clicks.
+  Private path propagation includes actual app prefixes. This is basic integration, not a link sweep.
+
+### Evidence
+
+All commands run in this worktree. Private logs/launchers remain in ignored `output/`.
+
+- RED `bun test ./apps/web/src/lib/auth/browser-consumer.test.ts`: missing verified resolver export.
+- Resolver/route/provider named files: 17 pass, 0 fail, 67 assertions, 22 ms.
+  The existing source-text sign-out assertion initially failed when the provider changed its sink.
+  The fix preserves the shared sink and puts the selected guard in performSignOut; assertions unchanged.
+- New consumer file, including legacy-refresh and auth-event rejection: 2 pass, 0 fail, 4 assertions,
+  34 ms (`output/consumer-capability-tests.log`).
+- Web typecheck exits 0 (`output/consumer-typecheck-final.log`). Changed-file ESLint exits 0;
+  a displaced use-client directive warning was fixed (`output/consumer-eslint-last.log`).
+- `bun output/launch-consumer-http-proof.ts` exits 0 against actual Next 17700, assembled API 17708,
+  and the existing isolated branch PostgreSQL database. Creates and deletes synthetic users.
+  One vault jar plus a real legacy A session cookie accompanies concurrent A/B `/u/<slot>/projects`
+  requests. Both return 200. Instrumented API responses prove each subject is verified by middleware
+  AND the production projects server getter. No request token response header is returned.
+  Real B RSC returns 200 and text/x-component. Foreign slot and missing handle return 401 despite
+  forged internal headers. Flag-off A SSR returns 200. The proof removes the saved slots afterward.
+  Next dev replaces the configured private/no-store header with `no-store`; production header behavior
+  is unverified. Initial proof instrumentation could not parse compressed API bodies; requesting identity
+  encoding fixed the ignored observer. This was a proof-observer failure, not an auth fallback.
+- T3 preview opens an unavailable selected route and observes exactly “Browser identity unavailable”,
+  no interactive elements. The owned tab is closed. Authenticated browser A/B lifecycle is NOT verified.
+- Own Next launcher/process was stopped after verification. No pre-existing listener was stopped.
+
+### Required remaining acceptance and work
+
+1. Real identity-sensitive Server Action round trip is UNVERIFIED. No action acceptance is claimed.
+2. Authenticated browser bootstrap, cross-tab Supabase event races, connection disposal, identity switch,
+   recovery retry and client-side navigation require DOM/network acceptance. HTTP RSC proof alone
+   does not establish those contracts. The new capabilities have focused protocol tests only.
+3. Direct next/navigation push/replace calls, prefetch, modifier-key/new-tab anchors, forms, auth return
+   destinations, public-to-private transitions, and non-page API routing need the parent's navigation stage.
+   RouterBridge and ordinary anchor capture do not cover every direct router call.
+4. Persisted Query/Zustand/storage caches and late writers remain unscoped. No global reset was added.
+   Existing SDK runtime/stream hooks still require the scoped-state teardown acceptance. Do not enable.
+5. Selected Supabase MFA/profile/password/credential controls deliberately reject until migrated.
+   Broker candidate controls, selected logout/removal UI, discovery, Google/email flows and chooser
+   remain next-stage work. No visual/menu implementation was added.
+6. Preview authority isolation, download/terminal/runtime acceptance, help/translations/analytics,
+   kickoff review, council and the complete A/B acceptance matrix remain outstanding.

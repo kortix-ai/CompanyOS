@@ -1,4 +1,4 @@
-import { browserLogins, type BrowserBrokerOptions } from '@kortix/sdk';
+import { authUser, browserLogins, type BrowserBrokerOptions } from '@kortix/sdk';
 
 export interface BrowserRequestOptions {
   /** Trusted deployment configuration, never forwarded Host or Origin. */
@@ -31,4 +31,15 @@ export async function resolveBrowserRequest(request: Request, slot: string, opti
       return (options.fetch ?? fetch)(new URL(String(input), backend.origin), { ...init, headers, redirect: 'error' });
     },
   });
+}
+
+export async function resolveVerifiedBrowserRequest(request: Request, slot: string, options: BrowserRequestOptions) {
+  const token = await resolveBrowserRequest(request, slot, options);
+  const { user } = await authUser(token.access_token, {
+    backendUrl: options.backendOrigin,
+    signal: request.signal,
+    fetch: (input, init) => (options.fetch ?? fetch)(input, { ...init, cache: 'no-store', redirect: 'error' }),
+  });
+  if (user.id !== token.user_id) throw new Error('Browser identity unavailable');
+  return { ...token, user };
 }

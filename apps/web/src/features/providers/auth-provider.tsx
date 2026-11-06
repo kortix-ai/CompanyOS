@@ -1,4 +1,5 @@
 'use client';
+import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
 import { IDENTITY_MARKER_KEY, shouldResetClientState } from '@/lib/auth/identity-marker';
@@ -59,6 +60,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let active = true;
+    const selected = browserDocumentIdentity();
+    if (selected) {
+      const unsubscribe = selected.subscribe(() => {
+        if (!active) return;
+        setSession(null);
+        setUser(null);
+        setBootstrapError(new Error('Saved sign-in is unavailable. Retry authentication.'));
+        setIsLoading(false);
+      });
+      selectedDocumentSession().then((verified) => {
+        if (!active) return;
+        setSession(verified);
+        setUser(verified.user);
+        setIsLoading(false);
+      }).catch((error) => {
+        if (!active) return;
+        setSession(null);
+        setUser(null);
+        setBootstrapError(error instanceof Error ? error : new Error('Browser identity unavailable'));
+        setIsLoading(false);
+      });
+      return () => { active = false; unsubscribe(); };
+    }
     /**
      * Make the client state safe to hand to `nextUserId`, then record that it
      * belongs to them. Resolves only once any wipe has finished, so callers can

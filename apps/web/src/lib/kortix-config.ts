@@ -1,4 +1,5 @@
 'use client';
+import { browserDocumentIdentity } from '@/lib/auth/browser-document';
 
 /**
  * The one place apps/web wires itself into @kortix/sdk. The entire data layer
@@ -29,11 +30,12 @@ export function ensureKortixConfigured(tI18nComplete: UiTranslator): void {
   if (configured) return;
   configured = true;
 
+  const selected = browserDocumentIdentity();
   configureKortix({
     backendUrl: getEnv().BACKEND_URL,
-    getToken: kortixGetToken,
+    getToken: selected?.getToken ?? kortixGetToken,
     clientVersion: getEnv().VERSION ? `web/${getEnv().VERSION}` : undefined,
-    getUserId: async () => {
+    getUserId: selected?.getUserId ?? (async () => {
       try {
         const {
           data: { session },
@@ -42,7 +44,7 @@ export function ensureKortixConfigured(tI18nComplete: UiTranslator): void {
       } catch {
         return null;
       }
-    },
+    }),
     sandboxId: getEnv().SANDBOX_ID ?? null,
     billingEnabled: isBillingEnabled(),
     // Literal dotted process.env.NEXT_PUBLIC_* reads are the ONLY form Next's

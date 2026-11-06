@@ -1,3 +1,4 @@
+import { browserDocumentIdentity } from '@/lib/auth/browser-document';
 /**
  * Shared auth token helpers.
  *
@@ -82,6 +83,8 @@ let forceRefreshNext = false;
  * Slow path: deduplicates concurrent calls into a single auth roundtrip.
  */
 export async function getSupabaseAccessToken(): Promise<string | null> {
+  const selected = browserDocumentIdentity();
+  if (selected) return selected.getToken();
   // Installer/bootstrap flow: server actions may set auth cookies without a
   // client-side Supabase session yet. Use an injected token until the client
   // session hydrates.

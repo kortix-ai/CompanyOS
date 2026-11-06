@@ -1,3 +1,5 @@
+import { headers } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { ProjectSelector } from '@/features/workspace/project-selector/project-selector';
 
 /**
@@ -6,6 +8,11 @@ import { ProjectSelector } from '@/features/workspace/project-selector/project-s
  * (`/projects/start`) sends the user here whenever it has no single obvious
  * project to open.
  */
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  if ((await headers()).has('x-kortix-browser-slot')) {
+    const client = await createClient();
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) throw new Error('Browser identity unavailable');
+  }
   return <ProjectSelector />;
 }

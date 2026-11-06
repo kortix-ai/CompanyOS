@@ -1,3 +1,5 @@
+import { browserDocumentIdentity, selectedSupabaseCapability } from '@/lib/auth/browser-document';
+import { createClient as createIsolatedClient } from '@supabase/supabase-js';
 import { getEnv } from '@/lib/env-config';
 import { createBrowserClient } from '@supabase/ssr';
 import { KORTIX_SUPABASE_AUTH_COOKIE } from './constants';
@@ -44,6 +46,12 @@ export function createClient() {
   const runtimeEnv = getEnv();
   const url = resolveBrowserSupabaseUrl(runtimeEnv.SUPABASE_URL);
   const key = runtimeEnv.SUPABASE_ANON_KEY;
+
+  if (browserDocumentIdentity()) {
+    return selectedSupabaseCapability(createIsolatedClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    }));
+  }
 
   // `@supabase/ssr` never sets `secure` itself (confirmed against the
   // installed package's `dist/` — zero matches for `secure`), so on

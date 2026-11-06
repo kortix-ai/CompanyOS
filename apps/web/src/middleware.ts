@@ -1,3 +1,5 @@
+import { parseBrowserRoute, stripBrowserIdentityHeaders } from '@/lib/auth/browser-route';
+import { resolveVerifiedBrowserRequest } from '@/lib/auth/browser-request';
 import { defaultLocale, locales } from '@/i18n/catalog.mjs';
 import { isNonPagePath, localizedPathname, unverifiedSessionLocale } from '@/i18n/routing';
 import {
@@ -285,6 +287,7 @@ function isDecodablePath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  stripBrowserIdentityHeaders(request.headers);
   let { pathname } = request.nextUrl;
   // These are probes for server files, not product routes. A plain response also
   // avoids rendering the translated application shell for sensitive-file probes.
@@ -375,6 +378,31 @@ export async function middleware(request: NextRequest) {
     }
     return response;
   };
+
+  // Explicit selectors never consult or mutate the legacy session cookie.
+  try {
+    const selected = parseBrowserRoute(pathname);
+    if (selected) {
+      if (!isProtectedAppPath(selected.pathname)) return new NextResponse('Browser identity unavailable', { status: 404, headers: { 'cache-control': 'private, no-store' } });
+      const identity = await resolveVerifiedBrowserRequest(request, selected.slot, {
+        frontendOrigin: process.env.FRONTEND_URL || process.env.KORTIX_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://kortix.com',
+        backendOrigin: process.env.BACKEND_URL || process.env.KORTIX_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.kortix.com',
+      });
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('x-kortix-browser-slot', selected.slot);
+      requestHeaders.set('x-kortix-browser-token', identity.access_token);
+      const locale = (selected.locale ?? defaultLocale) as Locale;
+      requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
+      requestHeaders.set('x-locale', locale);
+      const target = request.nextUrl.clone();
+      target.pathname = localizedPathname(locale, selected.pathname);
+      const response = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
+      response.headers.set('cache-control', 'private, no-store, max-age=0');
+      return finalizeEnvironmentAccess(response);
+    }
+  } catch {
+    return new NextResponse('Browser identity unavailable', { status: 401, headers: { 'cache-control': 'private, no-store' } });
+  }
 
   // Public HTML pages have canonical Markdown representations. Rewrite only
   // explicit Markdown requests. Browsers keep the normal HTML representation.

@@ -714,6 +714,10 @@ test("real TOTP broker upgrades candidate before AAL2-required confirmation", as
     expect(verified.status).toBe(200);
     expect(await verified.json()).toEqual({ verified: true });
     expect((await request(`/attempts/${attempt}/confirm`)).status).toBe(200);
+    // A saved subject must not bypass assurance for a fresh candidate.
+    const again = await (await request('/begin', { method: 'password' })).json() as any;
+    expect((await request(`/attempts/${again.attempt}/complete`, identity)).status).toBe(200);
+    expect((await request(`/attempts/${again.attempt}/confirm`)).status).toBe(403);
   } finally {
     await db.execute(
       sql`delete from kortix.accounts where account_id=${account}::uuid`,

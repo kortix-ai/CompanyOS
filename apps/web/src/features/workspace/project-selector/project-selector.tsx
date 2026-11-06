@@ -1,10 +1,8 @@
 'use client';
+import { browserIdentityPath } from '@/lib/auth/browser-route';
 
-import {
-  acceptAccountInviteAndLand,
-  type KortixProject,
-  type MyAccountInvite,
-} from '@kortix/sdk';
+import { useRouter } from '@/lib/navigation/use-identity-router';
+import { acceptAccountInviteAndLand, type KortixProject, type MyAccountInvite } from '@kortix/sdk';
 import { qk } from '@kortix/sdk/react';
 import {
   ArrowRightIcon,
@@ -14,28 +12,27 @@ import {
 } from '@phosphor-icons/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useMemo, useState, type MouseEvent } from 'react';
 
+import { useAuth } from '@/features/providers/auth-provider';
+import { AccountTopBar } from '@/features/workspace/account-top-bar';
+import { useLocale, useTranslations } from '@/i18n/use-translations';
+import { performSignOut } from '@/lib/auth/perform-sign-out';
+import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
+import { cn } from '@kortix/ui';
 import { Button } from '@kortix/ui/button';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { Input } from '@kortix/ui/input';
+import { useBrandName } from '@kortix/ui/internal/branding/branding-provider';
+import { isModifiedClick } from '@kortix/ui/internal/lib/navigation/modified-click';
+import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
+import { relativeTime } from '@kortix/ui/internal/lib/relative-time';
+import { useCurrentAccountStore } from '@kortix/ui/internal/stores/current-account-store';
 import { KortixLogo } from '@kortix/ui/kortix-logo';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
 import { errorToast } from '@kortix/ui/toast';
-import { useAuth } from '@/features/providers/auth-provider';
-import { AccountTopBar } from '@/features/workspace/account-top-bar';
 import { newWorkspacePathForAccount } from '@kortix/ui/workspace/new/account-param';
-import { useLocale, useTranslations } from '@/i18n/use-translations';
-import { performSignOut } from '@/lib/auth/perform-sign-out';
-import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
-import { isModifiedClick } from '@kortix/ui/internal/lib/navigation/modified-click';
-import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
-import { relativeTime } from '@kortix/ui/internal/lib/relative-time';
-import { cn } from '@kortix/ui';
-import { useCurrentAccountStore } from '@kortix/ui/internal/stores/current-account-store';
-import { useBrandName } from '@kortix/ui/internal/branding/branding-provider';
 
 import {
   COLLAPSED_PROJECT_LIMIT,
@@ -79,9 +76,10 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
   const t = useTranslations('projectSelector');
   const brandName = useBrandName();
   const { email, loading, loadFailed, sections, invites } = props;
-  const createHref = props.createHref && props.connectComputer
-    ? `${props.createHref}&connect=computer`
-    : props.createHref;
+  const createHref =
+    props.createHref && props.connectComputer
+      ? `${props.createHref}&connect=computer`
+      : props.createHref;
   const [query, setQuery] = useState('');
 
   const total = countProjects(sections);
@@ -107,7 +105,12 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-lg flex-col px-6 py-20">
-      <AccountTopBar email={email} name={props.name} signingOut={props.signingOut} onLogOut={props.onLogOut} />
+      <AccountTopBar
+        email={email}
+        name={props.name}
+        signingOut={props.signingOut}
+        onLogOut={props.onLogOut}
+      />
 
       {/* `my-auto` centers the block in the viewport while it fits, and lets
           it start at the top and scroll once the project list is taller.
@@ -216,7 +219,7 @@ function CreateCard({ href }: { href: string }) {
   const t = useTranslations('projectSelector');
   return (
     <Link
-      href={href}
+      href={browserIdentityPath(href, typeof window === 'undefined' ? '' : window.location.pathname)}
       prefetch
       data-testid="selector-create"
       className="group bg-popover hover:bg-hover focus-visible:ring-ring flex items-center gap-3 rounded-md border px-4 py-3.5 transition-colors outline-none focus-visible:ring-2"
@@ -343,7 +346,7 @@ function AccountBlock({
         </ul>
       ) : section.state === 'empty-creatable' ? (
         <Link
-          href={`${newWorkspacePathForAccount(section.accountId)}${connectComputer ? '&connect=computer' : ''}`}
+          href={browserIdentityPath(`${newWorkspacePathForAccount(section.accountId)}${connectComputer ? '&connect=computer' : ''}`, typeof window === 'undefined' ? '' : window.location.pathname)}
           className="group hover:bg-hover focus-visible:ring-ring flex items-center gap-3 rounded-md border border-dashed px-4 py-3 transition-colors outline-none focus-visible:ring-2"
         >
           <span className="text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-md border border-dashed">
@@ -390,7 +393,10 @@ function ProjectRow({
   return (
     <li>
       <Link
-        href={`/projects/${project.project_id}${connectComputer ? '/settings/computer' : ''}`}
+        href={browserIdentityPath(
+          `/projects/${project.project_id}${connectComputer ? '/settings/computer' : ''}`,
+          typeof window === 'undefined' ? '' : window.location.pathname,
+        )}
         onClick={(event) => onOpen(event, project)}
         data-testid="selector-project"
         className="group bg-popover hover:bg-hover focus-visible:ring-ring duration-fast flex items-center gap-3 rounded-md border px-4 py-2.5 transition-colors outline-none focus-visible:ring-2"

@@ -571,3 +571,91 @@ All commands use this canonical worktree. Raw evidence remains in ignored output
 - The broader feature remains NOT YET shippable. This bounded milestone must not be marked accepted
   until the missing project/draft/IDB and lifecycle browser scenarios run. Parent UI/menu/preview/navigation
   and final reviews remain outstanding. No enablement claim is made.
+
+## Account picker vertical, 2026-11-06
+
+Status: UI vertical implemented locally; NOT accepted for enablement. No push, PR, merge, publish, or deploy.
+Starting HEAD `a2ec666b91`; same canonical branch/worktree. Original untracked plan/research remain untouched.
+
+### UI and contracts
+
+- `features/auth/browser-logins/accounts.tsx` owns the shared Signed-in accounts section and isolated chooser/add page.
+  Existing `AccountTopBar` header and sidebar Theme section compose it. Workspace switching stays separate.
+  Current row has a checkmark/aria-current. Account rows and Open in new tab carry actual selector hrefs.
+  Add keeps the sanitized destination. Five-account limit, roster loading/retry, expired labels and browser-only help exist.
+- `/auth/browser-logins` handles password and actual broker email-code send/complete, explicit candidate confirmation,
+  candidate/saved-slot TOTP factor challenge/verification, cancel and scoped single/all-browser removal.
+  Password is React memory only. No Supabase credential writer or legacy signout runs for selected paths.
+  All-browser removal calls the atomic broker removeAll through a host helper and invalidates the local roster.
+- `/auth/browser-logins/callback` accepts only the initiating tab's matching sessionStorage attempt.
+  It consumes that marker before code completion; confirmation follows factor verification.
+  Google begin uses the server PKCE chooser URL. There is no linkIdentity or browser refresh credential.
+- `GET /v1/auth/browser-logins/capabilities` returns only `{enabled}` from server vault availability and flag.
+  SDK `browserLogins.capabilities()` uses the existing no-store cookie broker without a bearer.
+  No query parameter enables the feature. Add disappears when disabled; saved roster/removal/recovery remain.
+- Middleware resolves bare protected/root URLs from the browser roster. Multiple identities go to the chooser;
+  one can resolve automatically. Failed explicit selectors redirect to the neutral chooser without legacy fallback.
+  `browser-login-navigation.ts` strips foreign selectors and origin escapes, preserves locale and safe app destinations.
+- Header/project-selector settings/project/create hrefs carry selectors. Selected header/menu logout uses the host helper.
+  AuthProvider's unavailable screen links to the chooser. Pending upstream revocation is stated without claiming success.
+- Server closed event `auth_identity_operation` records successful candidate authentication with operation/outcome/surface.
+  Metadata has no email, slot, browser handle or identity pair. Shared browser analytics remain disabled.
+- SDK README/developer reference describe discovery and browser selection. Ordered catalog additions pass the catalog guard.
+  Non-English entries currently use English copy; translation review remains required.
+- Real TOTP testing found duplicate confirmation returned before required AAL2 enforcement. The guard now runs before
+  duplicate lookup. The regression first returned 200 instead of 403, then passed after the fix. The learnings ledger records it.
+- Export guards found three pre-existing additive managed-storage exports absent from both snapshots. Both snapshots now
+  include adoptManagedStorage/detachManagedStorage/onManagedStorageAdoption. No exported name was removed or renamed.
+
+### Local checks and real proof
+
+All commands run from `/Users/jay/root/kortix/suna-multi-account-login-plan`.
+
+- SDK RED: named browser-identity test failed on missing capabilities method. GREEN: 6 pass, 0 fail.
+- `pnpm --filter @kortix/sdk test src/core/auth/browser-identity.test.ts src/root-canonical.test.ts
+  src/index.isomorphic.test.ts src/package-exports.test.ts src/public-surface.test.ts src/public-type-surface.test.ts`:
+  six isolated files, 43 pass total, 0 fail. Logs: output/picker-sdk-final.log.
+- `pnpm --filter @kortix/sdk typecheck`: exit 0. `pnpm --filter @kortix/sdk run smoke:install`:
+  packed ESM import/construction pass. Logs: output/picker-sdk-t0-last.log, output/picker-install-last.log.
+- Named web run: browser-login-navigation.test.ts, browser-route.test.ts, browser-consumer.test.ts,
+  browser-lifecycle.test.ts: 13 pass, 0 fail, 45 assertions. output/picker-web-tests.log.
+- `bun output/launch-test.ts`: only vault.integration.test.ts and capacity.integration.test.ts,
+  branch DB/local GoTrue: 14 pass, 0 fail, 114 assertions, 8.38s. output/picker-assurance-green.log.
+  Includes controlled Google PKCE/chooser/callback boundaries, actual TOTP, five-account limit and removal races.
+- Web/API typechecks exit 0. Changed web lint: 0 errors, 6 warnings (effect state/impure time).
+  Header and API changed-file lint exit 0. Brand audit clean. Ordered catalogs check --base=HEAD passes.
+  git diff --check passes. No full/package suite ran.
+- Real T3 preview browser on own Next 17700/API 17708, branch DB and synthetic A/B. Both accounts entered through
+  actual password inputs, reached identity confirmation and selected /u/<slot>/projects pages. No cookie injection.
+  Same-context child tab created via window.open: A and B simultaneously render their respective identity.
+  For each tab token HTTP status=200, visible identity=true, /auth/user subjectMatches=true.
+  Bare /projects with two identities opens chooser preserving returnTo. Both selector hrefs are rendered.
+- Wrong password displays a failure and roster count stays 2. Cancel calls candidate cancel and leaves saved rows.
+  Candidate TOTP UI verifies actual local code (mfa/verify=200); Continue reaches verified B project chooser.
+  Actual Google provider login was NOT performed.
+- Controlled local flag-disable: Add hidden=true, rows=2; actual B remove=200 leaves chooser=true, rows=1.
+  A remains visible and token status=200 with expected subject. No silent selection of A follows B removal.
+- Header menu DOM shows Signed-in accounts, selected checkmark/aria-current, scoped settings and target=_blank hrefs.
+  Sidebar instance shares that component but cannot be exercised without an accessible project.
+- Actual broker email send from UI returns 200 and local Mailpit receives the synthetic email.
+  Shared local GoTrue template contains only a magic link; it does not include a code. No shared auth config was changed.
+  Completion using a delivered code remains UNVERIFIED. Existing broker integration proves generated OTP completion only.
+- Synthetic screenshots: output/picker-desktop-chooser.png, output/picker-header-dark.png,
+  output/picker-mobile-dark.png, output/picker-mobile-light.png, output/picker-desktop-flag-off.png.
+  Mobile 390x844 DOM has horizontal overflow=false; both themes observed. Local demo: output/picker-demo.mp4.
+  The demo shows chooser/add controls; it is not a complete recording of the A/B acceptance matrix.
+
+### Local proof launchers and remaining acceptance
+
+- Own test-only launcher: `bun output/launch-picker.ts`; Next: `bun output/start-consumer-next.ts`.
+  These use branch DB, local GoTrue, fixed synthetic keyring and ports 17708/17700. No config-file enablement occurred.
+  Fixture credentials/TOTP secrets are only in ignored output. Never commit them.
+  The test API reads existence of output/picker-disabled: present disables Add, absent enables only that fixture process.
+  This is not a product flag mechanism. Product flag remains default false and machine .env.local stays false.
+- Remaining: delivered email code requires an isolated auth template containing Token, without changing shared GoTrue.
+  Real Google chooser/provider exchange, full callback UI acceptance, forced typed429 UI and expired/foreign callback browser
+  assertions remain unverified. Existing server tests do not substitute for these browser journeys.
+- Remaining: accessible project/sidebar journey, runtime/preview isolation acceptance, native Electron parity, keyboard-only
+  complete flow, all-browser concurrent removal browser journey, translated non-English copy and final parent reviews.
+  Project creation remains blocked by the existing GitHub installation requirement; no security requirement was weakened.
+- Parent owns preview/runtime acceptance and kickoff reviews. Do not enable the feature or claim overall completion.

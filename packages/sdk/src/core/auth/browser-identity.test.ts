@@ -113,3 +113,13 @@ test("broker lists factor identifiers without requiring a browser access token",
     factors: [{ id: "factor", factor_type: "totp", status: "verified" }],
   });
 });
+
+test("broker capabilities use no-store cookie discovery without bearer", async () => {
+  const { browserLogins } = await import("../../index");
+  expect(await browserLogins.capabilities({ fetch: async (url, init) => {
+    expect(String(url)).toBe("/v1/auth/browser-logins/capabilities");
+    expect(init?.cache).toBe("no-store");
+    expect(new Headers(init?.headers).has("authorization")).toBe(false);
+    return Response.json({ enabled: false });
+  } })).toEqual({ enabled: false });
+});

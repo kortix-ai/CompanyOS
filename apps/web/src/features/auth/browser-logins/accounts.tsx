@@ -1,0 +1,396 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Identity changes require a document load to discard private App Router caches. */
+'use client';
+
+import { useTranslations } from '@/i18n/use-translations';
+import { removeAllBrowserDocumentLogins, removeBrowserDocumentLogin } from '@/lib/auth/browser-document';
+import { parseBrowserRoute, stripBrowserSelector } from '@/lib/auth/browser-route';
+import { browserLogins, type BrowserLoginSlot } from '@kortix/sdk';
+import { Button } from '@kortix/ui/button';
+import {
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@kortix/ui/dropdown-menu';
+import { Input } from '@kortix/ui/input';
+import { Label } from '@kortix/ui/label';
+import { useEffect, useRef, useState } from 'react';
+
+import { accountHref, loginDestination } from '@/lib/auth/browser-login-navigation';
+function useRoster() {
+  const [slots, setSlots] = useState<BrowserLoginSlot[]>([]);
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const reload = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const capabilities = await browserLogins.capabilities();
+      setEnabled(capabilities.enabled);
+      try {
+        setSlots((await browserLogins.roster()).slots);
+      } catch (error) {
+        if ((error as { status?: number }).status !== 401) throw error;
+        setSlots([]);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void reload();
+  }, []);
+  return { slots, enabled, loading, error, reload };
+}
+
+export function SignedInAccounts() {
+  const t = useTranslations('browserLogins');
+  const { slots, enabled, loading, error, reload } = useRoster();
+  if (!enabled && slots.length === 0) return null;
+  const current =
+    typeof window === 'undefined' ? null : parseBrowserRoute(window.location.pathname)?.slot;
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t('text1')}</DropdownMenuLabel>
+      {loading && <DropdownMenuItem disabled>{t('text2')}</DropdownMenuItem>}
+      {error && <DropdownMenuItem onSelect={() => void reload()}>{t('text3')}</DropdownMenuItem>}
+      {slots.map((slot) => (
+        <DropdownMenuItem key={slot.slot} asChild>
+          <a
+            href={accountHref(slot.slot, window.location.pathname + window.location.search)}
+            aria-current={current === slot.slot ? 'true' : undefined}
+          >
+            {current === slot.slot ? t('text4') : ''}
+            {slot.email ?? t('text5')}
+            {Date.parse(slot.expires_at) <= Date.now() ? t('text6') : ''}
+          </a>
+        </DropdownMenuItem>
+      ))}
+      {current && (
+        <DropdownMenuItem asChild>
+          <a
+            href={accountHref(current, window.location.pathname + window.location.search)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t('text7')}
+          </a>
+        </DropdownMenuItem>
+      )}
+      {enabled && (
+        <DropdownMenuItem disabled={slots.length >= 5} asChild>
+          <a href={'/auth/browser-logins?add=1&returnTo=' + encodeURIComponent(stripBrowserSelector(window.location.pathname + window.location.search))}>{slots.length >= 5 ? t('text8') : t('text9')}</a>
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem asChild>
+        <a href="/auth/browser-logins">{t('text10')}</a>
+      </DropdownMenuItem>
+    </>
+  );
+}
+
+export function BrowserAccountsPage({ callback = false }: { callback?: boolean }) {
+  const t = useTranslations('browserLogins');
+  const callbackStarted = useRef(false);
+  const roster = useRoster();
+  const [attempt, setAttempt] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [method, setMethod] = useState<'password' | 'email'>('password');
+  const [sent, setSent] = useState(false);
+  const [candidate, setCandidate] = useState<string | null>(null);
+  const [mfa, setMfa] = useState<{
+    kind: 'attempt' | 'slot';
+    id: string;
+    factor: string;
+    challenge: string;
+  } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState('');
+  const [add, setAdd] = useState(false);
+  const destination = () =>
+    loginDestination(new URLSearchParams(window.location.search).get('returnTo'));
+  const run = async (work: () => Promise<void>) => {
+    setPending(true);
+    setMessage('');
+    try {
+      await work();
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      setMessage(status === 429 ? t('text11') : t('text12'));
+    } finally {
+      setPending(false);
+    }
+  };
+  const factors = async (target: { kind: 'attempt' | 'slot'; id: string }) => {
+    const result = await browserLogins.mfaFactors(target);
+    const factor = result.factors.find((f) => f.factor_type === 'totp' && f.status === 'verified');
+    if (!factor) return false;
+    const challenge = await browserLogins.challengeMfa(target, { factor_id: factor.id });
+    setMfa({ ...target, factor: factor.id, challenge: challenge.id });
+    return true;
+  };
+  useEffect(() => {
+    setAdd(new URLSearchParams(window.location.search).get('add') === '1');
+    if (new URLSearchParams(window.location.search).get('revocation') === 'pending') setMessage(t('text18'));
+    if (!callback || callbackStarted.current) return;
+    callbackStarted.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('attempt');
+    const providerCode = params.get('code');
+    const stored = sessionStorage.getItem('kortix-login-attempt');
+    if (!id || !providerCode || stored !== id) {
+      setMessage(t('text13'));
+      return;
+    }
+    sessionStorage.removeItem('kortix-login-attempt');
+    setAttempt(id);
+    void run(async () => {
+      const result = await browserLogins.complete(id, { code: providerCode });
+      history.replaceState(null, '', '/auth/browser-logins/callback');
+      setCandidate(result.user.email ?? t('text14'));
+      await factors({ kind: 'attempt', id });
+    });
+  }, [callback]);
+  const begin = async (kind: 'password' | 'email' | 'google') => {
+    await browserLogins.initialize();
+    const result = await browserLogins.begin({ method: kind });
+    setAttempt(result.attempt);
+    return result;
+  };
+  const confirm = async () => {
+    if (!attempt) return;
+    const result = await browserLogins.confirm(attempt);
+    if (result.duplicate_candidate) await browserLogins.cancel(result.duplicate_candidate);
+    await browserLogins.token(result.slot);
+    window.location.assign(
+      accountHref(result.slot, sessionStorage.getItem('kortix-login-return') ?? destination()),
+    );
+  };
+  return (
+    <main className="mx-auto w-full max-w-md space-y-4 p-6">
+      <h1 className="text-xl font-medium">{candidate ? t('text15') : t('text1')}</h1>
+      <p className="text-muted-foreground text-sm">{t('text16')}</p>
+      {message && <p role="alert">{message}</p>}
+      {roster.loading && <p role="status">{t('text2')}</p>}
+      {roster.error && (
+        <Button variant="outline" onClick={() => void roster.reload()}>
+          {t('text3')}
+        </Button>
+      )}
+      {!candidate && (
+        <ul className="space-y-2">
+          {roster.slots.map((slot) => (
+            <li key={slot.slot} className="space-y-2">
+              <a className="block text-sm underline" href={accountHref(slot.slot, destination())}>
+                {slot.email ?? t('text5')}
+                {Date.parse(slot.expires_at) <= Date.now() ? t('text6') : ''}
+              </a>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  void run(async () => {
+                    if (!window.confirm(t('text17'))) return;
+                    const receipt = await removeBrowserDocumentLogin(slot.slot);
+                    await roster.reload();
+                    setMessage(receipt.revocation_pending ? t('text18') : t('text19'));
+                  })
+                }
+              >
+                {t('text20')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  void run(async () => {
+                    if (!(await factors({ kind: 'slot', id: slot.slot }))) setMessage(t('text21'));
+                  })
+                }
+              >
+                {t('text22')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!candidate && roster.slots.length > 0 && (
+        <Button
+          variant="outline"
+          disabled={pending}
+          onClick={() =>
+            void run(async () => {
+              if (!window.confirm(t('text23'))) return;
+              const { revocation_pending: retained } = await removeAllBrowserDocumentLogins();
+              await roster.reload();
+              setMessage(retained ? t('text18') : t('text24'));
+            })
+          }
+        >
+          {t('text25')}
+        </Button>
+      )}
+      {!candidate && roster.enabled && roster.slots.length < 5 && !add && (
+        <Button onClick={() => setAdd(true)}>{t('text9')}</Button>
+      )}
+      {roster.slots.length >= 5 && <p>{t('text26')}</p>}
+      {add && roster.enabled && !candidate && roster.slots.length < 5 && (
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              const id = attempt ?? (await begin(method)).attempt;
+              if (method === 'email' && !sent) {
+                await browserLogins.sendEmail(id, { email });
+                setSent(true);
+                return;
+              }
+              const result = await browserLogins.complete(
+                id,
+                method === 'password' ? { email, password } : { email, token: code },
+              );
+              setPassword('');
+              setCandidate(result.user.email ?? t('text14'));
+              await factors({ kind: 'attempt', id });
+            });
+          }}
+        >
+          <Label htmlFor="saved-email">{t('text27')}</Label>
+          <Input
+            id="saved-email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={pending || sent}
+          />
+          {method === 'password' ? (
+            <>
+              <Label htmlFor="saved-password">{t('text28')}</Label>
+              <Input
+                id="saved-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </>
+          ) : (
+            sent && (
+              <>
+                <Label htmlFor="saved-code">{t('text29')}</Label>
+                <Input
+                  id="saved-code"
+                  autoComplete="one-time-code"
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </>
+            )
+          )}
+          <Button type="submit" disabled={pending}>
+            {pending ? t('text30') : method === 'email' && !sent ? t('text31') : t('text32')}
+          </Button>
+          {!attempt && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setMethod(method === 'password' ? 'email' : 'password')}
+            >
+              {method === 'password' ? t('text33') : t('text34')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              void run(async () => {
+                if (attempt) await browserLogins.cancel(attempt);
+                const result = await begin('google');
+                if (!result.url) throw Error('Missing provider URL');
+                sessionStorage.setItem('kortix-login-attempt', result.attempt);
+                sessionStorage.setItem('kortix-login-return', destination());
+                window.location.assign(result.url);
+              })
+            }
+          >
+            {t('text35')}
+          </Button>
+        </form>
+      )}
+      {mfa && (
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              await browserLogins.verifyMfa(
+                { kind: mfa.kind, id: mfa.id },
+                { factor_id: mfa.factor, challenge_id: mfa.challenge, code },
+              );
+              setCode('');
+              setMfa(null);
+              setMessage(t('text36'));
+            });
+          }}
+        >
+          <Label htmlFor="mfa-code">{t('text37')}</Label>
+          <Input
+            id="mfa-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+          <Button disabled={pending}>{t('text38')}</Button>
+        </form>
+      )}
+      {candidate && (
+        <>
+          <p>{candidate}</p>
+          <Button disabled={pending || !!mfa} onClick={() => void run(confirm)}>
+            {t('text39')}
+          </Button>
+        </>
+      )}
+      {(attempt || add) && (
+        <Button
+          variant="outline"
+          disabled={pending}
+          onClick={() =>
+            void run(async () => {
+              if (attempt) await browserLogins.cancel(attempt);
+              setAttempt(null);
+              setCandidate(null);
+              setMfa(null);
+              setPassword('');
+              setAdd(false);
+              setSent(false);
+              sessionStorage.removeItem('kortix-login-attempt');
+            })
+          }
+        >
+          {t('text40')}
+        </Button>
+      )}
+      {!roster.enabled && <p>{t('text41')}</p>}
+      <a className="block text-sm underline" href="/auth">
+        {t('text42')}
+      </a>
+    </main>
+  );
+}

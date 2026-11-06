@@ -1,20 +1,24 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Identity changes require a document load to discard private App Router caches. */
 'use client';
-import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
 import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
+import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
 import { IDENTITY_MARKER_KEY, shouldResetClientState } from '@/lib/auth/identity-marker';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
 import { isDefinitiveSessionRejection } from '@/lib/auth/session-rejection';
-import { adoptManagedStorage, detachManagedStorage } from '@kortix/ui/internal/lib/storage/managed-storage';
-import { detachDeviceCaches } from '@/lib/device-caches';
-import { getSharedQueryClient } from '@kortix/ui/internal/lib/query-client-singleton';
-import { resetIdentityState } from '@kortix/sdk/react';
-import { adoptDeviceCaches } from '@/lib/device-caches';
-import { safeGetItem, safeSetItem } from '@kortix/ui/internal/lib/storage/managed-storage';
+import { adoptDeviceCaches, detachDeviceCaches } from '@/lib/device-caches';
 import { createClient } from '@/lib/supabase/client';
 import { rememberValidatedUser } from '@/lib/supabase/mfa';
 import { resetClientState } from '@/lib/utils/reset-client-state';
+import { resetIdentityState } from '@kortix/sdk/react';
+import { getSharedQueryClient } from '@kortix/ui/internal/lib/query-client-singleton';
+import {
+  adoptManagedStorage,
+  detachManagedStorage,
+  safeGetItem,
+  safeSetItem,
+} from '@kortix/ui/internal/lib/storage/managed-storage';
 import { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import {
   createContext,
@@ -95,18 +99,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setIsLoading(false);
         },
         error: (error) => {
-          if ([401, 404].includes((error as { status?: number })?.status ?? 0)) selected.select(null);
-          setBootstrapError(error instanceof Error ? error : new Error('Browser identity unavailable'));
+          if ([401, 404].includes((error as { status?: number })?.status ?? 0))
+            selected.select(null);
+          setBootstrapError(
+            error instanceof Error ? error : new Error('Browser identity unavailable'),
+          );
           setIsLoading(false);
         },
       });
       // Self-initiated cache invalidation is not another validation request.
       const revalidate = () => lifecycle.revalidate();
-      const unsubscribe = selected.subscribe(() => { if (!validating) lifecycle.revalidate(); });
-      const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('kortix-browser-roster');
-      if (channel) channel.onmessage = (event) => {
-        if (event.data?.slot === selected.getSlot()) revalidate();
-      };
+      const unsubscribe = selected.subscribe(() => {
+        if (!validating) lifecycle.revalidate();
+      });
+      const channel =
+        typeof BroadcastChannel === 'undefined'
+          ? null
+          : new BroadcastChannel('kortix-browser-roster');
+      if (channel)
+        channel.onmessage = (event) => {
+          if (event.data?.slot === selected.getSlot()) revalidate();
+        };
       window.addEventListener('focus', revalidate);
       window.addEventListener('pageshow', revalidate);
       window.addEventListener('online', revalidate);
@@ -324,7 +337,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [supabase, session, user, isLoading, bootstrapError, retryAuth],
   );
 
-  return <AuthContext.Provider value={value}>{selectedDocument && (!user || isLoading) ? <div role="status">{bootstrapError ? 'Saved sign-in is unavailable. Retry authentication.' : 'Validating saved sign-in…'}{bootstrapError && <button onClick={retryAuth}>Retry</button>}</div> : children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {selectedDocument && (!user || isLoading) ? (
+        <div role="status">
+          {bootstrapError
+            ? 'Saved sign-in is unavailable. Retry authentication.'
+            : 'Validating saved sign-in…'}
+          {bootstrapError && (
+            <>
+              <button onClick={retryAuth}>Retry</button>
+              <a href="/auth/browser-logins">Choose another account or sign in again</a>
+            </>
+          )}
+        </div>
+      ) : (
+        children
+      )}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

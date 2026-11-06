@@ -1,7 +1,10 @@
 'use client';
 
-import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
+import { SignedInAccounts } from '@/features/auth/browser-logins/accounts';
 import { useTranslations } from '@/i18n/use-translations';
+import { removeBrowserDocumentLogin } from '@/lib/auth/browser-document';
+import { parseBrowserRoute } from '@/lib/auth/browser-route';
+import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
 /**
  * The rows two different menus both need: Theme, Help, and the log-out flow.
  *
@@ -35,11 +38,11 @@ import {
   DropdownMenuSubTrigger,
 } from '@kortix/ui/dropdown-menu';
 
-import Loading from '@kortix/ui/loading';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
-import { openExternalRoute } from '@kortix/ui/internal/lib/desktop';
 import { isInterfaceThemeId } from '@/lib/interface-themes';
+import { openExternalRoute } from '@kortix/ui/internal/lib/desktop';
 import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel-store';
+import Loading from '@kortix/ui/loading';
 import {
   ArticleIcon,
   BookOpenIcon,
@@ -123,47 +126,50 @@ export function ThemeSubmenu() {
     selectedOption && selectedOption.kind === 'named' ? selectedOption : undefined;
 
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        {resolvedTheme === 'dark' ? <Moon /> : <Sun />}
-        {tI18nComplete.raw('text3907fa7f8072')}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuPortal>
-        <DropdownMenuSubContent className="space-y-0.5" sideOffset={6}>
-          <DropdownMenuRadioGroup
-            value={selected}
-            onValueChange={(value) => {
-              if (isInterfaceThemeId(value)) select(value);
-            }}
-          >
-            {primaryOptions.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
-                <ThemeSwatch value={option.value} choice={choice} />
-                {t(`themes.${option.labelKey}`)}
-              </DropdownMenuRadioItem>
-            ))}
-            {extraSelectedOption && (
-              <DropdownMenuRadioItem value={extraSelectedOption.value}>
-                <ThemeSwatch value={extraSelectedOption.value} choice={choice} />
-                {extraSelectedOption.name}
-              </DropdownMenuRadioItem>
-            )}
-          </DropdownMenuRadioGroup>
+    <>
+      <SignedInAccounts />
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          {resolvedTheme === 'dark' ? <Moon /> : <Sun />}
+          {tI18nComplete.raw('text3907fa7f8072')}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuSubContent className="space-y-0.5" sideOffset={6}>
+            <DropdownMenuRadioGroup
+              value={selected}
+              onValueChange={(value) => {
+                if (isInterfaceThemeId(value)) select(value);
+              }}
+            >
+              {primaryOptions.map((option) => (
+                <DropdownMenuRadioItem key={option.value} value={option.value}>
+                  <ThemeSwatch value={option.value} choice={choice} />
+                  {t(`themes.${option.labelKey}`)}
+                </DropdownMenuRadioItem>
+              ))}
+              {extraSelectedOption && (
+                <DropdownMenuRadioItem value={extraSelectedOption.value}>
+                  <ThemeSwatch value={extraSelectedOption.value} choice={choice} />
+                  {extraSelectedOption.name}
+                </DropdownMenuRadioItem>
+              )}
+            </DropdownMenuRadioGroup>
 
-          <DropdownMenuSeparator />
+            <DropdownMenuSeparator />
 
-          {/* Opens the Appearance tab's own Select, which lists every terminal
+            {/* Opens the Appearance tab's own Select, which lists every terminal
               theme grouped and scrollable — the submenu itself only ever
               shows the six rows above. */}
-          <DropdownMenuItem
-            onSelect={() => useSettingsPanelStore.getState().openSettings('appearance')}
-          >
-            <PaintBrushIcon />
-            {t('moreThemes')}
-          </DropdownMenuItem>
-        </DropdownMenuSubContent>
-      </DropdownMenuPortal>
-    </DropdownMenuSub>
+            <DropdownMenuItem
+              onSelect={() => useSettingsPanelStore.getState().openSettings('appearance')}
+            >
+              <PaintBrushIcon />
+              {t('moreThemes')}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
+    </>
   );
 }
 
@@ -245,6 +251,8 @@ export function HelpSubmenu({ onClose }: { onClose: () => void }) {
  */
 export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tAccounts = useTranslations('browserLogins');
+  const selected = typeof window !== 'undefined' && !!parseBrowserRoute(window.location.pathname);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -266,15 +274,27 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
   const performLogout = (event: React.MouseEvent) => {
     event.preventDefault();
     setPending(true);
-    void performSignOut();
+    const slot = parseBrowserRoute(window.location.pathname)?.slot;
+    if (slot) {
+      void removeBrowserDocumentLogin(slot)
+        .then((receipt) => {
+          window.location.assign(
+            new URL(
+              '/auth/browser-logins' + (receipt.revocation_pending ? '?revocation=pending' : ''),
+              window.location.origin,
+            ).href,
+          );
+        })
+        .catch(() => setPending(false));
+    } else void performSignOut();
   };
 
   const dialog = (
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{tI18nComplete.raw('texted31daf7d840')}</AlertDialogTitle>
-          <AlertDialogDescription>{tI18nComplete.raw('textcf8f4cd95840')}</AlertDialogDescription>
+          <AlertDialogTitle>{selected ? tAccounts('text20') : tI18nComplete.raw('texted31daf7d840')}</AlertDialogTitle>
+          <AlertDialogDescription>{selected ? tAccounts('text16') : tI18nComplete.raw('textcf8f4cd95840')}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>

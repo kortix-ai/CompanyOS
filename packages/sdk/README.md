@@ -2004,3 +2004,10 @@ notifications call `invalidateRoster`; they never synchronize active selection.
 A 401 replay checks `getUserId` before reissuing a request with a refreshed token.
 The host must clear identity-scoped caches and stop streams when selection changes.
 Full browser acceptance remains in implementation. Keep the flag off.
+
+Saved browser sign-ins discover add availability through `browserLogins.capabilities()`.
+Its `{ enabled }` response contains no key material. Disabling additions leaves roster,
+verification, selection, and removal available. The web account menu opens
+`/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
+The browser stores no password or refresh token. Google uses server-owned PKCE;
+the initiating tab confirms the verified identity before selecting it.

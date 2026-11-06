@@ -154,6 +154,10 @@ export function createVault(codec: Codec) {
         const row = rows[0];
         if (!row)
           throw new VaultError(409, "browser_login_attempt_unavailable");
+        const session = JSON.parse(
+          codec.open(row.candidate, binding(h, a, row.user_id)),
+        );
+        await requireAssurance(tx, row.user_id, session);
         const existing = await tx.execute(
           sql`select slot from kortix.browser_login_slots where handle_hash=${h} and user_id=${row.user_id}::uuid and removed_at is null`,
         );
@@ -168,10 +172,6 @@ export function createVault(codec: Codec) {
           sql`select count(*)::int as n from kortix.browser_login_slots where handle_hash=${h} and removed_at is null`,
         );
         if (count[0].n >= 5) throw new VaultError(429, "browser_login_limit");
-        const session = JSON.parse(
-          codec.open(row.candidate, binding(h, a, row.user_id)),
-        );
-        await requireAssurance(tx, row.user_id, session);
         const slot = createBrowserHandle().slice(0, 16);
         await tx.execute(
           sql`insert into kortix.browser_login_slots(handle_hash,slot,user_id,session_id,credential,expires_at) values (${h},${slot},${row.user_id}::uuid,${row.session_id}::uuid,${codec.seal(JSON.stringify(session), binding(h, slot, row.user_id))},to_timestamp(${session.expires_at})) on conflict(handle_hash,user_id) do update set slot=excluded.slot,session_id=excluded.session_id,credential=excluded.credential,expires_at=excluded.expires_at,removed_at=null,revoke_pending=false,revision=kortix.browser_login_slots.revision+1 where not kortix.browser_login_slots.revoke_pending`,

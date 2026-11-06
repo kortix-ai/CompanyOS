@@ -1,3 +1,4 @@
+import { captureProductEvent } from "../../shared/product-analytics";
 import { z, OpenAPIHono } from "@hono/zod-openapi";
 import { logger } from "../../lib/logger";
 import { recordAuditEvent } from "../../shared/audit";
@@ -63,6 +64,8 @@ function registerIngress() {
       });
     if (Number(c.req.header("content-length") ?? 0) > 16384)
       return c.json({ error: "invalid_request" }, 400);
+    if (c.req.method === "GET" && c.req.path.endsWith("/capabilities"))
+      return c.json({ enabled: Boolean(vault && settings.enabled) });
     if (!vault) return c.json({ error: "browser_login_unavailable" }, 503);
     try {
       await next();
@@ -244,6 +247,7 @@ function registerFlowRoutes() {
         return { ...data.session, user: data.user };
       },
     );
+    if (!("error" in result)) captureProductEvent({ userId: result.user.id, event: "auth_identity_operation", properties: { operation: "authenticate", outcome: "success", surface: "browser" } });
     return "error" in result
       ? c.json({ error: result.error }, 403)
       : c.json(result);
@@ -339,6 +343,7 @@ function registerDescriptions() {
     z.object({ code: z.string().max(4096) }),
   ]);
   const descriptions = [
+    ["get", "/capabilities", undefined, z.object({ enabled: z.boolean() }), "Discover browser sign-in additions without credentials or key material"],
     [
       "post",
       "/initialize",

@@ -29,6 +29,7 @@ import { logger } from '../lib/logger';
  * infra/posthog/dashboards.tf: change an event here, change the insight there.
  */
 export type ProductEvent =
+  | 'auth_identity_operation'
   // Acquisition and activation
   /** A personal account was created for a new user. `method`: auth provider. */
   | 'user_signed_up'

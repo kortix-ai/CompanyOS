@@ -47,6 +47,7 @@ async function call<T>(
 const id = encodeURIComponent;
 /** Same-origin browser cookie broker. Never returns refresh credentials. */
 export const browserLogins = {
+  capabilities: (options?: BrowserBrokerOptions) => call<{ enabled: boolean }>("/capabilities", undefined, options),
   mfaFactors: (
     target: { kind: "attempt" | "slot"; id: string },
     options?: BrowserBrokerOptions,

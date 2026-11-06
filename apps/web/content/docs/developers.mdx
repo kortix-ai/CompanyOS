@@ -9036,3 +9036,10 @@ CLI: `kortix sessions model get [session-id]`, `set [session-id] <model>`,
 and `switch [session-id] <model> --prompt "Continue verification" --idempotency-key verification-model-1`.
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
+
+Saved browser sign-ins discover add availability through `browserLogins.capabilities()`.
+Its `{ enabled }` response contains no key material. Disabling additions leaves roster,
+verification, selection, and removal available. The web account menu opens
+`/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
+The browser stores no password or refresh token. Google uses server-owned PKCE;
+the initiating tab confirms the verified identity before selecting it.

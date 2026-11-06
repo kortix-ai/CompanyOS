@@ -4273,8 +4273,11 @@
   ],
   "./internal/managed-storage": [
     "ScopedCache",
+    "adoptManagedStorage",
     "createSafeJSONStorage",
     "createSafeSessionJSONStorage",
+    "detachManagedStorage",
+    "onManagedStorageAdoption",
     "pruneAllRegisteredCaches",
     "pruneDisposableCaches",
     "registerDisposableFamily",

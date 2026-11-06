@@ -1,9 +1,12 @@
 'use client';
 
+import { SignedInAccounts } from '@/features/auth/browser-logins/accounts';
+import { parseBrowserRoute, browserIdentityPath } from '@/lib/auth/browser-route';
+import { removeBrowserDocumentLogin } from '@/lib/auth/browser-document';
 import { CaretDownIcon, GearSixIcon, SignOutIcon } from '@phosphor-icons/react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Button } from '@kortix/ui/button';
 import { BackPillBody, backPillClass } from '@kortix/ui/back-pill';
@@ -61,6 +64,16 @@ export function AccountTopBar({
 }) {
   const t = useTranslations('newWorkspace');
   const identity = name?.trim() || email;
+  const tAccounts = useTranslations('browserLogins');
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState(false);
+  const slot = typeof window === 'undefined' ? null : parseBrowserRoute(window.location.pathname)?.slot;
+  const logout = () => {
+    if (!slot) return onLogOut();
+    if (!window.confirm(tAccounts('text17'))) return;
+    setRemoving(true); setRemoveError(false);
+    void removeBrowserDocumentLogin(slot).then(receipt => window.location.assign(new URL('/auth/browser-logins' + (receipt.revocation_pending ? '?revocation=pending' : ''), window.location.origin).href)).catch(() => { setRemoving(false); setRemoveError(true); });
+  };
 
   return (
     <div className="kx-desktop-band-row absolute inset-x-0 top-3 z-10 flex items-center justify-between gap-3 px-4 sm:top-4 sm:px-6">
@@ -103,13 +116,14 @@ export function AccountTopBar({
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-64">
+            <SignedInAccounts />
             {/* Settings must be reachable from every account-level page,
                 regardless of project count: with no projects this menu was
                 Log out only, and /settings/profile had no link at all
                 (KRTX-1327). A real anchor, so the menu closes on navigate. */}
             <DropdownMenuItem asChild>
-              <Link href="/settings/profile" prefetch>
+              <Link href={browserIdentityPath('/settings/profile', typeof window === 'undefined' ? '' : window.location.pathname)} prefetch>
                 <GearSixIcon />
                 {t('actions.settings')}
               </Link>
@@ -119,12 +133,13 @@ export function AccountTopBar({
                 group — the last item in a menu is the one a slipped pointer
                 lands on. */}
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={signingOut} onSelect={onLogOut}>
+            <DropdownMenuItem disabled={signingOut || removing} onSelect={logout}>
               <SignOutIcon />
-              {signingOut ? t('actions.signingOut') : t('actions.logOut')}
+              {signingOut || removing ? t('actions.signingOut') : slot ? tAccounts('text20') : t('actions.logOut')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {removeError && <span role="alert">{tAccounts('text12')}</span>}
         {trailing}
       </div>
     </div>

@@ -1,16 +1,31 @@
-import { parseBrowserRoute, stripBrowserIdentityHeaders } from '@/lib/auth/browser-route';
-import { resolveVerifiedBrowserRequest } from '@/lib/auth/browser-request';
 import { defaultLocale, locales } from '@/i18n/catalog.mjs';
 import { isNonPagePath, localizedPathname, unverifiedSessionLocale } from '@/i18n/routing';
+import { resolveVerifiedBrowserRequest } from '@/lib/auth/browser-request';
+import {
+  parseBrowserRoute,
+  stripBrowserIdentityHeaders,
+  stripBrowserSelector,
+} from '@/lib/auth/browser-route';
+import { canonicalPublicPath } from '@/lib/canonical-public-path';
 import {
   authorizeEnvironment,
   deriveEnvironmentAccessCookie,
   ENVIRONMENT_ACCESS_COOKIE,
 } from '@/lib/environment-protection';
 import { legalShortPathRedirectUrl, legalTermsRedirectUrl } from '@/lib/legal-terms-redirect';
-import { canonicalPublicPath } from '@/lib/canonical-public-path';
 import { MAINTENANCE_BYPASS_COOKIE, verifyBypassToken } from '@/lib/maintenance-bypass';
 import { getMaintenanceConfig } from '@/lib/maintenance-store';
+import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
+import {
+  cookieIdentityPlan,
+  isDeadSessionAuthError,
+  resolveMiddlewareIdentity,
+  type MiddlewareUser,
+} from '@/lib/supabase/middleware-identity';
+import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/panel-cookies';
+import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
+import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
+import { browserLogins } from '@kortix/sdk';
 import {
   AUTH_BOUNCE_COOKIE,
   AUTH_BOUNCE_MAX_AGE,
@@ -20,16 +35,6 @@ import {
   resolveDefaultLandingPath,
   serializeAuthBounce,
 } from '@kortix/ui/internal/lib/onboarding/landing-destination';
-import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
-import {
-  cookieIdentityPlan,
-  isDeadSessionAuthError,
-  resolveMiddlewareIdentity,
-  type MiddlewareUser,
-} from '@/lib/supabase/middleware-identity';
-import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
-import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/panel-cookies';
-import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -305,11 +310,9 @@ export async function middleware(request: NextRequest) {
   // dynamic keys so the standalone container uses ECS runtime values instead of
   // build-time replacements. The gate fails closed when enabled without a secret.
   const protectionEnabled = Reflect.get(process.env, 'WEB_PROTECTION_ENABLED') as
-    | string
-    | undefined;
+    string | undefined;
   const protectionPassword = Reflect.get(process.env, 'WEB_PROTECTION_PASSWORD') as
-    | string
-    | undefined;
+    string | undefined;
   const authorization = request.headers.get('authorization');
   const accessCookie = request.cookies.get(ENVIRONMENT_ACCESS_COOKIE)?.value;
   const expectedAccessCookie =
@@ -383,10 +386,22 @@ export async function middleware(request: NextRequest) {
   try {
     const selected = parseBrowserRoute(pathname);
     if (selected) {
-      if (!isProtectedAppPath(selected.pathname)) return new NextResponse('Browser identity unavailable', { status: 404, headers: { 'cache-control': 'private, no-store' } });
+      if (!isProtectedAppPath(selected.pathname))
+        return new NextResponse('Browser identity unavailable', {
+          status: 404,
+          headers: { 'cache-control': 'private, no-store' },
+        });
       const identity = await resolveVerifiedBrowserRequest(request, selected.slot, {
-        frontendOrigin: process.env.FRONTEND_URL || process.env.KORTIX_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://kortix.com',
-        backendOrigin: process.env.BACKEND_URL || process.env.KORTIX_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.kortix.com',
+        frontendOrigin:
+          process.env.FRONTEND_URL ||
+          process.env.KORTIX_PUBLIC_APP_URL ||
+          process.env.NEXT_PUBLIC_APP_URL ||
+          'https://kortix.com',
+        backendOrigin:
+          process.env.BACKEND_URL ||
+          process.env.KORTIX_PUBLIC_BACKEND_URL ||
+          process.env.NEXT_PUBLIC_BACKEND_URL ||
+          'https://api.kortix.com',
       });
       const requestHeaders = new Headers(request.headers);
       requestHeaders.set('x-kortix-browser-slot', selected.slot);
@@ -401,7 +416,48 @@ export async function middleware(request: NextRequest) {
       return finalizeEnvironmentAccess(response);
     }
   } catch {
-    return new NextResponse('Browser identity unavailable', { status: 401, headers: { 'cache-control': 'private, no-store' } });
+    const chooser = new URL('/auth/browser-logins', request.url);
+    chooser.searchParams.set('returnTo', stripBrowserSelector(pathname) + request.nextUrl.search);
+    return NextResponse.redirect(chooser);
+  }
+
+  // A saved browser roster takes precedence over the shared legacy cookie.
+  if ((isProtectedAppPath(pathname) || pathname === '/') && request.method === 'GET') {
+    const cookie = request.headers.get('cookie') ?? '';
+    if (cookie.includes('kortix-vault')) {
+      try {
+        const roster = await browserLogins.roster({
+          fetch: (input, init) =>
+            fetch(
+              new URL(
+                String(input),
+                process.env.BACKEND_URL ||
+                  process.env.NEXT_PUBLIC_BACKEND_URL ||
+                  'https://api.kortix.com',
+              ).toString(),
+              {
+                ...init,
+                headers: { ...Object.fromEntries(new Headers(init?.headers)), cookie },
+                signal: AbortSignal.timeout(5000),
+              },
+            ),
+        });
+        const destination = (pathname === '/' ? '/projects' : pathname) + request.nextUrl.search;
+        if (roster.slots.length === 1)
+          return NextResponse.redirect(
+            new URL(`/u/${encodeURIComponent(roster.slots[0].slot)}${destination}`, request.url),
+          );
+        if (roster.slots.length > 1) {
+          const chooser = new URL('/auth/browser-logins', request.url);
+          chooser.searchParams.set('returnTo', destination);
+          return NextResponse.redirect(chooser);
+        }
+      } catch {
+        const chooser = new URL('/auth/browser-logins', request.url);
+        chooser.searchParams.set('returnTo', pathname + request.nextUrl.search);
+        return NextResponse.redirect(chooser);
+      }
+    }
   }
 
   // Public HTML pages have canonical Markdown representations. Rewrite only
@@ -492,7 +548,11 @@ export async function middleware(request: NextRequest) {
   }
   // /privacy, /terms, /imprint, /subprocessors (and each locale prefix) were
   // 200 "Page not found" pages; each is a real legal page (KRTX-3256).
-  const legalDestination = legalShortPathRedirectUrl(pathname, request.nextUrl.searchParams, request.nextUrl);
+  const legalDestination = legalShortPathRedirectUrl(
+    pathname,
+    request.nextUrl.searchParams,
+    request.nextUrl,
+  );
   if (legalDestination) {
     return finalizeEnvironmentAccess(NextResponse.redirect(legalDestination, 308));
   }
@@ -519,7 +579,8 @@ export async function middleware(request: NextRequest) {
   const isRemainingPathMarketing =
     EXACT_MARKETING_ROUTES.includes(remainingPath) ||
     MARKETING_ROUTES.some(
-      (route) => remainingPath === route || (route !== '/' && remainingPath.startsWith(route + '/')),
+      (route) =>
+        remainingPath === route || (route !== '/' && remainingPath.startsWith(route + '/')),
     );
   if (explicitLocale && !isRemainingPathMarketing) pathname = remainingPath;
 
@@ -693,10 +754,7 @@ export async function middleware(request: NextRequest) {
   // asks the extension for a session.
   const panelRequest = hasPanelMarker(request.cookies);
   if (panelRequest && pathname === '/auth') {
-    const target = new URL(
-      panelAuthUrl(request.nextUrl.searchParams.get('redirect')),
-      request.url,
-    );
+    const target = new URL(panelAuthUrl(request.nextUrl.searchParams.get('redirect')), request.url);
     return finalizeEnvironmentAccess(NextResponse.redirect(target));
   }
 

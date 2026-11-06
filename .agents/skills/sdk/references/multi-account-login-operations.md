@@ -23,6 +23,8 @@ Open the account menu and choose Add account.
 If this browser still uses an ordinary sign-in, authenticate that same account once to save it first.
 The new vault session has a separate refresh-token family. The host then retires only the old browser session.
 The form opens again for the additional account. Inspect each verified account and confirm.
+Existing ordinary tabs can require account selection or sign-in again after their shared session is retired.
+Tabs already using a /u/<slot> URL keep their own selection when another account is added or selected elsewhere.
 Wrong-account authentication is cancelled before confirmation. Cancellation or failed authentication preserves the ordinary sign-in.
 A bare legacy tab follows a saved slot only when their users match; a different saved user never replaces it.
 The same-origin retirement route uses the SDK, never auth-js refresh or global sign-out.

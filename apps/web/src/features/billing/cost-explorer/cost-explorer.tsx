@@ -3,7 +3,8 @@
 import type { UiTranslator } from '@/i18n/translator';
 import { Fragment, useState } from 'react';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 
 import {
   Breadcrumb,

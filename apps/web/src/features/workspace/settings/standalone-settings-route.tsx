@@ -31,7 +31,8 @@
  * frames between the close and the new route painting are never white.
  */
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useRef } from 'react';
 
 import { useAuth } from '@/features/providers/auth-provider';

@@ -33,7 +33,7 @@ import {
   UsersIcon as Users,
 } from '@phosphor-icons/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useMemo, useState } from 'react';
 import { HubLink } from '@kortix/ui/internal/account-hub/account-hub-location';
 import { AccountPane } from './account-pane';

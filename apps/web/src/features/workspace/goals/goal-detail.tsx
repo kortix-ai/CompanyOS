@@ -78,7 +78,7 @@ import { parseGoalLog } from './goal-log';
 import { GoalShareModal } from './goal-share-modal';
 import { useAuth } from '@/features/providers/auth-provider';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**

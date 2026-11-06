@@ -5,7 +5,8 @@ import {
   useCaptureDeviceGrant,
   useDenyCaptureDevice,
 } from '@kortix/sdk/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

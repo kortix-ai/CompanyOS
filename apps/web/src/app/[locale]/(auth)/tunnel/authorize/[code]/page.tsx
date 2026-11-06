@@ -2,7 +2,8 @@
 
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { useTranslations } from '@/i18n/use-translations';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

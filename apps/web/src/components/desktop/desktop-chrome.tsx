@@ -25,7 +25,8 @@ import { projectIdFromPathname } from '@kortix/ui/internal/stores/project-switch
 import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import { useTheme } from 'next-themes';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { cn } from '@kortix/ui';

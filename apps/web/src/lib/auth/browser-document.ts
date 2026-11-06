@@ -3,6 +3,7 @@ import { authUser, createBrowserIdentity } from '@kortix/sdk';
 import type { Session, User, SupabaseClient } from '@supabase/supabase-js';
 import { parseBrowserRoute } from './browser-route';
 
+let documentSlot: string | null = null;
 let identity: ReturnType<typeof createBrowserIdentity> | null = null;
 export function browserDocumentIdentity() {
   if (typeof window === 'undefined') return null;
@@ -12,9 +13,10 @@ export function browserDocumentIdentity() {
     return null;
   }
   if (!identity) {
+    documentSlot = selected.slot;
     identity = createBrowserIdentity();
     identity.select(selected.slot);
-  } else if (identity.getSlot() !== selected.slot) {
+  } else if (documentSlot !== selected.slot) {
     identity.select(null);
     window.location.replace(window.location.href);
     throw new Error('Browser identity changed. Reloading.');

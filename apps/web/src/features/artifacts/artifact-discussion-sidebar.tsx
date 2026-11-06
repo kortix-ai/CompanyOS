@@ -28,7 +28,7 @@ import { Skeleton } from '@kortix/ui/skeleton';
 import { Tabs, TabsContent, TabsListCompact, TabsTriggerCompact } from '@kortix/ui/tabs';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import { CaretDownIcon, ChatCircleIcon, PlusIcon, XIcon } from '@phosphor-icons/react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '@/features/providers/auth-provider';

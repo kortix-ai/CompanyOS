@@ -11,7 +11,7 @@ import { useCurrentAccountStore } from '@kortix/ui/internal/stores/current-accou
 import { SignOutIcon } from '@phosphor-icons/react';
 import { useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { decideDoor } from '@kortix/ui/workspace/project-selector/project-selector-model';

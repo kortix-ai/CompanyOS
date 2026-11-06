@@ -61,7 +61,7 @@ import {
   XCircleIcon,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { memo, useEffect, useRef, useState } from 'react';
 
 import { ArtifactFrame, artifactFrameKey } from '@kortix/ui/artifacts';

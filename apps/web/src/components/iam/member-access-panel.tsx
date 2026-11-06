@@ -102,7 +102,7 @@ import { areaLabel, permissionLabel } from './role-capability-model';
 import Hint from '@kortix/ui/hint';
 import { ButtonGroup } from '@kortix/ui/button-group';
 import { useAccountHubSheet } from '@kortix/ui/internal/account-hub/hub-sheet';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { MemberTableHead, MemberTableRow, ROLE_TONE } from '@/features/accounts/hub/member-table';
 
 const TABLE_HEAD = 'text-muted-foreground truncate text-xs font-medium';

@@ -18,7 +18,8 @@ import { setSilentErrorToastFilter } from '@kortix/ui/toast';
 import * as Sentry from '@sentry/nextjs';
 import NextImage from 'next/image';
 import NextLink from 'next/link';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { forwardRef, useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 
 import { WallpaperBackground } from '@/components/ui/wallpaper-background';

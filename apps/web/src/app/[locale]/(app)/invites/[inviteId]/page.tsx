@@ -4,7 +4,8 @@ import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { Button } from '@kortix/ui/button';

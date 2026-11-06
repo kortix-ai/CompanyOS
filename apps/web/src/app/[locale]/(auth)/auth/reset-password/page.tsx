@@ -4,7 +4,8 @@ import { useTranslations } from '@/i18n/use-translations';
 
 import { CheckCircleIcon as CheckCircle2 } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { FormEvent, Suspense, useState } from 'react';
 
 import { ConnectingScreen } from '@/components/dashboard/connecting-screen';

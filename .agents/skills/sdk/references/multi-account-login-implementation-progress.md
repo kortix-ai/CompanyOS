@@ -420,3 +420,61 @@ All commands run in this worktree. Private logs/launchers remain in ignored `out
    remain next-stage work. No visual/menu implementation was added.
 6. Preview authority isolation, download/terminal/runtime acceptance, help/translations/analytics,
    kickoff review, council and the complete A/B acceptance matrix remain outstanding.
+
+## Imperative navigation and authenticated browser probe, 2026-11-06
+
+Status: PARTIAL milestone. State/navigation/client acceptance is NOT complete. Default remains OFF.
+No SDK edits, push, PR, merge, deployment, or publication. Original research plans remain untracked.
+
+- `lib/navigation/use-identity-router.ts` owns host imperative push/replace/prefetch. Host router consumers,
+  including KortixUiProvider and RouterBridge, import this adapter. UI package components already receive
+  the host router through UiProvider; no direct Next router imports exist there. Marketing-only and public
+  share components retain their existing imports. Adapter adds the current selector to private destinations,
+  preserves an explicit other selector, and performs a document navigation when selection changes.
+  It invalidates the previous token generation before requesting document navigation. Connection teardown
+  beyond document unload is NOT verified.
+- `browser-route.ts` no longer changes an explicit B destination to A. Public/share paths lose selectors.
+  RouterBridge now also intercepts explicit cross-slot ordinary clicks. Prefetch uses the same path adapter.
+- `browser-document.ts` records the immutable document slot separately from the token adapter selection.
+  Invalidating the adapter during unload must not race a render into reloading the old URL.
+- Selected SDK host configuration uses same-origin `/v1`; legacy configuration retains its backend URL.
+  Actual browser data requests exposed a cross-origin fetch failure with the isolated launcher. Broker
+  requests succeeded while account reads failed. The selected same-origin configuration fixes these reads.
+- Local launcher initially omitted KORTIX_API_PROXY_TARGET and sent browser broker requests to port 8008.
+  Ignored launcher now sets 17708. One restart attempted before its own orphan listener exited returned
+  EADDRINUSE. Only the identified child of this session was terminated. No foreign process was killed.
+
+Evidence (private files under ignored output):
+
+- RED `bun test ./apps/web/src/lib/auth/browser-route.test.ts`: 6 pass, 1 fail; explicit B became A.
+  GREEN same command: 7 pass, 0 fail, 26 assertions, 32 ms.
+- `pnpm --filter Kortix-Computer-Frontend typecheck`: exit 0 (state-navigation-typecheck.log and
+  navigation-final-typecheck.log). Changed-file ESLint: exit 0, 0 errors, existing hook warnings.
+- Actual T3 preview browser, same incognito profile, separate A/B `/u/<slot>/projects` tabs:
+  both DOMs show their respective synthetic identities. Actual same-origin broker + `/v1/auth/user`
+  fetches verify each expected subject. Actual authenticated `/v1/accounts` returns 200 in both tabs.
+  A reload paints A. No mock auth provider or imported handler was used.
+- Fixture broker sessions originate from the real backend and local GoTrue against the isolated DB.
+  The test injects the synthetic vault handle as a browser cookie. This does not verify HttpOnly cookie
+  delivery or real login UX. No private projects were created; private marker/draft acceptance is unrun.
+- **FAILED acceptance:** actual broker removal of B returns 200, B token request returns 404, but B's
+  already rendered identity remains visible. A token still returns 200 and A remains visible.
+  This proves a missing client revocation/display lifecycle, not successful revocation acceptance.
+- Private sanitized DOM/network result summary: `output/navigation-browser-evidence.json`.
+  Synthetic screenshots: `output/navigation-browser-A.png`, `output/navigation-browser-B-revoked.png`.
+  Server logs: browser-lifecycle-api.log and browser-lifecycle-next-fixed.log.
+
+Required continuation before this milestone can be called complete:
+
+1. Scope persisted Zustand/current workspace/drafts/settings and identity marker. Existing query/saved-copy
+   keys already include userId; selected AuthProvider still does not adopt them. Separate detach/reset/delete
+   in device-caches and registered stores. Legacy reset/prefix sweep must never delete sibling data.
+2. Fence late writers and implement revocation/focus/BFCache display validation and connection disposal.
+   The concrete failed B removal browser acceptance above is the first regression to close.
+3. Actual rendered Link hrefs, modifier/new-tab, forms/action targets, server redirects, auth returns,
+   notifications and analytics remain unmigrated. Imperative migration is not complete navigation coverage.
+4. Server actions inventory finds auth/actions.ts and auth/sign-out-actions.ts. Real Next Action protocol
+   acceptance is still unrun; no selected mutation authorization claim is made.
+5. Two private project markers, cache/draft isolation, soft/hard/new-tab/back/focus, legacy auth events,
+   runtime streams, notification attribution and IndexedDB acceptance remain required.
+6. Preview/menu/callback/chooser work and final kickoff reviews remain outside this continuation.

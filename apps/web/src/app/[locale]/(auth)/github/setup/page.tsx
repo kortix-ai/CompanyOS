@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';

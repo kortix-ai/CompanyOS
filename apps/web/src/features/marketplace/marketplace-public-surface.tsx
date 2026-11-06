@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useMemo, type ReactNode } from 'react';
 
 import { marketplaceItemHref } from '@/lib/marketplace-slug';

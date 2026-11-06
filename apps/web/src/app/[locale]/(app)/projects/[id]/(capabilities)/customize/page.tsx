@@ -23,7 +23,8 @@
  * page fills placeholders in place instead of flashing a blank.
  */
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { CapabilitiesSkeleton } from '@kortix/ui/customize/shared/capability-skeleton';

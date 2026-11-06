@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/features/providers/auth-provider';
 import { isSigningOut } from '@/lib/auth/sign-out-sequence';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 /**

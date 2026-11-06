@@ -18,7 +18,8 @@
  * `pending` and replace to whatever `href` it produces.
  */
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { useLegacySectionRedirect } from '@/features/workspace/settings/use-account-section-redirect';

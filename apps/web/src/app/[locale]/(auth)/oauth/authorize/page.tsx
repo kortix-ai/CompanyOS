@@ -3,7 +3,8 @@
 import type { UiTranslator } from '@/i18n/translator';
 import { CheckIcon as Check, ShieldWarningIcon } from '@phosphor-icons/react';
 import { useTranslations } from '@/i18n/use-translations';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

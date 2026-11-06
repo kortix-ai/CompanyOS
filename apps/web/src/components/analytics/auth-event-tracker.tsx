@@ -2,7 +2,8 @@
 
 import { AuthMethod, trackLogin, trackSignUp } from '@/lib/analytics/gtm';
 import { track } from '@/lib/track';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 /**

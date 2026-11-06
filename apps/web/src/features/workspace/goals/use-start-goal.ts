@@ -7,7 +7,7 @@ import { useUiViewerId } from '@kortix/ui';
 import { successToast } from '@kortix/ui/toast';
 import { goalHref } from '@kortix/ui/workspace';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useRef } from 'react';
 
 /**

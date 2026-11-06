@@ -16,7 +16,8 @@ import { useUpgradeDialogStore } from '@kortix/ui/internal/stores/upgrade-dialog
 import { getProject } from '@kortix/sdk';
 import { contract, qk, useFeatureFlag } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useRef } from 'react';
 
 import { resolveHomeLanding } from './home-landing';

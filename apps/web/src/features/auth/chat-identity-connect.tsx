@@ -9,7 +9,7 @@ import { useTranslations } from '@/i18n/use-translations';
  */
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

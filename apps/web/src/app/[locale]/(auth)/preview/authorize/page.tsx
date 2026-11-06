@@ -19,7 +19,8 @@
  * bearer token.
  */
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, useEffect, useState } from 'react';
 
 import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';

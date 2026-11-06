@@ -1,7 +1,7 @@
 'use client';
 
-import { browserIdentityPath } from '@/lib/auth/browser-route';
-import { useRouter } from 'next/navigation';
+import { browserIdentityPath, parseBrowserRoute } from '@/lib/auth/browser-route';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { registerAppRouter } from '@kortix/ui/internal/lib/navigation/router-bridge';
@@ -18,7 +18,7 @@ export function RouterBridge() {
   const router = useRouter();
   useEffect(() => {
     const path = (href: string) => browserIdentityPath(href, window.location.pathname);
-    registerAppRouter({ ...router, push: (href, options) => router.push(path(href), options), replace: (href, options) => router.replace(path(href), options) });
+    registerAppRouter(router);
     const click = (event: MouseEvent) => {
       const anchor = (event.target as Element)?.closest?.('a');
       if (!anchor || anchor.target || anchor.download || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -26,7 +26,9 @@ export function RouterBridge() {
       if (url.origin !== window.location.origin) return;
       const href = url.pathname + url.search + url.hash;
       const selected = path(href);
-      if (selected === href) return;
+      const currentSlot = parseBrowserRoute(window.location.pathname)?.slot;
+      const nextSlot = parseBrowserRoute(selected.split(/[?#]/)[0])?.slot;
+      if (selected === href && currentSlot === nextSlot) return;
       event.preventDefault();
       event.stopPropagation();
       router.push(selected);

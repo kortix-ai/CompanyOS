@@ -1,6 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { startTransition, useCallback, useEffect } from 'react';
 
 import { CUSTOMIZE_TAB_ID, useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';

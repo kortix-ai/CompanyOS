@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { hubTarget, openAccountPanel } from '@kortix/ui/internal/stores/account-panel-store';
 import { useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { Badge } from '@kortix/ui/badge';

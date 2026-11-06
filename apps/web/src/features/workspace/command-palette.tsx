@@ -183,7 +183,8 @@ import {
   XIcon as X,
 } from '@phosphor-icons/react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,

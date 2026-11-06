@@ -1,6 +1,7 @@
 'use client';
 
-import { notFound, useParams, useRouter } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { useFeatureFlag } from '@kortix/sdk/react';

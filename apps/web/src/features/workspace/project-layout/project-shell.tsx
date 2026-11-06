@@ -7,7 +7,8 @@ import { AppPreviewPoolLoader } from '@/features/apps/app-preview-pool-loader';
 import { ArtifactFramePreloader } from '@/features/artifacts/artifact-frame-preloader';
 import { useTranslations } from '@/i18n/use-translations';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect } from 'react';
 
 import { TITLEBAR_CONTROL_CLASS } from '@kortix/ui/internal/desktop/titlebar-control';

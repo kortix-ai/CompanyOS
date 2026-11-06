@@ -6,7 +6,8 @@ import { SignInIcon as LogIn } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import { cn, faviconUrlForHostname } from '@kortix/ui';

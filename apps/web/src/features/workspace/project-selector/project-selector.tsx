@@ -14,7 +14,7 @@ import {
 } from '@phosphor-icons/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useMemo, useState, type MouseEvent } from 'react';
 
 import { Button } from '@kortix/ui/button';

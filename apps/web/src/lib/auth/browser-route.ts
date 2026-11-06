@@ -37,6 +37,7 @@ export function browserIdentityPath(href: string, currentPathname: string): stri
   if (!href.startsWith('/') || href.startsWith('//')) return href;
   const current = parseBrowserRoute(currentPathname);
   if (!current) return href;
+  const explicit = parseBrowserRoute(href.split(/[?#]/)[0]);
   const clean = stripBrowserSelector(href);
   const boundary = clean.search(/[?#]/);
   const path = boundary < 0 ? clean : clean.slice(0, boundary);
@@ -45,6 +46,6 @@ export function browserIdentityPath(href: string, currentPathname: string): stri
   const locale = (locales as readonly string[]).includes(segments[1]) ? segments.splice(1, 1)[0] : current.locale;
   const destination = segments.join('/');
   if (!PRIVATE_PATH.test(destination)) return clean;
-  return `${locale ? `/${locale}` : ''}/u/${current.slot}${destination}${suffix}`;
+  return `${locale ? `/${locale}` : ''}/u/${explicit?.slot ?? current.slot}${destination}${suffix}`;
 }
 

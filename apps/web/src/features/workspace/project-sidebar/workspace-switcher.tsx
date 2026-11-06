@@ -100,7 +100,7 @@ import {
 } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 

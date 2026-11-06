@@ -37,7 +37,8 @@
  * ever rendered here. Redirecting away fixes both.
  */
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect } from 'react';
 
 import { parseSettingsTab } from '@kortix/ui/customize/settings/settings-tabs';

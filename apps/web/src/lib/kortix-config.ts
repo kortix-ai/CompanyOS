@@ -32,7 +32,7 @@ export function ensureKortixConfigured(tI18nComplete: UiTranslator): void {
 
   const selected = browserDocumentIdentity();
   configureKortix({
-    backendUrl: getEnv().BACKEND_URL,
+    backendUrl: selected ? '/v1' : getEnv().BACKEND_URL,
     getToken: selected?.getToken ?? kortixGetToken,
     clientVersion: getEnv().VERSION ? `web/${getEnv().VERSION}` : undefined,
     getUserId: selected?.getUserId ?? (async () => {

@@ -28,7 +28,8 @@ import {
   SkipForwardIcon,
 } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';

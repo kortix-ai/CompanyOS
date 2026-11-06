@@ -2,7 +2,7 @@
 
 import { useAppHome } from '@kortix/ui/internal/lib/onboarding/use-app-home';
 import { useTabStore } from '@kortix/ui/internal/stores/tab-store';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { use, useEffect } from 'react';
 
 /**

@@ -44,7 +44,7 @@ import { Skeleton } from '@kortix/ui/skeleton';
 import { Tabs, TabsListCompact, TabsTriggerCompact } from '@kortix/ui/tabs';
 import { errorToast } from '@kortix/ui/toast';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-identity-router';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { quickEntryRecentSessions } from '@/components/desktop/desktop-quick-entry';

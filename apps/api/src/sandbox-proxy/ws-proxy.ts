@@ -31,7 +31,7 @@ import { classifyPtyWebSocketPath } from '../platform/providers/pty-ingress';
 import { OPENCODE_PRIMARY_PORT, isOpencodePort } from '../shared/opencode-ports';
 import { healthHarnessId, healthRuntimePort } from '@kortix/api-contract/runtime-relay';
 import { invalidatePreviewLink, resolveSandboxIngress } from './backend';
-import { establishPreviewSession, resolvePreviewRequest, sessionFromCookies } from './preview-origin';
+import { resolvePreviewSession, resolvePreviewRequest } from './preview-origin';
 import { onSpaceAccessBust } from '../shared/space-access';
 import { recheckStreamAccess } from '../shared/stream-access-recheck';
 
@@ -292,16 +292,11 @@ export async function preparePreviewHostWsUpgrade(
     return { ok: false, status: 403, message: 'cross-site websocket to a preview' };
   }
 
-  let session = sessionFromCookies(req, target);
-  if (!session) {
-    // No cookie yet — accept the same one-shot credential the HTTP handshake
-    // takes, so a client that opens a socket before any page load still works.
-    const established = await establishPreviewSession(req, url, target);
-    if ('refusal' in established) {
-      return { ok: false, status: established.refusal.status, message: established.refusal.message };
-    }
-    session = established.session;
+  const established = await resolvePreviewSession(req, url, target);
+  if ('refusal' in established) {
+    return { ok: false, status: established.refusal.status, message: established.refusal.message };
   }
+  const session = established.session;
   bindPreviewSession(session);
   bindPreviewResource(session.sandboxId, target.port);
   if (session.kind !== 'principal') {

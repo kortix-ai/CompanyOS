@@ -659,3 +659,58 @@ All commands run from `/Users/jay/root/kortix/suna-multi-account-login-plan`.
   complete flow, all-browser concurrent removal browser journey, translated non-English copy and final parent reviews.
   Project creation remains blocked by the existing GitHub installation requirement; no security requirement was weakened.
 - Parent owns preview/runtime acceptance and kickoff reviews. Do not enable the feature or claim overall completion.
+
+
+## Preview explicit-authority hardening, 2026-11-06
+
+Status: PARTIAL IMPLEMENTATION. SECURITY RELEASE BLOCKER remains open. No enablement claim.
+Branch multi-account-login-plan; starting HEAD 9fa3072932. Work stays in the existing worktree.
+Original untracked plan and security-research files remain untouched. No SDK or host UI changes.
+
+### Threat model and implemented behavior
+
+Two authenticated identities share a browser cookie jar but select different identities per document.
+An existing principal preview cookie names sandbox and port, not the embedding document.
+A request supplying another credential must never inherit that cookie's authority on credential failure.
+Previously HTTP ignored explicit bearer authority when a cookie existed. WebSocket did the same.
+An invalid HTTP navigation ticket also fell back to the cookie.
+
+`resolvePreviewSession` now selects explicit tickets first, then explicit bearer/token/share credentials,
+then ambient cookies only when the request supplies no explicit credential. Invalid tickets return 401.
+Both HTTP and WebSocket use this resolver. Successful WebSocket navigation tickets use the same purpose-separated verifier.
+Existing supported cookie-only legacy requests remain supported. Public-share capability semantics remain explicit.
+This change DOES NOT establish identity-partitioned origins. A cookie-only B navigation to A's legacy host remains unsafe.
+
+Residual same-origin XSS: code executing on the selected application origin can act as the selected document,
+and can read document-accessible short-lived credentials. Origin partitioning cannot protect against that execution.
+No refresh credential transport, auth bypass, security-policy disablement, schema change, or flag change was added.
+
+### Verification
+
+All commands run from /Users/jay/root/kortix/suna-multi-account-login-plan.
+- RED: `bun test apps/api/src/sandbox-proxy/preview-origin.test.ts`: 44 pass, 3 fail; HTTP returned 200 instead of 401,
+  and WebSocket accepted an invalid bearer with a valid cookie. output/preview-authority-red.log.
+- GREEN, same command after implementation and updating two prior fallback-policy assertions:
+  47 pass, 0 fail, 141 assertions, 91ms. output/preview-authority-green.log.
+- `pnpm --filter kortix-api typecheck`: exit 0. output/preview-authority-typecheck.log.
+- `pnpm --filter kortix-api exec eslint src/sandbox-proxy/preview-origin.ts src/sandbox-proxy/ws-proxy.ts
+  src/sandbox-proxy/preview-origin.test.ts`: exit 0, zero errors; test file ignored warning.
+  output/preview-authority-lint.log.
+- `git diff --check`: exit 0. No full suite ran.
+
+### Unfinished work and concrete fixture finding
+
+The established `tests/src/fixtures/database-project.ts` exports createDatabaseProject and deletion helpers.
+It seeds a synthetic private project and manager membership directly, under an explicit non-production fixture profile.
+This is the supported next setup path for the earlier GitHub-installation 409; no external-provider outage was established.
+The picker launcher serves app.fetch directly and therefore does not exercise the Bun preview-host dispatcher.
+A real proof launcher must include the production preview HTTP and WebSocket dispatcher, not this shortcut.
+
+NOT IMPLEMENTED: identity hostname grammar, length-safe encoding, SDK generation, edge ingress validation,
+actor/ticket/host binding, shared-link partition behavior, live login-session cookie/ticket revocation,
+and active runtime/PTY lifecycle teardown integration.
+NOT RUN: real HTTP/WS preview authority proof, A/B project fixtures, cloud runtime prompts/transcript/files/billing,
+iframe DOM/network/assets/redirects/WebSocket positives, actual terminal/download acceptance,
+and project/sidebar/draft/IndexedDB reload/back/focus/BFCache acceptance.
+No browser or cloud resources were created in this bounded change. No external-provider failure is claimed.
+Production enablement remains blocked. Parent must not treat these isolated protocol tests as end-to-end acceptance.

@@ -329,6 +329,28 @@ export async function establishPreviewSession(
   };
 }
 
+/** Explicit authority never falls back to a cookie from another document. */
+export async function resolvePreviewSession(
+  req: Request,
+  url: URL,
+  target: ResolvedPreviewHost,
+): Promise<{ session: PreviewSession; fresh: boolean } | { refusal: PreviewRefusal }> {
+  if (url.searchParams.has('preview_ticket')) {
+    const session = verifyPreviewSession(url.searchParams.get('preview_ticket'), target, 'ticket');
+    return session
+      ? { session, fresh: true }
+      : { refusal: { status: 401, state: 'signed-out', message: 'Invalid preview ticket' } };
+  }
+  const explicit = req.headers.has('Authorization') ||
+    url.searchParams.has('token') || url.searchParams.has('public_share');
+  if (!explicit) {
+    const session = sessionFromCookies(req, target);
+    if (session) return { session, fresh: false };
+  }
+  const established = await establishPreviewSession(req, url, target);
+  return 'refusal' in established ? established : { ...established, fresh: true };
+}
+
 /** Set-Cookie values that persist a freshly established session. */
 export function cookiesForSession(session: PreviewSession, secure: boolean): string[] {
   const ttl = session.kind === 'public_share' ? PREVIEW_SHARE_TTL_SECONDS : PREVIEW_SESSION_TTL_SECONDS;
@@ -418,18 +440,12 @@ export async function handlePreviewOriginRequest(
   // there, which is what keeps the local iframe preview working.
   const secure = proto === 'https' || target.local;
 
-  const ticketSession = verifyPreviewSession(url.searchParams.get('preview_ticket'), target, 'ticket');
-  let session = ticketSession || sessionFromCookies(req, target);
-  let setCookies: string[] = ticketSession ? cookiesForSession(ticketSession, secure) : [];
-
-  if (!session) {
-    const established = await establishPreviewSession(req, url, target);
-    if ('refusal' in established) {
-      return gateResponse(req, url, { ...established.refusal, origin, publicHost });
-    }
-    session = established.session;
-    setCookies = cookiesForSession(session, secure);
+  const resolvedSession = await resolvePreviewSession(req, url, target);
+  if ('refusal' in resolvedSession) {
+    return gateResponse(req, url, { ...resolvedSession.refusal, origin, publicHost });
   }
+  const session = resolvedSession.session;
+  const setCookies = resolvedSession.fresh ? cookiesForSession(session, secure) : [];
   // Every preview request after the first rides the cookie, so the cookie is
   // what names the caller on this request's audit row.
   bindPreviewSession(session);

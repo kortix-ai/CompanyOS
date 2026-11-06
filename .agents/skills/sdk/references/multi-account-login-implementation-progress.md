@@ -300,3 +300,43 @@ The original plan and security research remain untracked and unchanged.
 - Parent must finish web identity routing/cache/preview/UI, real browser journeys, and the requested
   kickoff review delegation. No subagent or review delegation ran in this implementation stage.
 - Shippable to production: NOT YET. The flag stays off until the entire acceptance plan passes.
+
+## Web request-boundary groundwork, 2026-11-06
+
+Status: WEB STAGE INCOMPLETE. This section does not supersede the backend/SDK evidence above.
+It supersedes any inference that starting the web stage means the approved vertical feature exists.
+The browser-login flag remains off in configuration. No push, PR, merge, publish, or deploy occurred.
+
+Added (not yet connected to production consumers):
+
+- `apps/web/src/lib/auth/browser-route.ts`: locale-aware opaque-selector grammar, selector-free
+  copy/share paths, private-path navigation propagation, and internal identity-header stripping.
+- `apps/web/src/lib/auth/browser-request.ts`: request-scoped host fetch adapter for the public SDK
+  browser broker. It accepts trusted configured origins, sends only the matching vault cookie,
+  rejects missing/duplicate handles, rejects non-HTTPS origins outside loopback, forbids redirects,
+  and propagates the request abort signal. It stores no process-global identity or token.
+- `apps/web/src/lib/auth/browser-route.test.ts`: targeted grammar and adapter boundary tests.
+  Initial RED: missing browser-route module. GREEN: 6 pass, 0 fail, 24 assertions, 50 ms.
+
+Verification from this canonical worktree:
+
+- `bun test ./apps/web/src/lib/auth/browser-route.test.ts`: 6 pass, 0 fail.
+- From `apps/web`, `pnpm exec eslint src/lib/auth/browser-route.ts
+  src/lib/auth/browser-request.ts src/lib/auth/browser-route.test.ts`: exit 0.
+- `pnpm --filter Kortix-Computer-Frontend typecheck`: exit 0 before the adapter split;
+  final typecheck after the split also exits 0 (`output/web-stage-typecheck-final.log`).
+- `bun output/launch-web-request-proof.ts`: exit 0. Real assembled API on 17708 and the existing
+  isolated branch DB; two newly created synthetic GoTrue users; concurrent host-adapter resolutions
+  return their respective user IDs. Missing handle and foreign slot reject. After disabling the
+  process-local flag, A resolves, removing B rejects B, and A still resolves. Synthetic users are
+  deleted in finally. Private launcher and evidence: `output/web-request-proof.log`.
+- This proof does NOT exercise middleware, Next SSR/RSC/actions, a browser, or previews.
+  It is new adapter evidence, not a repeat or replacement of the earlier backend acceptance tests.
+
+Exact outstanding implementation remains the approved web plan: middleware rewrite and server
+identity; central Link/router adoption; selected AuthProvider/Supabase/MFA adapter; scoped persistent
+state and late-writer fencing; preview-origin authority isolation; saved-sign-in UI/callback/chooser;
+translations, analytics, help; browser A/B/runtime/preview/terminal/download acceptance and demo.
+No new UI, screenshot, recording, or complete web journey exists from this continuation.
+The original plan and security-research files remain unchanged and untracked.
+Parent kickoff Sol loop and council remain unrun. Feature enablement remains unsafe.

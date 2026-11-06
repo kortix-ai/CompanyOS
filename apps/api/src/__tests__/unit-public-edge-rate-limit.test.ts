@@ -202,6 +202,8 @@ test('saved-session renewal isolates browser handles sharing an edge address', a
       (await app.request('/v1/auth/user', { headers: from('b'.repeat(43)) }))
         .status,
     ).toBe(404);
+    expect((await app.request('/v1/auth/browser-logins', { headers: from('a'.repeat(43)) })).status).toBe(404);
+    expect((await app.request('/v1/auth/browser-logins/capabilities', { headers: from('b'.repeat(43)) })).status).toBe(404);
   }
 });
 

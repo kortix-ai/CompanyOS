@@ -1142,3 +1142,5 @@ Rate-budget hardening adds a named negative test: fabricated handle cookies cann
 Final budget checks: 9 pass, 0 fail, 1523 assertions, 136 ms. Anonymous fabricated handles remain limited by IP. HTTP recovery with the actual outer limiter: 3 pass, 0 fail, 75 assertions, 348 ms. API typecheck passes. Cleanup: zero owned synthetic users; owned browser/server processes stopped. No cloud resources were created in this council-fix stage.
 
 Cleanup final check: no listeners on 17700,17708,17821,17822,17825,17826,17731; owned auth container absent. Formatting-only churn was reduced before review. Original source conventions were retained. No full or package-wide suite ran.
+
+Verified-handle rate budgets also include roster/capability reads. RED: 8 pass/1 fail; GREEN: 9 pass/0 fail. Invented handles remain on the anonymous budget. This avoids a second shared-address bottleneck during account discovery.

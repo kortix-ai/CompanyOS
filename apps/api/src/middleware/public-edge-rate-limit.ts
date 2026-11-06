@@ -65,7 +65,7 @@ export function createPublicEdgeRateLimitMiddleware(
       (/^\/v1\/auth\/browser-logins\/slots\/[^/]+\/(?:token|resolve)$/.test(
         c.req.path,
       ) ||
-        (c.req.method === 'GET' && c.req.path === '/v1/auth/user'))
+        (c.req.method === 'GET' && ['/v1/auth/user', '/v1/auth/browser-logins', '/v1/auth/browser-logins/', '/v1/auth/browser-logins/capabilities'].includes(c.req.path)))
         ? getCookie(c, options.browserLoginCookieName)
         : undefined;
     // Refresh authority is the opaque browser credential. It must not spend the shared web server's IP bucket.

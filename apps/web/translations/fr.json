@@ -26664,6 +26664,8 @@
     "standardSignIn": "Utiliser la connexion classique",
     "validatingIdentity": "Vérification de la connexion enregistrée…",
     "identityUnavailable": "La connexion enregistrée est indisponible. Réessayez ou choisissez un autre compte.",
-    "retryIdentity": "Réessayer"
+    "retryIdentity": "Réessayer",
+    "saveCurrentFirst": "Reconnectez-vous d’abord avec {email} pour enregistrer ce compte. Ajoutez ensuite un autre compte. Annuler conserve votre connexion actuelle.",
+    "currentAccountMismatch": "Il s’agit d’un autre compte. Connectez-vous d’abord avec votre compte actuel. Votre connexion actuelle reste inchangée."
   }
 }

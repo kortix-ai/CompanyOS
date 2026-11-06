@@ -26664,6 +26664,8 @@
     "standardSignIn": "Usa l’accesso standard",
     "validatingIdentity": "Verifica dell’accesso salvato…",
     "identityUnavailable": "L’accesso salvato non è disponibile. Riprova o scegli un altro account.",
-    "retryIdentity": "Riprova"
+    "retryIdentity": "Riprova",
+    "saveCurrentFirst": "Accedi di nuovo come {email} per salvare questo account. Poi aggiungi un altro account. Se annulli, il tuo accesso attuale resta attivo.",
+    "currentAccountMismatch": "Questo è un altro account. Accedi prima con il tuo account attuale. Il tuo accesso attuale resta invariato."
   }
 }

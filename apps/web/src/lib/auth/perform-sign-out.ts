@@ -1,7 +1,6 @@
 'use client';
 import { browserDocumentIdentity } from '@/lib/auth/browser-document';
 
-import { stopWebPush } from '@kortix/ui/internal/notifications/web-push';
 import { finalizeServerSignOut } from '@/lib/auth/finalize-sign-out';
 import { stashSignOutNotice } from '@/lib/auth/sign-out-notice';
 import { runSignOut, SIGN_OUT_DESTINATION } from '@/lib/auth/sign-out-sequence';
@@ -9,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
 import { resetClientState } from '@/lib/utils/reset-client-state';
 import { withTimeBudget } from '@kortix/ui/internal/lib/utils/time-budget';
+import { stopWebPush } from '@kortix/ui/internal/notifications/web-push';
 
 export { SIGN_OUT_DESTINATION };
 
@@ -52,7 +52,12 @@ function expireSupabaseAuthCookie(): void {
  * dropped, so a caller can never turn sign-out into an open redirect.
  */
 export function signOutDestination(returnUrl?: string): string {
-  if (!returnUrl || !returnUrl.startsWith('/') || returnUrl.startsWith('//') || returnUrl.includes('\\')) {
+  if (
+    !returnUrl ||
+    !returnUrl.startsWith('/') ||
+    returnUrl.startsWith('//') ||
+    returnUrl.includes('\\')
+  ) {
     return SIGN_OUT_DESTINATION;
   }
   return `${SIGN_OUT_DESTINATION}?returnUrl=${encodeURIComponent(returnUrl)}`;
@@ -85,7 +90,8 @@ export function signOutDestination(returnUrl?: string): string {
  * `sign-out-sequence.ts`.
  */
 export async function performSignOut(options?: { returnUrl?: string }): Promise<void> {
-  if (browserDocumentIdentity()) throw new Error('Saved sign-in removal is unavailable in this stage');
+  if (browserDocumentIdentity())
+    throw new Error('Saved sign-in removal is unavailable in this stage');
   const destination = signOutDestination(options?.returnUrl);
   let left = false;
   try {
@@ -95,7 +101,8 @@ export async function performSignOut(options?: { returnUrl?: string }): Promise<
     const supabase = createClient();
     await runSignOut({
       finalizeServerSession: finalizeServerSignOut,
-      endSession: (scope) => (scope ? supabase.auth.signOut({ scope }) : supabase.auth.signOut()),
+      // Browser logout must not revoke a saved session created concurrently in another tab.
+      endSession: () => supabase.auth.signOut({ scope: 'local' }),
       resetClientState,
       dropAuthCookie: expireSupabaseAuthCookie,
       // The toast cannot live in THIS document (`leave` replaces it), so the

@@ -96,3 +96,11 @@ Reviewed head b804810f3b. GPT Sol: CHANGES, code 8/10, UI 9/10. Claude Opus 5.5:
 Final-round checks and bounded acceptance remain in the progress ledger. No push, PR, merge, publication or deployment. Flag stays off.
 
 Final council round deferred: original-requirement inspection found that ordinary legacy A is not imported into the vault before B is added. Preserving A's cookie is insufficient to list both accounts. The approved migration design remains unimplemented. Keep the flag off while this handoff is researched, implemented and verified.
+
+## Final council preparation after adoption, 2026-11-07
+
+The original already-signed-in adoption gap is implemented and locally verified under engineering ruling 1. The progress ledger names real HTTP, PostgreSQL, browser and video results. All round-2 findings have responses in the prior sections. Fresh authentication avoids transferring a rotating credential from old bundles. Legacy routing follows only the same saved user. An uncertain saved current identity is repaired first, and a token failure leaves the ordinary session intact.
+
+Ordinary sign-out intentionally changes to local Supabase scope even with the feature off. This prevents global revocation of a concurrently created saved session. An outer capability check cannot eliminate that race. No design relies on a cross-tab acknowledgement to control old code.
+
+Round 3 must assess code and the captured chooser, gate, dialog, mobile/theme and first-adoption states. Genuine external Google, deployed TLS/edge, persisted BFCache, combined delayed callback and native acceptance remain excluded. Do not infer production approval from local results. Two providers are available; no third provider is claimed. No PR or publication is authorized.

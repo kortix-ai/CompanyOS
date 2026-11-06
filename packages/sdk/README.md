@@ -2024,6 +2024,9 @@ Legacy programmatic clients retain the existing unpartitioned transport.
 
 The API flag `KORTIX_BROWSER_LOGINS_ENABLED` defaults to `false`. Restart API replicas after changing configuration.
 Up to five sign-ins share one browser cookie partition; each tab selects its own account.
+When adding from an ordinary browser sign-in, authenticate the current account once to save it first.
+The host retires the old browser session without sharing its rotating credential or signing out other devices.
+Then authenticate the additional account. Failed or cancelled authentication preserves the current account.
 Browser logout leaves other devices signed in. Billing and permissions remain separate.
 Selected sign-ins gate profile/password changes and authenticator enrollment with an explicit notice.
 Use the ordinary sign-in page and explicitly authenticate the intended account for those settings.

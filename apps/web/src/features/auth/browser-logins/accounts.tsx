@@ -1,11 +1,13 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Identity changes require a document load to discard private App Router caches. */
 'use client';
 
+import { useAuth } from '@/features/providers/auth-provider';
 import { useTranslations } from '@/i18n/use-translations';
 import {
   removeAllBrowserDocumentLogins,
   removeBrowserDocumentLogin,
 } from '@/lib/auth/browser-document';
+import { retireLegacyBrowserSession } from '@/lib/auth/browser-login-adoption';
 import { parseBrowserRoute, stripBrowserSelector } from '@/lib/auth/browser-route';
 import { browserLogins, type BrowserLoginSlot } from '@kortix/sdk';
 import { Avatar, AvatarFallback } from '@kortix/ui/avatar';
@@ -118,6 +120,9 @@ export function SignedInAccounts() {
 
 export function BrowserAccountsPage({ callback = false }: { callback?: boolean }) {
   const t = useTranslations('browserLogins');
+  const { user: legacyUser, isLoading: authLoading } = useAuth();
+  const adoption = useRef<{ id: string; email: string } | null>(null);
+  const [confirmedSlot, setConfirmedSlot] = useState<string | null>(null);
   const callbackStarted = useRef(false);
   const attemptDestination = useRef<string | null>(null);
   const removalTrigger = useRef<HTMLButtonElement | null>(null);
@@ -141,6 +146,20 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
   const [failed, setFailed] = useState(false);
   const [add, setAdd] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const needsAdoption =
+    !!legacyUser &&
+    !roster.slots.some((slot) => slot.user_id === legacyUser.id && !slot.needs_sign_in);
+  const signInEmail = needsAdoption ? (legacyUser?.email ?? '') : email;
+  const acceptCandidate = async (id: string, user: { id: string; email?: string | null }) => {
+    if (adoption.current && user.id !== adoption.current.id) {
+      await browserLogins.cancel(id);
+      setAttempt(null);
+      setSent(false);
+      throw Object.assign(new Error('Different adoption identity'), { code: 'adoption_mismatch' });
+    }
+    setCandidate(user.email ?? t('text14'));
+    await factors({ kind: 'attempt', id });
+  };
   const destination = () =>
     loginDestination(new URLSearchParams(window.location.search).get('returnTo'));
   const run = async (work: () => Promise<void>) => {
@@ -152,7 +171,13 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     } catch (error) {
       setFailed(true);
       const status = (error as { status?: number }).status;
-      setMessage(status === 429 ? t('text11') : t('text12'));
+      setMessage(
+        (error as { code?: string }).code === 'adoption_mismatch'
+          ? t('currentAccountMismatch')
+          : status === 429
+            ? t('text11')
+            : t('text12'),
+      );
     } finally {
       setPending(false);
     }
@@ -182,25 +207,38 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
       setMessage(t('text13'));
       return;
     }
-    attemptDestination.current = loginAttemptDestination(
-      sessionStorage.getItem('kortix-login-return'),
-      id,
-      destination(),
-    );
+    const storedReturn = sessionStorage.getItem('kortix-login-return');
+    try {
+      const state = JSON.parse(storedReturn ?? 'null');
+      if (state?.attempt === id && typeof state?.adoption?.id === 'string')
+        adoption.current = state.adoption;
+    } catch {
+      /* Invalid attempt metadata cannot select an identity. */
+    }
+    attemptDestination.current = loginAttemptDestination(storedReturn, id, destination());
     sessionStorage.removeItem('kortix-login-return');
     sessionStorage.removeItem('kortix-login-attempt');
     setAttempt(id);
     void run(async () => {
       const result = await browserLogins.complete(id, { code: providerCode });
       history.replaceState(null, '', '/auth/browser-logins/callback');
-      setCandidate(result.user.email ?? t('text14'));
-      await factors({ kind: 'attempt', id });
+      await acceptCandidate(id, result.user);
     });
   }, [callback]);
   const begin = async (kind: 'password' | 'email' | 'google') => {
     attemptDestination.current = destination();
     sessionStorage.removeItem('kortix-login-return');
     sessionStorage.removeItem('kortix-login-attempt');
+    if (needsAdoption && legacyUser)
+      adoption.current = { id: legacyUser.id, email: legacyUser.email ?? '' };
+    else if (legacyUser) {
+      const saved = roster.slots.find((slot) => slot.user_id === legacyUser.id);
+      if (saved) {
+        const verified = await browserLogins.token(saved.slot);
+        if (verified.user_id !== legacyUser.id) throw new Error('Current saved identity changed');
+        await retireLegacyBrowserSession(saved.slot);
+      }
+    }
     await browserLogins.initialize();
     const result = await browserLogins.begin({ method: kind });
     setAttempt(result.attempt);
@@ -208,14 +246,24 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
   };
   const confirm = async () => {
     if (!attempt) return;
-    const result = await browserLogins.confirm(attempt);
-    if (result.duplicate_candidate) await browserLogins.cancel(result.duplicate_candidate);
-    await browserLogins.token(result.slot);
+    let slot = confirmedSlot;
+    if (!slot) {
+      const result = await browserLogins.confirm(attempt);
+      slot = result.slot;
+      setConfirmedSlot(slot);
+      if (result.duplicate_candidate) await browserLogins.cancel(result.duplicate_candidate);
+    }
+    await browserLogins.token(slot);
+    if (adoption.current) await retireLegacyBrowserSession(slot);
     const target = attemptDestination.current ?? destination();
     attemptDestination.current = null;
     sessionStorage.removeItem('kortix-login-return');
     sessionStorage.removeItem('kortix-login-attempt');
-    window.location.assign(accountHref(result.slot, target));
+    window.location.assign(
+      adoption.current
+        ? '/auth/browser-logins?add=1&returnTo=' + encodeURIComponent(target)
+        : accountHref(slot, target),
+    );
   };
   return (
     <AuthFrame footerVariant={add || candidate ? 'continue' : 'none'}>
@@ -271,6 +319,11 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
           {candidate ? t('text15') : t('text1')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('text16')}</p>
+        {add && needsAdoption && (
+          <p role="status" className="text-sm">
+            {t('saveCurrentFirst', { email: legacyUser?.email ?? t('text5') })}
+          </p>
+        )}
         {message && !removing && (
           <p role={failed ? 'alert' : 'status'} className="text-sm">
             {message}
@@ -368,7 +421,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
           </Button>
         )}
         {roster.slots.length >= 5 && !add && <p>{t('text26')}</p>}
-        {add && roster.enabled && !candidate && (
+        {add && roster.enabled && !roster.loading && !authLoading && !candidate && (
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -376,18 +429,19 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
               void run(async () => {
                 const id = attempt ?? (await begin(method)).attempt;
                 if (method === 'email' && !sent) {
-                  await browserLogins.sendEmail(id, { email });
+                  await browserLogins.sendEmail(id, { email: signInEmail });
                   setSent(true);
                   return;
                 }
                 const result = await browserLogins.complete(
                   id,
-                  method === 'password' ? { email, password } : { email, token: code },
+                  method === 'password'
+                    ? { email: signInEmail, password }
+                    : { email: signInEmail, token: code },
                 );
                 setPassword('');
                 setCode('');
-                setCandidate(result.user.email ?? t('text14'));
-                await factors({ kind: 'attempt', id });
+                await acceptCandidate(id, result.user);
               });
             }}
           >
@@ -397,9 +451,10 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
               type="email"
               autoComplete="username"
               required
-              value={email}
+              value={signInEmail}
               onChange={(e) => setEmail(e.target.value)}
               disabled={pending || sent}
+              readOnly={needsAdoption}
             />
             {method === 'password' ? (
               <>
@@ -452,7 +507,11 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                   sessionStorage.setItem('kortix-login-attempt', result.attempt);
                   sessionStorage.setItem(
                     'kortix-login-return',
-                    JSON.stringify({ attempt: result.attempt, destination: destination() }),
+                    JSON.stringify({
+                      attempt: result.attempt,
+                      destination: destination(),
+                      adoption: adoption.current,
+                    }),
                   );
                   window.location.assign(result.url);
                 })
@@ -498,14 +557,20 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             </Button>
           </>
         )}
-        {(attempt || add) && (
+        {(attempt || add) && !confirmedSlot && (
           <Button
             variant="outline"
             disabled={pending}
             onClick={() =>
               void run(async () => {
-                if (attempt) await browserLogins.cancel(attempt);
+                if (attempt && !confirmedSlot) await browserLogins.cancel(attempt);
+                if ((needsAdoption || adoption.current) && !confirmedSlot) {
+                  window.location.assign(destination());
+                  return;
+                }
                 attemptDestination.current = null;
+                adoption.current = null;
+                setConfirmedSlot(null);
                 setAttempt(null);
                 setCandidate(null);
                 setMfa(null);

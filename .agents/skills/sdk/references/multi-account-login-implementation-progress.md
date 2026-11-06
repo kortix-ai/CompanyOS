@@ -1176,3 +1176,51 @@ Source inspection after council corrections finds no legacy-session import. Brow
 This is not a completed migration. Do not enable the feature or call the original already-signed-in adoption journey complete. Research the credential handoff, browser refresh ownership, concurrent legacy tabs, cookie cleanup and rollback before implementing it. The final council round is deferred until this original requirement is implemented and verified. The completed five-vault-account proofs do not establish legacy adoption.
 
 Parent cleanup after the council-fix proofs: remaining owned synthetic users 0; owned listeners on 17700/17708/17821/17822/17825/17826 are absent; owned auth container absent. No cloud resources created in this stage.
+
+## Existing browser sign-in adoption plan, 2026-11-07
+
+Problem: adding B from ordinary A currently saves only B. Bare-route roster precedence can select B in an existing A tab.
+
+Options: copying A shares a rotating credential with old bundles. Reauthenticating A creates an independent token family. Engineering ruling 1 selects reauthentication.
+
+Implementation sequence:
+1. Route bare legacy documents by their cookie user hint only when it matches a saved slot. A hint grants no authority. Unmatched legacy documents continue through existing verification.
+2. Require fresh A authentication before Add B. Bind the expected user to an OAuth attempt. Reject and cancel a different candidate.
+3. After confirmation and successful token verification, retire only the old legacy session through a same-origin SDK-backed route. Never refresh it. Clear its cookie only after successful revocation, or after expiry when revocation cannot authenticate.
+4. Continue to Add B. Failed or cancelled authentication preserves A. Remove saved sessions only after eligible legacy retirement. Use local scope for ordinary browser sign-out fallback.
+5. Verify real legacy A plus B, wrong-account preservation, concurrent tabs, retirement retries, flag rollback, and other-device survival. Keep the feature flag off. No PR, push, merge, or deploy.
+
+## Existing browser sign-in adoption implementation and proof, 2026-11-07
+
+Implemented the fresh-authentication ruling. Add account first saves the current ordinary account with an independent session. An OAuth attempt binds the expected user and destination. A different candidate is cancelled. Confirmation and a successful vault token precede retirement of the ordinary session. The same-origin host route uses SDK roster, verified user and local logout calls; it never refreshes or transfers the old rotating credential. Already revoked requests are idempotent. Base cookie and six chunks expire. Expired credentials lose only their cookie; upstream revocation is not claimed.
+
+An existing ordinary tab follows only a matching saved user. An unmatched ordinary tab continues existing identity verification, even when exactly one different identity is saved. A stale saved current account requires reauthentication before Add B. A healthy saved current account must return a valid token before the old session can be retired. Removal retires only a matching ordinary account; unrelated accounts remain untouched.
+
+Deliberate scope correction: ordinary browser sign-out uses local Supabase scope, including with the flag off. A one-time capability check cannot safely permit global revocation because another tab can create a saved session after the check. The real browser request uses scope=local. Two other-device sessions remain usable after that logout.
+
+Focused checks:
+- bun test apps/web/src/lib/auth/browser-login-adoption.test.ts apps/web/src/lib/auth/browser-login-navigation.test.ts apps/web/src/lib/auth/browser-lifecycle.test.ts: 12 pass, 0 fail, 42 assertions, 130 ms. The routing test first failed because its implementation did not exist.
+- pnpm --filter ./apps/web typecheck: exit 0.
+- Changed-file ESLint: exit 0, 0 errors, 3 warnings in existing effect patterns.
+- node apps/web/scripts/i18n-catalogs.mjs check --base=HEAD: all nine catalogs pass.
+- Learnings index check and git diff --check: exit 0.
+- No API or SDK runtime source changed in this adoption stage. Prior SDK gates remain recorded above. No full or package-wide suite ran.
+
+Actual local browser/HTTP/PostgreSQL evidence (ignored output files contain only owned synthetic identities):
+- adoption-final-result.txt: wrong password and a controlled Google return for another identity preserve ordinary A and an empty roster. Fresh A authentication removes its ordinary cookie, then the form adds B. The roster contains both. Same-origin /supabase/auth/v1/user requests return 200.
+- adoption-tabs-final-result.txt: A/B profile documents and API subjects match their selectors. Three re-presented ordinary routes follow A, never B. Repeated retirement returns 204.
+- adoption-precedence-final-result.txt: its first three-tab and mobile assertions pass; its Cancel wait failed. The product fix then returns Cancel to /projects with the ordinary cookie retained. The clean adoption-ui-result.txt proves Cancel and all four desktop/mobile light/dark states without overflow.
+- adoption-db-final-result.txt: old session absent, both new vault sessions present, other-device session present. Old API 401; other-device API 200. Retired refresh denied; both vault APIs 200.
+- adoption-family-race-result.txt: real old-family refresh 200 races retirement 204 with an expiry hint inside 60 seconds. The old database session is absent afterwards. Vault token and other-device API remain 200. This is an HTTP race, not an observed browser auto-refresh tick.
+- adoption-route-result.json: missing/foreign Origin 403, foreign slot 404, unrelated ordinary account unchanged, held-cookie retry 204, base plus six cookie variants expired.
+- adoption-recovery-proof-result.txt: uncertain saved A forces fresh A authentication. Wrong password preserves ordinary A. Successful recovery repairs A before retiring the old session and opening Add B.
+- adoption-token-failure-result.txt: a real token 503 stops Add B before ordinary retirement or additional-account authentication. Cookie and roster remain unchanged.
+- adoption-demo-result.json and multi-account-two-tabs.webm: both account rows, A tab, B tab, B removal, B unavailable with token 404, and A still mounted with token 200. Recording duration 49.7 seconds.
+- adoption-rollback-result.json: a separate real flag-off API and Next proxy retain selected token 200, reject begin 503, hide Add, allow retirement 204 and remove-all. Both removed account APIs return 401; another device remains 200. An immediate browser navigation abort ends at the empty chooser; a settled bare /projects navigation reaches /auth?redirect=%2Fprojects. No ordinary auth cookie remains.
+- adoption-post-scope-result.txt: ordinary logout session API 401; two independent other-device APIs 200.
+
+Harness corrections: direct fixture cross-origin URLs blocked ordinary auth reads. The final runs use the supported same-origin /v1 and /supabase proxies and Node 22. Initial direct-origin observations are not evidence of successful client user validation. One early profile assertion incorrectly expected a writable email input; the field is rendered text. A dialog harness initially searched for an incorrect confirmation label. Those failed harness attempts are not passing product assertions.
+
+Still excluded: genuine external Google authorization, deployed edge/TLS acceptance, observed BFCache persisted=true, the combined delayed browser callback race, and native/side-panel acceptance. Keep the feature flag OFF. Production shippable: NOT YET. Final council round 3 follows this implementation. No push, PR, merge, deploy, or publication.
+
+Adoption-stage cleanup: remaining owned synthetic users 0. All seven owned browser sessions closed. Owned API, flag-off API, Next, auth proxy and auth container stopped. No cloud resources were created. Original research/plans are preserved.

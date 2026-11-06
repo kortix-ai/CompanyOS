@@ -26664,6 +26664,8 @@
     "standardSignIn": "通常のログインを使う",
     "validatingIdentity": "保存されたログインを確認しています…",
     "identityUnavailable": "保存されたログインを利用できません。再試行するか、別のアカウントを選択してください。",
-    "retryIdentity": "再試行"
+    "retryIdentity": "再試行",
+    "saveCurrentFirst": "まず {email} として再ログインし、このアカウントを保存してください。その後、別のアカウントを追加できます。キャンセルしても現在のログインは維持されます。",
+    "currentAccountMismatch": "これは別のアカウントです。まず現在のアカウントでログインしてください。現在のログインは変更されていません。"
   }
 }

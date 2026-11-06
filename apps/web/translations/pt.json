@@ -26664,6 +26664,8 @@
     "standardSignIn": "Usar o início de sessão padrão",
     "validatingIdentity": "A validar o início de sessão guardado…",
     "identityUnavailable": "O início de sessão guardado está indisponível. Tente novamente ou escolha outra conta.",
-    "retryIdentity": "Tentar novamente"
+    "retryIdentity": "Tentar novamente",
+    "saveCurrentFirst": "Primeiro, entre novamente como {email} para salvar esta conta. Depois adicione outra conta. Cancelar mantém sua sessão atual.",
+    "currentAccountMismatch": "Esta é outra conta. Entre primeiro com sua conta atual. Sua sessão atual permanece inalterada."
   }
 }

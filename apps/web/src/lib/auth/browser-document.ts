@@ -1,6 +1,7 @@
 'use client';
 import { authUser, browserLogins, createBrowserIdentity } from '@kortix/sdk';
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import { retireLegacyBrowserSession } from './browser-login-adoption';
 import { parseBrowserRoute } from './browser-route';
 
 let documentSlot: string | null = null;
@@ -75,6 +76,7 @@ export function selectedSupabaseCapability(client: SupabaseClient): SupabaseClie
 export async function removeBrowserDocumentLogin(
   slot: string,
 ): Promise<{ removed: true; revocation_pending: boolean }> {
+  await retireLegacyBrowserSession(slot);
   const receipt = await browserLogins.remove(slot);
   if (identity?.getSlot() === slot) identity.invalidateRoster();
   if (typeof BroadcastChannel !== 'undefined') {
@@ -89,6 +91,7 @@ export async function removeBrowserDocumentLogin(
 /** Remove the roster atomically; sibling tabs learn only which slots were removed. */
 export async function removeAllBrowserDocumentLogins() {
   const { slots } = await browserLogins.roster();
+  for (const { slot } of slots) await retireLegacyBrowserSession(slot);
   const receipt = await browserLogins.removeAll();
   identity?.invalidateRoster();
   if (typeof BroadcastChannel !== 'undefined') {

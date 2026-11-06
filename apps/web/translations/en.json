@@ -26664,6 +26664,8 @@
     "standardSignIn": "Use standard sign-in",
     "validatingIdentity": "Validating saved sign-in…",
     "identityUnavailable": "Saved sign-in is unavailable. Try again or choose another account.",
-    "retryIdentity": "Try again"
+    "retryIdentity": "Try again",
+    "saveCurrentFirst": "First, sign in again as {email} to save this account. Then add another account. Cancelling keeps your current sign-in.",
+    "currentAccountMismatch": "This is a different account. Sign in with your current account first. Your current sign-in is unchanged."
   }
 }

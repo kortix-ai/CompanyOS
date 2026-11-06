@@ -26664,6 +26664,8 @@
     "standardSignIn": "Standardanmeldung verwenden",
     "validatingIdentity": "Gespeicherte Anmeldung wird geprüft…",
     "identityUnavailable": "Gespeicherte Anmeldung nicht verfügbar. Erneut versuchen oder ein anderes Konto wählen.",
-    "retryIdentity": "Erneut versuchen"
+    "retryIdentity": "Erneut versuchen",
+    "saveCurrentFirst": "Melde dich zuerst erneut als {email} an, um dieses Konto zu speichern. Füge danach ein weiteres Konto hinzu. Beim Abbrechen bleibst du angemeldet.",
+    "currentAccountMismatch": "Dies ist ein anderes Konto. Melde dich zuerst mit deinem aktuellen Konto an. Deine aktuelle Anmeldung bleibt unverändert."
   }
 }

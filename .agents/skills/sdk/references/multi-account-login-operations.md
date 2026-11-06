@@ -19,7 +19,18 @@ Rolling back to code without recovery routes requires removing saved sign-ins fi
 
 ## Browser behavior
 
-Open the account menu, choose Add account, authenticate, inspect the verified account, and confirm.
+Open the account menu and choose Add account.
+If this browser still uses an ordinary sign-in, authenticate that same account once to save it first.
+The new vault session has a separate refresh-token family. The host then retires only the old browser session.
+The form opens again for the additional account. Inspect each verified account and confirm.
+Wrong-account authentication is cancelled before confirmation. Cancellation or failed authentication preserves the ordinary sign-in.
+A bare legacy tab follows a saved slot only when their users match; a different saved user never replaces it.
+The same-origin retirement route uses the SDK, never auth-js refresh or global sign-out.
+Ordinary browser logout now uses local Supabase scope too, including with the feature off.
+This deliberate scope correction prevents a legacy fallback from revoking concurrently created saved sessions or other devices.
+A capability check cannot safely authorize global logout because another tab can save a session after that check.
+An expired legacy credential loses its browser cookie; the route does not claim upstream revocation.
+A failed retirement stays retryable before the additional-account step. Removal retires any matching legacy session first.
 Confirmation selects that account in this tab. Open another account in a new tab for independent use.
 Five saved sign-ins are allowed per browser handle. Duplicate users reuse their saved slot.
 Each account keeps its own projects, permissions, settings and billing. Accounts and billing are never merged.

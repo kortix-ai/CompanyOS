@@ -26664,6 +26664,8 @@
     "standardSignIn": "使用标准登录",
     "validatingIdentity": "正在验证已保存的登录…",
     "identityUnavailable": "已保存的登录不可用。请重试或选择其他账号。",
-    "retryIdentity": "重试"
+    "retryIdentity": "重试",
+    "saveCurrentFirst": "请先以 {email} 重新登录以保存此账号，然后添加其他账号。取消将保留当前登录。",
+    "currentAccountMismatch": "这是其他账号。请先使用当前账号登录。当前登录未发生变化。"
   }
 }

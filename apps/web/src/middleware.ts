@@ -1,5 +1,6 @@
 import { defaultLocale, locales } from '@/i18n/catalog.mjs';
 import { isNonPagePath, localizedPathname, unverifiedSessionLocale } from '@/i18n/routing';
+import { savedSlotForLegacyUser } from '@/lib/auth/browser-login-adoption';
 import { resolveVerifiedBrowserRequest } from '@/lib/auth/browser-request';
 import {
   parseBrowserRoute,
@@ -440,7 +441,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(chooser);
   }
 
-  // A saved browser roster takes precedence over the shared legacy cookie.
+  // A legacy tab can follow only its own saved identity. Never select a different user.
   if ((isProtectedAppPath(pathname) || pathname === '/') && request.method === 'GET') {
     const cookie = request.headers.get('cookie') ?? '';
     if (request.cookies.has(vaultCookieName)) {
@@ -462,11 +463,15 @@ export async function middleware(request: NextRequest) {
             ),
         });
         const destination = (pathname === '/' ? '/projects' : pathname) + request.nextUrl.search;
-        if (roster.slots.length === 1)
+        const legacy = readUnverifiedSession(request.cookies.getAll(), KORTIX_SUPABASE_AUTH_COOKIE);
+        const legacyUser = legacy?.user as { id?: unknown } | undefined;
+        const legacyUserId = typeof legacyUser?.id === 'string' ? legacyUser.id : null;
+        const savedSlot = savedSlotForLegacyUser(roster.slots, legacyUserId);
+        if (savedSlot)
           return NextResponse.redirect(
-            new URL(`/u/${encodeURIComponent(roster.slots[0].slot)}${destination}`, request.url),
+            new URL(`/u/${encodeURIComponent(savedSlot)}${destination}`, request.url),
           );
-        if (roster.slots.length > 1) {
+        if (!legacyUserId && roster.slots.length > 1) {
           const chooser = new URL('/auth/browser-logins', request.url);
           chooser.searchParams.set('returnTo', destination);
           return NextResponse.redirect(chooser);

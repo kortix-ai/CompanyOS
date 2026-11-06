@@ -25,6 +25,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { authenticatePreviewPrincipalDetailed } from './preview-auth';
+import { previewLoginSessionLive } from './preview-partition';
 import { bindPreviewResource, bindPreviewSession } from './preview-audit';
 import { resolvePreviewWsUpstream } from './forward';
 import { classifyPtyWebSocketPath } from '../platform/providers/pty-ingress';
@@ -257,6 +258,7 @@ export async function preparePreviewWsUpgrade(
     search: url.search,
     userId: principal.userId,
     callerSessionId: principal.sessionId,
+    loginSessionId: principal.loginSessionId,
   });
 }
 
@@ -311,6 +313,7 @@ export async function preparePreviewHostWsUpgrade(
     search: url.search,
     userId: session.userId,
     callerSessionId: session.callerSessionId,
+    loginSessionId: session.loginSessionId,
   });
 }
 
@@ -322,6 +325,7 @@ async function resolveUpgradeForPrincipal(input: {
   search: string;
   userId: string;
   callerSessionId: string | null;
+  loginSessionId?: string;
 }): Promise<
   | { ok: true; data: PreviewWsData }
   | { ok: false; status: number; message: string }
@@ -377,7 +381,16 @@ async function resolveUpgradeForPrincipal(input: {
       data: {
         type: 'preview-ws', url: upstream.url, headers: upstream.headers,
         ingress: { sandboxId, port: upstreamPort },
-        accessCheck: upstream.accessCheck,
+        accessCheck: async () => {
+          if (input.loginSessionId) {
+            try {
+              if (!await previewLoginSessionLive(userId, input.loginSessionId)) return false;
+            } catch {
+              return false;
+            }
+          }
+          return upstream.accessCheck();
+        },
       },
     };
   } catch (err) {

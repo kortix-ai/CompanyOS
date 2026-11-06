@@ -1,5 +1,6 @@
-import { platformConfig } from '../core/http/config';
 'use client';
+
+import { platformConfig } from '../core/http/config';
 
 import { useEffect, useState } from 'react';
 import { getAuthToken } from '../core/http/auth';

@@ -8,7 +8,6 @@ import {
   setUiTelemetry,
   type UiHostComponents,
   type UiHostConfig,
-  type UiLinkProps,
   type UiNavigation,
   type UiStringsInput,
   type UiViewer,
@@ -17,10 +16,10 @@ import type { UiI18nHost } from '@kortix/ui/i18n';
 import { setSilentErrorToastFilter } from '@kortix/ui/toast';
 import * as Sentry from '@sentry/nextjs';
 import NextImage from 'next/image';
-import NextLink from 'next/link';
+import { IdentityLink } from '@/components/identity-link';
 import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-identity-router';
-import { forwardRef, useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import { useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 
 import { WallpaperBackground } from '@/components/ui/wallpaper-background';
 import { useBranding } from '@kortix/ui/internal/branding/branding-provider';
@@ -29,7 +28,6 @@ import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { updateProfileMetadata } from '@/lib/auth/update-profile';
 import { isRuntimeNotReadyNoiseMessage } from '@kortix/ui/internal/lib/browser-error-noise';
 import { isConnectorsEnabled, isManagedProviderEnabled } from '@/lib/config';
-import { isStaticSitePath } from '@/lib/navigation/static-site-path';
 import { isInExtensionPanel } from '@/lib/supabase/panel-cookies';
 import { getEnv } from '@/lib/env-config';
 import { isSilentTimeoutMessage } from '@kortix/ui/internal/lib/timeout-toast-policy';
@@ -66,22 +64,6 @@ setUiHostEnv(() => {
     mapStyleUrl: process.env.NEXT_PUBLIC_GENUI_MAP_STYLE_URL,
     mapStyleUrlDark: process.env.NEXT_PUBLIC_GENUI_MAP_STYLE_URL_DARK,
   };
-});
-
-/**
- * next/link, except a static, non-App-Router path (`/docs`, `/sitemap.xml`):
- * that one is a plain <a>, the `SiteLink` rule. Next cannot prefetch or
- * soft-navigate a static file.
- */
-const HostLink = forwardRef<HTMLAnchorElement, Omit<UiLinkProps, 'ref'>>(function HostLink(
-  props,
-  ref,
-) {
-  if (isStaticSitePath(props.href)) {
-    const { prefetch: _prefetch, ...anchor } = props;
-    return <a ref={ref} {...anchor} />;
-  }
-  return <NextLink ref={ref} {...props} />;
 });
 
 // Next.js observes history.pushState/replaceState: tab and query-param URL writes stay shallow.
@@ -193,7 +175,7 @@ export function KortixUiProvider({ children }: { children: ReactNode }) {
   return (
     <UiProvider
       strings={strings}
-      link={HostLink}
+      link={IdentityLink}
       image={NextImage}
       useBrand={useBranding}
       navigation={navigation}

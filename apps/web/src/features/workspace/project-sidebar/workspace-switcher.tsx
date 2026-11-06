@@ -100,6 +100,7 @@ import {
 } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { browserIdentityPath } from '@/lib/auth/browser-route';
 import { useRouter } from '@/lib/navigation/use-identity-router';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -281,7 +282,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
                         anchor. */}
                     {canCreateWorkspace && (
                       <DropdownMenuItem asChild onSelect={() => setMenuOpen(false)} size="sm">
-                        <Link href="/new" prefetch>
+                        <Link href={browserIdentityPath('/new', typeof window === 'undefined' ? '' : window.location.pathname)} prefetch>
                           <PlusIcon />
                           {t('workspace.create')}
                         </Link>
@@ -315,7 +316,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
 
               {canRename === true && (
                 <DropdownMenuItem asChild onSelect={() => setMenuOpen(false)} size="sm">
-                  <Link href={capabilityTabHref(projectId, 'config')} prefetch>
+                  <Link href={browserIdentityPath(capabilityTabHref(projectId, 'config'), typeof window === 'undefined' ? '' : window.location.pathname)} prefetch>
                     <PencilSimpleIcon />
                     {tUi('text3064d79a295c')}
                   </Link>

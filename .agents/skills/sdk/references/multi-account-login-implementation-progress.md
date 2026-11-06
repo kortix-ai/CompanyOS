@@ -803,3 +803,142 @@ Commands below ran from the canonical worktree. Logs and synthetic launchers rem
   Live login-session revocation is exercised through real HTTP; the additional broker-row check is implemented.
 - Existing parent cloud prompt/transcript/files/billing, runtime teardown, drafts/IDB/BFCache, and other UI gates remain.
   The product feature flag stays default off. Do not claim overall feature completion or production acceptance.
+
+## Local continuation: delivered codes and host integration, 2026-11-06
+
+Status: PARTIAL. Overall acceptance remains NOT YET. Starting HEAD d13fcb4043.
+Workdir: /Users/jay/root/kortix/suna-multi-account-login-plan. No publication or flag configuration changes.
+
+### Fixed and verified
+
+- Real Next compilation failed because an import preceded the preview hook's `use client` directive.
+  Moved the directive first. The real account page then compiled and rendered.
+- Web T0 failed with TS2737 on two BigInt literals in static-file-preview.ts.
+  Replaced literals with equivalent BigInt constructor calls. Web and SDK typechecks exit 0.
+- The sidebar's Create project and Rename anchor hrefs lacked the selected slot.
+  Both now use browserIdentityPath. Actual rendered Rename and Open in new tab hrefs retain the selected slot.
+- Isolated GoTrue v2.196.0 ran on 17821 against the worktree DB, with a prefix proxy on 17822.
+  Templates on 17825 reuse renderAuthEmail with a GoTrue Token placeholder. No shared auth config changed.
+  The copied auth tables belong to the branch DB owner and enforce RLS against the auth role.
+  The isolated process therefore used the branch DB owner, matching the branch API connection.
+  No trigger or RLS policy was disabled. Temporary branch-only auth-role grants were used during diagnosis.
+- Actual UI email send returned 200. Mailpit delivered a six-digit code from the existing template.
+  A wrong code returned 409 and displayed the generic failure. The delivered code then returned a candidate.
+  Continue reached selected projects. Repeated delivered-code flow for B; sidebar roster displayed A and B.
+  No admin-generated OTP was used for these completions. Raw evidence stays under ignored output/.
+- createDatabaseProject seeded two owned private projects and manager memberships.
+  A's real projects page displayed PRIVATE-MARKER-ALPHA and excluded BETA.
+  B's page displayed PRIVATE-MARKER-BETA and excluded ALPHA. B's actual project shell/sidebar rendered.
+  Sidebar switcher displayed both saved identities, selected checkmark, management and new-tab entry.
+- Actual all-browser logout cleared the roster and showed the success message.
+  An already-open A tab replaced private content with Saved sign-in is unavailable.
+  Native dialog automation timed out; the completed run accepted window.confirm at the browser boundary.
+  This does not establish complete keyboard/native-dialog acceptance.
+- Both owned projects were deleted with deleteDatabaseProject. Both owned auth users were deleted through
+  isolated GoTrue admin DELETE, each status 200. No cloud resource was created in this continuation.
+  Own container, listeners and browser tabs were stopped. Previous partition fixture residue was not audited here.
+
+### Checks
+
+All commands ran in the workdir above. No full suite or whole-package tests ran.
+- Named SDK files: static-file-preview.test.ts, use-authenticated-preview-url.test.ts,
+  index.isomorphic.test.ts, public-surface.test.ts, public-type-surface.test.ts:
+  48 pass, 0 fail across five files. output/remaining-sdk-final-tests.log.
+- SDK typecheck: exit 0. Install smoke: packed ESM imports and constructs, passed.
+  output/remaining-sdk-final-typecheck.log and output/remaining-sdk-final-smoke.log.
+- Web typecheck: exit 0, output/remaining-web-final-typecheck.log.
+- browser-route.test.ts and browser-login-navigation.test.ts: 8 pass, 0 fail, 34 assertions.
+- Changed sidebar ESLint: exit 0. git diff --check: exit 0.
+
+### Still incomplete
+
+Controlled positive/negative Google callback UI; expired-code preservation with an existing A;
+shared-project permission differences; composer/drafts/IndexedDB/BFCache; actual cloud runtime/PTY/files/stream
+and broker-removal preview pending-upstream scenario; real Next action requests; translations;
+selected profile/password capability UX; notification capability acknowledgement; full keyboard/mobile/theme
+flow and complete synthetic demo; operator/help finalization and original-plan commit review.
+No provider outage is asserted: encrypted provider availability was not tested in this continuation.
+Deployed edge/cloud acceptance remains excluded by the local-only instruction.
+The earlier ledger's broad unverified items are narrowed only by the explicit proofs above.
+
+## Local cloud runtime and data isolation acceptance, 2026-11-06
+
+Workdir: /Users/jay/root/kortix/suna-multi-account-login-plan. Starting HEAD d13fcb4043.
+Local changes only. No push, PR, merge, deployment, publication, or default flag change.
+The original untracked plan and security research remain untracked. Generated SEO timestamps remain unstaged.
+
+### Real cloud runtime evidence
+
+- Decrypted apps/api/.env through dotenvx without printing credentials. Authenticated Platinum list returned 200.
+- Used isolated GoTrue and the branch DB. Created synthetic A/B accounts and private projects with database-project helpers.
+  The fixture defaults needed explicit Platinum session placement, the local HTTP Git helper, a reachable own tunnel,
+  and normal managed-lineup/runtime-catalog boot. Initial failed setup attempts are preserved in ignored output/.
+  These setup errors were not provider outages. No authorization guard or DB trigger was disabled.
+- Four owned Platinum boxes were provisioned across setup and successful runtime attempts.
+  The final A/B sessions returned stage=ready. Synthetic prompts returned 202 and completed through the actual gateway.
+  /transcript returned 200 with distinct assistant confirmations. /file/content returned the exact ALPHA/BETA marker.
+  Opposite-account file and terminal requests returned 403. Project/session/transcript private access returned 403.
+  Persisted lifecycle receipts bind both successful prompts to the correct actor_user_id and account_id.
+- Both /events endpoints returned 200 text/event-stream with their own kortix.stream.hello session binding.
+  Actual selected A and B pages rendered their separate transcripts and sender attribution.
+- A shared-project viewer read returned 200. Project-settings PATCH returned 403 with project_role_insufficient.
+  The owner passed that authorization gate but manifest writing returned 503 because the synthetic repo has no write credential.
+  Shared session renaming returned 200 for the viewer: that route allows session access; do not claim viewer rename denial.
+- Actual cloud partition preview: app=200, asset=200, redirect=302, WS=echo.
+  A real browser independently read CLOUD-APP-ALPHA, fetched CLOUD-ASSET-ALPHA, and received browser-cloud-echo.
+  The initial probe appended paths to a URL with a trailing slash; normalizing to URL.origin fixed the probe.
+- Pending-upstream broker removal: held the GoTrue logout request, confirmed the auth session remained live,
+  and observed the removed slot's preview cookie and ticket return 401 before releasing logout.
+
+### Concrete fixes and browser state
+
+- Session anchors from the shared UI host link omitted /u/<slot>. Normal clicks were intercepted, but modified clicks
+  could leave the selected route. IdentityLink now renders the selected href, including target=_blank anchors.
+  The component regression failed before implementation and passes afterward. Actual session anchors retain the slot.
+- A draft is DRAFT-ALPHA; B starts empty and retains DRAFT-BETA after reload. Navigating back to A restores DRAFT-ALPHA.
+  B renders BETA and excludes ALPHA. A renders ALPHA and excludes BETA after B removal.
+  Actual browser back navigation reported back_forward. A removed B URL resolves to the chooser without B's private content.
+- Read the actual IndexedDB saved-copies store in A, B, and after B removal. Envelopes remain keyed to their user.
+  Removal does not physically delete B's saved copies. The selected authentication gate prevents their display after revocation.
+  A's saved state survives. Raw DOM, navigation, storage and IDB readbacks remain private under output/.
+- A real cloud PTY exposed a lifecycle gap: open sockets checked sandbox membership without their opening login.
+  Both path and partition socket access checks now retain loginSessionId and fail closed on missing/revoked login state.
+  RED expected false but received true. GREEN passes. Actual selected PTY attached, emitted output, then closed with 4403
+  after broker removal at the existing 60-second server recheck. Removed-slot token retry returned 404.
+  This does not claim instantaneous server termination of an already-open socket. New preview requests reject immediately.
+- Preserved and verified previous-stage use-client, BigInt and sidebar selector fixes.
+
+### Next credential action inventory and negative boundary
+
+- auth/actions.ts exports resolveAuthMode, sendEmailCode, requestAccess, forgotPassword, resetPassword,
+  signInWithPassword and signUpWithPassword. sign-out-actions.ts exports clearAuthBounceCookie,
+  clearMaintenanceBypassCookie and finalizeServerSignOut. Selected UI uses the broker; credential actions have no selected UI contract.
+- Actual POST requests to selected /api/auth/password and selected /auth/reset-password with a legacy A cookie returned 404,
+  Browser identity unavailable. The selected middleware refuses those routes before legacy actions can read A's cookie.
+  An attempted Next action on the projects page returned 409 Server Action unavailable. This is not evidence that its handler ran.
+  No debug page or product route was added.
+
+### Checks, cleanup and limits
+
+All commands run from the canonical workdir above. No full suite or whole-package tests ran.
+- SDK named files: static-file-preview, use-authenticated-preview-url, browser-identity, identity-storage,
+  reset-identity-state: 25 pass, 0 fail across five files. SDK typecheck exits 0. Install smoke passes packed ESM imports/construction.
+- Web identity-link, browser-route and browser-login-navigation: 9 pass, 0 fail, 36 assertions. Web typecheck exits 0.
+- API ws-login-liveness, ws-proxy-access-recheck and ws-proxy-ingress-recovery: 9 pass, 0 fail, 14 assertions.
+  API typecheck exits 0. Changed API/web ESLint exits 0. git diff --check exits 0.
+- Commands, HTTP outputs and private browser proof: output/runtime-*. Tests and T0 have matching named log files.
+- Supported provider remove/status verified absence of all four owned cloud boxes BEFORE fixture deletion.
+  deleteDriveVolume/getDriveVolume verified both owned drive volumes absent. Session workspace-volume helper also ran.
+  Deleted all owned projects, auth users and accounts. Final SQL asserts zero owned auth.users, auth.sessions,
+  kortix.projects and kortix.account_tokens. No usable owned principal remains.
+- Audited eight original synthetic partition tombstones: provider GET returns 404 and no auth principal remains.
+  One copied synthetic principal remained in isolated auth and was deleted with GoTrue admin DELETE.
+  Immutable sandbox identity rows remain as safe tombstones. No trigger was changed or disabled.
+- Stopped own browser sessions, Next/API/gateway/tunnel launchers and isolated auth container/listeners.
+
+Residual acceptance limits: no browser persisted=true BFCache restoration was observed; back_forward navigation was exercised.
+A delayed old browser callback was not deliberately injected while live cloud SSE/PTY controllers switched identities.
+The SDK generation tests and real selected documents cover those paths separately, not that exact combined race.
+A successful shared-project settings write remains unverified because the fixture lacks a Git write credential.
+Physical deletion of removed-user IDB copies is not implemented or claimed. No external provider outage remains.
+Overall feature and production acceptance remain NOT YET. Callback, translations, capability UX, documentation and parent reviews remain parent work.

@@ -991,3 +991,12 @@ Incomplete acceptance; do not treat this continuation as task completion:
 - Previously recorded cloud/BFCache/delayed-callback/shared-write limitations remain as stated above.
 Parent review is still next, but these are implementation acceptance gaps, not reviewer responsibilities.
 Feature-wide production-shippable verdict: NOT YET. Keep default flag off.
+
+Commit/cleanup addendum:
+- Local implementation commit: 0c1acc82a127c2d8b5a8ad3fc352100495ff70cc. Normal hooks passed.
+- The artifact hook required preserving the unstaged SEO file separately during commit.
+  It then regenerated/staged the developer-doc timestamp. Restoring the preserved file produced no diff.
+  Thus the commit includes the generated developer-doc timestamp; the earlier exclusion statement describes initial staging only.
+- Closed the owned browser tab and stopped the owned Next process. Port 17700 has no listener.
+- Final frontend typecheck exits 0: output/finish-web-typecheck-final.log.
+- Working tree was clean after restoring the preserved SEO file.

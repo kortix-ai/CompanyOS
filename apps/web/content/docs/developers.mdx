@@ -9048,3 +9048,18 @@ Selected browser documents pass preview URL candidates through SDK `authorizePre
 The SDK creates a separate origin per user and exchanges the bearer for a short-lived preview ticket.
 Selected preview cookies bind the user, sandbox, port, and live login session.
 Public-share links remain separate capabilities; they do not establish a private principal on a selected origin.
+
+
+### Saved browser sign-ins: initial limitations
+
+The API flag `KORTIX_BROWSER_LOGINS_ENABLED` defaults to `false`. Restart API replicas after changing configuration.
+Up to five sign-ins share one browser cookie partition; each tab selects its own account.
+Browser logout leaves other devices signed in. Billing and permissions remain separate.
+Selected sign-ins gate profile/password changes and authenticator enrollment with an explicit notice.
+Use the ordinary sign-in page and explicitly authenticate the intended account for those settings.
+Existing authenticator verification is available in Manage browser sign-ins.
+Browser push notifications are unavailable for selected sign-ins. Native clients are outside the initial feature.
+Legacy desktop and extension authentication remain unchanged.
+Handles expire after 30 idle days or 90 absolute days; add attempts expire after five minutes.
+Disabling additions preserves recovery and removal. Keep old encryption keys during rotation and rollback.
+The server event `auth_identity_operation` records candidate authentication success, not switches or confirmed additions.

@@ -942,3 +942,52 @@ The SDK generation tests and real selected documents cover those paths separatel
 A successful shared-project settings write remains unverified because the fixture lacks a Git write credential.
 Physical deletion of removed-user IDB copies is not implemented or claimed. No external provider outage remains.
 Overall feature and production acceptance remain NOT YET. Callback, translations, capability UX, documentation and parent reviews remain parent work.
+
+
+## User-facing continuation, 2026-11-06
+
+Workdir: /Users/jay/root/kortix/suna-multi-account-login-plan. Starting HEAD 8bb9a1198b.
+No push, PR, merge, deploy, schedule, or publication. No SDK runtime code changed.
+The existing generated SEO timestamp edit remains excluded.
+
+Implemented:
+- Selected Profile and Security gate before mounting legacy Supabase mutation hooks.
+  The notice explains profile/password/MFA-enrollment limits and links to explicit ordinary sign-in and saved-login management.
+- Selected notification toggles render an explicit unavailability notice instead of accepting unusable settings.
+  The saved-login entry page discloses the initial push-notification limitation.
+- Account removal and remove-all use the existing ConfirmDialog/AlertDialog, with cancel, pending and error states.
+  The main flow exposes aria-busy. Native window.confirm is removed from this surface.
+- All 44 account strings have actual de/es/fr/it/ja/pt/sr/zh translations. Existing key order is preserved.
+- Original approved proposal and security research are archived with links to current status.
+  Operator guide documents exact flags/keyring format, restart, expiration, rotation, recovery, browser scope and unsupported clients.
+  SDK README and developer documentation explain initial limitations.
+- Documented the actual closed server event: candidate authentication success, not switch adoption or confirmed addition.
+
+Focused checks from this workdir:
+- pnpm --filter Kortix-Computer-Frontend test src/features/workspace/settings/tabs/profile-tab.container.test.tsx src/features/workspace/settings/tabs/profile-tab.test.tsx src/lib/auth/browser-login-navigation.test.ts src/lib/auth/browser-route.test.ts
+  => 33 pass, 0 fail, 100 assertions, four files, 444ms. output/finish-targeted-tests.log.
+- pnpm --filter Kortix-Computer-Frontend typecheck => exit 0. output/finish-web-typecheck.log.
+- Changed frontend ESLint => 0 errors, 6 warnings; notification-file ESLint => exit 0.
+  output/finish-eslint.log and output/finish-notifications-eslint.log.
+- node apps/web/scripts/i18n-catalogs.mjs check --base=HEAD => all catalogs ok. output/finish-catalog-check.log.
+- Brand audit => three existing security-tab hits (QR white background and two bare rounded classes).
+  These lines are unchanged from starting HEAD. New UI has no reported token violation. output/finish-brand.log.
+- git diff --check => exit 0.
+
+Limited browser observation:
+- Started only an owned Next listener; no auth/API listener or cloud fixture was created.
+- Actual foreign-attempt callback document renders role=alert:
+  “This sign-in attempt expired or belongs to another tab. Start again.”
+  Resource entries show only capabilities requests and no complete request.
+  This proves the client sessionStorage rejection only. It does NOT prove existing-A preservation through the broker.
+- Screenshot: /Users/jay/.t3/userdata/browser-artifacts/browser-screenshot-localhost-mw58t1v2-648b15a2.png.
+
+Incomplete acceptance; do not treat this continuation as task completion:
+- Controlled Google positive and negative callback journeys through real SDK/broker/PKCE remain unrun.
+  No external Google test account was established. External provider login remains unverified.
+- Existing-A preservation for foreign/replay/expired/cancel/429 callbacks remains unrun in this continuation.
+- Updated selected capability UI and AlertDialog require full keyboard, mobile, light/dark browser verification.
+  No current-diff full synthetic A/Add-B/two-tab/B-logout demo was recorded.
+- Previously recorded cloud/BFCache/delayed-callback/shared-write limitations remain as stated above.
+Parent review is still next, but these are implementation acceptance gaps, not reviewer responsibilities.
+Feature-wide production-shippable verdict: NOT YET. Keep default flag off.

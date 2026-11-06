@@ -1,5 +1,8 @@
 'use client';
 
+import { BrowserSettingsCapability } from './browser-settings-capability';
+import { parseBrowserRoute } from '@/lib/auth/browser-route';
+
 import { localizedCopy } from './localized-copy';
 import { removeProfileAvatar } from './profile-avatar';
 
@@ -598,6 +601,13 @@ export function ProfileTabView({
  *  tab is active (`SettingsTabPane` in `settings-panel.tsx` returns `null`
  *  otherwise), so nothing here fetches on panel open. */
 export function ProfileTab() {
+  if (typeof window !== 'undefined' && parseBrowserRoute(window.location.pathname)) {
+    return <BrowserSettingsCapability />;
+  }
+  return <LegacyProfileTab />;
+}
+
+function LegacyProfileTab() {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('settings.profile');
   const locale = useLocale();

@@ -1,5 +1,8 @@
 'use client';
 
+import { BrowserSettingsCapability } from './browser-settings-capability';
+import { parseBrowserRoute } from '@/lib/auth/browser-route';
+
 import { localizedCopy } from './localized-copy';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
@@ -689,6 +692,13 @@ export function DevicesSection({
 /** Container: owns every hook and renders `SecurityTabView` with real data
  *  and handlers. Only ever mounted while this tab is active. */
 export function SecurityTab() {
+  if (typeof window !== 'undefined' && parseBrowserRoute(window.location.pathname)) {
+    return <BrowserSettingsCapability />;
+  }
+  return <LegacySecurityTab />;
+}
+
+function LegacySecurityTab() {
   const t = useTranslations('settings.security');
   const locale = useLocale();
   const copy = localizedCopy(DEFAULT_SECURITY_TAB_COPY, t);

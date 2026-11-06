@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@kortix/ui/dropdown-menu';
+import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
 import { Input } from '@kortix/ui/input';
 import { Label } from '@kortix/ui/label';
 import { useEffect, useRef, useState } from 'react';
@@ -112,6 +113,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [add, setAdd] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
   const destination = () =>
     loginDestination(new URLSearchParams(window.location.search).get('returnTo'));
   const run = async (work: () => Promise<void>) => {
@@ -172,9 +174,28 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     );
   };
   return (
-    <main className="mx-auto w-full max-w-md space-y-4 p-6">
+    <main className="mx-auto w-full max-w-md space-y-4 p-6" aria-busy={pending}>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}
+        title={t(removing === 'all' ? 'text23' : 'text17')}
+        description={t('text16')}
+        confirmLabel={t(removing === 'all' ? 'text25' : 'text20')}
+        cancelLabel={t('text40')}
+        isPending={pending}
+        onConfirm={() => void run(async () => {
+          if (!removing) return;
+          const receipt = removing === 'all'
+            ? await removeAllBrowserDocumentLogins()
+            : await removeBrowserDocumentLogin(removing);
+          await roster.reload();
+          setMessage(receipt.revocation_pending ? t('text18') : t(removing === 'all' ? 'text24' : 'text19'));
+          setRemoving(null);
+        })}
+      />
       <h1 className="text-xl font-medium">{candidate ? t('text15') : t('text1')}</h1>
       <p className="text-muted-foreground text-sm">{t('text16')}</p>
+      <p className="text-muted-foreground text-sm">{t('text44')}</p>
       {message && <p role="alert">{message}</p>}
       {roster.loading && <p role="status">{t('text2')}</p>}
       {roster.error && (
@@ -194,14 +215,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                 variant="outline"
                 size="sm"
                 disabled={pending}
-                onClick={() =>
-                  void run(async () => {
-                    if (!window.confirm(t('text17'))) return;
-                    const receipt = await removeBrowserDocumentLogin(slot.slot);
-                    await roster.reload();
-                    setMessage(receipt.revocation_pending ? t('text18') : t('text19'));
-                  })
-                }
+                onClick={() => setRemoving(slot.slot)}
               >
                 {t('text20')}
               </Button>
@@ -225,14 +239,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
         <Button
           variant="outline"
           disabled={pending}
-          onClick={() =>
-            void run(async () => {
-              if (!window.confirm(t('text23'))) return;
-              const { revocation_pending: retained } = await removeAllBrowserDocumentLogins();
-              await roster.reload();
-              setMessage(retained ? t('text18') : t('text24'));
-            })
-          }
+          onClick={() => setRemoving('all')}
         >
           {t('text25')}
         </Button>

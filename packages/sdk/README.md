@@ -2018,3 +2018,18 @@ It exchanges the bearer for a 60-second preview ticket. It never places a refres
 Selected callers require an origin URL; authorization failures do not fall back to shared preview cookies.
 Pure synchronous URL builders return transport candidates, which selected callers must authorize before use.
 Legacy programmatic clients retain the existing unpartitioned transport.
+
+
+### Saved browser sign-ins: initial limitations
+
+The API flag `KORTIX_BROWSER_LOGINS_ENABLED` defaults to `false`. Restart API replicas after changing configuration.
+Up to five sign-ins share one browser cookie partition; each tab selects its own account.
+Browser logout leaves other devices signed in. Billing and permissions remain separate.
+Selected sign-ins gate profile/password changes and authenticator enrollment with an explicit notice.
+Use the ordinary sign-in page and explicitly authenticate the intended account for those settings.
+Existing authenticator verification is available in Manage browser sign-ins.
+Browser push notifications are unavailable for selected sign-ins. Native clients are outside the initial feature.
+Legacy desktop and extension authentication remain unchanged.
+Handles expire after 30 idle days or 90 absolute days; add attempts expire after five minutes.
+Disabling additions preserves recovery and removal. Keep old encryption keys during rotation and rollback.
+The server event `auth_identity_operation` records candidate authentication success, not switches or confirmed additions.

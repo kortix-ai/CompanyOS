@@ -26656,6 +26656,8 @@
     "text39": "Continue with this account",
     "text40": "Cancel",
     "text41": "Adding accounts is unavailable. Saved accounts can still be used or removed.",
-    "text42": "Sign in again"
+    "text42": "Sign in again",
+    "text43": "Profile changes, password changes, and authenticator setup are unavailable for saved browser sign-ins. To manage them, open the sign-in page and sign in explicitly with the account you want to change. Verify an existing authenticator in Manage browser sign-ins.",
+    "text44": "Browser push notifications are unavailable for saved browser sign-ins. Check your sessions here for updates."
   }
 }

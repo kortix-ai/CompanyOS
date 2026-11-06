@@ -65,3 +65,18 @@ describe('isServablePreviewUrl', () => {
     expect(isServablePreviewUrl('javascript:alert(1)', TEMPLATE)).toBe(false);
   });
 });
+
+it('accepts the configured loopback origin and refuses a different port', () => {
+  expect(
+    isServablePreviewUrl(
+      'http://p3000-sbx.localhost:17708/',
+      'http://p{port}-{sandbox}.localhost:17708',
+    ),
+  ).toBe(true);
+  expect(
+    isServablePreviewUrl(
+      'http://p3000-sbx.localhost:9999/',
+      'http://p{port}-{sandbox}.localhost:17708',
+    ),
+  ).toBe(false);
+});

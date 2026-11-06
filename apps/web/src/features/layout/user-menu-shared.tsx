@@ -271,7 +271,9 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
   // screen saying anything was happening. The predictable response is a second
   // click. `performSignOut` refuses re-entry, but the dialog is the honest
   // place to say so. The document load is what actually closes this.
+  const [logoutFailed, setLogoutFailed] = useState(false);
   const performLogout = (event: React.MouseEvent) => {
+    setLogoutFailed(false);
     event.preventDefault();
     setPending(true);
     const slot = parseBrowserRoute(window.location.pathname)?.slot;
@@ -285,7 +287,10 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
             ).href,
           );
         })
-        .catch(() => setPending(false));
+        .catch(() => {
+          setPending(false);
+          setLogoutFailed(true);
+        });
     } else void performSignOut();
   };
 
@@ -293,9 +298,18 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{selected ? tAccounts('text20') : tI18nComplete.raw('texted31daf7d840')}</AlertDialogTitle>
-          <AlertDialogDescription>{selected ? tAccounts('text16') : tI18nComplete.raw('textcf8f4cd95840')}</AlertDialogDescription>
+          <AlertDialogTitle>
+            {selected ? tAccounts('text20') : tI18nComplete.raw('texted31daf7d840')}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {selected ? tAccounts('text16') : tI18nComplete.raw('textcf8f4cd95840')}
+          </AlertDialogDescription>
         </AlertDialogHeader>
+        {logoutFailed && (
+          <p role="alert" className="text-sm">
+            {tAccounts('text12')}
+          </p>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>
             {tI18nComplete.raw('text19766ed6ccb2')}

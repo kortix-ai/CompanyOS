@@ -2033,3 +2033,7 @@ Legacy desktop and extension authentication remain unchanged.
 Handles expire after 30 idle days or 90 absolute days; add attempts expire after five minutes.
 Disabling additions preserves recovery and removal. Keep old encryption keys during rotation and rollback.
 The server event `auth_identity_operation` records candidate authentication success, not switches or confirmed additions.
+
+The optional `has_handle` capability lets hosts omit roster requests when no browser vault exists.
+Roster `needs_sign_in` reports uncertain or owned refresh credentials. Access-token expiry alone does not require signing in again.
+A stalled refresh is recovered through verified reauthentication; hosts must never retry its rotating refresh token.

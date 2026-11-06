@@ -14,6 +14,10 @@ import { browserPassword, browserEmail, browserOtp } from "../headless";
 import { gotrue, gotrueAuthorizeUrl } from "../gotrue";
 import { browserHandleCookieName, browserLoginWriteAllowed } from "./ingress";
 import { createBrowserHandle, hashBrowserHandle } from "./credentials";
+import {
+  rememberBrowserBudgetHandle,
+  forgetBrowserBudgetHandle,
+} from "./budget";
 import { VaultError } from "./store";
 import {
   vault,
@@ -37,6 +41,16 @@ function registerIngress() {
   browserLoginRouter.use("*", async (c, next) => {
     await next();
     const operation = c.req.routePath.replace(/:[A-Za-z]+/g, "id");
+    if (c.req.path.endsWith("/capabilities")) return;
+    const raw = getCookie(c, cookie);
+    if (
+      c.res.status < 400 &&
+      raw &&
+      /^[A-Za-z0-9_-]{43}$/.test(raw) &&
+      !c.req.path.endsWith("/initialize") &&
+      !c.req.path.endsWith("/remove-all")
+    )
+      rememberBrowserBudgetHandle(hashBrowserHandle(raw));
     void recordAuditEvent({
       action: "auth.browser_login.operation",
       resourceType: "browser_login",
@@ -56,8 +70,12 @@ function registerIngress() {
       return c.json({ error: "browser_login_forbidden" }, 403);
     if (
       c.req.method === "POST" &&
-      !limiter.check(requestClientKey(c), { limit: 60, windowMs: 60_000 })
-        .allowed
+      !limiter.check(
+        /\/slots\/[^/]+\/(?:token|resolve)$/.test(c.req.path)
+          ? `handle:${handle(c)}`
+          : requestClientKey(c),
+        { limit: 60, windowMs: 60_000 },
+      ).allowed
     )
       return c.json({ error: "browser_login_limit" }, 429, {
         "Retry-After": "60",
@@ -65,7 +83,10 @@ function registerIngress() {
     if (Number(c.req.header("content-length") ?? 0) > 16384)
       return c.json({ error: "invalid_request" }, 400);
     if (c.req.method === "GET" && c.req.path.endsWith("/capabilities"))
-      return c.json({ enabled: Boolean(vault && settings.enabled) });
+      return c.json({
+        enabled: Boolean(vault && settings.enabled),
+        has_handle: Boolean(getCookie(c, cookie)),
+      });
     if (!vault) return c.json({ error: "browser_login_unavailable" }, 503);
     try {
       await next();
@@ -114,6 +135,7 @@ function registerFlowRoutes() {
     }
     const raw = createBrowserHandle();
     await vault!.init(hashBrowserHandle(raw));
+    rememberBrowserBudgetHandle(hashBrowserHandle(raw));
     setCookie(c, cookie, raw, {
       httpOnly: true,
       secure: new URL(config.FRONTEND_URL).protocol === "https:",
@@ -247,7 +269,16 @@ function registerFlowRoutes() {
         return { ...data.session, user: data.user };
       },
     );
-    if (!("error" in result)) captureProductEvent({ userId: result.user.id, event: "auth_identity_operation", properties: { operation: "authenticate", outcome: "success", surface: "browser" } });
+    if (!("error" in result))
+      captureProductEvent({
+        userId: result.user.id,
+        event: "auth_identity_operation",
+        properties: {
+          operation: "authenticate",
+          outcome: "success",
+          surface: "browser",
+        },
+      });
     return "error" in result
       ? c.json({ error: result.error }, 403)
       : c.json(result);
@@ -275,7 +306,11 @@ function registerFlowRoutes() {
     const h = handle(c);
     await cancelAllCandidates(h);
     const result = await removeBrowserLogin(h);
-    deleteCookie(c, cookie, { path: "/" });
+    forgetBrowserBudgetHandle(h);
+    deleteCookie(c, cookie, {
+      path: "/",
+      secure: cookie.startsWith("__Host-"),
+    });
     return c.json(result);
   });
 }
@@ -343,7 +378,13 @@ function registerDescriptions() {
     z.object({ code: z.string().max(4096) }),
   ]);
   const descriptions = [
-    ["get", "/capabilities", undefined, z.object({ enabled: z.boolean() }), "Discover browser sign-in additions without credentials or key material"],
+    [
+      "get",
+      "/capabilities",
+      undefined,
+      z.object({ enabled: z.boolean(), has_handle: z.boolean() }),
+      "Discover browser sign-in additions without credentials or key material",
+    ],
     [
       "post",
       "/initialize",
@@ -362,6 +403,7 @@ function registerDescriptions() {
             user_id: z.string(),
             email: z.string().nullable(),
             expires_at: z.string(),
+            needs_sign_in: z.boolean(),
           }),
         ),
       }),

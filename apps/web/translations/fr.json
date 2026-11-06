@@ -26615,6 +26615,7 @@
     "listLabel": "Changements de modèle"
   },
   "browserLogins": {
+    "accountActions": "Actions du compte",
     "text1": "Comptes connectés",
     "text2": "Chargement des comptes…",
     "text3": "Recharger les comptes",
@@ -26658,6 +26659,11 @@
     "text41": "L’ajout de comptes est indisponible. Les comptes enregistrés peuvent toujours être utilisés ou supprimés.",
     "text42": "Se reconnecter",
     "text43": "La modification du profil et du mot de passe ainsi que la configuration d’un authentificateur sont indisponibles pour les connexions enregistrées du navigateur. Ouvrez la page de connexion et connectez-vous explicitement au compte à modifier. Vérifiez un authentificateur existant dans Gérer les connexions du navigateur.",
-    "text44": "Les notifications push sont indisponibles pour les connexions enregistrées du navigateur. Consultez vos sessions ici pour les mises à jour."
+    "text44": "Les notifications push sont indisponibles pour les connexions enregistrées du navigateur. Consultez vos sessions ici pour les mises à jour.",
+    "openAccount": "Ouvrir",
+    "standardSignIn": "Utiliser la connexion classique",
+    "validatingIdentity": "Vérification de la connexion enregistrée…",
+    "identityUnavailable": "La connexion enregistrée est indisponible. Réessayez ou choisissez un autre compte.",
+    "retryIdentity": "Réessayer"
   }
 }

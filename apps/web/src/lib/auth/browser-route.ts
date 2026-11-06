@@ -2,7 +2,8 @@ import { locales } from '../../i18n/catalog.mjs';
 
 export const BROWSER_SLOT_HEADER = 'x-kortix-browser-slot';
 const SLOT = /^[A-Za-z0-9_-]{1,128}$/;
-const PRIVATE_PATH = /^\/(?:projects|dashboard|settings|admin|onboarding|billing|invites|notifications|new|p|setup|connections|connectors|capture|github|cli|oauth|tunnel|approve|panel)(?:\/|$)/;
+const PRIVATE_PATH =
+  /^\/(?:projects|dashboard|settings|admin|onboarding|billing|invites|notifications|new|p|setup|connections|connectors|capture|github|cli|oauth|tunnel|approve|panel|slack|teams|preview)(?:\/|$)/;
 
 export function stripBrowserIdentityHeaders(headers: Headers): void {
   for (const key of [...headers.keys()]) {
@@ -14,12 +15,16 @@ export function stripBrowserIdentityHeaders(headers: Headers): void {
 export function parseBrowserRoute(pathname: string) {
   const segments = pathname.split('/');
   let offset = 1;
-  const locale = (locales as readonly string[]).includes(segments[offset]) ? segments[offset++] : null;
+  const locale = (locales as readonly string[]).includes(segments[offset])
+    ? segments[offset++]
+    : null;
   if (segments[offset] !== 'u') return null;
   const slot = segments[offset + 1];
-  if (!slot || !SLOT.test(slot) || slot === '.' || slot === '..') throw new Error('Invalid browser route');
+  if (!slot || !SLOT.test(slot) || slot === '.' || slot === '..')
+    throw new Error('Invalid browser route');
   const rest = segments.slice(offset + 2);
-  if (rest.some((segment) => segment === '.' || segment === '..' || /%2f|%5c/i.test(segment))) throw new Error('Invalid browser route');
+  if (rest.some((segment) => segment === '.' || segment === '..' || /%2f|%5c/i.test(segment)))
+    throw new Error('Invalid browser route');
   return { locale, slot, pathname: `/${rest.join('/')}` };
 }
 
@@ -43,9 +48,10 @@ export function browserIdentityPath(href: string, currentPathname: string): stri
   const path = boundary < 0 ? clean : clean.slice(0, boundary);
   const suffix = boundary < 0 ? '' : clean.slice(boundary);
   const segments = path.split('/');
-  const locale = (locales as readonly string[]).includes(segments[1]) ? segments.splice(1, 1)[0] : current.locale;
+  const locale = (locales as readonly string[]).includes(segments[1])
+    ? segments.splice(1, 1)[0]
+    : current.locale;
   const destination = segments.join('/');
   if (!PRIVATE_PATH.test(destination)) return clean;
   return `${locale ? `/${locale}` : ''}/u/${explicit?.slot ?? current.slot}${destination}${suffix}`;
 }
-

@@ -1111,3 +1111,34 @@ The earlier independent callback, cloud and A/B isolation results remain distinc
 Cleanup for parent focus proof: remaining owned synthetic users 0.
 Owned listener check on 17700,17708,17821,17822,17825,17826 returns no listeners.
 Sol round 3 approves the focus fix with no findings. Flag remains default off.
+
+## Parent council fixes and focused verification, 2026-11-06
+
+Canonical branch multi-account-login-plan. Council R1: Sol code 7/UI 7.5; Opus code 6/UI 4. Two available providers only. Findings and scope decisions are in multi-account-login-review.md.
+
+Verification (private logs under ignored output/):
+- RED: navigation/lifecycle/SDK storage tests: 21 pass, 3 fail. GREEN: 24 pass, 0 fail, 74 assertions, 69 ms.
+- bun output/launch-recovery.ts: real HTTP/PG, HTTPS FRONTEND_URL: 3 pass, 0 fail, 75 assertions, 3.21 s. Includes Secure host-cookie deletion, isolated token budgets and expired-handle 401.
+- bun output/launch-edge.ts: outer edge limiter: RED 7 pass/1 fail; GREEN 8 pass/0 fail, 1492 assertions, 1.348 s. Two handles share an IP without sharing renewal/user-read budgets.
+- bun output/launch-reauth.ts: 2 pass, 0 fail, 25 assertions, 1.92 s. Roster marks uncertain credentials without returning ciphertext. First attempt hit a 5 s fixture-start timeout; a ready-stack retry passes.
+- Named preview-origin.test.ts: 48 pass, 0 fail, 145 assertions, 657 ms. Legacy cookies retain precedence; selected HTTP/WS reject foreign authority.
+- Four named web navigation/lifecycle/preview-validation files: 25 pass, 0 fail, 65 assertions, 906 ms.
+- SDK named managed-storage and browser-identity: 18 plus 6 pass, no failures. SDK public-surface/isomorphic/package-export guards pass; final isomorphic output reports 31 pass, 7738 assertions.
+- SDK typecheck and smoke:install exit 0; tarball installs and imports. Web/API typechecks exit 0. Changed-file lint: zero errors. I18n catalogs and brand allowlist audit pass.
+
+Actual browser/HTTP boundaries:
+- Updated chooser: two account rows and two Open links. Desktop/mobile, light/dark screenshots updated; horizontal scroll never exceeds viewport. Avatar rows now use overflow controls for Verify and Sign out.
+- Selected settings document retains the same injected DOM node after focus and online revalidation; actual user-validation requests complete. output/council-r2-focus-contract.json.
+- Actual selected preview authorize page posts a principal-partitioned preview_url to /v1/p/ticket with the bearer in its header. No bearer appears in the preview URL. The intentionally nonexistent sandbox returns 401; this is a negative handoff proof, not a successful preview-open claim. output/council-r2-ticket-request.json. Earlier real-cloud preview proofs remain separate.
+- Standalone pre-hydration guard and form are extracted from the served auth HTML. With React held absent, browser typing and Enter stay on /auth and persist both synthetic email and submit intent. output/council-r2-hydration-result.json has four true/correct assertions. The initial normal-page attempt hydrated too early and is not counted.
+- Expired vault plus a real legacy session: actual Next /projects returns 200, clears the exact vault cookie, and does not redirect to auth or chooser. output/council-r2-expiry-result.json. The fixture initially omitted expires_at and pointed Next at GoTrue without the auth/v1 proxy. Both fixture errors were corrected before this positive claim.
+- Overflow-menu Escape returns focus to the identical initiating trigger. Successful-removal observation is recorded separately after its async work finishes.
+
+Remaining exclusions: real external Google, deployed edge/TLS, observed BFCache persisted=true, a combined delayed-callback browser race and a clean complete two-tab recording. Production enablement is not approved. The default flag stays off.
+
+Final overflow removal proof: roster count 1, dialog false, heading true. output/council-r2-overflow-removal.json.
+Rate-budget hardening adds a named negative test: fabricated handle cookies cannot shard anonymous limits. Only recently broker-verified handle hashes partition outer budgets; the bounded positive cache never authenticates requests. HTTP recovery tests now mount the actual outer edge middleware too.
+
+Final budget checks: 9 pass, 0 fail, 1523 assertions, 136 ms. Anonymous fabricated handles remain limited by IP. HTTP recovery with the actual outer limiter: 3 pass, 0 fail, 75 assertions, 348 ms. API typecheck passes. Cleanup: zero owned synthetic users; owned browser/server processes stopped. No cloud resources were created in this council-fix stage.
+
+Cleanup final check: no listeners on 17700,17708,17821,17822,17825,17826,17731; owned auth container absent. Formatting-only churn was reduced before review. Original source conventions were retained. No full or package-wide suite ran.

@@ -26615,6 +26615,7 @@
     "listLabel": "Modellwechsel"
   },
   "browserLogins": {
+    "accountActions": "Kontoaktionen",
     "text1": "Angemeldete Konten",
     "text2": "Konten werden geladen…",
     "text3": "Konten erneut laden",
@@ -26658,6 +26659,11 @@
     "text41": "Konten können derzeit nicht hinzugefügt werden. Gespeicherte Konten können weiterhin verwendet oder entfernt werden.",
     "text42": "Erneut anmelden",
     "text43": "Profil- und Passwortänderungen sowie die Einrichtung einer Authenticator-App sind für gespeicherte Browser-Anmeldungen nicht verfügbar. Öffne die Anmeldeseite und melde dich ausdrücklich mit dem zu ändernden Konto an. Bestehende Authenticator-Apps kannst du unter Browser-Anmeldungen verwalten verifizieren.",
-    "text44": "Browser-Push-Benachrichtigungen sind für gespeicherte Browser-Anmeldungen nicht verfügbar. Prüfe deine Sitzungen hier auf Neuigkeiten."
+    "text44": "Browser-Push-Benachrichtigungen sind für gespeicherte Browser-Anmeldungen nicht verfügbar. Prüfe deine Sitzungen hier auf Neuigkeiten.",
+    "openAccount": "Öffnen",
+    "standardSignIn": "Standardanmeldung verwenden",
+    "validatingIdentity": "Gespeicherte Anmeldung wird geprüft…",
+    "identityUnavailable": "Gespeicherte Anmeldung nicht verfügbar. Erneut versuchen oder ein anderes Konto wählen.",
+    "retryIdentity": "Erneut versuchen"
   }
 }

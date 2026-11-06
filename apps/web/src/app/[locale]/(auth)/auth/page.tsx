@@ -84,8 +84,8 @@ const ENTRY_HYDRATION_GUARD = `
     try {
       // Timestamped: a stash left behind by a navigation must not refill the
       // field on a visit hours later. Same TTL as the submit intent.
-      if (input.value) safeSessionSetItem(EMAIL_KEY, JSON.stringify({ t: Date.now(), v: input.value }));
-      else safeSessionRemoveItem(EMAIL_KEY);
+      if (input.value) window.sessionStorage.setItem(EMAIL_KEY, JSON.stringify({ t: Date.now(), v: input.value }));
+      else window.sessionStorage.removeItem(EMAIL_KEY);
     } catch (error) {}
   };
   var holdSubmit = function (event) {
@@ -93,7 +93,7 @@ const ENTRY_HYDRATION_GUARD = `
     if (!isGuardedForm(event.target)) return;
     var recorded = false;
     try {
-      safeSessionSetItem(SUBMIT_KEY, String(Date.now()));
+      window.sessionStorage.setItem(SUBMIT_KEY, String(Date.now()));
       recorded = true;
     } catch (error) {}
     if (!recorded) return; // sessionStorage unavailable: the intent cannot be handed over, so keep the pre-guard native behavior.

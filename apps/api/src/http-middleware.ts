@@ -26,6 +26,7 @@ import { protectResponseCache } from './middleware/cache-control';
 import { createCorsMiddleware } from './middleware/cors';
 import { requestDeadline } from './middleware/request-deadline';
 import { rejectOutdatedCli } from './middleware/cli-min-version';
+import { browserHandleCookieName } from './auth/browser-logins/ingress';
 import { createPublicEdgeRateLimitMiddleware } from './middleware/public-edge-rate-limit';
 import { shouldSuppressRequestLog } from './sandbox-proxy/request-log-suppression';
 import { PROXY_HOP_HEADER, PROXY_UPSTREAM_STATUS_HEADER } from './sandbox-proxy/proxy-hop';
@@ -357,7 +358,7 @@ if (config.INTERNAL_KORTIX_ENV === 'dev') {
 app.use('*', auditApiRequest);
 
 // Before route validation and authentication; inside request logging and audit.
-app.use('/v1/*', createPublicEdgeRateLimitMiddleware());
+app.use('/v1/*', createPublicEdgeRateLimitMiddleware({ browserLoginCookieName: browserHandleCookieName(config.FRONTEND_URL) }));
 
 // A CLI below CLI_MIN_VERSION reads routes this server no longer serves: tell it
 // to update before auth, so a stale token does not hide the reason.

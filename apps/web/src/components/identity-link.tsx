@@ -1,6 +1,6 @@
 'use client';
 
-import { browserIdentityPath } from '@/lib/auth/browser-route';
+import { browserIdentityPath, parseBrowserRoute } from '@/lib/auth/browser-route';
 import { isStaticSitePath } from '@/lib/navigation/static-site-path';
 import type { UiLinkProps } from '@kortix/ui';
 import NextLink from 'next/link';
@@ -15,9 +15,10 @@ export const IdentityLink = forwardRef<
     props.href,
     currentPathname ?? (typeof window === 'undefined' ? '' : window.location.pathname),
   );
+  const selected = parseBrowserRoute(href.split(/[?#]/)[0]);
   if (isStaticSitePath(href)) {
     const { prefetch: _prefetch, ...anchor } = props;
     return <a ref={ref} {...anchor} href={href} />;
   }
-  return <NextLink ref={ref} {...props} href={href} />;
+  return <NextLink ref={ref} {...props} prefetch={selected ? false : props.prefetch} href={href} />;
 });

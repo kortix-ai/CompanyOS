@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
+import { browserBudgetHandleKnown } from '../auth/browser-logins/budget';
+import { hashBrowserHandle } from '../auth/browser-logins/credentials';
+import { getCookie } from 'hono/cookie';
 import { bearerToken } from '../shared/bearer-token';
 import { KEY_PREFIX_SANDBOX } from '../shared/crypto';
 import { TokenBucketRateLimiter } from '../shared/rate-limit';
@@ -22,18 +25,24 @@ import { requestClientKey } from './client-ip';
  */
 function budgetKey(c: Context, clientKey: string): string {
   const token = bearerToken(c.req.header('Authorization'));
-  if (!token?.startsWith(KEY_PREFIX_SANDBOX) || !isTokenValidated(token)) return clientKey;
+  if (!token?.startsWith(KEY_PREFIX_SANDBOX) || !isTokenValidated(token))
+    return clientKey;
   return `sandbox:${createHash('sha256').update(token).digest('base64url')}`;
 }
 
 /** Pre-validation budget: malformed bodies and missing credentials count too. */
-export function createPublicEdgeRateLimitMiddleware(): MiddlewareHandler {
+export function createPublicEdgeRateLimitMiddleware(
+  options: { browserLoginCookieName?: string } = {},
+): MiddlewareHandler {
   // replica-local: budget scales with API replicas; this is abuse protection, not a quota.
   const authLimiter = new TokenBucketRateLimiter('public-auth-edge');
   // replica-local: general abuse budget, independent of the stricter auth budget.
   const apiLimiter = new TokenBucketRateLimiter('public-api-edge');
   return async (c, next) => {
-    if (c.req.method === 'OPTIONS' || ['/v1/health', '/v1/health/live', '/v1/health/ready'].includes(c.req.path)) {
+    if (
+      c.req.method === 'OPTIONS' ||
+      ['/v1/health', '/v1/health/live', '/v1/health/ready'].includes(c.req.path)
+    ) {
       return next();
     }
     const clientKey = requestClientKey(c);
@@ -43,12 +52,36 @@ export function createPublicEdgeRateLimitMiddleware(): MiddlewareHandler {
     // every such caller in a single 30/minute bucket throttled the whole flow
     // suite. Production is always behind the edge and always carries one.
     if (clientKey === 'unknown') return next();
-    const isAuth = ['/v1/auth', '/v1/oauth', '/v1/access', '/v1/tunnel/device-auth'].some(
+    const isAuth = [
+      '/v1/auth',
+      '/v1/oauth',
+      '/v1/access',
+      '/v1/tunnel/device-auth',
+    ].some(
       (prefix) => c.req.path === prefix || c.req.path.startsWith(`${prefix}/`),
     );
-    const key = budgetKey(c, clientKey);
+    const handle =
+      options.browserLoginCookieName &&
+      (/^\/v1\/auth\/browser-logins\/slots\/[^/]+\/(?:token|resolve)$/.test(
+        c.req.path,
+      ) ||
+        (c.req.method === 'GET' && c.req.path === '/v1/auth/user'))
+        ? getCookie(c, options.browserLoginCookieName)
+        : undefined;
+    // Refresh authority is the opaque browser credential. It must not spend the shared web server's IP bucket.
+    // This key grants no authority: the broker still validates the handle and selected slot.
+    const browserKey =
+      handle &&
+      /^[A-Za-z0-9_-]{43}$/.test(handle) &&
+      browserBudgetHandleKnown(hashBrowserHandle(handle))
+        ? `browser:${createHash('sha256').update(handle).digest('base64url')}`
+        : null;
+    const key = browserKey ?? budgetKey(c, clientKey);
     const result = isAuth
-      ? authLimiter.check(key, { limit: 30, windowMs: 60_000 })
+      ? authLimiter.check(key, {
+          limit: browserKey ? 300 : 30,
+          windowMs: 60_000,
+        })
       : apiLimiter.check(key, { limit: 300, windowMs: 60_000 });
     const setBudgetHeaders = () => {
       c.header('X-RateLimit-Limit', String(result.limit));
@@ -58,15 +91,22 @@ export function createPublicEdgeRateLimitMiddleware(): MiddlewareHandler {
     setBudgetHeaders();
     c.header('Cache-Control', 'no-store');
     if (!result.allowed) {
-      const seconds = Math.max(1, Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000));
+      const seconds = Math.max(
+        1,
+        Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000),
+      );
       c.header('Retry-After', String(seconds));
-      return c.json({ error: 'rate_limit_exceeded', retry_after_seconds: seconds }, 429);
+      return c.json(
+        { error: 'rate_limit_exceeded', retry_after_seconds: seconds },
+        429,
+      );
     }
     await next();
     // A route that answers with a Response it built (proxies, streams) drops the
     // headers set above; set them again on the final response (KRTX-4302).
     // An upgrade response is not rebuilt, and an inner limiter's own budget
     // headers stay.
-    if (c.res.status !== 101 && !c.res.headers.has('X-RateLimit-Limit')) setBudgetHeaders();
+    if (c.res.status !== 101 && !c.res.headers.has('X-RateLimit-Limit'))
+      setBudgetHeaders();
   };
 }

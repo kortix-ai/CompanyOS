@@ -700,7 +700,7 @@ describe('preview navigation tickets', () => {
       const withCookie = await handlePreviewOriginRequest(...request(path, {
         headers: { Cookie: cookie, 'sec-fetch-dest': 'document' },
       }));
-      expect(withCookie?.status).toBe(401);
+      expect(withCookie?.status).toBe(302);
       expect(withCookie?.headers.getSetCookie()).toHaveLength(0);
       clock.mockReturnValue(1_800_003_601_000);
       expect((await handlePreviewOriginRequest(...request('/', { headers: { Cookie: cookie } })))?.status).toBe(401);
@@ -708,12 +708,12 @@ describe('preview navigation tickets', () => {
       clock.mockRestore();
     }
   });
-  test('a forged ticket cannot renew an existing authenticated cookie', async () => {
+  test('a legacy cookie remains authoritative over a forged ticket', async () => {
     const response = await handlePreviewOriginRequest(...request('/?preview_ticket=forged', {
       headers: { Cookie: mintCookieFor('sbx-known', 8081), 'sec-fetch-dest': 'document' },
     }));
-    expect(response?.status).toBe(401);
-    expect(response?.headers.get('location')).toBeNull();
+    expect(response?.status).toBe(302);
+    expect(response?.headers.get('location')).toBe('/');
     expect(response!.headers.getSetCookie()).toHaveLength(0);
   });
 
@@ -751,29 +751,29 @@ describe('preview navigation tickets', () => {
 });
 
 
-describe('explicit preview authority overrides ambient cookies', () => {
-  test('HTTP rejects an invalid bearer despite a valid cookie', async () => {
+describe('legacy preview cookies retain ambient authority', () => {
+  test('HTTP accepts its cookie despite an application bearer header', async () => {
     const response = await handlePreviewOriginRequest(...request('/', {
       headers: { Cookie: mintCookieFor('sbx-known', 8081), Authorization: 'Bearer wrong' },
     }));
-    expect(response?.status).toBe(401);
-    expect(forwarded).toBe(0);
+    expect(response?.status).toBe(200);
+    expect(forwarded).toBe(1);
   });
 
-  test('HTTP rejects an invalid ticket despite a valid cookie', async () => {
+  test('HTTP accepts its cookie despite a stale ticket', async () => {
     const response = await handlePreviewOriginRequest(...request('/?preview_ticket=wrong', {
       headers: { Cookie: mintCookieFor('sbx-known', 8081) },
     }));
-    expect(response?.status).toBe(401);
-    expect(forwarded).toBe(0);
+    expect(response?.status).toBe(200);
+    expect(forwarded).toBe(1);
   });
 
-  test('WebSocket rejects an invalid bearer despite a valid cookie', async () => {
+  test('WebSocket accepts its cookie despite an application bearer header', async () => {
     const result = await preparePreviewHostWsUpgrade(...request('/hmr', {
       headers: { Cookie: mintCookieFor('sbx-known', 8081), Authorization: 'Bearer wrong' },
     }));
-    expect(result.ok).toBe(false);
-    expect(wsUpstreamResolutions).toBe(0);
+    expect(result.ok).toBe(true);
+    expect(wsUpstreamResolutions).toBe(1);
   });
 });
 

@@ -8,6 +8,8 @@ export interface BrowserLoginSlot {
   user_id: string;
   email: string | null;
   expires_at: string;
+  /** Refresh ownership or uncertainty requires verified reauthentication. */
+  needs_sign_in?: boolean;
 }
 export type BrowserLoginCompletion =
   | { email: string; password: string }
@@ -47,7 +49,12 @@ async function call<T>(
 const id = encodeURIComponent;
 /** Same-origin browser cookie broker. Never returns refresh credentials. */
 export const browserLogins = {
-  capabilities: (options?: BrowserBrokerOptions) => call<{ enabled: boolean }>("/capabilities", undefined, options),
+  capabilities: (options?: BrowserBrokerOptions) =>
+    call<{ enabled: boolean; has_handle?: boolean }>(
+      "/capabilities",
+      undefined,
+      options,
+    ),
   mfaFactors: (
     target: { kind: "attempt" | "slot"; id: string },
     options?: BrowserBrokerOptions,

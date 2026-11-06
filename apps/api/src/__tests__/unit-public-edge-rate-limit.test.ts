@@ -155,3 +155,85 @@ test('an upgrade response is returned untouched', async () => {
   const response = await app.request('/v1/p/x/ws', { headers: { 'X-Forwarded-For': '198.51.100.8' } });
   expect(response).toBe(upgrade);
 });
+
+test('saved-session renewal isolates browser handles sharing an edge address', async () => {
+  setSystemTime(new Date('2026-11-02T12:00:00Z'));
+  const app = new Hono();
+  app.use(
+    '*',
+    createPublicEdgeRateLimitMiddleware({
+      browserLoginCookieName: '__Host-kortix-vault',
+    }),
+  );
+  app.all('*', (c) => c.json({ error: 'missing_slot' }, 404));
+  const cookieName = '__Host-kortix-vault';
+  const { rememberBrowserBudgetHandle } =
+    await import('../auth/browser-logins/budget');
+  const { hashBrowserHandle } =
+    await import('../auth/browser-logins/credentials');
+  rememberBrowserBudgetHandle(hashBrowserHandle('a'.repeat(43)));
+  rememberBrowserBudgetHandle(hashBrowserHandle('b'.repeat(43)));
+  const from = (handle: string) => ({
+    'X-Forwarded-For': '192.0.2.44',
+    Cookie: `${cookieName}=${handle}`,
+  });
+  for (let i = 0; i < 40; i++) {
+    expect(
+      (
+        await app.request('/v1/auth/browser-logins/slots/synthetic/token', {
+          method: 'POST',
+          headers: from('a'.repeat(43)),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request('/v1/auth/browser-logins/slots/synthetic/token', {
+          method: 'POST',
+          headers: from('b'.repeat(43)),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await app.request('/v1/auth/user', { headers: from('a'.repeat(43)) }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await app.request('/v1/auth/user', { headers: from('b'.repeat(43)) }))
+        .status,
+    ).toBe(404);
+  }
+});
+
+test('invented browser handles cannot shard the anonymous auth budget', async () => {
+  setSystemTime(new Date('2026-11-02T12:00:00Z'));
+  const app = new Hono();
+  app.use(
+    '*',
+    createPublicEdgeRateLimitMiddleware({
+      browserLoginCookieName: '__Host-kortix-vault',
+    }),
+  );
+  app.all('*', (c) => c.json({}, 401));
+  for (let i = 0; i < 30; i++)
+    expect(
+      (
+        await app.request('/v1/auth/user', {
+          headers: {
+            'X-Forwarded-For': '192.0.2.45',
+            Cookie: '__Host-kortix-vault=' + String(i).padStart(43, 'x'),
+          },
+        })
+      ).status,
+    ).toBe(401);
+  expect(
+    (
+      await app.request('/v1/auth/user', {
+        headers: {
+          'X-Forwarded-For': '192.0.2.45',
+          Cookie: '__Host-kortix-vault=' + 'z'.repeat(43),
+        },
+      })
+    ).status,
+  ).toBe(429);
+});

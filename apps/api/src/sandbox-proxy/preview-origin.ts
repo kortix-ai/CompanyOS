@@ -341,26 +341,49 @@ async function previewSessionLive(session: PreviewSession): Promise<boolean> {
   try { return await previewLoginSessionLive(session.userId, session.loginSessionId); } catch { return false; }
 }
 
-/** Explicit authority never falls back to a cookie from another document. */
+/** Selected origins reject invalid explicit authority; legacy origins retain cookie precedence. */
 export async function resolvePreviewSession(
   req: Request,
   url: URL,
   target: ResolvedPreviewHost,
-): Promise<{ session: PreviewSession; fresh: boolean } | { refusal: PreviewRefusal }> {
-  if (url.searchParams.has('preview_ticket')) {
-    const session = verifyPreviewSession(url.searchParams.get('preview_ticket'), target, 'ticket');
-    return session && await previewSessionLive(session)
-      ? { session, fresh: true }
-      : { refusal: { status: 401, state: 'signed-out', message: 'Invalid preview ticket' } };
+): Promise<
+  { session: PreviewSession; fresh: boolean } | { refusal: PreviewRefusal }
+> {
+  // Preserve ambient cookie precedence for legacy hosts. Selected hosts require explicit authority.
+  if (!target.identityPartition) {
+    const session = sessionFromCookies(req, target);
+    if (session) return { session, fresh: false };
   }
-  const explicit = req.headers.has('Authorization') || req.headers.has('X-Kortix-Token') ||
-    url.searchParams.has('token') || url.searchParams.has('public_share');
+  if (url.searchParams.has('preview_ticket')) {
+    const session = verifyPreviewSession(
+      url.searchParams.get('preview_ticket'),
+      target,
+      'ticket',
+    );
+    return session && (await previewSessionLive(session))
+      ? { session, fresh: true }
+      : {
+          refusal: {
+            status: 401,
+            state: 'signed-out',
+            message: 'Invalid preview ticket',
+          },
+        };
+  }
+  const explicit =
+    req.headers.has('Authorization') ||
+    req.headers.has('X-Kortix-Token') ||
+    url.searchParams.has('token') ||
+    url.searchParams.has('public_share');
   if (!explicit) {
     const session = sessionFromCookies(req, target);
-    if (session && await previewSessionLive(session)) return { session, fresh: false };
+    if (session && (await previewSessionLive(session)))
+      return { session, fresh: false };
   }
   const established = await establishPreviewSession(req, url, target);
-  return 'refusal' in established ? established : { ...established, fresh: true };
+  return 'refusal' in established
+    ? established
+    : { ...established, fresh: true };
 }
 
 /** Set-Cookie values that persist a freshly established session. */

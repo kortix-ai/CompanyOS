@@ -26615,6 +26615,7 @@
     "listLabel": "Cambi di modello"
   },
   "browserLogins": {
+    "accountActions": "Azioni dell’account",
     "text1": "Account connessi",
     "text2": "Caricamento account…",
     "text3": "Ricarica account",
@@ -26658,6 +26659,11 @@
     "text41": "Non è possibile aggiungere account. Puoi ancora usare o rimuovere gli account salvati.",
     "text42": "Accedi di nuovo",
     "text43": "Le modifiche al profilo e alla password e la configurazione dell’autenticatore non sono disponibili per gli accessi salvati del browser. Apri la pagina di accesso e accedi esplicitamente con l’account da modificare. Verifica un autenticatore esistente in Gestisci accessi del browser.",
-    "text44": "Le notifiche push non sono disponibili per gli accessi salvati del browser. Controlla qui le tue sessioni per gli aggiornamenti."
+    "text44": "Le notifiche push non sono disponibili per gli accessi salvati del browser. Controlla qui le tue sessioni per gli aggiornamenti.",
+    "openAccount": "Apri",
+    "standardSignIn": "Usa l’accesso standard",
+    "validatingIdentity": "Verifica dell’accesso salvato…",
+    "identityUnavailable": "L’accesso salvato non è disponibile. Riprova o scegli un altro account.",
+    "retryIdentity": "Riprova"
   }
 }

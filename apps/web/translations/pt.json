@@ -26615,6 +26615,7 @@
     "listLabel": "Trocas de modelo"
   },
   "browserLogins": {
+    "accountActions": "Ações da conta",
     "text1": "Contas conectadas",
     "text2": "Carregando contas…",
     "text3": "Recarregar contas",
@@ -26658,6 +26659,11 @@
     "text41": "Não é possível adicionar contas. Você ainda pode usar ou remover as contas salvas.",
     "text42": "Entrar novamente",
     "text43": "Alterações de perfil e senha e a configuração do autenticador não estão disponíveis para acessos salvos do navegador. Abra a página de acesso e entre explicitamente com a conta que deseja alterar. Verifique um autenticador existente em Gerenciar acessos do navegador.",
-    "text44": "As notificações push não estão disponíveis para acessos salvos do navegador. Confira suas sessões aqui para ver atualizações."
+    "text44": "As notificações push não estão disponíveis para acessos salvos do navegador. Confira suas sessões aqui para ver atualizações.",
+    "openAccount": "Abrir",
+    "standardSignIn": "Usar o início de sessão padrão",
+    "validatingIdentity": "A validar o início de sessão guardado…",
+    "identityUnavailable": "O início de sessão guardado está indisponível. Tente novamente ou escolha outra conta.",
+    "retryIdentity": "Tentar novamente"
   }
 }

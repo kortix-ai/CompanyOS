@@ -14,7 +14,7 @@ import { MfaStepUpProvider } from '@/features/auth/mfa-step-up';
 import { SsoRequiredProvider } from '@/features/auth/sso-required';
 import { BrandingProvider } from '@kortix/ui/internal/branding/branding-provider';
 import { RequestDemoProvider } from '@/features/contact/request-demo-provider';
-import { AuthProvider } from '@/features/providers/auth-provider';
+import { AuthProvider, BrowserIdentityGate } from '@/features/providers/auth-provider';
 import { locales, type Locale } from '@/i18n/config';
 import { CHUNK_BOOT_RECOVERY_SCRIPT } from '@/lib/chunk-boot-recovery';
 import { DESKTOP_INIT_SCRIPT } from '@kortix/ui/internal/lib/desktop';
@@ -361,6 +361,7 @@ export default async function RootLayout({
               <TooltipProvider delayDuration={150}>
                 <AuthProvider>
                   <I18nProvider initialLocale={htmlLang}>
+                    <BrowserIdentityGate>
                     {/* Publishes the App Router to packages/ui/src/internal/lib/navigation/router-bridge so
                     stores and error handlers navigate softly instead of
                     reloading the document. */}
@@ -415,6 +416,7 @@ export default async function RootLayout({
                     {/* Desktop URL prompt, analytics, trackers, localhost link
                     interceptor — each a post-hydration dynamic chunk. */}
                     <RootClientHosts vercel={process.env.VERCEL === '1'} />
+                                      </BrowserIdentityGate>
                   </I18nProvider>
                 </AuthProvider>
               </TooltipProvider>

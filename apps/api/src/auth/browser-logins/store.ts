@@ -56,13 +56,34 @@ export function createVault(codec: Codec) {
       });
     },
     async roster(h: string) {
-      return this.run(h, async (tx) =>
-        Array.from(
-          await tx.execute(
-            sql`select s.slot,s.user_id,u.email,s.expires_at from kortix.browser_login_slots s join auth.users u on u.id=s.user_id where s.handle_hash=${h} and s.removed_at is null`,
-          ),
-        ),
-      );
+      return this.run(h, async (tx) => {
+        const rows = await tx.execute(
+          sql`select s.slot,s.user_id,u.email,s.expires_at,s.credential from kortix.browser_login_slots s join auth.users u on u.id=s.user_id where s.handle_hash=${h} and s.removed_at is null`,
+        );
+        return (
+          rows as Array<{
+            slot: string;
+            user_id: string;
+            email: string | null;
+            expires_at: string;
+            credential: string;
+          }>
+        ).map((row) => {
+          const { credential, ...slot } = row;
+          const session = JSON.parse(
+            codec.open(
+              String(credential),
+              binding(h, String(row.slot), String(row.user_id)),
+            ),
+          );
+          return {
+            ...slot,
+            needs_sign_in: Boolean(
+              session.refresh_uncertain || session.refresh_owner,
+            ),
+          };
+        });
+      });
     },
     async begin(h: string, method: string) {
       return this.run(h, async (tx) => {

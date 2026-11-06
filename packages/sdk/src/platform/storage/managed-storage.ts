@@ -81,7 +81,7 @@ function resolveStorage(name: 'localStorage' | 'sessionStorage'): Storage | null
 }
 
 function selectedDocument(): boolean {
-  return typeof window !== 'undefined' && /(?:^|\/)u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '');
+  return typeof window !== 'undefined' && /^\/(?:(?:en|de|it|zh|ja|pt|fr|es|sr)\/)?u\/[^/]+(?:\/|$)/.test(window.location?.pathname ?? '');
 }
 const scopes = new Map<string, ReturnType<typeof createIdentityStorage>>();
 let verifiedOwner: string | null = null;

@@ -359,7 +359,26 @@ export async function middleware(request: NextRequest) {
   // Renewing whenever the request is authorized makes it a sliding session. The
   // gate is unchanged: the value is still SHA-256 of the CURRENT password, so a
   // rotation still invalidates every outstanding cookie.
+  const browserFrontend = new URL(
+    process.env.FRONTEND_URL ||
+      process.env.KORTIX_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://kortix.com',
+  );
+  const vaultCookieName =
+    browserFrontend.protocol === 'https:'
+      ? '__Host-kortix-vault'
+      : `kortix-vault-local-${browserFrontend.port || '80'}`;
+  let expiredVaultCookie: string | null = null;
   const finalizeEnvironmentAccess = (response: NextResponse) => {
+    if (expiredVaultCookie)
+      response.cookies.set(expiredVaultCookie, '', {
+        path: '/',
+        maxAge: 0,
+        secure: expiredVaultCookie.startsWith('__Host-'),
+        httpOnly: true,
+        sameSite: 'lax',
+      });
     if (
       protectionEnabled === 'true' &&
       (protection.source === 'basic' || protection.source === 'cookie') &&
@@ -424,7 +443,7 @@ export async function middleware(request: NextRequest) {
   // A saved browser roster takes precedence over the shared legacy cookie.
   if ((isProtectedAppPath(pathname) || pathname === '/') && request.method === 'GET') {
     const cookie = request.headers.get('cookie') ?? '';
-    if (cookie.includes('kortix-vault')) {
+    if (request.cookies.has(vaultCookieName)) {
       try {
         const roster = await browserLogins.roster({
           fetch: (input, init) =>
@@ -452,10 +471,15 @@ export async function middleware(request: NextRequest) {
           chooser.searchParams.set('returnTo', destination);
           return NextResponse.redirect(chooser);
         }
-      } catch {
-        const chooser = new URL('/auth/browser-logins', request.url);
-        chooser.searchParams.set('returnTo', pathname + request.nextUrl.search);
-        return NextResponse.redirect(chooser);
+      } catch (error) {
+        if ((error as { status?: number }).status === 401) {
+          expiredVaultCookie = vaultCookieName;
+          if (expiredVaultCookie) request.cookies.delete(expiredVaultCookie);
+        } else {
+          const chooser = new URL('/auth/browser-logins', request.url);
+          chooser.searchParams.set('returnTo', pathname + request.nextUrl.search);
+          return finalizeEnvironmentAccess(NextResponse.redirect(chooser));
+        }
       }
     }
   }

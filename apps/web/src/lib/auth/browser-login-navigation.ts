@@ -10,7 +10,7 @@ export function loginDestination(value: string | null): string {
     if (
       url.origin !== 'https://local.invalid' ||
       /%2f|%5c/i.test(url.pathname) ||
-      url.pathname.includes('/auth')
+      /(?:^|\/)auth(?:\/|$)/.test(url.pathname)
     )
       return '/projects';
     return url.pathname + url.search;
@@ -19,6 +19,11 @@ export function loginDestination(value: string | null): string {
   }
 }
 export function accountHref(slot: string, destination: string) {
-  const scoped = browserIdentityPath(loginDestination(destination), `/u/${encodeURIComponent(slot)}/projects`);
-  return parseBrowserRoute(scoped.split('?')[0]) ? scoped : `/u/${encodeURIComponent(slot)}/projects`;
+  const scoped = browserIdentityPath(
+    loginDestination(destination),
+    `/u/${encodeURIComponent(slot)}/projects`,
+  );
+  return parseBrowserRoute(scoped.split('?')[0])
+    ? scoped
+    : `/u/${encodeURIComponent(slot)}/projects`;
 }

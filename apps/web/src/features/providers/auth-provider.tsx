@@ -1,7 +1,11 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Identity changes require a document load to discard private App Router caches. */
 'use client';
+import { useTranslations } from '@/i18n/use-translations';
 import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
 import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
+import { Button } from '@kortix/ui/button';
+import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
+import Loading from '@kortix/ui/loading';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
 import { IDENTITY_MARKER_KEY, shouldResetClientState } from '@/lib/auth/identity-marker';
@@ -34,6 +38,7 @@ import { withAuthBootstrapTimeout } from './auth-bootstrap';
 // Auth tracking moved to AuthEventTracker component (handles OAuth redirects)
 
 type AuthContextType = {
+  selectedDocument: boolean;
   supabase: SupabaseClient;
   session: Session | null;
   user: User | null;
@@ -109,6 +114,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       // Self-initiated cache invalidation is not another validation request.
       const revalidate = () => lifecycle.revalidate();
+      const backgroundRevalidate = () => lifecycle.revalidate(false);
+      const pageshow = (event: PageTransitionEvent) => lifecycle.revalidate(event.persisted);
       const unsubscribe = selected.subscribe(() => {
         if (!validating) lifecycle.revalidate();
       });
@@ -120,9 +127,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         channel.onmessage = (event) => {
           if (event.data?.slot === selected.getSlot()) revalidate();
         };
-      window.addEventListener('focus', revalidate);
-      window.addEventListener('pageshow', revalidate);
-      window.addEventListener('online', revalidate);
+      window.addEventListener('focus', backgroundRevalidate);
+      window.addEventListener('pageshow', pageshow);
+      window.addEventListener('online', backgroundRevalidate);
       const heartbeat = window.setInterval(() => lifecycle.revalidate(false), 30_000);
       revalidate();
       return () => {
@@ -131,9 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         unsubscribe();
         channel?.close();
         window.clearInterval(heartbeat);
-        window.removeEventListener('focus', revalidate);
-        window.removeEventListener('pageshow', revalidate);
-        window.removeEventListener('online', revalidate);
+        window.removeEventListener('focus', backgroundRevalidate);
+        window.removeEventListener('pageshow', pageshow);
+        window.removeEventListener('online', backgroundRevalidate);
       };
     }
 
@@ -326,6 +333,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // one sign-out path instead of hand-rolling a fifth cleanup.
   const value = useMemo<AuthContextType>(
     () => ({
+      selectedDocument,
       supabase,
       session,
       user,
@@ -334,29 +342,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       retryAuth,
       signOut: performSignOut,
     }),
-    [supabase, session, user, isLoading, bootstrapError, retryAuth],
+    [selectedDocument, supabase, session, user, isLoading, bootstrapError, retryAuth],
   );
 
-  return (
-    <AuthContext.Provider value={value}>
-      {selectedDocument && (!user || isLoading) ? (
-        <div role="status">
-          {bootstrapError
-            ? 'Saved sign-in is unavailable. Retry authentication.'
-            : 'Validating saved sign-in…'}
-          {bootstrapError && (
-            <>
-              <button onClick={retryAuth}>Retry</button>
-              <a href="/auth/browser-logins">Choose another account or sign in again</a>
-            </>
-          )}
-        </div>
-      ) : (
-        children
-      )}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+/** Mount inside I18nProvider so validation screens use the same catalog and UI providers. */
+export function BrowserIdentityGate({ children }: { children: ReactNode }) {
+  const { selectedDocument, user, isLoading, bootstrapError, retryAuth } = useAuth();
+  const tAccounts = useTranslations('browserLogins');
+  return selectedDocument && (!user || isLoading) ? (
+    <AuthFrame footerVariant="none">
+      <div role="status" className="space-y-4 text-center text-sm">
+        {!bootstrapError && (
+          <div className="flex justify-center">
+            <Loading className="size-5" />
+          </div>
+        )}
+        <p>{bootstrapError ? tAccounts('identityUnavailable') : tAccounts('validatingIdentity')}</p>
+        {bootstrapError && (
+          <div className="flex flex-col gap-2">
+            <Button onClick={retryAuth}>{tAccounts('retryIdentity')}</Button>
+            <Button variant="outline" asChild>
+              <a href="/auth/browser-logins">{tAccounts('text10')}</a>
+            </Button>
+          </div>
+        )}
+      </div>
+    </AuthFrame>
+  ) : (
+    children
+  );
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

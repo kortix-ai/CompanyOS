@@ -26615,6 +26615,7 @@
     "listLabel": "Cambios de modelo"
   },
   "browserLogins": {
+    "accountActions": "Acciones de la cuenta",
     "text1": "Cuentas con sesión iniciada",
     "text2": "Cargando cuentas…",
     "text3": "Volver a cargar cuentas",
@@ -26658,6 +26659,11 @@
     "text41": "No se pueden añadir cuentas. Puedes seguir usando o eliminando las cuentas guardadas.",
     "text42": "Volver a iniciar sesión",
     "text43": "Los cambios de perfil y contraseña y la configuración del autenticador no están disponibles para las sesiones guardadas del navegador. Abre la página de acceso e inicia sesión explícitamente con la cuenta que quieras cambiar. Verifica un autenticador existente en Gestionar sesiones del navegador.",
-    "text44": "Las notificaciones push no están disponibles para las sesiones guardadas del navegador. Consulta tus sesiones aquí para ver novedades."
+    "text44": "Las notificaciones push no están disponibles para las sesiones guardadas del navegador. Consulta tus sesiones aquí para ver novedades.",
+    "openAccount": "Abrir",
+    "standardSignIn": "Usar el inicio de sesión habitual",
+    "validatingIdentity": "Validando el inicio de sesión guardado…",
+    "identityUnavailable": "El inicio de sesión guardado no está disponible. Inténtalo de nuevo o elige otra cuenta.",
+    "retryIdentity": "Reintentar"
   }
 }

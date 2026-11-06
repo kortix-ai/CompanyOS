@@ -88,6 +88,9 @@ test("reauthentication replaces uncertain credentials and retains the old sessio
     sql`update kortix.browser_login_slots set credential=${codec.seal(JSON.stringify(credential), binding)} where handle_hash=${h} and slot=${slot}`,
   );
   expect((await request(`/slots/${slot}/token`)).status).toBe(503);
+  const roster = await (await fetch(base, { headers: { cookie } })).json();
+  expect(roster.slots[0].needs_sign_in).toBe(true);
+  expect(roster.slots[0].credential).toBeUndefined();
   const { attempt } = (await (
     await request("/begin", { method: "password" })
   ).json()) as any;

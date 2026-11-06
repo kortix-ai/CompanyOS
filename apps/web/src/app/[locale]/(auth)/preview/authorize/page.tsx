@@ -10,7 +10,7 @@
  * asking to sign in; that page sends the person here with `?to=<preview url>`.
  *
  * Here we are on the Kortix origin, so we have the session. We take the access
- * token and bounce back with a ONE-SHOT `?token=`, which the proxy exchanges
+ * token through the SDK and bounce back with a preview ticket, which the proxy exchanges
  * for a host-scoped cookie and strips from the address bar.
  *
  * `to` is attacker-controllable, so it is validated against the preview
@@ -19,19 +19,18 @@
  * bearer token.
  */
 
-import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-identity-router';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
-import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';
 import {
   PreviewAuthorizeView,
   type PreviewAuthorizeState,
 } from '@/features/auth/preview-authorize-view';
 import { useAuth } from '@/features/providers/auth-provider';
 import { getEnv } from '@/lib/env-config';
-import { createClient } from '@/lib/supabase/client';
-import { loadPreviewUrlTemplate } from '@kortix/sdk';
+import { authorizePreviewUrl, loadPreviewUrlTemplate } from '@kortix/sdk';
+import { AuthPendingScreen } from '@kortix/ui/internal/auth/auth-consent';
 
 /**
  * True only for a URL on a hostname this deployment serves previews on.
@@ -53,18 +52,17 @@ export function isServablePreviewUrl(candidate: string, template: string | null)
   }
   if (url.protocol !== shape.protocol) return false;
 
-  // `dev-p{port}-{sandbox}.p.kortix.com` -> suffix `.p.kortix.com`, prefix `dev-`
-  const shapeHost = shape.hostname;
-  const firstDot = shapeHost.indexOf('.');
-  if (firstDot === -1) return false;
-  const domain = shapeHost.slice(firstDot); // ".p.kortix.com"
-  const envPrefix = shapeHost.slice(0, shapeHost.indexOf('-p1-') + 1); // "dev-"
-  if (!envPrefix || !domain) return false;
-  if (!url.hostname.endsWith(domain)) return false;
-
-  const label = url.hostname.slice(0, -domain.length);
-  if (label.includes('.')) return false;
-  return new RegExp(`^${envPrefix}p\\d{1,5}-[a-z0-9-]+$`).test(label);
+  if (url.port !== shape.port || url.username || url.password) return false;
+  const marker = '65000-kortixpreviewplaceholder';
+  const trusted = new URL(
+    template.replace('{port}', '65000').replace('{sandbox}', 'kortixpreviewplaceholder'),
+  );
+  const parts = trusted.hostname.split(marker);
+  if (parts.length !== 2) return false;
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escape(parts[0])}\\d{1,5}-[a-z0-9-]+${escape(parts[1])}$`).test(
+    url.hostname,
+  );
 }
 
 export default function PreviewAuthorizePage() {
@@ -99,7 +97,15 @@ function PreviewAuthorize() {
     let cancelled = false;
     (async () => {
       const backendUrl = getEnv().BACKEND_URL || '';
-      const template = await loadPreviewUrlTemplate(backendUrl);
+      let template = await loadPreviewUrlTemplate(backendUrl);
+      const backend = new URL(backendUrl, window.location.origin);
+      if (
+        !template &&
+        backend.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(backend.hostname)
+      ) {
+        template = `http://p{port}-{sandbox}.localhost:${backend.port || '80'}`;
+      }
       if (cancelled) return;
 
       if (!isServablePreviewUrl(to, template)) {
@@ -107,20 +113,11 @@ function PreviewAuthorize() {
         return;
       }
 
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (!session?.access_token) {
-        setFailure('expired');
-        return;
-      }
-
-      const target = new URL(to);
-      target.searchParams.set('token', session.access_token);
-      window.location.replace(target.toString());
-    })();
+      const target = await authorizePreviewUrl(to, { serverUrl: backendUrl });
+      if (!cancelled) window.location.replace(target);
+    })().catch(() => {
+      if (!cancelled) setFailure('expired');
+    });
 
     return () => {
       cancelled = true;

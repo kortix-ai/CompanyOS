@@ -714,3 +714,92 @@ iframe DOM/network/assets/redirects/WebSocket positives, actual terminal/downloa
 and project/sidebar/draft/IndexedDB reload/back/focus/BFCache acceptance.
 No browser or cloud resources were created in this bounded change. No external-provider failure is claimed.
 Production enablement remains blocked. Parent must not treat these isolated protocol tests as end-to-end acceptance.
+
+## Identity-partitioned preview origins, 2026-11-06
+
+Status: bounded implementation and local authority proof complete. Overall feature remains NOT YET shippable.
+Canonical worktree: /Users/jay/root/kortix/suna-multi-account-login-plan; branch multi-account-login-plan.
+No push, PR, merge, deploy, publish, flag enablement, or subagent. Original untracked plans remain untouched.
+
+### Grammar and authority
+
+- Selected local label: `p{decimal-port}-{sandbox-label}--i{partition}.localhost:{api-port}`.
+- Selected deployed label: `{e}-p{decimal-port}-{sandbox-label}--i{partition}.{preview-base}`.
+  `e` is d=dev, s=staging, p=prod, r=preview. Short environment prefixes preserve wildcard TLS/DNS.
+  There is still exactly one wildcard label. Ports are 1..65535.
+- Partition is the first 96 bits of SHA-256 over UTF-8 `kortix-preview-identity:v1:{verified-user-id}`,
+  encoded as 20 lowercase RFC4648 base32 characters without padding. It is public routing information.
+  It does not grant authority. Separate users produce separate origins for the same sandbox and port.
+- Sandbox IDs retain their full identity. `sbx_` ULIDs use the existing lowercase/underscore-to-hyphen encoding.
+  UUIDs use reserved `uuid-` plus 25 zero-padded lowercase base36 digits for the full 128-bit UUID.
+  The API reverses that encoding before sandbox lookup. Names beginning `uuid-` are reserved in selected generation.
+  Selected UUID and 30-character sbx labels fit at port 65535 in every environment (maximum sbx label: 62 octets).
+  Longer unsupported labels throw; no sandbox ID is truncated. Empty, foreign, repeated or malformed partition suffixes grant nothing.
+- SDK async `authorizePreviewUrl` derives the partition from configured getUserId only for selected getToken.identityKey.
+  It sends the partitioned destination to the actual /p/ticket route. This covers iframe authorization and the existing
+  open-tab/static-file authorization seam. Pure synchronous builders remain transport candidates, requiring authorization.
+  Selected path-only/untrusted/missing-token requests fail closed. Selected iframe failures expose no legacy fallback URL.
+  Selected callers cannot mint the shared path cookie through ensurePreviewSessionCookie. Static-file address comparison
+  recognizes the authorized partitioned address. Reverse preview detection recognizes compact deployed environments.
+- The API verifies the credential principal against the partition before minting cookies/tickets. Signed payloads carry
+  identityPartition and loginSessionId alongside sandbox, port and user. Legacy or foreign cookies/tickets fail verification.
+  Partition requests never read the ambient legacy __preview_session bearer cookie.
+- HTTP and WS share resolvePreviewSession. Both check live auth.sessions ownership and browser-slot removal/expiry.
+  Removed slots refuse even while GoTrue revocation is pending. DB failures fail closed. The existing ticket lifetime is 60 seconds.
+  Cookie and ticket signing purposes remain separate. Cookies remain host-only: no Domain attribute was added.
+- The edge recognizes compact environments and signs the entire public hostname, including partition.
+  Signature tests change the partition and observe a different signature. No nested hostname labels were added.
+- Public shares retain explicit capability semantics on legacy share origins. Public-share credentials cannot establish
+  a private principal on partition origins. Same-origin app XSS can still act as saved identities; this is not a sandbox claim.
+
+### Executed checks
+
+Commands below ran from the canonical worktree. Logs and synthetic launchers remain in ignored output/.
+
+- RED: SDK preview-partition.test.ts failed on missing partition module. API preview-session.test.ts accepted a legacy cookie
+  for a partition target and failed the new denial assertion. Both are green after implementation.
+- `pnpm --filter @kortix/sdk test` with explicit files: core/session/preview-partition.test.ts,
+  core/session/preview-auth.test.ts, core/session/static-file-preview.test.ts, react/use-authenticated-preview-url.test.ts,
+  core/session/preview-origin-trust.test.ts, index.isomorphic.test.ts, public-surface.test.ts, public-type-surface.test.ts.
+  Eight isolated files: 73 pass, 0 fail. output/partition-sdk-final.log.
+- `bun test apps/api/src/sandbox-proxy/preview-hosts.test.ts apps/api/src/sandbox-proxy/preview-session.test.ts
+  apps/api/src/sandbox-proxy/preview-origin.test.ts infra/cloudflare/workers/preview-router/worker.test.mjs`:
+  98 pass, 0 fail, 232 assertions. output/partition-api-final.log.
+- SDK and API `typecheck`: exit 0. API changed-file ESLint: exit 0. Edge `node --check`: exit 0.
+  `git diff --check`: exit 0. No full/package suite ran. No public exports or package versions changed.
+- `pnpm --filter @kortix/sdk run smoke:install`: packed tarball imports and constructs; install smoke passed.
+  output/partition-install-final.log.
+
+### Real HTTP, WS, SDK and browser proof
+
+- `bun output/launch-partition.ts` launches the production dispatchInbound under Bun.serve, with actual Hono routes
+  and previewWsHandlers. It does not serve app.fetch directly. Own ports: API 17818, synthetic upstream 17819.
+  It uses branch DB and real local GoTrue users/sessions. createDatabaseProject/createDatabaseSession seed a private
+  project/session. Fixture account membership/owner role is synthetic. Only Platinum resolveIngress is replaced with
+  the local upstream address; auth, ownership, ticket, cookie, dispatcher and forwarding boundaries remain real.
+- Real selected SDK configureKortix + authorizePreviewUrl calls actual GET /p/config and POST /p/ticket (200).
+  The resulting URL has the expected partitioned origin and a scoped ticket, without a bearer or refresh credential.
+- Actual A-host ticket entry: 302; Set-Cookie exists and has no Domain. Deliberately sending A cookie to B host: 401.
+  A legacy-host cookie deliberately sent to B: 401. A ticket and A bearer sent to B: 401. Copied bare A URL: 401.
+  B WS handshakes with A cookie or A ticket: 401. A root asset: 200 / asset-ok. A redirect: 302 /asset.
+  Actual A WS handshake and echo: success. Deleting the real login session makes A cookie and ticket return 401.
+  output/partition-http-final.log ends PROOF PASS. Final fixture users/project and own listeners are removed. No cloud sandbox was allocated.
+  The DB invariant retains established sandbox identity rows; direct fixture-row deletion is refused.
+  Failed local retries can leave synthetic sandbox identity residue. Do not treat it as cloud teardown proof.
+- Same-profile T3 browser loaded simultaneous A/B iframe origins on the synthetic fixture panel.
+  A frame reported actual fetch('/asset') status 200 and text asset-ok through postMessage from A origin.
+  A frame opened same-origin WS and reported browser-echo. B frame reported kortix:preview-state signed-out from B origin.
+  Parent DOM contained two differently partitioned iframe origins. No browser cookie injection occurred.
+  Preview snapshot timed out; assertions used page evaluation and origin-checked frame messages instead. Own tabs closed.
+- Local fixture setup first exposed missing synthetic membership and duplicate external-ID fixture residue.
+  The launcher now creates explicit membership/role and uses a unique external ID. No production GitHub installation,
+  policy bypass, or auth weakening was used. Raw diagnostic data stays in ignored output/.
+
+### Parent acceptance still required
+
+- Deployed wildcard routing/TLS and edge release, cloud sandbox app/assets/redirect/WS, and complete selected UI journeys
+  remain parent gates. This local synthetic browser panel is not the complete production app preview journey.
+- Real browser broker-removal-to-preview refusal while upstream revocation is pending is not separately exercised here.
+  Live login-session revocation is exercised through real HTTP; the additional broker-row check is implemented.
+- Existing parent cloud prompt/transcript/files/billing, runtime teardown, drafts/IDB/BFCache, and other UI gates remain.
+  The product feature flag stays default off. Do not claim overall feature completion or production acceptance.

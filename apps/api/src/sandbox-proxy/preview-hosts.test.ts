@@ -223,3 +223,17 @@ describe('preview alias base domains (self-host domain move)', () => {
     expect(resolvePreviewHost(`dev-p3000-${LABEL}.p.old-acme.cloud`)).toBeNull();
   });
 });
+
+test('partitioned preview grammar is bounded and unambiguous', () => {
+ const suffix='--iaaaaaaaaaaaaaaaaaaaa';
+ expect(resolvePreviewHost(`p3000-sbx-test${suffix}.localhost`)).toMatchObject({sandboxLabel:'sbx-test',identityPartition:'aaaaaaaaaaaaaaaaaaaa',port:3000});
+ expect(resolvePreviewHost('p3000-sbx-test--i.localhost')).toBeNull();
+ expect(resolvePreviewHost(`p3000-sbx--iforged${suffix}.localhost`)).toBeNull();
+ expect(resolvePreviewHost(`p3000-${'a'.repeat(60)}${suffix}.localhost`)).toBeNull();
+});
+
+test('compact UUID sandbox identity decodes without losing bits', () => {
+ const id='00000000-0000-4000-8000-000000000001';
+ const encoded=BigInt('0x'+id.replaceAll('-','')).toString(36).padStart(25,'0');
+ expect(resolvePreviewHost(`p65535-uuid-${encoded}--iaaaaaaaaaaaaaaaaaaaa.localhost`)).toMatchObject({sandboxLabel:id,port:65535});
+});

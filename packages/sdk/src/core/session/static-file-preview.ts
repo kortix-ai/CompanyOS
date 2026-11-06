@@ -94,6 +94,13 @@ export function shouldRetryStaticFileHealth(attempts: number): boolean {
 function normalizeAddress(candidate: string): string | null {
   try {
     const url = new URL(candidate);
+    url.hostname = url.hostname.replace(/uuid-([a-z0-9]{25})(?=--i)/, (_, encoded: string) => {
+      let number = 0n;
+      for (const digit of encoded) number = number * 36n + BigInt(parseInt(digit, 36));
+      const hex = number.toString(16).padStart(32, '0');
+      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    });
+    url.hostname = url.hostname.replace(/--i[a-z2-7]{20}(?=\.)/, '').replace(/^(d|s|p|r)-/, (_, env: string) => ({d:'dev',s:'staging',p:'prod',r:'preview'})[env]! + '-');
     url.searchParams.delete('token');
     url.searchParams.delete('preview_ticket');
     url.searchParams.sort();

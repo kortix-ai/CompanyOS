@@ -187,3 +187,12 @@ describe('authorizePreviewUrl — the URL to actually open', () => {
     expect(requests).toHaveLength(0);
   });
 });
+
+test('selected authentication partitions the real ticket destination and fails closed without an origin', async () => {
+ const getter = Object.assign(async () => token, { identityKey: () => 'selected-slot' });
+ configureKortix({ backendUrl: 'http://localhost:8008/v1', getToken: getter, getUserId: async () => 'user-a' });
+ const url = await authorizePreviewUrl('https://dev-p3000-sbx-a.p.kortix.com/');
+ expect(url).toMatch(/d-p3000-sbx-a--i[a-z2-7]{20}\.p\.kortix\.com/);
+ expect(JSON.stringify(ticketRequests)).toContain(new URL(url).hostname);
+ await expect(authorizePreviewUrl('http://localhost:8008/v1/p/sbx-a/3000/')).rejects.toThrow();
+});

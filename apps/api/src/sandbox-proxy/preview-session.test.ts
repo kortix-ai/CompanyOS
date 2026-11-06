@@ -132,3 +132,8 @@ describe('appCookieHeader', () => {
     expect(appCookieHeader(`ref=${PREVIEW_COOKIE}`)).toBe(`ref=${PREVIEW_COOKIE}`);
   });
 });
+
+test('legacy and foreign identity cookies cannot authorize a partitioned host', () => {
+  const target = { ...TARGET, identityPartition: 'aaaaaaaaaaaaaaaaaaaa' };
+  expect(verifyPreviewSession(mintPreviewSession(principal, 60), target)).toBeNull();
+});

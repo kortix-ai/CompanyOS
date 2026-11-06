@@ -2011,3 +2011,10 @@ verification, selection, and removal available. The web account menu opens
 `/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
 The browser stores no password or refresh token. Google uses server-owned PKCE;
 the initiating tab confirms the verified identity before selecting it.
+
+Selected browser identities authorize previews through `authorizePreviewUrl` before navigation.
+The async authorization stage derives a non-secret origin partition from the verified user.
+It exchanges the bearer for a 60-second preview ticket. It never places a refresh credential in a URL.
+Selected callers require an origin URL; authorization failures do not fall back to shared preview cookies.
+Pure synchronous URL builders return transport candidates, which selected callers must authorize before use.
+Legacy programmatic clients retain the existing unpartitioned transport.

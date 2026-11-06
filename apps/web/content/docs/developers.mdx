@@ -9043,3 +9043,8 @@ verification, selection, and removal available. The web account menu opens
 `/auth/browser-logins`. Selection loads a `/u/<slot>/…` document for this tab.
 The browser stores no password or refresh token. Google uses server-owned PKCE;
 the initiating tab confirms the verified identity before selecting it.
+
+Selected browser documents pass preview URL candidates through SDK `authorizePreviewUrl` before navigation.
+The SDK creates a separate origin per user and exchanges the bearer for a short-lived preview ticket.
+Selected preview cookies bind the user, sandbox, port, and live login session.
+Public-share links remain separate capabilities; they do not establish a private principal on a selected origin.

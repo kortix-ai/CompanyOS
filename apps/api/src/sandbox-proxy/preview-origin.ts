@@ -1,3 +1,4 @@
+import { previewIdentityPartition, previewLoginSessionLive } from './preview-partition';
 /**
  * Preview ORIGIN proxy — `{env}-p{port}-{label}.{previewDomain}` in a deployed
  * environment, `p{port}-{label}.localhost:{apiPort}` locally.
@@ -255,7 +256,8 @@ export async function establishPreviewSession(
   target: ResolvedPreviewHost,
 ): Promise<{ session: PreviewSession } | { refusal: PreviewRefusal }> {
   const shareToken = url.searchParams.get('public_share');
-  const previewToken = extractPreviewToken(req, url);
+  const authRequest = target.identityPartition ? new Request(req.url, { headers: new Headers([...req.headers].filter(([name]) => name.toLowerCase() !== 'cookie')) }) : req;
+  const previewToken = extractPreviewToken(authRequest, url);
   if (!shareToken && !previewToken) {
     // Answer before touching the database. Resolving a host LABEL cannot use
     // the external_id index (see resolveExternalIdFromHostLabel), so letting an
@@ -276,7 +278,7 @@ export async function establishPreviewSession(
   bindPreviewResource(sandboxId, target.port);
 
   const share = await authenticatePublicShare(shareToken, sandboxId, target.port);
-  if (share && 'shareId' in share) {
+  if (!target.identityPartition && share && 'shareId' in share) {
     return {
       session: {
         kind: 'public_share',
@@ -310,8 +312,12 @@ export async function establishPreviewSession(
     return { refusal: { status: 401, state: 'signed-out', message: 'Unauthorized' } };
   }
 
+  if (target.identityPartition && (previewIdentityPartition(principal.userId) !== target.identityPartition || !principal.loginSessionId || !await previewLoginSessionLive(principal.userId, principal.loginSessionId))) {
+    return { refusal: { status: 401, state: 'signed-out', message: 'Preview identity mismatch' } };
+  }
   return {
     session: {
+      ...(target.identityPartition ? { identityPartition: target.identityPartition, loginSessionId: principal.loginSessionId } : {}),
       kind: 'principal',
       sandboxLabel: target.sandboxLabel,
       sandboxId,
@@ -329,6 +335,12 @@ export async function establishPreviewSession(
   };
 }
 
+async function previewSessionLive(session: PreviewSession): Promise<boolean> {
+  if (!session.identityPartition) return true;
+  if (session.kind !== 'principal' || !session.loginSessionId) return false;
+  try { return await previewLoginSessionLive(session.userId, session.loginSessionId); } catch { return false; }
+}
+
 /** Explicit authority never falls back to a cookie from another document. */
 export async function resolvePreviewSession(
   req: Request,
@@ -337,15 +349,15 @@ export async function resolvePreviewSession(
 ): Promise<{ session: PreviewSession; fresh: boolean } | { refusal: PreviewRefusal }> {
   if (url.searchParams.has('preview_ticket')) {
     const session = verifyPreviewSession(url.searchParams.get('preview_ticket'), target, 'ticket');
-    return session
+    return session && await previewSessionLive(session)
       ? { session, fresh: true }
       : { refusal: { status: 401, state: 'signed-out', message: 'Invalid preview ticket' } };
   }
-  const explicit = req.headers.has('Authorization') ||
+  const explicit = req.headers.has('Authorization') || req.headers.has('X-Kortix-Token') ||
     url.searchParams.has('token') || url.searchParams.has('public_share');
   if (!explicit) {
     const session = sessionFromCookies(req, target);
-    if (session) return { session, fresh: false };
+    if (session && await previewSessionLive(session)) return { session, fresh: false };
   }
   const established = await establishPreviewSession(req, url, target);
   return 'refusal' in established ? established : { ...established, fresh: true };

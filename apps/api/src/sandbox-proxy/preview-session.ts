@@ -31,6 +31,7 @@
  * rejected on another even if a browser were to send it there.
  */
 import { createHmac, timingSafeEqual } from 'crypto';
+import { previewIdentityPartition } from './preview-partition';
 import { config } from '../config';
 
 export const PREVIEW_COOKIE = '__kortix_preview';
@@ -50,6 +51,8 @@ interface PreviewSessionBase {
    */
   sandboxId: string;
   port: number;
+  identityPartition?: string;
+  loginSessionId?: string;
   exp: number;
 }
 
@@ -120,7 +123,7 @@ export function mintPreviewSession(session: Unexpired<PreviewSession>, ttlSecond
  */
 export function verifyPreviewSession(
   value: string | null | undefined,
-  target: { sandboxLabel: string; port: number },
+  target: { sandboxLabel: string; port: number; identityPartition?: string },
   purpose: PreviewCredentialPurpose = 'session',
 ): PreviewSession | null {
   if (!value || typeof value !== 'string') return null;
@@ -144,6 +147,9 @@ export function verifyPreviewSession(
   if (typeof payload.exp !== 'number' || payload.exp <= Math.floor(Date.now() / 1000)) return null;
   if (payload.sandboxLabel !== target.sandboxLabel || payload.port !== target.port) return null;
   if (payload.kind !== 'principal' && payload.kind !== 'public_share') return null;
+  if (payload.identityPartition !== target.identityPartition) return null;
+  if (target.identityPartition && (payload.kind !== 'principal' ||
+      previewIdentityPartition(payload.userId) !== target.identityPartition || !payload.loginSessionId)) return null;
   return payload;
 }
 

@@ -50,6 +50,7 @@ const LOCAL_HOST = /^p(\d{1,5})-([a-z0-9-]+)\.localhost$/;
 export interface ResolvedPreviewHost {
   /** DNS-safe sandbox label — resolve to a canonical row with `loadSandbox`. */
   sandboxLabel: string;
+  identityPartition?: string;
   port: number;
   local: boolean;
 }
@@ -152,11 +153,31 @@ export function previewOriginFor(externalId: string, port: number): string | nul
 export function resolvePreviewHost(hostname: string): ResolvedPreviewHost | null {
   // Port first, then the FQDN trailing dot: a Host header may carry both
   // (`host.example.:443`), and stripping the dot first leaves it stranded.
-  const host = (hostname || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+  let host = (hostname || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
 
+  let identityPartition: string | undefined;
+  const labels = host.split('.');
+  if (!labels[0] || labels[0].length > 63) return null;
+  if (labels[0].includes('--i')) {
+    const partition = /^(.*)--i([a-z2-7]{20})$/.exec(labels[0]);
+    if (!partition || partition[1]!.includes('--i')) return null;
+    identityPartition = partition[2];
+    labels[0] = partition[1]!;
+    const encoded = /^(.*-)(uuid-([a-z0-9]{25}))$/.exec(labels[0]);
+    if (encoded) {
+      let number = 0n;
+      for (const digit of encoded[3]!) number = number * 36n + BigInt(parseInt(digit, 36));
+      if (number >= (1n << 128n)) return null;
+      const hex = number.toString(16).padStart(32, '0');
+      labels[0] = encoded[1]! + `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+    labels[0] = labels[0].replace(/^(d|s|p|r)-/, (_, env: string) => ({d:'dev',s:'staging',p:'prod',r:'preview'})[env]! + '-');
+    host = labels.join('.');
+  }
   const local = LOCAL_HOST.exec(host);
   if (local) {
-    return { port: Number(local[1]), sandboxLabel: local[2]!, local: true };
+    if (Number(local[1]) < 1 || Number(local[1]) > 65535) return null;
+    return { port: Number(local[1]), sandboxLabel: local[2]!, local: true, ...(identityPartition ? { identityPartition } : {}) };
   }
 
   const domain = previewServedBaseDomains().find((base) => host.endsWith(`.${base}`));
@@ -167,7 +188,7 @@ export function resolvePreviewHost(hostname: string): ResolvedPreviewHost | null
   if (!match || match[1] !== config.INTERNAL_KORTIX_ENV) return null;
   const port = Number(match[2]);
   if (port < 1 || port > 65535) return null;
-  return { port, sandboxLabel: match[3]!, local: false };
+  return { port, sandboxLabel: match[3]!, local: false, ...(identityPartition ? { identityPartition } : {}) };
 }
 
 /**

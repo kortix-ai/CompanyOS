@@ -61,6 +61,7 @@ export interface PreviewPrincipal {
   sessionId: string | null;
   /** What `userId` is. An account API key's `userId` is an ACCOUNT id. */
   principalKind: PreviewPrincipalKind;
+  loginSessionId?: string;
 }
 
 /**
@@ -160,7 +161,7 @@ export async function authenticatePreviewPrincipalDetailed(
         previewActorFields({ kind: 'user', principalId: local.userId, sandboxAuthored: false, method: 'jwt' }),
       );
       return (await canAccessPreviewSandbox({ previewSandboxId: sandboxId, userId: local.userId }))
-        ? { userId: local.userId, sessionId: null, principalKind: 'user' }
+        ? { userId: local.userId, sessionId: null, principalKind: 'user', loginSessionId: jwtLoginSession(token) }
         : null;
     }
     if (!isInconclusiveVerifyFailure(local.reason)) return null;
@@ -172,7 +173,7 @@ export async function authenticatePreviewPrincipalDetailed(
       previewActorFields({ kind: 'user', principalId: user.id, sandboxAuthored: false, method: 'jwt' }),
     );
     return (await canAccessPreviewSandbox({ previewSandboxId: sandboxId, userId: user.id }))
-      ? { userId: user.id, sessionId: null, principalKind: 'user' }
+      ? { userId: user.id, sessionId: null, principalKind: 'user', loginSessionId: jwtLoginSession(token) }
       : null;
   } catch (err) {
     console.warn('[preview-auth] token validation error:', (err as Error)?.message || err);
@@ -203,4 +204,8 @@ export function extractPreviewToken(req: Request, url: URL): string | null {
     }
   }
   return null;
+}
+
+function jwtLoginSession(token: string): string | undefined {
+  try { return JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()).session_id; } catch { return undefined; }
 }

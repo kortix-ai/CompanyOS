@@ -1,3 +1,4 @@
+import { platformConfig } from '../core/http/config';
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -56,6 +57,12 @@ export function useAuthenticatedPreviewUrl(previewUrl: string): string | null {
       const token = await getAuthToken();
       if (cancelled) return;
 
+      const selected = Boolean(platformConfig().getToken?.identityKey?.());
+      if (selected) {
+        const authorized = await authorizePreviewUrl(previewUrl, { serverUrl }).catch(() => null);
+        if (!cancelled) setAuthenticatedUrl(authorized);
+        return;
+      }
       if (!token) {
         // No token available — expose bare URL (will likely 401, but nothing
         // we can do). Better than hanging in loading state forever.
@@ -121,6 +128,7 @@ export function useAuthenticatedPreviewUrl(previewUrl: string): string | null {
     // Refresh cookie periodically (cookie has 1-hour Max-Age; refresh every 55s)
     const interval = setInterval(() => {
       (async () => {
+        if (platformConfig().getToken?.identityKey?.()) return;
         const token = await getAuthToken();
         if (cancelled || !token) return;
 

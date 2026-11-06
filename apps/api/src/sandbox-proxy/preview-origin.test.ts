@@ -776,3 +776,15 @@ describe('explicit preview authority overrides ambient cookies', () => {
     expect(wsUpstreamResolutions).toBe(0);
   });
 });
+
+describe('partition authority at HTTP and websocket boundaries', () => {
+ test('rejects a legacy cookie and a principal from another partition', async () => {
+  const host='p8081-sbx-known--iaaaaaaaaaaaaaaaaaaaa.localhost:8008';
+  const cookie=mintCookieFor('sbx-known',8081);
+  expect((await handlePreviewOriginRequest(...request('/',{headers:{cookie}},host)))?.status).toBe(401);
+  expect((await handlePreviewOriginRequest(...request('/?token=good',{},host)))?.status).toBe(401);
+  const [req,url]=request('/hmr',{headers:{cookie,origin:`http://${host}`}},host);
+  expect(await preparePreviewHostWsUpgrade(req,url)).toMatchObject({ok:false,status:401});
+  expect(wsUpstreamResolutions).toBe(0);
+ });
+});

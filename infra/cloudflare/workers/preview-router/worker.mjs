@@ -19,7 +19,12 @@
 const ENVIRONMENTS = new Set(['dev', 'staging', 'prod', 'preview']);
 
 function backendFor(hostname, env) {
-  const environment = hostname.split('-', 1)[0];
+  const prefix = hostname.split('-', 1)[0];
+  const environment = ({d:'dev',s:'staging',p:'prod',r:'preview'})[prefix] || prefix;
+  const label = hostname.split('.')[0];
+  if (label.length > 63 || !/^(?:dev|staging|prod|preview|d|s|p|r)-p\d{1,5}-[a-z0-9-]+$/.test(label)) return null;
+  if (label.includes('--i') && !/^[a-z0-9-]+--i[a-z2-7]{20}$/.test(label)) return null;
+  if (['d','s','p','r'].includes(prefix) && !label.includes('--i')) return null;
   if (!ENVIRONMENTS.has(environment)) return null;
   return {
     environment,

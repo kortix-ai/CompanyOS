@@ -24,3 +24,16 @@ test('staging previews forward to the same live API origin as apps', async () =>
   expect(await response.text()).toBe('preview content');
   expect(response.headers.get('x-kortix-preview-environment')).toBe('staging');
 });
+
+test('partitioned staging hosts retain the complete signed hostname', async () => {
+ let forwarded;
+ globalThis.fetch = async request => { forwarded=request; return new Response('ok'); };
+ const host='s-p65535-sbx-01aaaaaaaaaaaaaaaaaaaaaaaa--iaaaaaaaaaaaaaaaaaaaa.p.kortix.com';
+ const response=await worker.fetch(new Request(`https://${host}/asset`),{...preview.vars,STAGING_EDGE_SECRET:'synthetic-test-secret'});
+ expect(response.status).toBe(200);
+ expect(forwarded.headers.get('x-kortix-preview-host')).toBe(host);
+ const {signPreviewRequest}=await import('./worker.mjs');
+ const timestamp=forwarded.headers.get('x-kortix-preview-timestamp');
+ expect(forwarded.headers.get('x-kortix-preview-signature')).toBe(await signPreviewRequest(new Request(`https://${host}/asset`),timestamp,'synthetic-test-secret'));
+ expect(await signPreviewRequest(new Request(`https://${host.replace('--iaaaa','--ibaaa')}/asset`),timestamp,'synthetic-test-secret')).not.toBe(forwarded.headers.get('x-kortix-preview-signature'));
+});

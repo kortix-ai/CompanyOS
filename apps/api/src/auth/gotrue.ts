@@ -107,6 +107,7 @@ export async function gotrue<T = Record<string, unknown>>(
       headers,
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
       redirect: 'manual',
+      signal: AbortSignal.timeout(20_000),
     });
   } catch (err) {
     return {
@@ -130,6 +131,7 @@ export async function gotrueAuthorizeUrl(query: Record<string, string | undefine
       method: 'GET',
       headers: { apikey: config.SUPABASE_SERVICE_ROLE_KEY, accept: 'application/json' },
       redirect: 'manual',
+      signal: AbortSignal.timeout(20_000),
     });
   } catch (err) {
     return { ok: false, status: 502, body: { error: 'auth_upstream_unreachable', error_description: (err as Error).message } as never };

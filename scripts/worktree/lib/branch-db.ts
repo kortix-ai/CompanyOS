@@ -175,7 +175,7 @@ export function createBranchDb(p: PrimaryDb, name: string): string | null {
  * session. Idempotent;
  * `start` runs it every time, which also repairs anything a push missed.
  */
-export function syncBranchUsers(p: PrimaryDb, name: string): string | null {
+export function syncBranchUsers(p: PrimaryDb, name: string, reconcileOthers = true): string | null {
   const db = branchDbName(name);
   let r = psql(p.url, PRIMARY_SQL);
   if (!r.ok) return `install primary sync trigger: ${r.stderr.trim()}`;
@@ -185,7 +185,7 @@ export function syncBranchUsers(p: PrimaryDb, name: string): string | null {
   // apply_rows, which a branch created by an older checkout does not have yet.
   const branches = sh(['psql', p.url, '-XAtc', 'select br.datname from kortix_wt.branches br join pg_database d using (datname)']).stdout
     .split('\n').map((n) => n.trim()).filter(Boolean);
-  for (const other of branches) {
+  for (const other of reconcileOthers ? branches : [db]) {
     r = psql(withDatabase(p.url, other), BRANCH_SQL);
     if (!r.ok && other === db) return `install branch sync procedures: ${r.stderr.trim()}`;
   }

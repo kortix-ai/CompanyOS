@@ -14,6 +14,7 @@
  * and add it here with its stale limit. `unit-worker-scope-wiring.test.ts` fails
  * on a loop that is neither here nor an approved per-process loop in `replica/`.
  */
+import { startBrowserLogins, stopBrowserLogins } from './browser-logins';
 import { kickStartupPreBuild } from '../../snapshots/builder';
 import type { Job } from '../runtime/job';
 import { startAccountDeletionSchedule, stopAccountDeletionSchedule } from './account-deletion';
@@ -62,6 +63,7 @@ const HOUR = 60 * MIN;
 // successful tick the heartbeat reports it stale (the longest wait between two
 // ticks, plus the longest legitimate tick, with margin; at least 10 min).
 export const JOBS: readonly Job[] = [
+  { ticks: { 'browser-logins': 10 * MIN }, start: startBrowserLogins, stop: stopBrowserLogins },
   { ticks: { 'sales-outbox': 10 * MIN }, start: startSalesOutbox, stop: stopSalesOutbox },
   { ticks: { 'active-turn-renewal': 10 * MIN }, start: () => startActiveTurnRenewal(), stop: stopActiveTurnRenewal },
   { ticks: { 'project-maintenance': 20 * MIN }, start: startProjectMaintenance, stop: stopProjectMaintenance },

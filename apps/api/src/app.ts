@@ -13,6 +13,7 @@ import { accountInvitesRouter } from './accounts/invites';
 import { adminApp } from './admin';
 import { authRouter } from './auth';
 import { headlessAuthRouter } from './auth/headless';
+import { browserLoginRouter } from './auth/browser-logins/routes';
 import { authEmailHookApp, registerSendEmailHookRoutes } from './auth/send-email-hook';
 import { accountDeletionApp, billingApp } from './billing';
 import { notificationsApp } from './notifications/routes';
@@ -112,6 +113,7 @@ app.route('/v1/accounts', accountsRouter);
 // + this router so SOC2 reviews see the full auth lifecycle.
 // Headless regular auth (signup / sign-in / magic link / social / refresh /
 // reset) — public, mounted BEFORE the bearer-gated auth router on the same prefix.
+app.route('/v1/auth/browser-logins', browserLoginRouter);
 app.route('/v1/auth', headlessAuthRouter);
 app.route('/v1/auth', authRouter);
 // SCIM 2.0 — separate auth (per-account bearer tokens, not Supabase JWT).

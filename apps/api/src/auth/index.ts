@@ -19,6 +19,7 @@ import type { AppEnv } from '../types';
 import { auditLogout } from '../middleware/auth-audit';
 import { makeOpenApiApp, json, errors, auth } from '../openapi';
 import { gotrue } from './gotrue';
+import { revokeLocalSession } from './revoke-session';
 import { readJsonObject } from '../shared/http-body';
 import { bearerToken } from '../shared/bearer-token';
 
@@ -61,36 +62,10 @@ authRouter.openapi(
       | string
       | undefined) ?? null;
 
-  // Mark every account_session_activity row for this session as
-  // revoked across ALL accounts the user has visited under it. Users
-  // typically have one account context per session, but multi-tenant
-  // dashboards can hit several — the safe move is to revoke them all
-  // on explicit logout.
-  // GoTrue deletes the auth.sessions row, so the next request with this
-  // bearer is refused on every replica (shared/jwt-liveness.ts).
   const logoutBearer = c.req.header('Authorization')?.replace(/^Bearer\s+/, '');
-  if (logoutBearer && c.get('authType') === 'supabase') {
-    const result = await gotrue('/logout', { method: 'POST', bearer: logoutBearer, body: {}, query: { scope: 'local' } });
-    if (!result.ok) return c.json({ error: 'auth_unavailable', error_description: 'Session revocation failed' }, 503);
-  }
-  let revokedCount = 0;
-  if (sessionId) {
-    const rows = await db
-      .update(accountSessionActivity)
-      .set({
-        revokedAt: sql`COALESCE(${accountSessionActivity.revokedAt}, now())`,
-        revokedReason: sql`COALESCE(${accountSessionActivity.revokedReason}, 'user_action')`,
-        revokedBy: userId,
-      })
-      .where(
-        and(
-          eq(accountSessionActivity.userId, userId),
-          eq(accountSessionActivity.sessionId, sessionId),
-        ),
-      )
-      .returning({ accountId: accountSessionActivity.accountId });
-    revokedCount = rows.length;
-  }
+  const result = await revokeLocalSession(c.get('authType') === 'supabase' ? logoutBearer : undefined,userId,sessionId);
+  if(!result.ok)return c.json({error:'auth_unavailable',error_description:'Session revocation failed'},503);
+  const revokedCount=result.count;
 
   auditLogout({
     c,

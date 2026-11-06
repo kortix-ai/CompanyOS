@@ -909,6 +909,9 @@ const envSchema = z.object({
 
   // ── Frontend (optional) ──────────────────────────────────────────────────
   FRONTEND_URL: optUrl('http://localhost:3000'),
+  KORTIX_BROWSER_LOGINS_ENABLED: optBoolFalse,
+  KORTIX_BROWSER_LOGINS_ACTIVE_KEY: optStr,
+  KORTIX_BROWSER_LOGINS_KEYS: optStr,
 
   // ── Pipedream Connect (optional — powers the Connector's 1-click connectors) ─
   PIPEDREAM_CLIENT_ID: optStr,
@@ -1710,6 +1713,9 @@ export const config = {
 
   // ─── Frontend ────────────────────────────────────────────────────────────
   FRONTEND_URL: env.FRONTEND_URL,
+  KORTIX_BROWSER_LOGINS_ENABLED: env.KORTIX_BROWSER_LOGINS_ENABLED,
+  KORTIX_BROWSER_LOGINS_ACTIVE_KEY: env.KORTIX_BROWSER_LOGINS_ACTIVE_KEY,
+  KORTIX_BROWSER_LOGINS_KEYS: env.KORTIX_BROWSER_LOGINS_KEYS,
 
   // ─── Tunnel (Reverse-Tunnel to Local Machine) ──────────────────────────────
   TUNNEL_SIGNING_SECRET: env.TUNNEL_SIGNING_SECRET,

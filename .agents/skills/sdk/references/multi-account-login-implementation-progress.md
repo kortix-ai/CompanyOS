@@ -1000,3 +1000,114 @@ Commit/cleanup addendum:
 - Closed the owned browser tab and stopped the owned Next process. Port 17700 has no listener.
 - Final frontend typecheck exits 0: output/finish-web-typecheck-final.log.
 - Working tree was clean after restoring the preserved SEO file.
+
+## Controlled callback acceptance continuation, 2026-11-06
+
+Workdir: /Users/jay/root/kortix/suna-multi-account-login-plan. HEAD 4c8e0ac2bc.
+Parent's uncommitted Sol Round 2 review-ledger update preserved. No source change,
+commit, push, PR, merge, deploy, cloud provisioning or flag configuration change.
+
+Acceptance result: NOT COMPLETE. Confirmed keyboard focus-restoration defect remains.
+The saved-login ConfirmDialog has no trigger. After opening a per-account logout
+with keyboard and pressing Escape, document.activeElement remains BODY after
+closure. Shift+Tab remains inside role=alertdialog while open. Initial focus is
+Cancel. This failed browser assertion is reproducible; no fix was attempted here.
+
+Commands (all in the workdir above):
+- bun output/setup-isolated-auth.ts; bun output/isolated-auth-proxy.ts;
+  bun output/start-isolated-next.ts; bun output/launch-accept.ts.
+  Own GoTrue uses branch DB, Next 17700, API 17708. Ignored accept-provider.ts
+  installs existing __setGoTrueFetch. Only authorize and PKCE token exchange are
+  controlled. The boundary validates auth_code and SHA256(code_verifier), consumes
+  the code, and obtains a real B password session from isolated GoTrue. User lookup,
+  broker, SDK, attempt storage, confirmation and UI remain real. Not real Google.
+- agent-browser --session acceptance commands; private reusable commands in
+  output/accept-ui.py, accept-matrix.py, accept-negative2.py and accept-expire.ts.
+  Preview snapshot timed out twice; used agent-browser fallback. Next callback
+  compilation stalled; restarted only the owned Next process, then repeated the flow.
+- Actual A password UI login -> explicit confirmation -> projects. Google button
+  -> controlled provider -> same-tab callback with actual UI sessionStorage marker
+  -> complete 200 -> Confirm your account -> keyboard confirmation -> roster count 2.
+  Provider log: controlled code/verifier validated. No refresh token entered browser.
+- Foreign marker: DOM expired/other-tab notice, no complete request. Unknown attempt:
+  complete 409 plus generic failure notice. Provider denial: client rejection notice.
+  Initial negative readbacks retained both A and B. These are not a foreign-profile
+  test and not the requested fresh-A-only matrix.
+- Keyboard B logout via AlertDialog completed; roster count 1. Subsequent failed
+  exchange, replayed consumed attempt, cancelled attempt and expired attempt returned
+  409 plus generic failure notice. Typed broker rate limit returned 429 and DOM
+  Too many attempts. Wait one minute, then retry. Every readback retained A only.
+  Expiration changed only one owned attempt expires_at in branch DB; SQL output
+  owned expired attempts 1. Replay used a consumed attempt with an invalid code,
+  so exact same-code replay remains unverified.
+- Final browser fetch of A slot/token returned 200; authenticated /v1/auth/user 200;
+  roster count 1. No readable legacy cookie existed. Preservation of an existing
+  legacy cookie was not tested. No replacement of a legacy cookie is claimed.
+- agent-browser set viewport 390 844; light/dark screenshots; innerWidth=390 and
+  document.documentElement.scrollWidth=390. No horizontal overflow on chooser.
+  Pending password sign-in rendered Signing in… and disabled controls.
+- No unchanged typechecks or package tests repeated. No full suite ran.
+
+Private evidence:
+- output/accept-api.log; accept-next.log; accept-next-restart.log;
+  accept-network-positive.txt; accept-network-final.txt; accept-negative-results.json;
+  accept-negative2-results.json; accept-expired-dom.txt.
+- output/accept-confirm-B.png; accept-mobile-light.png; accept-mobile-dark.png;
+  accept-negative-final.png.
+- output/final-demo-actual.webm records actual login/controlled-add/confirmation/logout
+  activity, including diagnostic interruptions. It is NOT the requested polished
+  two-tab journey. Existing picker-demo.mp4 remains unchanged.
+
+Remaining: focus restore fix with regression; genuine foreign-profile callback;
+exact repeated-code proof; controlled upstream failed exchange after valid verifier;
+legacy-cookie preservation; complete chooser/menu keyboard traversal; profile/security/
+push notice DOM and no-write assertions under B; actual two-tab final demo. BFCache
+persisted=true was not observed or retested. External Google account unavailable;
+no actual Google provider acceptance, production acceptance or council claim.
+
+Cleanup: deleted only the two owned synthetic auth users; SQL remaining owned users 0.
+No projects or cloud resources created. Closed own browser session and preview tab.
+Stopped owned isolated auth container and owned Next/API/proxy/template listeners.
+Restored generated SEO timestamp change caused by this Next run. Parent review ledger untouched.
+
+## Final narrow browser acceptance, 2026-11-06
+
+Workdir: /Users/jay/root/kortix/suna-multi-account-login-plan; branch multi-account-login-plan, HEAD 4c8e0ac2bc plus parent focus fix. No source edits, commits, pushes, PRs, merges, deployments, subagents, cloud provisioning, suites or duplicate typechecks in this acceptance turn. Parent changes preserved.
+
+Verified through the isolated Next/API/GoTrue fixture and agent-browser:
+- Keyboard Enter opens logout with Cancel focused. Shift+Tab wraps to the confirm button within alertdialog. Escape closes it and restores the identical initiating button (activeElement === saved trigger: true). Cancel closes it and restores that same button. Successful removal returns focus to h1[tabindex="-1"], with alertdialog absent. Evidence: output/final-check.log, output/final-focus.json. The initial command used the wrong confirm label; corrected the selector without editing implementation.
+- Separate acceptance-foreign browser session opens the captured callback URL without originating storage or vault cookie. DOM rejects it as expired/another-tab. Original A remains in the originating roster. This is an actual separate browser profile, not a fabricated sessionStorage marker.
+- Exact consumed code and attempt from successful controlled B completion replay through the callback with only the marker reinserted. Real broker complete returns 409 (output/final-api.log, 18:04:52 UTC). A token readback returns 200 with A subject. Initial replay of the earlier consumed completion also returns 409. Some immediate readbacks hit the shared edge budget; no success is inferred from a 429.
+- Controlled failed exchange validates code and SHA256(verifier), then calls real GoTrue with an intentionally invalidated synthetic B password. Upstream password exchange fails; broker complete returns 409 (18:04:14 UTC). DOM shows the generic safe failure and A remains. Restored B password via isolated auth admin (200). A token and authenticated /v1/auth/user return 200. Evidence: output/final-failed-exchange.txt, output/final-A-after-negative.json, output/final-api.log.
+- Both real token responses return 200 with distinct subjects matching the roster users: output/final-subjects.json. Explicit rendered selector links open A and B in simultaneous tabs using window.open on those observed hrefs. A and B account labels are observed independently. agent-browser tab new and click --new-tab used its original context rather than the recording context, so those initial tabs had no vault cookie; window.open preserves the real originating context.
+- B Profile and Security panels show the saved-sign-in restriction notice and only management/sign-in links. Notifications shows the push restriction notice. Actual tab mousedown plus click selects these panels. No profile/password/MFA/push mutation request appears in output/final-settings-network.txt; token and IAM effective-permission reads are present. Evidence: output/final-profile.txt, output/final-security.txt, output/final-push.txt.
+- Current desktop light/dark and mobile light/dark screenshots: output/final-desktop-light.png, output/final-desktop-dark.png, output/final-mobile-light.png, output/final-mobile-dark.png. Mobile innerWidth and scrollWidth both 390. Theme class switched only in the fixture browser.
+
+Preview fallback: preview_open and preview_navigate returned ERR_CONNECTION_REFUSED. Used agent-browser as requested. Multiple diagnostic recordings are incomplete and must not be presented as clean demos. The fixture's public auth edge budget is 30 requests/minute; rapid repeated login/navigation hit 429. Reset only the owned API process, retaining owned synthetic users, then paced the final recording. No configured rate limit or feature default changed.
+
+Final outcome: NOT COMPLETE; do not label this acceptance GREEN.
+- Paced A and B password sign-ins and confirmations each return 200. Both selected tabs open through rendered selector hrefs. B removal returns 200 at 18:10:53 UTC. Final roster count is 1; A slot token returns 200 with A subject, and /v1/auth/user returns 200 at 18:12:49 UTC. Evidence: output/final-clean5.log, output/final-demo-finish.log, output/final-api-reset.log, output/final-A-final.json.
+- A later removal observation is unresolved: B disappears from the roster after remove 200, but role=alertdialog remains present with enabled Cancel and Sign out buttons; activeElement is BUTTON. Earlier isolated keyboard/removal verification did focus the heading with no dialog. During the later flow keyboard commands and DOM evaluation operated across recording-created tabs. This prevents attributing the discrepancy to implementation or tooling. No source fix attempted. Exact log: output/final-demo-finish.log; DOM observations were role=alertdialog true, h1 tabindex=-1, active tag BUTTON. The final script times out waiting for dialog absence. Reproduce B removal in one selected browser context before accepting this criterion.
+- output/final-multi-account-demo.webm exists (512 KiB), but is NOT certified as the requested clean complete demo. Recording follows the initial page, not every opened tab. record stop and close then stall; stopped only the owned acceptance-paced browser process tree. Do not use this artifact as complete two-tab demo evidence.
+- No readable legacy A cookie existed in the fixture; existing legacy-cookie preservation remains unobserved. Genuine external Google remains unavailable. Controlled provider evidence is not external Google acceptance.
+- No new production gate is claimed. Parent council review remains separate. Remaining bounded acceptance: resolve the later dialog-presence discrepancy and record a complete clean two-tab demo with a recorder that follows the actual active tab. Existing external-provider and legacy-cookie limits remain explicit.
+
+Cleanup completed: fixture SIGTERM deletes only the two synthetic users. `bun output/final-cleanup.ts` prints `remaining owned synthetic users 0` (both admin lookups 404). Stopped only owned Next/API/proxy/template listeners and kortix-multi-account-auth container. Final lsof on 17700,17708,17822,17825,17826 returns no listeners. Closed other owned acceptance sessions and preview tab. No cloud resources created. Parent source/review-ledger changes remain untouched; only appended this progress ledger and wrote ignored output evidence. No default flag configuration changed.
+
+## Parent single-tab logout resolution, 2026-11-06
+
+The parent reproduced the chooser with two synthetic identities on isolated Next/API/GoTrue.
+The initial auth fixture launch raced GoTrue readiness; retry after health 200 resolved startup.
+A queued agent-browser wait prevented observation through the original controller.
+The parent attached a second controller to that same Chrome instance and its sole tab.
+Fresh accessibility snapshot identified the dialog controls. Escape returned focus to the identical initiating button.
+Enter reopened the dialog; clicking its snapshot confirm button removed B.
+Subsequent actual roster readback returned one account; its token POST returned 200.
+DOM assertions returned dialog=false and heading=true. No implementation change was needed beyond the existing focus fix.
+Private evidence: output/root-logout-result.json and output/root-logout-success.png.
+This resolves the later dialog-presence discrepancy. A complete two-tab recording remains uncertified.
+The earlier independent callback, cloud and A/B isolation results remain distinct from this focused proof.
+
+Cleanup for parent focus proof: remaining owned synthetic users 0.
+Owned listener check on 17700,17708,17821,17822,17825,17826 returns no listeners.
+Sol round 3 approves the focus fix with no findings. Flag remains default off.

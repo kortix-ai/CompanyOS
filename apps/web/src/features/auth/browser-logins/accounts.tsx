@@ -96,6 +96,8 @@ export function SignedInAccounts() {
 export function BrowserAccountsPage({ callback = false }: { callback?: boolean }) {
   const t = useTranslations('browserLogins');
   const callbackStarted = useRef(false);
+  const removalTrigger = useRef<HTMLButtonElement | null>(null);
+  const heading = useRef<HTMLHeadingElement | null>(null);
   const roster = useRoster();
   const [attempt, setAttempt] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -178,6 +180,12 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => { if (!open && !pending) setRemoving(null); }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const trigger = removalTrigger.current;
+          if (trigger?.isConnected && !trigger.disabled) trigger.focus();
+          else heading.current?.focus();
+        }}
         title={t(removing === 'all' ? 'text23' : 'text17')}
         description={t('text16')}
         confirmLabel={t(removing === 'all' ? 'text25' : 'text20')}
@@ -193,7 +201,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
           setRemoving(null);
         })}
       />
-      <h1 className="text-xl font-medium">{candidate ? t('text15') : t('text1')}</h1>
+      <h1 ref={heading} tabIndex={-1} className="text-xl font-medium">{candidate ? t('text15') : t('text1')}</h1>
       <p className="text-muted-foreground text-sm">{t('text16')}</p>
       <p className="text-muted-foreground text-sm">{t('text44')}</p>
       {message && <p role="alert">{message}</p>}
@@ -215,7 +223,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                 variant="outline"
                 size="sm"
                 disabled={pending}
-                onClick={() => setRemoving(slot.slot)}
+                onClick={(event) => { removalTrigger.current = event.currentTarget; setRemoving(slot.slot); }}
               >
                 {t('text20')}
               </Button>
@@ -239,7 +247,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
         <Button
           variant="outline"
           disabled={pending}
-          onClick={() => setRemoving('all')}
+          onClick={(event) => { removalTrigger.current = event.currentTarget; setRemoving('all'); }}
         >
           {t('text25')}
         </Button>

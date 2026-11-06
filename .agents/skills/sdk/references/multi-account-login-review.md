@@ -21,10 +21,28 @@ Affected existing HTTP/PG tests: bun output/launch-sol-regression.ts, 14 pass, z
 API typecheck and changed-file ESLint: exit 0. Source formatting applied.
 No full or package-wide test suite ran. Private launchers/logs remain in ignored output/.
 
-Round 2: pending focused recheck of S1/S2 and changed source.
+Round 2: APPROVE. S1 and S2 resolved; no new findings in changed behavior.
+Reviewed head 4c8e0ac2bc. Reviewer inspected source/assertions and prior logs without rerunning unchanged tests.
+Worktree and whitespace check clean. Usage not exposed. UI not scored in this backend recheck.
 
 ## Remaining acceptance
 
-Controlled callback browser matrix and final keyboard/mobile/theme/demo remain unverified.
+Controlled callback negatives, focus restoration, and mobile/theme captures are verified in the progress ledger.
+A clean complete two-tab recording remains uncertified.
 External Google provider sign-in and deployment are not claimed.
 Council follows Sol approval. Available provider catalog currently exposes Codex and Claude; a third provider was not listed.
+
+## Keyboard acceptance finding
+
+K1: logout-dialog Escape restored focus to BODY (actual browser failure).
+Fix in working tree: remember the initiating logout button; ConfirmDialog forwards Radix close-auto-focus.
+Closing restores that connected enabled button, or the page heading if successful removal deleted it.
+Frontend changed-file lint: exit 0, zero errors, five pre-existing warnings.
+Real browser GREEN: Escape restores the identical trigger; successful B removal closes the dialog and focuses the heading.
+Roster readback retains one account; its token POST returns 200. Full demo remains uncertified.
+
+Round 3: APPROVE. K1 resolved; no new findings. Codex gpt-6.1-sol, medium.
+Reviewer inspected the two-file focus diff, async removal flow and dialog primitives.
+Pending state prevents dismissal and duplicate confirmation; failed removal retains the dialog.
+Approval covers the focus fix; demo, external provider and deployed acceptance remain excluded.
+Usage not exposed. No suites rerun.

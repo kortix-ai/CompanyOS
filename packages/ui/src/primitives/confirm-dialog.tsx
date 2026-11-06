@@ -45,6 +45,7 @@ interface ConfirmDialogProps {
   confirmIcon?: React.ReactNode;
   /** Keep the confirm button disabled, e.g. until a typed confirmation matches. */
   confirmDisabled?: boolean;
+  onCloseAutoFocus?: React.ComponentProps<typeof AlertDialogContent>['onCloseAutoFocus'];
 }
 
 export function ConfirmDialog({
@@ -59,6 +60,7 @@ export function ConfirmDialog({
   confirmVariant = 'default',
   confirmIcon,
   confirmDisabled,
+  onCloseAutoFocus,
 }: ConfirmDialogProps) {
   // The defaults are the viewer's language: an English literal here put
   // "Cancel" under every translated dialog that passed no label (KRTX-2326).
@@ -66,7 +68,7 @@ export function ConfirmDialog({
   const confirmText = confirmLabel ?? strings.confirm;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="sm:max-w-md" overlayClassName="bg-black/25 backdrop-blur-sm">
+      <AlertDialogContent className="sm:max-w-md" overlayClassName="bg-black/25 backdrop-blur-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

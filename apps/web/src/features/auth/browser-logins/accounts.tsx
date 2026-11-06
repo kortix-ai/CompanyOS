@@ -149,6 +149,15 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
   const needsAdoption =
     !!legacyUser &&
     !roster.slots.some((slot) => slot.user_id === legacyUser.id && !slot.needs_sign_in);
+  const unsupportedAdoption =
+    needsAdoption &&
+    (!legacyUser?.email ||
+      [
+        legacyUser.app_metadata?.provider,
+        ...(Array.isArray(legacyUser.app_metadata?.providers)
+          ? legacyUser.app_metadata.providers
+          : []),
+      ].some((provider) => typeof provider === 'string' && /^(?:sso|saml)(?::|$)/i.test(provider)));
   const signInEmail = needsAdoption ? (legacyUser?.email ?? '') : email;
   const acceptCandidate = async (id: string, user: { id: string; email?: string | null }) => {
     if (adoption.current && user.id !== adoption.current.id) {
@@ -162,7 +171,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
   };
   const destination = () =>
     loginDestination(new URLSearchParams(window.location.search).get('returnTo'));
-  const run = async (work: () => Promise<void>) => {
+  const run = async (work: () => Promise<void>, failureMessage?: string) => {
     setPending(true);
     setMessage('');
     setFailed(false);
@@ -172,11 +181,13 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
       setFailed(true);
       const status = (error as { status?: number }).status;
       setMessage(
-        (error as { code?: string }).code === 'adoption_mismatch'
-          ? t('currentAccountMismatch')
-          : status === 429
-            ? t('text11')
-            : t('text12'),
+        (error as { code?: string }).code === 'browser_login_capacity'
+          ? t('text26')
+          : (error as { code?: string }).code === 'adoption_mismatch'
+            ? t('currentAccountMismatch')
+            : status === 429
+              ? t('text11')
+              : (failureMessage ?? t('text12')),
       );
     } finally {
       setPending(false);
@@ -248,7 +259,13 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
     if (!attempt) return;
     let slot = confirmedSlot;
     if (!slot) {
-      const result = await browserLogins.confirm(attempt);
+      const result = await browserLogins.confirm(attempt).catch((error) => {
+        if (error?.status === 429 && error?.code === 'browser_login_limit')
+          throw Object.assign(new Error('Browser sign-in capacity reached'), {
+            code: 'browser_login_capacity',
+          });
+        throw error;
+      });
       slot = result.slot;
       setConfirmedSlot(slot);
       if (result.duplicate_candidate) await browserLogins.cancel(result.duplicate_candidate);
@@ -284,7 +301,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             <>
               {t('text16')}
               {failed && message && (
-                <p role="alert" className="mt-4 text-sm">
+                <p role="alert" className="text-destructive mt-4 text-sm font-medium">
                   {message}
                 </p>
               )}
@@ -307,7 +324,7 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
                   : t(removing === 'all' ? 'text24' : 'text19'),
               );
               setRemoving(null);
-            })
+            }, t('removalFailed'))
           }
         />
         <KortixLogo variant="icon" size={22} className="text-foreground hidden md:block" />
@@ -316,12 +333,17 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
           tabIndex={-1}
           className="text-foreground text-2xl font-medium tracking-tight text-balance md:mt-6"
         >
-          {candidate ? t('text15') : t('text1')}
+          {candidate ? t('text15') : add && needsAdoption ? t('savingCurrentAccount') : t('text1')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('text16')}</p>
-        {add && needsAdoption && (
+        {add && needsAdoption && !unsupportedAdoption && (
           <p role="status" className="text-sm">
             {t('saveCurrentFirst', { email: legacyUser?.email ?? t('text5') })}
+          </p>
+        )}
+        {add && unsupportedAdoption && (
+          <p role="status" className="text-muted-foreground text-sm">
+            {t('adoptionUnavailable')}
           </p>
         )}
         {message && !removing && (
@@ -420,107 +442,116 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
             {t('text25')}
           </Button>
         )}
-        {roster.slots.length >= 5 && !add && <p>{t('text26')}</p>}
-        {add && roster.enabled && !roster.loading && !authLoading && !candidate && (
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(async () => {
-                const id = attempt ?? (await begin(method)).attempt;
-                if (method === 'email' && !sent) {
-                  await browserLogins.sendEmail(id, { email: signInEmail });
-                  setSent(true);
-                  return;
-                }
-                const result = await browserLogins.complete(
-                  id,
-                  method === 'password'
-                    ? { email: signInEmail, password }
-                    : { email: signInEmail, token: code },
-                );
-                setPassword('');
-                setCode('');
-                await acceptCandidate(id, result.user);
-              });
-            }}
-          >
-            <Label htmlFor="saved-email">{t('text27')}</Label>
-            <Input
-              id="saved-email"
-              type="email"
-              autoComplete="username"
-              required
-              value={signInEmail}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={pending || sent}
-              readOnly={needsAdoption}
-            />
-            {method === 'password' ? (
-              <>
-                <Label htmlFor="saved-password">{t('text28')}</Label>
-                <Input
-                  id="saved-password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </>
-            ) : (
-              sent && (
+        {roster.slots.length >= 5 && !candidate && (
+          <p className="text-muted-foreground text-sm">{t('text26')}</p>
+        )}
+        {add &&
+          roster.enabled &&
+          !roster.loading &&
+          !authLoading &&
+          !candidate &&
+          !unsupportedAdoption && (
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(async () => {
+                  const id = attempt ?? (await begin(method)).attempt;
+                  if (method === 'email' && !sent) {
+                    await browserLogins.sendEmail(id, { email: signInEmail });
+                    setSent(true);
+                    return;
+                  }
+                  const result = await browserLogins.complete(
+                    id,
+                    method === 'password'
+                      ? { email: signInEmail, password }
+                      : { email: signInEmail, token: code },
+                  );
+                  setPassword('');
+                  setCode('');
+                  await acceptCandidate(id, result.user);
+                });
+              }}
+            >
+              <Label htmlFor="saved-email">{t('text27')}</Label>
+              <Input
+                id="saved-email"
+                type="email"
+                autoComplete="username"
+                required
+                value={signInEmail}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={pending || sent || needsAdoption}
+                readOnly={needsAdoption}
+              />
+              {method === 'password' ? (
                 <>
-                  <Label htmlFor="saved-code">{t('text29')}</Label>
+                  <Label htmlFor="saved-password">{t('text28')}</Label>
                   <Input
-                    id="saved-code"
-                    autoComplete="one-time-code"
+                    id="saved-password"
+                    type="password"
+                    autoComplete="current-password"
                     required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                   />
                 </>
-              )
-            )}
-            <Button type="submit" disabled={pending}>
-              {pending ? t('text30') : method === 'email' && !sent ? t('text31') : t('text32')}
-            </Button>
-            {!attempt && (
+              ) : (
+                sent && (
+                  <>
+                    <Label htmlFor="saved-code">{t('text29')}</Label>
+                    <Input
+                      id="saved-code"
+                      autoComplete="one-time-code"
+                      required
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                    />
+                  </>
+                )
+              )}
+              <Button type="submit" className="w-full" disabled={pending}>
+                {pending ? t('text30') : method === 'email' && !sent ? t('text31') : t('text32')}
+              </Button>
+              {!attempt && (
+                <Button
+                  type="button"
+                  className="w-full"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => setMethod(method === 'password' ? 'email' : 'password')}
+                >
+                  {method === 'password' ? t('text33') : t('text34')}
+                </Button>
+              )}
               <Button
                 type="button"
+                className="w-full"
                 variant="outline"
                 disabled={pending}
-                onClick={() => setMethod(method === 'password' ? 'email' : 'password')}
+                onClick={() =>
+                  void run(async () => {
+                    if (attempt) await browserLogins.cancel(attempt);
+                    const result = await begin('google');
+                    if (!result.url) throw Error('Missing provider URL');
+                    sessionStorage.setItem('kortix-login-attempt', result.attempt);
+                    sessionStorage.setItem(
+                      'kortix-login-return',
+                      JSON.stringify({
+                        attempt: result.attempt,
+                        destination: destination(),
+                        adoption: adoption.current,
+                      }),
+                    );
+                    window.location.assign(result.url);
+                  })
+                }
               >
-                {method === 'password' ? t('text33') : t('text34')}
+                {t('text35')}
               </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() =>
-                void run(async () => {
-                  if (attempt) await browserLogins.cancel(attempt);
-                  const result = await begin('google');
-                  if (!result.url) throw Error('Missing provider URL');
-                  sessionStorage.setItem('kortix-login-attempt', result.attempt);
-                  sessionStorage.setItem(
-                    'kortix-login-return',
-                    JSON.stringify({
-                      attempt: result.attempt,
-                      destination: destination(),
-                      adoption: adoption.current,
-                    }),
-                  );
-                  window.location.assign(result.url);
-                })
-              }
-            >
-              {t('text35')}
-            </Button>
-          </form>
-        )}
+            </form>
+          )}
         {mfa && (
           <form
             className="space-y-4"
@@ -552,20 +583,25 @@ export function BrowserAccountsPage({ callback = false }: { callback?: boolean }
         {candidate && (
           <>
             <p>{candidate}</p>
-            <Button disabled={pending || !!mfa} onClick={() => void run(confirm)}>
+            <Button
+              className="w-full"
+              disabled={pending || !!mfa}
+              onClick={() => void run(confirm)}
+            >
               {t('text39')}
             </Button>
           </>
         )}
         {(attempt || add) && !confirmedSlot && (
           <Button
+            className="w-full"
             variant="outline"
             disabled={pending}
             onClick={() =>
               void run(async () => {
                 if (attempt && !confirmedSlot) await browserLogins.cancel(attempt);
                 if ((needsAdoption || adoption.current) && !confirmedSlot) {
-                  window.location.assign(destination());
+                  window.location.assign(attemptDestination.current ?? destination());
                   return;
                 }
                 attemptDestination.current = null;

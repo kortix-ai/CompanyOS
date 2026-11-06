@@ -1215,7 +1215,7 @@ Actual local browser/HTTP/PostgreSQL evidence (ignored output files contain only
 - adoption-route-result.json: missing/foreign Origin 403, foreign slot 404, unrelated ordinary account unchanged, held-cookie retry 204, base plus six cookie variants expired.
 - adoption-recovery-proof-result.txt: uncertain saved A forces fresh A authentication. Wrong password preserves ordinary A. Successful recovery repairs A before retiring the old session and opening Add B.
 - adoption-token-failure-result.txt: a real token 503 stops Add B before ordinary retirement or additional-account authentication. Cookie and roster remain unchanged.
-- adoption-demo-result.json and multi-account-two-tabs.webm: both account rows, A tab, B tab, B removal, B unavailable with token 404, and A still mounted with token 200. Recording duration 49.7 seconds.
+- adoption-demo-result.json: DOM/network assertions cover both account rows, A/B tabs, scoped B removal, B token 404, and A still mounted with token 200. The 49.7-second multi-account-two-tabs.webm recording is NOT certified: round-3 review found it captures a static page. It is not video proof of those assertions.
 - adoption-rollback-result.json: a separate real flag-off API and Next proxy retain selected token 200, reject begin 503, hide Add, allow retirement 204 and remove-all. Both removed account APIs return 401; another device remains 200. An immediate browser navigation abort ends at the empty chooser; a settled bare /projects navigation reaches /auth?redirect=%2Fprojects. No ordinary auth cookie remains.
 - adoption-post-scope-result.txt: ordinary logout session API 401; two independent other-device APIs 200.
 
@@ -1224,3 +1224,30 @@ Harness corrections: direct fixture cross-origin URLs blocked ordinary auth read
 Still excluded: genuine external Google authorization, deployed edge/TLS acceptance, observed BFCache persisted=true, the combined delayed browser callback race, and native/side-panel acceptance. Keep the feature flag OFF. Production shippable: NOT YET. Final council round 3 follows this implementation. No push, PR, merge, deploy, or publication.
 
 Adoption-stage cleanup: remaining owned synthetic users 0. All seven owned browser sessions closed. Owned API, flag-off API, Next, auth proxy and auth container stopped. No cloud resources were created. Original research/plans are preserved.
+
+## Post-council-3 corrections and acceptance, 2026-11-07
+
+The review ledger records Opus code/UI 8/8, default-off approval, all F1–F8 corrections and U1–U6 changes. F9 remains the documented expired-credential limitation. No fourth Opus review will run. Sol round 3 remains pending after an option-validation failure created no review run.
+
+Checks and real surfaces:
+- Host named files (browser-login-adoption, browser-login-navigation, browser-lifecycle): 14 pass, 0 fail, 47 assertions, 147 ms. Routing and retirement eligibility regressions first fail, then pass.
+- unit-public-edge-rate-limit.test.ts through the isolated env launcher: 10 pass, 0 fail, 1,943 assertions, 117 ms. The new logout budget regression first fails with 30 instead of 300. The initial direct invocation lacked mandatory environment values; it is not the regression RED run.
+- Web/API typechecks exit 0. Changed-file web lint: 0 errors, 4 existing effect warnings. API limiter lint: 0 errors. Nine catalogs pass; learnings index and diff checks pass. SDK runtime source remains unchanged.
+- review-retirement-budget-result.json: actual Next/API forwards the handle on adoption logout with a 300 budget. All 35 held-cookie retirement retries return 204 and use handle-keyed user reads. An unrelated ordinary user receives no cookie expiry.
+- review-journey-result.txt: controlled correct-A Google callback Cancel preserves the original profile destination and ordinary cookie, then fresh A and B are both saved.
+- review-recovery-routing-result.txt: ordinary A remains on its verified ordinary profile while saved A is uncertain. Updated first-adoption heading, locked email and equal-width actions pass desktop/mobile light/dark overflow checks.
+- review-capacity-result.txt: direct add=1 at five shows a muted notice; sixth confirmation shows the capacity explanation and preserves five.
+- review-sso-ui-result.txt: controlled SAML metadata displays an explicit unsupported notice, omits the unusable form, preserves the cookie and allows cancellation. Genuine SAML remains excluded.
+- review-demo-result.json: same-context popup tabs carry distinct A/B subjects; removing B produces token 404 and its unavailable gate; A remains mounted with token 200. Associated agent-browser video is uncertified.
+- review-walkthrough-result.json: actual removal error copy/styling, successful B removal, gate logo/heading, retry and A token 200. Its agent-browser video also omits frames and is uncertified.
+- Playwright CLI fallback records a management walkthrough. Its last scripted assertion initially expected a settings heading after opening a Projects destination. A follow-up explicitly navigates A to its profile and verifies Settings. The raw 176.067-second recording is visually checked. account-management-demo.webm removes the idle interval; it is an edited one-page UI walkthrough. Two-tab assertions are independent evidence, not a claim that this video records tab switching.
+
+Still unverified: genuine Google, deployed edge/TLS, BFCache persisted=true, combined delayed browser callback race, native/side-panel, and a certified raw complete two-tab recording. Flag OFF. Production shippable NOT YET. No push, PR, merge, deploy or publication.
+
+Final post-council static/build result and cleanup:
+- The unconfigured shell build compiles successfully, then exits 1 during static export because SUPABASE_URL and BACKEND_URL are absent.
+- bun --no-env-file output/review-build.ts supplies the existing local public-runtime configuration and runs pnpm --filter ./apps/web build under Node 22: exit 0, including static generation and filesystem cache completion. The wrapper reads the public anon key without printing it.
+- No test suite or package-wide tests ran. Four named test files pass: host 14 and edge 10.
+- Common-egress budget proof uses a controlled forwarded address on Node auth requests. It does not claim deployed ingress verification.
+- All four owned agent-browser sessions and the owned Playwright recorder close. Remaining owned synthetic users: 0. All proof listeners and the owned auth container stop. No cloud resources are created. CLI artifacts move into ignored output. The transient auth fixture environment file is removed.
+- The 30.067-second account-management-demo.webm is an edited local UI walkthrough. The raw complete two-tab recording remains uncertified. Final Sol round 3 follows the source commit. Flag OFF; production shippable NOT YET.

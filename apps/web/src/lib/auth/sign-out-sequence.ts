@@ -161,9 +161,8 @@ export function __resetSignOutLatchForTests(): void {
  *     the problem — a timeout, or a settled `AuthRetryableFetchError` — because
  *     `scope: 'local'` makes the same request to the same host and can only
  *     fail the same way, one budget later. It is KEPT for any settled HTTP
- *     error: `scope: 'global'` revokes every refresh token for the user, which
- *     is a heavier server write than `scope: 'local'`, so a global 500 beside a
- *     local 200 is not hypothetical.
+ *     error: a bounded retry can recover a transient upstream failure.
+ *     Both attempts use local scope in the browser adapter.
  *  2. **The cleanup runs REGARDLESS.** `resetClientState()` is not conditional
  *     on the sign-out succeeding. The `SIGNED_OUT` listener in `AuthProvider`
  *     also resets, but it only fires when Supabase actually removed a session —
@@ -277,9 +276,8 @@ export async function runSignOut(
  * offline and DNS failures produce.
  *
  * Everything else — any settled HTTP error, and a throw — falls through to the
- * retry on purpose. `scope: 'global'` revokes every refresh token for the user
- * and is a heavier server write than `scope: 'local'`, so a global failure
- * beside a local success is a real outcome, not a theoretical one.
+ * retry on purpose. The browser adapter uses local scope for both attempts.
+ * A second bounded request can recover a transient upstream rejection.
  */
 function isNetworkClassFailure(outcome: BudgetOutcome<SignOutResult>): boolean {
   if (outcome.status === 'timeout') return true;

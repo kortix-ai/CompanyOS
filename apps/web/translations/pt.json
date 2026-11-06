@@ -26666,6 +26666,9 @@
     "identityUnavailable": "O início de sessão guardado está indisponível. Tente novamente ou escolha outra conta.",
     "retryIdentity": "Tentar novamente",
     "saveCurrentFirst": "Primeiro, entre novamente como {email} para salvar esta conta. Depois adicione outra conta. Cancelar mantém sua sessão atual.",
-    "currentAccountMismatch": "Esta é outra conta. Entre primeiro com sua conta atual. Sua sessão atual permanece inalterada."
+    "currentAccountMismatch": "Esta é outra conta. Entre primeiro com sua conta atual. Sua sessão atual permanece inalterada.",
+    "savingCurrentAccount": "Salve sua conta atual",
+    "adoptionUnavailable": "Não é possível salvar um acesso SSO existente ou uma conta sem email. Sua sessão atual permanece ativa.",
+    "removalFailed": "Não foi possível sair desta conta. Tente novamente."
   }
 }

@@ -26666,6 +26666,9 @@
     "identityUnavailable": "Saved sign-in is unavailable. Try again or choose another account.",
     "retryIdentity": "Try again",
     "saveCurrentFirst": "First, sign in again as {email} to save this account. Then add another account. Cancelling keeps your current sign-in.",
-    "currentAccountMismatch": "This is a different account. Sign in with your current account first. Your current sign-in is unchanged."
+    "currentAccountMismatch": "This is a different account. Sign in with your current account first. Your current sign-in is unchanged.",
+    "savingCurrentAccount": "Save your current account",
+    "adoptionUnavailable": "Saving an existing SSO sign-in or an account without email is unavailable. Your current sign-in stays active.",
+    "removalFailed": "Could not sign out of this account. Please retry."
   }
 }

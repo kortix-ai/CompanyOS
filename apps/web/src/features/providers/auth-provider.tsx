@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-html-link-for-pages -- Identity changes require a document load to discard private App Router caches. */
 'use client';
 import { useTranslations } from '@/i18n/use-translations';
 import { browserDocumentIdentity, selectedDocumentSession } from '@/lib/auth/browser-document';
@@ -6,6 +5,7 @@ import { createBrowserLifecycle } from '@/lib/auth/browser-lifecycle';
 import { stripBrowserSelector } from '@/lib/auth/browser-route';
 import { Button } from '@kortix/ui/button';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
+import { KortixLogo } from '@kortix/ui/kortix-logo';
 import Loading from '@kortix/ui/loading';
 
 import { setBootstrapAuthToken, setCachedAuthToken } from '@/lib/auth-token';
@@ -219,7 +219,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // (dev, 2026-09-17). See `lib/auth/session-rejection.ts`.
           if (userError && isDefinitiveSessionRejection(userError)) {
             console.warn('[AuthProvider] Stale session detected, signing out:', userError.message);
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
             if (!active) return;
             setBootstrapAuthToken(null);
             setCachedAuthToken(null);
@@ -366,6 +366,10 @@ export function BrowserIdentityGate({ children }: { children: ReactNode }) {
   return selectedDocument && (!user || isLoading) ? (
     <AuthFrame footerVariant="none">
       <div role="status" className="space-y-4 text-center text-sm">
+        <KortixLogo variant="icon" size={22} className="text-foreground mx-auto hidden md:block" />
+        <h1 className="text-foreground text-2xl font-medium tracking-tight text-balance">
+          {tAccounts('text1')}
+        </h1>
         {!bootstrapError && (
           <div className="flex justify-center">
             <Loading className="size-5" />

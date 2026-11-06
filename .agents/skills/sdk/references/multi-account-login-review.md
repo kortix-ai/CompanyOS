@@ -104,3 +104,20 @@ The original already-signed-in adoption gap is implemented and locally verified 
 Ordinary sign-out intentionally changes to local Supabase scope even with the feature off. This prevents global revocation of a concurrently created saved session. An outer capability check cannot eliminate that race. No design relies on a cross-tab acknowledgement to control old code.
 
 Round 3 must assess code and the captured chooser, gate, dialog, mobile/theme and first-adoption states. Genuine external Google, deployed TLS/edge, persisted BFCache, combined delayed callback and native acceptance remain excluded. Do not infer production approval from local results. Two providers are available; no third provider is claimed. No PR or publication is authorized.
+
+## Council round 3: Opus and subsequent corrections, 2026-11-07
+
+Claude Opus 5.5, high effort: APPROVE for default-off stage only. Code 8/10, UI 8/10 at e1a22d5e44. Read-only source and ten screenshots; video frames inspected. No suites or browsers run. The UI target of 9 from every reviewer was not met. The three-round cap prohibits another Opus round. Sol round 3 has not run: its first request rejected an unsupported option before creating a child. The retry uses supported reasoningEffort=high.
+
+Corrections after the Opus review:
+- F1: retirement forwards the vault cookie on authUser through its SDK fetch adapter and on recordPlatformLogout through supported headers. Ordinary server finalization also forwards cookies. POST auth/logout joins the verified handle budget. Real Next/API proof observes 300 on both paths and 35 retirement retries returning 204. The targeted edge regression first failed, then passed.
+- F2: a working ordinary identity follows only a matching saved slot that does not need sign-in. Otherwise legacy verification continues. New named regression and real ordinary A plus uncertain saved A proof pass.
+- F3: five-account notice remains visible on direct add=1. Confirmation capacity errors map to the capacity explanation, not the rate retry message. Real sixth-account confirmation preserves five slots and displays the correct explanation.
+- F4/F5: stale-session cleanup uses local scope. Sequence comments describe two local attempts with a bounded transient-failure retry.
+- F6: SSO/SAML and email-less initial adoption show an explicit unavailable notice and preserve the ordinary sign-in. These paths remain outside this release. A controlled SAML metadata UI check passes; no genuine SAML authorization is claimed.
+- F7: a named permission-decision test rejects unrelated and missing ordinary identities. The route still verifies the bearer separately.
+- F8: adoption Cancel retains its attempt-bound return destination after callback URL cleanup. Actual controlled expected-A callback → Cancel reaches the original profile page with the ordinary cookie intact.
+- F9 remains accepted and documented: expired ordinary credentials lose the cookie; upstream session revocation is not claimed.
+- U1–U6: full-width form actions, visibly disabled current email, adoption-specific heading, specific removal error in destructive styling, muted capacity notice, gate logo and heading. Updated desktop/mobile light/dark and dialog/gate screenshots are in ignored output.
+
+Video correction: the original 49.7-second video and subsequent agent-browser captures are uncertified. They freeze or omit transitions. Their DOM/network assertions remain separate evidence. A Playwright CLI recording captures the actual management form, modal failure, successful removal, remaining A, and A profile. The edited account-management-demo.webm removes an idle interval using raw ranges 0–26 and 172–176.067 seconds. Contact sheets were visually inspected. This is a single-page UI walkthrough, not a raw two-tab recording. No claim of certified full two-tab video remains.

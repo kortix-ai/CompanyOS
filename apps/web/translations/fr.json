@@ -26666,6 +26666,9 @@
     "identityUnavailable": "La connexion enregistrée est indisponible. Réessayez ou choisissez un autre compte.",
     "retryIdentity": "Réessayer",
     "saveCurrentFirst": "Reconnectez-vous d’abord avec {email} pour enregistrer ce compte. Ajoutez ensuite un autre compte. Annuler conserve votre connexion actuelle.",
-    "currentAccountMismatch": "Il s’agit d’un autre compte. Connectez-vous d’abord avec votre compte actuel. Votre connexion actuelle reste inchangée."
+    "currentAccountMismatch": "Il s’agit d’un autre compte. Connectez-vous d’abord avec votre compte actuel. Votre connexion actuelle reste inchangée.",
+    "savingCurrentAccount": "Enregistrer votre compte actuel",
+    "adoptionUnavailable": "L’enregistrement d’une connexion SSO existante ou d’un compte sans e-mail est indisponible. Votre connexion actuelle reste active.",
+    "removalFailed": "Impossible de déconnecter ce compte. Réessayez."
   }
 }

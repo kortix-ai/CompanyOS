@@ -74,3 +74,17 @@ It does not measure confirmed additions, switches, switch attempts, or switch re
 Do not report switch adoption from this event. No paired identities, email, slot, handle, or credential enters its properties.
 The approved proposal's switch metric remains a proposal. No rollout schedule or deployment exists.
 See the implementation progress ledger for exact local acceptance and remaining limits.
+
+## Initial adoption exclusions and session scope
+
+Saving an existing SSO/SAML sign-in or an account without email is unavailable in this release.
+The chooser displays this limit and keeps the current sign-in active. Do not enable the feature for deployments that require these adoption paths until they are implemented and verified.
+Security → Sign out other sessions remains the explicit way to end other sessions.
+Those sessions include saved sign-ins of the same account in this browser. Independent accounts are unaffected.
+
+## Release-note draft (unpublished)
+
+Keep up to five accounts saved in your browser and choose an account for each tab.
+When starting from an ordinary sign-in, authenticate that account once to save it before adding another.
+Browser sign-out ends the current session. Use Security → Sign out other sessions to end other sessions.
+Publish only after the provider, deployment and browser acceptance gates pass. The feature remains off.

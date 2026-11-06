@@ -26666,6 +26666,9 @@
     "identityUnavailable": "El inicio de sesión guardado no está disponible. Inténtalo de nuevo o elige otra cuenta.",
     "retryIdentity": "Reintentar",
     "saveCurrentFirst": "Primero, vuelve a iniciar sesión como {email} para guardar esta cuenta. Después añade otra cuenta. Si cancelas, tu sesión actual se conserva.",
-    "currentAccountMismatch": "Esta es otra cuenta. Inicia sesión primero con tu cuenta actual. Tu sesión actual no ha cambiado."
+    "currentAccountMismatch": "Esta es otra cuenta. Inicia sesión primero con tu cuenta actual. Tu sesión actual no ha cambiado.",
+    "savingCurrentAccount": "Guarda tu cuenta actual",
+    "adoptionUnavailable": "No se puede guardar una sesión SSO existente ni una cuenta sin correo. Tu sesión actual sigue activa.",
+    "removalFailed": "No se pudo cerrar la sesión de esta cuenta. Inténtalo de nuevo."
   }
 }

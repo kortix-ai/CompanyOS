@@ -26666,6 +26666,9 @@
     "identityUnavailable": "已保存的登录不可用。请重试或选择其他账号。",
     "retryIdentity": "重试",
     "saveCurrentFirst": "请先以 {email} 重新登录以保存此账号，然后添加其他账号。取消将保留当前登录。",
-    "currentAccountMismatch": "这是其他账号。请先使用当前账号登录。当前登录未发生变化。"
+    "currentAccountMismatch": "这是其他账号。请先使用当前账号登录。当前登录未发生变化。",
+    "savingCurrentAccount": "保存当前账号",
+    "adoptionUnavailable": "暂不支持保存现有的 SSO 登录或没有电子邮箱的账号。当前登录将保持有效。",
+    "removalFailed": "无法退出此账号，请重试。"
   }
 }

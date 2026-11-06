@@ -239,3 +239,18 @@ test('invented browser handles cannot shard the anonymous auth budget', async ()
     ).status,
   ).toBe(429);
 });
+
+test('verified browser logout uses its handle budget instead of the shared auth IP', async () => {
+  const { rememberBrowserBudgetHandle } = await import('../auth/browser-logins/budget');
+  const { hashBrowserHandle } = await import('../auth/browser-logins/credentials');
+  const handle = 'z'.repeat(43);
+  rememberBrowserBudgetHandle(hashBrowserHandle(handle));
+  const app = new Hono();
+  app.use('*', createPublicEdgeRateLimitMiddleware({ browserLoginCookieName: '__Host-kortix-vault' }));
+  app.post('/v1/auth/logout', (c) => c.json({ error: 'unauthorized' }, 401));
+  for (let i = 0; i < 35; i++) {
+    const response = await app.request('/v1/auth/logout', { method: 'POST', headers: { cookie: '__Host-kortix-vault=' + handle, 'X-Forwarded-For': '192.0.2.89' } });
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-RateLimit-Limit')).toBe('300');
+  }
+});

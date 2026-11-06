@@ -1,3 +1,4 @@
+import { legacySessionMatchesSavedUser } from '@/lib/auth/browser-login-adoption';
 import { sameOriginRequest } from '@/lib/auth/submit-auth';
 import { KORTIX_SUPABASE_AUTH_COOKIE } from '@/lib/supabase/constants';
 import { readUnverifiedSession } from '@/lib/supabase/session-cookie';
@@ -15,30 +16,29 @@ export async function POST(request: NextRequest) {
   const backendOrigin = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
   if (!frontendOrigin || !backendOrigin) return new NextResponse(null, { status: 503 });
   try {
-    const { slots } = await browserLogins.roster({
-      fetch: (input, init) =>
-        fetch(new URL(String(input), backendOrigin), {
-          ...init,
-          headers: {
-            ...Object.fromEntries(new Headers(init?.headers)),
-            cookie: request.headers.get('cookie') ?? '',
-          },
-          signal: AbortSignal.timeout(5000),
-          redirect: 'error',
-          cache: 'no-store',
-        }),
-    });
+    const cookie = request.headers.get('cookie') ?? '';
+    const forwardedFetch = (input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(new URL(String(input), backendOrigin), {
+        ...init,
+        headers: { ...Object.fromEntries(new Headers(init?.headers)), cookie },
+        signal: AbortSignal.timeout(5000),
+        redirect: 'error',
+        cache: 'no-store',
+      });
+    const { slots } = await browserLogins.roster({ fetch: forwardedFetch });
     const selected = slots.find((slot) => slot.slot === body.slot);
     if (!selected) return new NextResponse(null, { status: 404 });
     const hint = legacy.user as { id?: unknown } | undefined;
     // Removing B must never retire an unrelated legacy A session.
-    if (hint?.id !== selected.user_id) return new NextResponse(null, { status: 204 });
+    if (!legacySessionMatchesSavedUser(hint?.id, selected.user_id))
+      return new NextResponse(null, { status: 204 });
     if (typeof legacy.access_token !== 'string') return new NextResponse(null, { status: 409 });
     if (typeof legacy.expires_at === 'number' && legacy.expires_at > Date.now() / 1000) {
       let live = true;
       try {
         const { user } = await authUser(legacy.access_token, {
           backendUrl: backendOrigin,
+          fetch: forwardedFetch,
           signal: AbortSignal.timeout(5000),
         });
         if (user.id !== selected.user_id) return new NextResponse(null, { status: 409 });
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
           await recordPlatformLogout({
             backendUrl: backendOrigin,
             accessToken: legacy.access_token,
+            headers: { cookie },
             signal: AbortSignal.timeout(5000),
           });
         } catch (error) {

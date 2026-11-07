@@ -1,4 +1,4 @@
-import type { Context } from 'hono';
+import type { Context, TypedResponse } from 'hono';
 import { PROJECT_ACTIONS } from '../../../iam';
 import { assertAgentScope } from '../../../iam/agent-scope';
 import { callerKortixSessionId } from '../../../middleware/caller-session';
@@ -13,6 +13,15 @@ import {
 
 type LoadedProject = NonNullable<Awaited<ReturnType<typeof loadProjectForUser>>>;
 type VisibleSession = NonNullable<Awaited<ReturnType<typeof loadVisibleSession>>>;
+
+/**
+ * The gate's typed error response: exactly what `c.json({ error }, status)` returns, so a
+ * `createRoute` handler returns it directly — the routes declare these codes' envelopes
+ * (`errors(…, 403, 404, …)`), and `{ error: string }` fits the all-optional `ErrorEnvelope`.
+ */
+type LifecycleGateErrorResponse = Response &
+  (TypedResponse<{ error: string }, 403, 'json'> | TypedResponse<{ error: string }, 404, 'json'>);
+type RunnableGateErrorResponse = Response & TypedResponse<{ error: string }, 404, 'json'>;
 
 /** The shared UUID and project-load sleeve; route-specific gates stay at their original sites. */
 export async function resolveSessionBinding(
@@ -38,7 +47,10 @@ export async function loadLifecycleSession(
   sessionId: string,
   refusal: string,
   options: { rejectTombstoned: boolean },
-): Promise<{ kind: 'error'; response: Response } | { kind: 'ok'; visible: VisibleSession }> {
+): Promise<
+  | { kind: 'error'; response: LifecycleGateErrorResponse }
+  | { kind: 'ok'; visible: VisibleSession }
+> {
   const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
   if (!visible || (options.rejectTombstoned && sessionIsTombstoned(visible.row)))
     return { kind: 'error', response: c.json({ error: 'Not found' }, 404) };
@@ -53,7 +65,7 @@ export async function loadRunnableSession(
   projectId: string,
   sessionId: string,
 ): Promise<
-  | { kind: 'error'; response: Response }
+  | { kind: 'error'; response: RunnableGateErrorResponse }
   | { kind: 'ok'; loaded: LoadedProject; visible: VisibleSession }
 > {
   const loaded = await loadProjectForUser(c, projectId, 'session');

@@ -204,7 +204,7 @@ export function registerSessionRuntimeRoutes(): void {
         'Only the session owner or an account owner/admin can restart this session',
         { rejectTombstoned: true },
       );
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const { visible } = gate;
       const result = await restartSession({
         loaded,
@@ -261,7 +261,7 @@ export function registerSessionRuntimeRoutes(): void {
         'Only the session owner or an account owner/admin can continue this session',
         { rejectTombstoned: true },
       );
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const result = await recoverLostSession({ projectId, sessionId, accountId: loaded.row.accountId });
       if ('ok' in result) return c.json({ ok: true as const }, 200);
       return c.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, result.status);
@@ -316,7 +316,7 @@ export function registerSessionRuntimeRoutes(): void {
         'Only the session owner or an account owner/admin can stop this session',
         { rejectTombstoned: false },
       );
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
 
       // Read before the stop ends the turn: a background subagent's parent hears it.
       const parentNotice = await stoppedSubagentNotice(sessionId, callerKortixSessionId(c));

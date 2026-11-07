@@ -1098,7 +1098,7 @@ export function registerProjectSessionsRoutes(): void {
       'Only the session owner or a workspace manager can stop this session',
       { rejectTombstoned: false },
     );
-    if (gate.kind === 'error') return gate.response as never;
+    if (gate.kind === 'error') return gate.response;
     const { visible } = gate;
     // A repeated delete (the SDK retries one whose response was lost) answers
     // with the first stamp: the restore window never moves.
@@ -1153,7 +1153,7 @@ export function registerProjectSessionsRoutes(): void {
       'Only the session owner or a workspace manager can restore this session',
       { rejectTombstoned: false },
     );
-    if (gate.kind === 'error') return gate.response as never;
+    if (gate.kind === 'error') return gate.response;
 
     const result = await restoreSession({ projectId, sessionId, accountId: loaded.row.accountId });
     if ('error' in result) return c.json({ error: result.error, code: result.code }, result.status);

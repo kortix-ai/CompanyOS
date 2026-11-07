@@ -583,7 +583,7 @@ export function registerSessionPromptsRoutes(): void {
       // Floor 'session' — see the POST /prompts gate comment. Un-queuing your own
       // pending message is running the session, not editing the project.
       const gate = await loadRunnableSession(c, projectId, sessionId);
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const { loaded, visible } = gate;
 
       // The session AND inbox scopes are in the DELETE's own predicate, so
@@ -687,7 +687,7 @@ export function registerSessionPromptsRoutes(): void {
       // Floor 'session' — see the POST /prompts gate comment. Editing your own
       // queued message is running the session, not editing the project.
       const gate = await loadRunnableSession(c, projectId, sessionId);
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);
@@ -763,7 +763,7 @@ export function registerSessionPromptsRoutes(): void {
       // Floor 'session' — see the POST /prompts gate comment. "Retry"/"send now"
       // on your own queued message is running the session, not editing the project.
       const gate = await loadRunnableSession(c, projectId, sessionId);
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const { loaded, visible } = gate;
 
       // ONE primitive for "retry" and for "send now": both are the user pointing
@@ -823,7 +823,7 @@ export function registerSessionPromptsRoutes(): void {
       // Floor 'session' — see the POST /prompts gate comment. Stop/hold is the
       // counterpart of send; a member who can send must be able to hold.
       const gate = await loadRunnableSession(c, projectId, sessionId);
-      if (gate.kind === 'error') return gate.response as never;
+      if (gate.kind === 'error') return gate.response;
       const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);

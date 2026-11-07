@@ -450,6 +450,16 @@ export async function computeTemplateIdentity(
   const hashInputs = {
     dockerfile: userDockerfile,
     contextTreeOid: template.isShared ? 'platform-default' : `template:${template.slug}`,
+    // A project template's image name belongs to ITS project, never to another
+    // one: the provider namespace is one platform account, so a purely
+    // content-addressed name collides across tenants — one project's rebuild
+    // would delete and re-bake the image another project's sessions boot
+    // from, and a re-bake could carry a caller-chosen entrypoint the other
+    // tenant then boots (KRTX-4469). The shared default stays
+    // project-independent (its identity is a platform constant, so its name
+    // must not move with any tenant or entrypoint).
+    owner: template.isShared ? undefined : template.projectId ?? undefined,
+    entrypoint: template.entrypoint ?? undefined,
     spec: { cpu: template.cpu, memory: template.memoryGb, disk: template.diskGb },
     containerRuntime: template.containerRuntime,
     // In swapKey too: an agent swap patches its predecessor in the

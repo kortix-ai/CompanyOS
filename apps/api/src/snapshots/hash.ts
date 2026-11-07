@@ -48,6 +48,22 @@ export interface SnapshotHashInputs {
   /** `container_runtime: true` bakes kernel modules; hashed only when true. */
   containerRuntime?: boolean;
   /**
+   * Owning tenant of a project template's image (its projectId). The provider
+   * namespace is ONE platform account, so a purely content-addressed name
+   * collides across tenants: one project's rebuild would delete and re-bake
+   * the image another project's sessions boot from (KRTX-4469). Hashed only
+   * when set, so the shared platform default keeps its project-independent
+   * name.
+   */
+  owner?: string;
+  /**
+   * Custom entrypoint baked into the image at build time. Part of the identity:
+   * one name must never denote two different image contents, or a re-bake
+   * could swap image content under a live name (KRTX-4469). Hashed only when
+   * set.
+   */
+  entrypoint?: string;
+  /**
    * Provider region the image is built in, when it is not the home region.
    * Hashed only when set, so home-region images keep their hashes.
    */
@@ -95,6 +111,10 @@ export function computeSnapshotHash(inputs: SnapshotHashInputs): SnapshotHashRes
   if (specSegment) blob.push(`spec=${specSegment}`);
   if (inputs.containerRuntime) blob.push('container_runtime=1');
   if (inputs.region) blob.push(`region=${inputs.region}`);
+  if (inputs.owner) blob.push(`owner=${inputs.owner}`);
+  // Caller-controlled string: length-prefix it like the dockerfile, so an
+  // entrypoint containing a newline can't fake a segment boundary.
+  if (inputs.entrypoint) blob.push(`entrypoint=${inputs.entrypoint.length}:${inputs.entrypoint}`);
 
   const contentHash = createHash('sha256').update(blob.join('\n')).digest('hex');
   return {

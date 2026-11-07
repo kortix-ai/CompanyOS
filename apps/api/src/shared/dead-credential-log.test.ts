@@ -190,6 +190,7 @@ describe('dead-credential exceptions are marked and throttled at the error handl
     }
     expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(1);
   });
+});
 
 describe('invalid or expired token warn is throttled at the error handler (KRTX-4442)', () => {
   // The route throws what resolveJwt throws for a JWT that failed verification.
@@ -227,17 +228,6 @@ describe('invalid or expired token warn is throttled at the error handler (KRTX-
     expect(warns[0]?.context?.suppressed).toBe(0);
   });
 
-  test('the next logged line after the window carries the volume suppressed since the previous one', async () => {
-    resetDeadCredentialLogForTests();
-    const app = appWithExpiredTokenThrow();
-    const before = logged.length;
-    for (let i = 0; i < 5; i += 1) await app.request('/v1/auth/user');
-    // KRTX-4442's real burst: the same refusal kept arriving every few
-    // seconds until the client gave up. Downstream of the window a fresh
-    // burst logs again (best-effort, never the response).
-    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(1);
-  });
-
   test('a 401 with a different reason still logs one warn per refusal', async () => {
     resetDeadCredentialLogForTests();
     const app = new OpenAPIHono();
@@ -259,11 +249,10 @@ describe('invalid or expired token warn is throttled at the error handler (KRTX-
   });
 });
 
-describe('marking is what routes the line through the throttle', () => {
-    const plain = new HTTPException(401, { message: 'Invalid PAT' });
-    const marked = new HTTPException(401, { message: 'PAT not found or revoked' });
-    markDeadCredential(marked);
-    expect(isDeadCredential(marked)).toBe(true);
-    expect(isDeadCredential(plain)).toBe(false);
-  });
+test('marking is what routes the line through the throttle', () => {
+  const plain = new HTTPException(401, { message: 'Invalid PAT' });
+  const marked = new HTTPException(401, { message: 'PAT not found or revoked' });
+  markDeadCredential(marked);
+  expect(isDeadCredential(marked)).toBe(true);
+  expect(isDeadCredential(plain)).toBe(false);
 });

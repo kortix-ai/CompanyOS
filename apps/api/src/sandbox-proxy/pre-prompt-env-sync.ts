@@ -268,6 +268,49 @@ export function bodyWithoutPromptAgent(
 }
 
 /**
+ * One warn per minute per process for a refused prompt (KRTX-4016).
+ *
+ * A container-wide fork burst (`spawn EAGAIN` / `cannot fork() for
+ * remote-https`) refuses EVERY prompt for minutes, and the per-prompt warn
+ * became the log-pattern spike the issue files on — 52 identical lines in one
+ * 4-minute window, against a 4-line-per-hour baseline. The refusal response is
+ * unchanged (still 503 + `git_mirror_unavailable`, retryable); only the log
+ * dedupes, and the aggregate count keeps the burst measurable in one line.
+ *
+ * Emission is traffic-driven: the suppressed count covers everything since the
+ * previous line, whatever span that was, and flushes on the next refusal.
+ * ponytail: the final suppressed count flushes on the next refusal only; a
+ * wall-clock flush needs a module timer per burst — add one if the aggregate
+ * must be exact.
+ */
+const GRANT_REFUSAL_LOG_INTERVAL_MS = 60_000;
+let grantRefusalLastLoggedAt = 0;
+let grantRefusalsSinceLog = 0;
+
+export function logSecretGrantRefusal(
+  sandboxId: string,
+  port: number,
+  detail: string,
+  now = Date.now(),
+): void {
+  grantRefusalsSinceLog += 1;
+  if (now - grantRefusalLastLoggedAt < GRANT_REFUSAL_LOG_INTERVAL_MS) return;
+  const suppressed = grantRefusalsSinceLog - 1;
+  grantRefusalLastLoggedAt = now;
+  grantRefusalsSinceLog = 0;
+  console.warn(
+    `[PREVIEW] Secret grant refused prompt for ${sandboxId}:${port}: ${detail}` +
+      (suppressed > 0 ? ` (+${suppressed} suppressed since the previous line)` : ''),
+  );
+}
+
+/** Test-only: forget the refusal log rate-limit state. */
+export function __resetSecretGrantRefusalLogForTests(): void {
+  grantRefusalLastLoggedAt = 0;
+  grantRefusalsSinceLog = 0;
+}
+
+/**
  * Map a secret-grant failure from the pre-prompt env sync onto its response, or
  * null when the error is an ordinary env-sync failure the caller should handle
  * with its existing retry/502 logic.
@@ -486,9 +529,7 @@ export async function runPrePromptEnvSync(
     // rather than forwarding it against an env we can't vouch for.
     const grantResponse = secretGrantErrorResponse(err, origin);
     if (grantResponse) {
-      console.warn(
-        `[PREVIEW] Secret grant refused prompt for ${sandboxId}:${port}: ${errorMessage(err, 'secret grant error')}`,
-      );
+      logSecretGrantRefusal(sandboxId, port, errorMessage(err, 'secret grant error'));
       return grantResponse;
     }
     const message = errorMessage(err, 'project env sync failed');

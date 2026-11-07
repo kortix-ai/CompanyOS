@@ -118,7 +118,10 @@ export function kickProjectTemplatePrebuilds(
  */
 export async function deleteSandboxImage(
   project: GitBackedProject,
-  opts: { slug?: string; provider?: string; template?: ResolvedTemplate; snapshotName?: string } = {},
+  opts:
+    | { /** Exact provider identity to drop; its provider is required. */ snapshotName: string; provider: string; slug?: string }
+    | { slug?: string; provider?: string; template?: ResolvedTemplate }
+    = {},
 ): Promise<{ deleted: boolean; snapshotName: string; slug: string }> {
   // A caller holding the EXACT provider identity to drop (the session heal:
   // the snapshot name the session actually booted) passes `snapshotName`:
@@ -126,7 +129,7 @@ export async function deleteSandboxImage(
   // named `default-warm` that disappears mid-provision would otherwise fall
   // back to the shared platform default and make the heal delete the image
   // every tenant's next session boots from (KRTX-4465, Strix CWE-367).
-  if (opts.snapshotName) {
+  if ('snapshotName' in opts) {
     const directProvider = getSandboxProvider(opts.provider);
     const wasThere = await directProvider.getSnapshotState(opts.snapshotName);
     await directProvider.deleteSnapshot(opts.snapshotName);

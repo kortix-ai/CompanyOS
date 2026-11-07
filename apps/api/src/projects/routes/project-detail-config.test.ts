@@ -187,7 +187,7 @@ function getDetail() {
 }
 
 beforeEach(() => {
-  const { PROJECT_ACTIONS } = realIam as unknown as { PROJECT_ACTIONS: Record<string, string> };
+  const { PROJECT_ACTIONS } = realIam;
   savedSummary = null;
   gitFiles = [];
   gitListError = null;
@@ -314,7 +314,7 @@ describe('GET /:projectId/detail — characterization of the detail bundle', () 
 
   test('a caller without project.file.read loses the file list but keeps the config sections', async () => {
     gitFiles = filesFixture();
-    capMap[(realIam as unknown as { PROJECT_ACTIONS: Record<string, string> }).PROJECT_ACTIONS.PROJECT_FILE_READ] = false;
+    capMap[realIam.PROJECT_ACTIONS.PROJECT_FILE_READ] = false;
     const res = await getDetail();
     expect(res.status).toBe(200);
     const body = (await res.json()) as { config: Record<string, unknown>; file_count: number; files: unknown[] };
@@ -327,7 +327,7 @@ describe('GET /:projectId/detail — characterization of the detail bundle', () 
 
   test('a caller without project.skill.read gets an empty skills section, agents intact', async () => {
     gitFiles = filesFixture();
-    capMap[(realIam as unknown as { PROJECT_ACTIONS: Record<string, string> }).PROJECT_ACTIONS.PROJECT_SKILL_READ] = false;
+    capMap[realIam.PROJECT_ACTIONS.PROJECT_SKILL_READ] = false;
     const res = await getDetail();
     expect(res.status).toBe(200);
     const body = (await res.json()) as { config: Record<string, unknown> };

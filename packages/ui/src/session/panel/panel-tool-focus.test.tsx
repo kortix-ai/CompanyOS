@@ -1,8 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { ReactNode } from 'react';
-
-import { toolCallBlock, type Step, type ToolCallBlock } from '@kortix/sdk';
+import type { Step, ToolCallBlock } from '@kortix/sdk';
 
 /**
  * A tool call clicked in the chat must never open an empty right panel.
@@ -27,6 +26,7 @@ let m: {
   useKortixComputerStore: typeof import('../../internal/stores/kortix-computer-store').useKortixComputerStore;
   DetailLayer: typeof import('./easy/detail-view').DetailLayer;
   SessionDetailPanel: typeof import('./session-detail-panel').SessionDetailPanel;
+  toolCallBlock: typeof import('@kortix/sdk').toolCallBlock;
 };
 
 beforeAll(async () => {
@@ -40,6 +40,7 @@ beforeAll(async () => {
   }
   g.IS_REACT_ACT_ENVIRONMENT = true;
   const query = await import('@tanstack/react-query');
+  const sdk = await import('@kortix/sdk');
   m = {
     act: (await import('react')).act,
     createRoot: (await import('react-dom/client')).createRoot,
@@ -51,9 +52,22 @@ beforeAll(async () => {
     useKortixComputerStore: (await import('../../internal/stores/kortix-computer-store')).useKortixComputerStore,
     DetailLayer: (await import('./easy/detail-view')).DetailLayer,
     SessionDetailPanel: (await import('./session-detail-panel')).SessionDetailPanel,
+    toolCallBlock: sdk.toolCallBlock,
   };
   // The built-in tool renderers (GenericTool draws a `prune` call).
   await import('../tool/tools/register');
+  PRUNE = m.toolCallBlock({
+    type: 'tool',
+    tool: 'prune',
+    callID: 'call-prune',
+    state: { status: 'completed', input: {}, output: 'compacted 2 turns' },
+  } as never) as ToolCallBlock;
+  BASH = m.toolCallBlock({
+    type: 'tool',
+    tool: 'bash',
+    callID: 'call-bash',
+    state: { status: 'completed', input: { command: 'ls' }, output: 'files' },
+  } as never) as ToolCallBlock;
 });
 
 afterAll(() => {
@@ -76,19 +90,8 @@ afterEach(async () => {
 // row (GenericTool — no registered renderer, not in HIDDEN_TOOLS) and is
 // clickable; `groupSteps` drops it (`familyForTool === 'hidden'`), so the
 // step lookup in the handoff used to miss it.
-const PRUNE = toolCallBlock({
-  type: 'tool',
-  tool: 'prune',
-  callID: 'call-prune',
-  state: { status: 'completed', input: {}, output: 'compacted 2 turns' },
-} as never) as ToolCallBlock;
-
-const BASH = toolCallBlock({
-  type: 'tool',
-  tool: 'bash',
-  callID: 'call-bash',
-  state: { status: 'completed', input: { command: 'ls' }, output: 'files' },
-} as never) as ToolCallBlock;
+let PRUNE: ToolCallBlock;
+let BASH: ToolCallBlock;
 
 let root: ReturnType<typeof import('react-dom/client').createRoot> | null = null;
 const queryClient = () => new m.QueryClient({ defaultOptions: { queries: { retry: false } } });

@@ -113,7 +113,7 @@ function strippedKeys(rendered: string): string[] {
 }
 
 function renderMetadata(call: UpdateCall): string {
-  return renderSql(call.set.metadata);
+  return renderSql(call.set.metadata).replace(/\s+/g, ' ');
 }
 
 /** The pass's own write, not the loop's batch stamp (which strips nothing). */

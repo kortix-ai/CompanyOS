@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
-import { classifyPlatinumPollError, httpStatusFromMessage } from './platinum-poll-classify';
+import {
+  type PollErrorClass,
+  classifyPlatinumPollError,
+  httpStatusFromMessage,
+} from './platinum-poll-classify';
 import { findTemplateById, isPlatinumAuthFailure, type PlatinumClient } from './platinum-templates';
 import { isRetryableUploadError, templateInUseCount } from './platinum-upload';
 
@@ -45,7 +49,7 @@ function findingTemplateById(message: string): Promise<unknown> {
 const ROWS: Array<{
   name: string;
   message: string;
-  poll: string;
+  poll: PollErrorClass;
   findTemplate: 'null' | 'throws';
   authFailure: boolean;
   retryableUpload: boolean;
@@ -53,13 +57,15 @@ const ROWS: Array<{
 }> = [
   { name: '-> 404', message: M_404, poll: 'not-visible', findTemplate: 'null', authFailure: false, retryableUpload: false, inUseCount: null },
   // Compact `->404`: only the poll classifier (the canonical regex) reads it.
-  { name: '->404', message: M_404_COMPACT, poll: 'not-visible', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: null },
+  // Collapsed onto the canonical parser (KRTX-4468): `->404` now reads as a
+  // 404 on every site, like `-> 404` always did.
+  { name: '->404', message: M_404_COMPACT, poll: 'not-visible', findTemplate: 'null', authFailure: false, retryableUpload: false, inUseCount: null },
   { name: '-> 409 template_in_use', message: M_409, poll: 'unknown', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: 3 },
-  { name: '->409 template_in_use', message: M_409_COMPACT, poll: 'unknown', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: null },
+  { name: '->409 template_in_use', message: M_409_COMPACT, poll: 'unknown', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: 3 },
   { name: '-> 401', message: M_401, poll: 'auth-permanent', findTemplate: 'throws', authFailure: true, retryableUpload: false, inUseCount: null },
-  { name: '->401', message: M_401_COMPACT, poll: 'auth-permanent', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: null },
+  { name: '->401', message: M_401_COMPACT, poll: 'auth-permanent', findTemplate: 'throws', authFailure: true, retryableUpload: false, inUseCount: null },
   { name: '-> 408 idle', message: M_408, poll: 'transient-transport', findTemplate: 'throws', authFailure: false, retryableUpload: true, inUseCount: null },
-  { name: '->408 idle', message: M_408_COMPACT, poll: 'transient-transport', findTemplate: 'throws', authFailure: false, retryableUpload: false, inUseCount: null },
+  { name: '->408 idle', message: M_408_COMPACT, poll: 'transient-transport', findTemplate: 'throws', authFailure: false, retryableUpload: true, inUseCount: null },
 ];
 
 describe('platinum `-> <status>` decisions (characterization)', () => {

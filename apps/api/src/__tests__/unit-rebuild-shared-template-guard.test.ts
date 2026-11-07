@@ -121,6 +121,7 @@ mock.module('../shared/db', () => ({
 // before and after the guard.
 const { TemplateNotFoundError } = await import('../snapshots/templates');
 const actualBuilder = await import('../snapshots/builder');
+const kickCalls: Array<{ slug?: string; source?: string }> = [];
 mock.module('../snapshots/builder', () => ({
   ...actualBuilder,
   deleteSandboxImage: async (_project: unknown, opts: { slug?: string; provider?: string }) => {
@@ -130,12 +131,17 @@ mock.module('../snapshots/builder', () => ({
     return { deleted: true, snapshotName: `snap-${slug}`, slug };
   },
   kickPreBuild: () => {},
+  kickRoutedPreBuild: (_project: unknown, opts: { slug?: string; source?: string }) => {
+    kickCalls.push({ ...opts });
+  },
   templateBuildProviders: () => ['platinum'],
 }));
 
 const { projectsApp } = await import('../projects/lib/app');
 const { registerSandboxesRoutes } = await import('../projects/routes/sandboxes');
+const { registerSandboxTemplatesRoutes } = await import('../projects/routes/sandbox-templates');
 registerSandboxesRoutes();
+registerSandboxTemplatesRoutes();
 
 function createApp() {
   const app = new Hono();
@@ -160,6 +166,7 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
     platformAdmin = false;
     callerUserId = USER_ID;
     deleteCalls.length = 0;
+    kickCalls.length = 0;
   });
 
   test('a project-scoped caller rebuilding the implicit default gets 403 and the shared image is not deleted', async () => {
@@ -211,5 +218,39 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
     const body = await res.json();
     expect(body.code).toBe('TEMPLATE_NOT_FOUND');
     expect(deleteCalls).toHaveLength(0);
+  });
+});
+
+describe('POST /v1/projects/:id/sandbox-templates/:templateId/build refuses the shared platform image (KRTX-4465)', () => {
+  beforeEach(() => {
+    platformAdmin = false;
+    callerUserId = USER_ID;
+    deleteCalls.length = 0;
+    kickCalls.length = 0;
+  });
+
+  function build(templateId: string) {
+    return createApp().request(`/v1/projects/${PROJECT_ID}/sandbox-templates/${templateId}/build`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+  }
+
+  test('a project-scoped caller building the shared platform template gets 403 and no build starts', async () => {
+    const res = await build(SHARED_ROW.templateId);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe('TEMPLATE_SHARED');
+    expect(kickCalls).toHaveLength(0);
+  });
+
+  test('a platform admin keeps the ability to build the shared template', async () => {
+    platformAdmin = true;
+    const res = await build(SHARED_ROW.templateId);
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.slug).toBe('default');
+    expect(kickCalls).toHaveLength(1);
   });
 });

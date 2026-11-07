@@ -28,6 +28,7 @@ import {
   deadCredentialLogDecision,
   deadCredentialLogKey,
   isDeadCredential,
+  isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
@@ -360,7 +361,15 @@ function handleHttpException(
   // (first per window per normalized key, best-effort count in `suppressed`), never
   // the response; see shared/dead-credential-log.ts. Every other HTTPException
   // keeps its per-request line.
-  if (isDeadCredential(err)) {
+  //
+  // The invalid-or-expired-token 401 shares that treatment (KRTX-4442): one
+  // external client retrying an expired JWT put 78 warn lines on
+  // GET /v1/auth/user in one hour, every one a per-request line of the same
+  // signal. The credential CAN come back, so the response keeps its global
+  // body with no session_token_revoked code — only the line is throttled,
+  // first per window per normalized key, next line carrying `suppressed`.
+  // auth-audit's auditLoginFail at each throw site keeps exact accounting.
+  if (isDeadCredential(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.

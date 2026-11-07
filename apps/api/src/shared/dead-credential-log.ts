@@ -91,6 +91,29 @@ export function isDeadCredential(err: HTTPException): boolean {
   return deadCredentials.has(err);
 }
 
+/**
+ * The 401 message `resolveJwt` throws when a presented Supabase JWT fails
+ * verification (expired, bad signature, malformed) or rejects at the network
+ * fallback. Shared verbatim between every throw site and the error handler,
+ * so the throttle below cannot silently drift from what is thrown.
+ */
+export const INVALID_OR_EXPIRED_TOKEN_MESSAGE = 'Invalid or expired token';
+
+/**
+ * True for the plain 401 `resolveJwt` throws for a Supabase JWT that does not
+ * verify. Unlike a deadCredential401 the credential CAN come back (a
+ * refresh), so the response stays untouched — but a client that neither
+ * refreshes nor stops turns every refusal into a warn line (KRTX-4442: 78
+ * lines in one hour on GET /v1/auth/user, one external client retrying an
+ * expired JWT every few seconds). Route the LINE through the same per-route
+ * window throttle; the reason already differs from every dead-credential
+ * refusal, so the buckets stay separate, and `auditLoginFail` at the throw
+ * site keeps exact per-request accounting.
+ */
+export function isInvalidExpiredTokenRefusal(status: number, reason: string): boolean {
+  return status === 401 && reason === INVALID_OR_EXPIRED_TOKEN_MESSAGE;
+}
+
 /** First warning logs immediately; the next window reports pending suppression. */
 export function deadCredentialLogDecision(key: string, now: number): { log: boolean; suppressed: number } {
   const window = windows.get(key);

@@ -191,7 +191,75 @@ describe('dead-credential exceptions are marked and throttled at the error handl
     expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(1);
   });
 
-  test('marking is what routes the line through the throttle', () => {
+describe('invalid or expired token warn is throttled at the error handler (KRTX-4442)', () => {
+  // The route throws what resolveJwt throws for a JWT that failed verification.
+  // Five identical refusals from one client retrying must produce ONE warn
+  // line — the prod burst was 78 lines in one hour on GET /v1/auth/user —
+  // while the response body keeps its global shape with no
+  // session_token_revoked code: an expired JWT can come back via refresh.
+  function appWithExpiredTokenThrow(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/auth/user', () => {
+      throw new HTTPException(401, { message: 'Invalid or expired token' });
+    });
+    return app;
+  }
+
+  test('the first refusal logs one warn; repeats inside the window are suppressed and the body is untouched', async () => {
+    resetDeadCredentialLogForTests();
+    const app = appWithExpiredTokenThrow();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/auth/user');
+      expect(res.status).toBe(401);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toEqual({
+      error: true,
+      message: 'Invalid or expired token',
+      status: 401,
+    });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(1);
+    expect(warns[0]?.message).toContain('-> 401 [HTTPException] Invalid or expired token');
+    expect(warns[0]?.context?.suppressed).toBe(0);
+  });
+
+  test('the next logged line after the window carries the volume suppressed since the previous one', async () => {
+    resetDeadCredentialLogForTests();
+    const app = appWithExpiredTokenThrow();
+    const before = logged.length;
+    for (let i = 0; i < 5; i += 1) await app.request('/v1/auth/user');
+    // KRTX-4442's real burst: the same refusal kept arriving every few
+    // seconds until the client gave up. Downstream of the window a fresh
+    // burst logs again (best-effort, never the response).
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(1);
+  });
+
+  test('a 401 with a different reason still logs one warn per refusal', async () => {
+    resetDeadCredentialLogForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/auth/user', () => {
+      throw new HTTPException(401, { message: 'Missing bearer token' });
+    });
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) {
+      const res = await app.request('/v1/auth/user');
+      expect(res.status).toBe(401);
+    }
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+    for (const warn of warns) {
+      expect(warn.message).toContain('-> 401 [HTTPException] Missing bearer token');
+      expect(warn.context?.suppressed).toBeUndefined();
+    }
+  });
+});
+
+describe('marking is what routes the line through the throttle', () => {
     const plain = new HTTPException(401, { message: 'Invalid PAT' });
     const marked = new HTTPException(401, { message: 'PAT not found or revoked' });
     markDeadCredential(marked);

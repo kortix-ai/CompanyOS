@@ -1,8 +1,8 @@
 import { afterEach, expect, jest, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import React, { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { useTheme, type ThemeChoice } from '../src/theme';
+import { type Root, createRoot } from 'react-dom/client';
+import { type ThemeChoice, useTheme } from '../src/theme';
 
 const window = new Window();
 Object.defineProperties(globalThis, {
@@ -28,7 +28,9 @@ afterEach(() => {
 const KEY = 'wl-shared_theme_test';
 
 /** Mounts a probe that reads the hook and a button that flips the choice. */
-async function mountProbe(defaultChoice: ThemeChoice): Promise<{ label: HTMLElement; flip: HTMLButtonElement }> {
+async function mountProbe(
+  defaultChoice: ThemeChoice,
+): Promise<{ label: HTMLElement; flip: HTMLButtonElement }> {
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -37,15 +39,15 @@ async function mountProbe(defaultChoice: ThemeChoice): Promise<{ label: HTMLElem
     return (
       <div>
         <span data-choice>{choice}</span>
-        <button onClick={() => setChoice('dark')}>flip</button>
+        <button type="button" onClick={() => setChoice('dark')}>flip</button>
       </div>
     );
   }
   await act(async () => root?.render(<Probe />));
-  return {
-    label: host.querySelector('[data-choice]')!,
-    flip: host.querySelector('button')!,
-  };
+  const label = host.querySelector<HTMLElement>('[data-choice]');
+  const flip = host.querySelector<HTMLButtonElement>('button');
+  if (!label || !flip) throw new Error('probe did not render');
+  return { label, flip };
 }
 
 test('the stored choice wins over the default once the effect runs', async () => {

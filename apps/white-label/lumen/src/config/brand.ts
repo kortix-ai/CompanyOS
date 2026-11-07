@@ -24,4 +24,3 @@ export type Brand = typeof BRAND;
 export function brandProviderLabel(model: { providerID: string; providerName: string }): string {
   return model.providerID === 'kortix' ? BRAND.name : model.providerName;
 }
-

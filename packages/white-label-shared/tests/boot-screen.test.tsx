@@ -1,7 +1,8 @@
 import { afterEach, expect, jest, test } from 'bun:test';
 import { Window } from 'happy-dom';
-import React, { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type React from 'react';
+import { act } from 'react';
+import { type Root, createRoot } from 'react-dom/client';
 import { BootScreen } from '../src/boot-screen';
 
 const window = new Window();

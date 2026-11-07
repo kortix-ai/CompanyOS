@@ -2281,6 +2281,46 @@ describe('pi subagents extension', () => {
     }
   })
 
+  test('subagent_type and an inline agent spec are mutually exclusive: the call is refused before any child', async () => {
+    // The empty inline spec is the exact shape a router over the wire sent beside its subagent_type:
+    // the inline spec silently displaced the named agent and the child ran as an unnamed inline agent.
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname
+        if (req.method === 'POST' && path === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+          return Response.json({ session_id: 'refusal-child' }, { status: 201 })
+        }
+        if (req.method === 'GET' && path.startsWith('/v1/workspaces/proj-pi-test/sessions')) return Response.json([])
+        return new Response('not found', { status: 404 })
+      },
+    })
+    try {
+      const r = await boot({
+        script: [
+          TASK({ description: 'Ship it', subagent_type: 'general', agent: { instructions: '', tools: [], model: '', description: '' } }),
+          TASK({ description: 'Ship it too', subagent_type: 'general', agent: { instructions: 'You do extra work.' } }),
+          { text: 'parent done' },
+        ],
+        env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1` },
+      })
+      await promptAndSettle(r, 'delegate with a named type and an inline spec')
+      expect(creates).toEqual([])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const parts = toolParts(page, 'task')
+      expect(parts).toHaveLength(2)
+      for (const part of parts) {
+        expect(part.state.status).toBe('error')
+        expect(part.state.error).toContain('cannot combine')
+        expect(part.state.error).toContain('"general"')
+      }
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('a router (kortix.front) has only agent, send_message and task_stop; it routes each task to a roster agent or My Kortix, as a named background worker, not narrowed', async () => {
     const creates: Array<Record<string, any>> = []
     let detailReads = 0

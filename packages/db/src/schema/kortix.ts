@@ -5019,18 +5019,21 @@ export const gatewayRequestLogs = kortixSchema.table(
     // 20261008012757000_gateway_logs_account_time_covering.concurrent.ts.
     index('idx_gateway_logs_account_time_covering').on(table.accountId, table.createdAt),
     // Covering index for the project-led gateway aggregates (gateway budgets
-    // memberRows/projectAgg + budgetSpends, gateway overview, gateway series):
-    // index-only scan by (project_id, created_at) that never touches the wide
-    // request/response jsonb heap rows. Built CONCURRENTLY with INCLUDE (ok,
-    // billing_mode, final_cost_precise, upstream_cost_precise, input_tokens,
-    // output_tokens, latency_ms, actor_user_id, provider, resolved_model,
-    // cached_tokens, cache_write_tokens, metadata) — not expressible in
-    // drizzle-orm 0.45's index builder; the schema contract checks relation
-    // + uniqueness only, same pattern as idx_gateway_logs_account_time_covering
-    // — by 20261107145000000_gateway_logs_project_time_covering_v2.concurrent.ts
-    // (KRTX-4022: the last five INCLUDE columns are what the usage-value
-    // aggregate of KRTX-3560 reads; without them the series is heap-bound).
-    index('idx_gateway_logs_project_time_covering_v2').on(table.projectId, table.createdAt),
+    // memberRows/projectAgg + budgetSpends, gateway overview, gateway series,
+    // gateway sources): index-only scan by (project_id, created_at) that never
+    // touches the wide request/response jsonb heap rows. Built CONCURRENTLY
+    // with INCLUDE (session_id, account_id, ok, billing_mode,
+    // final_cost_precise, upstream_cost_precise, input_tokens, output_tokens,
+    // latency_ms, actor_user_id, provider, resolved_model, cached_tokens,
+    // cache_write_tokens, metadata) — not expressible in drizzle-orm 0.45's
+    // index builder; the schema contract checks relation + uniqueness only,
+    // same pattern as idx_gateway_logs_account_time_covering — by
+    // 20261107164457464_gateway_logs_project_time_covering_v3.concurrent.ts
+    // (KRTX-4022: the value columns are what the usage-value aggregate of
+    // KRTX-3560 reads; KRTX-4449: session_id and account_id are what the
+    // sources aggregate's attribution join and CostScope predicate read;
+    // without them every window row is still heap-fetched).
+    index('idx_gateway_logs_project_time_covering_v3').on(table.projectId, table.createdAt),
   ],
 );
 

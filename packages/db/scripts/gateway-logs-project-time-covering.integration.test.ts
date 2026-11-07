@@ -11,9 +11,16 @@
  * plans become index-only.
  *
  * The assertion reads the live catalog and the live planner (EXPLAIN), never
- * source text: the budgets aggregate's exact shape must plan as an Index Only
- * Scan over the covering index, and dropping the index must flip the plan
- * back to the heap path — so the test fails without the migration.
+ * source text: each aggregate's exact shape must plan index-only (no heap
+ * fetch), and where the column set forces the covering project index (series
+ * needs latency_ms, sources need metadata — the account covering index carries
+ * neither) the plan must name it. The budgets aggregate reads only columns
+ * BOTH covering indexes carry (account and project), so which index-only
+ * plan it gets is a cost race on this single-project fixture (2026-11-07:
+ * widening v2 to v3 flipped the fixture's budgets plan to the account index)
+ * — the invariant there is index-only, not the index name. Dropping the
+ * project index must flip the series plan back to the heap path — so the
+ * test fails without the migration.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import pg from 'pg';
@@ -21,7 +28,7 @@ import pg from 'pg';
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
 
-const INDEX = 'idx_gateway_logs_project_time_covering_v2';
+const INDEX = 'idx_gateway_logs_project_time_covering_v3';
 
 /** The projectAgg statement of GET /:projectId/gateway/budgets (gateway-spend.ts),
  *  with the same money expression llm-spend.ts composes. */
@@ -35,6 +42,43 @@ const BUDGETS_PROJECT_AGG = `
          ), 0)::float8
     from kortix.gateway_request_logs
    where project_id = $1 and created_at >= date_trunc('month', now())
+`;
+
+/** The gateway sources shape (listProjectGatewaySourceSpend): the same scan
+ *  plus the session attribution join, a distinct-session count and the
+ *  CostScope OR arm — the columns that kept it heap-bound before v3. */
+const SOURCES = `
+  select coalesce(
+           case when ps.initiator_type::text = 'trigger' then ps.initiator_id end,
+           case when parent.initiator_type::text = 'trigger' then parent.initiator_id end,
+           ps.initiator_type::text,
+           case when l.session_id is null then 'unattributed' end,
+           'unknown'
+         ) as source,
+         count(distinct l.session_id)::int,
+         count(*)::int,
+         count(*) filter (where not l.ok)::int,
+         coalesce(sum(
+           l.final_cost_precise + case when coalesce(
+             l.billing_mode,
+             case when l.final_cost_precise > 0 then 'credits' else 'none' end
+           ) = 'credits' then 0 else l.upstream_cost_precise end
+         ), 0)::float8,
+         coalesce(sum(case when l.provider in ('openai', 'openai-codex')
+                              and l.resolved_model = 'gpt-6.1-sol' and l.ok
+                              and coalesce(l.metadata->>'usageEstimated', 'false') <> 'true'
+                           then l.input_tokens + l.output_tokens
+                           + l.cached_tokens + l.cache_write_tokens end), 0)::float8
+    from kortix.gateway_request_logs l
+    left join kortix.project_sessions ps
+           on ps.session_id = l.session_id and ps.project_id = l.project_id
+    left join kortix.project_sessions parent
+           on parent.session_id = ps.parent_session_id
+   where l.project_id = $1
+     and (l.account_id = $2 or l.session_id in (
+            select s.session_id from kortix.project_sessions s where s.project_id = $1))
+     and l.created_at >= now() - make_interval(hours => 24)
+   group by 1
 `;
 
 /** The gateway series shape: same scan, tokens + errors + latency percentiles. */
@@ -58,11 +102,9 @@ suite('gateway_request_logs project aggregates are index-only', () => {
   const projectId = crypto.randomUUID();
   const accountId = crypto.randomUUID();
 
-  const planOf = async (sql: string): Promise<string> => {
-    const { rows } = await client.query<{ plan: unknown[] }>(`explain (costs off) ${sql}`, [
-      projectId,
-    ]);
-    return rows.map((r) => String(r["QUERY PLAN"])).join("\n");
+  const planOf = async (sql: string, params: unknown[] = [projectId]): Promise<string> => {
+    const { rows } = await client.query<{ plan: unknown[] }>(`explain (costs off) ${sql}`, params);
+    return rows.map((r) => String(r['QUERY PLAN'])).join('\n');
   };
 
   beforeAll(async () => {
@@ -70,7 +112,10 @@ suite('gateway_request_logs project aggregates are index-only', () => {
     superuser = new pg.Client({ connectionString: process.env.TEST_DATABASE_SUPERUSER_URL });
     await client.connect();
     await superuser.connect();
-    await client.query('insert into kortix.accounts (account_id, name) values ($1, $2) on conflict do nothing', [accountId, accountId]);
+    await client.query(
+      'insert into kortix.accounts (account_id, name) values ($1, $2) on conflict do nothing',
+      [accountId, accountId],
+    );
     await client.query(
       `insert into kortix.projects (project_id, account_id, name, repo_url) values ($1, $2, 'covering-index-test', 'https://example.test/covering.git')
        on conflict (project_id) do nothing`,
@@ -115,9 +160,9 @@ suite('gateway_request_logs project aggregates are index-only', () => {
     await client
       .query('delete from kortix.gateway_request_logs where project_id = $1', [projectId])
       .catch(() => undefined);
-    await client.query('delete from kortix.projects where project_id = $1', [projectId]).catch(
-      () => undefined,
-    );
+    await client
+      .query('delete from kortix.projects where project_id = $1', [projectId])
+      .catch(() => undefined);
     await client
       .query('delete from kortix.accounts where account_id = $1', [accountId])
       .catch(() => undefined);
@@ -125,14 +170,23 @@ suite('gateway_request_logs project aggregates are index-only', () => {
     await superuser.end();
   });
 
-  test('the budgets project aggregate plans as an index-only scan of the covering index', async () => {
+  test('the budgets project aggregate plans as an index-only scan (no heap fetch)', async () => {
     const plan = await planOf(BUDGETS_PROJECT_AGG);
+    // The account covering index also serves this aggregate's columns, so
+    // WHICH covering index wins is a planner cost race (see the file
+    // docstring); a heap fetch is the regression this asserts against.
     expect(plan).toContain('Index Only Scan');
-    expect(plan).toContain(INDEX);
+    expect(plan).not.toContain('Heap Scan');
   });
 
   test('the gateway series plans as an index-only scan too (needs latency_ms carried)', async () => {
     const plan = await planOf(SERIES);
+    expect(plan).toContain('Index Only Scan');
+    expect(plan).toContain(INDEX);
+  });
+
+  test('the gateway sources aggregate plans index-only over the join too (KRTX-4449: session_id + account_id carried)', async () => {
+    const plan = await planOf(SOURCES, [projectId, accountId]);
     expect(plan).toContain('Index Only Scan');
     expect(plan).toContain(INDEX);
   });
@@ -149,6 +203,10 @@ suite('gateway_request_logs project aggregates are index-only', () => {
     expect(rows[0]).toMatchObject({ indisvalid: true });
     expect(def).toContain('ON kortix.gateway_request_logs USING btree (project_id, created_at)');
     for (const column of [
+      // KRTX-4449: read by the sources aggregate's attribution join, its
+      // distinct-session count and its CostScope predicate.
+      'session_id',
+      'account_id',
       'ok',
       'billing_mode',
       'final_cost_precise',
@@ -170,8 +228,11 @@ suite('gateway_request_logs project aggregates are index-only', () => {
 
   test('dropping the index flips the plan back to the heap path (the test is not vacuous)', async () => {
     await superuser.query(`drop index if exists kortix.${INDEX}`);
-    const plan = await planOf(BUDGETS_PROJECT_AGG);
+    // The series shape is the deterministic probe: latency_ms lives only in
+    // the covering project index, so without it the plan must heap-fetch.
+    const plan = await planOf(SERIES);
     expect(plan).not.toContain(INDEX);
+    expect(plan).not.toContain('Index Only Scan');
     // Rebuild with the migration's own statement, so the test also proves the
     // migration's SQL is what creates the index the other tests assert on.
     await superuser.query(`set lock_timeout = '30s'`);
@@ -179,10 +240,11 @@ suite('gateway_request_logs project aggregates are index-only', () => {
     await superuser.query(`
       create index if not exists ${INDEX}
         on kortix.gateway_request_logs (project_id, created_at) include (
+          session_id, account_id,
           ok, billing_mode, final_cost_precise, upstream_cost_precise,
           input_tokens, output_tokens, latency_ms, actor_user_id,
           provider, resolved_model, cached_tokens, cache_write_tokens, metadata
         )`);
-    expect(await planOf(BUDGETS_PROJECT_AGG)).toContain(INDEX);
+    expect(await planOf(SERIES)).toContain(INDEX);
   });
 });

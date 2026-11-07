@@ -3825,7 +3825,7 @@ Install it from npm with `npm i @kortix/ui @kortix/sdk`, the same version of
 each. Never copy component source into the App. A Vite App without Tailwind
 imports `@kortix/ui/styles.css` once in `src/main.tsx`. A Tailwind v4 App
 imports `@import 'tailwindcss'; @import '@kortix/ui/tailwind.css';` in its main
-CSS. Compose `Card`, `Table`, `Modal`, `Badge` and `InfoBanner` before you write
+CSS. Compose `Card`, `Table`, `Modal`, `Badge` and `Alert` before you write
 a component, and re-theme with CSS variables. A chat view of a session is
 `SessionThread` from `@kortix/ui/session`.
 
@@ -7819,7 +7819,7 @@ Colors take any CSS color. Defaults are light / dark.
 | `hover`, `active` | `--hover`, `--active` | Translucent hover and pressed tints | ink 4.5% / 7.5%, white 6% / 10% |
 | `selection`, `selectionForeground` | `--selection`, `--selection-foreground` | Text selection | `primary` at 72% |
 | `sidebar`, `sidebarForeground`, `sidebarPrimary`, `sidebarPrimaryForeground`, `sidebarAccent`, `sidebarAccentForeground`, `sidebarRow`, `sidebarRowControl`, `sidebarBorder`, `sidebarRing` | `--sidebar-*` | The sidebar. `sidebar` also fills `Dialog`, `AlertDialog`, `Modal` and `Sheet`. | Kortix surface values |
-| `blue` | `--kortix-blue` | The accent: a checked `Switch`, `Checkbox` or `RadioGroup`, the `brand` and `blue` `Button` variants, info `Badge`, `InfoBanner` | `#2b91f7` |
+| `blue` | `--kortix-blue` | The accent: a checked `Switch`, `Checkbox` or `RadioGroup`, the `brand` and `blue` `Button` variants, info `Badge`, `Alert` | `#2b91f7` |
 | `green`, `orange`, `yellow`, `red`, `purple` | `--kortix-*` | Status tones. Keep their meaning. | `#199338`, `#d18b19`, `#cca300`, `#f14b4c`, `#ab80d6` |
 | `brand` | `--kortix-base` | The Kortix base accent | follows `ring` |
 | `chart1` … `chart5` | `--chart-1` … `--chart-5` | Chart series | an amber ramp |
@@ -7868,7 +7868,7 @@ The root `@kortix/ui` exports the primitives with their parts: `Button`, `Badge`
 | Search | `InputGroupSearch`, `PageSearchBar`, `Command` | `input-group`, `page-search-bar`, `command` |
 | Overlays | `Modal`, `Sheet`, `Popover`, `DropdownMenu`, `Hint` | `modal`, `sheet`, `popover`, `dropdown-menu`, `hint` |
 | Confirm | `ConfirmDialog`, `AlertDialog` | `confirm-dialog`, `alert-dialog` |
-| Feedback | `InfoBanner`, the toast helpers, `Loading`, `Skeleton`, `Progress` | `info-banner`, `toast`, `loading`, `skeleton`, `progress` |
+| Feedback | `Alert`, the toast helpers, `Loading`, `Skeleton`, `Progress` | `alert`, `toast`, `loading`, `skeleton`, `progress` |
 | Status | `Badge`, `CountBadge`, `StatusBadge` | `badge`, `count-badge`, `status` |
 | Layout | `Card`, `Section`, `Tabs`, `Disclosure`, `Accordion`, `Separator`, `ScrollArea`, `Sidebar` | `card`, `section`, `tabs`, `disclosure`, `accordion`, `separator`, `scroll-area`, `sidebar` |
 | Data | `Table`, `DefinitionList`, `InlineMeta`, `Empty`, `Calendar` | `table`, `definition-list`, `inline-meta`, `empty`, `calendar` |

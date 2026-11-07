@@ -68,6 +68,7 @@ import {
 } from './session-sandbox-metadata';
 import { parseActualRuntime, UNREPORTED_ACTUAL_RUNTIME, type ActualRuntimeDocument } from '../../runtime-convergence/actual';
 import { projectsView } from '../../workspaces/rows';
+import { errorMessage } from '../../shared/error-message';
 
 /** A competing refresh is a fetch plus a fast-forward: seconds, not minutes. */
 const REFRESH_BUSY_RETRIES = 5;
@@ -859,7 +860,7 @@ export async function reloadSessionConfig(input: {
         .catch((error) =>
           console.warn(
             `[session-reload] orphaned-turn repair failed for ${input.sessionId}:`,
-            error instanceof Error ? error.message : String(error),
+            errorMessage(error),
           ),
         );
     }

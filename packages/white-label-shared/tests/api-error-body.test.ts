@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { serverErrorBody } from '../../src/lib/api-error-body';
+import { serverErrorBody } from '../src/api-error-body';
 
 describe('serverErrorBody', () => {
   test('reads the parsed body the SDK puts on `data`', () => {

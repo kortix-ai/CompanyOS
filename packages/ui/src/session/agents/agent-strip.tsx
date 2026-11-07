@@ -6,7 +6,7 @@ import { CountBadge } from '../../primitives/count-badge';
 import { Hint } from '../../primitives/hint';
 import Loading from '../../primitives/loading';
 import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popover';
-import { Tabs, TabsContent, TabsListCompact, TabsTriggerCompact } from '../../primitives/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import { agentDisplayName } from '../../internal/components/agent-mark';
@@ -292,13 +292,13 @@ export function AgentsPanel({ projectId, sessionId, agents, team, runs, tasks, o
         <TasksPanel tasks={tasks} />
       </TabsContent>
       <div className="border-t p-1">
-        <TabsListCompact animate="none" className="w-full">
-          <TabsTriggerCompact value="agents">{t('label')}</TabsTriggerCompact>
-          <TabsTriggerCompact value="tasks" className="gap-1.5">
+        <TabsList size="xs" animate="none" className="w-full">
+          <TabsTrigger value="agents">{t('label')}</TabsTrigger>
+          <TabsTrigger value="tasks" className="gap-1.5">
             {t('tasks')}
             {openTasks > 0 && <CountBadge count={openTasks} />}
-          </TabsTriggerCompact>
-        </TabsListCompact>
+          </TabsTrigger>
+        </TabsList>
       </div>
     </Tabs>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { successToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import type { SessionScope } from '@kortix/sdk';
@@ -541,9 +541,9 @@ export function SessionOverridesToolbar({
     initialized && scopeDraftSignature(draft) !== scopeDraftSignature(draftState.base);
   const chatInputDirty = scopeDirty || hasProviderChanges;
   const chatInputNotice = retroactive === false ? (
-    <InfoBanner tone="warning" icon={TriangleAlert} title={tI18nComplete.raw('texta6cd531093d4')}>
+    <BannerAlert variant="warning" ><BannerAlertMedia><TriangleAlert /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('texta6cd531093d4')}</BannerAlertTitle><BannerAlertDescription>
       {tI18nComplete.raw('text54a4e6b3594a')}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   ) : null;
   const chatInputPendingNote = hasProviderChanges ? tPooled('unsavedChanges') : undefined;
   const chatInputSave = useCallback(() => handleSave(), [handleSave]);
@@ -617,13 +617,9 @@ export function SessionOverridesToolbar({
       hideSave={!rows.some((row) => row.id === 'secrets' || row.id === 'provider-keys')}
       notice={
         retroactive === false ? (
-          <InfoBanner
-            tone="warning"
-            icon={TriangleAlert}
-            title={tI18nComplete.raw('texta6cd531093d4')}
-          >
+          <BannerAlert variant="warning" ><BannerAlertMedia><TriangleAlert /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('texta6cd531093d4')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nComplete.raw('text54a4e6b3594a')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : null
       }
       onSave={handleSave}

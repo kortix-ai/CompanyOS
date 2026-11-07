@@ -3,7 +3,7 @@ import type { SessionAudit } from '@kortix/sdk';
 import {
   approvalFailure,
   sessionApprovalsView,
-} from '../../src/components/workbench/approvals-model';
+} from '../src/approvals-model';
 
 type Action = SessionAudit['actions'][number];
 

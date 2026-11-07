@@ -5,11 +5,12 @@
  *
  * - READ is the per-SESSION audit (`GET /projects/{id}/sessions/{sid}/audit`),
  *   not the project-wide approval inbox. The inbox is manager-scoped and
- *   returns every end-user's pending gate; in wrapper mode ONE operator
- *   credential makes every call, so that inbox would hand this browser other
- *   Lumen Workspace users' execution ids — and an execution id is all the resolve route
- *   needs. The per-session audit is bounded to the session already on screen,
- *   so it is the only read that cannot leak across end-users.
+ *   returns every end-user's pending gate; the browser holds ONE credential
+ *   for many end-users (the firm's service account, or the wrapper's operator
+ *   credential), so that inbox would hand this browser other end-users'
+ *   execution ids — and an execution id is all the resolve route needs. The
+ *   per-session audit is bounded to the session already on screen, so it is
+ *   the only read that cannot leak across end-users.
  * - RESOLVE is `POST /projects/{id}/approvals/{executionId}` — the only route
  *   that decides a gate.
  *
@@ -19,7 +20,7 @@
  * session did nothing else", so the panel has to be told which it is looking at.
  */
 
-import { serverErrorBody } from '@/lib/api-error-body';
+import { serverErrorBody } from './api-error-body';
 import type { SessionAudit } from '@kortix/sdk';
 
 type AuditAction = SessionAudit['actions'][number];

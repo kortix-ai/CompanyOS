@@ -37,12 +37,21 @@ export async function alreadyHandled(eventId: string | undefined): Promise<boole
 // concurrent replicas). This is the keystone that makes the turn flow idempotent:
 // without it, a redelivery that lands after the thread→session mapping exists is
 // treated as a brand-new follow-up and runs the agent a second time.
+//
+// The claim belongs to the RECEIVING PROJECT, never to the message alone. Every
+// BYO Slack app of a workspace receives every channel message, so one user
+// message legitimately arrives here once per installed project with identical
+// coordinates. Without the project in the key the first project's claim
+// suppressed every other project's delivery (CWE-863, KRTX-4447). Inside one
+// project the coordinates still collapse the siblings, so exactly-once holds
+// where it is owed.
 export function inboundMessageKey(
+  projectId: string,
   teamId: string,
   event: { channel?: string; ts?: string },
 ): string | null {
-  if (!teamId || !event.channel || !event.ts) return null;
-  return `slack:msg:${teamId}:${event.channel}:${event.ts}`;
+  if (!projectId || !teamId || !event.channel || !event.ts) return null;
+  return `slack:msg:${projectId}:${teamId}:${event.channel}:${event.ts}`;
 }
 
 // Returns true iff WE are the first to claim this message → run it. Empty ⇒ a

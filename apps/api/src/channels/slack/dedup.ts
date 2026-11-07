@@ -9,15 +9,26 @@ import { recordClaim } from '../webhook-work';
 // to another replica re-fires the turn. An INSERT … ON CONFLICT DO NOTHING makes
 // "already handled?" one shared decision: a row came back ⇒ we're the first to
 // claim it; empty ⇒ someone already has.
-export async function alreadyHandled(eventId: string | undefined): Promise<boolean> {
+//
+// The claim is namespaced by the project that received it: a per-project (BYO)
+// Slack app is a separate Slack app with its own event id space, so two projects
+// can receive the same event_id and each must handle it. The canonical app keeps
+// a scope of its own. Unlike this envelope layer, the message gate below is
+// namespaced by TEAM, not project — two BYO apps in one workspace share it; that
+// sibling gap is KRTX-4447, out of scope here by the issue's own instruction.
+export async function alreadyHandled(
+  eventId: string | undefined,
+  scope?: { projectId: string },
+): Promise<boolean> {
   if (!eventId) return false;
+  const key = scope ? `slack:event:${scope.projectId}:${eventId}` : `slack:event:${eventId}`;
   try {
     const inserted = await db
       .insert(chatEventDedup)
-      .values({ eventId, expiresAt: new Date(Date.now() + EVENT_DEDUPE_TTL_MS) })
+      .values({ eventId: key, expiresAt: new Date(Date.now() + EVENT_DEDUPE_TTL_MS) })
       .onConflictDoNothing({ target: chatEventDedup.eventId })
       .returning({ eventId: chatEventDedup.eventId });
-    if (inserted.length > 0) recordClaim(eventId);
+    if (inserted.length > 0) recordClaim(key);
     return inserted.length === 0;
   } catch (err) {
     // Never let a dedup hiccup wedge the webhook — fail open (process the event).

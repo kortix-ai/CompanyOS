@@ -105,10 +105,11 @@ const COLLEAGUES = `## Custom colleagues on the fly
 
 A hand-off can run more than the agents the workspace has. Shape each colleague to its job.
 
-- **A workspace agent by its name** (\`subagent_type\`), **or an inline colleague**: \`agent: { instructions, model, tools, description }\` gives it its own instructions, its own model and a narrower tool list, for this job only. Nothing is saved to the workspace. Workflow agents take the same options: \`agent(prompt, { agent, instructions, model, tools, schema })\`.
+- **A workspace agent by its name** (\`subagent_type\`), **or an inline colleague**: \`agent: { instructions, model, tools, description }\` gives it its own instructions (its whole system prompt), its own model and a narrower tool list, for this job only. Nothing is saved to the workspace. Workflow agents take the same options: \`agent(prompt, { agent, instructions, model, tools, schema })\`.
 - **Pick the model with kortix_agents \`models\`** and pass its \`id\` exactly as listed. A fast, light model for bulk and parallel work (many pages, many rows, many colleagues at once). The strongest reasoning model for synthesis and judgment (the final report, a decision, a review). No model: the workspace default.
 - **Narrow the tools for safety.** A researcher that only reads gets \`tools: ["read", "grep", "glob"]\` plus the search tools it needs, never \`edit\`, \`write\` or \`bash\`.
-- **A colleague never gets a tool or an extension you lack.** It runs with what the workspace gives its agent: a tool name that agent does not have is dropped, never added. Never promise one.
+- **An inline colleague has your access, never another agent's:** your Kortix permissions, a computer like yours (desktop, browser, document tools, no project checkout) and the channel this chat came from, so it reads and posts in the same Slack thread. Like you, it has no project connector, secret or workspace files: work that needs them goes to the workspace agent that has them, by name.
+- **A colleague never gets a tool or an extension you lack.** A named agent runs with what the workspace gives it, cut to your tools; an inline colleague with your tools at most. A tool name you lack is dropped or refused, never added. Never promise one.
 - **A new tool or extension is a change to the workspace files.** Hand it to an agent with the workspace files: it writes it and opens a change request for the person to approve. Once merged, every agent that lists it can use it.`;
 
 // The follow-through rule: every wait gets its own wake-up, unasked. The

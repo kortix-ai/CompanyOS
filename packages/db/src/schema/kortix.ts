@@ -5027,7 +5027,7 @@ export const gatewayRequestLogs = kortixSchema.table(
     // cached_tokens, cache_write_tokens, metadata) — not expressible in
     // drizzle-orm 0.45's index builder; the schema contract checks relation
     // + uniqueness only, same pattern as idx_gateway_logs_account_time_covering
-    // — by 20261104060000000_gateway_logs_project_time_covering_v2.concurrent.ts
+    // — by 20261107145000000_gateway_logs_project_time_covering_v2.concurrent.ts
     // (KRTX-4022: the last five INCLUDE columns are what the usage-value
     // aggregate of KRTX-3560 reads; without them the series is heap-bound).
     index('idx_gateway_logs_project_time_covering_v2').on(table.projectId, table.createdAt),

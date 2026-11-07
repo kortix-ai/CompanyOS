@@ -18,7 +18,7 @@
 // can carry upstream failure text, and a btree tuple has a hard size limit: the
 // writer (buildGatewayTraceRow in apps/api/src/shared/gateway-trace-row.ts)
 // bounds it to 2000 bytes so the INSERT of a trace row can never be rejected by
-// this index. The old index is dropped by 20261104060000001: this one serves
+// this index. The old index is dropped by 20261107145000100: this one serves
 // every query it served.
 export const shorthands = undefined;
 

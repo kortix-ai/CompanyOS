@@ -2,7 +2,7 @@
 //
 // mixed-version-safe: idx_gateway_logs_project_time_covering is only a planner
 // choice, never named by code. Its INCLUDE list is a strict subset of
-// idx_gateway_logs_project_time_covering_v2 (20261104060000000), which has the
+// idx_gateway_logs_project_time_covering_v2 (20261107145000000), which has the
 // same key (project_id, created_at), so old and new API versions both plan
 // index-only over v2. The insert-only log table pays one append per index, so
 // the superseded index goes.

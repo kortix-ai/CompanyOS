@@ -18,6 +18,7 @@ import { ttlMemo } from '../../shared/ttl-memo';
 import { templateSlugFromBuildSlug } from '../../snapshots/build-slug';
 import { TemplateNotFoundError, resolveTemplateForBuildSlug } from '../../snapshots/templates';
 import { isPlatformAdmin } from '../../shared/platform-roles';
+import type { Context } from 'hono';
 import { createRoute, z } from '@hono/zod-openapi';
 import { loadProjectForUser, assertProjectCapability } from '../lib/access';
 import { AnyObject, SnapshotSchema, projectsApp } from '../lib/app';
@@ -240,6 +241,19 @@ export function invalidateSandboxHealth(projectId: string): void {
   sandboxHealthMemo.invalidate(projectId);
 }
 
+async function loadSandboxWriter(
+  c: Context,
+  projectId: string,
+): Promise<Response | NonNullable<Awaited<ReturnType<typeof loadProjectForUser>>>> {
+  const loaded = await loadProjectForUser(c, projectId, 'read');
+  if (!loaded) return c.json({ error: 'Not found' }, 404);
+  // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
+  // project.sandbox.write so a custom role can withhold it (humans) AND the
+  // agent-grant fold applies (agent sessions). Managers hold it by default.
+  await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+  return loaded;
+}
+
 export function registerSandboxesRoutes(): void {
   // ─── Sandbox templates ─────────────────────────────────────────────────────
   // One platform-default image, optionally extended by `sandbox: templates:` entries
@@ -410,12 +424,8 @@ export function registerSandboxesRoutes(): void {
     }),
     async (c: any) => {
     const projectId = workspaceIdParam(c);
-    const loaded = await loadProjectForUser(c, projectId, 'read');
-    if (!loaded) return c.json({ error: 'Not found' }, 404);
-    // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
-    // project.sandbox.write so a custom role can withhold it (humans) AND the
-    // agent-grant fold applies (agent sessions). Managers hold it by default.
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+    const loaded = await loadSandboxWriter(c, projectId);
+    if (loaded instanceof Response) return loaded;
 
     const body = await readJsonObject(c);
     const slugRaw = (typeof body.slug === 'string' && body.slug)
@@ -524,12 +534,8 @@ export function registerSandboxesRoutes(): void {
     }),
     async (c: any) => {
     const projectId = workspaceIdParam(c);
-    const loaded = await loadProjectForUser(c, projectId, 'read');
-    if (!loaded) return c.json({ error: 'Not found' }, 404);
-    // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
-    // project.sandbox.write so a custom role can withhold it (humans) AND the
-    // agent-grant fold applies (agent sessions). Managers hold it by default.
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+    const loaded = await loadSandboxWriter(c, projectId);
+    if (loaded instanceof Response) return loaded;
     const userId = c.get('userId') as string;
 
     const builds = await listSnapshotBuilds(projectId, { limit: 50 }).catch(() => []);

@@ -581,7 +581,7 @@ DB `project_session_groups`: a project's named folders of sessions, in one `posi
 ## 8. Sandbox lifecycle + snapshots
 
 `SNAP-1` `GET /projects/:id/snapshots` → `read` → list `kortix-snap-…` images per baseRef. **Session boot requires a `ready` snapshot of baseRef** (no shared fallback → session `failed` if none).
-`SNAP-2` `POST /projects/:id/snapshots/rebuild` → **`manage` AND account `ACCOUNT_WRITE` (owner/admin)** → rebuild image: `202` with the started providers, or `409 SNAPSHOT_IN_USE` with `in_use > 0` when running sandboxes still use the image (Platinum refuses that delete; the legacy Daytona provider does not). Any other provider failure is `503` and fails the flow. A project `manager` who is not owner/admin → 403; M_EDITOR → 403.
+`SNAP-2` `POST /projects/:id/snapshots/rebuild` → `project.sandbox.write` → the requested slug resolves first: a **shared platform template** (the omitted or `default` slug — one project-independent image every tenant's sessions boot from) is refused to every project-scoped caller with `403 TEMPLATE_SHARED`, and only a **platform admin** may rebuild it (`202` with the started providers, or `409 SNAPSHOT_IN_USE` with `in_use > 0` when running sandboxes still use the image — Platinum refuses that delete; the legacy Daytona provider does not). A project-owned slug rebuilds: `202`, or `409 SNAPSHOT_IN_USE`, or `503` on any other provider failure. M_EDITOR → 403.
 **No standalone sandbox create/stop routes exist.** Sandbox create/start is implicit
 on session create (`provisionSessionSandbox`), asserted transitively by `RUN-1` /
 `GOLD-1`. Manual stop = `SESS-12` (pauses in place, resumable); destructive teardown =

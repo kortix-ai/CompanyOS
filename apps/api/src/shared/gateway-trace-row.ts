@@ -34,7 +34,7 @@ function nonNegInt(value: number | undefined) {
   return Number.isFinite(value) && value && value > 0 ? Math.floor(value) : 0;
 }
 
-// metadata is an INCLUDE column of idx_gateway_logs_project_time_covering_v2,
+// metadata is an INCLUDE column of idx_gateway_logs_project_time_covering_v3,
 // so it lives in a btree tuple (max ~2.7 KB): an oversized value fails the
 // INSERT of the whole trace row. attemptFailures carries upstream error text,
 // the one unbounded part; shrink it tier by tier until the metadata fits.

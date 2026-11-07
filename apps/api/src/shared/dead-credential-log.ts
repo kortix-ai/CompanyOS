@@ -1,6 +1,7 @@
 /**
- * Rate-limit marked dead-credential warnings by method, normalized route,
- * status and reason. Responses and emitted message text stay unchanged.
+ * Rate-limit marked dead-credential refusals by method, normalized route,
+ * status and reason, and ship the throttled line at a severity that follows
+ * the window's volume. Responses and emitted message text stay unchanged.
  * A ten-minute window permits six lines per route/reason per process per hour.
  * Suppression counts are best-effort: they appear only on the next warning.
  * A final quiet burst, eviction or process restart can lose pending counts;
@@ -10,6 +11,20 @@ import { HTTPException } from 'hono/http-exception';
 
 const WINDOW_MS = 10 * 60_000;
 const MAX_TRACKED_MESSAGES = 10_000;
+
+/**
+ * The suppressed count at which a throttled refusal line ships at `warn`
+ * instead of `info` (KRTX-4454). The steady state of this class is DESIGNED
+ * churn: every session stop leaves its box probing with a dead credential,
+ * 1-2 refusals per stop, forever — so the window trips forever and a flat
+ * warn level keeps a 0-baseline warn pattern alive that re-trips the
+ * infra-sweep's new-pattern detector every time (~10 lines/h on the
+ * audit-events route, 2026-11-07). Measured prod steady state: a pending
+ * count of 0-4 per route/reason per replica window; the KRTX-1039 storm ran
+ * ~200. Above this band is a caller ignoring the typed stop code — that
+ * stays warn.
+ */
+export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 
 const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
 

@@ -78,12 +78,7 @@ async function markRemoved(sandboxId: string, now: Date): Promise<void> {
     .update(sessionSandboxes)
     .set({
       metadata: patchedSandboxMetadata({
-        strip: [
-          PROVIDER_REMOVAL_PENDING_KEY,
-          'providerRemovalAttempts',
-          'providerRemovalRetryAfterAt',
-          'providerRemovalError',
-        ],
+        strip: [PROVIDER_REMOVAL_PENDING_KEY, 'providerRemovalAttempts', 'providerRemovalRetryAfterAt', 'providerRemovalError'],
         merge: { [PROVIDER_REMOVED_KEY]: now.toISOString() },
       }),
       updatedAt: now,

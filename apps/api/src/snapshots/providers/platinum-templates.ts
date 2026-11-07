@@ -1,12 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { platinumJson, platinumJsonResponse, isPlatinumConfigured } from '../../shared/platinum';
 import type { BuildLogTap } from './index';
-import {
-  classifyPlatinumPollError,
-  httpStatusFromMessage,
-  isTerminalPollError,
-  retryAfterMsFromError,
-} from './platinum-poll-classify';
+import { classifyPlatinumPollError, httpStatusFromMessage, isTerminalPollError, retryAfterMsFromError } from './platinum-poll-classify';
 import { exponentialBackoffMs } from '../../shared/backoff';
 
 const ACTIVATE_DEADLINE_MS = 12 * 60 * 1000; // build + activate ceiling

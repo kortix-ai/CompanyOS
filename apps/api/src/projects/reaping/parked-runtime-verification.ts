@@ -35,7 +35,7 @@
  */
 
 import { sessionSandboxes } from '@kortix/db';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 
 import { endComputeSession } from '../../billing/services/compute-metering';
 import { type SandboxProviderName, config } from '../../config';
@@ -194,6 +194,11 @@ export async function recoverRemovedParkedRuntime(
   return { outcome, row: current };
 }
 
+/** Verified and stop/settle write the same patch: drop the pending-stop flag, stamp this pass. */
+function stopPendingStamp(now: Date): SQL {
+  return patchedSandboxMetadata({ strip: ['providerStopPendingAt'], merge: { parkedVerifiedAt: now.toISOString() } });
+}
+
 export async function verifyParkedRuntimes(now = new Date()): Promise<{
   examined: number;
   lost: number;
@@ -271,10 +276,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
           .set({
             metadata: patchedSandboxMetadata({
               strip: ['runtimeIdentityState', 'runtimeUnavailableReason', 'runtimeUnavailableAt'],
-              merge: {
-                runtimeRestoredAt: now.toISOString(),
-                parkedVerifiedAt: now.toISOString(),
-              },
+              merge: { runtimeRestoredAt: now.toISOString(), parkedVerifiedAt: now.toISOString() },
             }),
             updatedAt: now,
           })
@@ -315,13 +317,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
           await endComputeSession(row.sandboxId);
           await tx
             .update(sessionSandboxes)
-            .set({
-              metadata: patchedSandboxMetadata({
-                strip: ['providerStopPendingAt'],
-                merge: { parkedVerifiedAt: now.toISOString() },
-              }),
-              updatedAt: now,
-            })
+            .set({ metadata: stopPendingStamp(now), updatedAt: now })
             .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
         });
         continue;
@@ -332,12 +328,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
         // nothing interesting was found.
         await db
           .update(sessionSandboxes)
-          .set({
-            metadata: patchedSandboxMetadata({
-              strip: ['providerStopPendingAt'],
-              merge: { parkedVerifiedAt: now.toISOString() },
-            }),
-          })
+          .set({ metadata: stopPendingStamp(now) })
           .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
       }
     } catch (error) {

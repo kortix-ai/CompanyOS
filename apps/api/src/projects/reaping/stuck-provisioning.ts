@@ -213,10 +213,7 @@ export async function convergeStuckProvisioningRuntimes(now = new Date()): Promi
       const [claimed] = await db
         .update(sessionSandboxes)
         .set({
-          metadata: patchedSandboxMetadata({
-            strip: LEASE_KEYS,
-            merge: { provisioningConvergedAt: now.toISOString() },
-          }),
+          metadata: patchedSandboxMetadata({ strip: LEASE_KEYS, merge: { provisioningConvergedAt: now.toISOString() } }),
           updatedAt: now,
         })
         .where(

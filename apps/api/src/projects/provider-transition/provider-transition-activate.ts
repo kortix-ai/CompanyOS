@@ -10,13 +10,7 @@ import {
   PIN_META_KEY, TRANSITION_META_KEY,
 } from './provider-transition-routing';
 import { TRANSITION_AUDIT_COLUMNS, type Queryable } from './provider-transition-store';
-import {
-  metadataMerge,
-  projectsView,
-  updateProjectRows,
-  updateProjectRowsReturning,
-  type ProjectRow,
-} from '../../workspaces/rows';
+import { metadataMerge, projectsView, updateProjectRows, updateProjectRowsReturning, type ProjectRow } from '../../workspaces/rows';
 
 type ActivationArgs = {
   projectId: string;
@@ -210,8 +204,7 @@ export async function setPinWithGenerationBump(
     const deleteKeys = [ACTIVE_EXTERNAL_ID_META_KEY, ACTIVE_SNAPSHOT_NAME_META_KEY];
     if (args.pin === null) deleteKeys.push(PIN_META_KEY);
     else patch[PIN_META_KEY] = args.pin;
-    // RETURNING hands the immediate switch response the row with the pin
-    // applied — the service no longer re-SELECTs it after the transaction.
+    // RETURNING hands the immediate response the row with the pin applied: no re-SELECT.
     const [projectRow] = await updateProjectRowsReturning(eq(projectsView.projectId, args.projectId), { metadata: metadataMerge(patch, deleteKeys), sandboxProviderGeneration: newGen, updatedAt: args.now }, tx);
     // The epoch bump fences any runner still driving a cancelled row (see
     // reserveSwitchTransition's supersede).

@@ -166,9 +166,8 @@ export function kickDrive(transitionId: string, database: Database = appDb): voi
 }
 
 /**
- * One project-row read for the service: null when the row is missing or
- * archived. Every caller treats both as "not found"; the archived row keeps
- * the same treatment wherever it surfaced.
+ * One project-row read: null when the row is missing or archived ("not found"
+ * is one treatment here, for the loadProject dep and the request guard alike).
  */
 async function readProjectRow(database: Database, projectId: string): Promise<ProjectRow | null> {
   const [row] = await database.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
@@ -231,8 +230,8 @@ export async function requestProviderTransition(input: {
     if (kind === 'immediate_clear') {
       emitProviderTransitionEvent('cancelled', { target: 'default', source: sourceProvider, projectId: input.projectId });
     }
-    // The pin's write already RETURNED the fresh row (metadata.default_sandbox_provider
-    // applied): no re-SELECT, and the serialized project shows the new pin.
+    // setPin's write RETURNED the row with the pin applied: no re-SELECT, so the response
+    // is the serializable project with this switch's own pin, never the pre-write row.
     return { kind: 'immediate', pin: target, projectRow: projectRow ?? row };
   }
 

@@ -167,9 +167,8 @@ export async function reconcileSnapshotQuota(
       '[snapshot-gc] referenced-name lookup failed — pass skipped:',
       err instanceof Error ? err.message : err,
     );
-    // A partial pass still reports the org it inspected: these feed the
-    // heartbeat's org/managed counts. The complete pass gets both from the
-    // plan (they are the same all.length/isManaged computation there).
+    // A partial pass still reports the org it inspected (the heartbeat's org/
+    // managed counts); the complete pass gets both from the plan instead.
     result.orgTotal = all.length;
     result.managedCount = all.filter((snapshot) => isManaged(snapshot.name)).length;
     return result;

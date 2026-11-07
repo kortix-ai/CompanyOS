@@ -151,15 +151,14 @@ describe('parked-runtime metadata writes (characterization)', () => {
       'runtimeUnavailableReason',
       'runtimeUnavailableAt',
     ]);
-    // The merged delta is exactly the two stamps. Pre-refactor the heal
-    // patch stamps `runtimeRestoredAt` from `new Date()` at write time, not
-    // the pass clock (KRTX-4468 strikes healMetadataPatch for that); the
-    // refactor folds both stamps onto the pass clock, so after it the two
-    // values are the same ISO instant.
+    // The merged delta is exactly the two stamps, both on the pass clock. The
+    // pre-refactor write stamped `runtimeRestoredAt` from `new Date()` at
+    // write time (the drift KRTX-4468 strikes healMetadataPatch for); the
+    // refactor folds both stamps onto the pass clock, pinned below.
     const merged = JSON.parse(/\{\s*"[\s\S]*\}/.exec(rendered)![0]) as Record<string, string>;
     expect(Object.keys(merged)).toEqual(['runtimeRestoredAt', 'parkedVerifiedAt']);
     expect(merged.parkedVerifiedAt).toBe(NOW.toISOString());
-    expect(merged.runtimeRestoredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(merged.runtimeRestoredAt).toBe(NOW.toISOString());
     // The strip+merge shape keeps every sibling: the base is `coalesce`,
     // not a whole-object reset, and the merged delta rides `||`.
     expect(rendered).toContain('coalesce(');

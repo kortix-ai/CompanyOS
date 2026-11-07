@@ -1,6 +1,7 @@
-import { accountModelPreferences, projectSessions, projects } from '@kortix/db';
+import { accountModelPreferences, projectSessions } from '@kortix/db';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
+import { projectsView } from '../workspaces/rows';
 
 // Persistent store for account-scoped default model preferences. Drives the
 // server-side resolution of the synthetic `auto` model in the LLM gateway:
@@ -9,7 +10,7 @@ import { db } from '../shared/db';
 //   platform default.
 // Stored `model` values are gateway wire models (bare managed id like 'glm-5.3-flash',
 // a BYOK 'provider/model', or 'codex/<id>') — never the synthetic `auto` and
-// never the opencode-only `kortix/` prefix.
+// never the runtime's `kortix/` provider prefix.
 //
 // AGENT-SCOPE ROWS ARE PROJECT-SCOPED (see the `project_id` doc comment on
 // `accountModelPreferences` in packages/db/src/schema/kortix.ts for the full
@@ -191,10 +192,10 @@ export async function getSessionAgentContext(
     .select({
       agentName: projectSessions.agentName,
       metadata: projectSessions.metadata,
-      projectMetadata: projects.metadata,
+      projectMetadata: projectsView.metadata,
     })
     .from(projectSessions)
-    .leftJoin(projects, eq(projects.projectId, projectSessions.projectId))
+    .leftJoin(projectsView, eq(projectsView.projectId, projectSessions.projectId))
     .where(eq(projectSessions.sessionId, sessionId))
     .limit(1);
   if (!row) return null;

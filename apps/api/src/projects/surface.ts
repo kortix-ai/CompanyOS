@@ -73,9 +73,9 @@ export {
 
 // Every declared agent's grant (consumed by the connectors rules matrix).
 export { extractAgents, grantsByAgent, loadProjectAgents } from './agents';
-export { mentionTokens, mentionsMember } from './lib/mentions';
+export { mentionTokens } from './lib/mentions';
 export { resolveAndAuthorizeAgentAs } from './lib/agent-access';
-export { loadVisibleSession } from './lib/session-visibility';
+export { isSpawnAncestor, loadVisibleSession } from './lib/session-visibility';
 export { sessionHoldsLiveTurn } from './session-lifecycle/inbox-admission';
 // Does a sandbox's runtime keep a prompt's message id (consumed by the sandbox proxy's wire-id placement).
 export { sandboxKeepsMessageIds } from './session-lifecycle/inbox-admission';
@@ -132,8 +132,10 @@ export { markKortixRemovalIntent } from './runtime-identity';
 export { disableRemindersAuthoredBy } from './lib/session-reminders';
 
 // Nested `projects.metadata` writes (consumed by ../feature-flags/write).
-export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from './lib/metadata-merge';
+export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from '../workspaces/rows';
 export { MANIFEST_PROJECT_NAME_KEY, projectNameAction } from './lib/manifest-project-name';
+// Workspace name = account name = project name (consumed by account rename and manifest sync).
+export { renameAccountOfSoleProject, renameSoleProjectOfAccount } from './lib/workspace-name';
 
 // Whether any app-event adapter is configured (consumed by ../feature-flags/registry).
 
@@ -206,6 +208,12 @@ export { signalSessionRuntimeActive } from './session-lifecycle/runtime-active-s
 export { noteSandboxHealthBody } from './lib/turn-start-convergence';
 
 export { registerRuntimeFork } from './lib/runtime-session-snapshot';
+// A provider edge refused a daemon-port request: start the dead-daemon relaunch now (consumed by sandbox-proxy/forward/retry.ts).
+// Behind a dynamic import: the wiring module must stay out of the proxy's static graph (sandbox-proxy/module-graph.test.ts).
+export async function repairDeadDaemonOnEdgeRefusal(sandboxId: string): Promise<boolean> {
+  const wiring = await import('./lib/legacy-runtime-bootstrap-wiring');
+  return wiring.repairDeadDaemonOnEdgeRefusal(sandboxId);
+}
 
 // `chat` on: file every session into `#general`, and the "turned on
 // again" record (consumed by ../feature-flags/toggle-effects).
@@ -228,6 +236,27 @@ export {
 } from './git/push-manifest-check';
 // A manifest write refused while the default branch's kortix.yaml is not YAML (consumed by the HTTP error handler).
 export { ManifestWriteRefusedError } from './manifest-io';
+
+// The transfer engine and the workspace split's data movement (consumed by workspaces/split).
+export {
+  afterProjectMoved,
+  copyProjectSiteBlobs,
+  moveOwnedRows,
+  PROJECT_TRANSFER_APP_TABLES,
+  PROJECT_TRANSFER_LEAVE_TABLES,
+  PROJECT_TRANSFER_TABLES,
+} from './lib/project-transfer';
+export {
+  countRotatingLogins,
+  isRotatingLogin,
+  projectGrantCounts,
+  reachingGroupsSql,
+  reachingUsersSql,
+  ProjectSplitError,
+  reverseProjectSplit,
+  splitProjectIntoNewAccount,
+  type SplitCopiedIds,
+} from './lib/workspace-split-copy';
 
 // Session and sandbox status transitions (consumed by the preview proxy's
 // lifecycle writes) and the canonical live session set (consumed by every

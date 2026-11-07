@@ -74,6 +74,7 @@ import { PI_HARNESS_VERSION } from './version'
 import { promptImages } from './images'
 import type { PiSessionSnapshot } from './session-log'
 import { flushSessionLogJournal, reliveSessionLogMessage } from '../shared/session-log-journal'
+import { workspaceIdFromEnv } from '@/lib/config/workspace-id'
 
 export type { CompiledAgent }
 
@@ -171,6 +172,41 @@ export const PARKED_PERMISSION_REASON =
   'This call needs a person\'s approval and did not run. The request waits in their Review inbox; nobody answered it yet. ' +
   'Continue with work that does not need this call. When they approve, you get a message: then run exactly the same call again and it runs. ' +
   'If nothing else is left, end your turn and say in one line what you wait for. Do not retry the call before that message.'
+
+/**
+ * Every agent's ids: its session, its project, the session that started it
+ * and its space (`KORTIX_SESSION_ID`, `KORTIX_PROJECT_ID`,
+ * `KORTIX_PARENT_SESSION_ID`, `KORTIX_SPACE_ID`). A subagent reads the
+ * conversation that started it with `kortix sessions log` instead of relying
+ * on its brief alone: the API lets a session read the sessions that spawned
+ * it (apps/api `session-visibility.ts` `isSpawnAncestor`). A subagent inside
+ * this session (`session: "same"`) has this session's main conversation as
+ * its parent. The ids never change during a session, so the section never
+ * breaks the prompt cache. Null on a box with no session id (a local box).
+ */
+export function sessionIdsSection(input: {
+  sessionId?: string
+  projectId?: string
+  parentSessionId?: string
+  spaceId?: string
+  /** A subagent that runs inside this session. */
+  inProcessChild?: boolean
+}): string | null {
+  const session = input.sessionId?.trim()
+  if (!session) return null
+  const parent = input.inProcessChild ? null : input.parentSessionId?.trim()
+  return [
+    '## Session ids',
+    `- session_id: ${session} (this session)`,
+    ...(input.projectId?.trim() ? [`- project_id: ${input.projectId.trim()}`] : []),
+    ...(input.inProcessChild ? [`- parent: the main conversation of this session (${session}), which started you`] : []),
+    ...(parent ? [`- parent_session_id: ${parent} (the session that started you)`] : []),
+    ...(input.spaceId?.trim() ? [`- space_id: ${input.spaceId.trim()}`] : []),
+    'Read a session\'s conversation with `kortix sessions log <session_id> -n 50` (`--json` for scripts; pipe it to rg or jq to search). It is always current.',
+    ...(input.inProcessChild || parent ? ['Read your parent\'s conversation when your task needs context your brief does not give.'] : []),
+    'Pass a session_id to a subagent or a command instead of copying a conversation into a prompt or a file.',
+  ].join('\n')
+}
 
 /** The system prompt's `Today's date` line, with the box's time zone. Without it an agent with no shell cannot resolve "yesterday". */
 export const todayLine = (now: number) => `Today's date: ${new Date(now).toDateString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`
@@ -794,7 +830,7 @@ export class PiRuntime {
         streamFn: withMessageIdentity(
           withAgentSampling(
             (model, context, options) => this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId }),
-            () => this.sampling(this.compiledAgent(), this.selected!),
+            () => this.sampling(this.compiledAgent(), this.selected!, this.turnParent ?? undefined),
           ),
           { reserveMessageId: () => this.adapter!.reserveMessageId(), turnId: () => this.turnParent },
         ),
@@ -2286,7 +2322,7 @@ export class PiRuntime {
       streamFn: withMessageIdentity(
         withAgentSampling(
           (m, context, options) => this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id }),
-          () => this.sampling(this.compiled?.agent?.[input.agent], selected),
+          () => this.sampling(this.compiled?.agent?.[input.agent], selected, messageId),
         ),
         { reserveMessageId: () => adapter.reserveMessageId(), turnId: () => messageId, threadId: child.id },
       ),
@@ -2538,12 +2574,15 @@ export class PiRuntime {
     this.rebuildSystemPrompt()
   }
 
-  /** An agent's `temperature`, `top_p` and `steps` for its requests on `model`. */
-  private sampling(agent: CompiledAgent | undefined, model: SelectedModel) {
+  /** An agent's `temperature`, `top_p`, `steps` and current run id for its requests on `model`.
+   *  `runId` is the prompt message id of the run in flight; the step counter resets when it
+   *  changes (a new turn or sub-agent invocation) and holds across compaction within a run. */
+  private sampling(agent: CompiledAgent | undefined, model: SelectedModel, runId: string | undefined) {
     return {
       temperature: agent?.temperature,
       top_p: agent?.top_p,
       steps: agent?.steps,
+      runId,
       acceptsTemperature: this.models?.catalog[model.modelID]?.temperature !== false,
     }
   }
@@ -2611,6 +2650,14 @@ export class PiRuntime {
     const releaseNotice = this.releases?.notice()
     if (releaseNotice) parts.push(releaseNotice)
     if (this.cfg.workspaceVolume) parts.push(this.newComputer ? `${TEMPORARY_COMPUTER}\n${NEW_COMPUTER_NOTE}` : TEMPORARY_COMPUTER)
+    const ids = sessionIdsSection({
+      sessionId: this.env.KORTIX_SESSION_ID,
+      projectId: this.env.KORTIX_PROJECT_ID,
+      parentSessionId: this.env.KORTIX_PARENT_SESSION_ID,
+      spaceId: this.env.KORTIX_SPACE_ID,
+      inProcessChild: Boolean(child),
+    })
+    if (ids) parts.push(ids)
     parts.push(
       [
         '## Runtime capabilities',
@@ -2748,7 +2795,7 @@ export class PiRuntime {
     return {
       id: this.rootId,
       slug: this.rootId,
-      projectID: (this.env.KORTIX_PROJECT_ID ?? '').trim() || this.sessionId,
+      projectID: workspaceIdFromEnv(this.env) || this.sessionId,
       directory: this.workspace,
       title: this.title,
       version: PI_HARNESS_VERSION,

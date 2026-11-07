@@ -383,7 +383,7 @@ function describe(types: Map<string, SubagentType>, anyProjectAgent = false, top
     'Usage:',
     '- Set subagent_type to one of the types above (omitted: general), OR pass an inline `agent` spec ({ instructions, model?, tools?, description? }) to define one on the fly: its own system prompt, its own model, and a subset of your tools.',
     '- model (provider/model) runs this hand-off on another model, for a named subagent_type too.',
-    '- Write a complete prompt: the subagent sees nothing of this conversation.',
+    '- Write the task and the facts it depends on. The subagent does not see this conversation, but it knows your session_id and reads this conversation itself (`kortix sessions log`) when your prompt leaves something out: never paste the conversation into the prompt.',
     '- Launch several subagents in one message when their work is independent.',
     '- The result is not shown to the user; summarize what matters in your own reply.',
     '- Reuse first. To continue work that builds on an earlier hand-off, continue THAT agent: send_message to its name, or agent with its task_id. It keeps its context and its computer is already warm. Start a new agent only for independent or parallel work.',
@@ -405,7 +405,7 @@ function describe(types: Map<string, SubagentType>, anyProjectAgent = false, top
     ...(teams
       ? [
           '',
-          'Agent teams (on in this project):',
+          'Agent teams (on in this workspace):',
           '- Start a teammate with team: true and a name. Only then is it a TEAMMATE: its own session that keeps running, works through the team task list (task_create, task_list, task_update) and talks to you and the other teammates with send_message. A name without team is a plain subagent.',
           '- Use a team only when several agents must share one task list. Name each teammate by its role. Run each on the project agent whose description fits the role (subagent_type); use the default agent with the role in the prompt only when none fits.',
           '- A teammate\'s role is context for its own session only: no agent and no project setting changes, and nothing is saved. The team lives in this session.',
@@ -552,6 +552,7 @@ function stopTool(host: KortixHost) {
 export const FORK_PROMPT = [
   'You are a fork of the session whose conversation you see above: a copy that continues on its own, in its own session.',
   'Do the task in the next message end to end. Your final message is returned to the session you were forked from, not shown to the person: make it a concise, complete report.',
+  'That session is your parent_session_id: read what it says after the fork with `kortix sessions log <parent_session_id>`.',
 ].join('\n')
 
 /** What a teammate is told when it starts (`initial_context`). */
@@ -575,7 +576,7 @@ export function teamRefusal(host: KortixHost): string {
   const omit = 'Omit team to start a plain subagent (a name alone keeps it addressable).'
   if (host.subagentDepth() > 0) return `Only a top-level session leads a team, and this session is a subagent (level ${host.subagentDepth()}), so it cannot start teammates. ${omit}`
   if (!host.separateSessions()) return `A teammate runs in its own session, and this session cannot start one (it has no Kortix control plane). ${omit}`
-  return `Agent teams are off in this project: team: true needs the agent_teams feature. ${omit}`
+  return `Agent teams are off in this workspace: team: true needs the agent_teams feature. ${omit}`
 }
 
 /** The call's name, team, fork and background shape. */

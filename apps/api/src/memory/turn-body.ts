@@ -5,13 +5,13 @@
  * off never loads them (`turn-context.ts` holds the rest).
  */
 import { MEMORY_TURN_SYSTEM_MAX_CHARS } from '@kortix/api-contract';
-import { projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { driveStorageAvailable } from '../drives/volumes';
 import { resolveFeatureFlag } from '../feature-flags/registry';
 import { classifyRuntimeRequest } from '../sandbox-proxy/runtime-request';
 import { db } from '../shared/db';
 import { ttlMemo } from '../shared/ttl-memo';
+import { projectsView } from '../workspaces/rows';
 
 /**
  * `chat` of a project, read at most once per 30 s per replica: a
@@ -21,14 +21,14 @@ export const memoryChannelsOn = ttlMemo({
   ttlMs: 30_000,
   keyFn: (projectId: string) => projectId,
   loader: async (projectId: string) => {
-    const [row] = await db.select({ metadata: projects.metadata }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    const [row] = await db.select({ metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     return driveStorageAvailable() && resolveFeatureFlag(row?.metadata, 'chat');
   },
 });
 
 
 
-/** Only the Kortix prompt route carries the memory `system`: not `/steer`, not OpenCode's `prompt_async`. */
+/** Only the Kortix prompt route carries the memory `system`: not `/steer`, not the box's OpenCode-shaped `prompt_async`. */
 export function isMemoryTurnRoute(method: string, path: string): boolean {
   const request = classifyRuntimeRequest(method, path);
   return request.kind === 'turn-start' && request.verb === 'prompt';

@@ -29,8 +29,8 @@ import { CliSandbox, throwIfCliInfraFailure } from "../fixtures/cli";
 import { createDatabaseSession } from "../fixtures/database-project";
 import { seedSessionTranscript } from "../fixtures/session-transcript";
 
-const JOURNAL = "/v1/projects/:projectId/sessions/:sessionId/log/journal";
-const MANIFEST = "/v1/projects/:projectId/sessions/:sessionId/log/manifest";
+const JOURNAL = "/v1/workspaces/:projectId/sessions/:sessionId/log/journal";
+const MANIFEST = "/v1/workspaces/:projectId/sessions/:sessionId/log/manifest";
 const REV = 1_791_681_474_704_000;
 const T = "2026-10-11T10:00:00.000Z";
 
@@ -186,9 +186,9 @@ function syntheticConversation(root: string, child: string, turns: number) {
   return rows;
 }
 
-const TRANSCRIPT = "/v1/projects/:projectId/sessions/:sessionId/transcript";
-const BUNDLE = "/v1/projects/:projectId/sessions/:sessionId/open-bundle";
-const LOG = "/v1/projects/:projectId/sessions/:sessionId/log";
+const TRANSCRIPT = "/v1/workspaces/:projectId/sessions/:sessionId/transcript";
+const BUNDLE = "/v1/workspaces/:projectId/sessions/:sessionId/open-bundle";
+const LOG = "/v1/workspaces/:projectId/sessions/:sessionId/log";
 
 flow(
   "SLOG-2",
@@ -198,7 +198,7 @@ flow(
     routes: [
       "POST /v1/accounts/tokens", `POST ${JOURNAL}`, `GET ${TRANSCRIPT}`, `GET ${BUNDLE}`, `GET ${LOG}`,
       // `kortix sessions log` logs in and locates the session before it reads the log.
-      "GET /v1/accounts/me", "GET /v1/projects/:projectId/sessions/:sessionId",
+      "GET /v1/me", "GET /v1/workspaces/:projectId/sessions/:sessionId",
     ],
   },
   async (ctx) => {
@@ -326,8 +326,8 @@ flow(
   },
 );
 
-const RESTORE = "/v1/projects/:projectId/sessions/:sessionId/log/restore";
-const ATTACHMENT = "/v1/projects/:projectId/sessions/:sessionId/attachments/:attachmentId";
+const RESTORE = "/v1/workspaces/:projectId/sessions/:sessionId/log/restore";
+const ATTACHMENT = "/v1/workspaces/:projectId/sessions/:sessionId/attachments/:attachmentId";
 
 flow(
   "SLOG-3",
@@ -406,7 +406,7 @@ flow(
   },
 );
 
-const PREFLIGHT = "/v1/projects/:projectId/sessions/:sessionId/log/switch-preflight";
+const PREFLIGHT = "/v1/workspaces/:projectId/sessions/:sessionId/log/switch-preflight";
 
 flow(
   "SLOG-4",
@@ -469,8 +469,8 @@ flow(
         });
       });
 
-      await ctx.step("preflight to opencode (the same harness) → 200 not available (same_harness), no loss; the read claimed nothing (a journal batch at generation 0 → 200)", async () => {
-        (await preflight("opencode")).status(200).body().has("$.available", false).has("$.reason", "same_harness").has("$.losses", []).has("$.unsupported", []);
+      await ctx.step("preflight to opencode → 400: no session can switch to OpenCode; the reads claimed nothing (a journal batch at generation 0 → 200)", async () => {
+        (await preflight("opencode")).status(400);
         (await box.post(JOURNAL, batch(0, [{ rev: REV + 5, message: message("msg_u3", 3) }]), { params, raw: true, headers: { "content-type": "application/json", "content-encoding": "gzip" } })).status(200);
       });
 
@@ -504,8 +504,8 @@ flow(
         }
       });
 
-      await ctx.step("a user with no membership in the project's account → 403, no report", async () => {
-        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(403);
+      await ctx.step("a user with no membership in the project's account → 404 workspace_not_found, no report", async () => {
+        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(404).body().has("$.code", "workspace_not_found");
       });
     } finally {
       await close();
@@ -513,7 +513,7 @@ flow(
   },
 );
 
-const BLOB = "/v1/projects/:projectId/sessions/:sessionId/log/blobs/:sha256";
+const BLOB = "/v1/workspaces/:projectId/sessions/:sessionId/log/blobs/:sha256";
 
 flow(
   "SLOG-5",

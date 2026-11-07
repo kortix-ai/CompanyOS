@@ -30,7 +30,7 @@ import {
   toSessionModelRef,
 } from '../../llm-gateway/resolution/effective';
 import { checkClaudeAgentRef } from '../../llm-gateway/resolution/claude-agent';
-import { claudeSubscriptionRequiredBody, missingClaudeSubscription } from '../claude-subscription/gate';
+import { claudeSubscriptionRequiredBody, missingClaudeSubscription, promptModelRef } from '../claude-subscription/gate';
 
 import { selectProvider } from '../../platform/services/provider-balancer';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
@@ -2057,6 +2057,28 @@ export async function createProjectSession(input: {
         with_prompt: Boolean(body.pending_prompt ?? body.initial_prompt),
       },
     });
+    // The first prompt rides inside the create on the workspace home, mobile
+    // and the sessions board, and never reaches the prompt POST that reports
+    // every later one. Same properties as that route.
+    const createPrompt = pendingPromptConversion?.rowValues ?? null;
+    if (createPrompt || initialPrompt) {
+      const pendingModel = (body.pending_prompt as Record<string, unknown> | undefined)?.model;
+      const parts = (createPrompt?.payload as { parts?: Array<{ type?: unknown }> } | undefined)?.parts ?? [];
+      captureProductEvent({
+        userId: input.userId,
+        accountId,
+        event: 'prompt_sent',
+        dedupeKey: createPrompt?.idempotencyKey ?? `prompt:${sessionId}:initial`,
+        properties: {
+          project_id: projectId,
+          session_id: sessionId,
+          model: promptModelRef(pendingModel) ?? sessionModel ?? 'default',
+          attachment_count: parts.filter((part) => part.type === 'file').length,
+          source: source === 'ui' ? 'web' : typeof source === 'string' ? source : null,
+          at_create: true,
+        },
+      });
+    }
   }
 
   // A prompt supplied at create is claimed by the session daemon. This is the

@@ -8,22 +8,32 @@
  * Sandboxes idle-stop (and die) in the real world. Rather than silently
  * disabling the composer (so Enter "does nothing"), surface the state and
  * recover: restart() wakes the box and re-arms useSession's /start poll.
+ *
+ * The host app supplies its own seam: `restart` makes the app's SDK restart
+ * call and `sessionStartKey` is the app's query key for the session-start read.
  */
 
-import { kortix } from '@/lib/kortix';
-import { qk } from '@/lib/query-keys';
 import type { UseSessionResult } from '@kortix/sdk/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { errorToast, successToast } from '@kortix/ui/toast';
 
-export function useRuntimeRecovery(session: UseSessionResult) {
+/** The session fields the recovery guard reads. `UseSessionResult` satisfies it. */
+export type RecoverySession = Pick<
+  UseSessionResult,
+  'projectId' | 'sessionId' | 'runtimePhase' | 'switched'
+>;
+
+export function useRuntimeRecovery(
+  session: RecoverySession,
+  seam: { restart: () => Promise<unknown>; sessionStartKey: readonly unknown[] },
+) {
   const qc = useQueryClient();
   const restart = useMutation({
-    mutationFn: () => kortix.session(session.projectId, session.sessionId).restart(),
+    mutationFn: seam.restart,
     onSuccess: () => {
       qc.invalidateQueries({
-        queryKey: qk.sessionStart(session.projectId, session.sessionId),
+        queryKey: seam.sessionStartKey,
       });
       successToast('Reconnecting the runtime…');
     },

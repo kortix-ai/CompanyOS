@@ -48,6 +48,7 @@ import { CONFIG_RELEASE_CAPABILITY } from './session-config-release';
 import { runtimeProvenThisBoot } from '../session-lifecycle/readiness-clocks';
 import { exponentialBackoffMs } from '../../shared/backoff';
 import { isRecord } from '@kortix/shared/guards';
+import { errorMessage } from '../../shared/error-message';
 
 /**
  * The in-box script ships as a sidecar file, not a template literal: bash is
@@ -1164,7 +1165,7 @@ async function runBootstrapScript(
   const repair = await deps.mintRepairToken?.().catch((error) => {
     deps.log('repair credential mint failed; falling back to the box token', {
       sandboxId: input.sandboxId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return null;
   });
@@ -1177,7 +1178,7 @@ async function runBootstrapScript(
     await repair.release().catch((error) =>
       deps.log('repair credential release failed', {
         sandboxId: input.sandboxId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       }),
     );
   };
@@ -1204,7 +1205,7 @@ async function runBootstrapScript(
       LEGACY_BOOTSTRAP_EXEC_TIMEOUT_MS,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     await commitToken(null);
     await releaseRepair();
     return {

@@ -19,6 +19,7 @@ import { featureFlagsEnvValue } from './feature-flag-env';
 import { managedSkillFeatureFlag } from '../../skills/catalog';
 import { denierFromConfig, filterConfigResourcesForUser } from './project-resources';
 import type { AppEnv } from '../../types';
+import { errorMessage } from '../../shared/error-message';
 
 /**
  * The detail response's `config`, `files`/`file_count` and the status headers.
@@ -42,7 +43,7 @@ export async function loadProjectDetailConfig(
     } catch (error) {
       console.warn('[projects] repo detail listing unavailable', {
         projectId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
       headers['X-Kortix-Repo-Status'] = 'unavailable';
       return [];

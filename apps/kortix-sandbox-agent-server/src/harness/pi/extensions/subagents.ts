@@ -311,7 +311,7 @@ const inlineAgent = Type.Object(
     model: Type.Optional(Type.String({ description: 'A `provider/model` ref for this ephemeral agent; the parent model when absent.' })),
     tools: Type.Optional(Type.Array(Type.String(), { description: 'Workspace tool names this ephemeral agent may use; all of them when absent.' })),
   },
-  { description: 'An inline, ephemeral agent defined here instead of a named subagent_type. When set, subagent_type is ignored.' },
+  { description: 'An inline, ephemeral agent defined here instead of a named subagent_type. Pass one, not both: a call with subagent_type is refused.' },
 )
 
 const parameters = Type.Object({
@@ -341,7 +341,7 @@ const parameters = Type.Object({
         'A `provider/model` ref for this hand-off, such as kortix/glm-5.3: it overrides the model of the named subagent_type, the inline agent and a fork. The agent\'s own model (else this session\'s) when absent. A follow-up (task_id) keeps its model.',
     }),
   ),
-  subagent_type: Type.Optional(Type.String({ description: 'The named agent to use for this task. Omitted: the general-purpose agent `general`, which runs with your own access. Ignored when you pass an inline `agent` spec.' })),
+  subagent_type: Type.Optional(Type.String({ description: 'The named agent to use for this task. Omitted: the general-purpose agent `general`, which runs with your own access. Mutually exclusive with an inline `agent` spec: a call carrying both is refused.' })),
   agent: Type.Optional(inlineAgent),
   task_id: Type.Optional(Type.String({ description: 'Set only to resume a previous task: the task_id a previous task output returned. The task resumes in the session it was created in.' })),
   session: Type.Optional(
@@ -627,6 +627,13 @@ function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessio
     return { title: `${params.description} (fork)`, agent: INLINE_AGENT, systemPrompt: FORK_PROMPT }
   }
   const inline = params.agent
+  // One call names the child's agent one way. A previous release let an inline spec — even an
+  // empty one — silently displace subagent_type and spawn an unnamed, tool-less child.
+  if (inline && params.subagent_type && !params.task_id) {
+    throw new Error(
+      `subagent_type "${params.subagent_type}" and an inline \`agent\` spec cannot combine: the inline spec displaces the named agent. Pass one: omit agent to run the named type, or omit subagent_type and fill the inline spec.`,
+    )
+  }
   if (inline) {
     const instructions = inline.instructions?.trim()
     return {

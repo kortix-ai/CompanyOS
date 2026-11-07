@@ -26,6 +26,7 @@ import { templateProviderObservation } from '../lib/template-provider-observatio
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
 import { isPlatformAdmin } from '../../shared/platform-roles';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
 import { workspaceIdParam } from '../../shared/route-params';
 
@@ -362,12 +363,14 @@ export function registerSandboxTemplatesRoutes(): void {
       return c.json({ error: 'Not found' }, 404);
     }
     // A shared platform row is not this project's to build — the same
-    // shared-row refusal the rebuild route enforces (KRTX-4465). Building it
-    // here would let a project-scoped caller force the platform-owned default
-    // image build on every enabled provider and mutate the shared row's build
-    // state; the platform's own startup pre-build owns that image. Platform
-    // admins keep the ability.
-    if (row.isShared && !(await isPlatformAdmin(c.get('userId')))) {
+    // shared-row refusal the rebuild route enforces (KRTX-4465). Only a
+    // PERSON acting as a platform admin owns the platform image: an agent
+    // session carries its launcher's userId, so the session-principal
+    // predicate rides next to isPlatformAdmin. Building it here would let a
+    // project-scoped caller force the platform-owned default image build on
+    // every enabled provider and mutate the shared row's build state; the
+    // platform's own startup pre-build owns that image.
+    if (row.isShared && (isProjectSessionPrincipal(c) || !(await isPlatformAdmin(c.get('userId'))))) {
       return c.json({ error: 'Shared platform templates cannot be built from a project.', code: 'TEMPLATE_SHARED' }, 403);
     }
 

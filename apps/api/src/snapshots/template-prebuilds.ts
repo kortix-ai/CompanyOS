@@ -118,9 +118,14 @@ export function kickProjectTemplatePrebuilds(
  */
 export async function deleteSandboxImage(
   project: GitBackedProject,
-  opts: { slug?: string; provider?: string } = {},
+  opts: { slug?: string; provider?: string; template?: ResolvedTemplate } = {},
 ): Promise<{ deleted: boolean; snapshotName: string; slug: string }> {
-  const template = await resolveTemplateForBuildSlug(project, opts.slug);
+  // A caller that ALREADY resolved the template (the rebuild route's guard
+  // authorizes the resolved row before reaching here) passes it back: delete
+  // exactly that identity, never re-resolve the raw slug — a project row that
+  // disappears between the caller's resolve and this one would fall back to
+  // the shared platform default (the check/use window, KRTX-4465).
+  const template = opts.template ?? await resolveTemplateForBuildSlug(project, opts.slug);
   const provider = getSandboxProvider(opts.provider ?? template.provider);
   const identity = await computeTemplateIdentity(project, template);
   const before = await provider.getSnapshotState(identity.snapshotName);

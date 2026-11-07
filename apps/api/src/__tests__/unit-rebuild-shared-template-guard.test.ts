@@ -60,7 +60,8 @@ const PROJECT_ROW = {
 
 let platformAdmin = false;
 let callerUserId = USER_ID;
-const deleteCalls: Array<{ slug?: string; provider?: string }> = [];
+let sessionPrincipal = false;
+const deleteCalls: Array<{ slug?: string; provider?: string; template?: { slug: string } }> = [];
 
 // The guard consults the caller's platform role. Overridden per test.
 const actualPlatformRoles = await import('../shared/platform-roles');
@@ -118,16 +119,17 @@ mock.module('../shared/db', () => ({
 
 // Observe (not execute) the provider-side delete. Unknown slugs reproduce the
 // real resolve's TemplateNotFoundError so the 404 mapping stays pinned both
-// before and after the guard.
+// before and after the guard. The authorized `template` the rebuild handler
+// passes through is recorded too (the check/use closure).
 const { TemplateNotFoundError } = await import('../snapshots/templates');
 const actualBuilder = await import('../snapshots/builder');
 const kickCalls: Array<{ slug?: string; source?: string }> = [];
 mock.module('../snapshots/builder', () => ({
   ...actualBuilder,
-  deleteSandboxImage: async (_project: unknown, opts: { slug?: string; provider?: string }) => {
+  deleteSandboxImage: async (_project: unknown, opts: { slug?: string; provider?: string; template?: { slug: string } }) => {
     const slug = (opts.slug ?? '').trim() || 'default';
     if (slug !== 'default' && slug !== 'custom') throw new TemplateNotFoundError(slug);
-    deleteCalls.push({ ...opts });
+    deleteCalls.push({ slug: opts.slug, provider: opts.provider, template: opts.template });
     return { deleted: true, snapshotName: `snap-${slug}`, slug };
   },
   kickPreBuild: () => {},
@@ -147,6 +149,9 @@ function createApp() {
   const app = new Hono();
   app.use('/v1/projects/*', async (c: any, next) => {
     c.set('userId', callerUserId);
+    // The session-principal shape the auth middleware would set for an
+    // in-sandbox agent session: a session binding on the context.
+    if (sessionPrincipal) c.set('sessionId', 'sess-test-principal');
     await next();
   });
   app.route('/v1/projects', projectsApp);
@@ -165,6 +170,7 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
   beforeEach(() => {
     platformAdmin = false;
     callerUserId = USER_ID;
+    sessionPrincipal = false;
     deleteCalls.length = 0;
     kickCalls.length = 0;
   });
@@ -200,7 +206,11 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
     const body = await res.json();
     expect(body.slug).toBe('default');
     expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0]).toEqual({ slug: 'default', provider: 'platinum' });
+    // The delete runs against the template the guard resolved (the check/use
+    // closure): never a re-resolve of the raw slug.
+    expect(deleteCalls[0].slug).toBe('default');
+    expect(deleteCalls[0].provider).toBe('platinum');
+    expect(deleteCalls[0].template?.slug).toBe('default');
   });
 
   test('an explicit project slug still rebuilds for a project-scoped caller', async () => {
@@ -209,7 +219,9 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
     const body = await res.json();
     expect(body.slug).toBe('custom');
     expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0]).toEqual({ slug: 'custom', provider: 'platinum' });
+    expect(deleteCalls[0].slug).toBe('custom');
+    expect(deleteCalls[0].provider).toBe('platinum');
+    expect(deleteCalls[0].template?.slug).toBe('custom');
   });
 
   test('a slug naming no template still answers 404 TEMPLATE_NOT_FOUND', async () => {
@@ -219,12 +231,27 @@ describe('POST /v1/projects/:id/snapshots/rebuild refuses the shared platform im
     expect(body.code).toBe('TEMPLATE_NOT_FOUND');
     expect(deleteCalls).toHaveLength(0);
   });
+
+  test('a project-session principal never counts as the platform-admin operator, even with an admin userId', async () => {
+    // An in-sandbox agent session carries its launcher's userId: a platform
+    // admin's session token would pass isPlatformAdmin alone (KRTX-4465,
+    // Strix CWE-863). The session principal is refused like any other
+    // project-scoped caller.
+    platformAdmin = true;
+    sessionPrincipal = true;
+    const res = await rebuild({ slug: 'default' });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe('TEMPLATE_SHARED');
+    expect(deleteCalls).toHaveLength(0);
+  });
 });
 
 describe('POST /v1/projects/:id/sandbox-templates/:templateId/build refuses the shared platform image (KRTX-4465)', () => {
   beforeEach(() => {
     platformAdmin = false;
     callerUserId = USER_ID;
+    sessionPrincipal = false;
     deleteCalls.length = 0;
     kickCalls.length = 0;
   });
@@ -252,5 +279,15 @@ describe('POST /v1/projects/:id/sandbox-templates/:templateId/build refuses the 
     const body = await res.json();
     expect(body.slug).toBe('default');
     expect(kickCalls).toHaveLength(1);
+  });
+
+  test('a project-session principal never counts as the platform-admin operator on the build route either', async () => {
+    platformAdmin = true;
+    sessionPrincipal = true;
+    const res = await build(SHARED_ROW.templateId);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe('TEMPLATE_SHARED');
+    expect(kickCalls).toHaveLength(0);
   });
 });

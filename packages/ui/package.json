@@ -221,7 +221,6 @@
     "./i18n/ui-catalog/use-localized-ui-catalog": "./src/i18n/ui-catalog/use-localized-ui-catalog.ts",
     "./icon-provider": "./src/primitives/icon-provider.tsx",
     "./icons": "./src/icons/index.ts",
-    "./info-banner": "./src/primitives/info-banner.tsx",
     "./inline-meta": "./src/primitives/inline-meta.tsx",
     "./input": "./src/primitives/input.tsx",
     "./input-group": "./src/primitives/input-group.tsx",
@@ -1355,10 +1354,6 @@
       "./icons": {
         "types": "./dist/icons/index.d.ts",
         "import": "./dist/icons/index.js"
-      },
-      "./info-banner": {
-        "types": "./dist/primitives/info-banner.d.ts",
-        "import": "./dist/primitives/info-banner.js"
       },
       "./inline-meta": {
         "types": "./dist/primitives/inline-meta.d.ts",

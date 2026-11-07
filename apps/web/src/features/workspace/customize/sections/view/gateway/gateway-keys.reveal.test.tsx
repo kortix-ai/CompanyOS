@@ -43,7 +43,7 @@ describe('Gateway key reveal — KM01', () => {
     expect(reveal).toContain('{created.secret_key}');
     expect(reveal).toContain("t('shownOnceNote')");
     expect(reveal).toContain('<Alert>');
-    expect(reveal).not.toContain('InfoBanner');
+    expect(reveal).not.toContain('Alert');
     expect(reveal).toContain('<GatewayFirstRequest');
   });
 

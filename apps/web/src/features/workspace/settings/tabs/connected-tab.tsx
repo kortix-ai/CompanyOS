@@ -3,7 +3,7 @@
 import { localizedCopy } from './localized-copy';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
 import { SettingsRow, SettingsRowGroup } from '@kortix/ui/settings-row';
 import { Skeleton } from '@kortix/ui/skeleton';
@@ -53,17 +53,17 @@ export interface ConnectedAccountsTabCopy {
 }
 
 const DEFAULT_CONNECTED_ACCOUNTS_COPY: ConnectedAccountsTabCopy = {
-  checking: 'Checking this account for a GitHub App installation.',
+  checking: 'Checking this workspace for a GitHub App installation.',
   connectedAs: (name) =>
     `Connected as ${name} — installed for this account, shared by every project.`,
-  unavailable: 'GitHub status unavailable for this account.',
-  install: 'Install the GitHub App for this account so every project can import its repositories.',
+  unavailable: 'GitHub status unavailable for this workspace.',
+  install: 'Install the GitHub App for this workspace so it can import repositories.',
   disconnect: 'Disconnect',
   connect: 'Connect',
   github: 'GitHub',
   moreInstallations: (count) =>
     `+${count} more installation${count === 1 ? '' : 's'} on this account — manage all`,
-  adminOnly: 'Only an account owner or admin can connect GitHub for this account.',
+  adminOnly: 'Only a workspace owner or admin can connect GitHub for this workspace.',
   disconnectedToast: 'GitHub disconnected',
   disconnectFailed: 'Failed to disconnect GitHub',
 };
@@ -134,7 +134,7 @@ export function ConnectedAccountsTabView({
             </SettingsRow>
           </SettingsRowGroup>
           {githubStatus === 'error' && githubError ? (
-            <InfoBanner tone="warning">{githubError}</InfoBanner>
+            <BannerAlert variant="warning" ><BannerAlertDescription>{githubError}</BannerAlertDescription></BannerAlert>
           ) : null}
           {githubStatus === 'connected' &&
           githubOtherInstallationsCount > 0 &&
@@ -152,7 +152,7 @@ export function ConnectedAccountsTabView({
            only provider on this pane, and installing it writes the account. An
            empty `SettingsRowGroup` would draw a bordered box around nothing, so
            the pane says why it is empty instead. */
-        <InfoBanner tone="info">{copy.adminOnly}</InfoBanner>
+        <BannerAlert variant="default" ><BannerAlertDescription>{copy.adminOnly}</BannerAlertDescription></BannerAlert>
       )}
     </div>
   );
@@ -217,7 +217,7 @@ export function ConnectedAccountsTab({ accountId }: { accountId?: string }) {
     rememberGitHubSetupReturn(
       typeof window !== 'undefined'
         ? window.location.pathname + window.location.search
-        : '/projects',
+        : '/workspaces',
     );
     router.push(`/github/setup?account_id=${encodeURIComponent(resolvedAccountId)}`);
   };

@@ -5,12 +5,12 @@
  */
 import { sessionSandboxes } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
+import { logger } from '../../lib/logger';
 import { getProvider, type ProviderName } from '../../platform/providers';
 import { SANDBOX_SERVICE_PORT } from './sandbox-env-transport';
 import { readFileSync } from 'node:fs';
-import { RUNTIME_VERSIONS as runtimeVersions } from '@kortix/shared/runtime-versions';
 import { runtimeAssetsManifest, runtimeEntrypointPath, type RuntimeAssetsManifest } from '../../runtime-assets/manifest';
-import { projectSessions, projects } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 import { sql } from 'drizzle-orm';
 import { createAccountToken, revokeAccountToken } from '../../repositories/account-tokens';
 import { mintSessionToken } from '../../platform/services/session-sandbox';
@@ -21,6 +21,9 @@ import { mergeMetadata } from '../reaping/sandbox-state-sync';
 import {
   bootstrapLegacyRuntime,
   bootstrapWouldSkip,
+  decideDeadDaemonOnEdgeRefusal,
+  DEAD_DAEMON_REPAIR_REQUESTED_KEY,
+  LEGACY_CHECK_METADATA_KEY,
   updatesItself,
   classifyDaemonHealth,
   describeLegacyBootstrapRetry,
@@ -31,6 +34,7 @@ import {
   type LegacyBootstrapRetrySummary,
   type RuntimeClassification,
 } from './legacy-runtime-bootstrap';
+import { projectsView } from '../../workspaces/rows';
 
 const HEALTH_TIMEOUT_MS = 8_000;
 
@@ -100,13 +104,13 @@ async function mintReplacementServiceKey(row: LegacyBootstrapRow): Promise<strin
   if (!session?.createdBy) return null;
   const [project] = await db
     .select({
-      projectId: projects.projectId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
+      projectId: projectsView.projectId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
     })
-    .from(projects)
-    .where(eq(projects.projectId, session.projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, session.projectId))
     .limit(1);
   if (!project) return null;
   return mintSessionToken({
@@ -272,7 +276,6 @@ export function buildLegacyBootstrapDeps(row: LegacyBootstrapRow): LegacyBootstr
         return null;
       }
     },
-    pnpmVersion: () => (typeof (runtimeVersions as { pnpm?: unknown }).pnpm === 'string' ? ((runtimeVersions as { pnpm: string }).pnpm) : null),
     rotateKortixToken: () => mintReplacementServiceKey(row),
     commitKortixToken: (secret, rotatedOnBox) => commitReplacementServiceKey(row, secret, rotatedOnBox),
     exec: async (command, timeoutMs) => {
@@ -396,6 +399,56 @@ export function scheduleLegacyRuntimeBootstrap(
       ),
     )
     .finally(() => inFlight.delete(row.sandboxId));
+  return true;
+}
+
+/**
+ * The provider edge refused a daemon-port request on a running box: ask for the
+ * dead-daemon relaunch now instead of at the next `/start` or reaper tick.
+ * Fire-and-forget for the proxy (it never waits on a repair); returns whether
+ * a relaunch was scheduled. `scheduleRepair` is overridable for tests only.
+ */
+export async function repairDeadDaemonOnEdgeRefusal(
+  sandboxId: string,
+  scheduleRepair: typeof scheduleLegacyRuntimeBootstrap = scheduleLegacyRuntimeBootstrap,
+): Promise<boolean> {
+  const [row] = await db
+    .select({
+      sandboxId: sessionSandboxes.sandboxId,
+      sessionId: sessionSandboxes.sessionId,
+      accountId: sessionSandboxes.accountId,
+      projectId: sessionSandboxes.projectId,
+      provider: sessionSandboxes.provider,
+      externalId: sessionSandboxes.externalId,
+      metadata: sessionSandboxes.metadata,
+      status: sessionSandboxes.status,
+    })
+    .from(sessionSandboxes)
+    .where(eq(sessionSandboxes.sandboxId, sandboxId))
+    .limit(1);
+  if (!row?.externalId || row.status !== 'active') return false;
+  const metadata = (row.metadata ?? null) as Record<string, unknown> | null;
+  if (decideDeadDaemonOnEdgeRefusal({ provider: row.provider, metadata, nowMs: Date.now() }) === 'skip') return false;
+  // A `current` verdict from hours ago says nothing about a daemon the edge just
+  // found refusing; with it the repair's 6 h recent-check gate skips this box.
+  const { [LEGACY_CHECK_METADATA_KEY]: _staleCheck, ...freshMetadata } = metadata ?? {};
+  const scheduled = scheduleRepair(
+    { ...row, externalId: row.externalId, metadata: freshMetadata },
+    'proxy-edge-refused-daemon',
+  );
+  if (!scheduled) return false;
+  await db
+    .update(sessionSandboxes)
+    .set({
+      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
+        [DEAD_DAEMON_REPAIR_REQUESTED_KEY]: new Date().toISOString(),
+      })}::jsonb`,
+    })
+    .where(eq(sessionSandboxes.sandboxId, sandboxId));
+  logger.warn('[proxy] daemon port refused on a running box; relaunching', {
+    sandbox_id: sandboxId,
+    external_id: row.externalId,
+  });
   return true;
 }
 

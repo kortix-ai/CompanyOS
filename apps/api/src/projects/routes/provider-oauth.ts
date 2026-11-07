@@ -23,18 +23,18 @@ import {
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
 import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { createRoute, z } from '@hono/zod-openapi';
-import { accountSecretGrants, accountSecretResources } from '@kortix/db';
-import { memberMayReadProject } from '../../secrets/account-resource';
+import { accountSecretGrants } from '@kortix/db';
 import { reconnectProviderAccount, writeProviderAccount } from '../../secrets/provider-accounts';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import {
   loadProjectForUser,
   assertProjectCapability,
   projectCapabilityAllowed,
 } from '../lib/access';
 import { projectsApp } from '../lib/app';
+import { parseOAuthStartRequest } from '../lib/provider-oauth-request';
 import {
   CODEX_AUTH_JSON_SECRET_NAME,
   loadSecretViewsForUser,
@@ -42,6 +42,8 @@ import {
 } from '../lib/serializers';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { capturePersonEvent } from './product-events';
+import { workspaceIdParam } from '../../shared/route-params';
 
 // ─── Provider OAuth device flow (poll-based) ───────────────────────────────
 //
@@ -61,9 +63,7 @@ import { rethrowDatabaseError } from '../../shared/database-errors';
 // isn't tied to a client connection, so nothing the edge does can kill it.
 
 // Kortix provider id → how its device flow runs and where the login is saved.
-// `legacySecretNames` are older names for the same login. Nothing writes them
-// any more, but clients and the gateway still count them as connected, so a
-// disconnect must delete them too. `resourceProviderId` tags a named (pooled)
+// `resourceProviderId` tags a named (pooled)
 // connection. `secretName` is read lazily: the OpenCode names come from the
 // runtime catalog (a Console login is stored as the provider's own key secret,
 // see llm-gateway/credentials/opencode-console.ts).
@@ -71,7 +71,6 @@ interface OAuthProvider {
   label: string;
   secretName: string;
   resourceProviderId: string;
-  legacySecretNames?: string[];
   start: () => Promise<{ verificationUrl: string; userCode: string; handle: string; intervalMs: number }>;
   poll: (handle: string, userCode: string) => Promise<
     { status: 'pending' } | { status: 'failed'; error: string } | { status: 'authorized'; authJson: string }>;
@@ -83,7 +82,6 @@ function oauthProvider(provider: string): OAuthProvider | null {
   if (provider === 'openai') {
     return {
       label: 'ChatGPT', secretName: CODEX_AUTH_JSON_SECRET_NAME, resourceProviderId: 'codex',
-      legacySecretNames: ['OPENCODE_AUTH_JSON'],
       start: async () => {
         const c = await startCodexDeviceAuth();
         return { verificationUrl: c.verificationUrl, userCode: c.userCode, handle: c.deviceAuthId, intervalMs: c.intervalMs };
@@ -114,8 +112,7 @@ const OAUTH_POLL_INTERVAL_MS = 3000;
 // Persists the login as the provider's project secret (CODEX_AUTH_JSON, or the
 // OpenCode key secret) — private (the caller's own per-user OAuth login,
 // ownerUserId-scoped) when `sharing` says so, else the project-wide shared
-// row — then returns the caller's view of it. A legacy OPENCODE_AUTH_JSON row
-// is never overwritten by this. `sharing` only ever chooses private-vs-shared
+// row — then returns the caller's view of it. `sharing` only ever chooses private-vs-shared
 // here — member/group secret sharing was retired (see projects/secrets.ts).
 async function writeOAuthLoginSecret(input: {
   projectId: string;
@@ -260,12 +257,12 @@ export function registerProviderOauthRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/oauth/{provider}/start',
+      path: '/{workspaceId}/oauth/{provider}/start',
       tags: ['secrets'],
       summary: 'Start an LLM provider OAuth login',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), provider: z.string() }),
+          params: z.object({ workspaceId: z.string(), provider: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               resource_label: z.string().optional().openapi({ description: 'Label of the connection.' }),
               resource_id: z.string().optional().openapi({ description: 'Existing connection to re-authorize.' }),
@@ -278,7 +275,7 @@ export function registerProviderOauthRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const provider = c.req.param('provider');
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -289,67 +286,9 @@ export function registerProviderOauthRoutes(): void {
       return c.json({ error: `OAuth device flow is not available for "${provider}"` }, 400);
     }
 
-    const resourceLabel = body.resource_label === undefined ? null :
-      typeof body.resource_label === 'string' ? body.resource_label.trim() : '';
-    if (resourceLabel !== null && (resourceLabel.length < 1 || resourceLabel.length > 100)) {
-      return c.json({ error: 'A named OAuth resource requires a 1–100 character label' }, 400);
-    }
-    // Reconnect refreshes the login of an existing named account resource in
-    // place. It never renames or re-shares it, so a label or sharing is refused.
-    const resourceId = body.resource_id === undefined ? null :
-      typeof body.resource_id === 'string' ? body.resource_id.trim() : '';
-    if (resourceId !== null && !z.string().uuid().safeParse(resourceId).success) {
-      return c.json({ error: `resource_id must be the id of a ${cfg.label} account` }, 400);
-    }
-    if (resourceId !== null && (resourceLabel !== null || body.sharing != null)) {
-      return c.json({ error: 'Reconnecting keeps the account label and access; send only resource_id' }, 400);
-    }
-    const named = resourceLabel !== null || resourceId !== null;
-    if (named && !resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets')) {
-      return c.json({ error: 'Pooled OAuth connections require pooled provider secrets' }, 403);
-    }
-    if (named) {
-      const [member] = await accountMemberRow(loaded.row.accountId, loaded.userId);
-      if (!member) return c.json({ error: `An account member must own a ${cfg.label} connection` }, 403);
-    }
-    if (resourceId !== null) {
-      const [resource] = await db.select({
-        projectId: accountSecretResources.projectId,
-        providerId: accountSecretResources.providerId,
-        name: accountSecretResources.name,
-        createdBy: accountSecretResources.createdBy,
-      }).from(accountSecretResources)
-        .where(and(eq(accountSecretResources.accountId, loaded.row.accountId), eq(accountSecretResources.secretId, resourceId)))
-        .limit(1);
-      if (!resource || resource.projectId !== projectId || resource.providerId !== cfg.resourceProviderId ||
-        resource.name !== cfg.secretName) {
-        return c.json({ error: `${cfg.label} account not found` }, 404);
-      }
-      // The login is the owner's own subscription; only they re-authorize it.
-      // Account admins can still delete the account.
-      if (resource.createdBy !== loaded.userId) {
-        return c.json({ error: `Only the person who connected this ${cfg.label} account can reconnect it` }, 403);
-      }
-    }
-
-    let sharing: ReturnType<typeof parseSharingIntent> | undefined;
-    if (body.sharing != null) {
-      sharing = parseSharingIntent(body.sharing, loaded.userId);
-      if (!sharing) {
-        return c.json({ error: 'invalid sharing — mode must be project|private|members' }, 400);
-      }
-      if (resourceLabel !== null) {
-        if (sharing.mode === 'private' && sharing.ownerId !== loaded.userId) return c.json({ error: 'Invalid connection owner' }, 400);
-        if (sharing.mode === 'members') {
-          if (sharing.groupIds?.length || (sharing.memberIds?.length ?? 0) > 200) return c.json({ error: 'Select up to 200 project members' }, 400);
-          for (const userId of sharing.memberIds ?? []) {
-            if (!z.string().uuid().safeParse(userId).success || !(await memberMayReadProject(loaded.row.accountId, projectId, userId))) {
-              return c.json({ error: 'Member has no project access' }, 400);
-            }
-          }
-        }
-      }
-    }
+    const parsed = await parseOAuthStartRequest(c, body, cfg, loaded, projectId);
+    if ('response' in parsed) return parsed.response;
+    const { resourceLabel, resourceId, sharing } = parsed.request;
     // A shared credential is a project SECRET WRITE (the device flow persists it
     // via writeOAuthLoginSecret on poll). Gate on the leaf so a custom role can
     // withhold it and the agent-grant fold applies — closing the gap where the
@@ -411,12 +350,12 @@ export function registerProviderOauthRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/oauth/{provider}/poll',
+      path: '/{workspaceId}/oauth/{provider}/poll',
       tags: ['secrets'],
       summary: 'Poll an LLM provider OAuth login',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), provider: z.string() }),
+          params: z.object({ workspaceId: z.string(), provider: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               flow_id: z.string().openapi({ description: 'Flow id returned by start.' }),
             }) } } },
@@ -427,7 +366,7 @@ export function registerProviderOauthRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const provider = c.req.param('provider');
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -473,7 +412,7 @@ export function registerProviderOauthRoutes(): void {
 
     if (state.rc && state.rid) {
       if (!resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets')) {
-        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this project' });
+        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this workspace' });
       }
       const reconnected = await reconnectProviderAccount({
         secretId: state.rid, accountId: loaded.row.accountId, userId: loaded.userId,
@@ -482,6 +421,7 @@ export function registerProviderOauthRoutes(): void {
       if (!reconnected) {
         return c.json({ status: 'failed', error: `This ${cfg.label} account is no longer available. Add it again.` });
       }
+      capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: String(provider), method: 'oauth' });
       return c.json({ status: 'success', credential: {
         provider_id: cfg.resourceProviderId, secret_id: reconnected.secretId, label: reconnected.label,
         expires_in_ms: authExpiresInMs(result.authJson), updated_at: new Date().toISOString(),
@@ -492,13 +432,14 @@ export function registerProviderOauthRoutes(): void {
     // device flow gets a new resource; it never overwrites another user's login.
     if (state.l && state.rid) {
       if (!resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets')) {
-        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this project' });
+        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this workspace' });
       }
       const secretId = await writeProviderAccount({
         secretId: state.rid, accountId: loaded.row.accountId, userId: loaded.userId,
         label: state.l, value: result.authJson, projectId, kind: accountKind(cfg),
         sharing: state.s ? (parseSharingIntent(state.s, loaded.userId) ?? undefined) : undefined,
       });
+      capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: String(provider), method: 'oauth' });
       return c.json({ status: 'success', credential: {
         provider_id: cfg.resourceProviderId, secret_id: secretId, label: state.l,
         expires_in_ms: authExpiresInMs(result.authJson), updated_at: new Date().toISOString(),
@@ -516,6 +457,7 @@ export function registerProviderOauthRoutes(): void {
       sharing,
     });
 
+    capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: String(provider), method: 'oauth' });
     return c.json({
       status: 'success',
       credential: {
@@ -532,18 +474,18 @@ export function registerProviderOauthRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/oauth',
+      path: '/{workspaceId}/oauth',
       tags: ['secrets'],
       summary: 'List connected LLM provider logins',
       ...auth,
-        request: { params: z.object({ projectId: z.string() }) },
+        request: { params: z.object({ workspaceId: z.string() }) },
       responses: {
           200: json(z.any(), 'Configured OAuth credentials'),
           ...errors(401, 404),
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_READ);
@@ -583,18 +525,18 @@ export function registerProviderOauthRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/oauth/{provider}',
+      path: '/{workspaceId}/oauth/{provider}',
       tags: ['secrets'],
       summary: 'Disconnect an LLM provider login',
       ...auth,
-        request: { params: z.object({ projectId: z.string(), provider: z.string() }) },
+        request: { params: z.object({ workspaceId: z.string(), provider: z.string() }) },
       responses: {
           200: json(z.any(), 'OK'),
           ...errors(401, 403, 404),
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const provider = c.req.param('provider');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -614,7 +556,7 @@ export function registerProviderOauthRoutes(): void {
           .where(
             and(
               eq(projectSecrets.projectId, projectId),
-              inArray(projectSecrets.name, [cfg.secretName, ...(cfg.legacySecretNames ?? [])]),
+              eq(projectSecrets.name, cfg.secretName),
               canManageShared ? or(ownPrivate, isNull(projectSecrets.ownerUserId)) : ownPrivate,
             ),
           );

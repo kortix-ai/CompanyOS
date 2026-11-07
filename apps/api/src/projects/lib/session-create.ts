@@ -113,6 +113,7 @@ import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
 import { isInlineColleagueContext } from './inline-colleague';
+import { childSessionLimitRefusal } from './child-session-limit';
 import type { SessionInvocationSource } from '../session-lifecycle/types';
 import { captureProductEvent } from '../../shared/product-analytics';
 /** Every status a failed create answers with. Routes that create a session
@@ -1769,6 +1770,11 @@ export async function createProjectSession(input: {
     if (!parentId.success || !parentId.data) return { error: { status: 400, body: { error: 'Invalid parent session' } } };
     const parent = await loadVisibleSession({ row: project, userId, actor: input.parentActor }, parentId.data, null, null);
     if (!parent || sessionIsTombstoned(parent.row)) return { error: { status: 404, body: { error: 'Not found' } } };
+  }
+  // A session starting its own child: the cap on children per window (child-session-limit.ts), before any side effect.
+  if (input.callerSessionId) {
+    const limited = await childSessionLimitRefusal(input.callerSessionId, projectId);
+    if (limited) return { error: limited };
   }
 
   // The id first: a /workspace-volume session starts opening its volume now,

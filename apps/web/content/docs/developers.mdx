@@ -106,7 +106,7 @@ my-agent/
 └── .gitignore
 ```
 
-- `kortix.yaml` turns on My Kortix (`builtin_agents: { my_kortix: true }`) and sets `default_agent: mykortix`. A session that names no agent runs My Kortix, and My Kortix hands the work to `worker` unless you name another agent.
+- `kortix.yaml` turns on My Kortix (`builtin_agents: { my_kortix: true }`) and sets `default_agent: mykortix`. A session that names no agent runs My Kortix, and My Kortix hands project work to `worker` by name.
 - `worker` is a general-purpose agent. Every grant it has is `"*"`: every name. A workspace created before `worker` existed keeps its `kortix` agent.
 - `worker` sets `workspace: { project_repository: true }`, so each session gets a checkout of the repository on its own branch in `/workspace`.
 - `kortix-cli` is the one Kortix skill in the folder. The other `kortix-*` skills are always registered and come with every session. The `skills` key in `kortix.yaml` lists the other 10.
@@ -992,7 +992,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 - **`secrets` reaches the sandbox.** A granted secret is an environment variable or a network-enforced secret in the agent's sandbox. Model logins, connector and git credentials stay with Kortix services: the agent's model and connector settings decide their use.
 - **Built in, with no entry.** The Kortix skills: `kortix-cli`, `kortix-memory` and the other `kortix-*` skills. The Kortix tools: `web_search`, `image_search`, `image_gen`, `scrape_webpage`, `show`. See [Kortix tools](/docs/developers#kortix-tools). The built-in tools: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `question`, `task`. An agent loads a Kortix skill only when its `skills` grant names it or is `"*"`.
 - **My Kortix runs only when the file turns it on.** `builtin_agents: { my_kortix: true }` turns it on, and the starter sets it. No key, `false`, or a file Kortix cannot read leaves it off. With it off, a request for the agent `mykortix` returns `409 builtin_agent_disabled`.
-- **Which agent a session runs.** A session or trigger that names no agent runs `default_agent`. With My Kortix on and no `default_agent`, it runs My Kortix. When My Kortix starts a session and names no agent, the session runs `default_agent`, or the first enabled agent with `mode` `primary` or `all` when `default_agent` is `mykortix`. The starter manifest sets `builtin_agents.my_kortix: true`, `default_agent: mykortix` and one workspace agent, `worker`, so a new workspace runs My Kortix, and My Kortix hands work to `worker`. A workspace made before `worker` existed keeps its `kortix` agent.
+- **Which agent a session runs.** A session or trigger that names no agent runs `default_agent`. With My Kortix on and no `default_agent`, it runs My Kortix. A colleague My Kortix starts without naming an agent (an inline agent, `general`, a fork) runs as My Kortix, with My Kortix's own access and its own instructions. Any other session My Kortix starts names its agent: when `default_agent` is `mykortix`, a create that names none is refused with 400 `AGENT_REQUIRED` and the agents to name. Nothing picks an agent for it. The starter manifest sets `builtin_agents.my_kortix: true`, `default_agent: mykortix` and one workspace agent, `worker`, so a new workspace runs My Kortix, and My Kortix hands project work to `worker` by name. A workspace made before `worker` existed keeps its `kortix` agent.
 - **A file with an error** still runs My Kortix when it sets `my_kortix: true`, so My Kortix can fix the file.
 - **Extensions** are packages for the agent runtime. A package holds runtime extensions, skills, prompts or themes. The change request merge builds npm packages, and a session never installs them. A session loads its extensions when its runtime starts, so a change reaches a running session at its next start.
 
@@ -1529,6 +1529,7 @@ The worked example is in the `kortix-system` skill, `references/scheduling.md` �
 - **Continue a child.** `agent` with a `task_id` sends a finished child a follow-up in its same session. `agent` with the `name` of a finished child (idle, completed or stopped) does the same: no new session starts, and the result says `This continued your earlier subagent "<name>" in its same session` (tool metadata `continued: true`). A `name` whose child still works, or waits for its person, is refused. A failed child frees its name. A message to a finished child wakes it in its same session, and a background child or teammate then sends its next report by itself.
 - **Stop a child.** `task_stop` with the child's `task_id` or name stops its session.
 - **Depth.** A separate child may start its own separate children down to depth 2 (`KORTIX_PI_CLOUD_SUBAGENTS_MAX_DEPTH`). One session runs at most 4 separate children at the same time (`KORTIX_PI_CLOUD_SUBAGENTS_MAX`).
+- **Rate.** One session starts at most 40 child sessions in 10 minutes. The next create answers 429 `CHILD_SESSION_LIMIT` with `Retry-After`, and its message tells the model to stop and tell the person what keeps failing. A workflow runner is exempt: its run has its own cap.
 
 #### Custom subagents
 

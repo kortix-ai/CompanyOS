@@ -118,8 +118,24 @@ export function kickProjectTemplatePrebuilds(
  */
 export async function deleteSandboxImage(
   project: GitBackedProject,
-  opts: { slug?: string; provider?: string; template?: ResolvedTemplate } = {},
+  opts: { slug?: string; provider?: string; template?: ResolvedTemplate; snapshotName?: string } = {},
 ): Promise<{ deleted: boolean; snapshotName: string; slug: string }> {
+  // A caller holding the EXACT provider identity to drop (the session heal:
+  // the snapshot name the session actually booted) passes `snapshotName`:
+  // delete that name and never re-derive it from a slug — a project template
+  // named `default-warm` that disappears mid-provision would otherwise fall
+  // back to the shared platform default and make the heal delete the image
+  // every tenant's next session boots from (KRTX-4465, Strix CWE-367).
+  if (opts.snapshotName) {
+    const directProvider = getSandboxProvider(opts.provider);
+    const wasThere = await directProvider.getSnapshotState(opts.snapshotName);
+    await directProvider.deleteSnapshot(opts.snapshotName);
+    return {
+      deleted: wasThere === 'active' || wasThere === 'building',
+      snapshotName: opts.snapshotName,
+      slug: opts.slug ?? '',
+    };
+  }
   // A caller that ALREADY resolved the template (the rebuild route's guard
   // authorizes the resolved row before reaching here) passes it back: delete
   // exactly that identity, never re-resolve the raw slug — a project row that

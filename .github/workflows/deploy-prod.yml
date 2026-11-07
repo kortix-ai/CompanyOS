@@ -1779,8 +1779,8 @@ jobs:
           exit 1
 
   # Deploy kortix.com (Vercel) ONLY after the API provably serves the release.
-  # Vercel's git auto-deploy for `prod` is OFF (vercel.json deploymentEnabled +
-  # vercel-ignore.sh): during the 2026-08-10 v0.12.7 rollout the auto-deployed
+  # Vercel never deploys from a git push (the project has no Git connection, and
+  # vercel.json sets git.deploymentEnabled false): during the 2026-08-10 v0.12.7 rollout the auto-deployed
   # new frontend called routes the still-old API did not have, and every
   # project load failed. Ordering the frontend after `verify-live-version`
   # makes a mixed frontend/API pair impossible.

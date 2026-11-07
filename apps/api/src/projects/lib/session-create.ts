@@ -112,6 +112,8 @@ import type { Actor } from '../../iam/actor';
 import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
+import { isInlineColleagueContext } from './inline-colleague';
+import { childSessionLimitRefusal } from './child-session-limit';
 import type { SessionInvocationSource } from '../session-lifecycle/types';
 import { captureProductEvent } from '../../shared/product-analytics';
 /** Every status a failed create answers with. Routes that create a session
@@ -592,7 +594,7 @@ async function resolveSessionAgent(params: {
   // A session that names no agent runs `default_agent`. A project that runs My
   // Kortix and sets no `default_agent` runs My Kortix; the mirrored default is
   // not read then, since it can name an agent the file turned off.
-  let agentName =
+  const agentName =
     metaAgentEnabled && !requestedAgent && !manifestDefaultAgent && !callerIsMeta
       ? MY_KORTIX_AGENT_NAME
       : resolveSessionAgentName({
@@ -601,10 +603,10 @@ async function resolveSessionAgent(params: {
           mirroredDefaultAgent,
         });
   // My Kortix starting a session without naming an agent, in a project whose
-  // `default_agent` is My Kortix: the first enabled primary agent the file declares.
-  if (callerIsMeta && !requestedAgent && isMyKortixAgentName(agentName)) {
-    agentName = loadedAgents.specs.find((spec) => spec.enabled && !spec.subagent)?.name ?? agentName;
-  }
+  // `default_agent` is My Kortix. Nothing is guessed: a router's child is a My
+  // Kortix worker and an inline colleague runs as My Kortix (both below);
+  // anything else is refused with the agents to name.
+  const unnamedMyKortixChild = callerIsMeta && !requestedAgent && isMyKortixAgentName(agentName);
   // kortix.yaml is not YAML: repair mode. Only My Kortix runs, so the file can
   // be fixed. Any other agent is a typed refusal that names the error, never a 500.
   if (loadedAgents.manifestSyntaxError && !isMyKortixAgentName(agentName)) {
@@ -661,7 +663,22 @@ async function resolveSessionAgent(params: {
       };
     }
   }
-  if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker) {
+  // An inline colleague (inline-colleague.ts) has My Kortix's own access and its own prompt.
+  const myKortixColleague = platformMetaAgent && callerIsMeta && isInlineColleagueContext(body.runtime_context);
+  if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker && !myKortixColleague) {
+    if (unnamedMyKortixChild) {
+      const agents = loadedAgents.specs.filter((spec) => spec.enabled && !spec.subagent).map((spec) => spec.name);
+      return {
+        error: {
+          status: 400,
+          body: {
+            error: `My Kortix is this workspace's default agent, so a session My Kortix starts names its agent: ${agents.join(', ') || 'none is declared'}. To start a colleague with your own access, give the agent tool inline instructions.`,
+            code: 'AGENT_REQUIRED',
+            agents,
+          },
+        },
+      };
+    }
     return {
       error: {
         status: 400,
@@ -1753,6 +1770,11 @@ export async function createProjectSession(input: {
     if (!parentId.success || !parentId.data) return { error: { status: 400, body: { error: 'Invalid parent session' } } };
     const parent = await loadVisibleSession({ row: project, userId, actor: input.parentActor }, parentId.data, null, null);
     if (!parent || sessionIsTombstoned(parent.row)) return { error: { status: 404, body: { error: 'Not found' } } };
+  }
+  // A session starting its own child: the cap on children per window (child-session-limit.ts), before any side effect.
+  if (input.callerSessionId) {
+    const limited = await childSessionLimitRefusal(input.callerSessionId, projectId);
+    if (limited) return { error: limited };
   }
 
   // The id first: a /workspace-volume session starts opening its volume now,

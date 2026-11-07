@@ -1165,6 +1165,26 @@ function validateEnv(): z.infer<typeof envSchema> {
     }
   }
 
+  // ── Values dotenvx did not decrypt ─────────────────────────────────────
+  // With no private key, dotenvx leaves `encrypted:…` in place and still exits
+  // 0. The schema then fails with an unrelated-looking message ("Must be a
+  // valid HTTP(S) URL"), so name the real cause. A warning only: it never
+  // decides whether the server starts.
+  const stillEncrypted = Object.keys(process.env)
+    .filter((name) => process.env[name]?.startsWith('encrypted:'))
+    .sort();
+  if (stillEncrypted.length > 0) {
+    const shown = stillEncrypted.slice(0, 3).join(', ');
+    const more = stillEncrypted.length > 3 ? ` and ${stillEncrypted.length - 3} more` : '';
+    issues.push({
+      var: 'dotenvx',
+      message:
+        `${stillEncrypted.length} value(s) are still encrypted (${shown}${more}): no dotenvx private key was found. ` +
+        'Run `dotenvx armor login` (dotenvx 2.7.1 or newer), or set DOTENV_PRIVATE_KEY, or restore apps/api/.env.keys.',
+      level: 'warn',
+    });
+  }
+
   // Use raw values for conditional checks (schema may have failed)
   const raw = result.success ? result.data : (process.env as Record<string, string | undefined>);
 
@@ -1376,7 +1396,11 @@ function validateEnv(): z.infer<typeof envSchema> {
     }
     console.error('\x1b[31m' + '='.repeat(70) + '\x1b[0m');
     console.error('');
-    console.error('\x1b[31m  Fix the above in your .env file and restart.\x1b[0m');
+    console.error(
+      stillEncrypted.length > 0
+        ? '\x1b[31m  Values were never decrypted: fix the dotenvx warning above first, then restart.\x1b[0m'
+        : '\x1b[31m  Fix the above in your .env file and restart.\x1b[0m',
+    );
     console.error('');
     process.exit(1);
   }

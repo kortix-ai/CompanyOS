@@ -2281,16 +2281,16 @@ describe('pi subagents extension', () => {
     }
   })
 
-  test('subagent_type and an inline agent spec are mutually exclusive: the call is refused before any child', async () => {
+  test('subagent_type and an inline agent spec are mutually exclusive: the call is refused before any child, and the corrected call spawns the child', async () => {
     // The empty inline spec is the exact shape a router over the wire sent beside its subagent_type:
     // the inline spec silently displaced the named agent and the child ran as an unnamed inline agent.
-    const creates: Array<Record<string, any>> = []
+    const creates: Array<Record<string, unknown>> = []
     const server = Bun.serve({
       port: 0,
       fetch: async (req) => {
         const path = new URL(req.url).pathname
         if (req.method === 'POST' && path === '/v1/workspaces/proj-pi-test/sessions') {
-          creates.push((await req.json()) as Record<string, any>)
+          creates.push((await req.json()) as Record<string, unknown>)
           return Response.json({ session_id: 'refusal-child' }, { status: 201 })
         }
         if (req.method === 'GET' && path.startsWith('/v1/workspaces/proj-pi-test/sessions')) return Response.json([])
@@ -2302,20 +2302,28 @@ describe('pi subagents extension', () => {
         script: [
           TASK({ description: 'Ship it', subagent_type: 'general', agent: { instructions: '', tools: [], model: '', description: '' } }),
           TASK({ description: 'Ship it too', subagent_type: 'general', agent: { instructions: 'You do extra work.' } }),
+          // The corrected hand-off, without the inline spec: the child starts (the loop cannot repeat the same failure).
+          TASK({ description: 'Ship it right', subagent_type: 'general' }),
           { text: 'parent done' },
         ],
         env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1` },
       })
-      await promptAndSettle(r, 'delegate with a named type and an inline spec')
-      expect(creates).toEqual([])
+      await promptAndSettle(r, 'delegate with a named type, then the corrected call')
+      expect(creates).toHaveLength(1)
+      // A built-in `general` maps to no project agent (cloud-subagent.ts), so the create
+      // carries no `agent_name`; the named project-agent path is asserted by the
+      // 'separate sessions (the default, no `session` arg)' test above (agent_name reviewer/build).
+      expect('agent_name' in creates[0]!).toBe(false)
       const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
       const parts = toolParts(page, 'task')
-      expect(parts).toHaveLength(2)
-      for (const part of parts) {
-        expect(part.state.status).toBe('error')
+      expect(parts).toHaveLength(3)
+      for (const part of parts.slice(0, 2)) {
+        expect(part.state.status, 'a refused call carries its error').toBe('error')
         expect(part.state.error).toContain('cannot combine')
         expect(part.state.error).toContain('"general"')
       }
+      expect(parts[2]!.state.status).toBe('completed')
+      expect(parts[2]!.state.output).toContain('<task_started>')
     } finally {
       server.stop(true)
     }

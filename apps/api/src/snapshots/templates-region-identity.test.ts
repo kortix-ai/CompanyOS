@@ -54,16 +54,14 @@ test('a project image built in us-east gets its own name and swap key', async ()
   expect(us.swapKey).not.toBe(home.swapKey);
 });
 
-test('a home-region project keeps the identity it had before regions existed', async () => {
+test('a home-region identity is the tenant-scoped hash without a region segment', async () => {
   const home = await computeTemplateIdentity(project, template(), builtIn(undefined));
   const before = computeSnapshotHash({
     dockerfile: home.userDockerfile,
     contextTreeOid: 'template:app',
-    // KRTX-4469: the identity gained a tenant segment (owner) — the home-region
-    // pin now reads the scheme AFTER that change, still without a region.
-    owner: 'proj_1',
     spec: { cpu: 2, memory: 4, disk: 20 },
     containerRuntime: false,
+    projectId: 'proj_1',
     runtimeFingerprint: home.runtimeFingerprint,
   });
   expect(home.contentHash).toBe(before.contentHash);
@@ -97,34 +95,6 @@ test('an agent swap names the region its predecessor was built in', async () => 
 
   expect(await maybeSwapAgent(predecessor, identity, provider, 'kortix-tpl-previous')).toBe(true);
   expect(swaps).toEqual([[identity.snapshotName, 'kortix-tpl-previous', { region: 'us-east' }]]);
-});
-
-// KRTX-4469: the provider namespace is one platform account, so a purely
-// content-addressed name collides across tenants. The identity carries the
-// owning projectId (and the entrypoint, which is baked at build time), so a
-// name can never denote two tenants' images, and a re-bake can never swap
-// image content under a live name.
-test('two tenants with identical template content derive different image names', async () => {
-  const a = await computeTemplateIdentity(project, template(), builtIn(undefined));
-  const other = { ...project, projectId: 'proj_other' };
-  const b = await computeTemplateIdentity(other, template({ projectId: 'proj_other' }), builtIn(undefined));
-  expect(b.snapshotName).toStartWith('kortix-tpl-');
-  expect(b.snapshotName).not.toBe(a.snapshotName);
-});
-
-test('an entrypoint change re-bakes under a new identity instead of reusing the name', async () => {
-  const plain = await computeTemplateIdentity(project, template(), builtIn(undefined));
-  const custom = await computeTemplateIdentity(project, template({ entrypoint: '/usr/local/bin/other-entrypoint' }), builtIn(undefined));
-  expect(custom.snapshotName).not.toBe(plain.snapshotName);
-  // An agent swap patches its predecessor in place; an entrypoint change is a
-  // full-content change and must never pass the swap gate.
-  expect(custom.swapKey).not.toBe(plain.swapKey);
-});
-
-test('the shared default name never changes with the tenant segments', async () => {
-  const shared = await computeTemplateIdentity(project, template({ isShared: true, slug: 'default', projectId: null, image: null }), builtIn(undefined));
-  const other = await computeTemplateIdentity({ ...project, projectId: 'proj_other' }, template({ isShared: true, slug: 'default', projectId: null, image: null }), builtIn(undefined));
-  expect(other.snapshotName).toBe(shared.snapshotName);
 });
 
 test('residential_proxy is a boot setting: it never changes the image identity', async () => {

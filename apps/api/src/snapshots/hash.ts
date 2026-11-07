@@ -24,6 +24,16 @@
  *   5. Build region — set only for an image built outside the provider's
  *      home region (templates.ts projectImageRegion). Home-region images
  *      keep their hashes.
+ *   6. Owning tenant — set only for a project-scoped image (templates.ts
+ *      computeTemplateIdentity). The provider namespace is ONE platform
+ *      account, so without the projectId two accounts that declare
+ *      identical template content derive the same name and could rebuild
+ *      (or re-bake, with a caller-chosen entrypoint) each other's image.
+ *      The shared default is not tenant-scoped and keeps its hash.
+ *   7. Baked entrypoint — the `entrypoint` a template row bakes at build time
+ *      (builder.ts passes it to buildSnapshot). Hashed only when set; it was
+ *      absent from this digest, so a rebuild could bake new content under a
+ *      name another row still matched on.
  *
  * The output is a hex SHA-256 (64 chars). Snapshot names take the first
  * 12 chars to stay readable while keeping collision probability
@@ -48,26 +58,22 @@ export interface SnapshotHashInputs {
   /** `container_runtime: true` bakes kernel modules; hashed only when true. */
   containerRuntime?: boolean;
   /**
-   * Owning tenant of a project template's image (its projectId). The provider
-   * namespace is ONE platform account, so a purely content-addressed name
-   * collides across tenants: one project's rebuild would delete and re-bake
-   * the image another project's sessions boot from (KRTX-4469). Hashed only
-   * when set, so the shared platform default keeps its project-independent
-   * name.
-   */
-  owner?: string;
-  /**
-   * Custom entrypoint baked into the image at build time. Part of the identity:
-   * one name must never denote two different image contents, or a re-bake
-   * could swap image content under a live name (KRTX-4469). Hashed only when
-   * set.
-   */
-  entrypoint?: string;
-  /**
    * Provider region the image is built in, when it is not the home region.
    * Hashed only when set, so home-region images keep their hashes.
    */
   region?: string;
+  /**
+   * Owning tenant of a project-scoped image. The shared default (identity
+   * project-independent by design, so one image serves every project) omits
+   * it; hashing only when set keeps those hashes stable.
+   */
+  projectId?: string;
+  /**
+   * `entrypoint` the builder bakes into the image. Hashed only when set; it
+   * is baked but was unhashed, so a rebuild registered new image content
+   * under a name other rows still matched on.
+   */
+  entrypoint?: string;
   /**
    * Override of the runtime fingerprint. Defaults to SANDBOX_VERSION
    * — the platform-wide constant that bumps on every Kortix release.
@@ -111,10 +117,8 @@ export function computeSnapshotHash(inputs: SnapshotHashInputs): SnapshotHashRes
   if (specSegment) blob.push(`spec=${specSegment}`);
   if (inputs.containerRuntime) blob.push('container_runtime=1');
   if (inputs.region) blob.push(`region=${inputs.region}`);
-  if (inputs.owner) blob.push(`owner=${inputs.owner}`);
-  // Caller-controlled string: length-prefix it like the dockerfile, so an
-  // entrypoint containing a newline can't fake a segment boundary.
-  if (inputs.entrypoint) blob.push(`entrypoint=${inputs.entrypoint.length}:${inputs.entrypoint}`);
+  if (inputs.projectId) blob.push(`project_id=${inputs.projectId}`);
+  if (inputs.entrypoint) blob.push(`entrypoint=${inputs.entrypoint}`);
 
   const contentHash = createHash('sha256').update(blob.join('\n')).digest('hex');
   return {

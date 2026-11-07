@@ -10,10 +10,12 @@ import { recordClaim } from '../webhook-work';
 // "already handled?" one shared decision: a row came back ⇒ we're the first to
 // claim it; empty ⇒ someone already has.
 //
-// The claim is namespaced by the project that received it, like the message gate
-// below: a per-project (BYO) Slack app is a separate Slack app with its own
-// event id space, so two projects can receive the same event_id and each must
-// handle it. The canonical app keeps a scope of its own.
+// The claim is namespaced by the project that received it: a per-project (BYO)
+// Slack app is a separate Slack app with its own event id space, so two projects
+// can receive the same event_id and each must handle it. The canonical app keeps
+// a scope of its own. Unlike this envelope layer, the message gate below is
+// namespaced by TEAM, not project — two BYO apps in one workspace share it; that
+// sibling gap is KRTX-4447, out of scope here by the issue's own instruction.
 export async function alreadyHandled(
   eventId: string | undefined,
   scope?: { projectId: string },

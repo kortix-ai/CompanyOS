@@ -100,3 +100,48 @@ test('an identity is refused when the template row belongs to a different projec
   const crossTenant = computeTemplateIdentity(projectA, template({ projectId: 'proj_b' }), builtIn(undefined));
   await expect(crossTenant).rejects.toThrow(/belongs to a different project/);
 });
+
+/**
+ * Predecessor ownership across the identity migration (KRTX-4469): prune and
+ * reap paths may only delete a legacy (pre-fix, content-addressed) name when
+ * no OTHER template row still points at it. Pre-fix, a cross-tenant collision
+ * made that name the CURRENT name of rows in several projects.
+ */
+
+import { mock } from 'bun:test';
+
+// The guarded helper runs the real drizzle chain; answer it from a queue, in
+// call order (the pattern of templates-record-reap-async.test.ts).
+const answers: unknown[][] = [];
+function query(): unknown {
+  const chain: unknown = new Proxy(() => {}, {
+    get: (_target, key) =>
+      key === 'then'
+        ? (resolve: (rows: unknown[]) => void) => resolve(answers.shift() ?? [])
+        : key === 'catch'
+          ? () => Promise.resolve(answers.shift() ?? [])
+          : () => chain,
+    apply: () => chain,
+  });
+  return chain;
+}
+mock.module('../shared/db', () => ({ db: query() }));
+
+const { templateSnapshotReferencedByAnotherRow } = await import('./templates');
+
+test('a legacy name still referenced by another project row is not reapable', async () => {
+  // Two project rows, tenant A prunes while row B (different project) still
+  // references the shared legacy name.
+  answers.push([{ id: 'row-B' }]);
+  await expect(templateSnapshotReferencedByAnotherRow('kortix-tpl-legacy', 'row-A')).resolves.toBe(true);
+});
+
+test('a legacy name referenced only by the pruning row itself is reapable', async () => {
+  answers.push([]);
+  await expect(templateSnapshotReferencedByAnotherRow('kortix-tpl-legacy', 'row-A')).resolves.toBe(false);
+});
+
+test('a legacy name referenced by any row is not reapable when the pruning row is unknown', async () => {
+  answers.push([{ id: 'row-X' }]);
+  await expect(templateSnapshotReferencedByAnotherRow('kortix-tpl-legacy')).resolves.toBe(true);
+});

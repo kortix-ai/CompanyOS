@@ -657,17 +657,7 @@ async function reapPredecessorSnapshot(
     if (!config.KORTIX_SNAPSHOT_REAP_PREDECESSOR) return;
     if (!isReapableTemplatePredecessor(snapshotName)) return;
     // Still referenced by a DIFFERENT template row? Leave it shared.
-    const stillUsed = await db
-      .select({ id: sandboxTemplates.templateId })
-      .from(sandboxTemplates)
-      .where(
-        and(
-          eq(sandboxTemplates.providerSnapshotName, snapshotName),
-          ne(sandboxTemplates.templateId, templateId),
-        ),
-      )
-      .limit(1);
-    if (stillUsed.length > 0) return;
+    if (await templateSnapshotReferencedByAnotherRow(snapshotName, templateId)) return;
     await getSandboxProvider(provider).deleteSnapshot(snapshotName);
     console.log(`[snapshots] reaped superseded snapshot ${snapshotName} (provider=${provider})`);
   } catch (err) {
@@ -692,6 +682,32 @@ export async function recordTemplateFailed(
     })
     .where(eq(sandboxTemplates.templateId, templateId))
     .catch(() => {});
+}
+
+/**
+ * Is the snapshot name still referenced by a template row other than
+ * `exceptTemplateId`? Pre-fix identities were content-addressed once per
+ * provider namespace, so a legacy `kortix-tpl-<hash>` name can be the CURRENT
+ * name of rows in several projects. The name's latest provider image is the
+ * `contentHash`/snapshotName every such row still matches
+ * (KRTX-4469): deletion that skips this check deletes another tenant's
+ * image.
+ */
+export async function templateSnapshotReferencedByAnotherRow(
+  snapshotName: string,
+  exceptTemplateId: string | null = null,
+): Promise<boolean> {
+  const stillUsed = await db
+    .select({ id: sandboxTemplates.templateId })
+    .from(sandboxTemplates)
+    .where(
+      and(
+        eq(sandboxTemplates.providerSnapshotName, snapshotName),
+        exceptTemplateId ? ne(sandboxTemplates.templateId, exceptTemplateId) : sql`true`,
+      ),
+    )
+    .limit(1);
+  return stillUsed.length > 0;
 }
 
 // ─── Internals ────────────────────────────────────────────────────────────

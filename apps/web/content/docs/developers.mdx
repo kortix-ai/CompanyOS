@@ -1536,7 +1536,7 @@ A session shapes each child to its job in the call. Nothing is saved to the work
 
 | Call | Options |
 | --- | --- |
-| `agent` tool | `subagent_type`: a workspace agent's name. Or `agent: { instructions, model?, tools?, description? }`: an inline agent for this call only; `subagent_type` is then ignored. A top-level `model` runs the named agent on another model. |
+| `agent` tool | `subagent_type`: a workspace agent's name. Or `agent: { instructions, model?, tools?, description? }`: an inline agent for this call only. Pass one, not both: a call carrying both is refused. A top-level `model` runs the named agent on another model. |
 | workflow `agent(prompt, opts)` | `agent` (a workspace agent's name), `instructions`, `model`, `tools` and `schema`, plus `label`, `phase`, `strict` and `stallMs`. See [Workflows](#workflows). |
 
 - **Model.** A `provider/model` ref. A gateway model is `kortix/<id>`; a Claude subscription model is `claude-agent/<id>`. My Kortix lists the workspace's models with `kortix_agents` `models`: each row has the exact `id`, the name, `fast` (from the model name), `reasoning` and `images` when they apply, and the context size. Another agent reads the same catalog with `kortix models ls --json`, by wire id: prefix a gateway id with `kortix/`. With no `model`, the child runs on its agent's model, else on the caller's. Use a fast model for bulk and parallel work and the strongest reasoning model for synthesis and judgment.

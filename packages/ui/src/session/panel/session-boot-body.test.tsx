@@ -182,6 +182,16 @@ describe('tool cards while the session boots', () => {
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Starting your session');
   });
 
+  test('open, booted, no detail and no terminal: an explicit empty state, never a blank panel', async () => {
+    // The dead-end behind the reported bug: `focusToolCall` opened the panel,
+    // the handoff found nothing to show, and the panel sat there blank. The
+    // shell must name the state instead of drawing nothing.
+    const { host } = await render(panelValue({ booting: false, detail: null, terminalOpen: false }), <m.SessionDetailPanel />);
+    expect(host.textContent).toContain('Nothing here yet');
+    // The boot status is NOT mounted in this state: booting is false.
+    expect(host.querySelector('[role="status"]')).toBeNull();
+  });
+
   test('Files on Changes: only the disabled tabs, like the live Changes card; turns live without reopening', async () => {
     const body = (
       <m.SessionBootGate

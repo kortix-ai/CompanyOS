@@ -71,7 +71,7 @@ describe('buildGatewayTraceRow', () => {
 });
 
 describe('buildGatewayTraceRow metadata bound (KRTX-4022)', () => {
-  // metadata is an INCLUDE column of idx_gateway_logs_project_time_covering_v2;
+  // metadata is an INCLUDE column of idx_gateway_logs_project_time_covering_v3;
   // a btree tuple over ~2.7 KB makes the INSERT of the whole trace row fail.
   const BOUND = 2000;
   const failure = (attempt: number, message: string) => ({

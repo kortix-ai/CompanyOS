@@ -1760,11 +1760,8 @@
     }
   },
   "src/projects/managed-repo-seed.ts": {
-    "kortix-api/replica-local": {
-      "count": 1
-    },
     "no-console": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/prompt-attachment-cleanup.ts": {

@@ -1748,6 +1748,9 @@ importers:
 
   packages/api-contract:
     dependencies:
+      '@kortix/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       zod:
         specifier: ^4.6.7
         version: 4.6.7

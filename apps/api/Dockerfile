@@ -7,13 +7,13 @@
 # .github/workflows/tests.yml). tests/unit/image-bun.test.ts fails when the
 # two differ: a Web API the image's Bun lacks passes every test and answers 500
 # on dev (CompressionStream on Bun 1.2, 2026-08-26 and 2026-10-13).
-ARG BUN_VERSION=1.4.3
+ARG BUN_VERSION=1.4.4
 # Bun 1.2 silently accepts `Bun.spawn({ terminal: ... })` but closes the child
 # shell's stdin immediately in the compiled sandbox agent. The REST create then
 # returns a pid while the shell exits 0 before its WebSocket can attach, surfacing
 # as `pty not found`. Keep this exact pin synchronized with the agent package's
 # `engines.bun`; that package metadata is also part of the snapshot fingerprint.
-ARG SANDBOX_AGENT_BUN_VERSION=1.4.3
+ARG SANDBOX_AGENT_BUN_VERSION=1.4.4
 FROM oven/bun:${BUN_VERSION}-slim AS base
 
 # ---- Kortix Apps Runtime Stage ----

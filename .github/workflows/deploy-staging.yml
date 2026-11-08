@@ -312,7 +312,7 @@ jobs:
           persist-credentials: false
       - uses: ./.aws-env/.github/actions/prepare-migrate
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
           database-url: DATABASE_URL=kortix-staging-env:DATABASE_URL
       - name: Apply pending migrations (node-pg-migrate; halts on failure)
         run: |

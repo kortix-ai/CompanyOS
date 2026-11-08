@@ -73,25 +73,17 @@ export function useWorkspaceApps(projectId: string | null | undefined) {
     enabled: !!projectId,
     ...contract('inventory'),
   });
-  const invalidate = () => invalidateProjectApps(queryClient, projectId);
+  // Every App mutation of this hook refreshes that list on success — the
+  // `useArtifactMutations` idiom: each useMutation spreads `opts`.
+  const opts = { onSuccess: () => invalidateProjectApps(queryClient, projectId) };
 
-  const create = useMutation({
-    mutationFn: (input: Parameters<typeof createApp>[1]) => createApp(projectId as string, input),
-    onSuccess: invalidate,
-  });
+  const create = useMutation({ mutationFn: (input: Parameters<typeof createApp>[1]) => createApp(projectId as string, input), ...opts });
   const update = useMutation({
-    mutationFn: (args: { appId: string; input: Parameters<typeof updateApp>[2] }) =>
-      updateApp(projectId as string, args.appId, args.input),
-    onSuccess: invalidate,
+    mutationFn: (args: { appId: string; input: Parameters<typeof updateApp>[2] }) => updateApp(projectId as string, args.appId, args.input),
+    ...opts,
   });
-  const start = useMutation({
-    mutationFn: (appId: string) => startApp(projectId as string, appId),
-    onSuccess: invalidate,
-  });
-  const stop = useMutation({
-    mutationFn: (appId: string) => stopApp(projectId as string, appId),
-    onSuccess: invalidate,
-  });
+  const start = useMutation({ mutationFn: (appId: string) => startApp(projectId as string, appId), ...opts });
+  const stop = useMutation({ mutationFn: (appId: string) => stopApp(projectId as string, appId), ...opts });
   const remove = useMutation({
     mutationFn: (appId: string) => deleteApp(projectId as string, appId),
     onSuccess: (_deleted: unknown, appId: string) => {
@@ -142,11 +134,8 @@ export function useSendAppTestEvent(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof sendAppTestEvent>[2]) =>
-      sendAppTestEvent(projectId as string, appId as string, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: appEventsKey(projectId, appId) });
-    },
+    mutationFn: (input: Parameters<typeof sendAppTestEvent>[2]) => sendAppTestEvent(projectId as string, appId as string, input),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: appEventsKey(projectId, appId) }),
   });
 }
 
@@ -164,21 +153,13 @@ export function useAppDeployments(
     ...contract('inventory'),
     refetchInterval: 5_000,
   });
-  const invalidate = () => {
-    void invalidateProjectApps(queryClient, projectId);
-    void queryClient.invalidateQueries({ queryKey });
-  };
-
+  // The same `useArtifactMutations` idiom: each useMutation spreads `opts`.
+  const opts = { onSuccess: () => { void invalidateProjectApps(queryClient, projectId); void queryClient.invalidateQueries({ queryKey }); } };
   const deploy = useMutation({
-    mutationFn: (input: Parameters<typeof createAppDeployment>[2]) =>
-      createAppDeployment(projectId as string, appId as string, input),
-    onSuccess: invalidate,
+    mutationFn: (input: Parameters<typeof createAppDeployment>[2]) => createAppDeployment(projectId as string, appId as string, input),
+    ...opts,
   });
-  const rollback = useMutation({
-    mutationFn: (deploymentId: string) =>
-      rollbackApp(projectId as string, appId as string, deploymentId),
-    onSuccess: invalidate,
-  });
+  const rollback = useMutation({ mutationFn: (deploymentId: string) => rollbackApp(projectId as string, appId as string, deploymentId), ...opts });
 
   return { ...query, deploy, rollback };
 }
@@ -282,30 +263,14 @@ export function useAppMachines(projectId: string | null | undefined, appId: stri
     ...contract('inventory'),
     refetchInterval: 5_000,
   });
-  const invalidate = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey }),
-    invalidateProjectApps(queryClient, projectId),
-  ]);
-  const start = useMutation({
-    mutationFn: (machineId: string) => startAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const stop = useMutation({
-    mutationFn: (machineId: string) => stopAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const restart = useMutation({
-    mutationFn: (machineId: string) => restartAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const destroy = useMutation({
-    mutationFn: (machineId: string) => destroyAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const scale = useMutation({
-    mutationFn: (count: Record<string, number>) => scaleApp(projectId as string, appId as string, count),
-    onSuccess: invalidate,
-  });
+  // Every machine mutation refreshes both keys — the `useArtifactMutations`
+  // idiom: each useMutation spreads `opts`.
+  const opts = { onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey }), invalidateProjectApps(queryClient, projectId)]) };
+  const start = useMutation({ mutationFn: (machineId: string) => startAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const stop = useMutation({ mutationFn: (machineId: string) => stopAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const restart = useMutation({ mutationFn: (machineId: string) => restartAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const destroy = useMutation({ mutationFn: (machineId: string) => destroyAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const scale = useMutation({ mutationFn: (count: Record<string, number>) => scaleApp(projectId as string, appId as string, count), ...opts });
   return { ...query, start, stop, restart, destroy, scale };
 }
 
@@ -319,30 +284,26 @@ export function useAppVolumes(projectId: string | null | undefined, appId: strin
     enabled: !!projectId && !!appId,
     ...contract('inventory'),
   });
-  const invalidate = () => queryClient.invalidateQueries({ queryKey });
-  const snapshot = useMutation({
-    mutationFn: (volumeId: string) => createAppVolumeSnapshot(projectId as string, appId as string, volumeId),
-    onSuccess: invalidate,
-  });
+  // Every volume mutation refreshes that list — the `useArtifactMutations`
+  // idiom: each useMutation spreads `opts`.
+  const opts = { onSuccess: () => queryClient.invalidateQueries({ queryKey }) };
+  const snapshot = useMutation({ mutationFn: (volumeId: string) => createAppVolumeSnapshot(projectId as string, appId as string, volumeId), ...opts });
   const restore = useMutation({
-    mutationFn: (input: { volumeId: string; snapshotId: string }) =>
-      restoreAppVolume(projectId as string, appId as string, input.volumeId, input.snapshotId),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; snapshotId: string }) => restoreAppVolume(projectId as string, appId as string, input.volumeId, input.snapshotId),
+    ...opts,
   });
   const fork = useMutation({
     mutationFn: (input: { volumeId: string; name: string; snapshotId?: string }) =>
       forkAppVolume(projectId as string, appId as string, input.volumeId, { name: input.name, snapshot_id: input.snapshotId }),
-    onSuccess: invalidate,
+    ...opts,
   });
   const extend = useMutation({
-    mutationFn: (input: { volumeId: string; sizeGb: number }) =>
-      updateAppVolume(projectId as string, appId as string, input.volumeId, { size_gb: input.sizeGb }),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; sizeGb: number }) => updateAppVolume(projectId as string, appId as string, input.volumeId, { size_gb: input.sizeGb }),
+    ...opts,
   });
   const destroy = useMutation({
-    mutationFn: (input: { volumeId: string; name: string }) =>
-      destroyAppVolume(projectId as string, appId as string, input.volumeId, input.name),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; name: string }) => destroyAppVolume(projectId as string, appId as string, input.volumeId, input.name),
+    ...opts,
   });
   return { ...query, snapshot, restore, fork, extend, destroy };
 }

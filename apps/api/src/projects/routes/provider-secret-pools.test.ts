@@ -80,8 +80,8 @@ mock.module('../lib/access', () => ({
   }),
   assertProjectCapability: async (_c: unknown, _userId: string, _accountId: string, _projectId: string, action: string) => {
     capabilityChecks.push(action);
-    // The real assertion throws this exact 403 before the handler runs.
-    if (deniedLeaves.includes(action)) throw buildDenialError(action);
+    // The real assertion throws this 403 (a role without the leaf) before the handler runs.
+    if (deniedLeaves.includes(action)) throw buildDenialError(action, 'project_role_insufficient');
   },
   loadVisibleSession: async (_loaded: unknown, target: string, caller: string | null, bound: string | null) => {
     // `PUT /model` passes the raw context session id: a browser login's is not a Kortix session.

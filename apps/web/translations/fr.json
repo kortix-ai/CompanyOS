@@ -3750,6 +3750,27 @@
     "placeholder": "Dites à Kortix sur quoi vous travaillez",
     "kickoff": "Fais-moi découvrir Kortix"
   },
+  "existingRepoSetup": {
+    "title": "Configurer Kortix dans ce dépôt",
+    "intro": "<code>{repository}</code> n’a pas encore d’agents. Kortix les lit dans un fichier <code>kortix.yaml</code> à la racine du dépôt.",
+    "introNoName": "Ce dépôt n’a pas encore d’agents. Kortix les lit dans un fichier <code>kortix.yaml</code> à la racine du dépôt.",
+    "steps": {
+      "copy": "Copiez le prompt de configuration.",
+      "run": "Collez-le dans Claude Code, Codex ou Cursor, dans votre clone du dépôt.",
+      "push": "Votre agent écrit kortix.yaml, le valide et le pousse sur <code>{branch}</code>."
+    },
+    "defaultBranch": "la branche par défaut",
+    "promptLabel": "Prompt de configuration",
+    "copy": "Copier le prompt de configuration",
+    "copyAgain": "Copier à nouveau le prompt de configuration",
+    "copied": "Prompt copié",
+    "copyFailed": "Impossible de copier le prompt",
+    "checkAgain": "Rechercher kortix.yaml",
+    "checking": "Vérification…",
+    "autoCheck": "Cette page se met à jour d’elle-même environ une minute après le push.",
+    "docs": "Lire le guide de configuration",
+    "member": "Toute personne qui gère ce workspace peut le configurer. Vos agents apparaîtront ici une fois que ce sera fait."
+  },
   "announcements": {
     "memories": {
       "title": "Présentation des Mémoires",

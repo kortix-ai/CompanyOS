@@ -3750,6 +3750,27 @@
     "placeholder": "Dì a Kortix su cosa stai lavorando",
     "kickoff": "Guidami alla scoperta di Kortix"
   },
+  "existingRepoSetup": {
+    "title": "Configura Kortix in questo repository",
+    "intro": "<code>{repository}</code> non ha ancora agenti. Kortix li legge da un file <code>kortix.yaml</code> nella radice del repository.",
+    "introNoName": "Questo repository non ha ancora agenti. Kortix li legge da un file <code>kortix.yaml</code> nella radice del repository.",
+    "steps": {
+      "copy": "Copia il prompt di configurazione.",
+      "run": "Incollalo in Claude Code, Codex o Cursor nel tuo clone del repository.",
+      "push": "Il tuo agente scrive kortix.yaml, lo convalida e lo invia a <code>{branch}</code>."
+    },
+    "defaultBranch": "il branch predefinito",
+    "promptLabel": "Prompt di configurazione",
+    "copy": "Copia il prompt di configurazione",
+    "copyAgain": "Copia di nuovo il prompt di configurazione",
+    "copied": "Prompt copiato",
+    "copyFailed": "Impossibile copiare il prompt",
+    "checkAgain": "Cerca kortix.yaml",
+    "checking": "Controllo in corso…",
+    "autoCheck": "Questa pagina si aggiorna da sola circa un minuto dopo il push.",
+    "docs": "Leggi la guida alla configurazione",
+    "member": "Chiunque gestisca questo workspace può configurarlo. I tuoi agenti compariranno qui quando sarà fatto."
+  },
   "announcements": {
     "memories": {
       "title": "Presentiamo le Memorie",

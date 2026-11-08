@@ -3750,6 +3750,27 @@
     "placeholder": "告诉 Kortix 您在做什么",
     "kickoff": "带我上手 Kortix"
   },
+  "existingRepoSetup": {
+    "title": "在此仓库中设置 Kortix",
+    "intro": "<code>{repository}</code> 还没有代理。Kortix 从仓库根目录的 <code>kortix.yaml</code> 文件中读取代理。",
+    "introNoName": "此仓库还没有代理。Kortix 从仓库根目录的 <code>kortix.yaml</code> 文件中读取代理。",
+    "steps": {
+      "copy": "复制设置提示词。",
+      "run": "在仓库的本地克隆中,将其粘贴到 Claude Code、Codex 或 Cursor。",
+      "push": "你的代理会编写 kortix.yaml、验证它,并推送到 <code>{branch}</code>。"
+    },
+    "defaultBranch": "默认分支",
+    "promptLabel": "设置提示词",
+    "copy": "复制设置提示词",
+    "copyAgain": "再次复制设置提示词",
+    "copied": "提示词已复制",
+    "copyFailed": "无法复制提示词",
+    "checkAgain": "检查 kortix.yaml",
+    "checking": "正在检查…",
+    "autoCheck": "推送后约一分钟内,此页面会自动更新。",
+    "docs": "阅读设置指南",
+    "member": "管理此工作区的任何人都可以完成设置。完成后,你的代理会显示在这里。"
+  },
   "announcements": {
     "memories": {
       "title": "介绍记忆功能",

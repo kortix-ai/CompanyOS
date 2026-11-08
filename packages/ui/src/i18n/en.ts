@@ -2223,6 +2223,27 @@ const catalog = {
     "placeholder": "Tell Kortix what you're working on",
     "kickoff": "Onboard me"
   },
+  "existingRepoSetup": {
+    "title": "Set up Kortix in this repository",
+    "intro": "<code>{repository}</code> has no agents yet. Kortix reads them from a <code>kortix.yaml</code> file at the repository root.",
+    "introNoName": "This repository has no agents yet. Kortix reads them from a <code>kortix.yaml</code> file at the repository root.",
+    "steps": {
+      "copy": "Copy the setup prompt.",
+      "run": "Paste it into Claude Code, Codex or Cursor in your clone of the repository.",
+      "push": "Your agent writes kortix.yaml, validates it and pushes it to <code>{branch}</code>."
+    },
+    "defaultBranch": "the default branch",
+    "promptLabel": "Setup prompt",
+    "copy": "Copy setup prompt",
+    "copyAgain": "Copy setup prompt again",
+    "copied": "Prompt copied",
+    "copyFailed": "Could not copy the prompt",
+    "checkAgain": "Check for kortix.yaml",
+    "checking": "Checking…",
+    "autoCheck": "This page updates by itself within about a minute of the push.",
+    "docs": "Read the setup guide",
+    "member": "Anyone who manages this workspace can set it up. Your agents appear here when it is done."
+  },
   "hardcodedUi": {
     "appProjectsIdCustomizeSecretsPage": {
       "line773JsxAttrTitleFailedToLoadSecrets": "Failed to load secrets"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
 import { SplitNoticeBanner } from '../settings/split-notice-banner';
 import { useTranslations } from '../../i18n';
@@ -25,6 +25,7 @@ import { ProjectScope } from '../../internal/project-scope';
 import { useUiComponents, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import {
   getProject,
+  isSelectableAgent,
   listProjectAccessRequests,
   listProjectSandboxes,
   setProjectOnboardingComplete,
@@ -32,9 +33,10 @@ import {
   type SessionPromptOverrides,
 } from '@kortix/sdk';
 import type { AttachmentSubmission } from '../../session/composer/attachment-submission';
-import { contract, invalidateProject, qk, type Command } from '@kortix/sdk/react';
+import { contract, invalidateProject, qk, useProjectConfig, type Command } from '@kortix/sdk/react';
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName } from '@kortix/shared';
 import { AccessRequestsBell } from '../home/access-requests-bell';
+import { ExistingRepoSetup } from '../home/existing-repo-setup';
 import { FirstChat } from '../home/first-chat';
 import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
@@ -49,6 +51,9 @@ const ONBOARDING_ACTIONS = [
   PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
   PROJECT_ACTIONS.PROJECT_SESSION_START,
 ] as const;
+
+/** How often the setup page re-reads the project while it waits for a pushed kortix.yaml. */
+const REPO_SETUP_POLL_MS = 15_000;
 
 export interface ProjectHomeSendOptions extends ComposerOptions {
   sandbox_slug?: string;
@@ -207,8 +212,31 @@ function ProjectHomeView({
   const canSetUpProject = ONBOARDING_ACTIONS.every(
     (action) => onboardingCans[action]?.allowed === true,
   );
+  // A linked repository with no kortix.yaml runs no agent: every send would
+  // be refused. The home is the setup page instead (`home/existing-repo-setup.tsx`)
+  // until the person's own agent pushes the file. `manifest_health.state` and
+  // not the agent list alone: a member without agent grants also sees no
+  // agent, in a project that is set up.
+  const projectConfig = useProjectConfig(projectId);
+  const needsRepoSetup =
+    projectConfig?.manifest_health?.state === 'missing' &&
+    !projectConfig.agents.some(isSelectableAgent);
+  const canWriteProject = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_WRITE).allowed === true;
+  const checkingRepoSetup = useIsFetching({ queryKey: qk.project.detail(projectId) }) > 0;
+  const checkRepoSetup = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: qk.project.detail(projectId) }),
+    [queryClient, projectId],
+  );
+  // A push on the upstream is seen within one mirror refresh (60 s), so the
+  // page re-reads the project while it waits and turns into the usual home
+  // by itself.
+  useEffect(() => {
+    if (!needsRepoSetup) return;
+    const timer = setInterval(checkRepoSetup, REPO_SETUP_POLL_MS);
+    return () => clearInterval(timer);
+  }, [needsRepoSetup, checkRepoSetup]);
   const onboarding =
-    onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject;
+    onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject && !needsRepoSetup;
   // The onboarding lands on the first chat: it starts the chat (the sidebar
   // row) and moves the address to it. Rendered as the first chat from this
   // render on, so the usual home never paints in between.
@@ -224,13 +252,17 @@ function ProjectHomeView({
   }, [onboarding, hubLinkPending, firstChatRequested, projectId, router]);
   const firstChat = (firstChatPending && firstChatRequested) || onboarding;
 
-  // Once per mount: a second prefill id would send a second kickoff.
+  // Once per mount: a second prefill id would send a second kickoff. Not
+  // before the config is read: a repository that runs no agent turns the
+  // home into the setup page, and a kickoff queued before that is known
+  // would be refused.
+  const configRead = projectConfig !== undefined;
   const kickoffQueuedRef = useRef(false);
   useEffect(() => {
-    if (!onboarding || kickoffQueuedRef.current) return;
+    if (!onboarding || !configRead || kickoffQueuedRef.current) return;
     kickoffQueuedRef.current = true;
     setPrefill({ text: tFirstChat('kickoff'), id: Date.now(), submit: 'when-ready' });
-  }, [onboarding, tFirstChat]);
+  }, [onboarding, configRead, tFirstChat]);
   // Resolved during render so the bell is an anchor and Next holds its payload
   // in the segment cache. `account_id` arrives on a different query than the
   // count, so the bell can paint before the destination exists.
@@ -411,7 +443,15 @@ function ProjectHomeView({
           create resolves and the session route opens; the instant shell draws
           the first turn there (`useFirstPromptPreviewStore`). Painting the turn
           here left a slow or stuck create looking like a live session. */}
-      {firstChat ? (
+      {needsRepoSetup ? (
+        <ExistingRepoSetup
+          repoUrl={projectRowQuery.data?.repo_url}
+          branch={projectRowQuery.data?.default_branch}
+          canSetUp={canWriteProject}
+          checking={checkingRepoSetup}
+          onCheckAgain={checkRepoSetup}
+        />
+      ) : firstChat ? (
         <FirstChat composer={composer} />
       ) : (
         <ProjectHomeWelcomeBody

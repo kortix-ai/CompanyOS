@@ -9,7 +9,15 @@ This page covers the CLI and git workflow, the [kortix.yaml reference](#kortixya
 
 ## Quickstart
 
-Go from an empty terminal to a merged change request. Each step is a git operation on your workspace's repository. The workspace id is the `project_id`. The project names keep working permanently: `kortix projects` (a workspace), `--project`, `project_id` and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
+Pick the path that matches what you have:
+
+| You have | Start here |
+| --- | --- |
+| Nothing yet | [Create a workspace](#create-or-get-a-workspace) with `kortix init` |
+| A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml` |
+| A workspace a teammate made | [Clone it](#create-or-get-a-workspace) with `kortix projects clone` |
+
+Each path ends at a merged change request. Each step is a git operation on your workspace's repository. The workspace id is the `project_id`. The project names keep working permanently: `kortix projects` (a workspace), `--project`, `project_id` and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
 
 | Step | Command | What happens in git |
 | --- | --- | --- |
@@ -89,6 +97,8 @@ Open **Create a workspace** in the web app (`/new`). Type a **Workspace name**. 
 
 Click **Create workspace**. To work on it from a terminal, run `kortix projects clone`.
 
+An imported repository with no `kortix.yaml` runs no agent yet. Its workspace page shows **Copy setup prompt**: see [Set up an existing repository](#set-up-an-existing-repository).
+
 </Tab>
 </Tabs>
 
@@ -112,6 +122,66 @@ my-agent/
 - `kortix-cli` is the one Kortix skill in the folder. The other `kortix-*` skills are always registered and come with every session. The `skills` key in `kortix.yaml` lists the other 10.
 
 `kortix init` also writes files for the coding tools you picked. Codex, pi and Cursor get `AGENTS.md`. Codex, Claude Code and pi get a link to `skills/` in `.agents/`, `.claude/` or `.pi/`. Every key is in the [kortix.yaml reference](/docs/developers#kortixyaml-reference).
+
+### Set up an existing repository
+
+Kortix reads agents from `kortix.yaml` at the root of the branch the workspace uses. A repository you link keeps its own files: Kortix never writes to it. You add the file once, from your own clone, with the coding agent you already use.
+
+1. **Link the repository.** In the web app, open **Create a workspace** (`/new`) and choose **Import an existing repository**. Pick the branch Kortix reads. From a terminal, you link it in step 3 instead.
+2. **Copy the setup prompt.** The workspace page of a repository with no `kortix.yaml` shows **Copy setup prompt**, filled in with the repository and the branch. Or copy it from below.
+3. **Paste it into Claude Code, Codex or Cursor** in your clone. The agent writes `kortix.yaml`, runs `kortix validate` and pushes the file. With no workspace linked yet, run `kortix ship` after it: it links the GitHub `origin` and pushes.
+
+The workspace page checks the branch every 15 seconds and opens the usual home within about a minute of the push. **Check for kortix.yaml** checks at once.
+
+The prompt:
+
+````text
+Set up this repository for Kortix. Kortix reads `kortix.yaml` from the branch the workspace uses. The reference is https://kortix.com/docs/developers#set-up-an-existing-repository.
+
+1. If the `kortix` command is missing, install it: `curl -fsSL https://kortix.com/install | bash`.
+2. Create `kortix.yaml` at the repository root with this content:
+
+```yaml
+# yaml-language-server: $schema=https://kortix.com/schema/kortix.schema.json
+project:
+  name: "<the repository name>"
+builtin_agents:
+  my_kortix: true
+default_agent: mykortix
+skills: {}
+agents:
+  worker:
+    description: "General-purpose worker: coding, research, writing, ops and data work."
+    mode: primary
+    permission: allow
+    prompt: "You work in this repository. Read AGENTS.md or CLAUDE.md first when it exists."
+    tools: "*"
+    skills: "*"
+    connectors: "*"
+    secrets: "*"
+    kortix_permissions: "*"
+    workspace: { project_repository: true }
+```
+
+3. Keep the agent setup this repository already has. Do not move, copy or edit those files.
+   - For each `.claude/agents/<name>.md`, add an agent `<name>` with `prompt_file: .claude/agents/<name>.md`, the `description` from its frontmatter, `mode: primary`, `tools: "*"` and `workspace: { project_repository: true }`.
+   - For each folder that holds a `SKILL.md` (`.agents/skills/<name>`, `.claude/skills/<name>`, `skills/<name>`), add `<name>: <folder>` under `skills:`. Skip a name that starts with `kortix-`.
+4. Run `kortix validate`. Fix every error it prints and run it again until it exits 0.
+5. Commit only `kortix.yaml` with the message "chore: add kortix.yaml" and push it to the branch the workspace uses.
+6. Reply with the agents and skills you declared.
+````
+
+What the prompt keeps from your repository:
+
+| In your repository | In `kortix.yaml` |
+| --- | --- |
+| `.claude/agents/<name>.md` | An agent `<name>` whose `prompt_file` is that file. Kortix drops the file's frontmatter and uses the body as the prompt, so Claude Code and Kortix read one file. |
+| A folder with a `SKILL.md` | A project skill under `skills:`, granted to `worker` by `skills: "*"`. |
+| `AGENTS.md`, `CLAUDE.md` | Read by `worker` at the start of each session, as its prompt says. |
+
+`builtin_agents.my_kortix: true` turns on My Kortix, and `default_agent: mykortix` makes it run when a session names no agent. My Kortix hands project work to `worker` and to your agents. Each grant of `"*"` means every name: narrow them in the [kortix.yaml reference](#kortixyaml-reference).
+
+If the composer says **No agents available to you**, the workspace has no agent you may run. With no `kortix.yaml` on the branch, set it up as above. With a `kortix.yaml`, a person who manages the workspace grants you an agent: see [Teams](/docs/guide#teams).
 
 ### Run a session
 
@@ -1039,7 +1109,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `options` | map | — | Accepted. Sessions do not use it. |
 | `permission` | `ask`, `allow`, `deny` or map | `allow` | Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`"*"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`. See [Permission rules](#permission-rules). |
 | `prompt` | string | — | The system prompt. Set `prompt` or `prompt_file`, not both. |
-| `prompt_file` | string | — | A repository path to a `.md` file. The whole file is the system prompt. |
+| `prompt_file` | string | — | A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is. |
 | `enabled` | boolean | `true` | `false`: no session starts with the agent, and no agent starts it as a subagent. |
 | `codemode` | `on`, `only`, `off` | `on` | `on`: the model gets every tool plus `codemode`, which runs one JavaScript script that calls the other tools. `only`: `codemode` alone. `off`: no `codemode`. A script's calls follow the agent's `permission`. |
 | `context` | `record`, `summary` | `record` | What happens when the session's context fills. `record`: the agent continues at once in a fresh context and searches the session's full record, word for word, when it needs a detail; nothing is summarized. `summary`: a model call writes a summary of the conversation and the agent continues from it. |

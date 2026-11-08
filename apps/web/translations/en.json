@@ -26605,7 +26605,9 @@
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
-      }
+      },
+      "searchPlaceholder": "Search settings",
+      "searchNoResults": "No settings match"
     },
     "cli": {
       "noWorkspaceTitle": "Create a workspace to sign in the CLI",
@@ -26636,7 +26638,9 @@
     },
     "menu": {
       "invite": "Invite people to {name}",
-      "leave": "Leave {name}"
+      "leave": "Leave {name}",
+      "invitePeople": "Invite people",
+      "more": "More"
     },
     "roles": {
       "owner": {

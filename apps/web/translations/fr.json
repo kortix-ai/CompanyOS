@@ -26605,7 +26605,9 @@
         "createdDescription": "{name} agit en tant que {actsAs}. Kortix n'affiche la clé qu'une fois : copiez-la maintenant et stockez-la comme secret.",
         "accessFullHint": "Tout ce que le principal de la clé peut faire dans cet espace de travail.",
         "accessCustomHint": "Uniquement les autorisations choisies. Chacune doit faire partie de ce que le principal de la clé peut faire."
-      }
+      },
+      "searchPlaceholder": "Rechercher dans les paramètres",
+      "searchNoResults": "Aucun paramètre ne correspond"
     },
     "cli": {
       "noWorkspaceTitle": "Créez un espace de travail pour connecter la CLI",
@@ -26636,7 +26638,9 @@
     },
     "menu": {
       "invite": "Inviter des personnes dans {name}",
-      "leave": "Quitter {name}"
+      "leave": "Quitter {name}",
+      "invitePeople": "Inviter des personnes",
+      "more": "Plus"
     },
     "roles": {
       "owner": {

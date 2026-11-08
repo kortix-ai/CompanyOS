@@ -2738,10 +2738,7 @@
   },
   "src/sandbox-proxy/routes/share.ts": {
     "no-console": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/sandbox-proxy/sse-stall.ts": {

@@ -9,7 +9,7 @@ import {
   resolveSandboxIngress,
   wakeSandbox,
 } from '../backend';
-import { jsonProxyError, isTurnStartEnvSync } from '../pre-prompt-env-sync';
+import { jsonProxyError } from '../pre-prompt-env-sync';
 import {
   clientResponseHeaders,
   isBrowserNavigation,
@@ -173,7 +173,7 @@ async function forwardAttempt(
   const previewUrl = ingress.url;
   const targetUrl = ingressTargetUrl(ingress, remainingPath + queryString);
 
-  if (isTurnStartEnvSync(upstreamPort, method, remainingPath)) {
+  if (req.turnStartEnvSync) {
     const refusal = await syncEnvBeforeTurnStart(req, state, previewUrl, ingress.headers);
     if (refusal) return refusal;
   }

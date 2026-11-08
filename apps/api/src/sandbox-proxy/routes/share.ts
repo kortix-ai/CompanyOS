@@ -9,7 +9,8 @@
  */
 
 import { createRoute, z } from '@hono/zod-openapi'
-import type { Context } from 'hono'
+import type { Context, TypedResponse } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { resolveProvider } from '../provider'
 import { combinedAuth } from '../../middleware/auth'
 import { canAccessPreviewSandbox } from '../../shared/preview-ownership'
@@ -18,6 +19,22 @@ import { shareUpstreamResult } from '../share-upstream'
 
 const shareApp = makeOpenApiApp()
 type ResolvedProvider = NonNullable<Awaited<ReturnType<typeof resolveProvider>>>
+
+/**
+ * The typed answer the three handlers promise, in the same `Response &
+ * TypedResponse<…>` shape as `projects/routes/lib/route-bindings.ts`: the
+ * daemon's opaque share body (`ShareResultSchema`) returned on 200, or the
+ * error envelope on the declared errors(400…) codes. Two construction sites
+ * carry a WIRE NUMBER status (the resolve refusal, the daemon passthrough), and
+ * Hono's `c.json` types only a literal status, so they finish the Response and
+ * cast the finished object to this union — each member is exactly what
+ * `c.json` returns at that status. No `as any`.
+ */
+type ShareRouteResponse =
+  | (Response & (TypedResponse<Record<string, unknown>, 200, 'json'> |
+    TypedResponse<{ error: string }, 403, 'json'> |
+    TypedResponse<{ error: string }, 404, 'json'> |
+    TypedResponse<{ error: string }, 502, 'json'>))
 
 // Share results are whatever the sandbox daemon's /kortix/share endpoint
 // returns (opaque), or our own { error } envelope — model permissively.
@@ -68,7 +85,10 @@ async function resolveShareTarget(sandboxId: string): Promise<{
   return { resolved, sandboxShareBaseUrl }
 }
 
-async function ensureShareAccess(c: Context, sandboxId: string): Promise<Response | null> {
+async function ensureShareAccess(c: Context, sandboxId: string): Promise<
+  | null
+  | (Response & TypedResponse<{ error: string }, 403, 'json'>)
+> {
   const userId = c.get('userId') as string | undefined
   const accountId = c.get('accountId') as string | undefined
 
@@ -79,6 +99,49 @@ async function ensureShareAccess(c: Context, sandboxId: string): Promise<Respons
     return null
   }
   return c.json({ error: 'Not authorized to access this sandbox' }, 403)
+}
+
+// The one sandbox-proxy ceremony the three handlers share (KRTX-4477): the
+// access check, the daemon resolve, the 10 s fetch on the daemon's near-exact
+// URL, the `shareUpstreamResult` mapping and the 502 catch. Each handler keeps
+// its own validation and its own path; everything else lives here, so the
+// error envelopes and the status passthrough cannot drift apart again. The
+// daemon's status code passes through unchanged — `shareUpstreamResult` only
+// rewrites a 404 whose body names no share routes (that daemon is a 501).
+async function proxySandboxShare(
+  c: Context,
+  input: {
+    sandboxId: string
+    /** The URL path after the daemon share base, or '' for the base itself. */
+    path: string
+    method?: 'GET' | 'DELETE'
+    /** Names the failure in both the log line and the response envelope. */
+    action: string
+  },
+): Promise<ShareRouteResponse> {
+  const accessError = await ensureShareAccess(c, input.sandboxId)
+  if (accessError) return accessError
+
+  const target = await resolveShareTarget(input.sandboxId)
+  if ('error' in target) {
+    return c.json({ error: target.error }, target.status as ContentfulStatusCode) as ShareRouteResponse
+  }
+
+  const sandboxUrl = input.path
+    ? `${target.sandboxShareBaseUrl}/${input.path}`
+    : target.sandboxShareBaseUrl
+  try {
+    const resp = await fetch(sandboxUrl, {
+      method: input.method ?? 'GET',
+      headers: buildSandboxHeaders(target.resolved),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const upstream = shareUpstreamResult(resp.status, await parseJsonResponse(resp))
+    return c.json(upstream.body, upstream.status as ContentfulStatusCode) as ShareRouteResponse
+  } catch (err) {
+    console.error(`[share] ${input.action} failed:`, err)
+    return c.json({ error: `Failed to ${input.action}` }, 502)
+  }
 }
 
 shareApp.openapi(
@@ -108,10 +171,10 @@ shareApp.openapi(
       ...errors(400, 401, 403, 404, 501, 502),
     },
   }),
-  // Manual body parsing retained: the original contract returns a custom
-  // { error: 'Invalid JSON body' } / field-specific 400s before any access
-  // check, and proxies the sandbox's opaque status code through unchanged.
-  async (c: any) => {
+  // Validation kept per-handler (the OpenAPI schema answers for a malformed
+  // body first); this route passes the sandbox's opaque status code through
+  // unchanged and names the create action in its 502.
+  async (c: Context) => {
     let body: { sandbox_id: string; port: number; ttl?: string; label?: string }
     try {
       body = await c.req.json()
@@ -127,32 +190,11 @@ shareApp.openapi(
       return c.json({ error: 'port is required (1-65535)' }, 400)
     }
 
-    const accessError = await ensureShareAccess(c, sandbox_id)
-    if (accessError) return accessError
-
-    const target = await resolveShareTarget(sandbox_id)
-    if ('error' in target) {
-      return c.json({ error: target.error }, target.status as any)
-    }
-
     const queryParams = new URLSearchParams()
     if (ttl) queryParams.set('ttl', ttl)
     if (label) queryParams.set('label', label)
     const qs = queryParams.toString() ? `?${queryParams.toString()}` : ''
-    const sandboxUrl = `${target.sandboxShareBaseUrl}/${port}${qs}`
-
-    try {
-      const resp = await fetch(sandboxUrl, {
-        headers: buildSandboxHeaders(target.resolved),
-        signal: AbortSignal.timeout(10_000),
-      })
-
-      const upstream = shareUpstreamResult(resp.status, await parseJsonResponse(resp))
-      return c.json(upstream.body, upstream.status as any)
-    } catch (err) {
-      console.error('[share] create share link failed:', err)
-      return c.json({ error: 'Failed to create share link' }, 502)
-    }
+    return proxySandboxShare(c, { sandboxId: sandbox_id, path: `${port}${qs}`, action: 'create share link' })
   },
 )
 
@@ -174,31 +216,13 @@ shareApp.openapi(
   }),
   // Manual query read kept — original returns a custom 400 envelope and proxies
   // the sandbox's status code through.
-  async (c: any) => {
+  async (c: Context) => {
     const sandbox_id = c.req.query('sandbox_id')
     if (!sandbox_id || typeof sandbox_id !== 'string') {
       return c.json({ error: 'sandbox_id is required (string)' }, 400)
     }
 
-    const accessError = await ensureShareAccess(c, sandbox_id)
-    if (accessError) return accessError
-
-    const target = await resolveShareTarget(sandbox_id)
-    if ('error' in target) {
-      return c.json({ error: target.error }, target.status as any)
-    }
-
-    try {
-      const resp = await fetch(target.sandboxShareBaseUrl, {
-        headers: buildSandboxHeaders(target.resolved),
-        signal: AbortSignal.timeout(10_000),
-      })
-      const upstream = shareUpstreamResult(resp.status, await parseJsonResponse(resp))
-      return c.json(upstream.body, upstream.status as any)
-    } catch (err) {
-      console.error('[share] load share links failed:', err)
-      return c.json({ error: 'Failed to load share links' }, 502)
-    }
+    return proxySandboxShare(c, { sandboxId: sandbox_id, path: '', action: 'load share links' })
   },
 )
 
@@ -221,7 +245,7 @@ shareApp.openapi(
   }),
   // Manual param/query read kept — original returns field-specific 400 envelopes
   // and proxies the sandbox's status code through.
-  async (c: any) => {
+  async (c: Context) => {
     const sandbox_id = c.req.query('sandbox_id')
     if (!sandbox_id || typeof sandbox_id !== 'string') {
       return c.json({ error: 'sandbox_id is required (string)' }, 400)
@@ -232,26 +256,12 @@ shareApp.openapi(
       return c.json({ error: 'token is required' }, 400)
     }
 
-    const accessError = await ensureShareAccess(c, sandbox_id)
-    if (accessError) return accessError
-
-    const target = await resolveShareTarget(sandbox_id)
-    if ('error' in target) {
-      return c.json({ error: target.error }, target.status as any)
-    }
-
-    try {
-      const resp = await fetch(`${target.sandboxShareBaseUrl}/${encodeURIComponent(token)}`, {
-        method: 'DELETE',
-        headers: buildSandboxHeaders(target.resolved),
-        signal: AbortSignal.timeout(10_000),
-      })
-      const upstream = shareUpstreamResult(resp.status, await parseJsonResponse(resp))
-      return c.json(upstream.body, upstream.status as any)
-    } catch (err) {
-      console.error('[share] revoke share link failed:', err)
-      return c.json({ error: 'Failed to revoke share link' }, 502)
-    }
+    return proxySandboxShare(c, {
+      sandboxId: sandbox_id,
+      method: 'DELETE',
+      path: encodeURIComponent(token),
+      action: 'revoke share link',
+    })
   },
 )
 

@@ -286,7 +286,7 @@ no build step required:
 ## Entry points
 
 `@kortix/sdk` is the canonical entry — everything framework-free lives there.
-Eight others are stable, each for a reason that fits in one sentence:
+Nine others are stable, each for a reason that fits in one sentence:
 
 | Entry                           | Why it is separate                                         |
 | ------------------------------- | ---------------------------------------------------------- |

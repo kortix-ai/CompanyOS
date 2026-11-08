@@ -34,6 +34,7 @@ export function leaderTimer(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
   let started = false;
+  let awaiting = false;
   let inFlight: Promise<unknown> = Promise.resolve();
 
   const arm = (generationAtArm: number, delayMs: number) => {
@@ -42,8 +43,10 @@ export function leaderTimer(
 
   async function tick(generationAtStart: number): Promise<void> {
     timer = null;
+    awaiting = true;
     const waitStarted = performance.now();
     await inFlight;
+    awaiting = false;
     const waited = Math.round(performance.now() - waitStarted);
     if (waited > SLOW_WAIT_MS) logger.warn('[leader-timer] a restarted timer waited for the run before the restart', { name: options.name, ms: waited });
     if (generationAtStart !== generation || !isLeader()) return;
@@ -80,8 +83,10 @@ export function leaderTimer(
     wake() {
       // The old audit-webhook scheduleWorker: a wake never replaces an armed
       // delay, and beside a run in flight it takes over the next fire with a
-      // 0 ms timer — one wake, one extra tick, never a second chain.
-      if (!started || timer) return;
+      // 0 ms timer — one wake, one extra tick, never a second chain. A tick
+      // already waiting behind a run counts as armed: a second wake must not
+      // queue a second waiter, or the two would both resume and overlap.
+      if (!started || timer || awaiting) return;
       arm(generation, 0);
     },
   };

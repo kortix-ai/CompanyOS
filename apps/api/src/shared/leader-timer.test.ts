@@ -162,4 +162,32 @@ describe('leaderTimer', () => {
     expect(ticks).toBe(2); // one extra tick, not one per wake
     timer.stop();
   });
+
+  test('a wake whose extra tick already waits cannot queue a second one (no overlap)', async () => {
+    leader = true;
+    let runs = 0;
+    let active = 0;
+    let maxActive = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const timer = leaderTimer(async () => {
+      runs += 1;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      if (runs === 1) await gate;
+      else await Bun.sleep(20);
+      active -= 1;
+      return 2_000;
+    });
+    timer.start();
+    await Bun.sleep(10); // run 1 is held by the gate
+    timer.wake();
+    await Bun.sleep(10); // the wake timer fired; its tick now waits behind run 1
+    timer.wake(); // must not queue a second waiter against the same run
+    await Bun.sleep(10);
+    release();
+    await Bun.sleep(60);
+    await timer.stop();
+    expect([runs, maxActive]).toEqual([2, 1]);
+  });
 });

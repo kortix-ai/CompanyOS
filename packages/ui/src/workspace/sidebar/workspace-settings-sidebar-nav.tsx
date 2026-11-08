@@ -128,7 +128,8 @@ function SettingsSearch({
   const tSettings = useTranslations('workspaces.settings');
   const setPendingFind = useWorkspaceSettingsRailStore((s) => s.setPendingFind);
   const [query, setQuery] = useState('');
-  const [cursor, setCursor] = useState(0);
+  // `null`: no row picked by hand yet, so Enter opens the best match.
+  const [cursor, setCursor] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
@@ -178,11 +179,15 @@ function SettingsSearch({
     return { groups: grouped, items: flat };
   }, [results]);
   const indexOf = useMemo(() => new Map(items.map((item, index) => [item.key, index])), [items]);
-  const selected = items.length > 0 ? Math.min(cursor, items.length - 1) : 0;
+  // The best match leads, not the first row: a section that heads its group
+  // only to hold a match (it did not match itself) is not what Enter opens.
+  const best = results?.[0];
+  const bestIndex = best ? (indexOf.get(best.entry ? best.id : `section:${best.section.key}`) ?? 0) : 0;
+  const selected = items.length > 0 ? Math.min(cursor ?? bestIndex, items.length - 1) : 0;
 
   const reset = () => {
     setQuery('');
-    setCursor(0);
+    setCursor(null);
   };
 
   const open = (item: SearchItem) => {
@@ -245,7 +250,7 @@ function SettingsSearch({
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              setCursor(0);
+              setCursor(null);
             }}
             ref={inputRef}
             onKeyDown={onKeyDown}

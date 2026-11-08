@@ -11,7 +11,7 @@
 // under `--isolate`.
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { projects, sessionSandboxes } from '@kortix/db';
-import type { ProjectRow } from '../../../workspaces/rows';
+import type { ProjectSessionRow } from '../../lib/serializers';
 import type { SessionLifecycleCommandRow } from '../store';
 
 const ACCOUNT_ID = 'acct-1';
@@ -33,6 +33,15 @@ let failedCalls: Array<{
   outcome: 'queued' | 'dead_lettered';
 }> = [];
 let markCommandFailedOutcome: 'queued' | 'dead_lettered' = 'queued';
+let succeededCalls: Array<{
+  commandId: string;
+  result: Record<string, unknown>;
+  sessionId: string | null;
+  applied: boolean;
+}> = [];
+// `false` plays the lost lease: markCommandSucceeded's lease-guarded update
+// applied zero rows, so another owner reclaimed the row before the close.
+let markCommandSucceededApplied = true;
 
 const realConfig = await import('../../../config');
 mock.module('../../../config', () => ({
@@ -74,7 +83,7 @@ mock.module('../../../channels/core/threads', () => ({
 const realSessions = await import('../../lib/sessions');
 mock.module('../../lib/sessions', () => ({
   ...realSessions,
-  createProjectSession: async () => ({ row: { sessionId: SESSION_ID } as unknown as ProjectRow }),
+  createProjectSession: async () => ({ row: createdSessionRow() }),
 }));
 
 const realActor = await import('../actor');
@@ -116,7 +125,19 @@ mock.module('../store', () => ({
     });
     return markCommandFailedOutcome;
   },
-  markCommandSucceeded: async () => true,
+  markCommandSucceeded: async (
+    row: { commandId: string },
+    result: Record<string, unknown>,
+    sessionId?: string | null,
+  ) => {
+    succeededCalls.push({
+      commandId: row.commandId,
+      result,
+      sessionId: sessionId ?? null,
+      applied: markCommandSucceededApplied,
+    });
+    return markCommandSucceededApplied;
+  },
 }));
 
 const realInstanceRelease = await import('../instance-release');
@@ -140,6 +161,42 @@ function clearTriggerAlertInputOf(): { projectId: string; accountId: string; slu
   return { projectId: PROJECT_ID, accountId: ACCOUNT_ID, slug: TRIGGER_SLUG, source: 'fire' };
 }
 
+/** A full typed `project_sessions` row — the shape `createProjectSession` returns. */
+function createdSessionRow(): ProjectSessionRow {
+  const now = new Date();
+  return {
+    sessionId: SESSION_ID,
+    accountId: ACCOUNT_ID,
+    projectId: PROJECT_ID,
+    branchName: 'main',
+    baseRef: 'main',
+    sandboxProvider: 'daytona',
+    sandboxId: null,
+    sandboxUrl: null,
+    runtimeSessionId: null,
+    agentName: 'default',
+    status: 'queued',
+    error: null,
+    labels: [],
+    createdBy: null,
+    visibility: 'private',
+    origin: 'user',
+    originRef: null,
+    parentSessionId: null,
+    initiatorType: null,
+    initiatorId: null,
+    spaceId: null,
+    groupId: null,
+    secretsAllowlist: null,
+    requiredConnectors: null,
+    connectorBindingsConfigured: false,
+    connectorBindingsInheritUnbound: false,
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 function queuedCreateRow(overrides: Partial<SessionLifecycleCommandRow> = {}): SessionLifecycleCommandRow {
   const now = new Date();
   return {
@@ -149,6 +206,7 @@ function queuedCreateRow(overrides: Partial<SessionLifecycleCommandRow> = {}): S
     // `source: 'trigger:<kind>'` rows, which is what the alert-clear
     // assertion below needs.
     source: 'trigger:git',
+    artifactId: null,
     status: 'running',
     projectId: PROJECT_ID,
     accountId: ACCOUNT_ID,
@@ -170,7 +228,7 @@ function queuedCreateRow(overrides: Partial<SessionLifecycleCommandRow> = {}): S
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  } as SessionLifecycleCommandRow;
+  };
 }
 
 beforeEach(() => {
@@ -178,7 +236,9 @@ beforeEach(() => {
   bindChatThreadCalls = 0;
   clearTriggerAlertCalls = [];
   failedCalls = [];
+  succeededCalls = [];
   markCommandFailedOutcome = 'queued';
+  markCommandSucceededApplied = true;
   claimed = [queuedCreateRow()];
 });
 
@@ -197,14 +257,15 @@ describe('drainSessionLifecycleQueue — create_session post-create finalization
     const result = await drainSessionLifecycleQueue({ limit: 10 });
 
     expect(failedCalls).toHaveLength(1);
-    expect(failedCalls[0]!.retryable).toBe(true);
-    expect(failedCalls[0]!.result).toEqual({
+    const [failure] = failedCalls;
+    expect(failure.retryable).toBe(true);
+    expect(failure.result).toEqual({
       status: 'created',
       session_id: SESSION_ID,
       source: 'trigger:git',
       post_create_error: 'initial prompt delivery refused',
     });
-    expect(failedCalls[0]!.outcome).toBe('queued');
+    expect(failure.outcome).toBe('queued');
     // The row stays queued for a retry: the drain counts it as queued, not failed.
     expect(result.queued).toBe(1);
     expect(result.succeeded).toBe(0);
@@ -216,9 +277,34 @@ describe('drainSessionLifecycleQueue — create_session post-create finalization
 
     expect(failedCalls).toHaveLength(0);
     expect(bindChatThreadCalls).toBe(1);
+    // Row finalization: the success write carries the created result under
+    // this row's lease, and the write applied (the lease still held).
+    expect(succeededCalls).toHaveLength(1);
+    const [succeeded] = succeededCalls;
+    expect(succeeded.commandId).toBe('cmd-create-1');
+    expect(succeeded.result).toEqual({
+      status: 'created',
+      session_id: SESSION_ID,
+      source: 'trigger:git',
+    });
+    expect(succeeded.sessionId).toBe(SESSION_ID);
+    expect(succeeded.applied).toBe(true);
     expect(clearTriggerAlertCalls).toEqual([
       clearTriggerAlertInputOf(),
     ]);
+    expect(result.succeeded).toBe(1);
+  });
+
+  test('a success write that lost its lease clears no trigger alert', async () => {
+    markCommandSucceededApplied = false;
+
+    const result = await drainSessionLifecycleQueue({ limit: 10 });
+
+    expect(failedCalls).toHaveLength(0);
+    expect(succeededCalls).toHaveLength(1);
+    // The write ran and lost (`applied: false`): this drain no longer owns the
+    // row, so it must not end the fire's alert streak it did not finish.
+    expect(clearTriggerAlertCalls).toEqual([]);
     expect(result.succeeded).toBe(1);
   });
 });

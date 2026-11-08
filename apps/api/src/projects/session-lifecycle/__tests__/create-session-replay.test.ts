@@ -63,6 +63,7 @@ function existingRowFor(overrides: Partial<SessionLifecycleCommandRow> = {}): Se
     commandId: COMMAND_ID,
     commandType: 'create_session',
     source: 'ui',
+    artifactId: null,
     status: 'succeeded',
     projectId: PROJECT_ID,
     accountId: ACCOUNT_ID,
@@ -79,7 +80,7 @@ function existingRowFor(overrides: Partial<SessionLifecycleCommandRow> = {}): Se
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  } as SessionLifecycleCommandRow;
+  };
 }
 
 function commandFor(body: Record<string, unknown>): CreateSessionCommand {

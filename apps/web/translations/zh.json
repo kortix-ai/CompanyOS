@@ -3751,26 +3751,24 @@
     "placeholder": "告诉 Kortix 您在做什么",
     "kickoff": "带我上手 Kortix"
   },
-  "existingRepoSetup": {
-    "title": "在此仓库中设置 Kortix",
-    "intro": "<code>{repository}</code> 还没有代理。Kortix 从仓库根目录的 <code>kortix.yaml</code> 文件中读取代理。",
-    "introNoName": "此仓库还没有代理。Kortix 从仓库根目录的 <code>kortix.yaml</code> 文件中读取代理。",
-    "steps": {
-      "copy": "复制设置提示词。",
-      "run": "在仓库的本地克隆中,将其粘贴到 Claude Code、Codex 或 Cursor。",
-      "push": "你的代理会编写 kortix.yaml、验证它,并推送到 <code>{branch}</code>。"
+  "noAgentHome": {
+    "setup": {
+      "title": "在此仓库中设置 Kortix",
+      "body": "在你的本地克隆中,将设置提示词粘贴到 Claude Code、Codex 或 Cursor。<code>kortix.yaml</code> 推送到 <code>{branch}</code> 后,聊天会在这里打开。"
     },
     "defaultBranch": "默认分支",
-    "promptLabel": "设置提示词",
     "copy": "复制设置提示词",
-    "copyAgain": "再次复制设置提示词",
-    "copied": "提示词已复制",
+    "copied": "已复制",
     "copyFailed": "无法复制提示词",
-    "checkAgain": "检查 kortix.yaml",
-    "checking": "正在检查…",
-    "autoCheck": "推送后约一分钟内,此页面会自动更新。",
-    "docs": "阅读设置指南",
-    "member": "管理此工作区的任何人都可以完成设置。完成后,你的代理会显示在这里。"
+    "docs": "设置指南",
+    "noAccess": {
+      "title": "没有可供你使用的代理",
+      "body": "管理此工作区的任何人都可以为你开通访问权限。"
+    },
+    "empty": {
+      "title": "此工作区没有代理",
+      "body": "在 kortix.yaml 中声明一个,或通过“新建代理”创建一个。"
+    }
   },
   "announcements": {
     "memories": {

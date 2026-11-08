@@ -3751,26 +3751,24 @@
     "placeholder": "取り組んでいることを Kortix に伝えてください",
     "kickoff": "Kortixの使い方を案内して"
   },
-  "existingRepoSetup": {
-    "title": "このリポジトリで Kortix をセットアップ",
-    "intro": "<code>{repository}</code> にはまだエージェントがありません。Kortix はリポジトリのルートにある <code>kortix.yaml</code> からエージェントを読み込みます。",
-    "introNoName": "このリポジトリにはまだエージェントがありません。Kortix はリポジトリのルートにある <code>kortix.yaml</code> からエージェントを読み込みます。",
-    "steps": {
-      "copy": "セットアッププロンプトをコピーします。",
-      "run": "リポジトリのクローンで Claude Code、Codex、Cursor のいずれかに貼り付けます。",
-      "push": "エージェントが kortix.yaml を作成・検証し、<code>{branch}</code> にプッシュします。"
+  "noAgentHome": {
+    "setup": {
+      "title": "このリポジトリで Kortix をセットアップ",
+      "body": "クローンで Claude Code、Codex、Cursor のいずれかにセットアッププロンプトを貼り付けてください。<code>kortix.yaml</code> が <code>{branch}</code> に追加されると、ここでチャットが開きます。"
     },
     "defaultBranch": "デフォルトブランチ",
-    "promptLabel": "セットアッププロンプト",
     "copy": "セットアッププロンプトをコピー",
-    "copyAgain": "セットアッププロンプトを再度コピー",
-    "copied": "プロンプトをコピーしました",
+    "copied": "コピーしました",
     "copyFailed": "プロンプトをコピーできませんでした",
-    "checkAgain": "kortix.yaml を確認",
-    "checking": "確認中…",
-    "autoCheck": "プッシュから約 1 分以内に、このページは自動で更新されます。",
-    "docs": "セットアップガイドを読む",
-    "member": "このワークスペースを管理する人なら誰でもセットアップできます。完了するとエージェントがここに表示されます。"
+    "docs": "セットアップガイド",
+    "noAccess": {
+      "title": "利用できるエージェントがありません",
+      "body": "このワークスペースを管理する人なら誰でもアクセス権を付与できます。"
+    },
+    "empty": {
+      "title": "このワークスペースにエージェントがありません",
+      "body": "kortix.yaml で宣言するか、「新しいエージェント」で作成してください。"
+    }
   },
   "announcements": {
     "memories": {

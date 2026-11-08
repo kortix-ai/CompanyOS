@@ -131,7 +131,7 @@ Kortix reads agents from `kortix.yaml` at the root of the branch the workspace u
 2. **Copy the setup prompt.** The workspace page of a repository with no `kortix.yaml` shows **Copy setup prompt**, filled in with the repository and the branch. Or copy it from below.
 3. **Paste it into Claude Code, Codex or Cursor** in your clone. The agent writes `kortix.yaml`, runs `kortix validate` and pushes the file. With no workspace linked yet, run `kortix ship` after it: it links the GitHub `origin` and pushes.
 
-The workspace page checks the branch every 15 seconds and opens the usual home within about a minute of the push. **Check for kortix.yaml** checks at once.
+Until then the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab, and opens the chat within about a minute of the push.
 
 The prompt:
 

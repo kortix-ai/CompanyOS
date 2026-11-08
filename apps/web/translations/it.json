@@ -3751,26 +3751,24 @@
     "placeholder": "Dì a Kortix su cosa stai lavorando",
     "kickoff": "Guidami alla scoperta di Kortix"
   },
-  "existingRepoSetup": {
-    "title": "Configura Kortix in questo repository",
-    "intro": "<code>{repository}</code> non ha ancora agenti. Kortix li legge da un file <code>kortix.yaml</code> nella radice del repository.",
-    "introNoName": "Questo repository non ha ancora agenti. Kortix li legge da un file <code>kortix.yaml</code> nella radice del repository.",
-    "steps": {
-      "copy": "Copia il prompt di configurazione.",
-      "run": "Incollalo in Claude Code, Codex o Cursor nel tuo clone del repository.",
-      "push": "Il tuo agente scrive kortix.yaml, lo convalida e lo invia a <code>{branch}</code>."
+  "noAgentHome": {
+    "setup": {
+      "title": "Configura Kortix in questo repository",
+      "body": "Incolla il prompt di configurazione in Claude Code, Codex o Cursor nel tuo clone. La chat si apre qui quando <code>kortix.yaml</code> arriva su <code>{branch}</code>."
     },
     "defaultBranch": "il branch predefinito",
-    "promptLabel": "Prompt di configurazione",
     "copy": "Copia il prompt di configurazione",
-    "copyAgain": "Copia di nuovo il prompt di configurazione",
-    "copied": "Prompt copiato",
+    "copied": "Copiato",
     "copyFailed": "Impossibile copiare il prompt",
-    "checkAgain": "Cerca kortix.yaml",
-    "checking": "Controllo in corso…",
-    "autoCheck": "Questa pagina si aggiorna da sola circa un minuto dopo il push.",
-    "docs": "Leggi la guida alla configurazione",
-    "member": "Chiunque gestisca questo workspace può configurarlo. I tuoi agenti compariranno qui quando sarà fatto."
+    "docs": "Guida alla configurazione",
+    "noAccess": {
+      "title": "Nessun agente disponibile per te",
+      "body": "Chiunque gestisca questo workspace può darti accesso."
+    },
+    "empty": {
+      "title": "Nessun agente in questo workspace",
+      "body": "Dichiaranne uno in kortix.yaml o creane uno con Nuovo agente."
+    }
   },
   "announcements": {
     "memories": {

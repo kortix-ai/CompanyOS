@@ -3751,26 +3751,24 @@
     "placeholder": "Реци Kortix-у на чему радиш",
     "kickoff": "Уведи ме у Kortix"
   },
-  "existingRepoSetup": {
-    "title": "Podesi Kortix u ovom repozitorijumu",
-    "intro": "<code>{repository}</code> još nema agente. Kortix ih čita iz datoteke <code>kortix.yaml</code> u korenu repozitorijuma.",
-    "introNoName": "Ovaj repozitorijum još nema agente. Kortix ih čita iz datoteke <code>kortix.yaml</code> u korenu repozitorijuma.",
-    "steps": {
-      "copy": "Kopiraj prompt za podešavanje.",
-      "run": "Nalepi ga u Claude Code, Codex ili Cursor u svom klonu repozitorijuma.",
-      "push": "Tvoj agent piše kortix.yaml, proverava ga i šalje na <code>{branch}</code>."
+  "noAgentHome": {
+    "setup": {
+      "title": "Podesi Kortix u ovom repozitorijumu",
+      "body": "Nalepi prompt za podešavanje u Claude Code, Codex ili Cursor u svom klonu. Čet se otvara ovde kada <code>kortix.yaml</code> stigne na <code>{branch}</code>."
     },
     "defaultBranch": "podrazumevanu granu",
-    "promptLabel": "Prompt za podešavanje",
     "copy": "Kopiraj prompt za podešavanje",
-    "copyAgain": "Ponovo kopiraj prompt za podešavanje",
-    "copied": "Prompt kopiran",
+    "copied": "Kopirano",
     "copyFailed": "Prompt nije kopiran",
-    "checkAgain": "Proveri kortix.yaml",
-    "checking": "Proveravanje…",
-    "autoCheck": "Ova stranica se sama osvežava otprilike minut posle push-a.",
-    "docs": "Pročitaj vodič za podešavanje",
-    "member": "Svako ko upravlja ovim workspace-om može da ga podesi. Tvoji agenti će se pojaviti ovde kada to bude gotovo."
+    "docs": "Vodič za podešavanje",
+    "noAccess": {
+      "title": "Nemaš dostupnih agenata",
+      "body": "Svako ko upravlja ovim workspace-om može da ti da pristup."
+    },
+    "empty": {
+      "title": "U ovom workspace-u nema agenata",
+      "body": "Deklariši jednog u kortix.yaml ili ga napravi pomoću Novi agent."
+    }
   },
   "announcements": {
     "memories": {

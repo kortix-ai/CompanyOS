@@ -3751,26 +3751,24 @@
     "placeholder": "Sagen Sie Kortix, woran Sie arbeiten",
     "kickoff": "Führ mich durch Kortix"
   },
-  "existingRepoSetup": {
-    "title": "Kortix in diesem Repository einrichten",
-    "intro": "<code>{repository}</code> hat noch keine Agenten. Kortix liest sie aus einer Datei <code>kortix.yaml</code> im Stammverzeichnis des Repositorys.",
-    "introNoName": "Dieses Repository hat noch keine Agenten. Kortix liest sie aus einer Datei <code>kortix.yaml</code> im Stammverzeichnis des Repositorys.",
-    "steps": {
-      "copy": "Kopiere den Einrichtungs-Prompt.",
-      "run": "Füge ihn in Claude Code, Codex oder Cursor in deinem Klon des Repositorys ein.",
-      "push": "Dein Agent schreibt kortix.yaml, prüft die Datei und pusht sie nach <code>{branch}</code>."
+  "noAgentHome": {
+    "setup": {
+      "title": "Kortix in diesem Repository einrichten",
+      "body": "Füge den Einrichtungs-Prompt in Claude Code, Codex oder Cursor in deinem Klon ein. Der Chat öffnet sich hier, sobald <code>kortix.yaml</code> auf <code>{branch}</code> liegt."
     },
-    "defaultBranch": "den Standard-Branch",
-    "promptLabel": "Einrichtungs-Prompt",
+    "defaultBranch": "dem Standard-Branch",
     "copy": "Einrichtungs-Prompt kopieren",
-    "copyAgain": "Einrichtungs-Prompt erneut kopieren",
-    "copied": "Prompt kopiert",
+    "copied": "Kopiert",
     "copyFailed": "Der Prompt konnte nicht kopiert werden",
-    "checkAgain": "Nach kortix.yaml suchen",
-    "checking": "Wird geprüft…",
-    "autoCheck": "Diese Seite aktualisiert sich etwa eine Minute nach dem Push von selbst.",
-    "docs": "Anleitung lesen",
-    "member": "Alle, die diesen Workspace verwalten, können ihn einrichten. Deine Agenten erscheinen hier, sobald das erledigt ist."
+    "docs": "Anleitung",
+    "noAccess": {
+      "title": "Für dich sind keine Agenten verfügbar",
+      "body": "Alle, die diesen Workspace verwalten, können dir Zugriff geben."
+    },
+    "empty": {
+      "title": "Keine Agenten in diesem Workspace",
+      "body": "Lege einen in kortix.yaml an oder erstelle einen mit Neuer Agent."
+    }
   },
   "announcements": {
     "memories": {

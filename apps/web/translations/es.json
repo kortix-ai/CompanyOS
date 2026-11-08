@@ -3751,26 +3751,24 @@
     "placeholder": "Cuéntale a Kortix en qué estás trabajando",
     "kickoff": "Guíame para empezar con Kortix"
   },
-  "existingRepoSetup": {
-    "title": "Configura Kortix en este repositorio",
-    "intro": "<code>{repository}</code> aún no tiene agentes. Kortix los lee de un archivo <code>kortix.yaml</code> en la raíz del repositorio.",
-    "introNoName": "Este repositorio aún no tiene agentes. Kortix los lee de un archivo <code>kortix.yaml</code> en la raíz del repositorio.",
-    "steps": {
-      "copy": "Copia el prompt de configuración.",
-      "run": "Pégalo en Claude Code, Codex o Cursor en tu clon del repositorio.",
-      "push": "Tu agente escribe kortix.yaml, lo valida y lo sube a <code>{branch}</code>."
+  "noAgentHome": {
+    "setup": {
+      "title": "Configura Kortix en este repositorio",
+      "body": "Pega el prompt de configuración en Claude Code, Codex o Cursor en tu clon. El chat se abre aquí cuando <code>kortix.yaml</code> llega a <code>{branch}</code>."
     },
     "defaultBranch": "la rama predeterminada",
-    "promptLabel": "Prompt de configuración",
     "copy": "Copiar prompt de configuración",
-    "copyAgain": "Copiar de nuevo el prompt de configuración",
-    "copied": "Prompt copiado",
+    "copied": "Copiado",
     "copyFailed": "No se pudo copiar el prompt",
-    "checkAgain": "Buscar kortix.yaml",
-    "checking": "Comprobando…",
-    "autoCheck": "Esta página se actualiza sola en aproximadamente un minuto tras el push.",
-    "docs": "Leer la guía de configuración",
-    "member": "Cualquier persona que gestione este workspace puede configurarlo. Tus agentes aparecerán aquí cuando esté listo."
+    "docs": "Guía de configuración",
+    "noAccess": {
+      "title": "No tienes agentes disponibles",
+      "body": "Cualquier persona que gestione este workspace puede darte acceso."
+    },
+    "empty": {
+      "title": "No hay agentes en este workspace",
+      "body": "Declara uno en kortix.yaml o crea uno con Nuevo agente."
+    }
   },
   "announcements": {
     "memories": {

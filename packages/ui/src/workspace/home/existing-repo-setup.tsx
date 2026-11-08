@@ -25,7 +25,10 @@ import { EXISTING_REPO_DOCS_URL, existingRepoSetupPrompt, repositoryLabel } from
  * `kortix.yaml` in their clone, validates it and pushes it. "Check again"
  * re-reads the project; the page becomes the usual home once an agent exists.
  *
- * A person who may not change the project sees who can set it up instead.
+ * A person who may read the manifest but not change the project sees who can
+ * set it up instead. A plain member never reaches this page: the server
+ * answers `manifest_health.state: 'restricted'` to them, and the composer's
+ * "ask a manager" refusal already says the right thing.
  */
 export function ExistingRepoSetup({
   repoUrl,
@@ -75,10 +78,10 @@ export function ExistingRepoSetup({
             {repository
               ? t.rich('intro', {
                   repository,
-                  code: (chunks) => <code className="text-foreground font-mono text-sm">{chunks}</code>,
+                  code: (chunks) => <code className="text-foreground font-mono text-sm break-all">{chunks}</code>,
                 })
               : t.rich('introNoName', {
-                  code: (chunks) => <code className="text-foreground font-mono text-sm">{chunks}</code>,
+                  code: (chunks) => <code className="text-foreground font-mono text-sm break-all">{chunks}</code>,
                 })}
           </p>
         </div>

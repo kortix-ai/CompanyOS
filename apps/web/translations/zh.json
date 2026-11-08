@@ -347,7 +347,8 @@
       "actionImport": "导入现有仓库",
       "ownerTypePersonal": "个人账户",
       "ownerTypeOrg": "组织",
-      "createPersonalAuthorize": "首次在个人账户中创建仓库时，Kortix 会请求你在 GitHub 上的授权。"
+      "createPersonalAuthorize": "首次在个人账户中创建仓库时，Kortix 会请求你在 GitHub 上的授权。",
+      "importHint": "Kortix 从此仓库的 kortix.yaml 读取代理。如果没有该文件,工作区会显示一个设置提示词,供你复制到编码代理中。"
     }
   },
   "projectHome": {

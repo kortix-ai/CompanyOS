@@ -347,7 +347,8 @@
       "actionImport": "Importar un repositorio existente",
       "ownerTypePersonal": "Cuenta personal",
       "ownerTypeOrg": "Organización",
-      "createPersonalAuthorize": "Kortix solicitará tu autorización en GitHub la primera vez que crees un repositorio en una cuenta personal."
+      "createPersonalAuthorize": "Kortix solicitará tu autorización en GitHub la primera vez que crees un repositorio en una cuenta personal.",
+      "importHint": "Kortix lee los agentes del kortix.yaml de este repositorio. Si no existe, el workspace se abre con un prompt de configuración que copias en tu agente de código."
     }
   },
   "projectHome": {

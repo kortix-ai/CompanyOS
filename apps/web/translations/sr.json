@@ -347,7 +347,8 @@
       "actionImport": "Увези постојећи репозиторијум",
       "ownerTypePersonal": "Лични налог",
       "ownerTypeOrg": "Организација",
-      "createPersonalAuthorize": "Kortix će prvi put zatražiti vašu autorizaciju na GitHubu kada kreirate repozitorijum na ličnom nalogu."
+      "createPersonalAuthorize": "Kortix će prvi put zatražiti vašu autorizaciju na GitHubu kada kreirate repozitorijum na ličnom nalogu.",
+      "importHint": "Kortix čita agente iz kortix.yaml u ovom repozitorijumu. Bez njega, workspace se otvara sa promptom za podešavanje koji kopiraš u svog agenta za kodiranje."
     }
   },
   "projectHome": {

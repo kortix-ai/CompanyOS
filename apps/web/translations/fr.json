@@ -347,7 +347,8 @@
       "actionImport": "Importer un dépôt existant",
       "ownerTypePersonal": "Compte personnel",
       "ownerTypeOrg": "Organisation",
-      "createPersonalAuthorize": "Kortix demande votre autorisation à GitHub la première fois que vous créez un dépôt dans un compte personnel."
+      "createPersonalAuthorize": "Kortix demande votre autorisation à GitHub la première fois que vous créez un dépôt dans un compte personnel.",
+      "importHint": "Kortix lit les agents dans le kortix.yaml de ce dépôt. S’il n’existe pas, le workspace s’ouvre sur un prompt de configuration à copier dans votre agent de code."
     }
   },
   "projectHome": {

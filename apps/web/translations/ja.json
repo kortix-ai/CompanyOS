@@ -347,7 +347,8 @@
       "actionImport": "既存のリポジトリをインポート",
       "ownerTypePersonal": "個人アカウント",
       "ownerTypeOrg": "組織",
-      "createPersonalAuthorize": "個人アカウントにリポジトリを初めて作成するとき、Kortix は GitHub で認可を求めます。"
+      "createPersonalAuthorize": "個人アカウントにリポジトリを初めて作成するとき、Kortix は GitHub で認可を求めます。",
+      "importHint": "Kortix はこのリポジトリの kortix.yaml からエージェントを読み込みます。ファイルがない場合、ワークスペースはコーディングエージェントにコピーするセットアッププロンプトを表示します。"
     }
   },
   "projectHome": {

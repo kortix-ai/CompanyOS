@@ -26605,7 +26605,9 @@
         "createdDescription": "{name} handelt als {actsAs}. Kortix zeigt den Schlüssel nur einmal: Kopieren Sie ihn jetzt und speichern Sie ihn als Secret.",
         "accessFullHint": "Alles, was der Prinzipal des Schlüssels in diesem Workspace darf.",
         "accessCustomHint": "Nur die Berechtigungen, die Sie auswählen. Jede muss etwas sein, das der Prinzipal des Schlüssels darf."
-      }
+      },
+      "searchPlaceholder": "Einstellungen durchsuchen",
+      "searchNoResults": "Keine passende Einstellung"
     },
     "cli": {
       "noWorkspaceTitle": "Erstelle einen Workspace, um die CLI anzumelden",
@@ -26636,7 +26638,9 @@
     },
     "menu": {
       "invite": "Personen zu {name} einladen",
-      "leave": "{name} verlassen"
+      "leave": "{name} verlassen",
+      "invitePeople": "Personen einladen",
+      "more": "Mehr"
     },
     "roles": {
       "owner": {

@@ -9960,7 +9960,9 @@ const catalog = {
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
-      }
+      },
+      "searchPlaceholder": "Search settings",
+      "searchNoResults": "No settings match"
     },
     "models": {
       "yourDefault": "Workspace default",

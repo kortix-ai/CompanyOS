@@ -145,9 +145,11 @@ mock.module('../../secrets/account-resource', () => ({
   },
 }));
 
-mock.module('../../shared/db', () => ({ db: {
+const fakeDb = {
+  transaction: async (run: (tx: unknown) => Promise<unknown>) => run(fakeDb),
   select: () => ({ from: (table: unknown) => {
-    if (table !== sessionProviderSecretPools) throw new Error('unexpected select');
+    if (table === projectSessions) return { where: () => ({ for: async () => [{ sessionId, metadata: sessionMetadata, status: 'idle' }] }) };
+    if (table !== sessionProviderSecretPools) return { where: async () => [] };
     let rows: unknown[] = [];
     const query: any = {
       where: (condition: SQL) => {
@@ -162,6 +164,8 @@ mock.module('../../shared/db', () => ({ db: {
     return query;
   } }),
   insert: (table: unknown) => ({ values: (row: { providerId: string; secretIds: string[] }) => ({
+    returning: async () => [{ commandId: crypto.randomUUID(), createdAt: new Date() }],
+    then: (resolve: (value: unknown) => unknown) => Promise.resolve([]).then(resolve),
     onConflictDoUpdate: async () => { writes++; pools.set(row.providerId, row.secretIds); },
     onConflictDoNothing: () => ({ returning: async () => {
       if (table !== sessionProviderSecretPools) throw new Error('unexpected insert');
@@ -171,21 +175,22 @@ mock.module('../../shared/db', () => ({ db: {
       return [{ sessionId }];
     } }),
   }) }),
-  update: (table: unknown) => ({ set: (values: { metadata: { opencode_model: string } }) => ({ where: async () => {
+  update: (table: unknown) => ({ set: (values: { metadata: { model: string } }) => ({ where: async () => {
     if (table !== projectSessions) throw new Error('unexpected update');
-    storedModel = values.metadata.opencode_model;
+    storedModel = values.metadata.model;
   } }) }),
   delete: () => ({ where: async (condition: SQL) => {
     writes++;
     for (const p of paramsOf(condition)) pools.delete(p as string);
   } }),
-} }));
+};
+mock.module('../../shared/db', () => ({ db: fakeDb }));
 (await import('./provider-secret-pools')).registerProviderSecretPoolsRoutes();
 (await import('./session-scope')).registerSessionScopeRoutes();
 const { MAX_KEYS_PER_PROVIDER } = await import('../../secrets/provider-key-selection');
 
 const putModel = (model: string) => app.request(`/${projectId}/sessions/${sessionId}/model`, {
-  method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ opencode_model: model }),
+  method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: model }),
 });
 
 const put = (providerId: string, secretIds: string[] | null) => app.request(`${base}/${providerId}`, {
@@ -319,7 +324,7 @@ test('a selection is refused when the session owner cannot read the project', as
   const owner = await put('anthropic', [keyId(1)]);
   expect(owner.status).toBe(403);
   expect(await owner.json()).toEqual({
-    error: 'The session owner can no longer read this project, so the session cannot use provider secrets',
+    error: 'The session owner can no longer read this workspace, so the session cannot use provider secrets',
     code: 'SESSION_OWNER_NO_PROJECT_ACCESS',
   });
   expect(writes).toBe(0);
@@ -352,7 +357,7 @@ test('a shared session whose owner cannot read the project names that cause, not
   const response = await put('anthropic', [keyId(1)]);
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({
-    error: 'The session owner can no longer read this project, so the session cannot use provider secrets',
+    error: 'The session owner can no longer read this workspace, so the session cannot use provider secrets',
     code: 'SESSION_OWNER_NO_PROJECT_ACCESS',
   });
   expect(writes).toBe(0);
@@ -463,7 +468,7 @@ describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {
     const response = await putModel(model);
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.opencode_model).toBe(storedModel!);
+    expect(body.model).toBe(storedModel!);
     expect(storedModel).toContain(model);
     expect(pools.get('anthropic')).toEqual([keyId(1), keyId(2)]);
     // Listed as the owner, a member, with nobody's grants: the caller is not the owner.
@@ -483,7 +488,7 @@ describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.model).toBe(storedModel!);
-    expect(body.opencode_model).toBe(storedModel!);
+    expect(body.model).toBe(storedModel!);
     expect(storedModel).toContain(model);
   });
 

@@ -13,10 +13,11 @@ import {
 } from '../secrets';
 import { recordAuditEvent } from '../../shared/audit';
 import { bindAuditPrincipal } from '../../shared/audit-scope';
-import { accountGithubInstallationStates, accountGithubInstallations, accountTokens, readStoredAgentGrant, projectGitConnections, projectGitCredentials, projectSessions, projects, sessionSandboxes } from '@kortix/db';
+import { accountGithubInstallationStates, accountGithubInstallations, accountTokens, readStoredAgentGrant, projectGitConnections, projectGitCredentials, projectSessions, sessionSandboxes } from '@kortix/db';
 import type { AgentGrant } from '@kortix/db';
 import { and, countDistinct, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { errorMessage } from '../../shared/error-message';
 // Imported from the leaf modules, not the `../../iam` barrel: this file is
 // pulled in by most of the project surface, and several suites mock the barrel
 // with a partial shape — a barrel import here turns those into module-load
@@ -43,6 +44,7 @@ import {
   type GitHealth,
   type RepositoryDisconnectedReason,
 } from '../../shared/repository-health';
+import { projectsView } from '../../workspaces/rows';
 
 /**
  * Every account connection, NEWEST first. The order is explicit because
@@ -881,7 +883,7 @@ export async function resolveProjectGitAuth(project: ProjectRow): Promise<Projec
         logger.warn('[projects] GitHub App installation token mint failed', {
           projectId: project.projectId,
           installationId,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage(err),
         });
         return { authSource: 'none', reason: 'installation_unusable' };
       }
@@ -1163,7 +1165,7 @@ export async function authorizeGitProxy(
 }
 
 async function currentGitProxyProject(projectId: string): Promise<ProjectRow | null> {
-  const [project] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [project] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   return project?.status === 'archived' ? null : (project ?? null);
 }
 
@@ -1182,8 +1184,8 @@ async function authorizeGitProxyUncached(
   // instead of paying two sequential cross-region round trips.
   const projectPromise = db
     .select()
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1)
     .then((rows) => rows[0]);
   const tokenPromise: Promise<
@@ -1305,7 +1307,7 @@ async function authorizeGitProxyUncached(
       // Thread the acting token so the agent-grant fold fires (userRole ∩ grant)
       // — a bare authorize() would silently skip it.
       if (!(await grantedByProjectRole(result.userId, result.tokenId, sessionPrincipal !== null))) {
-        return { ok: false, status: 403, message: 'token is not authorized for this project' };
+        return { ok: false, status: 403, message: 'token is not authorized for this workspace' };
       }
     }
     return {
@@ -1375,7 +1377,7 @@ async function authorizeGitProxyUncached(
         ))
         .limit(1);
       if (!sandbox) {
-        return { ok: false, status: 403, message: 'sandbox token is not scoped to this project' };
+        return { ok: false, status: 403, message: 'sandbox token is not scoped to this workspace' };
       }
       if (!workspaceMetadataAllowsRepositoryAccess(sandbox.sessionMetadata)) {
         return { ok: false, status: 403, message: 'sandbox workspace does not allow Git access' };
@@ -1425,7 +1427,7 @@ async function authorizeGitProxyUncached(
     // carries no user identity, so there is no principal to evaluate project
     // grants against — account ownership stays the only rule.
     if (result.accountId !== project.accountId) {
-      return { ok: false, status: 403, message: 'token does not own this project' };
+      return { ok: false, status: 403, message: 'token does not own this workspace' };
     }
     return { ok: true, project, principal: { kind: 'user', userId: null }, agentGrant: null };
   }
@@ -1567,8 +1569,8 @@ export async function resolveProjectGitAccessById(projectId: string): Promise<{
   try {
     const [row] = await db
       .select()
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
+      .from(projectsView)
+      .where(eq(projectsView.projectId, projectId))
       .limit(1);
     if (!row) return null;
     const resolved = await withProjectGitAuth(row);

@@ -42,15 +42,16 @@ load_local_env() {
   # endpoint back to localhost and mark the process as local-dev so cloud
   # provision pollers do not sweep shared remote rows.
   # apps/api/.env and apps/web/.env are dotenvx-ENCRYPTED and committed to git.
-  # Decrypt them with the dotenvx private keys — apps/{api,web}/.env.keys locally,
-  # or Dotenv Armor (`dotenvx-armor login`) — and export into the shell so the
-  # API (Bun) and web (Next) children inherit the plaintext values.
+  # Decrypt them with the repo's dotenvx (2.x), which finds the private key in
+  # DOTENV_PRIVATE_KEY, apps/{api,web}/.env.keys, or the Dotenv Armor login
+  # (`dotenvx armor login`, token in the OS keychain), and export into the shell
+  # so the API (Bun) and web (Next) children inherit the plaintext values.
   local DOTENVX="$ROOT_DIR/node_modules/.bin/dotenvx" _f _env
   if [[ -x "$DOTENVX" ]]; then
     for _f in apps/api/.env apps/web/.env; do
       _env="$("$DOTENVX" get --format eval -f "$ROOT_DIR/$_f" 2>/dev/null || true)"
       if [[ -z "$_env" || "$_env" == *'="encrypted:'* ]]; then
-        echo "[dev] ⚠️  could not decrypt $_f — run 'dotenvx-armor login' (or restore its .env.keys)" >&2
+        echo "[dev] ⚠️  could not decrypt $_f — run 'dotenvx armor login' (dotenvx 2.7.1+), or restore its .env.keys" >&2
       else
         set -a; eval "$_env"; set +a
       fi
@@ -143,8 +144,8 @@ ensure_dev_tunnel() {
     echo "[dev] Tunnel skipped — KORTIX_URL=$KORTIX_URL"
     if [[ "$default_provider" == "platinum" || "$default_provider" == "daytona" ]]; then
       echo "[dev] ⚠️  Default sandbox provider ($default_provider) is a cloud provider but the tunnel is off —"
-      echo "[dev]     sessions will fail with 'OpenCode runtime is not ready' because the"
-      echo "[dev]     sandbox cannot reach $api_origin. Unset KORTIX_DEV_TUNNEL to enable it."
+      echo "[dev]     sessions will fail to start ('KORTIX_URL points at a loopback address') because"
+      echo "[dev]     the sandbox cannot reach $api_origin. Unset KORTIX_DEV_TUNNEL to enable it."
     fi
     return 0
   fi
@@ -423,7 +424,7 @@ if "access_token" in d:
 
 # Warm the heavy frontend routes in the background of `pnpm dev` so the FIRST
 # human navigation doesn't pay Turbopack's on-demand compile (measured:
-# /projects/[id] 16.1s, /projects/[id]/sessions/[sessionId] 5.2s — which read
+# /workspaces/[id] 16.1s, /workspaces/[id]/sessions/[sessionId] 5.2s — which read
 # as "creating a session takes 6+ seconds" when it was the ROUTE compiling,
 # not the sandbox). An UNAUTHED hit compiles the bundle but redirects before
 # the page's module graph ever evaluates — the first real (authed) navigation
@@ -440,7 +441,7 @@ warm_frontend_routes() {
   local cookie="$(mint_warm_cookie)"
   local auth_header=""
   [[ -n "$cookie" ]] && auth_header="Cookie: sb-kortix-auth-token-${WEB_PORT:-3000}=$cookie"
-  for p in "/projects" "/projects/warmup-id" "/projects/warmup-id/sessions/warmup-id" "/projects/warmup-id/files"; do
+  for p in "/workspaces" "/workspaces/warmup-id" "/workspaces/warmup-id/sessions/warmup-id" "/workspaces/warmup-id/files"; do
     curl -s -o /dev/null -m 120 ${auth_header:+-H "$auth_header"} "$base$p" || true
   done
   if [[ -n "$cookie" ]]; then

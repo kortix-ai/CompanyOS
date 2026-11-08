@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
-import { projectSnapshotArchives, projects } from '@kortix/db';
+import { projectSnapshotArchives } from '@kortix/db';
 import type { GitBackedProject } from '../projects/git/types';
 import { db } from '../shared/db';
 import { PROJECT_SNAPSHOT_FORMAT, type ProjectSnapshotRepository } from './project-snapshot-store';
 import { buildProjectSnapshotArchive, publishProjectSnapshot, ProjectSnapshotTooLargeError, type BuiltProjectSnapshot } from './project-snapshot-build';
 import { exponentialBackoffMs } from '../shared/backoff';
+import { projectsView } from '../workspaces/rows';
 
 // ── Worker claim / settle ───────────────────────────────────────────────────
 
@@ -18,6 +19,18 @@ export function projectSnapshotRetryDelayMs(attempts: number): number {
 
 interface ClaimedRow extends Record<string, unknown> {
   snapshotId: string;
+}
+
+/**
+ * The claim fence for a settle write: it lands only on the row this worker
+ * claimed, and never on a row a later attempt has already set ready.
+ */
+function claimedRowWhere(snapshotId: string, workerId: string) {
+  return and(
+    eq(projectSnapshotArchives.snapshotId, snapshotId),
+    eq(projectSnapshotArchives.lockedBy, workerId),
+    sql`${projectSnapshotArchives.status} <> 'ready'`,
+  );
 }
 
 /**
@@ -79,13 +92,7 @@ async function settleReady(
       readyAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(projectSnapshotArchives.snapshotId, snapshotId),
-        eq(projectSnapshotArchives.lockedBy, workerId),
-        sql`${projectSnapshotArchives.status} <> 'ready'`,
-      ),
-    );
+    .where(claimedRowWhere(snapshotId, workerId));
 }
 
 async function settleFailure(
@@ -107,13 +114,7 @@ async function settleFailure(
       lockedUntil: null,
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(projectSnapshotArchives.snapshotId, snapshotId),
-        eq(projectSnapshotArchives.lockedBy, workerId),
-        sql`${projectSnapshotArchives.status} <> 'ready'`,
-      ),
-    );
+    .where(claimedRowWhere(snapshotId, workerId));
   return exhausted ? 'failed' : 'requeued';
 }
 
@@ -138,13 +139,13 @@ export interface ProcessedProjectSnapshot {
 async function loadSnapshotProject(projectId: string) {
   const [project] = await db
     .select({
-      projectId: projects.projectId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
+      projectId: projectsView.projectId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
     })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   return project;
 }

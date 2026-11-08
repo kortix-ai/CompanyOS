@@ -25,7 +25,7 @@
  * while another tick waits behind its run (the wake takeover) must not arm
  * its own delay over the waiter — the waiter's returned delay wins, so a
  * backlog run's `return 0` re-arms at once instead of stalling behind the
- * finishing run's shorter idle delay. The waiter re-arms when its run ends.
+ * finishing run's armed delay. The waiter re-arms when its run ends.
  */
 import { logger } from '../lib/logger';
 import { isLeader } from './leader-election';

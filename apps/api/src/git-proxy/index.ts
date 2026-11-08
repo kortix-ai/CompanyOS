@@ -18,6 +18,7 @@
  * Scope: `git-receive-pack` ⇒ write; `git-upload-pack` ⇒ read.
  */
 import { createRoute, z } from '@hono/zod-openapi';
+import type { MiddlewareHandler } from 'hono';
 import {
   authorizeGitProxy,
   resolveProjectUpstream,
@@ -39,6 +40,7 @@ import {
 } from './receive-pack';
 import { evaluateRefUpdates, principalLabel } from './ref-policy';
 import { isRepositoryDisconnectedError } from '../shared/repository-health';
+import { joinChunks } from '../shared/join-chunks';
 import { annotateGitTransfer, bindGitProxyPrincipal, gitAuditOutcome, gitPushRefSummary } from './audit';
 import { denialsAfterScopes, sessionMayBypassGrantReview } from './ref-scopes';
 import {
@@ -296,8 +298,8 @@ async function forwardAuthorized(
     void (async () => {
       try {
         const gitProject = await loadGitProject({ row: auth.project });
-        // Warm the fresh-session git hint (base tip + scaffold delta + OpenCode
-        // config dir) right after the push that moved the tip, so the next
+        // Warm the fresh-session git hint (base tip + scaffold delta) right
+        // after the push that moved the tip, so the next
         // session create finds it cached instead of losing the 2 s create-time
         // race on a cold mirror (measured on dev 2026-08-27: a 200 KB delta's
         // first session fell back to a 6 s proxied fetch; the second, with the
@@ -424,7 +426,7 @@ async function gateReceivePack(
     if (done) break;
     chunks.push(value);
     buffered += value.length;
-    parsed = parseReceivePackCommands(concatChunks(chunks, buffered));
+    parsed = parseReceivePackCommands(joinChunks(chunks, buffered));
   }
   if (parsed.status !== 'ok') {
     reader.cancel().catch(() => {});
@@ -476,7 +478,7 @@ async function gateReceivePack(
       chunks.push(value);
       buffered += value.length;
     }
-    const pack = complete ? packOf(concatChunks(chunks, buffered), parsed) : null;
+    const pack = complete ? packOf(joinChunks(chunks, buffered), parsed) : null;
     if (pack) {
       const project = await loadGitProject({ row: auth.project }).catch(() => null);
       const error = project ? await pushedManifestSyntaxError(project, toDefault[0]!, pack) : null;
@@ -519,7 +521,7 @@ async function gateReceivePack(
 
   // Allowed: replay what we read, then hand the rest of the stream straight
   // through. The pack itself is never buffered.
-  const prefix = concatChunks(chunks, buffered);
+  const prefix = joinChunks(chunks, buffered);
   return {
     updates: parsed.updates,
     body: new ReadableStream<Uint8Array>({
@@ -554,16 +556,19 @@ function packOf(body: Uint8Array, parsed: { commandBytes: number; capabilities: 
   return magic === 'PACK' ? body.subarray(offset) : null;
 }
 
-function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
+// info/refs, fast-boot-bundle and project-snapshot carry a query schema, and the
+// OpenAPI validator runs before any handler code. Registered before them: Hono
+// runs middleware in registration order. Without this, an anonymous request with a missing or
+// malformed query got `400 Validation failed` (naming the parameters) instead of
+// `401`. Reject a credential-less request first; the handler still authorizes
+// the token against the project.
+const requireGitCredential: MiddlewareHandler = async (c, next) => {
+  if (!extractToken(c.req.header('authorization'))) return unauthorized(c, 'authentication required');
+  await next();
+};
+gitProxyApp.use('/:project/fast-boot-bundle', requireGitCredential);
+gitProxyApp.use('/:project/project-snapshot', requireGitCredential);
+gitProxyApp.use('/:project/info/refs', requireGitCredential);
 
 // Ref discovery — scope is determined by the requested service.
 gitProxyApp.openapi(

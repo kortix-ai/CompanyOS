@@ -14,7 +14,7 @@ import { logger } from '../lib/logger';
  * gzip passthrough counts its compressed size, which is what the wire carried.
  */
 
-export type ProxyByteClass = 'events' | 'runtime' | 'file' | 'daemon' | 'preview';
+type ProxyByteClass = 'events' | 'runtime' | 'file' | 'daemon' | 'preview';
 
 const FLUSH_INTERVAL_MS = 60_000;
 
@@ -25,8 +25,8 @@ let windowStartedAt = Date.now();
 /** The route class of a proxied request: what a direct path would have to carry. */
 export function proxyByteClass(port: number, remainingPath: string): ProxyByteClass {
   if (port !== 8000) return 'preview';
-  if (/^\/(?:global\/event|kortix\/(?:runtime|opencode)\/events)(?:$|[/?#])/.test(remainingPath)) return 'events';
-  if (/^\/kortix\/(?:runtime|opencode)(?:$|[/?#])/.test(remainingPath)) return 'runtime';
+  if (/^\/(?:global\/event|kortix\/runtime\/events)(?:$|[/?#])/.test(remainingPath)) return 'events';
+  if (/^\/kortix\/runtime(?:$|[/?#])/.test(remainingPath)) return 'runtime';
   if (/^\/(?:file|kortix\/part)(?:$|[/?#])/.test(remainingPath)) return 'file';
   return 'daemon';
 }

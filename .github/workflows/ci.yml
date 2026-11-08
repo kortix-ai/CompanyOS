@@ -84,6 +84,7 @@ jobs:
               # Bundled into the daemon (KORTIXD_SHARED_SOURCES).
               - 'packages/api-contract/src/**'
               - 'packages/sdk/src/core/session/wire-message-id.ts'
+              - 'packages/sdk/src/core/wire-values.ts'
               - 'packages/voice/src/**'
             sandbox_image:
               - '.github/workflows/ci.yml'
@@ -403,7 +404,7 @@ jobs:
       - name: Build Linux desktop installer (Electron, unsigned)
         run: pnpm --filter @kortix/desktop-electron exec electron-builder --linux --publish never
         env:
-          KORTIX_DESKTOP_DEFAULT_URL: https://dev.kortix.com/projects
+          KORTIX_DESKTOP_DEFAULT_URL: https://dev.kortix.com/workspaces
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Verify installer exists
@@ -453,7 +454,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         if: always()
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - name: Check daemon lockfile against GHSA advisories
         if: always()
         working-directory: apps/kortix-sandbox-agent-server
@@ -468,9 +469,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install checksum-verified Trivy from GitHub Releases
+        run: |
+          bash infra/scripts/install-trivy.sh "$RUNNER_TEMP/trivy-bin"
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
       - name: Trivy filesystem (fail on CRITICAL)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret

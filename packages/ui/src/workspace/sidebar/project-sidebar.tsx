@@ -15,7 +15,6 @@ import {
   SidebarRail,
   useSidebar,
 } from '../../primitives/sidebar';
-import { NotificationBell } from '../../internal/notifications/notification-bell';
 import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
 import { ProjectMcpNavItem } from './footer/project-mcp-nav';
@@ -24,10 +23,10 @@ import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-ale
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
 import { NewAgentModalProvider } from './new-agent-modal-provider';
-import { ProjectMemoryNavItem } from './footer/project-memory-nav';
 import { ProjectNavItems } from './project-nav-items';
 import { ProjectSessionList } from './project-session-list';
 import { ProjectSpacesNav } from './project-spaces-nav';
+import { SidebarMoreGroup } from './sidebar-more-group';
 import { useIsCreatingProjectSession } from '../../internal/hooks/projects/new-session-guard';
 import { useNewProjectSession } from '../../internal/hooks/projects/use-new-project-session';
 import { useIsMobile } from '../../internal/hooks';
@@ -44,7 +43,9 @@ import {
   NavigationArrowIcon,
 } from '@phosphor-icons/react';
 import { UiLink as Link } from '../../providers/ui-provider';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useWorkspaceSettingsRailStore } from '../../internal/stores/workspace-settings-rail-store';
+import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
 import { SidebarUpgradeButton } from './footer/project-upgrade-button';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -82,9 +83,23 @@ export function ProjectSidebar({
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
   const [connectMcpOpen, setConnectMcpOpen] = useState(false);
 
+  // Settings drill (`SidebarDrill`): a click there closes the mobile sheet.
+  const handleDrilledNavigate = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
+  // The page hides its own rail while this panel is docked open on the
+  // desktop. The value does not depend on the route, so it is already right
+  // when the settings page renders its first frame: no rail flashes in.
+  const setSidebarDocked = useWorkspaceSettingsRailStore((s) => s.setSidebarDocked);
+  useLayoutEffect(() => {
+    setSidebarDocked(isExpanded && !isMobile);
+  }, [isExpanded, isMobile, setSidebarDocked]);
+  useLayoutEffect(() => () => setSidebarDocked(false), [setSidebarDocked]);
+
   const accountId = useBillingAccountId();
-  // Channels replace New session and the session list (fail-closed: off until the project answers).
-  const channels = useFeatureFlag(projectId, 'project_channels').enabled;
+  // Chat (`chat`): the spaces list replaces New session, and the session list
+  // moves below it, closed by default (fail-closed: off until the project answers).
+  const chat = useFeatureFlag(projectId, 'chat').enabled;
   // The project flag and the web app's master switch (`CHROME_UI_ENABLED`) must both be on.
   const chrome = useFeatureFlag(projectId, 'chrome').enabled && CHROME_UI_ENABLED;
 
@@ -128,8 +143,8 @@ export function ProjectSidebar({
     onOpenSearch?.();
   }, [isMobile, setOpenMobile, onOpenSearch]);
 
+  // Cmd+J opens the new-session composer with `chat` on too (`newSessionHref`).
   useEffect(() => {
-    if (channels) return;
     const handler = (event: KeyboardEvent) => {
       if (
         (event.metaKey || event.ctrlKey) &&
@@ -143,7 +158,36 @@ export function ProjectSidebar({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [channels, handleNewSession]);
+  }, [handleNewSession]);
+
+  // The connect rows and the upgrade call to action. Spaces on (`chat`), they
+  // live inside "More": the bottom of the sidebar is More and the status alerts.
+  const connectRows = (
+    <>
+              {/* Connect MCP over Connect your computer: one block, 1px seam,
+                  inner corners rounded-sm. Either row can be absent (dismissed,
+                  or a paired computer), so the corners come from the siblings
+                  that render and an empty block collapses. A plain <li>, not
+                  SidebarMenuItem: its `group/menu-item` would make hovering one
+                  row light up the other row's badge and dismiss. */}
+              <li className="not-has-[li]:hidden">
+                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
+                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
+                  <ProjectComputerNavItem
+                    projectId={projectId}
+                    onOpenConnect={() => setComputerConnectOpen(true)}
+                  />
+                  {chrome ? (
+                    <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
+                  ) : null}
+                </SidebarMenu>
+              </li>
+              {/* Last (Jay, 2026-09-03). It is the only paid call to action in
+                  this group, and above the nav rows it put a sell between the
+                  user and the links they actually use. */}
+              <SidebarUpgradeButton accountId={accountId} />
+    </>
+  );
 
   return (
     // The New agent modal mounts beside <Sidebar>, outside the mobile sheet.
@@ -162,10 +206,9 @@ export function ProjectSidebar({
         data-peek={peek ? '' : undefined}
       >
         {/* Offcanvas everywhere: the whole panel slides, so the header keeps a
-            single layout. Up to four controls on one 240px row, all 32px
-            tall: the merged brand/switcher control, the notification bell
-            (only with the `notification_center` flag on), search, and the
-            panel's own collapse toggle — so the collapse control sits inside
+            single layout. Up to three controls on one 240px row, all 32px
+            tall: the merged brand/switcher control, search, and the panel's
+            own collapse toggle — so the collapse control sits inside
             the thing it collapses and the session header no longer has to
             carry a toggle while the panel is docked open.
 
@@ -186,16 +229,9 @@ export function ProjectSidebar({
         >
           {menu ? <div className="min-w-0">{menu}</div> : null}
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            {/* The inbox (KRTX-1742), first, while this project has the
-                `notification_center` flag on. The switcher shrinks before any
-                of the three icon buttons, so the row fits the 208px floor. */}
-            <NotificationBell
-              projectId={projectId}
-              surface="bg-sidebar"
-              onNavigate={() => {
-                if (isMobile) setOpenMobile(false);
-              }}
-            />
+            {/* The switcher shrinks before either icon button, so the row
+                fits the 208px floor. The inbox is a row in the switcher's
+                menu (KRTX-1742), not a header control or a nav row. */}
             {/* Search is the palette's only pointer-reachable entry point —
                 ⌘K is otherwise the whole discovery story. Renders on mobile
                 too: there is no keystroke to fall back on there. The ⌘K
@@ -282,10 +318,10 @@ export function ProjectSidebar({
           (header `p-2` + switcher `px-1` + half of the `size-6` tile). Left
           side only: right padding still clears trailing badges. */}
       <SidebarContent className="relative min-h-0 flex-1 [scrollbar-width:'none'] overflow-hidden [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden [&_[data-sidebar=menu-button]]:pl-2">
-        <div className="flex h-full min-h-0 flex-col space-y-2">
+        <SidebarDrill projectId={projectId} onNavigate={handleDrilledNavigate}>
           <SidebarGroup className="py-0">
             <SidebarMenu>
-              {channels ? null : (
+              {chat ? null : (
                 <SidebarMenuItem>
                   {creatingSession ? (
                     <SidebarMenuButton
@@ -311,15 +347,24 @@ export function ProjectSidebar({
               {/* Customize, Apps, Files: order and
                   visibility come from "Customize sidebar". They moved up here
                   from the footer (Jay, 2026-10-12) to keep the footer short. */}
-              {/* Channels on: the Company memory, the first row under the new-thread slot. */}
-              {channels ? <ProjectMemoryNavItem projectId={projectId} /> : null}
-              <ProjectNavItems projectId={projectId} />
+              {chat ? null : <ProjectNavItems projectId={projectId} />}
             </SidebarMenu>
           </SidebarGroup>
 
           <SidebarGroup className="min-h-0 flex-1 flex-col py-0" ref={sessionsGroupRef}>
-            {channels ? (
-              <ProjectSpacesNav projectId={projectId} />
+            {chat ? (
+              <>
+                {/* Channels and Direct messages are the core surface. The
+                    session list sits below them, closed by default: every
+                    session the viewer runs, threads included. */}
+                {/* Spaces on: Review and the Spaces are the only things up
+                    top. Everything else (Customize, Drive, Apps, Artifacts,
+                    the session list) waits in "More" at the bottom. */}
+                <div className="min-h-0 flex-1">
+                  <ProjectSpacesNav projectId={projectId} />
+                </div>
+                <SidebarMoreGroup projectId={projectId} footer={<SidebarMenu className="gap-1">{connectRows}</SidebarMenu>} />
+              </>
             ) : (
               <ProjectSessionList projectId={projectId} />
             )}
@@ -334,35 +379,15 @@ export function ProjectSidebar({
               <ProjectSandboxAlert projectId={projectId} />
               <ProjectManifestIssuesAlert projectId={projectId} />
               <SidebarBalanceWarning accountId={accountId} />
-              {/* Connect MCP over Connect your computer: one block, 1px seam,
-                  inner corners rounded-sm. Either row can be absent (dismissed,
-                  or a paired computer), so the corners come from the siblings
-                  that render and an empty block collapses. A plain <li>, not
-                  SidebarMenuItem: its `group/menu-item` would make hovering one
-                  row light up the other row's badge and dismiss. */}
-              <li className="not-has-[li]:hidden">
-                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
-                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
-                  <ProjectComputerNavItem
-                    projectId={projectId}
-                    onOpenConnect={() => setComputerConnectOpen(true)}
-                  />
-                  {chrome ? (
-                    <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
-                  ) : null}
-                </SidebarMenu>
-              </li>
-              {/* Last (Jay, 2026-09-03). It is the only paid call to action in
-                  this group, and above the nav rows it put a sell between the
-                  user and the links they actually use. */}
-              <SidebarUpgradeButton accountId={accountId} />
+              {chat ? null : connectRows}
             </SidebarMenu>
           </SidebarGroup>
-        </div>
+        </SidebarDrill>
       </SidebarContent>
 
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>
+    <SettingsReturnTracker projectId={projectId} />
     <ComputerConnectModal
       projectId={projectId}
       open={computerConnectOpen}

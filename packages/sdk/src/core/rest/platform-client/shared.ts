@@ -7,11 +7,9 @@
  */
 
 import { backendApi } from '../../http/api-client';
-import { platformConfig } from '../../http/config';
-import { safeEnv } from '../../http/env';
-import { stripTrailingSlashes } from '../../../platform/strings';
+import { getPlatformUrl, platformApiBase } from '../../http/url';
 import {
-  listProjectSessions,
+  listWorkspaceSessions,
   listProjects,
   type KortixProject,
   type ProjectSession,
@@ -19,30 +17,10 @@ import {
 } from '../projects-client';
 import { SANDBOX_PORTS, type SandboxInfo, type SandboxProviderName } from './types';
 
-/**
- * Get the base URL for platform API calls.
- *
- * Uses NEXT_PUBLIC_BACKEND_URL directly (includes /v1).
- */
-export function getPlatformUrl(): string {
-  // Server-side: prefer BACKEND_URL (internal Docker hostname) over
-  // NEXT_PUBLIC_BACKEND_URL (browser-facing localhost, unreachable from container).
-  // `safeEnv` because this module is isomorphic-core: a bare `process.env` read
-  // throws a ReferenceError in a browser <script> bundle and on React Native.
-  const backendUrl = safeEnv('BACKEND_URL') || platformConfig().backendUrl;
-  if (backendUrl) {
-    return backendUrl;
-  }
-
-  // Fallback for local dev
-  return 'http://localhost:8008/v1';
-}
-
-/** Backend URL → platform API base: trailing slashes stripped, `/v1` appended when absent. */
-export function platformApiBase(backendUrl: string): string {
-  const base = stripTrailingSlashes(backendUrl);
-  return base.endsWith('/v1') ? base : `${base}/v1`;
-}
+// The backend base owner lives in `core/http/url.ts` (a leaf module, so REST
+// modules can import it without a cycle). Kept here as a re-export for the
+// platform-client siblings that import the helpers from this module.
+export { getPlatformUrl, platformApiBase } from '../../http/url';
 
 export function normalizeSandboxId(value: unknown): string | undefined {
   if (typeof value === 'string') {
@@ -113,7 +91,7 @@ export async function listProjectSessionSandboxes(): Promise<Array<{
   }> = [];
 
   for (const project of projects) {
-    const sessions = await listProjectSessions(project.project_id).catch(() => []);
+    const sessions = await listWorkspaceSessions(project.project_id).catch(() => []);
     for (const session of sessions) {
       // Derive runtime info from the session row — do NOT call /start here, or
       // listing would wake every sandbox across every project. The single-session

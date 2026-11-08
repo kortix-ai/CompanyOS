@@ -28,7 +28,6 @@ import { Checkbox } from '@kortix/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -41,7 +40,7 @@ import { cn } from '@kortix/ui/lib/utils';
 import Loading from '@kortix/ui/loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@kortix/ui/popover';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '@kortix/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast } from '@kortix/ui/toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -90,8 +89,8 @@ export function ChromePanelHome() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const { sections, listsLoading } = useProjectSelectorData();
-  const projects = useMemo(() => sections.flatMap((section) => section.projects), [sections]);
+  const { openable: workspaces, listsLoading } = useProjectSelectorData();
+  const projects = useMemo(() => workspaces.map((row) => row.project), [workspaces]);
   const [picked, setPicked] = useState<string | null>(null);
   const projectId = useMemo(() => {
     const known = (id: string | null) => (id && projects.some((p) => p.project_id === id) ? id : null);
@@ -176,7 +175,7 @@ export function ChromePanelHome() {
         .getState()
         .setPrefill(projectId, prompt, { submit: 'when-ready', ...(files.length ? { files } : {}) });
       // nav-contract: prefetch-only — project home consumes the prefill and opens the new session
-      router.push(`/projects/${projectId}`);
+      router.push(`/workspaces/${projectId}`);
     } catch (error) {
       errorToast(error instanceof Error && error.message ? error.message : t('readFailed'));
       setSending(false);
@@ -211,18 +210,11 @@ export function ChromePanelHome() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-80 w-64">
               <DropdownMenuRadioGroup value={projectId ?? ''} onValueChange={pickProject}>
-                {sections
-                  .filter((section) => section.projects.length)
-                  .map((section) => (
-                    <div key={section.accountId}>
-                      {sections.length > 1 ? <DropdownMenuLabel>{section.accountName}</DropdownMenuLabel> : null}
-                      {section.projects.map((p) => (
-                        <DropdownMenuRadioItem key={p.project_id} value={p.project_id}>
-                          <span className="truncate">{p.name}</span>
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </div>
-                  ))}
+                {projects.map((p) => (
+                  <DropdownMenuRadioItem key={p.project_id} value={p.project_id}>
+                    <span className="truncate">{p.name}</span>
+                  </DropdownMenuRadioItem>
+                ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -234,7 +226,7 @@ export function ChromePanelHome() {
           <div className="space-y-2">
             <p className="text-muted-foreground text-sm text-pretty">{t('noProjects')}</p>
             <Button asChild variant="outline" size="sm">
-              <Link href="/projects/start">{t('createProject')}</Link>
+              <Link href="/workspaces/start">{t('createProject')}</Link>
             </Button>
           </div>
         ) : (
@@ -286,7 +278,7 @@ export function ChromePanelHome() {
                   {recent.map((session) => (
                     <li key={session.id}>
                       <Link
-                        href={`/projects/${projectId}/sessions/${session.id}`}
+                        href={`/workspaces/${projectId}/sessions/${session.id}`}
                         className="hover:bg-muted -mx-2 flex items-center rounded-md px-2 py-1.5 text-sm"
                       >
                         <span className="truncate">{session.title}</span>
@@ -393,10 +385,10 @@ export function ChromePanelHome() {
           />
           <div className="flex items-center gap-2">
             <Tabs value={mode} onValueChange={(value) => setMode(value as PanelMode)}>
-              <TabsListCompact aria-label={t('modeLabel')}>
-                <TabsTriggerCompact value="read">{t('read')}</TabsTriggerCompact>
-                <TabsTriggerCompact value="act">{t('act')}</TabsTriggerCompact>
-              </TabsListCompact>
+              <TabsList size="xs" aria-label={t('modeLabel')}>
+                <TabsTrigger value="read">{t('read')}</TabsTrigger>
+                <TabsTrigger value="act">{t('act')}</TabsTrigger>
+              </TabsList>
             </Tabs>
             <span className="flex-1" />
             <Hint label={t('send')} side="top">

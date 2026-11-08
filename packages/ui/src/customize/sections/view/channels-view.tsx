@@ -11,7 +11,7 @@ import { useLocalizedUiCatalog } from '../../../i18n/ui-catalog/use-localized-ui
  *
  * This exports `ChannelsSection`: the channels CONTENT and nothing else — no
  * heading, no column, no scroll container. Its one mount is the Channels scope
- * of `/projects/<id>/connectors` (`connectors-page.tsx`), which owns the
+ * of `/workspaces/<id>/connectors` (`connectors-page.tsx`), which owns the
  * `CapabilityPageShell` around it.
  *
  * Channels was briefly its own top-level Customize tab and rendered its own
@@ -20,8 +20,8 @@ import { useLocalizedUiCatalog } from '../../../i18n/ui-catalog/use-localized-ui
  * same job as a person wiring up any other outside tool, and asking them to
  * know that one lives under "Channels" and the other under "Connectors" is
  * asking them to know our table layout. The two are still different backend
- * resources — `/projects/{id}/channels/*` (inbound: installations, chat
- * identity, per-channel bindings) versus `/projects/{id}/connectors/*`
+ * resources — `/workspaces/{id}/channels/*` (inbound: installations, chat
+ * identity, per-channel bindings) versus `/workspaces/{id}/connectors/*`
  * (outbound: tool and OAuth access) — and nothing here merges them. Only the
  * navigation merged.
  *
@@ -75,7 +75,7 @@ import { useLocalizedUiCatalog } from '../../../i18n/ui-catalog/use-localized-ui
 import { Badge } from '../../../primitives/badge';
 import { Button } from '../../../primitives/button';
 import { Field, FieldDescription, FieldGroup, FieldTitle } from '../../../primitives/field';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../../primitives/alert';
 import {
   InputGroupSearch,
   InputGroupSearchClear,
@@ -99,7 +99,7 @@ import {
   SelectValue,
 } from '../../../primitives/select';
 import { Skeleton } from '../../../primitives/skeleton';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '../../../primitives/tabs';
+import { Tabs, TabsList, TabsTrigger } from '../../../primitives/tabs';
 import Loading from '../../../primitives/loading';
 import { errorToast, infoToast, successToast, warningToast } from '../../../primitives/toast';
 import { ModelSelector } from '../../../session/models/model-selector';
@@ -385,11 +385,11 @@ function SlackFollowUp({ projectId }: { projectId: string }) {
   const bindings = (bindingsQuery.data?.bindings ?? []).filter((b) => b.platform === 'slack');
 
   return bindings.length === 0 && !bindingsQuery.isLoading ? (
-    <InfoBanner tone="neutral" icon={AtIcon} title={tI18nComplete.raw('textd63af8edd3d6')}>
+    <BannerAlert variant="default" ><BannerAlertMedia><AtIcon /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('textd63af8edd3d6')}</BannerAlertTitle><BannerAlertDescription>
       {tI18nComplete.raw('text1fd9ae1607aa')}{' '}
       <span className="text-foreground font-medium">{tI18nComplete.raw('text476b90bdc143')}</span>{' '}
       {tI18nComplete.raw('textb81b729b4538')}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   ) : null;
 }
 
@@ -453,7 +453,7 @@ function ChannelBindingsDialog({
   const needle = query.trim().toLowerCase();
   const visible = needle
     ? inTab.filter(({ binding, name, scope }) =>
-        [name, scope, binding.agentName ?? '', binding.opencodeModel ?? '']
+        [name, scope, binding.agentName ?? '', binding.model ?? '']
           .join(' ')
           .toLowerCase()
           .includes(needle),
@@ -490,14 +490,14 @@ function ChannelBindingsDialog({
                   setQuery('');
                 }}
               >
-                <TabsListCompact>
+                <TabsList size="xs">
                   {tabs.map((t) => (
-                    <TabsTriggerCompact key={t.platform} value={t.platform} className="gap-1.5">
+                    <TabsTrigger key={t.platform} value={t.platform} className="gap-1.5">
                       {isChannelPlatform(t.platform) ? CHANNELS[t.platform].label : t.platform}
                       <span className="text-muted-foreground tabular-nums">{t.count}</span>
-                    </TabsTriggerCompact>
+                    </TabsTrigger>
                   ))}
-                </TabsListCompact>
+                </TabsList>
               </Tabs>
             ) : null}
             {inTab.length >= BINDING_SEARCH_MIN ? (
@@ -565,10 +565,10 @@ function BindingOverrides({
   policies: Array<{ value: ChannelBinding['conversationPolicy']; label: string }>;
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const modelUnavailable = binding.opencodeModel !== null && binding.effectiveModel.source !== 'explicit';
+  const modelUnavailable = binding.model !== null && binding.effectiveModel.source !== 'explicit';
   const overrides = [
     binding.agentName,
-    binding.opencodeModel ? stripGatewayNamespace(binding.opencodeModel) : null,
+    binding.model ? stripGatewayNamespace(binding.model) : null,
     binding.conversationPolicy === 'project_open'
       ? null
       : (policies.find((p) => p.value === binding.conversationPolicy)?.label ?? binding.conversationPolicy),
@@ -594,7 +594,7 @@ const BINDING_SEARCH_MIN = 7;
 
 const CONVERSATION_POLICIES: Array<{ value: ChannelBinding['conversationPolicy']; label: string }> =
   [
-    { value: 'project_open', label: 'Project members can join' },
+    { value: 'project_open', label: 'Workspace members can join' },
     { value: 'owner_only', label: 'Owner only' },
     { value: 'owner_approval', label: 'Owner approval' },
   ];
@@ -611,7 +611,7 @@ function policyDescription(
 
 /** Label for the synthetic agent-picker entry meaning "inherit the project's default agent". */
 function agentDefaultLabel(projectDefaultAgent: string | null): string {
-  return projectDefaultAgent ? `Project default (${projectDefaultAgent})` : 'Project default';
+  return projectDefaultAgent ? `Project default (${projectDefaultAgent})` : 'Workspace default';
 }
 
 /** Bare model id → the compact form callers below already assume (`kortix/x` → `x`). */
@@ -626,14 +626,14 @@ function stripGatewayNamespace(model: string): string {
  * `effectiveModel.source` surfaces as something other than `'explicit'`.
  */
 function describeEffectiveModel(binding: ChannelBinding): string {
-  if (binding.opencodeModel) {
-    const label = stripGatewayNamespace(binding.opencodeModel);
+  if (binding.model) {
+    const label = stripGatewayNamespace(binding.model);
     return binding.effectiveModel.source === 'explicit'
       ? label
       : `${label} (unavailable — using default)`;
   }
   const resolved = binding.effectiveModel.model;
-  return resolved ? `Project default (${stripGatewayNamespace(resolved)})` : 'Project default';
+  return resolved ? `Project default (${stripGatewayNamespace(resolved)})` : 'Workspace default';
 }
 
 function BindingBrandMark({ platform }: { platform: string }) {
@@ -705,8 +705,8 @@ function ChannelSettingsModalContent({
     () => flattenModels(providers, { providerMode: modelProviderMode(providers) }),
     [providers],
   );
-  const boundModel: ChannelModelKey = binding.opencodeModel
-    ? modelRefToKey(binding.opencodeModel)
+  const boundModel: ChannelModelKey = binding.model
+    ? modelRefToKey(binding.model)
     : null;
 
   const [agentDraft, setAgentDraft] = useState<string | null | undefined>(undefined);
@@ -792,7 +792,7 @@ function ChannelSettingsModalContent({
                 {/* What the unset or refused pin runs instead, when it is known. */}
                 {modelDraft === undefined &&
                 binding.effectiveModel.source !== 'explicit' &&
-                (binding.opencodeModel || binding.effectiveModel.model)
+                (binding.model || binding.effectiveModel.model)
                   ? `${describeEffectiveModel(binding)}. `
                   : null}
                 {tI18nComplete.raw('text9116af1ce384')}
@@ -1035,11 +1035,11 @@ function TeamsAppUpdateNotice({
 }) {
   const latest = install.latestAppVersion ?? '';
   return (
-    <InfoBanner tone="warning" title={tI18nComplete.raw('text80043b03898d')}>
+    <BannerAlert variant="warning" ><BannerAlertTitle>{tI18nComplete.raw('text80043b03898d')}</BannerAlertTitle><BannerAlertDescription>
       {install.appVersion
         ? tI18nComplete('textdf757dbe33eb', { value0: install.appVersion, value1: latest })
         : tI18nComplete('textcd2c4b26eedd', { value0: latest })}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   );
 }
 

@@ -21,8 +21,10 @@ import {
   recordTemplateBuilt,
   recordTemplateFailed,
   resolveTemplateBySlug,
+  templateSnapshotReferencedByAnotherRow,
   type ResolvedTemplate,
 } from './templates';
+import { isReapableTemplatePredecessor } from './predecessor-reap-policy';
 import { DEFAULT_SANDBOX_SLUG } from './dockerfile-layer';
 import {
   type ReadyImage,
@@ -38,10 +40,11 @@ import { config, type SandboxProviderName } from '../config';
 import { logger } from '../lib/logger';
 import type { SessionStartImageState } from '@kortix/api-contract';
 import { and, desc, eq } from 'drizzle-orm';
-import { projects, sessionSandboxes } from '@kortix/db';
+import { sessionSandboxes } from '@kortix/db';
 import { db } from '../shared/db';
 import { resolveSessionPlacement } from '../platform/services/sandbox-region';
 import { preparePlatinumTemplateRegion } from './providers/platinum-templates';
+import { projectsView } from '../workspaces/rows';
 
 type TemplateIdentity = Awaited<ReturnType<typeof computeTemplateIdentity>>;
 
@@ -627,9 +630,9 @@ export async function templateRegionResident(
 
 async function readProjectMetadata(projectId: string): Promise<unknown> {
   const [row] = await db
-    .select({ metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   return row?.metadata ?? null;
 }
@@ -692,7 +695,7 @@ async function runInlineBuild(
       // Built where its sessions boot, so they never wait for a copy.
       region: identity.region,
       // Cold-only, unified with Daytona: Platinum builds a cold rootfs template
-      // and cold-boots it (entrypoint re-runs → opencode re-inits, ~6s) on spawn
+      // and cold-boots it (entrypoint re-runs → the runtime re-inits) on spawn
       // AND on resume — the SAME path Daytona takes, no provider divergence.
       // Stateful/warm capture used to resume opencode mid-state off a CH memory
       // snapshot, which intermittently wedged it (virtio-net RX stall after
@@ -741,10 +744,25 @@ async function runInlineBuild(
           `[snapshots] keeping predecessor ${prevSnapshot}: it was built recently, so another ` +
           `live replica/code version likely still serves it; it is pruned once it stops being rebuilt`,
         );
-      } else {
+      } else if (
+        isReapableTemplatePredecessor(prevSnapshot) &&
+        !(await templateSnapshotReferencedByAnotherRow(prevSnapshot, template.templateId))
+      ) {
         await provider
           .deleteSnapshot(prevSnapshot)
           .catch((e) => console.warn(`[snapshots] prune predecessor ${prevSnapshot} failed: ${e?.message ?? e}`));
+      } else {
+        // Outside the reap-eligible namespaces, or another template row still
+        // points at it (pre-fix identities were content-addressed once per
+        // provider namespace: a legacy `kortix-tpl-<hash>` name can be the
+        // current name of rows in several projects; deleting it here deletes
+        // the image their sessions still boot, KRTX-4469). The ownership-aware
+        // per-project reaper handles scoped images; quota GC collects
+        // everything left unreferenced.
+        logger.info(
+          `[snapshots] keeping predecessor ${prevSnapshot}: it is not proven owned by this template's namespace ` +
+          `or another row still references it`,
+        );
       }
     }
     return {

@@ -49,29 +49,28 @@ const row = {
   metadata: { model: 'codex/gpt-6-sol' },
 } as never;
 
+const INPUT = {
+  sessionId: 'sess-1',
+  projectId: 'proj-1',
+  accountId: 'acct-1',
+  userId: 'user-1',
+  firstPromptText: 'Please set up the MS Graph OAuth2 connector',
+};
+
 describe('title-generate gateway log fields', () => {
   it('logs the upstream gateway status as upstream_status, never as the request status', async () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async () =>
       new Response('upstream unavailable', { status: 503 })) as unknown as typeof fetch;
     try {
-      await generateSessionTitleFromFirstPrompt(
-        {
-          sessionId: 'sess-1',
-          projectId: 'proj-1',
-          accountId: 'acct-1',
-          userId: 'user-1',
-          firstPromptText: 'Please set up the MS Graph OAuth2 connector',
-        },
-        {
-          loadRow: async () => row,
-          mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
-          revokeKey: async () => {},
-          persist: async () => {},
-          // No retry model: one gateway attempt, one warn.
-          fallbackModel: async () => null,
-          },
-      );
+      await generateSessionTitleFromFirstPrompt(INPUT, {
+        loadRow: async () => row,
+        mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
+        revokeKey: async () => {},
+        persist: async () => {},
+        // No retry model: one gateway attempt, one warn.
+        fallbackModel: async () => null,
+      });
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -97,22 +96,13 @@ describe('title-generate gateway log fields', () => {
       accountId: 'acct-1',
       metadata: {},
     } as never;
-    await generateSessionTitleFromFirstPrompt(
-      {
-        sessionId: 'sess-1',
-        projectId: 'proj-1',
-        accountId: 'acct-1',
-        userId: 'user-1',
-        firstPromptText: 'Please set up the MS Graph OAuth2 connector',
-      },
-      {
-        loadRow: async () => noModelRow,
-        mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
-        revokeKey: async () => {},
-        persist: async () => {},
-        fallbackModel: async () => null,
-      },
-    );
+    await generateSessionTitleFromFirstPrompt(INPUT, {
+      loadRow: async () => noModelRow,
+      mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
+      revokeKey: async () => {},
+      persist: async () => {},
+      fallbackModel: async () => null,
+    });
 
     const levelsOf = (message: string) =>
       logged.filter((l) => l.message === message).map((l) => l.level);
@@ -132,24 +122,15 @@ describe('title-generate gateway log fields', () => {
     }) as unknown as typeof fetch;
     const persisted: string[] = [];
     try {
-      await generateSessionTitleFromFirstPrompt(
-        {
-          sessionId: 'sess-1',
-          projectId: 'proj-1',
-          accountId: 'acct-1',
-          userId: 'user-1',
-          firstPromptText: 'Please set up the MS Graph OAuth2 connector',
+      await generateSessionTitleFromFirstPrompt(INPUT, {
+        loadRow: async () => row,
+        mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
+        revokeKey: async () => {},
+        persist: async (_r, title) => {
+          persisted.push(title);
         },
-        {
-          loadRow: async () => row,
-          mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
-          revokeKey: async () => {},
-          persist: async (_r, title) => {
-            persisted.push(title);
-          },
-          fallbackModel: async () => null,
-        },
-      );
+        fallbackModel: async () => null,
+      });
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -177,24 +158,15 @@ describe('title-generate gateway log fields', () => {
     }) as unknown as typeof fetch;
     const persisted: string[] = [];
     try {
-      await generateSessionTitleFromFirstPrompt(
-        {
-          sessionId: 'sess-1',
-          projectId: 'proj-1',
-          accountId: 'acct-1',
-          userId: 'user-1',
-          firstPromptText: 'Please set up the MS Graph OAuth2 connector',
+      await generateSessionTitleFromFirstPrompt(INPUT, {
+        loadRow: async () => row,
+        mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
+        revokeKey: async () => {},
+        persist: async (_r, title) => {
+          persisted.push(title);
         },
-        {
-          loadRow: async () => row,
-          mintKey: async () => ({ secret: 'sk', keyId: 'key-1' }),
-          revokeKey: async () => {},
-          persist: async (_r, title) => {
-            persisted.push(title);
-          },
-          fallbackModel: async () => null,
-        },
-      );
+        fallbackModel: async () => null,
+      });
     } finally {
       globalThis.fetch = realFetch;
     }

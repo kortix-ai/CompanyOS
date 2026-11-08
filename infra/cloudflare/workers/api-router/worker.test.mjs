@@ -75,15 +75,12 @@ describe('api-router worker', () => {
   });
 
   test('the retired api-yolo route rides over the proxied tunnel record as a zone route, never a custom domain', () => {
-    const wrangler = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
-    const prodEnv = wrangler.match(/\[env\.prod\]([\s\S]*?)(?=\n\[env\.)/)?.[1] ?? '';
-    expect(prodEnv).toContain('{ pattern = "api-yolo.kortix.com/*", zone_name = "kortix.com" }');
+    const config = Bun.TOML.parse(readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8'));
     // A custom_domain would claim the DNS record itself; the route answers over
     // it (the staging-api approach) so the zone operator can retire the record
     // later without touching the worker.
-    const prodRoutes = prodEnv.match(/routes = \[[\s\S]*?\]/)?.[0] ?? '';
-    expect(prodRoutes).toContain('api-yolo.kortix.com/*');
-    expect(prodRoutes.match(/\{[^}]*api-yolo[^}]*\}/g)?.every((route) => route.includes('zone_name'))).toBe(true);
+    const prodRoutes = config.env.prod.routes.filter((route) => route.pattern.startsWith('api-yolo.kortix.com'));
+    expect(prodRoutes).toEqual([{ pattern: 'api-yolo.kortix.com/*', zone_name: 'kortix.com' }]);
   });
 
   test('deploys the dev router from dev and verifies its commit and SCIM boundary', () => {

@@ -22,19 +22,19 @@ type ResolvedProvider = NonNullable<Awaited<ReturnType<typeof resolveProvider>>>
 
 /**
  * The opaque passthrough (KRTX-4477 review): the daemon's share body or one of
- * our error envelopes, at whatever contentful status the upstream produced —
- * the daemon is free to answer 201 or 500 (the tests pin both) and
- * `shareUpstreamResult` rewrites one 404 read to a 501, so no fixed union can
- * list them all. Mapped one member per literal status — with the declared
- * error envelopes and the `default` passthrough, `createRoute`'s checked
- * handler union matches member-wise and no status is excluded. The two
- * construction sites that carry a wire-number status cast to this union; the
- * assertion accepts every contentful status, so it cannot hide one the proxy
- * can produce.
+ * our error envelopes, at whatever numeric status the upstream produced — 201,
+ * 500, the 404 read that `shareUpstreamResult` rewrites to 501, or a status
+ * outside Hono's named list (Cloudflare 520 and friends); no status union can
+ * list them all, so the type stays the plain `Response` every `c.json` answer
+ * already is. Each route declares the `default` OpenAPI response with a
+ * wildcard content-type entry (every media type, any status, body passed
+ * through unchanged); in the checked handler union that makes the default
+ * member exactly this plain `Response` instead of a per-status claim. The two
+ * `ContentfulStatusCode` casts at the wire-number construction sites are
+ * Hono's own signature for a dynamic status — the same form hono's docs use
+ * for unofficial statuses.
  */
-type ShareRouteResponse = ContentfulStatusCode extends infer S extends ContentfulStatusCode
-  ? S extends S ? Response & TypedResponse<Record<string, any>, S, 'json'> : never
-  : never
+type ShareRouteResponse = Response
 
 // Share results are whatever the sandbox daemon's /kortix/share endpoint
 // returns (opaque), or our own { error } envelope — model permissively.
@@ -124,7 +124,7 @@ async function proxySandboxShare(
 
   const target = await resolveShareTarget(input.sandboxId)
   if ('error' in target) {
-    return c.json({ error: target.error }, target.status as ContentfulStatusCode) as ShareRouteResponse
+    return c.json({ error: target.error }, target.status as ContentfulStatusCode)
   }
 
   const sandboxUrl = input.path
@@ -137,7 +137,7 @@ async function proxySandboxShare(
       signal: AbortSignal.timeout(10_000),
     })
     const upstream = shareUpstreamResult(resp.status, await parseJsonResponse(resp))
-    return c.json(upstream.body, upstream.status as ContentfulStatusCode) as ShareRouteResponse
+    return c.json(upstream.body, upstream.status as ContentfulStatusCode)
   } catch (err) {
     console.error(`[share] ${input.action} failed:`, err)
     return c.json({ error: `Failed to ${input.action}` }, 502)
@@ -169,7 +169,10 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Share link (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
-      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
+      default: {
+        description: 'Daemon passthrough: any other status the sandbox daemon answers, body passed through unchanged',
+        content: { '*/*': {} },
+      },
     },
   }),
   // Validation kept per-handler (the OpenAPI schema answers for a malformed
@@ -213,7 +216,10 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Share links (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
-      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
+      default: {
+        description: 'Daemon passthrough: any other status the sandbox daemon answers, body passed through unchanged',
+        content: { '*/*': {} },
+      },
     },
   }),
   // Manual query read kept — original returns a custom 400 envelope and proxies
@@ -243,7 +249,10 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Revocation result (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
-      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
+      default: {
+        description: 'Daemon passthrough: any other status the sandbox daemon answers, body passed through unchanged',
+        content: { '*/*': {} },
+      },
     },
   }),
   // Manual param/query read kept — original returns field-specific 400 envelopes

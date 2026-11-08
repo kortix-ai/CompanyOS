@@ -2,31 +2,16 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { noteSessionSyncEvent } from '../../browser/session-sync/session-sync-registry';
-import { useDiagnosticsStore } from '../../browser/stores/diagnostics-store';
 import { useRuntimeCompactionStore } from '../../browser/stores/runtime-compaction-store';
 import { useRuntimePendingStore } from '../../browser/stores/runtime-pending-store';
-import {
-  noteRuntimeEvidence,
-  useSandboxConnectionStore,
-} from '../../browser/stores/sandbox-connection-store';
+import { useSandboxConnectionStore } from '../../browser/stores/sandbox-connection-store';
 import { useServerStore } from '../../browser/stores/server-store';
 import { useSyncStore } from '../../browser/stores/sync-store';
-import { logger } from '../../core/http/logger';
 import { onHostSignal } from '../../core/session/host-signals';
-import { dropClientForUrl, getClient } from '../../core/runtime/client';
-import { openEventStream } from '../../core/stream/event-stream';
-import { openSessionStream, sessionStreamEventClient } from '../../core/session/control-stream';
-
-/** The shared session stream has its own 45 s liveness bound. */
-const SESSION_STREAM_WATCHDOG_OFF_MS = 24 * 60 * 60_000;
 import { useKortixRouteWorkspaceId } from '../route-project';
 import { useCurrentRuntime } from '../use-current-runtime';
-import { resetPrefetchState } from '../use-session-prefetch';
-import { createEventHandler } from './handle-event';
-import { resolveClientEvictionUrl } from './helpers';
-import { hydrateFromPending } from './hydrate-core';
-import { emitRuntimeStreamSignal, shouldReconnectOnHostSignal } from './runtime-stream-signals';
+import { connectRuntimeStream } from './connect-stream';
+import { shouldReconnectOnHostSignal } from './runtime-stream-signals';
 import { createStreamRevival } from './stream-revival';
 import { useEventStreamRefs } from './use-event-stream-refs';
 
@@ -115,196 +100,64 @@ export function useRuntimeEventStream(
     reconcileMissingBusySessions,
   } = useEventStreamRefs({ queryClient, stopCompaction, applySyncEvent });
 
-  useEffect(() => {
-    // On first mount, always start clean — the provider may have remounted
-    // after navigating away and back while the session's runtime changed. The
-    // ref would have been initialized to the post-change runtimeVersion so the
-    // isServerSwitch check below would miss the change.
-    const isFirstMount = isMountRef.current;
-    isMountRef.current = false;
-
-    // Only nuke caches on an actual runtime switch (new session/sandbox), not
-    // URL/port updates within the same runtime.
-    const isServerSwitch = prevRuntimeVersionRef.current !== runtimeVersion;
-    prevRuntimeVersionRef.current = runtimeVersion;
-    const previousServerUrl = prevServerUrlRef.current;
-    const didServerUrlChange = previousServerUrl !== activeServerUrl;
-    prevServerUrlRef.current = activeServerUrl;
-
-    // Only reset the SDK client on actual server switches — NOT on URL/port
-    // updates. Resetting on every urlVersion change tears down the client
-    // unnecessarily, causing SSE disconnection → reconnection → cache
-    // invalidation cascade that manifests as random loading flashes.
-    //
-    // Evict ONLY the one url actually being replaced (`resolveClientEvictionUrl`)
-    // — never `resetClient()`'s full `clientsByUrl` wipe, which would force
-    // every OTHER concurrently-open session's client to be recreated just
-    // because THIS session's runtime switched (`clientsByUrl` is deliberately
-    // keyed per url so several session sandboxes stay connected at once).
-    const evictUrl = resolveClientEvictionUrl({
-      isFirstMount,
-      isServerSwitch,
-      didServerUrlChange,
-      previousServerUrl,
-      activeServerUrl,
-    });
-    if (evictUrl) dropClientForUrl(evictUrl);
-
-    if (isFirstMount || isServerSwitch) {
-      clearPending();
-      // NOTE: we intentionally do NOT wipe the sync store or the runtime
-      // query cache here anymore. Those are now scoped per-sandbox (see
-      // runtimeKeys.activeServerKey + the sync store's session-id keying),
-      // so each sandbox's data coexists safely. Wiping them was what made
-      // switching back to an already-open session "reload". Diagnostics are
-      // still cleared because they're keyed by bare file path (no sandbox
-      // scope) and would otherwise bleed across sandboxes.
-      useDiagnosticsStore.getState().clearAll();
-      resetPrefetchState();
-    }
-
-    // Do not connect SSE or hydrate runtime-backed endpoints while the
-    // runtime is starting/degraded. Otherwise every mounted dashboard tab
-    // fans out into /session/*, /path, /permission, /question, and /lsp/*
-    // requests that each sit for 30s and retry.
-    if (
-      options.enabled === false ||
-      !activeServerUrl ||
-      sandboxStatus !== 'connected' ||
-      runtimeHealthy !== true
-    )
-      return;
-
-    // `activeServerUrl` (getActiveServerUrl) and the url getClient() resolves
-    // (getActiveRuntimeUrl → current-runtime) come from DIFFERENT accessors and
-    // briefly diverge on a session switch: the server-store url is set before the
-    // current-runtime url is pinned. In that window getClient() throws
-    // RuntimeNotReadyError — and because this hook runs in the page render tree
-    // (outside SandboxLoadingBoundary), a synchronous throw here is caught by the
-    // GLOBAL error boundary and flashes the whole route to blank. "Runtime not
-    // ready" is a transient info state, never an error: skip this tick and let the
-    // effect re-run (deps include runtimeVersion/activeServerUrl) once it pins.
-    let client: ReturnType<typeof getClient>;
-    try {
-      client = getClient();
-    } catch {
-      return;
-    }
-
-    const handleEvent = createEventHandler({
-      queryClient,
-      client,
-      applySyncEvent,
-      stopCompaction,
-      addPermission,
-      removePermission,
-      addQuestion,
-      removeQuestion,
-      normalizeDiagnosticPaths,
-      markSessionAbortedLocally,
-      fetchLspDiagnosticsDebounced,
-      projectId,
-      notificationProjectId: options.projectId ?? projectId,
-      sessionId: options.projectId && options.sessionId ? options.sessionId : null,
-      startCompaction,
-    });
-
-    const logSessionId = options.sessionId;
-    const hydrate = () =>
-      hydrateFromPending({
-        applySyncEvent,
+  useEffect(
+    () =>
+      connectRuntimeStream({
+        options: {
+          enabled: options.enabled,
+          projectId: options.projectId,
+          sessionId: options.sessionId,
+        },
+        queryClient,
+        projectId,
+        runtimeVersion,
+        activeServerUrl,
+        sandboxStatus,
+        runtimeHealthy,
+        isMountRef,
+        prevRuntimeVersionRef,
+        prevServerUrlRef,
+        revival,
+        normalizeDiagnosticPaths,
+        fetchLspDiagnosticsDebounced,
+        markSessionAbortedLocally,
         reconcileMissingBusySessions,
-        threads: () => Object.keys((logSessionId && useSyncStore.getState().sessionLogs[logSessionId]?.threads) || {}),
-        dispatch: (event) => handleEvent(event),
-      });
-
-    // A revived handle has no record of the previous handle's outage: read
-    // what waits now. The session log re-reads its own page.
-    hydrate();
-
-    // Set up SSE via the framework-free event-stream machine. The
-    // connect/reconnect/backoff loop, heartbeat watchdog, and event
-    // coalescing all live in `openEventStream` — this wrapper only supplies
-    // the QueryClient-dependent event handler and the gap-rehydrate hook.
-    // R5.3: the session's own stream when the host names the session. A
-    // reconnect inside the box's replay ring loses nothing, so only a runtime
-    // resync re-reads; the shared stream owns liveness, so this machine's
-    // watchdog stays out of it.
-    const sessionStream =
-      options.projectId && options.sessionId
-        ? sessionStreamEventClient(options.projectId, options.sessionId)
-        : null;
-    // The box could not replay a gap: re-read what this view holds.
-    const resyncs =
-      options.projectId && options.sessionId
-        ? openSessionStream({
-            projectId: options.projectId,
-            sessionId: options.sessionId,
-            onRuntimeResync: () => hydrate(),
-          })
-        : null;
-    const handle = openEventStream({
-      client: sessionStream ?? client,
-      ...(sessionStream ? { heartbeatTimeoutMs: SESSION_STREAM_WATCHDOG_OFF_MS } : {}),
-      // A park is not a verdict about the sandbox — only about the last few
-      // attempts. Nothing supplied this callback before, so the stream's
-      // documented "terminal for this handle" silently became terminal for the
-      // PAGE: the session view kept rendering a transcript nobody was updating
-      // until the user reloaded. See `createStreamRevival`.
-      onParked: (info) => {
-        logger.warn('SSE stream parked — arming revival', {
-          consecutiveFailures: info.consecutiveFailures,
-        });
-        revival.park();
-        emitRuntimeStreamSignal({ type: 'parked' });
-      },
-      onEvent: (event) => {
-        // Every delivered frame is live proof the runtime is reachable — it
-        // vetoes concurrent health-probe failures (a loaded box can miss the
-        // probe deadline mid-turn). See shouldIgnoreProbeFailure.
-        noteRuntimeEvidence();
-        noteSessionSyncEvent(event);
-        handleEvent(event);
-        emitRuntimeStreamSignal({ type: 'event', event });
-      },
-      onConnectionChange: (state) => emitRuntimeStreamSignal({ type: state }),
-      onGapRehydrate: () => {
-        if (!sessionStream) hydrate();
-      },
-    });
-
-    return () => {
-      revival.stop();
-      resyncs?.close();
-      handle.close();
-      emitRuntimeStreamSignal({ type: 'closed' });
-    };
+        addPermission,
+        removePermission,
+        addQuestion,
+        removeQuestion,
+        clearPending,
+        startCompaction,
+        stopCompaction,
+        applySyncEvent,
+      }),
     // NOTE: urlVersion is intentionally excluded from deps. We only reconnect
     // when the resolved activeServerUrl actually changes, which avoids
     // reconnecting on metadata-only updates while still recovering from
     // stale SSE connections after sandbox/proxy URL changes.
-  }, [
-    queryClient,
-    addPermission,
-    removePermission,
-    addQuestion,
-    removeQuestion,
-    clearPending,
-    runtimeVersion,
-    activeServerUrl,
-    sandboxStatus,
-    runtimeHealthy,
-    options.enabled,
-    options.projectId,
-    options.sessionId,
-    applySyncEvent,
-    stopCompaction,
-    projectId,
-    revival,
-    // A revived park re-opens the stream through this effect. Without it the
-    // park stayed terminal for the page.
-    streamGeneration,
-  ]);
+    [
+      queryClient,
+      addPermission,
+      removePermission,
+      addQuestion,
+      removeQuestion,
+      clearPending,
+      runtimeVersion,
+      activeServerUrl,
+      sandboxStatus,
+      runtimeHealthy,
+      options.enabled,
+      options.projectId,
+      options.sessionId,
+      applySyncEvent,
+      stopCompaction,
+      projectId,
+      revival,
+      // A revived park re-opens the stream through this effect. Without it the
+      // park stayed terminal for the page.
+      streamGeneration,
+    ],
+  );
 }
 
 /**
@@ -318,4 +171,3 @@ export function RuntimeEventStreamProvider() {
   useRuntimeEventStream();
   return null;
 }
-

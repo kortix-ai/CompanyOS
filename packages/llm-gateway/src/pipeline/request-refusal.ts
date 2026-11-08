@@ -162,7 +162,7 @@ export async function admitOrRefuse(
     if (!admission.ok) {
       const message = admission.message ?? 'Request not allowed';
       if (admission.principal) {
-        traceRefusal(options.emit, admission.principal, options.operation, options.requestedModel !== undefined ? { requestedModel: options.requestedModel } : {}, {
+        traceRefusal(options.emit, admission.principal, options.operation, { requestedModel: options.requestedModel }, {
           status: admission.status,
           ok: false,
           errorCode: admission.errorCode,

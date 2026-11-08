@@ -89,6 +89,14 @@ function getReq(path: string, secret: string) {
   });
 }
 
+function putReq(path: string, secret: string, body: unknown) {
+  return app.request(path, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 function postReq(path: string, secret: string, body: unknown) {
   return app.request(path, {
     method: 'POST',
@@ -269,4 +277,24 @@ describe('HTTP enforcement — send-primitive gates (Slack upload / meet speak)'
       });
     });
   }
+});
+
+// The provider-secret pool selects which keys a session may spend at the
+// gateway, so PUT asks project.secret.read next to the session control leaf.
+// A floor member holds project.session.stop but not project.secret.read: the
+// real IAM refuses at that leaf, before any session or pool is read.
+describe('HTTP enforcement — PUT session provider-secret pool needs project.secret.read', () => {
+  const poolPath = () => `/v1/projects/${PROJECT}/sessions/00000000-0000-0000-0000-000000000000/provider-secret-pools/anthropic`;
+
+  test('floor MEMBER (session control, no secret read) → 403 naming project.secret.read', async () => {
+    const res = await putReq(poolPath(), await mintToken(null), { secret_ids: null });
+    expect(res.status).toBe(403);
+    const body = await res.json().catch(() => ({}));
+    expect(JSON.stringify(body)).toContain(PROJECT_ACTIONS.PROJECT_SECRET_READ);
+  });
+
+  test('MANAGER (holds the leaf) → passes the gate (not 403)', async () => {
+    const res = await putReq(poolPath(), await mintManagerToken(null), { secret_ids: null });
+    expect(res.status).not.toBe(403);
+  });
 });

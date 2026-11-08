@@ -121,8 +121,11 @@ test('existing session retains provider loading and failure summaries', () => {
   expect(render(true)[1]?.summary).toBe('keysLoadError');
   poolLoading = false;
   poolError = false;
+  // Without `project.secret.read` the pools route refuses the save, so the row
+  // goes with the secrets row instead of showing keys the viewer cannot keep.
+  // (`sandbox` is absent here too: this fixture sets no sandbox slot.)
   secretAllowed = false;
-  expect(render(true).map((row) => row.id)).toEqual(['provider-keys', 'sandbox']);
+  expect(render(true).map((row) => row.id)).toEqual([]);
 });
 
 // The scope catalog (secrets, connectors, connections) can take seconds. It

@@ -160,9 +160,8 @@ export function registerProviderSecretPoolsRoutes(): void {
     const loaded = await loadProjectForUser(c, projectId, 'session');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
-    // The pool decides which keys the session may spend at the gateway, and the
-    // answer echoes `secret_ids`: a custom role can grant session control and
-    // omit project.secret.read, so ask the leaf the sibling secret routes ask.
+    // Session control and secret visibility are separate leaves: assert both
+    // (the same two-leaf gate as agent-scope.ts:310).
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ);
     const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
     if (!visible) return c.json({ error: 'Not found' }, 404);

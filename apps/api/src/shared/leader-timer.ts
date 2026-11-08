@@ -13,7 +13,12 @@
  * run now waits for the old one to settle, so two runs never overlap. A wait
  * over `SLOW_WAIT_MS` logs a warning with the timer's `name`.
  *
- * `run` returns the delay until the next tick.
+ * `run` returns the delay until the next tick. `stop()` clears the timer
+ * before its first await and returns once the in-flight tick settles: the
+ * `Job` contract (`worker/runtime/job.ts`) promises exactly that. A `wake()`
+ * runs the next tick now instead of waiting the armed delay (the
+ * audit-webhook delivery loop replays); with a tick already running it lets
+ * that chain re-arm on its own return value.
  */
 import { logger } from '../lib/logger';
 import { isLeader } from './leader-election';
@@ -23,7 +28,7 @@ const SLOW_WAIT_MS = 10_000;
 export function leaderTimer(
   run: () => Promise<number>,
   options: { firstDelayMs?: number; name?: string } = {},
-): { start(): void; stop(): void } {
+): { start(): void; stop(): Promise<void>; wake(): void } {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
   let started = false;
@@ -65,6 +70,18 @@ export function leaderTimer(
       generation += 1;
       if (timer) clearTimeout(timer);
       timer = null;
+      // The `Job` contract: a returned promise resolves when the tick in
+      // flight has finished. `inFlight` always resolves (each run's catch is
+      // attached), so this never hangs.
+      return inFlight.then(() => undefined);
+    },
+    wake() {
+      if (!started) return;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+        void tick(generation);
+      }
     },
   };
 }

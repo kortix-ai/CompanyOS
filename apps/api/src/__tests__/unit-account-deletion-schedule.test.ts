@@ -19,6 +19,9 @@ type ProcessorResult = { processed: number; errors: string[] };
 let processorCalls = 0;
 let processor: () => Promise<ProcessorResult> = async () => ({ processed: 0, errors: [] });
 
+// leaderTimer consults the lease every tick; the test runs a sole leader.
+mock.module('../shared/leader-election', () => ({ isLeader: () => true }));
+
 mock.module('../billing/services/account-deletion', () => ({
   processScheduledDeletions: async () => processor(),
 }));

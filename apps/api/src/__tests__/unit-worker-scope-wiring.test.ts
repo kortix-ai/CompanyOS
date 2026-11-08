@@ -114,8 +114,7 @@ const NOT_WORKERS: Record<string, string> = {
   'projects/session-lifecycle/command-lease.ts':
     'renews the lock of one claimed command while its drain lane or inline create runs',
   'router/config/model-pricing.ts': 'refreshes the in-memory model pricing',
-  'sandbox-proxy/ws-proxy.ts': 'keepalive ping on one open preview WebSocket',
-  'shared/stream-access-recheck.ts': 're-checks access for one open session stream; runs inside that stream',
+  'sandbox-proxy/ws-proxy.ts': 'keepalive ping on one open preview WebSocket',  'shared/stream-access-recheck.ts': 're-checks access for one open session stream; runs inside that stream',
   'replica/access-control-cache.ts': 'refreshes the in-memory access-control cache',
   'replica/event-loop-lag.ts': 'measures event-loop lag',
   'replica/managed-lineup.ts': 'refreshes the in-memory managed lineup from Platinum Inference',
@@ -123,7 +122,6 @@ const NOT_WORKERS: Record<string, string> = {
   'replica/teams-bot-token-refresh.ts': 'refreshes the in-memory Teams bot token',
   'replica/tmp-reaper.ts': 'deletes stale local tmp directories; no database writes',
   'replica/tunnel.ts': "clears this process's in-memory tunnel rate-limit buckets",
-  'worker/jobs/app-deployment.ts': 'timer that calls triggerAppDeploymentWorker, which wraps itself',
   'worker/runtime/heartbeat.ts': 'reports the in-memory tick times as one stdout line; no database writes',
 };
 

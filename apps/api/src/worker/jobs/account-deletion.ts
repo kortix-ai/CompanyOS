@@ -22,8 +22,8 @@ const TICK_MS = 15 * 60 * 1000;
 
 const job = leaderTimer(
   async () => {
-    await runWorkerTick('account-deletion', async () => {
-      try {
+    try {
+      await runWorkerTick('account-deletion', async () => {
         const { processScheduledDeletions, SWEEP_BATCH_SIZE } = await import('../../billing/services/account-deletion');
         await processScheduledDeletions();
         // "Delete my account" requests: their own table, after the account requests.
@@ -33,12 +33,14 @@ const job = leaderTimer(
         const { processScheduledPersonDeletions } = await import('../../workspaces/surface');
         const people = await processScheduledPersonDeletions(SWEEP_BATCH_SIZE);
         logger.info(`[PersonDeletion] Processed: ${people.processed}, Errors: ${people.errors.length}`);
-      } catch (err) {
-        logger.error('[AccountDeletion] scheduled deletion tick failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    });
+      });
+    } catch (err) {
+      // The catch wraps runWorkerTick so a failing sweep settles the tick as
+      // an error and the heartbeat's lastOkAt stays behind (StaleJobs alarm).
+      logger.error('[AccountDeletion] scheduled deletion tick failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return TICK_MS;
   },
   { name: 'account-deletion' },

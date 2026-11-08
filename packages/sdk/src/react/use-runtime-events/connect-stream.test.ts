@@ -74,6 +74,7 @@ mock.module('./hydrate-core', () => ({
 }));
 
 const { connectRuntimeStream } = await import('./connect-stream');
+type ConnectRuntimeStreamDeps = import('./connect-stream').ConnectRuntimeStreamDeps;
 const { createStreamRevival } = await import('./stream-revival');
 const { subscribeRuntimeStream } = await import('./runtime-stream-signals');
 
@@ -108,7 +109,7 @@ function revivalHarness() {
   };
 }
 
-function baseDeps(overrides: Record<string, unknown> = {}) {
+function baseDeps(overrides: Partial<ConnectRuntimeStreamDeps> = {}) {
   const harness = revivalHarness();
   return {
     deps: {

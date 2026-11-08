@@ -106,10 +106,12 @@ describe('POST /v1/p/share — create', () => {
     expect(gone.status).toBe(404);
     expect(await gone.json()).toEqual({ error: 'Sandbox not found or not active' });
 
-    // A resolve with no baseUrl is not dailable (create path).
-    lookup = { resolved: null };
-    const unreachable = await create(jsonBody({ sandbox_id: 'gone', port: 3000 }));
-    expect(unreachable.status).toBe(404);
+    // A resolved provider with no baseUrl has nothing to dial (create path).
+    lookup = { resolved: { ...RESOLVED, baseUrl: '' } };
+    const unreachable = await create(jsonBody({ sandbox_id: 'ext-1', port: 3000 }));
+    expect(unreachable.status).toBe(502);
+    expect(await unreachable.json()).toEqual({ error: 'Cannot reach sandbox' });
+    expect(lastFetch).toBeNull();
 
     accessAllowed = false;
     const refused = await create(jsonBody({ sandbox_id: 'ext-1', port: 3000 }));

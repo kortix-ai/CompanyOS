@@ -3273,7 +3273,9 @@ kortix apps access my-site --viewer api
 
 A viewer exists when a person opens the App with their Kortix login or an access
 link. A `password` App never has a viewer. A `public` App has one only for a
-visitor who arrived through an access link.
+visitor who arrived through an access link. Before a `public` App gets a token
+for its viewer, the gate checks again that the viewer may still open the App. A
+person removed from the workspace gets no new token, even with a valid cookie.
 
 **In the browser.** `GET /_kortix/viewer` on the App's origin returns the
 viewer. Call the Kortix API through `/_kortix/api/v1/*` on the same origin: a
@@ -3576,6 +3578,9 @@ Your own values come from `env` and `secrets` in the `kortix.yaml` block:
 - `secrets` maps a runtime name to a workspace secret identifier. The secret must
   have the `environment` exposure. Kortix resolves it when it creates the
   machine and never writes it into the image. See [Security](/docs/guide#security).
+- A deploy that maps `secrets` needs `project.secret.read` as well as
+  `project.app.deploy`. An agent session can map only the secrets its own
+  `secrets` grant gives it. Otherwise the deploy answers `403`.
 
 ### URLs and what visitors see
 

@@ -9,6 +9,7 @@ let poolEnabled = false;
 let poolLoading = false;
 let poolError = false;
 let secretAllowed = true;
+let secretLoading = false;
 let managesSession = true;
 let selection: Record<string, string[]> = {};
 // The scope catalog (and, for a session, its scope) has answered.
@@ -37,7 +38,7 @@ mock.module('../../i18n', () => ({
     values ? `${key}:${values.count}` : key, { raw: (key: string) => key }),
 }));
 mock.module('../../internal/lib/use-project-can', () => ({
-  useProjectCan: () => ({ allowed: secretAllowed, isLoading: false }),
+  useProjectCan: () => ({ allowed: secretAllowed, isLoading: secretLoading }),
 }));
 mock.module('../scope/use-session-scope', () => ({
   useSessionScope: () => ({
@@ -133,6 +134,12 @@ test('a viewer without project.secret.read gets no Provider keys row', () => {
   // Both editable rows are gone; the sandbox row is read-only on a new session,
   // so the toolbar renders nothing at all rather than a gear onto a dead Save.
   expect(render()).toEqual([]);
+  // An unresolved probe is not a denial: the row stays while it loads, so it
+  // does not blink out and back on every session open.
+  secretAllowed = false;
+  secretLoading = true;
+  expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
+  secretLoading = false;
 });
 
 // The scope catalog (secrets, connectors, connections) can take seconds. It

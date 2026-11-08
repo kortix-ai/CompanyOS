@@ -426,7 +426,10 @@ test('a caller without project.secret.read cannot select, and gets the capabilit
   expect(capabilityChecks).toEqual(['project.session.stop', 'project.secret.read']);
 });
 
-// The control: the same caller holding the leaf is answered with the selection.
+// The control: a caller with the leaf is answered with the selection. The gate
+// really fires on this route — the sibling test below denies the *other* leaf
+// this route asserts (`project.session.stop`) and gets a 403 — so the 200 here
+// means `project.secret.read` was applied and held, not skipped.
 test('a caller that holds project.secret.read selects and is handed the key ids', async () => {
   keys = [projectKey(1)];
   const response = await put('anthropic', [keyId(1)]);
@@ -438,6 +441,17 @@ test('a caller that holds project.secret.read selects and is handed the key ids'
   });
   expect(pools.get('anthropic')).toEqual([keyId(1)]);
   expect(capabilityChecks).toEqual(['project.session.stop', 'project.secret.read']);
+});
+
+// Proves the mock gate actually refuses on this route: the same caller, the
+// leaf held, but the session-control assert denied.
+test('the gates on this route really fire: denying project.session.stop alone is refused', async () => {
+  deniedLeaves = ['project.session.stop'];
+  keys = [projectKey(1)];
+  const response = await put('anthropic', [keyId(1)]);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ status: 403, action: 'project.session.stop' });
+  expect(writes).toBe(0);
 });
 
 describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {

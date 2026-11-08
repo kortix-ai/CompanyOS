@@ -160,11 +160,12 @@ export function registerProviderSecretPoolsRoutes(): void {
     const loaded = await loadProjectForUser(c, projectId, 'session');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
-    // Session control and secret visibility are separate leaves: assert both
-    // (the same two-leaf gate as agent-scope.ts:310).
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ);
     const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
     if (!visible) return c.json({ error: 'Not found' }, 404);
+    // Session control and secret visibility are separate leaves: assert both
+    // (the same two-leaf gate as projects/routes/agent-scope.ts:315). After the
+    // session read, so a session the caller cannot see stays a 404.
+    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ);
     if (!mayChangeSessionModel(visible)) return c.json({ error: 'Only the session owner or a project manager can select provider secrets' }, 403);
     const gate = requireFeatureFlag(c, loaded.row.metadata, 'pooled_provider_secrets');
     if (gate) return gate;

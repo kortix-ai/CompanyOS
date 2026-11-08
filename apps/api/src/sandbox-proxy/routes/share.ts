@@ -28,7 +28,7 @@ type ResolvedProvider = NonNullable<Awaited<ReturnType<typeof resolveProvider>>>
  * carry a WIRE NUMBER status (the resolve refusal, the daemon passthrough), and
  * Hono's `c.json` types only a literal status, so they finish the Response and
  * cast the finished object to this union — each member is exactly what
- * `c.json` returns at that status. No `as any`.
+ * `c.json` returns at that status. No blind cast.
  */
 type ShareRouteResponse =
   | (Response & (TypedResponse<Record<string, unknown>, 200, 'json'> |

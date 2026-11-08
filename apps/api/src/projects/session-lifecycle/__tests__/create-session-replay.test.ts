@@ -10,6 +10,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { projectSessions } from '@kortix/db';
 import type { CreateSessionCommand } from '../types';
+import type { ProjectRow } from '../../lib/serializers';
 import type { SessionLifecycleCommandRow } from '../store';
 
 const ACCOUNT_ID = 'acct-1';
@@ -83,15 +84,37 @@ function existingRowFor(overrides: Partial<SessionLifecycleCommandRow> = {}): Se
   };
 }
 
+function projectRowFor(overrides: Partial<ProjectRow> = {}): ProjectRow {
+  const now = new Date();
+  return {
+    projectId: PROJECT_ID,
+    accountId: ACCOUNT_ID,
+    name: 'Replay Project',
+    repoUrl: 'https://github.com/kortix-managed/replay-project.git',
+    defaultBranch: 'main',
+    manifestPath: 'kortix.yaml',
+    status: 'active',
+    secretDefaultStrategy: 'runtime',
+    metadata: {},
+    idempotencyKey: null,
+    sandboxProviderGeneration: 0,
+    splitPending: false,
+    lastOpenedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
 function commandFor(body: Record<string, unknown>): CreateSessionCommand {
   return {
     source: 'ui',
-    project: { projectId: PROJECT_ID, accountId: ACCOUNT_ID },
+    project: projectRowFor(),
     userId: 'user-1',
     requestingPrincipalType: 'human',
     body,
     idempotencyKey: KEY,
-  } as CreateSessionCommand;
+  };
 }
 
 beforeEach(() => {

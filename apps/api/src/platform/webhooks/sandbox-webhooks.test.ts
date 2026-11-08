@@ -154,9 +154,13 @@ describe('handleDaytonaWebhook', () => {
 
 describe('handlePlatinumWebhook', () => {
   const secret = 'whsec_plat';
-  function hmacHeader(body: string): (h: string) => string | undefined {
+  function hmacHeader(body: string, deliveryId?: string): (h: string) => string | undefined {
     const sig = createHmac('sha256', secret).update(body, 'utf8').digest('hex');
-    return (h: string) => (h.toLowerCase() === 'x-platinum-signature' ? sig : undefined);
+    return (h: string) => {
+      const name = h.toLowerCase();
+      if (name === 'x-platinum-signature') return sig;
+      return name === 'webhook-id' ? deliveryId : undefined;
+    };
   }
   test('503 when not configured', async () => {
     const r = await handlePlatinumWebhook('{}', () => undefined);
@@ -177,6 +181,48 @@ describe('handlePlatinumWebhook', () => {
     expect(stoppedCalls).toEqual([]);
     expect(removedCalls).toEqual([]);
   });
+
+  // The replay guard must never fold two DIFFERENT deliveries into one key. A
+  // sandbox fires `stopped` and later `removed` with different bodies: an
+  // inventing fallback keyed on `externalId:eventType:` dropped the second and
+  // the box kept its earlier terminal outcome (CWE-345, KRTX-4502).
+  test('applies a stopped then a removed delivery for the same sandbox', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    const stopped = JSON.stringify({ event: 'sandbox.state.updated', sandbox_id: 'sbx_synthetic_2', state: 'stopped' });
+    const removed = JSON.stringify({ event: 'sandbox.state.updated', sandbox_id: 'sbx_synthetic_2', state: 'deleted' });
+    // A `webhook-id` per delivery, the provider's own identity, and no payload
+    // `id`: what the finding measured.
+    const first = await handlePlatinumWebhook(stopped, hmacHeader(stopped, 'dlv_1'));
+    const second = await handlePlatinumWebhook(removed, hmacHeader(removed, 'dlv_2'));
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({ ok: true, action: 'removed' });
+    expect(stoppedCalls).toEqual(['sbx_synthetic_2']);
+    expect(removedCalls).toEqual(['sbx_synthetic_2']);
+  });
+
+  // The guard still has to stop a real replay: the SAME delivery, byte for
+  // byte, is applied once.
+  test('dedupes the same delivery replayed', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    const body = JSON.stringify({ event: 'sandbox.deleted', id: 'pReplay', state: 'deleted' });
+    const hdr = hmacHeader(body, 'dlv_3');
+    await handlePlatinumWebhook(body, hdr);
+    const again = await handlePlatinumWebhook(body, hdr);
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual({ ok: true, deduped: true });
+    expect(removedCalls).toEqual(['pReplay']);
+  });
+
+  // A delivery with no identity at all cannot be safely deduped. Refuse it
+  // rather than inventing a key that may already belong to another event.
+  test('400 on a delivery that carries no usable identity', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    const body = JSON.stringify({ event: 'sandbox.state_updated', sandbox_id: 'sbx_no_id', state: 'stopped' });
+    const r = await handlePlatinumWebhook(body, hmacHeader(body));
+    expect(r.status).toBe(400);
+    expect(stoppedCalls).toEqual([]);
+  });
 });
 
 describe('a sandbox provider delivery names the provider in the request audit', () => {
@@ -193,9 +239,11 @@ describe('a sandbox provider delivery names the provider in the request audit', 
     return runWithContext('POST', '/v1/webhooks/sandbox/platinum', async () => {
       const scope = attachInboundAuditScope({ owner: 'edge', method: 'POST' });
       const header = sig === 'valid' ? createHmac('sha256', secret).update(body, 'utf8').digest('hex') : sig;
-      const result = await handlePlatinumWebhook(body, (h: string) =>
-        h.toLowerCase() === 'x-platinum-signature' ? header : undefined,
-      );
+      const result = await handlePlatinumWebhook(body, (h: string) => {
+        const name = h.toLowerCase();
+        if (name === 'x-platinum-signature') return header;
+        return name === 'webhook-id' ? 'dlv_audit' : undefined;
+      });
       return { status: result.status, principal: scope.principal };
     });
   }

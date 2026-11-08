@@ -169,14 +169,14 @@ describe('handlePlatinumWebhook', () => {
   test('removes on a delete event', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const body = JSON.stringify({ event: 'sandbox.deleted', id: 'pX', state: 'deleted' });
-    const r = await handlePlatinumWebhook(body, hmacHeader(body));
+    const r = await handlePlatinumWebhook(body, hmacHeader(body, 'dlv_px'));
     expect(r.status).toBe(200);
     expect(removedCalls).toEqual(['pX']);
   });
   test('noop on started', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const body = JSON.stringify({ event: 'sandbox.state_updated', id: 'pY', state: 'running' });
-    const r = await handlePlatinumWebhook(body, hmacHeader(body));
+    const r = await handlePlatinumWebhook(body, hmacHeader(body, 'dlv_py'));
     expect(r.status).toBe(200);
     expect(stoppedCalls).toEqual([]);
     expect(removedCalls).toEqual([]);
@@ -199,6 +199,21 @@ describe('handlePlatinumWebhook', () => {
     expect(second.body).toMatchObject({ ok: true, action: 'removed' });
     expect(stoppedCalls).toEqual(['sbx_synthetic_2']);
     expect(removedCalls).toEqual(['sbx_synthetic_2']);
+  });
+
+  // A payload that names its sandbox in `id` (line 163 reads it as the sandbox
+  // id) must still key each delivery on its own `webhook-id`. Keying on the
+  // payload `id` folds every event of that box into one key — the drop again.
+  test('applies a stopped then a removed delivery whose payload id is the sandbox', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    const stopped = JSON.stringify({ event: 'sandbox.state_updated', id: 'sbx_synthetic_3', state: 'stopped' });
+    const removed = JSON.stringify({ event: 'sandbox.state_updated', id: 'sbx_synthetic_3', state: 'deleted' });
+    const first = await handlePlatinumWebhook(stopped, hmacHeader(stopped, 'dlv_4'));
+    const second = await handlePlatinumWebhook(removed, hmacHeader(removed, 'dlv_5'));
+    expect(first.body).toMatchObject({ ok: true, externalId: 'sbx_synthetic_3' });
+    expect(second.body).toMatchObject({ ok: true, action: 'removed' });
+    expect(stoppedCalls).toEqual(['sbx_synthetic_3']);
+    expect(removedCalls).toEqual(['sbx_synthetic_3']);
   });
 
   // The guard still has to stop a real replay: the SAME delivery, byte for

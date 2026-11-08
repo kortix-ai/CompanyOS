@@ -9,8 +9,9 @@
  *    (`webhook-id` / `webhook-timestamp` / `webhook-signature`, secret `whsec_…`).
  *  - Platinum: events `sandbox.created` / `sandbox.state_updated` / `sandbox.deleted`,
  *    each HMAC-SHA-256 signed with the per-webhook secret shown once at
- *    registration (`POST /v1/webhooks`). Its payload carries the event `id`,
- *    which is what the replay guard keys on.
+ *    registration (`POST /v1/webhooks`). Its replay guard keys on the sender's
+ *    per-delivery `webhook-id` header, never on the payload `id` — that one
+ *    names the sandbox (see handlePlatinumWebhook).
  *
  * Signature header/format specifics for each provider are confirmed against a
  * live delivery at deploy time — see verify* below. Until the matching secret is
@@ -165,14 +166,14 @@ export async function handlePlatinumWebhook(
   const newState: string | undefined = event?.state ?? event?.new_state ?? event?.newState ?? event?.data?.state;
   if (!externalId) return { status: 200, body: { ok: true, ignored: 'no sandbox id' } };
 
-  // Key the replay guard on the provider's own delivery identity. Platinum
-  // echoes the `id` it minted for the event; a Standard Webhooks sender also
-  // stamps a per-delivery `webhook-id`. Never invent a key from
-  // `externalId:eventType` — that is constant for a sandbox and event type, so
-  // the first delivery of that kind claims it forever and every later distinct
-  // event (a `removed` after a `stopped`) is answered `deduped` and dropped
-  // (CWE-345, KRTX-4502). A delivery with neither identity is refused.
-  const deliveryId = event?.id ?? getHeader('webhook-id') ?? getHeader('svix-id');
+  // Key the replay guard on the sender's per-delivery identity only. The payload
+  // `id` is NOT one: line 163 already reads it as the sandbox id first, so a
+  // payload that names its sandbox in `id` would key every event of that box on
+  // `platinum:<sandbox_id>` — the same constant-per-sandbox collapse this fix
+  // removes (CWE-345, KRTX-4502). Never invent a key from `externalId:eventType`
+  // either. A delivery with no `webhook-id` is refused rather than folded into
+  // another event's key.
+  const deliveryId = getHeader('webhook-id') ?? getHeader('svix-id');
   if (!deliveryId) return { status: 400, body: { error: 'no delivery id' } };
 
   const dedupId = `platinum:${deliveryId}`;

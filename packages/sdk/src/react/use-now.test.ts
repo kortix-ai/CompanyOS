@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, mock, test } from 'bun:test';
+import { afterEach, expect, jest, spyOn, test } from 'bun:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -77,18 +77,13 @@ test('no interval left running on unmount', async () => {
   expect(seen.length).toBe(2);
   // React ignores a setState after unmount, so a leaked interval is invisible
   // in the render count — assert the cleanup actually cleared the timer.
-  const realClearInterval = globalThis.clearInterval;
-  const cleared: number[] = [];
-  globalThis.clearInterval = mock(((id: number) => {
-    cleared.push(id);
-    realClearInterval(id);
-  }) as typeof clearInterval);
+  const clearSpy = spyOn(globalThis, 'clearInterval');
   try {
     await act(async () => {
       renderer?.unmount();
     });
-    expect(cleared.length).toBeGreaterThan(0);
+    expect(clearSpy).toHaveBeenCalled();
   } finally {
-    globalThis.clearInterval = realClearInterval;
+    clearSpy.mockRestore();
   }
 });

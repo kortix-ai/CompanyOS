@@ -644,11 +644,11 @@ export function AccountHubContent({
             </div>
           ) : null}
 
-          {/* Branding — Enterprise. The pane exists for anyone with
-              account.write (rail rule); the entitlement decides whether it
-              is the editor or the upsell, mirroring the server's 402 on the
-              write routes. */}
-          {activeSection === 'branding' && canWriteAccount ? (
+          {/* Branding — Enterprise, self-host only. The pane exists for
+              anyone with account.write off the Kortix cloud (rail rule); the
+              entitlement decides whether it is the editor or the upsell,
+              mirroring the server's 402 on the write routes. */}
+          {activeSection === 'branding' && sectionVisible.branding ? (
             entitlementsLoading ? (
               <Skeleton className="h-64 w-full rounded-md" />
             ) : brandingEnabled ? (

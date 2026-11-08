@@ -1,12 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import {
-  BasicTool,
-  partOutcome,
-  ToolOutcomeContext,
-} from '@kortix/ui/session';
-import type { ToolPart } from '@/ui';
+import { partOutcome } from './infrastructure';
+import { BasicTool } from './infrastructure-rows';
+import { ToolOutcomeContext } from './infrastructure-contexts';
+import type { ToolPart } from '../../../internal/session-types';
 
 function part(state: Record<string, unknown>): Pick<ToolPart, 'state'> {
   return { state } as unknown as Pick<ToolPart, 'state'>;

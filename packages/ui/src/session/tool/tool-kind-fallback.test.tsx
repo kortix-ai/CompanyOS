@@ -1,13 +1,14 @@
-import '@kortix/ui/session/tool/tools/register';
-import { TooltipProvider } from '@kortix/ui/tooltip';
-import { FOREIGN_TOOL_CALLS } from '@kortix/ui/session/tool/foreign-tool-calls';
-import { parseListing } from '@kortix/ui/session/tool/shared/file-list';
-import { patchFilesFromText } from '@kortix/ui/session/tool/shared/patch-helpers';
-import { ToolRegistry, ToolPartRenderer } from '@kortix/ui/session';
+import './tools/register';
+import { TooltipProvider } from '../../primitives/tooltip';
+import { FOREIGN_TOOL_CALLS } from './foreign-tool-calls';
+import { parseListing } from './shared/file-list';
+import { patchFilesFromText } from './shared/patch-helpers';
+import { ToolRegistry } from './shared/registry';
+import { ToolPartRenderer } from './tool-part-renderer';
 import type { ToolCallBlock } from '@kortix/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, test } from 'bun:test';
-import { NextIntlClientProvider } from 'next-intl';
+import { IntlTestProvider } from '../../test-utils/intl';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -20,13 +21,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const render = (call: ToolCallBlock) =>
   renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{}} onError={() => {}}>
+    <IntlTestProvider locale="en" onError={() => {}}>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>
           <ToolPartRenderer call={call} defaultOpen />
         </TooltipProvider>
       </QueryClientProvider>
-    </NextIntlClientProvider>,
+    </IntlTestProvider>,
   );
 
 /** Block kind → the registered name whose renderer draws it. */
@@ -102,7 +103,7 @@ describe('a session with foreign tool names renders no generic fallback', () => 
 });
 
 describe('the codex and claude-code golden sessions', () => {
-  const FIXTURES = join(import.meta.dir, '../../../../../../packages/api-contract/src/__tests__/fixtures/session-log');
+  const FIXTURES = join(import.meta.dir, '../../../../../packages/api-contract/src/__tests__/fixtures/session-log');
   const toolCalls = (value: unknown): ToolCallBlock[] =>
     Array.isArray(value)
       ? value.flatMap(toolCalls)

@@ -1,9 +1,10 @@
-import '@kortix/ui/session/tool/tools/register';
-import { ToolPartRenderer, ToolRegistry } from '@kortix/ui/session';
-import type { ToolPart } from '@/ui';
+import './tools/register';
+import { ToolPartRenderer } from './tool-part-renderer';
+import { ToolRegistry } from './shared/registry';
+import type { ToolPart } from '../../internal/session-types';
 import { toolCallBlock } from '@kortix/sdk';
 import { describe, expect, test } from 'bun:test';
-import { NextIntlClientProvider } from 'next-intl';
+import { IntlTestProvider } from '../../test-utils/intl';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 /** The text of rendered markup: tags removed until none remain (one pass can leave a tag behind). */
@@ -24,9 +25,9 @@ const part = (tool: string) => ({
 
 function render(tool: string) {
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{}} onError={() => {}}>
+    <IntlTestProvider locale="en" onError={() => {}}>
       <ToolPartRenderer call={toolCallBlock(part(tool))} sessionId="child" defaultOpen />
-    </NextIntlClientProvider>,
+    </IntlTestProvider>,
   );
 }
 

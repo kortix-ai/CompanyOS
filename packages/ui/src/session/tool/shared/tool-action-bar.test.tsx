@@ -1,19 +1,19 @@
-import { TooltipProvider } from '@kortix/ui/tooltip';
-import { NextIntlClientProvider } from '@/i18n/use-translations';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, test } from 'bun:test';
+import { IntlTestProvider } from '../../../test-utils/intl';
+import { TooltipProvider } from '../../../primitives/tooltip';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ServicePreviewActions, type ServicePreviewState } from '@kortix/ui/session';
-import { ShowFileActions } from '@kortix/ui/session/tool/shared/show-helpers';
+import { ServicePreviewActions, type ServicePreviewState } from './infrastructure-preview';
+import { ShowFileActions } from './show-helpers';
 
 function render(node: ReactNode) {
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{}} onError={() => {}}>
+    <IntlTestProvider locale="en" onError={() => {}}>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>{node}</TooltipProvider>
       </QueryClientProvider>
-    </NextIntlClientProvider>,
+    </IntlTestProvider>,
   );
 }
 

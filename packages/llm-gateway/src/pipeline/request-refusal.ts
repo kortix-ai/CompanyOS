@@ -6,7 +6,7 @@ import type {
   GatewayLogger,
   GatewayTrace,
 } from '../domain';
-import { gatewayErrorBody } from './error-response';
+import { type GatewayErrorContext, gatewayErrorBody, gatewayErrorResponse } from './error-response';
 import { authorize, identity, refundHold, type HandlerRuntime } from './simple-handler';
 import type { TraceEmitter, TraceFields } from './trace';
 
@@ -41,6 +41,8 @@ export interface RefusalRun {
   /** The surface's own trace: `traceRefusal` redacts it. */
   trace(fields: TraceFields): void;
   readonly site: RefusalSite;
+  /** The envelope refusals serialize through: the canonical `refusalResponse` when the surface carries none. */
+  readonly wire?: RefusalWire;
 }
 
 /** A request with no bearer token, before anything else runs. */
@@ -52,14 +54,11 @@ export const MISSING_TOKEN: Refusal = {
 };
 
 /**
- * The refusal envelope both surfaces answer with: the canonical gateway error
- * body (with its below-500 status gate), the `retry_after` body field and the
- * `retry-after` header together, and any per-refusal headers — an image
- * limit's reset headers — relayed on top.
+ * What an error envelope names, before a wire chooses where `retry_after`
+ * goes — read at refusal time from the surface's own naming.
  */
-export function refusalResponse(at: RefusalSite, refusal: Refusal): Response {
-  const { status, retryAfter } = refusal;
-  const body = gatewayErrorBody({
+function refusalContext(at: RefusalSite, refusal: Refusal): Omit<GatewayErrorContext, 'responseStatus' | 'retryAfterSeconds'> {
+  return {
     message: refusal.message,
     code: refusal.code,
     provider: at.provider,
@@ -67,6 +66,22 @@ export function refusalResponse(at: RefusalSite, refusal: Refusal): Response {
     resolvedModel: at.resolvedModel,
     requestId: at.id,
     suggestion: refusal.suggestion,
+  };
+}
+
+/** One refusal envelope. Either a surface's own wire, or the canonical one below. */
+export type RefusalWire = (at: RefusalSite, refusal: Refusal) => Response;
+
+/**
+ * The canonical refusal envelope: the gateway error body (with its below-500
+ * status gate), the `retry_after` body field and the `retry-after` header
+ * together, and any per-refusal headers — an image limit's reset headers —
+ * relayed on top. The image surface's wire.
+ */
+export function refusalResponse(at: RefusalSite, refusal: Refusal): Response {
+  const { status, retryAfter } = refusal;
+  const body = gatewayErrorBody({
+    ...refusalContext(at, refusal),
     responseStatus: status,
   });
   return new Response(JSON.stringify(retryAfter !== undefined ? { ...body, retry_after: retryAfter } : body), {
@@ -77,6 +92,17 @@ export function refusalResponse(at: RefusalSite, refusal: Refusal): Response {
       ...refusal.headers,
     },
   });
+}
+
+/**
+ * The audio surface's wire, kept through the move from its deleted
+ * `errorResponse`: the canonical `gatewayErrorResponse` builder, whose
+ * `retry-after` lives in the header alone — clamped, never a body field, and
+ * no per-refusal header spread. Two surfaces, two wire contracts; a refusal
+ * serializes through exactly one of these.
+ */
+export function audioRefusalResponse(at: RefusalSite, refusal: Refusal): Response {
+  return gatewayErrorResponse(refusal.status, { ...refusalContext(at, refusal), retryAfterSeconds: refusal.retryAfter });
 }
 
 /** The one trace both surfaces emit: the surface's fields over the caller's, never a payload. */
@@ -103,7 +129,7 @@ export function traceRefusal(
 export function refuse(run: RefusalRun, refusal: Refusal): Response {
   refundHold(run.hooks, run.principal, run.logger);
   run.trace({ status: refusal.status, ok: false, errorCode: refusal.code, errorMessage: refusal.message });
-  return refusalResponse(run.site, refusal);
+  return (run.wire ?? refusalResponse)(run.site, refusal);
 }
 
 /** A stopped client or the request's time budget ends it. */
@@ -121,9 +147,15 @@ export function stopped(
 }
 
 /** The admission gate itself failed (a transport failure, not a denial): log it, ask for a short retry. */
-export function admissionUnavailable(site: RefusalSite, logger: GatewayLogger, error: unknown): Response {
+export function admissionUnavailable(
+  site: RefusalSite,
+  logger: GatewayLogger,
+  error: unknown,
+  /** The refusal's wire: audio surfaces pass `audioRefusalResponse`. */
+  wire: RefusalWire = refusalResponse,
+): Response {
   logger.error(`[gateway] ${site.id}: admission control unavailable — ${error instanceof Error ? error.message : String(error)}`);
-  return refusalResponse(site, {
+  return wire(site, {
     status: 503,
     code: 'admission_unavailable',
     message: 'Gateway admission control is unavailable',
@@ -151,9 +183,12 @@ export async function admitOrRefuse(
     requestedModel?: string;
     /** The host's batched admission, taken inside the gate's protection. */
     prefetch?: (token: string) => Promise<AdmitResult | null>;
+    /** The refusal's wire: audio surfaces pass `audioRefusalResponse`. */
+    wire?: RefusalWire;
   },
 ): Promise<{ admission: Extract<AuthorizeResult, { ok: true }>; prefetched: AdmitResult | null } | Response> {
-  if (!token) return refusalResponse(options.site, MISSING_TOKEN);
+  const wire = options.wire ?? refusalResponse;
+  if (!token) return wire(options.site, MISSING_TOKEN);
   const { hooks, logger } = runtime;
   try {
     const prefetched = options.prefetch ? await options.prefetch(token) : null;
@@ -169,7 +204,7 @@ export async function admitOrRefuse(
           errorMessage: message,
         });
       }
-      return refusalResponse(options.site, {
+      return wire(options.site, {
         status: admission.status,
         code: admission.errorCode,
         message,
@@ -178,7 +213,7 @@ export async function admitOrRefuse(
     }
     return { admission, prefetched };
   } catch (error) {
-    return admissionUnavailable(options.site, logger, error);
+    return admissionUnavailable(options.site, logger, error, wire);
   }
 }
 

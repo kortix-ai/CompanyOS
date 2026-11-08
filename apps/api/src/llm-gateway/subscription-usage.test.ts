@@ -138,7 +138,8 @@ describe('one shaping for both subscription-usage readers', () => {
     }, NOW);
     expect(fromHeaders).not.toBeNull();
     expect(fromEndpoint).not.toBeNull();
-    expect(fromEndpoint!.limited).toBe(fromHeaders!.limited);
-    expect(fromEndpoint!.windows).toEqual(fromHeaders!.windows);
+    if (!fromHeaders || !fromEndpoint) throw new Error('a snapshot was expected from each reader');
+    expect(fromEndpoint.limited).toBe(fromHeaders.limited);
+    expect(fromEndpoint.windows).toEqual(fromHeaders.windows);
   });
 });

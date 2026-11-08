@@ -138,21 +138,27 @@ export interface UsageWindowInput {
 }
 
 /**
+ * Shortest window first: the order every shaped reader carries. The provider's
+ * own order is not a contract, but a reader that shapes provider-native order
+ * (the Codex response headers live below) keeps it instead of sorting.
+ */
+export function byWindowLength(a: { window_minutes: number | null }, b: { window_minutes: number | null }): number {
+  return (a.window_minutes ?? Infinity) - (b.window_minutes ?? Infinity);
+}
+
+/**
  * The one shaping every subscription-usage snapshot takes, whoever read it —
  * the gateway from a model response's headers, the API from the provider's
- * usage endpoint: percents rounded to a tenth, shortest window first, the
- * limit state, the observation time and the source. A snapshot a host stores
- * and one it reports are the same shape.
+ * usage endpoint: percents rounded to a tenth, the limit state, the
+ * observation time and the source. A snapshot a host stores and one it
+ * reports are the same shape. The caller brings the windows in its own order.
  */
 export function usageSnapshot(
   windows: UsageWindowInput[],
   options: { limited: boolean; now: number; source: SubscriptionUsage['source'] },
 ): SubscriptionUsage | null {
   if (!windows.length) return null;
-  const shaped = windows
-    .map(({ fallback, ...window }) => ({ id: windowId(window.window_minutes, fallback), ...window, used_percent: percent(window.used_percent) }))
-    // Shortest window first; the provider's order is not a contract.
-    .sort((a, b) => (a.window_minutes ?? Infinity) - (b.window_minutes ?? Infinity));
+  const shaped = windows.map(({ fallback, ...window }) => ({ id: windowId(window.window_minutes, fallback), ...window, used_percent: percent(window.used_percent) }));
   return {
     windows: shaped,
     limited: options.limited || shaped.some((window) => window.used_percent >= 100),
@@ -164,7 +170,10 @@ export function usageSnapshot(
 /** The plan usage a ChatGPT or Claude response reports, or null when it reports none. */
 export function subscriptionUsageFromHeaders(headers: Headers, now = Date.now()): SubscriptionUsage | null {
   const codex = codexWindows(headers, now);
-  const windows = codex.length ? codex : claudeWindows(headers);
+  // A Codex response names `primary` then `secondary`, and the header reader
+  // keeps that order; Claude's headers come in no name order, so they are
+  // shortest window first, as every endpoint reader shapes them.
+  const windows = codex.length ? codex : claudeWindows(headers).sort(byWindowLength);
   if (!windows.length) return null;
   return usageSnapshot(windows, {
     limited: headers.get('anthropic-ratelimit-unified-status') === 'rejected',

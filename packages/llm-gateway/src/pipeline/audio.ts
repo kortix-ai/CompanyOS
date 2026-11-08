@@ -21,7 +21,8 @@ import {
   MISSING_TOKEN,
   type Refusal,
   type RefusalSite,
-  refusalResponse,
+  type RefusalWire,
+  audioRefusalResponse,
   refuse,
   stopped,
   traceRefusal,
@@ -86,6 +87,8 @@ interface Run {
   signal: AbortSignal;
   trace(fields: TraceFields): void;
   readonly site: RefusalSite;
+  /** Audio's own refusal wire, for `refuse`: `retry-after` in the header alone, never a body field. */
+  readonly wire?: RefusalWire;
 }
 
 type Named = Pick<Run, 'id' | 'model'> & { descriptor?: UpstreamDescriptor };
@@ -417,7 +420,7 @@ export async function handleAudioRequest(runtime: HandlerRuntime, req: AudioRequ
   const emit = createTraceEmitter(hooks, logger, id, new Date().toISOString(), Date.now());
   const token = bearer(req.authorization);
   if (!token) {
-    return refusalResponse({ id, provider: '', requestedModel: '', resolvedModel: '' }, MISSING_TOKEN);
+    return audioRefusalResponse({ id, provider: '', requestedModel: '', resolvedModel: '' }, MISSING_TOKEN);
   }
   const parsed = req.operation === 'transcriptions' ? await transcriptionInput(req) : speechInput(req);
   req.body = new Uint8Array(0);
@@ -429,6 +432,7 @@ export async function handleAudioRequest(runtime: HandlerRuntime, req: AudioRequ
     prefetch: admitHook && 'input' in parsed
       ? (t) => admitHook(t, { requestedModel: parsed.model, requires: { imageInput: false } })
       : undefined,
+    wire: audioRefusalResponse,
   });
   if (admitted instanceof Response) return admitted;
   const { admission, prefetched } = admitted;
@@ -449,6 +453,7 @@ export async function handleAudioRequest(runtime: HandlerRuntime, req: AudioRequ
     trace(fields) {
       return trace(this, fields);
     },
+    wire: audioRefusalResponse,
     get site() {
       return { id: this.id, provider: this.descriptor ? shownProvider(this.descriptor) : '', requestedModel: this.model, resolvedModel: this.model };
     },
@@ -477,19 +482,19 @@ export async function handleVoicesRequest(runtime: HandlerRuntime, req: VoicesRe
   const site: RefusalSite = { id, provider: '', requestedModel: req.model, resolvedModel: req.model };
   const token = bearer(req.authorization);
   if (!token) {
-    return refusalResponse(site, MISSING_TOKEN);
+    return audioRefusalResponse(site, MISSING_TOKEN);
   }
   let principal: AuthedPrincipal | null;
   try {
     principal = await hooks.authenticate(token);
   } catch (error) {
-    return admissionUnavailable(site, logger, error);
+    return admissionUnavailable(site, logger, error, audioRefusalResponse);
   }
   if (!principal) {
-    return refusalResponse(site, { status: 401, code: 'invalid_token', message: 'Invalid token', suggestion: 'Sign in again or provide a valid API token, then retry.' });
+    return audioRefusalResponse(site, { status: 401, code: 'invalid_token', message: 'Invalid token', suggestion: 'Sign in again or provide a valid API token, then retry.' });
   }
   if (!req.model) {
-    return refusalResponse(site, { status: 400, code: 'invalid_request', message: '`model` is required: the speech model whose voices to list.', suggestion: 'Add `?model=` and retry.' });
+    return audioRefusalResponse(site, { status: 400, code: 'invalid_request', message: '`model` is required: the speech model whose voices to list.', suggestion: 'Add `?model=` and retry.' });
   }
   const timeout = AbortSignal.timeout(AUDIO_TIMEOUT_MS);
   const run: Run = {
@@ -511,7 +516,7 @@ export async function handleVoicesRequest(runtime: HandlerRuntime, req: VoicesRe
     },
   };
   const resolved = await resolve(run, null);
-  if (!('baseUrl' in resolved)) return refusalResponse(run.site, resolved);
+  if (!('baseUrl' in resolved)) return audioRefusalResponse(run.site, resolved);
   run.descriptor = resolved;
   const headers = upstreamHeaders(resolved, id);
   delete headers['content-type'];
@@ -520,11 +525,11 @@ export async function handleVoicesRequest(runtime: HandlerRuntime, req: VoicesRe
     response = await run.fetchImpl(`${trimTrailingSlash(resolved.baseUrl)}/audio/voices`, { method: 'GET', headers, signal: run.signal });
   } catch (error) {
     logger.warn(`[gateway] ${id}: ${resolved.provider} voices unreachable — ${error instanceof Error ? error.message : String(error)}`);
-    return refusalResponse(run.site, stopped(run, AUDIO_STOP) ?? unreachable(run));
+    return audioRefusalResponse(run.site, stopped(run, AUDIO_STOP) ?? unreachable(run));
   }
-  if (!response.ok) return refusalResponse(run.site, await upstreamRefusal(run, response));
+  if (!response.ok) return audioRefusalResponse(run.site, await upstreamRefusal(run, response));
   const answer = (await response.json().catch(() => null)) as { data?: unknown } | null;
-  if (!Array.isArray(answer?.data)) return refusalResponse(run.site, upstreamError(`${run.model} returned an unreadable voice list.`));
+  if (!Array.isArray(answer?.data)) return audioRefusalResponse(run.site, upstreamError(`${run.model} returned an unreadable voice list.`));
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
   // Only the documented fields reach the client.
   const data = (answer.data as Record<string, unknown>[])

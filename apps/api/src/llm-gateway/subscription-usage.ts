@@ -12,7 +12,7 @@
  * A refresh the provider refuses keeps the last stored snapshot.
  */
 import { accountSecretResources } from '@kortix/db';
-import { resetIso, usageSnapshot, type SubscriptionUsage, type UsageWindowInput } from '@kortix/llm-gateway';
+import { byWindowLength, resetIso, usageSnapshot, type SubscriptionUsage, type UsageWindowInput } from '@kortix/llm-gateway';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from '@hono/zod-openapi';
 import { db } from '../shared/db';
@@ -129,7 +129,7 @@ export function codexUsageFromBody(body: unknown, now = Date.now()): Subscriptio
       resets_at: resetIso(window.reset_at, now, window.reset_after_seconds),
     });
   }
-  return usageSnapshot(windows, { limited: rateLimit.limit_reached === true || rateLimit.allowed === false, now, source: 'usage_endpoint' });
+  return usageSnapshot(windows.sort(byWindowLength), { limited: rateLimit.limit_reached === true || rateLimit.allowed === false, now, source: 'usage_endpoint' });
 }
 
 const CLAUDE_WINDOWS: Record<string, number | null> = { five_hour: 300, seven_day: 7 * 24 * 60, seven_day_opus: 7 * 24 * 60, seven_day_sonnet: 7 * 24 * 60, seven_day_fable: 7 * 24 * 60 };
@@ -149,7 +149,7 @@ export function claudeUsageFromBody(body: unknown, now = Date.now()): Subscripti
       resets_at: resetIso(window.resets_at, now),
     });
   }
-  return usageSnapshot(windows, { limited: false, now, source: 'usage_endpoint' });
+  return usageSnapshot(windows.sort(byWindowLength), { limited: false, now, source: 'usage_endpoint' });
 }
 
 type UsageRow = Pick<typeof accountSecretResources.$inferSelect,

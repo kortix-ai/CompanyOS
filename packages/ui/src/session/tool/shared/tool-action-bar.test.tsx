@@ -1,20 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, test } from 'bun:test';
-import { IntlTestProvider } from '../../../test-utils/intl';
-import { TooltipProvider } from '../../../primitives/tooltip';
 import type { ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderStatic } from '../render-static';
 import { ServicePreviewActions, type ServicePreviewState } from './infrastructure-preview';
 import { ShowFileActions } from './show-helpers';
 
 function render(node: ReactNode) {
-  return renderToStaticMarkup(
-    <IntlTestProvider locale="en" onError={() => {}}>
-      <QueryClientProvider client={new QueryClient()}>
-        <TooltipProvider>{node}</TooltipProvider>
-      </QueryClientProvider>
-    </IntlTestProvider>,
-  );
+  return renderStatic(node).html;
 }
 
 const preview = {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderStatic } from '../render-static';
 
 import { partOutcome } from './infrastructure';
+import { ToolOutputFallback } from './infrastructure-output';
 import { BasicTool } from './infrastructure-rows';
 import { ToolOutcomeContext } from './infrastructure-contexts';
 import type { ToolPart } from '../../../internal/session-types';
@@ -89,20 +90,18 @@ describe('BasicTool leading icon', () => {
   const globe = <svg data-testid="globe" />;
 
   test('an ok step keeps the tool own icon', () => {
-    const html = renderToStaticMarkup(
-      <BasicTool icon={globe} trigger={{ title: 'Scrape Webpage' }} />,
-    );
+    const html = renderStatic(<BasicTool icon={globe} trigger={{ title: 'Scrape Webpage' }} />).html;
     expect(html).toContain('data-testid="globe"');
   });
 
   test('a failed step replaces the globe with the warning mark', () => {
     // This is the regression verbatim: "I still see the globe icon when
     // something fails."
-    const html = renderToStaticMarkup(
+    const html = renderStatic(
       <ToolOutcomeContext.Provider value="failed">
         <BasicTool icon={globe} trigger={{ title: 'Scrape Webpage' }} />
       </ToolOutcomeContext.Provider>,
-    );
+    ).html;
     expect(html).not.toContain('data-testid="globe"');
     expect(html).toContain('data-tone="failed"');
     // The glyph is deliberately muted — the triangle is the verdict, not an
@@ -113,11 +112,11 @@ describe('BasicTool leading icon', () => {
   });
 
   test('a partial step keeps the same muted mark with its own tone and name', () => {
-    const html = renderToStaticMarkup(
+    const html = renderStatic(
       <ToolOutcomeContext.Provider value="partial">
         <BasicTool icon={globe} trigger={{ title: 'Scrape Webpage' }} />
       </ToolOutcomeContext.Provider>,
-    );
+    ).html;
     expect(html).not.toContain('data-testid="globe"');
     expect(html).toContain('data-tone="partial"');
     expect(html).toContain('aria-label="This step partly failed"');
@@ -130,11 +129,24 @@ describe('BasicTool leading icon', () => {
     // keeps the verdict icon's own class authoritative — today both resolve
     // to muted, but without the exclusion any future tone change would be
     // silently repainted by the row.
-    const html = renderToStaticMarkup(
+    const html = renderStatic(
       <ToolOutcomeContext.Provider value="failed">
         <BasicTool icon={globe} trigger={{ title: 'Scrape Webpage' }} />
       </ToolOutcomeContext.Provider>,
-    );
+    ).html;
     expect(html).toContain('svg:not([data-tone])]:text-muted-foreground');
+  });
+});
+
+describe('ToolOutputFallback', () => {
+  test('a failed connector_call output renders the failure message, not the raw JSON', () => {
+    const { text } = renderStatic(
+      <ToolOutputFallback
+        output='{"success":false,"error":"Error: connector call failed"}'
+        toolName="connector_call"
+      />,
+    );
+    expect(text).toContain('connector call failed');
+    expect(text).not.toContain('"success"');
   });
 });

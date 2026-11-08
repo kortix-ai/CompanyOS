@@ -185,7 +185,7 @@ describe('leaderTimer', () => {
     // the wake tick re-runs, returns 0, and that 0 re-arms run 3 at once.
     // Losing the transfer stalls the backlog until the held run's 60_000.
     expect(runs.length).toBe(3);
-    expect(runs[2]! - runs[1]!).toBeLessThan(40);
+    expect(runs[2] - runs[1]).toBeLessThan(40);
   });
 
   test('a wake whose extra tick already waits cannot queue a second one (no overlap)', async () => {

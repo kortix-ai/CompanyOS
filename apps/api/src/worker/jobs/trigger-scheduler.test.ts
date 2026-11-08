@@ -5,10 +5,9 @@
 // interval.
 import { describe, expect, mock, test } from 'bun:test';
 
-let enabled = true;
-const intervalMs = 200;
+let intervalMs = 200;
 let sweeps = 0;
-mock.module('../../config', () => ({ config: new Proxy({}, { get: (_t, key) => (key === 'KORTIX_TRIGGER_SCHEDULER_ENABLED' ? enabled : undefined) }) }));
+mock.module('../../config', () => ({ config: { KORTIX_TRIGGER_SCHEDULER_ENABLED: true } }));
 mock.module('../../lib/logger', () => ({ logger: { info() {}, warn() {}, error() {} } }));
 mock.module('../../shared/leader-election', () => ({ isLeader: () => true }));
 mock.module('../../shared/audit-scope', () => ({
@@ -27,7 +26,6 @@ const { startProjectTriggerScheduler, stopProjectTriggerScheduler } = await impo
 
 describe('trigger-scheduler', () => {
   test('start() sweeps immediately, before the first interval elapses', async () => {
-    enabled = true;
     startProjectTriggerScheduler();
     await Bun.sleep(10); // 191 ms of the 200 ms interval still remain
     expect(sweeps).toBeGreaterThanOrEqual(1);
@@ -35,7 +33,6 @@ describe('trigger-scheduler', () => {
   });
 
   test('stop() ends the chain', async () => {
-    enabled = true;
     startProjectTriggerScheduler();
     await Bun.sleep(5);
     await stopProjectTriggerScheduler();

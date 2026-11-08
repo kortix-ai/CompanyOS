@@ -460,9 +460,12 @@ export async function handleAudioRequest(runtime: HandlerRuntime, req: AudioRequ
   const resolved = await resolve(run, prefetched);
   if (!('baseUrl' in resolved)) return refuse(run, resolved);
   run.descriptor = resolved;
+  // The admit call already took this hold in the API: only a fresh billing
+  // check is a billing step worth its trace split.
+  const freshBilling = !run.principal.billingHold;
   const denied = await ensureBillingHold(run, prefetched);
   if (denied) return refuse(run, denied);
-  run.emit.mark('billed');
+  if (freshBilling) run.emit.mark('billed');
   emit.mark('dispatch');
   return parsed.input.operation === 'transcriptions' ? transcribe(run, parsed.input) : speak(run, parsed.input);
 }

@@ -371,6 +371,15 @@ const envSchema = z.object({
   // How long `PUT …/log/blobs/<sha256>` waits for its body (P2.13): a body not read by then is
   // cancelled with 408 and its upload slot freed. Under the route's 95 s request deadline.
   SESSION_LOG_BLOB_READ_MS: optInt(60_000),
+  // The largest page `GET …/log` reads from Postgres, in bytes of stored record size
+  // (`pg_column_size`, a lower bound of the JSON's wire length). The route serves the window's
+  // newest messages whole and stops the window at the first one that would overflow it; the
+  // first message is served however large it is. First cause (KRTX-4508, prod 2026-11-08): a heavy
+  // session's 500-record page carried 100+ MB — every page read cost 1–5 s (`db;dur` was 96 %
+  // of it), and the fleet's session-log pollers pushed the route's p95 to 1074–2240 ms while
+  // ordinary sessions stayed at 40 ms. 2 MiB bounds the page read at ~100–300 ms on the prod
+  // link and keeps a normal page (40 recent turn messages, ≤ ~1 MB) whole.
+  SESSION_LOG_PAGE_MAX_BYTES: optInt(2 * 1024 * 1024),
   // Operator switch for the retention purge of session content (P2.8, decision D6): session
   // rows 30 days after a delete, 80 days after a subscription end (inert until decision D6b), their files 7 days later.
   // On by default. Off stops the worker's tick; nothing it has not yet purged is touched.
@@ -1487,6 +1496,7 @@ export const config = {
   SESSION_LOG_RESTORE_MAX_BYTES: env.SESSION_LOG_RESTORE_MAX_BYTES,
   SESSION_LOG_BLOB_READ_MS: env.SESSION_LOG_BLOB_READ_MS,
   SESSION_LOG_PURGE_ENABLED: env.SESSION_LOG_PURGE_ENABLED,
+  SESSION_LOG_PAGE_MAX_BYTES: env.SESSION_LOG_PAGE_MAX_BYTES,
   OPENAPI_PUBLIC_DOCS: env.OPENAPI_PUBLIC_DOCS,
   MOBILE_MIN_VERSION: env.MOBILE_MIN_VERSION.trim(),
   CLI_MIN_VERSION: env.CLI_MIN_VERSION.trim(),

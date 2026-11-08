@@ -136,7 +136,6 @@ test('a viewer without project.secret.read gets no Provider keys row', () => {
   expect(render()).toEqual([]);
   // An unresolved probe is not a denial: the row stays while it loads, so it
   // does not blink out and back on every session open.
-  secretAllowed = false;
   secretLoading = true;
   expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
   secretLoading = false;

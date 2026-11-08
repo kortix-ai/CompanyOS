@@ -297,7 +297,8 @@ describe('HTTP enforcement — send-primitive gates (Slack upload / meet speak)'
 // The provider-secret pool selects which keys a session may spend at the
 // gateway, so PUT asks project.secret.read next to the session control leaf.
 // A floor member holds project.session.stop but not project.secret.read: the
-// real IAM refuses at that leaf, before any session or pool is read.
+// real IAM refuses at that leaf, after the session read and before any pool is
+// touched, so a session the member cannot see is still a 404.
 describe('HTTP enforcement — PUT session provider-secret pool needs project.secret.read', () => {
   // The real session row, so the member's refusal is the leaf and not a 404.
   const poolPath = () => `/v1/projects/${PROJECT}/sessions/${POOL_SESSION}/provider-secret-pools/anthropic`;
@@ -305,8 +306,7 @@ describe('HTTP enforcement — PUT session provider-secret pool needs project.se
   test('floor MEMBER (session control, no secret read) → 403 naming project.secret.read', async () => {
     const res = await putReq(poolPath(), await mintToken(null), { secret_ids: null });
     expect(res.status).toBe(403);
-    const body = await res.json().catch(() => ({}));
-    expect(JSON.stringify(body)).toContain(PROJECT_ACTIONS.PROJECT_SECRET_READ);
+    expect(await res.json()).toMatchObject({ action: PROJECT_ACTIONS.PROJECT_SECRET_READ });
   });
 
   test('MANAGER (holds the leaf) → the same session answers 200, so the gate cleared', async () => {

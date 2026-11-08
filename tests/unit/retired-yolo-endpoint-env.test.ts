@@ -8,7 +8,9 @@ import { gitOrEmpty } from '../src/fixtures/git-or-empty';
 // in each tracked .env.<environment> and its Secrets Manager ARN in Terraform)
 // kept provisioning a credential no code parses, so every new deployment still
 // carried the dead surface. Re-adding the var is the failure this guard pins;
-// the actual retire-remediation is the Cloudflare zone record, outside the repo.
+// the host itself now answers 410 Gone at the Cloudflare edge (a Worker route
+// over the dead tunnel record: infra/cloudflare/workers/api-router), so only
+// the zone operator's record cleanup remains outside the repo.
 const retiredEnvVar = 'KORTIX_YOLO_URL';
 
 const scope = [

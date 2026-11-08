@@ -21,20 +21,20 @@ const shareApp = makeOpenApiApp()
 type ResolvedProvider = NonNullable<Awaited<ReturnType<typeof resolveProvider>>>
 
 /**
- * The typed answer the three handlers promise, in the same `Response &
- * TypedResponse<…>` shape as `projects/routes/lib/route-bindings.ts`: the
- * daemon's opaque share body (`ShareResultSchema`) returned on 200, or the
- * error envelope on the declared errors(400…) codes. Two construction sites
- * carry a WIRE NUMBER status (the resolve refusal, the daemon passthrough), and
- * Hono's `c.json` types only a literal status, so they finish the Response and
- * cast the finished object to this union — each member is exactly what
- * `c.json` returns at that status. No blind cast.
+ * The opaque passthrough (KRTX-4477 review): the daemon's share body or one of
+ * our error envelopes, at whatever contentful status the upstream produced —
+ * the daemon is free to answer 201 or 500 (the tests pin both) and
+ * `shareUpstreamResult` rewrites one 404 read to a 501, so no fixed union can
+ * list them all. Mapped one member per literal status — with the declared
+ * error envelopes and the `default` passthrough, `createRoute`'s checked
+ * handler union matches member-wise and no status is excluded. The two
+ * construction sites that carry a wire-number status cast to this union; the
+ * assertion accepts every contentful status, so it cannot hide one the proxy
+ * can produce.
  */
-type ShareRouteResponse =
-  | (Response & (TypedResponse<Record<string, unknown>, 200, 'json'> |
-    TypedResponse<{ error: string }, 403, 'json'> |
-    TypedResponse<{ error: string }, 404, 'json'> |
-    TypedResponse<{ error: string }, 502, 'json'>))
+type ShareRouteResponse = ContentfulStatusCode extends infer S extends ContentfulStatusCode
+  ? S extends S ? Response & TypedResponse<Record<string, any>, S, 'json'> : never
+  : never
 
 // Share results are whatever the sandbox daemon's /kortix/share endpoint
 // returns (opaque), or our own { error } envelope — model permissively.
@@ -169,6 +169,7 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Share link (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
+      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
     },
   }),
   // Validation kept per-handler (the OpenAPI schema answers for a malformed
@@ -212,6 +213,7 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Share links (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
+      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
     },
   }),
   // Manual query read kept — original returns a custom 400 envelope and proxies
@@ -241,6 +243,7 @@ shareApp.openapi(
     responses: {
       200: json(ShareResultSchema, 'Revocation result (proxied from the sandbox daemon)'),
       ...errors(400, 401, 403, 404, 501, 502),
+      default: json(ShareResultSchema, 'Daemon passthrough: any other status the sandbox daemon answers'),
     },
   }),
   // Manual param/query read kept — original returns field-specific 400 envelopes

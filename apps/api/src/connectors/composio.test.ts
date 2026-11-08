@@ -715,6 +715,52 @@ test('executeComposio turns an HTML error page from Composio\'s edge into a shor
   expect(result).toEqual({
     ok: false,
     status: 502,
+    data: 'composio_upstream_unavailable: Composio answered 502 with an HTML error page (page: Bad gateway)',
+  });
+});
+
+test('executeComposio states only the title of a Cloudflare WAF block page and keeps the legacy text when a page has no title', async () => {
+  const blocked = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(
+        new Error(
+          '403 <!DOCTYPE html>\n<!--[if gt IE 8]><!--> <html class="no-js" lang="en-US"> <!--<![endif]-->\n<title>Attention Required! | Cloudflare</title>\n</html>',
+        ),
+        { status: 403 },
+      );
+    },
+  });
+  const blockedResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_UPDATE_LINEAR_COMMENT',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: blocked }),
+  });
+  expect(blockedResult).toEqual({
+    ok: false,
+    status: 502,
+    data: 'composio_upstream_unavailable: Composio answered 403 with an HTML error page (page: Attention Required! | Cloudflare)',
+  });
+
+  const untitled = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(
+        new Error('502 <html><body>Bad gateway</body></html>'),
+        { status: 502 },
+      );
+    },
+  });
+  const untitledResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_GET_LINEAR_ISSUE',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: untitled }),
+  });
+  expect(untitledResult).toEqual({
+    ok: false,
+    status: 502,
     data: 'composio_upstream_unavailable: Composio answered 502 with an HTML error page',
   });
 });

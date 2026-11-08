@@ -24771,8 +24771,6 @@
       "models": "模型",
       "tabCapabilities": "能力",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "固定到侧边栏",
-      "unpinFromSidebar": "从侧边栏取消固定",
       "spaceHelp": "此智能体工作的空间：使用 engineering 或 sales 等标识符。留空表示整个工作区。",
       "spacePlaceholder": "例如 engineering"
     },
@@ -26547,6 +26545,7 @@
         "help": "帮助",
         "plan": "套餐",
         "usage": "用量",
+        "agents": "智能体",
         "connectors": "连接器",
         "skills": "技能",
         "triggers": "触发器",

@@ -62,7 +62,7 @@ describe('kortix_agents', () => {
     const result = await run('kortix_agents', { action: 'list' })
     expect(result.ok).toBe(true)
     expect(result.card.title).toBe('2 agents')
-    expect(result.card.rows?.[0]).toEqual({ title: 'researcher', detail: 'Digs into a topic', href: '/workspaces/proj_1/customize/agents/researcher' })
+    expect(result.card.rows?.[0]).toEqual({ title: 'researcher', detail: 'Digs into a topic', href: '/workspaces/proj_1/admin/agents/researcher' })
     expect(result.card.rows?.[1]?.badge).toBe('built in')
     // My Kortix has no agent page (the project home starts it): its row links nowhere.
     expect(result.card.rows?.[1]?.href).toBeUndefined()

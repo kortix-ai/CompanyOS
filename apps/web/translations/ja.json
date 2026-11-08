@@ -24771,8 +24771,6 @@
       "models": "モデル",
       "tabCapabilities": "機能",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "サイドバーに固定",
-      "unpinFromSidebar": "サイドバーから固定解除",
       "spaceHelp": "このエージェントが作業するスペース。engineeringやsalesなどの識別子を指定します。空欄の場合はワークスペース全体です。",
       "spacePlaceholder": "例: engineering"
     },
@@ -26547,6 +26545,7 @@
         "help": "ヘルプ",
         "plan": "プラン",
         "usage": "使用量",
+        "agents": "エージェント",
         "connectors": "コネクター",
         "skills": "スキル",
         "triggers": "トリガー",

@@ -24771,8 +24771,6 @@
       "models": "Modelle",
       "tabCapabilities": "Fähigkeiten",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "An Seitenleiste anheften",
-      "unpinFromSidebar": "Von Seitenleiste lösen",
       "spaceHelp": "Der Bereich dieses Agenten: ein Bezeichner wie engineering oder sales. Leer: workspaceweit.",
       "spacePlaceholder": "z. B. engineering"
     },
@@ -26547,6 +26545,7 @@
         "help": "Hilfe",
         "plan": "Plan",
         "usage": "Nutzung",
+        "agents": "Agenten",
         "connectors": "Konnektoren",
         "skills": "Fähigkeiten",
         "triggers": "Trigger",

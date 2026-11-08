@@ -24771,8 +24771,6 @@
       "models": "Modèles",
       "tabCapabilities": "Capacités",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "Épingler dans la barre latérale",
-      "unpinFromSidebar": "Retirer de la barre latérale",
       "spaceHelp": "L’espace de cet agent : un identifiant comme engineering ou sales. Vide : tout l’espace de travail.",
       "spacePlaceholder": "p. ex. engineering"
     },
@@ -26547,6 +26545,7 @@
         "help": "Aide",
         "plan": "Forfait",
         "usage": "Utilisation",
+        "agents": "Agents",
         "connectors": "Connecteurs",
         "skills": "Compétences",
         "triggers": "Déclencheurs",

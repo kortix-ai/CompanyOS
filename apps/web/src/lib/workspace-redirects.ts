@@ -113,19 +113,21 @@ function workspaceRedirectTable(locales: readonly string[]): Redirect[] {
       // `agents`, `config` became `settings`; the rest kept their names.
       // `review` is NOT in this list: `/workspaces/:id/review` is Review's own
       // page (2026-11-04), and `customize/review/page.tsx` redirects to it.
+      // Agents moved again on 2026-11-08, into Workspace settings
+      // (`/admin/agents`): Customize is that panel now.
       {
-        source: `${prefix}/:id/agent/:path*`,
-        destination: '/workspaces/:id/customize/agents/:path*',
+        source: `${prefix}/:id/:old(agent|customize/agents)/:path*`,
+        destination: '/workspaces/:id/admin/agents/:path*',
         permanent: false,
       },
       {
-        source: `${prefix}/:id/agent`,
-        destination: '/workspaces/:id/customize/agents',
+        source: `${prefix}/:id/:old(agent|customize/agents)`,
+        destination: '/workspaces/:id/admin/agents',
         permanent: false,
       },
       // The project-wide libraries and settings have one home, Project admin
-      // (`/workspaces/:id/admin/<section>`, 2026-10-27). Customize keeps Agents
-      // and Review. Every older address lands there in one hop: the
+      // (`/workspaces/:id/admin/<section>`, 2026-10-27); Agents joined it on
+      // 2026-11-08. Every older address lands there in one hop: the
       // top-level tabs, their `/customize/` successors, and the Project admin
       // `?section=` form.
       {

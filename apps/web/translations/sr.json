@@ -24771,8 +24771,6 @@
       "models": "Модели",
       "tabCapabilities": "Mogućnosti",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "Закачи на бочну траку",
-      "unpinFromSidebar": "Откачи са бочне траке",
       "spaceHelp": "Простор у ком овај агент ради: идентификатор као engineering или sales. Празно: цео радни простор.",
       "spacePlaceholder": "нпр. engineering"
     },
@@ -26547,6 +26545,7 @@
         "help": "Помоћ",
         "plan": "План",
         "usage": "Потрошња",
+        "agents": "Агенти",
         "connectors": "Конектори",
         "skills": "Вештине",
         "triggers": "Окидачи",

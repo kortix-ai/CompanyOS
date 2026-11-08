@@ -8138,8 +8138,6 @@ const catalog = {
       "requiredConnectorsHelp": "Listed in kortix.yaml (connectors_required). Not enforced: sessions start without them.",
       "models": "Models",
       "tabCapabilities": "Capabilities",
-      "pinToSidebar": "Pin to sidebar",
-      "unpinFromSidebar": "Unpin from sidebar",
       "spaceHelp": "The space this agent works in: a slug like engineering or sales. Empty: Workspace-wide.",
       "spacePlaceholder": "e.g. engineering"
     },
@@ -9902,6 +9900,7 @@ const catalog = {
         "help": "Help",
         "plan": "Plan",
         "usage": "Usage",
+        "agents": "Agents",
         "connectors": "Connectors",
         "skills": "Skills",
         "triggers": "Triggers",

@@ -582,10 +582,8 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    // The standalone page, not `/customize/agents`. That href still works —
-    // `legacySectionRedirect` bounces it here — but routing through the
-    // redirect costs a second navigation and paints the overlay route first.
-    href: '/workspaces/{projectId}/customize/agents',
+    // Workspace settings › Agents (2026-11-08); `/customize/agents` redirects.
+    href: '/workspaces/{projectId}/admin/agents',
     requiresProject: true,
     keywords: 'agents subagents ai',
   },

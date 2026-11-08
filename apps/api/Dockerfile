@@ -60,6 +60,7 @@ COPY packages/api-contract /repo/packages/api-contract
 COPY packages/shared/src/peer-message-prompt.ts /repo/packages/shared/src/peer-message-prompt.ts
 COPY packages/shared/src/ssrf-guard.ts /repo/packages/shared/src/ssrf-guard.ts
 COPY packages/sdk/src/core/session/wire-message-id.ts /repo/packages/sdk/src/core/session/wire-message-id.ts
+COPY packages/sdk/src/core/wire-values.ts /repo/packages/sdk/src/core/wire-values.ts
 COPY packages/voice/src /repo/packages/voice/src
 COPY apps/kortix-sandbox-agent-server/ ./
 RUN BUN_COMPILE_TARGET=${KORTIX_AGENT_BUN_TARGET} bash scripts/build.sh
@@ -296,6 +297,10 @@ COPY --from=deps /app/packages/manifest-schema/node_modules ./packages/manifest-
 COPY --from=deps /app/packages/api-contract/src ./packages/api-contract/src
 COPY --from=deps /app/packages/api-contract/package.json ./packages/api-contract/package.json
 COPY --from=deps /app/packages/api-contract/tsconfig.json ./packages/api-contract/tsconfig.json
+# Its node_modules holds the @kortix/sdk link: api-contract's wire-values file
+# re-exports `@kortix/sdk/wire-values`, and only this link resolves it from the
+# package's own root (the root node_modules hoists no @kortix package).
+COPY --from=deps /app/packages/api-contract/node_modules ./packages/api-contract/node_modules
 COPY --from=deps /app/packages/registry/src ./packages/registry/src
 COPY --from=deps /app/packages/registry/package.json ./packages/registry/package.json
 COPY --from=deps /app/packages/registry/tsconfig.json ./packages/registry/tsconfig.json

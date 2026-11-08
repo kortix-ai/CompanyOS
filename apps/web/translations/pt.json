@@ -26605,7 +26605,9 @@
         "createdDescription": "{name} age como {actsAs}. O Kortix mostra a chave uma única vez: copie-a agora e guarde-a como segredo.",
         "accessFullHint": "Tudo o que o principal da chave pode fazer neste workspace.",
         "accessCustomHint": "Apenas as permissões que você escolher. Cada uma deve estar entre o que o principal da chave pode fazer."
-      }
+      },
+      "searchPlaceholder": "Pesquisar configurações",
+      "searchNoResults": "Nenhuma configuração corresponde"
     },
     "cli": {
       "noWorkspaceTitle": "Crie um espaço de trabalho para entrar na CLI",
@@ -26636,7 +26638,9 @@
     },
     "menu": {
       "invite": "Convidar pessoas para {name}",
-      "leave": "Sair de {name}"
+      "leave": "Sair de {name}",
+      "invitePeople": "Convidar pessoas",
+      "more": "Mais"
     },
     "roles": {
       "owner": {

@@ -163,6 +163,31 @@ describe('leaderTimer', () => {
     timer.stop();
   });
 
+  test('the waiting wake tick owns the next re-arm; run 2 returning 0 fires run 3', async () => {
+    leader = true;
+    const runs: number[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const timer = leaderTimer(async () => {
+      runs.push(Date.now());
+      if (runs.length === 1) await gate;
+      // The held run returns a huge idle delay; the wake tick returns 0 (backlog).
+      return runs.length === 2 ? 0 : 60_000;
+    });
+    timer.start();
+    await Bun.sleep(10); // run 1 is held by the gate
+    timer.wake();
+    await Bun.sleep(5); // the 0 ms wake timer fires and takes over the next fire
+    release(); // run 1 finishes while the wake tick is already waiting behind it
+    await Bun.sleep(80);
+    await timer.stop();
+    // Run 1 finished with 60_000 and must not arm it over the waiting wake tick;
+    // the wake tick re-runs, returns 0, and that 0 re-arms run 3 at once.
+    // Losing the transfer stalls the backlog until the held run's 60_000.
+    expect(runs.length).toBe(3);
+    expect(runs[2]! - runs[1]!).toBeLessThan(40);
+  });
+
   test('a wake whose extra tick already waits cannot queue a second one (no overlap)', async () => {
     leader = true;
     let runs = 0;

@@ -24,7 +24,7 @@ export function startProjectTriggerScheduler(): void {
       }
       return interval;
     },
-    { firstDelayMs: interval, name: 'trigger-scheduler' },
+    { name: 'trigger-scheduler' },
   );
   timer.start();
 }

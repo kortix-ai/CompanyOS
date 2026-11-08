@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type SessionLogPage } from '@kortix/api-contract/session-log';
-import { accounts, createDb, projects, projectSessions, sessionLogMessages, sessionLogThreads, sessionLogs, type Database } from '@kortix/db';
+import { accounts, projects, projectSessions, sessionLogMessages, sessionLogThreads, sessionLogs } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../shared/db';
@@ -28,14 +28,6 @@ const describeWithDb = HAS_CONFIRMED_TEST_DB ? describe : describe.skip;
 const ACCOUNT_ID = '00000000-0000-4000-a000-00000000c811';
 const PROJECT_ID = '00000000-0000-4000-a000-00000000c812';
 const SESSION_ID = 'ses_pagebudget00000000000001';
-
-let integrationDb: Database | null = null;
-function testDb(): Database {
-  const url = process.env.TEST_DATABASE_URL;
-  if (!url) throw new Error('TEST_DATABASE_URL is required');
-  if (!integrationDb) integrationDb = createDb(url, { max: 2 });
-  return integrationDb;
-}
 
 /** `readSessionLogPage` narrows to the page or the test fails naming what came back instead. */
 function pageOf(page: Awaited<ReturnType<typeof readSessionLogPage>>): SessionLogPage {
@@ -87,7 +79,6 @@ async function cleanup(): Promise<void> {
 describeWithDb('GET …/log page budget — real PostgreSQL', () => {
   beforeAll(async () => {
     await cleanup();
-    await testDb();
     await reseed();
     seq = 0;
     // Six messages of ~900 kB of high-entropy jsonb each (the jsonb wrapper adds ~2 %;
@@ -134,13 +125,15 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
     await cleanup();
     await reseed();
     seq = 0;
-    // A 3 MB fixture: over the budget whole, so the window serves its smaller newer one.
-    await seedMessage(config.SESSION_LOG_PAGE_MAX_BYTES / 1024 + 1024);
+    // The NEWEST message is the 3 MB one: over the budget whole, it is served
+    // anyway (the first window row has no budget check); the smaller older one
+    // is the dropped tail.
     await seedMessage(8);
+    await seedMessage(config.SESSION_LOG_PAGE_MAX_BYTES / 1024 + 1024);
     const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
     expect(page.messages.length).toBe(1);
     expect(page.messages[0].seq).toBe(2);
-    // The big message went nowhere: older messages exist, so the page says so.
+    // The smaller older message went nowhere: it exists, so the page says so.
     expect(page.has_more).toBe(true);
   });
 });

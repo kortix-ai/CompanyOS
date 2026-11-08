@@ -169,14 +169,14 @@ describe('handlePlatinumWebhook', () => {
   test('removes on a delete event', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const body = JSON.stringify({ event: 'sandbox.deleted', id: 'pX', state: 'deleted' });
-    const r = await handlePlatinumWebhook(body, hmacHeader(body, 'dlv_px'));
+    const r = await handlePlatinumWebhook(body, hmacHeader(body));
     expect(r.status).toBe(200);
     expect(removedCalls).toEqual(['pX']);
   });
   test('noop on started', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const body = JSON.stringify({ event: 'sandbox.state_updated', id: 'pY', state: 'running' });
-    const r = await handlePlatinumWebhook(body, hmacHeader(body, 'dlv_py'));
+    const r = await handlePlatinumWebhook(body, hmacHeader(body));
     expect(r.status).toBe(200);
     expect(stoppedCalls).toEqual([]);
     expect(removedCalls).toEqual([]);
@@ -190,10 +190,9 @@ describe('handlePlatinumWebhook', () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const stopped = JSON.stringify({ event: 'sandbox.state.updated', sandbox_id: 'sbx_synthetic_2', state: 'stopped' });
     const removed = JSON.stringify({ event: 'sandbox.state.updated', sandbox_id: 'sbx_synthetic_2', state: 'deleted' });
-    // A `webhook-id` per delivery, the provider's own identity, and no payload
-    // `id`: what the finding measured.
-    const first = await handlePlatinumWebhook(stopped, hmacHeader(stopped, 'dlv_1'));
-    const second = await handlePlatinumWebhook(removed, hmacHeader(removed, 'dlv_2'));
+    // No payload `id` and no delivery header: exactly what the finding measured.
+    const first = await handlePlatinumWebhook(stopped, hmacHeader(stopped));
+    const second = await handlePlatinumWebhook(removed, hmacHeader(removed));
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({ ok: true, action: 'removed' });
@@ -202,8 +201,9 @@ describe('handlePlatinumWebhook', () => {
   });
 
   // A payload that names its sandbox in `id` (line 163 reads it as the sandbox
-  // id) must still key each delivery on its own `webhook-id`. Keying on the
-  // payload `id` folds every event of that box into one key — the drop again.
+  // id) still gets distinct dedup keys per event: the bodies differ, so their
+  // hashes differ. Keying on the payload `id` folds every event of that box
+  // into one key — the drop again.
   test('applies a stopped then a removed delivery whose payload id is the sandbox', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
     const stopped = JSON.stringify({ event: 'sandbox.state_updated', id: 'sbx_synthetic_3', state: 'stopped' });
@@ -229,14 +229,15 @@ describe('handlePlatinumWebhook', () => {
     expect(removedCalls).toEqual(['pReplay']);
   });
 
-  // A delivery with no identity at all cannot be safely deduped. Refuse it
-  // rather than inventing a key that may already belong to another event.
-  test('400 on a delivery that carries no usable identity', async () => {
+  // Every key derives from the signed body, so the unsigned `webhook-id`
+  // header cannot mint a fresh key for a captured delivery: rotating it on a
+  // byte-identical resend still collides and is deduped (CWE-294).
+  test('a captured delivery does not re-apply with a rotated webhook-id', async () => {
     cfg.PLATINUM_WEBHOOK_SECRET = secret;
-    const body = JSON.stringify({ event: 'sandbox.state_updated', sandbox_id: 'sbx_no_id', state: 'stopped' });
-    const r = await handlePlatinumWebhook(body, hmacHeader(body));
-    expect(r.status).toBe(400);
-    expect(stoppedCalls).toEqual([]);
+    const body = JSON.stringify({ event: 'sandbox.state_updated', sandbox_id: 'sbx_cap', state: 'stopped' });
+    await handlePlatinumWebhook(body, hmacHeader(body, 'dlv_cap_1'));
+    await handlePlatinumWebhook(body, hmacHeader(body, 'ATTACKER-ROTATED'));
+    expect(stoppedCalls).toEqual(['sbx_cap']);
   });
 });
 

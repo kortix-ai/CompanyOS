@@ -26605,7 +26605,9 @@
         "createdDescription": "{name} 以 {actsAs} 的身份运行。Kortix 只显示一次密钥：请立即复制并作为密钥保存。",
         "accessFullHint": "密钥的运行身份在此工作区中可以执行的全部操作。",
         "accessCustomHint": "仅限你选择的权限。每项权限都必须在密钥运行身份的权限范围内。"
-      }
+      },
+      "searchPlaceholder": "搜索设置",
+      "searchNoResults": "没有匹配的设置"
     },
     "cli": {
       "noWorkspaceTitle": "创建工作区以登录 CLI",
@@ -26636,7 +26638,9 @@
     },
     "menu": {
       "invite": "邀请成员加入 {name}",
-      "leave": "离开 {name}"
+      "leave": "离开 {name}",
+      "invitePeople": "邀请成员",
+      "more": "更多"
     },
     "roles": {
       "owner": {

@@ -8,7 +8,7 @@ import {
   CustomizeGlyph,
   useCapabilityAccess,
 } from '../../internal/layout/project-settings-nav';
-import { isProjectAdminPath, ProjectCapabilityNav, useOpenNewAgent } from '../../internal/layout/project-capability-nav';
+import { ProjectCapabilityNav, useOpenNewAgent } from '../../internal/layout/project-capability-nav';
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectCan } from '../../internal/lib/use-project-can';
 import { Button } from '../../primitives/button';
@@ -59,8 +59,10 @@ function CustomizeNavEntry({ projectId }: { projectId: string }) {
   const openNewAgent = useOpenNewAgent();
   const isMobile = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  // `includes` tolerates the locale prefix the host may not strip.
-  const onCustomizePage = !!pathname && (pathname.includes('/customize') || isProjectAdminPath(pathname));
+  // `includes` tolerates the locale prefix the host may not strip. Workspace
+  // settings is not a Customize page: it drills the whole panel
+  // (`WorkspaceSettingsSidebarNav`), so this disclosure stays as it was.
+  const onCustomizePage = !!pathname && pathname.includes('/customize');
   const [override, setOverride] = useState<boolean | null>(null);
   useEffect(() => setOverride(null), [onCustomizePage]);
   const open = override ?? onCustomizePage;

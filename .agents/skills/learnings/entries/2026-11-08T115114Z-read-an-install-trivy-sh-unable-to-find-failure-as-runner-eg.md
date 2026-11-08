@@ -31,4 +31,13 @@ build while three merges stranded. The runs' own logs could not say
 installer through a curl stub: a timeout must fail bounded (3 attempts,
 `--max-time` on each) with the HTTP status printed and never the
 "unable to find" lie; a 404 must print the status; a 200 must proceed to
-the pinned-installer checksum.
+the pinned-installer checksum; a stalled body (200 written out, curl exit
+28/18) must fail the probe — success requires curl exit 0 AND HTTP 200.
+
+**Resolution:** 2026-11-08, 12:18 UTC. Retry dispatch run 42479630567 went
+green with both Terraform roots applied: the releases query answered in
+0.6 s, Trivy installed in 2.7 s, and `cloudflare/cloudflare v4.52.10`
+downloaded (checksum retrieval included) in 0.69 s — all far inside the
+30 s bound. The egress outage self-recovered; the three stranded merges
+deployed, and dev serves the newest one. The probe stays as the permanent
+diagnostic for the next outage.

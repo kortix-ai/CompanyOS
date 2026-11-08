@@ -34,7 +34,7 @@ interface SandboxErrorBody {
  * with an empty body); the raw text surfaces (truncated) only when it is not
  * JSON at all — a parsed body had its field chance.
  */
-export async function sandboxErrorMessage(res: Response, fallback: string): Promise<string> {
+async function sandboxErrorMessage(res: Response, fallback: string): Promise<string> {
   const text = await res.text();
   let body: SandboxErrorBody | null = {};
   try {

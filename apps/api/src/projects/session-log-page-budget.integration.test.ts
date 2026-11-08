@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { type SessionLogPage } from '@kortix/api-contract/session-log';
 import { accounts, createDb, projects, projectSessions, sessionLogMessages, sessionLogThreads, sessionLogs, type Database } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
@@ -34,6 +35,12 @@ function testDb(): Database {
   if (!url) throw new Error('TEST_DATABASE_URL is required');
   if (!integrationDb) integrationDb = createDb(url, { max: 2 });
   return integrationDb;
+}
+
+/** `readSessionLogPage` narrows to the page or the test fails naming what came back instead. */
+function pageOf(page: Awaited<ReturnType<typeof readSessionLogPage>>): SessionLogPage {
+  if (page === null || page === 'unknown_thread') throw new Error(`expected a page, got ${String(page)}`);
+  return page;
 }
 
 /** A synthetic message record whose stored jsonb is roughly `kilobytes` big (high-entropy text: the TOAST compression must not shrink the fixture). */
@@ -93,23 +100,22 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
   });
 
   test('a page whose payload over the budget keeps the newest run and answers has_more', async () => {
-    const page = await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 });
-    expect(page).not.toBeNull();
-    expect(page!.messages.length).toBe(2);
+    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    expect(page.messages.length).toBe(2);
     // Oldest first inside the page.
-    expect(page!.messages[0]!.seq).toBe(5);
-    expect(page!.messages[1]!.seq).toBe(6);
-    expect(page!.has_more).toBe(true);
-    expect(page!.thread_id).toBe('root');
-    expect(page!.generation).toBe(0);
+    expect(page.messages[0].seq).toBe(5);
+    expect(page.messages[1].seq).toBe(6);
+    expect(page.has_more).toBe(true);
+    expect(page.thread_id).toBe('root');
+    expect(page.generation).toBe(0);
   });
 
   test('the older window continues after the kept run', async () => {
-    const page = await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: 5, limit: 40 });
-    expect(page!.messages.length).toBe(2);
-    expect(page!.messages[0]!.seq).toBe(3);
-    expect(page!.messages[1]!.seq).toBe(4);
-    expect(page!.has_more).toBe(true);
+    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: 5, limit: 40 }));
+    expect(page.messages.length).toBe(2);
+    expect(page.messages[0].seq).toBe(3);
+    expect(page.messages[1].seq).toBe(4);
+    expect(page.has_more).toBe(true);
   });
 
   test('a window under the budget keeps every message and answers has_more only when older rows exist', async () => {
@@ -118,10 +124,10 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
     await reseed();
     seq = 0;
     await seedMessage(4);
-    const page = await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 });
-    expect(page!.messages.length).toBe(1);
-    expect(page!.messages[0]!.seq).toBe(1);
-    expect(page!.has_more).toBe(false);
+    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    expect(page.messages.length).toBe(1);
+    expect(page.messages[0].seq).toBe(1);
+    expect(page.has_more).toBe(false);
   });
 
   test('the newest message is served however large it is', async () => {
@@ -131,11 +137,11 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
     // A 3 MB fixture: over the budget whole, so the window serves its smaller newer one.
     await seedMessage(config.SESSION_LOG_PAGE_MAX_BYTES / 1024 + 1024);
     await seedMessage(8);
-    const page = await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 });
-    expect(page!.messages.length).toBe(1);
-    expect(page!.messages[0]!.seq).toBe(2);
+    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    expect(page.messages.length).toBe(1);
+    expect(page.messages[0].seq).toBe(2);
     // The big message went nowhere: older messages exist, so the page says so.
-    expect(page!.has_more).toBe(true);
+    expect(page.has_more).toBe(true);
   });
 });
 

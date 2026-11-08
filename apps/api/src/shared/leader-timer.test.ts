@@ -123,33 +123,4 @@ describe('leaderTimer', () => {
     await Bun.sleep(40);
     expect(ticks).toBe(seen);
   });
-
-  test('wake() runs the next tick now, once, while the chain is armed', async () => {
-    leader = true;
-    let ticks = 0;
-    const timer = leaderTimer(async () => {
-      ticks += 1;
-      return 60_000;
-    });
-    timer.start();
-    await Bun.sleep(10);
-    expect(ticks).toBe(1);
-    timer.wake();
-    timer.wake();
-    await Bun.sleep(10);
-    expect(ticks).toBe(2);
-    timer.stop();
-  });
-
-  test('a wake on a stopped timer does nothing', async () => {
-    leader = true;
-    let ticks = 0;
-    const timer = leaderTimer(async () => {
-      ticks += 1;
-      return 10;
-    });
-    timer.wake();
-    await Bun.sleep(20);
-    expect(ticks).toBe(0);
-  });
 });

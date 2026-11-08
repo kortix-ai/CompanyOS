@@ -10,15 +10,10 @@ import { leaderTimer } from '../../shared/leader-timer';
  */
 const gatewayTimer = leaderTimer(
   async () => {
-    try {
-      await runWorkerTick('discord-gateway', async () => {
-        // A fatal close stays closed until the process restarts (gateway.ts `fatal`).
-        if (!discordGateway.connected) await discordGateway.start();
-      });
-    } catch {
-      // Nothing to do here: leaderTimer logged the tick failure; a dropped
-      // Gateway reconnects by itself and the check re-arms below.
-    }
+    await runWorkerTick('discord-gateway', async () => {
+      // A fatal close stays closed until the process restarts (gateway.ts `fatal`).
+      if (!discordGateway.connected) await discordGateway.start();
+    });
     return 60_000;
   },
   { firstDelayMs: 60_000, name: 'discord-gateway' },

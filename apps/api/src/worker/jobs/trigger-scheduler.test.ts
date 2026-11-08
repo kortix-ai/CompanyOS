@@ -1,5 +1,5 @@
 // Behavior pin for `trigger-scheduler`: the old hand-rolled scheduler swept at
-// startup at once (`tick()` then `setInterval`), and the `Job` wiring guard
+// startup at once (`tick()` then a fixed-cadence loop), and the `Job` wiring guard
 // pins the start call in `unit-worker-scope-wiring.test.ts`. This file pins the
 // sweep itself: the first tick runs immediately on `start()`, not after a full
 // interval.

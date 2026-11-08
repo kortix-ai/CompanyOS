@@ -1,7 +1,6 @@
 import { discordGateway } from '../../channels/discord/gateway';
 import { runWorkerTick } from '../../shared/audit-scope';
-
-let checkTimer: ReturnType<typeof setInterval> | null = null;
+import { leaderTimer } from '../../shared/leader-timer';
 
 /**
  * Leader-only (worker/jobs/index.ts): Discord delivers the bot's messages over
@@ -9,20 +8,29 @@ let checkTimer: ReturnType<typeof setInterval> | null = null;
  * application is not configured. The tick reopens a connection a stop or a
  * fatal close ended; a dropped one reconnects by itself.
  */
+const gatewayTimer = leaderTimer(
+  async () => {
+    try {
+      await runWorkerTick('discord-gateway', async () => {
+        // A fatal close stays closed until the process restarts (gateway.ts `fatal`).
+        if (!discordGateway.connected) await discordGateway.start();
+      });
+    } catch {
+      // Nothing to do here: leaderTimer logged the tick failure; a dropped
+      // Gateway reconnects by itself and the check re-arms below.
+    }
+    return 60_000;
+  },
+  { firstDelayMs: 60_000, name: 'discord-gateway' },
+);
+
 export function startDiscordGateway(): void {
-  if (checkTimer) return;
   void discordGateway.start();
-  checkTimer = setInterval(() => {
-    void runWorkerTick('discord-gateway', async () => {
-      // A fatal close stays closed until the process restarts (gateway.ts `fatal`).
-      if (!discordGateway.connected) await discordGateway.start();
-    });
-  }, 60_000);
+  gatewayTimer.start();
 }
 
 /** Saves the session before it closes, so the next leader resumes it (a deploy loses no message). */
 export async function stopDiscordGateway(): Promise<void> {
-  if (checkTimer) clearInterval(checkTimer);
-  checkTimer = null;
+  await gatewayTimer.stop();
   await discordGateway.stop();
 }

@@ -358,8 +358,14 @@ describe('untrusted-JSON leaf', () => {
     expect(decodeJsonStringLiteral('x\\ry')).toBe('x\ry');
     expect(decodeJsonStringLiteral('\\u0039\\u0045')).toBe('9E');
     expect(decodeJsonStringLiteral('a\\tb')).toBe('a\tb');
-    // A bare invalid literal (no quotes to parse) comes back unchanged.
+    // A bare key round-trips: wrapping it in quotes is valid JSON, and the
+    // parsed string equals the raw text.
     expect(decodeJsonStringLiteral('plain-key')).toBe('plain-key');
+    // The failures reach the catch: an invalid \\q escape, a raw control
+    // character, and an escaped quote that closes nothing.
     expect(decodeJsonStringLiteral('un\\"terminated')).toBe('un"terminated');
+    expect(decodeJsonStringLiteral('a\\qb')).toBe('a\\qb');
+    expect(decodeJsonStringLiteral('raw\nnewline')).toBe('raw\nnewline');
+    expect(decodeJsonStringLiteral('end\\')).toBe('end\\');
   });
 });

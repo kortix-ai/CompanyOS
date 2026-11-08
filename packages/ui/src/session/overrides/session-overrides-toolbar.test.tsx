@@ -129,16 +129,21 @@ test('existing session retains provider loading and failure summaries', () => {
 test('a viewer without project.secret.read gets no Provider keys row', () => {
   poolEnabled = true;
   secretAllowed = true;
+  secretLoading = false;
   expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
-  secretAllowed = false;
   // Both editable rows are gone; the sandbox row is read-only on a new session,
   // so the toolbar renders nothing at all rather than a gear onto a dead Save.
+  secretAllowed = false;
   expect(render()).toEqual([]);
-  // An unresolved probe is not a denial: the row stays while it loads, so it
-  // does not blink out and back on every session open.
+});
+
+// An unresolved probe is not a denial: the row stays while it loads, so it does
+// not blink out and back on every session open.
+test('an unresolved project.secret.read probe keeps the Provider keys row', () => {
+  poolEnabled = true;
+  secretAllowed = false;
   secretLoading = true;
   expect(render().map((row) => row.id)).toEqual(['secrets', 'provider-keys', 'sandbox']);
-  secretLoading = false;
 });
 
 // The scope catalog (secrets, connectors, connections) can take seconds. It
@@ -147,6 +152,7 @@ test('a viewer without project.secret.read gets no Provider keys row', () => {
 test('a new session saves at once while its secrets catalog loads', async () => {
   poolEnabled = true;
   secretAllowed = true;
+  secretLoading = false;
   catalogLoaded = false;
   selection = { alpha: ['key-a'] };
   providerDrafts = {};

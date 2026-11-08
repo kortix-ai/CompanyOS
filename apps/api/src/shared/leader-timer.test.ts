@@ -123,4 +123,43 @@ describe('leaderTimer', () => {
     await Bun.sleep(40);
     expect(ticks).toBe(seen);
   });
+
+  test('a wake during an armed delay does not move the next tick earlier', async () => {
+    leader = true;
+    let ticks = 0;
+    const timer = leaderTimer(async () => {
+      ticks += 1;
+      return 40;
+    });
+    timer.start();
+    await Bun.sleep(5);
+    expect(ticks).toBe(1);
+    timer.wake();
+    await Bun.sleep(20);
+    expect(ticks).toBe(1); // still armed at 40 ms
+    await Bun.sleep(45);
+    expect(ticks).toBe(2); // the armed tick fired on its own delay
+    timer.stop();
+  });
+
+  test('a wake while a run is in flight queues exactly one extra tick behind it', async () => {
+    leader = true;
+    let ticks = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const timer = leaderTimer(async () => {
+      ticks += 1;
+      if (ticks === 1) await gate;
+      return 60_000;
+    });
+    timer.start();
+    await Bun.sleep(10);
+    expect(ticks).toBe(1); // the first run is held by the gate
+    timer.wake();
+    timer.wake();
+    release();
+    await Bun.sleep(30);
+    expect(ticks).toBe(2); // one extra tick, not one per wake
+    timer.stop();
+  });
 });

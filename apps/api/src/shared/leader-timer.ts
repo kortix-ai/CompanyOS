@@ -15,7 +15,12 @@
  *
  * `run` returns the delay until the next tick. `stop()` clears the timer
  * before its first await and returns once the in-flight tick settles: the
- * `Job` contract (`worker/runtime/job.ts`) promises exactly that.
+ * `Job` contract (`worker/runtime/job.ts`) promises exactly that. A `wake()`
+ * keeps the old delivery-loop waker racing-free: an armed delay already
+ * covers the imminent tick (the old `scheduleWorker` skip armed nothing),
+ * while a wake beside a run in flight takes over the next fire with a 0 ms
+ * timer, exactly as the old waker's schedule did — the running chain's own
+ * re-arm skips and the wake's tick runs instead.
  */
 import { logger } from '../lib/logger';
 import { isLeader } from './leader-election';
@@ -25,7 +30,7 @@ const SLOW_WAIT_MS = 10_000;
 export function leaderTimer(
   run: () => Promise<number>,
   options: { firstDelayMs?: number; name?: string } = {},
-): { start(): void; stop(): Promise<void> } {
+): { start(): void; stop(): Promise<void>; wake(): void } {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
   let started = false;
@@ -51,7 +56,7 @@ export function leaderTimer(
       logger.error('[leader-timer] tick failed', { error: error instanceof Error ? error.message : String(error) });
       next = 60_000;
     }
-    if (generationAtStart === generation) arm(generationAtStart, next);
+    if (generationAtStart === generation && !timer) arm(generationAtStart, next);
   }
 
   return {
@@ -71,6 +76,13 @@ export function leaderTimer(
       // flight has finished. `inFlight` always resolves (each run's catch is
       // attached), so this never hangs.
       return inFlight.then(() => undefined);
+    },
+    wake() {
+      // The old audit-webhook scheduleWorker: a wake never replaces an armed
+      // delay, and beside a run in flight it takes over the next fire with a
+      // 0 ms timer — one wake, one extra tick, never a second chain.
+      if (!started || timer) return;
+      arm(generation, 0);
     },
   };
 }

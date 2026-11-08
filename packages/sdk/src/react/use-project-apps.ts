@@ -75,7 +75,8 @@ export function useWorkspaceApps(projectId: string | null | undefined) {
   });
   // Every App mutation of this hook refreshes that list on success — the
   // `useArtifactMutations` idiom: each useMutation spreads `opts`.
-  const opts = { onSuccess: () => invalidateProjectApps(queryClient, projectId) };
+  const invalidate = () => invalidateProjectApps(queryClient, projectId);
+  const opts = { onSuccess: invalidate };
 
   const create = useMutation({ mutationFn: (input: Parameters<typeof createApp>[1]) => createApp(projectId as string, input), ...opts });
   const update = useMutation({
@@ -154,7 +155,11 @@ export function useAppDeployments(
     refetchInterval: 5_000,
   });
   // The same `useArtifactMutations` idiom: each useMutation spreads `opts`.
-  const opts = { onSuccess: () => { void invalidateProjectApps(queryClient, projectId); void queryClient.invalidateQueries({ queryKey }); } };
+  const refresh = () => {
+    void invalidateProjectApps(queryClient, projectId);
+    void queryClient.invalidateQueries({ queryKey });
+  };
+  const opts = { onSuccess: refresh };
   const deploy = useMutation({
     mutationFn: (input: Parameters<typeof createAppDeployment>[2]) => createAppDeployment(projectId as string, appId as string, input),
     ...opts,
@@ -265,7 +270,11 @@ export function useAppMachines(projectId: string | null | undefined, appId: stri
   });
   // Every machine mutation refreshes both keys — the `useArtifactMutations`
   // idiom: each useMutation spreads `opts`.
-  const opts = { onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey }), invalidateProjectApps(queryClient, projectId)]) };
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey }),
+    invalidateProjectApps(queryClient, projectId),
+  ]);
+  const opts = { onSuccess: invalidate };
   const start = useMutation({ mutationFn: (machineId: string) => startAppMachine(projectId as string, appId as string, machineId), ...opts });
   const stop = useMutation({ mutationFn: (machineId: string) => stopAppMachine(projectId as string, appId as string, machineId), ...opts });
   const restart = useMutation({ mutationFn: (machineId: string) => restartAppMachine(projectId as string, appId as string, machineId), ...opts });
@@ -286,7 +295,8 @@ export function useAppVolumes(projectId: string | null | undefined, appId: strin
   });
   // Every volume mutation refreshes that list — the `useArtifactMutations`
   // idiom: each useMutation spreads `opts`.
-  const opts = { onSuccess: () => queryClient.invalidateQueries({ queryKey }) };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey });
+  const opts = { onSuccess: invalidate };
   const snapshot = useMutation({ mutationFn: (volumeId: string) => createAppVolumeSnapshot(projectId as string, appId as string, volumeId), ...opts });
   const restore = useMutation({
     mutationFn: (input: { volumeId: string; snapshotId: string }) => restoreAppVolume(projectId as string, appId as string, input.volumeId, input.snapshotId),

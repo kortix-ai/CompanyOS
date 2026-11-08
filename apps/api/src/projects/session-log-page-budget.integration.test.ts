@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { type SessionLogPage } from '@kortix/api-contract/session-log';
-import { accounts, projects, projectSessions, sessionLogMessages, sessionLogThreads, sessionLogs } from '@kortix/db';
-import { eq, sql } from 'drizzle-orm';
+import type { SessionLogPage } from '@kortix/api-contract/session-log';
+import {
+  accounts,
+  projectSessions,
+  projects,
+  sessionLogMessages,
+  sessionLogThreads,
+  sessionLogs,
+} from '@kortix/db';
+import { sql } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../shared/db';
 import { readSessionLogPage } from './session-log-read';
@@ -31,7 +38,8 @@ const SESSION_ID = 'ses_pagebudget00000000000001';
 
 /** `readSessionLogPage` narrows to the page or the test fails naming what came back instead. */
 function pageOf(page: Awaited<ReturnType<typeof readSessionLogPage>>): SessionLogPage {
-  if (page === null || page === 'unknown_thread') throw new Error(`expected a page, got ${String(page)}`);
+  if (page === null || page === 'unknown_thread')
+    throw new Error(`expected a page, got ${String(page)}`);
   return page;
 }
 
@@ -41,7 +49,21 @@ const recordOf = (kilobytes: number, seq: number) => ({
   seq,
   blocks: [
     { type: 'text', id: 'b1', text: 'page-budget fixture' },
-    { type: 'tool_call', id: 'b2', state: 'complete', result: { content: [{ type: 'text', text: Array.from({ length: kilobytes * 1024 }, () => Math.random().toString(36).slice(2).slice(0, 1)).join('') }] } },
+    {
+      type: 'tool_call',
+      id: 'b2',
+      state: 'complete',
+      result: {
+        content: [
+          {
+            type: 'text',
+            text: Array.from({ length: kilobytes * 1024 }, () =>
+              Math.random().toString(36).slice(2).slice(0, 1),
+            ).join(''),
+          },
+        ],
+      },
+    },
   ],
 });
 
@@ -68,10 +90,16 @@ async function seedMessage(sizeKilobytes: number): Promise<void> {
 let seq = 0;
 
 async function cleanup(): Promise<void> {
-  await db.execute(sql.raw(`DELETE FROM kortix.session_log_messages WHERE session_id = '${SESSION_ID}'`));
-  await db.execute(sql.raw(`DELETE FROM kortix.session_log_threads WHERE session_id = '${SESSION_ID}'`));
+  await db.execute(
+    sql.raw(`DELETE FROM kortix.session_log_messages WHERE session_id = '${SESSION_ID}'`),
+  );
+  await db.execute(
+    sql.raw(`DELETE FROM kortix.session_log_threads WHERE session_id = '${SESSION_ID}'`),
+  );
   await db.execute(sql.raw(`DELETE FROM kortix.session_logs WHERE session_id = '${SESSION_ID}'`));
-  await db.execute(sql.raw(`DELETE FROM kortix.project_sessions WHERE session_id = '${SESSION_ID}'`));
+  await db.execute(
+    sql.raw(`DELETE FROM kortix.project_sessions WHERE session_id = '${SESSION_ID}'`),
+  );
   await db.execute(sql.raw(`DELETE FROM kortix.projects WHERE project_id = '${PROJECT_ID}'`));
   await db.execute(sql.raw(`DELETE FROM kortix.accounts WHERE account_id = '${ACCOUNT_ID}'`));
 }
@@ -91,7 +119,14 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
   });
 
   test('a page whose payload over the budget keeps the newest run and answers has_more', async () => {
-    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    const page = pageOf(
+      await readSessionLogPage({
+        sessionId: SESSION_ID,
+        threadId: null,
+        beforeSeq: null,
+        limit: 40,
+      }),
+    );
     expect(page.messages.length).toBe(2);
     // Oldest first inside the page.
     expect(page.messages[0].seq).toBe(5);
@@ -102,7 +137,9 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
   });
 
   test('the older window continues after the kept run', async () => {
-    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: 5, limit: 40 }));
+    const page = pageOf(
+      await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: 5, limit: 40 }),
+    );
     expect(page.messages.length).toBe(2);
     expect(page.messages[0].seq).toBe(3);
     expect(page.messages[1].seq).toBe(4);
@@ -115,7 +152,14 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
     await reseed();
     seq = 0;
     await seedMessage(4);
-    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    const page = pageOf(
+      await readSessionLogPage({
+        sessionId: SESSION_ID,
+        threadId: null,
+        beforeSeq: null,
+        limit: 40,
+      }),
+    );
     expect(page.messages.length).toBe(1);
     expect(page.messages[0].seq).toBe(1);
     expect(page.has_more).toBe(false);
@@ -130,7 +174,14 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
     // is the dropped tail.
     await seedMessage(8);
     await seedMessage(config.SESSION_LOG_PAGE_MAX_BYTES / 1024 + 1024);
-    const page = pageOf(await readSessionLogPage({ sessionId: SESSION_ID, threadId: null, beforeSeq: null, limit: 40 }));
+    const page = pageOf(
+      await readSessionLogPage({
+        sessionId: SESSION_ID,
+        threadId: null,
+        beforeSeq: null,
+        limit: 40,
+      }),
+    );
     expect(page.messages.length).toBe(1);
     expect(page.messages[0].seq).toBe(2);
     // The smaller older message went nowhere: it exists, so the page says so.
@@ -141,8 +192,18 @@ describeWithDb('GET …/log page budget — real PostgreSQL', () => {
 /** The fixture's base rows, after `cleanup()`. */
 async function reseed(): Promise<void> {
   await db.insert(accounts).values({ accountId: ACCOUNT_ID, name: 'page-budget-test' });
-  await db.insert(projects).values({ projectId: PROJECT_ID, accountId: ACCOUNT_ID, name: 'page-budget', repoUrl: 'https://example.test/page-budget.git' });
-  await db.insert(projectSessions).values({ sessionId: SESSION_ID, projectId: PROJECT_ID, accountId: ACCOUNT_ID, branchName: SESSION_ID });
+  await db.insert(projects).values({
+    projectId: PROJECT_ID,
+    accountId: ACCOUNT_ID,
+    name: 'page-budget',
+    repoUrl: 'https://example.test/page-budget.git',
+  });
+  await db.insert(projectSessions).values({
+    sessionId: SESSION_ID,
+    projectId: PROJECT_ID,
+    accountId: ACCOUNT_ID,
+    branchName: SESSION_ID,
+  });
   await db.insert(sessionLogs).values({
     sessionId: SESSION_ID,
     projectId: PROJECT_ID,
@@ -152,5 +213,7 @@ async function reseed(): Promise<void> {
     restoreGrade: 'full',
     record: { session_id: SESSION_ID },
   });
-  await db.insert(sessionLogThreads).values({ sessionId: SESSION_ID, threadId: 'root', v: 2, record: { id: 'root' } });
+  await db
+    .insert(sessionLogThreads)
+    .values({ sessionId: SESSION_ID, threadId: 'root', v: 2, record: { id: 'root' } });
 }

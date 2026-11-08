@@ -11,16 +11,20 @@ RELEASE_URL="https://github.com/aquasecurity/trivy/releases/${TAG}"
 # (2026-11-08 vulcan outage).
 status=''
 probe_rc=0
+ok=''
 for attempt in 1 2 3; do
+  probe_rc=0
   status="$(curl --silent --show-error --location --connect-timeout 10 --max-time 30 \
     --header 'Accept: application/json' --write-out '%{http_code}' --output /dev/null \
-    "$RELEASE_URL")" && break
-  probe_rc=$?
+    "$RELEASE_URL")" || probe_rc=$?
+  # Success needs curl exit 0 AND HTTP 200: --write-out still prints 200 when
+  # the body stalls after the headers (curl exits 28/18).
+  if [ "$probe_rc" -eq 0 ] && [ "$status" = 200 ]; then ok=1; break; fi
   echo "trivy install probe: attempt ${attempt}/3 failed (curl exit ${probe_rc}, HTTP status ${status:-none})"
 done
-if [ "${status:-}" != 200 ]; then
-  echo "trivy install probe: GitHub releases answered HTTP ${status:-none} (last curl exit ${probe_rc}) for ${RELEASE_URL}" >&2
-  echo "  HTTP 000 with a curl exit (7/18/28) = runner egress to github.com is down, NOT a missing tag. HTTP 404 = the tag is absent upstream." >&2
+if [ -z "$ok" ]; then
+  echo "trivy install probe: GitHub releases not confirmed after 3 attempts (HTTP ${status:-none}, last curl exit ${probe_rc}) for ${RELEASE_URL}" >&2
+  echo "  A curl exit (7/18/28) with any HTTP status, even 200, = the response stalled mid-transfer: runner egress to github.com is down, NOT a missing tag. HTTP 404 = the tag is absent upstream." >&2
   exit 1
 fi
 echo "trivy install probe: HTTP 200 for ${RELEASE_URL}"

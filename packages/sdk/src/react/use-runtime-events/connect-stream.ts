@@ -24,32 +24,32 @@ import type { useEventStreamRefs } from './use-event-stream-refs';
 /** The shared session stream has its own 45 s liveness bound. */
 const SESSION_STREAM_WATCHDOG_OFF_MS = 24 * 60 * 60_000;
 
-/** Everything the connection policy reads, wired by `useRuntimeEventStream`. */
-export type ConnectRuntimeStreamDeps = {
-  options: {
-    enabled?: boolean;
-    projectId?: string;
-    sessionId?: string;
-  };
+/** The connection options of `useRuntimeEventStream`. */
+export type RuntimeEventStreamOptions = {
+  enabled?: boolean;
+  /**
+   * Read runtime events from this session's stream (`GET .../events`, R5.3)
+   * instead of the sandbox proxy's `/global/event`. `useSession` passes both.
+   */
+  projectId?: string;
+  sessionId?: string;
+  /**
+   * @deprecated Ignored. Every box past the runtime floor serves its log (`runtime.log.v1`): a
+   * connect or a resync reads only `GET /kortix/runtime/pending`, and no frame re-reads a
+   * transcript tail or a session record.
+   */
+  logNative?: boolean;
+};
+
+/**
+ * The store subscriptions and mount refs the connection effect reads — the
+ * React wiring `useRuntimeStreamWiring` (in `index.ts`) subscribes once per
+ * render, and the policy reads per run.
+ */
+export type RuntimeStreamWiring = {
   queryClient: QueryClient;
   /** The route-scoped project this connection's events are about. */
   projectId: string | null;
-  runtimeVersion: number;
-  activeServerUrl: string | null;
-  sandboxStatus: SandboxConnectionStatus;
-  runtimeHealthy: boolean | null;
-  isMountRef: RefObject<boolean>;
-  prevRuntimeVersionRef: RefObject<number>;
-  prevServerUrlRef: RefObject<string | null>;
-  revival: ReturnType<typeof createStreamRevival>;
-  normalizeDiagnosticPaths: ReturnType<typeof useEventStreamRefs>['normalizeDiagnosticPaths'];
-  fetchLspDiagnosticsDebounced: ReturnType<
-    typeof useEventStreamRefs
-  >['fetchLspDiagnosticsDebounced'];
-  markSessionAbortedLocally: ReturnType<typeof useEventStreamRefs>['markSessionAbortedLocally'];
-  reconcileMissingBusySessions: ReturnType<
-    typeof useEventStreamRefs
-  >['reconcileMissingBusySessions'];
   addPermission: ReturnType<typeof useRuntimePendingStore.getState>['addPermission'];
   removePermission: ReturnType<typeof useRuntimePendingStore.getState>['removePermission'];
   addQuestion: ReturnType<typeof useRuntimePendingStore.getState>['addQuestion'];
@@ -58,6 +58,27 @@ export type ConnectRuntimeStreamDeps = {
   startCompaction: (sessionID: string) => void;
   stopCompaction: (sessionID: string) => void;
   applySyncEvent: ReturnType<typeof useSyncStore.getState>['applyEvent'];
+  runtimeVersion: number;
+  activeServerUrl: string | null;
+  sandboxStatus: SandboxConnectionStatus;
+  runtimeHealthy: boolean | null;
+  isMountRef: RefObject<boolean>;
+  prevRuntimeVersionRef: RefObject<number>;
+  prevServerUrlRef: RefObject<string | null>;
+};
+
+/** Everything the connection policy reads, wired by `useRuntimeEventStream`. */
+export type ConnectRuntimeStreamDeps = {
+  options: RuntimeEventStreamOptions;
+  wiring: RuntimeStreamWiring;
+  revival: ReturnType<typeof createStreamRevival>;
+  streamRefs: Pick<
+    ReturnType<typeof useEventStreamRefs>,
+    | 'normalizeDiagnosticPaths'
+    | 'fetchLspDiagnosticsDebounced'
+    | 'markSessionAbortedLocally'
+    | 'reconcileMissingBusySessions'
+  >;
 };
 
 /**
@@ -67,22 +88,10 @@ export type ConnectRuntimeStreamDeps = {
  * when this tick must not connect (the gate, or the runtime not yet pinned).
  */
 export function connectRuntimeStream(deps: ConnectRuntimeStreamDeps): (() => void) | undefined {
+  const { options, wiring, revival, streamRefs } = deps;
   const {
-    options,
     queryClient,
     projectId,
-    runtimeVersion,
-    activeServerUrl,
-    sandboxStatus,
-    runtimeHealthy,
-    isMountRef,
-    prevRuntimeVersionRef,
-    prevServerUrlRef,
-    revival,
-    normalizeDiagnosticPaths,
-    fetchLspDiagnosticsDebounced,
-    markSessionAbortedLocally,
-    reconcileMissingBusySessions,
     addPermission,
     removePermission,
     addQuestion,
@@ -91,7 +100,20 @@ export function connectRuntimeStream(deps: ConnectRuntimeStreamDeps): (() => voi
     startCompaction,
     stopCompaction,
     applySyncEvent,
-  } = deps;
+    runtimeVersion,
+    activeServerUrl,
+    sandboxStatus,
+    runtimeHealthy,
+    isMountRef,
+    prevRuntimeVersionRef,
+    prevServerUrlRef,
+  } = wiring;
+  const {
+    normalizeDiagnosticPaths,
+    fetchLspDiagnosticsDebounced,
+    markSessionAbortedLocally,
+    reconcileMissingBusySessions,
+  } = streamRefs;
 
   // On first mount, always start clean — the provider may have remounted
   // after navigating away and back while the session's runtime changed. The

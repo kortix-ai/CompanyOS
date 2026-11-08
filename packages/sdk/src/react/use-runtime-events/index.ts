@@ -8,9 +8,14 @@ import { useSandboxConnectionStore } from '../../browser/stores/sandbox-connecti
 import { useServerStore } from '../../browser/stores/server-store';
 import { useSyncStore } from '../../browser/stores/sync-store';
 import { onHostSignal } from '../../core/session/host-signals';
+import type { StreamRevival } from './stream-revival';
 import { useKortixRouteWorkspaceId } from '../route-project';
 import { useCurrentRuntime } from '../use-current-runtime';
-import { connectRuntimeStream } from './connect-stream';
+import {
+  connectRuntimeStream,
+  type RuntimeEventStreamOptions,
+  type RuntimeStreamWiring,
+} from './connect-stream';
 import { shouldReconnectOnHostSignal } from './runtime-stream-signals';
 import { createStreamRevival } from './stream-revival';
 import { useEventStreamRefs } from './use-event-stream-refs';
@@ -18,37 +23,11 @@ import { useEventStreamRefs } from './use-event-stream-refs';
 export { subscribeRuntimeStream, type RuntimeStreamSignal } from './runtime-stream-signals';
 
 /**
- * Connects to the session runtime's SSE event stream via the SDK and
- * performs INCREMENTAL cache updates on React Query data.
- *
- * Instead of invalidating queries (which triggers full refetches),
- * we use setQueryData to surgically update messages, parts, sessions, etc.
- * This matches the SolidJS reference implementation's approach.
- *
- * This hook is a THIN React wrapper: the actual connect/reconnect/backoff,
- * heartbeat watchdog, and event-coalescing machinery is framework-free and
- * lives in `core/stream/event-stream.ts`'s `openEventStream()`. Everything here is
- * either genuinely React-only (effect lifecycle, store subscriptions) or
- * needs the React Query `QueryClient` (cache reads/writes, which
- * `createEventHandler` and `hydrateFromPending` below perform).
+ * The store subscriptions and mount refs the connection effect reads: the
+ * selectors re-render the hook when a store value changes, so the effect's
+ * deps see the change and the connection policy is re-run with fresh inputs.
  */
-export function useRuntimeEventStream(
-  options: {
-    enabled?: boolean;
-    /**
-     * Read runtime events from this session's stream (`GET .../events`, R5.3)
-     * instead of the sandbox proxy's `/global/event`. `useSession` passes both.
-     */
-    projectId?: string;
-    sessionId?: string;
-    /**
-     * @deprecated Ignored. Every box past the runtime floor serves its log (`runtime.log.v1`): a
-     * connect or a resync reads only `GET /kortix/runtime/pending`, and no frame re-reads a
-     * transcript tail or a session record.
-     */
-    logNative?: boolean;
-  } = {},
-) {
+function useRuntimeStreamWiring(): RuntimeStreamWiring {
   const queryClient = useQueryClient();
   // The project this SSE connection's events are about — threaded into
   // `refetchKortixSessionMirrors` so a title/tree mirror refetch stays scoped
@@ -72,6 +51,29 @@ export function useRuntimeEventStream(
   const isMountRef = useRef(true);
   const prevRuntimeVersionRef = useRef(runtimeVersion);
   const prevServerUrlRef = useRef(activeServerUrl);
+  return {
+    queryClient,
+    projectId,
+    addPermission,
+    removePermission,
+    addQuestion,
+    removeQuestion,
+    clearPending,
+    stopCompaction,
+    startCompaction,
+    applySyncEvent,
+    runtimeVersion,
+    activeServerUrl,
+    sandboxStatus,
+    runtimeHealthy,
+    isMountRef,
+    prevRuntimeVersionRef,
+    prevServerUrlRef,
+  };
+}
+
+/** One revival instance and the generation bump that re-opens the stream with it. */
+function useStreamRevival(): { revival: StreamRevival; streamGeneration: number } {
   // Bumped when a parked stream earns another attempt. It is an effect DEP, so
   // the bump tears the dead handle down and opens a fresh one — the same path
   // a runtime switch takes, rather than a second reconnect mechanism.
@@ -92,13 +94,32 @@ export function useRuntimeEventStream(
       }),
     [],
   );
+  return { revival, streamGeneration };
+}
 
-  const {
-    normalizeDiagnosticPaths,
-    fetchLspDiagnosticsDebounced,
-    markSessionAbortedLocally,
-    reconcileMissingBusySessions,
-  } = useEventStreamRefs({ queryClient, stopCompaction, applySyncEvent });
+/**
+ * Connects to the session runtime's SSE event stream via the SDK and
+ * performs INCREMENTAL cache updates on React Query data.
+ *
+ * Instead of invalidating queries (which triggers full refetches),
+ * we use setQueryData to surgically update messages, parts, sessions, etc.
+ * This matches the SolidJS reference implementation's approach.
+ *
+ * This hook is a THIN React wrapper: the actual connect/reconnect/backoff,
+ * heartbeat watchdog, and event-coalescing machinery is framework-free and
+ * lives in `core/stream/event-stream.ts`'s `openEventStream()`. Everything here is
+ * either genuinely React-only (effect lifecycle, store subscriptions) or
+ * needs the React Query `QueryClient` (cache reads/writes, which
+ * `createEventHandler` and `hydrateFromPending` — via `connectRuntimeStream` — perform).
+ */
+export function useRuntimeEventStream(options: RuntimeEventStreamOptions = {}) {
+  const wiring = useRuntimeStreamWiring();
+  const { revival, streamGeneration } = useStreamRevival();
+  const streamRefs = useEventStreamRefs({
+    queryClient: wiring.queryClient,
+    stopCompaction: wiring.stopCompaction,
+    applySyncEvent: wiring.applySyncEvent,
+  });
 
   useEffect(
     () =>
@@ -108,50 +129,31 @@ export function useRuntimeEventStream(
           projectId: options.projectId,
           sessionId: options.sessionId,
         },
-        queryClient,
-        projectId,
-        runtimeVersion,
-        activeServerUrl,
-        sandboxStatus,
-        runtimeHealthy,
-        isMountRef,
-        prevRuntimeVersionRef,
-        prevServerUrlRef,
+        wiring,
         revival,
-        normalizeDiagnosticPaths,
-        fetchLspDiagnosticsDebounced,
-        markSessionAbortedLocally,
-        reconcileMissingBusySessions,
-        addPermission,
-        removePermission,
-        addQuestion,
-        removeQuestion,
-        clearPending,
-        startCompaction,
-        stopCompaction,
-        applySyncEvent,
+        streamRefs,
       }),
     // NOTE: urlVersion is intentionally excluded from deps. We only reconnect
     // when the resolved activeServerUrl actually changes, which avoids
     // reconnecting on metadata-only updates while still recovering from
     // stale SSE connections after sandbox/proxy URL changes.
     [
-      queryClient,
-      addPermission,
-      removePermission,
-      addQuestion,
-      removeQuestion,
-      clearPending,
-      runtimeVersion,
-      activeServerUrl,
-      sandboxStatus,
-      runtimeHealthy,
+      wiring.queryClient,
+      wiring.addPermission,
+      wiring.removePermission,
+      wiring.addQuestion,
+      wiring.removeQuestion,
+      wiring.clearPending,
+      wiring.runtimeVersion,
+      wiring.activeServerUrl,
+      wiring.sandboxStatus,
+      wiring.runtimeHealthy,
       options.enabled,
       options.projectId,
       options.sessionId,
-      applySyncEvent,
-      stopCompaction,
-      projectId,
+      wiring.applySyncEvent,
+      wiring.stopCompaction,
+      wiring.projectId,
       revival,
       // A revived park re-opens the stream through this effect. Without it the
       // park stayed terminal for the page.

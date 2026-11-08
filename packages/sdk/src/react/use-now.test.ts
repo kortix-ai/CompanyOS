@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, test } from 'bun:test';
+import { afterEach, expect, jest, mock, test } from 'bun:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -75,12 +75,20 @@ test('no interval left running on unmount', async () => {
     jest.advanceTimersByTime(10);
   });
   expect(seen.length).toBe(2);
-  await act(async () => {
-    renderer?.unmount();
-  });
-  const afterUnmount = seen.length;
-  await act(async () => {
-    jest.advanceTimersByTime(100);
-  });
-  expect(seen.length).toBe(afterUnmount);
+  // React ignores a setState after unmount, so a leaked interval is invisible
+  // in the render count — assert the cleanup actually cleared the timer.
+  const realClearInterval = globalThis.clearInterval;
+  const cleared: number[] = [];
+  globalThis.clearInterval = mock(((id: number) => {
+    cleared.push(id);
+    realClearInterval(id);
+  }) as typeof clearInterval);
+  try {
+    await act(async () => {
+      renderer?.unmount();
+    });
+    expect(cleared.length).toBeGreaterThan(0);
+  } finally {
+    globalThis.clearInterval = realClearInterval;
+  }
 });

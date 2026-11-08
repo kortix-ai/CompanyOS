@@ -849,12 +849,19 @@ export async function executeComposio(
     result: response.data,
     ...(response.error ? { error: response.error } : {}),
   };
-  // Linear rejects malformed GraphQL from the caller, not from an unavailable provider.
-  const callerError = input.toolkit === 'linear' && input.toolSlug === 'LINEAR_RUN_QUERY_OR_MUTATION' &&
-    typeof response.error === 'string' && /\bCode: (?:GRAPHQL_VALIDATION_FAILED|INPUT_ERROR)\b/.test(response.error);
+  // The caller's own input was rejected, not the provider: Composio's request
+  // validation answers a 400 in the execute payload (a required tool argument
+  // is missing), and a provider's argument validation surfaces in the error
+  // text (Linear's GraphQL validation codes). The caller fixes the args and
+  // retries, so this is a 400 the gateway logs at debug — an unavailable
+  // provider is the 502-warn path. Scoped matches leaked other shapes into the
+  // warn path: prod, 2026-11-07/08, one `linear.run_query_or_mutation` warn
+  // spike against a near-zero baseline (KRTX-678).
+  const errorText = typeof response.error === 'string' ? response.error : '';
+  const callerError = response.data.status_code === 400 ||
+    /\bCode: (?:GRAPHQL_VALIDATION_FAILED|INPUT_ERROR|INVALID_INPUT)\b/.test(errorText);
   // A provider's rate limit arrives inside Composio's error text.
-  // ponytail: text match, no structured provider status in the execute response; read it when Composio exposes one.
-  const rateLimited = typeof response.error === 'string' && COMPOSIO_RATE_LIMIT.test(response.error);
+  const rateLimited = COMPOSIO_RATE_LIMIT.test(errorText);
   return response.error
     ? { ok: false, status: callerError ? 400 : rateLimited ? 429 : 502, data }
     : { ok: true, status: 200, data };

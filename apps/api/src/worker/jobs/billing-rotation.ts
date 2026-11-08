@@ -66,7 +66,8 @@ export function startBillingRotation(): void {
   for (const timer of timers) timer.start();
 }
 
-export function stopBillingRotation(): void {
-  for (const timer of timers) timer.stop();
+export async function stopBillingRotation(): Promise<void> {
+  const stopped = timers;
   timers = [];
+  await Promise.all(stopped.map((timer) => timer.stop()));
 }

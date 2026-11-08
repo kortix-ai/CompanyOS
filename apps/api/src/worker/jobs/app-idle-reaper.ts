@@ -3,33 +3,46 @@ import { logger } from '../../lib/logger';
 import { runWorkerTick } from '../../shared/audit-scope';
 import { leaderTimer } from '../../shared/leader-timer';
 
-let timer: ReturnType<typeof leaderTimer> | null = null;
+let timers: Array<ReturnType<typeof leaderTimer>> = [];
 
 export function startAppIdleReaper(): void {
   if (process.env.KORTIX_APPS_IDLE_REAPER_ENABLED === 'false') return;
-  if (timer) return;
+  if (timers.length) return;
   const interval = Math.max(5_000, Number(process.env.KORTIX_APPS_IDLE_REAPER_INTERVAL_MS) || 30_000);
-  timer = leaderTimer(
+  const reaper = leaderTimer(
     async () => {
-      await Promise.all([
-        runWorkerTick('app-idle-reaper', runAppIdleReaper).catch((error) => logger.error('[apps] idle reaper failed', {
-          error: error instanceof Error ? error.message : String(error),
-        })),
-        // Its own guard and its own 5-minute cadence: a slow always-on start never
-        // holds up an idle stop.
-        runWorkerTick('app-keep-alive', () => runAppKeepAlive()).catch((error) => logger.error('[apps] keep-alive pass failed', {
-          error: error instanceof Error ? error.message : String(error),
-        })),
-      ]);
+      try {
+        await runWorkerTick('app-idle-reaper', runAppIdleReaper);
+      } catch (err) {
+        logger.error('[apps] idle reaper failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       return interval;
     },
     { firstDelayMs: interval, name: 'app-idle-reaper' },
   );
-  timer.start();
+  // Its own guard and its own 5-minute cadence: a slow always-on start never
+  // holds up an idle stop.
+  const keepAlive = leaderTimer(
+    async () => {
+      try {
+        await runWorkerTick('app-keep-alive', runAppKeepAlive);
+      } catch (err) {
+        logger.error('[apps] keep-alive pass failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return interval;
+    },
+    { firstDelayMs: interval, name: 'app-keep-alive' },
+  );
+  timers = [reaper, keepAlive];
+  for (const timer of timers) timer.start();
 }
 
 export async function stopAppIdleReaper(): Promise<void> {
-  const reaper = timer;
-  timer = null;
-  await reaper?.stop();
+  const stopped = timers;
+  timers = [];
+  await Promise.all(stopped.map((timer) => timer.stop()));
 }

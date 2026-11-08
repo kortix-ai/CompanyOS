@@ -136,9 +136,6 @@ export function startDriveWorkers(): void {
   indexSweeper.start();
 }
 
-export function stopDriveWorkers(): void {
-  scanSweeper.stop();
-  drainSweeper.stop();
-  revocationSweeper.stop();
-  indexSweeper.stop();
+export async function stopDriveWorkers(): Promise<void> {
+  await Promise.all([scanSweeper.stop(), drainSweeper.stop(), revocationSweeper.stop(), indexSweeper.stop()]);
 }

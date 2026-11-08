@@ -43,6 +43,7 @@ export function startCaptureWorkers(): void {
   for (const l of loops) l.start();
 }
 
-export function stopCaptureWorkers(): void {
-  for (const l of loops.splice(0)) l.stop();
+export async function stopCaptureWorkers(): Promise<void> {
+  const stopped = loops.splice(0);
+  await Promise.all(stopped.map((l) => l.stop()));
 }

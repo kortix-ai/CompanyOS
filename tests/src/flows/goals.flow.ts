@@ -16,6 +16,7 @@ import { mintAccountToken, type Client } from '../core/client';
 import { flow } from '../core/flow';
 import type { FlowContext } from '../core/types';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 const R = {
   list: 'GET /v1/projects/:projectId/goals',
@@ -84,7 +85,7 @@ async function ownerCredential(ctx: FlowContext, world: AgentPrincipalsWorld, se
   world.tokens.push(credential.token_id);
   const serviceAccountId = await world.serviceAccountId('kortix');
   await world.db.query(
-    `UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, service_account_id = $6, agent_grant = NULL WHERE token_id = $1`,
+    lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, service_account_id = $6, agent_grant = NULL WHERE token_id = $1`),
     [credential.token_id, world.accountId, ctx.P.OWNER.userId, world.projectId, sessionId, serviceAccountId],
   );
   return ctx.client.withBearer(credential.secret_key, 'GOAL_OWNER');

@@ -3,6 +3,7 @@ import * as sessionLogContract from '@kortix/api-contract/session-log';
 import type { V1Row } from '@kortix/api-contract/session-log';
 import { Client } from 'pg';
 import type { Env } from '../core/env';
+import { lockProjectFirst } from './token-binding-lock';
 
 // Playwright loads the package as CommonJS, where its re-exported names sit on `default`;
 // Bun reads them from the namespace.
@@ -150,7 +151,7 @@ export async function journalSessionLog(
   db.on('error', () => {});
   await db.connect();
   // The credential a box holds: bound to the project and the session, live while its sandbox row is active.
-  await db.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1', [
+  await db.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1'), [
     credential.token_id,
     input.projectId,
     input.sessionId,

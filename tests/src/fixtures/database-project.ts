@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Env } from "../core/env";
 import type { CreatedProject } from "../core/types";
+import { lockProjectFirst } from './token-binding-lock';
 
 interface ProjectDb {
   query(text: string, values?: unknown[]): Promise<unknown>;
@@ -532,9 +533,9 @@ export async function bindDatabaseSessionCredential(
         [input.sessionId, input.accountId, input.projectId],
       );
       await client.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
          SET session_id = $2
-         WHERE token_id = $1::uuid`,
+         WHERE token_id = $1::uuid`),
         [input.tokenId, input.sessionId],
       );
       await client.query(

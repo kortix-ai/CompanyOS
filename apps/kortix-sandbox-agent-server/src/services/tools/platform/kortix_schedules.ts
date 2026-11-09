@@ -144,7 +144,7 @@ async function runJson<T>(args: string[], context: PlatformToolContext): Promise
     const off = run.stderr.split('\n').find((line) => /is not enabled for this (project|workspace)/.test(line))
     if (off) {
       const sentence = off.replace(/^\W+/, '').trim()
-      return { error: { kind: 'failed', message: `${sentence} Ask the person or a workspace admin to turn it on.` } }
+      return { error: { kind: 'failed', message: `${sentence} Ask the person or a workspace admin to turn it on.`, note: `${sentence} A workspace admin can turn it on.` } }
     }
     return { error: cliError(run) }
   }
@@ -423,7 +423,8 @@ async function list(context: PlatformToolContext) {
   ]
   const count = (n: number, one: string, many: string) => (n === 0 ? null : `${n} ${n === 1 ? one : many}`)
   const title = [count(followUps.length, 'follow-up', 'follow-ups'), count(wakeOns.length, 'wake-on', 'wake-ons'), count(schedules.length, 'schedule', 'schedules')].filter(Boolean).join(', ') || 'Nothing scheduled'
-  const missing = 'error' in loops ? `This session's follow-ups could not be read: ${loops.error.message}` : 'error' in triggers ? `The project schedules could not be read: ${triggers.error.message}` : null
+  // The card names what is missing; the reason is the model's (`data`).
+  const missing = 'error' in loops ? "This session's follow-ups could not be read." : 'error' in triggers ? 'The project schedules could not be read.' : null
   return ok(
     TOOL,
     'list',

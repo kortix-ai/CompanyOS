@@ -194,6 +194,20 @@ function toolError(value: unknown): KortixToolError | undefined {
   };
 }
 
+/** The person's title of a failed argument check (kortixd `kortixFailureTitle`). */
+const INCOMPLETE_CALL_TITLE = 'The agent left out a required detail';
+
+/**
+ * The card is the person's; `error.message` is the model's. kortixd before
+ * 2026-11-09 copied the message into the subtitle and titled an argument check
+ * as a question to the model ("What should the follow-up check?"). Those
+ * transcripts still load, so the parser reads them the way kortixd now writes them.
+ */
+function personTitle(title: string, error: KortixToolError | undefined): string {
+  if (error?.kind !== 'invalid') return title;
+  return title.endsWith('?') || title === 'Unknown action' ? INCOMPLETE_CALL_TITLE : title;
+}
+
 /**
  * The result in a platform call's output (or its error text, when the call threw
  * it): one JSON object. `null` when the text is not that object. `callName` names
@@ -222,13 +236,14 @@ export function parseKortixToolResult(raw: string | undefined, callName?: string
       : value.ok
         ? 'done'
         : 'error';
-  const subtitle = text(value.card.subtitle);
+  const rawSubtitle = text(value.card.subtitle);
+  const subtitle = rawSubtitle && rawSubtitle !== error?.message ? rawSubtitle : undefined;
   return {
     ok: value.ok,
     tool,
     action: text(value.action) ?? '',
     card: {
-      title,
+      title: personTitle(title, error),
       ...(subtitle ? { subtitle } : {}),
       status,
       rows: list(value.card.rows, row),

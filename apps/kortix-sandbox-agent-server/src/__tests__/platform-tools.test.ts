@@ -317,6 +317,8 @@ describe('kortix_schedules follow-through', () => {
     // The example is a whole call the model can copy.
     const example = missing.error!.message.slice(missing.error!.message.indexOf('{'))
     expect(JSON.parse(example)).toMatchObject({ action: 'follow_up', in: '4d' })
+    // The card is the person's: the model's instructions and example never reach it.
+    expect(missing.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
     expect((await run('kortix_schedules', { action: 'wake_on', on: 'cr_merged', cr: '42' })).error?.message).toContain('{"action":"wake_on"')
     expect(argvs()).toHaveLength(2)
   })
@@ -733,5 +735,22 @@ describe('runKortix', () => {
     chmodSync(join(bin, 'kortix'), 0o755)
     const result = await runKortix(['schedules', 'create', '--json'], { env: env() }, 'x'.repeat(1024 * 1024))
     expect(result.code).toBe(3)
+  })
+})
+
+describe('a failure card carries no text written for the model', () => {
+  test('fail(): an argument check reads as an incomplete call, a note shows, the message never does', async () => {
+    const { fail } = await import('@/services/tools/platform/platform')
+    const context = { env: {} }
+    const question = await fail('kortix_agents', 'create', 'Which agent?', { kind: 'invalid', message: 'Pass `name`.' }, context)
+    expect(question.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
+    expect(question.error).toEqual({ kind: 'invalid', message: 'Pass `name`.' })
+    const unknown = await fail('kortix_agents', 'nope', 'Unknown action', { kind: 'invalid', message: 'Use one of: list.' }, context)
+    expect(unknown.card.title).toBe('The agent left out a required detail')
+    // A server refusal of a well-formed call keeps its own title.
+    const conflict = await fail('kortix_agents', 'create', 'Could not create the agent', { kind: 'invalid', message: 'name taken (409)' }, context)
+    expect(conflict.card).toEqual({ title: 'Could not create the agent', status: 'error' })
+    const noted = await fail('kortix_memory', 'list', 'Memory is off in this workspace', { kind: 'failed', message: 'model text', note: 'Files is off.' }, context)
+    expect(noted.card).toEqual({ title: 'Memory is off in this workspace', subtitle: 'Files is off.', status: 'error' })
   })
 })

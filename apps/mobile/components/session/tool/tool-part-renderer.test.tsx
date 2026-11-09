@@ -231,6 +231,21 @@ describe('ToolPartRenderer dispatch', () => {
     expect(texts().some((t) => t.startsWith('REGISTERED-'))).toBe(false);
   });
 
+  test('a My Kortix platform call renders its card title, never the JSON or the model message', async () => {
+    const message = 'Missing `text`: send this call from codemode. Call again with it, e.g. {"action":"follow_up"}';
+    const result = JSON.stringify({
+      ok: false,
+      tool: 'kortix_schedules',
+      action: 'follow_up',
+      card: { title: 'What should the follow-up check?', subtitle: message, status: 'error' },
+      error: { kind: 'invalid', message },
+    });
+    for (const state of [{ status: 'error', error: result }, { status: 'completed', output: result }]) {
+      await renderPart({ type: 'tool', id: 'part-k', callID: 'call-k', tool: 'kortix_schedules', state: { input: { action: 'follow_up' }, ...state } });
+      expect(texts()).toEqual(['The agent left out a required detail']);
+    }
+  });
+
   test('a failed image_gen call renders the image card, which draws its own failure', async () => {
     await renderPart({
       type: 'tool',

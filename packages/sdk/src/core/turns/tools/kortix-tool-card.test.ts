@@ -111,3 +111,31 @@ describe('parseKortixToolResult', () => {
     }
   });
 });
+
+describe('parseKortixToolResult: a failure card never shows text written for the model', () => {
+  // The exact result an older kortixd wrote for a follow_up call with no `text`.
+  const MODEL_TEXT =
+    'Missing `text`: what the woken turn reads (what was done, what to check, what to do on each outcome, an end date). If you did send it, it did not arrive: send this call from codemode. Call again with it, e.g. {"action":"follow_up","in":"4d","text":"Check replies."}';
+  const legacy = (title: string, kind: string, message = MODEL_TEXT) =>
+    JSON.stringify({ ok: false, tool: 'kortix_schedules', action: 'follow_up', card: { title, subtitle: message, status: 'error' }, error: { kind, message } });
+
+  test('an argument check reads as an incomplete call, with no subtitle', () => {
+    const result = parseKortixToolResult(legacy('What should the follow-up check?', 'invalid'))!;
+    expect(result.card.title).toBe('The agent left out a required detail');
+    expect(result.card.subtitle).toBeUndefined();
+    // The model's text stays on the error for whoever reads it as the model.
+    expect(result.error?.message).toBe(MODEL_TEXT);
+    expect(parseKortixToolResult(legacy('Unknown action', 'invalid'))!.card.title).toBe('The agent left out a required detail');
+  });
+
+  test('a failure keeps its own title, and drops a subtitle that repeats the model message', () => {
+    const result = parseKortixToolResult(legacy('Could not set the follow-up', 'failed', 'kortix exited 1'))!;
+    expect(result.card).toMatchObject({ title: 'Could not set the follow-up', status: 'error' });
+    expect(result.card.subtitle).toBeUndefined();
+  });
+
+  test('a subtitle written for the person stays', () => {
+    const raw = JSON.stringify({ ok: false, tool: 'kortix_memory', action: 'list', card: { title: 'Memory is off in this workspace', subtitle: 'Files is off.', status: 'error' }, error: { kind: 'failed', message: 'model text', note: 'Files is off.' } });
+    expect(parseKortixToolResult(raw)!.card.subtitle).toBe('Files is off.');
+  });
+});

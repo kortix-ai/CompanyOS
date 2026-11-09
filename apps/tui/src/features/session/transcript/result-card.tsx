@@ -7,6 +7,7 @@
  *
  * The tool returns a `KortixToolResult` (`parseKortixToolResult`, SDK); its
  * `card` is written for people: a headline, a subtitle and a few rows.
+ * `error.message` is written for the model and never prints.
  */
 
 import type { KortixToolResult } from '@kortix/sdk';
@@ -39,11 +40,6 @@ export function ResultCard({ result, width }: { result: KortixToolResult; width:
         <span fg={theme.fg}>{clip(printable(card.title), inner - 2)}</span>
         <span fg={theme.dim}>{card.subtitle ? ` · ${clip(printable(card.subtitle), Math.max(inner - card.title.length - 6, 8))}` : ''}</span>
       </text>
-      {result.error ? (
-        <text fg={theme.danger} wrapMode="none">
-          {`  ${clip(printable(result.error.message), inner - 2)}`}
-        </text>
-      ) : null}
       {shown.map((row, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: card rows have no id
         <text key={index} wrapMode="none">

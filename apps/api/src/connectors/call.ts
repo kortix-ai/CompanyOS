@@ -399,10 +399,11 @@ function joinUrl(base: string, path: string): string {
  * exact value the URL builder substitutes: `String(value ?? '')` for the
  * untrimmed `{…}` capture. That segment is empty (a nullish value, or a JSON
  * value whose serialization is empty such as `[]` or `['']`, or whitespace)
- * or dot-only (`.` / `..` — URL normalization collapses it into a parent
- * path). Null when every placeholder has a usable value. Callers deny the
- * call with this name so the provider never sees a truncated or escaping URL
- * (KRTX-4539).
+ * or exactly `.` / `..` — the only segments URL normalization collapses
+ * (RFC 3986 remove_dot_segments); a longer dot run such as `...` is a
+ * literal segment a caller may legitimately pass. Null when every
+ * placeholder has a usable value. Callers deny the call with this name so
+ * the provider never sees a truncated or escaping URL (KRTX-4539).
  */
 export function missingPathArg(
   pathTemplate: string,
@@ -412,7 +413,7 @@ export function missingPathArg(
     const name = match[1]!;
     const value = args?.[name];
     const segment = (value == null ? '' : String(value)).trim();
-    if (segment === '' || /^[.]+$/.test(segment)) return name.trim();
+    if (segment === '' || segment === '.' || segment === '..') return name.trim();
   }
   return null;
 }

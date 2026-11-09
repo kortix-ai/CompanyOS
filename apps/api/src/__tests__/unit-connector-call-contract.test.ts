@@ -249,7 +249,8 @@ describe('handleCall() path arguments', () => {
     // JSON arg values whose serialized path segment is empty.
     ['empty array', { intentId: [] }],
     ['array of one empty string', { intentId: [''] }],
-    // URL normalization collapses a dot-only segment into a parent path.
+    // URL normalization collapses exactly the segments `.` and `..` into a
+    // parent path; longer dot runs are literal segments (control below).
     ['dot-only', { intentId: '.' }],
     ['parent-segment dots', { intentId: '..' }],
   ])('path argument that serializes to nothing usable (%s) → denied before the upstream, message names it', async (_case, args) => {
@@ -277,6 +278,15 @@ describe('handleCall() path arguments', () => {
     const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs({ intentId: 'pi_1' }));
     expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
     expect(fetches).toEqual(['/intents/pi_1']);
+  });
+
+  test('a dot run URL normalization leaves alone (`...`) is a literal segment and goes through', async () => {
+    // remove_dot_segments collapses exactly `.` and `..`; `...` is a literal
+    // segment that cannot escape the configured path, so it is a valid
+    // identifier and must reach the upstream (review of KRTX-4539's fix).
+    const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs({ intentId: '...' }));
+    expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
+    expect(fetches).toEqual(['/intents/...']);
   });
 
   test('two placeholders: the first empty one is named; both filled go through', async () => {

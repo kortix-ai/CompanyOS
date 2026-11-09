@@ -359,7 +359,9 @@ export async function runPrePromptEnvSync(
       throw new Error(message);
     }
     console.warn(`[PREVIEW] Project env sync failed for ${sandboxId}:${port}: ${message}`);
-    return jsonProxyError({ error: message }, 502, origin);
+    // The body stays stable and termless: an internal failure's own message
+    // can name stack-level context, already logged server-side.
+    return jsonProxyError({ error: 'Project env sync failed. Retry the request or check the sandbox logs.' }, 502, origin);
   }
   return null;
 }

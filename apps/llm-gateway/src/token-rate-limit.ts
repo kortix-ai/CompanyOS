@@ -44,9 +44,9 @@ export function createTokenRateLimit(limitPerMinute: number): {
   const limiter = new TokenBucketRateLimiter('gateway_token');
   const validatedKeys = new Set<string>();
   // Credentials charged to the shared bucket while unvalidated; their slot is
-  // refunded once, when the API validates them. Bounded to the shared allowance
-  // itself: at most that many unvalidated credentials can be admitted in a
-  // window, so the set can never outgrow it.
+  // refunded once, when the API validates them. Bounded by the shared
+  // allowance itself: only an admitted request adds a key, and the bucket
+  // admits at most `limit` of them per window, so the set cannot outgrow it.
   const chargedShared = new Set<string>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
   const limit = (request: Request, headers = new Headers()): Response | null => {
@@ -57,8 +57,7 @@ export function createTokenRateLimit(limitPerMinute: number): {
     // bucket, so a rotating fake bearer spends the shared allowance, never its
     // own private one.
     const result = limiter.check(validatedKeys.has(key) ? key : UNVALIDATED, policy);
-    if (!validatedKeys.has(key) && result.allowed)
-      track(chargedShared, key, Math.max(1, limitPerMinute));
+    if (!validatedKeys.has(key) && result.allowed) chargedShared.add(key);
     headers.set('RateLimit-Limit', String(result.limit));
     headers.set('RateLimit-Remaining', String(result.remaining));
     headers.set('RateLimit-Reset', String(Math.ceil(result.resetMs / 1000)));
@@ -86,16 +85,6 @@ export function createTokenRateLimit(limitPerMinute: number): {
 
 /** The bucket every credential this task has not validated shares. */
 const UNVALIDATED = 'distinct_credentials';
-
-/** Add to a capped set, evicting the oldest entry once it is full. */
-function track(set: Set<string>, key: string, cap: number): void {
-  if (set.has(key)) return;
-  for (const oldest of set) {
-    if (set.size < cap) break;
-    set.delete(oldest);
-  }
-  set.add(key);
-}
 
 /** The bearer token, or the `x-api-key` that Anthropic SDKs send instead. */
 function credentialOf(request: Request): string | null {

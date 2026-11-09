@@ -62,18 +62,26 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
   });
 
   test('a credential the API answers with a principal gets its own budget back', async () => {
-    // One pinned minute: a real clock would refill a one-per-minute budget.
+    // One pinned minute: a real clock would refill the budget.
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     useFakeApi();
-    const { app } = buildServer({ requestsPerMinutePerCredential: 1 });
-    // The first request reaches the fake API, which answers its principal (it
-    // also takes the one shared slot, so validation is what gives it back), and
-    // from then on the credential has its own budget of one per minute.
+    const { app } = buildServer({ requestsPerMinutePerCredential: 2 });
+    // The first request reaches the fake API, which answers its principal. That
+    // request took a shared slot, and validation gives it back once: the
+    // credential's own budget of two admits two more, and the fourth is
+    // refused. Without the refund the second request would still fit its own
+    // budget but the shared bucket would be empty for the first fake below.
+    expect((await app.request(call('kortix_real'))).status).toBe(402);
     expect((await app.request(call('kortix_real'))).status).toBe(402);
     expect((await app.request(call('kortix_real'))).status).toBe(402);
     expect((await app.request(call('kortix_real'))).status).toBe(429);
-    // Its own budget never drains the shared allowance: a fake is still admitted.
+    // The refunded slot went back to the shared allowance: two fakes are still
+    // admitted before it is spent again. Without the refund this first succeed
+    // is refused, because the real credential's first request took the only
+    // slot past the two it already spent.
     expect((await app.request(call('kortix_fake_1'))).status).toBe(401);
+    expect((await app.request(call('kortix_fake_2'))).status).toBe(401);
+    expect((await app.request(call('kortix_fake_3'))).status).toBe(429);
   });
 
   test('a flood of distinct never-validated x-api-key credentials is refused too', async () => {

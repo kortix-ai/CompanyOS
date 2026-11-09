@@ -89,6 +89,19 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     expect(limit.buckets()).toEqual(['gateway_token:distinct_credentials']);
   });
 
+  test('refunds a credential’s shared slot once, however often it is validated', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(2);
+    expect(limit(fake(1))).toBeNull();
+    expect(limit(fake(2))).toBeNull();
+    // A request authenticates the same token several times per call (authorize,
+    // admit); a second validated() must not refund a slot it never took.
+    limit.validated('kortix_fake_1');
+    limit.validated('kortix_fake_1');
+    expect(limit(fake(3))).toBeNull();
+    expect(limit(fake(4))?.status).toBe(429);
+  });
+
   test('validating a credential moves it off the shared bucket and refunds its slot', () => {
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     const limit = createTokenRateLimit(2);

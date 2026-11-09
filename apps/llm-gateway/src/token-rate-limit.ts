@@ -22,7 +22,11 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
  * credential onto its own budget and gives back the shared slot it took, once,
  * so real traffic does not drain the allowance every new credential shares. A
  * request without a credential is not counted: the pipeline refuses it with
- * 401 before it calls the API.
+ * 401 before it calls the API. The cost this accepts: every credential's first
+ * request spends a shared slot, so a flood can exhaust the shared bucket and
+ * refuse a real credential still waiting on that first validation until the
+ * window refills. That is the trade for a bounded, unauthenticated allowance.
+
  *
  * Each gateway task counts alone, so the fleet allows limit × tasks. This
  * stops a runaway loop or a flood on one credential. It is not a quota.

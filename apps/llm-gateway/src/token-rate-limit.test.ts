@@ -91,14 +91,18 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
 
   test('validating a credential moves it off the shared bucket and refunds its slot', () => {
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
-    const limit = createTokenRateLimit(1);
-    // `kortix_fake_1` spends the one shared slot while it is unvalidated.
+    const limit = createTokenRateLimit(2);
+    // Two fakes take the two shared slots, so the allowance is empty.
     expect(limit(fake(1))).toBeNull();
-    expect(limit(fake(2))?.status).toBe(429);
-    // The API answered `kortix_fake_1` with a principal: it leaves the shared
-    // allowance (refunded, so a fake is admitted again) and gets its own budget.
+    expect(limit(fake(2))).toBeNull();
+    expect(limit(fake(9))?.status).toBe(429);
+    // The API answered `kortix_fake_1` with a principal: its shared slot is
+    // refunded, so exactly one more unvalidated request fits.
     limit.validated('kortix_fake_1');
-    expect(limit(fake(9))).toBeNull();
+    expect(limit(fake(8))).toBeNull();
+    expect(limit(fake(7))?.status).toBe(429);
+    // It also has its own budget now, so repeating it is not the shared limit.
+    expect(limit(fake(1))).toBeNull();
     expect(limit(fake(1))).toBeNull();
     expect(limit(fake(1))?.status).toBe(429);
   });

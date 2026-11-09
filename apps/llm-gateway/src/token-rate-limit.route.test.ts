@@ -28,7 +28,7 @@ const fakeApi = (async (url: string, init: RequestInit) => {
         }
       : { ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' };
   return Response.json({ admission });
-}) as unknown as typeof fetch;
+}) as typeof fetch;
 const useFakeApi = () => {
   apiCalls.length = 0;
   globalThis.fetch = fakeApi;

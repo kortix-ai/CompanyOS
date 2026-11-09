@@ -144,4 +144,17 @@ describe('parseKortixToolResult: a failure card never shows text written for the
     const raw = JSON.stringify({ ok: false, tool: 'kortix_memory', action: 'list', card: { title: 'Memory is off in this workspace', subtitle: FILES_OFF, status: 'error' }, error: { kind: 'failed', message: FILES_OFF, note: FILES_OFF } });
     expect(parseKortixToolResult(raw)!.card.subtitle).toBe(FILES_OFF);
   });
+
+  test('a question title with trailing space still reads as an incomplete call', () => {
+    expect(parseKortixToolResult(legacy('Which agent?  ', 'invalid'))!.card.title).toBe('The agent left out a required detail');
+  });
+
+  test('two legacy success subtitles lose their model text', () => {
+    const models = JSON.stringify({ ok: true, tool: 'kortix_agents', action: 'models', card: { title: '2 models', subtitle: 'Pass an id as `model` to a hand-off, a workflow agent or an agent setting.', status: 'done' } });
+    expect(parseKortixToolResult(models)!.card.subtitle).toBeUndefined();
+    const list = JSON.stringify({ ok: true, tool: 'kortix_schedules', action: 'list', card: { title: '1 schedule', subtitle: "This session's follow-ups could not be read: kortix exited 2 (send this call from codemode)", status: 'done' } });
+    expect(parseKortixToolResult(list)!.card.subtitle).toBe("This session's follow-ups could not be read.");
+    const projectList = JSON.stringify({ ok: true, tool: 'kortix_schedules', action: 'list', card: { title: '1 follow-up', subtitle: 'The project schedules could not be read: boom', status: 'done' } });
+    expect(parseKortixToolResult(projectList)!.card.subtitle).toBe('The project schedules could not be read.');
+  });
 });

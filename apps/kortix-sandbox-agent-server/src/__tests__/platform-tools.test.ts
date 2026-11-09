@@ -366,6 +366,20 @@ describe('kortix_schedules follow-through', () => {
     expect(result.card.rows?.map((row) => row.detail)).toEqual(['Follow-up · every 3h · next 2026-10-31 15:00 UTC', 'Wakes when change request 42 merges', '0 9 * * 1 · next 2026-11-02 09:00 UTC'])
   })
 
+  test('list with one unreadable source: the card says which in plain words, the reason goes to the model in data.errors', async () => {
+    fakeKortix(`'triggers ls --json') echo '{"triggers":[],"runtime":[]}' ;;`)
+    const result = await run('kortix_schedules', { action: 'list' })
+    expect(result.card.subtitle).toBe("This session's follow-ups could not be read.")
+    expect(typeof (result.data as { errors?: { follow_ups?: unknown } }).errors?.follow_ups).toBe('string')
+  })
+
+  test('an automate argument check reads as an incomplete call on the card', async () => {
+    fakeKortix('')
+    const result = await run('kortix_schedules', { action: 'automate', name: 'Not A Slug', on: 'schedule', every: '1d', agent: 'writer', prompt: 'x' })
+    expect(result.card).toEqual({ title: 'The agent left out a required detail', status: 'error' })
+    expect(result.error?.message).toContain('`name` is a short id')
+  })
+
   test('remove routes by id: reminder.<id> → kortix loops, trigger.<id> → kortix triggers, a kortix.yaml slug → --apply; delete is an alias; pause and resume work for loops', async () => {
     fakeKortix(`'loops rm reminder.aaaaaaaaaaaa') echo 'Removed' ;;
   'triggers rm trigger.cccccccccccc') echo 'Removed' ;;

@@ -209,6 +209,20 @@ function personTitle(title: string, error: KortixToolError | undefined): string 
 }
 
 /**
+ * Two success subtitles older kortixd wrote with model text in them: the
+ * `models` hint on how to pass an id, and the reason after a schedule list's
+ * "could not be read". The person keeps what the subtitle says without it.
+ */
+function personSubtitle(tool: KortixCardTool, action: string, subtitle: string): string | undefined {
+  if (tool === 'kortix_agents' && action === 'models' && subtitle.startsWith('Pass an id as `model`')) return undefined;
+  if (tool === 'kortix_schedules' && action === 'list') {
+    const unread = /^(This session's follow-ups|The project schedules) could not be read: /.exec(subtitle);
+    if (unread) return `${unread[1]} could not be read.`;
+  }
+  return subtitle;
+}
+
+/**
  * The result in a platform call's output (or its error text, when the call threw
  * it): one JSON object. `null` when the text is not that object. `callName` names
  * the tool when the result leaves `tool` out.
@@ -239,11 +253,13 @@ export function parseKortixToolResult(raw: string | undefined, callName?: string
   const rawSubtitle = text(value.card.subtitle);
   // A subtitle the tool backed with `error.note` is the person's, even when the model reads the same words.
   const note = isObject(value.error) ? text(value.error.note) : undefined;
-  const subtitle = rawSubtitle && (rawSubtitle === note || rawSubtitle !== error?.message) ? rawSubtitle : undefined;
+  const action = text(value.action) ?? '';
+  const subtitle =
+    rawSubtitle && (rawSubtitle === note || rawSubtitle !== error?.message) ? personSubtitle(tool, action, rawSubtitle) : undefined;
   return {
     ok: value.ok,
     tool,
-    action: text(value.action) ?? '',
+    action,
     card: {
       title: personTitle(title, error),
       ...(subtitle ? { subtitle } : {}),

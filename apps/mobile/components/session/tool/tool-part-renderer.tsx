@@ -18,6 +18,8 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { getChildSessionId, getToolInfo, kortixPlatformTool, parseKortixToolResult, parseWorkflowRun, partOutcome, sessionLogOpenCall, stripAnsi, toolKind, type ToolCallBlock } from '@kortix/sdk';
 import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import * as WebBrowser from 'expo-web-browser';
 import type { PermissionRequest } from '@/lib/session/types';
 import { usePendingPermissions } from '@/lib/session/session-store';
 import { getDiffStats } from '@/lib/session/diff-utils';
@@ -200,16 +202,28 @@ function ToolPartRendererImpl({
   if (call.name === 'todoread') return null;
 
   if (platformCard) {
+    // A sign-in link (an absolute https:// URL) is the card's action: it opens in the browser.
+    const external = platformCard.links.filter((link) => link.external);
     return (
       <RowAmbient running={false} stale={false} turnLive={turnLive} outcome={outcome} durationMs={durationMs} permission={permission} onPermissionReply={onPermissionReply}>
         <BasicTool
           disclosureId={rowKey}
           icon={getToolIconByName(info.icon)}
           trigger={{ title: platformCard.title, subtitle: platformCard.subtitle }}
-          defaultOpen={defaultOpen}
+          defaultOpen={defaultOpen || external.length > 0}
           forceOpen={forceOpen}
           locked={forceOpen}
-        />
+        >
+          {external.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: TURN_SPACE.gap1_5, marginTop: TURN_SPACE.gap1_5 }}>
+              {external.map((link) => (
+                <Button key={link.href} variant="secondary" size="sm" onPress={() => void WebBrowser.openBrowserAsync(link.href)} accessibilityHint="Opens in the browser">
+                  <Text>{link.label}</Text>
+                </Button>
+              ))}
+            </View>
+          ) : null}
+        </BasicTool>
       </RowAmbient>
     );
   }

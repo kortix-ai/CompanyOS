@@ -14,6 +14,7 @@ function health(
     degraded?: boolean;
     authDown?: boolean;
     upstream?: { incidents: string[]; warnings: string[] };
+    rateLimit?: ReturnType<typeof createTokenRateLimit>;
   } = {},
 ) {
   const api = createApiClient({
@@ -37,7 +38,7 @@ function health(
   // wired because `/health` forwards a caller bearer to `authenticate`, the
   // same allowance the model routes draw from.
   const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
-  const rateLimit = createTokenRateLimit(600, 10_000);
+  const rateLimit = options.rateLimit ?? createTokenRateLimit(600, 10_000);
   registerHealth(
     app,
     api,
@@ -112,6 +113,22 @@ describe('gateway health disclosure boundary', () => {
     expect(body.checks.admission.capacity_bytes).toBe(1024);
     expect(body.traffic.requests).toBe(20);
     expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+  test('a bearer the API proves real refunds its shared allowance slot', async () => {
+    // The probe spends shared allowance on the pre-validation admission. A
+    // credential the API answers with a principal must give that slot back,
+    // exactly as the model routes do — otherwise one real probe drains the
+    // unvalidated allowance for every made-up bearer until the window resets.
+    // At a shared allowance of 2 the real probe plus TWO distinct fakes fit; a
+    // third is refused, so the test proves both the refund and the bound.
+    const rateLimit = createTokenRateLimit(1, 2);
+    const app = health({ rateLimit });
+    const probe = (token: string) =>
+      app.request('/health', { headers: { authorization: `Bearer ${token}` } });
+    expect((await probe('synthetic-valid-token')).status).toBe(200);
+    expect((await probe('synthetic-fake-1')).status).toBe(200);
+    expect((await probe('synthetic-fake-2')).status).toBe(200);
+    expect((await probe('synthetic-fake-3')).status).toBe(429);
   });
   test('authentication failure never discloses details', async () => {
     const response = await health({ authDown: true }).request('/health', {

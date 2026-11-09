@@ -88,7 +88,12 @@ export function registerHealth(
       ?.match(/^Bearer\s+(\S.*)$/i)?.[1]
       .trim();
     const principal = token ? await api.authenticate(token).catch(() => null) : null;
+    // The probe spent shared allowance before the API vouched for this
+    // credential; give that slot back now it is proven real, exactly as the
+    // model routes do (KRTX-4528). Without this one real probe drains the
+    // unvalidated allowance for every made-up bearer until the window resets.
     if (!principal) return c.json({ status }, status === 'unhealthy' ? 503 : 200);
+    if (token) rateLimit.validated(token);
 
     return c.json(
       {

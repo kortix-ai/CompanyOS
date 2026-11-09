@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { chatEventDedup } from '@kortix/db';
 import { db } from '../../shared/db';
 import { EVENT_DEDUPE_TTL_MS } from './app';
@@ -6,9 +6,10 @@ import { recordClaim } from '../webhook-work';
 
 // Cross-replica dedup. Slack can redeliver the same event_id (retries); with >1
 // API replica an in-memory set only dedups within one process, so a redelivery
-// to another replica re-fires the turn. An INSERT … ON CONFLICT DO NOTHING makes
-// "already handled?" one shared decision: a row came back ⇒ we're the first to
-// claim it; empty ⇒ someone already has.
+// to another replica re-fires the turn. One atomic INSERT … ON CONFLICT makes
+// "already handled?" a shared decision: a row came back ⇒ someone still holds
+// the claim; empty ⇒ we won it. The conflict is expiry-aware (see
+// `claimExpiringKey`) so an expired claim frees its key.
 //
 // The claim is namespaced by the project that received it: a per-project (BYO)
 // Slack app is a separate Slack app with its own event id space, so two projects
@@ -31,10 +32,21 @@ export interface ClaimPolicy {
 
 export async function claimExpiringKey(key: string, ttlMs: number, opts: ClaimPolicy): Promise<boolean> {
   try {
+    const expiresAt = new Date(Date.now() + ttlMs);
+    // The conflict is expiry-aware: a LIVE claim (expiresAt ≥ now) still wins the
+    // conflict (the update's WHERE excludes it, no row comes back), while an
+    // EXPIRED one is re-taken — refreshed and returned — so a claim left behind
+    // by a failed release or held past its TTL during a redelivery never
+    // suppresses the delivery again (the lost-event window the redelivery
+    // consumers otherwise complete undelivered).
     const inserted = await db
       .insert(chatEventDedup)
-      .values({ eventId: key, expiresAt: new Date(Date.now() + ttlMs) })
-      .onConflictDoNothing({ target: chatEventDedup.eventId })
+      .values({ eventId: key, expiresAt })
+      .onConflictDoUpdate({
+        target: chatEventDedup.eventId,
+        set: { expiresAt },
+        setWhere: lt(chatEventDedup.expiresAt, new Date()),
+      })
       .returning({ eventId: chatEventDedup.eventId });
     if (inserted.length > 0 && opts.record) recordClaim(key);
     return opts.inverted ? inserted.length === 0 : inserted.length > 0;

@@ -148,8 +148,8 @@ export function groupRow(accountId: string | null, groupId: string) {
 
 /**
  * The full rows of `groupIds`, or of every group of the account, ordered by
- * name. The callers keep their `length > 0` guard: an empty `groupIds` would
- * fence on nothing, not on an empty set.
+ * name. The callers keep their `length > 0` guard: an empty array still
+ * builds an `inArray`, it never means "no fence".
  */
 export function groupRows(opts: { accountId?: string; groupIds?: string[] }) {
   return db

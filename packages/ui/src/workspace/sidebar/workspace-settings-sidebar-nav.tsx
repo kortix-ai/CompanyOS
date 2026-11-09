@@ -140,6 +140,17 @@ export function withSettingsQuery(href: string, query: string): string {
   return `${path}${search ? `?${search}` : ''}${hash !== undefined ? `#${hash}` : ''}`;
 }
 
+/**
+ * Whether a debounced write may still land: only on the page (path and query)
+ * it started from. Any move inside the debounce came from elsewhere (Back or
+ * Forward, a result link carrying a newer query) and wins, so the write is
+ * dropped. Comparing the query alone is not enough: Back can restore a page
+ * that holds the same query on another path.
+ */
+export function settingsQueryWriteStillValid(current: string, startedFrom: string): boolean {
+  return current === startedFrom;
+}
+
 function SettingsSearch({
   projectId,
   rail,
@@ -156,6 +167,7 @@ function SettingsSearch({
   const tSettings = useTranslations('workspaces.settings');
   const setPendingFind = useWorkspaceSettingsRailStore((s) => s.setPendingFind);
   const searchParams = useUiSearchParams();
+  const pathname = useUiPathname();
   const shallowNavigate = useUiShallowNavigate();
   const [query, setQuery] = useState(() => searchParams.get(SEARCH_PARAM) ?? '');
   // `null`: no row picked by hand yet, so Enter opens the best match.
@@ -176,16 +188,19 @@ function SettingsSearch({
   const listId = useId();
 
   // The URL follows the field, debounced 250 ms after the last keystroke,
-  // replacing the entry so typing adds no history. `written` is what the field
-  // last wrote: a URL change that differs from it came from elsewhere (Back,
-  // Forward, a pasted link) and puts that query in the field instead.
+  // replacing the entry so typing adds no history. A location is its path and
+  // query; `written` is the one the field last wrote. Any other location
+  // change came from elsewhere (Back, Forward, a result link, a pasted link)
+  // and puts its query in the field. Path matters: Back can restore a page
+  // that holds the same query on another path.
   const urlQuery = searchParams.get(SEARCH_PARAM) ?? '';
-  const [written, setWritten] = useState(urlQuery);
-  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery);
-  if (urlQuery !== seenUrlQuery) {
-    setSeenUrlQuery(urlQuery);
-    if (urlQuery !== written) {
-      setWritten(urlQuery);
+  const location = `${pathname}|${urlQuery}`;
+  const [written, setWritten] = useState(location);
+  const [seenLocation, setSeenLocation] = useState(location);
+  if (location !== seenLocation) {
+    setSeenLocation(location);
+    if (location !== written) {
+      setWritten(location);
       setQuery(urlQuery);
       setCursor(null);
     }
@@ -195,12 +210,16 @@ function SettingsSearch({
   const writeQuery = (next: string, delayMs: number) => {
     clearTimeout(writeTimer.current);
     const value = next.trim() ? next : '';
+    const here = () => `${window.location.pathname}${window.location.search}`;
+    const startedFrom = here();
     const write = () => {
-      setWritten(value);
-      // Read at write time: a result opened mid-debounce has already moved
-      // the page, and the query lands on that page, not the old one.
-      const { pathname, search, hash } = window.location;
-      shallowNavigate(withSettingsQuery(`${pathname}${search}${hash}`, value), { replace: true });
+      if (!settingsQueryWriteStillValid(here(), startedFrom)) return;
+      // The guard proved the page has not moved, so `pathname` is still it.
+      setWritten(`${pathname}|${value}`);
+      const { search, hash } = window.location;
+      shallowNavigate(withSettingsQuery(`${window.location.pathname}${search}${hash}`, value), {
+        replace: true,
+      });
     };
     if (delayMs === 0) write();
     else writeTimer.current = setTimeout(write, delayMs);

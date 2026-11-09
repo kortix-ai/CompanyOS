@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { withSettingsQuery } from './workspace-settings-sidebar-nav';
+import { settingsQueryWriteStillValid, withSettingsQuery } from './workspace-settings-sidebar-nav';
 
 describe('withSettingsQuery', () => {
   test('adds the query to a plain path', () => {
@@ -22,5 +22,21 @@ describe('withSettingsQuery', () => {
   test('an empty query removes the param and leaves no bare "?"', () => {
     expect(withSettingsQuery('/s/general?settings_q=en', '')).toBe('/s/general');
     expect(withSettingsQuery('/s/general?tab=a&settings_q=en', '  ')).toBe('/s/general?tab=a');
+  });
+});
+
+describe('settingsQueryWriteStillValid', () => {
+  test('a write fires when the page has not moved since it started', () => {
+    expect(settingsQueryWriteStillValid('/s/api-keys?settings_q=key', '/s/api-keys?settings_q=key')).toBe(true);
+  });
+
+  test('Back before the debounce fires: the restored page wins, even with the same query', () => {
+    // Typed "git" on api-keys?settings_q=key, Back to general?settings_q=key within 250 ms.
+    expect(settingsQueryWriteStillValid('/s/general?settings_q=key', '/s/api-keys?settings_q=key')).toBe(false);
+    expect(settingsQueryWriteStillValid('/s/general?settings_q=old', '/s/general?settings_q=key')).toBe(false);
+  });
+
+  test('a result opened mid-debounce already carries the newer query: the write is dropped', () => {
+    expect(settingsQueryWriteStillValid('/s/security?settings_q=keys', '/s/general?settings_q=ke')).toBe(false);
   });
 });

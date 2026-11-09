@@ -4467,13 +4467,15 @@ describe("hydrate keeps what did not change", () => {
 // driven through the store's real actions and read back through its public
 // surface.
 //
-// Probe coverage, collection by collection: the optimistic trio
-// (`optimisticIds`/`dispatchedOptimisticIds`/`inboxBackedOptimisticIds`) via
+// Probe coverage, collection by collection: `optimisticIds` via
 // `isOptimisticMessage`; `optimisticEchoes`/`optimisticOrigins` via the echo
 // getters; `deltaEventTails`/`deltaOffsets` via the same eventID reapplying;
-// `bridgedPartIds` via the part-wipe probe; `cacheSourcedIds` via
+// `deltaActiveParts` via the snapshot-skip guard; `bridgedPartIds` via the
+// part-wipe probe on a bucket the probe filled first; `cacheSourcedIds` via
 // `hasOnlyCacheSourcedMessages`; `cancelledMessageIds` via the tombstone
-// probe; `controlPlaneOwnedIds` via `reclaimRemovedMessage`.
+// probe; `controlPlaneOwnedIds` via `reclaimRemovedMessage`;
+// `dispatchedOptimisticIds` via the role-guess net (`awaitsUserEcho`);
+// `inboxBackedOptimisticIds` via `clearOptimisticMessages`.
 // `stubAssistantIds` has no stale-mark observable (a stale mapping holds the
 // same parent a fresh adoption would write), so its release rests on the
 // collapse itself: the record is one `delete`/`clear` away, and the setup
@@ -4528,10 +4530,15 @@ function markEveryCollection(sessionID: string): void {
 		id: "evt_error",
 		type: "session.error",
 		properties: { sessionID, error: { name: "UnknownError", data: { message: "boom" } } },
-	} as never);
+	});
 	// The streaming-delta marks on prt_a.
 	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "typed", sessionID), sessionID);
 	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", " grew", "evt_delta_1");
+	// A second active-delta mark on its own part id: the delta-reapply probe
+	// legitimately re-marks prt_a active when it reruns the pair, so prt_a
+	// cannot carry the release probe for this collection.
+	store.upsertPart("msg_seed", textPart("prt_delta_seed", "msg_seed", "", sessionID), sessionID);
+	store.applyPartDelta(sessionID, "msg_seed", "prt_delta_seed", "text", "Hi", "evt_delta_seed");
 }
 
 /**
@@ -4552,22 +4559,36 @@ function expectFreshLifetime(sessionID: string): void {
 	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "", sessionID), sessionID);
 	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", "Hi", "evt_delta_1");
 	expect((useSyncStore.getState().parts.msg_a[0] as TextPart).text).toBe("Hi");
-	// The bridge mark is gone: real parts for a re-used id append normally
-	// instead of wiping the bucket as if optimistic parts were still bridged.
-	store.upsertPart("msg_c", {
-		id: "prt_step",
-		sessionID,
-		messageID: "msg_c",
-		type: "step-start",
-	} as Part);
-	store.upsertPart("msg_c", textPart("prt_text", "msg_c", "fresh", sessionID));
-	const ids = useSyncStore.getState().parts.msg_c?.map((p) => p.id) ?? [];
-	expect(ids).toContain("prt_step");
-	expect(ids).toContain("prt_text");
+	// The active-delta mark is gone: a `message.part.updated` snapshot for a
+	// part id that already exists in another bucket lands in its own bucket.
+	// A stale active-delta mark reads the part as the delta-created copy and
+	// skips the insert. (Independent of the reapply probe above: that apply
+	// legitimately re-marks prt_a active, so prt_a cannot carry this probe.)
+	store.upsertPart("msg_seed", textPart("prt_delta_seed", "msg_seed", "", sessionID), sessionID);
+	store.upsertPart("msg_snapshot", textPart("prt_delta_seed", "msg_snapshot", "snapshot", sessionID), sessionID);
+	expect(useSyncStore.getState().parts.msg_snapshot?.some((p) => p.id === "prt_delta_seed")).toBe(true);
 	// The cache-provenance mark is gone: a re-added id is not treated as
-	// painted from a saved copy.
+	// painted from a saved copy. (Runs while msg_e is the session's ONLY
+	// message: the bridge probe below re-adds msg_c, and a second message the
+	// mark does not hold would make `every` false and mask the leak.)
 	store.optimisticAdd(sessionID, userMessage("msg_e", sessionID), []);
 	expect(hasOnlyCacheSourcedMessages(sessionID)).toBe(false);
+	// The bridge mark is gone: real parts for a re-used id append normally
+	// instead of wiping the bucket as if optimistic parts were still bridged.
+	// The bucket is filled first through the optimistic add — the one part
+	// write that neither reads nor retires the bridge mark (a hydrate with
+	// parts retires it in `reconcileHydratedParts`; an upsertPart IS the
+	// wipe) — so the wipe a leaked bridge retires on the first real part has
+	// something observable to drop.
+	store.optimisticAdd(sessionID, userMessage("msg_c", sessionID), [
+		textPart("prt_keep", "msg_c", "optimistic", sessionID),
+	]);
+	store.upsertPart("msg_c", { id: "prt_step", sessionID, messageID: "msg_c", type: "step-start" });
+	store.upsertPart("msg_c", textPart("prt_text", "msg_c", "fresh", sessionID));
+	const ids = useSyncStore.getState().parts.msg_c?.map((p) => p.id) ?? [];
+	expect(ids).toContain("prt_keep");
+	expect(ids).toContain("prt_step");
+	expect(ids).toContain("prt_text");
 	// The cancelled tombstone is gone: a re-read shows the deleted id.
 	store.hydrate(sessionID, [{ info: userMessage("msg_d", sessionID), parts: [] }]);
 	expect(useSyncStore.getState().messages[sessionID]?.some((m) => m.id === "msg_d")).toBe(true);
@@ -4575,6 +4596,25 @@ function expectFreshLifetime(sessionID: string): void {
 	// optimistic message is a deletion, not a re-placement in progress.
 	store.optimisticAdd(sessionID, userMessage("msg_c", sessionID), []);
 	expect(store.reclaimRemovedMessage(sessionID, "msg_c")).toBe(false);
+	// The dispatched mark is gone: with a fresh optimistic bubble outstanding
+	// and no echo claimed, the role-guess net for a part that outran its
+	// message frame INVENTS the assistant message. A stale dispatched mark on
+	// the bubble answers `awaitsUserEcho` yes and suppresses the invention.
+	store.optimisticAdd(sessionID, userMessage("msg_a", sessionID), []);
+	store.applyEvent({
+		id: "evt_orphan_part",
+		type: "message.part.updated",
+		properties: {
+			sessionID,
+			time: 1,
+			part: { id: "prt_orphan", messageID: "msg_orphan", sessionID, type: "text", text: "hello" },
+		},
+	});
+	expect(useSyncStore.getState().messages[sessionID]?.some((m) => m.id === "msg_orphan")).toBe(true);
+	// The inbox-backed mark is gone: the local idle sweep removes a re-added
+	// optimistic bubble instead of holding it as control-plane property.
+	store.clearOptimisticMessages(sessionID);
+	expect(useSyncStore.getState().messages[sessionID]?.some((m) => m.id === "msg_a")).toBe(false);
 }
 
 test("clearSession releases every per-session mark", () => {

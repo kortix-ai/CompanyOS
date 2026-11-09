@@ -45,6 +45,7 @@ mock.module('@kortix/ui/files', () => ({
   useDismissDriveConflict: () => ({ mutate: dismiss, isPending: false }),
 }));
 const { DriveConflictsBar } = await import('./drive-conflicts-bar');
+const { TooltipProvider } = await import('@kortix/ui/tooltip');
 const host = document.createElement('div');
 document.body.append(host);
 const root = createRoot(host);
@@ -59,7 +60,9 @@ async function mount() {
         messages={messages}
         now={new Date('2026-10-01T01:00:00Z')}
       >
-        <DriveConflictsBar driveId="synthetic-drive" onOpenFolder={openFolder} />
+        <TooltipProvider>
+          <DriveConflictsBar driveId="synthetic-drive" onOpenFolder={openFolder} />
+        </TooltipProvider>
       </NextIntlClientProvider>,
     ),
   );
@@ -71,7 +74,7 @@ function trigger() {
 }
 function button(label: string) {
   const match = Array.from(document.querySelectorAll('button')).find(
-    (node) => node.textContent === label,
+    (node) => node.getAttribute('aria-label') === label || node.textContent === label,
   );
   if (!match) throw new Error(`Missing ${label}`);
   return match;
@@ -97,13 +100,6 @@ test('click opens an accessible popover, actions retain their inputs, and Escape
   await act(async () => trigger().click());
   expect(trigger().getAttribute('aria-expanded')).toBe('true');
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('report.txt');
-  await act(async () => button('Open folder').click());
-  expect(openFolder).toHaveBeenCalledWith('/Shared');
-  await act(async () => button('Dismiss').click());
-  expect(dismiss.mock.calls[0]?.[0]).toEqual({
-    driveId: 'synthetic-drive',
-    conflictId: conflict.conflictId,
-  });
   await act(async () =>
     document.activeElement?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
@@ -111,6 +107,15 @@ test('click opens an accessible popover, actions retain their inputs, and Escape
   );
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(document.activeElement).toBe(trigger());
+  await act(async () => trigger().click());
+  await act(async () => button('Dismiss').click());
+  expect(dismiss.mock.calls[0]?.[0]).toEqual({
+    driveId: 'synthetic-drive',
+    conflictId: conflict.conflictId,
+  });
+  await act(async () => button('Open folder').click());
+  expect(openFolder).toHaveBeenCalledWith('/Shared');
+  expect(trigger().getAttribute('aria-expanded')).toBe('false');
 });
 
 test('outside pointer closes the popover', async () => {

@@ -2077,6 +2077,8 @@
       "upgrade": "アップグレード",
       "promptTitle": "モデルを接続して始めましょう",
       "offerTitle": "ChatGPT または Claude のプランを使う",
+      "connectChatGpt": "ChatGPT を接続",
+      "connectClaude": "Claude を接続",
       "promptDescription": "すでに契約中のプランでサインインできます。",
       "useChatGpt": "ChatGPT を使う",
       "chatGptPlan": "Plus または Pro プラン",

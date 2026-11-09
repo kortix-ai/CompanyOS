@@ -2077,6 +2077,8 @@
       "upgrade": "Upgrade",
       "promptTitle": "Verbinde ein Modell, um zu starten",
       "offerTitle": "Nutze dein ChatGPT- oder Claude-Abo",
+      "connectChatGpt": "ChatGPT verbinden",
+      "connectClaude": "Claude verbinden",
       "promptDescription": "Melde dich mit einem Abo an, das du schon bezahlst.",
       "useChatGpt": "ChatGPT nutzen",
       "chatGptPlan": "Plus- oder Pro-Abo",

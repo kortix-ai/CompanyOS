@@ -2077,6 +2077,8 @@
       "upgrade": "Passer à une offre supérieure",
       "promptTitle": "Connectez un modèle pour commencer",
       "offerTitle": "Utilisez votre abonnement ChatGPT ou Claude",
+      "connectChatGpt": "Connecter ChatGPT",
+      "connectClaude": "Connecter Claude",
       "promptDescription": "Connectez-vous avec un abonnement que vous payez déjà.",
       "useChatGpt": "Utiliser ChatGPT",
       "chatGptPlan": "Abonnement Plus ou Pro",

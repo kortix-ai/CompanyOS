@@ -18,7 +18,6 @@ import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
 import { SpaceMentionContext } from './menus/space-mentions';
 import { useFeatureFlag } from '@kortix/sdk/react';
 
-import { hasRunnableSubscriptionModel } from '../models/model-availability';
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
@@ -566,20 +565,9 @@ export function ComposerCard({
     {/*
       The connect prompt is NOT a tray: it is the next step, so it sits a gap
       below everything the composer owns (card and underbar) as a row of its
-      own. See `ModelConnectionBar`. With no model at all it is required;
-      with only Kortix models it shows on an empty chat until a ChatGPT or
-      Claude plan is connected.
+      own. See `ModelConnectionBar`.
     */}
-    <ModelConnectionBar
-      show={
-        noModelsConnected ||
-        (!modelsLoading &&
-          models.length > 0 &&
-          (messages?.length ?? 0) === 0 &&
-          !hasRunnableSubscriptionModel(models))
-      }
-      required={noModelsConnected}
-    />
+    <ModelConnectionBar show={noModelsConnected} />
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the

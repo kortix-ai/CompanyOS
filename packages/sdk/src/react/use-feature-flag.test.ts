@@ -5,12 +5,21 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 // tree — while still asserting the exact `queryKey`, the `enabled` guard, the
 // freshness contract, and the fail-closed read.
 
-let lastConfig: Record<string, any> | null = null;
-let configs: Array<Record<string, any>> = [];
+// The fields the hooks' useQuery config carries that these pins read, kept as
+// a test-local type so the mock stays type-checked.
+interface CapturedQueryConfig {
+  queryKey: unknown;
+  enabled?: boolean;
+  refetchOnWindowFocus?: boolean;
+  queryFn: () => Promise<unknown>;
+}
+
+let lastConfig: CapturedQueryConfig | null = null;
+let configs: CapturedQueryConfig[] = [];
 let nextResult: Record<string, unknown> = { data: undefined, isLoading: false };
 
 mock.module('@tanstack/react-query', () => ({
-  useQuery: (config: Record<string, any>) => {
+  useQuery: (config: CapturedQueryConfig) => {
     configs.push(config);
     lastConfig = config;
     return nextResult;

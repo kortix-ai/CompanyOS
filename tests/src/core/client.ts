@@ -161,6 +161,23 @@ export class Res {
       (error as any).ke2eRetryAfterMs = retryAfterMs(this.header('retry-after'));
       throw error;
     }
+    if (!codes.includes(this.statusCode) && isTypedRetryableApiDegradation(this)) {
+      // The API itself classified this failure: `code: 'git_mirror_unavailable'`
+      // (a session's git-mirror cold-clone/fetch failed for a TRANSIENT upstream
+      // reason — projects/git/mirror.ts) or `retry: true` on a 5xx (the deploy
+      // in progress, session insert). Both are PRE-COMMIT: no row was written,
+      // so the same marked-retryable class the edge-laundered branch raises
+      // applies, and the flow-level budget re-runs the flow against fresh
+      // fixtures exactly as the design comment above describes. The in-request
+      // retry stays untouched: POST is still never re-sent here.
+      const error = new Error(
+        `typed retryable api degradation ${this.statusCode}; expected [${codes.join(', ')}] ` +
+          `body=${describeTypedRetryableResponse(this)}`,
+      );
+      (error as any).ke2eRetryable = true;
+      (error as any).ke2eRetryAfterMs = retryAfterMs(this.header('retry-after'));
+      throw error;
+    }
     assert({
       kind: 'status',
       description: `status in [${codes.join(', ')}]`,
@@ -210,6 +227,40 @@ export class Res {
  * API responses carry x-request-id. Cloudflare host failures do not. This
  * distinction prevents retries from hiding a real API 5xx contract failure.
  */
+export const GIT_MIRROR_UNAVAILABLE = 'git_mirror_unavailable';
+
+/**
+ * Detect the API's own TYPED, retryable pre-commit degradation.
+ *
+ * `git_mirror_unavailable` (a session's git-mirror cold clone/fetch failed for
+ * a transient, upstream reason — see `projects/git/mirror.ts`) and a 5xx body
+ * carrying `retry: true` (the deploy in progress, the session insert) are
+ * the API's own declaration that it took no committed action and the caller
+ * may re-send. The edge-laundered branch above covers the gateway case; this
+ * covers the origin case, which that branch deliberately excludes by
+ * `x-request-id`. Without this, a response the API already promised is
+ * retryable breaks `.status()` as a plain contract assertion.
+ */
+export function isTypedRetryableApiDegradation(response: Res): boolean {
+  if (response.statusCode < 500) return false;
+  if (isKe2eTransientGatewayResponse(response)) return false;
+  const body = response.captured.res.json as
+    | { code?: unknown; retry?: unknown; message?: unknown }
+    | undefined;
+  if (typeof body !== 'object' || body === null) return false;
+  if (body.code === GIT_MIRROR_UNAVAILABLE) return true;
+  return body.retry === true;
+}
+
+function describeTypedRetryableResponse(response: Res): string {
+  const body = response.captured.res.json as
+    | { code?: unknown; message?: unknown; status?: unknown }
+    | undefined;
+  const code = typeof body?.code === 'string' ? body.code : '<no code>';
+  const message = typeof body?.message === 'string' ? body.message : '<no message>';
+  return `${code}: ${message.slice(0, 160)}`;
+}
+
 export function isKe2eTransientGatewayResponse(response: Res): boolean {
   if (![502, 503, 504].includes(response.statusCode)) return false;
   if (response.header('x-request-id')) return false;

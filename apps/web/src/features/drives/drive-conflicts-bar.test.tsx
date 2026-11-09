@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, jest, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { NextIntlClientProvider } from 'next-intl';
 import { act } from 'react';
@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import messages from '../../../translations/en.json';
 
 const win = new Window();
-for (const key of [
+const domKeys = [
   'window',
   'document',
   'navigator',
@@ -23,7 +23,15 @@ for (const key of [
   'KeyboardEvent',
   'NodeFilter',
   'HTMLInputElement',
-]) {
+  'getComputedStyle',
+  'IS_REACT_ACT_ENVIRONMENT',
+];
+// `bun test` evaluates every file in one process: put the happy-dom globals
+// back when this file ends, so later files do not inherit them.
+const globalsBackup = new Map(
+  domKeys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const key of domKeys) {
   Object.defineProperty(globalThis, key, { configurable: true, value: Reflect.get(win, key) });
 }
 Object.defineProperty(globalThis, 'getComputedStyle', {
@@ -31,6 +39,12 @@ Object.defineProperty(globalThis, 'getComputedStyle', {
   value: win.getComputedStyle.bind(win),
 });
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, value: true });
+afterAll(() => {
+  for (const [key, descriptor] of globalsBackup) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 const conflict = {
   conflictId: 'synthetic-conflict',
   path: '/Shared/report.txt',
@@ -38,9 +52,20 @@ const conflict = {
 };
 let entries = [conflict];
 const dismiss = mock((_input: { driveId: string; conflictId: string }, _options: unknown) => {});
+// The barrel mock that wins a combined `bun test` run is the union of what
+// every file in the directory needs, because bun links named imports against
+// the mock registered when the importing graph is linked, and
+// drive-folder-tree.test.tsx may register its own (smaller) mock first.
+// So: spread whatever the registry holds now, and re-add every runtime
+// export this file's graph links — the two hooks (stubbed) plus the barrel
+// names drive-explorer-source.tsx imports, taken from their own modules.
 const files = await import('@kortix/ui/files');
+const useDrives = await import('../../../../../packages/ui/src/files/drives/use-drives');
+const driveStorage = await import('../../../../../packages/ui/src/files/drives/drive-storage');
 mock.module('@kortix/ui/files', () => ({
   ...files,
+  saveDriveFile: useDrives.saveDriveFile,
+  useDriveLimitMessage: driveStorage.useDriveLimitMessage,
   useDriveConflicts: () => ({ data: entries }),
   useDismissDriveConflict: () => ({ mutate: dismiss, isPending: false }),
 }));
@@ -84,6 +109,7 @@ afterEach(async () => {
   entries = [conflict];
   dismiss.mockClear();
   openFolder.mockClear();
+  jest.useRealTimers();
 });
 
 test('hover leaves the conflict details closed and the trigger unchanged', async () => {
@@ -130,7 +156,6 @@ test('outside pointer closes the popover', async () => {
     document.body.click();
   });
   expect(trigger().getAttribute('aria-expanded')).toBe('false');
-  jest.useRealTimers();
 });
 
 test('no conflicts renders no control', async () => {

@@ -41,7 +41,7 @@ export function useFileContent(
     // miss this fresh answers its refetches without a re-read; see the gate
     // in internal/files/file-read-retry.
     queryFn: ({ signal }) => {
-      if (missingFileSuppressed(serverUrl, filePath)) throw missingFileReadError(filePath!);
+      if (missingFileSuppressed(serverUrl, filePath)) throw missingFileReadError();
       return readRuntimeFileWithRetry(filePath!, () => readFile(filePath!), undefined, signal)
         .then((content) => {
           clearMissingFileRead(serverUrl, filePath!);

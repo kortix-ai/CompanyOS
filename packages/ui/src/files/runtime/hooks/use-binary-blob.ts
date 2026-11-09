@@ -88,7 +88,7 @@ export function useBinaryBlob(
       // invalidates every open file query on each file write and turn end.
       // A miss this fresh answers its refetches without a re-read; see the
       // gate in internal/files/file-read-retry.
-      if (missingFileSuppressed(serverUrl, filePath)) throw missingFileReadError(filePath!);
+      if (missingFileSuppressed(serverUrl, filePath)) throw missingFileReadError();
       const blob = await readRuntimeFileWithRetry(
         filePath!,
         async () => {

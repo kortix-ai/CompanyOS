@@ -138,8 +138,7 @@ export function missingFileSuppressed(
 }
 
 /** The fast-fail a suppressed refetch throws in the reader's place. */
-export function missingFileReadError(filePath: string): Error {
-  void filePath;
+export function missingFileReadError(): Error {
   return new ApiError('File or folder not found', { status: 404, code: 'not_found' });
 }
 

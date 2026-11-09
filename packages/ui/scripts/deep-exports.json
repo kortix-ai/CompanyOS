@@ -185,7 +185,6 @@
     "./internal/lib/use-deployment-cli-install-command",
     "./internal/lib/use-permission",
     "./internal/lib/use-project-can",
-    "./internal/lib/use-project-feature-flags",
     "./internal/lib/utils/clipboard",
     "./internal/lib/utils/file-utils",
     "./internal/lib/utils/focus-without-scroll",

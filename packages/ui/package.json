@@ -329,7 +329,6 @@
     "./internal/lib/use-deployment-cli-install-command": "./src/internal/lib/use-deployment-cli-install-command.ts",
     "./internal/lib/use-permission": "./src/internal/lib/use-permission.ts",
     "./internal/lib/use-project-can": "./src/internal/lib/use-project-can.ts",
-    "./internal/lib/use-project-feature-flags": "./src/internal/lib/use-project-feature-flags.ts",
     "./internal/lib/utils/clipboard": "./src/internal/lib/utils/clipboard.ts",
     "./internal/lib/utils/file-utils": "./src/internal/lib/utils/file-utils.ts",
     "./internal/lib/utils/focus-without-scroll": "./src/internal/lib/utils/focus-without-scroll.ts",
@@ -1784,10 +1783,6 @@
       "./internal/lib/use-project-can": {
         "types": "./dist/internal/lib/use-project-can.d.ts",
         "import": "./dist/internal/lib/use-project-can.js"
-      },
-      "./internal/lib/use-project-feature-flags": {
-        "types": "./dist/internal/lib/use-project-feature-flags.d.ts",
-        "import": "./dist/internal/lib/use-project-feature-flags.js"
       },
       "./internal/lib/utils/clipboard": {
         "types": "./dist/internal/lib/utils/clipboard.d.ts",

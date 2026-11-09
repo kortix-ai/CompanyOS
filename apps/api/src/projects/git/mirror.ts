@@ -1013,6 +1013,11 @@ const BARE_CLONE_TIMEOUT_MS = bareCloneTimeoutMs();
  * while surviving the propagation window. */
 const MIRROR_RETRY_MAX_ATTEMPTS = 5;
 const MIRROR_RETRY_DELAY_MS = 2000;
+/** The refresh-epoch cap is a CONCURRENCY budget, not a transient-network one:
+ * how many times a refresh may retry while a base move keeps invalidating the
+ * mirror under it (`kind: "busy"`). Its neighbor test pins the move count —
+ * deliberately unchanged, and not the transient budget above. */
+const MIRROR_EPOCH_MAX_ATTEMPTS = 3;
 
 function looksLikeBareMirror(repoPath: string): boolean {
   return (
@@ -1362,7 +1367,7 @@ async function refreshStore(
   // reader) is finishing. Dropping its proof is not enough: this reader must
   // not ground a new session on the checkout that the move invalidated.
   if (epoch !== (invalidations.get(project.projectId) ?? 0)) {
-    if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+    if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
     return refreshMirror(project, force, opts, epochRetries + 1);
   }
   return repoPath;
@@ -1419,7 +1424,7 @@ async function lockedRefreshMirror(
       // Timed as git: a request that waits out another caller's fetch shows the wait.
       const repoPath = await timeStage('git', () => current.promise);
       if (current.epoch === (invalidations.get(project.projectId) ?? 0)) return repoPath;
-      if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+      if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
       return refreshMirror(project, force, opts, epochRetries + 1);
     }
     // The in-flight refresh belongs to another caller, often with another

@@ -12,6 +12,7 @@ export type SessionInvocationSource =
   | 'email'
   | 'telegram'
   | 'teams'
+  | 'discord'
   | 'trigger:webhook'
   | 'trigger:cron'
   | 'trigger:manual'
@@ -19,17 +20,26 @@ export type SessionInvocationSource =
   | 'trigger:event'
   | 'trigger:app'
   | 'trigger:reminder'
+  | 'trigger:change_request'
   | 'system:sandbox-build-fix'
   | 'system:approval-resume'
   | 'system:secret-submitted'
   | 'system:connector-connected'
-  /** A message another participant posted in a room the session joined (`projects/rooms`). */
-  | 'system:room-message'
+  /** A background subagent finished a turn: its report, delivered into the parent (`projects/subagent-notice.ts`). */
+  | 'system:subagent-finished'
+  /** A cross-session message (`send_message`) or its idle notice (`projects/peer-messages`). */
+  | 'system:peer-message'
   /** The continuation of a turn a provider-originated `runtime_gone` cut short
    *  when no `continue_session` row took the turn over — the session's own
    *  initial prompt, or an unattended session's row that could not be requeued
    *  (`sandbox-state-sync.ts` `enqueueTurnContinuation`). */
   | 'system:auto-recovery'
+  /** Kortix started a thread in the person's chat (`projects/routes/chat-threads.ts`, flag `chat`). */
+  | 'system:chat-post'
+  /** A space's watcher (`projects/lib/space-watch/`, flag `spaces_proactive`): one hidden session per space. */
+  | 'system:space-watcher'
+  /** The goal engine (`projects/goals/`, flag `goals`): owner and verifier sessions and their prompts. */
+  | 'system:goal'
   | 'admin';
 
 export type QueuePolicy = 'never' | 'on_backpressure' | 'always';
@@ -53,6 +63,9 @@ export type SessionLifecyclePostCreateAction =
       source: SessionInvocationSource;
       text: string;
       userId?: string | null;
+      /** A channel message's files, and the model its image needs. Absent on older rows and on text. */
+      parts?: PromptPartWire[];
+      overrides?: PromptOverridesWire;
     }
   | {
       /** Resolve at execution time so queued creates never capture stale access. */
@@ -145,8 +158,6 @@ export interface ContinueSessionCommand {
   /** Legacy plain-text form. Ignored when `parts` is present. */
   text: string;
   userId?: string | null;
-  /** Allow-listed env applied to OpenCode before server-side prompt delivery. */
-  opencodeEnv?: Record<string, string | null>;
   /** The full prompt body, when the producer has one (the prompt inbox). Text-only
    *  producers keep sending `text` and get the same single-part body as before. */
   parts?: PromptPartWire[];
@@ -163,10 +174,8 @@ export interface ContinueSessionCommand {
   wireMessageId?: string;
   /** Stable lifecycle row identity used only for deterministic workspace paths. */
   materializationKey?: string;
-  /** Persist the message without starting an agent loop (OpenCode `noReply`). */
+  /** Persist the message without starting an agent loop (`noReply`). */
   noReply?: boolean;
-  /** Skip legacy first-message repair only for the pending-first row itself. */
-  isPendingFirstPrompt?: boolean;
   /** `userId` is the person who sent this prompt: the session token acts as
    *  them from this turn on (`bindSessionTurnIdentity`). Set by the prompt
    *  route for a non-agent caller; absent keeps the token's identity. */
@@ -178,14 +187,6 @@ export interface ContinueSessionCommand {
    * the Stop itself (`holdInboxPrompts`) and released by the next send.
    */
   queuedAt?: Date;
-}
-
-/** JSON metadata used to gate the one-time repair of pre-materialization prompts. */
-export interface LegacyInlineAttachmentRepairMetadata extends Record<string, unknown> {
-  pending_prompt?: {
-    attachment_names?: unknown;
-  };
-  legacy_inline_attachments_repaired_at?: unknown;
 }
 
 export interface StartSessionCommand {
@@ -221,7 +222,7 @@ export interface StartSessionCommand {
  * How one hand-off of a prompt to the runtime ended.
  *
  * The RETRY CLASS is the whole point of the split:
- *  - `delivered`     — OpenCode holds the message. Terminal, success.
+ *  - `delivered`     — the runtime holds the message. Terminal, success.
  *  - `pending`       — the runtime did not become ready inside this attempt's
  *                      budget. Worth another pass soon.
  *  - `unreachable`   — the RUNTIME is down: the provider has the box stopped,

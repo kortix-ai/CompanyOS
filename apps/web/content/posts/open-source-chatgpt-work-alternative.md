@@ -8,7 +8,7 @@ tags: ["Comparisons"]
 updated: "2026-10-22"
 slug: "/open-source-chatgpt-work-alternative"
 ---
-ChatGPT Work is a capable agent inside OpenAI's product, and the open-source alternative is Kortix, the open-source AI Operating System a company can run on its own infrastructure. Each agent lives in a markdown file under `agents/`, with its own block in `kortix.yaml`. The question a buyer actually asks is who can read an agent's instructions and who approves a change to them, and what each option costs before the first agent runs.
+ChatGPT Work is a capable agent inside OpenAI's product, and the open-source alternative is Kortix CompanyOS, which a company can run on its own infrastructure. Each agent lives in a markdown file under `agents/`, with its own block in `kortix.yaml`. The question a buyer actually asks is who can read an agent's instructions and who approves a change to them, and what each option costs before the first agent runs.
 
 ```logos
 label: 'Compared here:'
@@ -41,7 +41,7 @@ Business is the team plan that carries Work for a company, and it is where the f
 
 Free, Go and Plus suit one person trying the agent. A company that wants shared context, admin controls and central billing lands on Business, and Business starts at two seats.
 
-Kortix puts the money on credits instead. Free is $0 with 500 credits per month, every feature and 1 project, on the user's own provider keys or ChatGPT subscription. Managed models are on the Credits plan only. Above the free tier, credits are bought at 100 credits per dollar, so a plan starts at 5,000 credits a month for $50, and they land in one wallet that unlimited members share at no per-member charge. Unused monthly credits roll over one month ([pricing](https://kortix.com/pricing), checked October 2026). A credit buys the agent computer, which bills per second while it runs and costs nothing while it is stopped. Two Business seats come to $40 a month billed annually, and the Kortix paid plan starts at $50 a month in credits, so the two bills start close together.
+Kortix puts the money on credits instead. Free is $0 with 500 credits per month on your first workspace and every feature, on your own provider keys or ChatGPT subscription. Managed models are on the Credits plan only. Above the free tier, credits are bought at 100 credits per dollar, so a plan starts at 5,000 credits a month for $50, and they land in one wallet that unlimited members share at no per-member charge. Unused monthly credits roll over one month ([pricing](https://kortix.com/pricing), checked October 2026). A credit buys the agent computer, which bills per second while it runs and costs nothing while it is stopped. Two Business seats come to $40 a month billed annually, and the Kortix paid plan starts at $50 a month in credits, so the two bills start close together.
 
 ## Agents you can read, changes a person approves
 

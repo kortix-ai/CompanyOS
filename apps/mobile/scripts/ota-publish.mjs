@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const MOBILE = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Update channel -> EAS environment its builds use (eas.json `environment`).
 const CHANNEL_ENVIRONMENTS = { dev: 'preview', production: 'production' };
-const JS_PATHS = ['apps/mobile', 'packages/sdk', 'pnpm-lock.yaml'];
+const JS_PATHS = ['apps/mobile', 'packages/sdk', 'packages/shared', 'pnpm-lock.yaml'];
 // Fingerprint sources that configure EAS itself and never reach the binary.
 const NOT_NATIVE = new Set(['eas.json', '.easignore', '.gitignore']);
 
@@ -101,7 +101,7 @@ export function appIdentifier(expo, platform) {
 }
 
 /** Why this platform must not publish, or null when it may. */
-export function skipReason(channel, platform, runtime) {
+function skipReason(channel, platform, runtime) {
   const appId = appIdentifier(JSON.parse(readFileSync(join(MOBILE, 'app.json'), 'utf8')).expo, platform);
   const builds = easJson([
     'build:list', '--channel', channel, '--platform', platform, '--app-identifier', appId,

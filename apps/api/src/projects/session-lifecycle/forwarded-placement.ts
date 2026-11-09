@@ -1,5 +1,7 @@
 /**
- * Placing a forwarded prompt INTO a live OpenCode turn, and proving it landed.
+ * Placing a forwarded prompt INTO a live turn, and proving it landed. The
+ * ordering rules below are OpenCode's. A runtime that keeps message ids (pi,
+ * `RUNTIME_STABLE_MESSAGE_ID_CAPABILITY`) goes through `keepsWireIdOnStableRuntime`.
  *
  * HOW THE LOOP DECIDES "is the latest user message answered?" — AND THAT IT
  * DEPENDS ON THE BOX'S OPENCODE VERSION. `opencode` is baked into the sandbox
@@ -202,6 +204,37 @@ export function reachedPlacement(
 }
 
 /**
+ * May a prompt go out under `wireMessageId` unchanged on a runtime that keeps
+ * message ids (`RUNTIME_STABLE_MESSAGE_ID_CAPABILITY`, pi)? That runtime orders
+ * by position, so nothing here is about the runtime's own order. Two checks:
+ *
+ *  - The tip does not hold the id. pi answers a known id
+ *    `200 { deduplicated: true }` and runs nothing, so a redelivery of a held
+ *    prompt (a box that restored the log without its answer) must go out under
+ *    a new id, as it does today.
+ *  - Every USER message on the tip sorts below the id. The web still orders
+ *    turns by user message id (`compareMessagesForDisplay`, packages/sdk
+ *    `core/turns/display-order.ts`). A server-minted id is dated 2 min back,
+ *    so it can sort below a prompt the user sent after it; kept, its turn
+ *    renders above that prompt's.
+ *
+ * An id with no readable clock is never kept.
+ */
+export function keepsWireIdOnStableRuntime(
+  tip: ReadonlyArray<PlacementTipMessage>,
+  wireMessageId: string,
+): boolean {
+  const mine = wireIdTime(wireMessageId);
+  if (mine === null) return false;
+  return tip.every((m) => {
+    if (m.id === wireMessageId) return false;
+    if (m.role !== 'user') return true;
+    const at = wireIdTime(m.id);
+    return at === null || wireIdClockDelta(at, mine) < ZERO;
+  });
+}
+
+/**
  * Is there an OPEN user message ABOVE this id — placed (not stranded),
  * unanswered? Then a message that sits BELOW it is not lost: OpenCode's next
  * step parents on the newest user message and hands the model the whole
@@ -278,28 +311,6 @@ export function tipIsBusy(tip: ReadonlyArray<PlacementTipMessage>): boolean {
     if (isLaterTipMessage(m, newest)) newest = m;
   }
   return !!newest && (newest.completed === null || newest.completed === undefined);
-}
-
-/** Parse OpenCode's `GET /session/:id/message` body into tip messages. */
-export function parsePlacementTip(body: unknown): PlacementTipMessage[] | null {
-  if (!Array.isArray(body)) return null;
-  const out: PlacementTipMessage[] = [];
-  for (const entry of body) {
-    const info = (entry as { info?: Record<string, unknown> } | null)?.info;
-    if (!info || typeof info.id !== 'string' || typeof info.role !== 'string') continue;
-    const time = info.time as { created?: unknown; completed?: unknown } | undefined;
-    const parts = (entry as { parts?: Array<{ id?: unknown; type?: unknown; auto?: unknown }> }).parts ?? [];
-    out.push({
-      id: info.id,
-      role: info.role,
-      parentID: typeof info.parentID === 'string' ? info.parentID : null,
-      created: typeof time?.created === 'number' ? time.created : null,
-      completed: typeof time?.completed === 'number' ? time.completed : null,
-      partIds: parts.flatMap((part) => (typeof part?.id === 'string' ? [part.id] : [])),
-      ...(parts.some((part) => part?.type === 'compaction' && part.auto === true) ? { autoCompaction: true } : {}),
-    });
-  }
-  return out;
 }
 
 // ─── Box clock ───────────────────────────────────────────────────────────────

@@ -33,6 +33,12 @@
  * This is the safety net behind the drain's own post-insert proof
  * (`executeQueuedContinue` → `verifyLivePlacement`): a verify read that failed
  * or a repair that could not run ends up here, a turn later.
+ *
+ * A runtime that keeps message ids (`RUNTIME_STABLE_MESSAGE_ID_CAPABILITY`,
+ * pi) orders by position and runs each prompt as its own turn, so nothing
+ * strands there. The drain sends a prompt that waited under its own, older
+ * id, which the strand signature would misread, so the newer-candidate repair
+ * is skipped on such a box. Older candidates still close.
  */
 
 import { sessionLifecycleCommands, sessionTurns } from '@kortix/db';
@@ -44,9 +50,10 @@ import type { StoredSandboxTurn } from '../session-turn-ledger';
 import { ORPHANED_PROMPT_MIN_AGE_MS } from '../reaper-constants';
 import { wireIdClockDelta, wireIdTime } from '../wire-message-id';
 import { drainSessionLifecycleQueue } from './drain';
-import { readSessionMessageTip, resolveSessionOpencodeEndpoint, retractSessionMessage } from './runtime-client';
+import { readSessionMessageTip, resolveSessionRuntimeEndpoint, retractSessionMessage } from './runtime-client';
 import { type PlacementTipMessage, isLaterTipMessage, openUserAbove, strandedPlacement, tipIsBusy } from './forwarded-placement';
 import { promoteNextInboxRow, withNextDeliveryAttempt } from './store';
+import { sessionKeepsMessageIds } from './inbox-admission';
 import { wireMessageIdMatches } from './wire-id-match';
 
 /** The stranded prompt and the assistant that proves it both sit at the tip. */
@@ -68,12 +75,14 @@ export interface ForwardedTurnReconciliation {
 
 export interface StrandReconcileDeps {
   readOpenTurns: (sessionId: string) => Promise<StoredSandboxTurn[]>;
-  closeOlderTurn: (sessionId: string, opencodeSessionId: string | null, messageId: string) => Promise<void>;
+  closeOlderTurn: (sessionId: string, runtimeSessionId: string | null, messageId: string) => Promise<void>;
   closeStrandedTurn: (sessionId: string, messageId: string) => Promise<void>;
   readTip: (sessionId: string) => Promise<PlacementTipMessage[] | null>;
   removeMessage: (sessionId: string, messageId: string) => Promise<boolean>;
   requeueStranded: (sessionId: string, messageId: string) => Promise<'requeued' | 'no_row' | 'exhausted' | 'not_open'>;
   kickDrain: (sessionId: string) => void;
+  /** The session's runtime keeps message ids; false when the read fails. */
+  keepsMessageIds: (sessionId: string) => Promise<boolean>;
 }
 
 const liveDeps: StrandReconcileDeps = {
@@ -88,7 +97,7 @@ const liveDeps: StrandReconcileDeps = {
       .select({
         token: sessionTurns.turnToken,
         messageId: sessionTurns.messageId,
-        opencodeSessionId: sessionTurns.runtimeSessionId,
+        runtimeSessionId: sessionTurns.runtimeSessionId,
         state: sessionTurns.state,
         startedAt: sessionTurns.startedAt,
       })
@@ -98,13 +107,13 @@ const liveDeps: StrandReconcileDeps = {
       (row): StoredSandboxTurn => ({
         token: row.token,
         messageId: row.messageId ?? null,
-        runtimeSessionId: row.opencodeSessionId ?? '',
+        runtimeSessionId: row.runtimeSessionId ?? '',
         state: row.state === 'active' ? 'active' : 'delivering',
         startedAtMs: row.startedAt ? new Date(row.startedAt).getTime() : null,
       }),
     );
   },
-  async closeOlderTurn(sessionId, _opencodeSessionId, messageId) {
+  async closeOlderTurn(sessionId, _runtimeSessionId, messageId) {
     // The step that just ended answered it (OpenCode answers every queued
     // message below the one it parents the step on, in that step).
     await closeSandboxTurnByMessageId(sessionId, messageId, 'completed');
@@ -113,7 +122,7 @@ const liveDeps: StrandReconcileDeps = {
     await closeSandboxTurnByMessageId(sessionId, messageId, 'abandoned');
   },
   async readTip(sessionId) {
-    const resolved = await resolveSessionOpencodeEndpoint(sessionId);
+    const resolved = await resolveSessionRuntimeEndpoint(sessionId);
     return resolved ? readSessionMessageTip(resolved, { limit: TIP_LIMIT }) : null;
   },
   removeMessage: (sessionId, messageId) => retractSessionMessage(sessionId, messageId, 'forwarded-turns'),
@@ -179,6 +188,7 @@ const liveDeps: StrandReconcileDeps = {
       .then((key) => (key ? drainSessionLifecycleQueue({ idempotencyKey: key }) : null))
       .catch(() => undefined);
   },
+  keepsMessageIds: (sessionId) => sessionKeepsMessageIds(sessionId, null),
 };
 
 /**
@@ -187,7 +197,7 @@ const liveDeps: StrandReconcileDeps = {
  * not name one, or when no forwarded turn is open.
  */
 export async function reconcileForwardedTurnsAtEnd(
-  input: { sessionId: string; opencodeSessionId?: string | null; endedMessageId?: string | null },
+  input: { sessionId: string; runtimeSessionId?: string | null; endedMessageId?: string | null },
   deps: StrandReconcileDeps = liveDeps,
 ): Promise<ForwardedTurnReconciliation> {
   const out: ForwardedTurnReconciliation = { closedOlder: 0, candidates: 0, stranded: 0, orphaned: 0, requeued: 0 };
@@ -202,7 +212,7 @@ export async function reconcileForwardedTurnsAtEnd(
     return out;
   }
   const sameRoot = (turn: StoredSandboxTurn) =>
-    !input.opencodeSessionId || !turn.runtimeSessionId || turn.runtimeSessionId === input.opencodeSessionId;
+    !input.runtimeSessionId || !turn.runtimeSessionId || turn.runtimeSessionId === input.runtimeSessionId;
   const forwarded = open.filter((turn) => !!turn.messageId && sameRoot(turn));
   if (forwarded.length === 0) return out;
   // ONE tip read for everything below. It also stands in for the relay when
@@ -271,6 +281,8 @@ export async function reconcileForwardedTurnsAtEnd(
   });
   if (newer.length === 0) return out;
   if (!tip) return out;
+  // A runtime that keeps message ids has no strand to repair (header).
+  const stableIds = await deps.keepsMessageIds(input.sessionId);
   let kicked = false;
   // Classify the newer candidates by the tip. A STRANDED row (persisted below
   // an assistant that predates it) is not lost while a LATER, correctly
@@ -281,7 +293,7 @@ export async function reconcileForwardedTurnsAtEnd(
   // and it re-queues AS A WHOLE so the redelivery batch re-mints it in send
   // order. Re-queueing one row of a burst individually is what scrambled the
   // order (measured: FIRST, B3, B1, B4, B2).
-  const verdicts = newer.map((turn) => ({ turn, verdict: strandedPlacement(tip!, turn.messageId!) }));
+  const verdicts = stableIds ? [] : newer.map((turn) => ({ turn, verdict: strandedPlacement(tip!, turn.messageId!) }));
   // The strand verdict has a blind spot the loop's exit exposes: a candidate
   // placed correctly AT THE TIP (no assistant above it, so not "stranded")
   // that the ended loop simply never read. With the tip's newest assistant

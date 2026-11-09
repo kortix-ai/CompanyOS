@@ -62,12 +62,12 @@ harnessFlow(
     // Boot (≤540s) + one turn (≤240s) + the mirror wait (≤180s) exceeds 360s.
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'GET /v1/projects/:projectId/sessions',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx, harness) => {
@@ -84,7 +84,7 @@ harnessFlow(
 
     let mirrored: any = null;
     await ctx.step('the session read exposes a non-placeholder root title and tree', async () => {
-      // `metadata.opencode_sessions` follows the runtime's state document: it
+      // `metadata.runtime_sessions` follows the runtime's state document: it
       // is written when the turn end refreshes the projection and when the
       // daemon pushes one for a new session or title (R7.4). No timer, so a
       // poll needs no second prompt to re-arm a writer.
@@ -92,15 +92,15 @@ harnessFlow(
         async () => {
           const response = await ctx.client
             .as(ctx.P.OWNER)
-            .get('/v1/projects/:projectId/sessions/:sessionId', { params: { projectId, sessionId } });
+            .get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { projectId, sessionId } });
           response.status(200);
           return response.json<any>();
         },
         {
           until: (row) => {
-            const root = Array.isArray(row?.opencode_sessions)
-              ? row.opencode_sessions.find(
-                  (entry: any) => entry?.id === row?.opencode_session_id && !entry?.parent_id,
+            const root = Array.isArray(row?.runtime_sessions)
+              ? row.runtime_sessions.find(
+                  (entry: any) => entry?.id === row?.runtime_session_id && !entry?.parent_id,
                 )
               : null;
             const title = typeof root?.title === 'string' ? root.title.trim() : '';
@@ -119,7 +119,7 @@ harnessFlow(
     await ctx.step('the project session list returns the same mirrored title and tree', async () => {
       const response = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/projects/:projectId/sessions', { params: { projectId } });
+        .get('/v1/workspaces/:projectId/sessions', { params: { projectId } });
       response.status(200);
       const body = response.json<any>();
       const rows = Array.isArray(body) ? body : (body.sessions ?? []);
@@ -128,7 +128,7 @@ harnessFlow(
       if (listed.name !== mirrored.name) {
         throw new Error(`list title ${String(listed.name)} != detail title ${String(mirrored.name)}`);
       }
-      if (JSON.stringify(listed.opencode_sessions) !== JSON.stringify(mirrored.opencode_sessions)) {
+      if (JSON.stringify(listed.runtime_sessions) !== JSON.stringify(mirrored.runtime_sessions)) {
         throw new Error('list and detail returned different session trees');
       }
     });
@@ -143,9 +143,9 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 660_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx, harness) => {
@@ -153,11 +153,11 @@ harnessFlow(
     await ctx.step('the ready session names the root conversation its runtime serves', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/projects/:projectId/sessions/:sessionId', {
+        .get('/v1/workspaces/:projectId/sessions/:sessionId', {
           params: { projectId: session.projectId, sessionId: session.sessionId },
         });
       r.status(200).body().has('$.session_id', session.sessionId);
-      const root = r.json<any>()?.opencode_session_id;
+      const root = r.json<any>()?.runtime_session_id;
       if (typeof root !== 'string' || !root) {
         throw new Error(`a ready ${harness} session names no root conversation: ${r.text()}`);
       }
@@ -174,12 +174,12 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 660_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx, harness) => {
@@ -195,7 +195,7 @@ harnessFlow(
         async () => {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .get('/v1/projects/:projectId/sessions/:sessionId/prompts', { params: { projectId, sessionId } });
+            .get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params: { projectId, sessionId } });
           r.status(200);
           const mine = (r.json<any>().prompts ?? []).find((p: any) => p.prompt_id === promptId);
           if (mine?.state === 'failed') throw new Error(`prompt delivery failed: ${JSON.stringify(mine)}`);
@@ -217,8 +217,8 @@ harnessFlow(
     await ctx.step('a client reads the conversation from the runtime: the gzip answer of …/kortix/runtime/messages/<root> decodes', async () => {
       const detail = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/projects/:projectId/sessions/:sessionId', { params: { projectId, sessionId } });
-      const root = detail.status(200).json<any>()?.opencode_session_id;
+        .get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { projectId, sessionId } });
+      const root = detail.status(200).json<any>()?.runtime_session_id;
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .get(runtimePath(session.sandboxId, `/kortix/runtime/messages/${root}?limit=200`), { headers: { 'accept-encoding': 'gzip' } });
@@ -239,10 +239,10 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/events',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/events',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
     ],
   },
   async (ctx, harness) => {
@@ -272,10 +272,10 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 660_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
     ],
   },
   async (ctx, harness) => {
@@ -306,12 +306,12 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 660_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
@@ -362,10 +362,10 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 660_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
@@ -406,16 +406,17 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 780_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'POST /v1/projects/:projectId/sessions/:sessionId/commit-push',
-      'GET /v1/projects/:projectId/files/content',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/commit-push',
+      'GET /v1/workspaces/:projectId/files/content',
     ],
   },
   async (ctx, harness) => {
-    const session = await bootSession(ctx, harness);
+    // Git flows need the seeded repository agent, not the default My Kortix workspace.
+    const session = await bootSession(ctx, harness, { agentName: 'worker' });
     const { projectId, sessionId } = session;
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
@@ -440,7 +441,7 @@ harnessFlow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .post(
-          '/v1/projects/:projectId/sessions/:sessionId/commit-push',
+          '/v1/workspaces/:projectId/sessions/:sessionId/commit-push',
           { message: 'ke2e RUN-7 agent change' },
           { params: { projectId, sessionId } },
         );
@@ -451,7 +452,7 @@ harnessFlow(
         async () =>
           ctx.client
             .as(ctx.P.OWNER)
-            .get('/v1/projects/:projectId/files/content', {
+            .get('/v1/workspaces/:projectId/files/content', {
               params: { projectId },
               query: { path, ref: sessionId },
             }),
@@ -481,8 +482,8 @@ flow(
     timeoutMs: 660_000,
     retry: { attempts: 2 },
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
       'POST /v1/p/share',
       'DELETE /v1/p/share/:token',
     ],
@@ -532,7 +533,7 @@ flow(
     requires: ['funded', 'sandbox'],
     serial: true,
     timeoutMs: 300_000,
-    routes: ['POST /v1/projects/:projectId/sessions'],
+    routes: ['POST /v1/workspaces/:projectId/sessions'],
   },
   async (ctx) => {
     const team = await ctx.fixtures.team();
@@ -545,7 +546,7 @@ flow(
       await ctx.step(`session ${n} of 4 → 201 with no X-RateLimit headers`, async () => {
         const r = await ctx.client
           .as(ctx.P.OWNER)
-          .post('/v1/projects/:projectId/sessions', {}, { params: { projectId: project.id } });
+          .post('/v1/workspaces/:projectId/sessions', {}, { params: { projectId: project.id } });
         r.status(201);
         const limit = r.header('x-ratelimit-limit');
         if (limit !== undefined) throw new Error(`session create still sends X-RateLimit-Limit: ${limit}`);
@@ -569,7 +570,7 @@ flow(
     domain: 'sessions',
     requires: ['funded', 'sandbox'],
     timeoutMs: 240_000,
-    routes: ['POST /v1/projects/:projectId/sessions'],
+    routes: ['POST /v1/workspaces/:projectId/sessions'],
   },
   async (ctx) => {
     const project = await ctx.fixtures.sharedSeededProject();
@@ -578,7 +579,7 @@ flow(
       'create session with client-minted id + branch_already_created → 201',
       async () => {
         const r = await ctx.client.as(ctx.P.OWNER).post(
-          '/v1/projects/:projectId/sessions',
+          '/v1/workspaces/:projectId/sessions',
           {
             session_id: clientSessionId,
             branch_already_created: true,
@@ -605,16 +606,16 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/restart',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/restart',
     ],
   },
   async (ctx, harness) => {
     const { projectId, sessionId } = await bootSession(ctx, harness);
     await ctx.step('restart → 202 status provisioning', async () => {
       const r = await ctx.client.as(ctx.P.OWNER).post(
-        '/v1/projects/:projectId/sessions/:sessionId/restart',
+        '/v1/workspaces/:projectId/sessions/:sessionId/restart',
         {},
         {
           params: { projectId, sessionId },
@@ -638,9 +639,9 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/stop',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/stop',
     ],
   },
   async (ctx, harness) => {
@@ -650,7 +651,7 @@ harnessFlow(
     });
     await ctx.step('stopping an already-stopped session → 409', async () => {
       const r = await ctx.client.as(ctx.P.OWNER).withTransientGatewayRetries().post(
-        '/v1/projects/:projectId/sessions/:sessionId/stop',
+        '/v1/workspaces/:projectId/sessions/:sessionId/stop',
         {},
         {
           params: { projectId, sessionId },
@@ -665,40 +666,6 @@ harnessFlow(
   },
 );
 
-/**
- * `POST /start` reports `stage: 'ready'` the moment the sandbox is usable; the
- * session's remote branch publishes separately, fully in the background (see
- * apps/api/src/projects/lib/sessions.ts, "Origin branch creation is publishing
- * work, not readiness work"). `GET /sessions/:id` mirrors that publish through
- * `metadata.remote_branch.status` (`'ready'` | `'failed'`, absent while still
- * in flight). A diff against `refs/heads/<sessionId>` needs the push to have
- * landed — poll for it rather than racing the background job.
- */
-async function waitForRemoteBranch(
-  ctx: FlowContext,
-  projectId: string,
-  sessionId: string,
-): Promise<void> {
-  const branch = await waitFor(
-    async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId/sessions/:sessionId', {
-        params: { projectId, sessionId },
-      });
-      r.status(200);
-      return (r.json<any>()?.metadata?.remote_branch ?? null) as { status?: string; error?: string } | null;
-    },
-    {
-      until: (rel) => rel?.status === 'ready' || rel?.status === 'failed',
-      timeoutMs: 120_000,
-      intervalMs: 3_000,
-      description: `session ${sessionId}'s remote branch to publish`,
-    },
-  );
-  if (branch?.status === 'failed') {
-    throw new Error(`remote branch publish failed for session ${sessionId}: ${branch.error ?? 'unknown error'}`);
-  }
-}
-
 // ─── FILE-8: version-diff between two refs (params from/head + into/base) ─────
 flow(
   'FILE-8',
@@ -707,36 +674,34 @@ flow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 360_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'GET /v1/projects/:projectId/version-diff',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/version-diff',
     ],
   },
   async (ctx) => {
-    // A booted session pushes a branch named <sessionId>; diffing it against main
-    // exercises a REAL two-ref diff. (version-diff itself only needs `read`, but
-    // we gate the whole flow so it runs where a session branch actually exists.)
+    // A booted session's branch is named <sessionId>. It reaches origin with the
+    // session's first push; until then the session's files are its base, so
+    // the diff reads the base (projects/lib/session-read-ref.ts). (version-diff
+    // itself only needs `read`, but we gate the whole flow so it runs where a
+    // real session exists.)
     const { projectId, sessionId } = await bootSession(ctx, 'pi');
-    await ctx.step('the session branch is published to origin before diffing it', async () => {
-      await waitForRemoteBranch(ctx, projectId, sessionId);
-    });
     await ctx.step('version-diff main → <sessionId> → 200 summary', async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId/version-diff', {
+      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId/version-diff', {
         params: { projectId },
         query: { from: sessionId, into: 'main' },
       });
       r.status(200).body().exists('$.files_changed').has('$.from', sessionId).has('$.into', 'main');
     });
     await ctx.step('the `head`/`base` aliases work identically', async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId/version-diff', {
+      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId/version-diff', {
         params: { projectId },
         query: { head: sessionId, base: 'main' },
       });
       r.status(200).body().exists('$.files_changed');
     });
     await ctx.step('missing into/base → 400', async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId/version-diff', {
+      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId/version-diff', {
         params: { projectId },
         query: { from: sessionId },
       });
@@ -758,8 +723,8 @@ flow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 600_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
     ],
   },
   async (ctx) => {
@@ -819,16 +784,16 @@ flow(
     serial: true,
     timeoutMs: 600_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'POST /v1/projects/:projectId/sessions/:sessionId/commit-push',
-      'GET /v1/projects/:projectId/snapshots',
-      'POST /v1/projects/:projectId/change-requests',
-      'GET /v1/projects/:projectId/change-requests/:crId/merge-preview',
-      'POST /v1/projects/:projectId/change-requests/:crId/merge',
-      'DELETE /v1/projects/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/commit-push',
+      'GET /v1/workspaces/:projectId/snapshots',
+      'POST /v1/workspaces/:projectId/change-requests',
+      'GET /v1/workspaces/:projectId/change-requests/:crId/merge-preview',
+      'POST /v1/workspaces/:projectId/change-requests/:crId/merge',
+      'DELETE /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx) => {
@@ -839,7 +804,7 @@ flow(
         async () => {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .get('/v1/projects/:projectId/snapshots', { params: { projectId: project.id } });
+            .get('/v1/workspaces/:projectId/snapshots', { params: { projectId: project.id } });
           return r.statusCode === 200 ? r.json<any>() : null;
         },
         {
@@ -871,6 +836,7 @@ flow(
     });
 
     const session = await ctx.fixtures.session(project, {
+      agentName: 'worker',
       prompt: 'add a README.md describing this project',
     });
     let sandboxId = '';
@@ -882,11 +848,15 @@ flow(
     const goldenMarker = `golden-e2e-${crypto.randomUUID()}`;
     const goldenDone = `GOLD1_DONE_${Date.now()}`;
     await ctx.step('agent writes the requested file and produces output', async () => {
+      // "Do not commit": the next step proves the host commit-push pushes the
+      // change. An agent that commits and pushes on its own leaves that call
+      // nothing to do (`pushed: false`, `nothing_to_do: true`; v0.14.15
+      // release suite, 2026-11-02). RUN-7 uses the same instruction.
       await sendPrompt(
         ctx,
         project.id,
         session.id,
-        `Create the file ${goldenPath} containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Then reply with exactly: ${goldenDone}`,
+        `Create the file ${goldenPath} containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Do not commit. Then reply with exactly: ${goldenDone}`,
       );
       await waitForAssistantText(ctx, project.id, session.id, goldenDone);
       const file = await ctx.client
@@ -902,7 +872,7 @@ flow(
       const committed = await ctx.client
         .as(ctx.P.OWNER)
         .post(
-          '/v1/projects/:projectId/sessions/:sessionId/commit-push',
+          '/v1/workspaces/:projectId/sessions/:sessionId/commit-push',
           { message: 'Add golden end-to-end fixture' },
           { params: { projectId: project.id, sessionId: session.id } },
         );
@@ -918,7 +888,7 @@ flow(
           const resp = await ctx.client
             .as(ctx.P.OWNER)
             .post(
-              '/v1/projects/:projectId/change-requests',
+              '/v1/workspaces/:projectId/change-requests',
               { head_ref: session.id, title: ctx.fixtures.name('golden-cr') },
               { params: { projectId: project.id } },
             );
@@ -944,7 +914,7 @@ flow(
     await ctx.step('merge-preview reports mergeable', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/projects/:projectId/change-requests/:crId/merge-preview', {
+        .get('/v1/workspaces/:projectId/change-requests/:crId/merge-preview', {
           params: { projectId: project.id, crId },
         });
       r.status(200);
@@ -952,7 +922,7 @@ flow(
 
     await ctx.step('merge the CR → 200 merged', async () => {
       const r = await ctx.client.as(ctx.P.OWNER).post(
-        '/v1/projects/:projectId/change-requests/:crId/merge',
+        '/v1/workspaces/:projectId/change-requests/:crId/merge',
         {},
         {
           params: { projectId: project.id, crId },
@@ -964,7 +934,7 @@ flow(
     await ctx.step('delete the session → 200 stopped (branch preserved)', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .del('/v1/projects/:projectId/sessions/:sessionId', {
+        .del('/v1/workspaces/:projectId/sessions/:sessionId', {
           params: { projectId: project.id, sessionId: session.id },
         });
       r.status(200);
@@ -997,7 +967,7 @@ flow(
     requires: ['funded', 'sandbox'],
     serial: true,
     timeoutMs: 240_000,
-    routes: ['POST /v1/webhooks/slack/:projectId', 'GET /v1/projects/:projectId/sessions'],
+    routes: ['POST /v1/webhooks/slack/:projectId', 'GET /v1/workspaces/:projectId/sessions'],
   },
   async (ctx) => {
     const project = await ctx.fixtures.project();
@@ -1038,7 +1008,7 @@ flow(
         async () => {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .get('/v1/projects/:projectId/sessions', { params: { projectId: project.id } });
+            .get('/v1/workspaces/:projectId/sessions', { params: { projectId: project.id } });
           return r.statusCode === 200 ? r.json<any>() : null;
         },
         {
@@ -1056,42 +1026,40 @@ flow(
 );
 
 /**
- * A manifest with one extra agent, `no-edit`, whose `.md` denies every way to
- * write a file: the file tools (`edit`), the shell (`bash`, which also covers
- * OpenCode's `pty_*` tools, W5 E9), and delegation.
- */
-/**
  * A synthetic value only a successful read of `private/notes.txt` can put in the
  * conversation. Not `secrets/…`: a model refuses on its own to read a file named
  * like a credential, and the rule is never exercised (OpenCode, 2026-10-23).
  */
 const RUN10_PRIVATE = 'RUN10-PRIVATE-c41f9e';
 
+/**
+ * A manifest with one extra agent, `no-edit`, whose `permission` denies every
+ * way to write a file: the file tools (`edit`) and the shell (`bash`, which
+ * also covers the `pty_*` tools, W5 E9). It starts no subagent (`subagents`
+ * omitted). It has the checkout, so `private/notes.txt` exists to be refused.
+ */
 const NO_EDIT_FILES = {
   'kortix.yaml': [
-    'kortix_version: 2',
     'default_agent: kortix',
     'agents:',
     '  kortix:',
     '    kortix_permissions: all',
     '    skills: all',
+    '    tools: all',
     '  no-edit:',
+    '    description: Reads this repository and never writes files.',
+    '    mode: primary',
+    '    prompt: You answer questions about this repository. Follow the user instructions exactly.',
     '    kortix_permissions: all',
-    '',
-  ].join('\n'),
-  '.kortix/opencode/agents/no-edit.md': [
-    '---',
-    'description: Reads this repository and never writes files.',
-    'mode: primary',
-    'permission:',
-    '  edit: deny',
-    '  bash: deny',
-    '  task: deny',
-    '  read:',
-    "    '*': allow",
-    "    'private/*': deny",
-    '---',
-    'You answer questions about this repository. Follow the user instructions exactly.',
+    '    tools: all',
+    '    workspace:',
+    '      project_repository: true',
+    '    permission:',
+    '      edit: deny',
+    '      bash: deny',
+    '      read:',
+    "        '*': allow",
+    "        'private/*': deny",
     '',
   ].join('\n'),
   'private/notes.txt': `${RUN10_PRIVATE}\n`,
@@ -1105,12 +1073,12 @@ harnessFlow(
     // Boot (≤540s) + the boot turn (≤240s).
     timeoutMs: 900_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx, harness) => {
@@ -1182,38 +1150,38 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 780_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
     const session = await bootSession(ctx, harness);
     const { projectId, sessionId } = session;
-    const path = `memory/ke2e-run12-${Date.now()}.md`;
+    const path = `output/ke2e-run12-${Date.now()}.md`;
     const content = `ke2e-run12-${crypto.randomUUID()}`;
     const done = `RUN12_DONE_${Date.now()}`;
-    // The daemon hosts both tools (services/tools) and runs the same module for
-    // either harness: pi in process, OpenCode through the bridge plugin.
-    await ctx.step('the agent writes project memory with `memory` and presents it with `show`', async () => {
+    // The daemon hosts both tools (services/tools); pi runs them in process.
+    // `memory` was a Kortix tool until 2026-10-30; `show` is the Kortix tool here, after a harness `write`.
+    await ctx.step('the agent writes a file with `write` and presents it with the Kortix `show` tool', async () => {
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Call the memory tool with command "create", path "${path}" and file_text "${content}". ` +
+        `Call the write tool with path "${path}" and content "${content}". ` +
           `Then call the show tool with action "show", type "file" and path "${path}". ` +
           `Use no other tool. Then reply with exactly: ${done}`,
       );
       const messages = await waitForAssistantText(ctx, projectId, sessionId, done);
       const tools = messages.flatMap((m) => m.tools ?? []);
-      for (const tool of ['memory', 'show']) {
+      for (const tool of ['write', 'show']) {
         if (!tools.some((t) => t.tool === tool && t.status === 'completed')) {
           throw new Error(`no completed ${tool} call on ${harness}: ${JSON.stringify(tools)}`);
         }
       }
     });
-    await ctx.step('the memory file exists in the workspace with the requested content', async () => {
+    await ctx.step('the file exists in the workspace with the requested content', async () => {
       const file = await ctx.client
         .as(ctx.P.OWNER)
         .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(path)}`));
@@ -1223,21 +1191,21 @@ harnessFlow(
 );
 
 // ─── RUN-20: a codemode script runs its tool calls on pi ─────────────────────
-// pi only: codemode is a pi tool. The project sets `harnesses.pi.codemode: only`, so the
-// manifest reaches the box (API -> KORTIX_PI_CODEMODE) and the model has no other tool to
-// call: a direct bash call cannot pass for a script. The script's two bash calls write
-// files, so the flow reads the effect back; the runtime's own message list holds the
-// nested calls the transcript flattens away.
+// pi only: codemode is a pi tool. The agent sets `codemode: only`, so the manifest
+// reaches the box and the model has no other tool to call: a direct bash call cannot
+// pass for a script. The script's two bash calls write files into the checkout, so the
+// flow reads the effect back; the runtime's own message list holds the nested calls the
+// transcript flattens away.
 const RUN20_MANIFEST = [
-  'kortix_version: 2',
   'default_agent: kortix',
   'agents:',
   '  kortix:',
   '    kortix_permissions: all',
   '    skills: all',
-  'harnesses:',
-  '  pi:',
+  '    tools: all',
   '    codemode: only',
+  '    workspace:',
+  '      project_repository: true',
   '',
 ].join('\n');
 
@@ -1248,18 +1216,18 @@ flow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 780_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
     ],
   },
   async (ctx) => {
     const project = await ctx.fixtures.project({ seed: true });
     const world = await AgentPrincipalsWorld.open(ctx, { accountId: project.accountId ?? ctx.P.OWNER.accountId!, projectId: project.id });
     try {
-      await ctx.step('the project runs pi with harnesses.pi.codemode: only', async () => {
+      await ctx.step('the project runs pi with agents.kortix.codemode: only', async () => {
         await world.commitToMain({ 'kortix.yaml': RUN20_MANIFEST }, 'ke2e RUN-20: codemode only');
       });
       const session = await bootSession(ctx, 'pi', { project });
@@ -1314,7 +1282,6 @@ flow(
 // of trusting the model's text.
 const PROJECT_TOOL_FILES = {
   'kortix.yaml': [
-    'kortix_version: 2',
     'default_agent: kortix',
     'tools:',
     '  ke2e_marker: tools/ke2e_marker.ts',
@@ -1322,34 +1289,29 @@ const PROJECT_TOOL_FILES = {
     '  kortix:',
     '    kortix_permissions: all',
     '    skills: all',
+    '    tools: all',
+    '    workspace:',
+    '      project_repository: true',
     '  limited:',
+    '    description: Reads this repository with the read tool only.',
+    '    mode: primary',
+    '    prompt: You answer questions about this repository. Follow the user instructions exactly.',
     '    kortix_permissions: all',
     '    tools: [read]',
+    '    workspace:',
+    '      project_repository: true',
     // No checkout and no file tools: the box receives only the tool's modules.
     '  locked:',
+    '    description: Records markers with the ke2e_marker tool only.',
+    '    mode: primary',
+    '    prompt: You record markers. Follow the user instructions exactly.',
     '    kortix_permissions: all',
     '    workspace:',
     '      project_repository: false',
     '    tools: [ke2e_marker]',
     '',
   ].join('\n'),
-  'agents/locked.md': [
-    '---',
-    'description: Records markers with the ke2e_marker tool only.',
-    'mode: primary',
-    '---',
-    'You record markers. Follow the user instructions exactly.',
-    '',
-  ].join('\n'),
   'tools/lib/marker-text.ts': 'export const markerText = (nonce: string, agent: string) => `${nonce}:${agent}`\n',
-  'agents/limited.md': [
-    '---',
-    'description: Reads this repository with the read tool only.',
-    'mode: primary',
-    '---',
-    'You answer questions about this repository. Follow the user instructions exactly.',
-    '',
-  ].join('\n'),
   'tools/ke2e_marker.ts': [
     "import { writeFileSync } from 'node:fs'",
     "import { join } from 'node:path'",
@@ -1376,11 +1338,11 @@ harnessFlow(
     // Three sessions: boot (≤540s) + one turn (≤240s) each.
     timeoutMs: 2_500_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
@@ -1431,23 +1393,21 @@ harnessFlow(
   },
 );
 
-// ─── RUN-19: Kortix tools in kortix.yaml, removed and ejected ────────────────
-// The project lists four Kortix tools (no `show`) and owns a changed copy of
-// `web_search`, made by the real `kortix tools eject`. The copy answers a
-// `ke2e-` query itself and writes its proof to the workspace, so the flow reads
+// ─── RUN-19: Kortix tools in kortix.yaml, excluded and ejected ───────────────
+// The agent excludes the Kortix tool `show` and the project owns a changed copy
+// of `web_search`, made by the real `kortix tools eject`. The copy answers a
+// `ke2e-` query itself and writes its proof to the checkout, so the flow reads
 // the effect back instead of trusting the model's text.
 const RUN19_MANIFEST = [
-  'kortix_version: 2',
   'default_agent: kortix',
-  'tools:',
-  '  web_search: kortix:web_search',
-  '  image_search: kortix:image_search',
-  '  scrape_webpage: kortix:scrape_webpage',
-  '  memory: kortix:memory',
   'agents:',
   '  kortix:',
   '    kortix_permissions: all',
   '    skills: all',
+  '    tools:',
+  '      exclude: [show]',
+  '    workspace:',
+  '      project_repository: true',
   '',
 ].join('\n');
 const EJECTED_EXECUTE = '  async execute(args: Record<string, any>, { env, signal }: ToolContext): Promise<string> {\n';
@@ -1469,11 +1429,11 @@ harnessFlow(
     // One session: boot (≤540s) + one turn (≤240s).
     timeoutMs: 900_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
@@ -1483,7 +1443,7 @@ harnessFlow(
     const query = `ke2e-run19-${Date.now()}`;
     const done = `RUN19_DONE_${Date.now()}`;
     try {
-      await ctx.step(`the project ejects web_search with kortix tools eject, changes the copy, lists no show, and runs ${harness}`, async () => {
+      await ctx.step(`the project ejects web_search with kortix tools eject, changes the copy, excludes show, and runs ${harness}`, async () => {
         cli.writeFile('kortix.yaml', RUN19_MANIFEST);
         const ejected = await cli.run(['tools', 'eject', 'web_search']);
         if (ejected.exitCode !== 0) throw new Error(`kortix tools eject web_search exited ${ejected.exitCode}: ${ejected.all}`);
@@ -1491,7 +1451,7 @@ harnessFlow(
         if (!manifest.includes('  web_search: tools/web_search.ts  # ejected from kortix:web_search\n')) throw new Error(`eject did not point kortix.yaml at the copy:\n${manifest}`);
         const source = cli.readFile('tools/web_search.ts');
         if (!source.includes(EJECTED_EXECUTE)) throw new Error('the ejected web_search no longer has the execute line this flow changes');
-        await world.commitToMain({ 'kortix.yaml': manifest, 'tools/web_search.ts': source.replace(EJECTED_EXECUTE, CHANGED_EXECUTE) }, 'ke2e RUN-19: four Kortix tools and an ejected web_search');
+        await world.commitToMain({ 'kortix.yaml': manifest, 'tools/web_search.ts': source.replace(EJECTED_EXECUTE, CHANGED_EXECUTE) }, 'ke2e RUN-19: no show and an ejected web_search');
       });
 
       const session = await bootSession(ctx, harness, {
@@ -1510,16 +1470,14 @@ harnessFlow(
           .matches('$.content', new RegExp(`^EJECTED ${query}$`));
       });
 
-      await ctx.step('show is not loaded: no show call completes and the daemon answers 404 for it; a listed Kortix tool runs', async () => {
+      await ctx.step('show is excluded: no show call completes, and the box reports image_search among its tools and no show', async () => {
         const { messages } = await readTranscript(ctx, session.projectId, session.sessionId);
         const shown = messages.flatMap((m) => m.tools ?? []).filter((t) => t.tool === 'show' && t.status === 'completed');
         if (shown.length > 0) throw new Error(`a show call completed on ${harness}: ${JSON.stringify(shown)}`);
-        const owner = ctx.client.as(ctx.P.OWNER);
-        (await owner.post(runtimePath(session.sandboxId, '/kortix/tools/show'), { args: { action: 'show', type: 'text', content: query }, agent: 'kortix' }))
-          .status(404)
-          .body()
-          .matches('$.error', /^no tool named show is loaded$/);
-        (await owner.post(runtimePath(session.sandboxId, '/kortix/tools/memory'), { args: { command: 'view', path: 'memory' }, agent: 'kortix' })).status(200);
+        const diag = await ctx.client.as(ctx.P.OWNER).get(runtimePath(session.sandboxId, '/kortix/diag?tail=1'));
+        diag.status(200);
+        const tools = diag.json<{ pi?: { tools?: string[] } }>().pi?.tools ?? [];
+        if (tools.includes('show') || !tools.includes('image_search')) throw new Error(`the box's tools on ${harness} are ${JSON.stringify(tools)}`);
       });
     } finally {
       cli.dispose();
@@ -1550,9 +1508,10 @@ async function runtimeCapabilities(ctx: FlowContext, sandboxId: string): Promise
 const messageText = (message: RuntimeMessage): string =>
   message.parts.map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : '')).join('');
 
-// pi keeps the last `keepRecentTokens` (20,000 by default) of a conversation out
-// of a summary, so a two-turn session has nothing to summarize. 1 makes it compactable.
-const PI_COMPACT_FILES = { 'harnesses/pi/settings.json': `${JSON.stringify({ compaction: { keepRecentTokens: 1 } })}\n` };
+// pi keeps the last 20,000 tokens of a conversation (`keepRecentTokens`) out of a
+// summary, so a session of short turns has nothing to summarize. ~91,000 characters
+// (~22,800 tokens at pi's 4 characters per token) put the boot turn before that cut.
+const RUN13_FILLER = 'This line is filler for a long conversation; ignore it.\n'.repeat(1_600);
 
 // ─── RUN-13: a session compacts its conversation on demand ───────────────────
 harnessFlow(
@@ -1562,75 +1521,82 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
     const project = await ctx.fixtures.project({ seed: true });
-    const world = await AgentPrincipalsWorld.open(ctx, { accountId: project.accountId ?? ctx.P.OWNER.accountId!, projectId: project.id });
-    try {
-      await ctx.step(`the project runs ${harness}`, async () => {
-        await world.commitToMain(PI_COMPACT_FILES, 'ke2e RUN-13: pi keeps no recent context out of a summary');
-      });
-      const session = await bootSession(ctx, harness, { project });
-      const { projectId, sessionId, sandboxId } = session;
-      const root = await pinnedRoot(ctx, projectId, sessionId);
+    const session = await bootSession(ctx, harness, { project });
+    const { projectId, sessionId, sandboxId } = session;
+    const root = await pinnedRoot(ctx, projectId, sessionId);
 
-      await ctx.step('the runtime lists `session.compact`, and the session answers a second prompt', async () => {
-        const capabilities = await runtimeCapabilities(ctx, sandboxId);
-        if (!capabilities.includes('session.compact')) throw new Error(`${harness} lists no session.compact: ${JSON.stringify(capabilities)}`);
-        const marker = `RUN13_BEFORE_${Date.now()}`;
-        await sendPrompt(ctx, projectId, sessionId, echo(marker));
-        await waitForAssistantText(ctx, projectId, sessionId, marker);
-      });
+    await ctx.step('the runtime lists `session.compact`, and the session answers a second prompt of ~22,800 tokens', async () => {
+      const capabilities = await runtimeCapabilities(ctx, sandboxId);
+      if (!capabilities.includes('session.compact')) throw new Error(`${harness} lists no session.compact: ${JSON.stringify(capabilities)}`);
+      const marker = `RUN13_BEFORE_${Date.now()}`;
+      await sendPrompt(ctx, projectId, sessionId, `${echo(marker)}\n\n${RUN13_FILLER}`);
+      await waitForAssistantText(ctx, projectId, sessionId, marker);
+    });
 
-      await ctx.step('summarize is accepted with the model of the last reply', async () => {
-        const last = (await runtimeMessages(ctx, sandboxId, root)).filter((m) => m.info.role === 'assistant' && m.info.modelID).at(-1);
-        if (!last) throw new Error('no assistant message names a model');
-        const r = await ctx.client
-          .as(ctx.P.OWNER)
-          .post(runtimePath(sandboxId, `/session/${root}/summarize`), { providerID: last.info.providerID, modelID: last.info.modelID });
-        r.status(200);
-      });
+    await ctx.step('summarize is accepted with the model of the last reply', async () => {
+      const last = (await runtimeMessages(ctx, sandboxId, root)).filter((m) => m.info.role === 'assistant' && m.info.modelID).at(-1);
+      if (!last) throw new Error('no assistant message names a model');
+      const r = await ctx.client
+        .as(ctx.P.OWNER)
+        .post(runtimePath(sandboxId, `/session/${root}/summarize`), { providerID: last.info.providerID, modelID: last.info.modelID });
+      r.status(200);
+    });
 
-      await ctx.step('the conversation carries the compaction request and a finished summary with text', async () => {
-        await waitFor(() => runtimeMessages(ctx, sandboxId, root), {
-          until: (messages) => {
-            const summary = messages.find((m) => m.info.role === 'assistant' && m.info.summary === true);
-            if (summary?.info.error) throw new Error(`the compaction failed on ${harness}: ${JSON.stringify(summary.info.error)}`);
-            return (
-              messages.some((m) => m.info.role === 'user' && m.parts.some((part) => part.type === 'compaction')) &&
-              Boolean(summary?.info.time?.completed) &&
-              messageText(summary!).trim().length > 0
-            );
-          },
-          timeoutMs: 180_000,
-          intervalMs: 2_000,
-          description: `a finished compaction summary in session ${sessionId}`,
-          retryOnError: isKe2eRetryableError,
-        });
+    await ctx.step('the conversation carries the compaction request, marked as a reset onto the record, and a finished reset message with text', async () => {
+      await waitFor(() => runtimeMessages(ctx, sandboxId, root), {
+        until: (messages) => {
+          const summary = messages.find((m) => m.info.role === 'assistant' && m.info.summary === true);
+          if (summary?.info.error) throw new Error(`the compaction failed on ${harness}: ${JSON.stringify(summary.info.error)}`);
+          return (
+            // The default context is the record: the marker says the context reset onto it, with nothing summarized.
+            messages.some((m) => m.info.role === 'user' && m.parts.some((part) => part.type === 'compaction' && (part as { mode?: string }).mode === 'record')) &&
+            Boolean(summary?.info.time?.completed) &&
+            messageText(summary!).trim().length > 0
+          );
+        },
+        timeoutMs: 180_000,
+        intervalMs: 2_000,
+        description: `a finished compaction summary in session ${sessionId}`,
+        retryOnError: isKe2eRetryableError,
       });
+    });
 
-      await ctx.step('the compacted session answers the next prompt', async () => {
-        const marker = `RUN13_AFTER_${Date.now()}`;
-        await sendPrompt(ctx, projectId, sessionId, echo(marker));
-        await waitForAssistantText(ctx, projectId, sessionId, marker);
-      });
-    } finally {
-      await world.close();
-    }
+    await ctx.step('the compacted session answers the next prompt', async () => {
+      const marker = `RUN13_AFTER_${Date.now()}`;
+      await sendPrompt(ctx, projectId, sessionId, echo(marker));
+      await waitForAssistantText(ctx, projectId, sessionId, marker);
+    });
   },
 );
 
 const COMMAND = 'ke2e-echo';
 const COMMAND_LEAD = 'Reply with exactly this single token and nothing else:';
-const COMMAND_TEMPLATE = `---\ndescription: Echo one token (ke2e)\n---\n${COMMAND_LEAD} $ARGUMENTS\n`;
+/** The project registers the command in kortix.yaml and the default agent enables it. */
+const COMMAND_MANIFEST = [
+  'default_agent: kortix',
+  'commands:',
+  `  ${COMMAND}:`,
+  '    description: Echo one token (ke2e)',
+  `    prompt: '${COMMAND_LEAD} $ARGUMENTS'`,
+  'agents:',
+  '  kortix:',
+  '    kortix_permissions: all',
+  '    skills: all',
+  '    tools: all',
+  `    commands: [${COMMAND}]`,
+  '',
+].join('\n');
 
 // ─── RUN-14: a project slash command runs its template ───────────────────────
 harnessFlow(
@@ -1640,21 +1606,20 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
     const project = await ctx.fixtures.project({ seed: true });
     const world = await AgentPrincipalsWorld.open(ctx, { accountId: project.accountId ?? ctx.P.OWNER.accountId!, projectId: project.id });
     try {
-      await ctx.step(`the project runs ${harness} and commits the command where that harness reads it`, async () => {
-        const path = `harnesses/pi/prompts/${COMMAND}.md`;
-        await world.commitToMain({ [path]: COMMAND_TEMPLATE }, `ke2e RUN-14: the ${COMMAND} command`);
+      await ctx.step(`the project runs ${harness} and declares the command in kortix.yaml`, async () => {
+        await world.commitToMain({ 'kortix.yaml': COMMAND_MANIFEST }, `ke2e RUN-14: the ${COMMAND} command`);
       });
       const session = await bootSession(ctx, harness, { project });
       const { projectId, sessionId, sandboxId } = session;
@@ -1698,26 +1663,28 @@ harnessFlow(
   },
 );
 
-/** A second primary agent whose prompt names it `token` (RUN-17). */
+/**
+ * A second primary agent whose prompt names it `token` (RUN-17). The session
+ * agent has the checkout: a session without it is compiled for its own agent
+ * alone, and its runtime would never list `marker`.
+ */
 function agentPickFiles(token: string): Record<string, string> {
   return {
     'kortix.yaml': [
-      'kortix_version: 2',
       'default_agent: kortix',
       'agents:',
       '  kortix:',
       '    kortix_permissions: all',
       '    skills: all',
+      '    tools: all',
+      '    workspace:',
+      '      project_repository: true',
       '  marker:',
+      '    description: Knows its own name.',
+      '    mode: primary',
+      `    prompt: Your name is ${token}. When anyone asks for your name, answer with exactly ${token} and nothing else.`,
       '    kortix_permissions: all',
-      '',
-    ].join('\n'),
-    '.kortix/opencode/agents/marker.md': [
-      '---',
-      'description: Knows its own name.',
-      'mode: primary',
-      '---',
-      `Your name is ${token}. When anyone asks for your name, answer with exactly ${token} and nothing else.`,
+      '    tools: all',
       '',
     ].join('\n'),
   };
@@ -1755,12 +1722,12 @@ harnessFlow(
     // Boot (≤540s) + the boot turn + two turns (≤240s each).
     timeoutMs: 1_200_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {
@@ -1814,10 +1781,10 @@ flow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx) => {
@@ -1861,12 +1828,12 @@ harnessFlow(
     requires: ['funded', 'sandbox'],
     timeoutMs: 900_000,
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'PATCH /v1/workspaces/:projectId/features',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
     ],
   },
   async (ctx, harness) => {

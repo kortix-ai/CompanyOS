@@ -57,10 +57,10 @@ interface SnapshotBuild {
 
 const HELP = help`Usage: kortix sandboxes <subcommand> [options]
 
-Manage the project's sandbox images — the same surface as the dashboard's
+Manage the workspace's sandbox images — the same surface as the dashboard's
 Customize → Sandbox images. A template is a definition (image OR Dockerfile +
 resources); a build produces the actual snapshot the platform boots sessions
-from. Templates also come from \`[[sandbox.templates]]\` in kortix.yaml.
+from. Templates also come from \`sandbox.templates\` in kortix.yaml.
 
 Subcommands:
   ls [--json]                       List templates + live provider state.
@@ -77,7 +77,7 @@ Subcommands:
   rm <slug>                         Delete a UI-created template.
   fix                               Start a session seeded with the last failed
                                     build log so an agent can repair it.
-  provider [--json]                 Show the project's sandbox-provider pin and
+  provider [--json]                 Show the workspace's sandbox-provider pin and
                                     which providers this host offers.
   provider <name> [--timeout <sec>] Pin every new session to one provider. If
                                     the target needs its snapshot built first
@@ -89,7 +89,7 @@ Subcommands:
 Local build (build --local):
   Renders your Dockerfile + the Kortix toolchain layer and builds it with an
   EMPTY context — the same repo-less constraint the cloud builds under. Needs
-  no login and no linked project, just Docker. For the checks that need neither,
+  no login and no linked workspace, just Docker. For the checks that need neither,
   run \`kortix validate\` (it lints these Dockerfiles statically).
 
   Slug: the positional, else \`sandbox.default\`, else your only template.
@@ -110,14 +110,14 @@ Options:
   --cpu <n>            vCPUs.   --memory <n>  GiB RAM.   --disk <n>  GiB disk.
   --clear              provider: remove the pin instead of setting one.
   --timeout <sec>      provider: how long to follow a preparation (default 600).
-  --project <id>       Operate on this project id (default: linked).
+  --workspace <id>     Operate on this workspace id (default: linked).
   --host <name>        Operate against a non-default Kortix host.
   -h, --help           Show this help.
 
 Pinning a provider needs the \`project.settings.write\` permission and is a person's
 action: an agent session (a session-bound or agent-grant token) is always refused.
 A session that needs a different runtime passes \`provider\` on session create instead —
-that changes only its own session, not the project.
+that changes only its own session, not the workspace.
 `;
 
 /** The `sandboxes` flags. Values arrive as strings; each use parses its own. */
@@ -155,7 +155,7 @@ export async function runSandboxes(argv: string[]): Promise<number> {
       local: takeFlagBool(rest, ['--local']),
       clear: takeFlagBool(rest, ['--clear', '--unpin']),
       timeout: takeFlagValue(rest, ['--timeout']),
-      project: takeFlagValue(rest, ['--project']),
+      project: takeFlagValue(rest, ['--project', '--workspace']),
       host: takeFlagValue(rest, ['--host']),
       image: takeFlagValue(rest, ['--image']),
       dockerfile: takeFlagValue(rest, ['--dockerfile']),
@@ -191,7 +191,7 @@ export async function runSandboxes(argv: string[]): Promise<number> {
 
   const ctx = await resolveProjectContext({ projectArg: f.project, hostArg: f.host });
   if (!ctx) return 1;
-  const base = `/projects/${ctx.projectId}`;
+  const base = `/workspaces/${ctx.projectId}`;
 
   try {
     switch (sub) {
@@ -259,7 +259,7 @@ async function sandboxesLs(client: Client, base: string, json: boolean): Promise
     );
   }
   process.stdout.write(
-    `\n  ${C.dim}${resp.items.length} template${resp.items.length === 1 ? '' : 's'} · default: ${resp.default_slug ?? '—'}${C.reset}\n\n`,
+    `\n  ${C.dim}${resp.items.length} template${resp.items.length === 1 ? '' : 's'} · default: ${resp.default_slug === 'default' ? 'default (platform image)' : (resp.default_slug ?? '—')}${C.reset}\n\n`,
   );
   return 0;
 }
@@ -345,7 +345,7 @@ async function sandboxesBuild(
       (t) => t.slug === slug,
     )?.template_id ?? null;
   if (!id) {
-    process.stderr.write(`${status.err(`No project-scoped template "${slug}" to build.`)}\n`);
+    process.stderr.write(`${status.err(`No workspace-scoped template "${slug}" to build.`)}\n`);
     return 1;
   }
   await client.post(`${base}/sandbox-templates/${id}/build`);
@@ -378,7 +378,7 @@ function sandboxAddLocal(slug: string | undefined, f: Flags): number {
   try {
     if (arrayEntryExists('sandbox.templates', 'slug', slug)) {
       process.stderr.write(
-        `${status.err(`A [[sandbox.templates]] "${slug}" already exists in kortix.yaml.`)}\n`,
+        `${status.err(`A sandbox template "${slug}" already exists in kortix.yaml.`)}\n`,
       );
       return 1;
     }
@@ -391,7 +391,7 @@ function sandboxAddLocal(slug: string | undefined, f: Flags): number {
     if (f.disk) fields.disk = Number(f.disk);
     appendArrayBlock('sandbox.templates', fields);
     process.stdout.write(
-      `${status.ok(`Added [[sandbox.templates]] ${C.bold}${slug}${C.reset} to kortix.yaml`)} ${C.dim}— \`kortix ship\` builds it.${C.reset}\n`,
+      `${status.ok(`Added sandbox template ${C.bold}${slug}${C.reset} to kortix.yaml`)} ${C.dim}— \`kortix ship\` builds it.${C.reset}\n`,
     );
     return 0;
   } catch (err) {
@@ -405,7 +405,7 @@ function sandboxUpdateLocal(slug: string | undefined, f: Flags): number {
   try {
     if (!arrayEntryExists('sandbox.templates', 'slug', slug)) {
       process.stderr.write(
-        `${status.err(`No [[sandbox.templates]] "${slug}" in kortix.yaml (platform/UI templates aren't file-based).`)}\n`,
+        `${status.err(`No sandbox template "${slug}" in kortix.yaml (platform/UI templates aren't file-based).`)}\n`,
       );
       return 1;
     }
@@ -419,7 +419,7 @@ function sandboxUpdateLocal(slug: string | undefined, f: Flags): number {
     if (updates.length === 0) return missing('at least one field to update');
     for (const [k, v] of updates) setScalarInArrayBlock('sandbox.templates', 'slug', slug, k, v);
     process.stdout.write(
-      `${status.ok(`Updated [[sandbox.templates]] ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
+      `${status.ok(`Updated sandbox template ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
     );
     return 0;
   } catch (err) {
@@ -432,11 +432,11 @@ function sandboxRmLocal(slug: string | undefined): number {
   if (!slug) return missing('a template slug');
   try {
     if (!removeArrayBlock('sandbox.templates', 'slug', slug)) {
-      process.stderr.write(`${status.err(`No [[sandbox.templates]] "${slug}" in kortix.yaml.`)}\n`);
+      process.stderr.write(`${status.err(`No sandbox template "${slug}" in kortix.yaml.`)}\n`);
       return 1;
     }
     process.stdout.write(
-      `${status.ok(`Removed [[sandbox.templates]] ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
+      `${status.ok(`Removed sandbox template ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
     );
     return 0;
   } catch (err) {

@@ -160,6 +160,47 @@ describe('public session preview shares', () => {
     });
     expect(res.status).toBe(405);
     expect(await res.json()).toEqual({ error: 'This public share is view-only' });
+    // RFC 9110 §15.5.6: a 405 names the methods the resource supports
+    // (KRTX-3380, pentest http.contract: 405 without Allow is not actionable).
+    expect(res.headers.get('allow')).toBe('GET, HEAD, OPTIONS');
+  });
+
+  // KRTX-4406: `mode` is a free-form column, so this edge must ask the same
+  // allowlist the preview origin asks (`isViewOnlyShare`) — anything that is
+  // not explicitly `interactive` is read-only. A value this edge has never
+  // heard of used to be writable here while the preview origin refused it.
+  test('a preview share is read-only for every mode that is not interactive', async () => {
+    for (const mode of ['view', 'readonly', 'read-only', 'VIEW', '', 'viewer']) {
+      shareRow = { ...shareRow, mode };
+      updateCalls = 0;
+
+      const write = await app().request(`/v1/p/public-share/${SHARE_TOKEN}/3000/api`, {
+        method: 'POST',
+        body: '{}',
+      });
+      expect({ mode, status: write.status }).toEqual({ mode, status: 405 });
+      expect({ mode, body: await write.json() }).toEqual({
+        mode,
+        body: { error: 'This public share is view-only' },
+      });
+
+      // Reads still pass for every mode.
+      const read = await app().request(`/v1/p/public-share/${SHARE_TOKEN}/3000/`);
+      expect({ mode, status: read.status }).toEqual({ mode, status: 200 });
+    }
+  });
+
+  // The negative control: the gate must not simply refuse every write.
+  test('an interactive preview share still forwards writes', async () => {
+    shareRow = { ...shareRow, mode: 'interactive', allowWebsocket: true };
+
+    const res = await app().request(`/v1/p/public-share/${SHARE_TOKEN}/3000/api`, {
+      method: 'POST',
+      body: '{}',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(updateCalls).toBe(1);
   });
 
   test('proxies allowed GET requests and records use', async () => {
@@ -245,6 +286,7 @@ describe('public session preview shares', () => {
       body: '{}',
     });
     expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('GET, HEAD, OPTIONS');
   });
 
 });

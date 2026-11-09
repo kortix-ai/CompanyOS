@@ -3,12 +3,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import type {
-  Config,
   FileContent,
   Path as RuntimePathInfo,
   Project as RuntimeProjectInfo,
-  ProviderAuthAuthorization,
-  ProviderAuthMethod,
 } from '../core/runtime/client';
 import { getClient } from '../core/runtime/client';
 import {
@@ -16,13 +13,14 @@ import {
   getActiveRuntimeUrl,
 } from '../browser/stores/server-store';
 import type { SubdomainUrlOptions } from '../core/session/url';
+import { activeRuntimeAction, runtimeActionError, runtimeActionPaths, type RuntimeWorkspaceInfo } from '../core/session/runtime-actions';
 import {
   buildStaticFileHealthPreviewUrl,
   buildStaticFilePreviewUrl,
   hasPreviewTarget,
 } from '../core/session/url';
 import { useCurrentRuntime } from './use-current-runtime';
-import { runtimeKeys, useRuntimeReady } from './use-opencode-sessions/keys';
+import { runtimeKeys, useRuntimeReady } from './use-runtime-sessions/keys';
 
 interface RuntimeResult<T> {
   data?: T;
@@ -40,80 +38,36 @@ function unwrapRuntimeResult<T>(result: RuntimeResult<T>): T {
   return result.data as T;
 }
 
-export function getRuntimeProjectInfo(): Promise<RuntimeProjectInfo> {
-  return getClient().project.current().then(unwrapRuntimeResult);
+/** The checkout facts from `GET /kortix/runtime/workspace`. */
+async function readRuntimeWorkspace(): Promise<RuntimeWorkspaceInfo> {
+  const read = await activeRuntimeAction('GET', runtimeActionPaths.workspace);
+  if (!read.ok) throw await runtimeActionError(read, 'Reading the workspace failed');
+  return (await read.json()) as RuntimeWorkspaceInfo;
 }
 
-export function getRuntimePathInfo(): Promise<RuntimePathInfo> {
-  return getClient().path.get().then(unwrapRuntimeResult);
+/** The checkout as the compatibility `Project` shape, from the workspace route. */
+export async function getRuntimeWorkspaceInfo(): Promise<RuntimeProjectInfo> {
+  const workspace = await readRuntimeWorkspace();
+  return {
+    id: workspace.directory,
+    worktree: workspace.directory,
+    ...(workspace.vcs === 'git' ? { vcs: 'git' as const } : {}),
+    time: { created: 0, updated: 0 },
+    sandboxes: [],
+  };
+}
+
+/** @deprecated Use `getRuntimeWorkspaceInfo`. Kept permanently. */
+export const getRuntimeProjectInfo = getRuntimeWorkspaceInfo;
+
+/** The checkout paths as the compatibility `Path` shape, from the workspace route. */
+export async function getRuntimePathInfo(): Promise<RuntimePathInfo> {
+  const workspace = await readRuntimeWorkspace();
+  return { home: workspace.home, state: '', config: '', worktree: workspace.directory, directory: workspace.directory };
 }
 
 export function readRuntimeTextFile(path: string): Promise<string | FileContent> {
   return getClient().file.read({ path }).then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function getRuntimeProviderAuthMethods(): Promise<
-  Record<string, ProviderAuthMethod[]>
-> {
-  return getClient().provider.auth().then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function authorizeRuntimeProvider(
-  providerID: string,
-  method: number,
-): Promise<ProviderAuthAuthorization> {
-  return getClient().provider.oauth.authorize({ providerID, method }).then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function completeRuntimeProviderOAuth(
-  providerID: string,
-  method?: number,
-  code?: string,
-): Promise<boolean> {
-  return getClient().provider.oauth.callback({
-    providerID,
-    method,
-    ...(code ? { code } : {}),
-  }).then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function setRuntimeProviderApiKey(
-  providerID: string,
-  key: string,
-): Promise<boolean> {
-  return getClient().auth.set({
-    providerID,
-    auth: { type: 'api', key },
-  }).then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function getRuntimeConfig(): Promise<Config> {
-  return getClient().global.config.get().then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export function updateRuntimeConfig(config: Config): Promise<Config> {
-  return getClient().global.config.update({ config } as never).then(unwrapRuntimeResult);
-}
-
-/** @deprecated Wraps an OpenCode-only runtime route. Removed in the next major. */
-export async function refreshRuntimeConfiguration(): Promise<void> {
-  unwrapRuntimeResult(await getClient().global.dispose());
-}
-
-/** @deprecated OpenCode only: pi does not serve it (OpenCode is sunset, 2026-10-23). Removed with OpenCode support. */
-export function logRuntimeEvent(input: {
-  service: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  message: string;
-  extra?: Record<string, unknown>;
-}): void {
-  void getClient().app.log(input);
 }
 
 /** Opaque identity for caches that must reset when the active runtime changes. */
@@ -169,14 +123,17 @@ export function getActiveStaticFileHealthUrl(): string {
   return buildStaticFileHealthPreviewUrl(deriveSubdomainOpts());
 }
 
-export function useRuntimeProjectInfo(options?: { enabled?: boolean }) {
+export function useRuntimeWorkspaceInfo(options?: { enabled?: boolean }) {
   const runtimeReady = useRuntimeReady();
   return useQuery<RuntimeProjectInfo>({
     queryKey: runtimeKeys.currentProject(),
-    queryFn: getRuntimeProjectInfo,
+    queryFn: getRuntimeWorkspaceInfo,
     enabled: runtimeReady && options?.enabled !== false,
     staleTime: Infinity,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
+
+/** @deprecated Use `useRuntimeWorkspaceInfo`. Kept permanently. */
+export const useRuntimeProjectInfo = useRuntimeWorkspaceInfo;

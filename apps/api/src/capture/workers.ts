@@ -4,7 +4,7 @@
  * Every replica: the `capture.ingest` job handler runs in the shared job
  * worker (shared/job-queue.ts).
  *
- * Leader only (workers/capture-worker.ts runs these ticks):
+ * Leader only (worker/jobs/capture.ts runs these ticks):
  *   - events reader: long-polls the SQS queue of the bucket's `*.manifest.json`
  *     ObjectCreated events (AWS), enqueueing one ingest per key;
  *   - index reader: for each active device, reads `status.json` (live status),
@@ -16,7 +16,7 @@
  *     retention, prunes expired sign-ins and finished jobs.
  */
 import { DeleteMessageCommand, ReceiveMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
-import { captureDeviceGrants, captureDevices, captureWorkspaces, timelineChunks } from '@kortix/db';
+import { captureDeviceGrants, captureDevices, captureTenants, timelineChunks } from '@kortix/db';
 import { and, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { logger } from '../lib/logger';
@@ -63,11 +63,11 @@ async function activeDevices() {
   const rows = await db
     .select({ device: captureDevices })
     .from(captureDevices)
-    .innerJoin(captureWorkspaces, eq(captureWorkspaces.accountId, captureDevices.accountId))
+    .innerJoin(captureTenants, eq(captureTenants.accountId, captureDevices.accountId))
     .where(
       and(
         isNull(captureDevices.revokedAt),
-        eq(captureWorkspaces.enabled, true),
+        eq(captureTenants.enabled, true),
         or(
           gt(captureDevices.lastCredentialsAt, sql`now() - interval '1 day'`),
           gt(captureDevices.statusReportedAt, sql`now() - interval '1 day'`),

@@ -1,36 +1,69 @@
 export type RuntimeReadinessMetadata = Record<string, unknown>;
 
-/**
- * The runtime boot-wait clocks, and the name an API before W4 wrote each one
- * under. Rows stamped by that API still carry the old names: every reader goes
- * through {@link readinessValue}, and every clearing list strips both names.
- * ponytail: drop the old names once no row carries them (they clear on the next ready answer or wake).
- */
-const PRE_W4_READINESS_KEYS = {
-  runtimeReadyWaitStartedAt: 'opencodeReadyWaitStartedAt',
-  runtimeReadyWaitReason: 'opencodeReadyWaitReason',
-  runtimeUnreachableWaitStartedAt: 'opencodeUnreachableWaitStartedAt',
-  runtimeNotReadyWaitStartedAt: 'opencodeNotReadyWaitStartedAt',
-  runtimeBootPhase: 'opencodeBootPhase',
-  runtimeBootWaitFirstSeenAt: 'opencodeBootWaitFirstSeenAt',
+/** The runtime boot-wait clocks and the `unreachable` diagnosis stamps. */
+const READINESS_KEYS = [
+  'runtimeReadyWaitStartedAt',
+  'runtimeReadyWaitReason',
+  'runtimeUnreachableWaitStartedAt',
+  'runtimeNotReadyWaitStartedAt',
+  'runtimeBootPhase',
+  'runtimeBootWaitFirstSeenAt',
   // WHY the last `unreachable` happened, stamped by the open (routes/shared.ts)
   // so a box that has been cycling for an hour can be diagnosed from the row
   // instead of from logs nobody can still reach. Cleared with every other
   // readiness field: a cause left behind after a good boot is a stale reading,
   // and a stale reading is worse than none — it is the trap this whole class of
   // bug keeps setting.
-  runtimeUnreachableCause: 'opencodeUnreachableCause',
-  runtimeUnreachableCauseAt: 'opencodeUnreachableCauseAt',
-  runtimeUnreachableResponder: 'opencodeUnreachableResponder',
-  runtimeUnreachableDetail: 'opencodeUnreachableDetail',
-} as const;
+  'runtimeUnreachableCause',
+  'runtimeUnreachableCauseAt',
+  'runtimeUnreachableResponder',
+  'runtimeUnreachableDetail',
+] as const;
 
-export type RuntimeReadinessKey = keyof typeof PRE_W4_READINESS_KEYS;
+export type RuntimeReadinessKey = (typeof READINESS_KEYS)[number];
 
-/** A readiness field under its neutral name, else under the name a pre-W4 API wrote. */
+/**
+ * A readiness field. Rows an API before W4 stamped (last 2026-10-07) carry
+ * the same clocks under `opencode*` names; nothing reads those any more.
+ */
 export function readinessValue(metadata: RuntimeReadinessMetadata, key: RuntimeReadinessKey): unknown {
-  return metadata[key] ?? metadata[PRE_W4_READINESS_KEYS[key]];
+  return metadata[key];
 }
+
+/**
+ * The daemon's failed-start text (`finishedBootError`) and when the open saw
+ * it. The open parks the box on it at once; the cooldown answer names it. A
+ * ready answer, the next wake and a restart clear it with the clocks below.
+ */
+export const RUNTIME_BOOT_ERROR_KEY = 'runtimeBootError';
+export const RUNTIME_BOOT_ERROR_AT_KEY = 'runtimeBootErrorAt';
+/** `runtimeParkReason` and `failure.evidence.check` of a box parked on its daemon's failed start. */
+export const RUNTIME_BOOT_ERROR_PARK_REASON = 'runtime_boot_error';
+
+/**
+ * `failure.message` for a box parked on its daemon's failed start. The box
+ * runs; the agent in it did not start. With `terminalAttempts` the retries are
+ * spent and only a restart tries again.
+ */
+export function runtimeBootErrorMessage(bootError: string, terminalAttempts?: number): string {
+  const error = bootError.replace(/[.\s]+$/, '');
+  return terminalAttempts
+    ? `Could not start the agent after ${terminalAttempts} attempts: ${error}. Restart the session to try again.`
+    : `Could not start the agent: ${error}. Trying again automatically.`;
+}
+
+/**
+ * The `unreachable` diagnosis stamps. A daemon that answers
+ * `not_ready` is reachable, so the open drops them then: the first poll of a
+ * fresh box always meets a daemon that is not listening yet, and its 502 was
+ * left on the row for the whole boot.
+ */
+export const RUNTIME_UNREACHABLE_CAUSE_KEYS: readonly string[] = [
+  'runtimeUnreachableCause',
+  'runtimeUnreachableCauseAt',
+  'runtimeUnreachableResponder',
+  'runtimeUnreachableDetail',
+];
 
 export const RUNTIME_READINESS_CLOCK_KEYS = [
   'runtimeWakeStartedAt',
@@ -41,8 +74,9 @@ export const RUNTIME_READINESS_CLOCK_KEYS = [
   // (shouldWarnRuntimeUnreachable). Cleared with the rest so the next spell
   // gets its own warn.
   'runtimeUnreachableWarnedAt',
-  ...(Object.keys(PRE_W4_READINESS_KEYS) as RuntimeReadinessKey[]),
-  ...Object.values(PRE_W4_READINESS_KEYS),
+  RUNTIME_BOOT_ERROR_KEY,
+  RUNTIME_BOOT_ERROR_AT_KEY,
+  ...READINESS_KEYS,
 ] as const;
 
 /**
@@ -154,7 +188,7 @@ export function inPlaceRestartWakePatch(now = new Date()): RuntimeReadinessMetad
  * through 13:34:48.8, authenticated to the gateway at 13:34:48.5–49.1 and
  * claimed its initial turn at 13:34:49.216 — but `/start` parked the box at
  * **13:34:49.202**. The boot lost by 14 ms to a budget it had not spent:
- * `opencodeBootWaitFirstSeenAt` was stamped during ATTEMPT 1 and nothing
+ * `runtimeBootWaitFirstSeenAt` (then named `opencodeBootWaitFirstSeenAt`) was stamped during ATTEMPT 1 and nothing
  * cleared it, so the 10-minute hard cap was already ~7 minutes old when
  * attempt 2's boot started. Every automatic rung after the first was
  * deterministically doomed.

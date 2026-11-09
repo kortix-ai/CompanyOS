@@ -39,9 +39,8 @@ function sanitizePtyChunk(chunk: string): string {
 const SHELL_HELP = help`Usage: kortix sessions shell [<session-id>] [options]
 
 Open a raw interactive terminal (PTY) inside a running session's sandbox —
-the same shell you'd get from the "Terminal" panel in the dashboard. Unlike
-\`sessions connect\` (which attaches to the OpenCode agent), this is a plain
-shell: no agent, no chat, just a prompt.
+the same shell you'd get from the "Terminal" panel in the dashboard. It is a
+plain shell: no agent, no chat, just a prompt.
 
 Reattaches to the session's existing terminal if one is already running
 (same one the dashboard shows) so you never lose your place; pass --new to
@@ -54,11 +53,11 @@ Subcommands:
   kill <pty-id>    Kill one terminal. The ambient shell respawns on the next
                    attach; anything running inside it does not.
 
-  --new            Start a brand-new shell instead of reattaching.
-  --project <id>   Pin this project id (skips the cross-host scan).
-  --host <name>    Pin this Kortix host (skips the cross-host scan).
-  --json           Machine-readable output (\`ls\`/\`kill\`).
-  -h, --help       Show this help.
+  --new             Start a brand-new shell instead of reattaching.
+  --workspace <id>  Pin this workspace id (skips the cross-host scan).
+  --host <name>     Pin this Kortix host (skips the cross-host scan).
+  --json            Machine-readable output (\`ls\`/\`kill\`).
+  -h, --help        Show this help.
 
 Examples:
   kortix sessions shell <session-id>
@@ -76,7 +75,7 @@ export async function runSessionsShell(argv: string[]): Promise<number> {
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
   } catch (err) {
     return fail((err as Error).message);

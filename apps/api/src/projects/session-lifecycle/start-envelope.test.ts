@@ -10,17 +10,17 @@ function payload(partial: Partial<SessionStartResult>): SessionStartResult {
     agent_name: 'default',
     retriable: true,
     sandbox: null,
-    opencode_session_id: null,
+    runtime_session_id: null,
     ...partial,
   };
 }
 
 describe('the session-open answer names the runtime session neutrally', () => {
-  test('runtime_session_id carries the same pin as opencode_session_id', () => {
+  test('runtime_session_id carries the same pin as runtime_session_id', () => {
     const log = createStartCallLog(OBSERVED_AT);
-    const pinned = withStartEnvelope(payload({ opencode_session_id: 'ses_root' }), log);
+    const pinned = withStartEnvelope(payload({ runtime_session_id: 'ses_root' }), log);
     expect(pinned.runtime_session_id).toBe('ses_root');
-    expect(pinned.opencode_session_id).toBe('ses_root');
+    expect(pinned.runtime_session_id).toBe('ses_root');
     expect(withStartEnvelope(payload({}), log).runtime_session_id).toBeNull();
   });
 });
@@ -98,9 +98,6 @@ describe('the session-open envelope states what THIS call did', () => {
     expect(booting({ runtimeBootWaitFirstSeenAt: '2026-08-26T13:59:30.000Z' })).toBe(
       '2026-08-26T13:59:30.000Z',
     );
-    expect(booting({ opencodeBootWaitFirstSeenAt: '2026-08-26T13:59:20.000Z' })).toBe(
-      '2026-08-26T13:59:20.000Z',
-    );
   });
 
   // `cooling_down` is proven through the real /start route in
@@ -142,6 +139,28 @@ describe('the session-open envelope states what THIS call did', () => {
     log.did('inspected');
     log.sawProvider('stopped');
     expect(log.action).toBe('resumed');
+  });
+
+  test('provisioning: the image step the row recorded is boot.image', () => {
+    const step = { state: 'building' as const, image: 'kortix-default-abc', since: '2026-08-26T13:59:58.000Z' };
+    const boot = deriveBoot(payload({ stage: 'provisioning' }), { initStatus: 'provisioning', imageStep: step }, 'inspected', OBSERVED_AT);
+    expect(boot.image).toEqual(step);
+  });
+
+  test('provisioning before the image step: boot.image is null; a malformed step is null, never a guess', () => {
+    expect(deriveBoot(payload({ stage: 'provisioning' }), { initStatus: 'provisioning' }, 'inspected', OBSERVED_AT).image).toBeNull();
+    const malformed = { initStatus: 'provisioning', imageStep: { state: 'compiling', image: 1, since: 'later' } };
+    expect(deriveBoot(payload({ stage: 'provisioning' }), malformed, 'inspected', OBSERVED_AT).image).toBeNull();
+  });
+
+  test('a ready session carries no image step, even when the row still holds one', () => {
+    const boot = deriveBoot(
+      payload({ stage: 'ready' }),
+      { imageStep: { state: 'serving_last_ready', image: 'x', since: '2026-08-26T13:59:58.000Z' } },
+      'inspected',
+      OBSERVED_AT,
+    );
+    expect('image' in boot).toBe(false);
   });
 
   test('deriveBoot never reports actively_starting for a parked row nobody is waking', () => {

@@ -11,6 +11,7 @@
  * Confidential clients present `client_secret`; public clients (a browser or
  * native app) rely on PKCE alone and must not send a secret.
  */
+import { isNoWorkspaceError } from '../shared/no-workspace';
 import { createRoute, z } from '@hono/zod-openapi';
 import { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -38,6 +39,15 @@ import {
   OAuthClientInputError,
 } from '../repositories/oauth-clients';
 import { TokenBucketRateLimiter } from '../shared/rate-limit';
+import { AUTH_REQUEST_TTL_MS, SELF_REGISTERED_DESCRIPTION } from './sweeper';
+
+// The housekeeping deletes live in sweeper.ts, so the scheduled job never loads
+// this module's routes and auth middleware.
+export {
+  SELF_REGISTERED_DESCRIPTION,
+  sweepAbandonedSelfRegisteredClients,
+  sweepExpiredAuthorizationRequests,
+} from './sweeper';
 import { requestClientKey } from '../middleware/client-ip';
 import {
   isOAuthAccessToken,
@@ -51,8 +61,12 @@ import {
 import { isUuid } from '../shared/validate';
 import { actsAsFullIdentity } from '../accounts/core/tokens';
 import { actorOf } from '../iam/actor';
+import { authorize } from '../iam/authorize';
+import { resolveWorkspace, WorkspaceAmbiguousError } from '../workspaces/surface';
+import { noWorkspaceError } from '../shared/no-workspace';
 import { resolveAccountId } from '../shared/resolve-account';
 import { bearerToken } from '../shared/bearer-token';
+import { hasOnlyExtensionRedirect, KORTIX_EXTENSION_REDIRECT_URI } from './extension-client';
 
 // ─── Rate Limiter (per client_id) ───────────────────────────────────────────
 
@@ -203,7 +217,6 @@ export function basicClientAuth(
 
 // ─── Pending authorization requests (persisted) ─────────────────────────────
 
-const AUTH_REQUEST_TTL_MS = 10 * 60 * 1000;
 
 function hashRequestId(requestId: string): string {
   return createHash('sha256').update(requestId).digest('hex');
@@ -283,53 +296,39 @@ async function consumeAuthorizationRequest(
   return pendingAuthorizationRequest(row);
 }
 
-/** Housekeeping: drop expired or consumed requests older than the TTL, at most `limit` per run. */
-export async function sweepExpiredAuthorizationRequests(
-  now = new Date(),
-  limit = SWEEP_BATCH,
-): Promise<number> {
-  const cutoff = new Date(now.getTime() - AUTH_REQUEST_TTL_MS);
-  const rows = await db.execute(sql`
-    delete from kortix.oauth_authorization_requests
-     where id in (
-       select id from kortix.oauth_authorization_requests
-        where expires_at < ${now.toISOString()}::timestamptz or created_at < ${cutoff.toISOString()}::timestamptz
-        limit ${limit})
-    returning id`);
-  return countRows(rows);
+// ─── Workspace binding ──────────────────────────────────────────────────────
+
+/** Every client's consent names a workspace, except the Kortix browser
+ *  extension's: Chrome is the person's own surface (a person route). */
+function asksWorkspace(client: Pick<ClientRow, 'redirectUris'>): boolean {
+  return !hasOnlyExtensionRedirect(client.redirectUris ?? []);
 }
 
-/** A self-registered client that no person ever approved and that never got a token is dropped after this long. */
-const ABANDONED_CLIENT_AGE_MS = 7 * 24 * 3600 * 1000;
-const SWEEP_BATCH = 500;
-
-const countRows = (r: unknown): number =>
-  ((r as { rows?: unknown[] }).rows ?? (r as unknown[])).length;
-
 /**
- * Housekeeping (B-9): open dynamic registration (RFC 7591) lets anyone create
- * client rows. Delete those older than 7 days with no consent and no token
- * ever issued. Codes and requests cascade. One DELETE, bounded by `limit`;
- * concurrent runs on several API tasks delete disjoint-or-equal rows, and a row
- * already deleted by a peer is simply not matched, so the run is idempotent.
+ * The workspace a consent binds its grant to (design.md §3.2 C4a): a workspace
+ * id (never a legacy account key) with an active project that the person may
+ * open. Null for an unknown workspace, one of a split_pending account's key,
+ * and one the person cannot read: the consent answers all three the same.
  */
-export async function sweepAbandonedSelfRegisteredClients(
-  now = new Date(),
-  limit = SWEEP_BATCH,
-): Promise<number> {
-  const cutoff = new Date(now.getTime() - ABANDONED_CLIENT_AGE_MS);
-  const rows = await db.execute(sql`
-    delete from kortix.oauth_clients
-     where client_id in (
-       select c.client_id from kortix.oauth_clients c
-        where c.description = ${SELF_REGISTERED_DESCRIPTION}
-          and c.account_id is null and c.app_id is null
-          and c.created_at < ${cutoff.toISOString()}::timestamptz
-          and not exists (select 1 from kortix.oauth_consents o where o.client_id = c.client_id)
-          and not exists (select 1 from kortix.oauth_access_tokens t where t.client_id = c.client_id)
-        limit ${limit})
-    returning client_id`);
-  return countRows(rows);
+async function consentWorkspace(
+  c: Context,
+  userId: string,
+  workspaceId: string,
+): Promise<{ workspaceId: string; accountId: string } | null> {
+  let resolved;
+  try {
+    resolved = await resolveWorkspace(workspaceId);
+  } catch (err) {
+    if (err instanceof WorkspaceAmbiguousError) return null;
+    throw err;
+  }
+  if (!resolved || resolved.workspaceId !== workspaceId.toLowerCase()) return null;
+  const verdict = await authorize(await actorOf(c, resolved.accountId), 'project.read', {
+    type: 'workspace',
+    id: resolved.workspaceId,
+  }).catch(() => ({ allowed: false }));
+  if (!verdict.allowed || !userId) return null;
+  return { workspaceId: resolved.workspaceId, accountId: resolved.accountId };
 }
 
 // ─── Remembered consent ─────────────────────────────────────────────────────
@@ -382,6 +381,8 @@ async function issueTokenPair(params: {
   userId: string;
   accountId: string;
   scopes: string[];
+  /** The workspace the consent bound the grant to; null = unbound (acts as the person). */
+  boundWorkspaceId: string | null;
 }) {
   const accessToken = generateAccessToken();
   const refreshToken = generateRefreshToken();
@@ -398,6 +399,7 @@ async function issueTokenPair(params: {
       accountId: params.accountId,
       scopes: params.scopes,
       expiresAt: accessExpiresAt,
+      boundWorkspaceId: params.boundWorkspaceId,
     })
     .returning();
 
@@ -408,6 +410,8 @@ async function issueTokenPair(params: {
     userId: params.userId,
     accountId: params.accountId,
     expiresAt: refreshExpiresAt,
+    // A refresh keeps the binding: every access token it mints is bound too.
+    boundWorkspaceId: params.boundWorkspaceId,
   });
 
   return {
@@ -582,6 +586,10 @@ oauthApp.openapi(
           self_registered: z.boolean(),
           /** Where the browser goes after approval: the origin, or the scheme of a native app. */
           redirect_to: z.string(),
+          /** True when the consent screen asks which workspace the app gets
+           *  (`workspace_id` on POST /authorize/consent). False for the Kortix
+           *  browser extension, whose surfaces are the person's own. */
+          asks_workspace: z.boolean(),
         }),
         'The pending authorization request',
       ),
@@ -618,6 +626,7 @@ oauthApp.openapi(
       remembered,
       self_registered: isSelfRegistered(client),
       redirect_to: redirectTarget(request.redirectUri),
+      asks_workspace: asksWorkspace(client),
     });
   },
 );
@@ -638,6 +647,10 @@ oauthApp.openapi(
             schema: z.object({
               request_id: z.string().optional(),
               approved: z.boolean().optional(),
+              workspace_id: z.string().uuid().optional().openapi({
+                description:
+                  'The workspace the app gets. The issued token is bound to it: it reaches that workspace only, like a workspace key. Omitted: an unbound token that acts as you in every workspace (deprecated; the consent screen always names one).',
+              }),
             }),
           },
         },
@@ -645,7 +658,7 @@ oauthApp.openapi(
     },
     responses: {
       200: json(z.object({ redirect_uri: z.string() }), 'Redirect URI to send the user back to'),
-      ...errors(400, 401),
+      ...errors(400, 401, 403, 409),
     },
   }),
   async (c: any) => {
@@ -653,6 +666,20 @@ oauthApp.openapi(
     const requestId = typeof body.request_id === 'string' ? body.request_id : '';
     const approved = body.approved === true;
     if (!requestId) return c.json({ error: 'invalid_request' }, 400);
+    const userId = (c as any).get('userId') as string;
+    // The workspace the grant binds to: checked BEFORE the request is consumed,
+    // so a wrong pick leaves the request open for a second try.
+    let bound: { workspaceId: string; accountId: string } | null = null;
+    if (approved && body.workspace_id !== undefined) {
+      if (typeof body.workspace_id !== 'string' || !isUuid(body.workspace_id)) {
+        return c.json({ error: 'invalid_request', error_description: 'workspace_id must be a workspace id' }, 400);
+      }
+      bound = await consentWorkspace(c, userId, body.workspace_id);
+      if (!bound) {
+        // An unknown workspace and one the person cannot open answer the same.
+        return c.json({ error: 'access_denied', error_description: 'You cannot open that workspace', code: 'workspace_not_found' }, 403);
+      }
+    }
 
     const request = await consumeAuthorizationRequest(requestId);
     if (!request) {
@@ -682,9 +709,17 @@ oauthApp.openapi(
       return c.json({ redirect_uri: redirect.toString() });
     }
 
-    const userId = (c as any).get('userId') as string;
-    const [membership] = await anyAccountMembershipOf(userId);
-    const accountId = membership?.accountId ?? userId;
+    // A grant acts in an account: the bound workspace's, else any membership.
+    // A person with no workspace has none to grant, so the consent is refused
+    // (409 `no_workspace`), never issued against a made-up account id.
+    let accountId: string;
+    if (bound) {
+      accountId = bound.accountId;
+    } else {
+      const [membership] = await anyAccountMembershipOf(userId);
+      if (!membership) throw noWorkspaceError();
+      accountId = membership.accountId;
+    }
 
     const code = generateAuthCode();
     await db.insert(oauthAuthorizationCodes).values({
@@ -697,6 +732,7 @@ oauthApp.openapi(
       codeChallenge: request.codeChallenge,
       codeChallengeMethod: request.codeChallengeMethod,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      boundWorkspaceId: bound?.workspaceId ?? null,
     });
     await rememberConsent(userId, request.clientId, scopes);
 
@@ -709,13 +745,16 @@ oauthApp.openapi(
 // ─── POST /register (RFC 7591) ──────────────────────────────────────────────
 
 /** Stored on a self-registered client; nothing else marks one. */
-export const SELF_REGISTERED_DESCRIPTION = 'Self-registered (RFC 7591 dynamic client registration)';
 
-function isSelfRegistered(client: ClientRow): boolean {
-  return client.accountId === null && client.description === SELF_REGISTERED_DESCRIPTION;
+export { KORTIX_EXTENSION_REDIRECT_URI };
+
+export function isSelfRegistered(client: Pick<ClientRow, 'accountId' | 'description' | 'redirectUris'>): boolean {
+  const kortixExtension = hasOnlyExtensionRedirect(client.redirectUris);
+  return client.accountId === null && client.description === SELF_REGISTERED_DESCRIPTION && !kortixExtension;
 }
 
 function redirectTarget(redirectUri: string): string {
+  if (redirectUri === KORTIX_EXTENSION_REDIRECT_URI) return 'Kortix in Chrome';
   const url = parseRedirectUri(redirectUri);
   if (!url) return redirectUri;
   return url.protocol === 'http:' || url.protocol === 'https:' ? url.host : url.protocol;
@@ -1016,6 +1055,7 @@ async function handleAuthorizationCodeGrant(
       userId: authCode.userId,
       accountId: authCode.accountId,
       scopes: (authCode.scopes as string[]) ?? [],
+      boundWorkspaceId: authCode.boundWorkspaceId ?? null,
     }),
   );
 }
@@ -1093,6 +1133,7 @@ async function handleRefreshTokenGrant(c: Context, body: Record<string, any>, cl
       userId: refreshRow.userId,
       accountId: refreshRow.accountId,
       scopes: (oldAccess?.scopes as string[]) ?? [],
+      boundWorkspaceId: refreshRow.boundWorkspaceId ?? null,
     }),
   );
 }
@@ -1210,9 +1251,20 @@ const GrantSchema = z.object({
 });
 
 async function requireFullIdentity(c: Context): Promise<Response | null> {
-  const userId = c.get('userId') as string;
-  const actor = await actorOf(c, await resolveAccountId(userId));
-  if (actsAsFullIdentity(c.get('authType') as string | undefined, actor)) return null;
+  // Decided on the credential first: a service account or a workspace key is
+  // refused here (403), never as a person with no workspace (409), and a
+  // person with no workspace still manages their connected apps.
+  const authType = c.get('authType') as string | undefined;
+  const person = authType === 'supabase'
+    || (authType === 'pat' && !c.get('tokenProjectId') && !c.get('sessionId') && !c.get('agentGrant'));
+  if (person) {
+    const userId = c.get('userId') as string;
+    const accountId = await resolveAccountId(userId).catch((err: unknown) => {
+      if (isNoWorkspaceError(err)) return null;
+      throw err;
+    });
+    if (!accountId || actsAsFullIdentity(authType, await actorOf(c, accountId))) return null;
+  }
   return c.json(
     {
       error:

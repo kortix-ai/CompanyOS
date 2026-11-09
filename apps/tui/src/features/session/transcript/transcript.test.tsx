@@ -1,10 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 import { act } from 'react';
 
+import type { MessageWithParts } from '@kortix/sdk';
+import { useSessionStateStore } from '@kortix/sdk/react';
+import { type Renderable, ScrollBoxRenderable } from '@opentui/core';
 import { testRender } from '@opentui/react/test-utils';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { fakeSession, message, seedSessionStore, shellOutput, textPart, toolPart } from './test-session.ts';
-import { type SessionState, Transcript } from './transcript.tsx';
+import {
+  fakeSession,
+  message,
+  seedSessionStore,
+  shellOutput,
+  textPart,
+  toolPart,
+} from './test-session.ts';
+import { type SessionState, Transcript, isAtBottom } from './transcript.tsx';
 
 // React 19 needs this before `act`. Without `act` a key press updates state but
 // the next frame is captured before React commits, so the assertion reads the
@@ -31,7 +42,14 @@ async function settle(flush: () => Promise<unknown>): Promise<void> {
 
 function render(session: SessionState) {
   seedSessionStore(session);
-  return testRender(<Transcript session={session} focused width={70} height={22} />, SIZE);
+  // The app always has a query client: a `show` card reads its artifact record through one.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return testRender(
+    <QueryClientProvider client={queryClient}>
+      <Transcript session={session} focused width={70} height={22} />
+    </QueryClientProvider>,
+    SIZE,
+  );
 }
 
 describe('<Transcript/> turns', () => {
@@ -55,11 +73,19 @@ describe('<Transcript/> turns', () => {
     renderer.destroy();
   });
 
-  test('a compaction is one message: its marker and its summary under one compaction header', async () => {
+  test('a compaction is one line under a compaction header; its summary (model context) is not shown', async () => {
     const session = fakeSession({
       messages: [
-        message('m1', 'user', [{ id: 'pc', sessionID: 's1', messageID: 'm1', type: 'compaction', auto: false }]),
-        message('m2', 'assistant', [textPart('p2', 'SUMMARY of the work so far.')], { agent: 'compaction', mode: 'compaction', summary: true, parentID: 'm1', time: { created: Date.now() - 50_000, completed: Date.now() - 49_000 } }),
+        message('m1', 'user', [
+          { id: 'pc', sessionID: 's1', messageID: 'm1', type: 'compaction', auto: false },
+        ]),
+        message('m2', 'assistant', [textPart('p2', 'SUMMARY of the work so far.')], {
+          agent: 'compaction',
+          mode: 'compaction',
+          summary: true,
+          parentID: 'm1',
+          time: { created: Date.now() - 50_000, completed: Date.now() - 49_000 },
+        }),
       ],
     });
     const { captureCharFrame, flush, renderer } = await render(session);
@@ -67,7 +93,8 @@ describe('<Transcript/> turns', () => {
     const frame = captureCharFrame();
     expect(frame).toContain('◆ compaction');
     expect(frame).toContain('context compacted (manual)');
-    expect(frame).toContain('SUMMARY of the work so far.');
+    // pi's summary is the continuation prompt, with the path of the full record: model-facing.
+    expect(frame).not.toContain('SUMMARY of the work so far.');
     expect(frame).not.toContain('❯ you');
     renderer.destroy();
   });
@@ -380,6 +407,231 @@ describe('<Transcript/> paging and prompts', () => {
     );
     await settle(flush);
     expect(captureCharFrame()).not.toContain('needs permission');
+    renderer.destroy();
+  });
+});
+
+describe('<Transcript/> boot readout', () => {
+  test('a provisioning session names its image step with the step clock', async () => {
+    const session = fakeSession({
+      phase: 'starting',
+      stage: 'provisioning',
+      bootImage: {
+        state: 'building',
+        image: null,
+        since: new Date(Date.now() - 42_000).toISOString(),
+      },
+    });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await flush();
+    const frame = captureCharFrame();
+    expect(frame).toMatch(/Building the first image for this workspace \(0:4\d\)/);
+    expect(frame).not.toContain('Reserving your computer');
+    renderer.destroy();
+  });
+
+  test('a provisioning session without an image step keeps today’s text', async () => {
+    const session = fakeSession({ phase: 'starting', stage: 'provisioning', bootImage: null });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await flush();
+    expect(captureCharFrame()).toMatch(/Reserving your computer · \d+s/);
+    renderer.destroy();
+  });
+});
+
+describe('<Transcript/> inbox prompts', () => {
+  const at = '2030-01-01T00:00:01.000Z';
+  const queued = {
+    prompt_id: 'p2',
+    client_message_id: 'c2',
+    message_id: 'msg_queuedprompt000000002',
+    wire_message_id: 'msg_queuedprompt000000002',
+    state: 'queued' as const,
+    reason: null,
+    text: 'and then this',
+    full_text: 'and then this',
+    attempts: 0,
+    last_error: null,
+    attachments: [],
+    created_at: at,
+    available_at: at,
+  };
+
+  test('a booting session draws its first prompt and a queued one, not "No messages yet"', async () => {
+    const session = fakeSession({ messages: [] });
+    seedSessionStore(session);
+    const inbox = {
+      prompts: [queued],
+      sent: [{ message_id: 'msg_firstprompt0000000001', prompt_id: null, text: 'yo', attachments: [], author_user_id: null, created_at: at }],
+    };
+    const { captureCharFrame, flush } = await testRender(
+      <Transcript session={session} focused width={70} height={22} inbox={inbox} />,
+      SIZE,
+    );
+    await settle(flush);
+    const frame = captureCharFrame();
+    expect(frame).not.toContain('No messages yet');
+    expect(frame).toContain('yo');
+    expect(frame).toContain('you · queued');
+    expect(frame).toContain('and then this');
+  });
+});
+
+describe('<Transcript/> messages from other agents', () => {
+  test('a message another agent sent is one compact row with its sender, not a turn of yours', async () => {
+    const { peerMessagePromptText } = await import('@kortix/shared');
+    const text = peerMessagePromptText({
+      kind: 'message',
+      from: 'reviewer',
+      fromShortId: 'a1b2c3d4',
+      messageId: 'pm_1',
+      summary: 'Found 2 issues',
+      text: 'The retry loop never backs off.\nThe test mocks the clock wrong.',
+    });
+    const session = fakeSession({ messages: [message('m1', 'user', [textPart('p1', text)])] });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await settle(flush);
+    const frame = captureCharFrame();
+    expect(frame).toContain('✉ @reviewer · Found 2 issues');
+    expect(frame).toContain('The retry loop never backs off.');
+    expect(frame).not.toContain('❯ you');
+    expect(frame).not.toContain('carries no authority');
+    renderer.destroy();
+  });
+});
+
+describe('<Transcript/> platform notices and tool result cards', () => {
+  test('a background agent that finished is one line with its first report line, not a turn of yours', async () => {
+    const child = 'kses_child_0001';
+    const text = [
+      'A background subagent you started has finished. This message is from the platform, not from the user.',
+      `task_id: ${child}`,
+      'status: completed',
+      '',
+      '<kortix_system type="session-report" source="subagent">',
+      '<session-report>',
+      `<session-id>${child}</session-id>`,
+      '<status>COMPLETE</status>',
+      '<project>writer</project>',
+      '<prompt>Draft the launch post (@writer subagent)</prompt>',
+      '<result>\n<task_result>\nThe draft is in docs/launch.md.\n</task_result>\n</result>',
+      '</session-report>',
+      '</kortix_system>',
+      '',
+      `Continue your task with this result. To send this subagent a follow-up, call \`agent\` with task_id ${child}.`,
+    ].join('\n');
+    const session = fakeSession({ messages: [message('m1', 'user', [textPart('p1', text)])] });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await settle(flush);
+    const frame = captureCharFrame();
+    expect(frame).toContain('◇ Draft the launch post finished · The draft is in docs/launch');
+    expect(frame).not.toContain('❯ you');
+    expect(frame).not.toContain('This message is from the platform');
+    renderer.destroy();
+  });
+
+  test('a platform tool answers with its card, not JSON', async () => {
+    const output = JSON.stringify({
+      ok: true,
+      tool: 'send_message',
+      action: 'send',
+      card: { title: 'Sent to @reviewer', subtitle: 'delivered', status: 'done', rows: [{ title: 'reviewer', detail: 'Code review', badge: 'working' }] },
+    });
+    const session = fakeSession({
+      messages: [
+        message('m1', 'assistant', [
+          toolPart('t1', 'send_message', 'completed', { to: 'reviewer', message: 'hi' }, output),
+        ]),
+      ],
+    });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await settle(flush);
+    const frame = captureCharFrame();
+    expect(frame).toContain('✓ Sent to @reviewer · delivered');
+    expect(frame).toContain('reviewer');
+    expect(frame).not.toContain('"ok": true');
+    renderer.destroy();
+  });
+});
+
+function findScrollBox(root: Renderable): ScrollBoxRenderable {
+  const stack: Renderable[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop() as Renderable;
+    if (node instanceof ScrollBoxRenderable) return node;
+    stack.push(...(node.getChildren() as Renderable[]));
+  }
+  throw new Error('no scrollbox rendered');
+}
+
+describe('<Transcript/> scroll follow', () => {
+  function longThread(extra = '') {
+    return Array.from({ length: 12 }, (_, index) =>
+      message(`m${index}`, index % 2 ? 'assistant' : 'user', [
+        textPart(`p${index}`, `line ${index} of the thread${index === 11 ? extra : ''}`),
+      ]),
+    );
+  }
+
+  test('a reader who scrolled up stays put while the turn streams and the clock ticks', async () => {
+    const session = fakeSession({ messages: longThread(), isBusy: true });
+    const { flush, mockMouse, renderer } = await render(session);
+    await settle(flush);
+    const box = () => findScrollBox(renderer.root);
+    const bottom = box().scrollTop;
+    expect(bottom).toBeGreaterThan(5);
+
+    for (let step = 0; step < 5; step += 1) await act(async () => mockMouse.scroll(10, 5, 'up'));
+    await flush();
+    const reading = box().scrollTop;
+    expect(reading).toBeLessThan(bottom);
+
+    // A streamed delta, then two clock ticks (busy re-renders every second).
+    const store = useSessionStateStore.getState();
+    await act(async () => {
+      store.hydrate('s1', longThread(' and more streamed text') as unknown as MessageWithParts[]);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+    });
+    await flush();
+    expect(box().scrollTop).toBe(reading);
+
+    // Back to the bottom: the follow resumes for the next delta.
+    for (let step = 0; step < 40; step += 1) await act(async () => mockMouse.scroll(10, 5, 'down'));
+    await act(async () => {
+      store.hydrate('s1', [
+        ...longThread(),
+        message('m12', 'assistant', [textPart('p12', 'a new reply\nwith\nseveral\nrows')]),
+      ] as unknown as MessageWithParts[]);
+    });
+    await settle(flush);
+    expect(isAtBottom(box())).toBe(true);
+    renderer.destroy();
+  }, 15_000);
+});
+
+describe('<Transcript/> show card', () => {
+  test('a show after other tools is its own card with its title and link, never folded into the steps', async () => {
+    const url = 'https://kortix.test/projects/11111111-2222-4333-8444-555555555555/artifacts/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const session = fakeSession({
+      messages: [
+        message('m1', 'user', [textPart('p1', 'make the report')]),
+        message('m2', 'assistant', [
+          toolPart('t1', 'bash', 'completed', { command: 'kortix artifacts publish report.md' }, shellOutput('ok')),
+          toolPart('t2', 'bash', 'completed', { command: 'ls' }, shellOutput('report.md')),
+          toolPart('t3', 'show', 'completed', { url, title: 'Q3 churn report' }),
+        ], { parentID: 'm1' }),
+      ],
+    });
+    const { captureCharFrame, flush, renderer } = await render(session);
+    await settle(flush);
+    const frame = captureCharFrame();
+    expect(frame).toContain('Completed 2 steps');
+    expect(frame).toContain('▣ Q3 churn report');
+    expect(frame).toContain('Artifact');
+    expect(frame).toContain('https://kortix.test/projects/');
+    expect(frame).toContain('Alt+O open');
     renderer.destroy();
   });
 });

@@ -1,13 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-
-const root = resolve(import.meta.dirname, '../..');
-
-function read(relativePath: string): string {
-  return readFileSync(resolve(root, relativePath), 'utf8');
-}
+import { REPO_ROOT as root, readRepoFile as read } from '../src/fixtures/repo';
 
 describe('web ECS migration', () => {
   it('maps --service web to the dedicated cluster, container, and secret', () => {
@@ -298,21 +293,23 @@ describe('web ECS migration', () => {
     expect(branchTeardown).not.toContain('gh api');
   });
 
-  it('disables Vercel auto-deploys everywhere except staging', () => {
-    const config = read('apps/web/vercel.json');
-    const ignore = read('apps/web/scripts/vercel-ignore.sh');
+  it('never deploys the Vercel frontend from a git push', () => {
+    const config = JSON.parse(read('apps/web/vercel.json'));
+    const stagingWorkflow = read('.github/workflows/deploy-staging.yml');
 
-    expect(config).toContain('"main": false');
-    expect(config).toContain('"staging": true');
-    // prod must NOT auto-deploy on push: during the 2026-08-10 v0.12.7 rollout
-    // the auto-deployed new frontend called routes the still-old API lacked
-    // and every project load failed. kortix.com deploys only from
-    // deploy-prod.yml's deploy-web-vercel job, after verify-live-version.
-    expect(config).toContain('"prod": false');
-    expect(ignore).toContain('prod deploys only via deploy-prod.yml');
-    expect(ignore).not.toContain('KORTIX_PREVIEW_APPROVED_SHA');
-    expect(ignore).not.toContain('*:main');
-    expect(ignore).toContain('dev deploys on ECS; PR previews deploy in sandboxes');
+    // Vercel deploys only from the CLI: deploy-staging.yml uploads and aliases
+    // staging.kortix.com, deploy-prod.yml's deploy-web-vercel job deploys
+    // kortix.com after verify-live-version. The Vercel project has no Git
+    // connection; this is the guard if someone reconnects it. A push to prod
+    // must never ship the frontend first: during the 2026-08-10 v0.12.7
+    // rollout the auto-deployed frontend called routes the still-old API
+    // lacked and every project load failed. Git builds that a script then
+    // cancelled still billed ~20 s of a 30-core build machine each: 1,892 of
+    // them from 2026-11-01 to 2026-11-07, ~77 % of the project's build cost.
+    expect(config.git?.deploymentEnabled).toBe(false);
+    expect(config.ignoreCommand).toBeUndefined();
+    expect(existsSync(resolve(root, 'apps/web/scripts/vercel-ignore.sh'))).toBe(false);
+    expect(stagingWorkflow).toContain('npx vercel alias set "$url" "$WEB_HOST"');
   });
 
   it('deploys the prod Vercel frontend only after the API serves the release', () => {
@@ -460,5 +457,26 @@ describe('web ECS migration', () => {
     expect(smoke).toContain('deploymentBypassRequestHeaders');
     expect(smoke).toContain('deploymentBypassSecret');
     expect(smoke).not.toContain("'x-vercel-protection-bypass'");
+  });
+
+  /**
+   * Vercel refuses a deploy of more than 15,000 files. The v0.14.9 tree had
+   * 15,077, and the prod Vercel job, the only one without `--archive=tgz`,
+   * failed after the API was live (Deploy Prod 40868757807). kortix.com stayed
+   * on the previous release, and the GitHub Release, the installers and the
+   * VERSION syncs never ran.
+   */
+  it('uploads every Vercel deploy as one archive', () => {
+    for (const file of ['deploy-prod.yml', 'deploy-staging.yml']) {
+      const deploys = read(`.github/workflows/${file}`)
+        .split('\n')
+        .filter((line) => /vercel(@[\w.]+)? deploy /.test(line));
+      expect(deploys.length).toBeGreaterThan(0);
+      for (const line of deploys) expect(line).toContain('--archive=tgz');
+    }
+    // An archive deploy does not promise git metadata, so prod stamps the commit.
+    expect(read('.github/workflows/deploy-prod.yml')).toContain(
+      '--build-env "NEXT_PUBLIC_KORTIX_COMMIT=${{ github.sha }}"',
+    );
   });
 });

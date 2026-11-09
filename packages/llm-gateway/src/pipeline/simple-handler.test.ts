@@ -56,10 +56,30 @@ describe('simple gateway pipeline', () => {
           status: 200,
           headers: { 'content-type': 'application/json' },
         }),
-      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
       expect(response.status).toBe(200);
     }
     expect(calls).toEqual(['account']);
+  });
+
+  test('the request log names the session message the call comes from', async () => {
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions({
+      hooks: hooks([], traces),
+      logger: { info() {}, warn() {}, error() {} },
+      fetchImpl: async () => new Response(JSON.stringify({ choices: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    }, {
+      authorization: 'Bearer token',
+      rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }),
+      origin: { messageId: 'msg_reply', turnId: 'msg_prompt' },
+    });
+    expect(response.status).toBe(200);
+    await Bun.sleep(0);
+    expect(traces).toHaveLength(1);
+    expect(traces[0]!.metadata).toMatchObject({ messageId: 'msg_reply', turnId: 'msg_prompt' });
   });
 
   test('HTTP pool exhaustion returns the earliest bounded cooldown', async () => {
@@ -84,7 +104,7 @@ describe('simple gateway pipeline', () => {
           notePoolRateLimit: async (_principal, secretId) => { cooldowns.push(secretId); },
         },
         logger: { info() {}, warn() {}, error() {} },
-      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
       expect(response.status).toBe(429);
       expect(response.headers.get('retry-after')).toBe('7');
       // Each key is tried once, and each key's cooldown is recorded.
@@ -108,7 +128,7 @@ describe('simple gateway pipeline', () => {
             ? 'data: {"choices":[{"delta":{"content":"hello"}}]}\n\ndata: {"error":{"code":429,"message":"limited"}}\n\ndata: [DONE]\n\n'
             : 'provider unavailable', { status, headers: { 'content-type': 'text/event-stream' } });
         },
-      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', stream: true, messages: [] }) });
+      }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', stream: true, messages: [{ role: 'user', content: 'hi' }] }) });
       expect(response.status).toBe(status);
       const body = await response.text();
       if (status === 200) expect(body).toContain('hello');
@@ -137,7 +157,7 @@ describe('simple gateway pipeline', () => {
           headers: credential.includes('first') ? { 'retry-after': '12' } : undefined,
         });
       },
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
     expect(response.status).toBe(200);
     expect(usedKeys).toEqual(['Bearer first', 'Bearer second']);
     expect(cooldowns).toEqual([{ secretId: 'key-a', seconds: 12 }]);
@@ -171,7 +191,7 @@ describe('simple gateway pipeline', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'requested-model', messages: [] }),
+        rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }),
       },
     );
     expect(response.status).toBe(503);
@@ -199,7 +219,7 @@ describe('simple gateway pipeline', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'requested-model', messages: [] }),
+        rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }),
       },
     );
 
@@ -224,7 +244,7 @@ describe('simple gateway pipeline', () => {
           throw new TypeError('fetch failed');
         },
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ code: 'upstream_error', message: 'fetch failed' });
@@ -267,7 +287,7 @@ describe('simple gateway pipeline', () => {
         logger: { info() {}, warn() {}, error() {} },
         fetchImpl: async () => reply(),
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', stream, messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', stream, messages: [{ role: 'user', content: 'hi' }] }) },
     );
     await response.text();
     expect(usage).toHaveLength(1);
@@ -420,7 +440,7 @@ describe('simple gateway pipeline', () => {
   });
 
   test('a provider 4xx labelled server_error reaches the client without the label OpenCode retries on', async () => {
-    // OpenCode retries any body matching /server_error|internal error|.../,
+    // The runtime retries any body matching /server_error|internal error|.../,
     // whatever the status: this permanent 400 was replayed 5 times (dev 2026-09-29).
     const upstreamBody = JSON.stringify({
       error: { type: 'server_error', message: 'Upstream request failed: This Go model requires Global regions.' },
@@ -449,6 +469,74 @@ describe('simple gateway pipeline', () => {
     expect(await unavailable.text()).toBe(upstreamBody);
   });
 
+  // 2026-11-02: twelve 1600x1200 PNG reads (3.6 MB base64 each, 43 MB) went to Bedrock, which
+  // refuses a body over ~32 MB with its context-overflow text at ~22k tokens. Every retry failed.
+  const sheet = (n: number) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${String(n % 10).repeat(3_620_000)}` } });
+  const sheetsRequest = (count: number) => JSON.stringify({
+    model: 'requested-model',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'review the sheets' }, ...Array.from({ length: count }, (_, i) => sheet(i))] }],
+  });
+  const bedrockTooLong = JSON.stringify({ message: 'Input is too long for requested model.' });
+
+  test('the default image window sends a 43 MB screenshot request to the provider under 31 MB', async () => {
+    let sentBytes = 0;
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], []), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async (_url, init) => {
+          sentBytes = String(init?.body ?? '').length;
+          return new Response(JSON.stringify({ id: 'c', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        },
+      },
+      { authorization: 'Bearer token', rawBody: sheetsRequest(12) },
+    );
+    expect(response.status).toBe(200);
+    expect(sentBytes).toBeGreaterThan(14_000_000);
+    expect(sentBytes).toBeLessThan(31_000_000);
+  });
+
+  test('a provider "too long" refusal of a body over 30 MB reaches the client and the trace as request_too_large', async () => {
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        // The window off: the provider receives the whole 32.6 MB body, as before the byte cap.
+        imageWindow: { maxImages: 0, keepOnOverflow: 0 },
+        fetchImpl: async () => new Response(bedrockTooLong, { status: 400, headers: { 'content-type': 'application/json' } }),
+      },
+      { authorization: 'Bearer token', rawBody: sheetsRequest(9) },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('request_too_large');
+    expect(body.error.message).toMatch(/^The request is 32\.\d MB, more than the model provider accepts/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(traces.at(-1)).toMatchObject({ status: 400, ok: false, errorCode: 'request_too_large' });
+  });
+
+  test('the same refusal of a small body stays context_length_exceeded, and the trace keeps the provider text', async () => {
+    const traces: GatewayTrace[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: { ...hooks([], traces), resolveUpstream: async () => [primary] },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async () => new Response(bedrockTooLong, { status: 400, headers: { 'content-type': 'application/json' } }),
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toEqual({
+      message: 'Input is too long for requested model.',
+      type: 'invalid_request_error',
+      code: 'context_length_exceeded',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Not "upstream HTTP 400": an own provider's refusal is the customer's to read.
+    expect(traces.at(-1)).toMatchObject({ errorCode: 'upstream_error', errorMessage: 'Input is too long for requested model.' });
+  });
+
   test('settles one successful response exactly once', async () => {
     const usage: UsageEvent[] = [];
     const traces: GatewayTrace[] = [];
@@ -465,7 +553,7 @@ describe('simple gateway pipeline', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'requested-model', messages: [] }),
+        rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }),
       },
     );
 
@@ -522,7 +610,7 @@ describe('simple gateway pipeline', () => {
   });
 
   // An error frame before any output served nothing: the client gets the
-  // provider's status as an HTTP error, which OpenCode can retry or compact on.
+  // provider's status as an HTTP error, which the runtime can retry or compact on.
   test.each([
     ['a timeout', '"upstream_timeout"', 502],
     ['a numeric rate limit', '429', 429],
@@ -542,7 +630,7 @@ describe('simple gateway pipeline', () => {
         authorization: 'Bearer token',
         rawBody: JSON.stringify({
           model: 'requested-model',
-          messages: [],
+          messages: [{ role: 'user', content: 'hi' }],
           stream: true,
         }),
       },
@@ -602,6 +690,45 @@ describe('simple gateway pipeline', () => {
     expect(traces[0]?.status).toBe(499);
   });
 
+  test('a client that closes right after [DONE] is a served request, and an answer without a usage frame still bills its prompt', async () => {
+    const usage: UsageEvent[] = [];
+    const traces: GatewayTrace[] = [];
+    const client = new AbortController();
+    const response = await handleChatCompletions(
+      {
+        hooks: hooks(usage, traces),
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                // An empty answer, no usage chunk, then [DONE]; the upstream's own end of body comes later.
+                controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'));
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      },
+      {
+        authorization: 'Bearer token',
+        signal: client.signal,
+        rawBody: JSON.stringify({ model: 'requested-model', stream: true, messages: [{ role: 'user', content: 'p'.repeat(40_000) }] }),
+      },
+    );
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let seen = '';
+    while (!seen.includes('[DONE]')) seen += decoder.decode((await reader.read()).value);
+    // The OpenAI SDK closes on [DONE].
+    await reader.cancel();
+    client.abort();
+
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({ usageEstimated: true, completionTokens: 0 });
+    expect(usage[0]!.promptTokens).toBeGreaterThanOrEqual(10_000);
+    expect(traces[0]).toMatchObject({ status: 200, ok: true });
+  });
+
   test('a stream stopped during prefill, before any output, settles the prompt', async () => {
     const usage: UsageEvent[] = [];
     const client = new AbortController();
@@ -653,7 +780,7 @@ describe('simple gateway pipeline', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'requested-model', stream: true, messages: [] }),
+        rawBody: JSON.stringify({ model: 'requested-model', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
       },
     );
     await response.text();
@@ -719,7 +846,7 @@ describe('simple gateway pipeline', () => {
         ...runtime,
         fetchImpl: async () => new Response(upstreamBody, { headers: providerHeaders }),
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(json.status).toBe(200);
     expect(json.headers.get('content-encoding')).toBeNull();
@@ -739,7 +866,7 @@ describe('simple gateway pipeline', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'm', messages: [], stream: true }),
+        rawBody: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }], stream: true }),
       },
     );
     expect(sse.status).toBe(200);
@@ -784,7 +911,7 @@ describe('simple gateway pipeline', () => {
           );
         },
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [], stream: true }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }], stream: true }) },
     );
     expect(response.status).toBe(200);
     const text = await response.text();
@@ -793,6 +920,54 @@ describe('simple gateway pipeline', () => {
     expect(call).toBe(2);
     // The cut itself is not a rate limit — no cooldown from the retry path.
     expect(cooldowns).toEqual([]);
+  });
+
+  test('a stream-cut retry that answers non-2xx is a failed retry: its body never enters the SSE stream', async () => {
+    const cooldowns: Array<{ secretId: string; seconds: number }> = [];
+    const keys: string[] = [];
+    const response = await handleChatCompletions(
+      {
+        hooks: {
+          ...hooks([], []),
+          resolveUpstream: async () => [
+            { ...primary, poolSecretId: 'cut-a', apiKey: 'cut-first' },
+            { ...primary, poolSecretId: 'cut-b', apiKey: 'cut-second' },
+          ],
+          notePoolRateLimit: async (_principal, secretId, seconds) => {
+            cooldowns.push({ secretId, seconds });
+          },
+        },
+        logger: { info() {}, warn() {}, error() {} },
+        fetchImpl: async (_url, init) => {
+          const key = new Headers(init?.headers).get('authorization') ?? '';
+          keys.push(key);
+          if (keys.length === 1) {
+            return new Response(new ReadableStream({ start(c) { c.close(); } }), {
+              headers: { 'content-type': 'text/event-stream' },
+            });
+          }
+          if (key.includes('cut-second')) {
+            return new Response('{"error":{"message":"pool key rate limited"}}', {
+              status: 429,
+              headers: { 'content-type': 'application/json', 'retry-after': '12' },
+            });
+          }
+          return new Response(
+            'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n' +
+              'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}\n\n' +
+              'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        },
+      },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }], stream: true }) },
+    );
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).not.toContain('pool key rate limited');
+    expect(text).toContain('"content":"hi"');
+    expect(keys.length).toBe(3);
+    expect(cooldowns).toEqual([{ secretId: 'cut-b', seconds: 12 }]);
   });
 
   test('a stream cut after bytes are already flowing gets an explicit terminal error and a pool cooldown, never a replay', async () => {
@@ -815,7 +990,7 @@ describe('simple gateway pipeline', () => {
           });
         },
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [], stream: true }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }], stream: true }) },
     );
     expect(response.status).toBe(200);
     const text = await response.text();
@@ -957,7 +1132,8 @@ describe('managed models present as Kortix (descriptor.publicProvider)', () => {
     expect(response.status).toBe(400);
     expect(response.headers.get('content-type')).toBe('application/json');
     const body = JSON.parse(text);
-    // OpenCode's parseAPICallError reads `error.code` to raise ContextOverflowError.
+    // pi-ai's `isContextOverflow` matches `context_length_exceeded` in the error
+    // text; OpenCode's parseAPICallError read `error.code`.
     expect(body.error.code).toBe('context_length_exceeded');
     expect(body.message).toBe('This request is longer than the primary-model context window.');
     expect(text).not.toMatch(LEAK);
@@ -1003,7 +1179,7 @@ describe('managed models present as Kortix (descriptor.publicProvider)', () => {
         controller.close();
       },
     }), { status: 200, headers: { 'content-type': 'text/event-stream' } }),
-    { model: 'requested-model', stream: true, messages: [] });
+    { model: 'requested-model', stream: true, messages: [{ role: 'user', content: 'hi' }] });
     expect(response.status).toBe(200);
     expect(text).not.toMatch(LEAK);
     const frames = text.split('\n\n').filter((f) => f.startsWith('data: {')).map((f) => JSON.parse(f.slice(6)));
@@ -1028,7 +1204,7 @@ describe('managed models present as Kortix (descriptor.publicProvider)', () => {
         controller.close();
       },
     }), { status: 200, headers: { 'content-type': 'text/event-stream' } }),
-    { model: 'requested-model', stream: true, messages: [] });
+    { model: 'requested-model', stream: true, messages: [{ role: 'user', content: 'hi' }] });
 
     expect(response.status).toBe(200);
     const events = text.trim().split(/\r?\n\r?\n/);
@@ -1473,7 +1649,7 @@ describe('trace timing', () => {
       },
       {
         authorization: 'Bearer token',
-        rawBody: JSON.stringify({ model: 'requested-model', messages: [], stream }),
+        rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }], stream }),
       },
     );
     await response.text();
@@ -1525,7 +1701,7 @@ describe('trace timing segments', () => {
             headers: { 'content-type': 'application/json' },
           }),
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     await response.text();
     for (let i = 0; i < 50 && traces.length === 0; i++) await sleep(10);
@@ -1559,7 +1735,7 @@ describe('refused requests are traced', () => {
         },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(400);
     const body = (await response.json()) as { code?: string };
@@ -1587,7 +1763,7 @@ describe('refused requests are traced', () => {
         },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(402);
     const trace = await firstTrace(traces);
@@ -1607,7 +1783,7 @@ describe('refused requests are traced', () => {
         hooks: { ...hooks(usage, traces), resolveUpstream: async () => [] },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(400);
     const body = (await response.json()) as { code?: string };
@@ -1637,7 +1813,7 @@ describe('refused requests are traced', () => {
         },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(402);
     const body = (await response.json()) as { code?: string };
@@ -1684,7 +1860,7 @@ describe('refused requests are traced', () => {
         },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(401);
     await sleep(120);
@@ -1712,7 +1888,7 @@ describe('refused requests are traced', () => {
         },
         logger,
       },
-      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) },
+      { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) },
     );
     expect(response.status).toBe(401);
     const trace = await firstTrace(traces);
@@ -1757,7 +1933,7 @@ describe('one-call admission (hooks.admit)', () => {
         dispatchedModel = JSON.parse(String(init.body)).model;
         return ok();
       },
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
     expect(response.status).toBe(200);
     expect(inputs).toEqual([{ token: 'token', input: { requestedModel: 'requested-model', requires: { imageInput: false } } }]);
     expect(dispatchedModel).toBe('primary-model');
@@ -1782,7 +1958,7 @@ describe('one-call admission (hooks.admit)', () => {
       },
       logger,
       fetchImpl: async () => ok(),
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
     expect(response.status).toBe(200);
     await response.text();
     const timing = traces.at(-1)!.metadata.timing as Record<string, number>;
@@ -1804,7 +1980,7 @@ describe('one-call admission (hooks.admit)', () => {
       },
       logger,
       fetchImpl: async () => ok(),
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
     expect(response.status).toBe(200);
     expect(calls).toEqual(['authorize', 'route', 'resolve', 'billing']);
   });
@@ -1814,7 +1990,7 @@ describe('one-call admission (hooks.admit)', () => {
       hooks: { ...hooks([], []), admit: async () => answer },
       logger,
       fetchImpl: async () => ok(),
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'requested-model', messages: [{ role: 'user', content: 'hi' }] }) });
     const route = { policyId: 'route', primaryModel: 'primary-model' };
     expect((await run({ admission: { ok: false, status: 401, errorCode: 'invalid_token' } })).status).toBe(401);
     const unresolved = await run({
@@ -1865,7 +2041,7 @@ describe('one-call admission (hooks.admit)', () => {
           status: 200, headers: { 'content-type': 'application/json' },
         });
       },
-    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'primary-model', messages: [] }) });
+    }, { authorization: 'Bearer token', rawBody: JSON.stringify({ model: 'primary-model', messages: [{ role: 'user', content: 'hi' }] }) });
     await Bun.sleep(0);
     return { response, usage, billingCalls, dispatched };
   };

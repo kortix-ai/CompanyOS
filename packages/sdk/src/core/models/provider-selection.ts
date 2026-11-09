@@ -36,7 +36,7 @@ export const LLM_PROVIDER_CREDENTIALS: Array<{
   authRequirement: providerAuthRequirement(provider),
 }));
 
-// OpenCode must see Kortix as the single LLM provider: the LLM gateway is the
+// The runtime must see Kortix as the single LLM provider: the LLM gateway is the
 // only model path.
 export const GATEWAY_PROVIDER_IDS = new Set(['kortix']);
 
@@ -147,7 +147,7 @@ export function filterToNativeProviders(providers: ProviderListResponse): Provid
   };
 }
 
-export function mergeProjectSecretConnectedProviders(
+export function mergeWorkspaceSecretConnectedProviders(
   providers: ProviderListResponse,
   secretNames: Set<string>,
   providerCredentials: Array<{ id: string; authRequirement: ProviderAuthRequirement }>,
@@ -175,6 +175,9 @@ export function mergeProjectSecretConnectedProviders(
 
   return { ...normalized, connected: [...connected] };
 }
+
+/** @deprecated Use `mergeWorkspaceSecretConnectedProviders`. Kept permanently. */
+export const mergeProjectSecretConnectedProviders = mergeWorkspaceSecretConnectedProviders;
 
 export function connectedGatewayProviderIdsFromSecretNames(secretNames: Set<string>): Set<string> {
   const ids = new Set<string>();
@@ -245,9 +248,10 @@ export function projectLlmCatalogToProviderList(
       }),
   );
   const firstModelId = Object.keys(models)[0];
+  const claude = catalog.claudeSubscription;
   return {
     default: firstModelId ? { kortix: firstModelId } : {},
-    connected: ['kortix'],
+    connected: claude ? ['kortix', claude.providerId] : ['kortix'],
     all: [
       {
         id: 'kortix',
@@ -255,6 +259,36 @@ export function projectLlmCatalogToProviderList(
         source: 'gateway',
         models,
       },
+      // Claude models on the caller's own Claude plan: runnable once the caller connected Claude.
+      ...(claude
+        ? [
+            {
+              id: claude.providerId,
+              name: claude.name,
+              source: 'claude-subscription',
+              models: Object.fromEntries(
+                claude.models.map((model) => [
+                  model.id.slice(claude.providerId.length + 1),
+                  {
+                    name: model.name,
+                    provider: claude.providerId,
+                    provider_name: claude.name,
+                    description: model.description,
+                    limit: model.limit,
+                    reasoning: true,
+                    attachment: true,
+                    tool_call: true,
+                    variants: Object.fromEntries(model.efforts.map((effort) => [effort, {}])),
+                    available: model.connected,
+                    availability: 'login',
+                    // The project's on/off switch (Models tab). An older API sends none: on.
+                    enabled: model.enabled !== false,
+                  },
+                ]),
+              ),
+            },
+          ]
+        : []),
     ],
   } as unknown as ProviderListResponse;
 }

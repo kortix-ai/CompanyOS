@@ -40,8 +40,7 @@ function fixture(): SessionLike[] {
 
 function props(overrides: Partial<SidebarViewProps> = {}): SidebarViewProps {
   return {
-    accountName: 'Acme',
-    projectName: 'Acme',
+    workspaceName: 'Acme',
     reviewCount: 2,
     groups: groupSessionsByDay(fixture(), { now: NOW }),
     selectedSessionId: null,
@@ -52,13 +51,11 @@ function props(overrides: Partial<SidebarViewProps> = {}): SidebarViewProps {
     loading: false,
     errorMessage: null,
     onOpenSession: () => {},
-    onOpenAccountPicker: () => {},
-    onOpenProjectPicker: () => {},
+    onOpenWorkspacePicker: () => {},
     onNewSession: () => {},
     onNavigate: () => {},
     onRename: () => {},
     onDelete: () => {},
-    onAttach: () => {},
     ...overrides,
   };
 }
@@ -84,7 +81,7 @@ async function pressEscape(mockInput: { pressEscape: () => void }): Promise<void
 }
 
 describe('<SidebarView/> through the OpenTUI test renderer', () => {
-  test('renders the account, project, nav rows and day-grouped sessions', async () => {
+  test('renders the workspace, nav rows and day-grouped sessions', async () => {
     const { captureCharFrame, flush, renderer } = await testRender(
       <SidebarView {...props()} />,
       SIZE,
@@ -94,12 +91,12 @@ describe('<SidebarView/> through the OpenTUI test renderer', () => {
     const lines = frame.split('\n').map((line) => line.trimEnd());
 
     expect(lines[0]).toContain('Acme');
-    expect(lines[2]).toContain('+ New session');
-    expect(lines[3]).toContain('Customize');
-    expect(lines[4]).toContain('Apps');
+    expect(lines[1]).toContain('+ New session');
+    expect(lines[2]).toContain('Customize');
+    expect(lines[3]).toContain('Apps');
     // The Review row carries its open change-request count, right-aligned.
-    expect(lines[5]).toMatch(/Review\s+2$/);
-    expect(lines[6]).toContain('Files');
+    expect(lines[4]).toMatch(/Review\s+2$/);
+    expect(lines[5]).toContain('Files');
 
     // Day sections in activity order, each above its own rows.
     const today = lines.indexOf('Today');
@@ -216,15 +213,15 @@ describe('<SidebarView/> through the OpenTUI test renderer', () => {
     renderer.destroy();
   });
 
-  test('Enter on a nav row routes, and on the account row opens the picker', async () => {
+  test('Enter on a nav row routes, and on the workspace row opens the picker', async () => {
     const screens: string[] = [];
-    let accountPicker = 0;
+    let workspacePicker = 0;
     const { flush, mockInput, renderer } = await testRender(
       <SidebarView
         {...props({
           onNavigate: (screen) => screens.push(screen),
-          onOpenAccountPicker: () => {
-            accountPicker += 1;
+          onOpenWorkspacePicker: () => {
+            workspacePicker += 1;
           },
         })}
       />,
@@ -242,13 +239,12 @@ describe('<SidebarView/> through the OpenTUI test renderer', () => {
     await flush();
     await act(async () => mockInput.pressEnter());
     await flush();
-    expect(accountPicker).toBe(1);
+    expect(workspacePicker).toBe(1);
     renderer.destroy();
   });
 
-  test('n creates a session and a asks the host to attach the selected one', async () => {
+  test('n creates a session', async () => {
     let created = 0;
-    const attached: string[] = [];
     const { flush, mockInput, renderer } = await testRender(
       <SidebarView
         {...props({
@@ -256,7 +252,6 @@ describe('<SidebarView/> through the OpenTUI test renderer', () => {
           onNewSession: () => {
             created += 1;
           },
-          onAttach: (id) => attached.push(id),
         })}
       />,
       SIZE,
@@ -265,10 +260,6 @@ describe('<SidebarView/> through the OpenTUI test renderer', () => {
     await act(async () => mockInput.pressKey('n'));
     await flush();
     expect(created).toBe(1);
-
-    await act(async () => mockInput.pressKey('a'));
-    await flush();
-    expect(attached).toEqual(['root-1']);
     renderer.destroy();
   });
 

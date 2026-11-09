@@ -1,3 +1,4 @@
+import { questionButtonData } from '../core/question-token';
 import { postBlocks, postMessage } from '../slack-api';
 import { slackAgentPersona } from './persona';
 import { deleteTurn, finalizeTurn, loadTurn } from './turn';
@@ -14,7 +15,7 @@ export type { QuestionInfo } from './types';
 // in-thread reply that @mentions the bot works too (for "Other"). Either way the answer arrives as a
 // normal follow-up turn with full context. The sentinel is returned as the
 // question tool's "answer" so the agent resumes and ends its turn. Kept here
-// (not just in the sandbox) so an OLD sandbox image — which resumes opencode
+// (not just in the sandbox) so an OLD sandbox image — which resumes OpenCode
 // from THIS response's `answers` — stays unblocked during the window between an
 // API deploy and the sandbox template rebuild.
 const QUESTION_SENTINEL =
@@ -25,12 +26,14 @@ const QUESTION_SENTINEL =
 
 // Renders the agent's question(s) into the live Slack thread. The sandbox owns
 // the "is this Slack / auto-answer the tool" decision (via its env = the session
-// metadata) and resumes opencode itself, so this is purely the thread-render side
+// metadata) and resumes the runtime itself, so this is purely the thread-render side
 // effect: it needs a live turn (for the channel/token) and is a best-effort no-op
 // when there isn't one (e.g. a second question after the first finalized).
 export async function postQuestion(
   sessionId: string,
   questions: QuestionInfo[],
+  /** The stored question its buttons answer (`buildQuestionBlocks`). */
+  pendingId?: string,
 ): Promise<{ ok: boolean; answers?: string[][]; error?: string }> {
   const handle = await loadTurn(sessionId);
   if (!handle) {
@@ -46,7 +49,7 @@ export async function postQuestion(
   await finalizeTurn(handle, { title: 'Waiting for your answer', unfinished: true });
   await deleteTurn(sessionId);
 
-  const blocks = buildQuestionBlocks(questions);
+  const blocks = buildQuestionBlocks(questions, pendingId);
   const fallback = questions[0]?.question?.slice(0, 200) ?? 'A question for you';
   const persona = await slackAgentPersona(handle).catch(() => null);
   const messageTs = await postBlocks(handle.token, handle.channel, fallback, blocks, handle.triggerTs, persona);
@@ -88,7 +91,10 @@ function renderQuestionsPlain(questions: QuestionInfo[]): string {
 // the `question` tool behaves natively in Slack instead of dead-ending in a
 // bullet list. Option descriptions (a button shows only its label) are surfaced
 // above the buttons so each choice stays legible. `description` is optional.
-function buildQuestionBlocks(questions: QuestionInfo[]): Array<Record<string, unknown>> {
+// `pendingId`: the stored question. Each button then names its question and
+// option (`kq:`, core/question-token.ts) in an actions block `kq<q>`, so a click
+// answers from the stored row and edits this message.
+export function buildQuestionBlocks(questions: QuestionInfo[], pendingId?: string): Array<Record<string, unknown>> {
   const blocks: Array<Record<string, unknown>> = [];
   questions.forEach((q, qi) => {
     blocks.push({
@@ -104,24 +110,51 @@ function buildQuestionBlocks(questions: QuestionInfo[]): Array<Record<string, un
     }
     if (q.options.length > 0) {
       // Slack caps an actions block at 25 elements; AskUserQuestion stays well
-      // under that. Button text ≤75 chars; the value carries the question +
-      // answer so the click handler can synthesize a clean follow-up.
+      // under that. Button text ≤75 chars; without a stored question the value
+      // carries the question + answer so the click handler can synthesize a
+      // clean follow-up.
       blocks.push({
         type: 'actions',
+        ...(pendingId ? { block_id: `kq${qi}` } : {}),
         elements: q.options.slice(0, 25).map((o, oi) => ({
           type: 'button',
           text: { type: 'plain_text', text: truncate(o.label, 75), emoji: true },
           action_id: `qa_${qi}_${oi}`,
-          value: JSON.stringify({ q: q.question.slice(0, 300), a: o.label }).slice(0, 1900),
+          value: pendingId
+            ? questionButtonData(pendingId, oi, qi)
+            : JSON.stringify({ q: q.question.slice(0, 300), a: o.label }).slice(0, 1900),
         })),
       });
     }
   });
-  blocks.push({
-    type: 'context',
-    elements: [{ type: 'mrkdwn', text: '↩︎  Click an option, or @mention me in this thread to answer.' }],
-  });
+  blocks.push(contextLine('↩︎  Click an option, or @mention me in this thread to answer.'));
   return blocks;
+}
+
+/** The last line of a question message whose click answers nothing (core `earlier`). */
+export const QUESTION_EARLIER = 'This question is from an earlier conversation.';
+
+const contextLine = (text: string) => ({ type: 'context', elements: [{ type: 'mrkdwn', text }] });
+
+const isQuestionButtons = (block: unknown, question?: number) => {
+  const { type, block_id } = block as { type?: unknown; block_id?: unknown };
+  return type === 'actions' && typeof block_id === 'string' && (question === undefined ? block_id.startsWith('kq') : block_id === `kq${question}`);
+};
+
+/**
+ * A question message once `question` is answered: its buttons become `line`,
+ * the other questions keep theirs, and the footer goes with the last buttons.
+ * Null: the message shows no buttons for that question.
+ */
+export function answeredQuestionBlocks(blocks: unknown[], question: number, line: string): unknown[] | null {
+  if (!blocks.some((b) => isQuestionButtons(b, question))) return null;
+  const answered = blocks.map((b) => (isQuestionButtons(b, question) ? contextLine(line) : b));
+  return answered.some((b) => isQuestionButtons(b)) ? answered : answered.slice(0, -1);
+}
+
+/** A question message whose click answers nothing: no buttons, and the last line says why. */
+export function earlierQuestionBlocks(blocks: unknown[]): unknown[] {
+  return [...blocks.filter((b) => !isQuestionButtons(b)).slice(0, -1), contextLine(QUESTION_EARLIER)];
 }
 
 function truncate(s: string, n: number): string {

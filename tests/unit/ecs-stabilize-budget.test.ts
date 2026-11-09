@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { REPO_ROOT as root, readWorkflow } from '../src/fixtures/repo';
 
-const root = resolve(import.meta.dirname, '../..');
 const script = resolve(root, 'infra/scripts/ecs-deploy.sh');
 
 /**
@@ -455,19 +455,24 @@ describe.concurrent('ECS rollout --wait-for serving', () => {
     expect(run.awsCalls).toHaveLength(0);
   });
 
-  it('is used by every Deploy Dev roll and by no staging or production roll', () => {
-    const workflow = (name: string) => readFileSync(resolve(root, '.github/workflows', name), 'utf8');
-    const devRolls = workflow('deploy-dev.yml')
+  it('is used by every Deploy Dev roll except the worker, and by no staging or production roll', () => {
+    const devRolls = readWorkflow('deploy-dev.yml')
       .split('\n')
       .filter((line) => line.includes('infra/scripts/ecs-deploy.sh') && !line.trim().startsWith('#') && !line.trim().startsWith('-'))
       // A --dry-run renders the task definition and rolls nothing (the release
       // gate reads its environment); only real rolls must wait for serving.
       .filter((line) => !line.includes('--dry-run'));
 
-    expect(devRolls).toHaveLength(3);
-    expect(workflow('deploy-dev.yml').match(/--wait-for serving/g)).toHaveLength(3);
+    // api, gateway, web (multi-line invocation) and the worker.
+    expect(devRolls).toHaveLength(4);
+    // The worker always waits stable (the old task hands the leader lease over
+    // when it stops), so its roll names no --wait-for.
+    const workerRolls = devRolls.filter((line) => line.includes('--service worker'));
+    expect(workerRolls).toHaveLength(1);
+    expect(workerRolls[0]).not.toContain('--wait-for');
+    expect(readWorkflow('deploy-dev.yml').match(/--wait-for serving/g)).toHaveLength(3);
     for (const name of ['deploy-staging.yml', 'deploy-prod.yml', 'rollback-prod.yml']) {
-      expect(workflow(name)).not.toContain('--wait-for');
+      expect(readWorkflow(name)).not.toContain('--wait-for');
     }
   });
 });

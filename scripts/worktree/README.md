@@ -34,7 +34,7 @@ pnpm worktree create --name auth-config --full-supabase --yes
 | `pnpm worktree web <n> [--billing]` | Start only the UI (`next dev`) for a stack started with `--no-web`. Fails when no API listens on the worktree's API port. `Ctrl+C` stops the UI; the API keeps running. |
 | `pnpm worktree stop <n>` | Stop the dev servers — the whole process tree, verified dead before the registry records it. Isolated mode also stops that worktree's Supabase containers. **Data is preserved.** |
 | `pnpm worktree stop --all` | Stop every worktree in one pass. The end-of-day sweep, and the way back from stacks orphaned by an OOM kill. |
-| `pnpm worktree nuke <n> [--force]` | Tear down the app worktree: stop, `git worktree remove`, delete the slot's store, free the port slot. Isolated mode also drops its Supabase containers **and volumes**. Shared mode leaves primary Supabase untouched. |
+| `pnpm worktree nuke <n> [--force]` | Tear down the app worktree: stop, `git worktree remove`, delete the slot's store, free the port slot. `--force` also drops a branch with unmerged commits, but only when every commit is on a remote: a branch with unpushed commits is kept. Isolated mode also drops its Supabase containers **and volumes**. Shared mode leaves primary Supabase untouched. |
 | `pnpm worktree nuke --all [--older-than 2d] [--idle 12h] [--include-dirty] [--dry-run] [--yes]` | Bulk teardown. Always keeps running stacks; frees slots whose directory is gone; keeps dirty checkouts unless `--include-dirty`; time rules filter on `createdAt` / last activity. Prints keep/nuke reasons before acting. |
 | `pnpm worktree list` | Every worktree with its live status and web/api ports, running first then alphabetical. Status comes from a real listening-port scan, not the registry, so it cannot go stale. |
 | `pnpm worktree list <name>` | Filter by substring. A single match expands to full clickable URLs (web, api, studio) plus its path. |
@@ -97,6 +97,11 @@ worktrees share (allocators before 2026-10-15 could hand one out twice).
   write. `nuke` drops the database. `create --db` on an old `--full-supabase`
   worktree moves it to a branch database and deletes its containers and volumes.
   Code: `lib/branch-db.ts`.
+- **Branch workers** — branch database APIs default to `KORTIX_WORKERS_ENABLED=false`.
+  Request serving stays active. Queue consumers, scheduled work, and startup
+  snapshot builds stay off, so copied rows cannot trigger provider writes.
+  Enable workers only for a controlled database with
+  `KORTIX_WORKERS_ENABLED=true pnpm worktree start <name>`.
 - **node_modules** — git worktrees have separate working trees, so each worktree
   gets its own isolated `node_modules` (and `node_modules/.pnpm` virtual layer) —
   a sibling's `pnpm install` can never touch it. Package **content** comes from

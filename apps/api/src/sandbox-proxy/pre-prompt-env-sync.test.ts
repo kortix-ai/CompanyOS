@@ -2,7 +2,7 @@
  * `runPrePromptEnvSync` — two things this file pins down.
  *
  * 1. R3 (the turn-latency spec (PR #7840) §3): session-title generation and the
- *    opencode_sessions snapshot refresh are schedule-and-return, never
+ *    runtime_sessions snapshot refresh are schedule-and-return, never
  *    awaited on the send path — this asserts that directly, not just that
  *    the response is unchanged (a response-only assertion proves nothing
  *    about latency; see the task's Verification section).
@@ -193,5 +193,66 @@ describe('jsonProxyError — CORS follows the preview allowlist', () => {
     expect(arbitrary.headers.has('Access-Control-Allow-Origin')).toBe(false);
     expect(arbitrary.headers.has('Access-Control-Allow-Credentials')).toBe(false);
     expect(jsonProxyError({ error: 'x' }, 502).headers.has('Access-Control-Allow-Origin')).toBe(false);
+  });
+});
+
+describe('runPrePromptEnvSync — a Claude subscription turn needs a usable Claude account', () => {
+  const claudePrompt = (model: unknown) =>
+    new TextEncoder().encode(JSON.stringify({ parts: [{ type: 'text', text: 'hello' }], ...(model ? { model } : {}) })).buffer as ArrayBuffer;
+  const json = new Headers({ 'content-type': 'application/json' });
+
+  test('no login → 409 claude_subscription_required before any title, bind or env work', async () => {
+    const log: string[] = [];
+    const seen: unknown[] = [];
+    const deps: PrePromptEnvSyncDeps = {
+      ...recordingDeps(log),
+      claudeSubscriptionMissing: async (input) => {
+        seen.push(input);
+        return input.promptModel;
+      },
+    };
+    const res = await runPrePromptEnvSync(
+      baseInput({ bindTurnIdentity: true, body: claudePrompt({ providerID: 'claude-agent', modelID: 'opus' }), incomingHeaders: json }),
+      deps,
+    );
+    expect(res?.status).toBe(409);
+    expect(await res!.json()).toEqual({
+      error: 'Connect your Claude subscription to use Claude models.',
+      message: 'Connect your Claude subscription to use Claude models.',
+      code: 'claude_subscription_required',
+      provider_id: 'claude-agent',
+      model: 'claude-agent/opus',
+    });
+    expect(seen).toEqual([{ accountId: 'acct-1', projectId: 'proj-1', sessionId: 'sess-1', userId: 'user-1', promptModel: 'claude-agent/opus' }]);
+    expect(log).toEqual([]);
+  });
+
+  test('a connected login (the gate answers null) → the turn goes on', async () => {
+    const log: string[] = [];
+    const deps: PrePromptEnvSyncDeps = { ...recordingDeps(log), claudeSubscriptionMissing: async () => null };
+    const res = await runPrePromptEnvSync(
+      baseInput({ bindTurnIdentity: true, body: claudePrompt({ providerID: 'claude-agent', modelID: 'opus' }), incomingHeaders: json }),
+      deps,
+    );
+    expect(res).toBeNull();
+    expect(log).toContain('syncEnv:called');
+  });
+
+  test('a turn the sandbox starts itself (no bind) is never gated here', async () => {
+    const log: string[] = [];
+    let asked = false;
+    const deps: PrePromptEnvSyncDeps = {
+      ...recordingDeps(log),
+      claudeSubscriptionMissing: async () => {
+        asked = true;
+        return 'claude-agent/opus';
+      },
+    };
+    const res = await runPrePromptEnvSync(
+      baseInput({ bindTurnIdentity: false, body: claudePrompt({ providerID: 'claude-agent', modelID: 'opus' }), incomingHeaders: json }),
+      deps,
+    );
+    expect(res).toBeNull();
+    expect(asked).toBe(false);
   });
 });

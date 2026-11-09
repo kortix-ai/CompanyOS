@@ -12,7 +12,8 @@ import type {
   ProviderListResponse,
   UsePromptAttachmentsResult,
 } from '@kortix/sdk/react';
-import { usePromptAttachments, useRuntimeSessions } from '@kortix/sdk/react';
+import { useProjectConfig, usePromptAttachments, useRuntimeSessions } from '@kortix/sdk/react';
+import { useActiveSpace } from '../../internal/stores/active-space-store';
 import { MoonIcon, WarningIcon } from '@phosphor-icons/react';
 import { SESSION_NOTICE, type SessionLogMessage } from '@kortix/sdk';
 import { newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
@@ -23,6 +24,7 @@ import {
   memo,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -47,7 +49,6 @@ import { type ModelDefaultControls } from '../models/model-selector';
 import { useModelConnectionGate } from '../models/use-model-connection-gate';
 import { NO_AGENT_ACCESS_HINT, NO_AGENT_ACCESS_LABEL } from './composer-agent-access';
 import { useComposerDropZone } from './composer-drop-zone';
-import { useComposerEscapeStop } from './hooks/use-composer-escape-stop';
 import type { DraftScope, StoredDraft } from './draft/composer-draft';
 import { finishedDraftUploads, keepUnsentUploadFile, restoreDraftUploads } from './draft/draft-uploads';
 import { useComposerDraft } from './draft/use-composer-draft';
@@ -114,6 +115,8 @@ import { useComposerFocus } from './hooks/use-composer-focus';
 import { useMenuRevalidation } from './hooks/use-file-search';
 import { controlToOpenFor, hostSlashActions, localizedSlashActions, slashActionShown, type SlashAction } from './menus/slash-actions';
 import type { SlashFile } from './menus/slash-files';
+import { outsideAgentMentions, SpaceMentionContext } from './menus/space-mentions';
+import { promptHistoryEntries, stepPromptHistory } from './prompt-history';
 import { QuoteList } from './quote-list';
 import { createSubmitLatch } from './submit-latch';
 import type { AttachedFile, TrackedMention } from './types';
@@ -198,6 +201,8 @@ export interface SessionChatInputProps {
    * `composer-agent-access.ts`.
    */
   noAccessibleAgents?: boolean;
+  /** The agent is fixed (a DM): the picker names it and offers no other. Pass no `onAgentChange` with it. */
+  agentLocked?: boolean;
   commands?: Command[];
   /**
    * Whether the live command list has EVER resolved — the hook's `data`
@@ -244,6 +249,13 @@ export interface SessionChatInputProps {
   selectedModel?: { providerID: string; modelID: string } | null;
   onModelChange?: (model: { providerID: string; modelID: string } | null) => void;
   modelDefaultControls?: ModelDefaultControls;
+  /**
+   * The model the selected agent runs on when nothing overrides it
+   * (`inheritedModelFor` in `chat-input/chat-input-summary.ts`). Read only by
+   * the `chat_input` control: its model row says "Auto (from <agent>)" while
+   * `selectedModel` is this one, and "Reset to auto" picks it.
+   */
+  inheritedModel?: { providerID: string; modelID: string } | null;
   variants?: string[];
   selectedVariant?: string | null;
   onVariantChange?: (variant: string | null | undefined) => void;
@@ -351,6 +363,11 @@ export interface SessionChatInputProps {
   inputSlot?: React.ReactNode;
 
   toolbarSlot?: React.ReactNode;
+  /**
+   * Rides the under-row right of the agent picker, in both placements: the
+   * session's agents line (`AgentsLine`). It must not add height to the row.
+   */
+  underbarSlot?: React.ReactNode;
   /**
    * Where the under-row's controls live — attach, the agent picker and the
    * context ring.
@@ -522,7 +539,6 @@ function ComposerImpl(props: SessionChatInputProps) {
   runtimeReady = true,
   onStop,
   stopDisabled = false,
-  canStop = true,
   isSending = false,
   rewind,
   agents = EMPTY_AGENTS,
@@ -586,6 +602,15 @@ function ComposerImpl(props: SessionChatInputProps) {
   const tThreads = useTranslations('threads');
 
   const dockId = `composer-slash-dock-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  // Inside a space (flag `chat`): the agents a sent message named from outside
+  // it. Mentioning one never adds it; the line above the card asks first.
+  const spaceMentions = useContext(SpaceMentionContext);
+  const spaceMentionsRef = useRef(spaceMentions);
+  useEffect(() => {
+    spaceMentionsRef.current = spaceMentions;
+  }, [spaceMentions]);
+  const [outsideAsk, setOutsideAsk] = useState<string[]>([]);
 
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   // Synchronous mirror of `attachedFiles`, for the one reader that cannot
@@ -817,9 +842,22 @@ function ComposerImpl(props: SessionChatInputProps) {
    * any document change clears them, and undo is the editor's again.
    */
   const pasteUndoRef = useRef<string[]>([]);
+  /**
+   * The recalled prompt on screen (`prompt-history.ts`), `null` for the draft.
+   * Any document change history did not make itself — typing, a send, a
+   * prefill — ends the walk, and Up/Down are caret keys again.
+   */
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const applyingHistoryRef = useRef(false);
+  const historyEntries = useMemo(() => promptHistoryEntries(messages), [messages]);
   const handleEditorDocChange = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       pasteUndoRef.current = [];
+      if (!applyingHistoryRef.current && historyIndexRef.current !== null) {
+        historyIndexRef.current = null;
+        setHistoryIndex(null);
+      }
       handleDocChange(doc, isEmpty);
     },
     [handleDocChange],
@@ -827,10 +865,20 @@ function ComposerImpl(props: SessionChatInputProps) {
 
   const { data: allSessions } = useRuntimeSessions();
 
-  const primaryAgents = useMemo(
-    () => agents.filter((a) => !a.hidden && a.mode !== 'subagent'),
-    [agents],
-  );
+  // Scope the startable agents to the active space (the sidebar's Spaces
+  // selection): in a space you start only that space's agents. The current
+  // agent is always kept so a session's own agent never disappears while you
+  // are viewing another space. No space selected = every agent, as before.
+  const [activeSpace] = useActiveSpace(projectId ?? '');
+  const scopeConfig = useProjectConfig(projectId);
+  const primaryAgents = useMemo(() => {
+    const base = agents.filter((a) => !a.hidden && a.mode !== 'subagent');
+    if (!activeSpace || !scopeConfig) return base;
+    const spaceByName = new Map(scopeConfig.agents.map((a) => [a.name, a.space ?? null]));
+    return base.filter(
+      (a) => spaceByName.get(a.name) === activeSpace || a.name === selectedAgent,
+    );
+  }, [agents, activeSpace, scopeConfig, selectedAgent]);
 
   const editorDisabled = disabled || lockForApproval;
 
@@ -1242,12 +1290,6 @@ function ComposerImpl(props: SessionChatInputProps) {
     !isEmpty ||
     attachedFiles.length > 0 ||
     (!lockForQuestion && (quotes.length > 0 || pastes.length > 0));
-  useComposerEscapeStop({
-    editorElement,
-    enabled: isBusy && canStop && !stopDisabled && !isSending && !lockForQuestion && !props.submitLabel,
-    hasDraft: canSubmit,
-    onStop,
-  });
   /**
    * No agent may run this prompt. Refused here rather than at the server:
    * `lockForQuestion` is exempt because answering an open question is not a new
@@ -1788,6 +1830,8 @@ function ComposerImpl(props: SessionChatInputProps) {
       // right after the paint (`deliverAfterPaint`), so the next Send never waits
       // behind them. The host releases the uploads after its POST; a send it keeps
       // on screen as failed still holds them for its Retry.
+      const outside = spaceMentionsRef.current ? outsideAgentMentions(spaceMentionsRef.current, trimmed) : [];
+      if (outside.length > 0) setOutsideAsk(outside);
       await runComposerSend({
         submission: attachmentSubmission,
         controller: promptAttachments,
@@ -1997,10 +2041,45 @@ function ComposerImpl(props: SessionChatInputProps) {
     handleSubmitRef.current();
   }, [submitWhenReady, prefillId, landedPrefillId, submitDisabled, modelsLoading, entitlementsPending]);
 
+  /**
+   * Up/Down through prompt history. Only from an empty composer, or while a
+   * recalled prompt is still on screen untouched. Returns whether it acted.
+   */
+  const stepHistory = useCallback(
+    (direction: 'up' | 'down') => {
+      const editor = editorRef.current;
+      const current = historyIndexRef.current;
+      if (!editor || (current === null && !editor.isEmpty())) return false;
+      const next = stepPromptHistory(current, direction, historyEntries.length);
+      if (next === undefined) return false;
+      if (next === current) return true;
+      historyIndexRef.current = next;
+      setHistoryIndex(next);
+      applyingHistoryRef.current = true;
+      try {
+        if (next === null) editor.clear();
+        // The caret lands on the edge the walk is heading to, so a repeat
+        // press steps again; the other arrow still moves through the lines.
+        else editor.setContent(historyEntries[next], direction === 'up' ? 'start' : 'end');
+      } finally {
+        applyingHistoryRef.current = false;
+      }
+      return true;
+    },
+    [historyEntries],
+  );
+
   // A question lock owns the editor: Up there is a caret move, never a take-back.
-  const handleArrowUpAtStart = useCallback(
-    () => (lockForQuestion ? false : (onArrowUpAtStart?.() ?? false)),
-    [lockForQuestion, onArrowUpAtStart],
+  // A queued message to take back outranks history.
+  const handleArrowUpAtStart = useCallback(() => {
+    if (lockForQuestion) return false;
+    if (historyIndexRef.current === null && onArrowUpAtStart?.()) return true;
+    return stepHistory('up');
+  }, [lockForQuestion, onArrowUpAtStart, stepHistory]);
+
+  const handleArrowDownAtEnd = useCallback(
+    () => (lockForQuestion ? false : stepHistory('down')),
+    [lockForQuestion, stepHistory],
   );
 
   const editorPlaceholder = resolveEditorPlaceholder({
@@ -2054,6 +2133,9 @@ function ComposerImpl(props: SessionChatInputProps) {
     animatePlaceholder,
     handleSubmit,
     handleArrowUpAtStart,
+    handleArrowDownAtEnd,
+    historyPosition:
+      historyIndex === null ? null : { index: historyIndex + 1, total: historyEntries.length },
     setIsEmpty,
     handleDocChange: handleEditorDocChange,
     allSessions,
@@ -2087,6 +2169,10 @@ function ComposerImpl(props: SessionChatInputProps) {
     quotes,
     quoteListLabels,
     handleRemoveQuote,
+    spaceAsk:
+      outsideAsk.length > 0 && spaceMentions?.renderOutsideAsk
+        ? spaceMentions.renderOutsideAsk(outsideAsk[0]!, () => setOutsideAsk((list) => list.slice(1)))
+        : null,
   };
 
   return (

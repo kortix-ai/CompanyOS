@@ -61,7 +61,6 @@ function runCli(args: string[]): Promise<RunResult> {
 describe('root dispatch characterization (KRTX-1341)', () => {
   const ALIASES: Array<[string, string]> = [
     ['session', 'sessions'],
-    ['attach', 'connect'],
     ['t', 'tui'],
     ['deploy', 'ship'],
     ['perms', 'permissions'],
@@ -82,8 +81,8 @@ describe('root dispatch characterization (KRTX-1341)', () => {
   test('`remind --help` routes through the reminders adapter with the add-verb default', async () => {
     const result = await runCli(['remind', '--help']);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('Usage: kortix reminders');
-    expect(result.stdout).toContain('kortix remind "<prompt>"');
+    expect(result.stdout).toContain('Usage: kortix loops');
+    expect(result.stdout).toContain('kortix loop "<prompt>"');
   });
 
   test('`skills` hands the invoked name down so its own help text matches how it was called', async () => {
@@ -134,6 +133,6 @@ describe('root dispatch characterization (KRTX-1341)', () => {
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('unknown command `zersons`');
     expect(result.stderr).not.toContain('Did you mean');
-    expect(result.stderr).toContain('kortix init <name>');
+    expect(result.stderr).toContain('kortix workspaces create <name>');
   });
 });

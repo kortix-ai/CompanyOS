@@ -23,6 +23,7 @@ import { EmptyState } from '../../../primitives/empty-state';
 import { ErrorState } from '../../../primitives/error-state';
 import { useLocale, useTranslations } from '../../../i18n';
 import { projectSessionHref } from '../../../internal/lib/navigation/session-href';
+import { uiRoutes } from '../../../lib/routes';
 import { cn } from '../../../internal/lib/utils';
 import { copyToClipboard } from '../../../internal/lib/utils/clipboard';
 import {
@@ -44,6 +45,7 @@ import { useMemo, useState } from 'react';
 
 import { RunHistogram, type RunTimeRange, fmtRange } from './trigger-runs-histogram';
 import {
+  appEventOf,
   RUNS_POLL_MS,
   type RunState,
   canReplay,
@@ -92,6 +94,7 @@ const SOURCE_LABEL_KEY = {
   reminder: 'text31757bbfa17e',
   event: 'text5441e7146193',
   app: 'text0d04bfeb7d64',
+  change_request: 'text5ffd973e20ed',
 } as const satisfies Record<ProjectTriggerRunSource, string>;
 
 /** Column widths, named once (the Models logs `LANE`). */
@@ -379,6 +382,12 @@ export function RunRow({
   const error = run.error ?? run.run_error;
   const failed = state === 'failed' || state === 'rejected';
   const source = t.raw(SOURCE_LABEL_KEY[run.source]);
+  // An App event run: its event, and the App's log of that event (one row per trigger it reached).
+  const appEvent = appEventOf(run.payload);
+  const appsHref = appEvent ? uiRoutes().apps(projectId) : null;
+  const eventHref = appEvent && appsHref
+    ? `${appsHref}?app=${encodeURIComponent(appEvent.app)}${appEvent.id ? `&event=${encodeURIComponent(appEvent.id)}` : ''}`
+    : null;
   const replayButton = (className?: string) =>
     replay ? (
       <Button
@@ -505,6 +514,16 @@ export function RunRow({
                   </button>
                 </div>
               ) : null}
+              {appEvent ? (
+                <div className="flex gap-3 text-xs">
+                  <span className="text-muted-foreground w-22 shrink-0">
+                    {t.raw('text4e1f49a9c8ae')}
+                  </span>
+                  <span className="text-foreground min-w-0 truncate font-mono">
+                    {appEvent.id ? `${appEvent.name} · ${appEvent.id}` : appEvent.name}
+                  </span>
+                </div>
+              ) : null}
               {error ? (
                 <div className="flex gap-3 text-xs">
                   <span className="text-muted-foreground w-22 shrink-0">
@@ -513,7 +532,7 @@ export function RunRow({
                   <span className="text-foreground min-w-0 break-words">{error}</span>
                 </div>
               ) : null}
-              {replay || run.session_id ? (
+              {replay || run.session_id || eventHref ? (
                 <div className="flex gap-1 pt-1">
                   {replayButton()}
                   {run.session_id ? (
@@ -526,6 +545,14 @@ export function RunRow({
                       <Link href={projectSessionHref(projectId, run.session_id)}>
                         <ArrowSquareOutIcon className="size-3 shrink-0" />
                         {t.raw('textb205bb47f81a')}
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {eventHref ? (
+                    <Button variant="ghost" size="xs" className="text-muted-foreground gap-1.5 text-xs" asChild>
+                      <Link href={eventHref}>
+                        <ArrowSquareOutIcon className="size-3 shrink-0" />
+                        {t.raw('text648f297b3b79')}
                       </Link>
                     </Button>
                   ) : null}

@@ -1,5 +1,5 @@
 import {
-  ArrowCircleUpIcon as ArrowUpCircle,
+  type Icon,
   ChatCircleIcon as ChatCircle,
   CoinsIcon as Coins,
   ShippingContainerIcon as Container,
@@ -16,6 +16,7 @@ import {
 } from '@phosphor-icons/react';
 
 import { Mcp } from '../../internal/icons/mcp';
+import { ChromeRailIcon } from '../../internal/chrome/browser-icon';
 
 import type { SettingsTab } from './settings-tabs';
 import type { RailGroup, RailItem } from './type';
@@ -32,7 +33,7 @@ type RailGroupDefinition = RailGroup & {
  * A plain 1:1 match. It used to carry a `models` stand-in for the seven
  * legacy `llm-*` sub-page ids, which went with the Models tab when project
  * configuration moved out of this rail. Those ids resolve through `GRADUATED`
- * in `settings-tabs.ts` onto `/projects/<id>/models` now — the config page
+ * in `settings-tabs.ts` onto `/workspaces/<id>/models` now — the config page
  * that briefly owned them was retired on 2026-09-02. Every tab left in this
  * rail matches its own id and nothing else.
  */
@@ -43,8 +44,8 @@ export function isRailItemActive(item: RailItem, tab: SettingsTab): boolean {
 const STATIC_GROUPS: readonly RailGroupDefinition[] = [
   /**
    * No Workspace group. Project configuration — General, Sandbox templates,
-   * Feature flags, Upgrades — is the Customize bar's Settings tab
-   * (`/projects/<id>/config`, `capability-tab-routes.ts`), where the rest of
+   * Feature flags — is the Customize bar's Settings tab
+   * (`/workspaces/<id>/config`, `capability-tab-routes.ts`), where the rest of
    * the project is configured. It sat here between 2026-09-02 and
    * 2026-09-03; Marko: the overlay is for the PERSON, so it holds only what
    * is theirs — their profile and their account.
@@ -58,7 +59,7 @@ const STATIC_GROUPS: readonly RailGroupDefinition[] = [
       {
         tab: 'profile',
         label: 'Profile',
-        description: 'Your picture, name, email, and organizations.',
+        description: 'Your picture, name, and email.',
         icon: User,
       },
       {
@@ -91,20 +92,21 @@ const STATIC_GROUPS: readonly RailGroupDefinition[] = [
         description: 'Language and keyboard shortcuts.',
         icon: SlidersHorizontal,
       },
-      // Labelled "API keys", routed at `/settings/tokens`. The id has to be
-      // `tokens` — it is the URL segment, and the account page already spends
-      // `api-keys` on a legacy redirect (`RENAMED` in `settings-tabs.ts`) —
-      // but nothing in the product calls a person's own key a "token", so the
-      // row says what the thing is called. Same split as `connected`, whose id
-      // is one word and whose label is two.
       {
-        tab: 'tokens',
-        // "Personal access keys" (Marko, 2026-09-03): these are API keys that
-        // act AS YOU — the CLI, a script or a CI job signed in under your
-        // identity — as opposed to the account's service-account tokens on
-        // the account page. The label says whose identity they carry.
-        label: 'Personal access keys',
-        description: 'API keys that act as you — for the CLI, a script, or a CI job.',
+        tab: 'chrome',
+        label: 'Kortix in Chrome',
+        description: 'Your sessions use Chrome with your logins. You see every step.',
+        docsHref: '/docs/connect/chrome',
+        // Monochrome like its neighbours; `ChromeRailIcon` takes only `className`.
+        icon: ChromeRailIcon as unknown as Icon,
+      },
+      // Personal keys act as the person in every workspace of theirs (the
+      // CLI login, older account-wide keys): listed and revoked here. New keys
+      // are minted per workspace in Workspace settings › API keys (C4).
+      {
+        tab: 'personal-keys',
+        label: 'Personal keys',
+        description: 'Keys that act as you in every workspace: the CLI login and older keys.',
         icon: Key,
       },
       // MCP and the paired computers (KRTX-1997) are the person's own too: the
@@ -116,7 +118,7 @@ const STATIC_GROUPS: readonly RailGroupDefinition[] = [
         label: 'MCP',
         description:
           'Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.',
-        docsHref: '/docs/connect/mcp',
+        docsHref: '/docs/guide#other-ai-tools-mcp',
         icon: Mcp,
       },
       {
@@ -167,7 +169,7 @@ export const RETIRED_RAIL_ITEMS: readonly RailItem[] = [
     // machine from it.
     description:
       'The recipe for the machine a session runs on, and the record of every time Kortix prepared one.',
-    docsHref: '/docs/work/runtime',
+    docsHref: '/docs/developers#sandbox-templates',
     icon: Container,
   },
   {
@@ -175,13 +177,6 @@ export const RETIRED_RAIL_ITEMS: readonly RailItem[] = [
     label: 'Feature flags',
     description: 'Features you can switch on before they are generally available.',
     icon: Flask,
-  },
-  {
-    tab: 'upgrades',
-    label: 'Upgrades',
-    description:
-      'Changes an agent makes to this workspace. Every run opens a change request for you to review — nothing merges on its own.',
-    icon: ArrowUpCircle,
   },
   // Connected accounts listed the ACCOUNT's GitHub App installations — the
   // same rows the account page's Git tab manages — under a person's own
@@ -195,13 +190,13 @@ export const RETIRED_RAIL_ITEMS: readonly RailItem[] = [
   {
     tab: 'credits',
     label: 'Credits',
-    description: 'What this account has left to spend, and what it spent this period.',
+    description: 'What this workspace has left to spend, and what it spent this period.',
     icon: Coins,
   },
   {
     tab: 'plan',
     label: 'Plan',
-    description: 'Your plan, credits, and billing for this account.',
+    description: 'Your plan, credits, and billing for this workspace.',
     icon: CreditCard,
   },
 ];

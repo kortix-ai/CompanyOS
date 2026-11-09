@@ -1,4 +1,7 @@
 name: Deploy Staging
+# The SHA in the run name lets promote.yml find ITS deploy run: a dispatch runs
+# on ref `dev`, so the run's headSha is dev's tip, not the staging SHA.
+run-name: Deploy Staging ${{ inputs.sha || github.event.workflow_run.head_sha || github.ref_name }}
 
 # Staging is the release-candidate lane. It tracks the `staging` branch and is
 # the only normal source for Promote to Production. Dev can be messy; staging
@@ -309,7 +312,7 @@ jobs:
           persist-credentials: false
       - uses: ./.aws-env/.github/actions/prepare-migrate
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
           database-url: DATABASE_URL=kortix-staging-env:DATABASE_URL
       - name: Apply pending migrations (node-pg-migrate; halts on failure)
         run: |
@@ -324,8 +327,9 @@ jobs:
           fi
           pnpm --filter @kortix/db migrate
 
-  # Roll staging ECS Fargate (api + gateway). deploy-web `needs:` this job,
-  # so a broken ECS staging deploy fails the staging rollout loudly.
+  # Roll staging ECS Fargate (worker, then api + gateway). deploy-web `needs:`
+  # this job, so a broken ECS staging deploy fails the staging rollout loudly.
+  # A failed WORKER roll does not: the API then runs the scheduled jobs itself.
   deploy-ecs:
     name: Deploy API + gateway to staging (ECS Fargate)
     needs: [preflight, sync-secret, migrate-db, terraform-staging]
@@ -338,7 +342,9 @@ jobs:
         && needs.migrate-db.result == 'success'
         && (needs.terraform-staging.result == 'success' || needs.terraform-staging.result == 'skipped') }}
     runs-on: ${{ vars.CI_RUNNER_S || 'ubuntu-24.04' }}
-    timeout-minutes: 45
+    # Worker roll (17 min cap) + API and gateway rolls (15 min wait budget
+    # each in ecs-deploy.sh) + overhead.
+    timeout-minutes: 62
     permissions:
       id-token: write # OIDC → ECS deploy role
       contents: read
@@ -383,6 +389,21 @@ jobs:
         with:
           role-to-assume: ${{ env.ROLE }}
           aws-region: ${{ env.AWS_REGION }}
+      # The worker (kortix-staging-euw2-worker) runs every scheduled job. It
+      # rolls BEFORE the API, with this job's KORTIX_ECS_ENV_OVERRIDES and the
+      # API's running environment, and always waits until the old worker
+      # stopped. The API roll sets KORTIX_PROCESS_ROLE=web only when this worker
+      # runs the same image and is HEALTHY; otherwise `all`. A failed worker
+      # roll never blocks the API: the job stays green and the next step
+      # annotates the run.
+      - name: Roll the staging worker service from the staging-env blob
+        id: worker
+        continue-on-error: true
+        timeout-minutes: 17
+        run: bash infra/scripts/ecs-deploy.sh staging-euw2 "kortix/kortix-api:staging-${SHA8}" --service worker --version "${VERSION}"
+      - name: Report a failed worker roll
+        if: steps.worker.outcome == 'failure'
+        run: echo "::error title=Worker deploy::the staging worker did not roll onto kortix/kortix-api:staging-${SHA8}. The API rolls with KORTIX_PROCESS_ROLE=all and runs the scheduled jobs; read the step 'Roll the staging worker service from the staging-env blob'."
       - name: Roll staging ECS (api + gateway) from the staging-env blob
         run: |
           bash infra/scripts/ecs-deploy.sh staging-euw2 "kortix/kortix-api:staging-${SHA8}" --version "${VERSION}"
@@ -419,8 +440,6 @@ jobs:
         with:
           keys: |
             CLOUDFLARE_API_TOKEN
-            CLOUDFLARE_EMAIL
-            CLOUDFLARE_GLOBAL_API_KEY
             CLOUDFLARE_APPS_EDGE_API_TOKEN
             CF_WORKER_CI_PASSTHROUGH_SECRET
       - name: Deploy staging API router Worker
@@ -430,21 +449,15 @@ jobs:
           WORKER_ROUTE: staging-api.kortix.com/*
         run: |
           set -euo pipefail
-          # Pick the first credential that actually AUTHENTICATES, probed with a
-          # cheap zone read — since 2026-08-18 the global key 403s and, because
-          # it was tried first and trusted blindly, every Worker deploy failed.
-          # CLOUDFLARE_APPS_EDGE_API_TOKEN is a legitimate same-account token
-          # (Apps edge) and serves as a fallback when it carries Workers scope.
+          # Pick the first scoped token that AUTHENTICATES, probed with a cheap
+          # zone read. The account Global API Key is never used: it leaked in
+          # public history (GHSA-gvj2-w9pq-xmgx) and was revoked 2026-08-18.
           zone_probe() {
             curl -fsS -o /dev/null --max-time 15 \
               "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}" "$@"
           }
           auth_headers=()
-          if [ -n "${CLOUDFLARE_GLOBAL_API_KEY:-}" ] && [ -n "${CLOUDFLARE_EMAIL:-}" ] \
-            && zone_probe -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" -H "X-Auth-Key: ${CLOUDFLARE_GLOBAL_API_KEY}"; then
-            auth_headers=(-H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" -H "X-Auth-Key: ${CLOUDFLARE_GLOBAL_API_KEY}")
-            echo "Cloudflare auth: global API key"
-          elif [ -n "${CLOUDFLARE_API_TOKEN:-}" ] \
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] \
             && zone_probe -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"; then
             auth_headers=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
             echo "Cloudflare auth: scoped API token"
@@ -453,7 +466,7 @@ jobs:
             auth_headers=(-H "Authorization: Bearer ${CLOUDFLARE_APPS_EDGE_API_TOKEN}")
             echo "Cloudflare auth: apps-edge API token (fallback)"
           else
-            echo "::error::No Cloudflare credential authenticates (global key, scoped token, apps-edge token all absent or refused). Rotate CLOUDFLARE_GLOBAL_API_KEY or provide a CLOUDFLARE_API_TOKEN with Workers + zone permissions."
+            echo "::error::No Cloudflare credential authenticates (scoped token and apps-edge token absent or refused). Provide a CLOUDFLARE_API_TOKEN with Workers + zone permissions."
             exit 1
           fi
 

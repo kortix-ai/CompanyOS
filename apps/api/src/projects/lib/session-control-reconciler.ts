@@ -49,6 +49,7 @@
 
 import { registerSessionRuntimeTurnEnds, forgetSessionRuntimeTurnEnds } from './session-runtime-turn-ends';
 import { listInboxPrompts } from '../session-lifecycle/inbox-rows';
+import { listSentPrompts } from '../session-lifecycle/sent-prompts';
 import { serializePrompt } from './session-prompt-view';
 import { readSessionTurnState } from './session-turn-read';
 import {
@@ -56,6 +57,7 @@ import {
   readSessionAuditWatermark,
   readSessionControlState,
 } from './session-control-readers';
+import { errorMessage } from '../../shared/error-message';
 export type { RuntimeControlState, AuditWatermark, SessionControlState } from './session-control-readers';
 import { deriveSessionWorking } from './session-working';
 import type { SessionTurnStatus } from '@kortix/api-contract';
@@ -383,13 +385,13 @@ async function tick(sessionId: string, reconciler: Reconciler): Promise<void> {
     const full = reconciler.fullRefs > 0;
     const [turn, queue, runtime, audit, session] = await Promise.allSettled([
       full ? readSessionTurnState(sessionId) : null,
-      listInboxPrompts(sessionId, PROMPT_LIST_LIMIT),
+      Promise.all([listInboxPrompts(sessionId, PROMPT_LIST_LIMIT), listSentPrompts(sessionId)]),
       full ? readRuntimeControlState(sessionId) : null,
       full ? readSessionAuditWatermark(sessionId, reconciler) : null,
       full ? readSessionControlState(sessionId) : null,
     ]);
 
-    if (queue.status === 'fulfilled') reconciler.lastPrompts = queue.value.map(serializePrompt);
+    if (queue.status === 'fulfilled') reconciler.lastPrompts = queue.value[0].map(serializePrompt);
     if (full && turn.status === 'fulfilled' && turn.value) {
       reconciler.lastTurn = turn.value;
       await readStopPrompter(sessionId, reconciler);
@@ -404,6 +406,8 @@ async function tick(sessionId: string, reconciler: Reconciler): Promise<void> {
         {
           known: true,
           prompts,
+          // Accepted prompts the log does not hold yet (`listSentPrompts`).
+          sent: queue.value[1],
           held: prompts.some(
             (prompt) => prompt.state === 'waiting' && prompt.reason === 'held',
           ),
@@ -565,7 +569,7 @@ async function driveWakeLadder(sessionId: string, reconciler: Reconciler): Promi
   } catch (error) {
     logger.warn('[wake-ladder] step failed', {
       sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
   } finally {
     ladder.acting = false;
@@ -641,7 +645,7 @@ function emit(
 /**
  * Publish a runtime-state projection frame for a session.
  *
- * Called by the stream when it has just read `/kortix/opencode/state` — the
+ * Called by the stream when it has just read `/kortix/runtime/state` — the
  * frame goes through the same channel and the same cseq space as every other
  * control snapshot, so a client applies it with the same reducer and dedupes it
  * with the same cursor.

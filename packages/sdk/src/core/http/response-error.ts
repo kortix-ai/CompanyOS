@@ -11,6 +11,7 @@ import type { ApiResponse, ErrorContext } from './api-client';
 import {
   ApiError,
   FEATURE_DISABLED_CODE,
+  NO_WORKSPACE_CODE,
   REPOSITORY_DISCONNECTED_CODE,
   RequestTooLargeError,
   parseBillingError,
@@ -133,11 +134,27 @@ function isExpectedResponse(status: number, data: any, message: string): boolean
       (data?.code === MODEL_NOT_SERVABLE_CODE ||
         data?.code === PROVISION_IN_FLIGHT_CODE ||
         data?.code === SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE ||
+        // A stale save: the editor that sent it shows the conflict.
+        data?.code === 'version_conflict' ||
+        // A goal write on a stale revision: the goal page refreshes and says what changed.
+        data?.error === 'goal_conflict' ||
         // A state a GitHub owner fixes, not a defect: the host shows the fix.
-        data?.code === REPOSITORY_DISCONNECTED_CODE)) ||
+        data?.code === REPOSITORY_DISCONNECTED_CODE ||
+        // No workspace yet: the host shows "Create a workspace or join one".
+        data?.code === NO_WORKSPACE_CODE)) ||
     (status === 503 &&
       (data?.code === ANALYTICS_UNAVAILABLE_CODE || data?.code === ACCOUNTS_LIST_UNAVAILABLE_CODE))
   );
+}
+
+/** A read that answers 404 found nothing to show: the surface that asked
+ *  renders that state (a folder that is gone, a feature the platform does not
+ *  offer, a deleted session). Reporting it made the host toast "Not found" on
+ *  every background poll. A write that answers 404 is a failed action and
+ *  still reports. Callers receive the `ApiError` in both cases. */
+function isReadNotFound(status: number, method: string | undefined): boolean {
+  const m = (method ?? 'GET').toUpperCase();
+  return status === 404 && (m === 'GET' || m === 'HEAD');
 }
 
 export async function handleErrorResponse<T>(
@@ -145,6 +162,7 @@ export async function handleErrorResponse<T>(
   signal: AbortSignal,
   showErrors: boolean,
   errorContext?: ErrorContext,
+  method?: string,
 ): Promise<ApiResponse<T>> {
   const { message, data } = await readErrorBody(response, signal);
   let error: ApiError | Error = new ApiError(message, {
@@ -187,7 +205,11 @@ export async function handleErrorResponse<T>(
         'Try uploading files one at a time, or reduce the number of files attached to your message.',
     });
   }
-  if (showErrors && !isExpectedResponse(response.status, data, message)) {
+  if (
+    showErrors &&
+    !isExpectedResponse(response.status, data, message) &&
+    !isReadNotFound(response.status, method)
+  ) {
     platformConfig().onError?.(error, errorContext);
   }
   return { error, success: false };

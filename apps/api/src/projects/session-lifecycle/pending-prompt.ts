@@ -1,5 +1,5 @@
 /**
- * `pending_prompt` → durable inbox row, at session create and warm claim.
+ * `pending_prompt` → durable inbox row, at session create.
  *
  * The first prompt of a new session used to travel client-side: the producer
  * stashed it in sessionStorage, navigated, and the workbench replayed it once
@@ -20,6 +20,7 @@
 import { buildContinueSessionCommandValues } from './store';
 import { flattenPromptText, sanitizeInboxPromptParts } from './prompt-parts';
 import { mintWireMessageId } from '../wire-message-id';
+import type { SessionInvocationSource } from './types';
 
 export interface PendingPromptConversion {
   /** Insert values for `session_lifecycle_commands`, or null when the prompt
@@ -38,6 +39,7 @@ export function convertPendingPromptToInboxRow(input: {
   accountId: string;
   sessionId: string;
   actorUserId: string | null;
+  source?: SessionInvocationSource;
   /** The session whose agent created this one (see `authorSessionId`). */
   authorSessionId?: string | null;
   /** Post it without a turn: a conversation with people starts with it. */
@@ -46,7 +48,6 @@ export function convertPendingPromptToInboxRow(input: {
 }): PendingPromptConversion {
   const { pendingPrompt } = input;
   const { text: _text, parts: _parts, ...metadataPicks } = pendingPrompt;
-
   const text = typeof pendingPrompt.text === 'string' ? pendingPrompt.text.trim() : '';
   const rawParts = Array.isArray(pendingPrompt.parts) ? pendingPrompt.parts : [];
   const effectiveRaw = rawParts.length > 0 ? rawParts : text ? [{ type: 'text', text }] : [];
@@ -68,7 +69,7 @@ export function convertPendingPromptToInboxRow(input: {
   };
 
   const rowValues = buildContinueSessionCommandValues({
-    source: 'ui',
+    source: input.source ?? 'ui',
     projectId: input.projectId,
     accountId: input.accountId,
     sessionId: input.sessionId,

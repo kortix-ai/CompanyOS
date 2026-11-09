@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   type CreateSessionPromptInput,
   type CreateSessionPromptResult,
@@ -15,8 +15,7 @@ import {
   listSessionPrompts,
   retrySessionPrompt,
   editSessionPrompt,
-  interruptSessionPrompt,
-} from '../core/rest/projects-client/sessions';
+  interruptSessionPrompt, type SessionSentPrompt } from '../core/rest/projects-client/sessions';
 import { useSessionWorkingStore } from '../browser/stores/session-working-store';
 import { countLiveInboxPrompts, inboxObservationSupersedes } from '../core/session/working';
 import { claimOpenBundle, openBundleQueue } from '../core/session/open-bundle';
@@ -24,7 +23,11 @@ import { createTickSingleFlight } from '../core/session/single-flight';
 import { openSessionControlStream } from '../core/session/control-stream';
 import { qk } from './query-keys';
 import { usePollOwner } from './use-poll-owner';
-import { mintSessionWireMessageId } from './use-opencode-sessions/messages';
+import { mintSessionWireMessageId } from './use-runtime-sessions/messages';
+import type { SessionPromptReason } from '../core/wire-values';
+
+/** Stop parked the row (`SESSION_PROMPT_REASONS`). */
+const HELD_REASON: SessionPromptReason = 'held';
 
 /**
  * The session's SERVER-SIDE prompt inbox.
@@ -189,7 +192,7 @@ export function applyInboxObservation(
  * one GET later — a GET `applyInboxObservation` may legitimately discard.
  */
 export function releaseHeldPrompts(prompts: readonly SessionPrompt[]): SessionPrompt[] {
-  return prompts.map((prompt) => (prompt.reason === 'held' ? { ...prompt, reason: null } : prompt));
+  return prompts.map((prompt) => (prompt.reason === HELD_REASON ? { ...prompt, reason: null } : prompt));
 }
 
 /** The rows with ONE row's text replaced — `edit`'s optimistic write, so the
@@ -430,7 +433,7 @@ export function reconcileOptimisticPrompts(
  * URL from ever being built for a session that has no project.
  *
  * Not every session has one. A sub-session (the "Agent · general: …" panel
- * `SubSessionModal` opens over the transcript) is a local OpenCode child:
+ * `SubSessionModal` opens over the transcript) is a local runtime child:
  * `SessionChat` renders it with a `sessionId` and nothing else — no project id,
  * no project session id — and there is no server-side inbox to read. Both ids
  * are then genuinely `undefined`, and `listSessionPrompts` interpolates them
@@ -502,6 +505,8 @@ export async function readSessionPromptsInbox(
     async () => {
       const issuedAtMs = Date.now();
       const listed = await listSessionPrompts(projectId, sessionId);
+      const listedAtMs = listed.observed_at ? Date.parse(listed.observed_at) : Number.NaN;
+      noteSentPrompts(sessionId, listed.sent, Number.isFinite(listedAtMs) ? listedAtMs : undefined);
       return { atMs: issuedAtMs, prompts: listed.prompts, observed_at: listed.observed_at };
     },
   );
@@ -520,6 +525,36 @@ export async function readSessionPromptsInbox(
   );
 }
 
+/**
+ * `sent` per session: accepted prompts the session log does not hold yet (`GET …/prompts`
+ * `sent`, the `kortix.control.queue` frame). The newest server observation wins, as for the
+ * inbox rows; a read with no server stamp always lands. An API that omits `sent` changes
+ * nothing.
+ */
+// replica-local: one copy per client, like the query cache it sits beside.
+const sentBySession = new Map<string, { atMs: number; sent: SessionSentPrompt[] }>();
+const sentListeners = new Set<() => void>();
+const NO_SENT: SessionSentPrompt[] = [];
+
+function noteSentPrompts(sessionId: string, sent: SessionSentPrompt[] | undefined, serverAtMs: number | undefined): void {
+  if (!sent) return;
+  const prev = sentBySession.get(sessionId);
+  const atMs = serverAtMs ?? Number.POSITIVE_INFINITY;
+  if (prev && serverAtMs !== undefined && prev.atMs !== Number.POSITIVE_INFINITY && prev.atMs > serverAtMs) return;
+  sentBySession.set(sessionId, { atMs, sent });
+  for (const listener of [...sentListeners]) listener();
+}
+
+function subscribeSent(listener: () => void): () => void {
+  sentListeners.add(listener);
+  return () => sentListeners.delete(listener);
+}
+
+/** Test-only: forget every session's `sent`. */
+export function __resetSentPromptsForTests(): void {
+  sentBySession.clear();
+}
+
 const promptReads = createTickSingleFlight<{
   atMs: number;
   prompts: SessionPrompt[];
@@ -528,6 +563,12 @@ const promptReads = createTickSingleFlight<{
 
 export interface UseSessionPromptsResult {
   prompts: SessionPrompt[];
+  /**
+   * Prompts the runtime accepted that the session log does not hold yet, and the session's
+   * `initial_prompt`, oldest first. Empty against an API that does not list them.
+   * `sessionLogThreadWithPrompts` draws them, with `prompts`, as provisional messages.
+   */
+  sent: SessionSentPrompt[];
   isLoading: boolean;
   /** Put one prompt in the inbox. Resolving means DURABLE, not delivered. */
   enqueue: (input: CreateSessionPromptInput) => Promise<CreateSessionPromptResult>;
@@ -578,6 +619,7 @@ export function useSessionPrompts(
       sessionId: sessionId!,
       onQueue: (queue) => {
         const serverAtMs = queue.observed_at ? Date.parse(queue.observed_at) : Number.NaN;
+        noteSentPrompts(sessionId!, queue.sent, Number.isFinite(serverAtMs) ? serverAtMs : undefined);
         queryClient.setQueryData<SessionPrompt[]>(key, (cached) =>
           applyInboxObservation(
             sessionId!,
@@ -630,6 +672,12 @@ export function useSessionPrompts(
       stream.close();
     };
   }, [enabled, pollOwner, streamConnected, projectId, sessionId]);
+
+  const sent = useSyncExternalStore(
+    subscribeSent,
+    () => (enabled ? (sentBySession.get(sessionId!)?.sent ?? NO_SENT) : NO_SENT),
+    () => NO_SENT,
+  );
 
   const query = useQuery({
     queryKey: key,
@@ -808,6 +856,7 @@ export function useSessionPrompts(
 
   return {
     prompts: query.data ?? [],
+    sent,
     isLoading: query.isLoading,
     enqueue: enqueueMutation.mutateAsync,
     remove: removeMutation.mutateAsync,

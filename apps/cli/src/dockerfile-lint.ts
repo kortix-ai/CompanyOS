@@ -14,7 +14,7 @@
  * Emits `ManifestIssue`s so `validate` can merge them straight into the report
  * it already prints — `path` carries the Dockerfile's repo-relative path (not a
  * kortix.yaml dot-path) and `line` is the line WITHIN that Dockerfile, so
- * `formatIssues` renders `error path/to/Dockerfile: … (line 3)`.
+ * `kortix validate` prints `path/to/Dockerfile:3  error  path/to/Dockerfile  …`.
  */
 import type { ManifestIssue } from '@kortix/manifest-schema';
 
@@ -186,7 +186,7 @@ export function lintDockerfile(text: string, opts: LintDockerfileOpts): Manifest
         message:
           `\`${ins.keyword} ${src}\` reads from the build context, but your repo is NOT in it — ` +
           `the cloud build fails with "Path does not exist: …/${src.replace(/^\.\//, '')}". Kortix ` +
-          `stages only its own artifacts there; your project source is git-cloned to /workspace ` +
+          `stages only its own artifacts there; your workspace source is git-cloned to /workspace ` +
           `when a session boots, so the image never bakes it in. Read it from /workspace at ` +
           `runtime, inline it with a RUN, or copy it from an earlier stage (\`COPY --from=<stage>\`).`,
       });

@@ -6,7 +6,7 @@
 //
 // A role's permission set is a list of ~44 dotted leaf actions. Showing 44
 // checkboxes made "what can this role do?" unanswerable at a glance, so the
-// matrix shows AREAS with two checkboxes each — View and Edit — and expands a
+// matrix shows View and Edit per area, and expands a
 // cell back to its leaf actions on save. The wire format is unchanged:
 // `createRole` / `updateRolePermissions` still receive the same leaf strings,
 // and the IAM engine is untouched.
@@ -16,7 +16,7 @@
 // are only partially present both stay editable in the "Advanced" disclosure,
 // which auto-opens when the loaded role needs it.
 //
-// The AREAS, the View/Edit split and the IMPLICATIONS all come from the server:
+// The areas, permission levels and implications all come from the server:
 // `GET /accounts/:id/iam/permissions` returns `area`, `level` and `implies` per
 // action. This used to be hardcoded here — ~150 lines of tables plus an
 // implication graph the client invented and the engine did not enforce, so the
@@ -51,7 +51,7 @@ export interface AreaDef {
  *  adds without an entry here renders with a humanized key and no hint, so a
  *  new permission is never invisible. */
 const AREA_COPY: Record<string, { label: string; hint?: string; note?: string }> = {
-  project: { label: 'Project', hint: 'The project itself — open it, rename it, delete it.' },
+  project: { label: 'Workspace', hint: 'The project itself — open it, rename it, delete it.' },
   sessions: { label: 'Sessions', hint: 'Read transcripts, start and stop runs.' },
   files: { label: 'Files', hint: 'The project workspace tree.' },
   customize: {
@@ -72,7 +72,7 @@ const AREA_COPY: Record<string, { label: string; hint?: string; note?: string }>
   groups: { label: 'Groups', hint: 'Groups and who belongs to them.' },
   roles: { label: 'Roles', hint: 'Custom roles and the assignments that hand them out.' },
   tokens: { label: 'API keys', hint: 'Service-account API keys and personal access keys.' },
-  projects: { label: 'Projects', hint: 'Creating a brand-new project in this account.' },
+  projects: { label: 'Workspaces', hint: 'Creating a brand-new project in this account.' },
   billing: { label: 'Billing', hint: 'Plan, invoices and payment method.' },
   audit: { label: 'Audit', hint: 'The account audit log.' },
   credentials: { label: 'Credentials', hint: 'Minting long-lived project tokens.' },
@@ -424,7 +424,7 @@ export function applyCell(
 ): Set<string> {
   const area = buildAreaTable(scope, permissions).find((a) => a.key === areaKey);
   if (!area) return new Set(selected);
-  const leaves = kind === 'view' ? area.view : area.edit;
+  const leaves = area[kind];
   return checked
     ? addLeaves(permissions, selected, leaves, availableIn(scope, permissions))
     : removeLeaves(permissions, selected, leaves);

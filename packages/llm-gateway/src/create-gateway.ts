@@ -12,17 +12,23 @@ import {
   responsesToChat,
 } from './ingress/openai-responses';
 import {
+  type AudioRequest,
   type ChatCompletionRequest,
   type GatewayDeps,
   type HandlerRuntime,
   type ImageRequest,
+  type VoicesRequest,
+  handleAudioRequest,
   handleChatCompletions,
   handleImageRequest,
+  handleVoicesRequest,
 } from './pipeline';
 import { parseUpstreamErrorBody } from './http/parse-upstream-error';
 import { gatewayErrorResponse } from './pipeline/error-response';
 import { requestFieldError } from './pipeline/request-fields';
 import { createRouteMemory } from './pipeline/route-memory';
+import { createClaudeCodePassthrough, type ClaudeCodeRequest } from './claude-code/passthrough';
+import { createUsageReporter } from './usage/subscription-usage';
 
 // Anthropic Messages API error `type` values by HTTP status — used only to
 // shape the JSON envelope for clients speaking the Anthropic wire format; the
@@ -78,8 +84,13 @@ function responsesErrorResponse(status: number, message: string): Response {
   );
 }
 
-export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
+export function createGateway(rawHooks: GatewayHooks, deps: GatewayDeps = {}) {
   const logger = deps.logger ?? console;
+  // Every subscription response reports usage; the host hears a change, not every call.
+  const reportUsage = rawHooks.notePoolUsage ? createUsageReporter(rawHooks.notePoolUsage, { logger }) : null;
+  const hooks: GatewayHooks = reportUsage
+    ? { ...rawHooks, notePoolUsage: async (principal, secretId, usage) => reportUsage(principal, secretId, usage) }
+    : rawHooks;
   const runtime: HandlerRuntime = {
     hooks,
     logger,
@@ -112,6 +123,7 @@ export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
   const listModels = async (
     authorization: string | undefined,
     opts?: ListModelsOptions,
+    openAiList = false,
   ): Promise<Response> => {
     const requestId = `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     const token = bearer(authorization);
@@ -137,13 +149,17 @@ export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
           requestId,
           suggestion: 'Sign in again or provide a valid API token, then retry.',
         });
-      if (!hooks.listModels) return jsonResponse({ models: {} });
-      const models = await hooks.listModels(principal, opts);
+      const models = hooks.listModels ? await hooks.listModels(principal, opts) : {};
       logger.info(
         `[gateway] models ${Object.keys(models).length}${opts?.managedOnly ? ' (managed only)' : opts?.scope === 'picker' ? ' (picker)' : ''} ` +
           `for acct=${principal.accountId.slice(0, 8)}`,
       );
-      return jsonResponse({ models });
+      if (!openAiList) return jsonResponse({ models });
+      // A picker entry turned off or not connected answers 400: never list it.
+      const data = Object.entries(models)
+        .filter(([, model]) => model.enabled !== false && model.available !== false)
+        .map(([id, model]) => ({ ...model, id, object: 'model', created: 0, owned_by: model.provider ?? 'kortix' }));
+      return jsonResponse({ object: 'list', data });
     } catch (err) {
       logger.error('[gateway] model catalog request failed', err);
       return gatewayErrorResponse(502, {
@@ -189,6 +205,7 @@ export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
       rawBody: '',
       parsedBody: chatBody as Record<string, unknown>,
       signal: req.signal,
+      origin: req.origin,
     });
 
     if (!upstream.ok) {
@@ -248,6 +265,7 @@ export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
       rawBody: '',
       parsedBody: chatBody as Record<string, unknown>,
       signal: req.signal,
+      origin: req.origin,
     });
 
     if (!upstream.ok) {
@@ -273,12 +291,30 @@ export function createGateway(hooks: GatewayHooks, deps: GatewayDeps = {}) {
     return withModelNames(upstream, jsonResponse(chatJsonToResponsesObject(data as Record<string, unknown>)));
   };
 
+  // Claude Code's own Anthropic requests on a stored Claude account. Never
+  // translated and never through the chat pipeline: see claude-code/passthrough.ts.
+  const claudeCredentials = hooks.claudeCredentials;
+  const claudeCodePassthrough = claudeCredentials
+    ? createClaudeCodePassthrough({
+      authenticate: hooks.authenticate,
+      claudeCredentials,
+      claudeRefused: hooks.claudeRefused,
+      notePoolRateLimit: hooks.notePoolRateLimit,
+      notePoolUsage: hooks.notePoolUsage,
+    }, { upstream: deps.claudeCodeUpstream, logger })
+    : null;
+  const claudeCode = (req: ClaudeCodeRequest): Promise<Response> =>
+    claudeCodePassthrough ? claudeCodePassthrough(req) : Promise.resolve(anthropicErrorResponse(404, 'Claude Code passthrough is not configured'));
+
   return {
+    claudeCode,
     chatCompletions: (req: ChatCompletionRequest): Promise<Response> =>
       handleChatCompletions(runtime, req),
     messages,
     responses,
     listModels,
     images: (req: ImageRequest): Promise<Response> => handleImageRequest(runtime, req),
+    audio: (req: AudioRequest): Promise<Response> => handleAudioRequest(runtime, req),
+    voices: (req: VoicesRequest): Promise<Response> => handleVoicesRequest(runtime, req),
   };
 }

@@ -30,6 +30,7 @@ import { useTranslations } from '../../i18n';
 
 import { SessionAuditPanel } from './session-audit-panel';
 import { SessionRemindersPanel } from './session-reminders-panel';
+import { SessionDesktop } from './session-desktop';
 import { SessionFilesBooting, SessionFilesExplorer } from './session-files-explorer';
 import { SessionBootStatus } from '../status/session-starting-loader';
 import { useSandboxProxy } from '../../internal/hooks/use-sandbox-proxy';
@@ -50,9 +51,7 @@ import {
 } from '../../internal/stores/session-panel-memory-store';
 import { useUserPreferencesStore } from '../../internal/stores/user-preferences-store';
 import { getProjectSession, SANDBOX_PORTS } from '@kortix/sdk';
-import { qk } from '@kortix/sdk/react';
 import { FileTextIcon as FileText } from '@phosphor-icons/react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   type ReactNode,
@@ -112,6 +111,7 @@ export interface SessionPanelValue {
   openFiles: (changes?: boolean) => void;
   openAudit: () => void;
   openReminders: () => void;
+  openDesktop: () => void;
 }
 
 /**
@@ -126,7 +126,7 @@ export const SessionPanelContext = createContext<SessionPanelValue | null>(null)
  * The panel value, or null outside a provider.
  *
  * Optional on purpose, exactly as `useOptionalSidebar` is: `SessionChat` has a
- * second call site in `sub-session-modal.tsx` that renders it read-only and
+ * second call site in `legacy-subagent-chat.tsx` that renders it read-only and
  * OUTSIDE `SessionLayout`. The floating overlay self-gates to null there rather
  * than every call site having to know which tree it is in.
  */
@@ -165,8 +165,9 @@ export function SessionPanelProvider({
   children: ReactNode;
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tDesktop = useTranslations('sessionDesktop');
   const tReminders = useTranslations('reminders');
-  const { steps, outputs, context, apps, files, isRunning, outcome } = usePanelDerivations({
+  const { steps, calls, outputs, context, apps, files, isRunning, outcome } = usePanelDerivations({
     sessionId, projectId, projectSessionId, isSessionBusy,
   });
 
@@ -560,6 +561,23 @@ export function SessionPanelProvider({
     });
   }, [openDetail, projectId, projectSessionId, tReminders]);
 
+  /** The session computer's live screen (`SessionDesktop`), at the wide split
+   *  a presentation gets: the stream is a 16:10 screen, not a text column. */
+  const openDesktop = useCallback(() => {
+    openDetail({
+      key: 'desktop',
+      title: tDesktop('title'),
+      hideHeader: true,
+      padded: false,
+      body: (
+        <SessionBootGate boot={<SessionBootStatus projectId={projectId} sessionId={projectSessionId} />}>
+          <SessionDesktop projectId={projectId} projectSessionId={projectSessionId} onClose={closeDetail} />
+        </SessionBootGate>
+      ),
+    });
+    setPanelSplit(70);
+  }, [openDetail, closeDetail, setPanelSplit, projectId, projectSessionId, tDesktop]);
+
   /**
    * The opt-in File Explorer (Marko's ask). Never a default view and never a
    * tab — it opens only when asked for, exactly like Terminal and Audit, so
@@ -625,8 +643,8 @@ export function SessionPanelProvider({
   );
 
   const { outputsDefaultOpen, pendingQuickView } = usePanelHandoffs({
-    sessionId, projectId, projectSessionId, isRunning, outcome, apps, files, steps,
-    detail, handleOpenOutput, openDetail, openTerminal, openAudit, openReminders, openBrowser, openFiles,
+    sessionId, projectId, projectSessionId, isRunning, outcome, apps, files, steps, calls,
+    detail, handleOpenOutput, openDetail, closeDetail, openTerminal, openAudit, openReminders, openDesktop, openBrowser, openFiles,
   });
 
   // The panel comes back with the session: what it showed is remembered while
@@ -641,7 +659,6 @@ export function SessionPanelProvider({
   const sidePanelOpen = useKortixComputerStore((s) => s.isSidePanelOpen);
   const advancedPanel = useUserPreferencesStore((s) => s.preferences.panelMode === 'advanced');
   const isMobile = useIsMobile();
-  const queryClient = useQueryClient();
   // Nothing is recorded before the arrival is decided: until then the panel is
   // closed by the arrival itself, not by the person.
   const [restoreSettled, setRestoreSettled] = useState(false);
@@ -658,12 +675,11 @@ export function SessionPanelProvider({
     let alive = true;
     // A FRESH row, never the cached one: it can be 30 s old, and reopening a
     // Terminal on a session stopped since then wakes its computer (measured).
-    void queryClient
-      .fetchQuery({
-        queryKey: qk.project.session(projectId, projectSessionId),
-        queryFn: () => getProjectSession(projectId, projectSessionId, { showErrors: false }),
-        staleTime: 0,
-      })
+    // Its own request, not the query cache's: `fetchQuery` joins the page's
+    // in-flight fetch of the same row, a refetch on arrival cancels that
+    // (`CancelledError`), and the restore was dropped on about half the
+    // returns from another session (measured).
+    void getProjectSession(projectId, projectSessionId, { showErrors: false })
       .then((row) => {
         if (!alive) return;
         const panel = panelToRestore({
@@ -687,7 +703,7 @@ export function SessionPanelProvider({
       alive = false;
       setRestoreSettled(true);
     };
-  }, [isActivePanel, memoryKey, isMobile, projectId, projectSessionId, queryClient, sessionId]);
+  }, [isActivePanel, memoryKey, isMobile, projectId, projectSessionId, sessionId]);
   // A file preview reopens once the transcript has derived its output, and only
   // if the person has not opened something else meanwhile.
   useEffect(() => {
@@ -755,6 +771,7 @@ export function SessionPanelProvider({
       openFiles,
       openAudit,
       openReminders,
+      openDesktop,
     }),
     [
       sessionId,
@@ -777,6 +794,7 @@ export function SessionPanelProvider({
       openFiles,
       openAudit,
       openReminders,
+      openDesktop,
     ],
   );
 

@@ -9,7 +9,7 @@ import { ReceiptIcon as ReceiptText } from '@phosphor-icons/react';
 import { Button } from '@kortix/ui/button';
 import { resolvePreset, type CostRange } from '@kortix/ui/date-range-picker';
 import Hint from '@kortix/ui/hint';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import { Skeleton } from '@kortix/ui/skeleton';
 import {
   Table,
@@ -126,6 +126,7 @@ export function buildProjectsLevelExportFilters(sort: ProjectCostSort): { sort: 
 
 const UNASSIGNED_LABEL = 'Unassigned';
 const UNASSIGNED_TOOLTIP_COPY = 'Spend recorded against sessions that no longer exist.';
+const MOVED_TOOLTIP_COPY = 'This project moved to another workspace. Its spend from before the move stays here.';
 
 // Rounding-noise guard: half a hundredth of a cent. Anything at or below
 // this is treated as "fully attributed" and never surfaced as a row.
@@ -137,8 +138,12 @@ export interface ProjectTableRow {
   session_count: number;
   llm_cost: number;
   compute_cost: number;
+  /** Volume storage (Files folders, session /workspace volumes). Absent from an older API. */
+  storage_cost?: number;
   total_cost: number;
   last_activity_at: string | null;
+  /** The project now lives in another workspace: its spend from before the move stays here. */
+  moved?: boolean;
 }
 
 /**
@@ -210,6 +215,7 @@ export function buildProjectTableRows(
       session_count: 0,
       llm_cost: 0,
       compute_cost: 0,
+      storage_cost: 0,
       total_cost: unassigned,
       last_activity_at: null,
     },
@@ -221,7 +227,8 @@ export function buildProjectTableRows(
 export function isProjectRowClickable(
   row: ProjectTableRow,
 ): row is ProjectTableRow & { project_id: string } {
-  return row.project_id !== null;
+  // A moved project is another workspace's now: there is nothing to open here.
+  return row.project_id !== null && !row.moved;
 }
 
 /**
@@ -299,6 +306,7 @@ export function ProjectsLevelContent({
   onNextPage,
 }: ProjectsLevelContentProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tCredits = useTranslations('settings.credits');
   const rows = page ? buildProjectTableRows(page, summary) : [];
 
   const offset = page?.offset ?? 0;
@@ -309,9 +317,9 @@ export function ProjectsLevelContent({
   let tableSlot: ReactNode;
   if (projectsError) {
     tableSlot = (
-      <InfoBanner tone="destructive" title={tI18nComplete.raw('text625e6bf05289')}>
+      <BannerAlert variant="destructive" ><BannerAlertTitle>{tI18nComplete.raw('text625e6bf05289')}</BannerAlertTitle><BannerAlertDescription>
         {projectsError.message}
-      </InfoBanner>
+      </BannerAlertDescription></BannerAlert>
     );
   } else if (isProjectsLoading || !page) {
     // `!page` — not `isProjectsLoading && !page`. Both empty states below are
@@ -358,8 +366,8 @@ export function ProjectsLevelContent({
         <TableHeader>
           <TableRow>
             {/* Only Project and Total are sortable — those are the two the
-                route can order by (see `ProjectSortColumn`). Sessions, LLM and
-                Compute stay plain `TableHead`s rather than dead controls. */}
+                route can order by (see `ProjectSortColumn`). Sessions, LLM,
+                Compute and Storage stay plain `TableHead`s rather than dead controls. */}
             <CostSortHeader
               label={tI18nComplete.raw('text985959785319')}
               direction={projectSortDirection(sort, 'name')}
@@ -368,6 +376,7 @@ export function ProjectsLevelContent({
             <TableHead className="text-right">{tI18nComplete.raw('text6fa3cbf451b2')}</TableHead>
             <TableHead className="text-right">LLM</TableHead>
             <TableHead className="text-right">{tI18nComplete.raw('textcedc516df056')}</TableHead>
+            <TableHead className="text-right">{tCredits('storage')}</TableHead>
             <CostSortHeader
               label={tI18nComplete.raw('text607d4d4de45d')}
               align="right"
@@ -406,6 +415,9 @@ export function ProjectsLevelContent({
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {formatSessionCostCredits(sumBy(rows, (row) => row.compute_cost))}
+            </TableCell>
+            <TableCell className="text-right font-mono tabular-nums">
+              {formatSessionCostCredits(sumBy(rows, (row) => row.storage_cost ?? 0))}
             </TableCell>
             <TableCell className="text-right font-mono font-medium tabular-nums">
               {formatSessionCostCredits(sumBy(rows, (row) => row.total_cost))}
@@ -475,6 +487,8 @@ function ProjectRow({
   onSelectProject: (projectId: string) => void;
 }) {
   const clickable = isProjectRowClickable(row);
+  // A moved project keeps its breakdown: the money was spent here.
+  const hasBreakdown = row.project_id !== null;
 
   // The unassigned row has no session/LLM/compute breakdown to show — the
   // API folds it into the account total without a split (see the SDK
@@ -517,13 +531,16 @@ function ProjectRow({
         </p>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
-        {clickable ? row.session_count.toLocaleString('en-US') : '—'}
+        {hasBreakdown ? row.session_count.toLocaleString('en-US') : '—'}
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
-        {clickable ? formatSessionCostCredits(row.llm_cost) : '—'}
+        {hasBreakdown ? formatSessionCostCredits(row.llm_cost) : '—'}
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
-        {clickable ? formatSessionCostCredits(row.compute_cost) : '—'}
+        {hasBreakdown ? formatSessionCostCredits(row.compute_cost) : '—'}
+      </TableCell>
+      <TableCell className="text-right font-mono tabular-nums">
+        {hasBreakdown ? formatSessionCostCredits(row.storage_cost ?? 0) : '—'}
       </TableCell>
       <TableCell className="text-right font-mono font-medium tabular-nums">
         {formatSessionCostCredits(row.total_cost)}
@@ -532,9 +549,10 @@ function ProjectRow({
   );
 
   if (!clickable) {
+    const tooltip = row.moved ? MOVED_TOOLTIP_COPY : UNASSIGNED_TOOLTIP_COPY;
     return (
-      <Hint label={UNASSIGNED_TOOLTIP_COPY} side="top">
-        <TableRow aria-label={UNASSIGNED_TOOLTIP_COPY} className="text-muted-foreground">
+      <Hint label={tooltip} side="top">
+        <TableRow aria-label={tooltip} className="text-muted-foreground">
           {cells}
         </TableRow>
       </Hint>

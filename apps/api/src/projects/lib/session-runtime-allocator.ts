@@ -33,7 +33,6 @@ export interface AllocateSessionRuntimeInput {
   extraEnvVars?: Record<string, string>;
   buildEnvVars: () => Promise<Record<string, string>>;
   resolveGitProject: () => Promise<GitBackedProject>;
-  beforeActive?: (externalId: string) => Promise<void>;
 }
 
 /**
@@ -97,7 +96,6 @@ async function allocateSessionRuntimeAsync(input: AllocateSessionRuntimeInput): 
       resolveGitProject: async () => gitProjectPromise,
       baseRef: input.baseRef,
       sandboxSlug: input.sandboxSlug,
-      beforeActive: input.beforeActive,
     });
 
     tl.mark('kicked');
@@ -125,8 +123,7 @@ async function allocateSessionRuntimeAsync(input: AllocateSessionRuntimeInput): 
     try {
       // Merge, never re-write `input.sessionMetadata`: that snapshot was
       // taken before allocation started, so writing it back drops anything
-      // committed since — the generated title, remote_branch,
-      // the start timeline. The session is terminal here, so nothing retries.
+      // committed since — the generated title, the start timeline. The session is terminal here, so nothing retries.
       await transitionSession('fail', input.sessionId, {
         error: message,
         metadata: { provisioning_error: message },

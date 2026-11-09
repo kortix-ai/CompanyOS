@@ -9,6 +9,8 @@
  * only — the web client paints eagerly off deltas).
  * Putting both on the bus would render the text twice.
  */
+import { CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent'
+import { CLAUDE_CONNECT_MESSAGE, CLAUDE_RECONNECT_MESSAGE } from './claude/sdk'
 import type { AgentEvent, AgentMessage } from '@earendil-works/pi-agent-core'
 import type { AssistantMessage as PiAssistantMessage, Usage } from '@earendil-works/pi-ai'
 import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow'
@@ -106,9 +108,13 @@ function errorStatus(text: string | null): number | undefined {
 
 /** The `error` of a terminal pi assistant message, with its `TurnErrorCode`, or undefined. */
 export function assistantMessageError(
-  message: Pick<PiAssistantMessage, 'stopReason' | 'errorMessage'>,
+  message: Pick<PiAssistantMessage, 'stopReason' | 'errorMessage'> & { provider?: string },
 ): KortixMessageError | undefined {
   const detail = typeof message.errorMessage === 'string' && message.errorMessage.trim() ? message.errorMessage.trim() : null
+  // A Claude subscription login is missing or Anthropic refused it: the person fixes it in Kortix.
+  if (message.stopReason === 'error' && message.provider === CLAUDE_AGENT_PROVIDER_ID && (detail === CLAUDE_CONNECT_MESSAGE || detail === CLAUDE_RECONNECT_MESSAGE)) {
+    return { name: 'ProviderAuthError', data: { providerID: CLAUDE_AGENT_PROVIDER_ID, message: detail }, code: 'auth' }
+  }
   if (message.stopReason === 'aborted') {
     return { name: 'MessageAbortedError', data: { message: detail ?? 'The message was aborted' }, code: 'aborted' }
   }
@@ -134,6 +140,8 @@ export function assistantMessageError(
 export class PiTurnEvents {
   private readonly now: () => number
   private currentMessageId = ''
+  /** The id the next assistant message takes, minted when its model request leaves (`reserveMessageId`). */
+  private reservedMessageId: string | null = null
   private currentParentId: string | null = null
   private currentCreatedAt = 0
   private partCount = 0
@@ -175,6 +183,15 @@ export class PiTurnEvents {
     return this.currentMessageId
   }
 
+  /**
+   * The id of the assistant message the next model request produces, known before the request
+   * leaves so the gateway can log it (`x-kortix-message-id`). The next `message_start` takes it.
+   * A request that never starts a message leaves it for the next one: one id, never two messages.
+   */
+  reserveMessageId(): string {
+    return (this.reservedMessageId ??= this.opts.mintMessageId())
+  }
+
   translate(event: AgentEvent): TurnEventEmission[] {
     const sessionID = this.opts.sessionID
     switch (event.type) {
@@ -194,7 +211,8 @@ export class PiTurnEvents {
         this.accum.clear()
         this.partStartedAt.clear()
         this.partCount = 0
-        this.currentMessageId = this.opts.mintMessageId()
+        this.currentMessageId = this.reservedMessageId ?? this.opts.mintMessageId()
+        this.reservedMessageId = null
         this.currentParentId = this.opts.parentMessageId()
         this.currentCreatedAt = this.now()
         return [{ type: 'message.updated', properties: { sessionID, info: this.assistantInfo(event.message) } }]
@@ -374,7 +392,7 @@ export class PiTurnEvents {
     ]
   }
 
-  /** `callID` is pi's tool call id, the one the model sent and the session log's `call_id` (as OpenCode's). */
+  /** `callID` is pi's tool call id, the one the model sent and the session log's `call_id`. */
   private toolPart(id: string, callID: string, tool: string, state: KortixToolState): TurnEventEmission {
     const sessionID = this.opts.sessionID
     return {

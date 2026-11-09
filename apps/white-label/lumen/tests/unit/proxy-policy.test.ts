@@ -55,17 +55,17 @@ describe('proxy policy: an Assistant file opens only inside the bearer\'s matter
 
 describe('proxy policy: browser-visible responses carry no platform plumbing', () => {
   const RT = 'p/sbx_01M5/8000';
-  test('a session record loses its sandbox URL, audit envelope, branch, provider and deprecated runtime aliases', () => {
+  test('a session record loses its sandbox URL, audit envelope, branch, provider and model bookkeeping', () => {
     const body = {
       session_id: 's1', name: 'NDA', agent_name: 'lumen-f-k17', sandbox_id: 'sbx_01M5',
       sandbox_url: 'https://example-tunnel.invalid/v1/p/sbx_01M5/8000', audit_v2: { actor_type: 'service_account' },
       repository_access: false, sandbox_provider: 'platinum', branch_name: 'session/s1', base_ref: 'main',
-      runtime_session_id: 'ses_9', opencode_session_id: 'ses_9', runtime_sessions: [], opencode_sessions: [],
-      metadata: { source: 'ui', lumen_matter_id: 'kh7', audit_v2: { actor_type: 'service_account' }, repository_access: false, opencode_model: 'kortix/deepseek-v4.1-flash', opencode_model_source: 'platform' },
+      runtime_session_id: 'ses_9', runtime_sessions: [],
+      metadata: { source: 'ui', lumen_matter_id: 'kh7', audit_v2: { actor_type: 'service_account' }, repository_access: false, model: 'kortix/deepseek-v4.1-flash', model_source: 'platform' },
     };
     for (const path of [S, `${S}/snapshot`]) {
       const out = JSON.stringify(redactIdentity(path, path === S ? body : { session: body }));
-      for (const leak of ['sandbox_url', 'example-tunnel', 'audit_v2', 'service_account', 'repository_access', 'platinum', 'branch_name', 'opencode_session', 'opencode_sessions']) {
+      for (const leak of ['sandbox_url', 'example-tunnel', 'audit_v2', 'service_account', 'repository_access', 'platinum', 'branch_name', 'opencode_session']) {
         expect(out).not.toContain(leak);
       }
       expect(out).toContain('"runtime_session_id":"ses_9"');
@@ -79,7 +79,7 @@ describe('proxy policy: browser-visible responses carry no platform plumbing', (
     const health = {
       status: 'ok', runtimeReady: true, version: '0.9.1', capabilities: ['session.rewind'],
       agent_path: '/usr/local/bin/kortix-agent', harness: { id: 'opencode', version: '1.18.15', state: 'ok', ready: true, error: null, session: { id: 'ses_9', required: true }, turn: null, details: { models: ['kortix/deepseek-v4.1-flash'], boot: 'opencode-spawned' } },
-      opencode_version: '1.18.15', boot_labels: ['opencode-spawned'],
+      harness_version: '1.18.15', boot_labels: ['opencode-spawned'],
     };
     expect(redactsIdentity(`${RT}/kortix/health`)).toBe(true);
     const out = redactIdentity(`${RT}/kortix/health`, health) as Record<string, unknown>;
@@ -93,9 +93,19 @@ describe('proxy policy: browser-visible responses carry no platform plumbing', (
   test('a transcript names an inbox file by its name only', () => {
     expect(redactsIdentity(`${S}/transcript`)).toBe(true);
     const out = redactIdentity(`${S}/transcript`, {
-      runtime_session_id: 'ses_9', opencode_session_id: 'ses_9', messages: [{ text: 'See /workspace/uploads/.kortix-inbox/a1b2/one-way-nda.pdf now' }],
+      runtime_session_id: 'ses_9', messages: [{ text: 'See /workspace/uploads/.kortix-inbox/a1b2/one-way-nda.pdf now' }],
     });
     expect(JSON.stringify(out)).toBe('{"runtime_session_id":"ses_9","messages":[{"text":"See one-way-nda.pdf now"}]}');
+  });
+
+  test('a session log page, from the API and from the box, names an inbox file by its name only', () => {
+    const page = { thread_id: 'ses_9', messages: [{ blocks: [{ type: 'text', text: 'See /workspace/uploads/.kortix-inbox/a1b2/one-way-nda.pdf now' }] }], has_more: false };
+    for (const path of [`${S}/log`, 'p/sbx_1/8000/kortix/runtime/log']) {
+      expect(redactsIdentity(path)).toBe(true);
+      expect(JSON.stringify(redactIdentity(path, page))).toBe(
+        '{"thread_id":"ses_9","messages":[{"blocks":[{"type":"text","text":"See one-way-nda.pdf now"}]}],"has_more":false}',
+      );
+    }
   });
 });
 
@@ -148,6 +158,17 @@ describe('proxy policy: what a member token may do', () => {
     ['POST', `${RT}/session/ses_1/revert`],
     ['POST', `${RT}/question/que_1/reply`],
     ['POST', `${RT}/permission/per_1/reply`],
+    // The same reads and answers on a box with the session-log actions (runtime.actions.v1).
+    ['GET', `${RT}/kortix/runtime/pending`],
+    ['GET', `${RT}/kortix/runtime/commands`],
+    ['GET', `${RT}/kortix/runtime/workspace`],
+    // The session log, from the API and from the box (runtime.log.v1): the transcript's only source there.
+    ['GET', `${S}/log`],
+    ['GET', `${RT}/kortix/runtime/log`],
+    ['POST', `${RT}/kortix/runtime/permissions/perm_1/reply`],
+    ['POST', `${RT}/kortix/runtime/questions/que_1/reply`],
+    ['POST', `${RT}/kortix/runtime/questions/que_1/reject`],
+    ['POST', `${RT}/kortix/runtime/sessions/ses_1/abort`],
   ];
 
   test.each(OBSERVED)('%s %s passes', (method, path) => {
@@ -160,7 +181,6 @@ describe('proxy policy: what a member token may do', () => {
     ['GET', `${S}/drive-sync/d1/files/content`],
     ['GET', `${S}/drives`],
     ['GET', `${S}/audit`],
-    ['GET', `${S}/log`],
     ['GET', `${S}/log/entries`],
     ['GET', `${S}/config`],
     ['GET', `${S}/participants`],
@@ -183,6 +203,11 @@ describe('proxy policy: what a member token may do', () => {
     ['GET', `${P}/files/raw`],
     ['POST', `${RT}/kortix/runtime/sessions/ses_1/prompt`],
     ['POST', `${RT}/kortix/runtime/anything`],
+    // Session-log actions the session UI never calls here: no compaction, commands, grants or diffs.
+    ['POST', `${RT}/kortix/runtime/sessions/ses_1/compact`],
+    ['POST', `${RT}/kortix/runtime/sessions/ses_1/command`],
+    ['PUT', `${RT}/kortix/runtime/sessions/ses_1/grants`],
+    ['GET', `${RT}/kortix/runtime/workspace/diff`],
     ['POST', `${RT}/kortix/abort`],
     ['POST', `${RT}/session/ses_1/prompt_async`],
     ['POST', `${RT}/session/ses_1/message`],
@@ -237,7 +262,7 @@ describe('proxy policy: what a member token may do', () => {
     expect(SESSION_ONE.test(`${S}/start`)).toBe(false);
   });
 
-  test('warm sessions are refused: they skip the Lumen tags and are shared by every member', () => {
+  test('the retired warm-session routes are refused: a literal segment is not a session id', () => {
     expect(blockedReason('POST', `${P}/sessions/warm`)).not.toBeNull();
     expect(blockedReason('POST', `${P}/sessions/warm/claim`)).not.toBeNull();
     expect(blockedReason('GET', `${P}/sessions/warm`)).not.toBeNull();
@@ -476,10 +501,23 @@ describe("proxy responses: the operator's Kortix identity never reaches a member
 
   test("records drop the operator's Kortix user and account ids and the managed repository", () => {
     const ids = { account_id: 'acc_op', created_by: 'u_op', owner_id: 'u_op' };
-    const session = { session_id: 's1', ...ids, owner_email: OPERATOR, opencode_model: 'kortix/x' };
+    const session = { session_id: 's1', ...ids, owner_email: OPERATOR, model: 'kortix/x' };
     const cases: Array<[string, unknown]> = [
       [P, { project_id: 'p1', name: 'Firm', ...ids, repo_url: 'https://github.com/managed-x/p1', manifest_path: 'kortix.yaml', description: 'A Kortix project.' }],
-      [`${P}/detail`, { manifest_raw: 'kortix_version: 2', experimental_features: [{ key: 'genui', enabled: true, description: 'KORTIX_GENUI=1 in kortixd' }] }],
+      [
+        `${P}/detail`,
+        {
+          manifest_raw: 'default_agent: worker',
+          manifest_health: {
+            path: 'kortix.yaml',
+            state: 'issues',
+            errors: 1,
+            warnings: 0,
+            issues: [{ path: 'agents.worker.promt', message: 'unknown agent key "promt". Did you mean "prompt"?', severity: 'error', line: 3, column: 5 }],
+          },
+          experimental_features: [{ key: 'voice_call', enabled: true, description: 'KORTIX_FEATURE_FLAGS lists it in kortixd' }],
+        },
+      ],
       [S, session],
       [`${P}/sessions`, [session]],
       [`${S}/snapshot`, { ...ids, session }],
@@ -488,7 +526,7 @@ describe("proxy responses: the operator's Kortix identity never reaches a member
     for (const [path, body] of cases) {
       expect(redactsIdentity(path)).toBe(true);
       const out = JSON.stringify(redactIdentity(path, body));
-      expect(out).not.toMatch(/acc_op|u_op|managed-x|manifest_path|Kortix project|kortix_version|KORTIX_GENUI/);
+      expect(out).not.toMatch(/acc_op|u_op|managed-x|manifest_path|Kortix project|default_agent|kortix\.yaml|promt|KORTIX_FEATURE_FLAGS/);
     }
   });
 
@@ -527,6 +565,21 @@ describe("proxy responses: the operator's Kortix identity never reaches a member
     ]);
     expect((out as { name: string }[]).map((c) => c.name)).toEqual(['review', 'xlsx']);
     expect((out as { template?: string }[])[1].template).toBe('Use the Lumen sandbox to open the file.');
+  });
+
+  test('the session-log command list (runtime.actions.v1) is filtered the same way', () => {
+    const path = 'p/sbx_1/8000/kortix/runtime/commands';
+    expect(redactsIdentity(path)).toBe(true);
+    const out = redactIdentity(path, {
+      commands: [
+        { name: 'review', description: 'Review changes', source: 'command' },
+        { name: 'kortix-cli', description: 'Drive the platform', source: 'skill' },
+        { name: 'pdf', description: 'Read PDFs. Uses the Kortix file tools.', source: 'skill' },
+        { name: 'notes', description: 'Notes for the Kortix team', source: 'template' },
+        { name: 'xlsx', description: null, source: 'skill' },
+      ],
+    }) as { commands: { name: string }[] };
+    expect(out.commands.map((c) => c.name)).toEqual(['review', 'xlsx']);
   });
 
   test('the open-session snapshot filters its command list the same way', () => {
@@ -607,9 +660,9 @@ describe('proxy policy: the shared project detail lists only the caller firm age
   const detail = {
     project: { project_id: 'p1', name: 'lumen', account_id: 'acc_operator', repo_url: 'https://git.example/x' },
     config: {
-      default_agent: 'lumen-none', open_code_default_agent: 'lumen-none',
+      default_agent: 'lumen-none',
       agents: [{ name: 'lumen-f-firma' }, { name: 'lumen-f-firmb', description: 'firm b prompt' }, { name: 'lumen-none' }, { name: 'kortix' }],
-      manifest: { agents: { 'lumen-f-firmb': {} } }, manifest_raw: 'lumen-f-firmb', open_code_raw: '{}', env: { optional: ['K'] },
+      manifest: { agents: { 'lumen-f-firmb': {} } }, manifest_raw: 'lumen-f-firmb', env: { optional: ['K'] },
       skills: [{ name: 'agent-browser' }], commands: [],
     },
     files: [{ path: 'kortix.yaml' }], file_count: 174,
@@ -619,7 +672,6 @@ describe('proxy policy: the shared project detail lists only the caller firm age
     const out = redactIdentity(`${P}/detail`, detail, 'lumen-f-firma') as typeof detail;
     expect(out.config.agents).toEqual([{ name: 'lumen-f-firma' }]);
     expect(out.config.default_agent).toBe('lumen-f-firma');
-    expect(out.config.open_code_default_agent).toBe('lumen-f-firma');
     expect([out.files, out.file_count]).toEqual([[], 0]);
     expect(JSON.stringify(out)).not.toMatch(/firmb|acc_operator|git\.example/);
     expect(redactsIdentity(`${P}/detail`)).toBe(true);

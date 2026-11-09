@@ -14,7 +14,7 @@
  * selectors and the connector hook are stubbed — those are collaborators, not
  * the subject. The transport is the real SDK: `updateProjectTrigger` runs
  * against a `configureKortix` fetch override, so every payload below is the
- * body that would hit `PATCH /projects/:id/triggers/:slug`.
+ * body that would hit `PATCH /workspaces/:id/triggers/:slug`.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -216,7 +216,7 @@ function patches() {
 function expectPatch(body: unknown) {
   expect(patches()).toEqual([
     {
-      url: 'http://api.test/v1/projects/proj-1/triggers/triage',
+      url: 'http://api.test/v1/workspaces/proj-1/triggers/triage',
       method: 'PATCH',
       body,
     },
@@ -779,5 +779,39 @@ describe('header controls follow one leaf each', () => {
     expect(sheet.buttonsWithin('Pause')).toHaveLength(0);
     expect(sheet.renderer.root.findAll((n) => n.type === 'input' && n.props?.id === 'trigger-name')).toHaveLength(0);
     expect(JSON.stringify(sheet.renderer.toJSON())).toContain('Triage the inbox');
+  });
+});
+
+describe('an App event trigger', () => {
+  const appTrigger: TriggerOverrides = {
+    type: 'app',
+    cron: null,
+    app: 'outreach',
+    filter: { 'event.name': 'reply.received', 'event.data.lead': 'x' },
+  };
+
+  test('opens on its App and its event name; the event name is not a condition row', async () => {
+    const sheet = mountSheet(appTrigger);
+    expect(sheet.inputById('trigger-app-event').props.value).toBe('reply.received');
+    expect(JSON.stringify(sheet.renderer.toJSON())).toContain('outreach');
+    await sheet.openOptions();
+    const editor = at(sheet.renderer.root.findAll((n) => typeof n.type !== 'string' && Array.isArray(n.props?.rows)));
+    expect(editor.props.rows).toEqual([{ path: 'event.data.lead', operator: 'equals', value: 'x' }]);
+  });
+
+  test('a new event name saves as the event.name condition, beside the other conditions', async () => {
+    const sheet = mountSheet(appTrigger);
+    await type(sheet.inputById('trigger-app-event'), 'reply.bounced');
+    await sheet.save();
+    await sheet.flush();
+    expectPatch({ filter: { 'event.data.lead': 'x', 'event.name': 'reply.bounced' } });
+  });
+
+  test('an emptied event name saves as any event: no event.name', async () => {
+    const sheet = mountSheet(appTrigger);
+    await type(sheet.inputById('trigger-app-event'), '');
+    await sheet.save();
+    await sheet.flush();
+    expectPatch({ filter: { 'event.data.lead': 'x' } });
   });
 });

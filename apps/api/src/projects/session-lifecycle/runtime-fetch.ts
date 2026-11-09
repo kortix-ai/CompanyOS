@@ -6,7 +6,7 @@
  * fail-open default and the warning that explains it stay at the call site.
  */
 
-import { RUNTIME_RETRACT_CAPABILITY, RUNTIME_TURNS_CAPABILITY } from '@kortix/api-contract/runtime-relay';
+import { RUNTIME_LOG_CAPABILITY } from '@kortix/api-contract/runtime-relay';
 import { sandboxRuntimeRequestHeaders } from '../sandbox-fetch';
 
 /** The directory every runtime read and write is forwarded under. */
@@ -15,15 +15,14 @@ export const WORKSPACE = '/workspace';
 /** A session whose signed runtime endpoint is resolved. */
 export interface ResolvedSessionRuntime {
   endpoint: { url: string; headers: Record<string, string> };
-  opencodeSessionId: string;
-  /** The sandbox, for `runtimeServesTurnVerbs`. */
+  runtimeSessionId: string;
   externalId?: string;
 }
 
 /**
  * Send one signed request to a resolved session runtime. `path` is the part
- * after the endpoint URL and already carries `?directory=…`. A non-2xx stays a
- * `Response` for the caller to map.
+ * after the endpoint URL, query included. A non-2xx stays a `Response` for the
+ * caller to map.
  */
 export function sessionRuntimeFetch(
   endpoint: { url: string; headers: Record<string, string> },
@@ -44,10 +43,6 @@ const segment = encodeURIComponent;
 
 /** The Kortix turn routes (`routes/kortix/runtime.ts` in kortixd). */
 export const runtimeVerbPaths = {
-  messages: (sessionId: string, opts: { limit: number; before?: string | null }) =>
-    `/kortix/runtime/messages/${segment(sessionId)}?limit=${opts.limit}${opts.before ? `&before=${segment(opts.before)}` : ''}`,
-  message: (sessionId: string, messageId: string) =>
-    `/kortix/runtime/messages/${segment(sessionId)}/${segment(messageId)}`,
   /** Take back a user message no model call has read (`runtime.retract.v1`). */
   retract: (sessionId: string, messageId: string) =>
     `/kortix/runtime/messages/${segment(sessionId)}/${segment(messageId)}/retract`,
@@ -56,13 +51,26 @@ export const runtimeVerbPaths = {
   prompt: (sessionId: string) => `/kortix/runtime/sessions/${segment(sessionId)}/prompt`,
   /** Hand a message to the RUNNING turn (`session.steer`). Not a turn start. */
   steer: (sessionId: string) => `/kortix/runtime/sessions/${segment(sessionId)}/steer`,
-  state: '/kortix/runtime/state',
+  /** The session-log actions (`runtime.actions.v1`). */
+  questionReply: (requestId: string) => `/kortix/runtime/questions/${segment(requestId)}/reply`,
+  questionReject: (requestId: string) => `/kortix/runtime/questions/${segment(requestId)}/reject`,
+  permissionReply: (requestId: string) => `/kortix/runtime/permissions/${segment(requestId)}/reply`,
+  /** Stop holding every call that waits on a person (session-asks.ts). A daemon built before parking answers 404. */
+  parkAsks: '/kortix/runtime/asks/park',
+  /** The box's own session log (`runtime.log.v1`): a page of the root, newest `limit` before `before_seq`. */
+  log: (opts: { limit: number; beforeSeq?: number | null }) =>
+    `/kortix/runtime/log?limit=${opts.limit}${opts.beforeSeq != null ? `&before_seq=${opts.beforeSeq}` : ''}`,
+  logMessage: (messageId: string) => `/kortix/runtime/log/messages/${segment(messageId)}`,
+  /** What each thread does and what waits on a person (`runtime.actions.v1`). */
+  pending: '/kortix/runtime/pending',
 } as const;
 
 const CAPABILITIES_TTL_MS = 5 * 60_000;
 const CAPABILITIES_MEMO_MAX = 5_000;
 // ponytail: per-process memo, cleared when full; a box whose daemon updates in
-// place is read again after the TTL.
+// place is read again after the TTL. A list without `runtime.log.v1` is never
+// kept: that daemon is below the runtime floor and is about to be replaced
+// (session-open/runtime-floor-policy.ts), so the next read must see its successor.
 const capabilitiesMemo = new Map<string, { capabilities: string[]; at: number }>();
 
 /**
@@ -90,6 +98,7 @@ export async function runtimeCapabilities(
     const capabilities = Array.isArray(body?.capabilities)
       ? body.capabilities.filter((value): value is string => typeof value === 'string')
       : [];
+    if (!capabilities.includes(RUNTIME_LOG_CAPABILITY)) return capabilities;
     if (capabilitiesMemo.size >= CAPABILITIES_MEMO_MAX) capabilitiesMemo.clear();
     capabilitiesMemo.set(externalId, { capabilities, at: now });
     return capabilities;
@@ -98,53 +107,7 @@ export async function runtimeCapabilities(
   }
 }
 
-/**
- * Does this sandbox's daemon serve the Kortix turn routes (`runtime.turns.v1`
- * in `/kortix/health` `capabilities`)? A failed read answers false: the legacy
- * spelling works on every daemon, so a miss costs only the old path.
- */
-export async function runtimeServesTurnVerbs(
-  externalId: string | undefined,
-  endpoint: () => Promise<{ url: string; headers: Record<string, string> } | null>,
-  now = Date.now(),
-): Promise<boolean> {
-  return (await runtimeCapabilities(externalId, endpoint, now))?.includes(RUNTIME_TURNS_CAPABILITY) ?? false;
-}
-
-/**
- * Does this sandbox's daemon serve the retract verb (`runtime.retract.v1`)?
- * A failed read answers false, and the caller uses the delete spelling.
- */
-export async function runtimeServesRetract(
-  externalId: string | undefined,
-  endpoint: () => Promise<{ url: string; headers: Record<string, string> } | null>,
-  now = Date.now(),
-): Promise<boolean> {
-  return (await runtimeCapabilities(externalId, endpoint, now))?.includes(RUNTIME_RETRACT_CAPABILITY) ?? false;
-}
-
-/** The header kortixd sets on every answer of a Kortix turn verb (`routes/kortix/runtime.ts`). */
-export const TURN_VERB_HEADER = 'x-kortix-turn-verb';
-
-/**
- * A Kortix-route answer from a daemon that does not have the route: a 404
- * without {@link TURN_VERB_HEADER}, from a daemon rolled back in place past
- * the memo. Forgets the sandbox's capability, so the caller resends on the
- * legacy route and the next request reads `/kortix/health` again. A 404 the
- * verb itself answered (the message is gone) carries the header and counts.
- */
-export function turnVerbMissing(externalId: string | undefined, res: Response): boolean {
-  if (res.status !== 404 || res.headers.get(TURN_VERB_HEADER)) return false;
-  if (externalId) capabilitiesMemo.delete(externalId);
-  return true;
-}
-
-/** Forget one sandbox's capabilities: its daemon refused a verb it listed. */
-export function forgetRuntimeCapabilities(externalId: string | undefined): void {
-  if (externalId) capabilitiesMemo.delete(externalId);
-}
-
 /** Test-only. */
-export function __resetRuntimeTurnVerbsMemo(): void {
+export function __resetRuntimeCapabilitiesMemo(): void {
   capabilitiesMemo.clear();
 }

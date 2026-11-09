@@ -1,9 +1,9 @@
-import type { MessageWithParts, ProjectSession } from '@kortix/sdk';
+import { type ProjectSession, type SessionLogMessage, classifySessionLogMessage } from '@kortix/sdk';
 import { loadAuth, loadAuthForHost } from '../api/auth.ts';
 import { ApiError } from '../api/client.ts';
 import { hasEnvTokenHost } from '../api/config.ts';
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
-import { extractMessageError, sendAndWaitForReply } from './sessions-chat.ts';
+import { sendAndWaitForReply } from './sessions-chat.ts';
 import type { MeResponse, ProjectSummary } from '../api/types.ts';
 import { takeFlags } from '../command-argv.ts';
 import { resolveProjectContext, shortId, takeFlagBool, takeFlagValue } from '../command-helpers.ts';
@@ -12,22 +12,21 @@ import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix doctor [options]
 
-End-to-end smoke test: confirms login → project resolves → optionally
+End-to-end smoke test: confirms login → workspace resolves → optionally
 spins up a throwaway session, sends a message, and asserts the agent
 replies. Designed so coding agents can verify Kortix end-to-end before
 they start orchestrating real work.
 
 By default, doctor attempts to delete only its diagnostic session.
-With --keep-session, it leaves that session in place. UI-prepared warm
-sessions are left unchanged and may remain billed.
+With --keep-session, it leaves that session in place.
 
 Options:
-  --no-session         Stop after auth + project checks. Don't create
+  --no-session         Stop after auth + workspace checks. Don't create
                        a sandbox. Fast and cheap.
   --keep-session       Don't delete the test session at the end.
   --prompt "<text>"    Test prompt (default: "ping").
   --timeout <seconds>  How long to wait for the reply (default: 180).
-  --project <id>       Operate on this project (default: linked).
+  --workspace <id>     Operate on this workspace (default: linked).
   --host <name>        Operate against a non-default Kortix host.
   -h, --help           Show this help.
 
@@ -40,7 +39,7 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const flags = takeFlags(argv, HELP, (rest) => ({
     noSession: takeFlagBool(rest, ['--no-session']),
     keepSession: takeFlagBool(rest, ['--keep-session']),
-    project: takeFlagValue(rest, ['--project']),
+    project: takeFlagValue(rest, ['--project', '--workspace']),
     host: takeFlagValue(rest, ['--host']),
     prompt: takeFlagValue(rest, ['--prompt']) || 'ping',
     timeoutSec: timeoutSeconds(takeFlagValue(rest, ['--timeout'])),
@@ -68,7 +67,7 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const ctx = await resolveProjectContext({ projectArg: flags.project, hostArg: flags.host });
   if (!ctx) return 1;
   try {
-    const me = await ctx.client.get<MeResponse>('/accounts/me');
+    const me = await ctx.client.get<MeResponse>('/me');
     process.stdout.write(`${status.ok(`identity verified as ${C.bold}${me.email}${C.reset}`)}\n`);
   } catch (err) {
     process.stdout.write(`${status.err(`identity probe failed: ${describe(err)}`)}\n`);
@@ -78,12 +77,12 @@ export async function runDoctor(argv: string[]): Promise<number> {
   // ── 3. Project ──────────────────────────────────────────────────────────
   let project: ProjectSummary;
   try {
-    project = await ctx.client.get<ProjectSummary>(`/projects/${ctx.projectId}`);
+    project = await ctx.client.get<ProjectSummary>(`/workspaces/${ctx.projectId}`);
     process.stdout.write(
-      `${status.ok(`project ${C.bold}${project.name}${C.reset} ${C.faded}(${project.project_id})${C.reset}`)}\n`,
+      `${status.ok(`workspace ${C.bold}${project.name}${C.reset} ${C.faded}(${project.project_id})${C.reset}`)}\n`,
     );
   } catch (err) {
-    process.stdout.write(`${status.err(`project lookup failed: ${describe(err)}`)}\n`);
+    process.stdout.write(`${status.err(`workspace lookup failed: ${describe(err)}`)}\n`);
     return 1;
   }
 
@@ -91,10 +90,6 @@ export async function runDoctor(argv: string[]): Promise<number> {
     process.stdout.write(`\n${status.ok('all checks passed (no-session)')}\n\n`);
     return 0;
   }
-
-  process.stdout.write(
-    `  ${C.dim}UI-prepared warm sessions are left unchanged and may remain billed.${C.reset}\n`,
-  );
 
   // Resolve through the server's entitlement and provider checks, not the runtime's default.
   let model: string | null;
@@ -202,12 +197,12 @@ export async function runDoctor(argv: string[]): Promise<number> {
  *  error fails it even after partial text, and names the cause the way
  *  `sessions chat` does (KRTX-2918). */
 export function doctorReplyVerdict(
-  reply: MessageWithParts,
+  reply: SessionLogMessage,
 ): { ok: true; text: string } | { ok: false; reason: string } {
-  const error = extractMessageError(reply);
-  if (error) return { ok: false, reason: `reply failed — ${error}` };
-  const text = reply.parts
-    .map((p) => (p.type === 'text' ? p.text : ''))
+  const error = classifySessionLogMessage(reply).error;
+  if (error) return { ok: false, reason: `reply failed — ${error.name}: ${error.message}` };
+  const text = reply.blocks
+    .map((block) => (block.type === 'text' ? block.text : ''))
     .join(' ')
     .trim();
   return text ? { ok: true, text } : { ok: false, reason: 'reply had no text content' };

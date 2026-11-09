@@ -1,24 +1,21 @@
 // Session events (KRTX-1742 design §3.1) with injected collaborators (DI, no
 // mock.module): which turn ends notify, who is told for each origin class and
-// kind, mutes, the access filter, the inbox row's text and dedupe key, the
-// Expo copy of the 4 session kinds, and the notification_center flag routing
-// (off: the pre-KRTX-1742 push, session-push-legacy.ts). The real queries run
-// in the DB suites (__tests__/integration-notification-recipients.test.ts,
+// kind, mutes, the access filter, the inbox row's text and dedupe key, and the
+// Expo copy of the 4 session kinds. The real queries run in the DB suites
+// (__tests__/integration-notification-recipients.test.ts,
 // __tests__/integration-session-push-recipients.test.ts).
 import { describe, expect, test } from 'bun:test';
 import type { SessionAccessRow } from './access';
 import type { PushDeviceTokenRow } from './device-tokens';
-import type { ExpoPushMessage } from './expo-push';
 import type { DeliverInput } from './notifier';
-import { buildExpoMessages, buildPushContent, opensRemindersPage } from './push-payload';
+import { buildExpoMessages, buildPushContent } from './push-payload';
 import {
   createSessionNotifier,
-  notifySessionEvent,
   sessionEventAudience,
+  chatTurnSettlement,
   turnEndPushType,
   type SessionPushEvent,
 } from './session-push';
-import type { LegacySessionPushDeps } from './session-push-legacy';
 import type { SessionWatchers } from './watchers';
 
 const PROJECT = '00000000-0000-4000-8000-000000000001';
@@ -39,6 +36,24 @@ const event = (overrides: Partial<SessionPushEvent> = {}): SessionPushEvent => (
   projectId: PROJECT,
   prompterUserId: PROMPTER,
   ...overrides,
+});
+
+describe("chatTurnSettlement — a chat's working marks settle only when the session goes idle", () => {
+  test('a finished run is done, an error failed, a user abort stopped', () => {
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'idle' })).toBe('done');
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'error', errorName: 'APIError' })).toBe('failed');
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'error', errorName: 'MessageAbortedError' })).toBe('stopped');
+  });
+  test('a promoted queued prompt keeps the session running: no settle, whatever the end', () => {
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'idle', promoted: true })).toBeNull();
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'error', errorName: 'APIError', promoted: true })).toBeNull();
+  });
+  test('a child session, a replay and a mismatch settle nothing', () => {
+    expect(chatTurnSettlement({ outcome: 'closed', status: 'idle', childSession: true })).toBeNull();
+    for (const outcome of ['already_closed', 'identity_mismatch', 'no_active_turn', 'non_terminal'] as const) {
+      expect(chatTurnSettlement({ outcome, status: 'idle' })).toBeNull();
+    }
+  });
 });
 
 describe('turnEndPushType — only a turn this call closed notifies', () => {
@@ -92,7 +107,7 @@ describe('sessionEventAudience — who is told (design §3.1)', () => {
     expect(out.recipients).toEqual([]);
   });
 
-  test('unattended turn end: the prompter only, with push (run failures are automation alerts)', () => {
+  test('unattended turn end: the prompter only, with push (run failures are trigger alerts)', () => {
     const out = sessionEventAudience(
       event({ type: 'error', originClass: 'unattended', triggerWatcherIds: [WATCHER] }),
       watchers([CREATOR]),
@@ -350,106 +365,6 @@ describe('createSessionNotifier', () => {
   });
 });
 
-// KRTX-1742 is behind the project's notification_center flag, off by default.
-// Off, notifySessionEvent sends the pre-KRTX-1742 push: the creator's phones,
-// no context lookup, no inbox row. The flag read itself runs in the DB suites.
-describe('notifySessionEvent with the notification_center flag off', () => {
-  function legacy(overrides: Partial<LegacySessionPushDeps> = {}) {
-    const loaded: Array<[string, string]> = [];
-    const listed: string[] = [];
-    const sent: ExpoPushMessage[] = [];
-    const deps: Partial<LegacySessionPushDeps> = {
-      enabled: true,
-      loadSession: async (sessionId, projectId) => {
-        loaded.push([sessionId, projectId]);
-        return { createdBy: CREATOR, title: 'Fix the build', accountId: ACCOUNT, projectId };
-      },
-      mayReceive: async () => true,
-      isPresent: async () => false,
-      store: {
-        listByUser: async (userId) => {
-          listed.push(userId);
-          return [deviceRow(userId, `ExponentPushToken[${userId === CREATOR ? 'creator' : userId}]`)];
-        },
-        deleteTokens: async (tokens) => tokens.length,
-      },
-      send: async (messages) => {
-        sent.push(...messages);
-        return { tickets: [], removedTokens: [], failedMessages: 0 };
-      },
-      ...overrides,
-    };
-    return { deps, loaded, listed, sent };
-  }
-  const unresolved = async () => {
-    throw new Error('the context must not be resolved with the flag off');
-  };
-
-  test('a turn end pushes only the creator`s phones, with the pre-KRTX-1742 payload', async () => {
-    const h = legacy();
-    const outcome = await notifySessionEvent(
-      event({ type: 'error', turnMessageId: 'msg_1', errorMessage: 'Payment Required' }),
-      { notificationCenter: false, context: unresolved, legacyDeps: h.deps },
-    );
-    expect(outcome).toMatchObject({ sent: 1, reason: 'sent' });
-    expect(h.loaded).toEqual([[SESSION, PROJECT]]);
-    expect(h.listed).toEqual([CREATOR]);
-    expect(h.sent).toEqual([
-      {
-        to: 'ExponentPushToken[creator]',
-        title: 'Fix the build',
-        body: 'The session stopped with an error.',
-        data: { type: 'error', projectId: PROJECT, sessionId: SESSION },
-        sound: 'kortix_error.wav',
-        channelId: 'session-error',
-        priority: 'high',
-      },
-    ]);
-  });
-
-  test('a question carries its text; a permission its fixed line', async () => {
-    const question = legacy();
-    await notifySessionEvent(event({ type: 'question', question: 'Which region?', requestId: 'que_1' }), {
-      notificationCenter: false,
-      legacyDeps: question.deps,
-    });
-    expect(question.sent.map((m) => [m.body, m.data])).toEqual([
-      ['Kortix has a question: Which region?', { type: 'question', projectId: PROJECT, sessionId: SESSION }],
-    ]);
-    const permission = legacy();
-    await notifySessionEvent(event({ type: 'permission', requestId: 'per_1' }), {
-      notificationCenter: false,
-      legacyDeps: permission.deps,
-    });
-    expect(permission.sent.map((m) => m.body)).toEqual(['Kortix needs your approval to continue.']);
-  });
-
-  test('any live tab of the creator holds the push back, alerting or not', async () => {
-    const h = legacy({ isPresent: async (userId) => userId === CREATOR });
-    expect(await notifySessionEvent(event(), { notificationCenter: false, legacyDeps: h.deps })).toEqual({
-      sent: 0,
-      reason: 'present',
-    });
-    expect(h.sent).toEqual([]);
-  });
-
-  test('explicit recipients replace the creator', async () => {
-    const h = legacy();
-    await notifySessionEvent(event({ recipients: [WATCHER] }), { notificationCenter: false, legacyDeps: h.deps });
-    expect(h.listed).toEqual([WATCHER]);
-  });
-
-  test('the kill switch stops everything, before any read', async () => {
-    const h = legacy({ enabled: false });
-    expect(await notifySessionEvent(event(), { notificationCenter: false, context: unresolved, legacyDeps: h.deps })).toEqual({
-      sent: 0,
-      reason: 'disabled',
-    });
-    expect(h.loaded).toEqual([]);
-    expect(h.sent).toEqual([]);
-  });
-});
-
 // The Expo copy of the 4 session kinds is unchanged by KRTX-1742: an installed
 // app keeps showing the same text and routing on the same `type`.
 describe('Expo copy of the session kinds (Spec §4)', () => {
@@ -504,22 +419,17 @@ describe('Expo copy of the session kinds (Spec §4)', () => {
   });
 });
 
-// The Triggers page lists kortix.yaml triggers only. A reminder is a runtime
-// row (`reminder.<hex>`), so its alert must open the Reminders page.
-describe('the page an automation alert opens', () => {
+// One Triggers page lists kortix.yaml and runtime triggers (2026-10-28):
+// a loop's alert and a kortix.yaml trigger's alert open the same page.
+describe('the page a trigger alert opens', () => {
   const alertUrl = (kind: 'automation_failed' | 'automation_recovered', triggerSlug: string) =>
     buildPushContent({ notificationId: 'n1', kind, title: 'Daily check', body: '', projectId: PROJECT, sessionId: null, triggerSlug }).payload.url;
 
-  test('a reminder alert opens Reminders; a kortix.yaml trigger alert opens Triggers', () => {
+  test('a loop alert and a kortix.yaml trigger alert both open Triggers', () => {
     for (const kind of ['automation_failed', 'automation_recovered'] as const) {
-      expect(alertUrl(kind, 'reminder.0a1b2c3d4e5f')).toBe(`/projects/${PROJECT}/reminders?notification=n1`);
-      expect(alertUrl(kind, 'nightly-report')).toBe(`/projects/${PROJECT}/customize/triggers?notification=n1`);
+      expect(alertUrl(kind, 'reminder.0a1b2c3d4e5f')).toBe(`/projects/${PROJECT}/admin/triggers?notification=n1`);
+      expect(alertUrl(kind, 'automation.0a1b2c3d4e5f')).toBe(`/projects/${PROJECT}/admin/triggers?notification=n1`);
+      expect(alertUrl(kind, 'nightly-report')).toBe(`/projects/${PROJECT}/admin/triggers?notification=n1`);
     }
-  });
-
-  test('opensRemindersPage reads that url back, and only that one', () => {
-    expect(opensRemindersPage(alertUrl('automation_failed', 'reminder.0a1b2c3d4e5f'))).toBe(true);
-    expect(opensRemindersPage(alertUrl('automation_failed', 'nightly-report'))).toBe(false);
-    expect(opensRemindersPage(`/projects/${PROJECT}/sessions/reminders?notification=n1`)).toBe(false);
   });
 });

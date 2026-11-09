@@ -1,8 +1,7 @@
 /**
  * The git route: scaffold + delta fetch, the API's fast-boot bundle, or a
  * clone with retries, then the shared checkout finalization (checkout.ts).
- * Also the warm-pool seeds and the post-boot history backfill, which use the
- * same scaffold and clone.
+ * Also the post-boot history backfill, which uses the same scaffold and clone.
  */
 import { createWriteStream, existsSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
@@ -13,16 +12,15 @@ import { pipeline } from 'node:stream/promises'
 import type { Config } from '@/lib/config/config'
 import { buildGitIdentityEnv, configureRepoGitIdentity, createStagePath, execGit, gitWithAuth, resolveCloneCredential } from '@/lib/git/git'
 import { logger } from '@/lib/log/logger'
-import { adoptOrClearBakedCheckout, checkoutLocalSessionBranch, establishBaseRefs, checkoutSessionBranch, clearDirContents, isShallowRepo, markSessionCheckoutAdopted, requireRepoUrl, swapStageIntoTarget } from './checkout'
+import { adoptOrClearBakedCheckout, checkoutLocalSessionBranch, establishBaseRefs, checkoutSessionBranch, isShallowRepo, markSessionCheckoutAdopted, requireRepoUrl, swapStageIntoTarget } from './checkout'
 
 /**
  * Boot-local fallback for an empty/branchless upstream (a managed repo that was
  * provisioned but never seeded). Instead of failing the whole session on
  * "Remote branch <base> not found in upstream origin", lay down a fresh local
  * repo at `base` with one empty commit, so the session branch has a base to
- * fork from and OpenCode boots normally. The agent then populates the tree, and
- * the background remote-branch publish (createRemoteSessionBranch) / first push
- * seeds the upstream for real. A cold sandbox now boots exactly like a warm/
+ * fork from and the session boots normally. The agent then populates the tree, and
+ * the session's first push seeds the upstream for real. A cold sandbox now boots exactly like a warm/
  * baked one — entirely from local git, never blocked on the remote.
  *
  * `dir` is the tmp clone target; the caller renames it into place afterwards.
@@ -256,72 +254,6 @@ export function __setScaffoldRepoPathForTests(path?: string): void {
   scaffoldRepoPath = path ?? DEFAULT_SCAFFOLD_REPO_PATH
 }
 
-/**
- * Seed-only: materialize the image-baked scaffold at `target` with ZERO network,
- * for the warm-snapshot builder. The seed has no project repo — it clones the
- * canonical scaffold so opencode can pay its per-directory project init (git
- * scan / file index / LSP / sqlite) ONCE, frozen into the snapshot. Every fresh
- * session shares the scaffold root, so a fork resumes with opencode already
- * 'ok' for /workspace (kills the runtime-ready wall). Returns true on success;
- * false (no scaffold baked) → caller leaves /workspace empty (degrades to the
- * old behaviour, never breaks). `base` is checked out as a local branch so the
- * working tree matches what a fresh session expects.
- */
-export async function materializeScaffoldSeed(target: string, base: string): Promise<boolean> {
-  if (!existsSync(scaffoldRepoPath)) return false
-  const tmp = await createStagePath(target, 'seed')
-  const t0 = Date.now()
-  try {
-    await rm(tmp, { recursive: true, force: true })
-    const cloned = await execGit(['clone', '-q', scaffoldRepoPath, tmp])
-    if (cloned.code !== 0) throw new Error(`seed scaffold clone: ${cloned.stderr}`)
-    const co = await execGit(['-C', tmp, 'checkout', '-q', '-B', base, 'HEAD'])
-    if (co.code !== 0) throw new Error(`seed checkout base: ${co.stderr}`)
-    await swapStageIntoTarget(tmp, target)
-    logger.info('[git] seed scaffold materialized (zero-network)', { ms: Date.now() - t0, base })
-    return true
-  } catch (err) {
-    logger.warn('[git] seed scaffold materialize failed; warm seed will boot repo-less', {
-      err: err instanceof Error ? err.message.slice(0, 200) : String(err),
-    })
-    await rm(tmp, { recursive: true, force: true }).catch(() => {})
-    return false
-  }
-}
-
-/**
- * Clone the PROJECT repo at base tip for a per-project warm seed (Platinum
- * stateful capture). Unlike materializeScaffoldSeed (the
- * repo-LESS generic scaffold), this clones the real project at base into
- * /workspace so the captured snapshot already has the repo — a fork then hits
- * materializeRepo's "using baked repo checkout (warm)" fast path (no in-box
- * clone). Leaves /workspace on `base` tip with NO session branch (none exists
- * during seed capture). Wipes any image-baked /workspace first so a scaffold is never mistaken
- * for the seed. Returns false (→ caller degrades to the scaffold seed) on any
- * failure, so a flaky clone never bricks the seed. Reuses materializeRepo's
- * battle-tested clone (retries, stall-abort, proxy auth) verbatim.
- */
-export async function materializeProjectSeed(cfg: Config): Promise<boolean> {
-  if (!cfg.repoUrl) return false
-  const t0 = Date.now()
-  try {
-    await clearDirContents(cfg.projectTarget)
-    // No branchName during seed capture (no session yet); baseSha=tip so a baked /workspace
-    // (if any) is treated as mismatched and re-materialized to the real repo.
-    await materializeRepo({ ...cfg, branchName: undefined, sessionFresh: true })
-    logger.info('[git] project seed materialized at base', {
-      ms: Date.now() - t0,
-      base: cfg.defaultBranch,
-    })
-    return true
-  } catch (err) {
-    logger.warn('[git] project seed materialize failed; warm seed will fall back to scaffold', {
-      err: err instanceof Error ? err.message.slice(0, 200) : String(err),
-    })
-    return false
-  }
-}
-
 // Materialize `target` from the image-baked scaffold + a delta fetch from the
 // project origin. Returns true when target is ready on `base` tip; false →
 // caller runs the normal network clone (never leaves a partial target behind).
@@ -426,6 +358,32 @@ const MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES = 64 * 1024 * 1024
 
 const REMOTE_FAST_BOOT_BUNDLE_TIMEOUT_MS = 30_000
 
+/**
+ * The delta import's fallback contract, defined once for both delta paths:
+ * `run` writes and applies the bundle at `bundlePath`; any failure logs the
+ * fetch-fallback line and answers `false` (the caller fetches the base
+ * itself); the temp file is always removed. The paths keep their own write
+ * step (base64 decode vs stream with a byte cap) and their own caps.
+ */
+async function withDeltaBundle(
+  repoPath: string,
+  name: string,
+  describe: string,
+  run: (bundlePath: string) => Promise<boolean>,
+): Promise<boolean> {
+  const bundlePath = join(repoPath, name)
+  try {
+    return await run(bundlePath)
+  } catch (error) {
+    logger.info(`[git] ${describe} unavailable; using authenticated fetch`, {
+      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    })
+    return false
+  } finally {
+    await rm(bundlePath, { force: true }).catch(() => {})
+  }
+}
+
 /** Import a bounded API-generated Git bundle only when it resolves to baseSha. */
 async function applyFastBootDeltaBundle(
   repoPath: string,
@@ -445,18 +403,10 @@ async function applyFastBootDeltaBundle(
   ) return false
   const bytes = Buffer.from(bundleBase64, 'base64')
   if (bytes.toString('base64') !== bundleBase64) return false
-  const bundlePath = join(repoPath, '.kortix-fast-boot.bundle')
-  try {
+  return withDeltaBundle(repoPath, '.kortix-fast-boot.bundle', 'API delta bundle', async (bundlePath) => {
     await writeFile(bundlePath, bytes, { mode: 0o600 })
-    return await applyFastBootDeltaBundleFile(repoPath, base, baseSha, bundlePath, parentSha, parentCommitBase64)
-  } catch (error) {
-    logger.info('[git] API delta bundle unavailable; using authenticated fetch', {
-      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
-    })
-    return false
-  } finally {
-    await rm(bundlePath, { force: true }).catch(() => {})
-  }
+    return applyFastBootDeltaBundleFile(repoPath, base, baseSha, bundlePath, parentSha, parentCommitBase64)
+  })
 }
 
 /**
@@ -489,60 +439,58 @@ async function applyRemoteFastBootDeltaBundle(
 ): Promise<boolean> {
   if (!cfg.repoUrl || !cfg.sandboxToken) return false
   if (!/^[0-9a-f]{40}$/i.test(baseSha) || !/^[0-9a-f]{40}$/i.test(parentSha)) return false
-  const bundlePath = join(repoPath, '.kortix-fast-boot-remote.bundle')
+  const { repoUrl, sandboxToken } = cfg
   const started = Date.now()
-  try {
-    const res = await fetchImpl(buildFastBootBundleUrl(cfg.repoUrl, base, baseSha, parentSha), {
-      headers: { accept: 'application/x-git-bundle', authorization: `Bearer ${cfg.sandboxToken}` },
-      signal: AbortSignal.timeout(REMOTE_FAST_BOOT_BUNDLE_TIMEOUT_MS),
-    })
-    if (!res.ok) {
-      const detail = (await res.text().catch(() => '')).trim().slice(0, 200)
-      throw new Error(`fast-boot bundle HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
-    }
-    const declared = Number(res.headers.get('content-length'))
-    if (Number.isFinite(declared) && declared > MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES) {
-      throw new Error(`fast-boot bundle exceeds ${MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES} bytes (${declared})`)
-    }
-    if (!res.body) throw new Error('fast-boot bundle response body is empty')
-    // Stream to the stage file under a hard byte cap — never buffer an
-    // upstream body in memory, never trust its length header alone. The
-    // bytes are then verified by `git bundle verify` + the baseSha check
-    // before anything is checked out.
-    let bytes = 0
-    const capped = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        bytes += chunk.length
-        if (bytes > MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES) {
-          callback(new Error(`fast-boot bundle exceeds ${MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES} bytes`))
-          return
-        }
-        callback(null, chunk)
-      },
-    })
-    await pipeline(
-      Readable.fromWeb(res.body as never),
-      capped,
-      createWriteStream(bundlePath, { mode: 0o600 }),
-    )
-    if (bytes === 0) throw new Error('fast-boot bundle response body is empty')
-    const ok = await applyFastBootDeltaBundleFile(repoPath, base, baseSha, bundlePath, parentSha, parentCommitBase64)
-    if (ok) {
-      logger.info('[git] remote fast-boot bundle applied', {
-        bytes,
-        ms: Date.now() - started,
-        cache: res.headers.get('x-kortix-artifact-cache'),
+  return withDeltaBundle(
+    repoPath,
+    '.kortix-fast-boot-remote.bundle',
+    'remote API delta bundle',
+    async (bundlePath) => {
+      const res = await fetchImpl(buildFastBootBundleUrl(repoUrl, base, baseSha, parentSha), {
+        headers: { accept: 'application/x-git-bundle', authorization: `Bearer ${sandboxToken}` },
+        signal: AbortSignal.timeout(REMOTE_FAST_BOOT_BUNDLE_TIMEOUT_MS),
       })
-    }
-    return ok
-  } catch (error) {
-    logger.info('[git] remote API delta bundle unavailable; using authenticated fetch', {
-      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
-    })
-    return false
-  } finally {
-    await rm(bundlePath, { force: true }).catch(() => {})
-  }
+      if (!res.ok) {
+        const detail = (await res.text().catch(() => '')).trim().slice(0, 200)
+        throw new Error(`fast-boot bundle HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
+      }
+      const declared = Number(res.headers.get('content-length'))
+      if (Number.isFinite(declared) && declared > MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES) {
+        throw new Error(`fast-boot bundle exceeds ${MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES} bytes (${declared})`)
+      }
+      if (!res.body) throw new Error('fast-boot bundle response body is empty')
+      // Stream to the stage file under a hard byte cap — never buffer an
+      // upstream body in memory, never trust its length header alone. The
+      // bytes are then verified by `git bundle verify` + the baseSha check
+      // before anything is checked out.
+      let bytes = 0
+      const capped = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          bytes += chunk.length
+          if (bytes > MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES) {
+            callback(new Error(`fast-boot bundle exceeds ${MAX_REMOTE_FAST_BOOT_BUNDLE_BYTES} bytes`))
+            return
+          }
+          callback(null, chunk)
+        },
+      })
+      await pipeline(
+        Readable.fromWeb(res.body as never),
+        capped,
+        createWriteStream(bundlePath, { mode: 0o600 }),
+      )
+      if (bytes === 0) throw new Error('fast-boot bundle response body is empty')
+      const ok = await applyFastBootDeltaBundleFile(repoPath, base, baseSha, bundlePath, parentSha, parentCommitBase64)
+      if (ok) {
+        logger.info('[git] remote fast-boot bundle applied', {
+          bytes,
+          ms: Date.now() - started,
+          cache: res.headers.get('x-kortix-artifact-cache'),
+        })
+      }
+      return ok
+    },
+  )
 }
 
 /**
@@ -599,11 +547,6 @@ async function applyFastBootDeltaBundleFile(
     // The scaffold clone left origin/<base> on the scaffold root.
     await establishBaseRefs(repoPath, base, baseSha)
     return true
-  } catch (error) {
-    logger.info('[git] API delta bundle unavailable; using authenticated fetch', {
-      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
-    })
-    return false
   } finally {
     await rm(parentCommitPath, { force: true }).catch(() => {})
   }

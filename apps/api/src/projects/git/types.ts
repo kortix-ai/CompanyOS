@@ -1,8 +1,10 @@
 // Shared types for the git-backed-project operations module.
 // Pure leaf module: no runtime imports, only type declarations (the
-// manifest-verdict import below is `import type`, so it erases at build).
+// manifest-health import below is `import type`, so it erases at build).
 
-import type { ProjectManifestVerdict } from '../lib/manifest-verdict';
+import type { SpaceV3 } from '@kortix/manifest-schema';
+
+import type { ManifestHealth } from '../lib/manifest-health';
 
 export interface GitBackedProject {
   projectId: string;
@@ -25,20 +27,18 @@ export interface ProjectConfigSummary {
   signals: Record<string, boolean>;
   manifest_raw: string | null;
   manifest: Record<string, unknown>;
-  /** Server-decided manifest version verdict — the only thing a client may read
-   *  to decide whether to offer an upgrade. See `../lib/manifest-verdict`. */
-  manifest_version: ProjectManifestVerdict;
+  /** Server-decided manifest health: what a client renders about kortix.yaml
+   *  (it never parses the manifest itself). See `../lib/manifest-health`. */
+  manifest_health: ManifestHealth;
   env: { required: string[]; optional: string[] };
-  /**
-   * The text of the project's `opencode.jsonc`: OpenCode's own config file.
-   * @deprecated OpenCode only. OpenCode is sunset: no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
-   */
-  open_code_raw: string | null;
   /** The project's default agent. */
   default_agent: string | null;
-  /** @deprecated The pre-W4 name of `default_agent`. Same value. */
-  open_code_default_agent: string | null;
-  agent_discovery: 'opencode' | 'declarative';
+  /** Which built-in agents the project runs (`builtin_agents` in kortix.yaml,
+   *  `true` = on, anything else off). Set by GET /detail;
+   *  `my_kortix` is the `mykortix` agent. */
+  builtin_agents?: { my_kortix: boolean };
+  /** `kortix.yaml` declares the project's agents. The only value since kortix.yaml v3. */
+  agent_discovery: 'declarative';
   agents: Array<{
     name: string;
     path: string;
@@ -49,12 +49,16 @@ export interface ProjectConfigSummary {
     /** The agent's `model:` frontmatter (`provider/model`), null when it
      *  follows the project default. */
     model?: string | null;
-    source: 'opencode' | 'kortix.yaml';
-    /** True for a platform-owned agent the API injects (the Meta coordinator),
-     *  not one declared in `kortix.yaml`. Hosts render it read-only. */
+    source: 'kortix.yaml';
+    /** True for a platform-owned agent the API injects (My Kortix), not one
+     *  declared in `kortix.yaml`. Hosts render it read-only. Its `path` is
+     *  empty: a built-in agent has no file in the project. */
     platform?: boolean;
     enabled?: boolean;
     sandbox?: string | null;
+    /** The space from `agents.<name>.space`. Grouping only; null/absent is
+     *  Project-wide. */
+    space?: string | null;
     /** Per-agent governance from the manifest's `agents` declarations (v2
      *  `agents:` map, or legacy v1 `[[agents]]`; declarative agents only).
      *  Read-only mirror of the allowlists the parser resolved — `'all'`
@@ -74,6 +78,9 @@ export interface ProjectConfigSummary {
   }>;
   skills: Array<{ name: string; path: string; description: string | null }>;
   commands: Array<{ name: string; path: string; description: string | null }>;
+  /** The spaces from the manifest's top-level `spaces:` map, sorted by
+   *  `order`, then slug. Each one is a channel with its `tabs`. */
+  spaces?: Array<SpaceV3 & { name: string }>;
 }
 
 export interface RepoGrepMatch {

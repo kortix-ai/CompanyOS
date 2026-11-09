@@ -1,9 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import {
-  IMPORTABLE_LIST_KEYS,
-  IMPORTABLE_MAP_KEYS,
-  type ManifestFormat,
   type ManifestImportReaderSync,
   type ResolvedManifest,
   parseManifestText,
@@ -37,6 +34,13 @@ function walk(root: string, dir: string, out: string[]): void {
   }
 }
 
+/** Every file under `root`, repo-relative, without `.git` and `node_modules`. */
+export function repoPaths(root: string): string[] {
+  const out: string[] = [];
+  walk(root, root, out);
+  return out.filter((path) => !SKIPPED_DIRS.has(basename(path)));
+}
+
 export function localImportReader(root: string): ManifestImportReaderSync {
   return {
     list(path) {
@@ -58,24 +62,8 @@ export function localImportReader(root: string): ManifestImportReaderSync {
  * `files`/`origins` name the file each entry is declared in. Throws the
  * parser's syntax error for the root, `ManifestImportError` for an import.
  */
-export function resolveLocalManifestImports(
-  manifestFile: string,
-  format: ManifestFormat,
-): ResolvedManifest {
+export function resolveLocalManifestImports(manifestFile: string): ResolvedManifest {
   const root = dirname(manifestFile);
-  const raw = parseManifestText(readFileSync(manifestFile, 'utf8'), format);
-  const rootSource = { path: toRepoPath(root, manifestFile), raw };
-  // Imports are a kortix.yaml feature, exactly as in the API: a TOML (v1)
-  // manifest is read as the single file it is.
-  if (format !== 'yaml') {
-    return {
-      raw,
-      files: [rootSource],
-      // One origin map per importable key, exactly the keys the resolver uses.
-      origins: Object.fromEntries(
-        [...IMPORTABLE_LIST_KEYS, ...IMPORTABLE_MAP_KEYS].map((key) => [key, {}]),
-      ) as ResolvedManifest['origins'],
-    };
-  }
-  return resolveManifestImportsSync(rootSource, localImportReader(root));
+  const raw = parseManifestText(readFileSync(manifestFile, 'utf8'));
+  return resolveManifestImportsSync({ path: toRepoPath(root, manifestFile), raw }, localImportReader(root));
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import { chatChannelBindings, chatInstalls, projects } from '@kortix/db';
+import { chatChannelBindings, chatInstalls } from '@kortix/db';
 import { db } from '../../shared/db';
 import {
   loadSlackBotIdForProject,
@@ -12,6 +12,7 @@ import {
   describeSlackConversation,
   postBlocks,
   postMessage,
+  updateBlocks,
 } from '../slack-api';
 import { backfillSlackBindingLabel } from './binding-label';
 import { slackMessageLabels } from './labels';
@@ -28,6 +29,8 @@ import {
 import { ensureSlackThreadParticipant } from './participants';
 import { currentChannelSelection } from './selection';
 import { postIdentityPrompt } from './identity';
+import { QUESTION_EARLIER, answeredQuestionBlocks, buildQuestionBlocks, earlierQuestionBlocks } from './questions';
+import type { QuestionPress } from '../core/questions';
 import { chatUser, resolveChatActor } from '../core/identity';
 import { dropChatThread, findChatThread, findChatThreadSession, followUpRoute, touchChatThread } from '../core/threads';
 import { resolveProjectAutomationActor } from '../../projects/session-lifecycle';
@@ -44,15 +47,21 @@ import {
   clearThreadErrorNotice,
   inboundMessageKey,
 } from './dedup';
-import { escapeMrkdwn, mentionsUser, sessionWebUrl, stripMentions } from './util';
+import { escapeMrkdwn, mentionsUser, respondViaUrl, sessionWebUrl, stripMentions } from './util';
 import { config } from '../../config';
 import type {
   EventClass,
+  LiveTurn,
   ProjectResolution,
+  QuestionInfo,
   SlackEnvelope,
   SlackEvent,
+  SlackQuestionPress,
   SlashResponse,
 } from './types';
+import { projectsView } from '../../workspaces/rows';
+
+type SlackTurnOpts = { ownThreadsOnly?: boolean; threadProjectResolved?: boolean; authorizedResume?: boolean; press?: SlackQuestionPress };
 
 // NOTE: deliberately does NOT call backfillSlackBindingLabel — this runs on EVERY
 // Slack event, and the name is already captured on first-bind (the auto-bind
@@ -85,11 +94,11 @@ export async function ensureProjectChannelBinding(
   // (`commands.ts`) deletes the row so the next event can re-claim it.
   await db
     .insert(chatChannelBindings)
-    .values({ platform: 'slack', workspaceId: teamId, channelId, projectId, pickerTs: null })
+    .values({ platform: 'slack', platformTeamId: teamId, channelId, projectId, pickerTs: null })
     .onConflictDoNothing({
       target: [
         chatChannelBindings.platform,
-        chatChannelBindings.workspaceId,
+        chatChannelBindings.platformTeamId,
         chatChannelBindings.channelId,
       ],
     });
@@ -100,26 +109,35 @@ export async function resolveOauthProject(
   channelId: string | undefined,
   threadTs?: string,
 ): Promise<ProjectResolution> {
+  // A deleted project resolves nothing. Its tombstone keeps the threads, and a
+  // project deleted before the delete released its channels also keeps its
+  // binding and install rows.
   // A reply in a thread bound to a session runs in that session's project,
   // before the channel decides: a web session that DMs someone, or posts in a
   // channel no project owns, must get the reply back, not a project picker.
   if (threadTs) {
     const thread = await findChatThread({ platform: 'slack', workspaceId: teamId, threadId: threadTs });
-    if (thread) return { kind: 'project', projectId: thread.projectId };
+    if (thread) {
+      const [project] = await db.select({ status: projectsView.status }).from(projectsView).where(eq(projectsView.projectId, thread.projectId));
+      return project?.status === 'archived' ? { kind: 'none' } : { kind: 'project', projectId: thread.projectId };
+    }
   }
   if (channelId) {
+    const where = and(
+      eq(chatChannelBindings.platform, 'slack'),
+      eq(chatChannelBindings.platformTeamId, teamId),
+      eq(chatChannelBindings.channelId, channelId),
+    );
     const [binding] = await db
-      .select({ projectId: chatChannelBindings.projectId })
+      .select({ projectId: chatChannelBindings.projectId, status: projectsView.status })
       .from(chatChannelBindings)
-      .where(
-        and(
-          eq(chatChannelBindings.platform, 'slack'),
-          eq(chatChannelBindings.workspaceId, teamId),
-          eq(chatChannelBindings.channelId, channelId),
-        ),
-      )
+      .leftJoin(projectsView, eq(projectsView.projectId, chatChannelBindings.projectId))
+      .where(where)
       .limit(1);
-    if (binding) {
+    if (binding?.status === 'archived') {
+      // Drop it, so the channel resolves afresh: an auto-bind or a picker.
+      await db.delete(chatChannelBindings).where(and(where, eq(chatChannelBindings.projectId, binding.projectId!)));
+    } else if (binding) {
       return binding.projectId
         ? { kind: 'project', projectId: binding.projectId }
         : { kind: 'pending' };
@@ -129,16 +147,17 @@ export async function resolveOauthProject(
   const installs = await db
     .select({ projectId: chatInstalls.projectId })
     .from(chatInstalls)
-    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.workspaceId, teamId)));
+    .innerJoin(projectsView, and(eq(projectsView.projectId, chatInstalls.projectId), eq(projectsView.status, 'active')))
+    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)));
   if (installs.length === 0) return { kind: 'none' };
   if (installs.length === 1) {
     const onlyProjectId = installs[0].projectId;
     if (channelId) {
       await db
         .insert(chatChannelBindings)
-        .values({ platform: 'slack', workspaceId: teamId, channelId, projectId: onlyProjectId })
+        .values({ platform: 'slack', platformTeamId: teamId, channelId, projectId: onlyProjectId })
         .onConflictDoNothing({
-          target: [chatChannelBindings.platform, chatChannelBindings.workspaceId, chatChannelBindings.channelId],
+          target: [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId],
         });
       await backfillSlackBindingLabel(teamId, channelId, onlyProjectId);
     }
@@ -187,9 +206,9 @@ async function postProjectPicker(opts: {
 
   const claimed = await db
     .insert(chatChannelBindings)
-    .values({ platform: 'slack', workspaceId: teamId, channelId, projectId: null })
+    .values({ platform: 'slack', platformTeamId: teamId, channelId, projectId: null })
     .onConflictDoNothing({
-      target: [chatChannelBindings.platform, chatChannelBindings.workspaceId, chatChannelBindings.channelId],
+      target: [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId],
     })
     .returning({ id: chatChannelBindings.bindingId });
   const isFreshClaim = claimed.length > 0;
@@ -203,7 +222,7 @@ async function postProjectPicker(opts: {
       .from(chatChannelBindings)
       .where(and(
         eq(chatChannelBindings.platform, 'slack'),
-        eq(chatChannelBindings.workspaceId, teamId),
+        eq(chatChannelBindings.platformTeamId, teamId),
         eq(chatChannelBindings.channelId, channelId),
       ))
       .limit(1);
@@ -214,9 +233,9 @@ async function postProjectPicker(opts: {
   }
 
   const projectRows = await db
-    .select({ projectId: projects.projectId, name: projects.name })
-    .from(projects)
-    .where(inArray(projects.projectId, projectIds));
+    .select({ projectId: projectsView.projectId, name: projectsView.name })
+    .from(projectsView)
+    .where(inArray(projectsView.projectId, projectIds));
 
   // The button carries only this id; the triggering message is parked in the DB
   // so the click replays it on any replica. No message (DM/assistant open) →
@@ -238,7 +257,7 @@ async function postProjectPicker(opts: {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*Which project should ${channelLabel} use?*\nAsked once — I'll remember it for ${isDm ? 'this DM' : 'this channel'}.`,
+        text: `*Which Kortix workspace should ${channelLabel} use?*\nAsked once — I'll remember it for ${isDm ? 'this DM' : 'this channel'}.`,
       },
     },
     {
@@ -255,7 +274,7 @@ async function postProjectPicker(opts: {
   const pickerTs = await postBlocks(
     token,
     channelId,
-    `Which project should ${channelLabel} use?`,
+    `Which Kortix workspace should ${channelLabel} use?`,
     blocks,
     threadTs,
   );
@@ -270,7 +289,7 @@ async function postProjectPicker(opts: {
       .where(
         and(
           eq(chatChannelBindings.platform, 'slack'),
-          eq(chatChannelBindings.workspaceId, teamId),
+          eq(chatChannelBindings.platformTeamId, teamId),
           eq(chatChannelBindings.channelId, channelId),
         ),
       );
@@ -300,7 +319,7 @@ export async function handleAssistantThreadStarted(
     const installs = await db
       .select({ projectId: chatInstalls.projectId })
       .from(chatInstalls)
-      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.workspaceId, teamId)));
+      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)));
     if (installs.length > 0) {
       await postProjectPicker({ teamId, projectIds: installs.map((i) => i.projectId), channelId, threadTs, isDm: true });
     }
@@ -360,7 +379,7 @@ export async function maybeHandleDmCommand(
       .from(chatChannelBindings)
       .where(and(
         eq(chatChannelBindings.platform, 'slack'),
-        eq(chatChannelBindings.workspaceId, teamId),
+        eq(chatChannelBindings.platformTeamId, teamId),
         eq(chatChannelBindings.channelId, channelId),
       ))
       .limit(1);
@@ -370,7 +389,7 @@ export async function maybeHandleDmCommand(
     const [install] = await db
       .select({ projectId: chatInstalls.projectId })
       .from(chatInstalls)
-      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.workspaceId, teamId)))
+      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)))
       .limit(1);
     tokenProjectId = install?.projectId ?? null;
   }
@@ -436,7 +455,7 @@ export async function classifyEvent(
   if (event.type === 'app_mention') {
     if (!botUserId) {
       console.warn(
-        '[slack] app_mention accepted without verifying the mentioned bot: this project has no ' +
+        '[slack] app_mention accepted without verifying the mentioned bot: this Kortix workspace has no ' +
           'recorded bot user id (run `link-bot`). In a workspace with more than one Kortix app ' +
           'installed, this is how the wrong bot answers.',
       );
@@ -444,7 +463,7 @@ export async function classifyEvent(
     }
     if (mentionsUser(event.text ?? '', botUserId)) return 'mention';
     console.warn(
-      `[slack] ignoring an app_mention that does not mention this project's bot (${botUserId}) — ` +
+      `[slack] ignoring an app_mention that does not mention this Kortix workspace's bot (${botUserId}) — ` +
         'it is addressed to another app in this workspace',
     );
     return 'ignore';
@@ -492,13 +511,13 @@ async function postChannelIntro(projectId: string, channelId: string): Promise<v
   const token = await loadSlackTokenForProject(projectId);
   if (!token) return;
   const [project] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ name: projectsView.name })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   const projectLine = project?.name
     ? `This channel is connected to *${escapeMrkdwn(project.name)}*.`
-    : 'This channel is connected to a Kortix project.';
+    : 'This channel is connected to a Kortix workspace.';
   const blocks: Array<Record<string, unknown>> = [
     {
       type: 'header',
@@ -531,7 +550,7 @@ export async function maybePostChannelIntro(teamId: string, event: SlackEvent): 
   const [install] = await db
     .select({ projectId: chatInstalls.projectId })
     .from(chatInstalls)
-    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.workspaceId, teamId)))
+    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)))
     .limit(1);
   if (!install) return;
   const botUserId = await loadSlackBotUserIdForProject(install.projectId);
@@ -613,13 +632,15 @@ export async function dispatchSlackEvent(
   // Exactly-once gate. ONE user message can arrive as several events (Slack
   // delivers a channel @mention as both `app_mention` and `message`), be retried
   // with a fresh event_id, and fan across replicas — but every delivery shares the
-  // message's (team, channel, ts). Claim that identity atomically; if we lose, a
-  // sibling delivery already owns this message, so we must NOT run it again.
+  // message's (team, channel, ts) — per RECEIVING project, because every BYO app
+  // of the workspace receives the same message. Claim that identity atomically;
+  // if we lose, a sibling delivery of OUR project already owns this message, so
+  // we must NOT run it again.
   // This gate must sit before every visible Slack response, including auth
   // prompts and empty-mention help, so one bare @mention never posts twice.
   // (Button clicks synthesize their own turns via spawnAgentTurn directly and are
   // intentionally NOT gated here, so re-clicking an option still works.)
-  const msgKey = inboundMessageKey(teamId, event);
+  const msgKey = inboundMessageKey(projectId, teamId, event);
   if (msgKey && !(await claimInboundMessage(msgKey))) return;
 
   // A bare @mention with no text is a "what now?" prompt — post help text.
@@ -628,9 +649,9 @@ export async function dispatchSlackEvent(
   if (eventClass === 'mention' && !stripMentions(event.text ?? '') && !event.files?.length) {
     if (config.SLACK_REQUIRE_USER_IDENTITY) {
       const [project] = await db
-        .select({ accountId: projects.accountId })
-        .from(projects)
-        .where(eq(projects.projectId, projectId))
+        .select({ accountId: projectsView.accountId })
+        .from(projectsView)
+        .where(eq(projectsView.projectId, projectId))
         .limit(1);
       if (!project) return;
       const slackUserId = event.user ?? '';
@@ -667,7 +688,7 @@ export async function dispatchSlackEvent(
 }
 
 const FOREIGN_THREAD_NOTICE =
-  'This thread belongs to a different Kortix project. Mention me in a new message to start here.';
+  'This thread belongs to a different Kortix workspace. Mention me in a new message to start here.';
 
 // `ownThreadsOnly`: the per-project (BYO) webhook. Its requests may reach only
 // its own project, so a thread another project owns is refused, not joined.
@@ -677,11 +698,14 @@ const FOREIGN_THREAD_NOTICE =
 // who may TALK in a thread; it must not strand the agent after a manager who
 // is not a participant decided. The sender is still resolved as a linked
 // member below. Not carried into another project's thread on re-dispatch.
+// `press`: a click on an agent question's button. It reaches only the thread's
+// session, under its own key; it never starts or revives a session, and an
+// unlinked sender's click is not kept for after login (they click again).
 export async function spawnAgentTurn(
   projectId: string,
   envelope: SlackEnvelope,
   event: SlackEvent,
-  opts: { ownThreadsOnly?: boolean; threadProjectResolved?: boolean; authorizedResume?: boolean } = {},
+  opts: SlackTurnOpts = {},
 ): Promise<void> {
   const teamId = envelope.team_id ?? event.team ?? '';
   const threadId = event.thread_ts ?? event.ts ?? '';
@@ -693,9 +717,9 @@ export async function spawnAgentTurn(
   //    to the owner (the impersonation this fixes).
   //  • OFF — legacy behavior: run as the account owner stand-in.
   const [project] = await db
-    .select({ accountId: projects.accountId, metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ accountId: projectsView.accountId, metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!project) return;
 
@@ -718,8 +742,7 @@ export async function spawnAgentTurn(
         threadTs: event.thread_ts,
         slackUserId,
         reason: actor.reason,
-        envelope,
-        event,
+        ...(opts.press ? {} : { envelope, event }),
       });
       return;
     }
@@ -740,8 +763,8 @@ async function routeSlackThread(
   projectId: string,
   envelope: SlackEnvelope,
   event: SlackEvent,
-  opts: { ownThreadsOnly?: boolean; threadProjectResolved?: boolean; authorizedResume?: boolean },
-  project: { accountId: string; metadata: typeof projects.$inferSelect.metadata },
+  opts: SlackTurnOpts,
+  project: { accountId: string; metadata: typeof projectsView.$inferSelect.metadata },
   actorUserId: string,
   teamId: string,
   threadId: string,
@@ -763,18 +786,30 @@ async function routeSlackThread(
     }
     if (route.kind === 'thread_project') {
       if (opts.threadProjectResolved) return;
-      await spawnAgentTurn(route.projectId, envelope, event, { threadProjectResolved: true });
+      await spawnAgentTurn(route.projectId, envelope, event, { threadProjectResolved: true, press: opts.press });
       return;
     }
     if (existing) {
       if (!(await mayJoinSlackThread(projectId, event, opts, actorUserId, teamId, threadId, existing))) return;
-      const delivery = await deliverToExistingThread(projectId, envelope, event, project, actorUserId, teamId, threadId, thread, existing);
+      const { press } = opts;
+      const deliver = (e: SlackEvent, opened?: LiveTurn | null) =>
+        deliverToExistingThread(projectId, envelope, e, project, actorUserId, teamId, threadId, thread, existing, press?.key, opened);
+      if (press?.button) {
+        await answerSlackQuestion(projectId, teamId, threadId, existing.sessionId, event, press, press.button, deliver);
+        return;
+      }
+      const delivery = await deliver(event);
       if (delivery.handled) return;
       const { handle } = delivery;
+      if (press) {
+        await dropPressTurn(existing.sessionId, handle);
+        await showQuestionEarlier(projectId, event, press, []);
+        return;
+      }
 
       // outcome === 'no-session': the durable projectSessions row itself is gone
       // (deleted; the chat_threads FK cascade should already have dropped this
-      // mapping). With the 404-heal in the shared lifecycle delivery path a stale OpenCode
+      // mapping). With the 404-heal in the shared lifecycle delivery path a stale runtime
       // root no longer masquerades as 'no-session', so this is now ONLY a truly
       // deleted session. Drop the stale mapping and recreate — atomically, below,
       // so the recreate can never shadow a live session.
@@ -792,9 +827,109 @@ async function routeSlackThread(
     }
   }
 
+  if (opts.press) {
+    await showQuestionEarlier(projectId, event, opts.press, []);
+    return;
+  }
   // No live mapping for this thread → create the session, or JOIN one that a
   // concurrent handler is creating this very moment. Single atomic create path.
   await createOrJoinThreadSession({ projectId, teamId, threadId, envelope, event, revived, actorUserId });
+}
+
+/**
+ * A click on a button that names its stored question (`kq:`, core/questions.ts).
+ * The answer is the stored option, the message shows who gave it, and only the
+ * question's own session hears it: in the turn the question still blocks, else
+ * as a follow-up under the click's own key. A question of another session, or
+ * a session that is gone, answers nothing, and the message says so.
+ */
+async function answerSlackQuestion(
+  projectId: string,
+  teamId: string,
+  threadId: string,
+  sessionId: string,
+  event: SlackEvent,
+  press: SlackQuestionPress,
+  { pendingId, question, index }: NonNullable<SlackQuestionPress['button']>,
+  deliver: (event: SlackEvent, opened: LiveTurn | null) => ReturnType<typeof deliverToExistingThread>,
+): Promise<void> {
+  const { decideQuestionPress, settleQuestionAnswer } = await import('../core/questions');
+  const p: QuestionPress = {
+    target: { platform: 'slack', workspaceId: teamId, threadId, projectId },
+    ref: `${event.channel}:${event.ts}`,
+    pendingId,
+    picks: [{ question, options: [index] }],
+  };
+  const decision = await decideQuestionPress(p, async (sid) => (sid === sessionId ? threadId : null));
+  if (decision.kind === 'earlier') return showQuestionEarlier(projectId, event, press, decision.questions);
+
+  const { answer } = decision;
+  const line = `✓ *${escapeMrkdwn(answer.label)}* — <@${event.user}>`;
+  await editQuestionMessage(projectId, event, press, answer.questions, line, (blocks) => answeredQuestionBlocks(blocks, question, line));
+  // Opened before the answer goes anywhere: a question still blocking the turn
+  // resumes that turn, and its steps and reply need this turn to land in.
+  const opened = await openThreadTurn(projectId, teamId, event, sessionId);
+  const settled = await settleQuestionAnswer(
+    p,
+    answer,
+    async (a) => {
+      const delivery = await deliver({ ...event, text: a.prompt }, opened);
+      if (delivery.handled) return 'handled';
+      await dropPressTurn(sessionId, delivery.handle);
+      return 'gone';
+    },
+    // Slack does not send a click again.
+    { finalAttempt: true },
+  ).catch(async (err: unknown) => {
+    await dropPressTurn(sessionId, opened);
+    throw err;
+  });
+  if (settled === 'gone') await showQuestionEarlier(projectId, event, press, answer.questions);
+}
+
+/**
+ * Edit the clicked question message: `edit` its blocks from the click, else
+ * the ones rebuilt from the stored `questions`. A message that cannot be
+ * edited (a `qa_` button, a failed update) tells the clicker `line` instead.
+ */
+async function editQuestionMessage(
+  projectId: string,
+  event: SlackEvent,
+  press: SlackQuestionPress,
+  questions: QuestionInfo[],
+  line: string,
+  edit: (blocks: unknown[]) => unknown[] | null,
+): Promise<void> {
+  const { channel, ts } = event;
+  const blocks = press.button && (press.blocks ?? (questions.length ? buildQuestionBlocks(questions, press.button.pendingId) : null));
+  const edited = blocks ? edit(blocks) : null;
+  if (edited && channel && ts) {
+    const token = await loadSlackTokenForProject(projectId);
+    if (token && (await updateBlocks(token, channel, ts, line, edited))) return;
+  }
+  await respondViaUrl(press.responseUrl, { response_type: 'ephemeral', text: line });
+}
+
+const showQuestionEarlier = (projectId: string, event: SlackEvent, press: SlackQuestionPress, questions: QuestionInfo[]) =>
+  editQuestionMessage(projectId, event, press, questions, QUESTION_EARLIER, earlierQuestionBlocks);
+
+/** A turn on `event` for the session: ⏳ on it, steps and reply into it. Null when one is in flight: its answer covers `event` too. */
+async function openThreadTurn(projectId: string, teamId: string, event: SlackEvent, sessionId: string): Promise<LiveTurn | null> {
+  const inflight = await loadTurn(sessionId);
+  if (inflight && !inflight.finalized) return null;
+  const handle = await startTurn(projectId, teamId, event, 'On it');
+  if (handle) {
+    handle.sessionId = sessionId;
+    await saveTurn(handle);
+  }
+  return handle;
+}
+
+/** The turn a click opened when nothing reached the session: clear its ⏳ and drop it. */
+async function dropPressTurn(sessionId: string, handle: LiveTurn | null): Promise<void> {
+  if (!handle) return;
+  await finalizeTurn(handle, {});
+  await deleteTurn(sessionId);
 }
 
 async function mayJoinSlackThread(
@@ -828,23 +963,17 @@ async function deliverToExistingThread(
   projectId: string,
   envelope: SlackEnvelope,
   event: SlackEvent,
-  project: { accountId: string; metadata: typeof projects.$inferSelect.metadata },
+  project: { accountId: string; metadata: typeof projectsView.$inferSelect.metadata },
   actorUserId: string,
   teamId: string,
   threadId: string,
   thread: Parameters<typeof touchChatThread>[0],
   existing: NonNullable<Awaited<ReturnType<typeof findChatThreadSession>>>,
+  idempotencyKey = slackFollowUpKey(teamId, event),
+  // The turn the caller already opened for `event` (openThreadTurn).
+  opened?: LiveTurn | null,
 ) {
-  const inflight = await loadTurn(existing.sessionId);
-  const turnInFlight = !!inflight && !inflight.finalized;
-
-  const handle = turnInFlight
-    ? null
-    : await startTurn(projectId, teamId, event, 'On it');
-  if (handle) {
-    handle.sessionId = existing.sessionId;
-    await saveTurn(handle);
-  }
+  const handle = opened === undefined ? await openThreadTurn(projectId, teamId, event, existing.sessionId) : opened;
   const plan = await slackFollowUpModel({
     project: { projectId, accountId: project.accountId, metadata: project.metadata },
     userId: actorUserId,
@@ -858,7 +987,7 @@ async function deliverToExistingThread(
   });
   const outcome = await deliverSlackFollowUpToSession({
     sessionId: existing.sessionId,
-    idempotencyKey: slackFollowUpKey(teamId, event),
+    idempotencyKey,
     text: renderFollowUpPrompt(
       envelope,
       event,

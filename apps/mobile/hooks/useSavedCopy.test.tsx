@@ -31,7 +31,7 @@ function serve(route: (url: string) => unknown) {
     // later. A retry from an earlier test's other backend is not this test's read.
     if (!url.startsWith(BACKEND)) throw new TypeError('Network request failed');
     urls.push(url);
-    if (url.endsWith('/projects/p1/detail')) return Response.json({ project: { project_id: 'p1', experimental: { session_log: true } }, config: {} });
+    if (/\/(projects|workspaces)\/p1\/detail$/.test(url)) return Response.json({ project: { project_id: 'p1', experimental: { session_log: true } }, config: {} });
     const answer = route(url);
     return answer instanceof Response ? answer : Response.json(answer);
   }) as unknown as typeof fetch;
@@ -39,7 +39,7 @@ function serve(route: (url: string) => unknown) {
 /** Every read but the project detail. */
 const reads = () => urls.filter((url) => !url.endsWith('/detail'));
 /** No project detail is read: the `session_log` flag decides nothing. */
-const details = () => urls.filter((url) => url.endsWith('/projects/p1/detail'));
+const details = () => urls.filter((url) => /\/(projects|workspaces)\/p1\/detail$/.test(url));
 /** A server older than the session log: `GET …/log` answers 404. */
 const noLog = (route: (url: string) => unknown) => (url: string) =>
   url.includes('/log?') ? Response.json({ error: 'Not found' }, { status: 404 }) : route(url);
@@ -51,7 +51,7 @@ function copy(rootId: string, count: number, fields: Record<string, unknown> = {
     source: 'mirror',
     complete: true,
     captured_at: '2026-09-26T10:00:00Z',
-    opencode_session_id: rootId,
+    runtime_session_id: rootId,
     message_count: count,
     messages: Array.from({ length: count }, (_, i) => ({
       info: { id: `msg_${rootId}_${i + 1}`, sessionID: rootId, role: 'assistant', time: { created: i + 1, completed: i + 2 } },
@@ -104,34 +104,29 @@ afterEach(async () => {
   resetIdentityState();
 });
 
-describe('useSavedCopy on a server older than the session log (`GET …/log` answers 404): the v1 copy', () => {
-  test('the root asks the log first, then paints the server copy from one saved-history read', async () => {
+// #11034: no build reads the v1 transcript (`GET …/transcript`), whatever the log answers.
+describe('useSavedCopy when the session log answers 404: no v1 copy', () => {
+  test('the root reads only the log, paints nothing from the network, and claims nothing', async () => {
     serve(noLog(() => copy(ROOT, 2)));
     const view = await mount(target());
-    expect(view.thread?.messages.map((message) => message.message_id)).toEqual([`msg_${ROOT}_1`, `msg_${ROOT}_2`]);
-    expect(view.empty).toBe(false);
-    expect(reads()).toHaveLength(2);
-    expect(reads()[0]).toBe('http://test.local/v1/projects/p1/sessions/s1/log?limit=40');
-    expect(reads()[1]).toContain('/projects/p1/sessions/s1/transcript?shape=sync');
-    expect(reads()[1]).toContain('history=true');
+    expect(view).toEqual({ thread: undefined, empty: false });
+    expect(reads()).toEqual(['http://test.local/v1/workspaces/p1/sessions/s1/log?limit=40']);
     expect(details()).toHaveLength(0);
   });
 
-  test('a sub-agent asks the log first, then paints its own window, read by `child`, and never claims emptiness', async () => {
+  test('a sub-agent reads only the log, paints nothing, and never claims emptiness', async () => {
     serve(noLog(() => copy(CHILD, 1)));
     const view = await mount(target({ rootId: CHILD, child: true }));
-    expect(view.thread?.messages.map((message) => message.thread_id)).toEqual([CHILD]);
-    expect(view.empty).toBe(false);
-    expect(reads()).toHaveLength(2);
-    expect(reads()[0]).toBe('http://test.local/v1/projects/p1/sessions/s1/log?limit=40');
-    expect(reads()[1]).toContain(`child=${CHILD}`);
+    expect(view).toEqual({ thread: undefined, empty: false });
+    expect(reads()).toEqual(['http://test.local/v1/workspaces/p1/sessions/s1/log?limit=40']);
   });
 
-  test('a copy that proves the root empty, with no turn on record, opens on the composer', async () => {
+  test('an empty v1 copy no longer proves the root empty: no /transcript read, no composer claim', async () => {
     serve(noLog((url) => (url.includes('/turn') ? { turns: [] } : copy(ROOT, 0, { total: 0 }))));
     const view = await mount(target());
-    expect(view.empty).toBe(true);
+    expect(view.empty).toBe(false);
     expect(view.thread).toBeUndefined();
+    expect(reads().some((url) => url.includes('/transcript'))).toBe(false);
   });
 
   test('a failed read paints nothing and claims nothing', async () => {
@@ -173,7 +168,7 @@ describe('useSavedCopy reads the session log first (P8)', () => {
     const view = await mount(target({ sessionId: 's-log-root', rootId: root!.thread_id }));
     expect(view.thread?.messages.map((message) => message.message_id)).toEqual(root!.messages.map((message) => message.message_id));
     expect(view.empty).toBe(false);
-    expect(reads()).toEqual(['http://test.local/v1/projects/p1/sessions/s-log-root/log?limit=40']);
+    expect(reads()).toEqual(['http://test.local/v1/workspaces/p1/sessions/s-log-root/log?limit=40']);
     expect(details()).toHaveLength(0);
   });
 
@@ -183,8 +178,8 @@ describe('useSavedCopy reads the session log first (P8)', () => {
     expect(view.thread?.messages.map((message) => message.message_id)).toEqual(child!.messages.map((message) => message.message_id));
     expect(view.empty).toBe(false);
     expect(reads()).toEqual([
-      'http://test.local/v1/projects/p1/sessions/s-log-child/log?limit=40',
-      `http://test.local/v1/projects/p1/sessions/s-log-child/log?thread=${child!.thread_id}&limit=40`,
+      'http://test.local/v1/workspaces/p1/sessions/s-log-child/log?limit=40',
+      `http://test.local/v1/workspaces/p1/sessions/s-log-child/log?thread=${child!.thread_id}&limit=40`,
     ]);
   });
 
@@ -196,12 +191,11 @@ describe('useSavedCopy reads the session log first (P8)', () => {
     expect(reads().some((url) => url.includes('/transcript'))).toBe(false);
   });
 
-  test('no stored log (404): the v1 window paints as the fallback', async () => {
+  test('no stored log (404): nothing paints, and no v1 window is read', async () => {
     serve((url) => (url.includes('/log') ? Response.json({ error: 'No session log for this session' }, { status: 404 }) : copy(root!.thread_id, 2)));
     const view = await mount(target({ sessionId: 's-log-none', rootId: root!.thread_id }));
-    expect(view.thread?.messages).toHaveLength(2);
-    expect(reads()[0]).toBe('http://test.local/v1/projects/p1/sessions/s-log-none/log?limit=40');
-    expect(reads()[1]).toContain('/projects/p1/sessions/s-log-none/transcript?shape=sync');
+    expect(view.thread).toBeUndefined();
+    expect(reads()).toEqual(['http://test.local/v1/workspaces/p1/sessions/s-log-none/log?limit=40']);
   });
 });
 
@@ -239,7 +233,7 @@ describe('connect → thread: the window is downloaded once per open (KRTX-189)'
       if (url.includes('/snapshot')) {
         return {
           observed_at: '2026-09-26T10:00:01Z',
-          session: { session_id: sessionId, runtime_session_id: OPEN_ROOT, opencode_session_id: OPEN_ROOT },
+          session: { session_id: sessionId, runtime_session_id: OPEN_ROOT },
           turn: { known: false, reason: 'test' },
           queue: { known: false, reason: 'test' },
           transcript: url.includes('transcript=0')
@@ -294,11 +288,11 @@ describe('connect → thread: the window is downloaded once per open (KRTX-189)'
   });
 
   for (const order of ['bound with the thread', 'thread before the bind'] as const) {
-    test(`no log (404), ${order}: one window read, and the snapshot asks for the pointer only`, async () => {
+    test(`no log (404), ${order}: no window read, and the snapshot asks for the pointer only`, async () => {
       const sessionId = order === 'bound with the thread' ? '11111111-1111-4111-8111-111111111189' : '22222222-2222-4222-8222-222222222189';
       serveOpen(sessionId, { log: false });
       const connecting = await mount(target({ sessionId, rootId: OPEN_ROOT }));
-      expect(connecting.thread?.messages).toHaveLength(2);
+      expect(connecting.thread).toBeUndefined();
       await act(async () => tree.unmount());
 
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -312,11 +306,11 @@ describe('connect → thread: the window is downloaded once per open (KRTX-189)'
         await settle();
       }
 
-      expect(thread?.messages.map((message) => message.info.id)).toEqual([`msg_${OPEN_ROOT}_1`, `msg_${OPEN_ROOT}_2`]);
+      expect(thread?.messages ?? []).toEqual([]);
       // This session's reads only: a retry of an earlier test can land late.
       const windows = urls.filter((url) => url.includes(`/sessions/${sessionId}/transcript?`));
       const snapshots = urls.filter((url) => url.includes(`/sessions/${sessionId}/snapshot`));
-      expect(windows).toHaveLength(1);
+      expect(windows).toEqual([]);
       expect(snapshots.length).toBeGreaterThan(0);
       for (const url of snapshots) expect(url).toContain('transcript=0');
       client.clear();

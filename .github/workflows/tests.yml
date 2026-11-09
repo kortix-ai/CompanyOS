@@ -106,7 +106,7 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       # No node_modules cache: measured 2026-10-16 (runs
       # 38936414571 cold, 38937437360 warm), restoring the 1.33 GB node_modules
       # archive took 24-44 s plus a 4 s install, against a 41-49 s cold install.
@@ -117,6 +117,25 @@ jobs:
           pnpm install --frozen-lockfile
         env:
           npm_config_engine_strict: "false"
+      - name: Install git 2.45 or later
+        # The API image ships git 2.47. Partial project stores need
+        # GIT_NO_LAZY_FETCH (git 2.45+); on older git the API keeps whole
+        # clones, so the partial-store tests and every flow that reads a
+        # project would test the fallback, not what prod runs. ubuntu-24.04
+        # ships 2.43 (2026-11-03: 20 partial-store tests red in packages-api).
+        run: |
+          if git --version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 45)) }'; then
+            git --version
+            exit 0
+          fi
+          if ! command -v add-apt-repository >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends software-properties-common
+          fi
+          sudo add-apt-repository -y ppa:git-core/ppa
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends git
+          git --version
       - name: Install ripgrep
         # The sandbox agent's glob/grep tools (kortix-sandbox-agent-server)
         # shell out to rg. The sandbox image ships it; GitHub's runner image

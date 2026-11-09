@@ -18,11 +18,31 @@
 import { expect, test } from 'bun:test';
 import type * as C from '../../api-contract/src/index';
 import type * as SL from '../../api-contract/src/session-log';
+import type * as MA from '../../api-contract/src/multi-agent';
+import type * as TC from '../../api-contract/src/kortix-tool-card';
+import type * as RR from '../../api-contract/src/runtime-relay';
+import type { RuntimeCapability, RuntimeThreadStatus } from './index';
+import type { SessionWorkingVerdict } from './core/session/working-server';
+import type {
+  PeerMessage,
+  PeerMessageSendBody,
+  PeerMessageSendResult,
+  ReachableAgents,
+  SessionTask,
+  SessionTaskCreateBody,
+  SessionTaskUpdateBody,
+  WorkflowControlBody,
+  WorkflowRunMetadata,
+} from './core/rest/projects-client/multi-agent';
 import type { SessionLogPage } from './core/session-log/source';
 import type { KortixAccount } from './core/rest/projects-client/accounts';
 import type { ChangeRequest } from './core/rest/projects-client/change-requests';
 import type { KortixProject } from './core/rest/projects-client/projects';
-import type { SessionStartResult } from './core/rest/projects-client/session-sandbox';
+import type {
+  SessionStartImageState,
+  SessionStartImageStep,
+  SessionStartResult,
+} from './core/rest/projects-client/session-sandbox';
 import type {
   AddProjectMemoryNoteInput,
   CreateProjectMemoryPageInput,
@@ -56,7 +76,6 @@ import type {
   SessionTurnEnded,
   SessionTurnFailure,
   SessionTurnStatus,
-  WarmProjectSessionResult,
 } from './core/rest/projects-client/sessions';
 import type {
   ProjectTrigger,
@@ -87,8 +106,35 @@ export function contractDrift(): void {
   // `warm_pool*` are read by older hosts only; the API stopped sending them.
   noPhantom<NoPhantom<KortixProject, C.Project, 'warm_pool' | 'warm_pool_available'>>();
 
+  // The runtime value sets: one canonical body (`@kortix/sdk/wire-values`); the
+  // contract file re-exports it, so the SDK's types accept the wire's sets.
+  fits<RuntimeCapability>(wire<RR.RuntimeCapability>());
+  fits<RuntimeThreadStatus>(wire<RR.RuntimeThreadStatus>());
+  // The turn verdict `kortix.control.turn` carries.
+  fits<SessionWorkingVerdict>(wire<C.SessionWorking>());
+  noPhantom<NoPhantom<SessionWorkingVerdict, C.SessionWorking>>();
+
   fits<ProjectSession>(wire<C.ProjectSession>());
   noPhantom<NoPhantom<ProjectSession, C.ProjectSession>>();
+
+  fits<ReachableAgents>(wire<MA.ReachableAgents>());
+  noPhantom<NoPhantom<ReachableAgents, MA.ReachableAgents>>();
+  fits<PeerMessage>(wire<MA.PeerMessage>());
+  noPhantom<NoPhantom<PeerMessage, MA.PeerMessage>>();
+  fits<PeerMessageSendResult>(wire<MA.PeerMessageSendResult>());
+  noPhantom<NoPhantom<PeerMessageSendResult, MA.PeerMessageSendResult>>();
+  fits<MA.PeerMessageSendBody>(wire<PeerMessageSendBody>());
+  noPhantom<NoPhantom<PeerMessageSendBody, MA.PeerMessageSendBody>>();
+  fits<SessionTask>(wire<MA.SessionTask>());
+  noPhantom<NoPhantom<SessionTask, MA.SessionTask>>();
+  fits<MA.SessionTaskCreateBody>(wire<SessionTaskCreateBody>());
+  noPhantom<NoPhantom<SessionTaskCreateBody, MA.SessionTaskCreateBody>>();
+  fits<MA.SessionTaskUpdateBody>(wire<SessionTaskUpdateBody>());
+  noPhantom<NoPhantom<SessionTaskUpdateBody, MA.SessionTaskUpdateBody>>();
+  fits<MA.WorkflowControlBody>(wire<WorkflowControlBody>());
+  noPhantom<NoPhantom<WorkflowControlBody, MA.WorkflowControlBody>>();
+  fits<WorkflowRunMetadata>(wire<TC.WorkflowRunMetadata>());
+  noPhantom<NoPhantom<WorkflowRunMetadata, TC.WorkflowRunMetadata>>();
 
   fits<ProjectSpace>(wire<C.Space>());
   noPhantom<NoPhantom<ProjectSpace, C.Space>>();
@@ -129,9 +175,14 @@ export function contractDrift(): void {
 
   fits<SessionStartResult>(wire<C.SessionStartResult>());
   noPhantom<NoPhantom<SessionStartResult, C.SessionStartResult>>();
-
-  fits<WarmProjectSessionResult>(wire<C.WarmProjectSessionResult>());
-  noPhantom<NoPhantom<WarmProjectSessionResult, C.WarmProjectSessionResult>>();
+  // `boot` both ways: a key the server adds to it (`image`) must reach the SDK type.
+  fits<NonNullable<SessionStartResult['boot']>>(wire<NonNullable<C.SessionStartResult['boot']>>());
+  noPhantom<NoPhantom<NonNullable<SessionStartResult['boot']>, NonNullable<C.SessionStartResult['boot']>>>();
+  noPhantom<NoPhantom<NonNullable<C.SessionStartResult['boot']>, NonNullable<SessionStartResult['boot']>>>();
+  fits<SessionStartImageStep>(wire<C.SessionStartImageStep>());
+  noPhantom<NoPhantom<SessionStartImageStep, C.SessionStartImageStep>>();
+  fits<SessionStartImageState>(wire<C.SessionStartImageState>());
+  fits<C.SessionStartImageState>(wire<SessionStartImageState>());
 
   fits<ProjectTrigger>(wire<C.Trigger>());
   noPhantom<NoPhantom<ProjectTrigger, C.Trigger>>();

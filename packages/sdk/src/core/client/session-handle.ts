@@ -10,6 +10,7 @@ import { bindSessionFiles } from './session-files';
 import { bindSessionLifecycleResources } from './session-lifecycle-resources';
 import { bindSessionLifecycleSecurity } from './session-lifecycle-security';
 import { bindSessionPreview } from './session-preview';
+import { bindSessionMultiAgent } from './session-multi-agent';
 
 import { getClientForUrl } from '../runtime/client';
 
@@ -18,15 +19,15 @@ import type { KortixPlatformConfig } from '../http/config';
 import type { ResolvedPreviewOptions } from '../session/preview-options';
 
 import type { SessionModel } from './session-shared';
-/** Id-bound handle for a single session: lifecycle (REST) + runtime (opencode). */
+/** Id-bound handle for a single session: lifecycle (REST) + runtime. */
 export function session(
   projectId: string,
   sessionId: string,
   config: KortixPlatformConfig,
   resolvePreviewOptsForSandbox: (sandboxId: string) => ResolvedPreviewOptions,
 ) {
-  // Opinionated-action state, scoped to THIS handle. The opencode runtime is
-  // keyed by the OpenCode session id (resolved server-side at /start), NOT the
+  // Opinionated-action state, scoped to THIS handle. The runtime is
+  // keyed by the runtime session id (resolved server-side at /start), NOT the
   // Kortix `sessionId` — they differ. We resolve+cache it once (including the
   // resolved runtime URL + sandbox id), and remember a chosen model so `send`
   // carries it. Every runtime-scoped operation below reads ONLY this cached
@@ -75,6 +76,7 @@ export function session(
     ...bindSessionActionsSecurity(context),
     ...bindSessionActionsServices(context),
     files: bindSessionFiles(ensureReady),
+    ...bindSessionMultiAgent(context),
     ...bindSessionRuntime(context),
     /**
      * The raw runtime REST client of THIS session's own sandbox.

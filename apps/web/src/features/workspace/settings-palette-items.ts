@@ -48,10 +48,11 @@ export const PALETTE_ACCOUNT_SCOPED_TABS: readonly SettingsTab[] = [
   'sessions',
   'preferences',
   'connected',
-  'tokens',
+  'chrome',
   'credits',
   'plan',
   'mcp',
+  'personal-keys',
 ];
 
 /**
@@ -110,13 +111,17 @@ const TAB_KEYWORDS: Record<SettingsTab, string> = {
   // called Projects.
   workspace:
     'workspace general settings name rename title icon emoji glyph avatar picture logo archive delete danger zone repo git repository github clone branch remote',
-  profile: 'profile name email avatar personal you account display organizations',
+  profile: 'profile name email avatar personal you account display',
+  // The caller's keys bound to no workspace: the CLI login and older keys.
+  'personal-keys': 'personal keys cli login revoke my keys personal access token',
   security: 'security two-factor 2fa mfa totp authenticator factor devices sign out sessions',
   appearance:
     'appearance theme color mode dark light wallpaper shader shaders background density conversation',
   sessions: 'sessions sounds audio volume notification notifications sound effects mute alerts',
   preferences: 'preferences language locale translation shortcuts keyboard hotkeys keybindings',
   connected: 'connected accounts linked oauth google github identities social sign in providers',
+  chrome:
+    'chrome browser extension edge brave arc connect tabs web page automation control cdp',
   // The words a person types when they want to sign the CLI in. `pat` and
   // `personal access token` came off `nav:account-tokens` in
   // `lib/menu-registry.ts` and landed here, because this is the pane that
@@ -149,7 +154,6 @@ const TAB_KEYWORDS: Record<SettingsTab, string> = {
     'sandbox templates template snapshot snapshots builds recipe container machine runtime image',
   'feature-flags':
     'feature flags flag experimental beta preview labs toggles switches early access',
-  upgrades: 'upgrades upgrade migrate migration manifest runner kortix yaml version bump',
   // The two connect tabs (KRTX-1997). PR #9992 added both tabs to
   // `SettingsTab` but left this record without their keys, so the total
   // `Record<SettingsTab, string>` below no longer described every tab. The
@@ -162,7 +166,7 @@ const TAB_KEYWORDS: Record<SettingsTab, string> = {
   // Every other bag is gone with the tab it named. Thirteen project-
   // configuration tabs (General, Members, Secrets, Channels, Repositories,
   // Models, Sandbox templates, Snapshots, Marketplace, Review, Voice, Feature
-  // flags, Upgrades) moved to `/projects/<id>/config`, and eight
+  // flags, Upgrades) moved to `/workspaces/<id>/config`, and eight
   // account-scoped ones to `/accounts/[id]`. Their words moved with them, onto
   // the `proj-settings` and `account-*` rows in `lib/menu-registry.ts` — the
   // same place every other out-of-overlay destination is searched from. A tab
@@ -192,8 +196,10 @@ export interface SettingsPaletteGroup {
 export interface SettingsPaletteParams {
   /** True only where `SettingsPanel` is mounted — see `openSettingsTab` in command-palette.tsx. */
   hasProject: boolean;
+  /** The platform offers Kortix in Chrome (`useChromeOffered`); off, its Settings row is not offered. */
+  chromeOffered?: boolean;
   // `flags: RailFlags` used to sit here. Marketplace, Review and Voice were
-  // the only flag-gated rows and all three moved to `/projects/<id>/config`,
+  // the only flag-gated rows and all three moved to `/workspaces/<id>/config`,
   // whose own sub-nav composes them
   // (`capabilities/project-settings/project-settings-sections.ts`). Nothing
   // left in this rail varies by flag, so `railGroups()` takes none either.
@@ -206,6 +212,7 @@ export interface SettingsPaletteParams {
  * tab is unreachable without a project.
  */
 export function isSettingsTabOfferable(tab: SettingsTab, params: SettingsPaletteParams): boolean {
+  if (tab === 'chrome' && !params.chromeOffered) return false;
   return params.hasProject || PALETTE_ACCOUNT_SCOPED_TABS.includes(tab);
 }
 
@@ -225,12 +232,6 @@ function toPaletteItem(item: RailItem, groupLabel: string): SettingsPaletteItem 
  * Every settings tab this user can reach, grouped exactly as the rail groups
  * it. Groups that lose all their rows disappear whole, so the palette never
  * renders an empty heading.
- *
- * `UPGRADE_ITEM` used to be appended to the last group here. It left the rail
- * with the rest of project configuration, became a section of
- * `/projects/<id>/config`, and came back on 2026-09-02 when that page was
- * retired — so it is a derived row from `railGroups()` like every other tab
- * in this file, with no hand-written registry entry anywhere.
  */
 export function settingsPaletteGroups(
   params: SettingsPaletteParams,

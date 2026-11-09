@@ -7,7 +7,7 @@ import { useTranslations } from '@/i18n/use-translations';
 //
 // A role's permission set is a list of ~44 dotted leaf actions. Showing 44
 // checkboxes made "what can this role do?" unanswerable at a glance, so this
-// component shows AREAS with two checkboxes each — View and Edit — and expands
+// component shows View and Edit per area, plus Comment for Artifacts, and expands
 // a cell back to its leaf actions on save. The wire format is unchanged:
 // `createRole` / `updateRolePermissions` still receive the same leaf strings,
 // and the IAM engine is untouched. This is display-side only.
@@ -17,7 +17,7 @@ import { useTranslations } from '@/i18n/use-translations';
 // are only partially present both stay editable in the "Advanced" disclosure,
 // which auto-opens when the loaded role needs it.
 //
-// The AREAS, the View/Edit split and the IMPLICATIONS all come from the server:
+// The areas, permission levels and implications all come from the server:
 // `GET /accounts/:id/iam/permissions` returns `area`, `level` and `implies` per
 // action. The pure model that builds the table, folds the selection and applies
 // the toggles lives in `./role-capability-model` — this file is the renderer,
@@ -229,7 +229,7 @@ export function RoleCapabilityMatrix({
                   <p className="text-muted-foreground text-xs">{row.area.hint}</p>
                 ) : null}
                 {row.area.note ? (
-                  <p className="text-muted-foreground/80 text-xs">{row.area.note}</p>
+                  <p className="text-muted-foreground text-xs">{row.area.note}</p>
                 ) : null}
                 {row.partial ? (
                   <p className="text-muted-foreground text-xs">
@@ -326,7 +326,7 @@ function MatrixCell({
   if (cell.leaves.length === 0) {
     return (
       <span
-        className="text-muted-foreground/50 flex w-10 shrink-0 justify-center pt-0.5 text-sm"
+        className="text-muted-foreground flex w-10 shrink-0 justify-center pt-0.5 text-sm"
         aria-hidden
       >
         —

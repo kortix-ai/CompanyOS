@@ -92,8 +92,11 @@ describe('per-resource scoping (iam_resource_grants)', () => {
     const AGENT = 'everyone-bot';
     const dave = await seedMember('member');
     await insertIntoView(db, projectMembers, { accountId: ACCOUNT, projectId: PROJECT, userId: dave, projectRole: 'member' });
-    // An account member with no project role is not "in the project".
-    const outsider = await seedMember('member');
+    // Membership is access (design.md C3): every account member of this 1:1
+    // workspace is in it, so "everyone in the project" includes them; only a
+    // person outside the workspace stays outside.
+    const accountMember = await seedMember('member');
+    const outsider = crypto.randomUUID();
 
     // Agents are closed to the member tier until someone grants them.
     expect(await canUse(dave, AGENT)).toBe(false);
@@ -106,6 +109,7 @@ describe('per-resource scoping (iam_resource_grants)', () => {
     });
 
     expect(await canUse(dave, AGENT)).toBe(true);
+    expect(await canUse(accountMember, AGENT)).toBe(true);
     expect(await canUse(outsider, AGENT)).toBe(false);
 
     // The pickers' list form answers the same: the Slack and Teams agent lists
@@ -127,6 +131,19 @@ describe('per-resource scoping (iam_resource_grants)', () => {
       return listed();
     });
     expect(acting).toEqual([SCOPED_AGENT, OPEN_AGENT]);
+  });
+
+  test('a plain project member with no agent grant may run My Kortix, and only My Kortix', async () => {
+    const erin = await seedMember('member');
+    await insertIntoView(db, projectMembers, { accountId: ACCOUNT, projectId: PROJECT, userId: erin, projectRole: 'member' });
+    // Agents are closed to a member by default; My Kortix (and its slug before the rename) is the one open agent.
+    expect(await canUse(erin, 'mykortix')).toBe(true);
+    expect(await canUse(erin, 'meta')).toBe(true);
+    expect(await canUse(erin, OPEN_AGENT)).toBe(false);
+    expect(await filterAccessibleObjects(actorForUser(erin, ACCOUNT), PROJECT, 'agent', ['mykortix', OPEN_AGENT])).toEqual(['mykortix']);
+    expect((await authorize(actorForUser(erin, ACCOUNT), PROJECT_ACTIONS.PROJECT_AGENT_READ, onAgent('mykortix'))).allowed).toBe(true);
+    // A person outside the workspace gets nothing, My Kortix included.
+    expect(await canUse(crypto.randomUUID(), 'mykortix')).toBe(false);
   });
 
   test('account owner bypasses per-resource scoping (implicit Manager)', async () => {

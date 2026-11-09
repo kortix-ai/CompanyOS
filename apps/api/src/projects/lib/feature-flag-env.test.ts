@@ -1,43 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 
-import { FEATURE_FLAGS_ENV_NAME, GENUI_ENV_NAME, featureFlagsEnvValue, genuiEnvValue } from './feature-flag-env';
-
-const on = { experimental: { genui: true } };
-const off = { experimental: { genui: false } };
-
-describe('genuiEnvValue', () => {
-  test('flag on and kill switch open => 1', () => {
-    expect(genuiEnvValue(on, true)).toBe('1');
-  });
-  test('flag off => 0', () => {
-    expect(genuiEnvValue(off, true)).toBe('0');
-  });
-  test('no flag set => platform default (on) => 1', () => {
-    expect(genuiEnvValue({}, true)).toBe('1');
-    expect(genuiEnvValue(null, true)).toBe('1');
-  });
-  test('kill switch closed => 0 even with the flag on', () => {
-    expect(genuiEnvValue(on, false)).toBe('0');
-  });
-  test('env name is the one kortixd reads', () => {
-    expect(GENUI_ENV_NAME).toBe('KORTIX_GENUI');
-  });
-});
+import {
+  FEATURE_FLAGS_ENV_NAME,
+  featureFlagsEnvValue,
+} from './feature-flag-env';
 
 describe('featureFlagsEnvValue', () => {
   test('lists the enabled flags, sorted, comma-separated', () => {
-    const value = featureFlagsEnvValue({ experimental: { agent_rooms: true, genui: false } }, true).split(',');
-    expect(value).toContain('agent_rooms');
-    expect(value).not.toContain('genui');
+    const value = featureFlagsEnvValue({ experimental: { voice_call: true } }).split(',');
+    expect(value).toContain('voice_call');
     expect([...value].sort()).toEqual(value);
   });
   test('a flag that is off is absent', () => {
-    expect(featureFlagsEnvValue({ experimental: { agent_rooms: false } }, true).split(',')).not.toContain('agent_rooms');
+    expect(featureFlagsEnvValue({ experimental: { voice_call: false } }).split(',')).not.toContain('voice_call');
   });
-  test('genui follows the kill switch', () => {
-    expect(featureFlagsEnvValue({ experimental: { genui: true } }, false).split(',')).not.toContain('genui');
+  test('genui is always listed, also over a stored flag-era `genui: false`, so an older image keeps the skill', () => {
+    expect(featureFlagsEnvValue({ experimental: { genui: false } }).split(',')).toContain('genui');
+    expect(featureFlagsEnvValue(null).split(',')).toContain('genui');
+  });
+  test('artifacts is listed exactly where Drive flags are, over a stored flag-era `artifacts: false`; artifact_comments never', () => {
+    const value = featureFlagsEnvValue({ experimental: { artifacts: false, artifact_comments: true } }).split(',');
+    expect(value.includes('artifacts')).toBe(value.includes('drives'));
+    expect(value).not.toContain('artifact_comments');
   });
   test('env name is the one kortixd and the CLI read', () => {
     expect(FEATURE_FLAGS_ENV_NAME).toBe('KORTIX_FEATURE_FLAGS');
   });
 });
+

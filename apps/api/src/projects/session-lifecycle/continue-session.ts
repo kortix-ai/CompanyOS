@@ -4,9 +4,7 @@
  * transient failures a freshly woken runtime throws.
  */
 
-import * as lifecycleStore from './store';
-import { sessionAttachmentStore } from '../lib/session-attachments';
-import { projectSessions } from '@kortix/db';
+import { projectSessions, sessionSandboxes } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
@@ -18,29 +16,20 @@ import {
   clearSessionOnBehalfOfForPrompt,
 } from '../lib/on-behalf-of';
 import { logger } from '../../lib/logger';
-import { materializePromptAttachments } from './prompt-attachment-materializer';
 import { confirmPromptLanded, promptNeedsLandingProof } from './prompt-landing-proof';
-import { writeRuntimePromptFile } from './runtime-prompt-file';
 import { db } from '../../shared/db';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
 import { resolveProjectAutomationActor } from './actor';
+import { sessionIsTombstoned } from '../lib/session-visibility';
 import { awakeDeliveryTarget, deliverAfterWake, undoDeliveryWake, type SendOutcome } from './deliver';
+import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { sessionTransitionLeaves, transitionSession } from './status-transitions';
-import { repairLegacyInlineAttachments } from './legacy-inline-attachment-repair';
 import { promptAgent } from './agent-availability';
 import { effortVariantForPrompt } from '../lib/effort-default';
-import type {
-  ContinueSessionCommand,
-  LegacyInlineAttachmentRepairMetadata,
-  SessionDeliveryOutcome,
-} from './types';
-import {
-  PromptNeverLandedError,
-  postPrompt,
-  readLegacyRuntimeMessage,
-  updateLegacyRuntimePart,
-} from './runtime-client';
+import type { ContinueSessionCommand, SessionDeliveryOutcome } from './types';
+import { onDevTunnel, staleDevTunnelReason } from '../../platform/dev-tunnel-stamp';
+import { PromptNeverLandedError, postPrompt, readRuntimeMessage } from './runtime-client';
 
 export async function continueSession(
   command: ContinueSessionCommand,
@@ -97,13 +86,22 @@ export async function continueSession(
   // the same status a normal hibernate uses. Without this check a queued
   // follow-up (Slack reply, scheduled trigger, etc.) would revive a session
   // the user explicitly deleted.
-  const sessionMeta = (session.metadata ?? {}) as LegacyInlineAttachmentRepairMetadata;
-  if (typeof sessionMeta.deletedAt === 'string') return 'no-session';
+  const sessionMeta = (session.metadata ?? {}) as Record<string, unknown>;
+  if (sessionIsTombstoned(session)) return 'no-session';
   if (command.projectId && command.projectId !== session.projectId) {
     console.warn('[session-lifecycle] command project does not own the session; refusing delivery', {
       sessionId,
       commandProjectId: command.projectId,
     });
+    return 'no-session';
+  }
+  // A box an earlier dev stack created calls a dead quick tunnel: it would take
+  // the prompt and never answer, and no start gives it the new URL. To this
+  // stack the session is gone: a channel starts its conversation over in a new
+  // session, which answers. A stable API URL (deployed envs) never reads the box.
+  const stale = await staleDevTunnelBox(sessionId);
+  if (stale) {
+    logger.warn('[session-lifecycle] refusing delivery to a box of an earlier dev tunnel', { sessionId, reason: stale });
     return 'no-session';
   }
   const userId = command.userId ?? (await resolveProjectAutomationActor(session.accountId));
@@ -140,7 +138,6 @@ export async function continueSession(
   // Observed here so a delivery that never reaches `sendPrompt` leaves no
   // unhandled rejection; `sendPrompt` awaits the original and throws.
   turnIdentity.catch(() => undefined);
-  const pendingAttachmentNames = sessionMeta.pending_prompt?.attachment_names;
   // The project's default reasoning effort, clamped to the model this prompt
   // runs on. Injected only when the prompt carries no variant of its own (the
   // composer's "Auto", a Slack message, a trigger fire): an explicit session
@@ -149,82 +146,23 @@ export async function continueSession(
   const projectEffortVariant = effortVariantForPrompt({
     stored: session.projectDefaultEffort,
     modelOverride: command.overrides?.model ?? undefined,
-    sessionModelRef: sessionMeta.opencode_model,
+    sessionModelRef: sessionMeta.model,
   });
-  const shouldRepairLegacyInlineAttachments =
-    command.isPendingFirstPrompt !== true &&
-    Array.isArray(pendingAttachmentNames) &&
-    pendingAttachmentNames.length > 0 &&
-    typeof sessionMeta.legacy_inline_attachments_repaired_at !== 'string';
-  const legacyRepairByExternalId = new Map<string, Promise<void>>();
-  const repairLegacyBeforeDelivery = (
-    externalId: string,
-    opencodeSessionId: string,
-  ): Promise<void> => {
-    if (!shouldRepairLegacyInlineAttachments) return Promise.resolve();
-    const existing = legacyRepairByExternalId.get(externalId);
-    if (existing) return existing;
-    const repair = repairLegacyInlineAttachments({
-      sessionId,
-      externalId,
-      opencodeSessionId,
-      userId,
-      loadPendingFirst: () => lifecycleStore.loadLegacyPendingFirstPrompt(sessionId),
-      readMessage: (messageId) =>
-        readLegacyRuntimeMessage({
-          externalId,
-          opencodeSessionId,
-          sessionId,
-          userId,
-          messageId,
-        }),
-      materialize: (parts, key) =>
-        materializePromptAttachments({
-          parts,
-          externalId,
-          sessionId,
-          userId,
-          materializationKey: key,
-          writeFile: writeRuntimePromptFile,
-          readAttachment: (scope) => sessionAttachmentStore().read(scope),
-          // The runtime already holds this message's native images inline;
-          // only the legacy non-native parts need a file behind them.
-          keepNativeInline: true,
-        }),
-      updatePart: ({ messageId, partId, text: replacementText }) =>
-        updateLegacyRuntimePart({
-          externalId,
-          opencodeSessionId,
-          sessionId,
-          userId,
-          messageId,
-          partId,
-          text: replacementText,
-        }),
-      markRepaired: () => lifecycleStore.markLegacyInlineAttachmentsRepaired(sessionId),
-    }).then((result) => {
-      if (result.unsupported) {
-        logger.info('[session-lifecycle] legacy attachment repair skipped: the runtime edits no parts', {
-          session_id: sessionId,
-          external_id: externalId,
-        });
-      }
-    });
-    legacyRepairByExternalId.set(externalId, repair);
-    return repair;
-  };
+  // The agent this turn runs: the prompt body carries it to the proxy, whose
+  // pre-prompt env sync resolves that agent's grant. The delivery's env
+  // prefetch must name the SAME string, or the sync cannot take it.
+  const turnAgent = promptAgent(command.overrides?.agent, session.agentName);
   const sendPrompt = async (
     externalId: string,
-    opencodeSessionId: string,
+    runtimeSessionId: string,
     sandboxRecord?: SandboxRecord,
   ): Promise<SendOutcome> => {
-    await repairLegacyBeforeDelivery(externalId, opencodeSessionId);
     await beforeSend?.();
     await turnIdentity;
     let bodyBytes = 0;
     const delivery = await postPrompt(
       externalId,
-      opencodeSessionId,
+      runtimeSessionId,
       text,
       userId,
       sessionId,
@@ -236,11 +174,12 @@ export async function continueSession(
           ...(projectEffortVariant && !command.overrides?.variant
             ? { variant: projectEffortVariant }
             : {}),
-          agent: promptAgent(command.overrides?.agent, session.agentName),
+          agent: turnAgent,
         },
         wireMessageId: command.wireMessageId,
         materializationKey: command.materializationKey,
         noReply: command.noReply,
+        source: command.source,
         accountId: session.accountId,
         projectId: session.projectId,
         sandboxRecord,
@@ -266,14 +205,11 @@ export async function continueSession(
     if ((delivery === 'accepted' || delivery === 'deduplicated') && promptNeedsLandingProof(bodyBytes)) {
       const landing = await confirmPromptLanded({
         messageId: command.wireMessageId,
-        readMessage: (messageId) =>
-          readLegacyRuntimeMessage({
-            externalId,
-            opencodeSessionId,
-            sessionId,
-            userId,
-            messageId,
-          }),
+        readMessage: async (messageId) => {
+          const endpoint = await sandboxRuntimeEndpoint(externalId, userId);
+          if (!endpoint) throw new Error('no runtime endpoint');
+          return readRuntimeMessage({ endpoint, runtimeSessionId, externalId }, messageId);
+        },
       });
       if (landing === 'unknown') {
         logger.warn('[session-lifecycle] large prompt accepted; the landing read could not answer', {
@@ -292,12 +228,6 @@ export async function continueSession(
         });
         throw new PromptNeverLandedError(command.wireMessageId);
       }
-    }
-    if (delivery === 'accepted' && command.isPendingFirstPrompt === true) {
-      // This first message used the canonical command-id path. The marker keeps
-      // later prompts from entering repair. If this write fails, repair compares
-      // the transcript against this exact command-id XML and records the marker.
-      await lifecycleStore.markLegacyInlineAttachmentsRepaired(sessionId);
     }
     // Carry the reachability verdict through to `deliverWithRetry` rather than
     // flattening it to false — a down path must not spend the dead-letter
@@ -336,7 +266,7 @@ export async function continueSession(
         error: err instanceof Error ? err.message : String(err),
       }),
     );
-  const outcome = await deliverAfterWake({ command, session, sessionId, userId, awakeEarly, sendPrompt, beforeSend, identityBound: turnIdentity, tl })
+  const outcome = await deliverAfterWake({ command, session, sessionId, userId, turnAgent, awakeEarly, sendPrompt, beforeSend, tl })
     .catch(async (err) => {
       if (wokeFrom) await undoWake();
       throw err;
@@ -345,4 +275,15 @@ export async function continueSession(
     await undoWake();
   }
   return outcome;
+}
+
+/** Why the session's box cannot answer: an earlier dev tunnel made it. No read unless this stack runs on a quick tunnel. */
+async function staleDevTunnelBox(sessionId: string): Promise<string | null> {
+  if (!onDevTunnel()) return null;
+  const [box] = await db
+    .select({ config: sessionSandboxes.config })
+    .from(sessionSandboxes)
+    .where(eq(sessionSandboxes.sessionId, sessionId))
+    .limit(1);
+  return box ? staleDevTunnelReason(box.config) : null;
 }

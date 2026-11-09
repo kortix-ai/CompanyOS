@@ -9,15 +9,15 @@ import type { ChannelPlatform } from './core/conversation';
  * be released with a sentinel or the turn hangs until the box is parked.
  *
  * That used to happen only inside the sandbox, gated on SLACK_THREAD_TS /
- * SLACK_CHANNEL_ID in BOTH harnesses (open-code/boot.ts and pi/relay.ts). A
+ * SLACK_CHANNEL_ID in BOTH harnesses (the OpenCode adapter, since deleted, and pi/relay.ts). A
  * Teams session carries MS_TEAMS_* instead, so a Teams agent that asked a
  * question hung after its card was posted. The daemons are image-baked, so
  * fixing them reaches only new sandboxes.
  *
- * This runs in `POST /turn-question`, which both harnesses already call with
- * the runtime's own question id. It reaches every existing sandbox on the next
- * API deploy, and it is harness-agnostic: real OpenCode and the pi harness both
- * serve `POST /question/:id/reply` with the same contract.
+ * This runs in `POST /turn-question`, which kortixd calls with the runtime's
+ * own question id. It reaches every existing sandbox on the next API deploy,
+ * and it is harness-agnostic: pi and an old OpenCode box both serve
+ * `POST /question/:id/reply` with the same contract.
  *
  * It also fixes Slack. The old daemon's Slack sentinel ended with "Next time,
  * just ask with `slack send` rather than the question tool" — the opposite of
@@ -38,7 +38,7 @@ export type ChatChannel = ChannelPlatform;
 export function channelOfSessionMetadata(metadata: unknown): ChatChannel | null {
   const m =
     metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>) : {};
-  for (const channel of ['teams', 'slack', 'telegram', 'email'] as const) {
+  for (const channel of ['teams', 'slack', 'telegram', 'discord', 'email'] as const) {
     if (m.source === channel || (m[channel] !== null && typeof m[channel] === 'object')) return channel;
   }
   return null;
@@ -54,6 +54,7 @@ const QUESTION_COPY: Record<ChatChannel, { where: string; send: string }> = {
   teams: { where: 'the Teams conversation', send: '`teams send`' },
   telegram: { where: 'the Telegram chat', send: '`kortix connectors call kortix_telegram.send_message`' },
   email: { where: 'the email thread', send: '`kortix connectors call email.reply_message`' },
+  discord: { where: 'the Discord conversation', send: '`kortix connectors call kortix_discord.send_message`' },
 };
 
 /**

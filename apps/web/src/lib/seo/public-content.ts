@@ -47,38 +47,6 @@ function loadContentTimestamps(): Record<string, string> {
   return contentTimestamps!;
 }
 
-export const STATIC_PUBLIC_ROUTES = [
-  '/',
-  '/a1o',
-  '/about',
-  '/careers',
-  '/changelog',
-  '/changelog/releases',
-  '/contact',
-  '/developers',
-  '/docs',
-  '/download',
-  '/enterprise',
-  '/legal',
-  '/marketplace',
-  '/pricing',
-  '/security',
-  '/self-hosted',
-  '/services',
-  '/case-studies',
-  '/framework',
-  '/multiplayer',
-  '/sovereign',
-  '/compliance',
-  '/use-cases',
-  '/white-label',
-  '/cli',
-  '/desktop',
-  '/mobile',
-  '/slack',
-  '/teams',
-] as const;
-
 const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
@@ -114,9 +82,9 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
     slug: 'marketplace',
-    title: 'Marketplace: agents, skills and project templates',
+    title: 'Marketplace: agents, skills and workspace templates',
     description:
-      'Browse skills, agents, and commands from every source. Add them to a Kortix project in one click.',
+      'Browse skills, agents, and commands from every source. Add them to a Kortix workspace in one click.',
     htmlPath: '/marketplace',
   },
   {
@@ -124,7 +92,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:
-      'Build with Kortix from the terminal: drive projects, sessions, and agents through the CLI and SDK, wire triggers and connectors, and land every change through a reviewed change request.',
+      'Build with Kortix from the terminal: drive workspaces, sessions, and agents through the CLI and SDK, wire triggers and connectors, and land every change through a reviewed change request.',
     htmlPath: '/developers',
     markdownPath: '/markdown/developers.md',
   },
@@ -163,7 +131,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'enterprise',
     title: 'Kortix for Enterprise',
     description:
-      'One AI Operating System for the whole company: every team’s agents, skills and memory in one place you own, on Kortix Cloud, your VPC or on-prem, with any model.',
+      'One CompanyOS for every team: agents, skills and memory in one place you own, on Kortix Cloud, your VPC or on-prem, with any model.',
     htmlPath: '/enterprise',
     markdownPath: '/markdown/enterprise.md',
   },
@@ -209,7 +177,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'case-studies',
     title: 'Case studies',
     description:
-      'What runs on Kortix today: a science agent at City University of Hong Kong, an AI-run hedge fund desk, a cloud company built by agents, Kortix itself and more.',
+      'What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match invoices.',
     htmlPath: '/case-studies',
   },
   {
@@ -277,14 +245,6 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     description:
       'Start, steer and approve Kortix sessions from your phone: live streaming, dictation, attachments, tool approvals, change-request review and push notifications. On the App Store and Google Play.',
     htmlPath: '/mobile',
-  },
-  {
-    kind: 'marketing',
-    slug: 'cli',
-    title: 'Kortix CLI: your company from the terminal',
-    description:
-      'One kortix binary for people and agents: init, ship and chat with projects, script access and audit, and self-host the whole stack. macOS and Linux, x86_64 and arm64, WSL on Windows.',
-    htmlPath: '/cli',
   },
   {
     kind: 'marketing',
@@ -404,8 +364,19 @@ const MDX_WRAPPER_TAGS = new Set([
   'StatGrid',
   'Steps',
   'Tabs',
+  'ToolList',
 ]);
-const MDX_BLOCK_TAGS = new Set(['AccordionItem', 'Callout', 'Card', 'Fact', 'Step', 'Tab']);
+const MDX_BLOCK_TAGS = new Set([
+  'AccordionItem',
+  'Callout',
+  'Card',
+  'ExampleRun',
+  'Expandable',
+  'Fact',
+  'Step',
+  'Tab',
+  'ToolNeed',
+]);
 
 // `:::warning[Title]` opens a container directive; a bare `:::` closes it.
 // Agent-facing markdown has no directive syntax, so both render as a
@@ -448,6 +419,16 @@ function renderCard(attrs: Record<string, string>, body?: string): string {
   return body && body !== title ? `- ${link}: ${body.trim()}` : `- ${link}`;
 }
 
+/** A copyable prompt or file: its title, then the text as a fenced block. */
+function renderCopyBlock(attrs: Record<string, string>): string {
+  const title = attrs.title ? `**${attrs.title}**\n\n` : '';
+  return `${title}\`\`\`${attrs.lang ?? ''}\n${(attrs.code ?? '').trim()}\n\`\`\``;
+}
+
+function renderToolNeed(attrs: Record<string, string>): string {
+  return `- **${attrs.name || 'Tool'}**${attrs.tag ? ` (${attrs.tag})` : ''}`;
+}
+
 function renderMdxTagLine(line: string, stack: MdxRenderContext[]): string | null | undefined {
   if (/^\s*<a\b[^>]*\/?>\s*$/.test(line)) return null;
 
@@ -479,6 +460,8 @@ function renderMdxTagLine(line: string, stack: MdxRenderContext[]): string | nul
     if (tag === 'Figure') return attrs.caption ? `> Figure: ${attrs.caption}` : null;
     if (tag === 'Stat') return `- **${attrs.value || 'Stat'}:** ${attrs.label || ''}`.trimEnd();
     if (tag === 'Card') return renderCard(attrs);
+    if (tag === 'CopyBlock') return renderCopyBlock(attrs);
+    if (tag === 'ToolNeed') return renderToolNeed(attrs);
     return undefined;
   }
 
@@ -502,15 +485,25 @@ function renderMdxTagLine(line: string, stack: MdxRenderContext[]): string | nul
     stack.push({ tag });
     return attrs.title ? `### ${attrs.title}` : null;
   }
-  // A tab or an accordion item shows one of several panels. Markdown shows
-  // every panel in order, each under its label.
-  if (tag === 'Tab' || tag === 'AccordionItem') {
+  // A tab, an accordion item or an expandable shows one panel at a time.
+  // Markdown shows every panel in order, each under its label.
+  if (tag === 'Tab' || tag === 'AccordionItem' || tag === 'Expandable') {
     stack.push({ tag });
     return attrs.title ? `**${attrs.title}**` : null;
   }
   if (tag === 'Fact') {
     stack.push({ tag });
     return attrs.label ? `- **${attrs.label}:**` : '-';
+  }
+  if (tag === 'ToolNeed') {
+    stack.push({ tag });
+    return `${renderToolNeed(attrs)}:`;
+  }
+  // An illustrative run: its title and prompt, then the summary, as a quote.
+  if (tag === 'ExampleRun') {
+    stack.push({ tag, quote: true });
+    const prompt = attrs.message ? `\n>\n> Prompt: ${attrs.message}` : '';
+    return `> **${attrs.title || 'Example run'}**${prompt}\n>`;
   }
 
   return undefined;
@@ -581,12 +574,14 @@ export function renderPlainMarkdownFromMdx(source: string): string {
     }
 
     if (/^\s*<[A-Z][A-Za-z0-9_.]*\b/.test(line) && !closesTag(line)) {
+      // A CopyBlock's code keeps its line breaks and indentation.
+      const copyBlock = /^\s*<CopyBlock\b/.test(line);
       const tagLines = [line.trim()];
       while (index + 1 < lines.length && !closesTag(tagLines.join(' '))) {
         index += 1;
-        tagLines.push(lines[index].trim());
+        tagLines.push(copyBlock ? lines[index] : lines[index].trim());
       }
-      line = tagLines.join(' ');
+      line = tagLines.join(copyBlock ? '\n' : ' ');
     }
 
     const transformed = renderMdxTagLine(line, stack);
@@ -612,6 +607,9 @@ function sourceDocuments(kind: 'docs' | 'use-case'): SourceDocument[] {
     const source = fs.readFileSync(sourcePath, 'utf8');
     const frontmatter = parseFrontmatter(source);
     if (frontmatter.draft === 'true' && process.env.NODE_ENV === 'production') return [];
+    // A `noindex` page is built and reachable by link, and nothing indexes it: not the sitemap,
+    // llms.txt, the Markdown copies or the agent APIs.
+    if (frontmatter.noindex === 'true') return [];
 
     const relative = path
       .relative(root, sourcePath)
@@ -670,7 +668,7 @@ function renderMarketingMarkdown(record: PublicContentRecord): string {
     `- [Documentation](${CANONICAL_ORIGIN}/docs)`,
     `- [Blog](${CANONICAL_ORIGIN}/blog)`,
     `- [Use cases](${CANONICAL_ORIGIN}/use-cases)`,
-    `- [GitHub](https://github.com/kortix-ai/suna)`,
+    `- [GitHub](https://github.com/kortix-ai/CompanyOS)`,
   ];
 
   if (record.slug === 'pricing' || record.slug === 'enterprise') {

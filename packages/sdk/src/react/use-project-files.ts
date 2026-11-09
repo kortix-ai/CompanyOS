@@ -11,18 +11,27 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  type AccountStorageUsage,
   type Drive,
   type DriveConflict,
+  type DriveUsage,
   type DriveEntry,
   type FolderAccess,
+  type AgentMountPlan,
+  type DriveAdminReads,
   type FolderAccessView,
   type FolderLevel,
   type FolderPrincipalType,
   type FolderPrincipals,
   type SessionDrives,
   dismissDriveConflict,
+  getAccountStorageUsage,
+  getDriveAdminReads,
+  getDriveUsage,
   getFolderAccess,
-  getProjectDrive,
+  listAgentMounts,
+  listProjectMounts,
+  getWorkspaceDrive,
   getSessionDrives,
   listDriveConflicts,
   listDriveFolder,
@@ -39,14 +48,17 @@ const pollUnlessFailing = (interval: number) => (query: { state: { status: strin
   query.state.status === 'error' ? false : interval;
 
 /** The project's drive and the caller's own folder in it: keyed by user, since it carries their access. */
-export function projectDriveQueryOptions(projectId: string | undefined, userId: string | null | undefined, enabled = true) {
+export function workspaceDriveQueryOptions(projectId: string | undefined, userId: string | null | undefined, enabled = true) {
   return {
     queryKey: qk.drives.list(userId, { projectId }),
-    queryFn: (): Promise<Drive> => getProjectDrive(projectId!),
+    queryFn: (): Promise<Drive> => getWorkspaceDrive(projectId!),
     enabled: enabled && !!projectId && !!userId,
     staleTime: 15_000,
   };
 }
+
+/** @deprecated Use `workspaceDriveQueryOptions`. Kept permanently. */
+export const projectDriveQueryOptions = workspaceDriveQueryOptions;
 
 /** One folder: what the caller may see in it, and their access to it. */
 export function driveFolderQueryOptions(driveId: string | null, path: string) {
@@ -65,6 +77,40 @@ export function folderAccessQueryOptions(driveId: string | null, path: string, e
     queryKey: [...qk.drives.grants(driveId ?? ''), path] as const,
     queryFn: (): Promise<FolderAccessView> => getFolderAccess(driveId!, path),
     enabled: !!driveId && enabled,
+  };
+}
+
+/** The admins who opened a person's own folder. Under the drive's key. */
+export function driveAdminReadsQueryOptions(driveId: string | null, path: string, enabled = true) {
+  return {
+    queryKey: [...qk.drives.drive(driveId ?? ''), 'admin-reads', path] as const,
+    queryFn: (): Promise<DriveAdminReads> => getDriveAdminReads(driveId!, path),
+    enabled: !!driveId && enabled,
+  };
+}
+
+/** The folders every new session of the project mounts. Under the drive's key, so a share or unshare refreshes it. */
+export function projectMountsQueryOptions(driveId: string | null, enabled = true) {
+  return {
+    queryKey: [...qk.drives.drive(driveId ?? ''), 'project-mounts'] as const,
+    queryFn: (): Promise<AgentMountPlan> => listProjectMounts(driveId!),
+    enabled: !!driveId && enabled,
+  };
+}
+
+export function useWorkspaceMounts(driveId: string | null, enabled = true) {
+  return useQuery(projectMountsQueryOptions(driveId, enabled));
+}
+
+/** @deprecated Use `useWorkspaceMounts`. Kept permanently. */
+export const useProjectMounts = useWorkspaceMounts;
+
+/** The folders a new session of an agent mounts. Under the drive's key, so a share or unshare refreshes it. */
+export function agentMountsQueryOptions(driveId: string | null, agentName: string, enabled = true) {
+  return {
+    queryKey: [...qk.drives.drive(driveId ?? ''), 'agent-mounts', agentName] as const,
+    queryFn: (): Promise<AgentMountPlan> => listAgentMounts(driveId!, agentName),
+    enabled: !!driveId && !!agentName && enabled,
   };
 }
 
@@ -109,9 +155,12 @@ export function useDriveAvailability(projectId: string | undefined) {
   return { enabled: flag.enabled, isLoading: flag.isLoading };
 }
 
-export function useProjectDrive(projectId: string | undefined, userId: string | null | undefined, enabled = true) {
-  return useQuery(projectDriveQueryOptions(projectId, userId, enabled));
+export function useWorkspaceDrive(projectId: string | undefined, userId: string | null | undefined, enabled = true) {
+  return useQuery(workspaceDriveQueryOptions(projectId, userId, enabled));
 }
+
+/** @deprecated Use `useWorkspaceDrive`. Kept permanently. */
+export const useProjectDrive = useWorkspaceDrive;
 
 export function useDriveFolder(driveId: string | null, path: string) {
   return useQuery(driveFolderQueryOptions(driveId, path));
@@ -119,6 +168,15 @@ export function useDriveFolder(driveId: string | null, path: string) {
 
 export function useFolderAccess(driveId: string | null, path: string, enabled = true) {
   return useQuery(folderAccessQueryOptions(driveId, path, enabled));
+}
+
+/** The project admins who opened the person's own folder that holds `path`. */
+export function useDriveAdminReads(driveId: string | null, path: string, enabled = true) {
+  return useQuery(driveAdminReadsQueryOptions(driveId, path, enabled));
+}
+
+export function useAgentMounts(driveId: string | null, agentName: string, enabled = true) {
+  return useQuery(agentMountsQueryOptions(driveId, agentName, enabled));
 }
 
 export function useFolderPrincipals(driveId: string | null, enabled = true) {
@@ -132,6 +190,43 @@ export function useSessionDrives(projectId: string | undefined, sessionId: strin
 
 export function useDriveConflicts(driveId: string | null, enabled = true) {
   return useQuery(driveConflictsQueryOptions(driveId, enabled));
+}
+
+/** A session's writes move the figure slowly; every write made here refreshes it at once. */
+const USAGE_POLL_MS = 5 * 60_000;
+
+/**
+ * What the project's Files hold against their limits, and each folder sessions
+ * mount against the folder-mount cap. Polls every 5 minutes while on screen
+ * (never in a background tab); a write in Files invalidates it at once.
+ */
+export function driveUsageQueryOptions(driveId: string | null, enabled = true) {
+  return {
+    queryKey: qk.drives.usage(driveId ?? ''),
+    queryFn: (): Promise<DriveUsage> => getDriveUsage(driveId!),
+    enabled: !!driveId && enabled,
+    staleTime: 60_000,
+    refetchInterval: pollUnlessFailing(USAGE_POLL_MS),
+    refetchIntervalInBackground: false,
+  };
+}
+
+export function useDriveUsage(driveId: string | null, enabled = true) {
+  return useQuery(driveUsageQueryOptions(driveId, enabled));
+}
+
+/** An account's Files per project against the plan's limits (`billing.read`). */
+export function accountStorageUsageQueryOptions(accountId: string | null | undefined, enabled = true) {
+  return {
+    queryKey: qk.drives.accountUsage(accountId),
+    queryFn: (): Promise<AccountStorageUsage> => getAccountStorageUsage(accountId ?? undefined),
+    enabled,
+    staleTime: 60_000,
+  };
+}
+
+export function useAccountStorageUsage(accountId: string | null | undefined, enabled = true) {
+  return useQuery(accountStorageUsageQueryOptions(accountId, enabled));
 }
 
 /** Refresh every Files query (one write can move a listing, the conflicts and the session mounts). */

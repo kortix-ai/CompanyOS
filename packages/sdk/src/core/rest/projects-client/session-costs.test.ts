@@ -5,7 +5,7 @@ import {
   fetchCostExportCsv,
   getCostSummary,
   getSessionCostRecord,
-  listCostByProject,
+  listCostByWorkspace,
   listSessionCosts,
   type CostSummary,
   type CostSummaryTotals,
@@ -14,6 +14,8 @@ import {
   type SessionCostSummary,
   type SessionCostDetail,
   type SessionCostsPage,
+  type SessionCostLlmLedgerEntry,
+  type SessionCostComputeLedgerEntry,
 } from './session-costs';
 
 let calls: { url: string; method: string }[] = [];
@@ -213,7 +215,9 @@ const projectCostPage = {
       llm_kortix_cost: 0.5,
       llm_provider_cost: 1,
       compute_cost: 0.5,
-      total_cost: 2,
+      storage_cost: 0.25,
+      storage_gib_hours: 3048.78,
+      total_cost: 2.25,
       last_activity_at: '2026-07-01T12:00:00.000Z',
     },
   ],
@@ -226,7 +230,7 @@ const projectCostPage = {
 test('listCostByProject targets the rollup route with account, window, sort and paging', async () => {
   nextResponse = projectCostPage;
 
-  const result = await listCostByProject({
+  const result = await listCostByWorkspace({
     accountId: 'acct-1',
     from: '2026-07-01T00:00:00.000Z',
     to: '2026-08-01T00:00:00.000Z',
@@ -248,7 +252,7 @@ test('listCostByProject targets the rollup route with account, window, sort and 
 test('listCostByProject omits the query string when no options are supplied', async () => {
   nextResponse = projectCostPage;
 
-  await listCostByProject();
+  await listCostByWorkspace();
 
   expect(last().url).toBe('http://test.local/usage/cost-by-project');
 });
@@ -256,7 +260,7 @@ test('listCostByProject omits the query string when no options are supplied', as
 test('listCostByProject accepts the project-only name_asc sort', async () => {
   nextResponse = projectCostPage;
 
-  await listCostByProject({ sort: 'name_asc' });
+  await listCostByWorkspace({ sort: 'name_asc' });
 
   expect(last().url).toBe('http://test.local/usage/cost-by-project?sort=name_asc');
 });
@@ -269,14 +273,16 @@ const costSummary = {
     llm_kortix_cost: 2.4,
     llm_provider_cost: 10,
     compute_cost: 34.02,
-    total_cost: 46.42,
+    storage_cost: 0.82,
+    total_cost: 47.24,
     request_count: 100,
     compute_seconds: 3600,
+    storage_gib_hours: 10000,
     session_count: 41,
     project_count: 3,
   },
   previous: { total_cost: 37.74 },
-  series: [{ day: '2026-07-01', llm_cost: 1, compute_cost: 0.5, total_cost: 1.5 }],
+  series: [{ day: '2026-07-01', llm_cost: 1, compute_cost: 0.5, storage_cost: 0.25, total_cost: 1.75 }],
   models: [{ provider: 'anthropic', model: 'claude-sonnet', cost: 12.4, request_count: 100 }],
 } satisfies CostSummary;
 
@@ -447,4 +453,15 @@ test('every account-wide cost shape carries the Kortix / provider LLM split', ()
   const projectRow: CarriesLlmSpendSplit<ProjectCostRow> = true;
   const sessionRow: CarriesLlmSpendSplit<SessionCostSummary> = true;
   expect([totals, projectRow, sessionRow]).toEqual([true, true, true]);
+});
+
+// Workspaces finding 31: a project that moved to another workspace keeps its
+// cost history; rows another workspace paid for are marked, and the payer's
+// rollup names the moved project without its new name.
+test('cost shapes mark rows billed to another workspace and moved projects', () => {
+  const entry: Pick<SessionCostLlmLedgerEntry, 'billed_elsewhere'> = { billed_elsewhere: true };
+  const compute: Pick<SessionCostComputeLedgerEntry, 'billed_elsewhere'> = { billed_elsewhere: true };
+  const detail: Pick<SessionCostDetail, 'billed_elsewhere_cost'> = { billed_elsewhere_cost: 1.25 };
+  const row: Pick<ProjectCostRow, 'moved'> = { moved: true };
+  expect([entry.billed_elsewhere, compute.billed_elsewhere, detail.billed_elsewhere_cost, row.moved]).toEqual([true, true, 1.25, true]);
 });

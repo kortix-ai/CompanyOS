@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
-  agentConfigSectionKeys,
   AGENT_MODE_LABEL,
   AGENT_MODES,
   grantSummary,
@@ -48,18 +47,8 @@ describe('behaviorBlock', () => {
   });
 });
 
-describe('kortix_version 3 grants — subagents, commands, extensions', () => {
-  test('a v3 agent gets the three registry grant pages; a v1 or v2 agent does not', () => {
-    const v3 = agentConfigSectionKeys(3);
-    for (const key of ['subagents', 'commands', 'extensions'] as const) {
-      expect(v3).toContain(key);
-      expect(agentConfigSectionKeys(2)).not.toContain(key);
-      expect(agentConfigSectionKeys(1)).not.toContain(key);
-    }
-    expect(agentConfigSectionKeys(2)).toContain('skills');
-  });
-
-  test('a v3 block renders each grant through the shared grant section', () => {
+describe('registry grants — subagents, commands, extensions', () => {
+  test('a block renders each grant through the shared grant section', () => {
     expect(editorSource).toContain('<RegistryGrantSection');
     expect(accessFieldsSource).toContain('export function RegistryGrantSection');
     // Every grant page has its copy in the catalog (`agents.grants.<grant>`).
@@ -70,7 +59,6 @@ describe('kortix_version 3 grants — subagents, commands, extensions', () => {
   });
 
   const manifest = [
-    'kortix_version: 3',
     'default_agent: lead',
     'commands:',
     '  weekly-report:',
@@ -245,13 +233,6 @@ describe('mode pickers use the shared component library', () => {
     expect(primitivesSource).not.toContain('FieldRow');
   });
 
-  test('the grant-mode field is built from Tabs', () => {
-    expect(grantFieldSource).toContain("from '../../../primitives/tabs'");
-    for (const mode of ['all', 'pick', 'none']) {
-      expect(grantFieldSource).toContain(`value: '${mode}'`);
-    }
-  });
-
   test('Tabs stay scoped to grants; repository access uses a Switch and enums use Select', () => {
     for (const source of sectionSources) {
       expect(source).not.toContain('@/components/ui/tabs');
@@ -302,21 +283,15 @@ describe('display-name maps — Select renders the value verbatim', () => {
 describe('KORTIX_PERMISSIONS_CATALOG — grantable action mirror', () => {
   const all = KORTIX_PERMISSIONS_CATALOG.flatMap((g) => g.actions);
 
-  test('only project-scoped actions appear (account-scoped admin never grantable)', () => {
-    for (const a of all) {
-      expect(a.startsWith('project.')).toBe(true);
-    }
-    expect(all).not.toContain('billing.read');
-    expect(all).not.toContain('member.invite');
-    expect(all).not.toContain('project.create');
-  });
-
-  // The three manager-tier project leaves are grantable again — reachable via
-  // a project's `manager` role, so an agent can carry them too.
-  test('the three manager-tier project leaves are present', () => {
-    expect(all).toContain('project.delete');
+  // Workspace administration is grantable (design.md §3.2 K1); HUMAN_ONLY
+  // actions (delete the workspace, mint credentials or gateway keys) never are.
+  test('workspace administration is offered; HUMAN_ONLY actions are not', () => {
+    expect(all).toContain('member.invite');
+    expect(all).toContain('billing.read');
     expect(all).toContain('project.members.manage');
-    expect(all).toContain('project.gateway.keys.manage');
+    expect(all).not.toContain('project.delete');
+    expect(all).not.toContain('project.credentials.issue');
+    expect(all).not.toContain('project.gateway.keys.manage');
   });
 
   test('full-array equality against the real GRANTABLE_KORTIX_PERMISSIONS (order-independent)', () => {

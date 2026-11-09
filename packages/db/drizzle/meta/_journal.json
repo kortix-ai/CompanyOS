@@ -1296,6 +1296,356 @@
       "when": 1793093398130,
       "tag": "20261027092958_project_session_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1793101077645,
+      "tag": "20261027113757_chrome_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1793288256822,
+      "tag": "20261029153736_artifact_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1793291783968,
+      "tag": "20261029163623_artifact_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1793296200000,
+      "tag": "20261029175000_connector_call_status_approved",
+      "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "7",
+      "when": 1793296201000,
+      "tag": "20261029175001_connector_held_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "7",
+      "when": 1793296202000,
+      "tag": "20261029175002_connector_held_calls_sweep_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 191,
+      "version": "7",
+      "when": 1793309438986,
+      "tag": "20261029213038_artifact_activity_tables_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1793312793000,
+      "tag": "20261029222633_artifact_comment_routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1793312797000,
+      "tag": "20261029222637_artifact_comment_delivery_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1793312801000,
+      "tag": "20261029222641_artifact_comment_tables_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1793325065135,
+      "tag": "20261030015105_drop_session_transcript_mirror",
+      "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1793356273031,
+      "tag": "20261030103113_job_queue_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "7",
+      "when": 1793365474468,
+      "tag": "20261030130434_artifact_bindings",
+      "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "7",
+      "when": 1793371333084,
+      "tag": "20261030144213_drives_volume_region",
+      "breakpoints": true
+    },
+    {
+      "idx": 199,
+      "version": "7",
+      "when": 1793372724266,
+      "tag": "20261030150524_session_turn_message_time",
+      "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1793379800509,
+      "tag": "20261030170320_base_tip_proven_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 201,
+      "version": "7",
+      "when": 1793382851000,
+      "tag": "20261030175411_artifact_comment_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "7",
+      "when": 1793382852000,
+      "tag": "20261030175412_artifact_screenshot_upload_confirmation",
+      "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1793382854000,
+      "tag": "20261030175414_artifact_screenshot_verified_size",
+      "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1793392877198,
+      "tag": "20261030204117_multi_agent_messages_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1793417513481,
+      "tag": "20261031033153_claude_subscription_logins",
+      "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "7",
+      "when": 1793465054863,
+      "tag": "20261031164414_claude_login_flow_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 207,
+      "version": "7",
+      "when": 1793555168351,
+      "tag": "20261101174608_storage_charges",
+      "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
+      "when": 1793619304264,
+      "tag": "20261102113504_storage_events_box_disk",
+      "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1793626443139,
+      "tag": "20261102133403_pending_question_chat_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 210,
+      "version": "7",
+      "when": 1793631988953,
+      "tag": "20261102150628_drive_index_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1793634907900,
+      "tag": "20261102150728_drive_folder_admin_reads",
+      "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "7",
+      "when": 1793724449016,
+      "tag": "20261103164728_sales_event_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 213,
+      "version": "7",
+      "when": 1793739197180,
+      "tag": "20261103205317_project_config_summaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 214,
+      "version": "7",
+      "when": 1793741721457,
+      "tag": "20261103213521_project_config_summaries_manifest_path",
+      "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "7",
+      "when": 1793753140870,
+      "tag": "20261104004540_retention_erasures",
+      "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1793800516626,
+      "tag": "20261104135516_subscription_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1793802606647,
+      "tag": "20261104143006_subscription_provider_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1793804676095,
+      "tag": "20261104150436_project_space_tabs",
+      "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1793807577127,
+      "tag": "20261104155257_self_host_signup_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1793813803361,
+      "tag": "20261104173643_artifact_doc_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1793821307989,
+      "tag": "20261104194147_session_asks",
+      "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1793900600832,
+      "tag": "20261105174320_runtime_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "7",
+      "when": 1793906231460,
+      "tag": "20261105191711_session_pending_permissions_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "7",
+      "when": 1793910739001,
+      "tag": "20261105203218_youthful_adam_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "7",
+      "when": 1793955408327,
+      "tag": "20261106085648_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1793961910964,
+      "tag": "20261106104510_goals_sessions_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1793973700352,
+      "tag": "20261106140140_lifecycle_status_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "7",
+      "when": 1793976046739,
+      "tag": "20261106144046_credit_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 229,
+      "version": "7",
+      "when": 1793973070444,
+      "tag": "20261106135110_workspaces_r1_merged",
+      "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1793989812005,
+      "tag": "20261106183011_workspace_split_emails",
+      "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "7",
+      "when": 1794001922657,
+      "tag": "20261106215202_workspaces_dev_merge",
+      "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1794038376374,
+      "tag": "20261107075936_gateway_logs_project_time_covering_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "7",
+      "when": 1794069932492,
+      "tag": "20261107164532_gateway_logs_project_time_covering_v3",
+      "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1794128400000,
+      "tag": "20261108090000_gateway_logs_served_model_usage_estimated",
+      "breakpoints": true
     }
   ]
 }

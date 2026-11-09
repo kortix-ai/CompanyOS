@@ -4,6 +4,7 @@
  * Mirrors the agents/tasks/sessions imports of apps/web `tool/tools/register.ts`.
  */
 import './task-tool';
+import './workflow-tool';
 import './todo-write-tool';
 import './task-list-tool';
 import './task-delete-tool';
@@ -21,3 +22,4 @@ import './session-read-tool';
 import './session-search-tool';
 import './session-stats-tool';
 import './session-lineage-tool';
+import './team-tools';

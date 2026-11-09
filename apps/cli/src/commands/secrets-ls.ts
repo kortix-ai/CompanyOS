@@ -89,7 +89,7 @@ export async function secretsLs(opts: CtxOpts, json = false): Promise<number> {
 
   let resp: ProjectSecretsResponse;
   try {
-    resp = await ctx.client.get<ProjectSecretsResponse>(`/projects/${ctx.projectId}/secrets`);
+    resp = await ctx.client.get<ProjectSecretsResponse>(`/workspaces/${ctx.projectId}/secrets`);
   } catch (err) {
     return surfaceApiError(err);
   }
@@ -245,7 +245,7 @@ export async function secretsLs(opts: CtxOpts, json = false): Promise<number> {
   process.stdout.write('\n');
   if (usingLocal) {
     process.stdout.write(
-      `  ${C.dim}Manifest: cloud mirror ${resp.manifest_status} — showing local kortix.yaml [env] spec.${C.reset}\n\n`,
+      `  ${C.dim}Manifest: cloud mirror ${resp.manifest_status} — showing the local kortix.yaml \`env\` list.${C.reset}\n\n`,
     );
   } else if (resp.manifest_status !== 'loaded') {
     process.stdout.write(
@@ -256,7 +256,7 @@ export async function secretsLs(opts: CtxOpts, json = false): Promise<number> {
   }
 
   if (resp.items.length === 0 && required.length === 0 && optional.length === 0) {
-    process.stdout.write(`  ${C.dim}No secrets set, no [env] spec in kortix.yaml.${C.reset}\n\n`);
+    process.stdout.write(`  ${C.dim}No secrets set, no \`env\` list in kortix.yaml.${C.reset}\n\n`);
     return 0;
   }
 
@@ -331,7 +331,7 @@ export async function secretsLs(opts: CtxOpts, json = false): Promise<number> {
       `  ${status.warn(
         `${undeliverable.length} secret${
           undeliverable.length === 1 ? '' : 's'
-        } cannot be delivered — the chosen path is not available on this project.`,
+        } cannot be delivered — the chosen path is not available on this workspace.`,
       )}\n`,
     );
   }
@@ -356,7 +356,7 @@ export async function secretsLs(opts: CtxOpts, json = false): Promise<number> {
         `${notGranted.length} secret${notGranted.length === 1 ? ' is' : 's are'} not granted to agent ${agentScope.agent} (${names}) — ` +
           'a value may be set, but this session never receives it.',
       )}\n` +
-        `  ${C.dim}Fix (a person with project access; an agent cannot widen its own grant): ` +
+        `  ${C.dim}Fix (a person with workspace access; an agent cannot widen its own grant): ` +
         `Customize → Agents → ${agentScope.agent} → Secrets and enable ${notGranted.length === 1 ? 'it' : 'them'}. ` +
         `Then run \`kortix secrets sync\` to pull ${notGranted.length === 1 ? 'it' : 'them'} into this session.${C.reset}\n`,
     );

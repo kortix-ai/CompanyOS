@@ -1,5 +1,5 @@
 ---
-title: "Open source is what makes an AI Operating System yours"
+title: "Open source is what makes a CompanyOS yours"
 description: "Kortix is open source: one git repo for the agents, skills, memory and connector config, self-hosted or managed, on any model."
 date: "2026-07-31"
 canonical: "https://kortix.com/blog/open-source-ai-management-system"
@@ -10,11 +10,11 @@ slug: "/open-source-ai-management-system"
 cover: "/banner.png"
 leadMedia: {"poster": "https://kortix.com/media/showcase/kortix-showcase-poster.jpg", "sources": [{"src": "https://kortix.com/media/showcase/kortix-showcase-1920.mp4", "type": "video/mp4"}, {"src": "https://kortix.com/media/showcase/kortix-showcase-1280.mp4", "type": "video/mp4"}], "alt": "Kortix in the browser: a project and its connectors, agents, skills and schedules, then a session working on a cloud computer and returning a finished deck.", "aspectRatio": "1920 / 1200"}
 ---
-Most AI tools ask you to move the company into their product. Kortix is the open-source AI Operating System, and the part that matters is a repository: agent prompts, skills, company memory and the connector configuration are text in a project you clone and run. The question that decides whether you own any of it is dull and decisive. Where does the configuration sit, and who can change it?
+Most AI tools ask you to move the company into their product. Kortix is the open-source CompanyOS, and the part that matters is a repository: agent prompts, skills, company memory and the connector configuration are text in a project you clone and run. The question that decides whether you own any of it is dull and decisive. Where does the configuration sit, and who can change it?
 
 ## One repo holds the whole company
 
-Open a Kortix project and you open a git repository. That repository is the company: a manifest at the root, an `agents/` directory beside it, and markdown the rest of the way down. `kortix.yaml` names the machine image, the triggers, and what each agent may touch. Secret values never appear in it. An agent's behavior sits in `agents/<name>.md`; its governance sits in the `agents.<name>` block of the manifest. Company memory is the living company brain, and today it is plain files.
+Open a Kortix workspace and you open a git repository. That repository is the company: a manifest at the root, an `agents/` directory beside it, and markdown the rest of the way down. `kortix.yaml` names the machine image, the triggers, and what each agent may touch. Secret values never appear in it. An agent's behavior sits in `agents/<name>.md`; its governance sits in the `agents.<name>` block of the manifest. Company memory is the living company brain, and today it is plain files.
 
 So the arrangement answers to `grep`. Every prompt, skill, remembered fact and grant is a line in a file with an author, a timestamp and a diff, and undo is `git revert`. `kortix init` turns a directory into a Kortix; [`kortix ship`](https://kortix.com/docs/cli) validates the manifest, commits every change, asks for missing secrets, pushes the current branch, and asks you to connect the connectors the project declares. The repo behaves identically on your laptop and in the cloud.
 
@@ -88,7 +88,7 @@ That gate is what lets a company hand an agent real capabilities. The agent prop
 
 Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free, and [`kortix self-host start`](https://kortix.com/docs/host) brings the stack up on hardware you control. The offer has one limit worth stating plainly: the stack pulls its images from docker.io and the default sandbox provider is remote, so this is not an air-gapped deployment. Isolated topologies get scoped with us.
 
-The compliance facts are as plain as the limits. SOC 2 Type I is verified; GDPR is a posture we run, not a certificate. On price, the Free plan costs $0 and includes 500 credits a month, every feature and 1 project, on your own provider keys or ChatGPT subscription. Paid plans start at $50 a month.
+The compliance facts are as plain as the limits. SOC 2 Type I is verified; GDPR is a posture we run, not a certificate. On price, the Free plan costs $0 and includes 500 credits a month on your first workspace and every feature, on your own provider keys or ChatGPT subscription. Paid plans start at $50 a month.
 
 The point of the option is what it does to the relationship: the repository that ran on our cloud runs on yours, and the vendor becomes a hosting choice instead of the owner of the system.
 

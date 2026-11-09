@@ -44,6 +44,7 @@ import {
   type PointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -87,7 +88,11 @@ const DRAWER_ROW =
 const firstLink = (panel: HTMLElement | null | undefined) =>
   panel?.querySelector<HTMLElement>('a[href]') ?? null;
 
-export function Navbar() {
+/**
+ * `solidAtTop`: the bar shows its background and bottom hairline before any
+ * scroll, for a page whose hero art runs under the bar (/services).
+ */
+export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
   const tHardcodedUi = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { user } = useAuth();
@@ -153,7 +158,7 @@ export function Navbar() {
     SITE_CONFIG_TRANSLATION_KEYS,
   ).filter((link) => USE_CASES_ENABLED || link.href !== '/use-cases');
 
-  const solid = scrolled || openMenu !== null || isDrawerOpen;
+  const solid = solidAtTop || scrolled || openMenu !== null || isDrawerOpen;
 
   const clearTimer = () => window.clearTimeout(timerRef.current);
 
@@ -203,15 +208,30 @@ export function Navbar() {
     return () => query.removeEventListener('change', onChange);
   }, [setMenu]);
 
-  // A committed navigation closes the menu (Next keeps this component mounted).
+  // A committed navigation closes the menu and the drawer (Next keeps this
+  // component mounted). The drawer's site switcher links carry no pending row.
   const [menuPathname, setMenuPathname] = useState(pathname);
   if (menuPathname !== pathname) {
     setMenuPathname(pathname);
     setOpenMenu(null);
     setInstant(true);
+    setIsDrawerOpen(false);
   }
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
+
+  // The reveal height follows the open panel, so a short menu is not padded
+  // to the tallest one. Measured, so switching menus animates the height.
+  const [panelHeight, setPanelHeight] = useState(0);
+  useLayoutEffect(() => {
+    const panel = openMenu ? panelRefs.current[openMenu] : null;
+    if (!panel) return;
+    const measure = () => setPanelHeight(panel.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [openMenu]);
 
   // A keyboard open moves focus to the panel's first link once it is no longer inert.
   useEffect(() => {
@@ -388,7 +408,9 @@ export function Navbar() {
         ? `/brandkit/Logo/Brandmark/SVG/Brandmark ${color}.svg`
         : `/brandkit/Logo/Logomark/SVG/Logomark ${color}.svg`;
     try {
-      const svg = await (await fetch(path)).text();
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(`Brand SVG fetch failed: ${response.status}`);
+      const svg = await response.text();
       await navigator.clipboard.writeText(svg);
       successToast(tHardcodedUi.raw('i18nComplete.textc46a054cc5d2'));
     } catch {
@@ -444,11 +466,11 @@ export function Navbar() {
             // the page, so it needs its own surface and edge from the start.
             'max-lg:border-border max-lg:bg-background/90 duration-slow relative w-full border-b border-transparent transition-[background-color,backdrop-filter,border-color] ease-out max-lg:backdrop-blur-md',
             solid && 'bg-background/90 backdrop-blur-md',
-            scrolled && 'border-border',
+            (scrolled || solidAtTop) && 'border-border',
             overBand && 'dark',
           )}
         >
-          <div className={cn(MARKETING_CONTAINER, 'flex h-16 items-center justify-between')}>
+          <div className={cn(MARKETING_CONTAINER, 'relative flex h-16 items-center justify-between')}>
             <ContextMenu>
               <ContextMenuTrigger asChild className="group/kortix-logo">
                 <Link
@@ -492,7 +514,11 @@ export function Navbar() {
               </ContextMenuContent>
             </ContextMenu>
 
-            <SiteSwitcher className="mr-auto ml-4 lg:mr-0" />
+            {/* The CompanyOS / Services switcher: centred in the bar from xl,
+                after the logo below it. Centred at lg (1024 px), it covers
+                "Pricing". Below sm (640 px) it moves into the drawer, so the
+                GitHub link and the CTA keep their room in the bar. */}
+            <SiteSwitcher className="ml-4 hidden sm:mr-auto sm:flex lg:mr-0 xl:absolute xl:left-1/2 xl:m-0 xl:-translate-x-1/2" />
 
             {/* The links sit right after the logo; `mr-auto` pushes the actions to the end. */}
             <nav className="hidden items-center gap-1 lg:mr-auto lg:ml-8 lg:flex">
@@ -535,20 +561,22 @@ export function Navbar() {
               ))}
             </nav>
 
-            <div className="flex items-center justify-end gap-1" onPointerEnter={closeOnEnter}>
-              {/* `stars`, not `formattedStars`: the formatter returns an en dash
-                  for a missing count. No number, no chip. */}
-              {stars !== null && !starsLoading && (
-                <Link
-                  href="https://github.com/kortix-ai/suna"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(BAR_LINK, 'mr-4 hidden gap-2 xl:flex')}
-                >
-                  <Github className="size-4" />
+            <div className="ml-auto flex items-center justify-end gap-1" onPointerEnter={closeOnEnter}>
+              {/* The GitHub link shows at every width, phones included. The
+                  count joins it once it loads. `stars`, not `formattedStars`:
+                  the formatter returns an en dash for a missing count. */}
+              <Link
+                href="https://github.com/kortix-ai/CompanyOS"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-github-link=""
+                className={cn(BAR_LINK, 'hit-area-y-3 mr-2 gap-1.5 lg:mr-4 lg:gap-2')}
+              >
+                <Github className="size-4 shrink-0" />
+                {stars !== null && !starsLoading && (
                   <span className="tabular-nums">{formattedStars}</span>
-                </Link>
-              )}
+                )}
+              </Link>
               {user ? (
                 <MarketingButton asChild className="hit-area-y-3">
                   <Link href={projectsHref} prefetch>
@@ -583,12 +611,12 @@ export function Navbar() {
           </div>
         </header>
 
-        {/* The panel reveal: height from 0 to the tallest panel, ease-out.
-            All panels share one grid cell, so the height never changes while
-            switching menus; only the content cross-fades. */}
+        {/* The panel reveal: height from 0 to the open panel's own height,
+            ease-out. All panels share one grid cell and cross-fade in place;
+            switching menus eases the height to the new panel. */}
         <m.div
           initial={false}
-          animate={{ height: openMenu ? 'auto' : 0 }}
+          animate={{ height: openMenu ? panelHeight || 'auto' : 0 }}
           transition={panelTransition}
           className={cn(
             'absolute inset-x-0 top-full hidden overflow-hidden lg:block',
@@ -596,7 +624,7 @@ export function Navbar() {
             overBand && 'dark',
           )}
         >
-          <div className="bg-background grid border-b">
+          <div className="bg-background grid">
             {menus.map((menu) => (
               <MegaMenuPanel
                 key={menu.id}
@@ -638,6 +666,7 @@ export function Navbar() {
               <KortixLogo size={15} variant="logomark" />
               {isPending('/') && <Loading variant="spokes" />}
             </Link>
+            <SiteSwitcher className="mr-auto ml-4 sm:hidden" />
             <button
               ref={drawerCloseRef}
               type="button"

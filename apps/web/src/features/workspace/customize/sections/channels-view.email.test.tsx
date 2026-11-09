@@ -51,13 +51,15 @@ mock.module('@kortix/ui/internal/hooks/channels/use-channels-installations', () 
   useUpdateEmailPolicy: disconnect,
   useTelegramInstall: disconnected,
   useConnectTelegram: disconnect,
-  useSetTelegramAllowedUsers: disconnect,
   useDisconnectTelegram: disconnect,
-  useTelegramUsers: disconnected,
-  useTelegramUserPhoto: disconnected,
-  useAllowTelegramUser: disconnect,
-  useRemoveTelegramUser: disconnect,
-  useDismissTelegramAccessRequest: disconnect,
+  useDiscordMode: disconnected,
+  useDiscordInstall: disconnected,
+  useDisconnectDiscord: disconnect,
+  useChannelUsers: disconnected,
+  useChannelUserPhoto: disconnected,
+  useAllowChannelUser: disconnect,
+  useRemoveChannelUser: disconnect,
+  useDismissChannelAccessRequest: disconnect,
 }));
 mock.module('@kortix/ui/internal/hooks/use-channel-bindings', () => ({
   useChannelBindings: () => ({ data: { bindings: [] }, isLoading: false }),
@@ -65,7 +67,7 @@ mock.module('@kortix/ui/internal/hooks/use-channel-bindings', () => ({
 }));
 mock.module('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
-  usePathname: () => '/projects/email-test/connectors',
+  usePathname: () => '/workspaces/email-test/connectors',
   useRouter: () => ({ replace: mock() }),
 }));
 // Unrelated channel setup and session pickers need live runtime providers.

@@ -1,9 +1,10 @@
 // The daemon lists what its runtime serves in `GET /kortix/health`. The API
 // reads the list once per sandbox per 5 minutes: `/start` hands it to the
-// client, and the delivery reads the turn-verb capability from the same memo.
+// client, and admission reads it from the same memo. A daemon below the runtime
+// floor (no `runtime.log.v1`) is read every time: the open is replacing it.
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 
-import { __resetRuntimeTurnVerbsMemo, runtimeCapabilities, runtimeServesTurnVerbs } from './runtime-fetch';
+import { __resetRuntimeCapabilitiesMemo, runtimeCapabilities } from './runtime-fetch';
 
 const ORIGINAL_FETCH = globalThis.fetch;
 const endpoint = async () => ({ url: 'https://daemon.test', headers: {} });
@@ -11,9 +12,9 @@ let health: () => Response;
 let healthReads = 0;
 
 beforeEach(() => {
-  __resetRuntimeTurnVerbsMemo();
+  __resetRuntimeCapabilitiesMemo();
   healthReads = 0;
-  health = () => Response.json({ capabilities: ['runtime.turns.v1', 'session.subagents'] });
+  health = () => Response.json({ capabilities: ['runtime.turns.v1', 'runtime.log.v1', 'session.subagents'] });
   globalThis.fetch = (async () => {
     healthReads += 1;
     return health();
@@ -23,27 +24,29 @@ afterAll(() => {
   globalThis.fetch = ORIGINAL_FETCH;
 });
 
-test('the capability list is read once and serves both readers', async () => {
-  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.turns.v1', 'session.subagents']);
-  expect(await runtimeServesTurnVerbs('ext-1', endpoint)).toBe(true);
-  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.turns.v1', 'session.subagents']);
+test('the capability list is read once per sandbox', async () => {
+  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.turns.v1', 'runtime.log.v1', 'session.subagents']);
+  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.turns.v1', 'runtime.log.v1', 'session.subagents']);
   expect(healthReads).toBe(1);
 });
 
 test('a failed read answers unknown and is not kept', async () => {
   health = () => new Response(null, { status: 503 });
   expect(await runtimeCapabilities('ext-1', endpoint)).toBeNull();
-  expect(await runtimeServesTurnVerbs('ext-1', endpoint)).toBe(false);
   health = () => Response.json({ capabilities: ['session.subagents'] });
   expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['session.subagents']);
-  expect(healthReads).toBe(3);
+  expect(healthReads).toBe(2);
 });
 
-test('a daemon that lists nothing serves nothing, and that answer is kept', async () => {
+test('a daemon below the runtime floor is read again, so its successor is seen at once', async () => {
   health = () => Response.json({ status: 'ok' });
   expect(await runtimeCapabilities('ext-1', endpoint)).toEqual([]);
-  expect(await runtimeServesTurnVerbs('ext-1', endpoint)).toBe(false);
-  expect(healthReads).toBe(1);
+  health = () => Response.json({ capabilities: ['runtime.turns.v1'] });
+  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.turns.v1']);
+  health = () => Response.json({ capabilities: ['runtime.log.v1'] });
+  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.log.v1']);
+  expect(await runtimeCapabilities('ext-1', endpoint)).toEqual(['runtime.log.v1']);
+  expect(healthReads).toBe(3);
 });
 
 test('no sandbox id, no read', async () => {

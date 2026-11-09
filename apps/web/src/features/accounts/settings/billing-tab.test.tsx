@@ -18,7 +18,10 @@ mock.module('@/features/providers/auth-provider', () => ({
 mock.module('@tanstack/react-query', () => ({
   ...reactQuery,
   useQuery: (options: { queryKey: string[] }) =>
-    options.queryKey[0] === 'account'
+    // The account's Files storage (AccountStorageSection) answers nothing here.
+    options.queryKey.includes('account-usage')
+      ? { data: undefined, isLoading: false }
+      : options.queryKey[0] === 'account'
       ? {
           data: memberCount === undefined ? undefined : { member_count: memberCount },
           isLoading: memberCountLoading,
@@ -125,7 +128,7 @@ describe('BillingTab — plan pane without a paid subscription', () => {
   test('a member who may not change billing sees who to ask, not the picker', () => {
     accountStateData = freeState({ can_manage_billing: false });
     const html = renderPlan();
-    expect(html).toContain('Only account owners and admins can change the plan.');
+    expect(html).toContain('Only workspace owners and admins can change the plan.');
     expect(html).not.toContain('Subscribe for');
   });
 

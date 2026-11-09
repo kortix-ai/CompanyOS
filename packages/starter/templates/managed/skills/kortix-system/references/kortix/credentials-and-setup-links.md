@@ -18,9 +18,10 @@ settings page.
 | An app account (Gmail, GitHub, …) | A connect link: `kortix connectors connect` | A sign-in |
 
 Slack is neither: `kortix channels connect` prints its install link. Never
-request `SLACK_BOT_TOKEN` and never add a `slack` connector (the slug is
-reserved). Both links open a dialog in the web app and a tappable link in
-Slack or Teams. A value entered through a link never passes through you.
+request `SLACK_BOT_TOKEN` and never add a connector for Slack: the channel
+is `kortix_slack`, which Kortix builds. Both links open a dialog in the web
+app and a tappable link in Slack or Teams. A value entered through a link
+never passes through you.
 
 ## Store a value you have
 
@@ -46,7 +47,7 @@ kortix secrets request BILLING_API_TOKEN                                  # conn
   the sandbox. Pass `--scope runtime` for a key your code or tools read.
 - One link asks for several keys. Ask for everything in one message.
 - A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
-  set the names it lists, in this project.
+  set the names it lists, in this workspace.
 - Minting is not idempotent: every call makes a new link. A looping task
   (trigger, retry) records the link and its `expires_at`, checks whether the
   secret is set, and mints again only when the link expired.
@@ -56,12 +57,12 @@ kortix secrets request BILLING_API_TOKEN                                  # conn
 
 ## Mint a connect link
 
-1. The connector is not on the project? Add it now, no CR needed:
+1. The connector is not on the workspace? Add it now, no CR needed:
    `kortix connectors add <slug> --provider composio --app <app> --apply`.
    Never pick a legacy provider by yourself; ask the user first.
 2. Pick the owner before you mint. It is set at sign-in:
-   - `--owner project`: a shared account. Every session of the project acts
-     as it. Tell the user to sign in as the project's shared identity (a team
+   - `--owner project`: a shared account. Every session of the workspace acts
+     as it. Tell the user to sign in as the workspace's shared identity (a team
      or service account), never their own login.
    - `--owner me` (default): private to this user, used only in their own
      sessions. Use it for a person's own account.
@@ -109,17 +110,17 @@ https://<app>/connect/ksl_…
 
 | You see | Meaning | Do |
 | --- | --- | --- |
-| `not granted` in `kortix secrets ls`, or `withheld` | The value exists; your agent's `secrets` grant lacks it. | Never say it is unset. Ask the user to enable it for your agent (**Customize → Agents → <agent> → Secrets**, or `kortix secrets grant <NAME> --agent <agent>`), then run `kortix secrets sync`. |
+| `not granted` in `kortix secrets ls`, or `withheld` | The value exists; your agent's `secrets` grant lacks it. | Never say it is unset. Ask the user to enable it for your agent (**Customize → Agents → <agent> → Access → Secrets**, or `kortix secrets grant <NAME> --agent <agent>`), then run `kortix secrets sync`. |
 | `undecryptable`, `credential_undecryptable` | Kortix can no longer decrypt the stored value. | Ask the user to enter it again: mint a secret link. |
 | `credential_not_shared` | The value is shared with someone this session does not act for (a shared session, a trigger, another member). | Never ask for it again. Name the case; the user runs it in their own private session or shares it (`kortix secrets share <NAME> --everyone`). |
 | `409 PERSONAL_SECRET_REQUIRES_PRIVATE_SESSION` | The session uses a value shared only with its person. | Suggest a new session to share. |
 
 ## A person's own credential
 
-A secret value is usable by everyone in the project by default. You cannot
+A secret value is usable by everyone in the workspace by default. You cannot
 change who can use it; the person can. After you store a credential that
 acts as the person or holds sensitive data (payroll, a bank, a personal
-login), tell them once: "Everyone in the project can use it now. To keep it
+login), tell them once: "Everyone in the workspace can use it now. To keep it
 to you, run `kortix secrets share <NAME> --user me`." For a value only one
 agent's trigger needs, suggest `kortix secrets share <NAME> --agent <agent>`.
 

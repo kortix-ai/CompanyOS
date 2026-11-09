@@ -31,9 +31,6 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { projectSessions, sessionLifecycleCommands } from '@kortix/db';
 import { sql } from 'drizzle-orm';
 
-mock.module('../projects/lib/session-transcript-capture', () => ({
-  captureJournallessSessionLog: async () => undefined,
-}));
 mock.module('../projects/session-lifecycle/forwarded-strand-reconcile', () => ({
   reconcileForwardedTurnsAtEnd: async () => undefined,
 }));
@@ -100,7 +97,7 @@ async function ask(requestId: string): Promise<void> {
     projectId: project.project_id,
     sessionId,
     requestId,
-    opencodeSessionId: RUNTIME_SESSION,
+    runtimeSessionId: RUNTIME_SESSION,
     questions: [{ question: 'Which region?', header: 'Region', options: [], multiple: false, custom: true }],
   });
   expect(stored?.inserted).toBe(true);

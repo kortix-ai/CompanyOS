@@ -2,7 +2,6 @@ import { describe, test, expect, afterEach } from 'bun:test'
 import {
   startLlmProxy,
   setLlmProxyToken,
-  llmProxyReady,
   llmProxyBaseUrl,
   stopLlmProxy,
   LLM_PROXY_PLACEHOLDER_KEY,
@@ -41,7 +40,6 @@ describe('credential proxy — live token swap (the no-restart mechanism)', () =
     try {
       // fresh proxy, never tokened (the pre-restore window) → must fail closed
       startLlmProxy(14319, up.url)
-      expect(llmProxyReady()).toBe(false)
       const res = await fetch(`${llmProxyBaseUrl()}/v1/llm/models`)
       expect(res.status).toBe(503)
     } finally {
@@ -55,7 +53,6 @@ describe('credential proxy — live token swap (the no-restart mechanism)', () =
       startLlmProxy(14319, up.url, 'token-A')
       const base = llmProxyBaseUrl()
       expect(base).toBe('http://127.0.0.1:14319')
-      expect(llmProxyReady()).toBe(true)
 
       // request 1 → upstream sees token-A, path preserved
       const r1 = await fetchJson(`${base}/v1/llm/models`)
@@ -134,7 +131,7 @@ describe('in-sandbox inline image window (SampleCo 2026-08-25: >128 MiB vision b
       })
       expect(res.status).toBe(200)
       const seen = up.seen()!
-      expect(seen.images).toBe(12) // DEFAULT_IMAGE_WINDOW.keepOnOverflow
+      expect(seen.images).toBe(14) // 30 images: the cut moves in steps of 8 (20 - 12), so 16 drop
       expect(seen.auth).toBe('Bearer real-token')
       expect(Number(seen.contentLength)).toBe(seen.bytes)
       expect(seen.bytes).toBeLessThan(15 * 64 * 1024)

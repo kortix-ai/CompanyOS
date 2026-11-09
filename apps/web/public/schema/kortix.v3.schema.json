@@ -1,29 +1,124 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kortix.com/schema/kortix.v3.schema.json",
-  "title": "Kortix manifest (kortix_version 3)",
-  "description": "kortix.yaml, schema version 3. The project registers skills, tools, commands and extensions; each agent is one block of behavior (prompt, model, permission) and enables registered things by name. No harness config folder is read. Unknown keys are errors.",
+  "$id": "https://kortix.com/schema/kortix.schema.json",
+  "title": "Kortix manifest (kortix.yaml)",
+  "description": "kortix.yaml. The project registers skills, tools, commands and extensions; each agent is one block of behavior (prompt, model, permission) and enables registered things by name. The format has no version: it changes only by adding optional keys. Unknown keys are errors when you write the file; a running project ignores them.",
   "type": "object",
-  "required": [
-    "kortix_version",
-    "default_agent"
-  ],
-  "if": {
-    "not": {
-      "required": [
-        "imports"
-      ]
-    }
-  },
-  "then": {
-    "required": [
-      "agents"
-    ]
-  },
   "properties": {
     "kortix_version": {
       "const": 3,
-      "description": "`3`. A higher version is an error."
+      "deprecated": true,
+      "description": "Deprecated: obsolete, the format has no version. Delete the line."
+    },
+    "sandboxes": {
+      "type": "array",
+      "deprecated": true,
+      "description": "Deprecated: use `sandbox.templates`.",
+      "items": {
+        "type": "object",
+        "required": [
+          "slug"
+        ],
+        "properties": {
+          "slug": {
+            "allOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+              },
+              {
+                "not": {
+                  "const": "default"
+                }
+              }
+            ],
+            "description": "Unique. Lowercase letters, digits, `-` and `_`, at most 64 characters. `default` is reserved."
+          },
+          "name": {
+            "type": "string",
+            "description": "The label in the template picker. Default: the slug."
+          },
+          "entrypoint": {
+            "type": "string",
+            "description": "Overrides the container entrypoint. Default: the image's."
+          },
+          "image": {
+            "description": "An image with a tag or a digest. No tag is an error. `:latest` is a warning. Set `image` or `dockerfile`, not both. Neither: the platform base image."
+          },
+          "dockerfile": {
+            "anyOf": [
+              {
+                "not": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
+              },
+              {
+                "type": "string",
+                "pattern": "\\S",
+                "not": {
+                  "pattern": "^/|(^|/)\\.\\.($|/)"
+                }
+              }
+            ],
+            "description": "A repository path to a Dockerfile. `kortix validate` lints it: no `COPY` from the repository, no `RUN` heredoc, a Debian-family base image."
+          },
+          "cpu": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "vCPU cores. Above 32 is a warning, and Kortix uses 32. Default: the platform default."
+          },
+          "memory": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "GiB of memory. Above 128 is a warning, and Kortix uses 128. Default: the platform default."
+          },
+          "disk": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "GiB of disk. Above 500 is a warning, and Kortix uses 500. Default: the platform default."
+          },
+          "container_runtime": {
+            "type": "boolean",
+            "default": false,
+            "description": "`true`: Docker runs inside the sandbox."
+          },
+          "residential_proxy": {
+            "description": "`true`, or `{ country: us }`: the sandbox's web traffic leaves through a residential IP address, billed per GB from credits. Kortix hosts and package registries connect directly. Sessions start only where the deployment offers it. Not part of the image.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "country": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z]{2}$",
+                    "description": "ISO 3166-1 alpha-2 country code of the IP address."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "not": {
+          "required": [
+            "image",
+            "dockerfile"
+          ],
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "dockerfile": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      }
     },
     "imports": {
       "type": "array",
@@ -36,7 +131,7 @@
     "default_agent": {
       "type": "string",
       "pattern": "\\S",
-      "description": "The agent a session or trigger runs when it names none. A declared agent that is enabled and whose `mode` is `primary` or `all`."
+      "description": "The agent a session or trigger runs when it names none, and the agent My Kortix starts when it names none. A declared agent that is enabled and whose `mode` is `primary` or `all`, or `mykortix` when `builtin_agents.my_kortix` is true. Omitted: My Kortix when it is on."
     },
     "runtime": {
       "type": "string",
@@ -128,9 +223,24 @@
                 "description": "Overrides the container entrypoint. Default: the image's."
               },
               "image": {
-                "description": "An image with a tag or a digest. No tag is an error. `:latest` is a warning. Set `image` or `dockerfile`, not both."
+                "description": "An image with a tag or a digest. No tag is an error. `:latest` is a warning. Set `image` or `dockerfile`, not both. Neither: the platform base image."
               },
               "dockerfile": {
+                "anyOf": [
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "not": {
+                      "pattern": "^/|(^|/)\\.\\.($|/)"
+                    }
+                  }
+                ],
                 "description": "A repository path to a Dockerfile. `kortix validate` lints it: no `COPY` from the repository, no `RUN` heredoc, a Debian-family base image."
               },
               "cpu": {
@@ -152,57 +262,42 @@
                 "type": "boolean",
                 "default": false,
                 "description": "`true`: Docker runs inside the sandbox."
+              },
+              "residential_proxy": {
+                "description": "`true`, or `{ country: us }`: the sandbox's web traffic leaves through a residential IP address, billed per GB from credits. Kortix hosts and package registries connect directly. Sessions start only where the deployment offers it. Not part of the image.",
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z]{2}$",
+                        "description": "ISO 3166-1 alpha-2 country code of the IP address."
+                      }
+                    }
+                  }
+                ]
               }
             },
-            "oneOf": [
-              {
-                "required": [
-                  "image"
-                ],
-                "properties": {
-                  "image": {
-                    "type": "string",
-                    "pattern": "\\S"
-                  }
+            "not": {
+              "required": [
+                "image",
+                "dockerfile"
+              ],
+              "properties": {
+                "image": {
+                  "type": "string",
+                  "pattern": "\\S"
                 },
-                "not": {
-                  "required": [
-                    "dockerfile"
-                  ],
-                  "properties": {
-                    "dockerfile": {
-                      "type": "string",
-                      "pattern": "\\S"
-                    }
-                  }
-                }
-              },
-              {
-                "required": [
-                  "dockerfile"
-                ],
-                "properties": {
-                  "dockerfile": {
-                    "type": "string",
-                    "pattern": "\\S",
-                    "not": {
-                      "pattern": "^/|(^|/)\\.\\.($|/)"
-                    }
-                  }
-                },
-                "not": {
-                  "required": [
-                    "image"
-                  ],
-                  "properties": {
-                    "image": {
-                      "type": "string",
-                      "pattern": "\\S"
-                    }
-                  }
+                "dockerfile": {
+                  "type": "string",
+                  "pattern": "\\S"
                 }
               }
-            ]
+            }
           },
           "description": "Named sandbox images."
         },
@@ -237,7 +332,8 @@
                   "cron",
                   "webhook",
                   "event",
-                  "app"
+                  "app",
+                  "change_request"
                 ],
                 "description": "Required in the flat form: the trigger without `on` and `run`. `type` next to `on` is an error."
               },
@@ -463,6 +559,10 @@
                 "description": "Flat form of `on.timezone`."
               },
               "max_lateness": {
+                "type": "string",
+                "pattern": "^([1-9][0-9]*)(s|m|h|d)$"
+              },
+              "expect_event_within": {
                 "type": "string",
                 "pattern": "^([1-9][0-9]*)(s|m|h|d)$"
               },
@@ -826,6 +926,27 @@
                   "properties": {
                     "type": {
                       "enum": [
+                        "cron",
+                        "webhook",
+                        "event"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "expect_event_within": false
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "type": {
+                      "enum": [
                         "webhook",
                         "event",
                         "app"
@@ -1013,13 +1134,18 @@
                 "pattern": "^([1-9][0-9]*)(s|m|h|d)$",
                 "description": "Schedules only, `60s` or more. A missed fire later than this does not run."
               },
+              "expect_event_within": {
+                "type": "string",
+                "pattern": "^([1-9][0-9]*)(s|m|h|d)$",
+                "description": "App events only, `5m` or more. No event for this long tells the trigger's watchers once; the next event clears it."
+              },
               "overlap": {
                 "type": "string",
                 "enum": [
                   "skip",
                   "allow"
                 ],
-                "description": "`skip` holds a fire while the previous run is active. Only with `run.session: fresh`. Default: `skip` for a schedule, `allow` for others."
+                "description": "`skip` holds a fire while the previous run is active. With `run.session: reuse`, `pinned` or `keyed`: while the previous prompt still waits in that session. Default: `skip` for a schedule, `allow` for others."
               },
               "on": {
                 "description": "What fires the trigger: a schedule (`cron`, `every` or `at`), a webhook, or an App event.",
@@ -1258,7 +1384,7 @@
           "slug": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$",
-            "description": "Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters. `kortix_slack`, `kortix_teams`, `kortix_email` and `computer` are reserved for the built-in connectors."
+            "description": "Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters. `kortix_slack`, `kortix_teams`, `kortix_email`, `kortix_telegram`, `kortix_discord` and `computer` are reserved for the built-in connectors."
           },
           "name": {
             "type": "string",
@@ -1337,11 +1463,12 @@
                   "slack",
                   "teams",
                   "email",
-                  "telegram"
+                  "telegram",
+                  "discord"
                 ]
               },
               {
-                "pattern": "^\\s*(?:[sS][lL][aA][cC][kKK]|[tT][eE][aA][mM][sS]|[eE][mM][aA][iI][lL]|[tT][eE][lL][eE][gG][rR][aA][mM])\\s*$(?![\\s\\S])"
+                "pattern": "^\\s*(?:[sS][lL][aA][cC][kKK]|[tT][eE][aA][mM][sS]|[eE][mM][aA][iI][lL]|[tT][eE][lL][eE][gG][rR][aA][mM]|[dD][iI][sS][cC][oO][rR][dD])\\s*$(?![\\s\\S])"
               }
             ]
           },
@@ -1630,6 +1757,58 @@
               "properties": {
                 "slug": {
                   "const": "kortix_email"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "channel"
+                      ]
+                    },
+                    {
+                      "pattern": "^\\s*(?:[cC][hH][aA][nN][nN][eE][lL])\\s*$(?![\\s\\S])"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "slug": {
+                  "const": "kortix_telegram"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "channel"
+                      ]
+                    },
+                    {
+                      "pattern": "^\\s*(?:[cC][hH][aA][nN][nN][eE][lL])\\s*$(?![\\s\\S])"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "slug": {
+                  "const": "kortix_discord"
                 }
               }
             },
@@ -2337,6 +2516,22 @@
               "parent": {
                 "type": "string",
                 "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+              },
+              "space": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+                "description": "The space the App is grouped in. Grouping only."
+              },
+              "agent": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$",
+                "description": "The agent that owns the App. Grouping only."
               }
             },
             "additionalProperties": false
@@ -2429,7 +2624,6 @@
               "image_search",
               "image_gen",
               "scrape_webpage",
-              "memory",
               "show"
             ]
           }
@@ -2451,6 +2645,8 @@
             "websearch",
             "skill",
             "lsp",
+            "agent",
+            "codemode",
             "invalid",
             "execute",
             "plan_exit"
@@ -2613,6 +2809,18 @@
       "description": "The decision for a connector call that no rule matches.",
       "properties": {
         "default_mode": {
+          "type": "string",
+          "anyOf": [
+            {
+              "enum": [
+                "risk",
+                "allow_all"
+              ]
+            },
+            {
+              "pattern": "^\\s*(?:[rR][iI][sS][kKK]|[aA][lL][lL][oO][wW]_[aA][lL][lL])\\s*$(?![\\s\\S])"
+            }
+          ],
           "default": "allow_all",
           "description": "`allow_all`: the call runs. `risk`: a read runs, and a write or a delete waits for approval."
         }
@@ -2622,11 +2830,31 @@
       "type": "array",
       "description": "Connector rules for the whole project. They run before every policy set and base rule.",
       "items": {
+        "type": "object",
+        "required": [
+          "match",
+          "action"
+        ],
         "properties": {
           "match": {
-            "description": "Required. A glob over `<connector-slug>.<tool>`, such as `gmail.send_*` or `*.delete*`. Case-insensitive."
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Required. A glob over `<connector-slug>.<tool>`, such as `gmail.send_*` or `*.delete*`, or a `/regex/flags`. Case-insensitive."
           },
           "action": {
+            "type": "string",
+            "anyOf": [
+              {
+                "enum": [
+                  "always_run",
+                  "require_approval",
+                  "block"
+                ]
+              },
+              {
+                "pattern": "^\\s*(?:[aA][lL][wW][aA][yY][sS]_[rR][uU][nN]|[rR][eE][qQ][uU][iI][rR][eE]_[aA][pP][pP][rR][oO][vV][aA][lL]|[bB][lL][oO][cC][kKK])\\s*$(?![\\s\\S])"
+              }
+            ],
             "description": "Required. What a matching call does."
           },
           "conditions": {
@@ -2648,10 +2876,211 @@
       },
       "additionalProperties": false
     },
+    "spaces": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Spaces: channels with configured tabs. Agents join one with `agents.<name>.space`.",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "header": {
+            "type": "array",
+            "description": "What the space header shows, in order. Absent: every item.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "agents",
+                "members",
+                "needs_you",
+                "new_session",
+                "ask_my_kortix"
+              ]
+            }
+          },
+          "tabs": {
+            "type": "array",
+            "description": "The tabs, in order. Absent: the default set.",
+            "items": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "goals",
+                    "apps",
+                    "artifacts",
+                    "files",
+                    "board",
+                    "app",
+                    "artifact",
+                    "link"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "files: a project folder path."
+                },
+                "app": {
+                  "type": "string",
+                  "description": "app: a Kortix App slug."
+                },
+                "artifact": {
+                  "type": "string",
+                  "description": "artifact: an artifact_id."
+                },
+                "url": {
+                  "type": "string",
+                  "pattern": "^https?://",
+                  "description": "link: an http(s) url."
+                },
+                "embed": {
+                  "type": "boolean",
+                  "description": "link: embed the page in a sandboxed frame."
+                },
+                "blocks": {
+                  "type": "array",
+                  "description": "board: the grid blocks, in order.",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "chat",
+                          "artifact",
+                          "app",
+                          "iframe",
+                          "text"
+                        ]
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "room": {
+                        "type": "string",
+                        "deprecated": true,
+                        "description": "Retired with Rooms (2026-11); ignored."
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "app": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "files"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "path"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "app"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "app"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "artifact"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "artifact"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "link"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "url"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "builtin_agents": {
+      "type": "object",
+      "description": "Built-in agents the platform adds to this project. Each is off unless set to true.",
+      "properties": {
+        "my_kortix": {
+          "type": "boolean",
+          "default": false,
+          "description": "My Kortix, the built-in agent you talk to (slug `mykortix`). true adds it to this project; absent, false or a file Kortix cannot read leaves it out."
+        }
+      },
+      "additionalProperties": false
+    },
     "agents": {
       "type": "object",
-      "description": "Agent name → agent block. At least 1 agent, here or in an imported file. A name is lowercase letters, digits, `-` and `_`, at most 128 characters.",
-      "minProperties": 1,
+      "description": "Agent name → agent block, here or in an imported file. A name is lowercase letters, digits, `-` and `_`, at most 128 characters.",
       "propertyNames": {
         "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
       },
@@ -2727,10 +3156,18 @@
             "oneOf": [
               {
                 "type": "string",
-                "enum": [
-                  "ask",
-                  "allow",
-                  "deny"
+                "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                "anyOf": [
+                  {
+                    "enum": [
+                      "ask",
+                      "allow",
+                      "deny"
+                    ]
+                  },
+                  {
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                  }
                 ]
               },
               {
@@ -2738,42 +3175,82 @@
                 "properties": {
                   "todowrite": {
                     "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
+                    "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "ask",
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                      }
                     ]
                   },
                   "question": {
                     "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
+                    "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "ask",
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                      }
                     ]
                   },
                   "webfetch": {
                     "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
+                    "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "ask",
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                      }
                     ]
                   },
                   "websearch": {
                     "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
+                    "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "ask",
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                      }
                     ]
                   },
                   "doom_loop": {
                     "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
+                    "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "ask",
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                      }
                     ]
                   },
                   "skill": false,
@@ -2783,20 +3260,36 @@
                   "oneOf": [
                     {
                       "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
+                      "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "ask",
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        {
+                          "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                        }
                       ]
                     },
                     {
                       "type": "object",
                       "additionalProperties": {
                         "type": "string",
-                        "enum": [
-                          "ask",
-                          "allow",
-                          "deny"
+                        "description": "`allow`, `ask` or `deny`. `\"*\"` and `all` also mean `allow`.",
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "ask",
+                              "allow",
+                              "deny"
+                            ]
+                          },
+                          {
+                            "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                          }
                         ]
                       }
                     }
@@ -2805,7 +3298,7 @@
               }
             ],
             "default": "allow",
-            "description": "Which tool calls run, ask a person, or never run. `skill` and `task` belong to `skills` and `subagents`."
+            "description": "Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`\"*\"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`."
           },
           "prompt": {
             "type": "string",
@@ -2832,15 +3325,32 @@
             "default": "on",
             "description": "`on`: the model gets every tool plus `codemode`, which runs one JavaScript script that calls the other tools. `only`: `codemode` alone. `off`: no `codemode`. A script's calls follow the agent's `permission`."
           },
+          "context": {
+            "type": "string",
+            "enum": [
+              "record",
+              "summary"
+            ],
+            "default": "record",
+            "description": "What happens when the session's context fills. `record`: the agent continues at once in a fresh context and searches the session's full record, word for word, when it needs a detail; nothing is summarized. `summary`: a model call writes a summary of the conversation and the agent continues from it."
+          },
           "tools": {
-            "default": "all",
-            "description": "The tools the agent may call: built-in tools, Kortix tools and registered tools. A list allows only those. `{ exclude: [bash] }` allows every tool but those.",
+            "default": "*",
+            "description": "The tools the agent may call: built-in tools, Kortix tools and registered tools. `\"*\"` (quoted; `all` is its alias) is every tool, `none` is none. A list allows only those. `{ exclude: [bash] }` allows every tool but those.",
             "oneOf": [
               {
                 "type": "string",
-                "enum": [
-                  "all",
-                  "none"
+                "anyOf": [
+                  {
+                    "enum": [
+                      "*",
+                      "all",
+                      "none"
+                    ]
+                  },
+                  {
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL])\\s*$(?![\\s\\S])"
+                  }
                 ]
               },
               {
@@ -2869,39 +3379,59 @@
             ]
           },
           "skills": {
-            "description": "Registered skills and Kortix skills the agent may load.",
+            "description": "Registered skills and Kortix skills the agent may load. `{ exclude: [...] }` grants every one but those. \"*\" (every name; alias `all`), \"none\" (default), a list of names, or `{ exclude: [names] }` for every name but those.",
             "oneOf": [
               {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "\\S"
-                }
-              },
-              {
-                "type": "string",
-                "anyOf": [
+                "description": "\"*\" (every name; `all` is its alias), \"none\", or a list of names. A list that holds \"*\" is every name.",
+                "oneOf": [
                   {
-                    "enum": [
-                      "all",
-                      "*",
-                      "none",
-                      ""
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "*",
+                          "all",
+                          "none",
+                          ""
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                      },
+                      {
+                        "pattern": "^\\s*$(?![\\s\\S])"
+                      }
                     ]
-                  },
-                  {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
-                  },
-                  {
-                    "pattern": "^\\s*$(?![\\s\\S])"
                   }
                 ]
+              },
+              {
+                "type": "object",
+                "required": [
+                  "exclude"
+                ],
+                "properties": {
+                  "exclude": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                "additionalProperties": false
               }
-            ],
-            "default": "none"
+            ]
           },
           "subagents": {
-            "description": "Agents this agent may start with the `task` tool: declared, enabled, `mode` `subagent` or `all`, and not itself. A subagent cannot start another subagent.",
+            "description": "Agents this agent may start with the `agent` tool (alias `task`): declared, enabled, `mode` `subagent` or `all`, and not itself. A subagent cannot start another subagent.",
             "oneOf": [
               {
                 "type": "array",
@@ -2915,14 +3445,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -2947,14 +3477,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -2965,36 +3495,56 @@
             "default": "none"
           },
           "extensions": {
-            "description": "Registered extensions that a session of the agent loads.",
+            "description": "Registered extensions that a session of the agent loads. `{ exclude: [...] }` grants every one but those. \"*\" (every name; alias `all`), \"none\" (default), a list of names, or `{ exclude: [names] }` for every name but those.",
             "oneOf": [
               {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "\\S"
-                }
-              },
-              {
-                "type": "string",
-                "anyOf": [
+                "description": "\"*\" (every name; `all` is its alias), \"none\", or a list of names. A list that holds \"*\" is every name.",
+                "oneOf": [
                   {
-                    "enum": [
-                      "all",
-                      "*",
-                      "none",
-                      ""
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "*",
+                          "all",
+                          "none",
+                          ""
+                        ]
+                      },
+                      {
+                        "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                      },
+                      {
+                        "pattern": "^\\s*$(?![\\s\\S])"
+                      }
                     ]
-                  },
-                  {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
-                  },
-                  {
-                    "pattern": "^\\s*$(?![\\s\\S])"
                   }
                 ]
+              },
+              {
+                "type": "object",
+                "required": [
+                  "exclude"
+                ],
+                "properties": {
+                  "exclude": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                "additionalProperties": false
               }
-            ],
-            "default": "none"
+            ]
           },
           "connectors": {
             "description": "Connector slugs the agent may call.",
@@ -3011,14 +3561,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -3059,14 +3609,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -3091,14 +3641,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -3118,7 +3668,6 @@
                   "enum": [
                     "project.read",
                     "project.write",
-                    "project.delete",
                     "project.session.read",
                     "project.session.start",
                     "project.session.stop",
@@ -3134,7 +3683,6 @@
                     "project.gateway.spend.read",
                     "project.usage.read",
                     "project.gateway.budget.set",
-                    "project.gateway.keys.manage",
                     "project.agent.read",
                     "project.agent.write",
                     "project.skill.read",
@@ -3164,17 +3712,136 @@
                     "project.review.read",
                     "project.review.submit",
                     "project.review.act",
-                    "project.room.read",
-                    "project.room.write",
                     "project.artifact.read",
                     "project.artifact.write",
                     "project.artifact.manage",
                     "project.artifact.public",
-                    "project.credentials.issue",
+                    "account.read",
+                    "account.write",
+                    "billing.read",
+                    "audit.read",
+                    "member.read",
+                    "member.invite",
+                    "member.update",
+                    "member.remove",
+                    "member.super_admin.grant",
+                    "group.read",
+                    "group.create",
+                    "group.update",
+                    "group.delete",
+                    "group.members.manage",
+                    "policy.read",
+                    "policy.create",
+                    "policy.delete",
+                    "role.read",
+                    "role.create",
+                    "role.update",
+                    "role.delete",
+                    "token.read",
+                    "token.revoke",
+                    "token.personal.revoke",
+                    "project.create",
+                    "capture.read_all",
+                    "capture.manage",
+                    "workspace.read",
+                    "workspace.write",
+                    "workspace.session.read",
+                    "workspace.session.start",
+                    "workspace.session.stop",
+                    "workspace.session.bindings.write",
+                    "workspace.members.read",
+                    "workspace.members.manage",
+                    "workspace.trigger.read",
+                    "workspace.trigger.create",
+                    "workspace.trigger.update",
+                    "workspace.trigger.delete",
+                    "workspace.trigger.fire",
+                    "workspace.gateway.logs.read",
+                    "workspace.gateway.spend.read",
+                    "workspace.usage.read",
+                    "workspace.gateway.budget.set",
+                    "workspace.agent.read",
+                    "workspace.agent.write",
+                    "workspace.skill.read",
+                    "workspace.skill.write",
+                    "workspace.command.read",
+                    "workspace.command.write",
+                    "workspace.file.read",
+                    "workspace.file.write",
+                    "workspace.settings.write",
+                    "workspace.sandbox.write",
+                    "workspace.model.read",
+                    "workspace.model.write",
+                    "workspace.gitops.read",
+                    "workspace.gitops.push",
+                    "workspace.gitops.merge",
+                    "workspace.gitops.ref.any",
+                    "workspace.gitops.ref.delete",
+                    "workspace.secret.read",
+                    "workspace.secret.write",
+                    "workspace.connector.read",
+                    "workspace.connector.connections.manage",
+                    "workspace.connector.write",
+                    "workspace.app.read",
+                    "workspace.app.write",
+                    "workspace.app.deploy",
+                    "workspace.app.admin",
+                    "workspace.review.read",
+                    "workspace.review.submit",
+                    "workspace.review.act",
+                    "workspace.artifact.read",
+                    "workspace.artifact.write",
+                    "workspace.artifact.manage",
+                    "workspace.artifact.public",
+                    "workspace.account.read",
+                    "workspace.account.write",
+                    "workspace.billing.read",
+                    "workspace.audit.read",
+                    "workspace.member.read",
+                    "workspace.member.invite",
+                    "workspace.member.update",
+                    "workspace.member.remove",
+                    "workspace.member.super_admin.grant",
+                    "workspace.group.read",
+                    "workspace.group.create",
+                    "workspace.group.update",
+                    "workspace.group.delete",
+                    "workspace.group.members.manage",
+                    "workspace.policy.read",
+                    "workspace.policy.create",
+                    "workspace.policy.delete",
+                    "workspace.role.read",
+                    "workspace.role.create",
+                    "workspace.role.update",
+                    "workspace.role.delete",
+                    "workspace.token.read",
+                    "workspace.token.revoke",
+                    "workspace.token.personal.revoke",
+                    "workspace.create",
+                    "workspace.capture.read_all",
+                    "workspace.capture.manage",
                     "project.cr.open",
                     "project.cr.merge",
                     "project.customize.read",
                     "project.customize.write",
+                    "project.room.read",
+                    "project.room.write",
+                    "project.artifact.comment",
+                    "workspace.artifact.comment",
+                    "token.create",
+                    "workspace.token.create",
+                    "token.personal.create",
+                    "workspace.token.personal.create",
+                    "project.credentials.issue",
+                    "workspace.credentials.issue",
+                    "project.gateway.keys.manage",
+                    "workspace.gateway.keys.manage",
+                    "billing.write",
+                    "workspace.billing.write",
+                    "account.delete",
+                    "workspace.account.delete",
+                    "project.delete",
+                    "workspace.delete",
                     "*"
                   ]
                 }
@@ -3184,14 +3851,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "all",
                       "*",
+                      "all",
                       "none",
                       ""
                     ]
                   },
                   {
-                    "pattern": "^\\s*(?:[aA][lL][lL]|\\*|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
                   },
                   {
                     "pattern": "^\\s*$(?![\\s\\S])"
@@ -3203,7 +3870,21 @@
           },
           "workspace": {
             "description": "What new sessions of this agent get in /workspace. Any other key under `workspace` is an error.",
-            "type": "object",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "branch",
+                  "runtime",
+                  "read"
+                ],
+                "deprecated": true,
+                "description": "Deprecated: `branch` is `{ project_repository: true }`, `runtime` is `{ project_repository: false }`."
+              },
+              {
+                "type": "object"
+              }
+            ],
             "properties": {
               "project_repository": {
                 "type": "boolean",
@@ -3217,6 +3898,11 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$",
             "description": "A template slug, or `default` for the platform image. Default: `sandbox.default`."
+          },
+          "space": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "The space the agent works in (a key of the top-level `spaces` map, or a bare slug). Grouping only."
           },
           "network_egress": {
             "type": "object",
@@ -3239,6 +3925,267 @@
             },
             "additionalProperties": false,
             "description": "Only `{ version: 1, default: deny, rules: [] }`. It validates with a warning: Kortix does not enforce it."
+          },
+          "disable": {
+            "type": "boolean",
+            "deprecated": true,
+            "description": "Deprecated: use `enabled` (the opposite value)."
+          },
+          "env": {
+            "description": "Deprecated: use `secrets` (same value).",
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
+              },
+              {
+                "type": "string",
+                "anyOf": [
+                  {
+                    "enum": [
+                      "*",
+                      "all",
+                      "none",
+                      ""
+                    ]
+                  },
+                  {
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                  },
+                  {
+                    "pattern": "^\\s*$(?![\\s\\S])"
+                  }
+                ]
+              }
+            ],
+            "deprecated": true
+          },
+          "kortix_cli": {
+            "description": "Deprecated: use `kortix_permissions` (same value).",
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "project.read",
+                    "project.write",
+                    "project.session.read",
+                    "project.session.start",
+                    "project.session.stop",
+                    "project.session.bindings.write",
+                    "project.members.read",
+                    "project.members.manage",
+                    "project.trigger.read",
+                    "project.trigger.create",
+                    "project.trigger.update",
+                    "project.trigger.delete",
+                    "project.trigger.fire",
+                    "project.gateway.logs.read",
+                    "project.gateway.spend.read",
+                    "project.usage.read",
+                    "project.gateway.budget.set",
+                    "project.agent.read",
+                    "project.agent.write",
+                    "project.skill.read",
+                    "project.skill.write",
+                    "project.command.read",
+                    "project.command.write",
+                    "project.file.read",
+                    "project.file.write",
+                    "project.settings.write",
+                    "project.sandbox.write",
+                    "project.model.read",
+                    "project.model.write",
+                    "project.gitops.read",
+                    "project.gitops.push",
+                    "project.gitops.merge",
+                    "project.gitops.ref.any",
+                    "project.gitops.ref.delete",
+                    "project.secret.read",
+                    "project.secret.write",
+                    "project.connector.read",
+                    "project.connector.connections.manage",
+                    "project.connector.write",
+                    "project.app.read",
+                    "project.app.write",
+                    "project.app.deploy",
+                    "project.app.admin",
+                    "project.review.read",
+                    "project.review.submit",
+                    "project.review.act",
+                    "project.artifact.read",
+                    "project.artifact.write",
+                    "project.artifact.manage",
+                    "project.artifact.public",
+                    "account.read",
+                    "account.write",
+                    "billing.read",
+                    "audit.read",
+                    "member.read",
+                    "member.invite",
+                    "member.update",
+                    "member.remove",
+                    "member.super_admin.grant",
+                    "group.read",
+                    "group.create",
+                    "group.update",
+                    "group.delete",
+                    "group.members.manage",
+                    "policy.read",
+                    "policy.create",
+                    "policy.delete",
+                    "role.read",
+                    "role.create",
+                    "role.update",
+                    "role.delete",
+                    "token.read",
+                    "token.revoke",
+                    "token.personal.revoke",
+                    "project.create",
+                    "capture.read_all",
+                    "capture.manage",
+                    "workspace.read",
+                    "workspace.write",
+                    "workspace.session.read",
+                    "workspace.session.start",
+                    "workspace.session.stop",
+                    "workspace.session.bindings.write",
+                    "workspace.members.read",
+                    "workspace.members.manage",
+                    "workspace.trigger.read",
+                    "workspace.trigger.create",
+                    "workspace.trigger.update",
+                    "workspace.trigger.delete",
+                    "workspace.trigger.fire",
+                    "workspace.gateway.logs.read",
+                    "workspace.gateway.spend.read",
+                    "workspace.usage.read",
+                    "workspace.gateway.budget.set",
+                    "workspace.agent.read",
+                    "workspace.agent.write",
+                    "workspace.skill.read",
+                    "workspace.skill.write",
+                    "workspace.command.read",
+                    "workspace.command.write",
+                    "workspace.file.read",
+                    "workspace.file.write",
+                    "workspace.settings.write",
+                    "workspace.sandbox.write",
+                    "workspace.model.read",
+                    "workspace.model.write",
+                    "workspace.gitops.read",
+                    "workspace.gitops.push",
+                    "workspace.gitops.merge",
+                    "workspace.gitops.ref.any",
+                    "workspace.gitops.ref.delete",
+                    "workspace.secret.read",
+                    "workspace.secret.write",
+                    "workspace.connector.read",
+                    "workspace.connector.connections.manage",
+                    "workspace.connector.write",
+                    "workspace.app.read",
+                    "workspace.app.write",
+                    "workspace.app.deploy",
+                    "workspace.app.admin",
+                    "workspace.review.read",
+                    "workspace.review.submit",
+                    "workspace.review.act",
+                    "workspace.artifact.read",
+                    "workspace.artifact.write",
+                    "workspace.artifact.manage",
+                    "workspace.artifact.public",
+                    "workspace.account.read",
+                    "workspace.account.write",
+                    "workspace.billing.read",
+                    "workspace.audit.read",
+                    "workspace.member.read",
+                    "workspace.member.invite",
+                    "workspace.member.update",
+                    "workspace.member.remove",
+                    "workspace.member.super_admin.grant",
+                    "workspace.group.read",
+                    "workspace.group.create",
+                    "workspace.group.update",
+                    "workspace.group.delete",
+                    "workspace.group.members.manage",
+                    "workspace.policy.read",
+                    "workspace.policy.create",
+                    "workspace.policy.delete",
+                    "workspace.role.read",
+                    "workspace.role.create",
+                    "workspace.role.update",
+                    "workspace.role.delete",
+                    "workspace.token.read",
+                    "workspace.token.revoke",
+                    "workspace.token.personal.revoke",
+                    "workspace.create",
+                    "workspace.capture.read_all",
+                    "workspace.capture.manage",
+                    "project.cr.open",
+                    "project.cr.merge",
+                    "project.customize.read",
+                    "project.customize.write",
+                    "project.room.read",
+                    "project.room.write",
+                    "project.artifact.comment",
+                    "workspace.artifact.comment",
+                    "token.create",
+                    "workspace.token.create",
+                    "token.personal.create",
+                    "workspace.token.personal.create",
+                    "project.credentials.issue",
+                    "workspace.credentials.issue",
+                    "project.gateway.keys.manage",
+                    "workspace.gateway.keys.manage",
+                    "billing.write",
+                    "workspace.billing.write",
+                    "account.delete",
+                    "workspace.account.delete",
+                    "project.delete",
+                    "workspace.delete",
+                    "*"
+                  ]
+                }
+              },
+              {
+                "type": "string",
+                "anyOf": [
+                  {
+                    "enum": [
+                      "*",
+                      "all",
+                      "none",
+                      ""
+                    ]
+                  },
+                  {
+                    "pattern": "^\\s*(?:\\*|[aA][lL][lL]|[nN][oO][nN][eE])\\s*$(?![\\s\\S])"
+                  },
+                  {
+                    "pattern": "^\\s*$(?![\\s\\S])"
+                  }
+                ]
+              }
+            ],
+            "deprecated": true
+          },
+          "connectors_personal": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "deprecated": true,
+            "description": "Deprecated: use `connectors_required` (same value)."
+          },
+          "repository_access": {
+            "type": "boolean",
+            "deprecated": true,
+            "description": "Deprecated: use `workspace: { project_repository: <bool> }`."
           }
         },
         "additionalProperties": false,

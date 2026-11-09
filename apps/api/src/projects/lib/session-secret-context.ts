@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { projectSessions, projects } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 
 import { db } from '../../shared/db';
+import { loadGitProjectRow } from './project-git-row';
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
 import { resolveSessionPersonalOwner } from './personal-resources';
 import { resolveSessionSecretGrant } from './secret-grant';
@@ -23,6 +24,8 @@ export interface SessionSecretContext {
   project: { repoUrl: string | null; defaultBranch: string | null; manifestPath: string | null } | undefined;
   grantEnv: () => Promise<string[] | 'all' | undefined>;
   personalUserId: () => Promise<string | null>;
+  /** When the grant read settled (`performance.now()`), null before. Timing only. */
+  grantSettledAt?: () => number | null;
 }
 
 export async function loadSessionSecretContext(
@@ -41,19 +44,11 @@ export async function loadSessionSecretContext(
       .where(eq(projectSessions.sessionId, sessionId))
       .limit(1)
       .then((rows) => rows[0]),
-    db
-      .select({
-        repoUrl: projects.repoUrl,
-        defaultBranch: projects.defaultBranch,
-        manifestPath: projects.manifestPath,
-      })
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
-      .limit(1)
-      .then((rows) => rows[0]),
+    loadGitProjectRow(projectId),
   ]);
   let grantEnv: Promise<string[] | 'all' | undefined> | undefined;
   let personalUserId: Promise<string | null> | undefined;
+  let grantSettled: number | null = null;
   return {
     session,
     project,
@@ -66,7 +61,10 @@ export async function loadSessionSecretContext(
         sessionAgent: session?.agentName ?? DEFAULT_AGENT_SENTINEL,
         requestedAgent,
         forceRefresh: 'tip-proof',
+      }).finally(() => {
+        grantSettled = performance.now();
       })),
+    grantSettledAt: () => grantSettled,
     // Spec 2026-09-22 §2.3: personal overrides follow the session's
     // on-behalf-of human under the agent-principal model; the creator otherwise.
     personalUserId: () =>

@@ -14,8 +14,7 @@
  *   gzipped, 16 MB raw) has its longest strings cut, longest first, to their first
  *   16 kB and `JOURNAL_TRUNCATION_MARK` until it fits. The native store keeps the
  *   whole message.
- * - Both harnesses' turn-end relays (`relayTurnEnd`, OpenCode's
- *   `relayTurnEndToApi`) and the daemon shutdown call `flush`, which waits at
+ * - pi's turn-end relay (`relayTurnEnd`) and the daemon shutdown call `flush`, which waits at
  *   most 3 s for the acknowledgement, and returns at the first failed post. A
  *   batch not acknowledged by then keeps retrying in the background; the
  *   native store still holds the messages.
@@ -56,7 +55,7 @@
  * then `log.message` for each put (`{ rev, message }`) and each tombstone
  * (`{ message_id, rev }`, as the journal posts it), with the revs the API receives. The
  * journal collects when it starts (the native store is at rest), at each turn
- * end and at the daemon stop. A journal the API turned off (404, 409)
+ * end, at the daemon stop and, on pi, while a turn runs (below). A journal the API turned off (404, 409)
  * collects and publishes nothing more, deltas included. While it runs, every `message.part.delta` text
  * frame on the v1 bus is published as `log.block.delta`: both harnesses use the
  * v1 session id, message id and part id as the thread, message and block id.
@@ -73,9 +72,23 @@
  * is built in the bus listener, before the next frame, so its text is exactly
  * the deltas published before it. A message whose seq the adapter cannot know
  * yet waits for the next live frame. The collection's put of the message has
- * a higher rev and ends its live puts. A live message the harness removes
+ * a higher rev and ends its live puts, unless it is a mid-turn streaming record (below). A live message the harness removes
  * before the collection (`message.removed`) gets the journal-form tombstone
  * if a put of it went out; a removed part (`message.part.removed`) a fresh put.
+ *
+ * Mid-turn (pi only: `midTurnMs`, `JOURNAL_MID_TURN_MS` = 5 s). A `message.*` frame on the v1 bus
+ * schedules one collection and send at most `midTurnMs` later, so a box that dies mid-turn loses at
+ * most that much of what pi stored: the prompt (stored when the turn starts), each finished step
+ * with its results, and the step whose calls run. An idle session has no frames and sends nothing;
+ * a collection that finds nothing changed sends nothing. pi exports a reply whose calls run as
+ * `streaming`, its calls open. That record goes to the API only (its cursor hash is marked `~`):
+ * no `log.message`, and its live puts go on, so the stream keeps their v1 metadata (a running
+ * task's `sessionId`). The API keeps the highest rev, so a later record replaces it. A box that
+ * dies leaves it `streaming`, as the stop path always did; a restore gives pi the open calls, and
+ * pi-ai sends "No result provided" for them. The restored box's next turn exports the step closed
+ * (C2) and replaces the record. The reply pi streams has no entry before its
+ * `message_end` and stays out. The first finished step marks the turn `log_durable_at` (apps/api
+ * `markDurableTurns`).
  *
  * Attachment bytes (P2.13). An adapter exports an image or file as `ref: blob:<sha256>`; its
  * bytes are only in the native store. A collection starts one attachment pass over the sha256s
@@ -131,6 +144,13 @@ import type { ExportedMessage, SessionLogChanges, SessionLogPort } from '../cont
 import { mapLimit } from '@/lib/map-limit'
 import { computeRetryDelay, MAX_RETRY_MS_DEFAULT } from './audit-relay'
 import { carryHarness, saveSeqOffsets, type HarnessCarry } from './session-log-boot'
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
+
+/** The assistant message a compaction streams its summary into (`summary: true`, its marker as parent). */
+function isCompactionSummary(info: unknown): boolean {
+  const i = info as { role?: unknown; summary?: unknown } | undefined
+  return i?.role === 'assistant' && i.summary === true
+}
 
 export const JOURNAL_MAX_BATCH_BYTES = 1024 * 1024
 /** The floor a 413 halves the batch limit to. */
@@ -155,6 +175,8 @@ export const JOURNAL_BLOB_ATTEMPTS = 3
 const JOURNAL_BLOB_CONCURRENCY = 4
 /** How long a collection waits for its attachment pass before its records go on; the pass continues. */
 export const JOURNAL_BLOB_BUDGET_MS = 10_000
+/** pi's mid-turn collection: what a box that dies mid-turn loses, at most (see the header). */
+export const JOURNAL_MID_TURN_MS = 5_000
 /** Ends a string the journal cut to fit the route's cap (see the header). */
 export const JOURNAL_TRUNCATION_MARK = '[Kortix: the session log keeps the first 16 kB of this text; the whole text is in the sandbox only]'
 
@@ -177,6 +199,8 @@ export interface SessionLogJournalOptions {
   harness?: HarnessCarry
   /** Per thread, what this box adds to a native seq (a 422 re-sequenced it, see the header). */
   seq_offsets?: Record<string, number>
+  /** Collect and send at most this long after a turn's message frame (see the header). Off when absent. */
+  midTurnMs?: number
   /** Test seams. */
   blobBudgetMs?: number
   maxBatchBytes?: number
@@ -224,9 +248,18 @@ export class SessionLogJournal {
   private readonly live = new Map<string, LiveRow>()
   private readonly seqOffsets: Map<string, number>
   private maxBatch: number
+  /** The mid-turn collection a message frame scheduled, at most one. */
+  private tick: ReturnType<typeof setTimeout> | null = null
   /** The v1 bus until `stop`: text deltas republished as `log.block.delta`, and the live turn's puts. */
   private readonly offDeltas = kortixEventBus().tap((event) => {
     if (this.off) return
+    const ms = this.options.midTurnMs
+    if (ms && event.type.startsWith('message.')) {
+      this.tick ??= setTimeout(() => {
+        this.tick = null
+        void this.flush(0)
+      }, ms)
+    }
     const p = event.payload as Record<string, any> | null
     if (event.type === 'message.updated') return this.liveMessage(p?.info)
     if (event.type === 'message.part.updated') return this.livePart(p?.part)
@@ -235,8 +268,10 @@ export class SessionLogJournal {
     if (event.type !== 'message.part.delta' || p?.field !== 'text' || typeof p.delta !== 'string') return
     const { sessionID: thread_id, messageID: message_id, partID: block_id } = p
     if (typeof thread_id !== 'string' || typeof message_id !== 'string' || typeof block_id !== 'string') return
-    const part = this.live.get(message_id)?.parts.get(block_id)
+    const row = this.live.get(message_id)
+    const part = row?.parts.get(block_id)
     if (part && typeof part.text === 'string') part.text += p.delta
+    if (isCompactionSummary(row?.info)) return
     sessionLogEventBus().publish('log.block.delta', { thread_id, message_id, block_id, delta: p.delta } satisfies SessionLogBlockDeltaEvent, thread_id)
   })
 
@@ -253,6 +288,18 @@ export class SessionLogJournal {
   private shifted(message: SessionLogMessage): SessionLogMessage {
     const offset = this.seqOffsets.get(message.thread_id)
     return offset ? { ...message, seq: message.seq + offset } : message
+  }
+
+  /** The session fields as this journal sends them: the boot's overlay and the restored harness history on top. */
+  private presented(session: SessionLogSessionPatch): SessionLogSessionPatch {
+    const presented = { ...session, ...this.options.session }
+    if (session.harness) presented.harness = carryHarness(this.options.harness, session.harness)
+    return presented
+  }
+
+  /** How the box's own log reads present the log: as this journal sends it to apps/api. */
+  view(): SessionLogView {
+    return { generation: this.options.generation, session: (session) => this.presented(session), message: (message) => this.shifted(message) }
   }
 
   /** Why the journal is off for this boot (`404`, `409`), or null while it runs. */
@@ -318,8 +365,9 @@ export class SessionLogJournal {
     return this.collecting
   }
 
+  /** The stream has the collection's record of `id`, which ends its live puts. A streaming record (`~`) went to the API only. */
   private collected(id: string): boolean {
-    for (const cursor of this.cursors.values()) if (id in cursor.native_hashes) return true
+    for (const cursor of this.cursors.values()) if (cursor.native_hashes[id]?.startsWith('~') === false) return true
     return false
   }
 
@@ -341,12 +389,20 @@ export class SessionLogJournal {
     if (typeof part?.id !== 'string' || typeof part.messageID !== 'string' || this.collected(part.messageID)) return
     const row = this.row(part.messageID)
     const before = row.parts.get(part.id)
-    // OpenCode also streams complete text snapshots via message.part.updated.
+    // A text part's `message.part.updated` carries the whole text (pi sends one at the text's end).
     // Publish changed snapshots; a snapshot echoing an applied delta is unchanged.
     row.due ||= !before || before.text !== part.text || toolShape(before) !== toolShape(part)
     // A copy: deltas extend it, and the v1 ring must keep the frame as published.
     row.parts.set(part.id, structuredClone(part))
     if (row.due) this.publishLive()
+  }
+
+  /** A live message whose seq changed (a queued prompt whose turn started): put it again, at its seq now. */
+  relive(messageId: string): void {
+    const row = this.live.get(messageId)
+    if (!row || this.collected(messageId)) return
+    row.due = true
+    this.publishLive()
   }
 
   /** A live message the harness removed before the journal collected it (a retracted prompt, a revert): its tombstone, if a put went out. */
@@ -368,13 +424,22 @@ export class SessionLogJournal {
   private publishLive(): void {
     for (const [id, row] of this.live) {
       if (!row.due || !row.info) continue
+      // A compaction summary is never a message of its own: the log carries it inside its marker's
+      // `compaction` block. Put alone, it rendered as an answer the stored log never replaces.
+      if (isCompactionSummary(row.info)) {
+        row.due = false
+        continue
+      }
       const thread = row.info.sessionID
       try {
         const known = this.port.live(thread, id)
         if (!known) continue
         row.due = false
         const harness = this.port.capabilities.harness as FromV1Options['harness']
-        const message = this.shifted(liveMessageFromV1({ info: row.info, parts: [...row.parts.values()] }, known, harness))
+        const { queued, ...at } = known
+        const live = liveMessageFromV1({ info: row.info, parts: [...row.parts.values()] }, at, harness)
+        // A queued seq is above every real one already: never shifted (it would pass MAX_SAFE_INTEGER).
+        const message = queued ? live : this.shifted(live)
         row.sent = true
         sessionLogEventBus().publish('log.message', { rev: nextRev(), message } satisfies SessionLogMessageEvent, thread)
       } catch (err) {
@@ -392,13 +457,16 @@ export class SessionLogJournal {
       const id = message.message_id
       let cursor = this.cursors.get(message.thread_id)
       if (!cursor) this.cursors.set(message.thread_id, (cursor = { thread_id: message.thread_id, last_seq: -1, native_hashes: {} }))
-      if (cursor.native_hashes[id] === native_hash) continue
-      // An attachment not stored yet: '' makes the next collection export the message again.
-      cursor.native_hashes[id] = this.withStoredRefs(message) ? native_hash : ''
+      // A streaming record (pi: a reply whose calls run) goes to the API only, marked `~` (see the header).
+      const streaming = message.status === 'streaming' ? '~' : ''
+      if (cursor.native_hashes[id] === streaming + native_hash) continue
+      // An attachment not stored yet: no hash makes the next collection export the message again.
+      cursor.native_hashes[id] = streaming + (this.withStoredRefs(message) ? native_hash : '')
       cursor.last_seq = Math.max(cursor.last_seq, message.seq)
       this.tombstoned.delete(id)
       const entry = { id, rev: nextRev(), message: this.shifted(message) }
       this.dirty.set(id, entry)
+      if (streaming) continue
       this.live.delete(id)
       messages.push({ rev: entry.rev, message: entry.message })
     }
@@ -418,8 +486,7 @@ export class SessionLogJournal {
       threads.push(thread)
     }
     if (changes.session) {
-      const session = { ...changes.session, ...this.options.session }
-      if (changes.session.harness) session.harness = carryHarness(this.options.harness, changes.session.harness)
+      const session = this.presented(changes.session)
       this.session = { ...this.session, ...session }
       sessionLogEventBus().publish('log.state', { generation: this.options.generation, session } satisfies SessionLogStateEvent)
     }
@@ -467,7 +534,7 @@ export class SessionLogJournal {
       return
     }
     if (sessionTokenPresumedDead()) return
-    const blobUrl = (sha256: string) => `${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/blobs/${sha256}`
+    const blobUrl = (sha256: string) => `${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/blobs/${sha256}`
     const headers = { Authorization: `Bearer ${ctx.token}` }
     let down = false
     const found = await mapLimit(pending, JOURNAL_BLOB_CONCURRENCY, async ([sha256]) => {
@@ -490,7 +557,7 @@ export class SessionLogJournal {
   private async lookupBlob(url: string, headers: Record<string, string>, sha256: string): Promise<'settled' | 'missing' | 'down'> {
     let found: Response
     try {
-      found = await fetch(url, { headers, signal: AbortSignal.timeout(JOURNAL_POST_TIMEOUT_MS) })
+      found = await kortixApiFetch(url, { headers, signal: AbortSignal.timeout(JOURNAL_POST_TIMEOUT_MS) })
     } catch (err) {
       logger.warn('[session-log] attachment lookup failed; it keeps blob: until a later collection', { err: (err as Error).message })
       return 'down'
@@ -510,7 +577,7 @@ export class SessionLogJournal {
     if (!bytes || bytes.byteLength > JOURNAL_MAX_BLOB_BYTES) return this.settleBlob(sha256, '')
     let put: Response
     try {
-      put = await fetch(url, { method: 'PUT', headers: { ...headers, 'Content-Type': mime }, body: bytes, signal: AbortSignal.timeout(JOURNAL_BLOB_TIMEOUT_MS) })
+      put = await kortixApiFetch(url, { method: 'PUT', headers: { ...headers, 'Content-Type': mime }, body: bytes, signal: AbortSignal.timeout(JOURNAL_BLOB_TIMEOUT_MS) })
     } catch (err) {
       logger.warn('[session-log] attachment upload failed', { err: (err as Error).message })
       return 'failed'
@@ -613,8 +680,8 @@ export class SessionLogJournal {
     let response: Response
     this.inflight = new AbortController()
     try {
-      response = await fetch(
-        `${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/journal`,
+      response = await kortixApiFetch(
+        `${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/journal`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', Authorization: `Bearer ${ctx.token}` },
@@ -765,8 +832,8 @@ export class SessionLogJournal {
 }
 
 /**
- * `SessionLogPort.changes` for an adapter that rebuilds its whole log on each read (pi,
- * OpenCode): every message after its thread's cursor or with a new native hash, every id a
+ * `SessionLogPort.changes` for an adapter that rebuilds its whole log on each read (pi):
+ * every message after its thread's cursor or with a new native hash, every id a
  * cursor holds that the log no longer has (a tombstone), every thread (the journal drops an
  * unchanged one), and the session fields when their JSON differs from `previousSessionJson`.
  */
@@ -857,7 +924,22 @@ function parseJson(text: string): unknown {
 
 // ── The boot's journal ────────────────────────────────────────────────────
 
+/** The generation, session fields and seqs apps/api stores for the box's log. */
+export interface SessionLogView {
+  generation: number
+  session(session: SessionLogSessionPatch): SessionLogSessionPatch
+  message(message: SessionLogMessage): SessionLogMessage
+}
+
+/** Without a journal (no apps/api to write to): the log as the adapter builds it, at generation 0. */
+const UNJOURNALED: SessionLogView = { generation: 0, session: (session) => session, message: (message) => message }
+
 let active: SessionLogJournal | null = null
+
+/** How the box's own log reads (`GET /kortix/runtime/log`) present the log: as this boot's journal sends it. */
+export function sessionLogView(): SessionLogView {
+  return active?.view() ?? UNJOURNALED
+}
 
 /** Start this boot's journal. An adapter calls it once its native store is ready (after a restore, with its cursors). */
 export function startSessionLogJournal(port: SessionLogPort, options: SessionLogJournalOptions): SessionLogJournal | null {
@@ -873,6 +955,11 @@ export function startSessionLogJournal(port: SessionLogPort, options: SessionLog
 /** Before a turn's end is relayed. True when there is nothing left to acknowledge. */
 export function flushSessionLogJournal(): Promise<boolean> {
   return active ? active.flush() : Promise.resolve(true)
+}
+
+/** A live message's seq changed (a queued prompt whose turn started): the v2 stream gets it again at once. */
+export function reliveSessionLogMessage(messageId: string): void {
+  active?.relive(messageId)
 }
 
 /** Every daemon stop path, before the harness stops. */

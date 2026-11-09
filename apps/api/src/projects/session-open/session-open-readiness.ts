@@ -1,5 +1,5 @@
 /**
- * OpenCode readiness staging for a provider-running box: the OpenCode pin,
+ * Runtime readiness staging for a provider-running box: the runtime session pin,
  * the boot budgets, the dead-daemon relaunch, and the open-time clock
  * writers. Split out of the former routes/shared.ts (KRTX-274); every
  * block below moved verbatim.
@@ -8,18 +8,26 @@ import type { SessionStartResult } from '@kortix/api-contract';
 import { sessionSandboxes } from '@kortix/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { type SandboxStatus } from '../../platform/providers';
+import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
-import { ensureOpencodeSessionPin, sandboxOpencodeEndpoint, type EnsureResult } from '../opencode-mapping';
+import { ensureRuntimeSessionPin, sandboxRuntimeEndpoint, type EnsureResult } from '../runtime-session-mapping';
 import { runtimeCapabilities } from '../session-lifecycle/runtime-fetch';
 import { metadataDelta, stripMetadataKeys } from '../session-lifecycle/sandbox-metadata-sql';
 import type { StartCallLog } from '../session-lifecycle/start-envelope';
+import { runtimeStartFailureCount, runtimeStartRetryAtMs } from '../session-lifecycle/runtime-wake-fence';
 import {
+  RUNTIME_BOOT_ERROR_AT_KEY,
+  RUNTIME_BOOT_ERROR_KEY,
+  RUNTIME_BOOT_ERROR_PARK_REASON,
   RUNTIME_PROVEN_AT_KEY,
   RUNTIME_READINESS_CLOCK_KEYS,
+  RUNTIME_UNREACHABLE_CAUSE_KEYS,
+  runtimeBootErrorMessage,
   STALE_RUNTIME_BOOT_HARD_MS,
   hasRuntimeReadinessClock,
   readinessValue,
   runtimeReadyWaitPatch,
+  runtimeBootEpochMs,
   runtimeProvenThisBoot,
   servesThroughProbeMiss,
   shouldWarnRuntimeUnreachable,
@@ -36,11 +44,12 @@ import {
   serializeSandboxRow,
   sessionRuntimeUrlPath,
 } from './stopped-wake-result';
+import { captureProductEvent } from '../../shared/product-analytics';
 
 // A provider-running box normally binds the daemon within seconds. A daemon
 // that remains unreachable for 30 seconds needs an explicit restart, not five
 // minutes of repeated 8-second /start long-polls. Once the daemon answers, give
-// OpenCode itself a wider window to finish booting.
+// the runtime itself a wider window to finish booting.
 const STALE_RUNTIME_UNREACHABLE_MS = 30_000;
 const STALE_RUNTIME_NOT_READY_MS = 90_000;
 /** A reconcile that did not heal the row waits this long before it execs again. */
@@ -87,7 +96,11 @@ export async function markRuntimeReadyWaitStarted(
   // budget below is "no progress for N seconds", not "not ready N seconds
   // after the first poll" (see runtimeReadyWaitPatch).
   const patch = runtimeReadyWaitPatch(metadata, reason, bootPhase);
-  if (!patch) return;
+  // A daemon that answers `not_ready` is reachable: an `unreachable` diagnosis
+  // still on the row is from before it listened.
+  const staleCause = reason === 'not_ready' && RUNTIME_UNREACHABLE_CAUSE_KEYS.some((key) => key in metadata);
+  if (!patch && !staleCause) return;
+  const delta = JSON.stringify(patch ? metadataDelta(metadata, patch) : {});
   try {
     // Merge only the clocks this poll changed. `patch` spreads the row read
     // before the daemon round-trip; writing it whole erased a restart claim
@@ -96,9 +109,9 @@ export async function markRuntimeReadyWaitStarted(
     await db
       .update(sessionSandboxes)
       .set({
-        metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify(
-          metadataDelta(metadata, patch),
-        )}::jsonb`,
+        metadata: staleCause
+          ? sql`${stripMetadataKeys(RUNTIME_UNREACHABLE_CAUSE_KEYS)} || ${delta}::jsonb`
+          : sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${delta}::jsonb`,
         updatedAt: new Date(),
       })
       .where(
@@ -108,17 +121,23 @@ export async function markRuntimeReadyWaitStarted(
         ),
       );
   } catch (err) {
-    console.warn(`[start] failed to mark OpenCode wait for ${row.sandboxId}:`, err);
+    console.warn(`[start] failed to mark runtime wait for ${row.sandboxId}:`, err);
   }
 }
 
-/** The daemon answered ready: drop the boot clocks and prove this boot, in one write when either is due. */
+/**
+ * The daemon answered ready: drop the boot clocks and prove this boot, in one
+ * write when either is due. `firstProof`: this call proved the boot (once per
+ * boot), with the boot duration when the boot clock is known.
+ */
 async function markRuntimeAnswered(
   row: typeof sessionSandboxes.$inferSelect,
-): Promise<void> {
+): Promise<{ firstProof: boolean; bootEpochMs: number | null; bootMs: number | null }> {
   const metadata = sandboxMetadata(row);
   const proven = runtimeProvenThisBoot(metadata);
-  if (!hasRuntimeReadinessClock(metadata) && proven) return;
+  const bootEpochMs = runtimeBootEpochMs(metadata);
+  const answer = { firstProof: false, bootEpochMs, bootMs: null as number | null };
+  if (!hasRuntimeReadinessClock(metadata) && proven) return answer;
   try {
     await db
       .update(sessionSandboxes)
@@ -135,17 +154,22 @@ async function markRuntimeAnswered(
         updatedAt: new Date(),
       })
       .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
+    if (!proven) {
+      answer.firstProof = true;
+      answer.bootMs = bootEpochMs === null ? null : Math.max(0, Date.now() - bootEpochMs);
+    }
   } catch (err) {
     console.warn(`[start] failed to record the runtime answer for ${row.sandboxId}:`, err);
   }
+  return answer;
 }
 
 /**
  * The readiness phase of `runOpenSession` for a provider-running box: resolve
- * the OpenCode pin server-side and assemble the serving answer. Body verbatim
+ * the runtime session pin server-side and assemble the serving answer. Body verbatim
  * from the original `runOpenSession` (KRTX-274 split).
  */
-export async function observeOpenCodeReadiness(
+export async function observeRuntimeReadiness(
   args: OpenSessionArgs,
   log: StartCallLog,
   row: OpenSessionRow,
@@ -160,12 +184,12 @@ export async function observeOpenCodeReadiness(
 }> {
   const { loaded, visible, projectId, sessionId } = args;
   const accountId = visible.row.accountId;
-  // Box is provider-running. Resolve OpenCode readiness + the canonical pin
+  // Box is provider-running. Resolve runtime readiness + the canonical pin
   // server-side — safe now that the box is confirmed up, so the daemon answers
-  // FAST (a 503 'not_ready' while OpenCode is still booting, not an 8s timeout
+  // FAST (a 503 'not_ready' while the runtime is still booting, not an 8s timeout
   // against a dead box). This keeps ALL the lifecycle logic server-side: the
   // client just polls until stage='ready' and gets the pin handed to it.
-  const ensured = await ensureOpencodeSessionPin({
+  const ensured = await ensureRuntimeSessionPin({
     projectId,
     sessionId,
     accountId,
@@ -194,7 +218,7 @@ export async function observeOpenCodeReadiness(
   const listed = booting
     ? null
     : await runtimeCapabilities(runningExternalId, () =>
-        sandboxOpencodeEndpoint(runningExternalId, loaded.userId),
+        sandboxRuntimeEndpoint(runningExternalId, loaded.userId),
       );
   const capabilities = listed?.length ? listed : null;
   const servingAnswer: SessionStartResult = {
@@ -202,7 +226,7 @@ export async function observeOpenCodeReadiness(
     agent_name: visible.row.agentName ?? 'default',
     retriable: false,
     sandbox: serializeSandboxRow(row),
-    opencode_session_id: ensured.pin,
+    runtime_session_id: ensured.pin,
     runtime_url: sessionRuntimeUrlPath(runningExternalId),
     reason: ensured.reason,
     ...(capabilities ? { capabilities } : {}),
@@ -218,7 +242,7 @@ export async function stampUnreachableDiagnostics(
 ): Promise<void> {
   if (ensured.reason === 'unreachable') {
     // `unreachable` is five different failures wearing one word (see
-    // `opencode-mapping.ts`'s `UnreachableCause`). A session that cycles on it
+    // `runtime-session-mapping.ts`'s `UnreachableCause`). A session that cycles on it
     // — measured 2026-09-28: 1447s of `starting/unreachable` ->
     // `failed/runtime_unreachable_timeout` on a box whose daemon answered
     // `200 {"daemon":"ok","opencode":"ok"}` — is undiagnosable without this.
@@ -234,7 +258,7 @@ export async function stampUnreachableDiagnostics(
     const nextCause = ensured.cause ?? 'unspecified';
     const warn = shouldWarnRuntimeUnreachable(metadata, Date.now(), STALE_RUNTIME_UNREACHABLE_MS);
     if (warn) {
-      console.warn('[start] opencode session list unreachable', {
+      console.warn('[start] runtime session list unreachable', {
         sandbox_id: row.sandboxId,
         session_id: row.sessionId,
         external_id: runningExternalId,
@@ -328,7 +352,7 @@ export async function stampUnreachableDiagnostics(
 }
 
 /**
- * The boot-budget phase: park or repair a box whose OpenCode never answers, or
+ * The boot-budget phase: park or repair a box whose runtime never answers, or
  * record the clock this poll owes. Body verbatim from the original
  * `runOpenSession` (KRTX-274 split); answers `null` when the open continues.
  */
@@ -343,6 +367,25 @@ export async function judgeBootBudget(
   booting: boolean,
 ): Promise<SessionStartResult | null> {
   const { loaded, visible, projectId, sessionId } = args;
+  if (booting && ensured.reason === 'not_ready' && ensured.bootError && !serving) {
+    // The daemon's runtime start failed and nothing in the box retries it
+    // (`finishedBootError`). Waiting out the not-ready budget and the wake
+    // ladder only hid it: 2026-11-02, a free account's box reported "pi harness
+    // has no model" 0.8 s after boot and the open spun ~7.5 min with no message.
+    // Park it now; the stamped-failure cooldown restarts it (2, 5, 10 min) and
+    // its answer names the error.
+    log.did('reconciled');
+    const answer = await preserveEstablishedRuntimeOnOpen(
+      loaded,
+      visible,
+      projectId,
+      sessionId,
+      row,
+      RUNTIME_BOOT_ERROR_PARK_REASON,
+      'runtime_boot_failed',
+    );
+    return withRuntimeBootError(answer, row.sandboxId, ensured.bootError);
+  }
   if (booting) {
     // A daemon that reports a NEW boot phase since the last poll has made
     // progress: its reason clock is restarted below before the next poll
@@ -410,7 +453,7 @@ export async function judgeBootBudget(
           agent_name: visible.row.agentName ?? 'default',
           retriable: true,
           sandbox: serializeSandboxRow(row),
-          opencode_session_id: null,
+          runtime_session_id: null,
           runtime_url: sessionRuntimeUrlPath(runningExternalId),
           reason: 'runtime_updating',
         };
@@ -435,9 +478,71 @@ export async function judgeBootBudget(
       ensured.bootPhase,
     );
   } else {
-    await markRuntimeAnswered(row);
+    const answered = await markRuntimeAnswered(row);
+    if (answered.firstProof) {
+      // Once per boot: the runtime of this session answered for the first time.
+      captureProductEvent({
+        userId: loaded.userId,
+        accountId: loaded.row.accountId,
+        event: 'session_started',
+        dedupeKey: `${row.sandboxId}:${answered.bootEpochMs ?? 'unknown'}`,
+        properties: {
+          project_id: projectId,
+          session_id: sessionId,
+          provider: visible.row.sandboxProvider,
+          boot_ms: answered.bootMs,
+          stage: 'ready',
+        },
+      });
+    }
   }
   return null;
+}
+
+/**
+ * Stamp the failed start on the parked row, after the park: the park claims
+ * the row by its `updatedAt`, so a write before it would lose the claim. The
+ * answer carries the error as its failure, so this poll names it too.
+ */
+async function withRuntimeBootError(
+  answer: SessionStartResult,
+  sandboxId: string,
+  bootError: string,
+): Promise<SessionStartResult> {
+  const at = new Date().toISOString();
+  await db
+    .update(sessionSandboxes)
+    .set({
+      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
+        [RUNTIME_BOOT_ERROR_KEY]: bootError,
+        [RUNTIME_BOOT_ERROR_AT_KEY]: at,
+      })}::jsonb`,
+    })
+    .where(eq(sessionSandboxes.sandboxId, sandboxId))
+    .catch((err) =>
+      logger.warn('[start] could not stamp the runtime boot error', { sandbox_id: sandboxId, err: err instanceof Error ? err.message : String(err) }),
+    );
+  logger.warn('[start] the runtime start failed in the box; parked it at once', {
+    sandbox_id: sandboxId,
+    boot_error: bootError.slice(0, 200),
+  });
+  const metadata = (answer.sandbox?.metadata ?? {}) as Record<string, unknown>;
+  const retryAtMs = runtimeStartRetryAtMs(metadata);
+  return {
+    ...answer,
+    failure: {
+      category: 'sandbox-provider',
+      message: runtimeBootErrorMessage(bootError),
+      retryable: true,
+      evidence: {
+        check: RUNTIME_BOOT_ERROR_PARK_REASON,
+        observed_at: at,
+        error: bootError,
+        attempts: Math.max(1, runtimeStartFailureCount(metadata)),
+        next_retry_at: retryAtMs !== null ? new Date(retryAtMs).toISOString() : null,
+      },
+    },
+  };
 }
 
 /** The daemon refuses a context as JSON `{error:'unauthorized', reason}`; an edge 401 body is not that. */

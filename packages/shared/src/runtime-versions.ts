@@ -14,13 +14,19 @@ export type RuntimeVersions = {
   bun: string;
   bunSha256Amd64: string;
   bunSha256Arm64: string;
-  /** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset". */
+  /** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted". */
   opencode: string;
-  /** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset". */
-  opencodeSdk: string;
   agentBrowser: string;
   playwright: string;
   anydoc: string;
+  /** The Claude Code program Claude subscription models run (`claude --version`). */
+  claudeCode: string;
+  /** The Claude Agent SDK release that ships that program (its `claudeCodeVersion`); kortixd pins the same SDK. */
+  claudeAgentSdk: string;
+  /** tembo/voxl commit the sandbox desktop streamer is built from (apps/sandbox/voxl/release.sh). */
+  voxl: string;
+  voxlSha256Amd64: string;
+  voxlSha256Arm64: string;
   /** pi packages every pi session loads, as pi sources: `npm:<name>@<exact version>`. */
   piSystemPackages: string[];
 };
@@ -58,14 +64,21 @@ export const PYTHON_PACKAGE_FLOOR_IMPORTS: Record<string, string> = {
 export const BUN_VERSION = RUNTIME_VERSIONS.bun;
 export const BUN_SHA256_AMD64 = RUNTIME_VERSIONS.bunSha256Amd64;
 export const BUN_SHA256_ARM64 = RUNTIME_VERSIONS.bunSha256Arm64;
-/** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset". */
+/** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted". */
 export const OPENCODE_VERSION = RUNTIME_VERSIONS.opencode;
-/** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset". */
-export const OPENCODE_SDK_VERSION = RUNTIME_VERSIONS.opencodeSdk;
 export const OPENCODE_USER_AGENT = `opencode/${OPENCODE_VERSION}`;
 export const AGENT_BROWSER_VERSION = RUNTIME_VERSIONS.agentBrowser;
 export const PLAYWRIGHT_VERSION = RUNTIME_VERSIONS.playwright;
 export const ANYDOC_VERSION = RUNTIME_VERSIONS.anydoc;
+export const CLAUDE_CODE_VERSION = RUNTIME_VERSIONS.claudeCode;
+export const CLAUDE_AGENT_SDK_VERSION = RUNTIME_VERSIONS.claudeAgentSdk;
+/** Where every image installs the Claude Code program (kortixd's default `KORTIX_CLAUDE_PATH`). */
+export const CLAUDE_CODE_PATH = '/opt/kortix/claude/bin/claude';
+export const VOXL_VERSION = RUNTIME_VERSIONS.voxl;
+export const VOXL_SHA256_AMD64 = RUNTIME_VERSIONS.voxlSha256Amd64;
+export const VOXL_SHA256_ARM64 = RUNTIME_VERSIONS.voxlSha256Arm64;
+/** The GitHub release apps/sandbox/voxl/release.sh publishes for VOXL_VERSION. */
+export const VOXL_RELEASE_URL = `https://github.com/kortix-ai/CompanyOS/releases/download/voxl-${VOXL_VERSION.slice(0, 12)}-kortix.3`;
 
 // An exact npm pin. Each spec is inlined into the image's install RUN line, so
 // the pattern also keeps every shell metacharacter out.

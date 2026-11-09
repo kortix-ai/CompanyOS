@@ -26,11 +26,11 @@ Every entry in the table ships its source, which already sets the five apart fro
 
 The first column is easy to check. The last two decide what the team keeps once the person who set everything up moves on.
 
-Two names are deliberately absent from the table. OpenAI's version of the category is ChatGPT Work, shipped in July 2026: closed, usage-metered, on OpenAI's cloud. No open-source build sits behind it ([Kortix on GitHub](https://github.com/kortix-ai/suna) keeps the running comparison). Cowork itself is no longer a separate product either. Anthropic folded it into Claude on September 16, 2026 ([release notes](https://support.claude.com/en/articles/12138966-release-notes)). The merged experience is reaching Pro and Max plans first, and there is no Cowork-only free tier to sign up for. Pro runs $17 a month billed annually or $20 month to month, checked October 2026 ([Claude's pricing page](https://claude.com/pricing)).
+Two names are deliberately absent from the table. OpenAI's version of the category is ChatGPT Work, shipped in July 2026: closed, usage-metered, on OpenAI's cloud. No open-source build sits behind it ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS) keeps the running comparison). Cowork itself is no longer a separate product either. Anthropic folded it into Claude on September 16, 2026 ([release notes](https://support.claude.com/en/articles/12138966-release-notes)). The merged experience is reaching Pro and Max plans first, and there is no Cowork-only free tier to sign up for. Pro runs $17 a month billed annually or $20 month to month, checked October 2026 ([Claude's pricing page](https://claude.com/pricing)).
 
 ## Kortix: the system a team runs
 
-Kortix is the open-source AI Operating System, and what it runs is the company itself: every agent and its skills, the memory colleagues share, each connector the team approved, all of it held in one repository. Open source. Read it, fork it, audit it.
+Kortix is the open-source CompanyOS, and what it runs is the company itself: every agent and its skills, the memory colleagues share, each connector the team approved, all of it held in one repository. Open source. Read it, fork it, audit it.
 
 Each project starts from a git repository, with `kortix.yaml` at the top of it. Everything the setup needs (agents, skills, memory, tools, triggers, connectors) is a file in there ([Kortix docs](https://kortix.com/docs)). A session runs a single agent, alone in a sandbox, on a branch cut from that repository. Nothing survives unless the agent commits it. The commit then waits for a reviewer, and whoever holds the merge grant decides; until a project grants it, an agent cannot merge.
 

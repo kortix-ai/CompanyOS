@@ -437,6 +437,15 @@ export interface UiHostComponents {
    * (apps/web: its mobile app). Without it, nothing is shown.
    */
   HomeAnnouncement?: React.ComponentType;
+  /** @deprecated Rooms were removed (2026-11); ignored. Removed in the next major. */
+  RoomPanel?: React.ComponentType<{
+    projectId: string;
+    roomName: string;
+    emptyTopic?: string;
+    fill?: boolean;
+    /** Replaces the room's one-line intro above its first message (the space page's room tab). */
+    intro?: React.ReactNode;
+  }>;
   /** Who can open a session, and its public link. Without it, the header has no Share button. */
   ShareSessionModal?: React.ComponentType<{
     projectId: string;

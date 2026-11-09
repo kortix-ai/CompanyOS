@@ -8,7 +8,7 @@ tags: ["Comparisons"]
 updated: "2026-10-25"
 slug: "/kortix-vs-paperclip"
 ---
-Paperclip is an open-source control plane for a team of AI agents you already run, and Kortix is the open-source AI Operating System that runs them too. Paperclip hands those agents an org chart, a task board and a budget you set per agent, then runs each agent's own CLI on the Paperclip host unless you attach an environment. Kortix takes the same ambition one layer down, hosting the agents, giving each session its own cloud computer, and landing the work as a change request a person reviews. The choice is how much of the stack you want the software to carry.
+Paperclip is an open-source control plane for a team of AI agents you already run, and Kortix is the open-source CompanyOS that runs them too. Paperclip hands those agents an org chart, a task board and a budget you set per agent, then runs each agent's own CLI on the Paperclip host unless you attach an environment. Kortix takes the same ambition one layer down, hosting the agents, giving each session its own cloud computer, and landing the work as a change request a person reviews. The choice is how much of the stack you want the software to carry.
 
 ```logos
 label: 'Compared here:'
@@ -79,7 +79,7 @@ Triggers widen what reaches that gate. A weekday cron starts a session with nobo
 
 Paperclip never pays for the machine, so its ledger tracks what your providers bill, per agent. Kortix pays for the machine and bills it directly. The default 2 vCPU, 4 GB, 20 GB computer costs about 11 credits an hour, charged per second, and nothing while it is stopped ([plans and credits](https://kortix.com/docs/credits)).
 
-- **Free is $0.** 500 credits a month, every feature, one project, on your own provider keys or a ChatGPT subscription. Those credits cover the default machine.
+- **Free is $0.** 500 credits a month on your first workspace, every feature, on your own provider keys or a ChatGPT subscription. Those credits cover the default machine.
 - **The Credits plan buys compute and managed models.** You choose a monthly amount and every tier buys 100 credits per dollar, so 5,000 credits is $50 a month. Members are unlimited and free, the account shares one wallet, and unused monthly credits roll over one month ([Kortix pricing](https://kortix.com/pricing), checked October 2026).
 - **Self-hosting is free.** The same stack on your infrastructure, with no managed models and no credits to buy.
 

@@ -10,8 +10,10 @@ import {
   type TeamsInbound,
 } from './inbound';
 import { consumePendingTeamsPickerMessage } from './auth-resume';
+import { runWebhookWork } from '../webhook-work';
 import {
   APPROVAL_NOTE_INPUT,
+  QUESTION_EARLIER,
   REVIEW_FEEDBACK_INPUT,
   TEAMS_APPROVAL_VERB,
   TEAMS_FORM_VERB,
@@ -32,15 +34,8 @@ import { stopTeamsTurn } from './stop';
 import { applyTeamsModelChoice } from './model-choice';
 import type { TeamsActivity, TeamsConversationRef } from './types';
 
-export interface TeamsInvokeResponse {
-  statusCode: number;
-  type: string;
-  value: unknown;
-}
-
-function cardResponse(card: unknown): TeamsInvokeResponse {
-  return { statusCode: 200, type: 'application/vnd.microsoft.card.adaptive', value: card };
-}
+import { type TeamsInvokeResponse, cardResponse, messageResponse } from './invoke-response';
+export { type TeamsInvokeResponse, cardResponse, messageResponse } from './invoke-response';
 
 function tenantOf(activity: TeamsActivity): string | null {
   return activity.conversation?.tenantId ?? activity.channelData?.tenant?.id ?? null;
@@ -53,7 +48,7 @@ function parseAction(activity: TeamsActivity): { verb: string; data: Record<stri
   return { verb, data: value?.action?.data ?? {} };
 }
 
-const OTHER_PROJECT_NOTICE = 'This bot is connected to a different Kortix project.';
+const OTHER_PROJECT_NOTICE = 'This bot is connected to a different Kortix workspace.';
 
 export async function handleAdaptiveCardAction(
   activity: TeamsActivity,
@@ -163,8 +158,10 @@ async function handleSetModel(
  * The invoke carries the session id the card was drawn with; nothing about the
  * activity itself names a turn. `stopTeamsTurn` decides whether this person may
  * end it and settles the card, so the reply here is only what the presser is
- * told — and a refusal reads the same to them as to anyone watching, because an
- * `Action.Execute` response is shown to the presser alone.
+ * told, and a refusal reads the same to them as to anyone watching. That holds
+ * only if an `Action.Execute` response is shown to the presser alone. That is
+ * unverified on a real tenant; see the same note in `buildQuestionCard`
+ * (cards.ts).
  */
 async function handleStop(
   activity: TeamsActivity,
@@ -222,7 +219,7 @@ async function handleOpenPanel(
   // A per-project bot runs only its own project: it has no project list to offer.
   if (panel === 'projects' && inbound.kind === 'project') return cardResponse(buildNoticeCard(OTHER_PROJECT_NOTICE));
   const projectId = await conversationProjectFor(inbound, convo.tenantId, convo.conversationId);
-  if (!projectId) return cardResponse(buildNoticeCard('Connect a project to this conversation first — try /projects.', '📁'));
+  if (!projectId) return cardResponse(buildNoticeCard('Connect a Kortix workspace to this conversation first — try /projects.', '📁'));
   // Loaded on press: `commands.ts` pulls the whole command surface, which no
   // other card action needs.
   const { buildTeamsPanel } = await import('./commands');
@@ -241,7 +238,7 @@ async function handlePickProject(
 ): Promise<TeamsInvokeResponse> {
   const convo = convoOf(activity);
   const projectId = typeof data.projectId === 'string' ? data.projectId : null;
-  if (!convo || !projectId) return cardResponse(buildNoticeCard("I couldn't switch project."));
+  if (!convo || !projectId) return cardResponse(buildNoticeCard("I couldn't switch the Kortix workspace."));
   const switched = await switchChannelProject(
     presser(activity, convo),
     teamsSettingsChannel(activity, convo.tenantId, convo.conversationId),
@@ -251,7 +248,7 @@ async function handlePickProject(
     return cardResponse(
       buildNoticeCard(
         switched.reason === 'not_installed'
-          ? "That project isn't connected to this Teams tenant."
+          ? "That Kortix workspace isn't connected to this Teams tenant."
           : teamsSettingsRefusal(switched.reason, ''),
       ),
     );
@@ -273,11 +270,22 @@ async function handlePickProject(
         activity: parked,
         ownThreadsOnly: inbound.kind === 'project',
       }).catch((err) => console.error('[teams-webhook] picker replay failed', err));
-      return cardResponse(buildNoticeCard('This conversation now runs the selected project — on it.', '✅'));
+      return cardResponse(buildNoticeCard('This conversation now runs the selected Kortix workspace — on it.', '✅'));
     }
   }
-  return cardResponse(buildNoticeCard('This conversation now runs the selected project.', '✅'));
+  return cardResponse(buildNoticeCard('This conversation now runs the selected Kortix workspace.', '✅'));
 }
+
+/**
+ * Each press on a question card has its own key, the invoke id: without one a
+ * press could not be told from another, so it is refused. A press whose data
+ * names its stored question (`kq`) is answered from it (question-press.ts).
+ * Any other is from a card posted before that: it reaches only the
+ * conversation's own session, a conversation with none (after `/new`)
+ * answers nothing, and a presser Kortix cannot act as is told before the
+ * card changes.
+ */
+const TAP_AGAIN = "Couldn't record that. Tap the button again.";
 
 async function handleAnswer(
   activity: TeamsActivity,
@@ -285,11 +293,17 @@ async function handleAnswer(
   inbound: TeamsInbound,
 ): Promise<TeamsInvokeResponse> {
   const convo = convoOf(activity);
+  if (!convo) return cardResponse(buildNoticeCard("I couldn't record that answer."));
+  if (!activity.id) return messageResponse(TAP_AGAIN);
+  if (typeof data.kq === 'string') return (await import('./question-press')).answerTeamsQuestion(activity, convo, inbound, data, false);
   const answer = typeof data.answer === 'string' ? data.answer : '';
-  if (!convo || !answer) return cardResponse(buildNoticeCard("I couldn't record that answer."));
+  if (!answer) return cardResponse(buildNoticeCard("I couldn't record that answer."));
 
-  const projectId = await conversationProjectFor(inbound, convo.tenantId, convo.conversationId);
-  if (!projectId) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  const target = await decisionTarget(inbound, convo);
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
+  if (!target.sessionId) return cardResponse(buildNoticeCard(QUESTION_EARLIER));
+  const unlinked = await (await import('./question-press')).unlinkedPresser(activity, target.projectId, convo.tenantId);
+  if (unlinked) return unlinked;
 
   // The question travels on the action (cards.ts), because the tap REPLACES the
   // card that asked it. Sending the agent a bare "Yes" leaves it to infer what
@@ -302,15 +316,21 @@ async function handleAnswer(
     ...activity,
     type: 'message',
     text: question ? `Answering your question "${question}":\n${answer}` : answer,
-    id: `${activity.id ?? 'answer'}:answer`,
+    id: `${activity.id}:answer`,
   };
-  void createOrJoinTeamsConversationSession({
-    projectId,
-    tenantId: convo.tenantId,
-    conversationId: convo.conversationId,
-    activity: synthetic,
-    ownThreadsOnly: inbound.kind === 'project',
-  }).catch((err) => console.error('[teams-webhook] answer follow-up failed', err));
+  void runWebhookWork(
+    'teams-question',
+    () =>
+      createOrJoinTeamsConversationSession({
+        projectId: target.projectId,
+        tenantId: convo.tenantId,
+        conversationId: convo.conversationId,
+        activity: synthetic,
+        ownThreadsOnly: inbound.kind === 'project',
+        followUpOnly: true,
+      }),
+    { ackWaitMs: 0 },
+  );
 
   return cardResponse(
     buildNoticeCard(question ? `**${question}**\n\n${answer} — working on it.` : `Answer received: ${answer}`, '✅'),
@@ -334,6 +354,8 @@ async function handleForm(
 ): Promise<TeamsInvokeResponse> {
   const convo = convoOf(activity);
   if (!convo) return cardResponse(buildNoticeCard("I couldn't record that."));
+  if (!activity.id) return messageResponse(TAP_AGAIN);
+  if (typeof data.kq === 'string') return (await import('./question-press')).answerTeamsQuestion(activity, convo, inbound, data, true);
 
   const ids = typeof data.fieldIds === 'string' ? data.fieldIds.split(',').map((f) => f.trim()).filter(Boolean) : [];
   const answered: Array<{ id: string; value: string }> = [];
@@ -347,8 +369,11 @@ async function handleForm(
     return cardResponse(buildNoticeCard('Nothing was filled in — open the form again and add at least one answer.'));
   }
 
-  const projectId = await conversationProjectFor(inbound, convo.tenantId, convo.conversationId);
-  if (!projectId) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  const target = await decisionTarget(inbound, convo);
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
+  if (!target.sessionId) return cardResponse(buildNoticeCard(QUESTION_EARLIER));
+  const unlinked = await (await import('./question-press')).unlinkedPresser(activity, target.projectId, convo.tenantId);
+  if (unlinked) return unlinked;
 
   // Every form here is one the agent posted — the `question` tool's, or its own
   // `teams ask` — so the answers are framed as replies to it, not as a new
@@ -358,15 +383,21 @@ async function handleForm(
     ...activity,
     type: 'message',
     text,
-    id: `${activity.id ?? 'form'}:form`,
+    id: `${activity.id}:form`,
   };
-  void createOrJoinTeamsConversationSession({
-    projectId,
-    tenantId: convo.tenantId,
-    conversationId: convo.conversationId,
-    activity: synthetic,
-    ownThreadsOnly: inbound.kind === 'project',
-  }).catch((err) => console.error('[teams-webhook] form follow-up failed', err));
+  void runWebhookWork(
+    'teams-question',
+    () =>
+      createOrJoinTeamsConversationSession({
+        projectId: target.projectId,
+        tenantId: convo.tenantId,
+        conversationId: convo.conversationId,
+        activity: synthetic,
+        ownThreadsOnly: inbound.kind === 'project',
+        followUpOnly: true,
+      }),
+    { ackWaitMs: 0 },
+  );
 
   return cardResponse(
     buildNoticeCard(
@@ -394,7 +425,7 @@ async function handleReview(
   if (!convo || !reviewItemId || !verdict) return cardResponse(buildNoticeCard("I couldn't apply that decision."));
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   const { projectId } = target;
 
   const item = await getReviewItemById(reviewItemId, projectId);
@@ -415,7 +446,7 @@ async function handleReview(
       buildNoticeCard(
         actor.reason === 'unlinked'
           ? 'Connect your Kortix account (`/login`) to act on reviews.'
-          : "You don't have access to act on this project's reviews.",
+          : "You don't have access to act on this Kortix workspace's reviews.",
       ),
     );
   }
@@ -424,7 +455,9 @@ async function handleReview(
   // whichever button was pressed.
   const raw = data[REVIEW_FEEDBACK_INPUT];
   const feedback = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 2000) : null;
-  await applyVerdict(reviewItemId, projectId, { verdict, feedback, actingUserId: actor.userId });
+  const decided = await applyVerdict(reviewItemId, projectId, { verdict, feedback, actingUserId: actor.userId });
+  // Someone decided it first (another press, the web inbox): change nothing.
+  if (decided === null) return cardResponse(buildNoticeCard(`"${item.title}" was already decided.`));
 
   const base =
     verdict === 'approve'
@@ -470,7 +503,7 @@ async function handleApproval(
   if (!convo || !executionId || !decision) return cardResponse(buildNoticeCard("I couldn't apply that decision."));
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   const { projectId } = target;
   const note = normalizeApprovalNote(data[APPROVAL_NOTE_INPUT]);
   const result = await decideChatApproval({
@@ -480,10 +513,21 @@ async function handleApproval(
     executionId,
     decision,
     note,
+    deciderLabel: activity.from?.name || undefined,
   });
   // A refusal is an answer to the presser, not the new state of the card: keep
   // the buttons for someone who may decide.
   if ('refusal' in result) return { statusCode: 200, type: 'application/vnd.microsoft.activity.message', value: result.refusal };
+  const outcomeCard = buildTeamsApprovalOutcomeCard({
+    actionPath: result.row.actionPath,
+    decision,
+    note,
+    decidedBy: activity.from?.name || undefined,
+    ...(result.running ? { run: 'running' as const } : {}),
+  });
+  // An approved held call: the held-call worker runs it and resumes the
+  // session once with the result; the card shows "Running…" until then.
+  if (result.running) return cardResponse(outcomeCard);
 
   const synthetic: TeamsActivity = {
     ...activity,
@@ -500,7 +544,7 @@ async function handleApproval(
     authorizedResume: true,
   }).catch((err) => console.error('[teams-webhook] approval resume failed', err));
 
-  return cardResponse(buildTeamsApprovalOutcomeCard({ actionPath: result.row.actionPath, decision, note, decidedBy: activity.from?.name || undefined }));
+  return cardResponse(outcomeCard);
 }
 
 async function handleThreadJoin(
@@ -566,6 +610,6 @@ async function handleRequestAccess(
     case 'no-identity':
       return cardResponse(buildNoticeCard('Connect your Kortix account first, then request access.'));
     case 'no-project':
-      return cardResponse(buildNoticeCard("That project isn't connected to this Teams tenant."));
+      return cardResponse(buildNoticeCard("That Kortix workspace isn't connected to this Teams tenant."));
   }
 }

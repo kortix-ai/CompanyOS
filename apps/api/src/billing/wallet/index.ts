@@ -65,7 +65,14 @@ import { assertRpcDebitLedgerType } from '../ledger-type-honesty';
 export type WalletKey = { readonly event: string } | { readonly request: string };
 
 /** Sub-kinds of a debit, stamped into `metadata.ledger_type`; the row's `type` is always `usage`. */
-export type LedgerDebitType = 'usage' | 'compute_debit' | 'llm_debit' | 'token_deduction' | 'token_overage';
+export type LedgerDebitType =
+  | 'usage'
+  | 'compute_debit'
+  | 'llm_debit'
+  | 'token_deduction'
+  | 'token_overage'
+  | 'proxy_debit'
+  | 'storage_debit';
 
 interface WalletWrite {
   accountId: string;
@@ -232,7 +239,9 @@ async function settle(input: SettleInput): Promise<SettleResult> {
   } catch (error) {
     console.error('[Wallet] settlement failed:', error);
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Credit settlement failed for ${input.accountId}: ${message}`);
+    // Keep the driver error as the cause: callers decide what a client may see
+    // by walking the cause chain (`isDatabaseError`, KRTX-4400).
+    throw new Error(`Credit settlement failed for ${input.accountId}: ${message}`, { cause: error });
   }
 
   if (!result.success) {

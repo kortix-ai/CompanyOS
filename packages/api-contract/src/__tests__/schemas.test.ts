@@ -47,8 +47,6 @@ import {
   TriggerListSchema,
   TriggerSchema,
   UpdateConnectionCredentialInputSchema,
-  WarmProjectSessionResultSchema,
-  ClaimWarmProjectSessionInputSchema,
 } from '../index';
 
 const NOW = '2026-07-01T12:00:00.000Z';
@@ -141,26 +139,31 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
     dashboard_url: 'https://kortix.com/projects/11111111-2222-4333-8444-555555555555',
     experimental: {
       marketplace: false,
-      meta_agent: false,
       monitors: false,
       reminders: false,
       warm_sessions: false,
       secrets_egress: false,
       pooled_provider_secrets: false,
-      genui: false,
       us_region: false,
       event_triggers: false,
-      notification_center: false,
+      notification_center: true,
       volumes: false,
       drives: false,
       session_log_restore: false,
-      project_channels: false,
-      agent_rooms: false,
+      chat: false,
+      shared_drives: false,
       goals: false,
       workspace_volume: false,
       artifacts: false,
+      artifact_comments: false,
       email_channel: false,
       session_groups: false,
+      chrome: false,
+      agent_teams: false,
+      voice_call: false,
+      chat_input: false,
+      chat_front: false,
+      spaces_proactive: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -181,7 +184,6 @@ function sessionFixture(overrides: Record<string, unknown> = {}) {
     sandbox_id: null,
     sandbox_url: null,
     runtime_session_id: 'ses_abc',
-    opencode_session_id: 'ses_abc',
     name: 'Fix the login bug',
     custom_name: null,
     labels: [],
@@ -190,7 +192,6 @@ function sessionFixture(overrides: Record<string, unknown> = {}) {
     error: null,
     metadata: { name: 'Fix the login bug' },
     runtime_sessions: [],
-    opencode_sessions: [],
     created_by: '99999999-8888-4777-8666-555555555555',
     owner_email: null,
     visibility: 'private',
@@ -340,7 +341,7 @@ describe('ProjectSchema', () => {
   });
 
   test('rejects an experimental map missing a registered key', () => {
-    const { meta_agent: _dropped, ...partial } = projectFixture().experimental as Record<
+    const { reminders: _dropped, ...partial } = projectFixture().experimental as Record<
       string,
       boolean
     >;
@@ -366,6 +367,21 @@ describe('ProjectSchema', () => {
     const experimental = projectFixture().experimental as Record<string, boolean>;
     expect(ProjectSchema.parse(projectFixture({ experimental: { ...experimental, pi_harness: true } })).experimental.pi_harness).toBe(true);
     expect(() => ProjectSchema.parse(projectFixture({ experimental: { ...experimental, pi_harness: false } }))).toThrow();
+  });
+
+  test('experimental carries the removed meta_agent key only as a constant true', () => {
+    // Wire compat: the API still sends `meta_agent: true`; My Kortix follows kortix.yaml `builtin_agents` alone.
+    const experimental = projectFixture().experimental as Record<string, boolean>;
+    expect(FEATURE_FLAG_KEYS as readonly string[]).not.toContain('meta_agent');
+    expect(ProjectSchema.parse(projectFixture({ experimental: { ...experimental, meta_agent: true } })).experimental.meta_agent).toBe(true);
+    expect(() => ProjectSchema.parse(projectFixture({ experimental: { ...experimental, meta_agent: false } }))).toThrow();
+  });
+
+  test('experimental carries the graduated genui key only as a constant true', () => {
+    // Wire compat: the API still sends `genui: true`; older web, SDK and mobile clients render blocks only while it is true.
+    const experimental = projectFixture().experimental as Record<string, boolean>;
+    expect(ProjectSchema.parse(projectFixture({ experimental: { ...experimental, genui: true } })).experimental.genui).toBe(true);
+    expect(() => ProjectSchema.parse(projectFixture({ experimental: { ...experimental, genui: false } }))).toThrow();
   });
 
   test('experimental carries the graduated connectors_v2 and connectors_api_discover keys only as a constant true', () => {
@@ -486,38 +502,6 @@ describe('session group contracts', () => {
   });
 });
 
-describe('warm project session schemas', () => {
-  test('accepts the ensure response with workspace refresh state', () => {
-    expect(
-      WarmProjectSessionResultSchema.parse({
-        session: sessionFixture(),
-        reused: true,
-        workspace_refresh: {
-          status: 'updated',
-          before_sha: 'abc123',
-          after_sha: 'def456',
-        },
-      }),
-    ).toMatchObject({
-      reused: true,
-      workspace_refresh: { status: 'updated' },
-    });
-  });
-
-  test('requires an RFC 4122 v4 session_id for claims', () => {
-    expect(
-      ClaimWarmProjectSessionInputSchema.safeParse({
-        session_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-        agent_name: 'default',
-        sandbox_slug: 'default',
-      }).success,
-    ).toBe(true);
-    expect(ClaimWarmProjectSessionInputSchema.safeParse({ session_id: 'not-a-uuid' }).success).toBe(
-      false,
-    );
-  });
-});
-
 describe('SessionStartResultSchema', () => {
   test('accepts the provisioning payload without sandbox or runtime_url', () => {
     const parsed = SessionStartResultSchema.strict().parse({
@@ -525,7 +509,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: true,
       sandbox: null,
-      opencode_session_id: null,
+      runtime_session_id: null,
     });
     expect(parsed.runtime_url).toBeUndefined();
   });
@@ -536,7 +520,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: false,
       sandbox: sandboxFixture(),
-      opencode_session_id: 'ses_abc',
+      runtime_session_id: 'ses_abc',
       runtime_url: '/p/sbx-123/8000',
       reason: 'pinned',
     });
@@ -549,7 +533,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: false,
       sandbox: sandboxFixture({ status: 'error' }),
-      opencode_session_id: null,
+      runtime_session_id: null,
       failure: {
         category: 'provider-capacity',
         message: 'The sandbox provider is at capacity right now. Try again in a minute.',
@@ -566,14 +550,14 @@ describe('SessionStartResultSchema', () => {
         agent_name: 'default',
         retriable: true,
         sandbox: null,
-        opencode_session_id: null,
+        runtime_session_id: null,
       }),
     ).toThrow();
   });
 });
 
 describe('pending session prompt contract', () => {
-  test('accepts a durable prompt draft on normal create and warm claim', () => {
+  test('accepts a durable prompt draft on create', () => {
     const pendingPrompt = {
       text: 'Map the flood risk for this parcel.',
       agent: 'kortix',
@@ -584,12 +568,6 @@ describe('pending session prompt contract', () => {
 
     expect(
       SessionCreateInputSchema.strict().parse({ pending_prompt: pendingPrompt }).pending_prompt,
-    ).toEqual(pendingPrompt);
-    expect(
-      ClaimWarmProjectSessionInputSchema.strict().parse({
-        session_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-        pending_prompt: pendingPrompt,
-      }).pending_prompt,
     ).toEqual(pendingPrompt);
   });
 
@@ -882,25 +860,23 @@ describe('envelopes', () => {
     // (TypeScript 7) sorts differently from tsc 5; the runtime order is the contract.
     expect(FEATURE_FLAG_KEYS as readonly string[]).toEqual([
       'marketplace',
-      'meta_agent',
       'reminders',
-      'warm_sessions',
       'secrets_egress',
       'pooled_provider_secrets',
-      'genui',
       'us_region',
       'event_triggers',
-      'notification_center',
-      'volumes',
-      'drives',
-      'session_log_restore',
-      'project_channels',
-      'agent_rooms',
+      'chat',
+      'shared_drives',
       'goals',
       'workspace_volume',
-      'artifacts',
       'email_channel',
       'session_groups',
+      'chrome',
+      'agent_teams',
+      'voice_call',
+      'chat_input',
+      'chat_front',
+      'spaces_proactive',
     ]);
   });
 
@@ -1023,7 +999,6 @@ describe('SessionCreateInputSchema runtime_context', () => {
         agentName: 'veyris',
         sandboxSlug: 'default',
         initialPrompt: 'hello',
-        opencodeModel: 'kortix/glm-5.3-flash',
         sessionId: '11111111-1111-4111-a111-111111111111',
         branchAlreadyCreated: true,
       }).success,
@@ -1275,7 +1250,7 @@ describe('session scope contracts', () => {
       connector_bindings_inherit_unbound: true,
       applied_live: true,
       detail:
-        'Applied to the running sandbox now — the OpenCode process and new shells see the new scope.',
+        'Applied to the running sandbox now — the agent runtime and new shells see the new scope.',
     };
     expect(SessionScopeSchema.parse(value)).toEqual(value);
   });

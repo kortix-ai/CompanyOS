@@ -14,7 +14,7 @@ import { accounts, gatewayRequestLogs, projectSessions, projects, sessionTurns }
 import { eq, sql } from 'drizzle-orm';
 
 import { projectSpendByModel, sessionModelUsage } from '../projects/lib/session-model-usage';
-import { db } from '../shared/db';
+import { db, withDbTransaction } from '../shared/db';
 
 const tag = crypto.randomUUID().slice(0, 8);
 const ACCOUNT = crypto.randomUUID();
@@ -61,6 +61,12 @@ async function request(input: {
     provider: input.provider, status: input.ok === false ? (input.errorCode === 'client_aborted' ? 499 : 429) : 200, ok: input.ok !== false,
     errorCode: input.errorCode ?? null,
     finalCost: String(billed), billingMode: billed > 0 ? 'credits' : 'none',
+    // KRTX-4023: mirror the real writer (gateway-trace-row.ts) — the served
+    // model rides in metadata AND its promoted column. The raw inserts below
+    // (no column) keep the pre-promotion INSERT shape; the fill trigger
+    // (20261108090000100) lifts their metadata keys at insert, and the
+    // rollout-window test asserts exactly that.
+    servedModel: typeof input.metadata?.servedModel === 'string' ? input.metadata.servedModel : null,
     metadata: input.metadata ?? {}, createdAt: at(input.at),
   });
 }
@@ -74,9 +80,9 @@ beforeAll(async () => {
   `);
   await db.insert(accounts).values({ accountId: ACCOUNT, name: `model-usage-${tag}` });
   await db.insert(projects).values([
-    { projectId: PROJECT, accountId: ACCOUNT, name: 'p', repoUrl: 'https://example.com/p.git' },
-    { projectId: OTHER_PROJECT, accountId: ACCOUNT, name: 'q', repoUrl: 'https://example.com/q.git' },
-    { projectId: SPEND_PROJECT, accountId: ACCOUNT, name: 's', repoUrl: 'https://example.com/s.git' },
+    { splitPending: true, projectId: PROJECT, accountId: ACCOUNT, name: 'p', repoUrl: 'https://example.com/p.git' },
+    { splitPending: true, projectId: OTHER_PROJECT, accountId: ACCOUNT, name: 'q', repoUrl: 'https://example.com/q.git' },
+    { splitPending: true, projectId: SPEND_PROJECT, accountId: ACCOUNT, name: 's', repoUrl: 'https://example.com/s.git' },
   ]);
 });
 
@@ -90,6 +96,75 @@ describe('sessionModelUsage', () => {
   test('a session with no gateway request has no latest model, no cost and no turns', async () => {
     await session('empty');
     expect(await usageOf('empty')).toEqual({ latest: null, billed_cost: 0, turns: {} });
+  });
+
+  test('command-only turns do not multiply work for a long request ledger', async () => {
+    await session('commands');
+    await turn('commands', 'msg_commands', 0, 1);
+    await db.execute(sql`
+      insert into kortix.session_turns
+        (turn_token, session_id, sandbox_id, project_id, account_id, state, end_reason, started_at)
+      select 'command-' || ${tag} || '-' || n, ${sid('commands')}, ${SANDBOX}::uuid,
+             ${PROJECT}::uuid, ${ACCOUNT}::uuid, 'ended', 'completed', ${at(1).toISOString()}::timestamptz
+      from generate_series(1, 10000) n
+    `);
+    await db.execute(sql`
+      insert into kortix.gateway_request_logs
+        (request_id, account_id, project_id, session_id, requested_model, resolved_model,
+         provider, status, ok, final_cost, billing_mode, metadata, created_at)
+      select 'command-request-' || ${tag} || '-' || n, ${ACCOUNT}::uuid, ${PROJECT}::uuid,
+             ${sid('commands')}, 'test-model', 'test-model', 'kortix', 200, true, 0, 'none',
+             '{}'::jsonb, ${at(2).toISOString()}::timestamptz
+      from generate_series(1, 2000) n
+    `);
+    const usage = await withDbTransaction(async () => {
+      await db.execute(sql`set local statement_timeout = '500ms'`);
+      return usageOf('commands');
+    });
+    expect(usage.turns).toEqual({
+      msg_commands: { served_models: ['test-model'], fallback_from: null, billed_cost: 0 },
+    });
+  });
+
+  // 2026-10-30 prod: a session with 13,316 requests and 1,377 message turns took
+  // 7.8 s per read. Each request's turn lookup read and sorted every earlier turn,
+  // because its sort order did not match the session index.
+  test('a long session reads one turn per request, not every earlier turn', async () => {
+    await session('long');
+    await db.execute(sql`
+      insert into kortix.session_turns
+        (turn_token, session_id, sandbox_id, project_id, account_id, message_id, state, end_reason, started_at)
+      select 'long-' || ${tag} || '-' || n, ${sid('long')}, ${SANDBOX}::uuid, ${PROJECT}::uuid, ${ACCOUNT}::uuid,
+             'msg_long_' || n, 'ended', 'completed', ${at(0).toISOString()}::timestamptz + make_interval(secs => n)
+      from generate_series(1, 4000) n
+    `);
+    // Two fallback answers per turn, so both turn lookups (spend and fallbacks) run for every request.
+    await db.execute(sql`
+      insert into kortix.gateway_request_logs
+        (request_id, account_id, project_id, session_id, requested_model, resolved_model,
+         provider, status, ok, final_cost, billing_mode, metadata, created_at)
+      select 'long-request-' || ${tag} || '-' || n, ${ACCOUNT}::uuid, ${PROJECT}::uuid,
+             ${sid('long')}, 'model-a', 'model-b', 'kortix', 200, true, 0, 'none',
+             '{"servedModel":"model-b","fallbackFrom":"model-a"}'::jsonb,
+             ${at(0).toISOString()}::timestamptz + make_interval(secs => 0.75 + n * 0.5)
+      from generate_series(1, 8000) n
+    `);
+    const usage = await withDbTransaction(async () => {
+      await db.execute(sql`set local statement_timeout = '500ms'`);
+      return usageOf('long');
+    });
+    const turn = {
+      served_models: ['model-b'],
+      fallback_from: 'model-a',
+      billed_cost: 0,
+      fallbacks: [
+        { requested_model: 'model-a', served_model: 'model-b', error_code: 'upstream_error' },
+        { requested_model: 'model-a', served_model: 'model-b', error_code: 'upstream_error' },
+      ],
+    };
+    expect(Object.keys(usage.turns)).toHaveLength(4000);
+    expect(usage.turns.msg_long_1).toEqual(turn);
+    expect(usage.turns.msg_long_4000).toEqual(turn);
   });
 
   test('a turn its own model answered names that model and no fallback', async () => {
@@ -179,6 +254,69 @@ describe('sessionModelUsage', () => {
       { requested_model: 'route-b', served_model: 'served-b', error_code: 'upstream_error' },
     ]);
     expect(JSON.stringify(usage)).not.toContain('SECRET');
+  });
+
+  // KRTX-4023 rework: an ECS rollout replaces pods gradually, so old writers
+  // keep inserting rows after the one-shot backfill ran. Their INSERT predates
+  // the promoted columns — the keys ride in metadata only — and the table is
+  // insert-only, so nothing heals them later. The fill trigger
+  // (20261108090000100) lifts the keys at insert; without it this row reads
+  // the requested model (the column fallback), not the served one.
+  test('a row the old writer inserts during the rollout (metadata keys, no column) names its served model', async () => {
+    await session('rollout');
+    await turn('rollout', 'msg_rollout_1', 0, 30);
+    await db.execute(sql`
+      insert into kortix.gateway_request_logs
+        (request_id, account_id, project_id, session_id, requested_model, resolved_model,
+         provider, status, ok, final_cost, billing_mode, metadata, created_at)
+      values ('rollout-request-' || ${tag}, ${ACCOUNT}::uuid, ${PROJECT}::uuid, ${sid('rollout')},
+              'gpt-5.4', 'gpt-5.4', 'openai', 200, true, 0, 'none',
+              '{"servedModel":"gpt-5.4-2026-01-30"}'::jsonb, ${at(10).toISOString()}::timestamptz)
+    `);
+
+    const usage = await usageOf('rollout');
+    expect(usage.latest).toEqual({
+      served_model: 'gpt-5.4-2026-01-30',
+      fallback_from: null,
+      at: at(10).toISOString(),
+      outcome: 'answered',
+    });
+    expect(usage.turns.msg_rollout_1?.served_models).toEqual(['gpt-5.4-2026-01-30']);
+  });
+
+  // The trigger applies the writer's bound to the lifted key: an old writer's
+  // metadata.servedModel is client/upstream-influenced and unbounded (old
+  // writers predate boundMetadata), and the v4 covering index carries
+  // served_model as a btree tuple member. The bound is BYTES, not code
+  // points (255 astral code points are up to 1020 bytes — the tuple would
+  // still overflow).
+  test('the trigger bounds an oversized old-writer servedModel to 255 bytes', async () => {
+    await session('rollout-bound');
+    await turn('rollout-bound', 'msg_rb_1', 0, 30);
+    const served = '🚀'.repeat(300); // 300 code points = 1200 UTF-8 bytes
+    const resolved = '🚀'.repeat(400); // 1600 UTF-8 bytes: the old writer bounded nothing
+    await db.execute(sql`
+      insert into kortix.gateway_request_logs
+        (request_id, account_id, project_id, session_id, requested_model, resolved_model,
+         provider, status, ok, final_cost, billing_mode, metadata, created_at)
+      values ('rollout-bound-' || ${tag}, ${ACCOUNT}::uuid, ${PROJECT}::uuid, ${sid('rollout-bound')},
+              'gpt-5.4', ${resolved}::text, 'openai', 200, true, 0, 'none',
+              jsonb_build_object('servedModel', ${served}::text), ${at(11).toISOString()}::timestamptz)
+    `);
+
+    const usage = await usageOf('rollout-bound');
+    const expected = '🚀'.repeat(63); // 63 × 4B = 252 ≤ 255; the 64th rocket would exceed
+    expect(usage.latest?.served_model).toBe(expected);
+    // The trigger bounds the model strings v4's INCLUDE carries for every
+    // writer — resolved_model too (old writers bounded nothing).
+    const rows = await db
+      .select({ requestedModel: gatewayRequestLogs.requestedModel, resolvedModel: gatewayRequestLogs.resolvedModel })
+      .from(gatewayRequestLogs)
+      .where(eq(gatewayRequestLogs.requestId, `rollout-bound-${tag}`));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.requestedModel).toBe('gpt-5.4');
+    expect(Buffer.byteLength(rows[0]?.resolvedModel ?? '', 'utf8')).toBe(252);
+    expect(Array.from(rows[0]?.resolvedModel ?? '')).toHaveLength(63);
   });
 
   test('a request logged before the serving model was recorded is read from its own columns', async () => {

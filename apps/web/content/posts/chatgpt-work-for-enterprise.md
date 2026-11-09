@@ -18,7 +18,7 @@ items:
   - { name: ChatGPT Work, domain: openai.com }
 ```
 
-Kortix is the open-source AI Operating System: your agents, their skills, your company memory, and every connector in one git repo you own, with the agents working on real cloud computers.
+Kortix is the open-source CompanyOS: your agents, their skills, your company memory, and every connector in one git repo you own, with the agents working on real cloud computers.
 
 ## What an enterprise admin actually gets
 
@@ -80,7 +80,7 @@ A governance review asks something narrower: who enabled local computer access, 
 
 ## The control surface is a file
 
-In Kortix the same decisions sit in a manifest at the root of a project repository, next to the code they govern. This is a working excerpt:
+In Kortix the same decisions sit in a manifest at the root of a workspace repository, next to the code they govern. This is a working excerpt:
 
 ```yaml
 kortix_version: 2

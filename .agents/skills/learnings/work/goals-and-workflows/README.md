@@ -7,6 +7,8 @@ updated: 2026-10-21
 
 # Goals and durable workflows
 
+> 2026-11-04: Rooms were removed (flag `agent_rooms` withdrawn, every `/rooms` route deleted). The rooms references below are history.
+
 **The problem.** A user gives an objective once ("close my old bank account and
 walk away", "secure EUR 2.5M of grant funding", "rank #1 for X", "rewrite the
 service in Rust") and an agent owns it until it is verifiably true: over days
@@ -27,6 +29,7 @@ discretion. Every new rule is a code check.
 | `state-machines.md` | the kinds of state machine considered and why the recommendation moved from statechart to durable workflow |
 | `decisions.md` | decided / recommended / open, dated. Update it whenever a decision changes |
 | `live-runs.md` | the local runs behind the lesson above |
+| `prod-readiness.md` | 2026-11-06 master plan: opt-in prod beta, server goal record, milestones M1–M7 |
 
 ## What was discussed (2026-10-19 to 2026-10-21)
 
@@ -59,7 +62,7 @@ discretion. Every new rule is a code check.
    in the company repo.
 7. **TypeScript-first Kortix.** `kortix.config.ts` compiling to the manifest
    (the CDK / Pulumi pattern). A separate initiative, tied to the
-   `kortix.yaml` v3 redesign.
+   `kortix.yaml` format work.
 8. **Not now:** a per-goal "Kortix Machines" primitive was started without a
    design and stopped. New primitives get a written design and an explicit
    decision first.

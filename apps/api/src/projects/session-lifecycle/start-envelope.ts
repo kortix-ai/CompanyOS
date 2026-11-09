@@ -28,12 +28,15 @@
  * `retriable` stays DERIVED per call. Nothing here reads a persisted verdict.
  */
 
-import type {
-  SessionStartAction,
-  SessionStartBoot,
-  SessionStartBootPhase,
-  SessionStartObservation,
-  SessionStartResult,
+import {
+  SESSION_START_RESUMING_REASONS,
+  SessionStartImageStepSchema,
+  type SessionStartAction,
+  type SessionStartBoot,
+  type SessionStartBootPhase,
+  type SessionStartImageStep,
+  type SessionStartObservation,
+  type SessionStartResult,
 } from '@kortix/api-contract';
 import { runtimeWakeInProgress } from './runtime-wake-fence';
 
@@ -108,16 +111,7 @@ export function createStartCallLog(observedAt: Date = new Date()): StartCallLog 
 }
 
 /** Reasons that mean "a provider operation is moving this box", not "booting". */
-const RESUMING_REASONS = new Set([
-  'runtime_waking',
-  'runtime_wake_cooldown',
-  'runtime_status_unknown',
-  'runtime_stop_unconfirmed',
-  'runtime_restoring_in_place',
-  'runtime_recovered_in_place',
-  'runtime_recovery_in_progress',
-  'runtime_removed_checking',
-]);
+const RESUMING_REASONS: ReadonlySet<string> = new Set(SESSION_START_RESUMING_REASONS);
 
 function firstTimestamp(
   metadata: Record<string, unknown>,
@@ -176,16 +170,28 @@ export function deriveBoot(
               metadata,
               'runtimeBootWaitFirstSeenAt',
               'runtimeReadyWaitStartedAt',
-              // The same two clocks as a pre-W4 API wrote them.
-              'opencodeBootWaitFirstSeenAt',
-              'opencodeReadyWaitStartedAt',
               'providerRunningConfirmedAt',
             )
           : phase === 'provisioning'
             ? firstTimestamp(metadata, 'initUpdatedAt', 'initStartedAt')
             : firstTimestamp(metadata, 'runtimeStartFailedAt', 'runtimeWakeFailedAt', 'stoppedAt');
 
-  return { phase, since, actively_starting: activelyStarting };
+  return {
+    phase,
+    since,
+    actively_starting: activelyStarting,
+    ...(phase === 'provisioning' ? { image: imageStepOf(metadata) } : {}),
+  };
+}
+
+/**
+ * The image step provisioning recorded (`metadata.imageStep`, written by
+ * `imageStepReporter` in session-sandbox.ts), or null. A malformed value is
+ * null, never a guess.
+ */
+export function imageStepOf(metadata: Record<string, unknown>): SessionStartImageStep | null {
+  const parsed = SessionStartImageStepSchema.safeParse(metadata.imageStep);
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -200,7 +206,7 @@ export function withStartEnvelope(
 ): SessionStartResult {
   return {
     ...result,
-    runtime_session_id: result.opencode_session_id,
+    runtime_session_id: result.runtime_session_id,
     observed_at: log.observedAt.toISOString(),
     action: log.action,
     observation: log.observation,

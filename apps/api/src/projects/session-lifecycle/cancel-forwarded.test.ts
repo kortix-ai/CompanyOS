@@ -9,7 +9,7 @@ import { WIRE_ID_TIME_SCALE } from '../wire-message-id';
  * bespoke fetch blocks must leave each of these exactly as it was.
  *
  * The signed proxy endpoint resolves through the real `runtime-client` and its
- * real helpers; `opencode-mapping` and the db row are the only stubs, plus the
+ * real helpers; `runtime-session-mapping` and the db row are the only stubs, plus the
  * `fetch` that stands in for the box.
  */
 
@@ -38,17 +38,19 @@ const inboxRow = {
 
 let selectResults: unknown[] = [];
 let sessionRow: Record<string, unknown> | null = null;
-let deletedMessages: string[] = [];
 let closedTurns: string[] = [];
 
 mock.module('../../shared/db', () => ({
   hasDatabase: () => true,
+  // Statically imported by modules this graph loads; no test path runs it.
+  withDbTransaction: async <T>(fn: () => Promise<T>) => fn(),
+  afterDbCommit: (fn: () => void) => fn(),
   db: {
     select: (projection?: Record<string, unknown>) => ({
       from: () => ({
         where: () => ({
           limit: async () =>
-            projection && 'opencodeSessionId' in projection
+            projection && 'runtimeSessionId' in projection
               ? sessionRow
                 ? [sessionRow]
                 : []
@@ -59,10 +61,10 @@ mock.module('../../shared/db', () => ({
   },
 }));
 
-const realOpencodeMapping = await import('../opencode-mapping');
-mock.module('../opencode-mapping', () => ({
-  ...realOpencodeMapping,
-  sandboxOpencodeEndpoint: async () => ({
+const realRuntimeMapping = await import('../runtime-session-mapping');
+mock.module('../runtime-session-mapping', () => ({
+  ...realRuntimeMapping,
+  sandboxRuntimeEndpoint: async () => ({
     url: `https://box.test/p/${EXTERNAL_ID}/8000`,
     headers: { 'x-kortix': '1' },
   }),
@@ -88,19 +90,47 @@ const { cancelForwardedPrompt } = await import('./cancel-forwarded');
 beforeEach(() => {
   selectResults = [inboxRow];
   sessionRow = {
-    opencodeSessionId: OC_SESSION_ID,
+    runtimeSessionId: OC_SESSION_ID,
     sandboxUrl: `https://box.test/p/${EXTERNAL_ID}/8000/`,
     accountId: 'acct-1',
     projectId: 'proj-1',
     createdBy: 'user-1',
   };
-  deletedMessages = [];
   closedTurns = [];
 });
 
 afterAll(() => {
   globalThis.fetch = realFetch;
 });
+
+/**
+ * The box's session-log page for message summaries written as `{ info, parts }`:
+ * `parentID` is the prompt a reply answers, an assistant without
+ * `time.completed` still streams, and each part id becomes a block id.
+ */
+function asLogPage(body: { messages: Array<{ info: Record<string, unknown>; parts?: Array<{ id?: string }> }>; has_more?: boolean }) {
+  const iso = (ms: unknown) => (typeof ms === 'number' ? new Date(ms).toISOString() : null);
+  return {
+    thread_id: 'ses_root',
+    has_more: body.has_more ?? false,
+    messages: body.messages.map(({ info, parts = [] }, i) => {
+      const time = (info.time ?? {}) as { created?: number; completed?: number };
+      const streaming = info.role === 'assistant' && time.completed === undefined;
+      return {
+        message_id: info.id,
+        thread_id: 'ses_root',
+        seq: i + 1,
+        role: info.role,
+        kind: 'turn',
+        reply_to: typeof info.parentID === 'string' ? info.parentID : null,
+        status: streaming ? 'streaming' : 'complete',
+        created_at: iso(time.created),
+        completed_at: streaming ? null : iso(time.completed ?? time.created),
+        blocks: parts.flatMap((part) => (typeof part.id === 'string' ? [{ type: 'text', id: part.id, text: '' }] : [])),
+      };
+    }),
+  };
+}
 
 describe('cancelForwardedPrompt — the tip read and its failure ladder', () => {
   test('an unresolved endpoint is unreachable', async () => {
@@ -128,45 +158,26 @@ describe('cancelForwardedPrompt — the tip read and its failure ladder', () => 
   });
 
   test('an assistant parented on the target means answered', async () => {
-    const tipBody = [
-      { info: { id: TARGET, role: 'user', time: { created: T } }, parts: [{ id: 'prt_u' }] },
-      {
-        info: {
-          id: ANSWER,
-          role: 'assistant',
-          parentID: TARGET,
-          time: { created: T + 1_000, completed: T + 1_500 },
+    const tipBody = {
+      messages: [
+        { info: { id: TARGET, role: 'user', time: { created: T } }, parts: [{ id: 'prt_u' }] },
+        {
+          info: {
+            id: ANSWER,
+            role: 'assistant',
+            parentID: TARGET,
+            time: { created: T + 1_000, completed: T + 1_500 },
+          },
+          parts: [{ id: 'prt_a' }],
         },
-        parts: [{ id: 'prt_a' }],
-      },
-    ];
+      ],
+      has_more: false,
+    };
     globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
-      if ((init?.method ?? 'GET') === 'DELETE')
-        throw new Error('must not delete an answered prompt');
-      return Response.json(tipBody);
+      if ((init?.method ?? 'GET') !== 'GET') throw new Error('must not retract an answered prompt');
+      return Response.json(asLogPage(tipBody));
     }) as unknown as typeof fetch;
     expect(await cancelForwardedPrompt(SESSION_ID, PROMPT_ID)).toEqual({ outcome: 'answered' });
-  });
-
-  test('an unanswered tip lets the whole-message delete take it back out', async () => {
-    const tipBody = [
-      { info: { id: TARGET, role: 'user', time: { created: T } }, parts: [{ id: 'prt_u' }] },
-    ];
-    globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
-      if ((init?.method ?? 'GET') === 'DELETE') {
-        deletedMessages.push(decodeURIComponent(String(url)));
-        return new Response(null, { status: 200 });
-      }
-      return Response.json(tipBody);
-    }) as unknown as typeof fetch;
-
-    const out = await cancelForwardedPrompt(SESSION_ID, PROMPT_ID);
-
-    expect(out.outcome).toBe('cancelled');
-    expect(deletedMessages).toEqual([
-      `https://box.test/p/${EXTERNAL_ID}/8000/session/${OC_SESSION_ID}/message/${TARGET}?directory=/workspace`,
-    ]);
-    expect(closedTurns).toEqual([TARGET]);
   });
 });
 
@@ -184,42 +195,44 @@ describe('cancelForwardedPrompt — a steer pi has not read (R10)', () => {
     ],
     has_more: false,
   };
-  function box(deleteStatus: number) {
+  const retracted: string[] = [];
+  function box(retract: () => Response) {
     globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
-      if (String(url).endsWith('/kortix/health')) return Response.json({ capabilities: ['runtime.turns.v1', 'session.steer'] });
-      if ((init?.method ?? 'GET') === 'DELETE') {
-        deletedMessages.push(decodeURIComponent(String(url)));
-        return new Response(null, { status: deleteStatus });
+      if ((init?.method ?? 'GET') === 'POST') {
+        retracted.push(decodeURIComponent(String(url)));
+        return retract();
       }
-      return Response.json(tipBody);
+      return Response.json(asLogPage(tipBody));
     }) as unknown as typeof fetch;
   }
+  const verb = (status: number, body: unknown) =>
+    Response.json(body, { status, headers: { 'X-Kortix-Turn-Verb': '1' } });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     selectResults = [steerRow];
-    (await import('./runtime-fetch')).__resetRuntimeTurnVerbsMemo();
+    retracted.length = 0;
   });
 
-  test('absent from the transcript, it is withdrawn through the runtime DELETE', async () => {
-    box(200);
+  test('absent from the transcript, it is withdrawn through the runtime retract', async () => {
+    box(() => verb(200, { retracted: true }));
     expect((await cancelForwardedPrompt(SESSION_ID, PROMPT_ID)).outcome).toBe('cancelled');
-    expect(deletedMessages).toEqual([
-      `https://box.test/p/${EXTERNAL_ID}/8000/kortix/runtime/messages/${OC_SESSION_ID}/${STEER}`,
+    expect(retracted).toEqual([
+      `https://box.test/p/${EXTERNAL_ID}/8000/kortix/runtime/messages/${OC_SESSION_ID}/${STEER}/retract`,
     ]);
   });
 
-  test('a 409 from the DELETE means the turn read it: answered, the row stays', async () => {
-    box(409);
+  test('a retract answered message_read means the turn read it: answered, the row stays', async () => {
+    box(() => verb(409, { code: 'message_read' }));
     expect(await cancelForwardedPrompt(SESSION_ID, PROMPT_ID)).toEqual({ outcome: 'answered' });
   });
 
-  test('a refused DELETE is unreachable', async () => {
-    box(503);
+  test('a refused retract is unreachable', async () => {
+    box(() => verb(503, { code: 'RUNTIME_NOT_READY' }));
     expect(await cancelForwardedPrompt(SESSION_ID, PROMPT_ID)).toEqual({ outcome: 'unreachable' });
   });
 });
 
-describe('cancelForwardedPrompt — a daemon that serves the retract (R7.1)', () => {
+describe('cancelForwardedPrompt — the runtime retract (R7.1)', () => {
   const RUNNING = wireId(T - 5_000, 'RUNNINGRUNNIN');
   // pi admitted the target behind a running turn: the turn's newer step is
   // parented on ITS prompt, so the target is in the transcript and unread.
@@ -235,20 +248,17 @@ describe('cancelForwardedPrompt — a daemon that serves the retract (R7.1)', ()
   function box(retract: () => Response) {
     globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
       const target = decodeURIComponent(String(url));
-      if (target.endsWith('/kortix/health')) return Response.json({ capabilities: ['runtime.turns.v1', 'runtime.retract.v1'] });
       const method = init?.method ?? 'GET';
       if (method !== 'GET') calls.push(`${method} ${target.replace(`https://box.test/p/${EXTERNAL_ID}/8000`, '')}`);
       if (target.endsWith('/retract')) return retract();
-      if (method === 'DELETE') throw new Error('a daemon with the retract gets no delete');
-      return Response.json(tipBody);
+      return Response.json(asLogPage(tipBody));
     }) as unknown as typeof fetch;
   }
   const verb = (status: number, body: unknown) =>
     Response.json(body, { status, headers: { 'X-Kortix-Turn-Verb': '1' } });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     calls.length = 0;
-    (await import('./runtime-fetch')).__resetRuntimeTurnVerbsMemo();
   });
 
   test('an unread prompt queued behind the running turn is retracted and the row goes', async () => {

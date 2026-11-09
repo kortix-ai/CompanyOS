@@ -1,4 +1,4 @@
-// Artifacts (project flag `artifacts`): paths in the project's Files volume
+// Artifacts: paths in the project's Files volume
 // shared as a `doc` (a Markdown file people edit in place) or an `html` page
 // (a file, or a folder with index.html: decks, dashboards, mockups, tools).
 // The files are plain files in Files; their history is the Files commit log
@@ -9,8 +9,9 @@
 
 import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
+import { appendQuery, platformApiBase } from '../../http/url';
 import { platformConfig } from '../../http/config';
-import { stripTrailingSlashes } from '../../../platform/strings';
+import type { SessionParticipants } from './sessions';
 import { unwrap } from './shared';
 
 /** `doc`: a document Kortix styles and people edit in place. `html`: any page or bundle, served as written. */
@@ -51,8 +52,33 @@ export interface Artifact {
   public_url: string | null;
   /** The raw page without Kortix chrome, when public. */
   public_content_url: string | null;
+  /** The space it is grouped in (see `ResourceBinding`), or null. Older servers omit it. */
+  space?: string | null;
+  /** The agent that owns it: by default the agent of the session that published it. Older servers omit it. */
+  agent?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Where an artifact is grouped. Grouping only: it grants nothing. Null clears a field. */
+export interface ArtifactBindingInput {
+  /** A space slug. */
+  space?: string | null;
+  /** An agent name. Default on publish/share from a session: that session's agent. */
+  agent?: string | null;
+}
+
+export interface ListArtifactsOptions {
+  scope?: ArtifactListScope;
+  type?: ArtifactType;
+  q?: string;
+  limit?: number;
+  /** Only artifacts in this space. With `agents`: bound to the space, or unbound to a space and owned by one of `agents`. */
+  space?: string;
+  /** The agents of `space` (`agentsInSpace`), so the server needs no manifest. */
+  agents?: string[];
+  /** Only artifacts with no space and no agent (project-wide). */
+  unbound?: boolean;
 }
 
 export interface ArtifactFile {
@@ -76,6 +102,8 @@ export interface ArtifactDetail extends Artifact {
   /** The entry file's version now: pass it as `base_version` when you save. */
   entry_version: string | null;
   version: { id: string | null; files: ArtifactFile[]; view_url: string };
+  /** Who can open it, owner first, in a session's participants shape. Only on a read (`getArtifact`). */
+  participants?: SessionParticipants;
 }
 
 export interface ArtifactTypeInfo {
@@ -94,7 +122,7 @@ export interface ArtifactFileInput {
   content_base64?: string;
 }
 
-export interface PublishArtifactInput {
+export interface PublishArtifactInput extends ArtifactBindingInput {
   title?: string;
   description?: string | null;
   /** Default private. */
@@ -103,7 +131,7 @@ export interface PublishArtifactInput {
   files: Record<string, ArtifactFileInput>;
 }
 
-export interface ShareArtifactPathInput {
+export interface ShareArtifactPathInput extends ArtifactBindingInput {
   /** A path in Files: a .md or .html file, or a folder with index.md or index.html. */
   path: string;
   title?: string;
@@ -120,7 +148,7 @@ export interface SaveArtifactInput {
   base_version?: string;
 }
 
-export interface UpdateArtifactInput {
+export interface UpdateArtifactInput extends ArtifactBindingInput {
   title?: string;
   description?: string | null;
   visibility?: ArtifactVisibility;
@@ -128,28 +156,47 @@ export interface UpdateArtifactInput {
   shared_with_user_ids?: string[];
 }
 
-const base = (projectId: string) => `/projects/${projectId}/artifacts`;
-
-function query(params: Record<string, string | number | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') search.set(key, String(value));
-  const text = search.toString();
-  return text ? `?${text}` : '';
-}
+const base = (projectId: string) => `/workspaces/${projectId}/artifacts`;
 
 export async function listArtifactTypes(projectId: string) {
   return unwrap(await backendApi.get<{ types: ArtifactTypeInfo[] }>(`${base(projectId)}/types`)).types;
 }
 
-export async function listArtifacts(
-  projectId: string,
-  options: { scope?: ArtifactListScope; type?: ArtifactType; q?: string; limit?: number } = {},
-) {
-  return unwrap(await backendApi.get<{ artifacts: Artifact[] }>(`${base(projectId)}${query(options)}`)).artifacts;
+export async function listArtifacts(projectId: string, options: ListArtifactsOptions = {}) {
+  const { agents, unbound, ...rest } = options;
+  // The one URLSearchParams build left in the unit: repeated `agent` keys,
+  // appendQuery cannot encode those and the rest keeps the options record's order.
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+  for (const agent of agents ?? []) search.append('agent', agent);
+  if (unbound) search.set('unbound', '1');
+  const text = search.toString();
+  return unwrap(await backendApi.get<{ artifacts: Artifact[] }>(`${base(projectId)}${text ? `?${text}` : ''}`)).artifacts;
+}
+
+/** A web page as a doc's link card shows it. Nulls where the page says nothing (or could not be read). */
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  site_name: string | null;
+  /** The page's og:image, https only. */
+  image_url: string | null;
+}
+
+/**
+ * Read a web page's title, description and image, through the API (a browser
+ * cannot read another site's page). Public addresses only; a page that cannot
+ * be read answers nulls.
+ */
+export async function getLinkPreview(projectId: string, url: string) {
+  return unwrap(await backendApi.get<LinkPreview>(`/workspaces/${projectId}/link-preview?url=${encodeURIComponent(url)}`));
 }
 
 export async function getArtifact(projectId: string, artifactId: string, options: { version?: string } = {}) {
-  return unwrap(await backendApi.get<ArtifactDetail>(`${base(projectId)}/${artifactId}${query(options)}`));
+  return unwrap(await backendApi.get<ArtifactDetail>(`${base(projectId)}/${artifactId}${appendQuery(options)}`));
 }
 
 export async function createArtifact(projectId: string, input: PublishArtifactInput) {
@@ -196,11 +243,37 @@ export async function readArtifactFile(
   artifactId: string,
   options: { path?: string; version?: string; signal?: AbortSignal } = {},
 ): Promise<Blob> {
-  const url = `${stripTrailingSlashes(platformConfig().backendUrl)}${base(projectId)}/${artifactId}/content${query({ path: options.path, version: options.version })}`;
+  const url = `${platformApiBase(platformConfig().backendUrl)}${base(projectId)}/${artifactId}/content${appendQuery({ path: options.path, version: options.version })}`;
   const response = await authenticatedFetch(url, { signal: options.signal });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
     throw new ApiError(body?.error || body?.message || 'Could not read the artifact', { status: response.status });
   }
   return response.blob();
+}
+
+
+const ARTIFACT_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const ARTIFACT_IN_PROJECT = new RegExp(`/(?:workspaces|projects)/(${ARTIFACT_UUID})/artifacts/(${ARTIFACT_UUID})/?$`, 'i');
+const ARTIFACT_PUBLIC = new RegExp(`/share/artifact/(${ARTIFACT_UUID})/?$`, 'i');
+
+/**
+ * The artifact an app link names: `/workspaces/<workspace>/artifacts/<artifact>`
+ * or the older `/projects/<project>/artifacts/<artifact>` (the app viewer, on
+ * any Kortix host, or a relative path) or
+ * `/share/artifact/<artifact>` (a public link, no project). Ids are
+ * lower-case. Null for any other URL. This is the link an agent hands over
+ * with `show`, so a host uses it to tell an artifact from a website.
+ */
+export function parseArtifactUrl(url: string): { projectId: string | null; artifactId: string } | null {
+  let path: string;
+  try {
+    path = new URL(url, 'http://localhost').pathname;
+  } catch {
+    return null;
+  }
+  const inProject = ARTIFACT_IN_PROJECT.exec(path);
+  if (inProject) return { projectId: inProject[1]!.toLowerCase(), artifactId: inProject[2]!.toLowerCase() };
+  const shared = ARTIFACT_PUBLIC.exec(path);
+  return shared ? { projectId: null, artifactId: shared[1]!.toLowerCase() } : null;
 }

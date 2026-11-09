@@ -11,11 +11,12 @@
  * config (local and self-host boots). Only the initial-turn calls throw: boot
  * decides what a failed claim or acceptance means.
  */
-import type {
-  DaemonTurnStreamKind,
-  TurnPermissionRelayBody,
-  TurnQuestionRelayBody,
-  TurnStreamRelayBody,
+import {
+  PERMISSION_ARGS_RELAY_MAX_BYTES,
+  type DaemonTurnStreamKind,
+  type TurnPermissionRelayBody,
+  type TurnQuestionRelayBody,
+  type TurnStreamRelayBody,
 } from '@kortix/api-contract/runtime-relay'
 import type { RuntimePermissionRequest, RuntimeQuestionRequest, TurnErrorCode } from '@kortix/api-contract/transcript'
 import { logger } from '@/lib/log/logger'
@@ -24,6 +25,7 @@ import { noteControlPlaneResponse, sessionTokenPresumedDead } from '@/lib/kortix
 import type { InitialTurnClaim } from '@/types/control-plane'
 import { flushSessionLogJournal } from './session-log-journal'
 import { runOnIdleHook } from './on-idle-hook'
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
 
 export type TurnStreamFrame = Omit<TurnStreamRelayBody, 'session_id' | 'kind'> & { kind: DaemonTurnStreamKind }
 
@@ -32,7 +34,7 @@ export async function postTurnStream(frame: TurnStreamFrame, timeoutMs = 15_000)
   const ctx = sandboxRelayContext()
   if (!ctx) return null
   const body: TurnStreamRelayBody = { session_id: ctx.sessionId, ...frame }
-  return fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-stream`, {
+  return kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
     body: JSON.stringify(body),
@@ -43,31 +45,11 @@ export async function postTurnStream(frame: TurnStreamFrame, timeoutMs = 15_000)
 // ── The first turn ────────────────────────────────────────────────────────
 
 let claimedInitialTurn: InitialTurnClaim | null = null
-let claimedRootPin: string | null = null
 let claimInFlight: Promise<InitialTurnClaim | null> | null = null
-
-/**
- * The first turn this process claimed, once `claimInitialTurn` resolved one.
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See harness/README.md "OpenCode sunset".
- */
-export function initialTurnClaim(): InitialTurnClaim | null {
-  return claimedInitialTurn
-}
-
-/**
- * The runtime root the control plane has pinned for this session, as the
- * initial-turn claim reported it. Null before the claim, when no root is
- * pinned, or from an API that predates the field.
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See harness/README.md "OpenCode sunset".
- */
-export function claimedRuntimeSessionPin(): string | null {
-  return claimedRootPin
-}
 
 /** Test seam: a daemon process claims at most one initial turn. */
 export function resetInitialTurnClaimForTests(): void {
   claimedInitialTurn = null
-  claimedRootPin = null
   claimInFlight = null
 }
 
@@ -100,10 +82,7 @@ export function claimInitialTurn(): Promise<InitialTurnClaim | null> {
     }
     const body = (await response.json()) as {
       initial_turn?: { prompt?: unknown; context?: unknown; turn_token?: unknown; message_id?: unknown } | null
-      runtime_session_id?: unknown
     }
-    const pin = typeof body.runtime_session_id === 'string' ? body.runtime_session_id.trim() : ''
-    claimedRootPin = pin || null
     const turn = body.initial_turn
     if (!turn || typeof turn.prompt !== 'string' || typeof turn.turn_token !== 'string' || typeof turn.message_id !== 'string') {
       return null
@@ -137,20 +116,6 @@ export async function relayTurnAccepted(runtimeSessionId: string, messageId: str
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     throw new Error(`initial turn acceptance rejected: ${response.status} ${text.slice(0, 200)}`)
-  }
-  return ((await response.json().catch(() => ({}))) as { ok?: boolean }).ok === true
-}
-
-/**
- * Remove only a pre-created initial-turn record the runtime never accepted.
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See harness/README.md "OpenCode sunset".
- */
-export async function relayTurnAbandoned(turnToken: string): Promise<boolean> {
-  const response = await postTurnStream({ kind: 'turn_abandoned', turn_token: turnToken })
-  if (!response) throw new Error('initial turn abandonment relay context is unavailable')
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`initial turn abandonment rejected: ${response.status} ${text.slice(0, 200)}`)
   }
   return ((await response.json().catch(() => ({}))) as { ok?: boolean }).ok === true
 }
@@ -209,6 +174,8 @@ export async function relayTurnBegin(runtimeSessionId: string, messageId: string
       const text = await response.text().catch(() => '')
       noteControlPlaneResponse(response.status, text)
       logger.warn('[turn-relay] turn-begin relay non-ok', { status: response.status, attempt, body: text.slice(0, 200) })
+      // A non-5xx is definitive (KRTX-4456); same rule as relaySteerRead.
+      if (response.status < 500) return
     } catch (err) {
       logger.warn('[turn-relay] turn-begin relay fetch failed', { err: (err as Error).message, attempt })
     }
@@ -352,7 +319,7 @@ export async function relayTurnEnd(
         const settled = outcome === undefined || outcome === 'closed' || outcome === 'already_closed' || outcome === 'no_active_turn'
         if (settled) {
           if (data?.ok) logger.info('[turn-relay] turn end relayed', { status: current.status, errorName: current.error?.name, runtimeSessionId: current.runtimeSessionId, attempt })
-          // pi ends its turns here; OpenCode's own relay (open-code/turn-relay.ts) runs the hook too.
+          // pi ends its turns here.
           runOnIdleHook(current)
           return true
         }
@@ -374,6 +341,9 @@ export async function relayTurnEnd(
       const text = await response.text().catch(() => '')
       noteControlPlaneResponse(response.status, text)
       logger.warn('[turn-relay] turn-end relay non-ok', { status: response.status, attempt, body: text.slice(0, 200) })
+      // A non-5xx is definitive — the doc above already says so (KRTX-4456:
+      // the ladder used to retry all four attempts through a refused lease).
+      if (response.status < 500) return false
     } catch (err) {
       logger.warn('[turn-relay] turn-end relay fetch failed', { err: (err as Error).message, attempt })
     }
@@ -397,6 +367,9 @@ export async function relayMemoryGuardTurnEnd(input: {
   /** The turn that was running when the guard fired, read before the abort. */
   turnMessageId: string | null
 }): Promise<boolean> {
+  // A refused lease cannot take this frame (KRTX-4456): skip while the
+  // credential is presumed dead, and feed the shared breaker on a refusal.
+  if (sessionTokenPresumedDead()) return false
   const turnMessageId = input.aborted ? input.turnMessageId : null
   try {
     const response = await postTurnStream(
@@ -416,6 +389,7 @@ export async function relayMemoryGuardTurnEnd(input: {
       10_000,
     )
     if (!response) return false
+    if (!response.ok) noteControlPlaneResponse(response.status, await response.text().catch(() => ''))
     logger.warn('[resources] memory guard relayed to the control plane', {
       status: response.status,
       turnMessageId,
@@ -431,14 +405,33 @@ export async function relayMemoryGuardTurnEnd(input: {
 
 // ── Interactions ──────────────────────────────────────────────────────────
 
+/** apps/api's answer to an ask relay, read into the runtime's terms (`AskRelayResponse`). */
+export interface RelayedAsk {
+  liveWaitMs?: number
+  approved?: boolean
+  grant?: string
+  answers?: string[][]
+}
+
+function relayedAsk(body: unknown): RelayedAsk {
+  const ask = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  const out: RelayedAsk = {}
+  if (typeof ask.live_wait_ms === 'number' && Number.isFinite(ask.live_wait_ms) && ask.live_wait_ms >= 0) out.liveWaitMs = ask.live_wait_ms
+  if (ask.approved === true) out.approved = true
+  if (typeof ask.grant === 'string' && ask.grant) out.grant = ask.grant
+  return out
+}
+
 /**
- * Persist an asked question server-side, so it survives the box being parked.
- * Best-effort. Returns the answer that releases the blocking question tool in a
- * channel session (Slack, Teams), where the reply arrives as a NEW turn; null
- * in a web session, where the question stays open for the UI. The adapter
- * delivers that answer to its runtime.
+ * Persist an asked question server-side, so it survives the box and the turn.
+ * Returns how long the call may wait live (`live_wait_ms`); answers that release
+ * it at once in a channel session (Slack, Teams), where the reply arrives as a
+ * NEW turn; null when apps/api cannot be reached (the default live wait applies).
  */
-export async function relayQuestion(request: Pick<RuntimeQuestionRequest, 'id' | 'sessionID' | 'questions'>): Promise<string[][] | null> {
+export async function relayQuestion(
+  request: Pick<RuntimeQuestionRequest, 'id' | 'sessionID' | 'questions'>,
+  ask: { parkable: boolean } = { parkable: false },
+): Promise<RelayedAsk | null> {
   const ctx = sandboxRelayContext()
   if (!ctx) return null
   logger.info('[turn-relay] relaying an asked question', { requestId: request.id, questions: request.questions.length })
@@ -447,14 +440,17 @@ export async function relayQuestion(request: Pick<RuntimeQuestionRequest, 'id' |
     request_id: request.id,
     runtime_session_id: request.sessionID,
     questions: request.questions,
+    parkable: ask.parkable,
   }
+  let relayed: RelayedAsk | null = null
   try {
-    await fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-question`, {
+    const response = await kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-question`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     })
+    if (response.ok) relayed = relayedAsk(await response.json().catch(() => null))
   } catch (err) {
     logger.warn('[turn-relay] turn-question post failed (non-fatal)', { err: (err as Error).message })
   }
@@ -462,25 +458,40 @@ export async function relayQuestion(request: Pick<RuntimeQuestionRequest, 'id' |
   // the fallback when that fails. A release that loses the race is a harmless
   // 404 in the runtime.
   const channel = sessionChannel()
-  if (!channel) return null
+  if (!channel) return relayed
   // Name the channel the agent is in: a Teams agent has no `slack send`.
   const sentinel =
     `(Posted to the ${channel} conversation. In ${channel}, questions are async — the user ` +
     'replies in the thread, which reaches you as a NEW turn with full context. In a channel, ' +
     'the reply reaches you only when it @mentions you; a DM reply needs no mention. Do NOT ' +
     'wait for an answer here; finish this turn now.)'
-  return request.questions.map(() => [sentinel])
+  return { ...relayed, answers: request.questions.map(() => [sentinel]) }
+}
+
+/** The call's arguments as the relay carries them: whole up to the cap, else a preview. */
+function relayArgs(args: unknown): unknown {
+  let text: string
+  try {
+    text = JSON.stringify(args ?? {})
+  } catch {
+    return { truncated: true, preview: '' }
+  }
+  if (text.length <= PERMISSION_ARGS_RELAY_MAX_BYTES) return args ?? {}
+  return { truncated: true, preview: text.slice(0, 2_000) }
 }
 
 /**
- * Report a permission request, so apps/api sends the session creator a "needs
- * your approval" push. REPORT ONLY: the request stays open until the user
- * answers it in the session UI. `metadata` is not sent (an edit carries its
- * full diff, and the push does not use it). apps/api dedupes a repeated id.
+ * Persist a permission request in apps/api (Review, "Needs you", the push) and
+ * learn how to wait. apps/api answers `approved` when a person approved this
+ * exact call (`argsHash`) while it was parked, so the agent's re-run runs. Null
+ * when apps/api cannot be reached: the request waits the default live window.
  */
-export async function relayPermission(request: Pick<RuntimePermissionRequest, 'id' | 'sessionID' | 'permission' | 'patterns'>): Promise<void> {
+export async function relayPermission(
+  request: Pick<RuntimePermissionRequest, 'id' | 'sessionID' | 'permission' | 'patterns' | 'metadata'>,
+  call?: { tool: string; argsHash: string },
+): Promise<RelayedAsk | null> {
   const ctx = sandboxRelayContext()
-  if (!ctx) return
+  if (!ctx) return null
   logger.info('[turn-relay] relaying a permission request', { requestId: request.id, permission: request.permission })
   const body: TurnPermissionRelayBody = {
     session_id: ctx.sessionId,
@@ -488,16 +499,22 @@ export async function relayPermission(request: Pick<RuntimePermissionRequest, 'i
     runtime_session_id: request.sessionID,
     permission: request.permission,
     patterns: Array.isArray(request.patterns) ? request.patterns : [],
+    ...(call ? { tool: call.tool, args_hash: call.argsHash, args: relayArgs(request.metadata) } : {}),
   }
   try {
-    const response = await fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-permission`, {
+    const response = await kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-permission`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     })
-    if (!response.ok) logger.warn('[turn-relay] turn-permission post non-ok (non-fatal)', { status: response.status })
+    if (!response.ok) {
+      logger.warn('[turn-relay] turn-permission post non-ok (non-fatal)', { status: response.status })
+      return null
+    }
+    return relayedAsk(await response.json().catch(() => null))
   } catch (err) {
     logger.warn('[turn-relay] turn-permission post failed (non-fatal)', { err: (err as Error).message })
+    return null
   }
 }

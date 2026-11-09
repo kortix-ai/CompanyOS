@@ -156,6 +156,11 @@ export interface InboundAuditScope {
    */
   recordedActions: Set<string>;
   emitted: boolean;
+  /**
+   * The handler said this request is a heartbeat that changed nothing
+   * (`markInboundAuditHeartbeat`): a success writes no row; a failure does.
+   */
+  heartbeat?: boolean;
 }
 
 export interface InboundAuditScopeInit {
@@ -244,6 +249,16 @@ export function annotateAuditEvent(annotation: AuditAnnotation): void {
   if (metadata) scope.annotation.metadata = { ...scope.annotation.metadata, ...metadata };
 }
 
+/**
+ * This request only kept something alive that was already in force (a
+ * co-edited doc's lease renewal, every 5 s per tab): when it succeeds it
+ * writes no audit row. A refused or failed one keeps its row.
+ */
+export function markInboundAuditHeartbeat(): void {
+  const scope = currentInboundAuditScope();
+  if (scope) scope.heartbeat = true;
+}
+
 /** Classify a request the dispatcher routed outside Hono. */
 export function setInboundAuditEntrypoint(entrypoint: InboundEntrypoint, route: string): void {
   const scope = currentInboundAuditScope();
@@ -311,8 +326,37 @@ export function bindIntegrationPrincipal(
  * Wrap the tick function itself, not the timer, so an ad-hoc kick from a
  * handler runs as the worker too. `unit-worker-scope-wiring.test.ts` fails
  * when a background loop in `apps/api/src` is neither wrapped nor classified.
+ *
+ * The tick observer (`observeWorkerTicks`) sees every tick start and settle:
+ * the job heartbeat (`worker/runtime/heartbeat.ts`) reads it.
  */
 export function runWorkerTick<T>(worker: string, tick: () => T | Promise<T>): Promise<T> {
+  const settled = tickObserver?.(worker);
+  const run = runWorkerTickInScope(worker, tick);
+  if (!settled) return run;
+  return run.then(
+    (value) => {
+      settled();
+      return value;
+    },
+    (error: unknown) => {
+      settled(error);
+      throw error;
+    },
+  );
+}
+
+/** Called when a tick starts; the function it returns is called when the tick settles. */
+export type WorkerTickObserver = (worker: string) => ((error?: unknown) => void) | undefined;
+
+let tickObserver: WorkerTickObserver | null = null;
+
+/** Install (or with null, remove) the one tick observer. */
+export function observeWorkerTicks(observer: WorkerTickObserver | null): void {
+  tickObserver = observer;
+}
+
+function runWorkerTickInScope<T>(worker: string, tick: () => T | Promise<T>): Promise<T> {
   return requestContext.runWithContext('WORKER', worker, async () => {
     attachInboundAuditScope({
       owner: 'worker',

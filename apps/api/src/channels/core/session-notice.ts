@@ -17,7 +17,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { registerSessionFailureNotifier } from '../../shared/session-failure-notifier';
-import type { ChannelPlatform, ChannelPort, ChannelTarget, SessionNotice, SessionQuestion } from './conversation';
+import type { ChannelPlatform, ChannelPort, ChannelTarget, SessionNotice, SessionQuestion, TurnSettlement } from './conversation';
 
 // replica-local: ports are code; each adapter registers its own at import.
 const SESSION_PORTS = new Map<ChannelPlatform, ChannelPort>();
@@ -49,6 +49,22 @@ export async function notifySessionChannel(notice: SessionNotice, opts: { once?:
 }
 
 /**
+ * The session went idle (projects/routes/turn-stream-handlers.ts): its chat
+ * clears what it showed while the agent worked. Every surface's turn counts,
+ * not only the chat's own: the chat showed its marks on its own messages.
+ * Never throws.
+ */
+export async function settleSessionChat(sessionId: string, outcome: TurnSettlement): Promise<void> {
+  try {
+    const chat = await findSessionChat(sessionId);
+    if (!chat?.port.turnSettled) return;
+    await chat.port.turnSettled(chat.target, outcome, sessionId);
+  } catch (error) {
+    logger.warn('[channel] session settle failed', { sessionId, outcome, error: String(error) });
+  }
+}
+
+/**
  * Post an agent question in the session's chat. The platform it was posted on,
  * or null: no chat, a port that posts no questions, or a refused or failed
  * post. The caller then releases the question as not posted.
@@ -72,7 +88,7 @@ async function findSessionChat(sessionId: string): Promise<{ target: ChannelTarg
   const [row] = await db
     .select({
       platform: chatThreads.platform,
-      workspaceId: chatThreads.workspaceId,
+      workspaceId: chatThreads.platformTeamId,
       threadId: chatThreads.threadId,
       projectId: chatThreads.projectId,
     })
@@ -81,7 +97,7 @@ async function findSessionChat(sessionId: string): Promise<{ target: ChannelTarg
       chatInstalls,
       and(
         eq(chatInstalls.platform, chatThreads.platform),
-        eq(chatInstalls.workspaceId, chatThreads.workspaceId),
+        eq(chatInstalls.platformTeamId, chatThreads.platformTeamId),
         eq(chatInstalls.projectId, chatThreads.projectId),
       ),
     )

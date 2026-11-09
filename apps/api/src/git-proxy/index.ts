@@ -18,6 +18,7 @@
  * Scope: `git-receive-pack` ⇒ write; `git-upload-pack` ⇒ read.
  */
 import { createRoute, z } from '@hono/zod-openapi';
+import type { MiddlewareHandler } from 'hono';
 import {
   authorizeGitProxy,
   resolveProjectUpstream,
@@ -39,6 +40,7 @@ import {
 } from './receive-pack';
 import { evaluateRefUpdates, principalLabel } from './ref-policy';
 import { isRepositoryDisconnectedError } from '../shared/repository-health';
+import { joinChunks } from '../shared/join-chunks';
 import { annotateGitTransfer, bindGitProxyPrincipal, gitAuditOutcome, gitPushRefSummary } from './audit';
 import { denialsAfterScopes, sessionMayBypassGrantReview } from './ref-scopes';
 import {
@@ -52,6 +54,7 @@ import {
 import { fetchUpstreamBuffered } from './upstream';
 import { auth, makeOpenApiApp } from '../openapi';
 import { loadGitProject } from '../projects/lib/git';
+import { MAX_CHECKED_PUSH_BYTES, pushedManifestRefusal, pushedManifestSyntaxError } from '../projects/surface';
 import { refreshMirror, runGit } from '../projects/git/mirror';
 import { writeScaffoldDeltaBundle } from '../projects/git/fast-boot-bundle';
 import { resolveFastBootGitHintWithCache } from '../projects/lib/fast-boot-git-hint';
@@ -295,8 +298,8 @@ async function forwardAuthorized(
     void (async () => {
       try {
         const gitProject = await loadGitProject({ row: auth.project });
-        // Warm the fresh-session git hint (base tip + scaffold delta + OpenCode
-        // config dir) right after the push that moved the tip, so the next
+        // Warm the fresh-session git hint (base tip + scaffold delta) right
+        // after the push that moved the tip, so the next
         // session create finds it cached instead of losing the 2 s create-time
         // race on a cold mirror (measured on dev 2026-08-27: a 200 KB delta's
         // first session fell back to a 6 s proxied fetch; the second, with the
@@ -315,9 +318,8 @@ async function forwardAuthorized(
         // (../projects/managed-repo-seed.ts). Provisioning now guarantees one
         // at birth and `kortix ship` refuses to push without one, but a plain
         // `git push` straight at this proxy can still land a default branch
-        // with no kortix.yaml — which produces a project with no declared
-        // agents, no skills, and manifest detection falling back to v1
-        // `kortix.toml`. That used to be discovered as an unexplained
+        // with no kortix.yaml — which produces a project that runs its
+        // built-in agents only. That used to be discovered as an unexplained
         // session-start failure, long after the push.
         //
         // This cannot REJECT the push: the proxy streams the pack straight to
@@ -333,14 +335,14 @@ async function forwardAuthorized(
           try {
             const repoPath = await refreshMirror(gitProject);
             const listed = await runGit(
-              ['ls-tree', gitProject.defaultBranch, '--', 'kortix.yaml', 'kortix.yml', 'kortix.toml'],
+              ['ls-tree', gitProject.defaultBranch, '--', 'kortix.yaml', 'kortix.yml'],
               repoPath,
             );
             if (!listed.stdout.trim()) {
               console.error(
                 `[git-proxy] MANIFEST MISSING after push to ${projectId}: ` +
-                  `${gitProject.defaultBranch} has no kortix.yaml. This project cannot ` +
-                  `declare agents or skills and session start will fail.`,
+                  `${gitProject.defaultBranch} has no kortix.yaml. This project runs ` +
+                  `its built-in agents only.`,
               );
             }
           } catch (err) {
@@ -424,7 +426,7 @@ async function gateReceivePack(
     if (done) break;
     chunks.push(value);
     buffered += value.length;
-    parsed = parseReceivePackCommands(concatChunks(chunks, buffered));
+    parsed = parseReceivePackCommands(joinChunks(chunks, buffered));
   }
   if (parsed.status !== 'ok') {
     reader.cancel().catch(() => {});
@@ -461,6 +463,34 @@ async function gateReceivePack(
       });
     }
   }
+  // A push that lands a kortix.yaml that is not YAML on the default branch is
+  // refused: the project would run its last good version until a fix. The
+  // check reads the pack, so only these pushes are buffered (up to
+  // MAX_CHECKED_PUSH_BYTES); every case it cannot decide is forwarded.
+  if (denials.length === 0 && toDefault.length === 1) {
+    let complete = false;
+    while (buffered <= MAX_CHECKED_PUSH_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) {
+        complete = true;
+        break;
+      }
+      chunks.push(value);
+      buffered += value.length;
+    }
+    const pack = complete ? packOf(joinChunks(chunks, buffered), parsed) : null;
+    if (pack) {
+      const project = await loadGitProject({ row: auth.project }).catch(() => null);
+      const error = project ? await pushedManifestSyntaxError(project, toDefault[0]!, pack) : null;
+      if (error) {
+        const reason = pushedManifestRefusal(error);
+        // Nothing is forwarded, so no ref of this push moves.
+        for (const u of parsed.updates) {
+          denials.push({ ref: u.ref, reason: u.ref === defaultRef ? reason : `not pushed: ${auth.project.defaultBranch} was refused` });
+        }
+      }
+    }
+  }
   if (denials.length > 0) {
     // Refuse before a single pack byte is uploaded. The client is mid-send;
     // git handles an early response and prints our per-ref reasons, so there is
@@ -491,7 +521,7 @@ async function gateReceivePack(
 
   // Allowed: replay what we read, then hand the rest of the stream straight
   // through. The pack itself is never buffered.
-  const prefix = concatChunks(chunks, buffered);
+  const prefix = joinChunks(chunks, buffered);
   return {
     updates: parsed.updates,
     body: new ReadableStream<Uint8Array>({
@@ -510,16 +540,35 @@ async function gateReceivePack(
   };
 }
 
-function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
+/** The pack of a receive-pack body: after the commands and any push options. Null when there is none. */
+function packOf(body: Uint8Array, parsed: { commandBytes: number; capabilities: string[] }): Uint8Array | null {
+  let offset = parsed.commandBytes;
+  if (parsed.capabilities.includes('push-options')) {
+    for (;;) {
+      if (offset + 4 > body.length) return null;
+      const length = parseInt(new TextDecoder('latin1').decode(body.subarray(offset, offset + 4)), 16);
+      if (!Number.isFinite(length)) return null;
+      offset += length === 0 ? 4 : length;
+      if (length === 0) break;
+    }
   }
-  return out;
+  const magic = new TextDecoder('latin1').decode(body.subarray(offset, offset + 4));
+  return magic === 'PACK' ? body.subarray(offset) : null;
 }
+
+// info/refs, fast-boot-bundle and project-snapshot carry a query schema, and the
+// OpenAPI validator runs before any handler code. Registered before them: Hono
+// runs middleware in registration order. Without this, an anonymous request with a missing or
+// malformed query got `400 Validation failed` (naming the parameters) instead of
+// `401`. Reject a credential-less request first; the handler still authorizes
+// the token against the project.
+const requireGitCredential: MiddlewareHandler = async (c, next) => {
+  if (!extractToken(c.req.header('authorization'))) return unauthorized(c, 'authentication required');
+  await next();
+};
+gitProxyApp.use('/:project/fast-boot-bundle', requireGitCredential);
+gitProxyApp.use('/:project/project-snapshot', requireGitCredential);
+gitProxyApp.use('/:project/info/refs', requireGitCredential);
 
 // Ref discovery — scope is determined by the requested service.
 gitProxyApp.openapi(

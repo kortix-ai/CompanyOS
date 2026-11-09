@@ -17,7 +17,7 @@
 import { focusManager, keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
-  listProjectSessionsPage,
+  listWorkspaceSessionsPage,
   type ListProjectSessionsOptions,
   type ProjectSession,
   type ProjectSessionPage,
@@ -31,9 +31,12 @@ import { contract } from './query-contracts';
  * what makes `hasNextPage` go false. Handing back `null` leaves `hasNextPage`
  * true and a Load-more button that re-fetches page one forever.
  */
-export function projectSessionsPageParam(page: ProjectSessionPage): string | undefined {
+export function workspaceSessionsPageParam(page: ProjectSessionPage): string | undefined {
   return page.next_cursor ?? undefined;
 }
+
+/** @deprecated Use `workspaceSessionsPageParam`. Kept permanently. */
+export const projectSessionsPageParam = workspaceSessionsPageParam;
 
 /**
  * Flatten the fetched pages into the flat array every consumer of this list
@@ -45,7 +48,7 @@ export function projectSessionsPageParam(page: ProjectSessionPage): string | und
  * paging makes that a shifted window, not a bug to fix server-side. Rendering
  * it twice would hand React two children with the same key.
  */
-export function flattenProjectSessionPages(
+export function flattenWorkspaceSessionPages(
   data: { pages: ProjectSessionPage[]; pageParams: unknown[] } | undefined,
 ): ProjectSession[] {
   if (!data) return [];
@@ -60,6 +63,9 @@ export function flattenProjectSessionPages(
   }
   return flat;
 }
+
+/** @deprecated Use `flattenWorkspaceSessionPages`. Kept permanently. */
+export const flattenProjectSessionPages = flattenWorkspaceSessionPages;
 
 /**
  * How many pages the list reads on its own while every page so far was empty.
@@ -99,6 +105,7 @@ function withFreshFirstPage(data: ProjectSessionPages | undefined, fresh: Projec
   return { ...data, pages: [{ ...first, items: [...fresh.items, ...pushedOff] }, ...rest] };
 }
 
+/** @deprecated Use `UseWorkspaceSessionsOptions`. Kept permanently. */
 export interface UseProjectSessionsOptions
   extends Pick<
     ListProjectSessionsOptions,
@@ -123,30 +130,33 @@ export interface UseProjectSessionsOptions
   keepPreviousData?: boolean;
 }
 
+/** The workspace name of {@link UseProjectSessionsOptions}: the same type. */
+export type UseWorkspaceSessionsOptions = UseProjectSessionsOptions;
+
 /**
  * One project's sessions, newest activity first, fetched a page at a time.
  *
  * Returns the flat `sessions` array plus the paging controls, so a list that
  * previously read `data ?? []` changes only where the array comes from.
  */
-export function useProjectSessions(projectId: string, options?: UseProjectSessionsOptions) {
+export function useWorkspaceSessions(projectId: string, options?: UseProjectSessionsOptions) {
   const scope = options?.scope ?? 'visible';
   const { parent, startedBy, q, labels, view, spaceId, group, createdBy, agent, updatedAfter } = options ?? {};
   const filters = { parent, startedBy, q, labels, view, spaceId, group, createdBy, agent, updatedAfter };
   const queryKey = qk.project.sessionsPaged(projectId, scope, filters);
   const readPage = (cursor: string | null) =>
-    listProjectSessionsPage(projectId, { scope, limit: options?.limit, cursor, ...filters });
+    listWorkspaceSessionsPage(projectId, { scope, limit: options?.limit, cursor, ...filters });
   const intervalFor = (data: ProjectSessionPages | undefined) => {
     const interval = options?.refetchInterval;
     if (typeof interval !== 'function') return interval ?? false;
-    return interval(flattenProjectSessionPages(data));
+    return interval(flattenWorkspaceSessionPages(data));
   };
   const pollFirstPageOnly = options?.pollFirstPageOnly === true;
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => readPage(pageParam),
-    getNextPageParam: projectSessionsPageParam,
+    getNextPageParam: workspaceSessionsPageParam,
     enabled: options?.enabled ?? true,
     refetchOnWindowFocus: options?.refetchOnWindowFocus,
     placeholderData: options?.keepPreviousData ? keepPreviousData : undefined,
@@ -205,13 +215,41 @@ export function useProjectSessions(projectId: string, options?: UseProjectSessio
      * see, where the old behavior was bounded by nothing. `pollFirstPageOnly`
      * opts out of it.
      */
-    sessions: flattenProjectSessionPages(query.data),
+    sessions: flattenWorkspaceSessionPages(query.data),
   };
 }
+
+/** @deprecated Use `useWorkspaceSessions`. Kept permanently. */
+export const useProjectSessions = useWorkspaceSessions;
 
 export interface UseSessionChildrenOptions extends Pick<ListProjectSessionsOptions, 'limit' | 'q'> {
   /** Set false until the parent is expanded — children load lazily. */
   enabled?: boolean;
+  /** Poll every this many ms while the page is visible (a live agent list). Omit for no poll. */
+  refetchInterval?: number;
+}
+
+/** The pages with `parentSessionId`'s `child_count` raised to at least `count`;
+ *  the same object when no row changes, so react-query notifies nobody. The
+ *  count only rises: `child_count` also counts children this viewer may not list. */
+function raiseChildCount(
+  data: ProjectSessionPages | undefined,
+  parentSessionId: string,
+  count: number,
+): ProjectSessionPages | undefined {
+  if (!data) return data;
+  let changed = false;
+  const pages = data.pages.map((page) => {
+    const index = page.items.findIndex(
+      (session) => session.session_id === parentSessionId && (session.child_count ?? 0) < count,
+    );
+    if (index < 0) return page;
+    changed = true;
+    const items = page.items.slice();
+    items[index] = { ...items[index]!, child_count: count };
+    return { ...page, items };
+  });
+  return changed ? { ...data, pages } : data;
 }
 
 /**
@@ -225,19 +263,32 @@ export function useSessionChildren(
   options?: UseSessionChildrenOptions,
 ) {
   const q = options?.q;
+  const queryClient = useQueryClient();
   const query = useInfiniteQuery({
     queryKey: qk.project.sessionChildren(projectId, parentSessionId, q),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) =>
-      listProjectSessionsPage(projectId, {
+    queryFn: async ({ pageParam }) => {
+      const page = await listWorkspaceSessionsPage(projectId, {
         parent: parentSessionId,
         limit: options?.limit,
         cursor: pageParam,
         q,
-      }),
-    getNextPageParam: projectSessionsPageParam,
+      });
+      // The session list opens a row's children only when the row counts
+      // some, and nothing tells that list a child was created. A first page
+      // read without a search is a lower bound on the count.
+      if (pageParam === null && !q?.trim() && page.items.length > 0) {
+        queryClient.setQueriesData<ProjectSessionPages>(
+          { queryKey: [...qk.project.sessionsScope(projectId), 'list-paged'] },
+          (data) => raiseChildCount(data, parentSessionId, page.items.length),
+        );
+      }
+      return page;
+    },
+    getNextPageParam: workspaceSessionsPageParam,
     enabled: options?.enabled ?? true,
     ...contract('inventory'),
+    ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval, refetchIntervalInBackground: false } : {}),
   });
-  return { ...query, sessions: flattenProjectSessionPages(query.data) };
+  return { ...query, sessions: flattenWorkspaceSessionPages(query.data) };
 }

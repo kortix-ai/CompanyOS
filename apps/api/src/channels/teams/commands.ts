@@ -1,5 +1,6 @@
 import { config } from '../../config';
 import { formatRelativeTime, sessionWebUrl } from '../slack/util';
+import { SESSION_STATUS, describeSession } from '../core/display';
 import { repoPreviewImages } from '../repo-preview';
 import { PREVIEW_WAIT_MS, projectRows } from './project-rows';
 import { buildTeamsHomeCard } from './home';
@@ -26,7 +27,6 @@ import {
 import { listVisibleChatSessions } from '../core/sessions';
 import {
   conversationSession,
-  type TeamsConversationSession,
   ensureTeamsConversationBinding,
   listTenantProjects,
   resolveConversationProject,
@@ -52,7 +52,7 @@ function conversationRef(activity: TeamsActivity, projectId?: string): TeamsConv
   };
 }
 
-const OWN_PROJECT_NOTICE = 'This bot always runs its own project, so there is no other project to pick here.';
+const OWN_PROJECT_NOTICE = 'This bot always runs its own Kortix workspace, so there is no other workspace to pick here.';
 
 function dashboardBase(): string {
   return (config.FRONTEND_URL || 'https://kortix.com').replace(/\/+$/, '');
@@ -183,13 +183,13 @@ export async function handleTeamsCommand(input: {
         // A per-project bot runs its own project in every conversation: there
         // is no binding to remove.
         if (sessionProjectId) {
-          await post(buildNoticeCard('This bot always runs its own project, so there is nothing to unbind.'));
+          await post(buildNoticeCard('This bot always runs its own Kortix workspace, so there is nothing to unbind.'));
           return true;
         }
         const result = await unbindChannel(actor, settings);
         await post(
           result.ok
-            ? buildNoticeCard('Unbound. The next message here picks the project again.', '✅')
+            ? buildNoticeCard('Unbound. The next message here picks the Kortix workspace again.', '✅')
             : buildNoticeCard(teamsSettingsRefusal(result.reason, '')),
         );
         return true;
@@ -263,17 +263,17 @@ function helpCard() {
     { cmd: '/login', desc: 'connect your Kortix account' },
     { cmd: '/logout', desc: 'disconnect your account' },
     { cmd: '/whoami', desc: 'show who you are linked as' },
-    { cmd: '/status', desc: 'show and change the project, agent and model' },
+    { cmd: '/status', desc: 'show and change the workspace, agent and model' },
     { cmd: '/sessions', desc: 'your recent sessions started from Teams' },
     { cmd: '/models', desc: 'pick the model for this conversation' },
     { cmd: '/agents', desc: 'pick the agent for this conversation' },
-    { cmd: '/projects', desc: 'list connected projects' },
-    { cmd: '/use <name>', desc: 'point this conversation at another project' },
+    { cmd: '/projects', desc: 'list connected Kortix workspaces' },
+    { cmd: '/use <name>', desc: 'point this conversation at another Kortix workspace' },
     { cmd: '/stop', desc: 'stop the run in progress here' },
     { cmd: '/new [message]', desc: 'start a new session in this chat' },
     { cmd: '/policy', desc: 'who may join sessions started here: open, owner, approval' },
-    { cmd: '/unbind', desc: 'disconnect this conversation from its project' },
-    { cmd: '/home', desc: 'your projects and what to try' },
+    { cmd: '/unbind', desc: 'disconnect this conversation from its Kortix workspace' },
+    { cmd: '/home', desc: 'your Kortix workspaces and what to try' },
   ]);
 }
 
@@ -299,28 +299,28 @@ async function buildStatusCard(
     emoji: '⚙️',
     title: 'This conversation',
     rows: [
-      { label: 'Project', value: projectName },
+      { label: 'Workspace', value: projectName },
       { label: 'Agent', value: selection?.agentName || 'default' },
-      { label: 'Model', value: statusModel(selection?.opencodeModel ?? null, session) },
+      { label: 'Model', value: statusModel(selection?.sessionModel ?? null, session?.sessionModel ?? null) },
       { label: 'Policy', value: conversationPolicyLabel(normalizeConversationPolicy(selection?.conversationPolicy ?? null)) },
       // The run itself. `/status` was the one place a user looks to answer
       // "what is this conversation doing", and it answered everything except
       // that — so a run that had quietly stopped looked identical to one still
       // working.
-      { label: 'Session', value: describeConversationSession(session) },
+      { label: 'Session', value: describeSession(session, { none: 'none yet — @-mention me with a task' }) },
       { label: 'You', value: identity ? `connected as ${email || 'your Kortix account'}` : 'not connected — run /login' },
     ],
     // Slack's settings panel changes what it shows; this one only showed it.
     actions: [
       openPanelAction('Change model', 'models'),
       openPanelAction('Change agent', 'agents'),
-      ...(projects.length > 1 && !sessionProjectId ? [openPanelAction('Switch project', 'projects')] : []),
+      ...(projects.length > 1 && !sessionProjectId ? [openPanelAction('Switch workspace', 'projects')] : []),
     ],
     // Deep-link to the run when there is one: the project page is a detour
     // from the thing the card is about.
     url: session
       ? sessionWebUrl(config.FRONTEND_URL, projectId, session.sessionId)
-      : `${dashboardBase()}/projects/${projectId}`,
+      : `${dashboardBase()}/workspaces/${projectId}`,
   });
 }
 
@@ -363,39 +363,6 @@ async function buildRecentSessionsCard(actor: ChatUser, projectId?: string) {
   })));
 }
 
-/**
- * Every value of `project_session_status`, as a glyph and a word a user reads.
- *
- * The first cut of this map keyed on `idle`, which is not one of them — so it
- * never matched, and `queued`, `branching`, `provisioning` and `completed` all
- * fell through to a bare `•`. The enum is the contract
- * (packages/db/src/schema/kortix.ts): queued, branching, provisioning, running,
- * stopped, failed, completed.
- *
- * `branching` and `provisioning` are how the sandbox is built, not something a
- * user asked about; both read as "starting". A status outside the enum still
- * renders, verbatim, rather than being swallowed.
- */
-const SESSION_STATUS: Record<string, { glyph: string; label: string }> = {
-  queued: { glyph: '•', label: 'queued' },
-  branching: { glyph: '•', label: 'starting' },
-  provisioning: { glyph: '•', label: 'starting' },
-  running: { glyph: '⏳', label: 'working' },
-  completed: { glyph: '✓', label: 'done' },
-  stopped: { glyph: '•', label: 'stopped' },
-  failed: { glyph: '✗', label: 'failed' },
-};
-
-function describeConversationSession(session: TeamsConversationSession | null): string {
-  if (!session) return 'none yet — @-mention me with a task';
-  const raw = session.status ?? '';
-  const known = SESSION_STATUS[raw];
-  const glyph = known?.glyph ?? '•';
-  const label = known?.label ?? raw ?? 'unknown';
-  const when = session.createdAt ? ` · started ${formatRelativeTime(session.createdAt)}` : '';
-  return `${glyph} ${label}${when}`;
-}
-
 /** Who this Teams user is linked as; null when they are not linked. */
 async function buildWhoamiCard(tenantId: string, userId: string | null, projectId: string) {
   const identity = userId ? await lookupChatIdentity(chatUser('teams', tenantId, userId)) : null;
@@ -408,7 +375,7 @@ async function buildWhoamiCard(tenantId: string, userId: string | null, projectI
       { label: 'Connected as', value: email || identity.userId },
       { label: 'Runs act as', value: 'you — your credentials & secrets' },
     ],
-    url: `${dashboardBase()}/projects/${projectId}`,
+    url: `${dashboardBase()}/workspaces/${projectId}`,
   });
 }
 
@@ -432,7 +399,7 @@ const POLICY_ALIASES: Record<string, 'project_open' | 'owner_only' | 'owner_appr
 
 async function setPolicy(ctx: SettingsChannel, user: ChatUser, arg: string) {
   const selection = await currentChannelSelection(ctx);
-  if (!selection) return buildNoticeCard('Connect a project to this conversation first — try /projects.', '📁');
+  if (!selection) return buildNoticeCard('Connect a Kortix workspace to this conversation first — try /projects.', '📁');
   const current = normalizeConversationPolicy(selection.conversationPolicy);
   const requested = arg.trim().toLowerCase();
   if (!requested) {
@@ -441,7 +408,7 @@ async function setPolicy(ctx: SettingsChannel, user: ChatUser, arg: string) {
       title: 'Session policy',
       rows: [
         { label: 'Current', value: conversationPolicyLabel(current) },
-        { label: 'open', value: 'linked project members can join sessions started here (default)' },
+        { label: 'open', value: 'linked workspace members can join sessions started here (default)' },
         { label: 'approval', value: 'the session owner approves each person' },
         { label: 'owner', value: 'only the session owner' },
       ],
@@ -450,14 +417,14 @@ async function setPolicy(ctx: SettingsChannel, user: ChatUser, arg: string) {
   const next = POLICY_ALIASES[requested];
   if (!next) return buildNoticeCard('Use `/policy open`, `/policy approval`, or `/policy owner`.');
   const result = await changeChannelPolicy(user, ctx, next);
-  if (!result.ok) return buildNoticeCard(teamsSettingsRefusal(result.reason, 'Connect a project to this conversation first — try /projects.'), '📁');
+  if (!result.ok) return buildNoticeCard(teamsSettingsRefusal(result.reason, 'Connect a Kortix workspace to this conversation first — try /projects.'), '📁');
   return buildNoticeCard(`Session policy set to **${conversationPolicyLabel(next)}**. New sessions started here use it.`, '✅');
 }
 
 async function buildProjectsCard(tenantId: string, currentProjectId: string) {
   const projects = await listTenantProjects(tenantId);
   if (projects.length === 0) {
-    return buildNoticeCard('No Kortix projects are connected to this Teams tenant yet.', '📁');
+    return buildNoticeCard('No Kortix workspaces are connected to this Teams tenant yet.', '📁');
   }
   return buildProjectsPickerCard(await projectRows(projects, currentProjectId));
 }
@@ -476,7 +443,7 @@ async function switchProject(user: ChatUser, channel: SettingsChannel, arg: stri
   if (!result.ok) {
     return buildNoticeCard(
       result.reason === 'not_installed'
-        ? "That project isn't connected to this Teams tenant."
+        ? "That Kortix workspace isn't connected to this Teams tenant."
         : teamsSettingsRefusal(result.reason, ''),
     );
   }

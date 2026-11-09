@@ -7,7 +7,6 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { logger } from '@/lib/log/logger'
-import { evaluateOpenCodePressure, formatOpenCodeMemoryGuardReason } from '@/harness/open-code/resource-diagnostics'
 import {
   type MemoryConsumer,
   type ResourceSnapshot,
@@ -32,7 +31,7 @@ SwapTotal:             0 kB
 SwapFree:              0 kB
 `
 
-const STATUS = `Name:\topencode.exe
+const STATUS = `Name:\tclaude
 State:\tS (sleeping)
 Pid:\t2423
 VmRSS:\t 2867200 kB
@@ -122,7 +121,7 @@ describe('evaluatePressure', () => {
     expect(evaluatePressure(snapshot())).toEqual([])
   })
 
-  test('memory, cgroup, disk, load, duplicate opencode, oom-kill rise are each named', () => {
+  test('memory, cgroup, disk, load, duplicate runtime, oom-kill rise are each named', () => {
     const s = snapshot({
       memory: { totalMb: 3892, availableMb: 100, usedPct: 97, swapTotalMb: 0, swapFreeMb: 0 },
       cgroup: { currentMb: 2900, workingSetMb: 2900, maxMb: 3000, usedPct: 97, oomKills: 3 },
@@ -132,9 +131,6 @@ describe('evaluatePressure', () => {
     })
     const kinds = evaluatePressure(s, snapshot()).map((f) => f.kind).sort()
     expect(kinds).toEqual(['cgroup', 'disk', 'load', 'memory', 'oom-kill', 'runtime-duplicates'])
-    const nativeFindings = evaluateOpenCodePressure(s, snapshot())
-    expect(nativeFindings.map((f) => f.kind).sort()).toEqual(['cgroup', 'disk', 'load', 'memory', 'oom-kill', 'opencode-duplicates'])
-    expect(nativeFindings.find((f) => f.kind === 'opencode-duplicates')?.detail).toBe('2 opencode serve processes: 2423,7259')
   })
 
   test('null fields never produce findings', () => {
@@ -154,14 +150,14 @@ describe('readResourceSnapshot', () => {
   test('top process sampling is bounded and excludes command lines', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-proc-'))
     try {
-      for (const [pid, name, rss] of [[101, 'bun', 2048000], [102, 'private-project', 1024000], [103, 'opencode', 512000]] as const) {
+      for (const [pid, name, rss] of [[101, 'bun', 2048000], [102, 'private-project', 1024000], [103, 'claude', 512000]] as const) {
         await mkdir(join(root, String(pid)))
         await writeFile(join(root, String(pid), 'status'), `Name:\t${name}\nVmRSS:\t${rss} kB\n`)
       }
-      expect(await readTopMemoryProcesses(root, ['opencode'])).toEqual([
+      expect(await readTopMemoryProcesses(root, ['claude'])).toEqual([
         { pid: 101, name: 'bun', rssMb: 2000 },
         { pid: 102, name: 'other', rssMb: 1000 },
-        { pid: 103, name: 'opencode', rssMb: 500 },
+        { pid: 103, name: 'claude', rssMb: 500 },
       ])
       // A harness binary is named only when the harness declares it.
       expect((await readTopMemoryProcesses(root)).map((p) => p.name)).toEqual(['bun', 'other', 'other'])
@@ -244,7 +240,6 @@ describe('memory guard', () => {
           runtime: { pid: 2423, rssMb: Math.round(8000 * usedPct / 100), threads: 8, state: 'R' },
         }),
       guard: {
-        formatReason: formatOpenCodeMemoryGuardReason,
         guardPct: 92,
         elevatedPct: 80,
         fastIntervalMs: 60_000,
@@ -272,7 +267,7 @@ describe('memory guard', () => {
     expect(aborts).toHaveLength(1)
     expect(aborts[0]).toContain('sandbox memory at 93%')
     expect(aborts[0]).toContain('7440 MB RSS')
-    expect(aborts[0]).toBe('sandbox memory at 93% (opencode 7440 MB RSS of 8000 MB): turn stopped to prevent a kernel OOM kill')
+    expect(aborts[0]).toBe('sandbox memory at 93% (runtime 7440 MB RSS of 8000 MB): no non-critical process to shed; turn stopped before the kernel would kill runtime')
     expect(relays).toEqual([{ aborted: true }])
 
     usedPct = 95
@@ -420,6 +415,97 @@ describe('memory guard — process shedding (prefer shedding over losing the VM)
     usedPct = 93
     await monitor.tick('t')
     expect(killed).toEqual([]) // nothing safe to shed — abortTurn is the only lever
+  })
+
+  test('never sheds a harness runtime binary (the claude process a turn runs in), even as the largest child', async () => {
+    // prod 2026-11-04: the daemon held 3.1 GB, the guard shed the 284 MB `claude`
+    // process as a "runaway", and the turn ended "terminated by signal SIGKILL".
+    let usedPct = 50
+    const killed: number[] = []
+    const aborts: string[] = []
+    const monitor = startResourceMonitor({
+      intervalMs: 60_000,
+      runtimePid: () => 2423,
+      runtimeProcessNames: ['claude'],
+      snapshot: async () =>
+        snapshot({
+          memory: { totalMb: 3917, availableMb: 125, usedPct, swapTotalMb: 0, swapFreeMb: 0 },
+          topProcesses: [
+            { pid: 2423, name: 'bun', rssMb: 3107 },
+            { pid: 1554, name: 'claude', rssMb: 284 },
+            { pid: 283, name: 'other', rssMb: 71 },
+          ],
+        }),
+      guard: {
+        guardPct: 92,
+        elevatedPct: 80,
+        fastIntervalMs: 60_000,
+        turnInFlight: async () => true,
+        abortTurn: async (reason) => {
+          aborts.push(reason)
+          return true
+        },
+        killProcess: (pid) => {
+          killed.push(pid)
+          return true
+        },
+      },
+    })
+    stop = monitor.stop
+    await Bun.sleep(20)
+    usedPct = 97
+    await monitor.tick('t')
+    expect(killed).toEqual([283])
+    expect(aborts).toHaveLength(0)
+  })
+
+  test('recycles idle model processes before killing anything, once per elevated episode', async () => {
+    let usedPct = 50
+    const killed: number[] = []
+    const aborts: string[] = []
+    let relieveCalls = 0
+    const monitor = startResourceMonitor({
+      intervalMs: 60_000,
+      runtimePid: () => 2423,
+      snapshot: async () =>
+        snapshot({
+          memory: { totalMb: 3917, availableMb: 125, usedPct, swapTotalMb: 0, swapFreeMb: 0 },
+          topProcesses: [{ pid: 2423, name: 'bun', rssMb: 3107 }, { pid: 283, name: 'other', rssMb: 71 }],
+        }),
+      guard: {
+        guardPct: 92,
+        elevatedPct: 80,
+        fastIntervalMs: 60_000,
+        turnInFlight: async () => true,
+        relieve: async () => {
+          relieveCalls++
+          return 1
+        },
+        abortTurn: async (reason) => {
+          aborts.push(reason)
+          return true
+        },
+        killProcess: (pid) => {
+          killed.push(pid)
+          return true
+        },
+      },
+    })
+    stop = monitor.stop
+    await Bun.sleep(20)
+    usedPct = 97
+    await monitor.tick('t')
+    expect(relieveCalls).toBe(1)
+    expect(killed).toEqual([]) // the recycle came first; the next tick judges whether it helped
+    await monitor.tick('t')
+    expect(relieveCalls).toBe(1) // once per episode: still high, so shedding takes over
+    expect(killed).toEqual([283])
+    usedPct = 50
+    await monitor.tick('t') // the episode ends
+    usedPct = 97
+    await monitor.tick('t')
+    expect(relieveCalls).toBe(2)
+    expect(aborts).toHaveLength(0)
   })
 
   test('gives up shedding after maxShedAttemptsPerEpisode and falls back to abortTurn', async () => {

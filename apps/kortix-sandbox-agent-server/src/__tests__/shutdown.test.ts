@@ -1,15 +1,11 @@
 /**
- * `isDaemonShuttingDown()` — the signal DEF-A needs.
- *
- * A candidate OpenCode that `harness.stop()` kills mid-verify is
- * indistinguishable, from inside `reloadVerified`, from one that genuinely
- * never started: both come back `cause: null`. The daemon knows the
- * difference — it is the thing calling `stop()` — so this module states it
- * instead of `config-release.ts` guessing from a symptom.
+ * `installShutdownHandlers` runs one shutdown per process: the first request
+ * stops the harness and exits with its code; a later one (a SIGTERM during an
+ * agent swap) is a no-op.
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { installShutdownHandlers } from '@/app/shutdown'
-import { isDaemonShuttingDown, resetDaemonShutdownStateForTests } from '@/lib/shutdown-state'
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
+import { installShutdownHandlers, SHUTDOWN_HARNESS_STOP_MS } from '@/app/shutdown'
+import { resetDaemonShutdownStateForTests } from '@/lib/shutdown-state'
 
 function fakeProxy() {
   return {
@@ -35,39 +31,48 @@ afterEach(() => {
   resetDaemonShutdownStateForTests()
 })
 
-describe('isDaemonShuttingDown', () => {
-  test('false before any shutdown was requested', () => {
-    expect(isDaemonShuttingDown()).toBe(false)
-  })
-
-  test('true the instant a shutdown starts — before harness.stop() resolves', async () => {
-    let sawItDuringStop = false
-    const harness = fakeHarness(() => {
-      sawItDuringStop = isDaemonShuttingDown()
-    })
+describe('installShutdownHandlers', () => {
+  test('a shutdown stops the harness, then exits with its code', async () => {
+    let stopped = 0
     const exits: number[] = []
-    const shutdown = installShutdownHandlers(harness, fakeProxy(), undefined, {
+    const shutdown = installShutdownHandlers(fakeHarness(() => stopped++), fakeProxy(), undefined, {
       exit: (code) => exits.push(code),
     })
-    expect(isDaemonShuttingDown()).toBe(false)
     shutdown({ reason: 'agent-swap', exitCode: 75 })
     // harness.stop() is awaited inside the async IIFE; give it a tick.
     await new Promise((r) => setTimeout(r, 10))
-    expect(sawItDuringStop).toBe(true)
-    expect(isDaemonShuttingDown()).toBe(true)
+    expect(stopped).toBe(1)
     expect(exits).toEqual([75])
   })
 
-  test('a second shutdown call is a no-op — the flag does not un-set', async () => {
-    const harness = fakeHarness()
+  test('a second shutdown call is a no-op', async () => {
+    let stopped = 0
     const exits: number[] = []
-    const shutdown = installShutdownHandlers(harness, fakeProxy(), undefined, {
+    const shutdown = installShutdownHandlers(fakeHarness(() => stopped++), fakeProxy(), undefined, {
       exit: (code) => exits.push(code),
     })
     shutdown({ reason: 'agent-swap', exitCode: 75 })
     shutdown({ reason: 'SIGTERM', exitCode: 0 })
     await new Promise((r) => setTimeout(r, 10))
-    expect(isDaemonShuttingDown()).toBe(true)
+    expect(stopped).toBe(1)
     expect(exits).toEqual([75])
+  })
+
+  test('a harness stop that never settles still exits at the deadline', async () => {
+    jest.useFakeTimers()
+    try {
+      const exits: number[] = []
+      const shutdown = installShutdownHandlers({ stop: () => new Promise<void>(() => {}) }, fakeProxy(), undefined, {
+        exit: (code) => exits.push(code),
+      })
+      shutdown({ reason: 'SIGTERM', exitCode: 0 })
+      for (let i = 0; i < 20; i += 1) await Promise.resolve()
+      expect(exits).toEqual([])
+      jest.advanceTimersByTime(SHUTDOWN_HARNESS_STOP_MS)
+      for (let i = 0; i < 20 && exits.length === 0; i += 1) await Promise.resolve()
+      expect(exits).toEqual([0])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

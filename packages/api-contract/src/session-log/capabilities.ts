@@ -12,7 +12,7 @@
  *
  * `switchPreflight(log, to, ctx)` is the report of a switch to `to`:
  * - `available` / `reason`: the switch can happen. `same_harness`: the log already runs on `to`.
- * - `restores`: the project's `session_log_restore` flag (and the operator switch) is on and the log, or
+ * - `restores`: the deployment's restore switch (`SESSION_LOG_RESTORE_ENABLED`) is on and the log, or
  *   else what the model sees of it (`modelViewSliceIds`), is under the API's restore cap
  *   (`SESSION_LOG_RESTORE_MAX_BYTES`), so the new box restores the model's context. Otherwise the new box
  *   starts without the earlier conversation, and `losses` starts with a `history` line (every live message).
@@ -41,12 +41,12 @@ const PI_NATIVE: CapabilityFeatures = {
   compaction: ['summary_first_tail'],
   subagents: 'sync', // the Kortix `task` tool runs a child agent in process
   todos: false,
-  reasoning_replay: 'same_model', // reasoning.ts drops another model's thinking; pi-ai would replay it as text
+  reasoning_replay: 'same_model', // pi-ai (1.3.0+) drops another model's thinking from the request
   freeform_tool_input: false,
 };
 export const PI_CAPABILITIES: AdapterCapabilities = {
   harness: 'pi',
-  harness_versions: '1.0.3 || 1.2.0',
+  harness_versions: '1.0.3 || 1.2.0 || 1.4.0',
   schema_minors: [1],
   dialects: ['openai-chat'],
   native: PI_NATIVE,
@@ -63,7 +63,7 @@ const OPENCODE_NATIVE: CapabilityFeatures = {
   reasoning_replay: 'lowers_to_text', // another model's reasoning is replayed as text
   freeform_tool_input: false,
 };
-/** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset". */
+/** @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted". */
 export const OPENCODE_CAPABILITIES: AdapterCapabilities = {
   harness: 'opencode',
   harness_versions: '1.18.23',
@@ -95,7 +95,7 @@ const own = <T>(table: Record<string, T>, key: string): T | undefined => (Object
 
 /** What the API knows besides the log (`POST …/log/switch-preflight`). */
 export type SwitchContext = {
-  /** The project's `session_log_restore` flag and the operator switch are on and the log is under the restore cap: the new box restores the log. */
+  /** The deployment's restore switch is on and the log is under the restore cap: the new box restores the log. */
   restore: boolean;
   /** Tombstoned messages: OpenCode deletes the messages a rewind reverts. */
   deletedMessages?: number;

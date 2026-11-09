@@ -50,7 +50,7 @@ export interface TeamsManifest {
  * on an older version; a team owner still accepts a new permission or message
  * action in each team. `unit-teams-manifest.test.ts` fails until you bump.
  */
-export const TEAMS_MANIFEST_VERSION = '1.6.2';
+export const TEAMS_MANIFEST_VERSION = '1.6.4';
 
 /**
  * Resource-specific consent (RSC). These let the bot receive every message in
@@ -74,12 +74,12 @@ export const TEAMS_RSC_PERMISSIONS = [
 
 const BOT_COMMANDS = [
   { title: '/help', description: 'Show what Kortix can do' },
-  { title: '/status', description: 'Show and change the project, agent and model' },
+  { title: '/status', description: 'Show and change the workspace, agent and model' },
   { title: '/sessions', description: 'Your recent sessions started from Teams' },
   { title: '/login', description: 'Connect your Kortix account' },
   { title: '/models', description: 'Pick the model for this conversation' },
   { title: '/agents', description: 'Pick the agent for this conversation' },
-  { title: '/projects', description: 'List connected projects' },
+  { title: '/projects', description: 'List connected Kortix workspaces' },
   { title: '/stop', description: 'Stop the run in progress here' },
   { title: '/new', description: 'Start a new session in this chat' },
   { title: '/policy', description: 'Who may join sessions started here' },
@@ -95,10 +95,10 @@ export interface BuildTeamsManifestConfig {
 }
 
 const SHORT_DESCRIPTION =
-  'Open-source AI Operating System — start a session from any Teams chat.';
+  'Open-source CompanyOS — start a session from any Teams chat.';
 
 const LONG_DESCRIPTION =
-  'Kortix is an open-source AI Operating System — your agents, skills, company memory, and connectors in one git repo you own. This app starts Kortix sessions from Microsoft Teams. Add the bot to a chat or channel, @-mention it with a task, and an agent gets on it — using your connected tools and replying right here as it goes, with live progress. Follow-ups stay in the same session. Managed by Kortix · https://kortix.com';
+  'Kortix is an open-source CompanyOS — your agents, skills, company memory, and connectors in one git repo you own. This app starts Kortix sessions from Microsoft Teams. Add the bot to a chat or channel, @-mention it with a task, and an agent gets on it — using your connected tools and replying right here as it goes, with live progress. Follow-ups stay in the same session. Managed by Kortix · https://kortix.com';
 
 function hostOf(baseUrl: string): string {
   try {
@@ -122,7 +122,8 @@ export function buildTeamsManifest(cfg: BuildTeamsManifestConfig): TeamsManifest
       privacyUrl: 'https://kortix.com/privacy',
       termsOfUseUrl: 'https://kortix.com/terms',
     },
-    name: { short: appName, full: appName },
+    // `short` is the @-mention name, so it stays short.
+    name: { short: appName, full: cfg.appName ?? 'Kortix CompanyOS' },
     description: {
       short: cfg.description ?? SHORT_DESCRIPTION,
       full: cfg.longDescription ?? LONG_DESCRIPTION,

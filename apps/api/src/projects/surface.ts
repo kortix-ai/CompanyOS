@@ -7,6 +7,12 @@
  * route registrations that index.ts loads.
  */
 
+// The subagent notices register their delivery at import (a reaped or failed
+// box tells the parent session). Every process that runs projects code loads
+// this surface, the worker included, so the registration lives here instead
+// of only behind the routes that also import the module.
+import './subagent-notice';
+
 // Git-proxy public API (consumed by ../git-proxy).
 export {
   withProjectGitAuth,
@@ -16,8 +22,16 @@ export {
   type GitProxyAuth,
 } from './lib/git';
 
-// Idle sessions off a fallback model (consumed by workers/session-model-fallback-worker).
+// Idle sessions off a fallback model (consumed by worker/jobs/session-model-fallback).
 export { revertIdleSessionFallbacks } from './lib/session-model-fallback-revert';
+
+// Chat (`chat`): a thread's board of the chat's other threads (consumed by the turn-start path).
+export { chatThreadBoardTurn } from './lib/chat-threads';
+export { sessionWhereTurn } from './lib/session-where';
+export { messageAddressesOnlyPeople, notifyMessageMentions } from './lib/space-posts';
+export { runSpaceWatcherTick } from './lib/space-watch/wake';
+export { runGoalReconcilerTick } from './goals/reconcile';
+export { sessionSpaceAgents } from './lib/front-thread';
 
 // A person's pins and archive (consumed by account erasure and offboarding).
 export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/session-user-state';
@@ -26,9 +40,11 @@ export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/sessio
 export {
   buildSessionSandboxEnvVars,
   createProjectSession,
+  resolveSessionAgentName,
 } from './lib/sessions';
 
 export {
+  buildContinueSessionCommandValues,
   createCommandStatus,
   createSession,
   startSession,
@@ -36,29 +52,42 @@ export {
   deliverThroughQueue,
   drainSessionLifecycleQueue,
   resolveProjectAutomationActor,
-  retireWarmProjectSessions,
 } from './session-lifecycle';
+export type { CreateSessionCommand } from './session-lifecycle';
+export type { PromptPartWire } from './session-lifecycle/prompt-payload';
+export { promptWireModel } from './lib/effort-default';
+export { continuationOverrides } from './session-lifecycle/queued-continue-delivery';
+export { sessionIsTombstoned } from './lib/session-visibility';
 
 // The shutdown hand-back of lifecycle claims (consumed by bootstrap.ts).
 export { handBackClaims } from './session-lifecycle/claim-handover';
 
-// Trigger + manifest helpers (consumed by channels / connector / the boot
-// sequence in src/index.ts).
+// Trigger + manifest helpers (consumed by channels and connectors).
 export {
   drainTriggerExecutionQueue,
   runProjectTriggerSweep,
-  startProjectTriggerScheduler,
-  stopProjectTriggerScheduler,
   schedulerSweepIsStale,
   loadManifestForEdit,
   commitManifest,
 } from './lib/triggers';
 
 // Every declared agent's grant (consumed by the connectors rules matrix).
-export { extractAgents, grantsByAgent } from './agents';
+export { extractAgents, grantsByAgent, loadProjectAgents } from './agents';
+export { mentionTokens } from './lib/mentions';
+export { resolveAndAuthorizeAgentAs } from './lib/agent-access';
+export { isSpawnAncestor, loadVisibleSession } from './lib/session-visibility';
+export { sessionHoldsLiveTurn } from './session-lifecycle/inbox-admission';
+// Does a sandbox's runtime keep a prompt's message id (consumed by the sandbox proxy's wire-id placement).
+export { sandboxKeepsMessageIds } from './session-lifecycle/inbox-admission';
 
 // Project access, the route app and the secret envelope.
-export { assertProjectCapability, loadProjectForUser } from './lib/access';
+export { assertProjectCapability, loadProjectForUser, projectCapabilityAllowed } from './lib/access';
+
+// An App delete takes the triggers that name the App (consumed by ../apps routes and app-manifest).
+export { dropRetiredAppTriggers, runtimeTriggersNamingApp, withoutAppTriggers } from './lib/app-trigger-retire';
+
+// An always-on App that keeps crashing alerts the triggers that name it (consumed by ../apps/idle-reaper).
+export { clearAppCrashAlerts, raiseAppCrashAlerts } from './lib/app-health-alerts';
 
 // Who may decide a gated connector call (consumed by ../setup-links/approval-app,
 // so the approval page refuses exactly whom the resolve route refuses).
@@ -67,9 +96,21 @@ export { approvalCallerOf } from './lib/http-approval-caller';
 export { approvalTargetSession, expireDueApprovals } from './lib/connector-approval-decision';
 export { projectsApp } from './lib/app';
 export { decryptProjectSecret, encryptProjectSecret } from './secrets/envelope';
-export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets } from './secrets';
+export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from './secrets';
 // App events (`type: app` triggers): apps/event-routes.ts appends through these.
-export { ingestAppEvents, parseAppEventsBody, type AppEventInput } from './lib/app-events';
+export {
+  APP_EVENT_LOG_STATUSES,
+  asTestEvents,
+  emitAppPlatformEvent,
+  isAppPlatformEvent,
+  decodeAppEventCursor,
+  ingestAppEvents,
+  listAppEventLog,
+  parseAppEventsBody,
+  type AppEventInput,
+  type AppEventLogEntry,
+  type AppEventLogStatus,
+} from './lib/app-events';
 // One-off App runs (runAfter / runAt) on the trigger engine.
 export { cancelAppRun, insertAppRun } from './lib/app-runs';
 export { currentInstanceId } from './instance-scope';
@@ -91,8 +132,10 @@ export { markKortixRemovalIntent } from './runtime-identity';
 export { disableRemindersAuthoredBy } from './lib/session-reminders';
 
 // Nested `projects.metadata` writes (consumed by ../feature-flags/write).
-export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from './lib/metadata-merge';
+export { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from '../workspaces/rows';
 export { MANIFEST_PROJECT_NAME_KEY, projectNameAction } from './lib/manifest-project-name';
+// Workspace name = account name = project name (consumed by account rename and manifest sync).
+export { renameAccountOfSoleProject, renameSoleProjectOfAccount } from './lib/workspace-name';
 
 // Whether any app-event adapter is configured (consumed by ../feature-flags/registry).
 
@@ -107,7 +150,7 @@ export const reconcileEventSubscriptionsFromCatalog: typeof import('./trigger-ev
   async (...args) => (await eventSubscriptions()).reconcileEventSubscriptionsFromCatalog(...args);
 export const releaseProjectEventSubscriptions: typeof import('./trigger-events/subscriptions').releaseProjectEventSubscriptions =
   async (...args) => (await eventSubscriptions()).releaseProjectEventSubscriptions(...args);
-// Kortix-polled app events (consumed by workers/trigger-event-poll-worker.ts). Loading the
+// Kortix-polled app events (consumed by replica/trigger-event-poll.ts). Loading the
 // module registers the delivery queue's job handler. Lazy for the same cycle as above.
 export const runDueEventPolls = async (onSlotFree?: () => void): Promise<number> =>
   (await import('./trigger-events/mcp-poll')).runDueEventPolls(onSlotFree);
@@ -120,34 +163,59 @@ export { flushDriveSyncBeforeStop } from './reaping/stop-box';
 
 // Close the stored copy of a question a client answered (consumed by ../sandbox-proxy).
 export { clearOpenQuestions } from './lib/pending-questions';
+export { closeRepliedPermission } from './lib/pending-permissions';
 
 // A chat button answers a stored question, in the turn it blocks or as a
 // follow-up (consumed by channels/telegram).
-export { getPendingQuestion, renderAnswerPrompt, resolvePendingQuestion } from './lib/pending-questions';
+export {
+  advancePendingQuestionSteps,
+  getPendingQuestion,
+  pendingQuestionStepsBy,
+  renderAnswerPrompt,
+  resolvePendingQuestion,
+} from './lib/pending-questions';
 export { releaseRuntimeQuestion } from './session-lifecycle/release-runtime-question';
 
 // The stored transcript (`toV1` of the session log), consumed by the public share route.
 export { readStoredTranscriptWindow } from './session-log-read';
 
-// The retention purge of session content (consumed by workers/session-log-purge-worker.ts).
+// Abort a session's running turn (consumed by chrome/, on a user's Stop in Chrome, and by
+// channels/core/commands.ts, on a chat's /stop and /new).
+export { abortRuntimeTurn } from './session-lifecycle/abort-runtime-turn';
+
+// The retention purge of session content (consumed by worker/jobs/session-log-purge.ts).
 export { PURGE_BATCH_SIZE, purgeSessionContent } from './session-log-purge';
-// The backfill of old sessions into the session log (consumed by workers/session-log-backfill-worker.ts).
-export { backfillSessionLogs } from './session-log-backfill';
+// The liveness rule of a closed account, shared with billing/services/retention-erasure.ts.
+export { LIVE as liveClosedAccountSql } from './session-log-purge';
 
 // Git reads (consumed by config-releases/publish.ts and config-releases/base-tip.ts).
 export { resolveCommitSha, resolveCommitShaAt } from './git/commits';
-export { refreshIntervalMs, refreshMirror } from './git/mirror';
+export { publishTipProofsTo, refreshIntervalMs, refreshMirror, useSharedTipProof } from './git/mirror';
 export type { GitBackedProject } from './git/types';
+// Saved config summaries, rebuilt when a base ref moves (consumed by ../config-releases/publish).
+export { savedProjectConfig, scheduleConfigSummary } from './config-summary/service';
 
 // Who may stop a running turn (consumed by channels/core/turn-stop.ts and
 // sandbox-proxy/forward/abort-authority.ts).
 export { readRunningTurn, sessionLifecycleStandingFor, turnPrompterOf } from './session-lifecycle/turn-stop-authority';
+// A chat's /stop and /new: the source of the running turn's prompt (consumed by channels/core/commands.ts).
+export { turnPromptSource } from './lib/notification-recipients';
 // Who may rewind a session (consumed by sandbox-proxy/forward/forward-to-sandbox.ts).
 export { mayRewindSession } from './session-lifecycle/rewind-authority';
+// Wakes the first prompts waiting on a box that went active on any replica (consumed by bootstrap.ts).
+export { signalSessionRuntimeActive } from './session-lifecycle/runtime-active-signal';
+// The session-open admission read, handed to the turn-start gates (consumed by runtime-convergence).
+export { noteSandboxHealthBody } from './lib/turn-start-convergence';
 
 export { registerRuntimeFork } from './lib/runtime-session-snapshot';
+// A provider edge refused a daemon-port request: start the dead-daemon relaunch now (consumed by sandbox-proxy/forward/retry.ts).
+// Behind a dynamic import: the wiring module must stay out of the proxy's static graph (sandbox-proxy/module-graph.test.ts).
+export async function repairDeadDaemonOnEdgeRefusal(sandboxId: string): Promise<boolean> {
+  const wiring = await import('./lib/legacy-runtime-bootstrap-wiring');
+  return wiring.repairDeadDaemonOnEdgeRefusal(sandboxId);
+}
 
-// `project_channels` on: file every session into `#general`, and the "turned on
+// `chat` on: file every session into `#general`, and the "turned on
 // again" record (consumed by ../feature-flags/toggle-effects).
 export { turnOnChannels } from './lib/project-spaces';
 export { recordChannelsReenabled } from './lib/channels-onboarding';
@@ -155,3 +223,43 @@ export { recordChannelsReenabled } from './lib/channels-onboarding';
 // Author names written into memory files (consumed by ../memory/layers.ts).
 export { resolveUserIdentities } from './lib/user-identity';
 export { readPublicResponse } from './lib/public-response';
+// Shutdown: the Claude sign-ins this task runs (bootstrap.ts).
+export { drainClaudeLogins } from './claude-subscription/flows';
+// The turn gate for Claude subscription models (sandbox-proxy/forward/turn-start.ts).
+export { missingClaudeSubscription, sessionModelPin } from './claude-subscription/gate';
+
+// The push gate's manifest check (consumed by the git proxy).
+export {
+  MAX_CHECKED_PUSH_BYTES,
+  pushedManifestRefusal,
+  pushedManifestSyntaxError,
+} from './git/push-manifest-check';
+// A manifest write refused while the default branch's kortix.yaml is not YAML (consumed by the HTTP error handler).
+export { ManifestWriteRefusedError } from './manifest-io';
+
+// The transfer engine and the workspace split's data movement (consumed by workspaces/split).
+export {
+  afterProjectMoved,
+  copyProjectSiteBlobs,
+  moveOwnedRows,
+  PROJECT_TRANSFER_APP_TABLES,
+  PROJECT_TRANSFER_LEAVE_TABLES,
+  PROJECT_TRANSFER_TABLES,
+} from './lib/project-transfer';
+export {
+  countRotatingLogins,
+  isRotatingLogin,
+  projectGrantCounts,
+  reachingGroupsSql,
+  reachingUsersSql,
+  ProjectSplitError,
+  reverseProjectSplit,
+  splitProjectIntoNewAccount,
+  type SplitCopiedIds,
+} from './lib/workspace-split-copy';
+
+// Session and sandbox status transitions (consumed by the preview proxy's
+// lifecycle writes) and the canonical live session set (consumed by every
+// domain that counts or stops live sessions).
+export { settleLiveSessionsOfAccounts, transitionSandbox, transitionSession } from './session-lifecycle/status-transitions';
+export { ACTIVE_SESSION_STATUSES, PROVISIONING_SESSION_STATUSES } from './lib/session-status';

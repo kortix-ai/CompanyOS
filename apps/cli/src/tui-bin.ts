@@ -24,8 +24,7 @@ import { SUPERVISED_NOTICE, isSupervised } from './supervised.ts';
  * user 18–37 MB for a command most never run. So the TUI ships as its own
  * release asset, built by the same job that builds `kortix`
  * (apps/tui/bundle/*), and the CLI keeps per-version copies under
- * ~/.kortix/tui/<version>/ — exactly the shape `ensureOpencodeBin`
- * (src/opencode-bin.ts) already uses for OpenCode.
+ * ~/.kortix/tui/<version>/.
  *
  * Version-matched on purpose: `kortix-tui` imports @kortix/cli's config reader
  * and @kortix/sdk, so a TUI from another release can disagree with this CLI
@@ -44,7 +43,7 @@ export interface TuiBinResolution {
 
 /** The repo whose releases carry the assets. Overridable for forks/tests. */
 function releaseRepo(env: NodeJS.ProcessEnv = process.env): string {
-  return env.KORTIX_REPO ?? 'kortix-ai/suna';
+  return env.KORTIX_REPO ?? 'kortix-ai/CompanyOS';
 }
 
 /**
@@ -94,8 +93,7 @@ export function cliVersion(env: NodeJS.ProcessEnv = process.env): string {
  *
  * The version is spliced into BOTH the release-asset URL and the cache path
  * under ~/.kortix, so anything beyond `X.Y.Z(-tag)` — a `/`, a `..`, a newline
- * — would redirect the download or escape the cache directory. Same rule and
- * same reason as `isValidOpencodeVersion`.
+ * — would redirect the download or escape the cache directory.
  *
  * `dev` is deliberately NOT valid: a source build has no published release to
  * match, and the caller must say so rather than invent a URL.
@@ -274,7 +272,7 @@ export async function downloadTuiBin(opts: DownloadTuiBinOpts): Promise<string> 
   }
   // The backstop. `runTui` already refuses before it asks, but this is where
   // the ~80 MB public release asset is actually fetched, so the last word
-  // belongs here — same rule as `ensureOpencodeBin`.
+  // belongs here.
   if (isSupervised()) {
     throw new Error(
       `${SUPERVISED_NOTICE} It will not download kortix-tui from a public release. ` +
@@ -286,10 +284,10 @@ export async function downloadTuiBin(opts: DownloadTuiBinOpts): Promise<string> 
   const checksumUrl = `${url}.sha256`;
   const log = opts.log ?? ((text: string) => process.stderr.write(text));
 
-  // Indirect through `doFetch`, exactly as `downloadOpencode` does: the target
-  // is an interpolated release URL, so scripts/sdk-boundary.mjs cannot read its
-  // static prefix. The default base is github.com — an allowed origin — and the
-  // indirection is also the test seam.
+  // Indirect through `doFetch`: the target is an interpolated release URL, so
+  // scripts/sdk-boundary.mjs cannot read its static prefix. The default base
+  // is github.com — an allowed origin — and the indirection is also the test
+  // seam.
   const doFetch = opts.fetchImpl ?? fetch;
 
   // The 90-byte checksum comes FIRST. It decides whether the 80 MB binary has
@@ -324,8 +322,7 @@ export async function downloadTuiBin(opts: DownloadTuiBinOpts): Promise<string> 
     const binaryResponse = await doFetch(url);
     if (!binaryResponse.ok) throw new Error(`${url} → HTTP ${binaryResponse.status}`);
     // Buffer before writing: `Bun.write(path, response)` can hang forever on a
-    // streamed 80 MB body, while arrayBuffer() drains it in seconds (the same
-    // trap opencode-bin.ts hit).
+    // streamed 80 MB body, while arrayBuffer() drains it in seconds.
     bytes = new Uint8Array(await binaryResponse.arrayBuffer());
     const actual = createHash('sha256').update(bytes).digest('hex');
     if (actual !== expected) {

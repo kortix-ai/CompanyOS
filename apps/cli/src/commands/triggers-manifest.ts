@@ -140,6 +140,14 @@ export function parseRunCapFlags(
     }
     out[field] = value;
   }
+  // --expect-event-within (app triggers): the silence alert, a duration such
+  // as 30m; the API checks the 5m floor and the type. On `set`, none removes it.
+  const silence = tf.expectEventWithin?.trim();
+  if (silence !== undefined) {
+    if (allowClear && silence === 'none') out.expect_event_within = null;
+    else if (/^[1-9][0-9]*[smhd]$/.test(silence)) out.expect_event_within = silence;
+    else return { error: `--expect-event-within must be a duration such as 30m or 2h${allowClear ? ', or none to remove it' : ''} (got "${silence}").` };
+  }
   // --overlap (KRTX-1721): skip | allow; on `set`, default resets it.
   const overlap = tf.overlap?.trim();
   if (overlap !== undefined) {
@@ -282,7 +290,7 @@ export async function triggersAddLocal(
   try {
     if (arrayEntryExists('triggers', 'slug', slug)) {
       process.stderr.write(
-        `${status.err(`A [[triggers]] "${slug}" already exists in kortix.yaml.`)}\n`,
+        `${status.err(`A trigger "${slug}" already exists in kortix.yaml.`)}\n`,
       );
       return 1;
     }
@@ -315,7 +323,7 @@ export async function triggersAddLocal(
     };
     appendArrayBlock('triggers', fields);
     process.stdout.write(
-      `${status.ok(`Added [[triggers]] ${C.bold}${slug}${C.reset} (${type}) to kortix.yaml`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
+      `${status.ok(`Added trigger ${C.bold}${slug}${C.reset} (${type}) to kortix.yaml`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
     );
     return 0;
   } catch (err) {
@@ -328,11 +336,11 @@ export function triggersRmLocal(slug: string | undefined): number {
   if (!slug) return missing('a trigger slug');
   try {
     if (!removeArrayBlock('triggers', 'slug', slug)) {
-      process.stderr.write(`${status.err(`No [[triggers]] "${slug}" in kortix.yaml.`)}\n`);
+      process.stderr.write(`${status.err(`No trigger "${slug}" in kortix.yaml.`)}\n`);
       return 1;
     }
     process.stdout.write(
-      `${status.ok(`Removed [[triggers]] ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
+      `${status.ok(`Removed trigger ${C.bold}${slug}${C.reset}`)} ${C.dim}— \`kortix ship\` to apply.${C.reset}\n`,
     );
     return 0;
   } catch (err) {
@@ -347,7 +355,7 @@ export function triggersToggle(slug: string | undefined, enabled: boolean): numb
   if (!slug) return missing('a trigger slug');
   try {
     if (!arrayEntryExists('triggers', 'slug', slug)) {
-      process.stderr.write(`${status.err(`No [[triggers]] "${slug}" in kortix.yaml.`)}\n`);
+      process.stderr.write(`${status.err(`No trigger "${slug}" in kortix.yaml.`)}\n`);
       return 1;
     }
     setScalarInArrayBlock('triggers', 'slug', slug, 'enabled', enabled);

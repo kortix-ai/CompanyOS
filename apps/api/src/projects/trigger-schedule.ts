@@ -6,7 +6,7 @@ export interface TriggerScheduleSpec {
   slug: string;
   /** `monitor` never schedules — `nextTriggerScheduleSlot` returns null for it,
    *  so the cron sweep's `trigger_type = 'cron'` claim can never see one. */
-  type: 'cron' | 'webhook' | 'event' | 'app';
+  type: 'cron' | 'webhook' | 'event' | 'app' | 'change_request';
   enabled: boolean;
   cron: string | null;
   runAt: string | null;
@@ -30,6 +30,8 @@ export interface TriggerScheduleSpec {
   reminder?: { everySeconds: number | null } | null;
   /** type=cron only — see GitTriggerSpec.maxLatenessSeconds. */
   maxLatenessSeconds?: number;
+  /** type=app only — see GitTriggerSpec.expectEventWithinSeconds. */
+  expectEventWithinSeconds?: number;
   /** Any type — see GitTriggerSpec.maxRunsPerHour / maxRunsPerDay. */
   maxRunsPerHour?: number;
   maxRunsPerDay?: number;
@@ -95,6 +97,8 @@ export function triggerScheduleRevision(spec: TriggerScheduleSpec): string {
     // Joins only when set: the claim reads it from the stored spec, which is
     // rewritten only on a revision change. Unset keeps every revision put.
     ...(spec.maxLatenessSeconds ? { maxLatenessSeconds: spec.maxLatenessSeconds } : {}),
+    // The silence check reads it from the stored spec: the same rule.
+    ...(spec.expectEventWithinSeconds ? { expectEventWithinSeconds: spec.expectEventWithinSeconds } : {}),
     // Run caps (KRTX-1721): the same rule. Cron, event and monitor fires read
     // them from the stored spec.
     ...(spec.maxRunsPerHour ? { maxRunsPerHour: spec.maxRunsPerHour } : {}),

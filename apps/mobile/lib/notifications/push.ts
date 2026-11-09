@@ -5,7 +5,7 @@
  *
  * The server sends `data = { notificationId, kind, type, projectId,
  * sessionId, triggerSlug, url }`, an iOS `sound`, and an Android `channelId`
- * (apps/api/src/notifications/push-payload.ts). `kind` is one of the 7 inbox
+ * (apps/api/src/notifications/push-payload.ts). `kind` is one of the inbox
  * kinds (KRTX-1742); `type` keeps the pre-inbox name of the 4 session kinds
  * (`completion`, `error`, `question`, `permission`), which a server from
  * before the inbox sends alone, with no `notificationId`. An automation alert
@@ -63,7 +63,7 @@ export const ANDROID_CHANNELS: readonly AndroidChannelSpec[] = [
 /**
  * The Android channel and iOS sound for one kind. With `playSound` false: the
  * silent channel and no iOS sound. Mirrors the server's choice
- * (`buildExpoMessages`). The 3 kinds added with the inbox reuse the 4
+ * (`buildExpoMessages`). Additional inbox kinds reuse the 4
  * existing channels: a new channel or sound needs a native build, and this
  * ships over the air.
  */
@@ -208,8 +208,7 @@ export const DEVICE_KIND_SWITCH: Partial<Record<InboxNotificationKind, DeviceKin
 /**
  * The kinds this phone turned off, as a patch for the user's record
  * (`updateNotificationPreferences`). Null when it turned none off. The patch
- * applies to the whole user: every device and Web Push of a project with
- * `notification_center` on.
+ * applies to the whole user: every device and Web Push.
  */
 export function legacyKindPatch(prefs: NotificationPreferences): NotificationPreferencesPatch | null {
   const kinds: NotificationPreferencesPatch['kinds'] = {};

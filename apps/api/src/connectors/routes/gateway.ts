@@ -9,10 +9,10 @@ import { auth, errors, json } from '../../openapi';
 import { canonicalConnectorAlias } from '../../projects/lib/session-connector-bindings';
 import { ATTACHMENT_REF_KEY } from '../attachment-inline';
 import { MAX_CONNECTOR_ATTACHMENT_BYTES, type StageConnectorAttachmentInput } from '../attachments';
-import { agentPolicySet } from '../../iam/agent-scope';
-import { handleCall } from '../gateway';
+import { INVALID_ARGS, handleCall } from '../gateway';
 import {
   type ConnectorDenialReason,
+  callPolicySetOf,
   connectorDenialBody,
   principalMayUseConnector,
 } from '../principal-access';
@@ -26,6 +26,7 @@ import {
   ProjectParam,
   featureNotSupportedResponse,
 } from './shared';
+import { workspaceIdParam } from '../../shared/route-params';
 
 function decodedAttachmentHeader(c: Context, name: string): string {
   const value = c.req.header(name);
@@ -265,6 +266,8 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
           approval_url: result.approvalUrl ?? null,
           approval_summary: result.approvalSummary ?? null,
           approval_instructions: result.approvalInstructions ?? null,
+          // Kortix runs the call after approval; the caller must not repeat it.
+          ...(result.runsOnApproval ? { runs_on_approval: true } : {}),
         },
         202,
       );
@@ -321,7 +324,9 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
             },
         result.reason === 'connector_not_found' || result.reason === 'action_not_found'
           ? 404
-          : 403,
+          : result.reason === INVALID_ARGS
+            ? 400
+            : 403,
       );
     }
     default: {
@@ -486,7 +491,7 @@ export function registerProjectAttachmentRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/attachments',
+      path: '/projects/{workspaceId}/attachments',
       tags: ['connector'],
       summary: 'Stage a private attachment in a project from raw bytes',
       description:
@@ -503,7 +508,7 @@ export function registerProjectAttachmentRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       if (!projectId) return c.json({ error: 'forbidden' }, 403);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
@@ -580,7 +585,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/catalog',
+      path: '/projects/{workspaceId}/catalog',
       tags: ['connector'],
       summary: 'List the connectors usable in a project (any valid principal)',
       ...auth,
@@ -591,7 +596,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
       return catalogResponse(deps, c, p);
@@ -602,7 +607,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/call',
+      path: '/projects/{workspaceId}/call',
       tags: ['connector'],
       summary: 'Run a connector action in a project (any valid principal)',
       ...auth,
@@ -640,7 +645,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
       return callResponse(deps, c, p);
@@ -657,7 +662,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/accounts',
+      path: '/projects/{workspaceId}/connectors/{slug}/accounts',
       tags: ['connector'],
       summary: 'Accounts this principal may run a connector as',
       ...auth,
@@ -670,7 +675,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
@@ -702,19 +707,4 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       });
     },
   );
-}
-
-/**
- * The policy set the caller's agent grant assigns on this connector. The grant
- * is the reconciled session grant on the principal (session token, or a user
- * token with a session header), so a subagent child session that shares the
- * root session's token runs under the ROOT agent's set. A caller without a
- * grant (PAT, dashboard, trigger poll) gets the base rules. The request body
- * never selects a set.
- */
-function callPolicySetOf(p: ConnectorPrincipal, connectorSlug: string) {
-  const grant = p.agentGrant ?? null;
-  const name = agentPolicySet(grant, canonicalConnectorAlias(connectorSlug));
-  if (name === null || !grant) return null;
-  return { name, agent: grant.agent, manifestCommit: grant.manifestCommit ?? null };
 }

@@ -1,3 +1,5 @@
+import { isClaudeAgentModelRef } from './claude-agent';
+import { resolveClaudeCredentials } from '../../claude-subscription/accounts';
 import { getProjectGatewayResolution, type getProjectModelAccess } from '../../repositories/project-model-access';
 import {
   resolveDefaultCodexAccountSecret,
@@ -27,6 +29,7 @@ import {
   canonicalManagedModelId,
   getRuntimeManagedModel,
   isKnownManagedModelId,
+  isManagedAudioModelId,
   managedLineup,
   isRetiredManagedModelId,
 } from '../models/managed-models';
@@ -90,10 +93,6 @@ async function selectedPool(context: Context, providerId: string, name: string) 
   });
 }
 
-function codexGrantAllowed(principal: AuthedPrincipal) {
-  return !Array.isArray(principal.agentGrant?.env) ||
-    principal.agentGrant.env.some((name) => name.toUpperCase() === 'CODEX_AUTH_JSON');
-}
 
 /**
  * Every ChatGPT account in reach is resting. A rest past a minute is the
@@ -115,11 +114,6 @@ function chatGptAccountsResting(subject: string, retryAfterSeconds: number | und
     'Choose another model, or connect another ChatGPT account.', undefined, retryAfterSeconds);
 }
 
-function codexGrantRefusal() {
-  return new GatewayResolutionError('agent_grant_excludes',
-    'The running agent cannot use ChatGPT connections.',
-    'Add CODEX_AUTH_JSON to the agent secret grant, or choose another agent.');
-}
 
 /** Names the ChatGPT accounts whose login failed, three at most. */
 function accountsNeedReconnection(labels: string[], scope: 'selected' | 'shared'): string {
@@ -166,9 +160,9 @@ async function codexAccountCandidates(context: Context, secrets: Array<{ secretI
  * no pool row, and a member who did not create a shared account has no personal
  * one. A project gateway API key (`keyId`) carries no member, so it gets only
  * accounts shared with the whole project (`grantUserId: null`): never its
- * creator's personal connection or a member-restricted account. An agent whose
- * grant excludes CODEX_AUTH_JSON still reaches the legacy connection, never a
- * shared account.
+ * creator's personal connection or a member-restricted account. The agent's
+ * secret grant does not narrow it: a model login is a project secret the
+ * gateway uses, and the agent's model access decides who calls the model.
  */
 async function codexSharedCandidates(context: Context): Promise<UpstreamDescriptor[] | GatewayResolutionError | null> {
   const { principal, personalUserId } = context;
@@ -176,8 +170,8 @@ async function codexSharedCandidates(context: Context): Promise<UpstreamDescript
     accountId: principal.accountId, projectId: principal.projectId!,
     userId: principal.userId, grantUserId: principal.keyId ? null : personalUserId,
     providerId: 'codex', name: 'CODEX_AUTH_JSON',
+    sessionId: principal.sessionId, probe: context.options?.probe,
   });
-  if ((shared.secrets.length || shared.coolingDown) && !codexGrantAllowed(principal)) return codexGrantRefusal();
   if (shared.secrets.length) {
     const { candidates, failed } = await codexAccountCandidates(context, shared.secrets);
     if (candidates.length) return candidates;
@@ -220,7 +214,6 @@ async function resolveCodexCandidates(context: Context): Promise<UpstreamDescrip
     'Connect Codex to use this model.', 'Connect your ChatGPT/Codex account in project settings, then retry.');
   const pool = await selectedPool(context, 'codex', 'CODEX_AUTH_JSON');
   if (pool?.configured) {
-    if (!codexGrantAllowed(principal)) throw codexGrantRefusal();
     if (!pool.secrets.length) throw pool.coolingDown
       ? chatGptAccountsResting('All selected ChatGPT connections', pool.retryAfterSeconds,
         'Select a granted ChatGPT connection in session settings.')
@@ -239,8 +232,7 @@ async function resolveCodexCandidates(context: Context): Promise<UpstreamDescrip
   if (pooledEnabled && personalUserId && !principal.keyId) {
     const personal = await resolveDefaultCodexAccountSecret(principal.accountId, principal.projectId, personalUserId);
     if (personal) {
-      if (!codexGrantAllowed(principal)) throw codexGrantRefusal();
-      // Resting after a rate or usage limit: a shared account may serve,
+        // Resting after a rate or usage limit: a shared account may serve,
       // else the routed model is unavailable and the project's chain takes
       // over, instead of every request being refused by ChatGPT again.
       if (personal.restingSeconds) {
@@ -368,11 +360,6 @@ async function resolveByokCandidates(context: Context, provider: string,
   byok: NonNullable<ReturnType<typeof resolveCatalogUpstream>>): Promise<UpstreamDescriptor[]> {
   const { principal } = context;
   const pool = await selectedPool(context, provider, byok.envVar);
-  if (pool?.configured && Array.isArray(principal.agentGrant?.env) &&
-    !principal.agentGrant.env.some((name) => name.toUpperCase() === byok.envVar.toUpperCase())) {
-    throw new GatewayResolutionError('agent_grant_excludes', `The running agent cannot use ${provider} keys.`,
-      `Add ${byok.envVar} to the agent's secret grant, or choose another agent.`);
-  }
   const keys = pool?.configured
     // A pooled key this API cannot decrypt is skipped, as if it were not selected.
     ? pool.secrets.flatMap((secret) => secret.value === null ? [] : [{ identifier: secret.secretId, secretId: secret.secretId, value: secret.value }])
@@ -413,10 +400,12 @@ async function resolveCustomCandidates(context: Context, provider: CustomLlmProv
  * getRuntimeManagedModel() matches only when KORTIX_MANAGED_PROVIDER_ENABLED is
  * on, so a self-host falls through to "model not available on this deployment".
  * An empty result (no transport credential configured) falls through the same way.
+ * A managed audio model (the gateway's `/audio/*` routes) takes the same gates.
  */
 async function resolveManagedCandidates(principal: AuthedPrincipal, effectiveModel: string,
   access: Awaited<ReturnType<typeof getProjectModelAccess>>): Promise<UpstreamDescriptor[]> {
-  const managed = getRuntimeManagedModel(effectiveModel);
+  const managed = getRuntimeManagedModel(effectiveModel)
+    ?? (isManagedAudioModelId(effectiveModel) ? { id: effectiveModel } : undefined);
   if (!managed || !config.KORTIX_MANAGED_PROVIDER_ENABLED) return [];
   if (access.disabledProviders.includes('kortix')) throw new GatewayResolutionError('provider_disabled',
     'Kortix Managed Models are disabled for this project.',
@@ -550,6 +539,31 @@ export async function resolveCandidates(
     );
   }
 
+  // Chat completion callers (including the sessionless playground) cannot run
+  // Claude Code. Reaching this resolver says nothing about a runtime's age.
+  if (isClaudeAgentModelRef(effectiveModel)) {
+    // pi sends a Claude step here when every Claude account of the session is at
+    // its limit (harness/pi/claude/provider.ts). A resting pool starts the
+    // project's Routing chain with its own rest, so the session's fallback holds
+    // until the plan resets. Any other refusal stays `model_not_found` below,
+    // which starts the chain too. So does a short per-minute 429 on an account
+    // with room: the fallback serves that step and the revert moves the session
+    // back at its next check.
+    if (principal.projectId && principal.sessionId) {
+      await resolveClaudeCredentials({
+        accountId: principal.accountId, projectId: principal.projectId, userId: principal.userId,
+        sessionId: principal.sessionId, keyId: principal.keyId, personalUserId,
+      }, { probe: true }).catch((err: unknown) => {
+        // A resting pool starts the chain with its own reason; another typed refusal falls through.
+        if (!(err instanceof GatewayResolutionError) || err.code === 'provider_pool_rate_limited') throw err;
+      });
+    }
+    throw new GatewayResolutionError(
+      'model_not_found',
+      `"${effectiveModel}" runs through Claude Code inside sessions only. Test it by starting a session with this model; the gateway playground and chat completions cannot execute it.`,
+      'Start a session with this model, or choose a gateway-compatible model for this request.',
+    );
+  }
   throw new GatewayResolutionError(
     'model_not_found',
     `"${effectiveModel}" is not a recognized model.`,

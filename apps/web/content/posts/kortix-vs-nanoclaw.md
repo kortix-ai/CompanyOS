@@ -14,7 +14,7 @@ items:
   - { name: NanoClaw, domain: nanoclaw.dev }
 ```
 
-NanoClaw is a lightweight personal AI agent that runs every session in its own Docker container and meets you in the chat apps you already use; Kortix is the open-source AI Operating System a team owns. Work an agent does reaches `main` through a change request a person merges, and merge is default-deny for agents. Both are open source, and both let you bring your own model. The separation between them is what each is built to hold: one person's private agent, or a workforce a company governs.
+NanoClaw is a lightweight personal AI agent that runs every session in its own Docker container and meets you in the chat apps you already use; Kortix is the open-source CompanyOS a team owns. Work an agent does reaches `main` through a change request a person merges, and merge is default-deny for agents. Both are open source, and both let you bring your own model. The separation between them is what each is built to hold: one person's private agent, or a workforce a company governs.
 
 ## What NanoClaw is good at
 
@@ -41,7 +41,7 @@ Those four properties are what make the install good for one person. They also s
 
 ## One repo that is the company
 
-Kortix starts from the opposite unit: a team, with a git repo at the center. An agent is `agents/<name>.md` (behavior) plus an `agents.<name>` block in `kortix.yaml` (governance). Company memory is plain files today. `kortix.yaml` declares the machine image, connectors and triggers, and secret names and grants. Secret values never appear in the repo. The repo is the company, and you can grep all of it ([Kortix on GitHub](https://github.com/kortix-ai/suna)). Because the configuration is text, a team diffs a change to an agent's permissions or its memory. It reviews that diff like any other code.
+Kortix starts from the opposite unit: a team, with a git repo at the center. An agent is `agents/<name>.md` (behavior) plus an `agents.<name>` block in `kortix.yaml` (governance). Company memory is plain files today. `kortix.yaml` declares the machine image, connectors and triggers, and secret names and grants. Secret values never appear in the repo. The repo is the company, and you can grep all of it ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS)). Because the configuration is text, a team diffs a change to an agent's permissions or its memory. It reviews that diff like any other code.
 
 ```
 agents:
@@ -54,7 +54,7 @@ That block is the whole agent. Behavior sits in the markdown file, reach and gov
 
 ## One machine per session, one review per change
 
-Kortix is built so that work is reviewed before it lands. One isolated sandbox per session. Each session has its own isolated machine and branch, and thousands of agents run in parallel on one config, each on its own cloud computer. When the work is ready, the agent opens a change request against the default branch. A person reads the diff before it lands ([Kortix on GitHub](https://github.com/kortix-ai/suna)).
+Kortix is built so that work is reviewed before it lands. One isolated sandbox per session. Each session has its own isolated machine and branch, and thousands of agents run in parallel on one config, each on its own cloud computer. When the work is ready, the agent opens a change request against the default branch. A person reads the diff before it lands ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS)).
 
 - **Per-resource permissions for people and agents.** Roles, groups, and an audit trail.
 - **Every tool call is scoped.** Each connector action is Allow, Ask, or Block, decided at the level of a single call's arguments, and connector credentials are brokered server-side so they never enter the machine.

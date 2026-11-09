@@ -1,3 +1,6 @@
+import { CHANNELS } from '@kortix/shared/channel-descriptors';
+import { HELD_RUN_CARD_TEXT, type HeldRunCardState } from '../core/held-run-card';
+import { questionButtonData } from '../core/question-token';
 import type { StreamTaskChunk } from '../slack-api';
 import { markdownToCardElements } from './markdown';
 
@@ -354,7 +357,7 @@ export function buildConnectedCard(input: { email: string | null; resumed: boole
   const who = input.email ? `as **${input.email}**` : 'to your Kortix account';
   if (!input.hasAccess) {
     return card(
-      headerBlock('🔒', 'Connected', `Your Teams account is linked ${who}, but your account can't run this project yet.`),
+      headerBlock('🔒', 'Connected', `Your Teams account is linked ${who}, but your account can't run this Kortix workspace yet.`),
       [executeAction('Request access', 'teams_request_access', { projectId: input.projectId })],
     );
   }
@@ -364,14 +367,14 @@ export function buildConnectedCard(input: { email: string | null; resumed: boole
 /** What an account admin gets in their 1:1 chat when someone asks for project access. */
 export function buildAccessRequestNoticeCard(input: { requester: string; reviewUrl: string }): Record<string, unknown> {
   return card(
-    headerBlock('🔑', 'Access requested', `${input.requester} asked for access to a Kortix project from Teams. Approve it under Members in Kortix.`),
+    headerBlock('🔑', 'Access requested', `${input.requester} asked for access to a Kortix workspace from Teams. Approve it under Members in Kortix.`),
     [{ ...openUrlAction('Review in Kortix', input.reviewUrl), style: 'positive' }],
   );
 }
 
 export function buildRequestAccessCard(projectId: string): Record<string, unknown> {
   return card(
-    headerBlock('🔒', 'Request access', "You're connected, but your account can't run this project yet."),
+    headerBlock('🔒', 'Request access', "You're connected, but your account can't run this Kortix workspace yet."),
     [executeAction('Request access', 'teams_request_access', { projectId })],
   );
 }
@@ -483,11 +486,11 @@ export function buildModelPickerCard(opts: {
   scopeNote: string;
 }): Record<string, unknown> {
   const subtitle = [
-    opts.current ? `Currently ${opts.currentLabel ?? opts.current}` : `Currently the project default${opts.defaultLabel ? ` (${opts.defaultLabel})` : ''}`,
+    opts.current ? `Currently ${opts.currentLabel ?? opts.current}` : `Currently the workspace default${opts.defaultLabel ? ` (${opts.defaultLabel})` : ''}`,
     opts.keysNote ?? null,
   ].filter(Boolean).join(' · ');
   const body: CardElement[] = [...headerBlock('🧠', 'Model', subtitle)];
-  const defaultChoice = { label: 'Project default', hint: opts.defaultLabel ?? undefined, value: '' };
+  const defaultChoice = { label: 'Workspace default', hint: opts.defaultLabel ?? undefined, value: '' };
   // Grouped by how each model is paid for, in Slack's order. A dropdown has no
   // groups in Adaptive Cards, so there the order and the hint carry it.
   const groups = VIA_GROUPS.map((g) => ({ ...g, models: opts.models.filter((m) => m.via === g.via) })).filter((g) => g.models.length);
@@ -518,7 +521,7 @@ export function buildModelPickerCard(opts: {
     style: 'filtered',
     value: opts.current ?? '',
     choices: [
-      { title: `Project default${opts.defaultLabel ? ` — ${opts.defaultLabel}` : ''}`, value: '' },
+      { title: `Workspace default${opts.defaultLabel ? ` — ${opts.defaultLabel}` : ''}`, value: '' },
       ...ordered.map((m) => ({ title: `${m.label} · ${viaHint(m)}`, value: m.id })),
     ],
     spacing: 'medium',
@@ -655,7 +658,7 @@ function projectRow(p: ProjectRow, separator: boolean, pickVerb?: string): CardE
 /** `/projects`: every project this Teams tenant runs, as Slack's project carousel lists them. */
 export function buildProjectsCard(projects: ReadonlyArray<ProjectRow>): Record<string, unknown> {
   return card([
-    ...headerBlock('📁', 'Connected projects', 'Pick which project this conversation runs.'),
+    ...headerBlock('📁', 'Connected workspaces', 'Pick which Kortix workspace this conversation runs.'),
     emphasisContainer(projects.map((p, i) => projectRow(p, i > 0, 'teams_pick_project'))),
   ]);
 }
@@ -673,7 +676,7 @@ export function buildHomeCard(opts: { projects: ReadonlyArray<ProjectRow> }): Re
   );
   if (opts.projects.length) {
     body.push(
-      text('Projects in this organization', { weight: 'bolder', size: 'small', spacing: 'medium' }),
+      text('Kortix workspaces here', { weight: 'bolder', size: 'small', spacing: 'medium' }),
       emphasisContainer(opts.projects.map((p, i) => projectRow(p, i > 0))),
     );
   }
@@ -735,7 +738,10 @@ export interface TeamsQuestion {
   custom?: boolean;
 }
 
-const MAX_BUTTON_OPTIONS = 6;
+/** A press on a question card that answers nothing: its session is gone, or the conversation moved on. */
+export const QUESTION_EARLIER = 'This question is from an earlier conversation.';
+
+const MAX_BUTTON_OPTIONS = CHANNELS.teams.buttons.max;
 /** Past this, a column of radios stops being scannable and a dropdown wins. */
 const MAX_EXPANDED_CHOICES = 6;
 
@@ -765,8 +771,12 @@ function questionFieldId(question: string, index: number): string {
  * floor. A form answers all of them — one `Input.ChoiceSet` per question,
  * multi-select when asked, a text box when free-form answers are allowed — and
  * `handleForm` relays the answers back labelled with their questions.
+ *
+ * `pendingId`: the stored question. A button, a field id and a choice value
+ * then name the question and option by their stored index (core/question-token.ts),
+ * so a press answers from the stored row (question-press.ts).
  */
-export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, unknown> {
+export function buildQuestionCard(questions: TeamsQuestion[], pendingId?: string): Record<string, unknown> {
   const list = (questions ?? []).filter((q) => q?.question?.trim());
   if (list.length === 0) return buildNoticeCard('The agent asked a question, but it arrived empty.', '💬');
 
@@ -795,14 +805,17 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
     return card(
       body,
       // The question rides along with the answer. `Action.Execute` REPLACES
-      // the card, so without it the conversation is left showing a bare
-      // "Answer received: Yes" — no context for anyone reading the channel
-      // later, and a bare label for the agent. Truncated because action data
-      // travels on every tap.
+      // the card with the invoke's reply, so without it the card would show a
+      // bare "Answer received: Yes", and the agent would get a bare label.
+      // Unverified on a real tenant: whether that reply replaces the card for
+      // everyone or for the presser alone (`handleStop` in interactivity.ts
+      // assumes the presser alone). Truncated because action data travels on
+      // every tap.
       options.map((o) =>
         executeAction(o.label, 'teams_answer', {
           answer: o.label,
           question: single.question.slice(0, 200),
+          ...(pendingId ? { kq: questionButtonData(pendingId, single.options!.indexOf(o), questions.indexOf(single)) } : {}),
         }),
       ),
     );
@@ -812,6 +825,7 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
   const numbered = list.length > 1;
   for (const [i, q] of list.entries()) {
     const id = questionFieldId(q.question, i);
+    const kq = pendingId && `kq${questions.indexOf(q)}`;
     const opts = q.options?.filter((o) => o?.label?.trim()) ?? [];
     // Shape of the Kortix web question UI: each question carries its short
     // header, and several questions say where they sit ("2 of 3") so
@@ -825,7 +839,7 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
     const caption = numbered ? `${i + 1} of ${list.length}${header ? ` · ${header}` : ''}` : header || undefined;
     if (opts.length > 0) {
       fields.push({
-        id,
+        id: kq || id,
         label,
         caption,
         type: q.multiple ? 'multichoice' : 'choice',
@@ -837,7 +851,7 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
         // A description belongs on the choice itself, where the user reads it.
         choices: opts.map((o) => ({
           title: o.description?.trim() ? `${o.label} — ${o.description.trim()}` : o.label,
-          value: o.label,
+          value: kq ? String(q.options!.indexOf(o)) : o.label,
         })),
         placeholder: q.multiple ? 'Pick one or more' : 'Pick one',
       });
@@ -847,10 +861,10 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
       // under the choices reads as "or say it yourself", where a repeated bold
       // "Something else" read as a second question.
       if (q.custom) {
-        fields.push({ id: `${id} (other)`, label: '', type: 'text', placeholder: 'Or type your own answer' });
+        fields.push({ id: kq ? `${kq}.text` : `${id} (other)`, label: '', type: 'text', placeholder: 'Or type your own answer' });
       }
     } else {
-      fields.push({ id, label, caption, type: 'textarea', placeholder: 'Your answer' });
+      fields.push({ id: kq ? `${kq}.text` : id, label, caption, type: 'textarea', placeholder: 'Your answer' });
     }
   }
 
@@ -859,6 +873,7 @@ export function buildQuestionCard(questions: TeamsQuestion[]): Record<string, un
     subtitle: 'Answer here, or just reply in the chat.',
     submitLabel: 'Send answers',
     fields,
+    ...(pendingId ? { data: { kq: pendingId } } : {}),
   });
   // `buildFormCard` returns null only when nothing usable survived; the
   // questions still have to reach the user, so fall back to plain text.
@@ -954,8 +969,8 @@ export function buildProjectPickerCard(
   return card(
     headerBlock(
       '📁',
-      'Which project should this conversation use?',
-      "Several Kortix projects are connected to this team. Pick one — I'll remember it here and run your message.",
+      'Which Kortix workspace should this conversation use?',
+      "Several Kortix workspaces are connected to this team. Pick one — I'll remember it here and run your message.",
     ),
     projects.slice(0, 8).map((p) =>
       executeAction(p.name, 'teams_pick_project', { projectId: p.projectId, ...(pendingId ? { pendingId } : {}) }),
@@ -1041,6 +1056,8 @@ export interface TeamsFormSpec {
   subtitle?: string;
   submitLabel?: string;
   fields: TeamsFormField[];
+  /** More data on the submit, beside `fieldIds`. */
+  data?: Record<string, string>;
 }
 
 const MAX_FORM_FIELDS = 12;
@@ -1122,7 +1139,7 @@ export function buildFormCard(spec: TeamsFormSpec): Record<string, unknown> | nu
   }
   if (ids.length === 0) return null;
   return card(body, [
-    executeAction(spec.submitLabel?.trim() || 'Submit', TEAMS_FORM_VERB, { fieldIds: ids.join(',') }),
+    executeAction(spec.submitLabel?.trim() || 'Submit', TEAMS_FORM_VERB, { fieldIds: ids.join(','), ...spec.data }),
   ]);
 }
 
@@ -1207,14 +1224,18 @@ export function buildTeamsApprovalOutcomeCard(opts: {
   note: string;
   /** Who decided: the presser's Teams name, or "a teammate in Kortix". */
   decidedBy?: string;
+  /** An approved held call: where its run is. */
+  run?: HeldRunCardState;
 }): Record<string, unknown> {
+  const by = opts.decidedBy ? `by ${opts.decidedBy}` : '';
+  const run = opts.decision === 'approve' && opts.run ? HELD_RUN_CARD_TEXT[opts.run] : '';
   const body: CardElement[] =
     opts.decision === 'expired'
       ? headerBlock('⌛', `Expired: ${opts.actionPath}`, 'This approval expired.')
       : headerBlock(
           opts.decision === 'approve' ? '✅' : '⛔',
           `${opts.decision === 'approve' ? 'Approved' : 'Denied'}: ${opts.actionPath}`,
-          opts.decidedBy ? `by ${opts.decidedBy}` : undefined,
+          [by, run].filter(Boolean).join('. ') || undefined,
         );
   if (opts.note) {
     body.push(

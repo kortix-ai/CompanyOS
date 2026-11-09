@@ -64,7 +64,6 @@ const MARKETING_SOURCES = {
   changelog: 'apps/web/src/app/[locale]/(public)/(seo)/changelog/page.tsx',
   'use-cases': 'apps/web/src/app/[locale]/(public)/(seo)/use-cases/page.tsx',
   download: 'apps/web/src/app/[locale]/(public)/download/page.tsx',
-  cli: 'apps/web/src/app/[locale]/(public)/(marketing)/cli/page.tsx',
   desktop: 'apps/web/src/app/[locale]/(public)/(marketing)/desktop/page.tsx',
   mobile: 'apps/web/src/app/[locale]/(public)/(marketing)/mobile/page.tsx',
   slack: 'apps/web/src/app/[locale]/(public)/(marketing)/slack/page.tsx',
@@ -94,19 +93,16 @@ function gitAvailable() {
   }
 }
 
-function lastCommit(format, pathRelativeToRepo) {
+function lastCommitIso(pathRelativeToRepo) {
+  let committed = '';
   try {
-    return execFileSync('git', ['log', '-1', `--format=${format}`, 'HEAD', '--', pathRelativeToRepo], {
+    committed = execFileSync('git', ['log', '-1', '--format=%cI', 'HEAD', '--', pathRelativeToRepo], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     }).trim();
   } catch {
-    return '';
+    // no git: fall through to the mtime fallback below
   }
-}
-
-function lastCommitIso(pathRelativeToRepo) {
-  const committed = lastCommit('%cI', pathRelativeToRepo);
   if (committed) return new Date(committed).toISOString();
   // A source file that exists on disk but has no commit touching it yet — a
   // page written on a branch and not yet committed. `git log` is silent for it,
@@ -189,9 +185,13 @@ function invalidContentTimestamps(committed) {
   return invalid.sort();
 }
 
-function createContentTimestampManifest() {
-  if (!gitAvailable()) return {};
-  return collectContentTimestampManifest();
+// The one manifest writer, shared by the build-time refresh and --strict. It
+// creates the output dir and writes the JSON; a real fs failure throws here so
+// --strict can fail loudly. The build-time caller swallows it (see below).
+function writeManifest(manifest) {
+  const dir = dirname(MANIFEST_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function refreshContentTimestamps() {
@@ -203,31 +203,23 @@ function refreshContentTimestamps() {
   if (!gitAvailable()) return {};
 
   const manifest = collectContentTimestampManifest();
-  safeWrite(manifest);
-  return manifest;
-}
-
-// Never throw from the build-time side effect: a non-writable output dir or a
-// transient fs failure must not crash `next build`/`next dev`. The manifest
-// is an optimization (freshness signaling), not a correctness requirement —
-// public-content.ts tolerates its absence.
-function safeWrite(manifest) {
+  // Never throw from the build-time side effect: a non-writable output dir or a
+  // transient fs failure must not crash `next build`/`next dev`. The manifest
+  // is an optimization (freshness signaling), not a correctness requirement —
+  // public-content.ts tolerates its absence.
   try {
-    const dir = dirname(MANIFEST_PATH);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+    writeManifest(manifest);
   } catch {
     // intentionally swallowed; see comment above
   }
+  return manifest;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv.includes('--strict')) {
       if (!gitAvailable()) throw new Error('Content timestamps require full git history');
-      const manifest = collectContentTimestampManifest();
-      mkdirSync(dirname(MANIFEST_PATH), { recursive: true });
-      writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+      writeManifest(collectContentTimestampManifest());
     } else {
       refreshContentTimestamps();
     }
@@ -237,4 +229,4 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
 }
 
-export { createContentTimestampManifest, invalidContentTimestamps, MANIFEST_PATH, refreshContentTimestamps };
+export { invalidContentTimestamps, MANIFEST_PATH, refreshContentTimestamps };

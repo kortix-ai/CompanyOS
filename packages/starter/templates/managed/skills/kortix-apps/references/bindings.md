@@ -1,6 +1,6 @@
 # Apps that use other Apps
 
-An App can **use** other Apps of the same project. The link does two things:
+An App can **use** other Apps of the same workspace. The link does two things:
 
 1. **Sign-in tokens.** Code in the App gets a token for an App it uses
    (`/_kortix/token?audience=<slug>`, sign-in.md). For any other App it gets
@@ -41,7 +41,7 @@ apps:
 
 `kortix apps deploy` with no arguments deploys every block that has a `path`
 or `image`, used Apps first; a block with neither is skipped.
-A slug that names no App of the project answers `400 app_not_found`.
+A slug that names no App of the workspace answers `400 app_not_found`.
 
 ## Use a binding in code
 
@@ -94,7 +94,7 @@ binding is browser-only (it needs the viewer's App cookie, which the gate keeps)
 Call the used App on its own URL instead. Every machine gets
 `KORTIX_USES_URL_<SLUG>` (`-` → `_`) for each App its App uses: a `crm-data`
 backend is at `process.env.KORTIX_USES_URL_CRM_DATA`. The browser mints a token
-for the used App (`kortixToken('crm-data')`) and sends it to your server; the
+for the used App (`kortixToken({ audience: 'crm-data' })`) and sends it to your server; the
 server forwards it as `Authorization: Bearer`. The backend verifies it as usual
 (sign-in.md). Never hard-code a host: a relaunch can change it. A new `uses`
 link reaches the machines with the next deploy.

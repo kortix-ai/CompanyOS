@@ -601,7 +601,7 @@ export function isUndefinedVariableThirdPartyNoise(input: {
 // (Kortix Frontend prod, application_id 2346967, KRTX-2393): `TypeError`,
 // 39 occurrences / 0 identified users, ALL on 2026-10-14 17:05:37–17:05:39
 // UTC in ONE session (Firefox 140.0, Linux x86_64, release `1ecba158…`,
-// turbopack), on `/projects/<project_id>/customize/connectors/<app>/<connec
+// turbopack), on `/projects/<project_id>/admin/connectors/<app>/<connec
 // tor>?src=apps` (the connector detail page, Tools tab), mechanism
 // `auto.browser.global_handlers.onerror` (UNCAUGHT, `handled:false`). The
 // stack is the deciding evidence: the ONLY frame is the page DOCUMENT itself
@@ -655,7 +655,7 @@ const FIREFOX_DEAD_OBJECT_NOISE_PATTERN = /^can['’]t access dead object$/i;
 // `app:///projects/…`) carries no file extension and is NOT a script frame:
 // it is Firefox's fallback source for a throw whose stack is uncapturable,
 // and it is exactly the shape this rule drops.
-function isScriptAssetSource(filename: unknown): boolean {
+export function isScriptAssetSource(filename: unknown): boolean {
   const normalized = normalizeString(filename);
   if (normalized === '' || normalized === 'undefined') return false;
   if (isExtensionSource(filename)) return true;

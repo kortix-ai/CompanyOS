@@ -284,7 +284,7 @@ failed `deployed` flow fails the gate.
 | Sandbox stop and wake | SESS-12 |
 | LLM gateway | GW-2, GW-MANAGED-1 |
 | Stripe and billing webhooks | BILL-1, BILL-3, BILL-8, BILL-18 |
-| Object storage and uploads | SESS-31, SESS-31-log, FILE-9, MEMORY-4 |
+| Object storage and uploads | SESS-31, FILE-9, MEMORY-4 |
 | Git push to managed repositories | SHIP-1, RUN-7, GH-19, FILE-1 |
 | Money path: prompt to merged change request, real CLI | GOLD-1, CLI-SESS |
 | MCP over HTTP with a PAT | MCP-4 |
@@ -294,8 +294,8 @@ failed `deployed` flow fails the gate.
 | Internal cron key | BILL-13 |
 | Database writes over the deployed pool | ACCT-2, PROJ-1 |
 
-45 flows, picked for stability: in the 8 release-gate runs from 2026-10-13 to
-2026-10-15, 44 passed every run (SESS-31-log: 3 of 3 since it was added) and
+44 flows, picked for stability: in the 8 release-gate runs from 2026-10-13 to
+2026-10-15, 43 passed every run and
 RUN-3 failed once on a request timeout (run 38399331524). Their median times
 sum to ~10 min of flow work, which the 9 workers run in ~3 min. `unit/deployed-set.test.ts`
 pins this table to the tags, keeps the set between 30 and 50 flows, and rejects
@@ -442,8 +442,9 @@ session fixture checks every session create the same way.
 
 A flow that runs a session turn registers with `harnessFlow` (`src/core/flow.ts`)
 instead of `flow`. `harnessFlow('RUN-1', meta, fn)` registers `RUN-1` and calls
-the body with `harness` = `pi`: every new session runs pi since 2026-10-23
-(OpenCode is sunset). The body proves the harness from `/kortix/health`.
+the body with `harness` = `pi`: every new session runs pi since 2026-10-23,
+and kortixd has no OpenCode adapter since 2026-10-30. The body proves the
+harness from `/kortix/health`.
 
 Drive these flows through `src/fixtures/session-run.ts`, which speaks only the
 Kortix session routes: `bootSession` (boot, prove the harness from
@@ -635,7 +636,7 @@ artifact.
 Every CI browser run records a video of every journey, passed or failed
 (`resolveVideoMode` in `playwright.config.ts`). A local run keeps a video only
 for a failure. To replay a release shard, download its artifact and open the
-report: `gh run download <run-id> --repo kortix-ai/suna -n
+report: `gh run download <run-id> --repo kortix-ai/CompanyOS -n
 tests-release-browser-shard-1 -D /tmp/shard-1`, then `npx playwright
 show-report /tmp/shard-1/html`.
 
@@ -764,6 +765,14 @@ package command documented in the **sdk** skill.
 3. Keep the flow `meta.routes` list exact.
 4. Regenerate `tests/spec/routes.generated.json` after route changes with
    `bun run apps/api/scripts/dump-routes.ts`.
+   Workspace routes have two names: the canonical `/v1/workspaces/…` and a
+   permanent legacy alias (`/v1/projects/…`, `/v1/accounts/:workspaceId/<family>/…`,
+   `/v1/accounts/me`, …; map in `packages/shared/src/workspace-routes.ts`).
+   The manifest marks each alias row with `aliasOf`, and coverage counts a
+   route as covered when its twin is. Write new flows against the canonical
+   name. `bun scripts/codemods/workspace-flow-routes.ts` moves flow strings
+   to it; `accounts`, `connectors`, `secrets` and `retired` flows keep the
+   legacy names on purpose (spec §4a, `WS-ROUTE-*`).
 5. Run the narrow flow first.
 6. Run `pnpm test` before handoff.
 7. Run `pnpm test -- --full` for broad refactors or release work.

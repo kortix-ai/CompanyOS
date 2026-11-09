@@ -1,9 +1,11 @@
+import { asLegacyWorkspaceRoute } from '@kortix/shared/workspace-routes';
 import { config } from './config';
 import { getRequestUrl } from './lib/request-url';
 import { runInboundAudit } from './shared/audit-edge';
 import { annotateAuditEvent, setInboundAuditEntrypoint } from './shared/audit-scope';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { isUuid } from './shared/validate';
+import { clientIpFromHeaders } from './shared/client-ip';
 import { schemaReady } from './bootstrap';
 import { handleAppPublicRequest, resolveAppRequest } from './apps/public-proxy';
 import { prepareAppWsUpgrade } from './apps/ws-proxy';
@@ -95,6 +97,13 @@ export async function dispatchInbound(
     if (tunnelResult !== false) return tunnelResult;
   }
 
+  // ── Kortix in Chrome control socket ───────────────────────────────────
+  // The extension connects, then authenticates with its first frame. The token
+  // is never in the URL, and there is no Origin check: the token is the gate.
+  if (isWsUpgrade && url.pathname === '/v1/chrome/ws') {
+    return upgradeChromeWs(req, server);
+  }
+
   // ── Preview WebSocket proxy ─────────────────────────────────────────
   // Path-based preview upgrades (`/v1/p/{sandboxId}/{port}/...`) — today the
   // xterm PTY terminal. Authenticate via the `?token=` query param (browsers
@@ -109,7 +118,7 @@ export async function dispatchInbound(
 
 // The per-request stream-timeout guards, moved verbatim.
 function applyStreamTimeouts(req: Request, url: URL, server: any): void {
-  // Sandbox preview traffic includes OpenCode long-poll and SSE routes. Let
+  // Sandbox preview traffic includes the runtime's long-poll and SSE routes. Let
   // the proxy's own upstream timeout decide instead of Bun closing the client
   // socket early with an empty reply.
   if (url.pathname.includes('/v1/p/')) {
@@ -121,7 +130,7 @@ function applyStreamTimeouts(req: Request, url: URL, server: any): void {
   // into a 502 with no CORS headers — the same shape as the gateway
   // idleTimeout incident. The global `idleTimeout: 0` above is necessary but
   // not sufficient: `server.timeout(req, …)` is the PER-REQUEST budget.
-  if (SECRET_RELAY_PATH.test(url.pathname)) {
+  if (SECRET_RELAY_PATH.test(asLegacyWorkspaceRoute(url.pathname))) {
     server.timeout(req, 0);
   }
 
@@ -149,6 +158,36 @@ async function upgradeAppOriginWs(req: Request, url: URL, server: any): Promise<
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
+}
+
+async function upgradeChromeWs(req: Request, server: any): Promise<Response | undefined> {
+  setInboundAuditEntrypoint('ws_upgrade', 'ws:/v1/chrome/ws');
+  // Until launch the feature exists only where KORTIX_CHROME_ENABLED is on.
+  if (!config.KORTIX_CHROME_ENABLED) {
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (!schemaReady) {
+    return new Response(JSON.stringify({ error: 'Service starting up, try again shortly' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
+    });
+  }
+  const { prepareChromeUpgrade } = await import('./chrome/ws');
+  const prepared = prepareChromeUpgrade(req.headers);
+  if (!prepared.ok) {
+    return new Response(JSON.stringify({ error: prepared.message }), {
+      status: prepared.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (server.upgrade(req, { data: prepared.data })) return undefined;
+  return new Response(JSON.stringify({ error: 'Browser WebSocket upgrade failed' }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 async function upgradePreviewHostWs(req: Request, url: URL, server: any): Promise<Response | undefined> {

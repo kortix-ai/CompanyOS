@@ -25,7 +25,7 @@
 
 import type { KeyEvent } from '@opentui/core';
 
-import { type Binding, type Chord, formatBinding } from '../../../keymap.ts';
+import { type Binding, type Chord, formatBinding, macOptionKey } from '../../../keymap.ts';
 
 function chord(key: string, modifiers: Omit<Chord, 'key'> = {}): Chord {
   return { key, ...modifiers };
@@ -52,13 +52,27 @@ export const COMPOSER_KEYMAP: readonly Binding[] = [
     id: 'composer.cancel',
     scope: 'composer',
     chords: [chord('escape')],
-    description: 'Clear the draft, or (empty and busy) stop the agent on a second press.',
+    description:
+      'Clear the draft, or close the command menu. Empty and busy: press it 3 times within 4 s to stop the turn.',
   },
   {
     id: 'composer.commands',
     scope: 'composer',
     chords: [chord('/')],
-    description: 'Open the command picker. Only at column 0.',
+    description:
+      'Type / at the start of the input to list every command. Keep typing to filter; /name args runs one.',
+  },
+  {
+    id: 'composer.menuMove',
+    scope: 'composer',
+    chords: [chord('up'), chord('down'), chord('p', { ctrl: true }), chord('n', { ctrl: true })],
+    description: 'Move the selection in the command menu.',
+  },
+  {
+    id: 'composer.complete',
+    scope: 'composer',
+    chords: [chord('tab')],
+    description: 'Complete the selected command in the menu.',
   },
   {
     id: 'composer.model',
@@ -77,6 +91,12 @@ export const COMPOSER_KEYMAP: readonly Binding[] = [
     scope: 'composer',
     chords: [chord('g', { alt: true })],
     description: 'Pick the agent.',
+  },
+  {
+    id: 'composer.outputs',
+    scope: 'composer',
+    chords: [chord('o', { alt: true })],
+    description: 'List what this session made: artifacts, pages, files.',
   },
 ] as const;
 
@@ -102,6 +122,9 @@ function shiftIsSignificant(key: string): boolean {
 }
 
 export function matchesComposerChord(event: KeyEvent, target: Chord): boolean {
+  // A stock macOS terminal: Option+key arrives as a character (`µ` for M).
+  if (target.alt && !target.ctrl && !target.shift && macOptionKey(event) === target.key)
+    return true;
   if (!event.name) return false;
   const pressed = normalizeKey(event.name, Boolean(event.shift));
   const wanted = normalizeKey(target.key, Boolean(target.shift));

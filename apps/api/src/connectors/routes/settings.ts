@@ -3,7 +3,8 @@ import { type OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { policySetNameError } from '@kortix/manifest-schema';
 import { auth, errors, json } from '../../openapi';
-import { areValidConditions, isValidMatcher, normalizeConditions } from '../policy';
+import { areValidConditions, isValidMatcher } from '@kortix/manifest-schema';
+import { normalizeConditions } from '../policy';
 import type { ConnectorRouterDeps, ProjectPolicyView } from '../router';
 import { POLICY_SET_TEMPLATES, isPolicySetTemplate, templatePolicies } from '../policy-templates';
 import {
@@ -16,13 +17,14 @@ import {
   SyncResultSchema,
   featureNotSupportedResponse,
 } from './shared';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: ConnectorRouterDeps): void {
   // ── Admin: re-materialize from kortix.yaml ───────────────────────────────
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/connectors/sync',
+      path: '/projects/{workspaceId}/connectors/sync',
       tags: ['connector'],
       summary: 'Re-materialize connectors from kortix.yaml',
       ...auth,
@@ -33,7 +35,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       const result = await deps.syncConnectors(projectId, admin.accountId);
@@ -47,7 +49,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/credential-mode',
+      path: '/projects/{workspaceId}/connectors/{slug}/credential-mode',
       tags: ['connector'],
       summary: "Set a connector's credential mode (shared only — per_user was removed)",
       ...auth,
@@ -61,7 +63,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -96,7 +98,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/authorization-strategy',
+      path: '/projects/{workspaceId}/connectors/{slug}/authorization-strategy',
       tags: ['connector'],
       summary: "Set a connector's connection strategy",
       ...auth,
@@ -110,7 +112,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -135,7 +137,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/sensitive',
+      path: '/projects/{workspaceId}/connectors/{slug}/sensitive',
       tags: ['connector'],
       summary: "Toggle a connector's sensitive flag (gate reads too)",
       ...auth,
@@ -149,7 +151,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -174,7 +176,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/name',
+      path: '/projects/{workspaceId}/connectors/{slug}/name',
       tags: ['connector'],
       summary: 'Rename a connector (display label)',
       ...auth,
@@ -188,7 +190,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -212,7 +214,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/policies',
+      path: '/projects/{workspaceId}/connectors/{slug}/policies',
       tags: ['connector'],
       summary: "Read a connector's tool-call policies (base rules, or one policy set's)",
       ...auth,
@@ -223,7 +225,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -242,7 +244,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/config',
+      path: '/projects/{workspaceId}/connectors/{slug}/config',
       tags: ['connector'],
       summary: "Read a connector's connection config (provider, url, auth, …)",
       ...auth,
@@ -253,7 +255,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -268,7 +270,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/policies',
+      path: '/projects/{workspaceId}/connectors/{slug}/policies',
       tags: ['connector'],
       summary: "Replace a connector's tool-call policies (base rules, or one policy set's)",
       ...auth,
@@ -283,7 +285,7 @@ export function registerConnectorSettingsRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -313,7 +315,7 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/agents',
+      path: '/projects/{workspaceId}/connectors/{slug}/agents',
       tags: ['connector'],
       summary: 'Every agent: may it use this connector, and under which rule set',
       ...auth,
@@ -321,7 +323,7 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
       responses: { 200: json(OpaqueSchema, 'Agents of a connector'), ...errors(403, 404, 501) },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const slug = c.req.param('slug')!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -340,7 +342,7 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/rules-matrix',
+      path: '/projects/{workspaceId}/rules-matrix',
       tags: ['connector'],
       summary: 'Every connector × every agent: granted, and the rule set it runs under',
       ...auth,
@@ -348,7 +350,7 @@ function registerRulesReadModelRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
       responses: { 200: json(OpaqueSchema, 'Rules matrix'), ...errors(403, 404, 501) },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.getRulesMatrix) return featureNotSupportedResponse(c, 'connector_rules_matrix');
@@ -390,7 +392,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/policy-sets',
+      path: '/projects/{workspaceId}/connectors/{slug}/policy-sets',
       tags: ['connector'],
       summary: "List a connector's policy sets, with their rules and the agents using each",
       ...auth,
@@ -401,7 +403,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const slug = c.req.param('slug')!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -415,7 +417,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/policy-sets/{name}',
+      path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}',
       tags: ['connector'],
       summary: 'Create a policy set, or change its description',
       ...auth,
@@ -429,7 +431,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const slug = c.req.param('slug')!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -481,7 +483,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/connectors/{slug}/policy-sets/{name}/name',
+      path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}/name',
       tags: ['connector'],
       summary: 'Rename a policy set and every agent assignment of it, in one commit',
       ...auth,
@@ -495,7 +497,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const slug = c.req.param('slug')!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -516,7 +518,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'delete',
-      path: '/projects/{projectId}/connectors/{slug}/policy-sets/{name}',
+      path: '/projects/{workspaceId}/connectors/{slug}/policy-sets/{name}',
       tags: ['connector'],
       summary: 'Delete a policy set (409 policy_set_in_use while an agent uses it)',
       ...auth,
@@ -527,7 +529,7 @@ function registerConnectorPolicySetRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId')!;
+      const projectId = workspaceIdParam(c)!;
       const slug = c.req.param('slug')!;
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
@@ -543,7 +545,7 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/policies',
+      path: '/projects/{workspaceId}/policies',
       tags: ['connector'],
       summary: 'Read project policies and default mode',
       ...auth,
@@ -554,7 +556,7 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.getProjectPolicies) return featureNotSupportedResponse(c, 'project_policies_read');
@@ -568,7 +570,7 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
   app.openapi(
     createRoute({
       method: 'put',
-      path: '/projects/{projectId}/policies',
+      path: '/projects/{workspaceId}/policies',
       tags: ['connector'],
       summary: 'Replace project policies and default mode',
       ...auth,
@@ -584,7 +586,7 @@ export function registerProjectPolicyRoutes(app: OpenAPIHono, deps: ConnectorRou
     // Manual parse kept: original does per-policy validation with indexed error
     // messages (`policy #N: ...`) and tolerates a partial/missing body.
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.setProjectPolicies) return featureNotSupportedResponse(c, 'project_policies_write');

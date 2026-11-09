@@ -15,7 +15,7 @@ import type { ConnectorAttachmentStore } from './attachments';
 import type { ConnectorAuthDiscovery } from './auth-discovery';
 import type { ConnectorAuth } from './call';
 import type { GatewayDeps } from './gateway';
-import type { PolicyArgCondition } from './policy';
+import type { PolicyArgCondition } from '@kortix/manifest-schema';
 export interface ConnectorPrincipal {
   userId: string;
   accountId: string;
@@ -210,6 +210,8 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
    * decide what the gated routes see rather than silently opening them.
    */
   featureFlagEnabled(projectId: string, key: FeatureFlagKey): Promise<boolean>;
+  /** The deployment has the Kortix Discord application. Absent: Discord is listed. */
+  discordAvailable?(): boolean;
   /**
    * `actingUserId`: whose own credentialed accounts count toward "connected"
    * for a connector with no project-wide shared credential (connection-access.ts

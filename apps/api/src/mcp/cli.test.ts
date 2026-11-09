@@ -50,8 +50,6 @@ describe('denial', () => {
     [['env', 'push']],
     [['drive', 'put', './a.txt', '/a.txt']],
     [['goals', 'ls']],
-    [['rooms', 'watch', 'general']],
-    [['rooms', 'chat', 'general']],
     [['artifacts', 'publish', './deck']],
     [['artifacts', 'pull', 'abc', './out']],
     [['apps', 'deploy', './x']],
@@ -66,10 +64,24 @@ describe('denial', () => {
 
   test('apps deploy names run_command in a session sandbox', () => {
     expect(denial(['apps', 'deploy'])?.use).toContain('run_command in a session sandbox');
+    // Listing and revoking keys run; creating one would print its secret here.
+    expect(denial(['keys', 'ls', '--json'])).toBeNull();
+    expect(denial(['keys', 'rm', 'k1', '-y'])).toBeNull();
+    expect(denial(['keys', 'create', 'ci'])?.reason).toContain('prints its secret');
+    expect(denial(['keys', 'new', 'ci'])?.reason).toContain('prints its secret');
   });
 
-  test('migrate points at a session sandbox, where the project checkout lives', () => {
-    expect(denial(['migrate', '--write'])?.use).toContain('`kortix migrate` there');
+  test('the removed migrate command is unknown; tasks and the automations alias run', () => {
+    expect(denial(['migrate', '--write'])?.reason).toContain('not a kortix command');
+    expect(denial(['tasks', 'ls', '--json'])).toBeNull();
+    expect(denial(['automations', 'ls', '--json'])).toBeNull();
+  });
+
+  test('loop and loops run, and the old remind and reminders aliases still run', () => {
+    expect(denial(['loop', 'check the build', '--in', '1h'])).toBeNull();
+    expect(denial(['loops', 'ls', '--json'])).toBeNull();
+    expect(denial(['remind', 'check the build', '--in', '1h'])).toBeNull();
+    expect(denial(['reminders', 'ls'])).toBeNull();
   });
 
   test('apps list and create run; token points at a session sandbox', () => {

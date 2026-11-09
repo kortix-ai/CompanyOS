@@ -4,7 +4,8 @@
  * Reads ./kortix.yaml (or --file <path>), runs the canonical
  * `@kortix/manifest-schema` validator, then the project checks in
  * `project-lint.ts`: every sandbox Dockerfile the manifest points at, the agent
- * wiring, and the size of the files Git stores. Prints one colored report.
+ * wiring, and the size of the files Git stores. Prints one line per issue:
+ * `<file>:<line>:<col>  <severity>  <path>  <message>`.
  *
  *   exit 0   — no errors (warnings may be present)
  *   exit 1   — one or more errors
@@ -15,28 +16,21 @@
  * warning: a large repository still pushes and its sessions still start, but
  * above 512 MiB compressed a running session stops picking up config changes.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
-import {
-  DEPRECATED_KORTIX_PERMISSION_ALIASES,
-  GRANTABLE_KORTIX_PERMISSIONS,
-  type ManifestIssue,
-  ManifestImportError,
-  formatIssues,
-  hasManifestImports,
-  manifestFormatForPath,
-  validateManifest,
-} from '@kortix/manifest-schema';
-import { lintProject } from '../project-lint.ts';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, relative, resolve } from 'node:path';
+import { DEPRECATED_KORTIX_PERMISSION_ALIASES, fixManifestText, GRANTABLE_KORTIX_PERMISSIONS, isEveryGrant } from '@kortix/manifest-schema';
+import { toLegacyAction, toWorkspaceAction } from '@kortix/shared/workspace-actions';
+import { isMap, isScalar, isSeq, parseDocument } from 'yaml';
+import { type FileIssue, formatIssueLine, validateManifestFile } from '../manifest.ts';
 import { resolveLocalManifestImports } from '../manifest-imports.ts';
-import { resolveLocalManifest } from '../manifest.ts';
+import { applyLocalLegacy, convertLocalLegacy, localManifestFile, readLegacyManifest } from '../manifest-legacy.ts';
 import { C, help, status } from '../style.ts';
 import { takeFlags } from '../command-argv.ts';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 
 const HELP = help`Usage: kortix validate [options]
 
-Statically validate the project's kortix.yaml against the canonical schema,
+Statically validate the workspace's kortix.yaml against the canonical schema,
 and lint every \`sandbox.templates\` Dockerfile for the constraints the cloud
 builder enforces (no COPY from the repo, no RUN heredocs, Debian-family base).
 Warn when the files in Git are large: every session downloads them, and above
@@ -44,51 +38,147 @@ Warn when the files in Git are large: every session downloads them, and above
 from the base branch. Keep big static assets in object storage, not in Git.
 \`kortix ship\` runs these checks.
 
+Prints one line per issue: <file>:<line>:<col>  <severity>  <path>  <message>.
+An entry that \`imports:\` brings in is reported in the file that declares it.
+Exit 1 on any error; warnings alone exit 0.
+
+A deprecated shape still works and is a warning with \`fix: <id>\`. \`--fix\`
+rewrites every deprecated shape to the latest one, in kortix.yaml and in the
+files it imports, keeping comments, then validates. An older format
+(\`kortix_version: 2\`, or a kortix.toml) still works too: it is validated as
+converted, and \`--fix\` converts the files (kortix.toml becomes kortix.yaml,
+each agent .md keeps only its prompt).
+
 Options:
-  --file <path>          Validate this file instead of ./kortix.yaml.
+  --file <path>          Validate this file instead of ./kortix.yaml (or kortix.toml).
+  --fix                  Rewrite deprecated shapes to the latest shape,
+                         \`all\` grants to \`"*"\`, and \`project.*\`
+                         kortix_permissions to their \`workspace.*\` names, first.
   --no-dockerfile-lint   Skip the sandbox Dockerfile checks (manifest only).
   --json                 Emit a machine-readable JSON report (no color).
-  --scopes               Print the full grantable kortix_permissions enum and exit.
+  --scopes               Print every grantable kortix_permissions name and exit.
   -h, --help             Show this help.
 `;
 
-/** One line per agent: its assigned connectors + Kortix permissions. */
+/** One line per agent: what it enables. Every grant is deny-by-default. */
 function describeAgents(parsed: Record<string, unknown> | null): string {
   const agents = parsed?.agents;
+  if (!agents || typeof agents !== 'object' || Array.isArray(agents)) return '';
   const show = (v: unknown): string =>
-    v === 'all' ? 'all' : Array.isArray(v) ? v.join(', ') || 'none' : 'none (default-deny)';
-  // kortix_version 3: what each agent enables. Every grant is deny-by-default.
-  if (Number(parsed?.kortix_version) === 3 && agents && typeof agents === 'object' && !Array.isArray(agents)) {
-    const keys = ['skills', 'subagents', 'commands', 'extensions', 'connectors', 'secrets'];
-    const lines = Object.entries(agents as Record<string, Record<string, unknown> | null>).map(
-      ([name, block]) => `  ${C.cyan}${name}${C.reset}  ${keys.map((key) => `${key}=[${show(block?.[key])}]`).join('  ')}`,
-    );
-    return `\n${C.dim}What each agent enables:${C.reset}\n${lines.join('\n')}\n`;
+    isEveryGrant(v) ? '* (every)' : Array.isArray(v) ? v.join(', ') || 'none' : 'none (default-deny)';
+  const keys = ['skills', 'subagents', 'commands', 'extensions', 'connectors', 'secrets'];
+  const lines = Object.entries(agents as Record<string, Record<string, unknown> | null>).map(
+    ([name, block]) => `  ${C.cyan}${name}${C.reset}  ${keys.map((key) => `${key}=[${show(block?.[key])}]`).join('  ')}`,
+  );
+  return lines.length === 0 ? '' : `\n${C.dim}What each agent enables:${C.reset}\n${lines.join('\n')}\n`;
+}
+
+/**
+ * `--fix` for a legacy file (`kortix_version` 1 or 2, or `kortix.toml`):
+ * write the converted project, and return the manifest to validate next. A
+ * file in the current format is returned as is. Null when the legacy file
+ * cannot be read.
+ */
+function convertLegacyFile(filePath: string, json: boolean): string | null {
+  const root = dirname(filePath);
+  let legacy;
+  try {
+    legacy = readLegacyManifest(filePath);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    if (json) process.stdout.write(JSON.stringify({ valid: false, error: 'read_failed', detail }) + '\n');
+    else process.stderr.write(`${status.err(`Failed to read ${filePath}: ${detail}`)}\n`);
+    return null;
   }
-  if (!Array.isArray(agents) || agents.length === 0) return '';
-  const lines = agents.map((a: any) => {
-    const name = typeof a?.name === 'string' ? a.name : '(unnamed)';
-    // `env` omitted == 'all' (the parser's default), so render it that way rather
-    // than as default-deny — otherwise the summary misreports an unscoped agent.
-    const env = a?.env === undefined || a?.env === null ? 'all' : a?.env;
-    return `  ${C.cyan}${name}${C.reset}  connectors=[${show(a?.connectors)}]  kortix_permissions=[${show(a?.kortix_permissions ?? a?.kortix_cli)}]  env=[${show(env)}]`;
-  });
-  return `\n${C.dim}Per-agent scope (kortix.yaml [[agents]]):${C.reset}\n${lines.join('\n')}\n`;
+  if (!legacy) return filePath;
+  const conversion = convertLocalLegacy(root, legacy);
+  const touched = applyLocalLegacy(root, legacy, conversion);
+  const manifest = resolve(root, conversion.changes[0]!.path);
+  if (!json) {
+    const shown = relative(process.cwd(), legacy.path) || basename(legacy.path);
+    const target = relative(process.cwd(), manifest) || basename(manifest);
+    process.stdout.write(`${status.ok(`${shown}: converted to ${target === shown ? '' : `${target}, `}the current format`)}\n`);
+    for (const change of conversion.changes) {
+      if (!touched.includes(change.path)) continue;
+      process.stdout.write(`  ${C.dim}${change.action === 'delete' ? 'deleted' : 'wrote'} ${change.path}${change.note ? ` (${change.note})` : ''}${C.reset}\n`);
+    }
+    for (const note of conversion.dropped) process.stdout.write(`  ${C.yellow}not carried over${C.reset} ${note}\n`);
+  }
+  return manifest;
+}
+
+/** Each name once, first spelling first. */
+const unique = (names: readonly string[]): string[] => [...new Set(names)];
+
+/** The grantable kortix_permissions names an agent should write: workspace.*. */
+export function grantableWorkspacePermissions(): string[] {
+  return unique(GRANTABLE_KORTIX_PERMISSIONS.map(toWorkspaceAction));
+}
+
+/** Legacy name → workspace name, for every grantable legacy name. */
+export function legacyPermissionRenames(): Array<[legacy: string, workspace: string]> {
+  return unique(GRANTABLE_KORTIX_PERMISSIONS.map(toLegacyAction))
+    .map((legacy) => [legacy, toWorkspaceAction(legacy)] as [string, string])
+    .filter(([legacy, workspace]) => legacy !== workspace);
+}
+
+/**
+ * `--fix`: every \`agents.<name>.kortix_permissions\` entry written under its
+ * legacy name (\`project.session.start\`) gets its workspace name
+ * (\`workspace.session.start\`). \`"*"\`, \`all\` and unknown names stay as written.
+ * Only the name's own characters change: quotes, comments and every other
+ * byte of the file stay. Returns the agent paths it rewrote.
+ */
+export function rewriteLegacyPermissionNames(text: string): { text: string; fixed: string[] } {
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0 || !isMap(doc.contents)) return { text, fixed: [] };
+  const agents = doc.contents.get('agents', true);
+  if (!isMap(agents)) return { text, fixed: [] };
+  const renames = new Map(legacyPermissionRenames());
+  const edits: Array<{ start: number; end: number; from: string; to: string }> = [];
+  const fixed: string[] = [];
+  for (const pair of agents.items) {
+    if (!isMap(pair.value)) continue;
+    const grant = pair.value.get('kortix_permissions', true);
+    if (!isSeq(grant)) continue;
+    let touched = false;
+    for (const item of grant.items) {
+      if (!isScalar(item) || typeof item.value !== 'string' || !item.range) continue;
+      const to = renames.get(item.value);
+      if (!to) continue;
+      edits.push({ start: item.range[0], end: item.range[1], from: item.value, to });
+      touched = true;
+    }
+    if (touched) fixed.push(`agents.${isScalar(pair.key) ? String(pair.key.value) : String(pair.key)}.kortix_permissions`);
+  }
+  let out = text;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, edit.start) + out.slice(edit.start, edit.end).replace(edit.from, edit.to) + out.slice(edit.end);
+  }
+  return { text: out, fixed };
 }
 
 export function runValidate(argv: string[]): number {
   const flags = takeFlags(argv, HELP, (rest) => ({
     file: takeFlagValue(rest, ['--file']),
     json: takeFlagBool(rest, ['--json']),
+    fix: takeFlagBool(rest, ['--fix']),
     scopes: takeFlagBool(rest, ['--scopes']),
     dockerfileLint: !takeFlagBool(rest, ['--no-dockerfile-lint']),
   }));
   if (typeof flags === 'number') return flags;
   if (flags.scopes) {
     process.stdout.write(
-      `${C.dim}Grantable kortix_permissions (project-scoped — account-level admin actions can never be granted to an agent):${C.reset}\n`,
+      `${C.dim}Grantable kortix_permissions (\`"*"\` grants every one of them):${C.reset}\n`,
     );
-    for (const a of GRANTABLE_KORTIX_PERMISSIONS) process.stdout.write(`  ${a}\n`);
+    for (const a of grantableWorkspacePermissions()) process.stdout.write(`  ${a}\n`);
+    const legacy = legacyPermissionRenames();
+    if (legacy.length > 0) {
+      process.stdout.write(
+        `\n${C.dim}Legacy names, still accepted (\`kortix validate --fix\` writes the new name):${C.reset}\n`,
+      );
+      for (const [was, now] of legacy) process.stdout.write(`  ${was}${C.dim} → ${now}${C.reset}\n`);
+    }
     const renamed = Object.entries(DEPRECATED_KORTIX_PERMISSION_ALIASES);
     if (renamed.length > 0) {
       // Not grantable any more, but still ACCEPTED in a manifest that has one.
@@ -98,17 +188,16 @@ export function runValidate(argv: string[]): number {
         `\n${C.dim}Renamed — still accepted, but write the new name:${C.reset}\n`,
       );
       for (const [was, now] of renamed) {
-        process.stdout.write(`  ${was}${C.dim} → ${now.join(', ')}${C.reset}\n`);
+        process.stdout.write(`  ${was}${C.dim} → ${now.map(toWorkspaceAction).join(', ')}${C.reset}\n`);
       }
     }
     return 0;
   }
 
-  // Explicit --file wins; otherwise resolve the project's manifest, preferring
-  // kortix.yaml over kortix.toml (falls back to kortix.yaml for the not-found msg).
-  const filePath = flags.file
+  // Explicit --file wins; otherwise the project's kortix.yaml (or kortix.yml, or a legacy kortix.toml).
+  let filePath = flags.file
     ? resolve(process.cwd(), flags.file)
-    : (resolveLocalManifest(process.cwd())?.path ?? resolve(process.cwd(), 'kortix.yaml'));
+    : (localManifestFile(process.cwd()) ?? resolve(process.cwd(), 'kortix.yaml'));
   if (!existsSync(filePath)) {
     if (flags.json) {
       process.stdout.write(
@@ -118,15 +207,45 @@ export function runValidate(argv: string[]): number {
       process.stderr.write(
         `${status.err('Manifest not found')}\n` +
           `  ${C.dim}Looked for ${filePath}${C.reset}\n` +
-          `  ${C.dim}Run from your project root, or pass${C.reset} ${C.cyan}--file <path>${C.reset}\n`,
+          `  ${C.dim}Run from your workspace root, or pass${C.reset} ${C.cyan}--file <path>${C.reset}\n`,
       );
     }
     return 2;
   }
 
-  let raw: string;
+  if (flags.fix) {
+    const root = dirname(filePath);
+    const converted = convertLegacyFile(filePath, flags.json);
+    if (converted === null) return 2;
+    filePath = converted;
+    let paths = [filePath];
+    try {
+      paths = resolveLocalManifestImports(filePath).files.map((file) => resolve(root, file.path));
+    } catch {
+      // A broken file or import: fix what can be read, and let validation report the rest.
+    }
+    for (const path of paths) {
+      const healed = fixManifestText(readFileSync(path, 'utf8'), { canonical: true });
+      const renamed = rewriteLegacyPermissionNames(healed.text);
+      const fixed = [
+        ...healed.fixed.map((f) => `${f.path} (${f.id})`),
+        ...renamed.fixed.map((p) => `${p} (workspace-permission-names)`),
+      ];
+      if (fixed.length === 0) continue;
+      writeFileSync(path, renamed.text, 'utf8');
+      if (!flags.json) {
+        process.stdout.write(`${status.ok(`${relative(process.cwd(), path) || basename(path)}: rewrote ${fixed.join(', ')}`)}\n`);
+      }
+    }
+  }
+
+  // Manifest issues first, then the project checks — one merged report, one
+  // exit code. A Dockerfile `error` fails `validate` exactly like a schema
+  // error does; `ship` runs the same checks and stops on it too.
+  let parsed: Record<string, unknown> | null;
+  let issues: FileIssue[];
   try {
-    raw = readFileSync(filePath, 'utf8');
+    ({ parsed, issues } = validateManifestFile(filePath, { dockerfileLint: flags.dockerfileLint }));
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     if (flags.json) {
@@ -136,67 +255,22 @@ export function runValidate(argv: string[]): number {
     }
     return 2;
   }
-
-  let result = validateManifest(raw, manifestFormatForPath(filePath));
-  // `imports:` — validate the MERGED document, the one the platform runs. A
-  // broken import (missing file, duplicate name, cycle, root-only key in an
-  // imported file) is an error here, the same one the CR-merge gate returns.
-  if (result.parsed && hasManifestImports(result.parsed) && manifestFormatForPath(filePath) === 'yaml') {
-    try {
-      const merged = resolveLocalManifestImports(filePath, 'yaml');
-      result = validateManifest(merged.raw, 'yaml');
-    } catch (err) {
-      if (!(err instanceof ManifestImportError)) throw err;
-      result = {
-        ...result,
-        valid: false,
-        issues: [...result.issues, { path: 'imports', message: err.message, severity: 'error' }],
-      };
-    }
-  }
-
-  // Manifest issues first, then the project checks — one merged report, one
-  // exit code. A Dockerfile `error` fails `validate` exactly like a schema
-  // error does; `ship` runs the same `lintProject` list and stops on it too.
-  const issues = [
-    ...result.issues,
-    ...lintProject(result.parsed, filePath, { dockerfileLint: flags.dockerfileLint }),
-  ];
-  const valid = !issues.some((i) => i.severity === 'error');
-
-  if (flags.json) {
-    process.stdout.write(
-      JSON.stringify({
-        valid,
-        path: filePath,
-        issues,
-      }) + '\n',
-    );
-    return valid ? 0 : 1;
-  }
-
   const errors = issues.filter((i) => i.severity === 'error');
   const warnings = issues.filter((i) => i.severity === 'warning');
 
-  if (valid && warnings.length === 0) {
-    process.stdout.write(`${status.ok(`${basename(filePath)} is valid`)}\n`);
-    process.stdout.write(describeAgents(result.parsed));
-    return 0;
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ valid: errors.length === 0, path: filePath, issues }) + '\n');
+    return errors.length === 0 ? 0 : 1;
   }
 
-  if (warnings.length > 0) {
-    process.stdout.write(
-      `${C.yellow}${warnings.length} warning${warnings.length === 1 ? '' : 's'}:${C.reset}\n`,
-    );
-    process.stdout.write(formatIssues(warnings) + '\n');
-  }
+  for (const w of warnings) process.stdout.write(`${formatIssueLine(w)}\n`);
+  for (const e of errors) process.stderr.write(`${formatIssueLine(e)}\n`);
+  const counts = `${errors.length} error${errors.length === 1 ? '' : 's'}, ${warnings.length} warning${warnings.length === 1 ? '' : 's'}`;
   if (errors.length > 0) {
-    process.stderr.write(
-      `\n${C.red}${errors.length} error${errors.length === 1 ? '' : 's'}:${C.reset}\n`,
-    );
-    process.stderr.write(formatIssues(errors) + '\n');
+    process.stderr.write(`\n${status.err(`${basename(filePath)}: ${counts}`)}\n`);
     return 1;
   }
-
+  process.stdout.write(`${warnings.length > 0 ? '\n' : ''}${status.ok(`${basename(filePath)} is valid${warnings.length > 0 ? ` (${counts})` : ''}`)}\n`);
+  process.stdout.write(describeAgents(parsed));
   return 0;
 }

@@ -8,7 +8,6 @@ import {
   scheduleRuntimeProjectionPush,
   shedProjectionToFit,
 } from '@/harness/shared/projection-relay'
-import { resetRuntimeStateForTests } from '@/harness/open-code/runtime-state-projection'
 import {
   SESSION_TOKEN_DEAD_TRIP_THRESHOLD,
   noteControlPlaneResponse,
@@ -31,8 +30,9 @@ function makeDoc(overrides: Record<string, unknown> = {}) {
     seq: 41,
     built_at: '2026-08-27T00:00:00.000Z',
     identity: {
-      opencode_session_id: 'ses_abc',
-      opencode_version: '1.18.23',
+      harness: 'pi',
+      runtime_session_id: 'ses_abc',
+      harness_version: '1.4.0',
       daemon_build: 1756240000,
       agent_config_etag: null,
       head_seq: { ses_abc: 2016 },
@@ -115,11 +115,8 @@ describe('scheduleRuntimeProjectionPush', () => {
     expect(urls).toHaveLength(expected)
   })
 
-  test('is a silent no-op when no runtime state store is configured (default reader, cold boot)', async () => {
-    // No registerRuntimeStateReader: the default reader consults
-    // runtimeStateStore(). Reset the process singleton explicitly — another
-    // test FILE in the same bun process may have configured it.
-    resetRuntimeStateForTests()
+  test('is a silent no-op when no runtime state reader is registered (default reader, cold boot)', async () => {
+    // No registerRuntimeStateReader: the default reader has no state document.
     const urls: string[] = []
     globalThis.fetch = (async (url: string) => {
       urls.push(String(url))
@@ -425,7 +422,7 @@ describe('createSessionTreeWatch', () => {
   test('a new session, a new title and a deleted session change the tree; a repeat or another frame does not', () => {
     const changed = createSessionTreeWatch()
     expect(changed(frame('session.created', 'ses_root', 'New session'))).toBe(true)
-    // OpenCode sends session.updated on every step: unchanged title, no push.
+    // The runtime sends session.updated on every step: unchanged title, no push.
     expect(changed(frame('session.updated', 'ses_root', 'New session'))).toBe(false)
     expect(changed(frame('session.updated', 'ses_root', 'Fix the login bug'))).toBe(true)
     expect(changed(frame('session.updated', 'ses_root', 'Fix the login bug'))).toBe(false)

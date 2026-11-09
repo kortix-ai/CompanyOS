@@ -65,6 +65,7 @@ import {
 } from '../../../primitives/input-group';
 import Loading from '../../../primitives/loading';
 import { Skeleton } from '../../../primitives/skeleton';
+import { Badge } from '../../../primitives/badge';
 import { Switch } from '../../../primitives/switch';
 import { errorToast } from '../../../primitives/toast';
 import { EmptyState } from '../../../primitives/empty-state';
@@ -106,20 +107,25 @@ export interface ExperimentalCopy {
   emptyTitle: string;
   emptyDescription: string;
   permission: string;
+  /** The badge on a work-in-progress flag, and what it means. */
+  wip: string;
+  wipNote: string;
 }
 
 export const DEFAULT_EXPERIMENTAL_COPY: ExperimentalCopy = {
-  overridden: 'Overridden for this project',
+  overridden: 'Overridden for this workspace',
   managedByKortix: 'Managed by Kortix',
   defaultOn: 'Default on',
   defaultOff: 'Default off',
   search: 'Search features',
-  loadFailed: 'Failed to load project',
+  loadFailed: 'Failed to load workspace',
   retry: 'Retry',
   noMatches: (query) => `No matches for ${query}.`,
   emptyTitle: 'No experimental features',
-  emptyDescription: 'This deployment exposes no per-project feature flags.',
-  permission: "You need the project's settings permission to change a feature flag.",
+  emptyDescription: 'This deployment exposes no per-workspace feature flags.',
+  permission: "You need the workspace's settings permission to change a feature flag.",
+  wip: 'Work in progress',
+  wipNote: 'Not recommended yet: it can change or break.',
 };
 
 function originLabel(feature: FeatureFlagView, copy: ExperimentalCopy): string {
@@ -168,8 +174,8 @@ export function localizeFeatureFlag<T extends FeatureFlagView>(
  *
  * Matches `key` as well as `name` and `description`, and the key is the one
  * that earns its place: flags get turned on from docs, changelogs and support
- * threads that name the raw key (`warm_sessions`), not the display name ("Warm
- * sessions"). A search reading only `name` would miss the exact term the reader
+ * threads that name the raw key (`us_region`), not the display name ("US
+ * Region"). A search reading only `name` would miss the exact term the reader
  * was handed.
  *
  * A blank or whitespace-only query returns the input unchanged — same array,
@@ -220,9 +226,17 @@ function ExperimentalFeatureRow({
           <p id={nameId} className="text-foreground text-sm font-medium">
             {feature.name}
           </p>
+          {feature.wip ? (
+            <Badge variant="warning" size="xs">
+              {copy.wip}
+            </Badge>
+          ) : null}
           <span className="text-muted-foreground text-xs">{originLabel(feature, copy)}</span>
         </div>
-        <p className="text-muted-foreground mt-0.5 text-xs text-pretty">{feature.description}</p>
+        <p className="text-muted-foreground mt-0.5 text-xs text-pretty">
+          {feature.wip ? `${copy.wipNote} ` : null}
+          {feature.description}
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {pending ? <Loading className="text-muted-foreground size-3.5" /> : null}
@@ -474,7 +488,7 @@ export function ExperimentalTab({ projectId }: { projectId: string }) {
 
   // the Channels switch changes the sidebar for everyone, so only a
   // viewer who may flip it sees it (hidden while that answer loads).
-  const visible = canEdit ? withPending : withPending.filter((f) => f.key !== 'project_channels');
+  const visible = canEdit ? withPending : withPending.filter((f) => f.key !== 'chat');
   const features = filterFeatures(visible, query);
 
   const apply = (key: string, next: boolean) => {
@@ -484,10 +498,9 @@ export function ExperimentalTab({ projectId }: { projectId: string }) {
   // Channels asks first: the dialog says what changes for everyone.
   const [channelsTarget, setChannelsTarget] = useState<boolean | null>(null);
   const handleToggle = (key: string, next: boolean) => {
-    if (key === 'project_channels') setChannelsTarget(next);
+    if (key === 'chat') setChannelsTarget(next);
     else apply(key, next);
   };
-  const drive = rawFeatures.find((f) => f.key === 'drives');
 
   return (
     <>
@@ -496,12 +509,10 @@ export function ExperimentalTab({ projectId }: { projectId: string }) {
         onOpenChange={(open) => !open && setChannelsTarget(null)}
         turningOn={channelsTarget === true}
         projectName={project?.name ?? ''}
-        driveOff={!!drive && !drive.enabled && drive.operator_only !== true}
-        onConfirm={(alsoDrive) => {
+        onConfirm={() => {
           const target = channelsTarget === true;
           setChannelsTarget(null);
-          apply('project_channels', target);
-          if (alsoDrive) apply('drives', true);
+          apply('chat', target);
         }}
       />
       <ExperimentalTabView
@@ -529,6 +540,8 @@ export function ExperimentalTab({ projectId }: { projectId: string }) {
           emptyTitle: t('emptyTitle'),
           emptyDescription: t('emptyDescription'),
           permission: t('permission'),
+          wip: t('wip'),
+          wipNote: t('wipNote'),
         }}
       />
     </>

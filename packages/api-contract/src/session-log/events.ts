@@ -17,15 +17,16 @@
  * | `log.thread` | `SessionLogThreadUpsertSchema` | a thread is new or changed |
  * | `log.message` | `SessionLogMessageEventSchema` | the journal collected a new revision of a message (`{ rev, message }`), or its tombstone (`{ message_id, rev }`, the journal's own form); or a live put of the running turn |
  * | `log.block.delta` | `SessionLogBlockDeltaEventSchema` | the harness streamed text into a text or reasoning block |
+ * | `log.status` | `SessionLogStatusEventSchema` | a thread starts or ends work, waits to retry, or compacts; never stored |
  *
  * In one collection the order is `log.state`, then `log.thread`, then `log.message`.
  *
  * The API session stream (`GET /v1/projects/:p/sessions/:s/events?schema=v2`, P4.4) carries these
  * frames in place of the v1 transcript frames (`V1_TRANSCRIPT_EVENTS`, `live.ts`). It relays them
- * from a daemon that lists `session.log.v2`; for an older daemon the API converts the v1 frames
- * (`liveMessageFromV1`, block id = part id, seq = `v1Seqs`), and `log.thread` is never sent.
+ * from the daemon (`session.log.v2`) and drops the daemon's v1 transcript frames.
  */
 import { z } from 'zod';
+import { THREAD_STATUSES } from '../wire-values';
 import { SessionLogPutSchema, SessionLogSessionPatchSchema, SessionLogThreadUpsertSchema, SessionLogTombstoneSchema } from './wire';
 
 const id = z.string().min(1);
@@ -46,15 +47,28 @@ export const SessionLogMessageEventSchema = z.union([SessionLogPutSchema, Sessio
  */
 export const SessionLogBlockDeltaEventSchema = z.object({ thread_id: id, message_id: id, block_id: id, delta: z.string() });
 
+/**
+ * What a thread does right now. `busy` from the start of a turn to its end; `retry` while a
+ * failed model request waits for its next attempt (`retry`); `compacting` while the harness
+ * summarizes the conversation. A client shows it and stores nothing: the next frame replaces it.
+ */
+export const SessionLogStatusEventSchema = z.object({
+  thread_id: id,
+  status: z.enum(THREAD_STATUSES),
+  retry: z.object({ attempt: z.number().int().positive(), message: z.string(), next_at: z.string() }).optional(),
+});
+
 /** The payload schema of each `log.*` frame. */
 export const SESSION_LOG_EVENTS = {
   'log.state': SessionLogStateEventSchema,
   'log.thread': SessionLogThreadUpsertSchema,
   'log.message': SessionLogMessageEventSchema,
   'log.block.delta': SessionLogBlockDeltaEventSchema,
+  'log.status': SessionLogStatusEventSchema,
 } as const;
 export type SessionLogEventType = keyof typeof SESSION_LOG_EVENTS;
 
 export type SessionLogStateEvent = z.infer<typeof SessionLogStateEventSchema>;
 export type SessionLogMessageEvent = z.infer<typeof SessionLogMessageEventSchema>;
 export type SessionLogBlockDeltaEvent = z.infer<typeof SessionLogBlockDeltaEventSchema>;
+export type SessionLogStatusEvent = z.infer<typeof SessionLogStatusEventSchema>;

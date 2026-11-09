@@ -49,16 +49,10 @@ mock.module('../../../internal/lib/use-project-can', () => ({
   useProjectCans: (projectId: string | undefined, actions: readonly string[]) =>
     Object.fromEntries(actions.map((action) => [action, { allowed: true }])),
   projectPermissionTarget: () => undefined,
-  projectPermissionProbes: () => [],
 }));
 
-mock.module('../../../internal/lib/manifest-version', () => ({
-  // The mock replaces the whole module, and the tab also statically imports
-  // `manifestFilename` — a missing binding fails the module link, so mirror
-  // the real pair (a v2 read renders the kortix.yaml label).
-  manifestFilename: (version: number | null) =>
-    (version ?? 1) >= 2 ? 'kortix.yaml' : 'kortix.toml',
-  useProjectManifestVersion: () => ({ version: 2, isLoading: false }),
+mock.module('../../../internal/lib/manifest-health', () => ({
+  useProjectManifestHealth: () => undefined,
 }));
 
 /**

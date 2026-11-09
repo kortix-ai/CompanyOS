@@ -3,11 +3,9 @@ import type { Message } from '../core/runtime/runtime-types';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { useDiagnosticsStore } from '../browser/stores/diagnostics-store';
-import { useRuntimePendingStore } from '../browser/stores/opencode-pending-store';
+import { useRuntimePendingStore } from '../browser/stores/runtime-pending-store';
 import { useSessionWorkingStore } from '../browser/stores/session-working-store';
 import { useSyncStore } from '../browser/stores/sync-store';
-import type { SessionTranscriptSyncEnvelope } from '../core/rest/projects-client/sessions';
-import { heldSavedWindow, holdSavedWindow } from '../core/session/open-bundle';
 import { resetIdentityState } from './reset-identity-state';
 import { useModelStore } from './use-model-store';
 
@@ -105,16 +103,18 @@ test('resetIdentityState forgets the previous user\'s transcripts, asks, receipt
   act(() => {
     models.api.setSessionModel('ses_B', { providerID: 'kortix', modelID: 'model-of-user-b' });
   });
-  const persisted = storage.getItem('opencode-model-store-v1') ?? '';
+  const persisted = storage.getItem('kortix-model-store-v1') ?? '';
   expect(persisted).toContain('model-of-user-b');
   expect(persisted).not.toContain('model-of-user-a');
   expect(persisted).not.toContain('ses_A');
   models.unmount();
 });
 
-test('resetIdentityState removes the persisted model store', () => {
+test('resetIdentityState removes the persisted model store, under its current and its old key', () => {
+  storage.setItem('kortix-model-store-v1', JSON.stringify({ user: [], recent: [], variant: {} }));
   storage.setItem('opencode-model-store-v1', JSON.stringify({ user: [], recent: [], variant: {} }));
   resetIdentityState();
+  expect(storage.getItem('kortix-model-store-v1')).toBeNull();
   expect(storage.getItem('opencode-model-store-v1')).toBeNull();
 });
 
@@ -129,24 +129,4 @@ test('resetIdentityState forgets the previous user\'s LSP diagnostics', () => {
   resetIdentityState();
 
   expect(useDiagnosticsStore.getState().byFile).toEqual({});
-});
-
-test("resetIdentityState forgets the previous user's held saved window (KRTX-189)", () => {
-  // A connecting view's saved window is held for the session's open, up to
-  // minutes. It is that user's conversation.
-  holdSavedWindow('p1', 's1', {
-    available: true,
-    reason: null,
-    source: 'mirror',
-    complete: true,
-    captured_at: '2026-09-26T10:00:00Z',
-    opencode_session_id: 'ses_root',
-    message_count: 0,
-    messages: [],
-  } as unknown as SessionTranscriptSyncEnvelope);
-  expect(heldSavedWindow('p1', 's1')).not.toBeNull();
-
-  resetIdentityState();
-
-  expect(heldSavedWindow('p1', 's1')).toBeNull();
 });

@@ -15,8 +15,7 @@ import {
   setArtifactPinned,
   updateArtifact,
   type ArtifactDetail,
-  type ArtifactListScope,
-  type ArtifactType,
+  type ListArtifactsOptions,
   type PublishArtifactInput,
   type SaveArtifactInput,
   type ShareArtifactPathInput,
@@ -25,10 +24,10 @@ import {
 import { contract } from './query-contracts';
 import { qk } from './query-keys';
 
-/** The project's artifacts the caller may view (flag `artifacts`), newest change first. */
+/** The project's artifacts the caller may view, newest change first. */
 export function useArtifacts(
   projectId: string | null | undefined,
-  filter: { scope?: ArtifactListScope; type?: ArtifactType; q?: string } = {},
+  filter: ListArtifactsOptions = {},
 ) {
   return useQuery({
     queryKey: qk.project.artifactList(projectId ?? '', JSON.stringify(filter)),
@@ -91,6 +90,20 @@ export async function prefetchArtifact(queryClient: QueryClient, projectId: stri
   });
 }
 
+/**
+ * After a create: the new artifact's detail, and for a doc the Markdown just
+ * written, so navigating to it opens without a request.
+ */
+export function seedCreatedArtifact(
+  queryClient: QueryClient,
+  projectId: string,
+  created: ArtifactDetail,
+  input: Pick<PublishArtifactInput, 'files'>,
+): void {
+  queryClient.setQueryData(qk.project.artifact(projectId, created.artifact_id, 'current'), created);
+  seedSavedText(queryClient, projectId, created, input);
+}
+
 /** After a doc save: the Markdown just written is the text of the new entry version. */
 export function seedSavedText(
   queryClient: QueryClient,
@@ -128,10 +141,18 @@ export function useArtifactMutations(projectId: string) {
   const refresh = () => qc.invalidateQueries({ queryKey: qk.project.artifacts(projectId) });
   const opts = { onSuccess: refresh };
   return {
-    create: useMutation({ mutationFn: (input: PublishArtifactInput) => createArtifact(projectId, input), ...opts }),
+    create: useMutation({
+      mutationFn: (input: PublishArtifactInput) => createArtifact(projectId, input),
+      onSuccess: (created, input) => {
+        seedCreatedArtifact(qc, projectId, created, input);
+        return refresh();
+      },
+    }),
     share: useMutation({ mutationFn: (input: ShareArtifactPathInput) => shareArtifactPath(projectId, input), ...opts }),
     save: useMutation({
       mutationFn: ({ artifactId, ...input }: SaveArtifactInput & { artifactId: string }) => saveArtifact(projectId, artifactId, input),
+      // The editor owns save errors (status line, conflict actions): no second, generic toast.
+      onError: () => {},
       onSuccess: (saved, input) => {
         seedSavedText(qc, projectId, saved, input);
         return refresh();

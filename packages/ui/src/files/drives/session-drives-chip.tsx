@@ -5,11 +5,25 @@ import { Button } from '../../primitives/button';
 import { warningToast } from '../../primitives/toast';
 import { Home } from '../../internal/icons/home';
 import { useSessionDrives } from './use-drives';
-import type { SessionDrive } from '@kortix/sdk';
-import { useTranslations } from '../../i18n';
+import { type ConflictMarks, readConflictMarks } from './conflict-marks';
+import type { SessionDrive, SessionDrives } from '@kortix/sdk';
+import { useLocale, useTranslations } from '../../i18n';
+import { formatStorageBytes } from './drive-storage';
 import { ArrowUpRightIcon, FolderIcon, WarningIcon } from '@phosphor-icons/react';
 import { useUiLink } from '../../providers/ui-provider';
 import { useEffect, useRef } from 'react';
+
+type SkippedReason = NonNullable<NonNullable<SessionDrives['skipped']>[number]['reason']>;
+
+/**
+ * One notice per cause of a folder the box does not mount: storage refused it
+ * at boot (it mounts later), it is too large to mount, or it did not fit.
+ */
+const SKIPPED_NOTICES: Array<{ key: 'sessionSkippedUnavailable' | 'sessionSkippedTooLarge' | 'sessionSkippedDrives'; matches: (reason: SkippedReason | undefined) => boolean }> = [
+  { key: 'sessionSkippedUnavailable', matches: (reason) => reason === 'unavailable' },
+  { key: 'sessionSkippedTooLarge', matches: (reason) => reason === 'too_large' },
+  { key: 'sessionSkippedDrives', matches: (reason) => reason !== 'unavailable' && reason !== 'too_large' },
+];
 
 /** Where the person's own folder also appears in the box: a path, not prose. */
 const DESKTOP_PATH = '~/Desktop';
@@ -25,9 +39,13 @@ export function SessionDrivesList({ projectId, sessionId }: { projectId: string;
   const t = useTranslations('drives');
   const Link = useUiLink();
   const driveHref = uiRoutes().drive(projectId);
+  const locale = useLocale();
   const session = useSessionDrives(projectId, sessionId);
   const rows = session.data?.drives ?? [];
   const skipped = session.data?.skipped ?? [];
+  // A folder too large to mount names its size: the number to get it under.
+  const named = (d: NonNullable<SessionDrives['skipped']>[number]) =>
+    d.reason === 'too_large' && typeof d.bytes === 'number' ? `${d.name} (${formatStorageBytes(d.bytes, locale)})` : d.name;
 
   return (
     <div className="flex flex-col gap-3">
@@ -58,15 +76,20 @@ export function SessionDrivesList({ projectId, sessionId }: { projectId: string;
           ))}
         </ul>
       )}
-      {skipped.length > 0 ? (
-        <p
-          role="status"
-          className="bg-kortix-orange/15 text-foreground flex items-start gap-2 rounded-md px-2.5 py-2 text-xs text-pretty"
-        >
-          <WarningIcon className="text-kortix-orange mt-px size-3.5 shrink-0" weight="fill" />
-          {t('sessionSkippedDrives', { count: skipped.length, names: skipped.map((d) => d.name).join(', ') })}
-        </p>
-      ) : null}
+      {SKIPPED_NOTICES.map(({ key, matches }) => {
+        const these = skipped.filter((d) => matches(d.reason));
+        if (!these.length) return null;
+        return (
+          <p
+            key={key}
+            role="status"
+            className="bg-kortix-orange/15 text-foreground flex items-start gap-2 rounded-md px-2.5 py-2 text-xs text-pretty"
+          >
+            <WarningIcon className="text-kortix-orange mt-px size-3.5 shrink-0" weight="fill" />
+            {t(key, { count: these.length, names: these.map(named).join(', ') })}
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -77,8 +100,7 @@ export function SessionDrivesList({ projectId, sessionId }: { projectId: string;
  */
 export function SessionDrivesWatch({ projectId, sessionId }: { projectId: string; sessionId: string }) {
   const session = useSessionDrives(projectId, sessionId);
-  const conflicts = (session.data?.drives ?? []).reduce((sum, row) => sum + (row.openConflicts ?? 0), 0);
-  useConflictToast(conflicts, sessionId);
+  useConflictToast(session.data?.drives, sessionId);
   return null;
 }
 
@@ -117,14 +139,19 @@ function SessionFolderRow({ driveHref, row }: { driveHref: string | null; row: S
   );
 }
 
-/** One toast per rise in the session's open conflicts, never on the first read. */
-function useConflictToast(count: number, sessionId: string) {
+/**
+ * One toast per read that finds conflicts detected while this session watched
+ * (readConflictMarks): never for the conflicts a folder already had when it
+ * mounted, which is every folder of a new session.
+ */
+function useConflictToast(drives: SessionDrive[] | undefined, sessionId: string) {
   const t = useTranslations('drives');
-  const seen = useRef<{ sessionId: string; count: number } | null>(null);
+  const seen = useRef<{ sessionId: string; marks: ConflictMarks } | null>(null);
   useEffect(() => {
-    const last = seen.current;
-    seen.current = { sessionId, count };
-    if (!last || last.sessionId !== sessionId) return;
-    if (count > last.count) warningToast(t('conflictToast', { count: count - last.count }));
-  }, [count, sessionId, t]);
+    if (!drives) return;
+    const last = seen.current?.sessionId === sessionId ? seen.current.marks : {};
+    const { marks, fresh } = readConflictMarks(last, drives);
+    seen.current = { sessionId, marks };
+    if (fresh > 0) warningToast(t('conflictToast', { count: fresh }));
+  }, [drives, sessionId, t]);
 }

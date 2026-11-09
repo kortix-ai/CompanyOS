@@ -12,9 +12,14 @@ import type { ProjectSession } from "./sessions";
 // team-membership coupling. Access gated by `project_members` only.
 // ---------------------------------------------------------------------------
 
+/** @deprecated Use `WorkspaceSessionSandboxStatus`. Kept permanently. */
 export type ProjectSessionSandboxStatus =
   "provisioning" | "active" | "stopped" | "error" | "archived";
 
+/** The workspace name of {@link ProjectSessionSandboxStatus}: the same type. */
+export type WorkspaceSessionSandboxStatus = ProjectSessionSandboxStatus;
+
+/** @deprecated Use `WorkspaceSessionSandbox`. Kept permanently. */
 export interface ProjectSessionSandbox {
   sandbox_id: string;
   session_id: string;
@@ -31,8 +36,43 @@ export interface ProjectSessionSandbox {
   updated_at: string;
 }
 
+/** The workspace name of {@link ProjectSessionSandbox}: the same type. */
+export type WorkspaceSessionSandbox = ProjectSessionSandbox;
+
 export type SessionStartStage =
   "provisioning" | "starting" | "ready" | "stopped" | "failed";
+
+/**
+ * Where a provisioning session is in getting its sandbox image
+ * (`SESSION_START_IMAGE_STATES` in `@kortix/api-contract`, mirrored here so the
+ * SDK stays free of zod; `contract-drift.test.ts` holds the two equal).
+ *
+ * - `resolving`: the server is choosing the image (seconds).
+ * - `serving_last_ready`: the wanted image is not ready; the session boots the
+ *   last ready image of its template (`image`) and the new one builds behind it.
+ * - `waiting_for_build`: no image of this template was ever ready; the session
+ *   waits for a build another request started.
+ * - `building`: no image of this template was ever ready; this request builds it.
+ * - `copying_to_region`: the image is ready and being copied to the session's region.
+ * - `waiting_for_provider`: the provider refused the create while it finishes
+ *   the image (building or replicating); the server retries.
+ */
+export type SessionStartImageState =
+  | "resolving"
+  | "serving_last_ready"
+  | "waiting_for_build"
+  | "building"
+  | "copying_to_region"
+  | "waiting_for_provider";
+
+/** The sandbox image step of a provisioning `/start` answer (`boot.image`). */
+export interface SessionStartImageStep {
+  state: SessionStartImageState;
+  /** The image this step is about, when known (a provider snapshot name). */
+  image: string | null;
+  /** When this step began (ISO timestamp, the server's clock). */
+  since: string;
+}
 
 export interface SessionStartFailure {
   category:
@@ -72,12 +112,10 @@ export interface SessionStartResult {
   sandbox: ProjectSessionSandbox | null;
   /** Canonical runtime root pin, resolved server-side once the box is up. Served by APIs since W4. */
   runtime_session_id?: string | null;
-  /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-  opencode_session_id: string | null;
   /** Stable terminal failure. Provider-specific diagnostics stay internal. */
   failure?: SessionStartFailure | null;
   /**
-   * Relative proxy path for this session's OpenCode runtime (port 8000), composed
+   * Relative proxy path for this session's runtime (port 8000), composed
    * against the configured backendUrl. The server owns the proxy scheme; the SDK
    * consumes this opaquely (never builds `/p/<id>/<port>` itself). Absent until the
    * box has an external_id — `useSession` falls back to deriving it from
@@ -121,6 +159,12 @@ export interface SessionStartResult {
      * that a box is being started.
      */
     actively_starting: boolean;
+    /**
+     * The sandbox image step while `phase` is `provisioning`; null in every
+     * other phase and before provisioning reaches the image. Absent from an
+     * API older than this field.
+     */
+    image?: SessionStartImageStep | null;
   };
   /**
    * What the server checked on this call. `known: false` means NOT CHECKED —
@@ -153,11 +197,11 @@ export function projectSessionStartSeed(
     !session.sandbox_id ||
     !session.sandbox_provider ||
     !session.sandbox_url ||
-    !(session.runtime_session_id ?? session.opencode_session_id)
+    !session.runtime_session_id
   ) {
     return null;
   }
-  const runtimeSessionId = session.runtime_session_id ?? session.opencode_session_id;
+  const runtimeSessionId = session.runtime_session_id;
   const externalId = session.sandbox_url.match(/\/p\/([^/]+)\//)?.[1];
   if (!externalId) return null;
   return {
@@ -180,7 +224,6 @@ export function projectSessionStartSeed(
       updated_at: session.updated_at,
     },
     runtime_session_id: runtimeSessionId,
-    opencode_session_id: runtimeSessionId,
     runtime_url: session.sandbox_url,
   };
 }
@@ -256,7 +299,7 @@ function postSessionStart(projectId: string, sessionId: string, options?: Sessio
   }
   const qs = search.size > 0 ? `?${search.toString()}` : "";
   return backendApi.post<SessionStartResult>(
-    `/projects/${projectId}/sessions/${sessionId}/start${qs}`,
+    `/workspaces/${projectId}/sessions/${sessionId}/start${qs}`,
     {},
     // Keep toasts quiet here. Terminal client errors are rendered by the host;
     // transient transport/server failures still yield null so polling can recover.
@@ -266,10 +309,10 @@ function postSessionStart(projectId: string, sessionId: string, options?: Sessio
 
 /**
  * THE session-open call. Idempotently provisions/resumes the sandbox and resolves
- * the OpenCode pin server-side, returning ONE readiness payload to poll until
+ * the runtime pin server-side, returning ONE readiness payload to poll until
  * stage='ready'.
  */
-export async function startProjectSession(
+export async function startWorkspaceSession(
   projectId: string,
   sessionId: string,
   options?: SessionStartOptions,
@@ -287,13 +330,16 @@ export async function startProjectSession(
   return recordReadyRuntime(projectId, sessionId, response.data);
 }
 
+/** @deprecated Use `startWorkspaceSession`. Kept permanently. */
+export const startProjectSession = startWorkspaceSession;
+
 /**
- * {@link startProjectSession}, but every failed request rejects with the API
+ * {@link startWorkspaceSession}, but every failed request rejects with the API
  * error itself (`status`, `code`, and a 402's billing `detail` intact) instead
  * of yielding `null`. For a host that counts transient failures and shows one
  * error, or opens an upgrade prompt on a 402.
  */
-export async function startProjectSessionOrThrow(
+export async function startWorkspaceSessionOrThrow(
   projectId: string,
   sessionId: string,
   options?: SessionStartOptions,
@@ -303,6 +349,9 @@ export async function startProjectSessionOrThrow(
   return recordReadyRuntime(projectId, sessionId, response.data);
 }
 
+/** @deprecated Use `startWorkspaceSessionOrThrow`. Kept permanently. */
+export const startProjectSessionOrThrow = startWorkspaceSessionOrThrow;
+
 function recordReadyRuntime(projectId: string, sessionId: string, result: SessionStartResult): SessionStartResult {
   // Populate the shared session-runtime registry the instant a session goes
   // ready, regardless of WHICH caller drove this /start (the facade's
@@ -311,7 +360,7 @@ function recordReadyRuntime(projectId: string, sessionId: string, result: Sessio
   // `kortix.session(pid, sid)` created for a one-off poll, e.g. — can then
   // adopt this entry instead of throwing SessionNotReadyError or re-POSTing.
   const externalId = result.sandbox?.external_id;
-  const runtimeSessionId = result.runtime_session_id ?? result.opencode_session_id;
+  const runtimeSessionId = result.runtime_session_id;
   if (result.stage === "ready" && externalId && runtimeSessionId) {
     setSessionRuntime(projectId, sessionId, {
       runtimeSessionId,

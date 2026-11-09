@@ -7,8 +7,8 @@ import {
 
 // The reaper's terminal observation says "no turn in flight". It does NOT say
 // "the assistant message is closed". `finalizeHuskTurn` is what closes the gap:
-// it reads the turn's OWN OpenCode root through the daemon, applies the daemon's
-// own open-turn predicate, and — only after a settle re-read agrees — aborts
+// it reads the turn's OWN root on the box's session log, applies the open-turn
+// predicate, and — only after a settle re-read agrees — aborts
 // that root and PROVES the turn is closed by reading it once more.
 //
 // Every test drives the real module through a scripted `globalThis.fetch`, so
@@ -17,8 +17,6 @@ import {
 let serviceKey: string | null = 'daemon-service-key';
 let fetchCalls: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
 let responses: Array<() => Promise<Response>> = [];
-/** What `/kortix/health` lists; answered outside the script. */
-let capabilities: string[] = [];
 const originalFetch = globalThis.fetch;
 
 // Spread the real module: `mock.module` replaces it WHOLESALE, so a stub that
@@ -36,26 +34,34 @@ mock.module('../../sandbox-proxy/backend', () => ({
 }));
 
 const { finalizeHuskTurn } = await import('./husk-finalizer');
-const { __resetRuntimeTurnVerbsMemo } = await import('../session-lifecycle/runtime-fetch');
 
 const TARGET = {
   sandboxId: 'sb-1',
   externalId: 'ext-1',
-  opencodeSessionId: 'ses_root',
+  runtimeSessionId: 'ses_root',
   messageId: 'msg_turn_1',
 };
 
-// The read is TAIL-BOUNDED. `/session/:id/message` returns every message with
-// its full `parts` array and the request forces `Accept-Encoding: identity`, so
-// an unbounded read drags the whole transcript across the provider ingress —
-// and blows READ_TIMEOUT_MS on exactly the long sessions that leave husks.
-const READ_URL =
-  'https://daemon.example.test/session/ses_root/message?directory=%2Fworkspace&limit=4';
-const ABORT_URL = 'https://daemon.example.test/session/ses_root/abort?directory=%2Fworkspace';
+// The read is TAIL-BOUNDED. A log page carries every message with its full
+// blocks and the request forces `Accept-Encoding: identity`, so an unbounded
+// read drags the whole session across the provider ingress — and blows
+// READ_TIMEOUT_MS on exactly the long sessions that leave husks.
+const READ_URL = 'https://daemon.example.test/kortix/runtime/log?limit=4';
+const ABORT_URL = 'https://daemon.example.test/kortix/runtime/sessions/ses_root/abort';
 
-/** A `/session/:id/message` body, shaped exactly as OpenCode returns it. */
+/**
+ * One page of the box's session log, from message summaries: `parentID` is the
+ * prompt a reply answers, and a reply without `time.completed` or `error` still
+ * streams.
+ */
 function transcript(...infos: Array<Record<string, unknown>>): () => Promise<Response> {
-  return async () => new Response(JSON.stringify(infos.map((info) => ({ info }))), { status: 200 });
+  const record = (info: Record<string, unknown>) => ({
+    message_id: info.id,
+    role: info.role,
+    reply_to: typeof info.parentID === 'string' ? info.parentID : null,
+    status: (info.time as { completed?: number } | undefined)?.completed ? 'complete' : info.error ? 'error' : 'streaming',
+  });
+  return async () => Response.json({ thread_id: 'ses_root', messages: infos.map(record), has_more: false });
 }
 
 function status(code: number): () => Promise<Response> {
@@ -74,10 +80,7 @@ beforeEach(() => {
   serviceKey = 'daemon-service-key';
   fetchCalls = [];
   responses = [];
-  capabilities = [];
-  __resetRuntimeTurnVerbsMemo();
   globalThis.fetch = (async (url: unknown, init: unknown) => {
-    if (String(url).endsWith('/kortix/health')) return Response.json({ capabilities });
     const request = (init ?? {}) as { method?: string; headers?: Record<string, string> };
     fetchCalls.push({
       url: String(url),
@@ -140,36 +143,11 @@ describe('finalizeHuskTurn', () => {
     expect(fetchCalls).toHaveLength(1);
   });
 
-  // The shared-predicate pin: a retryable error is a turn OpenCode still owns,
-  // not a closed one. Diverging from opencode-turn-state.ts here would leave the
-  // exact class of husk this module exists to close.
-  test('treats a retryable error as an OPEN turn', async () => {
-    const retryable = {
-      ...OPEN_TURN,
-      error: { name: 'APIError', data: { message: 'rate limited', isRetryable: true } },
-    };
-    responses = [
-      transcript(retryable),
-      transcript(retryable),
-      status(200),
-      transcript({
-        ...OPEN_TURN,
-        error: { name: 'MessageAbortedError', data: { message: 'aborted' } },
-      }),
-    ];
-
-    await finalizeHuskTurn(TARGET, { settleMs: 0 });
-
-    const aborts = fetchCalls.filter((call) => call.method === 'POST');
-    expect(aborts).toHaveLength(1);
-    expect(aborts[0]?.url).toBe(ABORT_URL);
-  });
-
   // ── ownership: the abort is ROOT-scoped, the terminal evidence is not ──
-  // Every prompt of a session runs on one OpenCode root and `activeTurns` holds
+  // Every prompt of a session runs on one runtime root and `activeTurns` holds
   // one record per prompt, so the reaper reaches this module for turn A while
-  // turn B is streaming on the SAME root — `opencodeDeliveryInFlight` reports A
-  // terminal the moment B's user message follows it. Aborting the root there
+  // turn B is streaming on the SAME root: A reads terminal the moment B's user
+  // message follows it. Aborting the root there
   // ends B mid-answer and the UI renders it "Interrupted".
   test('never aborts when the open assistant message answers ANOTHER turn on the same root', async () => {
     responses = [
@@ -192,7 +170,7 @@ describe('finalizeHuskTurn', () => {
   });
 
   // The same shape for a `delivering` record whose prompt never reached
-  // OpenCode: no assistant message can belong to it, so nothing may be aborted.
+  // the runtime: no assistant message can belong to it, so nothing may be aborted.
   test('never aborts when this turn has no message on the root at all', async () => {
     responses = [
       transcript(
@@ -325,27 +303,6 @@ describe('finalizeHuskTurn', () => {
     expect(await finalizeHuskTurn(TARGET, { settleMs: 0 })).toBe('finalized');
   });
 
-  test('a daemon with the Kortix turn routes is read and aborted through them (W5 E4)', async () => {
-    capabilities = ['runtime.turns.v1'];
-    const page = (...infos: Array<Record<string, unknown>>) => async () =>
-      Response.json({ messages: infos.map((info) => ({ info, parts: [] })), has_more: false });
-    responses = [
-      page(OPEN_TURN),
-      page(OPEN_TURN),
-      status(200),
-      page({ ...OPEN_TURN, error: { name: 'MessageAbortedError', data: { message: 'aborted' } } }),
-    ];
-
-    expect(await finalizeHuskTurn(TARGET, { settleMs: 0 })).toBe('finalized');
-    const read = 'https://daemon.example.test/kortix/runtime/messages/ses_root?limit=4';
-    expect(fetchCalls.map((call) => `${call.method} ${call.url}`)).toEqual([
-      `GET ${read}`,
-      `GET ${read}`,
-      'POST https://daemon.example.test/kortix/runtime/sessions/ses_root/abort',
-      `GET ${read}`,
-    ]);
-  });
-
   test('every request carries the signed system-reaper context and the service-key bearer', async () => {
     responses = [
       transcript(OPEN_TURN),
@@ -374,4 +331,5 @@ describe('finalizeHuskTurn', () => {
       }
     }
   });
+
 });

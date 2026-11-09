@@ -33,7 +33,7 @@ describe('init — the plain new-project path', () => {
 
     expect(result.status).toBe(0);
     const project = resolve(parent, 'my-app');
-    expect(result.stdout).toContain(`Initialized Kortix project "my-app" in ${project}`);
+    expect(result.stdout).toContain(`Initialized Kortix workspace "my-app" in ${project}`);
     expect(result.stdout).toContain('Wrote ');
     expect(result.stdout).toContain('  + kortix.yaml');
     expect(result.stdout).toContain('  + .agents/skills → ../skills');
@@ -78,7 +78,7 @@ describe('init — the plain new-project path', () => {
 
     expect(result.status).toBe(2);
     expect(result.stderr).toContain(
-      'kortix init: a project name is required — e.g. `kortix init my-app`.',
+      'kortix init: a workspace name is required — e.g. `kortix init my-app`.',
     );
     expect(existsSync(resolve(parent, 'kortix-project'))).toBe(false);
   });
@@ -93,11 +93,36 @@ describe('init — the plain new-project path', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
-      `Initialized Kortix project "fresh" in ${resolve(parent, 'fresh')}`,
+      `Initialized Kortix workspace "fresh" in ${resolve(parent, 'fresh')}`,
     );
-    expect(result.stdout).not.toContain('Configured this Kortix project');
+    expect(result.stdout).not.toContain('Configured this Kortix workspace');
     // No --no-git here: the new project becomes its own repository.
     expect(result.stdout).toContain('Git: initialized (main)');
+  });
+
+  test('--force wires a clone of a new project: kortix.yaml, no OpenCode folder', () => {
+    const clone = realpathSync(mkdtempSync(resolve(tmpdir(), 'kortix-init-clone-')));
+    writeFileSync(resolve(clone, 'kortix.yaml'), 'project:\n  name: Clone\n');
+    mkdirSync(resolve(clone, 'skills'));
+    const result = spawnSync(process.execPath, [cli, 'init', '--force', '--primary', 'codex', '-y', '--no-git'], {
+      cwd: clone,
+      encoding: 'utf8',
+    });
+
+    expect(result.stderr).not.toContain('not a cloned Kortix workspace');
+    expect(result.status).toBe(0);
+    expect(existsSync(resolve(clone, '.opencode'))).toBe(false);
+  });
+
+  test('--force refuses a directory with no kortix.yaml', () => {
+    const empty = realpathSync(mkdtempSync(resolve(tmpdir(), 'kortix-init-noclone-')));
+    const result = spawnSync(process.execPath, [cli, 'init', '--force', '--primary', 'codex', '-y'], {
+      cwd: empty,
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Expected kortix.yaml.');
   });
 
   test('a non-empty target directory is refused', () => {

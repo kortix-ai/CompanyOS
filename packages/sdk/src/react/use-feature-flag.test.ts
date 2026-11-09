@@ -15,9 +15,14 @@ mock.module('@tanstack/react-query', () => ({
   },
 }));
 
+let rowCalls: string[] = [];
 let detailCalls: string[] = [];
 mock.module('../core/rest/projects-client', () => ({
-  getProjectDetail: async (projectId: string) => {
+  getProject: async (projectId: string) => {
+    rowCalls.push(projectId);
+    return { project_id: projectId };
+  },
+  getWorkspaceDetail: async (projectId: string) => {
     detailCalls.push(projectId);
     return { project: { project_id: projectId } };
   },
@@ -28,23 +33,25 @@ const { qk } = await import('./query-keys');
 
 beforeEach(() => {
   lastConfig = null;
+  rowCalls = [];
   detailCalls = [];
   nextResult = { data: undefined, isLoading: false };
 });
 
 function withDetail(experimental: Record<string, unknown> | undefined) {
-  nextResult = { data: { project: { experimental } }, isLoading: false };
+  nextResult = { data: { experimental }, isLoading: false };
 }
 
 describe('useFeatureFlag', () => {
-  test('reads the shared project-detail cache entry, not a private key', () => {
+  test('reads the shared bare project row (qk.project.summary), not the git-backed detail', () => {
     useFeatureFlag('proj-1', 'reminders');
 
     // Built through the factory on purpose: the guard in
     // `query-key-literals.test.ts` forbids hand-typed key literals here, and
     // the point of the assertion is that the hook shares the SAME cache entry
-    // every other project-detail reader uses.
-    expect(lastConfig?.queryKey).toEqual(qk.project.detail('proj-1'));
+    // every other project-row reader uses. The detail reads git and can take
+    // seconds; a flag gate on it held the project page blank (2026-11-03).
+    expect(lastConfig?.queryKey).toEqual(qk.project.summary('proj-1'));
     expect(lastConfig?.enabled).toBe(true);
   });
 
@@ -55,11 +62,12 @@ describe('useFeatureFlag', () => {
     expect(flag.enabled).toBe(false);
   });
 
-  test('queryFn fetches the project detail for the given id', async () => {
+  test('queryFn fetches the bare project row for the given id, never the detail', async () => {
     useFeatureFlag('proj-9', 'reminders');
     await lastConfig?.queryFn();
 
-    expect(detailCalls).toEqual(['proj-9']);
+    expect(rowCalls).toEqual(['proj-9']);
+    expect(detailCalls).toEqual([]);
   });
 
   test('enabled only when the server says exactly true', () => {
@@ -90,9 +98,9 @@ describe('useFeatureFlag', () => {
   });
 
   test('one flag never reads another flag`s slot', () => {
-    withDetail({ genui: true, reminders: false });
+    withDetail({ marketplace: true, reminders: false });
 
-    expect(useFeatureFlag('p', 'genui').enabled).toBe(true);
+    expect(useFeatureFlag('p', 'marketplace').enabled).toBe(true);
     expect(useFeatureFlag('p', 'reminders').enabled).toBe(false);
   });
 
@@ -184,6 +192,17 @@ describe('useFeatureFlag', () => {
     expect(useFeatureFlag(null, 'pi_harness').enabled).toBe(true);
   });
 
+  test('genui graduated: generative UI is on for every project', () => {
+    // No flag since 2026-10-24. A stored `genui: false` from the flag era is inert.
+    withDetail({ genui: false });
+    expect(useFeatureFlag('p', 'genui').enabled).toBe(true);
+
+    withDetail(undefined);
+    expect(useFeatureFlag('p', 'genui').enabled).toBe(true);
+
+    expect(useFeatureFlag(null, 'genui').enabled).toBe(true);
+  });
+
   test('connectors_v2 and connectors_api_discover graduated: one catalog for every project', () => {
     // 2026-10-24. A stored `false` from the flag era is inert.
     withDetail({ connectors_v2: false, connectors_api_discover: false });
@@ -201,6 +220,17 @@ describe('useFeatureFlag', () => {
 
     withDetail(undefined);
     expect(useFeatureFlag('p', 'agentmail_email').enabled).toBe(true);
+  });
+
+  test('notification_center graduated: notifications are on for every project', () => {
+    // 2026-11-06. A stored `notification_center: false` from the flag era is inert.
+    withDetail({ notification_center: false });
+    expect(useFeatureFlag('p', 'notification_center').enabled).toBe(true);
+
+    withDetail(undefined);
+    expect(useFeatureFlag('p', 'notification_center').enabled).toBe(true);
+
+    expect(useFeatureFlag(null, 'notification_center').enabled).toBe(true);
   });
 
   test('config_releases graduated: every session runs the base branch config release', () => {

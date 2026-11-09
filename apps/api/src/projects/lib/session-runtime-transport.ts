@@ -1,5 +1,5 @@
 /**
- * The API's own client for the daemon's `/kortix/runtime/*` namespace (`/kortix/opencode/*` on a pre-W3 daemon).
+ * The API's own client for the daemon's `/kortix/runtime/*` namespace.
  *
  * Two calls, both over the EXISTING sandbox transport (`resolveSandboxIngress`
  * + `buildSandboxUpstreamHeaders` — the same resolver the `/v1/p/` proxy and
@@ -10,8 +10,8 @@
  *     wire, `If-None-Match` honoured.
  *   • {@link openRuntimeEventStream} — `GET /kortix/runtime/events?since=&epoch=&schema=`,
  *     an SSE body handed back UNREAD so the caller can pump it.
- *   • {@link fetchRuntimeMessages} — `GET /kortix/runtime/messages/:sessionId`,
- *     one transcript page. Every harness serves it.
+ *   • {@link fetchRuntimePending} — `GET /kortix/runtime/pending`, the thread
+ *     statuses and open asks of a box that serves its session log.
  *
  * ─── THE STREAM IS NEVER BUFFERED ──────────────────────────────────────────
  * WS-Z1's requirement, and the reason it is stated so plainly: a buffered
@@ -50,7 +50,8 @@ export interface DaemonCallTarget {
   userId?: string;
 }
 
-async function daemonEndpoint(
+/** The daemon's base URL and signed headers for `target`; null without a service key. */
+export async function runtimeDaemonEndpoint(
   target: DaemonCallTarget,
 ): Promise<{ url: string; headers: Record<string, string> } | null> {
   const serviceKey = await resolveServiceKey(target.externalId);
@@ -70,44 +71,9 @@ async function daemonEndpoint(
 
 /** The daemon's Runtime API since W3. */
 const RUNTIME_API = '/kortix/runtime';
-/**
- * Its path on a daemon built before W3.
- * @deprecated Pre-W3 OpenCode path (/kortix/opencode); use RUNTIME_API.
- */
-const LEGACY_RUNTIME_API = '/kortix/opencode';
-/**
- * Sandboxes whose daemon answered only the pre-W3 path.
- * @deprecated Pre-W3 OpenCode path (/kortix/opencode); use RUNTIME_API.
- */
-// ponytail: per-process memo, cleared when full; a box that updates its daemon
-// keeps the legacy path here until the memo clears or the process restarts.
-const legacyRuntimeApi = new Set<string>();
-const LEGACY_RUNTIME_API_MEMO_MAX = 5_000;
-
-/**
- * Call the Runtime API at `/kortix/runtime<path>`, or at its pre-W3 path on a
- * daemon that does not serve the new one: that daemon answers 404 JSON from its
- * `/kortix/*` catch-all, or, older still, the runtime's HTML shell.
- */
-async function fetchRuntimeApi(
-  externalId: string,
-  url: (base: string) => URL | string,
-  init: RequestInit,
-): Promise<Response> {
-  if (!legacyRuntimeApi.has(externalId)) {
-    const response = await fetch(url(RUNTIME_API), init);
-    const html = (response.headers.get('content-type') ?? '').toLowerCase().startsWith('text/html');
-    if (response.status !== 404 && !html) return response;
-    await response.body?.cancel().catch(() => {});
-    if (legacyRuntimeApi.size >= LEGACY_RUNTIME_API_MEMO_MAX) legacyRuntimeApi.clear();
-    legacyRuntimeApi.add(externalId);
-  }
-  return fetch(url(LEGACY_RUNTIME_API), init);
-}
-
-/** Test seam: forget which sandboxes answered only the pre-W3 path. */
-export function resetLegacyRuntimeApiForTests(): void {
-  legacyRuntimeApi.clear();
+/** Call the Runtime API at `/kortix/runtime<path>`. */
+function fetchRuntimeApi(url: (base: string) => URL | string, init: RequestInit): Promise<Response> {
+  return fetch(url(RUNTIME_API), init);
 }
 
 export type RuntimeStateFetch =
@@ -129,7 +95,7 @@ export async function fetchRuntimeState(
 ): Promise<RuntimeStateFetch> {
   let endpoint: { url: string; headers: Record<string, string> } | null;
   try {
-    endpoint = await daemonEndpoint(target);
+    endpoint = await runtimeDaemonEndpoint(target);
   } catch (error) {
     return { ok: false, reason: reasonOf(error), status: null };
   }
@@ -144,7 +110,7 @@ export async function fetchRuntimeState(
 
   try {
     const url = endpoint.url;
-    const response = await fetchRuntimeApi(target.externalId, (api) => `${url}${api}/state`, {
+    const response = await fetchRuntimeApi((api) => `${url}${api}/state`, {
       headers,
       signal: options.signal ?? AbortSignal.timeout(RUNTIME_STATE_TIMEOUT_MS),
     });
@@ -162,45 +128,30 @@ export async function fetchRuntimeState(
   }
 }
 
-export type RuntimeMessagesFetch =
-  | { ok: true; messages: unknown[] }
+export type RuntimePendingFetch =
+  | { ok: true; body: unknown }
   | { ok: false; reason: string; status: number | null };
 
 /**
- * Read the newest `limit` messages of one conversation, oldest first, as the
- * daemon projects them (`{ info, parts }` envelopes). Gzipped on the wire like
- * `/state`. A failure carries a machine reason, never the daemon's body.
+ * Read `GET /kortix/runtime/pending` once: what each thread of the session does
+ * and what waits on a person (`runtime.log.v1`).
  */
-export async function fetchRuntimeMessages(
+export async function fetchRuntimePending(
   target: DaemonCallTarget,
-  sessionId: string,
-  options: { limit: number; signal?: AbortSignal },
-): Promise<RuntimeMessagesFetch> {
-  let endpoint: { url: string; headers: Record<string, string> } | null;
+  signal?: AbortSignal,
+): Promise<RuntimePendingFetch> {
   try {
-    endpoint = await daemonEndpoint(target);
-  } catch (error) {
-    return { ok: false, reason: reasonOf(error), status: null };
-  }
-  if (!endpoint) return { ok: false, reason: 'no_service_key', status: null };
-
-  const base = endpoint.url;
-  const url = (api: string) => {
-    const next = new URL(`${base}${api}/messages/${encodeURIComponent(sessionId)}`);
-    next.searchParams.set('limit', String(options.limit));
-    return next;
-  };
-  try {
-    const response = await fetchRuntimeApi(target.externalId, url, {
-      headers: { ...endpoint.headers, Accept: 'application/json', 'Accept-Encoding': 'gzip' },
-      signal: options.signal ?? AbortSignal.timeout(RUNTIME_STATE_TIMEOUT_MS),
+    const endpoint = await runtimeDaemonEndpoint(target);
+    if (!endpoint) return { ok: false, reason: 'no_service_key', status: null };
+    const response = await fetch(`${endpoint.url}${RUNTIME_API}/pending`, {
+      headers: { ...endpoint.headers, Accept: 'application/json' },
+      signal: signal ?? AbortSignal.timeout(RUNTIME_STATE_TIMEOUT_MS),
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
       return { ok: false, reason: `daemon_${response.status}`, status: response.status };
     }
-    const body = (await response.json()) as { messages?: unknown };
-    return { ok: true, messages: Array.isArray(body.messages) ? body.messages : [] };
+    return { ok: true, body: await response.json() };
   } catch (error) {
     return { ok: false, reason: reasonOf(error), status: null };
   }
@@ -223,7 +174,7 @@ export async function fetchRuntimeHealth(
   signal?: AbortSignal,
 ): Promise<RuntimeHealthFetch> {
   try {
-    const endpoint = await daemonEndpoint(target);
+    const endpoint = await runtimeDaemonEndpoint(target);
     if (!endpoint) return { ok: false, reason: 'no_service_key' };
     const timeout = AbortSignal.timeout(RUNTIME_HEALTH_TIMEOUT_MS);
     const response = await fetch(`${endpoint.url}/kortix/health`, {
@@ -256,7 +207,7 @@ export async function openRuntimeEventStream(
 ): Promise<RuntimeStreamOpen> {
   let endpoint: { url: string; headers: Record<string, string> } | null;
   try {
-    endpoint = await daemonEndpoint(target);
+    endpoint = await runtimeDaemonEndpoint(target);
   } catch (error) {
     return { ok: false, reason: reasonOf(error), status: null };
   }
@@ -289,7 +240,7 @@ export async function openRuntimeEventStream(
   // it. It is removed only when the attach FAILS.
   let attached = false;
   try {
-    const response = await fetchRuntimeApi(target.externalId, url, {
+    const response = await fetchRuntimeApi(url, {
       headers: {
         ...endpoint.headers,
         Accept: 'text/event-stream',

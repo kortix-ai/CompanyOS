@@ -34,8 +34,8 @@ export interface StartStash {
  * How long a stash stays deliverable. A stash is a hand-off for the
  * navigation that wrote it — a failed replay restores it (re-stamped), but
  * one that then sits unconsumed is a stale prompt, and replaying it into the
- * session's by-then-real conversation on a much later visit is exactly the
- * mis-delivery the warm-session work exists to prevent. 10 minutes matches
+ * session's by-then-real conversation on a much later visit is a
+ * mis-delivery. 10 minutes matches
  * the API's own bound for "how stale can a delivery be and still count"
  * (UNDELIVERED_PROMPT_STARVATION_MS).
  */
@@ -65,14 +65,14 @@ export function writeStartStash(sessionId: string, stash: StartStash): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy hand-off shape (pre-dates this module). apps/web had several
-// independent "new session" producers (dashboard, project workspace, legacy
-// composer) that stash a bare prompt string under `opencode_pending_prompt:<id>`
+// Legacy hand-off shape (pre-dates this module). Older "new session" producers
+// in apps/web stashed a bare prompt string under `opencode_pending_prompt:<id>`
 // plus an optional `{ agent, model, variant }` JSON blob under
-// `opencode_pending_options:<id>` — instead of one JSON stash. Those call sites
-// are unchanged (out of scope for this migration); `readStartStash` /
-// `clearStartStash` understand both shapes so every existing producer keeps
-// working through the one shared contract.
+// `opencode_pending_options:<id>`. No producer in this repository writes these
+// keys any more; every producer writes `startStashKey`. `readStartStash` still
+// reads the old keys and `clearStartStash` removes them, so a hand-off a tab
+// stashed before the change is read once and then cleared. The key strings are
+// stored values: they keep their old names.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function legacyPromptKey(sessionId: string): string {
@@ -163,7 +163,7 @@ export function clearStartStash(sessionId: string): void {
 /**
  * Migrate a stash — canonical or legacy shape — from one session-id namespace
  * to another. Producers sometimes stash under an id that isn't the eventual
- * OpenCode session id (e.g. a project's route id, before the canonical
+ * runtime session id (e.g. a project's route id, before the canonical
  * session exists); once a later render resolves the real id, this hands the
  * stash off. Reads the source via {@link readStartStash} (so it understands
  * both the canonical JSON shape and the bare-prompt legacy shape at

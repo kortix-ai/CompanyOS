@@ -90,7 +90,7 @@ export interface SessionListFilter {
   q?: string | null;
   /** The session carries every one of these labels (exact match). */
   labels?: string[] | null;
-  /** Only sessions filed into this space (`project_channels`). */
+  /** Only sessions filed into this space (`chat`). */
   spaceId?: string | null;
   /** Only sessions filed into this group, or (`'none'`) in no group (`session_groups`). */
   group?: string | 'none' | null;
@@ -100,6 +100,8 @@ export interface SessionListFilter {
   agent?: string | null;
   /** Only sessions with activity (`updated_at`) at or after this time. */
   updatedAfter?: Date | null;
+  /** Only the teammates of this lead session (`metadata.team_lead`, agent teams). */
+  teamLead?: string | null;
   /** The person whose pins and archive apply (`personUserId`). Null: an
    *  agent, API key or service account, which reads the raw list. */
   personId?: string | null;
@@ -127,7 +129,7 @@ function agentSearchKey(value: string): string {
 /** Title, first prompt, trigger slug / channel (initiator_id), agent, source,
  *  the owner's email or name, or a session-id prefix (the branch is the session id). The
  *  title is what `serializeSession` resolves: custom_name, the auto name, or a
- *  runtime conversation title in the opencode_sessions snapshot. The owner is
+ *  runtime conversation title in the runtime_sessions snapshot. The owner is
  *  already on every row the viewer may see (`owner_email`/`owner_name`). */
 function searchMatchSql(t: SessionTable, q: string): SQL {
   const pattern = likePattern(q);
@@ -156,8 +158,8 @@ function searchMatchSql(t: SessionTable, q: string): SQL {
     or exists (select 1 from jsonb_array_elements_text(${t.labels}) as l(label) where l.label ilike ${pattern})
     or exists (
       select 1 from jsonb_array_elements(
-        case when jsonb_typeof(${t.metadata}->'opencode_sessions') = 'array'
-             then ${t.metadata}->'opencode_sessions' else '[]'::jsonb end
+        case when jsonb_typeof(${t.metadata}->'runtime_sessions') = 'array'
+             then ${t.metadata}->'runtime_sessions' else '[]'::jsonb end
       ) as oc(entry)
       where oc.entry->>'title' ilike ${pattern}
     )
@@ -195,6 +197,7 @@ function sessionListFilterSql(filter: SessionListFilter, viewerId: string): SQL 
   if (filter.createdBy) conditions.push(startedByPersonSql(filter.createdBy));
   if (filter.agent) conditions.push(eq(t.agentName, filter.agent));
   if (filter.updatedAfter) conditions.push(gte(t.updatedAt, filter.updatedAfter));
+  if (filter.teamLead) conditions.push(sql`${t.metadata}->>'team_lead' = ${filter.teamLead}`);
   if (filter.labels?.length) {
     const has = (table: SessionTable) => sql`${table.labels} @> ${JSON.stringify(filter.labels)}::jsonb`;
     conditions.push(
@@ -232,8 +235,6 @@ function sessionListFilterSql(filter: SessionListFilter, viewerId: string): SQL 
  * row whose metadata is null, as `selectSessionRowsForViewer` does.
  */
 const liveSessionSql = sql`(${projectSessions.metadata} ? 'deletedAt') is not true`;
-/** `metadata.warm === true`: an unprompted warm draft (lib/warm-sessions.ts). */
-const warmSessionSql = sql`(${projectSessions.metadata} -> 'warm') = 'true'::jsonb`;
 /** `isTriggerCreatedSessionMetadata` (connectors/share.ts). */
 const triggerCreatedSql = sql`(jsonb_typeof(${projectSessions.metadata} -> 'source') = 'string'
   and ${projectSessions.metadata} ->> 'source' like 'trigger:%'
@@ -268,7 +269,7 @@ export function restorableSinceIso(now = Date.now()): string {
 /**
  * The page WHERE for one viewer: the SQL twin of `selectSessionRowsForViewer`
  * (`isProjectSessionVisibleTo`, `agentSessionStanding`, and the scope's
- * tombstone and warm-draft rules). With it, a page of N rows the viewer may
+ * tombstone rules). With it, a page of N rows the viewer may
  * see is one read of N + 1 rows, however many newer rows are private to
  * someone else or deleted (KRTX-1727 scenarios A and B). The JS fold still
  * re-checks every row; this only decides what the page reads.
@@ -279,13 +280,12 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
   const tombstone = viewer.deleted
     ? // Recently deleted: what the restore route would still take back, and
       // only for its owner or a manager (`canManageLifecycle`).
-      sql`(${t.metadata} ? 'deletedAt') is true and (${warmSessionSql}) is not true
+      sql`(${t.metadata} ? 'deletedAt') is true
         and ${t.metadata} ->> 'deletedAt' > ${restorableSinceIso()}
         ${viewer.canManageProject ? sql`` : sql`and ${t.createdBy} = ${viewer.viewerId}`}`
     : viewer.scope === 'visible'
-      ? sql`${liveSessionSql} and (${warmSessionSql}) is not true`
-      : // A soft-deleted warm draft holds nothing to audit.
-        sql`not ((${t.metadata} ? 'deletedAt') is true and (${warmSessionSql}) is true)`;
+      ? liveSessionSql
+      : undefined;
   // A session-bound credential reaches its own session and the ones it spawned.
   const own = bound === null
     ? undefined
@@ -328,17 +328,11 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
     : canAccess === undefined
       ? undefined
       : and(spaceVisible, canAccess);
-  // A non-manager's project scope (`projectReadView`) reads every session of
-  // the project. The tombstone detoasts `metadata` (~6 KB a row) and the
-  // planner evaluates it first, so a 16k-session project spent ~600 ms there
-  // for the 11% of rows the viewer may open. The CASE checks the plain-column
-  // access rules first: the same rows, 670 -> 161 ms on prod. The manager
-  // inventory and the `visible` scope keep the AND, which the partial index
-  // `idx_project_sessions_project_live` and the keyset pages need.
-  if (access && viewer.scope === 'project' && !viewer.deleted && !viewer.canManageProject) {
-    return sql`(case when ${access} then ${tombstone} else false end)`;
-  }
-  return and(tombstone, access) as SQL;
+  // The `project` scope has no tombstone rule: it lists soft-deleted rows too,
+  // so it never detoasts `metadata` (~6 KB a row) for one. The `visible` scope
+  // keeps the AND, which the partial index `idx_project_sessions_project_live`
+  // and the keyset pages need.
+  return and(tombstone, access) ?? sql`true`;
 }
 
 /** JS twin of `searchMatchSql`, for `search_match: self | child`. `ownerText`
@@ -353,7 +347,7 @@ export function sessionRowMatchesSearch(row: ProjectSessionRow, q: string, owner
   if (ownerText.some(hit)) return true;
   if (row.sessionId.toLowerCase().startsWith(needle)) return true;
   if ((row.labels ?? []).some(hit)) return true;
-  const snapshot = Array.isArray(meta.opencode_sessions) ? meta.opencode_sessions : [];
+  const snapshot = Array.isArray(meta.runtime_sessions) ? meta.runtime_sessions : [];
   return snapshot.some((entry) => hit((entry as Record<string, unknown> | null)?.title));
 }
 
@@ -394,7 +388,7 @@ function sessionCursorScope(input: SessionInventoryInput, filter: SessionListFil
     // A cursor is a scan position inside ONE filtered list.
     filter:
       filter.parent || filter.startedBy || filter.q || filter.labels?.length || filter.view || filter.deleted || filter.spaceId ||
-      filter.group || filter.createdBy || filter.agent || filter.updatedAfter
+      filter.group || filter.createdBy || filter.agent || filter.updatedAfter || filter.teamLead
         ? JSON.stringify([
             filter.parent ?? null,
             filter.startedBy ?? null,
@@ -407,6 +401,7 @@ function sessionCursorScope(input: SessionInventoryInput, filter: SessionListFil
             ...(filter.createdBy ? [{ createdBy: filter.createdBy }] : []),
             ...(filter.agent ? [{ agent: filter.agent }] : []),
             ...(filter.updatedAfter ? [{ updatedAfter: filter.updatedAfter.toISOString() }] : []),
+            ...(filter.teamLead ? [{ teamLead: filter.teamLead }] : []),
           ])
         : undefined,
   };
@@ -509,7 +504,7 @@ async function appendMissingAncestors(input: {
   // A pinned, archived, deleted, space or group view promises only those rows.
   const appendAncestors =
     !filter.parent && !filter.labels?.length && !filter.view && !filter.deleted && !filter.spaceId &&
-    !filter.group && !filter.createdBy && !filter.agent && !filter.updatedAfter;
+    !filter.group && !filter.createdBy && !filter.agent && !filter.updatedAfter && !filter.teamLead;
   for (let depth = 0; appendAncestors && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
     const missing = [
       ...new Set(

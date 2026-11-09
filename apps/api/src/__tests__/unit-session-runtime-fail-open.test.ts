@@ -20,17 +20,20 @@ mock.module('../config', () => ({
   config: { KORTIX_URL: 'https://api.test' },
   SANDBOX_VERSION: 'test',
   KNOWN_PROVIDERS: ['platinum', 'daytona'],
+  childProcessEnv: (extra: Record<string, string> = {}) => ({ ...process.env, ...extra }),
 }));
 
 mock.module('../shared/db', () => ({
   hasDatabase: () => true,
+  withDbTransaction: async <T>(action: () => Promise<T>) => action(),
+  afterDbCommit: (action: () => void) => action(),
   db: {
     select: () => ({
       from: () => ({
         where: () => ({
           limit: async () => [
             {
-              opencodeSessionId: OC_SESSION_ID,
+              runtimeSessionId: OC_SESSION_ID,
               sandboxUrl: 'https://box.test/p/ext-fail-open/8000/',
               accountId: 'acct-1',
               projectId: 'proj-1',
@@ -45,10 +48,10 @@ mock.module('../shared/db', () => ({
 
 // The session's signed proxy endpoint. The transport itself is the real one:
 // the test stubs `fetch` below so the network throw happens at the wire.
-const realOpencodeMapping = await import('../projects/opencode-mapping');
-mock.module('../projects/opencode-mapping', () => ({
-  ...realOpencodeMapping,
-  sandboxOpencodeEndpoint: async () => ({
+const realRuntimeMapping = await import('../projects/runtime-session-mapping');
+mock.module('../projects/runtime-session-mapping', () => ({
+  ...realRuntimeMapping,
+  sandboxRuntimeEndpoint: async () => ({
     url: 'https://box.test/p/ext-fail-open/8000',
     headers: { 'x-kortix': '1' },
   }),

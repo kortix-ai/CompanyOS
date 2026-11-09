@@ -132,6 +132,8 @@ flow(
         .body()
         .exists('$.totals.llm_cost')
         .exists('$.totals.compute_cost')
+        .exists('$.totals.storage_cost')
+        .exists('$.totals.storage_gib_hours')
         .exists('$.totals.total_cost')
         .exists('$.totals.session_count')
         .exists('$.totals.project_count')
@@ -215,7 +217,7 @@ flow(
     domain: 'billing',
     requires: ['funded', 'sandbox', 'database'],
     timeoutMs: 300_000,
-    routes: ['POST /v1/projects/:projectId/sessions'],
+    routes: ['POST /v1/workspaces/:projectId/sessions'],
   },
   async (ctx) => {
     const { Client } = await import('pg');

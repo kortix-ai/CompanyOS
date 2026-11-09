@@ -1,5 +1,6 @@
 'use client';
 
+import { AccountStorageSection } from './account-storage';
 import type { UiTranslator } from '@/i18n/translator';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 /**
@@ -42,6 +43,7 @@ import { formatWholeUsd } from '@kortix/ui/internal/billing/compute-pricing';
 import { useAccountState } from '@kortix/ui/internal/billing/use-account-state';
 import { cn } from '@kortix/ui';
 import { CreditExpiry } from '@/features/billing/credit-expiry';
+import { FreeGrantNotice } from '@/features/billing/free-grant-notice';
 import { resolvedPlan, type AccountState } from '@kortix/sdk';
 import { formatUsdAsCredits } from '@kortix/shared';
 
@@ -77,7 +79,12 @@ export function AccountOverviewTab({ accountId }: AccountOverviewTabProps = {}) 
     return <p className="text-muted-foreground text-sm">{tI18nComplete.raw('text68b8f8d47a7a')}</p>;
   }
 
-  return <AccountOverviewView state={state} />;
+  return (
+    <div className="space-y-8">
+      <AccountOverviewView state={state} />
+      <AccountStorageSection accountId={accountId} />
+    </div>
+  );
 }
 
 /**
@@ -130,17 +137,19 @@ export function AccountOverviewView({ state }: { state: AccountState }) {
               {isNegative ? ` ${tI18nComplete.raw('text4fef65587333')}` : ''}
             </p>
             {state.credits.monthly > 0 && <CreditExpiry expiresAt={state.credits.expires_at} />}
+            <FreeGrantNotice state={state} className="mt-1.5 max-w-md" />
           </div>
           <PlanSummary state={state} />
         </div>
 
         {usage ? (
-          <div className="divide-border grid grid-cols-3 divide-x border-t">
+          <div className="divide-border grid grid-cols-4 divide-x border-t">
             <SpendStat
               label={tI18nComplete.raw('textcedc516df056')}
               value={usage.compute_usd}
               locale={locale}
             />
+            <SpendStat label={tCredits('storage')} value={usage.storage_usd ?? 0} locale={locale} />
             <SpendStat label="LLM" value={usage.llm_usd} locale={locale} />
             <SpendStat
               label={tI18nComplete.raw('text97c8335e2880')}
@@ -227,6 +236,8 @@ export interface PlanStatusCopy {
   graceUntil?: (date: string) => string;
   /** `→ $3,000/mo from Nov 14` — the amount is a monthly price, in dollars. */
   scheduledFrom?: (amount: string, date: string) => string;
+  /** `No charge until Nov 28, then Free` — a split-off workspace's comped plan. */
+  compedUntil?: (date: string) => string;
 }
 
 const DEFAULT_PLAN_STATUS_COPY: PlanStatusCopy = {
@@ -240,6 +251,7 @@ const DEFAULT_PLAN_STATUS_COPY: PlanStatusCopy = {
   status: (status) => status.replace(/_/g, ' '),
   graceUntil: (date) => `SSO stays on until ${date}`,
   scheduledFrom: (amount, date) => `→ ${amount}/mo from ${date}`,
+  compedUntil: (date) => `No charge until ${date}, then Free`,
 };
 
 /** `Nov 14` — a renewal-side date from an ISO timestamp, no year. */
@@ -275,6 +287,18 @@ export function describePlanStatus(
   // names what it changes to and when. The amount is a price: dollars.
   const scheduledUsd = sub?.scheduled_change?.target_tier.monthly_usd;
   const scheduledOn = formatShortIsoDate(sub?.scheduled_change?.effective_date, text.locale);
+  // A split-off workspace's comped plan: no subscription, it ends on a date.
+  const compedUntil = formatIsoDate(state.plan_comp?.until, text.locale);
+  if (compedUntil) {
+    return {
+      name: plan.label,
+      sublabel: plan.monthlyUsd != null ? text.perMonth(formatWholeUsd(plan.monthlyUsd, text.locale)) : plan.sublabel,
+      detail: text.compedUntil!(compedUntil),
+      isActive: true,
+      isWindingDown: true,
+      scheduled: null,
+    };
+  }
 
   return {
     name: plan.label,
@@ -324,6 +348,7 @@ function PlanSummary({ state }: { state: AccountState }) {
       noSubscription: t('noSubscription'),
       graceUntil: (date) => t('graceUntil', { date }),
       scheduledFrom: (amount, date) => t('scheduledFrom', { amount, date }),
+      compedUntil: (date) => t('compedUntil', { date }),
       status: (status) =>
         t.has(`statuses.${status}`)
           ? t(`statuses.${status}`)

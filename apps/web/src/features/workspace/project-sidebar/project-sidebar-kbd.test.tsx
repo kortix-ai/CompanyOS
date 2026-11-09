@@ -7,9 +7,9 @@
  */
 import { afterEach, expect, mock, test } from 'bun:test';
 import React, { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 import { Window } from 'happy-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
@@ -57,13 +57,13 @@ mock.module('@kortix/ui/internal/hooks/projects/use-new-project-session', () => 
     newSessionCalls += 1;
   },
 }));
-// The `project_channels` flag, read by the sidebar through the SDK hook.
+// The `chat` flag, read by the sidebar through the SDK hook.
 let channelsOn = false;
 const realSdkReact = await import('@kortix/sdk/react');
 mock.module('@kortix/sdk/react', () => ({
   ...realSdkReact,
   useFeatureFlag: (_projectId: string, key: string) => ({
-    enabled: key === 'project_channels' && channelsOn,
+    enabled: key === 'chat' && channelsOn,
     isLoading: false,
   }),
   useProjectSpaces: () => ({
@@ -78,6 +78,11 @@ mock.module('@kortix/sdk/react', () => ({
   useVisibleAgents: () => [{ name: 'kortix' }, { name: 'meta' }],
   useCreateProjectSpace: () => ({ mutate: () => undefined, isPending: false }),
   useUpdateProjectSpace: () => ({ mutate: () => undefined, isPending: false }),
+  // 3 unread, one of them a question (Needs you): the sidebar still shows no Inbox row.
+  useNotificationInbox: () => ({
+    data: { notifications: [{ id: 'n1', kind: 'question', read: false }], unread_count: 3 },
+    unreadCount: 3,
+  }),
 }));
 mock.module('@kortix/ui/internal/hooks/projects/new-session-guard', () => ({
   useIsCreatingProjectSession: () => false,
@@ -85,20 +90,17 @@ mock.module('@kortix/ui/internal/hooks/projects/new-session-guard', () => ({
 mock.module('@kortix/ui/internal/stores/billing-account-context', () => ({
   useBillingAccountId: () => 'synthetic-account',
 }));
-mock.module('@kortix/ui/internal/notifications/notification-bell', () => ({
-  NotificationBell: () => React.createElement('div', { 'data-testid': 'notification-bell' }),
-}));
 mock.module('@kortix/ui/workspace/sidebar/project-session-list', () => ({
-  ProjectSessionList: () => React.createElement('div', { 'data-testid': 'session-list' }),
+  ProjectSessionList: ({ secondary }: { secondary?: boolean }) =>
+    React.createElement('div', { 'data-testid': 'session-list', 'data-secondary': secondary ? 'true' : 'false' }),
 }));
 mock.module('@/features/workspace/project-sidebar/workspace-switcher', () => ({
   WorkspaceSwitcher: () => React.createElement('div', { 'data-testid': 'switcher' }),
 }));
-mock.module('@kortix/ui/workspace/sidebar/customize-sidebar-modal', () => ({
-  CustomizeSidebarModal: () => null,
-}));
 mock.module('@kortix/ui/internal/tunnel/computer-connect', () => ({
   ComputerConnectModal: () => null,
+  // The sidebar's Apps and extensions window reads it.
+  useOwnsPairedComputer: () => ({ isSuccess: true, owns: false, owned: [] }),
 }));
 mock.module('@kortix/ui/internal/layout/connect-mcp-modal', () => ({
   ConnectMcpModal: () => null,
@@ -109,8 +111,8 @@ mock.module('@kortix/ui/workspace/sidebar/footer/project-mcp-nav', () => ({
 mock.module('@kortix/ui/workspace/sidebar/footer/project-computer-nav', () => ({
   ProjectComputerNavItem: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-upgrade-alert', () => ({
-  ProjectManifestUpgradeAlert: () => null,
+mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-issues-alert', () => ({
+  ProjectManifestIssuesAlert: () => null,
 }));
 mock.module('@kortix/ui/workspace/sidebar/footer/project-sandbox-alert', () => ({
   ProjectSandboxAlert: () => null,
@@ -142,11 +144,17 @@ let container: { innerHTML: string; remove(): void } | undefined;
 
 /** Opens the mobile sheet on mount: its content only exists while open. */
 function MobileOpenHarness({ projectId }: { projectId: string }) {
-  const { setOpenMobile } = useSidebar();
+  const { openMobile, setOpenMobile } = useSidebar();
   React.useEffect(() => {
     setOpenMobile(true);
   }, [setOpenMobile]);
-  return React.createElement(ProjectSidebar, { projectId });
+  return React.createElement(
+    React.Fragment,
+    null,
+    // Outside the sheet: whether the sheet is open.
+    React.createElement('span', { 'data-testid': 'sheet', 'data-open': openMobile ? 'true' : 'false' }),
+    React.createElement(ProjectSidebar, { projectId }),
+  );
 }
 
 async function mountSidebar(width: number) {
@@ -156,12 +164,13 @@ async function mountSidebar(width: number) {
   win.document.body.appendChild(raw);
   root = createRoot(raw as unknown as Parameters<typeof createRoot>[0]);
   const mobile = width < 768;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root!.render(
       // The channels nav's permission probe reads a QueryClient.
       React.createElement(
         QueryClientProvider,
-        { client: new QueryClient() },
+        { client: queryClient },
         React.createElement(
           SidebarProvider,
           null,
@@ -200,35 +209,68 @@ test('the mobile sheet renders no keyboard shortcut hint (KRTX-2005)', async () 
   expect(document.body.innerHTML).not.toContain('data-slot="kbd-group"');
 });
 
-test('with project_channels on, Channels replace New session, the session list and Cmd+J', async () => {
+test('with chat on, the sidebar is Spaces only (Cmd+J still opens the new-session composer): Review, the personal chat at /chat, the live channels, and the session list waiting in More as the secondary list', async () => {
+  // The layout #11783 set (ProjectSpacesNav, SidebarMoreGroup): no New session
+  // row and no Direct messages section; a DM is one more space in the list.
   channelsOn = true;
   await mountSidebar(1280);
+  // The session list waits in "More" at the bottom, closed by default.
+  expect(container!.innerHTML).not.toContain('data-testid="session-list"');
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more!.click();
+  });
   const html = container!.innerHTML;
-  expect(html).not.toContain('data-testid="session-list"');
   expect(html).not.toContain('newSession');
-  // Channels: live channels only, then the add row. Direct messages: one row per agent.
-  expect(html).toContain('spaces.channels');
-  expect(html).toContain('href="/projects/synthetic-project/c/general"');
+  expect(html).not.toContain('oneChat');
+  expect(html).not.toContain('spaces.directMessages');
+  // Review first, then the person's own space (their chat with My Kortix, at /chat), then the channels.
+  const review = html.indexOf('href="/workspaces/synthetic-project/review"');
+  const personal = html.indexOf('href="/workspaces/synthetic-project/chat"');
+  const general = html.indexOf('href="/workspaces/synthetic-project/c/general"');
+  expect(review).toBeGreaterThan(-1);
+  expect(personal).toBeGreaterThan(review);
+  expect(general).toBeGreaterThan(personal);
+  // The My Kortix DM is that personal row, never a second row of its own.
+  expect(html).not.toContain('href="/workspaces/synthetic-project/dm/kortix"');
+  // Live channels only, then the add row.
   expect(html).not.toContain('/c/old');
-  expect(html).toContain('spaces.addChannel');
-  expect(html).toContain('spaces.directMessages');
-  expect(html).toContain('href="/projects/synthetic-project/dm/kortix"');
-  expect(html).toContain('>Kortix<');
-  expect(html).toContain('>Meta<');
+  expect(html.indexOf('spaces.addChannel')).toBeGreaterThan(general);
+  // The session list is the secondary list, below the spaces.
+  expect(html).toContain('data-testid="session-list" data-secondary="true"');
+  expect(html.indexOf('data-testid="session-list"')).toBeGreaterThan(html.indexOf('spaces.addChannel'));
   await act(async () => {
     win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'j', metaKey: true }));
   });
-  expect(newSessionCalls).toBe(0);
+  // A regular session starts as with chat off: `newSessionHref`, never the default channel.
+  expect(newSessionCalls).toBe(1);
 });
 
-test('with project_channels off, the sidebar keeps New session, the session list and Cmd+J', async () => {
+test('with chat off, the sidebar keeps New session, the session list and Cmd+J', async () => {
   await mountSidebar(1280);
   const html = container!.innerHTML;
-  expect(html).toContain('data-testid="session-list"');
+  expect(html).toContain('data-testid="session-list" data-secondary="false"');
   expect(html).toContain('newSession');
   expect(html).not.toContain('spaces.channels');
+  expect(html).not.toContain('href="/workspaces/synthetic-project/chat"');
   await act(async () => {
     win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'j', metaKey: true }));
   });
   expect(newSessionCalls).toBe(1);
+});
+
+const INBOX_HREF = 'href="/workspaces/synthetic-project/inbox"';
+
+// The Inbox is a row in the workspace menu (`workspace-switcher.tsx`), not a
+// sidebar nav row, with Spaces off or on.
+test('the sidebar has no Inbox row (KRTX-1742)', async () => {
+  await mountSidebar(1280);
+  expect(container!.innerHTML).not.toContain(INBOX_HREF);
+});
+
+test('with chat on, the sidebar has no Inbox row either', async () => {
+  channelsOn = true;
+  await mountSidebar(1280);
+  expect(container!.innerHTML).not.toContain(INBOX_HREF);
 });

@@ -12,14 +12,14 @@ Three things, one per question:
   Its slug is what `kortix connectors call <slug> <action>` takes. An app is
   installed once per way.
 - **Account**: WHO a call runs as. A sign-in on the profile, shared with the
-  project or private to one member. One profile holds several.
+  workspace or private to one member. One profile holds several.
 - **Rule set** (a policy set): WHAT one agent may do on the profile. Named
   tool rules, given to an agent in `agents.<name>.policy_sets`.
 
 Every call is decided in this order. The first layer with a matching rule
 decides:
 
-1. project `policies:` (nothing overrides them);
+1. workspace `policies:` (nothing overrides them);
 2. the calling agent's rule set on this profile;
 3. the profile's base `policies:`;
 4. `sensitive: true` → approval;
@@ -32,7 +32,7 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
 <fast-path>
 1. **See what exists.** `kortix connectors ls`: slugs, status, and an
    `ACCOUNTS` column.
-2. **Add an app the project lacks**, then hand the human the link:
+2. **Add an app the workspace lacks**, then hand the human the link:
    ```sh
    kortix connectors catalog <name>          # `installed as <slug>` = it is already here
    kortix connectors catalog install <id>    # e.g. kortix:linear, composio:gmail; live at once
@@ -81,9 +81,9 @@ Report which account ran when it could matter: read the result's `account`.
 
 ```sh
 $ kortix connectors accounts gmail
-  LABEL                 OWNER    DEFAULT  CONNECTION ID
-  personal@example.com  private  no       11111111-…
-  work@example.com      private  no       22222222-…
+  LABEL                 CONNECTED AS          OWNER    DEFAULT  CONNECTION ID
+  personal@example.com  personal@example.com  private  no       11111111-…
+  work@example.com      work@example.com      private  no       22222222-…
 ```
 
 Asked "check my gmail" here, ask which mailbox. Told "the work one", call
@@ -109,9 +109,17 @@ every write whose args are only ids (`send_draft`: who it goes to, the
 subject, the body; a delete: what goes). The approver sees it next to the
 args.
 
-A held call returns `approval_url`: share it, then stop the turn. The
-decision, and any message with it, arrives as your next prompt. A deny with
-a message is an instruction. In a Slack or Teams session Kortix posts the
+A held call returns `approval_url`: share it, then stop the turn. Approve
+runs the call once, as you, and your next prompt carries the result. Do not
+repeat the call: a repeat while it waits returns the same `execution_id`. A
+deny, and any message with it, also arrives as your next prompt. A deny with
+a message is an instruction. `kortix review show call:<execution_id>` shows
+the decision and `detail.run` (the run state and a redacted result).
+
+Read `approval_instructions` every time. When the response has no
+`runs_on_approval` (an older or unscoped token), approval alone does not run
+the call: when the prompt says approved, repeat the exact same call (same
+arguments and `--account`) within 15 minutes, and that call runs once. In a Slack or Teams session Kortix posts the
 approval card in the thread (`approval_instructions` says so): do not repost
 the link.
 </approvals>
@@ -129,9 +137,10 @@ kortix connectors catalog show composio:gmail       # every way to connect it + 
 Ways to connect, best first (the first is marked `recommended`):
 
 0. built by Kortix (`kind: kortix`): the channels Slack, Microsoft Teams,
-   Email and Telegram, and Computer. They are never installed. The human
-   sets them up: `kortix channels connect` (Slack; `--platform teams`),
-   `kortix channels email inboxes add`, Telegram on its web page, Computer
+   Email, Telegram and Discord, and Computer. They are never installed. The
+   human sets them up: `kortix channels connect` (Slack; `--platform teams`),
+   `kortix channels email inboxes add`, Telegram and Discord on their web
+   pages, Computer
    with `npx --yes @kortix/agent-tunnel@latest connect` on that machine or
    the desktop app;
 1. a one-click MCP server: the vendor's own; the human only signs in;
@@ -181,7 +190,9 @@ catalog and the web have nothing, stop, explain the gap, and ask the human.
 A rule set is a named rule list on one profile (`connectors[].policy_sets`).
 Give an agent one with `agents.<name>.policy_sets: { <slug>: <set> }`. A
 caller with no set (a person's token, a script, a trigger poll) gets the base
-rules. A pi subagent runs under the root session agent's set.
+rules. A subagent in your session (`agent` tool, `session: "same"`) runs
+under your set; a named subagent in its own session runs under its own
+agent's set.
 
 ```yaml
 connectors:
@@ -196,6 +207,7 @@ connectors:
             action: block
 agents:
   support:
+    tools: "*"
     connectors: [gmail]
     policy_sets:
       gmail: read_only
@@ -220,8 +232,8 @@ kortix connectors rules                                                 # every 
   Check the result with `policy <slug> effective`.
 - A name is `[a-z0-9][a-z0-9_-]{0,63}`; `base` is reserved. Channel profiles
   and `computer` hold no sets.
-- Changing any agent's `policy_sets` needs `project.agent.write` AND
-  `project.connector.write`. Without both in your own grant you cannot change
+- Changing any agent's `policy_sets` needs `workspace.agent.write` AND
+  `workspace.connector.write`. Without both in your own grant you cannot change
   any entry, your own included (`403 agent_grant_escalation`): ask the human.
 - `list_connectors` (MCP) shows `policy_set` per profile: the set YOUR agent
   runs under, `null` for base rules.
@@ -265,18 +277,18 @@ decides which accounts a call reaches:
 | App, browser | `backendUrl: '/_kortix/api/v1'` + `kortixAppViewerToken()` (App set to `--viewer api`) | the viewer's shared and private accounts |
 | App, server | `createAppViewerKortix(request, { backendUrl })` | the same, per request |
 | Convex action, App job with no viewer | a service account bearer (`kortix_sa_…`) in an env var | shared accounts nobody narrowed; never a private one |
-| External program, CI | a personal access token, `kortix tokens new <name> --project <id>` | the token owner's shared and private accounts |
+| External program, CI | a personal access token, `kortix tokens new <name> --workspace <id>` | the token owner's shared and private accounts |
 
 A service account is a human step: ask the person to run
 `kortix tokens service-accounts new <name>` and
-`kortix access grant --service-account <id> --role member --project <id>`,
+`kortix access grant --service-account <id> --role member --workspace <id>`,
 and to store the bearer (`npx convex env set KORTIX_API_KEY …` for Convex; a
-project secret under `apps.<slug>.secrets` for an App, not named `KORTIX_*`).
+workspace secret under `apps.<slug>.secrets` for an App, not named `KORTIX_*`).
 Build the rest while you wait. Recipes: `references/sdk.md`.
 </from-apps-and-backends>
 
 <rules>
-- Decision order: project rules → your rule set → base rules → sensitive →
+- Decision order: workspace rules → your rule set → base rules → sensitive →
   default mode. A `policy_block` (with `policy_set` when your set decided)
   or `policy_set_missing` is final: tell the human which set blocked which
   action. Never route around it through another profile, account, or raw key.

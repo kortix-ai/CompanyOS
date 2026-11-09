@@ -7,7 +7,7 @@ canonical: "https://kortix.com/blog/agents-in-slack-grant-nobody-wrote-down"
 author: "team"
 tags: ["Field notes"]
 ---
-You can have an agent answering in a Slack thread by the end of the afternoon: connect the workspace, invite the bot, link an account, mention it with a task. Then a colleague asks what else it can reach while nobody is watching, and nobody wrote that down. Kortix is the open-source AI Operating System: your agents, their skills, your company memory, and every connector in one git repo you own, with the agents working on real cloud computers.
+You can have an agent answering in a Slack thread by the end of the afternoon: connect the workspace, invite the bot, link an account, mention it with a task. Then a colleague asks what else it can reach while nobody is watching, and nobody wrote that down. Kortix is the open-source CompanyOS: your agents, their skills, your company memory, and every connector in one git repo you own, with the agents working on real cloud computers.
 
 The install settles which messages reach the agent. A second file settles what the agent may do once one arrives.
 
@@ -25,7 +25,7 @@ Slack's docs do not pretend the second half is solved. Agents "are not inherentl
 
 ## Four moves to a bot in the channel
 
-How do I add an agent to Slack? In a Kortix project it takes four moves. Connect the workspace with `kortix channels connect` and open the link it prints. Invite the bot to a channel. Send `/kortix login` once, since a Slack message carries no Kortix credential. Mention the bot with the task ([channels docs](https://kortix.com/docs/connect/channels)).
+How do I add an agent to Slack? In a Kortix workspace it takes four moves. Connect the workspace with `kortix channels connect` and open the link it prints. Invite the bot to a channel. Send `/kortix login` once, since a Slack message carries no Kortix credential. Mention the bot with the task ([channels docs](https://kortix.com/docs/connect/channels)).
 
 ```bash
 kortix channels connect     # Slack; add --platform teams for Microsoft Teams
@@ -40,7 +40,7 @@ An afternoon gives you a working bot with your company's tools behind it. Nothin
 
 ## What the install leaves open
 
-The starter project is the easy case: nobody edited its `agents:` block. In `kortix.yaml` that map is governance only: connectors, secrets, Kortix permissions, skills, the workspace boundary and the enabled flag, plus `file`. Grants are deny-by-default: an omitted `connectors`, `secrets` or `kortix_permissions` resolves to none, while an omitted `skills` grant leaves `permission.skill` in the agent's `.md` in charge ([manifest reference](https://kortix.com/docs/project/manifest)). The front-door agent ships with everything open ([`kortix.yaml`](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/kortix.yaml)):
+The starter project is the easy case: nobody edited its `agents:` block. In `kortix.yaml` that map is governance only: connectors, secrets, Kortix permissions, skills, the workspace boundary and the enabled flag, plus `file`. Grants are deny-by-default: an omitted `connectors`, `secrets` or `kortix_permissions` resolves to none, while an omitted `skills` grant leaves `permission.skill` in the agent's `.md` in charge ([manifest reference](https://kortix.com/docs/project/manifest)). The front-door agent ships with everything open ([`kortix.yaml`](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/kortix.yaml)):
 
 ```yaml
 agents:

@@ -1,8 +1,6 @@
 ---
 name: kortix-artifacts
-description: "Share work from the project's Drive as artifacts with the `kortix artifacts` CLI: a `doc` (a Markdown file people read and edit in place, exportable as PDF) or an `html` page (a slide deck, dashboard, mockup, tool or app). The files stay plain files in Drive; every save is a version from the Drive history; people open artifacts in the Kortix app under Artifacts and share them with the project, chosen people, or anyone with a link. Load when the user asks for a doc, report, write-up, plan, proposal, spec, decision record, comparison, deck, slides, presentation, dashboard, tracker, mockup, tool, page, or anything meant to be read, kept or shared; when a reply would run past a screen of structured content; or when the user names an artifact or an artifact link."
-metadata:
-  kortix-feature-flag: artifacts
+description: "Share work from the workspace's Drive as artifacts with the `kortix artifacts` CLI: a `doc` (a Markdown file people read and edit in place, exportable as PDF) or an `html` page (a slide deck, dashboard, mockup, tool or app). The files stay plain files in Drive; every save is a version from the Drive history; people open artifacts in the Kortix app under Artifacts and share them with the project, chosen people, or anyone with a link. Load when the user asks for a doc, report, write-up, plan, proposal, spec, decision record, comparison, deck, slides, presentation, dashboard, tracker, mockup, tool, page, or anything meant to be read, kept or shared; when a reply would run past a screen of structured content; or when the user names an artifact or an artifact link."
 ---
 
 <skill name="kortix-artifacts">
@@ -12,9 +10,10 @@ Before every publish:
 1. **Title = a name**, 2–4 words, no colon, dash or arrow: `--title "Scheduler migration"`,
    never `--title "Scheduler migration: off the cron VM"`. The explanation goes in
    `--description`.
-2. **Share when asked.** "So the team can review it", "share with the team" or
-   "for the project" → add `--visibility project`, on the publish or with
-   `kortix artifacts share <id> --visibility project`. In a private channel
+2. **Private unless told otherwise.** A named person ("send it to Ada") →
+   `--with <email>`. Only an explicit "everyone in the workspace" →
+   `--visibility project`. "The team" or "for review" names nobody: ask who,
+   or share with the people named in the thread. In a private channel
    (`/drives/README.md` says so) never use `--visibility project` or `public`:
    the artifact stays private to the channel's members.
 3. **Answer first**: the recommendation or result is the first paragraph.
@@ -25,7 +24,7 @@ Before every publish:
 </checklist>
 
 <overview>
-An artifact is a folder in the project's Drive, shared. Its files are ordinary
+An artifact is a folder in the workspace's Drive, shared. Its files are ordinary
 files (`index.md` for a doc, `index.html` plus its images and scripts for a
 page). The artifact adds a place in the Artifacts gallery, a viewer, version
 history (the Drive history of that folder) and share links. Keep a code change
@@ -151,12 +150,13 @@ id, its path in Drive and its app link. Hand it over with `show` (the app link
 as `url`) and one line on what it shows. Never paste the content into the chat.
 
 A new artifact is **private**: the person who runs this session (and you) can
-see it. Share it when the user asks. "Share it with the team", "something the
-team can review" or "for everyone on the project" each mean
-`--visibility project`; pass it on the first publish. Named people mean
-`--with`. Only an explicit "public" or "anyone with the link" means public:
+see it. Share it only as far as the user asks. Named people mean `--with`.
+Only an explicit "everyone in the workspace" means `--visibility project`; "the
+team" or "for review" alone does not: ask who, or share with the people named
+in the thread. Only an explicit "public" or "anyone with the link" means
+public:
 
-    kortix artifacts share <id> --visibility project        # every project member
+    kortix artifacts share <id> --visibility project        # every workspace member
     kortix artifacts share <id> --with ada@example.com      # chosen people (private)
     kortix artifacts share <id> --visibility public         # anyone with the link
 
@@ -176,8 +176,9 @@ saved after you pulled, for example a person editing the doc: pull again,
 merge, save. `kortix artifacts versions <id>` lists every save from the Drive
 history; `restore <id> <version-id>` writes one back as a new save.
 `kortix artifacts rm <id>` stops sharing; the files stay in Drive.
-If the request also asks to share ("so the team can review it"), share the
-artifact you saved: `kortix artifacts share <id> --visibility project`.
+If the request also asks to share, share the artifact you saved as far as the
+user asked: `--with <email>` for named people, `--visibility project` only for
+an explicit "everyone in the workspace".
 </update>
 
 <quality>
@@ -195,7 +196,7 @@ artifact you saved: `kortix artifacts share <id> --visibility project`.
 |---|---|
 | `kortix artifacts types [<type>]` | types; one type's format and starter |
 | `kortix artifacts publish <file\|dir> [--title --description --visibility]` | upload and share |
-| `kortix artifacts add <folder> [--title --visibility]` | share a folder already in Drive; an artifact is always a folder, so a lone file is refused (publish it instead) |
+| `kortix artifacts add <folder> [--title --visibility]` | share a folder already in Drive; its `index.md` or `index.html` stands for the folder, any other lone file is refused (publish it instead) |
 | `kortix artifacts publish <file\|dir> --id <id> [--base-version v]` | save new content |
 | `kortix artifacts ls [--mine\|--shared\|--pinned] [--type t] [--search q]` | list |
 | `kortix artifacts info <id>` / `open <id>` | details, path, links |
@@ -208,13 +209,13 @@ agent its `kortix_permissions` in kortix.yaml):
 
 | Permission | Lets you |
 |---|---|
-| `project.artifact.read` | list, open, read versions and files |
-| `project.artifact.write` | publish, add, save, restore; rename and share your own |
-| `project.artifact.manage` | rename, share or stop sharing anyone's |
-| `project.artifact.public` | give an artifact a public link |
+| `workspace.artifact.read` | list, open, read versions and files |
+| `workspace.artifact.write` | publish, add, save, restore; rename and share your own |
+| `workspace.artifact.manage` | rename, share or stop sharing anyone's |
+| `workspace.artifact.public` | give an artifact a public link |
 
 Saving also needs write access to the folder in Drive. A refused public link
-answers 403 `public_link_forbidden`: share with the project instead and tell
+answers 403 `public_link_forbidden`: share with the workspace instead and tell
 the user.
 </commands>
 

@@ -1,5 +1,5 @@
 /**
- * `@kortix/sdk/session` — a session's runtime surface.
+ * A session's runtime surface (exported from the `@kortix/sdk` root).
  *
  * The host thinks in sessions, never in sandboxes: a session owns its runtime,
  * so health + preview/proxy URLs hang off the session. Most hosts reach these
@@ -27,5 +27,6 @@ export * from './compaction';
 export * from './wake-escalation';
 export * from './status-vocabulary';
 export type { PendingInteractions, RuntimeVerbs, TranscriptPage } from './runtime-verbs';
+export type { RuntimeLogPage, RuntimePending, RuntimePendingRecord, RuntimeThreadStatus, RuntimeWorkspaceInfo } from './runtime-actions';
 export * from './runtime-sessions';
 export { notifyHostSignal, type HostSignal } from './host-signals';

@@ -16,12 +16,14 @@ import {
   getSlackManifest,
   getSlackMode,
   getTelegramInstallation,
-  getTelegramUserPhoto,
-  listTelegramUsers,
-  allowTelegramUser,
-  removeTelegramUser,
-  dismissTelegramAccessRequest,
-  setTelegramAllowedUsers,
+  getDiscordInstallation,
+  getDiscordMode,
+  disconnectDiscord,
+  getChannelUserPhoto,
+  listChannelUsers,
+  allowChannelUser,
+  removeChannelUser,
+  dismissChannelAccessRequest,
   updateEmailPolicy,
   type EmailDomain,
   type EmailDomainList,
@@ -33,8 +35,11 @@ import {
   type SlackMode,
   type ConnectTelegramInput,
   type TelegramInstallation,
-  type TelegramUser,
-  type TelegramAccessRequest,
+  type DiscordInstallation,
+  type DiscordMode,
+  type ChannelAccessList,
+  type ChannelAccessPlatform,
+  type ChannelUser,
 } from '@kortix/sdk';
 import { qk } from '@kortix/sdk/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -49,8 +54,10 @@ export type {
   SlackInstallation,
   SlackMode,
   TelegramInstallation,
-  TelegramUser,
-  TelegramAccessRequest,
+  DiscordInstallation,
+  DiscordMode,
+  ChannelAccessPlatform,
+  ChannelUser,
 };
 
 const key = (projectId: string | null) =>
@@ -231,9 +238,12 @@ export function useUpdateEmailPolicy() {
   });
 }
 
-const telegramKey = (projectId: string | null) =>
-  ['channels', 'telegram-install', projectId ?? 'none'] as const;
-const telegramUsersKey = (projectId: string) => ['channels', 'telegram-users', projectId] as const;
+const installKey = (platform: ChannelAccessPlatform, projectId: string | null) =>
+  ['channels', `${platform}-install`, projectId ?? 'none'] as const;
+const usersKey = (platform: ChannelAccessPlatform, projectId: string) =>
+  ['channels', `${platform}-users`, projectId] as const;
+const telegramKey = (projectId: string | null) => installKey('telegram', projectId);
+const telegramUsersKey = (projectId: string) => usersKey('telegram', projectId);
 
 /** The project's Telegram bot. Pass null to keep the query off. */
 export function useTelegramInstall(projectId: string | null) {
@@ -259,57 +269,56 @@ export function useConnectTelegram() {
   });
 }
 
-export function useSetTelegramAllowedUsers() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ projectId, userIds }: { projectId: string; userIds: string[] }) =>
-      setTelegramAllowedUsers(projectId, userIds),
-    onSuccess: (_data, { projectId }) => {
-      qc.invalidateQueries({ queryKey: telegramKey(projectId) });
-      qc.invalidateQueries({ queryKey: telegramUsersKey(projectId) });
-    },
-  });
-}
-
-/** Allowed users and access requests, with Telegram names. Each fetch can call Telegram, so enable it only on demand. */
-export function useTelegramUsers(projectId: string, enabled: boolean) {
+/** Allowed users and access requests, with their names on the platform. Each fetch can call the platform, so enable it only on demand. */
+export function useChannelUsers(projectId: string, platform: ChannelAccessPlatform, enabled: boolean) {
   return useQuery({
-    queryKey: telegramUsersKey(projectId),
+    queryKey: usersKey(platform, projectId),
     enabled,
-    queryFn: () => listTelegramUsers(projectId),
+    queryFn: () => listChannelUsers(projectId, platform),
   });
 }
 
 /** One user's profile photo. Off without a `version`: that user has no photo. */
-export function useTelegramUserPhoto(projectId: string, userId: string, version: string | null, enabled: boolean) {
+export function useChannelUserPhoto(
+  projectId: string,
+  platform: ChannelAccessPlatform,
+  userId: string,
+  version: string | null,
+  enabled: boolean,
+) {
   return useQuery({
-    queryKey: ['channels', 'telegram-photo', projectId, userId, version],
+    queryKey: ['channels', `${platform}-photo`, projectId, userId, version],
     enabled: enabled && !!version,
     // The version is in the key: a new photo is a new key.
     staleTime: Infinity,
     retry: false,
-    queryFn: ({ signal }) => getTelegramUserPhoto(projectId, userId, version, signal),
+    queryFn: ({ signal }) => getChannelUserPhoto(projectId, platform, userId, version, signal),
   });
 }
 
-function useTelegramUserMutation(
-  action: (projectId: string, userId: string) => Promise<TelegramInstallation>,
+function useChannelUserMutation(
+  platform: ChannelAccessPlatform,
+  action: (projectId: string, platform: ChannelAccessPlatform, userId: string) => Promise<ChannelAccessList>,
 ) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, userId }: { projectId: string; userId: string }) => action(projectId, userId),
+    mutationFn: ({ projectId, userId }: { projectId: string; userId: string }) =>
+      action(projectId, platform, userId),
     // Returned so the mutation stays pending until the list shows the change.
     onSuccess: (_data, { projectId }) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: telegramKey(projectId) }),
-        qc.invalidateQueries({ queryKey: telegramUsersKey(projectId) }),
+        qc.invalidateQueries({ queryKey: installKey(platform, projectId) }),
+        qc.invalidateQueries({ queryKey: usersKey(platform, projectId) }),
       ]),
   });
 }
 
-export const useAllowTelegramUser = () => useTelegramUserMutation(allowTelegramUser);
-export const useRemoveTelegramUser = () => useTelegramUserMutation(removeTelegramUser);
-export const useDismissTelegramAccessRequest = () => useTelegramUserMutation(dismissTelegramAccessRequest);
+export const useAllowChannelUser = (platform: ChannelAccessPlatform) =>
+  useChannelUserMutation(platform, allowChannelUser);
+export const useRemoveChannelUser = (platform: ChannelAccessPlatform) =>
+  useChannelUserMutation(platform, removeChannelUser);
+export const useDismissChannelAccessRequest = (platform: ChannelAccessPlatform) =>
+  useChannelUserMutation(platform, dismissChannelAccessRequest);
 
 export function useDisconnectTelegram() {
   const qc = useQueryClient();
@@ -318,6 +327,40 @@ export function useDisconnectTelegram() {
     onSuccess: (_data, projectId) => {
       qc.invalidateQueries({ queryKey: telegramKey(projectId) });
       qc.removeQueries({ queryKey: telegramUsersKey(projectId) });
+      qc.invalidateQueries({ queryKey: qk.project.connectors(projectId) });
+    },
+  });
+}
+
+const discordKey = (projectId: string | null) => installKey('discord', projectId);
+
+/** Whether this deployment has the Kortix Discord application, and the "Add to Discord" link. */
+export function useDiscordMode(projectId: string | null) {
+  return useQuery({
+    queryKey: ['channels', 'discord-mode', projectId ?? 'none'],
+    enabled: !!projectId,
+    staleTime: 5 * 60_000,
+    queryFn: () => (projectId ? getDiscordMode(projectId) : ({ available: false, install_url: null } satisfies DiscordMode)),
+  });
+}
+
+/** The project's Discord server. Pass null to keep the query off. */
+export function useDiscordInstall(projectId: string | null) {
+  return useQuery({
+    queryKey: discordKey(projectId),
+    enabled: !!projectId,
+    staleTime: 30_000,
+    queryFn: () => (projectId ? getDiscordInstallation(projectId) : null),
+  });
+}
+
+export function useDisconnectDiscord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) => disconnectDiscord(projectId),
+    onSuccess: (_data, projectId) => {
+      qc.invalidateQueries({ queryKey: discordKey(projectId) });
+      qc.removeQueries({ queryKey: usersKey('discord', projectId) });
       qc.invalidateQueries({ queryKey: qk.project.connectors(projectId) });
     },
   });

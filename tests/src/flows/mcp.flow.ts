@@ -156,19 +156,19 @@ flow(
       "GET /v1/mcp",
       "DELETE /v1/mcp",
       "GET /v1/accounts",
-      "GET /v1/projects",
-      "GET /v1/accounts/me",
+      "GET /v1/workspaces",
+      "GET /v1/me",
       "GET /v1/accounts/:accountId/audit",
       "GET /v1/skills",
       "GET /v1/skills/:name",
-      "GET /v1/projects/:projectId/files",
-      "GET /v1/projects/:projectId/files/content",
-      "GET /v1/projects/:projectId/sessions",
-      "GET /v1/projects/:projectId/sessions/:sessionId",
-      "PATCH /v1/projects/:projectId/sessions/:sessionId",
-      "GET /v1/projects/:projectId/sessions/:sessionId/turn",
-      "GET /v1/projects/:projectId/sessions/:sessionId/prompts",
-      "GET /v1/projects/:projectId/sessions/:sessionId/transcript",
+      "GET /v1/workspaces/:projectId/files",
+      "GET /v1/workspaces/:projectId/files/content",
+      "GET /v1/workspaces/:projectId/sessions",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId",
+      "PATCH /v1/workspaces/:projectId/sessions/:sessionId",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/turn",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/prompts",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/transcript",
     ],
   },
   async (ctx) => {
@@ -261,7 +261,7 @@ flow(
       const r = await ctx.client.as(ctx.P.ANON).post("/v1/oauth/token", form({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: redirectUri, code_verifier: verifier, resource }));
       r.status(200).body().has("$.scope", "kortix");
       token = r.json<any>().access_token;
-      const me = await ctx.client.as(ctx.P.ANON).get("/v1/accounts/me", { headers: { Authorization: `Bearer ${token}` } });
+      const me = await ctx.client.as(ctx.P.ANON).get("/v1/me", { headers: { Authorization: `Bearer ${token}` } });
       me.status(200).body().has("$.token_context.auth_type", "oauth");
     });
     await ctx.step("initialize → the requested protocol version, tools capability, instructions that start at list_projects (no feature flag)", async () => {
@@ -277,14 +277,14 @@ flow(
       const d = await ctx.client.as(ctx.P.ANON).del("/v1/mcp", { headers: { Authorization: `Bearer ${token}` } });
       d.status(405);
     });
-    await ctx.step("tools/list → the thirteen session/API tools, the ten connector tools and `kortix`", async () => {
+    await ctx.step("tools/list → the fourteen session/API tools (search_project included), the ten connector tools and `kortix`", async () => {
       const r = await mcp(rpc(2, "tools/list"));
       r.status(200);
       const names = r.json<any>().result.tools.map((t: { name: string }) => t.name).sort();
       const want = [
         "add_connector", "call_api", "call_connector", "connect_connector", "describe_api", "describe_connector_action", "get_connector_app", "kortix",
         "list_connector_accounts", "list_connectors", "list_files", "list_projects", "list_sessions", "read_file", "read_session", "read_skill",
-        "remove_connector", "run_command", "search_api", "search_connector_actions", "search_connector_apps",
+        "remove_connector", "run_command", "search_api", "search_connector_actions", "search_connector_apps", "search_project",
         "send_message", "start_session", "upload_connector_attachment", "write_file",
       ];
       if (JSON.stringify(names) !== JSON.stringify(want)) throw new Error(`tools: ${names}`);
@@ -293,17 +293,20 @@ flow(
         throw new Error("read_file / list_files lack offset and limit");
       }
       const hints = (name: string) => JSON.stringify(tool(name).annotations);
-      if (hints("read_file") !== '{"readOnlyHint":true,"openWorldHint":false}' || hints("list_files") !== '{"readOnlyHint":true,"openWorldHint":false}') throw new Error("read annotations");
+      if (hints("read_file") !== '{"readOnlyHint":true,"openWorldHint":false}' || hints("list_files") !== '{"readOnlyHint":true,"openWorldHint":false}' || hints("search_project") !== '{"readOnlyHint":true,"openWorldHint":false}') throw new Error("read annotations");
       if (!tool("write_file").annotations.idempotentHint || !tool("write_file").annotations.destructiveHint || !tool("run_command").annotations.destructiveHint) throw new Error("write annotations");
     });
     await ctx.step("search_api finds the secrets routes; describe_api reads one", async () => {
       const s = await mcp(rpc(3, "tools/call", { name: "search_api", arguments: { query: "secrets" } }));
       const hits: string = s.json<any>().result.content[0].text;
-      if (!hits.includes("/v1/projects/{projectId}/secrets")) throw new Error(`search: ${hits.slice(0, 300)}`);
+      // Search lists the canonical name; the legacy /v1/projects alias is hidden, not gone.
+      if (!hits.includes("/v1/workspaces/{workspaceId}/secrets")) throw new Error(`search: ${hits.slice(0, 300)}`);
+      if (hits.includes("/v1/projects/{workspaceId}/secrets")) throw new Error(`search lists a legacy alias: ${hits.slice(0, 300)}`);
       if (hits.includes("/v1/oauth")) throw new Error("search leaks OAuth routes");
       const d = await mcp(rpc(4, "tools/call", { name: "describe_api", arguments: { method: "GET", path: "/v1/projects/:projectId/secrets" } }));
       const doc = JSON.parse(d.json<any>().result.content[0].text);
-      if (doc.path !== "/v1/projects/{projectId}/secrets") throw new Error(`describe: ${JSON.stringify(doc).slice(0, 200)}`);
+      // The legacy name and param resolve to the canonical route.
+      if (doc.path !== "/v1/workspaces/{workspaceId}/secrets") throw new Error(`describe: ${JSON.stringify(doc).slice(0, 200)}`);
     });
     await ctx.step("list_projects names the project; call_api runs as the user and fills {projectId} from project_id", async () => {
       const projects = JSON.parse(await toolText(30, "list_projects", {})) as Array<{ project_id: string; account_id: string; role: string | null }>;
@@ -427,8 +430,8 @@ flow(
     await ctx.step("a session read by id names its owner exactly as the list does; list_sessions and read_session show it", async () => {
       const session = await ctx.fixtures.session(p);
       const params = { projectId: p.id, sessionId: session.id };
-      const one = (await ctx.client.as(ctx.P.OWNER).get("/v1/projects/:projectId/sessions/:sessionId", { params })).json<any>();
-      const row = (await ctx.client.as(ctx.P.OWNER).get("/v1/projects/:projectId/sessions", { params: { projectId: p.id } }))
+      const one = (await ctx.client.as(ctx.P.OWNER).get("/v1/workspaces/:projectId/sessions/:sessionId", { params })).json<any>();
+      const row = (await ctx.client.as(ctx.P.OWNER).get("/v1/workspaces/:projectId/sessions", { params: { projectId: p.id } }))
         .json<any[]>()
         .find((s) => s.session_id === session.id);
       if (one.owner_type !== "user" || !one.owner_email || one.owner_email !== row?.owner_email || one.owner_name !== row?.owner_name) {
@@ -562,7 +565,7 @@ flow(
       const none = await toolText(54, "search_api", { query: "a the" });
       if (!none.startsWith("No matching routes")) throw new Error(`stopwords: ${none.slice(0, 200)}`);
       const hits = await toolText(55, "search_api", { query: "set a secret" });
-      if (!hits.includes("/v1/projects/{projectId}/secrets")) throw new Error(`secret: ${hits.slice(0, 300)}`);
+      if (!hits.includes("/v1/workspaces/{workspaceId}/secrets")) throw new Error(`secret: ${hits.slice(0, 300)}`);
     });
     await ctx.step("an unknown JSON-RPC method → -32601", async () => {
       const r = await mcp(rpc(10, "resources/list"));
@@ -581,7 +584,7 @@ flow(
   {
     domain: "mcp",
     tags: ["deployed"],
-    routes: ["POST /v1/accounts/tokens", "POST /v1/mcp", "GET /v1/accounts", "GET /v1/projects", "GET /v1/projects/:projectId/files"],
+    routes: ["POST /v1/accounts/tokens", "POST /v1/mcp", "GET /v1/accounts", "GET /v1/workspaces", "GET /v1/workspaces/:projectId/files"],
   },
   async (ctx) => {
     const team = await ctx.fixtures.team();
@@ -652,11 +655,11 @@ flow(
     routes: [
       "POST /v1/accounts/tokens",
       "POST /v1/mcp",
-      "GET /v1/connectors/projects/:projectId/catalog",
-      "GET /v1/connectors/projects/:projectId/connectors",
-      "GET /v1/connectors/projects/:projectId/connectors/:slug/accounts",
-      "POST /v1/connectors/projects/:projectId/call",
-      "POST /v1/connectors/projects/:projectId/attachments",
+      "GET /v1/connectors/workspaces/:projectId/catalog",
+      "GET /v1/connectors/workspaces/:projectId/connectors",
+      "GET /v1/connectors/workspaces/:projectId/connectors/:slug/accounts",
+      "POST /v1/connectors/workspaces/:projectId/call",
+      "POST /v1/connectors/workspaces/:projectId/attachments",
     ],
   },
   async (ctx) => {
@@ -859,7 +862,7 @@ flow(
     domain: "mcp",
     requires: ["database"],
     timeoutMs: 180_000,
-    routes: ["POST /v1/accounts/tokens", "POST /v1/mcp", "GET /v1/projects/:projectId/detail", "GET /v1/projects/:projectId/files/content"],
+    routes: ["POST /v1/accounts/tokens", "POST /v1/mcp", "GET /v1/workspaces/:projectId/detail", "GET /v1/workspaces/:projectId/files", "GET /v1/workspaces/:projectId/files/content"],
   },
   async (ctx) => {
     const team = await ctx.fixtures.team();
@@ -894,11 +897,12 @@ flow(
         else outsiderPat = created.json<{ secret_key: string }>().secret_key;
       }
     });
-    await ctx.step("commit one project skill with a reference file to the project repository (the API mirror picks it up within 60 s: later steps wait for it)", async () => {
+    await ctx.step("commit one project skill with a reference file, registered under `skills:` in kortix.yaml (the API mirror picks it up within 60 s: later steps wait for it)", async () => {
       const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: p.id });
       try {
         await world.commitToMain(
           {
+            "kortix.yaml": "project:\n  name: ke2e-mcp\ndefault_agent: worker\nagents:\n  worker:\n    tools: all\nskills:\n  mcp-demo: skills/mcp-demo\n",
             "skills/mcp-demo/SKILL.md": "---\nname: mcp-demo\ndescription: Demo skill for the MCP flow\n---\n# MCP demo\nUse the demo.\n",
             "skills/mcp-demo/references/notes.md": "reference notes\n",
           },

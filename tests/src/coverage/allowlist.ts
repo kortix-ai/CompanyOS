@@ -44,6 +44,44 @@ const allowFor = (routes: Array<[string, string]>, reason: string): AllowEntry[]
 
 export const uncoveredAllow: AllowEntry[] = [
     ...allowFor(DRIVE_SYNC_ROUTES, DRIVE_SYNC_REASON),
+  // Sales reconciliation (#11610): a machine route behind its own bearer
+  // (SALES_RECONCILIATION_TOKEN), not a user or PAT. Its paging, cursor and
+  // auth are proven in apps/api/src/accounts/sales-outbox.integration.test.ts.
+  {
+    method: "GET",
+    path: "/v1/system/confirmed-signups",
+    reason: "sales reconciliation export behind its own token; covered by sales-outbox.integration.test.ts",
+  },
+  // Routes of this cycle proven over real HTTP + PostgreSQL in apps/api's
+  // integration suites rather than a flow: the subscription ones read a
+  // connected ChatGPT/Claude plan (an external login the local profile has
+  // not got), and chat threads and space posts are session-principal routes
+  // (only an agent's box calls them).
+  {
+    method: "GET",
+    path: "/v1/accounts/:accountId/subscription-connections",
+    reason: "lists connected ChatGPT/Claude subscriptions (#11816); needs a real plan login; covered by integration-subscription-discovery-http.test.ts",
+  },
+  {
+    method: "POST",
+    path: "/v1/accounts/:accountId/subscription-connections/:connectionId/usage",
+    reason: "refreshes a connected plan's usage from its vendor (#11816); needs a real plan login; covered by integration-subscription-discovery-http.test.ts",
+  },
+  {
+    method: "POST",
+    path: "/v1/projects/:projectId/chat/threads",
+    reason: "only a session's own box starts a thread in its person's chat (#11712); covered by integration-chat-threads-http.test.ts",
+  },
+  {
+    method: "POST",
+    path: "/v1/projects/:projectId/spaces/:spaceId/posts",
+    reason: "an agent posts into a space for its person (#11783); session-principal only; covered by integration-space-posts-http.test.ts",
+  },
+  {
+    method: "PUT",
+    path: "/v1/projects/:projectId/spaces/:spaceId/tabs",
+    reason: "free space tabs behind the chat flag (#11712); covered by integration-space-tabs-http.test.ts",
+  },
   // The CLI device-login (RFC 8628-style) routes. Covered by the CLI's own
   // device flow rather than by a browser journey: start → poll → decide is a
   // terminal handshake, and the CLI is not in the flow-runner matrix. They
@@ -235,6 +273,12 @@ export const externalRoutes: AllowEntry[] = [
   { method: "POST", path: "/v1/messages", reason: "llm-gateway standalone service Anthropic-Messages ingress" },
   { method: "POST", path: "/v1/responses", reason: "llm-gateway standalone service OpenAI Responses ingress" },
   { method: "POST", path: "/v1/openai/messages", reason: "llm-gateway standalone service Anthropic-Messages ingress, OpenAI-compat-namespace alias" },
+  { method: "POST", path: "/v1/audio/transcriptions", reason: "llm-gateway standalone service speech-to-text" },
+  { method: "POST", path: "/v1/audio/speech", reason: "llm-gateway standalone service text-to-speech" },
+  { method: "GET", path: "/v1/audio/voices", reason: "llm-gateway standalone service voice list" },
+  { method: "POST", path: "/v1/llm/audio/transcriptions", reason: "main-API bridge into the llm-gateway speech-to-text route" },
+  { method: "POST", path: "/v1/llm/audio/speech", reason: "main-API bridge into the llm-gateway text-to-speech route" },
+  { method: "GET", path: "/v1/llm/audio/voices", reason: "main-API bridge into the llm-gateway voice list" },
   ...allowFor(SETUP_ROUTES, SETUP_REASON),
   { method: "POST", path: "/v1/webhooks/sandbox/platinum", reason: "mounted only when PLATINUM_WEBHOOK_SECRET is set; the cloud manifest profile sets none" },
 ];

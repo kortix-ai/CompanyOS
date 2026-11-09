@@ -2,7 +2,7 @@ import type { SandboxBootState } from '../contract/boot-state'
 
 /**
  * pi's boot state. `/kortix/health` reports the session fields in its
- * `harness.session` block (and the pre-W3 flat names, from `legacy-names.ts`).
+ * `harness.session` block.
  */
 export interface PiBootState extends SandboxBootState {
   /** True when boot must claim the pending first turn before the UI is usable. */
@@ -11,6 +11,8 @@ export interface PiBootState extends SandboxBootState {
   initialRuntimeSessionId?: string | null
   /** Boot-time session setup failure. */
   initialRuntimeSessionError?: string | null
+  /** The runtime did not start after every boot attempt (`startRuntimeAtBoot`): terminal for this boot. */
+  runtimeStartError?: string | null
   /** The audit relay could not start or persist; the runtime reports unhealthy. */
   auditRelayError?: string | null
 }

@@ -34,7 +34,7 @@ None of these are flaws for the product Perplexity Computer is. They are why it 
 
 ## What Kortix gives instead
 
-Kortix is the open-source AI Operating System: your agents, their skills, your company memory, and every connector in one git repo you own. One isolated sandbox per session, each with its own branch, and session work reaches `main` through a change request you review. Merge is default-deny for agents, so a session's work lands only when a person approves the diff.
+Kortix is the open-source CompanyOS: your agents, their skills, your company memory, and every connector in one git repo you own. One isolated sandbox per session, each with its own branch, and session work reaches `main` through a change request you review. Merge is default-deny for agents, so a session's work lands only when a person approves the diff.
 
 The parts are files your team can read. Agents and skills are markdown, the rules that govern them sit in `kortix.yaml` beside them, and the source is open to read, fork and audit.
 
@@ -47,7 +47,7 @@ kortix init
 kortix ship
 ```
 
-You bring any model provider with your own keys, or the ChatGPT plan you already pay for, and pick the model per agent, per session or per message. Connectors reach 3,000+ apps plus MCP, OpenAPI, Postman, GraphQL and raw HTTP, and connector credentials are brokered server-side so they never enter the machine. Run it on Kortix Cloud, in your VPC, or on your own on-prem network, and self-hosting is free. The full capability list is at [Kortix on GitHub](https://github.com/kortix-ai/suna).
+You bring any model provider with your own keys, or the ChatGPT plan you already pay for, and pick the model per agent, per session or per message. Connectors reach 3,000+ apps plus MCP, OpenAPI, Postman, GraphQL and raw HTTP, and connector credentials are brokered server-side so they never enter the machine. Run it on Kortix Cloud, in your VPC, or on your own on-prem network, and self-hosting is free. The full capability list is at [Kortix on GitHub](https://github.com/kortix-ai/CompanyOS).
 
 ## Side by side
 

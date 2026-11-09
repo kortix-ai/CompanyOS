@@ -1,16 +1,12 @@
 /**
- * `POST /kortix/refresh` through the full daemon app (`buildDaemonApp` over the
- * production harness composition), with real `git` repositories and a fake
- * OpenCode lifecycle.
+ * `POST /kortix/refresh` through the full daemon app (`buildDaemonApp`) over the
+ * production pi control, with real `git` repositories. The pi runtime is a
+ * stub: refresh reads only its state and its skill reload.
  *
- * - Auth: a signed user context, or the sandbox bearer. `base=1` (a branch
- *   reset that discards the session's commits) additionally needs the
- *   direct-call header, because the preview proxy authenticates the user
- *   traffic it relays with the same bearer.
- * - Repo work: pull, base checkout, the no-op when HEAD is already base.
- * - Reload: a verified swap by default, none with `restart=0`, fault injection
- *   only on `verify_fail=1`, and the outcome on the wire.
- * - Runtime-assets convergence never runs while OpenCode is still booting.
+ * - Auth: a signed user context, or the sandbox bearer.
+ * - Repo work: pull, and the no-op when the session branch is not on the remote.
+ * - The route: one refresh at a time.
+ * - Runtime-assets convergence never runs while the runtime is still booting.
  */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -18,15 +14,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test'
 
-import type { OpenCodeConfig as Config } from '@/harness/open-code/config'
-import type { Opencode, VerifiedReloadResult } from '@/harness/open-code/lifecycle'
+import type { Config } from '@/lib/config/config'
+import type { HarnessControlService, HarnessRefreshInput } from '@/harness/contract/control'
+import { buildDaemonApp } from '@/app/server'
+import { createPiConfigReleases } from '@/harness/pi/config-release'
+import { createPiControlService } from '@/harness/pi/control'
+import type { PiRuntime } from '@/harness/pi/runtime'
 import { KORTIX_SERVICE_CALL_HEADER, KORTIX_USER_CONTEXT_HEADER } from '@/lib/kortix-api/kortix-user-context'
 import {
-  buildOpenCodeTestApp,
+  fakeHarness,
   signTestUserContext,
   TEST_SANDBOX_TOKEN,
-  testOpenCodeConfig,
-} from './helpers/open-code-harness'
+  testConfig,
+} from './helpers/daemon-test-app'
 import { resolveHarness } from '@/harness/harness'
 import { __resetReconcileCooldownForTests, registerHarnessAssets, resetHarnessAssetsForTests } from '@/services/runtime-assets/runtime-assets'
 
@@ -79,38 +79,35 @@ function clonedRepo(): { root: string; remote: string; seed: string; worktree: s
   return { root, remote, seed, worktree }
 }
 
-interface FakeLifecycle {
-  opencode: Opencode
-  reloads: Array<{ forceFail?: boolean }>
-}
-
-function fakeOpencode(
-  opts: {
-    state?: 'ok' | 'starting' | 'down'
-    reload?: (forceFail?: boolean) => Promise<VerifiedReloadResult>
-  } = {},
-): FakeLifecycle {
-  const reloads: FakeLifecycle['reloads'] = []
-  const opencode = {
-    // 'starting' by default: a serving runtime schedules a detached
-    // runtime-assets pass after each refresh, which would outlive its row.
-    getState: () => opts.state ?? 'starting',
-    getPid: () => 1,
-    getInternalUrl: () => 'http://127.0.0.1:1',
-    getActivePort: () => 4096,
-    reloadVerified: async (reloadOpts: { forceFail?: boolean } = {}) => {
-      reloads.push(reloadOpts)
-      return opts.reload
-        ? opts.reload(reloadOpts.forceFail)
-        : { outcome: 'swapped' as const, port: 4097, pid: 2, turnEnded: false, orphanedMessageId: null }
+/**
+ * The production pi control over a runtime stub in `state` (null: never
+ * started). `onRefresh` sees every refresh before the control runs it.
+ */
+function piControl(
+  cfg: Config,
+  opts: { state?: 'ok' | 'starting' | 'down' | null; onRefresh?: (input: HarnessRefreshInput) => Promise<void> | void } = {},
+): HarnessControlService {
+  const runtime = opts.state ? ({ getState: () => opts.state, reloadSkills: async () => {} } as unknown as PiRuntime) : null
+  const control = createPiControlService(() => runtime, createPiConfigReleases({ cfg, env: {} }), () => {})
+  if (!opts.onRefresh) return control
+  return {
+    ...control,
+    bind: (context) => {
+      const operations = control.bind(context)
+      return {
+        ...operations,
+        refresh: async (input) => {
+          await opts.onRefresh!(input)
+          return operations.refresh(input)
+        },
+      }
     },
-    reloadConfig: async () => ({ how: 'disposed' as const, turnEnded: false }),
-  } as unknown as Opencode
-  return { opencode, reloads }
+  }
 }
 
-function app(cfg: Partial<Config>, lifecycle: FakeLifecycle = fakeOpencode()) {
-  return buildOpenCodeTestApp(testOpenCodeConfig(cfg), lifecycle.opencode, Date.now())
+function app(over: Partial<Config>, opts: Parameters<typeof piControl>[1] = {}) {
+  const cfg = testConfig(over)
+  return buildDaemonApp(cfg, fakeHarness({ control: piControl(cfg, opts) }), Date.now())
 }
 
 /** An empty, repo-less project target. `/workspace` (the fixture default) is a
@@ -122,7 +119,6 @@ function emptyTarget(): string {
   return dir
 }
 
-const SERVICE = { Authorization: `Bearer ${TEST_SANDBOX_TOKEN}`, [KORTIX_SERVICE_CALL_HEADER]: '1' }
 const USER = () => ({
   [KORTIX_USER_CONTEXT_HEADER]: signTestUserContext(
     { userId: 'u', sandboxId: 's', sandboxRole: 'owner' },
@@ -140,24 +136,6 @@ describe('auth', () => {
   // What the preview proxy sends for an ordinary user: the sandbox's own
   // bearer and NO direct-call header (it strips that name from every forward).
   // The first version of this gate accepted it and protected nothing.
-  it('refuses base=1 from a request shaped like a proxied user request', async () => {
-    const res = await app({}).request('/kortix/refresh?base=1', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${TEST_SANDBOX_TOKEN}` },
-    })
-    expect(res.status).toBe(403)
-    expect(await res.json()).toMatchObject({ code: 'BASE_RESET_FORBIDDEN' })
-  })
-
-  it('does not accept the direct-call header alone for base=1', async () => {
-    // The header proves the hop, never the caller.
-    const res = await app({}).request('/kortix/refresh?base=1', {
-      method: 'POST',
-      headers: { [KORTIX_SERVICE_CALL_HEADER]: '1' },
-    })
-    expect(res.status).toBe(401)
-  })
-
   it('refreshes a materialized repo whose config names no repoUrl', async () => {
     // The credential boundary refuses a CONFIGURED non-proxy origin; a repo
     // with no repoUrl in env must not 500 on that refusal — the checkout's
@@ -172,15 +150,6 @@ describe('auth', () => {
     expect(await res.json()).toMatchObject({ ok: true })
   })
 
-  it('lets a direct API call with both proofs reach the repo work for base=1', async () => {
-    // No repo here, so the repo work answers 409; the gate did not refuse it.
-    const res = await app({ projectTarget: emptyTarget() }).request('/kortix/refresh?base=1&restart=0', { method: 'POST', headers: SERVICE })
-    expect(res.status).toBe(409)
-    const body = (await res.json()) as { error: string; message: string }
-    expect(body.error).toBe('refresh failed')
-    expect(body.message).toContain('not materialized')
-  })
-
   it('keeps an ordinary refresh open to a proxied caller', async () => {
     // Only the destructive flag needs the direct call: a user pulling their own
     // workspace keeps working without it. No repo here, so the repo work
@@ -192,72 +161,26 @@ describe('auth', () => {
     expect(res.status).toBe(409)
   })
 
-  it('rejects an invalid base_sha before any Git execution', async () => {
-    const res = await app({}).request('/kortix/refresh?base=1&base_sha=main', { method: 'POST', headers: SERVICE })
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'invalid base_sha' })
-  })
 })
 
-describe('repo work and reload', () => {
-  it('pulls the project repo and replaces OpenCode once, reporting the swap', async () => {
+describe('repo work and the route', () => {
+  it('pulls the project repo, reporting the commits before and after', async () => {
     const repo = clonedRepo()
     commit(repo.seed, 'v2\n')
     git(['push', '-q', 'origin', 'main'], repo.seed)
-    const lifecycle = fakeOpencode()
 
     const res = await app(
       { projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' },
-      lifecycle,
     ).request('/kortix/refresh', { method: 'POST', headers: USER() })
 
     expect(res.status).toBe(200)
     expect(readFileSync(join(repo.worktree, 'README.md'), 'utf8')).toBe('v2\n')
-    expect(lifecycle.reloads).toHaveLength(1)
-    expect(lifecycle.reloads[0]!.forceFail).toBeFalsy()
     const body = (await res.json()) as {
       ok: boolean
       repo: { before: { commit: string }; after: { commit: string } }
-      reload: { outcome: string; port: number }
     }
     expect(body.ok).toBe(true)
     expect(body.repo.before.commit).not.toBe(body.repo.after.commit)
-    expect(body.reload).toMatchObject({ outcome: 'swapped', port: 4097 })
-  })
-
-  it('a declined swap still reports the repo work as ok, with the reason', async () => {
-    // The pull succeeded; the reload safely kept the running OpenCode. Hiding
-    // the pull behind ok:false would lie about the repo.
-    const repo = clonedRepo()
-    const lifecycle = fakeOpencode({
-      reload: async () => ({ outcome: 'kept-old', reason: 'the new opencode did not start' }),
-    })
-
-    const res = await app(
-      { projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' },
-      lifecycle,
-    ).request('/kortix/refresh', { method: 'POST', headers: USER() })
-
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({
-      ok: true,
-      reload: { outcome: 'kept-old', reason: 'the new opencode did not start' },
-    })
-  })
-
-  it('injects a verification failure only on an explicit verify_fail=1', async () => {
-    const repo = clonedRepo()
-    const lifecycle = fakeOpencode()
-    const refresh = (query: string) =>
-      app({ projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' }, lifecycle).request(
-        `/kortix/refresh${query}`,
-        { method: 'POST', headers: USER() },
-      )
-
-    expect((await refresh('?verify_fail=true')).status).toBe(200)
-    expect((await refresh('?verify_fail=1')).status).toBe(200)
-
-    expect(lifecycle.reloads.map((opts) => opts.forceFail === true)).toEqual([false, true])
   })
 
   it('answers 409 to a second refresh while one is running', async () => {
@@ -266,18 +189,16 @@ describe('repo work and reload', () => {
     const held = new Promise<void>((resolve) => {
       release = resolve
     })
-    const lifecycle = fakeOpencode({
-      reload: async () => {
-        await held
-        return { outcome: 'swapped', port: 4097, pid: 2, turnEnded: false, orphanedMessageId: null }
-      },
-    })
-    const daemon = app({ projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' }, lifecycle)
+    let started = 0
+    const daemon = app(
+      { projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' },
+      { onRefresh: async () => { started += 1; await held } },
+    )
 
     const first = daemon.request('/kortix/refresh', { method: 'POST', headers: USER() })
-    // The first request is past the gate once its reload is pending.
+    // The first request is past the gate once its refresh is pending.
     const deadline = Date.now() + 10_000
-    while (lifecycle.reloads.length === 0 && Date.now() < deadline) await Bun.sleep(10)
+    while (started === 0 && Date.now() < deadline) await Bun.sleep(10)
     const second = await daemon.request('/kortix/refresh', { method: 'POST', headers: USER() })
     release()
 
@@ -302,49 +223,10 @@ describe('repo work and reload', () => {
     expect(((await res.json()) as { message: string }).message).toContain('git pull refresh failed')
   })
 
-  it('skips the base fetch when the workspace already matches base_sha', async () => {
-    // A missing remote proves no network was attempted.
-    const root = mkdtempSync(join(tmpdir(), 'kortix-refresh-unchanged-'))
-    roots.push(root)
-    const worktree = join(root, 'worktree')
-    mkdirSync(worktree)
-    git(['init', '-q', '-b', 'session-branch'], worktree)
-    const baseSha = commit(worktree, 'current\n')
-
-    const res = await app({
-      projectTarget: worktree,
-      repoUrl: join(root, 'missing-remote.git'),
-      branchName: 'session-branch',
-    }).request(`/kortix/refresh?base=1&base_sha=${baseSha}&restart=0`, { method: 'POST', headers: SERVICE })
-
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({
-      ok: true,
-      repo: { before: { commit: baseSha }, after: { commit: baseSha } },
-    })
-  })
-
-  it('checks out the exact base_sha, and restart=0 replaces nothing', async () => {
-    const repo = clonedRepo()
-    const baseSha = commit(repo.seed, 'v2\n')
-    commit(repo.seed, 'v3\n')
-    git(['push', '-q', 'origin', 'main'], repo.seed)
-    const lifecycle = fakeOpencode()
-
-    const res = await app(
-      { projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'session-branch' },
-      lifecycle,
-    ).request(`/kortix/refresh?base=1&base_sha=${baseSha}&restart=0`, { method: 'POST', headers: SERVICE })
-
-    expect(res.status).toBe(200)
-    expect(readFileSync(join(repo.worktree, 'README.md'), 'utf8')).toBe('v2\n')
-    expect(git(['rev-parse', 'HEAD'], repo.worktree)).toBe(baseSha)
-    expect(lifecycle.reloads).toHaveLength(0)
-  })
 })
 
 describe('runtime-assets convergence after a refresh', () => {
-  // The session-open refresh used to install a new OpenCode and restart it
+  // The session-open refresh used to install a new runtime and restart it
   // underneath a resume that was still booting (the API's start budget then
   // expired). A refresh converges only a runtime that is already serving.
   const saved = { url: process.env.KORTIX_API_URL, token: process.env.KORTIX_TOKEN }
@@ -361,6 +243,7 @@ describe('runtime-assets convergence after a refresh', () => {
   })
 
   it.each([
+    [null, 0],
     ['starting', 0],
     ['down', 0],
     ['ok', 1],
@@ -382,8 +265,8 @@ describe('runtime-assets convergence after a refresh', () => {
 
       const res = await app(
         { projectTarget: repo.worktree, repoUrl: repo.remote, branchName: 'main' },
-        fakeOpencode({ state }),
-      ).request('/kortix/refresh?restart=0', { method: 'POST', headers: USER() })
+        { state },
+      ).request('/kortix/refresh', { method: 'POST', headers: USER() })
       expect(res.status).toBe(200)
 
       const deadline = Date.now() + 2_000

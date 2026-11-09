@@ -22,7 +22,7 @@
 import { logger } from '../lib/logger';
 import type { GitBackedProject } from '../projects/git/types';
 import { resolveDesiredRelease } from '../config-releases/desired';
-import { sandboxOpencodeEndpoint } from '../projects/opencode-mapping';
+import { sandboxRuntimeEndpoint } from '../projects/runtime-session-mapping';
 import { sandboxRuntimeRequestHeaders } from '../projects/sandbox-fetch';
 import { admitSandboxForSession } from './admit-sandbox';
 import { runtimeAdmissionEnforced, type RuntimeAdmissionVerdict } from './admission';
@@ -44,18 +44,25 @@ export interface AdmitRunningSandboxDeps {
     userId: string | undefined,
   ) => Promise<{ capabilities?: unknown; runtime_truth?: unknown } | null>;
   resolveReleaseId: (input: AdmitRunningSandboxInput) => Promise<string | null>;
+  /** Record the health read for the turn-start gates (`noteSandboxHealthBody` in production). */
+  noteHealth?: (sessionId: string, health: unknown) => Promise<void>;
+}
+
+async function defaultNoteHealth(sessionId: string, health: unknown): Promise<void> {
+  const { noteSandboxHealthBody } = await import('../projects/surface');
+  await noteSandboxHealthBody(sessionId, health);
 }
 
 async function defaultFetchHealth(
   externalId: string,
   userId: string | undefined,
 ): Promise<{ capabilities?: unknown; runtime_truth?: unknown } | null> {
-  const ep = await sandboxOpencodeEndpoint(externalId, userId);
+  const ep = await sandboxRuntimeEndpoint(externalId, userId);
   if (!ep) return null;
   try {
     const res = await fetch(`${ep.url}/kortix/health`, {
       headers: sandboxRuntimeRequestHeaders(ep.headers),
-      // Matches `listSandboxOpencodeSessions`'s budget: a healthy daemon
+      // Matches `listSandboxRuntimeSessions`'s budget: a healthy daemon
       // answers in well under a second; this call sits on the session-open
       // path, so a wedged connection must fail fast rather than stall it.
       signal: AbortSignal.timeout(3_000),
@@ -84,6 +91,7 @@ async function defaultResolveReleaseId(input: AdmitRunningSandboxInput): Promise
 const defaultDeps: AdmitRunningSandboxDeps = {
   fetchHealth: defaultFetchHealth,
   resolveReleaseId: defaultResolveReleaseId,
+  noteHealth: defaultNoteHealth,
 };
 
 export async function admitRunningSandbox(
@@ -92,6 +100,12 @@ export async function admitRunningSandbox(
 ): Promise<RuntimeAdmissionVerdict> {
   try {
     const health = await deps.fetchHealth(input.externalId, input.userId);
+    // The first prompt's turn-start gates read this same endpoint. Hand them
+    // this read (dynamic import: the convergence graph must stay out of this
+    // module's static imports).
+    if (health) {
+      await deps.noteHealth?.(input.sessionId, health).catch(() => undefined);
+    }
     return await admitSandboxForSession(
       { health },
       {

@@ -15,7 +15,7 @@ import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { Button } from '@kortix/ui/button';
 import { ButtonGroup } from '@kortix/ui/button-group';
 import Hint from '@kortix/ui/hint';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
 import { OutcomeTitle } from '@kortix/ui/internal/auth/auth-consent';
@@ -224,13 +224,13 @@ export default function PublicSessionSharePage() {
   // internal detail the recipient has no context for.
   const title = isFileShare ? fileName : meta.share.label;
   const authHref = `/auth?next=${encodeURIComponent(`/share/session/${token}`)}`;
-  const sessionHref = `/projects/${meta.share.project_id}/sessions/${meta.share.session_id}`;
+  const sessionHref = `/workspaces/${meta.share.project_id}/sessions/${meta.share.session_id}`;
   const offlineTitle = isFileShare
     ? 'This shared file is offline'
     : 'This shared preview is offline';
   const offlineDescription = isFileShare
-    ? 'The session runtime that serves this file is not active. Sign in with access to this project to start it.'
-    : 'The session runtime is not active. Sign in with access to this project to start it.';
+    ? 'The session runtime that serves this file is not active. Sign in with access to this workspace to start it.'
+    : 'The session runtime is not active. Sign in with access to this workspace to start it.';
 
   const openAppLabel = tI18nHardcoded.raw(
     'autoAppPublicShareSessionTokenPageJsxTextOpenAppa9aa1bb9',
@@ -326,9 +326,9 @@ export default function PublicSessionSharePage() {
                   <p className="text-muted-foreground text-sm text-pretty">{offlineDescription}</p>
                 </div>
                 {startError && (
-                  <InfoBanner className="w-full" tone="destructive" role="alert">
+                  <BannerAlert variant="destructive" className="w-full" role="alert"><BannerAlertDescription>
                     {startError}
-                  </InfoBanner>
+                  </BannerAlertDescription></BannerAlert>
                 )}
                 <Button
                   onClick={startSession}

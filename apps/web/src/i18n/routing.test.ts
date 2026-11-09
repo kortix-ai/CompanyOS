@@ -16,7 +16,7 @@ describe('locale routing', () => {
   test('maps public paths onto the [locale] segment', () => {
     expect(localizedPathname('en', '/')).toBe('/en');
     expect(localizedPathname('de', '/pricing')).toBe('/de/pricing');
-    expect(localizedPathname('en', '/de/projects')).toBe('/en/de/projects');
+    expect(localizedPathname('en', '/de/workspaces')).toBe('/en/de/workspaces');
   });
 
   test('never rewrites Route Handlers, rewrite sources, files, or docs', () => {
@@ -25,6 +25,8 @@ describe('locale routing', () => {
       '/v1/accounts',
       '/scim/v2/Users',
       '/ingest/e',
+      '/blog',
+      '/blog/some-post',
       '/blog/rss.xml',
       '/blog/some-post.md',
       '/docs',
@@ -49,11 +51,9 @@ describe('locale routing', () => {
       '/download',
       '/auth',
       '/auth/signup',
-      '/projects',
+      '/workspaces',
       '/docsearch',
       '/blogroll',
-      '/blog',
-      '/blog/some-post',
     ]) {
       expect(isNonPagePath(path)).toBe(false);
     }

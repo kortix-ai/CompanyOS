@@ -1,4 +1,5 @@
 import { logger } from '../log/logger'
+import { workspaceIdFromEnv } from '../config/workspace-id'
 
 /**
  * The control-plane callback context every daemon relay reads from the sandbox
@@ -6,7 +7,7 @@ import { logger } from '../log/logger'
  * with, and the API's `/v1` root.
  *
  * One reader, so the relays cannot disagree about the URL. Nine copies used to
- * exist (OpenCode boot, background, pi, and the timeline and projection relays)
+ * exist (boot, background, pi, and the timeline and projection relays)
  * and six of them stripped only ONE trailing slash, so
  * `KORTIX_API_URL=https://api/v1//` became `https://api/v1//v1` in those six.
  *
@@ -32,7 +33,7 @@ export interface SandboxRelayContext {
 export function readControlPlaneEnv(): ControlPlaneEnv {
   const apiUrl = process.env.KORTIX_API_URL?.trim().replace(/\/+$/, '')
   return {
-    projectId: process.env.KORTIX_PROJECT_ID?.trim() || null,
+    projectId: workspaceIdFromEnv(process.env) || null,
     sessionId: process.env.KORTIX_SESSION_ID?.trim() || null,
     token: process.env.KORTIX_TOKEN?.trim() || null,
     apiRoot: apiUrl ? (apiUrl.endsWith('/v1') ? apiUrl : `${apiUrl}/v1`) : null,

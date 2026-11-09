@@ -43,6 +43,7 @@ flow(
       "GET /v1/accounts/:accountId/secret-resources",
       "PUT /v1/accounts/:accountId/secret-resources/:secretId/value",
       "POST /v1/accounts/:accountId/secret-resources/:secretId/retry",
+      "POST /v1/accounts/:accountId/secret-resources/:secretId/usage",
       "DELETE /v1/accounts/:accountId/secret-resources/:secretId",
     ],
   },
@@ -82,6 +83,13 @@ flow(
       response.status(200).body().has("$.secret_id", ids[1]!).has("$.cooldown_until", null);
       if ("value" in response.json<any>()) throw new Error("secret value leaked in retry response");
       (await ctx.client.as(ctx.P.NONMEMBER).post(`${path}/:secretId/retry`, {}, { params: { ...params, secretId: ids[1]! } })).status([403, 404]);
+    });
+    await ctx.step("an API key has no plan usage: listed as null, the usage route answers 400; a nonmember is denied", async () => {
+      const keys = (await ctx.client.as(ctx.P.OWNER).get(path, { params })).json<any>().secrets as any[];
+      if (keys.find((key) => key.secret_id === ids[1])?.usage !== null) throw new Error("an API key listed plan usage");
+      (await ctx.client.as(ctx.P.OWNER).post(`${path}/:secretId/usage`, {}, { params: { ...params, secretId: ids[1]! } }))
+        .status(400).body().has("$.error", "Not a subscription login");
+      (await ctx.client.as(ctx.P.NONMEMBER).post(`${path}/:secretId/usage`, {}, { params: { ...params, secretId: ids[1]! } })).status([403, 404]);
     });
     await ctx.step("delete primary; backup remains", async () => {
       (await ctx.client.as(ctx.P.OWNER).del(`${path}/:secretId`, { params: { ...params, secretId: ids[0]! } })).status(200);
@@ -139,6 +147,8 @@ flow(
       ids.push(result.json<any>().secret_id);
     }
     await ctx.step('flag off → session pool routes deny access', async () => {
+      (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false },
+        { params: { projectId: project.id } })).status(200);
       (await owner.get(poolPath, { params: poolParams })).status(403);
       (await owner.get(poolsPath, { params: poolParams })).status(403);
       (await owner.post('/v1/projects/:projectId/sessions', {
@@ -182,7 +192,7 @@ flow(
     });
     await ctx.step('an account-key model passes creation preflight with the selected pool', async () => {
       const created = await owner.post('/v1/projects/:projectId/sessions', {
-        opencode_model: 'anthropic/claude-sonnet-4.6', provider_secret_pools: { anthropic: ids },
+        model: 'anthropic/claude-sonnet-4.6', provider_secret_pools: { anthropic: ids },
       }, { params: { projectId: project.id } });
       if (ctx.env.target === 'local') {
         created.status(503).body().has('$.code', 'KORTIX_URL_UNREACHABLE');
@@ -193,7 +203,7 @@ flow(
         (await owner.get(poolPath, { params: { ...poolParams, sessionId: createdId } })).status(200).body().has('$.secret_ids', ids);
       }
       const refused = await owner.post('/v1/projects/:projectId/sessions', {
-        opencode_model: 'anthropic/claude-sonnet-4.6', provider_secret_pools: { anthropic: [] },
+        model: 'anthropic/claude-sonnet-4.6', provider_secret_pools: { anthropic: [] },
       }, { params: { projectId: project.id } });
       refused.status(400).body().has('$.code', 'INVALID_SESSION_MODEL');
     });
@@ -201,7 +211,7 @@ flow(
       // The CLI, the SDK and chat channels name only a model. This used to
       // answer 400 INVALID_SESSION_MODEL; an explicit empty list above still does.
       const created = await owner.post('/v1/projects/:projectId/sessions', {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
+        model: 'anthropic/claude-sonnet-4.6', agent_name: 'worker',
       }, { params: { projectId: project.id } });
       if (ctx.env.target === 'local') {
         created.status(503).body().has('$.code', 'KORTIX_URL_UNREACHABLE');
@@ -213,14 +223,14 @@ flow(
       }
       (await owner.put(poolPath, { secret_ids: null }, { params: poolParams })).status(200).body().has('$.configured', false);
       (await owner.put('/v1/projects/:projectId/sessions/:sessionId/model', {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
-      }, { params: poolParams })).status(200).body().has('$.opencode_model', 'kortix/anthropic/claude-sonnet-4.6');
+        model: 'anthropic/claude-sonnet-4.6',
+      }, { params: poolParams })).status(200).body().has('$.model', 'kortix/anthropic/claude-sonnet-4.6');
       (await owner.get(poolPath, { params: poolParams })).status(200).body().has('$.configured', true).has('$.secret_ids', ids);
     });
     await ctx.step('an explicit empty selection stays: a model change refuses the model and keeps it', async () => {
       (await owner.put(poolPath, { secret_ids: [] }, { params: poolParams })).status(200).body().has('$.configured', true);
       (await owner.put('/v1/projects/:projectId/sessions/:sessionId/model', {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
+        model: 'anthropic/claude-sonnet-4.6',
       }, { params: poolParams })).status(400).body().has('$.code', 'INVALID_SESSION_MODEL');
       (await owner.get(poolPath, { params: poolParams })).status(200).body().has('$.configured', true).has('$.secret_ids', []);
       (await owner.put(poolPath, { secret_ids: ids }, { params: poolParams })).status(200).body().has('$.secret_ids', ids);
@@ -267,8 +277,8 @@ flow(
           .body().has('$.error', 'Secret unavailable or not granted');
         (await sa.put(poolPath, { secret_ids: null }, { params })).status(200).body().has('$.configured', false);
         (await sa.put('/v1/projects/:projectId/sessions/:sessionId/model', {
-          opencode_model: 'anthropic/claude-sonnet-4.6',
-        }, { params })).status(200).body().has('$.opencode_model', 'kortix/anthropic/claude-sonnet-4.6');
+          model: 'anthropic/claude-sonnet-4.6',
+        }, { params })).status(200).body().has('$.model', 'kortix/anthropic/claude-sonnet-4.6');
         (await owner.get(poolPath, { params })).status(200).body().has('$.configured', true).has('$.secret_ids', [projectKeyId]);
       } finally {
         (await owner.del('/v1/accounts/:accountId/iam/service-accounts/:saId', {
@@ -317,7 +327,7 @@ flow(
         .status(200).body().has('$.personal_user_id', member.userId!).has('$.personal_keys_reason', null);
       // A model only those keys reach is refused, not accepted and then failed on every turn.
       (await owner.put('/v1/projects/:projectId/sessions/:sessionId/model', {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
+        model: 'anthropic/claude-sonnet-4.6',
       }, { params })).status(400).body().has('$.code', 'INVALID_SESSION_MODEL');
       (await owner.get(poolPath, { params })).status(200).body().has('$.configured', false);
     });
@@ -330,8 +340,8 @@ flow(
       (await asMember.put(poolPath, { secret_ids: ids }, { params })).status(200);
       (await asMember.get(poolPath, { params })).status(200).body().has('$.secret_ids', ids);
       (await asMember.put('/v1/projects/:projectId/sessions/:sessionId/model', {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
-      }, { params })).status(200).body().has('$.opencode_model', 'kortix/anthropic/claude-sonnet-4.6');
+        model: 'anthropic/claude-sonnet-4.6',
+      }, { params })).status(200).body().has('$.model', 'kortix/anthropic/claude-sonnet-4.6');
     });
     await ctx.step('sharing a session that runs on keys granted to its owner switches it to keys shared with the project', async () => {
       const privateSession = await createDatabaseSession(ctx.env, {
@@ -342,7 +352,7 @@ flow(
       const asMember = ctx.client.as(member);
       (await asMember.put(poolPath, { secret_ids: ids }, { params })).status(200);
       (await asMember.put(`${sessionPath}/model`, {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
+        model: 'anthropic/claude-sonnet-4.6',
       }, { params })).status(200);
       // A shared session uses nobody's personal keys: with no key shared with
       // the project, the share would leave the model with none. Refused, unchanged.
@@ -362,7 +372,7 @@ flow(
       (await asMember.get(poolPath, { params })).status(200).body().has('$.secret_ids', [projectKey]);
       // The shared session still runs its model, now on the project's key.
       (await asMember.put(`${sessionPath}/model`, {
-        opencode_model: 'anthropic/claude-sonnet-4.6',
+        model: 'anthropic/claude-sonnet-4.6',
       }, { params })).status(200);
       (await owner.del(`${resourcePath}/:secretId`, { params: { ...resourceParams, secretId: projectKey } })).status(200);
     });
@@ -416,7 +426,7 @@ flow('SEC-POOL-4', {
   await ctx.step('grant the other project agent access to the provider', async () => {
     (await owner.put('/v1/projects/:projectId/agents/:agentName/config',
       { secrets: ['ANTHROPIC_API_KEY'] },
-      { params: { projectId: otherProject.id, agentName: 'kortix' } })).status(200);
+      { params: { projectId: otherProject.id, agentName: 'worker' } })).status(200);
   });
   const path = '/v1/accounts/:accountId/secret-resources';
   const params = { accountId: team.id };
@@ -424,6 +434,9 @@ flow('SEC-POOL-4', {
   const input = { project_id: project.id, label: 'Project key', provider_id: 'anthropic',
     name: 'ANTHROPIC_API_KEY', value: 'project-key-test-value', consumer: 'llm_gateway', strategy: 'broker' };
   await ctx.step('flag off rejects a project-scoped credential', async () => {
+    // The flag is on by default since 2026-10-31 (#11335): turn it off first.
+    (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false },
+      { params: { projectId: project.id } })).status(200);
     (await owner.post(path, input, { params })).status(403);
   });
   (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true },
@@ -443,7 +456,7 @@ flow('SEC-POOL-4', {
     (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true },
       { params: { projectId: otherProject.id } })).status(200);
     (await owner.post('/v1/projects/:projectId/sessions', {
-      agent_name: 'kortix', provider_secret_pools: { anthropic: [secretId] },
+      agent_name: 'worker', provider_secret_pools: { anthropic: [secretId] },
     }, { params: { projectId: otherProject.id } })).status(403)
       .body().has('$.error', 'Secret unavailable or not granted');
   });
@@ -514,6 +527,9 @@ flow('SEC-POOL-5', {
   const params = { accountId: team.id };
 
   await ctx.step('with the flag off, a named ChatGPT account is refused', async () => {
+    // The flag is on by default since 2026-10-31 (#11335): turn it off first.
+    (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false },
+      { params: { projectId: project.id } })).status(200);
     (await asMember.post(startPath, { resource_label: 'ChatGPT · Member', sharing: { mode: 'private', ownerId: member.userId } },
       { params: startParams })).status(403);
   });
@@ -631,7 +647,7 @@ flow('SEC-POOL-6', {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
     await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
       credential.token_id, project.id, sessionId,
-      JSON.stringify({ agent: 'kortix', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
+      JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
     for (const [secretId, label, age] of [[newer, 'ChatGPT · Newer', '0 seconds'], [older, 'ChatGPT · Older', '1 day']]) {
       await database.query(`INSERT INTO kortix.account_secret_resources
@@ -740,7 +756,7 @@ flow('SEC-POOL-3', {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [first, team.id, project.id]);
     await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
       credential.token_id, project.id, first,
-      JSON.stringify({ agent: 'kortix', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
+      JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
   } finally { await database.end(); }
   const caller = ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION');
@@ -796,7 +812,7 @@ flow('SEC-9', {
       }
       await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
         credential.token_id, project.id, sessionId,
-        JSON.stringify({ agent: 'kortix', permissions, connectors: 'all', env: 'all' }), team.id,
+        JSON.stringify({ agent: 'worker', permissions, connectors: 'all', env: 'all' }), team.id,
       ]);
     } finally { await database.end(); }
     return ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION');
@@ -833,7 +849,7 @@ flow('SEC-9', {
       .has('$.identifier', 'AGENT_NARROWED_KEY')
       .has('$.configured', true);
     const listed = await agent.get('/v1/projects/:projectId/secrets', { params });
-    listed.status(200).body().has('$.agent_scope', { agent: 'kortix', secrets: 'all' });
+    listed.status(200).body().has('$.agent_scope', { agent: 'worker', secrets: 'all' });
     const item = listed.json<{ items: Array<Record<string, unknown>> }>().items.find((i) => i.identifier === 'AGENT_NARROWED_KEY');
     if (!item || item.configured !== true) throw new Error(`the agent cannot see its own write: ${JSON.stringify(item)}`);
     (await owner.get('/v1/projects/:projectId/secrets', { params })).status(200).body().has('$.agent_scope', null);
@@ -1426,7 +1442,7 @@ flow(
         .as(ctx.P.OWNER)
         .post(
           "/v1/projects/:projectId/secrets/:identifier/grant",
-          { agent: "kortix" },
+          { agent: "worker" },
           { params: { projectId: p.id, identifier: "NO_SUCH_SECRET" } },
         );
       r.status(404);
@@ -1437,7 +1453,7 @@ flow(
         .as(ctx.P.OWNER)
         .post(
           "/v1/projects/:projectId/secrets/:identifier/grant",
-          { agent: "kortix" },
+          { agent: "worker" },
           { params: { projectId: p.id, identifier: "not a valid identifier" } },
         );
       r.status(400);
@@ -1858,7 +1874,7 @@ flow('SEC-AUD-1', {
     await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
     await db.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
       credential.token_id, project.id, sessionId,
-      JSON.stringify({ agent: 'kortix', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
+      JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
     return ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION');
   };
@@ -1972,7 +1988,7 @@ async function agentSessionToken(
   await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, input.team.id, input.projectId]);
   await db.query(
     'UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5, service_account_id = $6 WHERE token_id = $1',
-    [credential.token_id, input.projectId, sessionId, JSON.stringify({ agent: 'kortix', permissions: 'all', connectors: 'all', env: 'all' }), input.team.id, input.serviceAccountId],
+    [credential.token_id, input.projectId, sessionId, JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), input.team.id, input.serviceAccountId],
   );
   return { sessionId, client: ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION') };
 }
@@ -2029,8 +2045,8 @@ flow('SEC-AUD-2', {
       const r = await asHolder.get('/v1/projects/:projectId/agent-identities', { params });
       r.status(200);
       const agent = r.json<{ agents: Array<{ service_account_id: string; project_id: string | null; agent_name: string | null }> }>()
-        .agents.find((a) => a.project_id === project.id && a.agent_name === 'kortix');
-      if (!agent) throw new Error(`no service account for agent kortix: ${r.text()}`);
+        .agents.find((a) => a.project_id === project.id && a.agent_name === 'worker');
+      if (!agent) throw new Error(`no service account for agent worker: ${r.text()}`);
       agentSa = agent.service_account_id;
       await db.query(
         `INSERT INTO kortix.service_accounts (service_account_id, account_id, name, secret_hash, public_prefix, created_by, project_id, agent_name)
@@ -2045,7 +2061,7 @@ flow('SEC-AUD-2', {
         shared_with: [{ principal_type: 'agent', principal_id: agentSa }],
       }, { params })).status(200);
       const row = await listed('NIGHTLY_REPORT_TOKEN');
-      if (row?.shared_with?.[0]?.principal_type !== 'agent' || row.shared_with[0].label !== 'kortix') {
+      if (row?.shared_with?.[0]?.principal_type !== 'agent' || row.shared_with[0].label !== 'worker') {
         throw new Error(`agent audience not listed: ${JSON.stringify(row?.shared_with)}`);
       }
       const connector = await db.query(

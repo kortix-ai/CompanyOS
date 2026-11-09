@@ -17,16 +17,16 @@ describe('classifyWaitPoll', () => {
 
   test('an explicit idle status is idle', () => {
     expect(
-      classifyWaitPoll({ oc_1: { type: 'idle' } }, 'oc_1', { permissions: 0, questions: 0 }),
+      classifyWaitPoll({ oc_1: 'idle' }, 'oc_1', { permissions: 0, questions: 0 }),
     ).toBe('idle');
   });
 
   test('any non-idle status means the agent is working', () => {
     expect(
-      classifyWaitPoll({ oc_1: { type: 'busy' } }, 'oc_1', { permissions: 0, questions: 0 }),
+      classifyWaitPoll({ oc_1: 'busy' }, 'oc_1', { permissions: 0, questions: 0 }),
     ).toBe('working');
     expect(
-      classifyWaitPoll({ oc_1: { type: 'retry', attempt: 2 } }, 'oc_1', {
+      classifyWaitPoll({ oc_1: 'compacting' }, 'oc_1', {
         permissions: 0,
         questions: 0,
       }),
@@ -35,14 +35,14 @@ describe('classifyWaitPoll', () => {
 
   test('pending permission or question asks report blocked, even mid-turn', () => {
     expect(
-      classifyWaitPoll({ oc_1: { type: 'busy' } }, 'oc_1', { permissions: 1, questions: 0 }),
+      classifyWaitPoll({ oc_1: 'busy' }, 'oc_1', { permissions: 1, questions: 0 }),
     ).toBe('blocked');
     expect(classifyWaitPoll({}, 'oc_1', { permissions: 0, questions: 2 })).toBe('blocked');
   });
 
   test('another session being busy does not affect this one', () => {
     expect(
-      classifyWaitPoll({ oc_2: { type: 'busy' } }, 'oc_1', { permissions: 0, questions: 0 }),
+      classifyWaitPoll({ oc_2: 'busy' }, 'oc_1', { permissions: 0, questions: 0 }),
     ).toBe('idle');
   });
 });
@@ -155,7 +155,7 @@ describe('settledTurnOutcome', () => {
 
 const PROJECT_ID = '00000000-0000-4000-a000-00000000c411';
 const ACCOUNT_ID = '00000000-0000-4000-a000-00000000c422';
-const OPENCODE_SESSION_ID = 'ses_cli_wait';
+const RUNTIME_SESSION_ID = 'ses_cli_wait';
 const TOKEN = 'kortix_pat_cli_wait';
 // One session per test: the SDK caches start/ready records per
 // (projectId, sessionId) process-globally, so two tests sharing an id would
@@ -176,7 +176,7 @@ function sessionRow() {
     sandbox_provider: 'daytona',
     sandbox_id: sessionId,
     sandbox_url: null,
-    opencode_session_id: OPENCODE_SESSION_ID,
+    runtime_session_id: RUNTIME_SESSION_ID,
     name: 'SDK wait',
     custom_name: null,
     agent_name: 'default',
@@ -244,39 +244,36 @@ describe('wait-for carries a failed turn out through the exit code', () => {
         const url = new URL(request.url);
         if (
           request.method === 'GET' &&
-          url.pathname === `/v1/projects/${PROJECT_ID}/sessions/${sessionId}`
+          url.pathname === `/v1/workspaces/${PROJECT_ID}/sessions/${sessionId}`
         ) {
           return Response.json(sessionRow());
         }
         if (
           request.method === 'POST' &&
-          url.pathname === `/v1/projects/${PROJECT_ID}/sessions/${sessionId}/start`
+          url.pathname === `/v1/workspaces/${PROJECT_ID}/sessions/${sessionId}/start`
         ) {
           return Response.json({
             stage: 'ready',
             agent_name: 'default',
             retriable: false,
             sandbox: { external_id: externalId },
-            opencode_session_id: OPENCODE_SESSION_ID,
+            runtime_session_id: RUNTIME_SESSION_ID,
           });
         }
         if (
           request.method === 'GET' &&
-          url.pathname === `/v1/projects/${PROJECT_ID}/sessions/${sessionId}/turn`
+          url.pathname === `/v1/workspaces/${PROJECT_ID}/sessions/${sessionId}/turn`
         ) {
           return Response.json(turnStatus);
         }
+        if (request.method === 'GET' && url.pathname === `/v1/p/${externalId}/8000/kortix/health`) {
+          return Response.json({ capabilities: ['runtime.actions.v1'] });
+        }
         if (
           request.method === 'GET' &&
-          url.pathname === `/v1/p/${externalId}/8000/session/status`
+          url.pathname === `/v1/p/${externalId}/8000/kortix/runtime/pending`
         ) {
-          return Response.json({});
-        }
-        if (request.method === 'GET' && url.pathname === `/v1/p/${externalId}/8000/permission`) {
-          return Response.json([]);
-        }
-        if (request.method === 'GET' && url.pathname === `/v1/p/${externalId}/8000/question`) {
-          return Response.json([]);
+          return Response.json({ statuses: {}, permissions: [], questions: [] });
         }
         return Response.json(
           { error: `unexpected ${request.method} ${url.pathname}` },

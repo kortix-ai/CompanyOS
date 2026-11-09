@@ -47,9 +47,8 @@
  * ─── `?schema=v2`: THE SESSION LOG (P4.4) ──────────────────────────────────
  * The runtime channel carries `log.*` frames (`SESSION_LOG_EVENTS`) IN PLACE OF
  * the v1 transcript frames (`V1_TRANSCRIPT_EVENTS`); every other frame stays.
- * A box whose `/kortix/health` lists `session.log.v2` is attached with
- * `?schema=v2` and its stream relayed (its own seq and epoch); an older box is
- * attached on v1 and the API converts (`lib/session-log-relay.ts`). Absent,
+ * The box is attached with `?schema=v2` and its stream relayed (its own seq and
+ * epoch); every daemon since 2026-10-11 serves it (`session.log.v2`). Absent,
  * empty or `v1`: the stream is the v1 stream, byte for byte. Another value: 400.
  *
  * ─── BOUNDED, AND QUIET ON A STOPPED BOX ───────────────────────────────────
@@ -90,7 +89,6 @@ import { projectsApp } from '../lib/app';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { isUuid } from '../../shared/validate';
 import { isPgBroadcastListening, waitForSessionChange } from '../../shared/pg-broadcast';
-import { notificationsEnabled } from '../../notifications/enabled';
 import { PRESENCE_RENEW_MS, expireSessionPresence, renewSessionPresence } from '../lib/session-presence';
 import {
   CONTROL_EPOCH,
@@ -113,11 +111,9 @@ import {
   openRuntimeEventStream,
   parseSseFrames,
 } from '../lib/session-runtime-transport';
-import {
-  createV1LogConverter,
-  dropV1Transcript,
-  type RuntimeEnvelope,
-} from '../lib/session-log-relay';
+import { isV1TranscriptEvent } from '@kortix/api-contract/session-log';
+import { workspaceIdParam } from '../../shared/route-params';
+import { isParkedRuntimeDownReason } from '@kortix/api-contract/wire-values';
 
 /** Our own keepalive cadence. Matches the daemon's, so a stream with no box
  *  attached still proves liveness on the same clock a healthy one does. */
@@ -229,12 +225,12 @@ export function registerSessionStreamRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/events',
+      path: '/{workspaceId}/sessions/{sessionId}/events',
       tags: ['sessions'],
       summary: 'Stream live events of a session',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         query: z.object({
           since: z.string().optional(),
           epoch: z.string().optional(),
@@ -259,7 +255,7 @@ export function registerSessionStreamRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 
@@ -301,9 +297,6 @@ export function registerSessionStreamRoutes(): void {
           ? {
               userId: String(loaded.userId),
               tabId: presenceTabId,
-              // KRTX-1742, only with the `notification_center` flag on: the
-              // stream end expires the lease. Off, it lives to its expiry.
-              expireOnClose: notificationsEnabled(loaded.row.metadata),
               extendDeadline: await projectCapabilityAllowed(
                 c,
                 String(loaded.userId),
@@ -503,7 +496,7 @@ export function registerSessionStreamRoutes(): void {
               // of its lease. Only the expiry this stream wrote: a newer stream
               // of the same tab (a reconnect, a control-to-runtime upgrade) may
               // have renewed it since. A reconnecting stream's renewal restores it.
-              if (presenceRenewal.expireOnClose && leaseWrittenUntil) {
+              if (leaseWrittenUntil) {
                 void expireSessionPresence(
                   presenceRenewal.userId,
                   sessionId,
@@ -580,10 +573,6 @@ export function registerSessionStreamRoutes(): void {
 interface PumpArgs {
   /** `?schema=v2`: the runtime channel carries `log.*` frames. */
   sessionLog: boolean;
-  /** Set per attachment on `schema=v2`: the envelopes to write for one daemon envelope. */
-  relay?: (envelope: RuntimeEnvelope) => RuntimeEnvelope[] | Promise<RuntimeEnvelope[]>;
-  /** The old-daemon converter, kept across re-attaches of one connection. */
-  converter?: ReturnType<typeof createV1LogConverter>;
   sessionId: string;
   projectId: string;
   accountId: string;
@@ -630,6 +619,8 @@ async function pumpRuntime(args: PumpArgs): Promise<void> {
       type: 'kortix.runtime.status',
       state: 'down',
       reason,
+      // The decision, not only the string: a client never parses `reason`.
+      parked: isParkedRuntimeDownReason(reason),
       at: Date.now(),
     });
   };
@@ -697,16 +688,12 @@ async function pumpRuntime(args: PumpArgs): Promise<void> {
     };
 
     const target = { externalId: sandbox.externalId, userId: args.userId };
-    const dialect = args.sessionLog ? await sessionLogDialect(args, target, attachment.signal) : null;
-    const opened =
-      dialect && !dialect.ok
-        ? dialect
-        : await openRuntimeEventStream(target, {
-            since: args.runtime.seq,
-            epoch: args.runtime.epoch,
-            ...(dialect?.native && { schema: 'v2' as const }),
-            signal: attachment.signal,
-          });
+    const opened = await openRuntimeEventStream(target, {
+      since: args.runtime.seq,
+      epoch: args.runtime.epoch,
+      ...(args.sessionLog && { schema: 'v2' as const }),
+      signal: attachment.signal,
+    });
     if (!opened.ok) {
       endAttachment();
       announceDown(opened.reason);
@@ -821,30 +808,11 @@ function watchRuntimeHealth(args: PumpArgs, externalId: string, signal: AbortSig
 }
 
 /**
- * How a `schema=v2` stream reads this box: its own `log.*` stream when its
- * health lists `session.log.v2`, else the v1 stream converted. Sets
- * `args.relay`. A failed health read fails the attach (the backoff ladder).
- */
-async function sessionLogDialect(
-  args: PumpArgs,
-  target: { externalId: string; userId: string },
-  signal: AbortSignal,
-): Promise<{ ok: true; native: boolean } | { ok: false; reason: string; status: null }> {
-  const health = await fetchRuntimeHealth(target, signal);
-  if (!health.ok) return { ok: false, reason: health.reason, status: null };
-  const capabilities = health.health.capabilities;
-  const native = Array.isArray(capabilities) && capabilities.includes('session.log.v2');
-  const harness = (health.health.harness as { id?: unknown } | undefined)?.id === 'pi' ? 'pi' : 'opencode';
-  args.relay = native ? dropV1Transcript : (args.converter ??= createV1LogConverter({ sessionId: args.sessionId, harness }));
-  return { ok: true, native };
-}
-
-/**
  * Forward ONE daemon frame.
  *
  * The envelope is written back out with exactly two additions — `channel` and
  * `epoch` — and no other change. `seq` is the daemon's number and stays the
- * daemon's number; `payload` is OpenCode's `properties` verbatim, which is what
+ * daemon's number; `payload` is the runtime event's `properties` verbatim, which is what
  * lets an existing SDK reducer apply it unchanged.
  */
 async function forwardRuntimeFrame(args: PumpArgs, event: string | null, data: string): Promise<void> {
@@ -855,7 +823,7 @@ async function forwardRuntimeFrame(args: PumpArgs, event: string | null, data: s
     // A frame we cannot parse is still a frame the daemon sent. Pass the bytes
     // through under a name that says what happened rather than dropping them.
     // A v2 stream never carries a v1 transcript frame, parsed or not.
-    if (args.relay && dropV1Transcript({ type: event }).length === 0) return;
+    if (args.sessionLog && isV1TranscriptEvent(String(event))) return;
     args.writeRaw(`event: ${event ?? 'message'}\ndata: ${data}\n\n`);
     return;
   }
@@ -894,8 +862,8 @@ async function forwardRuntimeFrame(args: PumpArgs, event: string | null, data: s
     const runtimeSessionId =
       typeof payload.runtime_session_id === 'string'
         ? payload.runtime_session_id
-        : typeof payload.opencode_session_id === 'string'
-          ? payload.opencode_session_id
+        : typeof payload.runtime_session_id === 'string'
+          ? payload.runtime_session_id
           : null;
     if (runtimeSessionId) args.onRuntimeTurnEnd(runtimeSessionId);
   }
@@ -904,14 +872,10 @@ async function forwardRuntimeFrame(args: PumpArgs, event: string | null, data: s
 
   const id =
     seq === null ? null : encodeStreamId(args.runtime, CONTROL_EPOCH, args.controlCseq());
-  // `schema=v2`: the frames the relay answers, each at this frame's seq.
-  const frames = args.relay ? await args.relay({ ...parsed, type }) : [parsed];
-  for (const frame of frames) {
-    const envelope = { ...frame, channel: 'runtime', epoch: args.runtime.epoch };
-    args.writeRaw(
-      `event: ${typeof frame.type === 'string' ? frame.type : type}\n${id ? `id: ${id}\n` : ''}data: ${JSON.stringify(envelope)}\n\n`,
-    );
-  }
+  // A v2 stream never carries a v1 transcript frame; its seq still moves the cursor.
+  if (args.sessionLog && isV1TranscriptEvent(type)) return;
+  const envelope = { ...parsed, channel: 'runtime', epoch: args.runtime.epoch };
+  args.writeRaw(`event: ${type}\n${id ? `id: ${id}\n` : ''}data: ${JSON.stringify(envelope)}\n\n`);
 }
 
 /**

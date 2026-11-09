@@ -5,33 +5,36 @@
  */
 import { sessionSandboxes } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
+import { logger } from '../../lib/logger';
 import { getProvider, type ProviderName } from '../../platform/providers';
 import { SANDBOX_SERVICE_PORT } from './sandbox-env-transport';
 import { readFileSync } from 'node:fs';
-import { RUNTIME_VERSIONS as runtimeVersions } from '@kortix/shared/runtime-versions';
 import { runtimeAssetsManifest, runtimeEntrypointPath, type RuntimeAssetsManifest } from '../../runtime-assets/manifest';
-import { projectSessions, projects } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 import { sql } from 'drizzle-orm';
 import { createAccountToken, revokeAccountToken } from '../../repositories/account-tokens';
 import { mintSessionToken } from '../../platform/services/session-sandbox';
 import { buildSandboxUpstreamHeaders, resolveSandboxIngress } from '../../sandbox-proxy/backend';
 import { recordAuditEvent } from '../../shared/audit';
 import { db } from '../../shared/db';
-import { OPENCODE_PRIMARY_PORT } from '../../shared/opencode-ports';
 import { mergeMetadata } from '../reaping/sandbox-state-sync';
 import {
   bootstrapLegacyRuntime,
   bootstrapWouldSkip,
+  decideDeadDaemonOnEdgeRefusal,
+  DEAD_DAEMON_REPAIR_REQUESTED_KEY,
+  LEGACY_CHECK_METADATA_KEY,
   updatesItself,
   classifyDaemonHealth,
   describeLegacyBootstrapRetry,
-  opencodeIdle,
+  runtimeIdle,
   type ExpectedRunningAssets,
   type LegacyBootstrapDeps,
   type LegacyBootstrapResult,
   type LegacyBootstrapRetrySummary,
   type RuntimeClassification,
 } from './legacy-runtime-bootstrap';
+import { projectsView } from '../../workspaces/rows';
 
 const HEALTH_TIMEOUT_MS = 8_000;
 
@@ -70,37 +73,6 @@ async function fetchJson(url: string, headers: Record<string, string>): Promise<
 }
 
 /**
- * The daemon proxies OpenCode routes behind the sandbox service key AND the
- * signed per-user context every proxied request carries; the control plane
- * probes as the user who provisioned the box (or the session's creator).
- */
-async function opencodeProbeHeaders(
-  row: LegacyBootstrapRow,
-  providerHeaders: Record<string, string>,
-): Promise<Record<string, string> | null> {
-  const [sb] = await db
-    .select({ config: sessionSandboxes.config, metadata: sessionSandboxes.metadata })
-    .from(sessionSandboxes)
-    .where(eq(sessionSandboxes.sandboxId, row.sandboxId))
-    .limit(1);
-  const config = (sb?.config ?? null) as Record<string, unknown> | null;
-  const serviceKey = typeof config?.serviceKey === 'string' ? (config.serviceKey as string) : null;
-  if (!serviceKey) return null;
-  const metadata = (sb?.metadata ?? null) as Record<string, unknown> | null;
-  let userId = typeof metadata?.provisionedBy === 'string' ? (metadata.provisionedBy as string) : null;
-  if (!userId && row.sessionId) {
-    const [session] = await db
-      .select({ createdBy: projectSessions.createdBy })
-      .from(projectSessions)
-      .where(eq(projectSessions.sessionId, row.sessionId))
-      .limit(1);
-    userId = session?.createdBy ?? null;
-  }
-  if (!userId) return null;
-  return buildSandboxUpstreamHeaders({ sandboxId: row.sandboxId, userId, serviceKey, providerHeaders });
-}
-
-/**
  * Legacy token model. A box provisioned before 2026-08 carries a `kortix_sb_`
  * sandbox API key as its service key / KORTIX_TOKEN; the LLM gateway resolves
  * only PATs, so every model call from such a box 401s once the current daemon
@@ -132,13 +104,13 @@ async function mintReplacementServiceKey(row: LegacyBootstrapRow): Promise<strin
   if (!session?.createdBy) return null;
   const [project] = await db
     .select({
-      projectId: projects.projectId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
+      projectId: projectsView.projectId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
     })
-    .from(projects)
-    .where(eq(projects.projectId, session.projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, session.projectId))
     .limit(1);
   if (!project) return null;
   return mintSessionToken({
@@ -183,9 +155,12 @@ async function probeDaemonWithServiceKey(row: LegacyBootstrapRow, serviceKey: st
     const metadata = (sb?.metadata ?? null) as Record<string, unknown> | null;
     const userId = typeof metadata?.provisionedBy === 'string' ? (metadata.provisionedBy as string) : null;
     if (!userId) return false;
-    const { url, headers } = await resolveSandboxIngress(row.externalId, { port: OPENCODE_PRIMARY_PORT, transport: 'http' });
+    // An authenticated daemon route that answers whatever the harness state: it answers only a
+    // request signed with the key the box holds. The repair installed the current daemon.
+    const { url, headers } = await resolveSandboxIngress(row.externalId, { port: SANDBOX_SERVICE_PORT, transport: 'http' });
     const probeHeaders = await buildSandboxUpstreamHeaders({ sandboxId: row.sandboxId, userId, serviceKey, providerHeaders: headers });
-    const res = await fetch(`${url.replace(/\/$/, '')}/session/status`, { headers: probeHeaders, signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    const res = await fetch(`${url.replace(/\/$/, '')}/kortix/diag?tail=1`, { headers: probeHeaders, signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    await res.body?.cancel().catch(() => {});
     return res.ok;
   } catch {
     return false;
@@ -279,19 +254,14 @@ export function buildLegacyBootstrapDeps(row: LegacyBootstrapRow): LegacyBootstr
         return null;
       }
     },
-    fetchOpencodeStatus: async () => {
-      // OpenCode routes are proxied by the daemon behind the sandbox service
-      // key plus the signed user context every proxied user request carries;
-      // health is the only unauthenticated daemon route.
+    fetchTurnInFlight: async () => {
       try {
         const { url, headers } = await resolveSandboxIngress(row.externalId, {
-          port: OPENCODE_PRIMARY_PORT,
+          port: SANDBOX_SERVICE_PORT,
           transport: 'http',
         });
-        const probeHeaders = await opencodeProbeHeaders(row, headers);
-        if (!probeHeaders) return null;
-        const body = await fetchJson(`${url.replace(/\/$/, '')}/session/status`, probeHeaders);
-        return body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
+        const body = (await fetchJson(`${url.replace(/\/$/, '')}/kortix/health?turn=1`, headers)) as { turn_in_flight?: unknown } | null;
+        return typeof body?.turn_in_flight === 'boolean' ? body.turn_in_flight : null;
       } catch {
         return null;
       }
@@ -306,7 +276,6 @@ export function buildLegacyBootstrapDeps(row: LegacyBootstrapRow): LegacyBootstr
         return null;
       }
     },
-    pnpmVersion: () => (typeof (runtimeVersions as { pnpm?: unknown }).pnpm === 'string' ? ((runtimeVersions as { pnpm: string }).pnpm) : null),
     rotateKortixToken: () => mintReplacementServiceKey(row),
     commitKortixToken: (secret, rotatedOnBox) => commitReplacementServiceKey(row, secret, rotatedOnBox),
     exec: async (command, timeoutMs) => {
@@ -433,6 +402,56 @@ export function scheduleLegacyRuntimeBootstrap(
   return true;
 }
 
+/**
+ * The provider edge refused a daemon-port request on a running box: ask for the
+ * dead-daemon relaunch now instead of at the next `/start` or reaper tick.
+ * Fire-and-forget for the proxy (it never waits on a repair); returns whether
+ * a relaunch was scheduled. `scheduleRepair` is overridable for tests only.
+ */
+export async function repairDeadDaemonOnEdgeRefusal(
+  sandboxId: string,
+  scheduleRepair: typeof scheduleLegacyRuntimeBootstrap = scheduleLegacyRuntimeBootstrap,
+): Promise<boolean> {
+  const [row] = await db
+    .select({
+      sandboxId: sessionSandboxes.sandboxId,
+      sessionId: sessionSandboxes.sessionId,
+      accountId: sessionSandboxes.accountId,
+      projectId: sessionSandboxes.projectId,
+      provider: sessionSandboxes.provider,
+      externalId: sessionSandboxes.externalId,
+      metadata: sessionSandboxes.metadata,
+      status: sessionSandboxes.status,
+    })
+    .from(sessionSandboxes)
+    .where(eq(sessionSandboxes.sandboxId, sandboxId))
+    .limit(1);
+  if (!row?.externalId || row.status !== 'active') return false;
+  const metadata = (row.metadata ?? null) as Record<string, unknown> | null;
+  if (decideDeadDaemonOnEdgeRefusal({ provider: row.provider, metadata, nowMs: Date.now() }) === 'skip') return false;
+  // A `current` verdict from hours ago says nothing about a daemon the edge just
+  // found refusing; with it the repair's 6 h recent-check gate skips this box.
+  const { [LEGACY_CHECK_METADATA_KEY]: _staleCheck, ...freshMetadata } = metadata ?? {};
+  const scheduled = scheduleRepair(
+    { ...row, externalId: row.externalId, metadata: freshMetadata },
+    'proxy-edge-refused-daemon',
+  );
+  if (!scheduled) return false;
+  await db
+    .update(sessionSandboxes)
+    .set({
+      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
+        [DEAD_DAEMON_REPAIR_REQUESTED_KEY]: new Date().toISOString(),
+      })}::jsonb`,
+    })
+    .where(eq(sessionSandboxes.sandboxId, sandboxId));
+  logger.warn('[proxy] daemon port refused on a running box; relaunching', {
+    sandbox_id: sandboxId,
+    external_id: row.externalId,
+  });
+  return true;
+}
+
 export type OpenRuntimeGuaranteeAction = 'proceed' | 'defer_turn_running' | 'repairing' | 'exhausted' | 'blocked';
 
 export interface OpenRuntimeGuaranteeOutcome {
@@ -450,13 +469,13 @@ export interface OpenRuntimeGuaranteeOutcome {
  * second implementation.
  *
  * Bounded on purpose: at most a health probe and (only for a stale/legacy
- * box) one OpenCode status probe — a few seconds, matching
+ * box) one turn probe — a few seconds, matching
  * `HEALTH_TIMEOUT_MS`. The actual repair (provider exec + relaunch, up to
  * `LEGACY_BOOTSTRAP_CONVERGE_BUDGET_MS` = 8 min to converge) is FIRED via
  * `scheduleRepair` and never awaited here — the caller reports `repairing`
  * and the client's own poll loop observes convergence on a later call,
  * exactly like `runtime_waking`/`cooling_down` already work in
- * `runOpenSession`. Never fires under a live turn (`opencodeIdle` gate,
+ * `runOpenSession`. Never fires under a live turn (`runtimeIdle` gate,
  * shared with `bootstrapLegacyRuntime`) — a relaunch kills PTYs and ends
  * in-flight work.
  */
@@ -496,7 +515,7 @@ export async function guaranteeCurrentRuntimeOnOpen(
   if (classification.klass !== 'legacy' && classification.klass !== 'stale') {
     // 'current' → nothing to do. 'unreachable'/'not-ok' here means the health
     // probe itself failed even though the caller already confirmed the
-    // provider is running and OpenCode answered moments earlier — fail open
+    // provider is running and the runtime answered moments earlier — fail open
     // rather than block a session open on a second, redundant probe flaking.
     return { action: 'proceed', classification };
   }
@@ -518,8 +537,7 @@ export async function guaranteeCurrentRuntimeOnOpen(
     return { action: 'proceed', classification, retry: describeLegacyBootstrapRetry(row.metadata, manifestBuild, deps.now()) };
   }
 
-  const status = await deps.fetchOpencodeStatus();
-  if (!opencodeIdle(status)) {
+  if (!runtimeIdle(await deps.fetchTurnInFlight())) {
     // A live turn owns this box. Relaunching would kill it. The reaper's own
     // background pass applies the identical gate and will repair it once the
     // turn ends.

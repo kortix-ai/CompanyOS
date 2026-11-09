@@ -94,8 +94,8 @@ const RULES: readonly Rule[] = [
   rule('POST', `projects/${PROJECT}/sessions`),
   // No prompt attachments: a file dropped in a chat goes to the matter's Documents
   // (src/app/providers.tsx `takeFiles`), the one path that makes it citable.
-  // One session: the session, its live stream, transcript, turn, queue, authors, model usage.
-  rule('GET', `${S}(?:/(?:events|snapshot|transcript|turn|prompts|message-authors|model-usage))?`),
+  // One session: the session, its live stream, transcript, session log, turn, queue, authors, model usage.
+  rule('GET', `${S}(?:/(?:events|snapshot|transcript|log|turn|prompts|message-authors|model-usage))?`),
   rule('PATCH DELETE', S),
   rule('POST', `${S}/(?:start|restart|prompts|prompts/hold)`),
   // A queued prompt's edit and removal (the composer's queue; not seen live: prompts steered).
@@ -112,6 +112,10 @@ const RULES: readonly Rule[] = [
   // Runtime writes: abort, edit-and-rewind, permission and question replies.
   rule('POST', `${RT}/session/${SEG}/(?:abort|revert)`),
   rule('POST', `${RT}/(?:permission|question)/${SEG}/(?:reply|reject)`),
+  // The same reads and writes on a box with the session-log actions (runtime.actions.v1), and
+  // the box's own session log (runtime.log.v1): the transcript's only source on such a box.
+  rule('GET', `${RT}/kortix/runtime/(?:pending|commands|workspace|log)`),
+  rule('POST', `${RT}/kortix/runtime/(?:permissions/${SEG}/reply|questions/${SEG}/(?:reply|reject)|sessions/${SEG}/abort)`),
 ];
 
 const RUNTIME_FILE = new RegExp(`^${RT}/(?:file|find)(?:/|$)`);
@@ -277,12 +281,14 @@ const CHANGE_REQUESTS = new RegExp(`^projects/${PROJECT}/change-requests$`);
 
 // The runtime's health, fetched on every turn.
 const RUNTIME_HEALTH = new RegExp(`^${RT}/kortix/health$`);
-// The transcript, from the API and from the runtime.
-const TRANSCRIPT = new RegExp(`^(?:${S}/transcript|${RT}/session/${SEG}/message)$`);
+// The transcript, from the API and from the runtime, and the session log page from either.
+const TRANSCRIPT = new RegExp(`^(?:${S}/transcript|${S}/log|${RT}/session/${SEG}/message|${RT}/kortix/runtime/log)$`);
 
 // The runtime's slash-command list: the platform's own skills (kortix-cli,
 // kortix-apps, …) are not a customer's commands.
 const RUNTIME_COMMANDS = new RegExp(`^${RT}/command$`);
+/** The same list on a box with the session-log actions: `{ commands: [...] }`. */
+const RUNTIME_ACTION_COMMANDS = new RegExp(`^${RT}/kortix/runtime/commands$`);
 const PLATFORM_COMMAND = /kortix|opencode/i;
 
 // The project record and its detail: the feature catalog and the manifest
@@ -299,7 +305,7 @@ const PROJECT_DETAIL = new RegExp(`^projects/${PROJECT}/detail$`);
  * in the shared manifest) or the project repository. A member reads only
  * their firm's agent.
  */
-const SHARED_CONFIG_KEYS = new Set(['manifest', 'manifest_raw', 'open_code_raw', 'env', 'skills']);
+const SHARED_CONFIG_KEYS = new Set(['manifest', 'manifest_raw', 'env', 'skills']);
 
 function scopeDetail(body: unknown, firmAgent: string): unknown {
   if (!isObject(body) || !isObject(body.config)) return body;
@@ -307,7 +313,7 @@ function scopeDetail(body: unknown, firmAgent: string): unknown {
   const agents = Array.isArray(body.config.agents) ? body.config.agents.filter((a) => isObject(a) && a.name === firmAgent) : [];
   return {
     ...body,
-    config: { ...config, agents, default_agent: firmAgent, open_code_default_agent: firmAgent },
+    config: { ...config, agents, default_agent: firmAgent },
     files: [],
     file_count: 0,
   };
@@ -322,6 +328,7 @@ export function redactsIdentity(path: string): boolean {
     CHANGE_REQUESTS.test(path) ||
     SESSION_TURN.test(path) ||
     RUNTIME_COMMANDS.test(path) ||
+    RUNTIME_ACTION_COMMANDS.test(path) ||
     PROJECT_RECORD.test(path) ||
     RUNTIME_HEALTH.test(path) ||
     TRANSCRIPT.test(path)
@@ -334,31 +341,21 @@ const isObject = (v: unknown): v is Json => !!v && typeof v === 'object' && !Arr
 /**
  * A session record's platform plumbing, which no Lumen screen reads: the
  * sandbox's upstream URL (it names the platform host), the audit envelope,
- * the provider, the repository branch and access. The deprecated
- * `opencode_*` aliases go when their `runtime_*` names are present.
+ * the provider, the repository branch and access.
  */
 const SESSION_PLATFORM_KEYS = ['sandbox_url', 'audit_v2', 'repository_access', 'sandbox_provider', 'branch_name', 'base_ref', 'owner_type'];
-
-/** `opencode_session_id` beside `runtime_session_id` is its deprecated alias: dropped at any depth. */
-function dropRuntimeAliases(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(dropRuntimeAliases);
-  if (!isObject(value)) return value;
-  const entries = Object.entries(value).filter(([k]) => !(k === 'opencode_session_id' && 'runtime_session_id' in value));
-  return Object.fromEntries(entries.map(([k, v]) => [k, dropRuntimeAliases(v)]));
-}
 
 function scrubSession(session: unknown): unknown {
   if (!isObject(session)) return session;
   const out: Json = { ...session, owner_email: null, owner_name: null, owner_avatar_url: null };
   if (isObject(session.initiator)) out.initiator = { ...session.initiator, label: null };
   for (const k of SESSION_PLATFORM_KEYS) delete out[k];
-  if ('runtime_session_id' in out) delete out.opencode_session_id;
-  if ('runtime_sessions' in out) delete out.opencode_sessions;
-  // The metadata's audit envelope and runtime model bookkeeping (`opencode_model*`): Lumen runs
-  // the firm's model with no picker, so the composer has no pin to show or keep.
+  // The metadata's audit envelope, the runtime conversation list and the model bookkeeping
+  // (`model`, `model_*`): Lumen runs the firm's model with no picker, so the composer has no
+  // pin to show or keep.
   if (isObject(session.metadata)) {
     out.metadata = Object.fromEntries(
-      Object.entries(session.metadata).filter(([k]) => k !== 'audit_v2' && k !== 'repository_access' && !k.startsWith('opencode_')),
+      Object.entries(session.metadata).filter(([k]) => k !== 'audit_v2' && k !== 'repository_access' && k !== 'runtime_sessions' && k !== 'model' && !k.startsWith('model_')),
     );
   }
   return out;
@@ -379,9 +376,6 @@ export function scrubHealth(body: unknown): unknown {
   if (isObject(body.harness)) {
     const h = body.harness;
     out.harness = { id: 'agent', version: null, state: h.state, ready: h.ready, error: h.error ?? null, session: h.session, turn: h.turn ?? null, details: {} };
-  } else if ('opencode' in body) {
-    // A daemon before the harness block: the runtime state is the field's only use.
-    out.harness = { id: 'agent', version: null, state: body.opencode === true ? 'ok' : String(body.opencode), ready: body.opencode === true || body.opencode === 'ok', error: null, session: { id: null, required: false }, turn: null, details: {} };
   }
   return out;
 }
@@ -407,8 +401,9 @@ const KORTIX_WORD = /\bKortix\b/g;
  */
 const OPERATOR_ID_KEYS = new Set(['account_id', 'created_by', 'owner_id', 'owner_user_id', 'user_id', 'updated_by', 'merged_by', 'closed_by', 'deleted_by', 'author_id']);
 // Platform plumbing on the project record: the managed repository and the manifest file.
-// The raw manifest and the feature catalog's descriptions name the platform's own env vars and daemon.
-const PLATFORM_KEYS = new Set(['repo_url', 'manifest_path', 'git_url', 'clone_url', 'git_origin_url', 'dashboard_url', 'manifest_raw']);
+// The raw manifest, its health report (file path, messages with platform docs links) and the
+// feature catalog's descriptions name the platform's own files, env vars and daemon.
+const PLATFORM_KEYS = new Set(['repo_url', 'manifest_path', 'git_url', 'clone_url', 'git_origin_url', 'dashboard_url', 'manifest_raw', 'manifest_health']);
 
 function dropOperatorIds(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(dropOperatorIds);
@@ -506,8 +501,11 @@ function scrubTurn(value: unknown): unknown {
  */
 export function redactIdentity(path: string, body: unknown, firmAgent = ''): unknown {
   if (RUNTIME_HEALTH.test(path)) return scrubHealth(body);
-  if (TRANSCRIPT.test(path)) return dropRuntimeAliases(scrubInbox(body));
+  if (TRANSCRIPT.test(path)) return scrubInbox(body);
   if (RUNTIME_COMMANDS.test(path) && Array.isArray(body)) return scrubCommands(body);
+  if (RUNTIME_ACTION_COMMANDS.test(path) && isObject(body) && Array.isArray(body.commands)) {
+    return { ...body, commands: scrubCommands(body.commands) };
+  }
   if (PROJECT_DETAIL.test(path)) return scrubPlatform(dropOperatorIds(scopeDetail(body, firmAgent)));
   if (PROJECT_RECORD.test(path) || CHANGE_REQUESTS.test(path)) return scrubPlatform(dropOperatorIds(body));
   if (SESSION_RECORD.test(path) && Array.isArray(body)) return dropOperatorIds(body.map(scrubSession));
@@ -515,7 +513,7 @@ export function redactIdentity(path: string, body: unknown, firmAgent = ''): unk
   if (SESSION_TURN.test(path)) return scrubTurn(body);
   if (SESSION_RECORD.test(path)) return dropOperatorIds(Array.isArray(body.sessions) ? { ...body, sessions: body.sessions.map(scrubSession) } : scrubSession(body));
   if (SESSION_SNAPSHOT.test(path)) {
-    return dropRuntimeAliases({
+    return {
       ...(dropOperatorIds(body) as Json),
       session: dropOperatorIds(scrubSession(body.session)),
       ...('turn' in body ? { turn: scrubTurn(body.turn) } : {}),
@@ -523,7 +521,7 @@ export function redactIdentity(path: string, body: unknown, firmAgent = ''): unk
       // The snapshot bundles the session audit, whose approval rows name the
       // operator's Kortix user by email: the same empty answer as `…/audit`.
       ...('audit' in body ? { audit: emptyAudit(isObject(body.session) ? body.session.session_id : undefined) } : {}),
-    });
+    };
   }
   if (!MESSAGE_AUTHORS.test(path)) return body;
   const keep = (map: unknown) =>

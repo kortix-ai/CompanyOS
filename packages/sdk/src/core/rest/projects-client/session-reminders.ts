@@ -1,5 +1,8 @@
 // Session reminders — scheduled prompts into one session.
 //
+// The product calls a reminder a loop (the Loops page, `kortix loop`). The
+// SDK names, the HTTP routes and the ids keep the wire name, reminder.
+//
 // A reminder wakes its session on a schedule with the same prompt ("did the email
 // arrive?") until someone stops it. It lives in the database, not kortix.yaml,
 // so an agent can create one mid-task with one call. Each fire re-prompts the
@@ -16,6 +19,8 @@ export interface SessionReminder {
   /** `reminder.<hex>` — pass it to update/remove. */
   id: string;
   session_id: string | null;
+  /** What fires it: `schedule` (a loop) or another trigger source. Absent on an older API. */
+  source_type?: 'schedule' | 'webhook' | 'event' | 'app' | 'change_request';
   name: string | null;
   prompt: string;
   /** Canonical period (`30m`, `1h`, `1d`), or null for a cron or one-shot reminder. */
@@ -58,7 +63,7 @@ export interface UpdateSessionReminderInput {
 
 export async function listSessionReminders(projectId: string, sessionId: string) {
   return unwrap(
-    await backendApi.get<{ reminders: SessionReminder[] }>(`/projects/${projectId}/sessions/${sessionId}/reminders`),
+    await backendApi.get<{ reminders: SessionReminder[] }>(`/workspaces/${projectId}/sessions/${sessionId}/reminders`),
   );
 }
 
@@ -68,7 +73,7 @@ export async function createSessionReminder(
   input: CreateSessionReminderInput,
 ) {
   return unwrap(
-    await backendApi.post<SessionReminder>(`/projects/${projectId}/sessions/${sessionId}/reminders`, input),
+    await backendApi.post<SessionReminder>(`/workspaces/${projectId}/sessions/${sessionId}/reminders`, input),
   );
 }
 
@@ -80,7 +85,7 @@ export async function updateSessionReminder(
 ) {
   return unwrap(
     await backendApi.patch<SessionReminder>(
-      `/projects/${projectId}/sessions/${sessionId}/reminders/${reminderId}`,
+      `/workspaces/${projectId}/sessions/${sessionId}/reminders/${reminderId}`,
       input,
     ),
   );
@@ -88,7 +93,7 @@ export async function updateSessionReminder(
 
 export async function deleteSessionReminder(projectId: string, sessionId: string, reminderId: string) {
   return unwrap(
-    await backendApi.delete<{ ok: boolean }>(`/projects/${projectId}/sessions/${sessionId}/reminders/${reminderId}`),
+    await backendApi.delete<{ ok: boolean }>(`/workspaces/${projectId}/sessions/${sessionId}/reminders/${reminderId}`),
   );
 }
 
@@ -96,7 +101,7 @@ export async function deleteSessionReminder(projectId: string, sessionId: string
 export async function runSessionReminder(projectId: string, sessionId: string, reminderId: string) {
   return unwrap(
     await backendApi.post<SessionReminder>(
-      `/projects/${projectId}/sessions/${sessionId}/reminders/${reminderId}/run`,
+      `/workspaces/${projectId}/sessions/${sessionId}/reminders/${reminderId}/run`,
       {},
     ),
   );
@@ -162,15 +167,25 @@ export function deleteSessionReminders(projectId: string, reminders: readonly Se
   return runBatch(reminders, (r) => deleteSessionReminder(projectId, r.sessionId, r.reminderId));
 }
 
-/** A reminder as the project list returns it: plus its session's display name. */
+/**
+ * A reminder as the project list returns it: plus its session's display name.
+ *
+ * @deprecated Use `WorkspaceReminder`. Kept permanently.
+ */
 export interface ProjectReminder extends SessionReminder {
   session_name: string | null;
 }
+
+/** The workspace name of {@link ProjectReminder}: the same type. */
+export type WorkspaceReminder = ProjectReminder;
 
 /**
  * Every reminder in a project on a session the caller can open, soonest
  * active first, then paused, then done. At most 200.
  */
-export async function listProjectReminders(projectId: string) {
-  return unwrap(await backendApi.get<{ reminders: ProjectReminder[] }>(`/projects/${projectId}/reminders`));
+export async function listWorkspaceReminders(projectId: string) {
+  return unwrap(await backendApi.get<{ reminders: ProjectReminder[] }>(`/workspaces/${projectId}/reminders`));
 }
+
+/** @deprecated Use `listWorkspaceReminders`. Kept permanently. */
+export const listProjectReminders = listWorkspaceReminders;

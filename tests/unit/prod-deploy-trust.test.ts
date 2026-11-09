@@ -1,9 +1,8 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { REPO_ROOT as repo, readRepoFile as read, readWorkflow } from '../src/fixtures/repo';
 
-const repo = resolve(import.meta.dirname, '../..');
-const read = (p: string) => readFileSync(resolve(repo, p), 'utf8');
 const PROD_ROLE = 'role/kortix-gha-ecs-deploy-prod';
 
 /** Split a workflow into its top-level jobs: name -> raw text. */
@@ -21,9 +20,12 @@ describe('prod deploy trust', () => {
     const tf = read('infra/terraform/security-baseline/iam-gha-ecs-deploy.tf');
     const block = tf.slice(tf.indexOf('resource "aws_iam_role" "gha_ecs_deploy_prod"'));
     const trust = block.slice(0, block.indexOf('tags = {'));
-    expect(trust).toContain('"repo:kortix-ai/suna:environment:prod"');
+    // Every trusted repository name (github-repos.tf), each pinned to the prod environment.
+    expect(trust).toContain('"repo:${repo}:environment:prod"');
     expect(trust).not.toContain('StringLike');
-    expect(trust).not.toContain('suna:*');
+    expect(trust).not.toMatch(/:\*"/);
+    const names = read('infra/terraform/security-baseline/github-repos.tf');
+    expect(names).toContain('"kortix-ai/CompanyOS"');
   });
 
   it.each(['.github/workflows/deploy-prod.yml'])(
@@ -72,6 +74,14 @@ describe('promote green gate', () => {
       expect(gate).toContain(`Publish ${name} manifest (staging)`);
     }
   });
+
+  // v0.14.12: merge-tree honored the learnings MEMORY.md `merge=union`, said "no
+  // conflict", and GitHub (no union driver) then refused the promotion PR merge.
+  it('checks the staging merge for conflicts the way GitHub merges, without merge drivers', () => {
+    const override = promote.indexOf(`printf '* merge\\n' >> "$(git rev-parse --git-dir)/info/attributes"`);
+    expect(override).toBeGreaterThan(-1);
+    expect(override).toBeLessThan(promote.indexOf('git merge-tree --write-tree origin/staging'));
+  });
 });
 
 describe('ecs-scale', () => {
@@ -99,7 +109,7 @@ describe('prod access is reachable only through the prod role (phase 2)', () => 
     const dir = resolve(repo, '.github/workflows');
     const offenders: string[] = [];
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.yml'))) {
-      for (const [name, text] of jobsOf(readFileSync(resolve(dir, file), 'utf8'))) {
+      for (const [name, text] of jobsOf(readWorkflow(file))) {
         const code = text.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
         const touchesProd = /kortix-prod-env|kortix-prod-web-env|ecs-deploy\.sh\s+prod|ecs-deploy\.sh\s+\\\s*\n\s*prod\b/.test(code);
         const ownRole = code.includes('kortix-gha-prod-use2-terraform');

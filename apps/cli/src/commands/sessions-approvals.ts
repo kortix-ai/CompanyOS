@@ -1,4 +1,5 @@
-import type { PermissionRequest, QuestionRequest } from '@kortix/sdk';
+import { getSessionAudit, resolveApproval, type RuntimePendingRecord, type SessionAuditAction } from '@kortix/sdk';
+import { withCliErrors } from '../api/client.ts';
 import { withKortixScope } from '../api/sdk.ts';
 import {
   emitJson,
@@ -12,6 +13,7 @@ import { C, help, pad, status } from '../style.ts';
 import { type ResolvedSession, loadSessionForChat } from './sessions-chat.ts';
 
 type CtxOpts = { projectArg?: string; hostArg?: string };
+type Located = NonNullable<Awaited<ReturnType<typeof locateSessionAnywhere>>>['located'];
 
 const PENDING_HELP = help`Usage: kortix sessions pending <session-id> [options]
 
@@ -20,10 +22,11 @@ questions the agent is blocked on. Answer them with
 \`kortix sessions approve\` / \`kortix sessions answer\`.
 
 Options:
-  --project <id>   Operate on this project id (default: linked/default).
-  --host <name>    Operate against a non-default Kortix host.
-  --json           Machine-readable output ({ permissions, questions }).
-  -h, --help       Show this help.
+  --workspace <id>  Operate on this workspace id (default: linked/default).
+  --host <name>     Operate against a non-default Kortix host.
+  --json            Machine-readable output ({ permissions, questions }; each
+                    record has id, thread_id, call_id, payload, asked_at).
+  -h, --help        Show this help.
 `;
 
 const APPROVE_HELP = help`Usage: kortix sessions approve <session-id> [<request-id>] [options]
@@ -35,7 +38,7 @@ Options:
   --always           Allow this action pattern for the rest of the session.
   --reject           Deny the request.
   --message "<why>"  Note passed back to the agent with the reply.
-  --project <id>     Operate on this project id (default: linked/default).
+  --workspace <id>   Operate on this workspace id (default: linked/default).
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 `;
@@ -53,7 +56,7 @@ Options:
   --reject           Dismiss the question without answering.
   --answers <json>   Raw answers payload (string[][]) for requests carrying
                      several questions — overrides --option/--text.
-  --project <id>     Operate on this project id (default: linked/default).
+  --workspace <id>   Operate on this workspace id (default: linked/default).
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 `;
@@ -62,7 +65,6 @@ interface ParsedTarget {
   sessionId: string;
   requestId?: string;
   opts: CtxOpts;
-  rest: string[];
 }
 
 function parseTarget(argv: string[], help: string): ParsedTarget | null {
@@ -70,7 +72,7 @@ function parseTarget(argv: string[], help: string): ParsedTarget | null {
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
   } catch (err) {
     process.stderr.write(`${status.err((err as Error).message)}\n\n${help}`);
@@ -85,21 +87,59 @@ function parseTarget(argv: string[], help: string): ParsedTarget | null {
     sessionId: positional[0],
     requestId: positional[1],
     opts: { projectArg, hostArg },
-    rest,
   };
 }
 
+interface QuestionInfo {
+  question: string;
+  header?: string;
+  options?: Array<{ label: string; description?: string }>;
+}
+
+/** A pending permission record's payload: what the agent wants to do. */
+function permissionOf(record: RuntimePendingRecord): { permission: string; patterns: string[] } {
+  const payload = (record.payload ?? {}) as { permission?: unknown; patterns?: unknown };
+  return {
+    permission: typeof payload.permission === 'string' ? payload.permission : '',
+    patterns: Array.isArray(payload.patterns) ? payload.patterns.filter((p): p is string => typeof p === 'string') : [],
+  };
+}
+
+/** A pending question record's payload: the questions the agent asked. */
+function questionsOf(record: RuntimePendingRecord): QuestionInfo[] {
+  const payload = (record.payload ?? {}) as { questions?: unknown };
+  return Array.isArray(payload.questions) ? (payload.questions as QuestionInfo[]) : [];
+}
+
 async function pendingFor(resolved: ResolvedSession): Promise<{
-  permissions: PermissionRequest[];
-  questions: QuestionRequest[];
+  permissions: RuntimePendingRecord[];
+  questions: RuntimePendingRecord[];
 } | null> {
   try {
-    const { permissions, questions } = await withKortixScope(resolved.auth, () => resolved.handle.pending());
+    const { permissions, questions } = await withKortixScope(resolved.auth, () => resolved.handle.pendingRequests());
     return { permissions, questions };
   } catch (err) {
     surfaceApiError(err);
     return null;
   }
+}
+
+/** The one pending ask of a kind, or null once it printed why there is none to take. */
+function pickSinglePending(
+  items: RuntimePendingRecord[],
+  kind: 'permission' | 'question',
+  label: (item: RuntimePendingRecord) => string,
+): RuntimePendingRecord | null {
+  if (items.length === 0) {
+    process.stderr.write(`${status.err(`No pending ${kind} on this session.`)}\n`);
+    return null;
+  }
+  if (items.length > 1) {
+    const listing = items.map((item) => `  ${item.id}  ${label(item)}`).join('\n');
+    process.stderr.write(`${status.err(`Several ${kind}s are pending — pass a request id:`)}\n${listing}\n`);
+    return null;
+  }
+  return items[0] ?? null;
 }
 
 export async function runSessionsPending(argv: string[]): Promise<number> {
@@ -130,9 +170,10 @@ export async function runSessionsPending(argv: string[]): Promise<number> {
   if (permissions.length > 0) {
     process.stdout.write(`\n  ${C.white}${C.bold}Permissions${C.reset}\n`);
     for (const p of permissions) {
+      const { permission, patterns } = permissionOf(p);
       process.stdout.write(
-        `  ${C.cyan}${p.id}${C.reset}  ${C.bold}${p.permission}${C.reset}` +
-          `${p.patterns.length ? ` ${C.dim}${p.patterns.join(', ')}${C.reset}` : ''}\n` +
+        `  ${C.cyan}${p.id}${C.reset}  ${C.bold}${permission}${C.reset}` +
+          `${patterns.length ? ` ${C.dim}${patterns.join(', ')}${C.reset}` : ''}\n` +
           `    ${C.dim}approve: kortix sessions approve ${resolved.session.session_id} ${p.id}${C.reset}\n`,
       );
     }
@@ -140,9 +181,9 @@ export async function runSessionsPending(argv: string[]): Promise<number> {
   if (questions.length > 0) {
     process.stdout.write(`\n  ${C.white}${C.bold}Questions${C.reset}\n`);
     for (const q of questions) {
-      for (const info of q.questions) {
+      for (const info of questionsOf(q)) {
         process.stdout.write(`  ${C.cyan}${q.id}${C.reset}  ${info.question}\n`);
-        for (const o of info.options) {
+        for (const o of info.options ?? []) {
           process.stdout.write(
             `    ${C.dim}- ${o.label}${o.description ? ` (${o.description})` : ''}${C.reset}\n`,
           );
@@ -183,18 +224,9 @@ export async function runSessionsApprove(argv: string[]): Promise<number> {
   if (!requestId) {
     const pending = await pendingFor(resolved);
     if (!pending) return 1;
-    if (pending.permissions.length === 0) {
-      process.stderr.write(`${status.err('No pending permission on this session.')}\n`);
-      return 1;
-    }
-    if (pending.permissions.length > 1) {
-      const listing = pending.permissions.map((p) => `  ${p.id}  ${p.permission}`).join('\n');
-      process.stderr.write(
-        `${status.err('Several permissions are pending — pass a request id:')}\n${listing}\n`,
-      );
-      return 1;
-    }
-    requestId = pending.permissions[0].id;
+    const only = pickSinglePending(pending.permissions, 'permission', (p) => permissionOf(p).permission);
+    if (!only) return 1;
+    requestId = only.id;
   }
 
   const reply = reject ? 'reject' : always ? 'always' : 'once';
@@ -244,7 +276,7 @@ export async function runSessionsAnswer(argv: string[]): Promise<number> {
   const resolved = await loadSessionForChat(target.sessionId, target.opts, 'sessions answer');
   if (!resolved) return 1;
 
-  let request: QuestionRequest | undefined;
+  let request: RuntimePendingRecord | undefined;
   if (target.requestId) {
     const pending = await pendingFor(resolved);
     if (!pending) return 1;
@@ -256,20 +288,8 @@ export async function runSessionsAnswer(argv: string[]): Promise<number> {
   } else {
     const pending = await pendingFor(resolved);
     if (!pending) return 1;
-    if (pending.questions.length === 0) {
-      process.stderr.write(`${status.err('No pending question on this session.')}\n`);
-      return 1;
-    }
-    if (pending.questions.length > 1) {
-      const listing = pending.questions
-        .map((q) => `  ${q.id}  ${q.questions[0]?.header ?? ''}`)
-        .join('\n');
-      process.stderr.write(
-        `${status.err('Several questions are pending — pass a request id:')}\n${listing}\n`,
-      );
-      return 1;
-    }
-    request = pending.questions[0];
+    request = pickSinglePending(pending.questions, 'question', (q) => questionsOf(q)[0]?.header ?? '') ?? undefined;
+    if (!request) return 1;
   }
   const requestId = target.requestId ?? request?.id;
   if (!requestId) {
@@ -287,13 +307,14 @@ export async function runSessionsAnswer(argv: string[]): Promise<number> {
     if (answersJson) {
       answers = JSON.parse(answersJson);
     } else {
-      if (request && request.questions.length > 1) {
+      const infos = request ? questionsOf(request) : [];
+      if (infos.length > 1) {
         return fail('This request carries several questions — pass --answers with a string[][] payload.');
       }
-      // OpenCode accepts the displayed option labels as the canonical answers.
-      const info = request?.questions[0];
+      // The runtime takes the displayed option labels as the answers.
+      const info = infos[0];
       const mapped = options.map((o) => {
-        const match = info?.options.find((opt) => opt.label === o);
+        const match = info?.options?.find((opt) => opt.label === o);
         return match?.label ?? o;
       });
       answers = [[...mapped, ...(text !== undefined ? [text] : [])]];
@@ -310,7 +331,7 @@ export async function runSessionsAnswer(argv: string[]): Promise<number> {
 //
 // Two different gates share the word "approve" and must not be confused:
 //
-//   `sessions approve`   answers an OpenCode PERMISSION ask — the agent wants
+//   `sessions approve`   answers a runtime PERMISSION ask — the agent wants
 //                        to run a tool and the runtime is blocked on a reply.
 //                        Lives in the sandbox; disappears if the box restarts.
 //   `sessions approvals` resolves a governed CONNECTOR call — a policy said
@@ -323,7 +344,7 @@ export async function runSessionsAnswer(argv: string[]): Promise<number> {
 const APPROVALS_HELP = help`Usage: kortix sessions approvals <session-id> [<subcommand>] [options]
 
 Governed connector calls this session is waiting on a human for — an action a
-project policy said needs a decision before the connector runs it. Durable:
+workspace policy said needs a decision before the connector runs it. Durable:
 unlike \`sessions pending\`, these survive a sandbox restart.
 
 Subcommands:
@@ -332,26 +353,81 @@ Subcommands:
   deny <execution-id>      Refuse it. The agent is told and continues without it.
 
 Options:
-  --project <id>   Operate on this project id (default: linked/default).
-  --host <name>    Operate against a non-default Kortix host.
-  --json           Machine-readable output.
-  -h, --help       Show this help.
+  --workspace <id>  Operate on this workspace id (default: linked/default).
+  --host <name>     Operate against a non-default Kortix host.
+  --json            Machine-readable output.
+  -h, --help        Show this help.
 
 Needs project.members.manage, or being the human who launched the session. An
 agent may never resolve its own approval.
 `;
 
-interface SessionAuditAction {
-  execution_id: string;
-  action: string;
-  connector: string | null;
-  connector_id: string | null;
-  status: string;
-  risk: string | null;
-  acted_by_email: string | null;
-  result_summary: Record<string, unknown> | null;
-  at: string;
-  approval_url?: string | null;
+/** `sessions approvals ls`: the calls awaiting a decision, as JSON or a table. */
+async function listConnectorApprovals(located: Located, sessionId: string, json: boolean): Promise<number> {
+  const { projectId, auth, session } = located;
+  let actions: SessionAuditAction[];
+  try {
+    const audit = await withCliErrors(auth, () =>
+      getSessionAudit(projectId, session.session_id, undefined, { includeEvents: false }),
+    );
+    actions = (audit.actions ?? []).filter((a) => a.status === 'pending_approval');
+  } catch (err) {
+    return surfaceApiError(err);
+  }
+  if (json) {
+    emitJson(actions);
+    return 0;
+  }
+  if (actions.length === 0) {
+    process.stdout.write(`  ${C.dim}No connector call is waiting on a decision.${C.reset}\n`);
+    return 0;
+  }
+  const idW = Math.max(...actions.map((a) => a.execution_id.length), 12);
+  process.stdout.write('\n');
+  process.stdout.write(`  ${C.dim}${pad('EXECUTION', idW)}   RISK          ACTION${C.reset}\n`);
+  for (const action of actions) {
+    // `action` already carries the connector prefix (`<slug>.<action>`) — the
+    // same field --json emits. Never prepend `connector` again.
+    process.stdout.write(
+      `  ${C.cyan}${pad(action.execution_id, idW)}${C.reset}   ${pad(action.risk ?? 'unknown', 12)}  ${C.bold}${action.action}${C.reset}\n`,
+    );
+    const args = action.result_summary?.args_preview;
+    if (args !== undefined) {
+      process.stdout.write(`    ${C.dim}args ${JSON.stringify(args)}${C.reset}\n`);
+    }
+    process.stdout.write(
+      `    ${C.dim}approve: kortix sessions approvals ${sessionId} approve ${action.execution_id}${C.reset}\n` +
+        `    ${C.dim}deny: kortix sessions approvals ${sessionId} deny ${action.execution_id}${C.reset}\n`,
+    );
+  }
+  process.stdout.write('\n');
+  return 0;
+}
+
+/** `sessions approvals approve|deny <execution-id>`: record the decision and say what happens next. */
+async function decideConnectorApproval(
+  located: Located,
+  sub: 'approve' | 'deny',
+  executionId: string,
+  json: boolean,
+): Promise<number> {
+  try {
+    await withCliErrors(located.auth, () => resolveApproval(located.projectId, executionId, sub));
+  } catch (err) {
+    return surfaceApiError(err);
+  }
+  if (json) {
+    emitJson({ execution_id: executionId, decision: sub });
+    return 0;
+  }
+  process.stdout.write(
+    `${status.ok(
+      sub === 'approve'
+        ? `Approved ${C.bold}${executionId}${C.reset}${C.dim} — the agent resumes and runs the call${C.reset}`
+        : `Denied ${C.bold}${executionId}${C.reset}${C.dim} — the agent is told and continues without it${C.reset}`,
+    )}\n`,
+  );
+  return 0;
 }
 
 export async function runSessionsConnectorApprovals(argv: string[]): Promise<number> {
@@ -365,7 +441,7 @@ export async function runSessionsConnectorApprovals(argv: string[]): Promise<num
   let json = false;
   try {
     opts = {
-      projectArg: takeFlagValue(rest, ['--project']),
+      projectArg: takeFlagValue(rest, ['--project', '--workspace']),
       hostArg: takeFlagValue(rest, ['--host']),
     };
     json = takeFlagBool(rest, ['--json']);
@@ -395,65 +471,7 @@ export async function runSessionsConnectorApprovals(argv: string[]): Promise<num
     (host) => `kortix sessions approvals ${sessionId} ${sub} --host ${host}`,
   );
   if (!located) return 1;
-  const { client, projectId, session } = located.located;
 
-  if (sub === 'ls' || sub === 'list') {
-    let actions: SessionAuditAction[];
-    try {
-      const audit = await client.get<{ actions: SessionAuditAction[] }>(
-        `/projects/${projectId}/sessions/${session.session_id}/audit`,
-      );
-      actions = (audit.actions ?? []).filter((a) => a.status === 'pending_approval');
-    } catch (err) {
-      return surfaceApiError(err);
-    }
-    if (json) {
-      emitJson(actions);
-      return 0;
-    }
-    if (actions.length === 0) {
-      process.stdout.write(`  ${C.dim}No connector call is waiting on a decision.${C.reset}\n`);
-      return 0;
-    }
-    const idW = Math.max(...actions.map((a) => a.execution_id.length), 12);
-    process.stdout.write('\n');
-    process.stdout.write(`  ${C.dim}${pad('EXECUTION', idW)}   RISK          ACTION${C.reset}\n`);
-    for (const action of actions) {
-      // `action` already carries the connector prefix (`<slug>.<action>`) — the
-      // same field --json emits. Never prepend `connector` again.
-      process.stdout.write(
-        `  ${C.cyan}${pad(action.execution_id, idW)}${C.reset}   ${pad(action.risk ?? 'unknown', 12)}  ${C.bold}${action.action}${C.reset}\n`,
-      );
-      const args = action.result_summary?.args_preview;
-      if (args !== undefined) {
-        process.stdout.write(`    ${C.dim}args ${JSON.stringify(args)}${C.reset}\n`);
-      }
-      process.stdout.write(
-        `    ${C.dim}approve: kortix sessions approvals ${sessionId} approve ${action.execution_id}${C.reset}\n` +
-          `    ${C.dim}deny: kortix sessions approvals ${sessionId} deny ${action.execution_id}${C.reset}\n`,
-      );
-    }
-    process.stdout.write('\n');
-    return 0;
-  }
-
-  try {
-    await client.post(`/projects/${projectId}/approvals/${executionId}`, {
-      decision: sub === 'approve' ? 'approve' : 'deny',
-    });
-  } catch (err) {
-    return surfaceApiError(err);
-  }
-  if (json) {
-    emitJson({ execution_id: executionId, decision: sub });
-    return 0;
-  }
-  process.stdout.write(
-    `${status.ok(
-      sub === 'approve'
-        ? `Approved ${C.bold}${executionId}${C.reset}${C.dim} — the agent resumes and runs the call${C.reset}`
-        : `Denied ${C.bold}${executionId}${C.reset}${C.dim} — the agent is told and continues without it${C.reset}`,
-    )}\n`,
-  );
-  return 0;
+  if (sub === 'approve' || sub === 'deny') return decideConnectorApproval(located.located, sub, executionId, json);
+  return listConnectorApprovals(located.located, sessionId, json);
 }

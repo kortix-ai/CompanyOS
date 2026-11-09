@@ -322,6 +322,12 @@ export type KortixCompactionPart = {
   auto: boolean;
   overflow?: boolean;
   tail_start_id?: string;
+  /** `record`: the context reset onto the session's searchable record, with nothing summarized. Absent: a summary. */
+  mode?: 'record';
+  /** The context size, in tokens, when it reset or compacted. */
+  tokens_before?: number;
+  /** For `record`: the entries the record held at the reset. */
+  entries?: number;
 };
 
 /**
@@ -482,6 +488,13 @@ export type KortixSessionEvent =
       properties: { sessionID: string; requestID: string; answers: RuntimeQuestionAnswer[] };
     }
   | { type: 'question.rejected'; properties: { sessionID: string; requestID: string } }
+  /**
+   * Nobody answered live, so the call stopped waiting and the turn went on. The
+   * request stays open server-side (Review, "Needs you"); its answer arrives
+   * as a new message. A client drops its live card and shows the stored ask.
+   */
+  | { type: 'question.parked'; properties: { sessionID: string; requestID: string } }
+  | { type: 'permission.parked'; properties: { sessionID: string; requestID: string } }
   | { type: 'todo.updated'; properties: { sessionID: string; todos: KortixTodo[] } };
 
 export type KortixSessionEventType = KortixSessionEvent['type'];

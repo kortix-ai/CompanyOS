@@ -43,13 +43,14 @@
  * Exit 0 = nothing missing (waivers aside).  Exit 1 = drift.
  * Exit 2 = usage error, connection error, or a ledger the role cannot read.
  */
+import { flag } from './argv';
 import { type Catalog, type CatalogConstraint, type CatalogIndex, readDatabase } from './catalog';
 import { LIVE_SCHEMA_WAIVERS, type LiveSchemaWaivers } from './verify-live-schema-waivers';
 
 const SCHEMA = 'kortix';
 
 /** Remove the schema qualification that renders differently per search_path. */
-export function unqualify(sql: string): string {
+function unqualify(sql: string): string {
   return sql.replace(/\b(?:kortix|public)\./g, '');
 }
 
@@ -59,7 +60,7 @@ export function normalizeIndexDef(def: string): string {
 }
 
 /** Drop schema qualification and a trailing NOT VALID (validity is compared separately). */
-export function normalizeConstraintDef(def: string): string {
+function normalizeConstraintDef(def: string): string {
   return unqualify(def).replace(/\s+NOT VALID$/, '');
 }
 
@@ -142,7 +143,7 @@ export function diffMissing(canonical: ComparedObjects, live: ComparedObjects): 
   return { missingTables, missingColumns, missingEnumValues };
 }
 
-export interface StructureDrift {
+interface StructureDrift {
   /** Canonical index definitions no live index has. `name: definition`. */
   missingIndexes: string[];
   /** Live indexes that are INVALID. */
@@ -242,12 +243,8 @@ export function pendingMigrations(canonicalLedger: readonly string[], liveLedger
 }
 
 function resolveUrls(argv: string[]): { canonical: string; live: string } {
-  const flag = (name: string) => {
-    const i = argv.indexOf(name);
-    return i >= 0 ? argv[i + 1] : undefined;
-  };
-  const canonical = flag('--canonical') ?? process.env.CANONICAL_DB_URL;
-  const live = flag('--live') ?? process.env.LIVE_DB_URL;
+  const canonical = flag('--canonical', argv) ?? process.env.CANONICAL_DB_URL;
+  const live = flag('--live', argv) ?? process.env.LIVE_DB_URL;
   if (!canonical || !live) {
     console.error(
       'Usage: CANONICAL_DB_URL=<fresh-migrated> LIVE_DB_URL=<target> bun scripts/verify-live-schema.ts\n' +

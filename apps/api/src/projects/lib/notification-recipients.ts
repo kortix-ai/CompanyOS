@@ -4,6 +4,8 @@
 // imports projects/ internals. Every export here is background-safe and never
 // throws: a failed read means "nobody extra", never a failed relay or route.
 import { sessionLifecycleCommands, sessionSandboxes } from '@kortix/db';
+import type { SelectedFields } from 'drizzle-orm/pg-core';
+import { CHANNEL_PLATFORM_IDS } from '@kortix/shared/channel-descriptors';
 import { and, desc, eq } from 'drizzle-orm';
 import type { SecretGrant, SharingIntent } from '../../connectors/share';
 import { accountGroupsAmong, groupMemberRows } from '../../iam/group-read';
@@ -20,8 +22,7 @@ import { storedSandboxTurns } from '../session-turn-ledger';
 import { triggerSlugOf } from './trigger-run-outcome';
 import { resolveTriggerWatchers } from './trigger-watchers';
 import { resolveUserIdentities } from './user-identity';
-
-const CHANNELS = ['slack', 'teams', 'email', 'telegram'] as const;
+import { errorMessage } from '../../shared/error-message';
 
 export interface SessionClass {
   originClass: SessionOriginClass;
@@ -39,7 +40,7 @@ export interface SessionClass {
  */
 export function classifySession(metadata: unknown, origin: string | null | undefined): SessionClass {
   const meta = (metadata && typeof metadata === 'object' ? metadata : {}) as Record<string, unknown>;
-  const channel = CHANNELS.some((name) => meta.source === name || (meta[name] !== null && typeof meta[name] === 'object'));
+  const channel = CHANNEL_PLATFORM_IDS.some((name) => meta.source === name || (meta[name] !== null && typeof meta[name] === 'object'));
   const triggerSlug = triggerSlugOf(meta);
   const originClass: SessionOriginClass = channel
     ? 'channel'
@@ -47,6 +48,37 @@ export function classifySession(metadata: unknown, origin: string | null | undef
       ? 'unattended'
       : 'attended';
   return { originClass, isChild: typeof meta.spawned_by_session === 'string', triggerSlug };
+}
+
+/** The newest `continue_session` lifecycle row the wire message id names. */
+function newestContinueSessionRow(
+  sessionId: string,
+  messageId: string,
+  columns: { actorUserId: typeof sessionLifecycleCommands.actorUserId; payload: typeof sessionLifecycleCommands.payload },
+): Promise<{ actorUserId: string | null; payload: unknown }[]>;
+function newestContinueSessionRow(
+  sessionId: string,
+  messageId: string,
+  columns: { source: typeof sessionLifecycleCommands.source },
+): Promise<{ source: string | null }[]>;
+async function newestContinueSessionRow(
+  sessionId: string,
+  messageId: string,
+  columns: SelectedFields,
+) {
+  const rows = await db
+    .select(columns)
+    .from(sessionLifecycleCommands)
+    .where(
+      and(
+        eq(sessionLifecycleCommands.sessionId, sessionId),
+        eq(sessionLifecycleCommands.commandType, 'continue_session'),
+        wireMessageIdMatches(messageId),
+      ),
+    )
+    .orderBy(desc(sessionLifecycleCommands.createdAt))
+    .limit(1);
+  return rows;
 }
 
 /**
@@ -62,18 +94,10 @@ export async function personPrompterOf(
   messageId: string | null | undefined,
 ): Promise<string | null> {
   if (!messageId) return null;
-  const [row] = await db
-    .select({ actorUserId: sessionLifecycleCommands.actorUserId, payload: sessionLifecycleCommands.payload })
-    .from(sessionLifecycleCommands)
-    .where(
-      and(
-        eq(sessionLifecycleCommands.sessionId, sessionId),
-        eq(sessionLifecycleCommands.commandType, 'continue_session'),
-        wireMessageIdMatches(messageId),
-      ),
-    )
-    .orderBy(desc(sessionLifecycleCommands.createdAt))
-    .limit(1);
+  const [row] = await newestContinueSessionRow(sessionId, messageId, {
+    actorUserId: sessionLifecycleCommands.actorUserId,
+    payload: sessionLifecycleCommands.payload,
+  });
   const payload = (row?.payload ?? {}) as Record<string, unknown>;
   if (!row?.actorUserId || payload.bindTurnIdentity !== true || payload.authorSessionId != null) return null;
   // Only a member of the account is a person. A personal account's owner is
@@ -90,18 +114,9 @@ export async function personPrompterOf(
  */
 export async function turnPromptSource(sessionId: string, messageId: string | null | undefined): Promise<string | null> {
   if (!messageId) return null;
-  const [row] = await db
-    .select({ source: sessionLifecycleCommands.source })
-    .from(sessionLifecycleCommands)
-    .where(
-      and(
-        eq(sessionLifecycleCommands.sessionId, sessionId),
-        eq(sessionLifecycleCommands.commandType, 'continue_session'),
-        wireMessageIdMatches(messageId),
-      ),
-    )
-    .orderBy(desc(sessionLifecycleCommands.createdAt))
-    .limit(1);
+  const [row] = await newestContinueSessionRow(sessionId, messageId, {
+    source: sessionLifecycleCommands.source,
+  });
   return row?.source ?? null;
 }
 
@@ -128,7 +143,7 @@ async function orFallback<T>(read: () => Promise<T>, fallback: T, what: string, 
   try {
     return await read();
   } catch (err) {
-    logger.warn('[notify] recipient lookup failed', { what, sessionId, error: err instanceof Error ? err.message : String(err) });
+    logger.warn('[notify] recipient lookup failed', { what, sessionId, error: errorMessage(err) });
     return fallback;
   }
 }
@@ -196,8 +211,8 @@ export interface SessionShareChange {
  * project-visible session narrowed to named members tells nobody: every
  * project member could already open it.
  * One row per person per session per UTC day, so toggling a share cannot
- * flood anyone. Returns the users told. The share route calls it only with the
- * project's notification_center flag on (routes/project-sessions.ts).
+ * flood anyone. Returns the users told. The share route calls it on every
+ * share change (routes/project-sessions.ts).
  */
 export async function notifySessionShared(
   change: SessionShareChange,
@@ -244,7 +259,7 @@ export async function notifySessionShared(
   } catch (err) {
     logger.warn('[notify] shared-with-you failed', {
       sessionId: change.sessionId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     return [];
   }

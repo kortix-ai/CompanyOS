@@ -85,7 +85,7 @@ Threat: the agent reads untrusted text (a web page, a file, an email, a connecto
 - Commit only after Jay approves executing this plan. Ask Jay before merging to `dev` (his standing rule overrides the self-merge default in CLAUDE.md).
 - Never run a suite. Run each test file named in a task: `pnpm --filter <pkg> test <file>`. A Mac exits `2` on suite runs.
 - `packages/sdk`: load the **sdk** skill. TDD is mandatory. End each SDK task with the gates run and a shippable YES/NO/NOT YET.
-- Load **ponytail** before writing code, and **animations-dev** before writing the card motion.
+- Load **animations-dev** before writing the card motion.
 - Kortix tool modules import only `node:*` (`apps/kortix-sandbox-agent-server/src/services/tools/kortix/*`). After a change, run `bun run apps/cli/scripts/generate-kortix-tools.ts`.
 - The tool output is a small JSON object with a path. Image bytes never enter a tool output, a trace, or a log.
 - Gateway traces carry no prompt and no image: `request: null`, `response: null`.
@@ -418,7 +418,7 @@ test('a new image_gen output never renders a remote URL')                     //
 - [ ] **Step 3: Codemode-only session.** Repeat step 2 with `KORTIX_PI_CODEMODE=only`. The `image_gen` part is still native.
 - [ ] **Step 4: Stop mid-generation.** The part ends aborted and no file exists.
 - [ ] **Step 5: Hand Jay the visual check** (web light and dark themes, desktop at 720 × 480, mobile): generating state, ready, failed (disconnected project), stopped.
-- [ ] **Step 6: PR, merge, dev.** Open the PR with the **create-pr** skill. Ask Jay before merging. Run `gh workflow run deploy-dev.yml --repo kortix-ai/suna -f surface=changed`. Confirm `/health` on api, gateway and sandbox image serves the merge SHA. Repeat steps 1–2 against `https://dev-api.kortix.com` with a new session (a kortixd change reaches new sessions only).
+- [ ] **Step 6: PR, merge, dev.** Open the PR with the **create-pr** skill. Ask Jay before merging. Run `gh workflow run deploy-dev.yml --repo kortix-ai/CompanyOS -f surface=changed`. Confirm `/health` on api, gateway and sandbox image serves the merge SHA. Repeat steps 1–2 against `https://dev-api.kortix.com` with a new session (a kortixd change reaches new sessions only).
 - [ ] **Step 7: Close the loop.**
   - Set the work folder `status` to the merge SHA.
   - Add a weekly changelog line.

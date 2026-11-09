@@ -1,16 +1,19 @@
 ---
 name: compliance
-description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes and their 30-day notice, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts."
+description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts. Load too for the 90-day deletion of a terminated account's data (the retention backstop, kortix.retention_erasures, RETENTION_ERASURE_MODE) and its monthly evidence."
 ---
 
 # Compliance
 
-The Data Processing Addendum (DPA) promises two things that code keeps:
+The Data Processing Addendum (DPA) promises three things that code keeps:
 
 - Section 7.2 / Annex III: `/legal/subprocessors` lists every third party that
   processes customer personal data.
 - Section 7.3: a new subprocessor gets at least 30 days' notice before it
   processes customer personal data.
+- The DPA and the Data Retention Policy: a terminated account's personal data
+  is deleted within 90 days of the termination (section "Delete a terminated
+  account within 90 days").
 
 ## Add a subprocessor
 
@@ -69,29 +72,26 @@ The privacy@kortix.com reports give the per-sweep totals.
 ## Change the Terms of Service
 
 The text is `apps/web/src/app/[locale]/(public)/(seo)/legal/terms-of-service.ts`.
-The version and the notice are `packages/shared/src/terms.ts`.
+The version is `packages/shared/src/terms.ts`.
 
 Terms section 16: a material change needs 30 days' notice to self-serve
 customers. A signed Order keeps the Terms version it names.
 
 1. Edit the text. Update the version line at the top of `TERMS_OF_SERVICE`.
 2. In `terms.ts`: move `TERMS_PREVIOUS_VERSION` to the old version, set
-   `TERMS_VERSION` to the merge day, `TERMS_EFFECTIVE` 37 days later, and
-   `TERMS_CHANGES` to one sentence per change.
+   `TERMS_VERSION` to the merge day and `TERMS_EFFECTIVE` 37 days later.
 3. If the change affects what a person accepts at signup, change the
    consent line too (`packages/ui/src/internal/auth/auth-card-shell.tsx`).
-   The publicity clause has no line of its own on `/auth`; the notice email
-   and the Terms carry it.
+   The publicity clause has no line of its own on `/auth`; the Terms carry
+   it.
 4. Merge to `dev`. The notice ships with the next prod release.
 
-`runTermsNoticeSweep` (`apps/api/src/billing/services/terms-notices.ts`) runs
-hourly in the billing worker, on prod only. It emails every signed-up user
-once, free or paid (`auth.users` with an email, not deleted, not anonymous),
-at most 10,000 per sweep. Reply-To is legal@kortix.com. Each sent email leaves
-an audit event `legal.terms_notice.sent` (`resource_id` = `TERMS_VERSION`,
-`output_summary.user_id`). legal@kortix.com gets one report when every user
-has the notice, and one per sweep while it runs late: "Terms notice gave only
-N days" means move `TERMS_EFFECTIVE`.
+Kortix does not email a Terms change to its users. A sweep that emailed
+every signed-up user (#11004) used up the SES 24-hour quota and the Resend
+monthly quota on 2026-10-29, and magic-link sign-in failed on prod until it
+was removed. Bulk mail never goes through the transactional email chain:
+that chain carries sign-in mail. Past sends keep their
+`legal.terms_notice.sent` audit events.
 
 ### Customer logos (Terms section 10, from version 2026-10-28)
 
@@ -103,6 +103,46 @@ endorsement without written approval. An opt-out arrives at legal@kortix.com:
 remove the name and logo from Kortix websites within 30 days. Never use a
 logo before `TERMS_EFFECTIVE`, or for a customer whose signed Order excludes
 it.
+
+## Delete a terminated account within 90 days
+
+Terminated means closed (decision D6b, 2026-10-14): an open
+`kortix.account_deletion_requests` row. `POST /v1/account/request-deletion`
+writes it with a 14-day grace; deleting the auth user writes it due now. The
+account closes at `scheduled_for`. A plan cancellation, a downgrade to Free, a
+payment failure or an idle account is not a termination.
+
+Two workers delete a closed account, both through `runAccountDeletion`
+(`apps/api/src/billing/services/account-deletion.ts`):
+
+1. `account-deletion` (every 15 min): a request due within the last 2 days.
+2. `retention-erasure` (daily, `apps/api/src/billing/services/retention-erasure.ts`):
+   every request still open `RETENTION_ERASURE_AFTER_DAYS` (default 80) after
+   `scheduled_for`. It skips an account that still acts live (a paid plan whose
+   payment is not cancelled, or a session or turn after the close) and records
+   `skipped_live` for a person.
+
+`RETENTION_ERASURE_MODE`: `dry_run` (default) records `would_erase` and
+deletes nothing; `execute` deletes; `off` stops the tick.
+`ACCOUNT_DELETION_SWEEP_PAUSED=true` forces `dry_run`.
+
+### Monthly evidence
+
+One `kortix.retention_erasures` row per account, UTC day and mode: ids, dates,
+outcome, no personal data. It outlives the account.
+
+```sql
+select account_id, request_id, requested_at, closed_at, run_on, mode, outcome, error,
+       run_on - closed_at::date as days_after_close
+from kortix.retention_erasures
+where run_on >= date '<YYYY-MM-01>' and run_on < date '<YYYY-MM-01>' + interval '1 month'
+order by run_on, account_id;
+```
+
+An `erased` row is the proof. A `failed` or `skipped_live` row past day 80 is
+an open item for a person: fix the failure, or decide the live account.
+
+Tests: `pnpm test -- --db-only integration-retention-erasure`.
 
 ## Staff access to a customer account (act-as)
 

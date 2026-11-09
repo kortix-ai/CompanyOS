@@ -52,8 +52,6 @@ const checks: Array<{ scope: Scope; model: string }> = [];
 let servableFor: (model: string, personal: string | null) => boolean = () => true;
 const keysOf = { providerId: 'anthropic', envVar: 'ANTHROPIC_API_KEY', secretIds: ['k1', 'k2'], labels: ['Team', 'Ivan'] };
 let currentKeys: typeof keysOf | null = null;
-let grantVerdict: { ok: false; reason: 'agent_grant'; envVar: string; providerId: string } | null = null;
-const grantAgents: Array<string | null | undefined> = [];
 let catalog: Array<Record<string, unknown>> = [];
 
 mock.module('../channels/model-access', () => ({
@@ -74,13 +72,8 @@ mock.module('../channels/model-access', () => ({
     freeManagedOnly: input.freeManagedOnly,
     pooledEnabled: input.pooledEnabled,
   }),
-  agentGrantEnvFor: (_projectId: string, agentName: string | null | undefined) => {
-    grantAgents.push(agentName);
-    return async () => null;
-  },
   checkChannelModel: async (scope: Scope, model: string) => {
     checks.push({ scope, model });
-    if (grantVerdict) return grantVerdict;
     return servableFor(model, scope.personalUserId)
       ? { ok: true, model: `kortix/${model}`, keys: model.includes('/') ? keysOf : null }
       : { ok: false, reason: 'not_servable' };
@@ -108,14 +101,12 @@ beforeEach(() => {
   gate = { projectId: 'proj', accountId: 'acct', ownerUserId: 'owner', freeManagedOnly: false };
   actor = { userId: 'ivan' };
   actorLookups.length = 0;
-  selection = { projectId: 'proj', agentName: null, opencodeModel: null };
+  selection = { projectId: 'proj', agentName: null, sessionModel: null };
   stored.length = 0;
   bound = true;
   checks.length = 0;
   servableFor = () => true;
   currentKeys = null;
-  grantVerdict = null;
-  grantAgents.length = 0;
   catalog = [];
 });
 
@@ -150,7 +141,7 @@ describe('/kortix models — what this person may run here', () => {
 
   test('a short list: one button per model, each saying how it is paid for', async () => {
     catalog = few;
-    selection = { projectId: 'proj', agentName: null, opencodeModel: 'kortix/anthropic/claude-opus-4-8' };
+    selection = { projectId: 'proj', agentName: null, sessionModel: 'kortix/anthropic/claude-opus-4-8' };
     currentKeys = keysOf;
     const resp = await buildSlackModelsResponse(dm);
     const all = text(resp);
@@ -177,7 +168,7 @@ describe('/kortix models — what this person may run here', () => {
       })),
       ...few,
     ];
-    selection = { projectId: 'proj', agentName: null, opencodeModel: 'kortix/glm-5.3-flash' };
+    selection = { projectId: 'proj', agentName: null, sessionModel: 'kortix/glm-5.3-flash' };
     const resp = await buildSlackModelsResponse(dm);
     const select = findAccessory(resp, 'static_select')!;
     expect(select.action_id).toBe('set_model_select');
@@ -205,7 +196,7 @@ describe('/kortix models — what this person may run here', () => {
 
   test('no project connected: says how to connect one', async () => {
     gate = null;
-    expect(text(await buildSlackModelsResponse(dm))).toContain('No project is connected to this channel yet');
+    expect(text(await buildSlackModelsResponse(dm))).toContain('No Kortix workspace is connected to this channel yet');
   });
 });
 
@@ -216,15 +207,6 @@ describe('/kortix model — a choice is checked as the person who made it', () =
     expect(checks[0].scope).toMatchObject({ memberUserId: 'ivan', personalUserId: 'ivan' });
     expect(reply).toContain('Model for this channel set to *Claude Opus 4.8*');
     expect(reply).toContain('Rotates across Team, Ivan. New threads use it.');
-  });
-
-  test('the channel`s agent decides which keys may be used, and is named when it may not', async () => {
-    selection = { projectId: 'proj', agentName: 'reviewer', opencodeModel: null };
-    grantVerdict = { ok: false, reason: 'agent_grant', envVar: 'CODEX_AUTH_JSON', providerId: 'codex' };
-    const reply = await applySlackModelChoice(dm, 'codex/gpt-6-astra');
-    expect(grantAgents).toEqual(['reviewer']);
-    expect(reply).toContain('The *reviewer* agent may not use ChatGPT connections. Add `CODEX_AUTH_JSON`');
-    expect(stored).toHaveLength(0);
   });
 
   test('a channel cannot use a model that runs only on the person`s own keys: it says where it works', async () => {
@@ -250,7 +232,7 @@ describe('/kortix model — a choice is checked as the person who made it', () =
     const reply = await applySlackModelChoice({ ...dm, channelId: 'C1' }, 'kortix/glm-5.3-flash');
     expect(checks).toHaveLength(0);
     expect(stored).toHaveLength(0);
-    expect(reply).toContain('Only a project manager');
+    expect(reply).toContain('Only a workspace manager');
   });
 
   test('an id with whitespace is refused on shape, before any check', async () => {
@@ -259,15 +241,15 @@ describe('/kortix model — a choice is checked as the person who made it', () =
   });
 
   test('`default` resets the channel to the project default', async () => {
-    expect(await applySlackModelChoice(dm, 'default')).toBe('Model reset to the project default.');
+    expect(await applySlackModelChoice(dm, 'default')).toBe('Model reset to the workspace default.');
     expect(stored).toEqual([null]);
   });
 
   test('no project connected, or the binding is gone: says to connect one, nothing kept', async () => {
     gate = null;
-    expect(await applySlackModelChoice(dm, 'glm-5.3-flash')).toContain('Connect a project first');
+    expect(await applySlackModelChoice(dm, 'glm-5.3-flash')).toContain('Connect a Kortix workspace first');
     gate = { projectId: 'proj', accountId: 'acct', ownerUserId: 'owner', freeManagedOnly: false };
     bound = false;
-    expect(await applySlackModelChoice(dm, 'glm-5.3-flash')).toContain('Connect a project first');
+    expect(await applySlackModelChoice(dm, 'glm-5.3-flash')).toContain('Connect a Kortix workspace first');
   });
 });

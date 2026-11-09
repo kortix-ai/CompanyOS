@@ -3,7 +3,7 @@
 import { useLocalizedUiCatalog } from '../../i18n/ui-catalog/use-localized-ui-catalog';
 import { useTranslations } from '../../i18n';
 /**
- * Models — the whole `/projects/[id]/models` page: the shared capability
+ * Models — the whole `/workspaces/[id]/models` page: the shared capability
  * shell, one tab strip, and whichever section that strip has selected.
  *
  * ## It is the same page as Connectors, Agents and Skills, or it is wrong
@@ -24,10 +24,10 @@ import { useTranslations } from '../../i18n';
  * section is plain local state and renders as the shell's `children`, so the
  * shell's scroll container is the page's only one.
  *
- * ## Seven tabs
+ * ## Eight tabs
  *
  * Order follows the work: bring a key in, choose models, add your own provider,
- * hand a key out, shape the routing, then watch what it costs and what it did.
+ * hand a key out, shape the routing, then watch costs, logs, and subscription usage.
  *
  *  - **Providers** (was "API keys") is now ONLY the provider list. The gateway
  *    key and its reference moved out — see `gateway-access-tab.tsx` for why the
@@ -42,8 +42,10 @@ import { useTranslations } from '../../i18n';
  *  - **Budgets folded into Costs.** The cap belongs under the number it caps —
  *    see `gateway-budgets.tsx`.
  *
- * The active tab is LOCAL state, so switching tabs never touches the main
- * Customize rail. Deep-links / `openCustomize('llm-providers')` set the hosting
+ * The page synchronizes its active tab with `?tab=`; agent editors keep their
+ * local tabs. The Usage tab exists only while a ChatGPT or Claude login is
+ * connected.
+ * Legacy deep-links / `openCustomize('llm-providers')` set the hosting
  * panel's section, read here via `useSettingsNav()` (once, and followed on
  * change) to pick the initial tab.
  *
@@ -71,8 +73,9 @@ import { useTranslations } from '../../i18n';
  * double-indents the page.
  */
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useUiPathname, useUiSearchParams, useUiShallowNavigate } from '../../providers/ui-provider';
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast } from '../../primitives/toast';
 import { SplitSheet, SplitSheetContent, SplitSheetMain } from '../../primitives/split-sheet';
@@ -84,11 +87,14 @@ import {
   type ModelsPageSheetHost,
 } from './models-page-sheet';
 import { cn } from '../../internal/lib/utils';
+import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { ModelSelector } from '../../session/models/model-selector';
+import type { ResourceScope } from '../shared/agent-resource-scope';
 import { CapabilityPageShell } from '../shared/capability-page-shell';
 import { GatewayAccessTab } from './gateway-access-tab';
 import { CustomProviderPanel } from './llm-provider/custom-provider-panel';
 import { ModelsTab } from './llm-provider/models-tab';
+import { SubscriptionUsageTab, useHasSubscriptions } from './view/subscription-usage-tab';
 import { GatewayLogs } from './view/gateway/gateway-logs';
 import { GatewayOverview } from './view/gateway/gateway-overview';
 import { GatewayRouting } from './view/gateway/gateway-routing';
@@ -99,13 +105,14 @@ import { gatewayRoutingPolicyKey, resolveModelDefault, useModelDefaults, useProj
 import { useIsMutating } from '@tanstack/react-query';
 
 export const MODELS_PAGE_TITLE = 'Models';
-export const MODELS_PAGE_DESCRIPTION = 'Choose the providers and models this project can use.';
+export const MODELS_PAGE_DESCRIPTION = 'Choose the providers and models this workspace can use.';
 
 type LlmTab =
-  'providers' | 'models' | 'custom' | 'gateway' | 'routing' | 'overview' | 'logs';
+  'providers' | 'models' | 'custom' | 'gateway' | 'routing' | 'overview' | 'logs' | 'usage';
 
 interface LlmTabEntry {
-  id: LlmTab;
+  /** `agent` exists only on the agent variant (`AGENT_LLM_TABS`). */
+  id: LlmTab | 'agent';
   label: string;
 }
 
@@ -129,6 +136,7 @@ export const LLM_TABS: LlmTabEntry[] = [
   // file's own render switch keep working unchanged.
   { id: 'overview', label: 'Costs' },
   { id: 'logs', label: 'Logs' },
+  { id: 'usage', label: 'Usage' },
 ];
 
 /**
@@ -249,6 +257,9 @@ export function ProjectDefaultPicker({ projectId }: { projectId: string }) {
     <div className="flex shrink-0 items-center" title={tI18nComplete.raw('texte8cb80e5c5cb')}>
       <ModelSelector
         triggerVariant="secondary"
+        // The composer caps the name at max-w-30; on this page the full
+        // name ("Workspace default", a model name) fits beside the tabs.
+        triggerLabelClassName="max-w-52"
         models={models}
         selectedModel={effectiveDefault}
         unsetLabel={tI18nComplete.raw('texte8cb80e5c5cb')}
@@ -345,14 +356,49 @@ export function LlmSections({
           used to live one tab over. */}
       {tab === 'overview' && <GatewayOverview projectId={projectId} canWrite={canWrite} />}
       {tab === 'logs' && <GatewayLogs projectId={projectId} />}
+      {tab === 'usage' && (
+        <SubscriptionUsageTab projectId={projectId} onConnect={() => onTabChange('providers')} />
+      )}
     </>
   );
 }
 
-export function LlmManagementView({ projectId }: { projectId: string }) {
+/** The agent variant's own tab, ahead of the seven project tabs. */
+const AGENT_TAB = 'agent';
+
+export function LlmManagementView({
+  projectId,
+  surface = { kind: 'global' },
+  agentSettings,
+}: {
+  projectId: string;
+  /** `agent` is the same page on one agent's editor: a leading "This agent"
+   *  tab holds the agent's own model, and the project default picker steps
+   *  aside — the project default is the global variant's control. */
+  surface?: ResourceScope;
+  /** The agent's model settings, rendered as the "This agent" tab. */
+  agentSettings?: ReactNode;
+}) {
   const { isOpen: open, activeTab: section } = useSettingsNav();
-  const [tab, setTab] = useState<LlmTab>(
-    () => TAB_BY_SECTION[section as LegacyLlmSubTab] ?? 'providers',
+  const searchParams = useUiSearchParams();
+  const pathname = useUiPathname();
+  const navigate = useUiShallowNavigate();
+  const requestedTab = searchParams.get('tab');
+  const agentScoped = surface.kind === 'agent' && agentSettings !== undefined;
+  const urlTab = !agentScoped ? LLM_TABS.find(entry => entry.id === requestedTab)?.id as LlmTab | undefined : undefined;
+  const tAgentScope = useTranslations('agentScope');
+  // No ChatGPT or Claude login, no Usage tab: it would only say "connect one".
+  const subscriptions = useHasSubscriptions(projectId);
+  const pageTabs = useMemo(
+    () => (subscriptions.has ? LLM_TABS : LLM_TABS.filter((entry) => entry.id !== 'usage')),
+    [subscriptions.has],
+  );
+  const agentTabs = useMemo<LlmTabEntry[]>(
+    () => [{ id: AGENT_TAB, label: tAgentScope('thisAgent') }, ...pageTabs],
+    [tAgentScope, pageTabs],
+  );
+  const [tab, setTab] = useState<LlmTab | typeof AGENT_TAB>(
+    () => urlTab ?? TAB_BY_SECTION[section as LegacyLlmSubTab] ?? (agentScoped ? AGENT_TAB : 'providers'),
   );
 
   // A role with the LLM section's READ leaf (project.read) but not
@@ -363,11 +409,25 @@ export function LlmManagementView({ projectId }: { projectId: string }) {
     useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_MODEL_WRITE).allowed === true;
 
   // Follow an external deep-link (e.g. openCustomize('llm-providers')) to its
-  // tab. Plain in-view tab clicks stay local and never move the main rail.
+  // tab. Page tab clicks update the URL without a server navigation.
   useEffect(() => {
-    const next = TAB_BY_SECTION[section as LegacyLlmSubTab];
-    if (next) setTab(next);
-  }, [section]);
+    const next = urlTab ?? TAB_BY_SECTION[section as LegacyLlmSubTab] ?? (agentScoped ? AGENT_TAB : 'providers');
+    setTab(next);
+  }, [section, urlTab, agentScoped]);
+
+  const selectTab = useCallback((next: LlmTab | typeof AGENT_TAB) => {
+    setTab(next);
+    if (agentScoped) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', next);
+    params.delete('provider');
+    navigate(`${pathname}?${params}`, { replace: true });
+  }, [searchParams, pathname, navigate, agentScoped]);
+
+  // A link to Usage after the last subscription was disconnected lands on Providers.
+  useEffect(() => {
+    if (tab === 'usage' && subscriptions.ready && !subscriptions.has) selectTab('providers');
+  }, [tab, subscriptions.ready, subscriptions.has, selectTab]);
 
   const [providerId, setProviderId] = useState<string | null>(null);
 
@@ -380,25 +440,47 @@ export function LlmManagementView({ projectId }: { projectId: string }) {
     >
     <CapabilityPageShell
       title={MODELS_PAGE_TITLE}
-      description={MODELS_PAGE_DESCRIPTION}
+      description={
+        // Only "This agent" is the agent's own; every other tab edits state
+        // that all of the project's agents share, and the line says so.
+        agentScoped ? tAgentScope('modelsDescription') : MODELS_PAGE_DESCRIPTION
+      }
+      // The workspace default is a page-level setting: it sits in the header
+      // beside the title, so the tab strip below gets the full width.
+      action={canWrite && !agentScoped ? <ProjectDefaultPicker projectId={projectId} /> : undefined}
       filters={
-        /* The tab strip on the left, the project default on the right of the
-           same row. */
         <>
-          <LlmTabStrip value={tab} onValueChange={(v) => setTab(v as LlmTab)} />
-          {canWrite ? <ProjectDefaultPicker projectId={projectId} /> : null}
+          {agentScoped ? (
+            // Eight tabs in the editor's pane, beside the rail: the strip
+            // scrolls rather than push the row wider than the column.
+            <FadedScrollArea orientation="horizontal" fadeColor="from-background" className="min-w-0 max-w-full">
+              <LlmTabStrip
+                value={tab}
+                onValueChange={(v) => selectTab(v as LlmTab | typeof AGENT_TAB)}
+                tabs={agentTabs}
+              />
+            </FadedScrollArea>
+          ) : (
+            <FadedScrollArea orientation="horizontal" fadeColor="from-background" className="min-w-0 max-w-full">
+              <LlmTabStrip value={tab} onValueChange={(v) => selectTab(v as LlmTab)} tabs={pageTabs} />
+            </FadedScrollArea>
+          )}
         </>
       }
     >
-      <LlmSections
-        projectId={projectId}
-        tab={tab}
-        onTabChange={setTab}
-        canWrite={canWrite}
-        enabled={open}
-        selectedProviderId={providerId}
-        onSelectProvider={setProviderId}
-      />
+      {tab === AGENT_TAB ? (
+        agentSettings
+      ) : (
+        <LlmSections
+          projectId={projectId}
+          tab={tab}
+          onTabChange={selectTab}
+          canWrite={canWrite}
+          enabled={open}
+          selectedProviderId={providerId}
+          onSelectProvider={setProviderId}
+        />
+      )}
     </CapabilityPageShell>
     </ProviderSheetSplit>
   );

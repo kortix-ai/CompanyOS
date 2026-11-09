@@ -39,9 +39,9 @@ Files, Review, Apps, Customize and Account screens — all in your terminal.
 \`kortix\`) is the one-keystroke door: bind it to a key in your terminal.
 
 A cloud engineering desk in one command:
-  kortixt --project <id> --new --terminal
-creates a session in that project (\`--agent <name>\` picks the agent; the
-project default otherwise) and opens it with the sandbox shell focused.
+  kortixt --workspace <id> --new --terminal
+creates a session in that workspace (\`--agent <name>\` picks the agent; the
+workspace default otherwise) and opens it with the sandbox shell focused.
 
 The TUI is a SEPARATE binary (\`kortix-tui\`, ~80 MB). \`kortix\` does not carry
 it. The first \`kortix tui\` asks to install the copy that matches this CLI's
@@ -56,16 +56,20 @@ instead of failing.
 
 Options:
   --host <name>     Use this configured host instead of the active one.
-  --project <id>    List this project's sessions (default: the host's default
-                    project, else its first project).
+  --workspace <id>  List this workspace's sessions (default: the host's default
+                    workspace, else its first workspace).
   --session <id>    Open this session at boot.
-  --new             Create a session in the project at boot and open it.
-  --agent <name>    Agent for the new session. Default: the project's default.
+  --new             Create a session in the workspace at boot and open it.
+  --agent <name>    Agent for the new session. Default: the workspace's default.
   --terminal        Open the sandbox terminal panel at boot (focused).
-  --no-sidebar      Start with the sidebar hidden. Alt+b shows it again.
-  --mouse           Let the TUI take the mouse. Off by default, so your
-                    terminal's own text selection, copy-on-select and
-                    Cmd+click on a URL keep working inside the TUI.
+  --sidebar         Start with the sidebar shown, for this run.
+  --no-sidebar      Start with the sidebar hidden, for this run. Without
+                    either flag the TUI uses the last /sidebar choice
+                    (hidden the first time).
+  --no-mouse        Leave the mouse to the terminal. By default the TUI
+                    takes it: click tabs and the sidebar, scroll with the
+                    wheel, and drag over text to copy it. Most terminals
+                    still select natively with Shift (Option on macOS).
   --install         Install the TUI binary now and exit. No prompt.
   --uninstall       Remove ~/.kortix/tui/ and exit.
   -h, --help        Show this help.
@@ -75,19 +79,24 @@ Environment:
                     (pnpm --filter @kortix/tui bundle) or a packaged copy.
                     Nothing is downloaded and no version is checked.
 
+Commands:
+  The TUI is one session on screen and one input. Type / in the input to
+  list every action; keep typing to filter, Enter runs it.
+  /sessions [filter]   Pick another session (also Ctrl+p).
+  /new [prompt]        Start a new session (also Ctrl+n). With no session
+                       open, any prompt starts one.
+  /rename /fork /pin /archive /share /delete /restart /compact
+  /projects /accounts /hosts
+  /model /effort /agent
+  /sidebar /terminal /ports /links
+  /files /repo /review /apps /customize /account
+  /help /quit
+
 Keys:
-  ?                 Every binding, generated from the app's own keymap.
-  Ctrl+p            Session switcher across every project.
-  Ctrl+n            New session in this project.
-  Alt+t             Toggle the sandbox terminal beside the transcript.
-  Alt+b             Hide or show the sidebar.
-  Alt+l             Links: every URL in the transcript or on the terminal
-                    screen (wrapped ones rejoined). Enter opens it.
-  Alt+f / Alt+r     Files · Review.
-  Alt+a / Alt+c     Apps · Customize.
-  Alt+u / Alt+h     Account · switch host.
-  Alt+o             Hand this session to the stock opencode TUI (OpenCode
-                    sessions only; a pi session shows a notice).
+  ?                 Every command and binding (also /help).
+  Alt+b             Show or hide the sidebar (also /sidebar).
+  Alt+t             Toggle the sandbox terminal (also /terminal).
+  Esc ×3            Stop the running turn (also /stop).
   Ctrl+c twice      Quit.
 
 Needs a real terminal at least 80x24 wide. Experimental means the screens,
@@ -97,7 +106,7 @@ Examples:
   kortix tui
   kortix tui --install
   kortix tui --host cloud
-  kortix tui --project <project-id> --session <session-id>
+  kortix tui --workspace <id> --session <session-id>
 
 Docs: ${DOCS_URL}
 `;
@@ -117,11 +126,14 @@ interface TuiFlags {
   agent?: string;
   /** Open the sandbox terminal panel at boot (`--terminal`). */
   terminal: boolean;
-  /** Start with the sidebar hidden (`--no-sidebar`); Alt+B shows it. */
+  /** Start with the sidebar shown (`--sidebar`) for this run. */
+  sidebar: boolean;
+  /** Start with the sidebar hidden (`--no-sidebar`) for this run. */
   noSidebar: boolean;
-  /** Let the TUI take the mouse (`--mouse`). Off by default so the terminal's
-   *  own selection, copy-on-select and Cmd+click on URLs keep working. */
+  /** `--mouse`: the old opt-in. The TUI takes the mouse by default now; accepted, changes nothing. */
   mouse: boolean;
+  /** Leave the mouse to the terminal (`--no-mouse`): its own selection, Cmd+click on URLs. */
+  noMouse: boolean;
   install: boolean;
   uninstall: boolean;
   help: boolean;
@@ -143,9 +155,11 @@ export function parseTuiFlags(argv: string[]): TuiFlags {
     newSession: takeFlagBool(rest, ['--new']),
     terminal: takeFlagBool(rest, ['--terminal']),
     noSidebar: takeFlagBool(rest, ['--no-sidebar']),
+    sidebar: takeFlagBool(rest, ['--sidebar']),
     mouse: takeFlagBool(rest, ['--mouse']),
+    noMouse: takeFlagBool(rest, ['--no-mouse']),
     host: takeFlagValue(rest, ['--host']),
-    project: takeFlagValue(rest, ['--project']),
+    project: takeFlagValue(rest, ['--project', '--workspace']),
     session: takeFlagValue(rest, ['--session']),
     agent: takeFlagValue(rest, ['--agent']),
   };
@@ -154,7 +168,7 @@ export function parseTuiFlags(argv: string[]): TuiFlags {
     throw new Error(
       left.startsWith('-')
         ? `unknown option "${left}"`
-        : `unexpected argument "${left}" — kortix tui takes options only (--project/--session)`,
+        : `unexpected argument "${left}" — kortix tui takes options only (--workspace/--session)`,
     );
   }
   return flags;
@@ -174,7 +188,15 @@ export function tuiChildEnv(
   flags: Partial<
     Pick<
       TuiFlags,
-      'host' | 'project' | 'session' | 'newSession' | 'agent' | 'terminal' | 'noSidebar' | 'mouse'
+      | 'host'
+      | 'project'
+      | 'session'
+      | 'newSession'
+      | 'agent'
+      | 'terminal'
+      | 'sidebar'
+      | 'noSidebar'
+      | 'noMouse'
     >
   >,
   base: NodeJS.ProcessEnv,
@@ -182,13 +204,16 @@ export function tuiChildEnv(
   return {
     ...base,
     ...(flags.host ? { KORTIX_TUI_HOST: flags.host } : {}),
-    ...(flags.project ? { KORTIX_PROJECT_ID: flags.project } : {}),
+    // Both names: the TUI reads KORTIX_WORKSPACE_ID first (the CLI and
+    // kortixd rule), so the flag must outrank an inherited one.
+    ...(flags.project ? { KORTIX_WORKSPACE_ID: flags.project, KORTIX_PROJECT_ID: flags.project } : {}),
     ...(flags.session ? { KORTIX_SESSION_ID: flags.session } : {}),
     ...(flags.newSession ? { KORTIX_TUI_NEW: '1' } : {}),
     ...(flags.agent ? { KORTIX_TUI_AGENT: flags.agent } : {}),
     ...(flags.terminal ? { KORTIX_TUI_TERMINAL: '1' } : {}),
+    ...(flags.sidebar ? { KORTIX_TUI_SIDEBAR: '1' } : {}),
     ...(flags.noSidebar ? { KORTIX_TUI_SIDEBAR: '0' } : {}),
-    ...(flags.mouse ? { KORTIX_TUI_MOUSE: '1' } : {}),
+    ...(flags.noMouse ? { KORTIX_TUI_MOUSE: '0' } : {}),
   };
 }
 
@@ -353,7 +378,10 @@ export async function runTui(argv: string[], overrides: Partial<TuiDeps> = {}): 
   }
 
   deps.stderr(`${EXPERIMENTAL_NOTICE}\n`);
-  return deps.run(resolution.bin, tuiChildEnv(flags, process.env));
+  return deps.run(resolution.bin, {
+    ...tuiChildEnv(flags, process.env),
+    KORTIX_TUI_VERSION: deps.version(),
+  });
 }
 
 /**

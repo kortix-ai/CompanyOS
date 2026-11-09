@@ -108,6 +108,16 @@ describe('host boundary transport', () => {
     expect(requests[0]?.init?.body).toBe(JSON.stringify({ request_id: 'req-1', approved: true }));
   });
 
+  test('submitOAuthConsent binds the grant to the workspace the person picked', async () => {
+    await boundary.submitOAuthConsent(
+      { requestId: 'req-2', approved: true, workspaceId: '11111111-1111-4111-8111-111111111111' },
+      { backendUrl: 'https://api.example.test/v1', accessToken: 'token-1' },
+    );
+    expect(requests[0]?.init?.body).toBe(
+      JSON.stringify({ request_id: 'req-2', approved: true, workspace_id: '11111111-1111-4111-8111-111111111111' }),
+    );
+  });
+
   test('setup-link and public-share reads stay anonymous', async () => {
     await boundary.getConnectorSetupLink('connect-token', {
       backendUrl: 'https://api.example.test/v1',
@@ -387,5 +397,34 @@ describe('public response share', () => {
     await expect(boundary.getPublicResponse('kps_x', { backendUrl: 'https://api.example.test' })).rejects.toMatchObject({
       status: 410,
     });
+  });
+});
+
+describe('instance branding', () => {
+  test('reads /access/branding without a token and returns the branding', async () => {
+    const branding = {
+      app_name: 'Acme',
+      logo_url: 'https://storage.example.test/branding/a/logo-1.svg',
+      icon_url: 'https://storage.example.test/branding/a/icon-1.png',
+      favicon_url: null,
+      logo_dark_url: null,
+      icon_dark_url: null,
+      favicon_dark_url: null,
+    };
+    responseFactory = () => Response.json({ branding });
+    const result = await boundary.getInstanceBranding({ backendUrl: 'https://api.example.test/v1' });
+
+    expect(requests[0]?.url).toBe('https://api.example.test/v1/access/branding');
+    expect(requests[0]?.init?.method).toBe('GET');
+    expect(new Headers(requests[0]?.init?.headers).has('Authorization')).toBe(false);
+    expect(result).toEqual({ branding });
+  });
+
+  test('an instance without branding answers null', async () => {
+    responseFactory = () => Response.json({ branding: null });
+    const result = await boundary.getInstanceBranding({ backendUrl: 'https://api.example.test' });
+
+    expect(requests[0]?.url).toBe('https://api.example.test/v1/access/branding');
+    expect(result.branding).toBeNull();
   });
 });

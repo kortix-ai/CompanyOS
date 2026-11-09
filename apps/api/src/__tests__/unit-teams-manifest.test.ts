@@ -73,6 +73,8 @@ describe('buildTeamsManifest', () => {
     const released: Record<string, string> = {
       '1.6.1': '677e28d110223694',
       '1.6.2': 'b5e6260aac81fc37',
+      '1.6.3': '161e6cfc16a289f6',
+      '1.6.4': 'dc97aff9e66b0441',
     };
     expect({ version, fingerprint }).toEqual({ version, fingerprint: released[version] ?? 'no fingerprint for this version' });
   });

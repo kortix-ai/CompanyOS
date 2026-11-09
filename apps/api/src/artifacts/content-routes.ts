@@ -13,13 +13,12 @@
 import { Hono, type Context } from 'hono';
 import { config } from '../config';
 import { verifyChannelState } from '../channels/core/signed-state';
-import { projectFeatureFlagEnabled } from '../feature-flags/for-project';
 import { createArtifactContentRateLimitMiddleware } from '../middleware/rate-limit';
 import { PUBLIC_SHARE_SANDBOX_CSP } from '../sandbox-proxy/routes/public-share';
 import { isUuid } from '../shared/validate';
-import { DriveStorageError } from '../drives/volumes';
+import { DriveStorageError, driveStorageAvailable } from '../drives/volumes';
 import { renderDoc } from './formats';
-import { ARTIFACTS_FLAG, artifactPrivateFolder, artifactPublicContentUrl, contentTypeFor, getArtifactById, normalizeArtifactPath, readArtifactFile, type ArtifactRow } from './service';
+import { artifactPrivateFolder, artifactPublicContentUrl, contentTypeFor, getArtifactById, normalizeArtifactPath, readArtifactFile, type ArtifactRow } from './service';
 
 export const artifactContentApp = new Hono();
 
@@ -63,7 +62,7 @@ function sandboxCsp(c: Context): string {
 }
 
 async function serve(c: Context, row: ArtifactRow | null, at: string | null, rest: string, cache: string): Promise<Response> {
-  if (!row || !(await projectFeatureFlagEnabled(row.projectId, ARTIFACTS_FLAG))) return notFound(c);
+  if (!row || !driveStorageAvailable()) return notFound(c);
   const wanted = rest === '' ? row.entry : normalizeArtifactPath(rest.endsWith('/') ? `${rest}index.html` : rest);
   if (!wanted) return notFound(c);
   const isEntry = wanted === row.entry;
@@ -106,7 +105,7 @@ export function registerArtifactContentRoutes(): void {
   artifactContentApp.use('/p/:artifactId/*', createArtifactContentRateLimitMiddleware(publicKey));
 
   // Without the trailing slash, relative URLs in the page would resolve one level up.
-  artifactContentApp.get('/s/:token', (c) => c.redirect(`${c.req.path}/`, 301));
+  artifactContentApp.get('/s/:token', (c) => c.redirect(`${c.req.path}/${new URL(c.req.url).search}`, 301));
   artifactContentApp.get('/p/:artifactId', (c) => c.redirect(`${c.req.path}/`, 301));
 
   artifactContentApp.get('/s/:token/*', async (c) => {
@@ -119,12 +118,12 @@ export function registerArtifactContentRoutes(): void {
     return serve(c, await getArtifactById(claim.a), at, rest, at ? 'private, max-age=3600' : 'private, no-cache');
   });
 
-  // The public page's chrome (title, type): a public artifact of a flag-on project, else 404.
+  // The public page's chrome (title, type): a public artifact, else 404.
   artifactContentApp.use('/meta/:artifactId', createArtifactContentRateLimitMiddleware(publicKey));
   artifactContentApp.get('/meta/:artifactId', async (c) => {
     const id = c.req.param('artifactId');
     const row = isUuid(id) ? await getArtifactById(id) : null;
-    if (!row || row.visibility !== 'public' || (await artifactPrivateFolder(row)) || !(await projectFeatureFlagEnabled(row.projectId, ARTIFACTS_FLAG))) {
+    if (!row || row.visibility !== 'public' || (await artifactPrivateFolder(row)) || !driveStorageAvailable()) {
       return c.json({ error: 'Artifact not found' }, 404);
     }
     c.header('Cache-Control', 'no-store');

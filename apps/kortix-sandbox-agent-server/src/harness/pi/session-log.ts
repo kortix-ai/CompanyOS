@@ -77,6 +77,13 @@
  * record then carries a higher seq than its streaming puts, and replaces
  * them (higher rev). A user message has no seq until pi appends its entry,
  * when its turn starts.
+ *
+ * The queued seq (`RUNTIME_LOG_CAPABILITY`). Until then an admitted prompt is in
+ * the log at a provisional seq above every real one: the last of n queued
+ * prompts at `Number.MAX_SAFE_INTEGER`, the one before it one lower, in run
+ * order. Only the box's own reads and the v2 stream carry it (`piQueued`,
+ * `piLive`); the journal never sends it, so apps/api stores only real seqs. Its
+ * turn-start record, at its real seq and a higher rev, replaces it.
  */
 import { createHash } from 'node:crypto'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
@@ -85,6 +92,7 @@ import {
   SESSION_LOG_MINOR,
   SESSION_LOG_SCHEMA,
   PI_CAPABILITIES,
+  liveMessageFromV1,
   type ExportCursor,
   type SessionLog,
   type SessionLogBlock,
@@ -102,6 +110,7 @@ import { restorePiSessionLog, type PiRestoreTarget } from './session-log-restore
 import { assistantMessageError } from './turn-events'
 import { PI_HARNESS_VERSION } from './version'
 import { imageTagPaths } from './images'
+import type { PendingRecord } from './interactions'
 
 export interface PiChildSnapshot {
   id: string
@@ -144,6 +153,10 @@ export interface PiSessionSnapshot {
   reply: { id: string; timestamp: number } | null
   agent: string | null
   model: { provider: string; model: string } | null
+  /** The permission requests and questions waiting for an answer. Absent: none. */
+  pending?: { questions: PendingRecord[]; permissions: PendingRecord[] }
+  /** Admitted root prompts pi has not appended yet, in run order (the queued seq). Absent: none. */
+  queued?: string[]
 }
 
 export const PI_VERSION = PI_HARNESS_VERSION.split('@').pop() ?? PI_HARNESS_VERSION
@@ -153,7 +166,7 @@ const V = { schema: SESSION_LOG_SCHEMA, v: SESSION_LOG_MINOR } as const
 /** What pi-ai sends for a call whose result is missing. */
 export const PI_NO_RESULT = 'No result provided'
 const DIALECT: Record<string, string> = { 'openai-completions': 'openai-chat', 'openai-responses': 'openai-responses', 'anthropic-messages': 'anthropic-messages' }
-const KIND: Record<string, string> = { bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'glob', grep: 'grep', task: 'task', question: 'question', web_search: 'web_search', codemode: 'code' }
+const KIND: Record<string, string> = { bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'glob', grep: 'grep', agent: 'task', task: 'task', question: 'question', web_search: 'web_search', codemode: 'code' }
 const toolKind = (name: string) => KIND[name] ?? (name.includes('__') || name.startsWith('mcp_') ? 'mcp' : 'other')
 
 /**
@@ -217,6 +230,10 @@ const iso = (ms: unknown): string => new Date(typeof ms === 'number' && Number.i
 const isoOf = (value: unknown): string => (typeof value === 'string' ? value : iso(value))
 
 /** Takes v1 parts of one message in order, by type. */
+/** A compaction `details` of the context record: a reset with nothing summarized. */
+const isRecordReset = (details: unknown): details is { kind: 'record'; entries: number } =>
+  !!details && typeof details === 'object' && (details as { kind?: unknown }).kind === 'record' && typeof (details as { entries?: unknown }).entries === 'number'
+
 function partPool(v1: KortixMessage | undefined) {
   const parts = [...(v1?.parts ?? [])] as J[]
   return {
@@ -315,6 +332,8 @@ function deriveThread(input: {
         first_kept_message_id: firstKept(entries, e, idOf),
         tokens_before: e.tokensBefore,
         ...(part ? { trigger: part.overflow ? 'overflow' : part.auto ? 'auto' : 'manual' } : {}),
+        // A reset onto the record (extensions/context-record.ts): nothing was summarized.
+        ...(isRecordReset(e.details) ? { mode: 'record' as const, entries: e.details.entries } : {}),
       }]
       m.ext = { pi: { version: PI_VERSION, native_id: e.id, data: { firstKeptEntryId: e.firstKeptEntryId, ...(e.details !== undefined ? { details: e.details } : {}), ...(e.fromHook ? { fromHook: true } : {}) } } }
       out.push({ message: m, native: [e, marker ?? null] })
@@ -329,7 +348,9 @@ function deriveThread(input: {
     const nativeParts: unknown[] = [e, ...own, row ?? null]
 
     if (msg.role === 'user' || msg.role === 'custom' || msg.role === 'system') {
-      const m = message(threadId, id, msg.role === 'system' ? 'system' : 'user', iso(msg.timestamp || input.createdAt))
+      // A custom message's time is its entry's, an ISO string (a message's own is epoch ms): read as a number it was
+      // 0, and every extension's message was dated 1970 (a voice call's turns showed "Worked for 29895800m").
+      const m = message(threadId, id, msg.role === 'system' ? 'system' : 'user', isoOf(msg.timestamp || input.createdAt))
       if (msg.role === 'system') m.kind = 'context'
       if (msg.role === 'custom') m.origin = 'automation'
       if (input.child && msg.role === 'user' && !out.some((x) => x.message.role === 'user')) m.origin = 'subagent'
@@ -499,13 +520,21 @@ function close(block: ToolCallBlock): void {
 }
 
 /** The whole session as a log, each message's native hash, and each image's base64 data by sha256. */
-export function piSessionLog(s: PiSessionSnapshot): { log: SessionLog; hashes: Map<string, string>; images: Map<string, string> } {
+export function piSessionLog(
+  s: PiSessionSnapshot,
+  /** False skips the per-message hashing: a read (`GET /kortix/runtime/log`) never uses
+   * the hashes — only the journal relay (`changes`) and a restore do — and digesting every
+   * entry's JSON on a long session costs hundreds of milliseconds per read (KRTX-4488:
+   * ~75% of a scaled-up export).*/
+  opts: { hashes?: boolean } = {},
+): { log: SessionLog; hashes: Map<string, string>; images: Map<string, string> } {
   const created = s.header?.timestamp ?? iso(0)
+  const hashMessages = opts.hashes !== false
   const hashes = new Map<string, string>()
   const images = new Map<string, string>()
   const finish = (derived: Derived[]) =>
     derived.map(({ message, native }) => {
-      hashes.set(message.message_id, sha256(JSON.stringify([message.seq, native])))
+      if (hashMessages) hashes.set(message.message_id, sha256(JSON.stringify([message.seq, native])))
       return message
     })
   const all = s.entries as J[]
@@ -526,7 +555,7 @@ export function piSessionLog(s: PiSessionSnapshot): { log: SessionLog; hashes: M
     ...V, session_id: s.sessionId, title: s.title, created_at: created, restore_grade: 'native',
     harness: { current: 'pi', history: [{ harness: 'pi', version: PI_VERSION, from_seq: 1, at: created }] },
     selection: { agent: s.agent, model: s.model },
-    todos: [], pending: { questions: [], permissions: [] },
+    todos: [], pending: s.pending ?? { questions: [], permissions: [] },
     threads: [root, ...children],
   }
   return { log, hashes, images }
@@ -561,15 +590,35 @@ function spawnedBy(messages: SessionLogMessage[], childId: string): SessionLogTh
   return null
 }
 
-/** A live message's seq (see the header) and pi timestamp; null for a message pi has not appended that is not the reply it streams. */
-export function piLive(s: PiSessionSnapshot, threadId: string, messageId: string): { seq: number; created_at: string } | null {
+/** A queued prompt's provisional seq and admission time (the queued seq, see the header); null for any other message. */
+function queuedSeq(s: PiSessionSnapshot, messageId: string): { seq: number; created_at: string } | null {
+  const queued = s.queued ?? []
+  const at = queued.indexOf(messageId)
+  if (at < 0) return null
+  const row = s.transcript.find((m) => m.info.id === messageId)
+  return { seq: Number.MAX_SAFE_INTEGER - (queued.length - 1 - at), created_at: iso(row?.info.time.created) }
+}
+
+/** The root's queued prompts as log records, at their queued seqs, in run order (see the header). */
+export function piQueued(s: PiSessionSnapshot): SessionLogMessage[] {
+  return (s.queued ?? []).flatMap((id) => {
+    const row = s.transcript.find((m) => m.info.id === id && m.info.sessionID === s.rootId)
+    const known = queuedSeq(s, id)
+    return row && known ? [liveMessageFromV1({ info: row.info, parts: row.parts }, known, 'pi')] : []
+  })
+}
+
+/** A live message's seq (see the header) and pi timestamp; null for a message pi has not appended that is not the reply it streams or a queued prompt. */
+export function piLive(s: PiSessionSnapshot, threadId: string, messageId: string): { seq: number; created_at: string; queued?: true } | null {
   // As deriveThread times each record.
   const at = (m: J | undefined) => iso(m?.timestamp)
   if (threadId === s.rootId) {
     const seqOf = rootSeqs(s)
     const e = s.entries.find((x) => s.entryMessageIds[x.id] === messageId) as J | undefined
     if (e) return { seq: seqOf(e.id), created_at: e.type === 'compaction' ? isoOf(e.timestamp) : at(e.type === 'message' ? e.message : e) }
-    return messageId === s.reply?.id ? { seq: seqOf(), created_at: at(s.reply) } : null
+    if (messageId === s.reply?.id) return { seq: seqOf(), created_at: at(s.reply) }
+    const queued = queuedSeq(s, messageId)
+    return queued ? { ...queued, queued: true } : null
   }
   const child = s.children.find((c) => c.id === threadId)
   if (!child) return null

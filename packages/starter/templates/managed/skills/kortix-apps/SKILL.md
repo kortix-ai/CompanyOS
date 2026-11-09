@@ -14,7 +14,7 @@ Kortix Apps are built from three parts:
 - **Volume:** a persistent disk a machine mounts. It outlives every release
   and every machine, and keeps daily snapshots.
 
-An App is one project-scoped thing: a stable URL, an access policy, labels,
+An App is one workspace-scoped thing: a stable URL, an access policy, labels,
 its releases, machines and volumes. A static App is files Kortix serves itself
 (no machine). Every App says what it supports in `app.capabilities`:
 `deployments`, `rollback`, `preview`, `member_tokens`, plus `static`, or
@@ -27,7 +27,7 @@ another host.
 ## Preflight
 
 1. Run `pwd` and inspect the intended source directory before deploying.
-2. Run `kortix projects info --json`. Read `project_id`.
+2. Run `kortix workspaces info --json`. Read `project_id`.
 3. Apps are generally available. Use Apps directly without checking a feature
    flag or routing to an alternative.
 4. Do not create an empty App identity first: `kortix apps deploy` and
@@ -56,9 +56,12 @@ Default to static for every UI. Server logic for a UI (queries, writes,
 webhooks, integrations, schedules) lives in the backend App, not in a second
 server.
 
-Every UI an App renders follows the `kortix-design` skill. Load it before
-you write the first className or user-facing string. It owns the token plan,
-the states, the motion and the screenshot check before deploy.
+Before creating or modifying any internal app or Kortix App UI, load and
+apply `kortix-design`, including delegated app builders. Put this requirement
+in every delegated builder's brief before UI work starts. Load it before the
+first className or user-facing string. It owns the token plan, the states,
+the motion and the screenshot check before deploy. Preserve user-requested
+styling; when using `@kortix/ui`, also load `kortix-ui` and use its tokens.
 
 ## Where the code lives
 
@@ -67,7 +70,7 @@ Default: one folder per App, `apps/<slug>/`, named after its `kortix.yaml` key:
 (a server App with its `Dockerfile`), `apps/backend/` (a Convex backend's
 `package.json` and `convex/`). Templates, `launch` and every example here use
 it. It is a default, not a rule: `path` is free-form, so group the code by team
-or topic when that fits the project better (`apps/sales/crm`,
+or topic when that fits the workspace better (`apps/sales/crm`,
 `apps/ops/fieldops-backend`).
 
 ## Deploy
@@ -83,8 +86,8 @@ The command waits for `ready` for up to 1200 s. Use `--app <slug>` (or the
 `kortix.yaml` block) for every later release of the same App. Never create a
 new slug for a normal update.
 
-Declare Apps in `kortix.yaml` `apps.<slug>` (`kortix schema --version 3`
-prints every key). The file owns `resources`,
+Declare Apps in `kortix.yaml` `apps.<slug>` (`kortix schema` prints every
+key). The file owns `resources`,
 `idle_timeout_seconds`, `always_on`, `labels`, `display` and `uses`: a write
 from the web, CLI, SDK or API commits to `apps.<slug>` first, and a push
 applies them on sync without a deploy. Deleting an App removes its block. The
@@ -123,16 +126,19 @@ config with `400 app_config_invalid` and `issues: [{path, message}]`.
 
 ## Start an agent from an App
 
-An App never starts an agent itself. It posts an **App event**; a trigger in
-`kortix.yaml` decides which agent runs. Every machine of a server App has
+An App never starts an agent itself. It posts an **App event**; a trigger
+decides which agent runs or which session wakes. Every machine of a server App has
 `KORTIX_APP_ID`, `KORTIX_APP_TOKEN` and `KORTIX_APP_EVENTS_URL`
 (`…/v1/projects/<project_id>/apps/<app_id>/events`).
 
-**Build an App for this last.** Before you write a watcher App, check in this
-order: (1) a webhook (the service can call a URL), (2) a schedule (a fixed
-cadence is enough). Build the App only when neither fits: no webhook, code
-must decide what deserves an agent, or the watch needs a connection that
-stays open.
+**Pick the source in this order:** (1) a webhook (the service can call a
+URL), (2) a connector event, (3) a watcher App when the source sends nothing
+(a page, a status, a price, an API): code checks it and an agent runs only on
+a change, so "tell me whenever it changes" is a watcher App, not a loop. A
+scheduled agent run fits only when a model must judge each check. Start it with
+`kortix apps launch --template watcher --name <slug>` and edit
+`apps/<slug>/watch.js`: `check()` returns what is true now. The whole recipe:
+`kortix-system` → `references/scheduling.md` → Watch 24/7.
 
 1. Post one event `{name, data?, id?}` or `{events: [...]}` (at most 50):
    ```bash
@@ -156,9 +162,25 @@ stays open.
 3. Emit only what deserves a session: one summary event, not one per item.
    Each trigger takes at most 60 events an hour and 30 a minute. Past that it
    is suppressed for 10 minutes; 3 suppressions in 24 hours disable it.
-4. To test from your machine, a project admin reads the credentials:
-   `GET /v1/projects/<project_id>/apps/<app_id>/events/credentials` →
-   `{token, url}`.
+4. Prove the wiring with a test event, never with a real check (a real id
+   fires once):
+   ```bash
+   kortix apps events emit inbox-poller reply.received --data '{"subject":"Test"}' --wait
+   ```
+   It takes the real path with an id starting `test-` (the prompt reads
+   `event.test` as true) and exits 0 only when a trigger fired.
+5. See what came of every event: `kortix apps events inbox-poller` lists the
+   last 30 days, one row per trigger: `fired` with the session, `skipped` with
+   the reason, `suppressed`, `failed`, `pending`, or `unmatched` (no enabled
+   trigger listens; the App's POST answer says so in `hint`). Read it before
+   you guess why nothing ran.
+6. Know when the watcher stops: add `expect_event_within: 30m` (5m to 30d)
+   to the work trigger, or `--expect-event-within 30m`. No post from the App
+   (any name, a deduplicated one or `kortix.heartbeat` too) for that long
+   tells the trigger's watchers once; the App's next post clears it.
+7. Code outside the App (your machine while you build it) gets the URL and
+   token from `kortix apps events credentials <app>` (workspace admins). The
+   token posts as that App: keep it out of chat, files and commits.
 
 **Have Kortix call the App.** A poller does not need to run 24/7: deploy it
 `--on-demand` and add a schedule that calls it.
@@ -222,12 +244,12 @@ kortix apps access <app> --mode restricted --members <member-id> --groups <group
 kortix apps access-link <app> --json      # a 5-minute signed browser link
 ```
 
-- `private` (default): the creator and project managers. `project`: every
-  project reader. `restricted`: chosen members and groups. `password`: anyone
+- `private` (default): the creator and workspace managers. `project`: every
+  workspace reader. `restricted`: chosen members and groups. `password`: anyone
   with the password. `public`: no authentication.
 - A service's own `access` overrides it on that service's host: `public` (no
   gate; the service checks sign-in itself, like a backend whose functions call
-  `requireKortixMember`), `app` (the App's policy), `admins` (project admins).
+  `requireKortixMember`), `app` (the App's policy), `admins` (workspace admins).
 - Never write a password into `kortix.yaml`, source, logs, or a shared command.
 - An unchanged access write does not sign anyone out; a changed one revokes
   App browser sessions.
@@ -278,7 +300,7 @@ member's browser ──▶ App "crm" (static UI, access: project)
       └──── /_kortix/apps/backend (HTTP + websocket) ──▶ App "backend" (Convex, volume) ── requireKortixMember
 ```
 
-### Layout (project repo)
+### Layout (workspace repo)
 
 ```text
 apps/backend/                  # Convex functions for App "backend" (references/convex.md)
@@ -307,7 +329,7 @@ Every session downloads the whole repository, so keep it small. Create
    people take. Write it down in `memory/<app>.md` first.
 2. **Backend App.** `kortix apps launch --template convex`, then
    connect, discover and push as references/convex.md shows (`launch` writes
-   the admin key to the project secret `BACKEND_ADMIN_KEY` and the dashboard's
+   the admin key to the workspace secret `BACKEND_ADMIN_KEY` and the dashboard's
    files to `apps/backend/dashboard/`; the dashboard is the Dashboard tab of `backend`).
 3. **Schema + sign-in.** `convex/schema.ts` with an index for every filter,
    `convex/auth.config.ts` and `convex/lib/auth.ts` from references/sign-in.md.
@@ -322,7 +344,7 @@ Every session downloads the whole repository, so keep it small. Create
    `src/convex.ts` as references/sign-in.md, "The browser", shows. Read the
    signed-in member with a `members:me` query, never `useConvexAuth()`.
    Components, theme and the whole Kortix session experience (session workspace,
-   project home, session list, files) come from `@kortix/ui`:
+   workspace home, session list, files) come from `@kortix/ui`:
    `kortix system-skills file kortix-ui references/custom-dashboard.md`.
 7. **Quality bar.** A product, not a demo: navigation and create/edit/delete
    for every entity with confirmation before destructive actions; loading,
@@ -338,7 +360,7 @@ Every session downloads the whole repository, so keep it small. Create
    Never `public` for internal data: a public App has no signed-in member.
 9. **Integrations** only through Kortix connectors (references/connectors.md).
 10. **Ship** once Verify passed: commit, push the session branch, open a
-    change request (kortix-system, `<change-requests>`). Never merge your own CR.
+    change request (kortix-system, `<change-requests>`). Merge it only when the user asks.
 
 ### Redeploy after a change, and undo
 
@@ -388,7 +410,7 @@ quote a price.
 ## Delete
 
 ```bash
-kortix apps delete <slug> --yes                         # the App, its machines and images; volumes keep a final snapshot 7 days
+kortix apps delete <slug> --yes                         # the App, its machines, images and the triggers that name it; volumes keep a final snapshot 7 days
 kortix apps delete <slug> --deployment <vN> --yes       # one release (not the live one)
 kortix apps volumes destroy <slug> <volume> --yes       # admins; a final snapshot is kept 7 days
 ```
@@ -403,4 +425,4 @@ kortix apps volumes destroy <slug> <volume> --yes       # admins; a final snapsh
 - references/sign-in.md — tokens, `kortixToken`, `verifyKortixToken`, `requireKortixMember`, troubleshooting.
 - references/bindings.md — `uses` links and the `/_kortix/apps/<slug>` mount.
 - references/connectors.md — calling connectors from an App.
-- kortix-ui skill, references/custom-dashboard.md — a dashboard or App UI on `@kortix/sdk` + `@kortix/ui`: projects, the session list, the project home, the session workspace (thread + side panel), files, a custom tool row, a company theme. references/modules.md: every module entry with its props and an example; references/theming.md: every theme key.
+- kortix-ui skill, references/custom-dashboard.md — a dashboard or App UI on `@kortix/sdk` + `@kortix/ui`: workspaces, the session list, the workspace home, the session workspace (thread + side panel), files, a custom tool row, a company theme. references/modules.md: every module entry with its props and an example; references/theming.md: every theme key.

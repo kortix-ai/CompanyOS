@@ -1,16 +1,16 @@
-import { projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import {
   hasEmailInboxes,
   loadSlackInstall,
   loadTeamsInstall,
   loadTelegramInstall,
+  loadDiscordInstall,
 } from '../channels/install-store';
 /**
  * Auto-materialize channel connectors from platform installs.
  *
- * A channel connector (Slack today) doesn't need a `connectors:` entry in
- * kortix.yaml — connecting the platform IS the registration. When a project has
+ * A channel connector (Slack, Teams, Telegram, Email) doesn't need a
+ * `connectors:` entry in kortix.yaml — connecting the platform IS the registration. When a project has
  * a Slack install but hasn't explicitly declared a `channel` connector for it,
  * we synthesize a ConnectorSpec here so the materializer treats it like any
  * other connector: it gets DB rows, a fixed action catalog, policies, and
@@ -22,6 +22,7 @@ import type { ChannelPlatform, ConnectorSpec } from '../projects/connectors';
 import { MANIFEST_FILENAME } from '../projects/triggers';
 import { db } from '../shared/db';
 import { channelDefaultSlug, channelLabel } from './channels';
+import { projectsView } from '../workspaces/rows';
 
 function channelSpec(
   platform: ChannelPlatform,
@@ -39,7 +40,7 @@ function channelSpec(
     authorizationStrategy: 'project',
     // Email is sensitive by default — reading a private inbox is an exfiltration
     // surface, so its actions ask before running (silence per-session with "allow
-    // for session"). Slack/meet aren't gated by default.
+    // for session"). The other channels aren't gated by default.
     sensitive: platform === 'email',
     app: null,
     account: null,
@@ -80,8 +81,7 @@ export async function synthesizeChannelConnectors(
 ): Promise<ConnectorSpec[]> {
   const specs: ConnectorSpec[] = [];
 
-  // Slack and Teams — no feature flag: the install IS the registration
-  // (Telegram slots in here the same way — see KORTIX-206 Phase D).
+  // Slack and Teams — no feature flag: the install IS the registration.
   // Use the reserved platform-owned slug so user-defined connectors like
   // `[[connectors]] slug="slack" provider="pipedream" app="slack"` cannot
   // shadow the built-in Slack CLI's channel catalog.
@@ -98,9 +98,9 @@ export async function synthesizeChannelConnectors(
   }
 
   const [project] = await db
-    .select({ metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
 
   if (!project) return specs;
@@ -112,6 +112,15 @@ export async function synthesizeChannelConnectors(
     (await loadTelegramInstall(projectId).catch(() => null))
   ) {
     specs.push(channelSpec('telegram', telegramSlug));
+  }
+
+  // Discord: the server install is the registration, like Slack.
+  const discordSlug = channelDefaultSlug('discord');
+  if (
+    !channelAlreadyDeclared(declared, 'discord', discordSlug) &&
+    (await loadDiscordInstall(projectId).catch(() => null))
+  ) {
+    specs.push(channelSpec('discord', discordSlug));
   }
 
   // One `kortix_email` connector; every inbox is one of its accounts. Not

@@ -1,4 +1,5 @@
 /** A project's repository contents: files, archive, search, history, branches, commits, and diffs. */
+import { isManifestSyntaxError, manifestCandidatePaths, parseManifestText } from '@kortix/manifest-schema';
 import { createHash } from 'node:crypto';
 import { canonicalTreePath, normalizeTreePath } from '../git/mirror';
 import { callerKortixSessionId } from '../../middleware/caller-session';
@@ -24,11 +25,13 @@ import {
 // From the leaf, not the barrel: suites that stub '../git' by listing its
 // exports would otherwise lose these names and fail at import.
 import { remoteBranchExists, BRANCH_LIST_MAX_LIMIT, filterBranchesForResponse, isSessionBranchName } from '../git/branches';
+import { CommitDiffTooLargeError } from '../git/commits';
 import {
   DIRECTORY_PAGE_LIMIT,
   DIRECTORY_PAGE_MAX_LIMIT,
   decodeDirectoryCursor,
   encodeDirectoryCursor,
+  isRepoContentTooLargeError,
   listRepoDirectory,
 } from '../git/files';
 import { createRoute, z } from '@hono/zod-openapi';
@@ -37,10 +40,12 @@ import { resourceDenierForRequest } from '../lib/project-resources';
 import { CommitSchema, projectsApp } from '../lib/app';
 import { isGitRefNotFoundError } from '../git/mirror';
 import { withProjectGitAuth } from '../lib/git';
+import { sessionReadRef } from '../lib/session-read-ref';
 import { projectReadView } from '../lib/project-read-view';
 import { withSessionLabels } from '../lib/session-branch-labels';
 import { normalizeString } from '../lib/serializers';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 function isMissingGitPathError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -49,8 +54,8 @@ function isMissingGitPathError(error: unknown): boolean {
 
 /**
  * The repo file a single-file read names, or null when it can name none: an
- * absolute, traversal or NUL-containing path (the platform meta agent's
- * /workspace/AGENTS.md lives in the sandbox image, not the repo), or the root
+ * absolute, traversal or NUL-containing path (a sandbox path such as
+ * /workspace/AGENTS.md is not a repo file), or the root
  * (`.`, `./`). The visibility check and the git read both take this value, so
  * a respelled path (`.//x`, `x/`) is checked as the file git reads.
  */
@@ -85,16 +90,29 @@ const DirectoryListingSchema = z
   })
   .openapi('ProjectDirectoryListing');
 
+/** Why `content` may not be saved as the manifest at `path`, or null (not the manifest, or valid YAML). */
+function manifestSyntaxErrorOf(path: string, content: string, manifestPath: string | null): string | null {
+  if (!manifestCandidatePaths(manifestPath).includes(path)) return null;
+  try {
+    parseManifestText(content);
+    return null;
+  } catch (err) {
+    if (!isManifestSyntaxError(err)) return null;
+    const at = err.line ? `${path}:${err.line}${err.column ? `:${err.column}` : ''}` : path;
+    return `${at} is not valid YAML (${err.message}). Fix it and save again.`;
+  }
+}
+
 export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/files/content',
+      path: '/{workspaceId}/files/content',
       tags: ['files'],
       summary: 'Commit an edited repository file',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { required: true, content: { 'application/json': { schema: z.object({
           path: z.string().min(1), ref: z.string().regex(/^[A-Za-z0-9._\-/]+$/).refine((ref) => !ref.startsWith('-') && !ref.includes('..')),
           content: z.string().max(2_000_000),
@@ -104,7 +122,7 @@ export function registerProjectFilesRoutes(): void {
       responses: { 200: json(z.object({ commit_sha: z.string() }), 'Committed'), ...errors(400, 403, 404, 409) },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertAgentSessionWorkspaceAllowsRepository(c, loaded.row.accountId, projectId);
@@ -127,6 +145,10 @@ export function registerProjectFilesRoutes(): void {
         actingTokenId: c.get('iamTokenId'), row: loaded.row,
       });
       if (denier?.isDenied(path)) return c.json({ error: 'File not found' }, 404);
+      // The push gate's rule for an edit made here: the default branch never
+      // gets a kortix.yaml that is not YAML (the git proxy checks pushes).
+      const syntaxError = body.ref === loaded.row.defaultBranch ? manifestSyntaxErrorOf(path, body.content, loaded.row.manifestPath) : null;
+      if (syntaxError) return c.json({ error: syntaxError, code: 'manifest_invalid' }, 409);
       try {
         const gitProject = await withProjectGitAuth(loaded.row);
         if (!(await remoteBranchExists(gitProject, body.ref))) return c.json({ error: 'Branch not found' }, 404);
@@ -148,7 +170,7 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files',
+      path: '/{workspaceId}/files',
       tags: ['files'],
       summary: 'List files in the project repository',
       description:
@@ -157,7 +179,7 @@ export function registerProjectFilesRoutes(): void {
         'Without `depth`: every file under `path`, recursively, cut at 1,000; a cut list carries `X-Kortix-Truncated: 1`.',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           // Documented, not enforced: every field reads as text, as
           // `c.req.query()` read it before (a repeated key keeps its first
           // value). Only the `depth=1` branch checks `limit` and `cursor`, so
@@ -186,14 +208,14 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_FILE_READ);
 
     const query = c.req.valid('query');
     const gitProject = await withProjectGitAuth(loaded.row);
-    const ref = query.ref || loaded.row.defaultBranch;
+    const ref = await sessionReadRef(gitProject, query.ref || loaded.row.defaultBranch);
     const unavailable = (error: unknown) => {
       console.warn('[projects] repo file listing unavailable', {
         projectId,
@@ -259,12 +281,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/archive',
+      path: '/{workspaceId}/files/archive',
       tags: ['files'],
       summary: 'Download the project repository as an archive',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -273,7 +295,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_FILE_READ);
@@ -283,7 +305,7 @@ export function registerProjectFilesRoutes(): void {
 
     // Visibility isolation: a zip can't be stripped mid-stream, so refuse any
     // archive whose subtree would include an agent/skill this member is scoped out
-    // of (e.g. the whole repo, or `.opencode/`). They can still archive a narrower
+    // of (e.g. the whole repo, or `agents/`). They can still archive a narrower
     // path that contains none. No-op when nothing is scoped.
     const denier = await resourceDenierForRequest({
       userId: loaded.userId,
@@ -300,7 +322,8 @@ export function registerProjectFilesRoutes(): void {
     }
 
     try {
-      const stream = await archiveRepoSubtree(await withProjectGitAuth(loaded.row), ref, path);
+      const gitProject = await withProjectGitAuth(loaded.row);
+      const stream = await archiveRepoSubtree(gitProject, await sessionReadRef(gitProject, ref), path);
       const fileName = (canonicalTreePath(path ?? '').split('/').pop() || 'workspace') + '.zip';
       return new Response(stream, {
         status: 200,
@@ -312,6 +335,7 @@ export function registerProjectFilesRoutes(): void {
       });
     } catch (error) {
       rethrowDatabaseError(error);
+      if (isRepoContentTooLargeError(error)) return c.json({ error: error.message }, 413);
       const message = error instanceof Error ? error.message : 'Failed to archive directory';
       return c.json({ error: message }, 400);
     }
@@ -323,12 +347,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/search',
+      path: '/{workspaceId}/files/search',
       tags: ['files'],
       summary: 'Search files in the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -337,7 +361,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const query = normalizeString(c.req.query('q'));
     if (!query) return c.json({ error: 'q query param is required' }, 400);
 
@@ -351,6 +375,7 @@ export function registerProjectFilesRoutes(): void {
 
     try {
       const gitProject = await withProjectGitAuth(loaded.row);
+      const readRef = await sessionReadRef(gitProject, ref);
       // Visibility isolation: never surface (path or content) a scoped-out
       // agent/skill in search results. One memo check when nothing is scoped.
       const denier = await resourceDenierForRequest({
@@ -361,11 +386,11 @@ export function registerProjectFilesRoutes(): void {
         row: loaded.row,
       });
       if (contentSearch) {
-        const matches = await grepRepoFiles(gitProject, query, ref, limit);
+        const matches = await grepRepoFiles(gitProject, query, readRef, limit);
         const results = denier ? matches.filter((m) => !denier.isDenied(m.path)) : matches;
         return c.json({ query, ref, content_search: true, results });
       }
-      const files = await searchRepoFileNames(gitProject, query, ref, limit);
+      const files = await searchRepoFileNames(gitProject, query, readRef, limit);
       const visible = denier ? files.filter((f) => !denier.isDenied(f.path)) : files;
       return c.json({
         query,
@@ -386,12 +411,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/content',
+      path: '/{workspaceId}/files/content',
       tags: ['files'],
       summary: 'Read a file from the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -408,7 +433,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -431,11 +456,13 @@ export function registerProjectFilesRoutes(): void {
 
     const ref = c.req.query('ref') || loaded.row.defaultBranch;
     try {
-      const bytes = await readRepoFileBytes(await withProjectGitAuth(loaded.row), treePath, ref, { freshOnMiss: true });
+      const gitProject = await withProjectGitAuth(loaded.row);
+      const bytes = await readRepoFileBytes(gitProject, treePath, await sessionReadRef(gitProject, ref), { freshOnMiss: true });
       const revision = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
       return c.json({ path, ref, content: bytes.toString('utf8'), revision });
     } catch (error) {
       if (isGitRefNotFoundError(error)) return c.json({ error: 'ref not found' }, 404);
+      if (isRepoContentTooLargeError(error)) return c.json({ error: error.message }, 413);
       // `readRepoFile` converts a `git show` "path does not exist" failure into a
       // typed `RepoFileNotFoundError` (message: `file not found in repository at
       // '<ref>:<path>'`), which the `isMissingGitPathError` regex below does NOT
@@ -461,12 +488,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/raw',
+      path: '/{workspaceId}/files/raw',
       tags: ['files'],
       summary: 'Read a file\u2019s raw bytes from the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -475,7 +502,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -498,7 +525,8 @@ export function registerProjectFilesRoutes(): void {
 
     const ref = c.req.query('ref') || loaded.row.defaultBranch;
     try {
-      const bytes = await readRepoFileBytes(await withProjectGitAuth(loaded.row), treePath, ref, { freshOnMiss: true });
+      const gitProject = await withProjectGitAuth(loaded.row);
+      const bytes = await readRepoFileBytes(gitProject, treePath, await sessionReadRef(gitProject, ref), { freshOnMiss: true });
       return new Response(new Uint8Array(bytes), {
         status: 200,
         headers: {
@@ -508,6 +536,7 @@ export function registerProjectFilesRoutes(): void {
       });
     } catch (error) {
       if (isGitRefNotFoundError(error)) return c.json({ error: 'ref not found' }, 404);
+      if (isRepoContentTooLargeError(error)) return c.json({ error: error.message }, 413);
       if (isRepoFileNotFoundError(error) || isMissingGitPathError(error)) {
         return c.json({ error: 'File not found' }, 404);
       }
@@ -521,12 +550,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/history',
+      path: '/{workspaceId}/files/history',
       tags: ['files'],
       summary: 'List the commit history of a file',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -535,7 +564,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -562,7 +591,8 @@ export function registerProjectFilesRoutes(): void {
     const limit = Number(c.req.query('limit') || '50');
     const skip = Number(c.req.query('skip') || '0');
     try {
-      const result = await getFileHistory(await withProjectGitAuth(loaded.row), treePath, { ref, limit, skip });
+      const gitProject = await withProjectGitAuth(loaded.row);
+      const result = await getFileHistory(gitProject, treePath, { ref: await sessionReadRef(gitProject, ref), limit, skip });
       return c.json({ path, ref, ...result });
     } catch (error) {
       rethrowDatabaseError(error);
@@ -574,9 +604,10 @@ export function registerProjectFilesRoutes(): void {
 
   // GET /v1/projects/:projectId/branches?q=...&limit=...&include_session_branches=...
   //
-  // A project's remote can carry thousands of auto-created session branches —
-  // createRemoteSessionBranch names each one after the session's own UUID (see
-  // ../git/branches.ts). The response is capped (default 500, the default
+  // A project's remote can carry thousands of session branches — each is
+  // named after its session's UUID, and the box pushes it with the session's
+  // first publish. Session create pushed one for every session until
+  // 2026-10-30, so older projects carry one per session. The response is capped (default 500, the default
   // branch always kept). Session branches stay in by default — the Files
   // version selector and the change-request head picker list them on purpose —
   // and `include_session_branches=false` drops them for a default-branch picker.
@@ -584,12 +615,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/branches',
+      path: '/{workspaceId}/branches',
       tags: ['files'],
       summary: 'List repository branches',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({
             q: z.string().optional(),
             limit: z.coerce.number().int().min(1).max(BRANCH_LIST_MAX_LIMIT).optional(),
@@ -603,7 +634,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_READ);
@@ -654,12 +685,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits',
+      path: '/{workspaceId}/commits',
       tags: ['files'],
       summary: 'List repository commits',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -668,7 +699,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_READ);
@@ -679,7 +710,8 @@ export function registerProjectFilesRoutes(): void {
     const limit = Number(c.req.query('limit') || '50');
     const skip = Number(c.req.query('skip') || '0');
     try {
-      const result = await listCommits(await withProjectGitAuth(loaded.row), { ref, path, limit, skip });
+      const gitProject = await withProjectGitAuth(loaded.row);
+      const result = await listCommits(gitProject, { ref: await sessionReadRef(gitProject, ref), path, limit, skip });
       return c.json({ ref, path: path ?? null, ...result });
     } catch (error) {
       rethrowDatabaseError(error);
@@ -694,12 +726,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits/{sha}',
+      path: '/{workspaceId}/commits/{sha}',
       tags: ['files'],
       summary: 'Get a repository commit',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), sha: z.string() }),
+          params: z.object({ workspaceId: z.string(), sha: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -707,7 +739,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -732,12 +764,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits/{sha}/diff',
+      path: '/{workspaceId}/commits/{sha}/diff',
       tags: ['files'],
       summary: 'Get the diff of a commit',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), sha: z.string() }),
+          params: z.object({ workspaceId: z.string(), sha: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -746,7 +778,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const path = normalizeString(c.req.query('path'));
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -759,6 +791,7 @@ export function registerProjectFilesRoutes(): void {
       return c.json({ path: path ?? null, ...diff });
     } catch (error) {
       rethrowDatabaseError(error);
+      if (error instanceof CommitDiffTooLargeError) return c.json({ error: error.message }, 413);
       const message = error instanceof Error ? error.message : 'Failed to load diff';
       return c.json({ error: message }, 400);
     }
@@ -774,12 +807,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/version-diff',
+      path: '/{workspaceId}/version-diff',
       tags: ['files'],
       summary: 'Compare two repository versions',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -788,7 +821,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const fromRef = normalizeString(c.req.query('from') ?? c.req.query('head'));
     const intoRef = normalizeString(c.req.query('into') ?? c.req.query('base'));
     if (!fromRef || !intoRef) {
@@ -817,7 +850,13 @@ export function registerProjectFilesRoutes(): void {
     }
 
     try {
-      const diff = await getBranchDiff(await withProjectGitAuth(loaded.row), intoRef, fromRef);
+      const gitProject = await withProjectGitAuth(loaded.row);
+      // An unpublished session diffs as its base (`sessionReadRef`).
+      const [intoRead, fromRead] = await Promise.all([
+        sessionReadRef(gitProject, intoRef),
+        sessionReadRef(gitProject, fromRef),
+      ]);
+      const diff = await getBranchDiff(gitProject, intoRead, fromRead);
       return c.json({
         from: fromRef,
         into: intoRef,

@@ -10,10 +10,10 @@ import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { renderEmail, renderText, S } from '../../lib/email/template';
 import { escapeHtml } from '../../shared/html';
-import { accounts } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import { sendAlertEmail } from './owner-alerts';
+import { accountsView } from '../../workspaces/rows';
 
 export type SalesSignal = 'demo_on' | 'contact';
 
@@ -35,9 +35,9 @@ export async function notifySales(input: {
   const to = salesRecipients();
   if (to.length === 0) return false;
   const [account] = await db
-    .select({ name: accounts.name })
-    .from(accounts)
-    .where(eq(accounts.accountId, input.accountId))
+    .select({ name: accountsView.name })
+    .from(accountsView)
+    .where(eq(accountsView.accountId, input.accountId))
     .limit(1)
     .catch(() => []);
   const accountName = account?.name?.trim() || input.accountId;
@@ -55,7 +55,6 @@ export async function notifySales(input: {
       subject: `[Kortix sales] ${title}`,
       category: `enterprise-${input.signal}`,
       html: renderEmail({
-        kicker: 'Sales',
         title,
         body: lines.map((line) => `<p style="${S.p}">${escapeHtml(line)}</p>`).join(''),
       }),

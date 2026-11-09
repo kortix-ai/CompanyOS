@@ -6,7 +6,9 @@
  *
  * - `FilesScreen` is the data half. It builds the two loaders from
  *   `kortix().session(projectId, sessionId).files` (SPEC §7) and gates on the
- *   session's own runtime phase.
+ *   session's own runtime phase. Paths under `/drives` (the session's Drive
+ *   mounts) go through the Drive API instead (`drive-mounts.ts`): the box
+ *   daemon does not serve them.
  * - `FilesView` is pixels and keys. Every read arrives through the injected
  *   `FileLoaders`, so `files-screen.test.tsx` drives the real component with
  *   fake loaders and no mocked module.
@@ -20,7 +22,8 @@
  * opening this screen on a started session.
  */
 
-import type { useSession } from '@kortix/sdk/react';
+import { listDriveFolder, readDriveFile } from '@kortix/sdk';
+import { type useSession, useSessionDrives } from '@kortix/sdk/react';
 import { useKeyboard } from '@opentui/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -28,6 +31,7 @@ import { kortix } from '../../kortix.ts';
 import { copyToClipboard } from '../../lib/clipboard.ts';
 import { glyph as GLYPH, theme } from '../../theme.ts';
 import { Spinner, layoutRow, windowStart } from '../../ui/index.ts';
+import { type DriveMount, type DriveReads, withDriveMounts } from './drive-mounts.ts';
 import {
   type FileTree,
   type TreeNode,
@@ -67,14 +71,16 @@ export interface FileLoaders {
 }
 
 export interface FilesScreenProps {
-  projectId: string;
-  sessionId: string;
+  projectId: string | null;
+  sessionId: string | null;
   focused: boolean;
   width: number;
   height: number;
   onBack(): void;
   /** The host's `useSession` result. Gates the reads on the runtime phase. */
   session?: SessionState;
+  /** A file to open on mount (`/shown` → a shown file). */
+  target?: string | null;
   onToast?(message: string, kind?: 'info' | 'error'): void;
 }
 
@@ -84,7 +90,23 @@ function errorText(error: unknown): string {
   return 'Unknown error';
 }
 
-export function FilesScreen({
+/** No mounts. One constant, so the loaders memo is stable without a session's drives. */
+const NO_MOUNTS: readonly DriveMount[] = [];
+
+/** The Drive reads behind `/drives/*`. Module-level: they hold no state. */
+const DRIVE_READS: DriveReads = {
+  listFolder: (driveId, path) => listDriveFolder(driveId, path),
+  readFile: async (driveId, path) => (await readDriveFile(driveId, path)).blob,
+};
+
+export function FilesScreen(props: FilesScreenProps) {
+  if (!props.projectId || !props.sessionId) {
+    return <text fg={theme.faint}>Open a session to browse its files.</text>;
+  }
+  return <FilesScreenBody {...props} projectId={props.projectId} sessionId={props.sessionId} />;
+}
+
+function FilesScreenBody({
   projectId,
   sessionId,
   focused,
@@ -92,14 +114,28 @@ export function FilesScreen({
   height,
   onBack,
   session,
+  target: reveal = null,
   onToast,
-}: FilesScreenProps) {
+}: FilesScreenProps & { projectId: string; sessionId: string }) {
+  // The folders the session mounts under `/drives`. The hook is off while the
+  // project's `drives` flag is off, so the tree is then exactly the sandbox.
+  // React Query keeps the same array while a poll returns the same mounts, so
+  // the loaders below change only when the mounts do.
+  const sessionDrives = useSessionDrives(projectId, sessionId);
+  const mounts = sessionDrives.data?.drives ?? NO_MOUNTS;
+
   const loaders = useMemo<FileLoaders>(
-    () => ({
-      listDirectory: (path: string) => kortix().session(projectId, sessionId).files.list(path),
-      readFile: (path: string) => kortix().session(projectId, sessionId).files.read(path),
-    }),
-    [projectId, sessionId],
+    () =>
+      withDriveMounts(
+        {
+          listDirectory: (path: string) => kortix().session(projectId, sessionId).files.list(path),
+          readFile: (path: string) => kortix().session(projectId, sessionId).files.read(path),
+        },
+        mounts,
+        DRIVE_READS,
+        WORKSPACE_ROOT,
+      ),
+    [projectId, sessionId, mounts],
   );
 
   useKeyboard((key) => {
@@ -135,6 +171,7 @@ export function FilesScreen({
       width={width}
       height={height}
       onBack={onBack}
+      reveal={reveal}
       onToast={onToast}
     />
   );
@@ -147,7 +184,21 @@ export interface FilesViewProps {
   height: number;
   onBack(): void;
   root?: string;
+  /** A file to show on open: its folders expand, the cursor lands on it, the viewer reads it. */
+  reveal?: string | null;
   onToast?(message: string, kind?: 'info' | 'error'): void;
+}
+
+/** The folders between `root` and `path`, outermost first. Empty when `path` is not under `root`. */
+export function revealFolders(root: string, path: string): string[] {
+  const base = root.replace(/\/+$/, '');
+  if (!path.startsWith(`${base}/`)) return [];
+  const rest = path.slice(base.length + 1).split('/').filter(Boolean);
+  const folders: string[] = [];
+  for (let index = 0; index < rest.length - 1; index += 1) {
+    folders.push(`${base}/${rest.slice(0, index + 1).join('/')}`);
+  }
+  return folders;
 }
 
 /** Tree column width: a third of the screen, inside a readable band. */
@@ -162,6 +213,7 @@ export function FilesView({
   height,
   onBack,
   root = WORKSPACE_ROOT,
+  reveal = null,
   onToast,
 }: FilesViewProps) {
   const [tree, setTree] = useState<FileTree>(() => createTree(root));
@@ -210,6 +262,18 @@ export function FilesView({
     },
     [loaders],
   );
+
+  // `/shown` → a shown file: open its folders, put the cursor on it, read it.
+  // A relative path is the workspace's, as the agent's own tools resolve it.
+  useEffect(() => {
+    if (!reveal) return;
+    const path = reveal.startsWith('/') ? reveal : `${root.replace(/\/+$/, '')}/${reveal}`;
+    const folders = revealFolders(root, path);
+    setTree((current) => folders.reduce((next, folder) => expand(next, folder), current));
+    for (const folder of folders) void loadDirectory(folder);
+    setCursorId(path);
+    void openFile(path);
+  }, [reveal, root, loadDirectory, openFile]);
 
   const allRows = useMemo(() => flatten(tree), [tree]);
   const visibleRows = useMemo(
@@ -366,7 +430,7 @@ export function FilesView({
                 : theme.dim;
           return (
             <text key={row.id} fg={fg} bg={isCursor ? theme.surface : undefined}>
-              <span fg={theme.accent}>{isCursor && focused ? GLYPH.selected : ' '}</span>
+              <span fg={theme.brand}>{isCursor && focused ? GLYPH.selected : ' '}</span>
               {body}
             </text>
           );

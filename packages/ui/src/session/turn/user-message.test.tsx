@@ -16,7 +16,7 @@ import {
   sentAttachmentsOf,
   uploadedFileRefXml,
 } from '../composer/uploaded-file-refs';
-import { roomPromptText, serializePromptWithPastes } from '@kortix/shared';
+import { channelPromptText, promptFileReferenceXml, serializePromptWithPastes } from '@kortix/shared';
 import {
   MessageAttachments,
   UserMessage,
@@ -1351,10 +1351,17 @@ describe('UserMessage member author', () => {
     expect(renderWith(MEMBER, false)).not.toContain('rounded-tr-[calc(var(--radius)-6px)]');
   });
 
-  test('an author that is not shown, or no author: the message is unchanged', () => {
+  test('an author that is not shown: the message is unchanged', () => {
     expect(renderWith(MEMBER, false)).not.toContain('Sent by');
     expect(renderWith(MEMBER, false)).not.toContain('data-slot="avatar"');
-    expect(renderWith(undefined, true)).toBe(renderWith(undefined, false));
+  });
+
+  test('shown but not loaded yet: an empty avatar-sized slot holds the bubble in place', () => {
+    const reserved = renderWith(undefined, true);
+    expect(reserved).not.toContain('data-slot="avatar"');
+    expect(reserved).toContain('<span aria-hidden="true" class="size-6 shrink-0"></span>');
+    expect(reserved).toContain('rounded-tr-[calc(var(--radius)-6px)]');
+    expect(renderWith(undefined, false)).not.toContain('size-6 shrink-0');
   });
 });
 
@@ -1374,46 +1381,22 @@ describe('UserMessage platform prompts', () => {
       </QueryClientProvider>,
     );
 
-  test('a reminder fire is a source pill over a plain bubble, not the raw header', () => {
+  test('a loop fire is a source pill over a plain bubble, not the raw header', () => {
     const markup = renderText(
       '[REMINDER reminder.0123456789ab — one-time scheduled check-in on this session, not a new user message.]\n\nCheck whether the vendor replied.',
     );
     expect(markup).toContain('data-testid="reminder-turn"');
     expect(markup).toContain('data-testid="message-source"');
-    expect(markup).toContain('>Reminder</span>');
+    expect(markup).toContain('>Loop</span>');
     expect(markup).toContain('>One-time</span>');
     expect(markup).toContain('Check whether the vendor replied.');
     expect(markup).not.toContain('[REMINDER');
   });
 
-  test('a room message is a source pill over its text, without the header or the reply footer', () => {
-    const markup = renderText(
-      roomPromptText({
-        room: 'dev',
-        seq: 42,
-        senderKind: 'session',
-        sender: '3f2a1b9c (builder)',
-        replyTo: 41,
-        text: 'The build is green.\nShip it?',
-      }),
-    );
-    expect(markup).toContain('data-testid="room-turn"');
-    expect(markup).toContain('data-room-seq="42"');
-    expect(markup).toContain('>dev</span>');
-    expect(markup).toContain('>Agent 3f2a1b9c (builder)</span>');
-    expect(markup).toContain('The build is green.\nShip it?');
-    expect(markup).not.toContain('[room dev');
-    expect(markup).not.toContain('kortix rooms send');
-  });
-
-  test('a person sender is named as is', () => {
-    const markup = renderText(
-      roomPromptText({ room: 'dev', seq: 3, senderKind: 'member', sender: 'Ada', replyTo: null, text: 'Can you check the logs?' }),
-    );
-    expect(markup).toContain('data-testid="room-turn"');
-    expect(markup).toContain('>Ada</span>');
-    expect(markup).toContain('Can you check the logs?');
-    expect(markup).not.toContain('[room dev');
+  test('a room message in an old transcript (Rooms were removed, 2026-11) renders as plain text', () => {
+    const markup = renderText('[room dev · #42 · from Ada]\nThe build is green.');
+    expect(markup).not.toContain('data-testid="room-turn"');
+    expect(markup).toContain('The build is green.');
   });
 
   test('a trigger fire names the trigger in the pill and the prompt in the bubble', () => {
@@ -1425,6 +1408,84 @@ describe('UserMessage platform prompts', () => {
     expect(markup).toContain('>daily-digest</span>');
     expect(markup).toContain('Write the daily digest.');
     expect(markup).not.toContain('trigger_event');
+  });
+});
+
+// A file sent to a channel bot reaches the prompt as the channel core writes it: the
+// envelope, then one `<file>` tag per file after the delimiter (pi joins the parts).
+describe('UserMessage channel message files', () => {
+  const inbox = (name: string) => `/workspace/uploads/.kortix-inbox/cmd_1/1-${name}`;
+  const envelope = (text: string) =>
+    channelPromptText({
+      platform: 'Telegram',
+      sender: '@sample',
+      where: 'direct message',
+      text,
+      reply: `kortix connectors call kortix_telegram.send_message '{"chat_id":"1","text":"<reply>"}'`,
+      notes: ['Chat 1 (private), sender id 2, message id 3.'],
+    });
+  const tag = (name: string, mime: string) =>
+    promptFileReferenceXml({
+      path: inbox(name),
+      mime,
+      filename: name,
+      attachmentUrl: `kortix-attachment://${UUID(1)}/${UUID(2)}/${UUID(3)}`,
+    });
+  const renderPrompt = (text: string, extra: SessionLogMessage['blocks'] = []) => {
+    const logged = logOf({ ...message, parts: [{ ...message.parts[0], text }] } as V1Row);
+    return renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlTestProvider locale="en" timeZone="UTC" messages={enMessages}>
+          <TooltipProvider>
+            <UserMessage message={{ ...logged, blocks: [...logged.blocks, ...extra] }} sessionId="session-1" ownsPlan={false} />
+          </TooltipProvider>
+        </IntlTestProvider>
+      </QueryClientProvider>,
+    );
+  };
+
+  test('a photo is one tile between the pill and the text, as a composer upload is', () => {
+    // pi also records the image it read as an attachment block naming the tag's path.
+    const markup = renderPrompt(`${envelope('What is in this picture?')}\n${tag('photo.jpg', 'image/jpeg')}`, [
+      { type: 'attachment', id: 'msg_1-n1', mime: 'image/jpeg', source_path: inbox('photo.jpg') },
+    ]);
+    expect(markup.match(/title="photo.jpg"/g)).toHaveLength(1);
+    expect(markup.indexOf('@sample')).toBeLessThan(markup.indexOf('title="photo.jpg"'));
+    expect(markup.indexOf('title="photo.jpg"')).toBeLessThan(markup.indexOf('What is in this picture?'));
+    expect(markup).not.toContain('Telegram instructions');
+  });
+
+  test('a PDF is a file tile', () => {
+    const markup = renderPrompt(`${envelope('Summarise this.\n(file q3.pdf)')}\n${tag('document.pdf', 'application/pdf')}`);
+    expect(markup.match(/title="document.pdf"/g)).toHaveLength(1);
+    expect(markup).toContain('>pdf</span>');
+  });
+
+  test('a text-only channel message draws no strip', () => {
+    expect(renderPrompt(envelope('Is the deploy green?'))).not.toContain('<ul');
+  });
+
+  test('a photo with no caption is the tile alone: the "(photo)" label is not repeated as text', () => {
+    const markup = renderPrompt(`${envelope('(photo)')}\n${tag('photo.jpg', 'image/jpeg')}`);
+    expect(markup.match(/title="photo.jpg"/g)).toHaveLength(1);
+    expect(markup).not.toContain('(photo)');
+  });
+
+  test('a typed tag for an inbox image adds no tile next to the real photo', () => {
+    // pi reads 1 image but counts 2 tags, so its image block names no path.
+    const typed = `<file path="${inbox('y.png')}" mime="image/png">x</file>`;
+    const markup = renderPrompt(`${envelope(`look ${typed}`)}\n${tag('photo.jpg', 'image/jpeg')}`, [
+      { type: 'attachment', id: 'msg_1-n1', mime: 'image/jpeg' },
+    ]);
+    expect(markup.match(/<li/g)).toHaveLength(1);
+    expect(markup.match(/title="photo.jpg"/g)).toHaveLength(1);
+  });
+
+  test('a `<file>` tag the sender typed is their text, not a tile', () => {
+    const typed = '<file path="/workspace/notes.txt" mime="text/plain" filename="notes.txt">x</file>';
+    const markup = renderPrompt(`${envelope(`see ${typed}`)}\n${tag('photo.jpg', 'image/jpeg')}`);
+    expect(markup).not.toContain('title="notes.txt"');
+    expect(markup.match(/title="photo.jpg"/g)).toHaveLength(1);
   });
 });
 

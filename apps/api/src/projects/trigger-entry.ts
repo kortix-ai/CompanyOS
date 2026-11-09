@@ -2,14 +2,17 @@ import { BoundedMap } from '../shared/bounded-map';
 import {
   EVENT_FORBIDDEN_KEYS,
   TRIGGER_MIN_MAX_LATENESS_SECONDS,
+  TRIGGER_MIN_EXPECT_EVENT_WITHIN_SECONDS,
+  TRIGGER_MAX_EXPECT_EVENT_WITHIN_SECONDS,
   formatDurationSeconds,
   normalizeTriggerList,
+  parseChangeRequestFilter,
   parseDurationSeconds,
   parseTriggerFilter,
 } from '@kortix/manifest-schema';
 import { isPlainObject } from '../shared/json';
 import type { GitBackedProject } from './git';
-import { MANIFEST_FILENAME, readManifest } from './manifest-io';
+import { MANIFEST_FILENAME, readManifest, runtimeManifest } from './manifest-io';
 import { validateTriggerCron, validateTriggerTimezone } from './trigger-schedule';
 import {
   GIT_TRIGGER_SESSION_MODES,
@@ -128,7 +131,7 @@ export function parseTargetField(
   if (payload !== undefined && (!isPlainObject(payload) || JSON.stringify(payload).length > 64 * 1024)) {
     return { error: 'target.payload must be an object of at most 64 KiB' };
   }
-  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this project' };
+  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this workspace' };
   if (typeof path !== 'string' || !path.startsWith('/') || /[\r\n]/.test(path) || path.length > 2048) return { error: 'target.path must be an HTTP path starting with /' };
   if (method !== 'POST' && method !== 'GET') return { error: 'target.method must be POST or GET' };
   return { target: { app: app.trim(), path, method, ...(payload ? { payload: payload as Record<string, unknown> } : {}) } };
@@ -148,6 +151,24 @@ export function parseMaxLateness(
   if (type !== 'cron') return { error: 'max_lateness is only valid on a cron trigger' };
   const parsed = parseMonitorDuration(raw, 'max_lateness', TRIGGER_MIN_MAX_LATENESS_SECONDS);
   return 'error' in parsed ? parsed : { maxLatenessSeconds: parsed.seconds };
+}
+
+/**
+ * An app trigger's `expect_event_within`: the silence alert. Absent → `{}`, so
+ * a spec without it keeps its shape and schedule revision. Mirrors
+ * `@kortix/manifest-schema`: app only, 5m to 30d.
+ */
+export function parseExpectEventWithin(
+  row: Record<string, unknown>,
+  type: GitTriggerType,
+): { expectEventWithinSeconds?: number } | { error: string } {
+  const raw = row.expect_event_within;
+  if (raw === undefined || raw === null) return {};
+  if (type !== 'app') return { error: 'expect_event_within is only valid on an app trigger' };
+  const parsed = parseMonitorDuration(raw, 'expect_event_within', TRIGGER_MIN_EXPECT_EVENT_WITHIN_SECONDS);
+  if ('error' in parsed) return parsed;
+  if (parsed.seconds > TRIGGER_MAX_EXPECT_EVENT_WITHIN_SECONDS) return { error: 'expect_event_within must be at most 30d' };
+  return { expectEventWithinSeconds: parsed.seconds };
 }
 
 /**
@@ -172,8 +193,8 @@ export function parseRunCaps(
 
 /**
  * A trigger's `overlap` (KRTX-1721): `skip` or `allow`. Absent → omitted, and
- * the default applies (`skip` for cron, `allow` otherwise). It acts on fresh
- * session mode only (`lib/trigger-overlap.ts`).
+ * the default applies (`skip` for cron, `allow` otherwise). It acts on every
+ * session mode (`lib/trigger-overlap.ts`).
  */
 export function parseOverlap(row: Record<string, unknown>): { overlap?: 'skip' | 'allow' } | { error: string } {
   const raw = row.overlap;
@@ -223,10 +244,7 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
         {
           slug: '(top-level)',
           path: filename,
-          error:
-            manifest.format === 'yaml'
-              ? '`triggers` must be a list — write it as a YAML `triggers:` list, not a map or scalar.'
-              : '`triggers` must be an array of tables — use [[triggers]], not [triggers]',
+          error: '`triggers` must be a list — write it as a YAML `triggers:` list, not a map or scalar.',
         },
       ],
     };
@@ -265,10 +283,10 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
 }
 
 /**
- * Walk a project: read its manifest, extract triggers. Convenience for
- * callers that don't otherwise need the parsed manifest. Returns empty
- * arrays + a single top-level error when the manifest fails to parse —
- * never throws.
+ * Walk a project: read its manifest, extract the triggers a running project
+ * applies (`runtimeManifest`: a trigger with a validation error is off).
+ * Returns empty arrays + a single top-level error when the manifest fails to
+ * parse — never throws.
  */
 export async function loadProjectTriggers(
   project: GitBackedProject,
@@ -279,9 +297,8 @@ export async function loadProjectTriggers(
     manifest = await readManifest(project, { forceRefresh: opts?.forceRefresh });
   } catch (err) {
     // The manifest failed to parse before we learned which candidate file it
-    // actually was (.yaml/.yml/.toml) — fall back to the project's configured
-    // manifestPath (best-effort; may be stale for a project that switched
-    // format by hand without updating it) rather than always naming kortix.toml.
+    // actually was (.yaml/.yml) — fall back to the project's configured
+    // manifestPath.
     return {
       specs: [],
       errors: [
@@ -294,7 +311,7 @@ export async function loadProjectTriggers(
     };
   }
   if (!manifest) return { specs: [], errors: [] };
-  return extractTriggers(manifest);
+  return extractTriggers(runtimeManifest(manifest));
 }
 
 function forcedTriggerRefreshCooldownMs(): number {
@@ -329,13 +346,11 @@ export async function findProjectTriggerBySlug(
 /* ─── Trigger ↔ manifest-entry conversion ───────────────────────────────── */
 
 /**
- * Convert a TriggerSpec back to the raw object that goes into the `triggers`
- * array — the shape is format-agnostic (same object serializes to either a
- * kortix.yaml list entry or a legacy kortix.toml `[[triggers]]` table).
- * Inverse of `parseTriggerEntry`. Used by the CRUD path to write back to the
+ * Convert a TriggerSpec back to the flat raw object that goes into the
+ * `triggers` list. Inverse of `parseTriggerEntry`. Used by the CRUD path to write back to the
  * project manifest after a UI edit.
  */
-export function triggerSpecToTomlEntry(spec: GitTriggerSpec): Record<string, unknown> {
+export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unknown> {
   const entry: Record<string, unknown> = {
     slug: spec.slug,
     name: spec.name,
@@ -369,8 +384,10 @@ export function triggerSpecToTomlEntry(spec: GitTriggerSpec): Record<string, unk
   if (keyedByKey) {
     entry.session_key = spec.sessionKey;
   }
-  if (spec.filter && Object.keys(spec.filter).length > 0) {
-    entry.filter = spec.filter;
+  // A change_request trigger writes its branch back as `filter.base`.
+  const filter = spec.type === 'change_request' && spec.changeRequest?.base ? { ...spec.filter, base: spec.changeRequest.base } : spec.filter;
+  if (filter && Object.keys(filter).length > 0) {
+    entry.filter = filter;
   }
   if (spec.type === 'cron') {
     if (spec.runAt) {
@@ -393,6 +410,8 @@ export function triggerSpecToTomlEntry(spec: GitTriggerSpec): Record<string, unk
   } else if (spec.secretEnv) {
     entry.secret_env = spec.secretEnv;
   }
+  // An app trigger's silence alert; written outside the type branch so an edit of any type that holds it keeps it.
+  if (spec.expectEventWithinSeconds) entry.expect_event_within = formatDurationSeconds(spec.expectEventWithinSeconds);
   if (spec.target) entry.target = spec.target;
   if (spec.promptTemplate) entry.prompt = spec.promptTemplate;
   return entry;
@@ -451,6 +470,7 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
     ...(spec.maxRunsPerDay ? { max_runs_per_day: spec.maxRunsPerDay } : {}),
     ...(spec.overlap ? { overlap: spec.overlap } : {}),
     ...(spec.maxLatenessSeconds ? { max_lateness: formatDurationSeconds(spec.maxLatenessSeconds) } : {}),
+    ...(spec.expectEventWithinSeconds ? { expect_event_within: formatDurationSeconds(spec.expectEventWithinSeconds) } : {}),
   };
 }
 
@@ -491,16 +511,19 @@ function parseTriggerEntry(
     typeRaw !== 'cron' &&
     typeRaw !== 'webhook' &&
     typeRaw !== 'event' &&
-    typeRaw !== 'app'
+    typeRaw !== 'app' &&
+    typeRaw !== 'change_request'
   ) {
     return err(
       slug,
-      `type must be "cron", "webhook", "event", or "app" (got "${typeRaw || 'unset'}")`,
+      `type must be "cron", "webhook", "event", "app", or "change_request" (got "${typeRaw || 'unset'}")`,
     );
   }
   const type = typeRaw as GitTriggerType;
   const lateness = parseMaxLateness(row, type);
   if ('error' in lateness) return err(slug, lateness.error);
+  const silence = parseExpectEventWithin(row, type);
+  if ('error' in silence) return err(slug, silence.error);
   const caps = parseRunCaps(row);
   if ('error' in caps) return err(slug, caps.error);
   const overlap = parseOverlap(row);
@@ -597,7 +620,8 @@ function parseTriggerEntry(
 
   // Optional payload guard: a value (equals) or one operator per path,
   // compared as text against the delivery (`@kortix/manifest-schema`).
-  const parsedFilter = parseTriggerFilter(row.filter);
+  // A change_request trigger reads `filter.base` as the merge's target branch.
+  const parsedFilter = type === 'change_request' ? parseChangeRequestFilter(row.filter) : parseTriggerFilter(row.filter);
   if ('error' in parsedFilter) return err(slug, parsedFilter.error);
   const { filter } = parsedFilter;
 
@@ -622,6 +646,21 @@ function parseTriggerEntry(
     ...overlap,
   };
 
+  if (type === 'change_request') {
+    return {
+      ok: true,
+      spec: {
+        ...base,
+        type: 'change_request',
+        cron: null,
+        runAt: null,
+        timezone: 'UTC',
+        secretEnv: null,
+        changeRequest: { crId: null, base: 'base' in parsedFilter ? (parsedFilter.base as string | null) : null },
+      },
+    };
+  }
+
   if (type === 'app') {
     const parsed = parseAppField(row);
     if ('error' in parsed) return err(slug, parsed.error);
@@ -635,6 +674,7 @@ function parseTriggerEntry(
         timezone: 'UTC',
         secretEnv: null,
         app: parsed.app,
+        ...silence,
       },
     };
   }

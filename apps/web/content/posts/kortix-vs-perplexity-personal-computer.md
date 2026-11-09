@@ -8,7 +8,7 @@ tags: ["Comparisons"]
 updated: "2026-10-21"
 slug: "/kortix-vs-perplexity-personal-computer"
 ---
-Perplexity Personal Computer is the shortest path from a download to an agent working on your own machine; Kortix is the open-source AI Operating System a company can keep. Download the app, sign in, point it at a folder. The same product now arrives four ways: a cloud subscription, a desktop app, a local build for a supported GPU box, and a Mac mini that stays switched on. Whichever route you take, the setup and the record of the work stay inside Perplexity's product.
+Perplexity Personal Computer is the shortest path from a download to an agent working on your own machine; Kortix is the open-source CompanyOS a company can keep. Download the app, sign in, point it at a folder. The same product now arrives four ways: a cloud subscription, a desktop app, a local build for a supported GPU box, and a Mac mini that stays switched on. Whichever route you take, the setup and the record of the work stay inside Perplexity's product.
 
 ## One name, four purchases
 
@@ -61,7 +61,7 @@ Perplexity's plans are $17 a month for Pro and $167 a month for Max, billed annu
 
 ## What owning the system looks like
 
-A Kortix project is a git repository. Open source. Read it, fork it, audit it. The manifest is short enough to read in a review:
+A Kortix workspace is backed by a git repository. Open source. Read it, fork it, audit it. The manifest is short enough to read in a review:
 
 ```yaml
 kortix_version: 2

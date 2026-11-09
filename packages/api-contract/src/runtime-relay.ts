@@ -4,14 +4,10 @@
  * its `GET /kortix/health` serves.
  *
  * kortixd bundles this file into the guest binary, so it imports nothing but
- * zod. Every name here is harness-neutral: an OpenCode box and a pi box send
- * the same fields.
- *
- * `normalizeRuntimeRelayBody` accepts the pre-W3 spellings a daemon built
- * before these names existed still sends (`opencode_session_id`, turn-stream
- * kind `opencode_session`). Remove it when no such daemon runs.
+ * zod. Every name here is harness-neutral.
  */
 import { z } from 'zod';
+import type { RuntimeThreadStatus } from './wire-values';
 
 /** `POST /v1/projects/:projectId/turn-stream` kinds the daemon sends. */
 export const DAEMON_TURN_STREAM_KINDS = [
@@ -71,8 +67,28 @@ export const TurnQuestionRelayBodySchema = z.object({
   request_id: z.string(),
   runtime_session_id: z.string().optional(),
   questions: z.array(z.unknown()),
+  /**
+   * The runtime parks this question instead of dismissing it when nobody
+   * answers live: apps/api keeps it open past the turn. Omitted (a daemon
+   * built before parking): false.
+   */
+  parkable: z.boolean().optional(),
 });
 export type TurnQuestionRelayBody = z.infer<typeof TurnQuestionRelayBodySchema>;
+
+/**
+ * What apps/api answers a `turn-question` or `turn-permission` relay with,
+ * beside its older fields. A daemon built before parking ignores it.
+ */
+export const AskRelayResponseSchema = z.object({
+  /** How long the call waits for a live answer before it parks. 0: park at once (an unattended session). */
+  live_wait_ms: z.number().int().nonnegative().optional(),
+  /** Permission: a person approved this exact call (`args_hash`) while it was parked; it runs now. */
+  approved: z.boolean().optional(),
+  /** Permission: the capability the approval granted for the session (an "always" reply). */
+  grant: z.string().optional(),
+});
+export type AskRelayResponse = z.infer<typeof AskRelayResponseSchema>;
 
 /** `POST /v1/projects/:projectId/turn-permission`. apps/api reads `session_id` and `request_id`. */
 export const TurnPermissionRelayBodySchema = z.object({
@@ -81,7 +97,14 @@ export const TurnPermissionRelayBodySchema = z.object({
   runtime_session_id: z.string().optional(),
   permission: z.string(),
   patterns: z.array(z.string()),
+  /** The tool the call runs. Omitted by a daemon built before parking. */
+  tool: z.string().optional(),
+  /** sha256 of the tool and its canonical arguments: an approval matches the agent's re-run of the same call. */
+  args_hash: z.string().optional(),
+  /** The call's arguments, at most `PERMISSION_ARGS_RELAY_MAX_BYTES` of JSON; larger ones arrive as `{ truncated: true, preview }`. */
+  args: z.unknown().optional(),
 });
+export const PERMISSION_ARGS_RELAY_MAX_BYTES = 16_384;
 export type TurnPermissionRelayBody = z.infer<typeof TurnPermissionRelayBodySchema>;
 
 /** `POST /v1/platform/runtime-projection` (gzip). `projection` is the `/kortix/runtime/state` document. */
@@ -176,24 +199,6 @@ export const DAEMON_FILE_IMPORT_TIMEOUT_MS = 120_000;
 export const BLOCKING_TURN_VERBS = ['message', 'command', 'summarize'] as const;
 
 /**
- * Rewrite the pre-W3 names an older daemon sends to the names above: the
- * `opencode_session_id` field and the `opencode_session` turn-stream kind.
- * Returns a copy; the neutral name wins when a body carries both.
- * @deprecated Pre-W3 OpenCode names (opencode_session_id, kind opencode_session) from older daemons; new daemons send runtime_session_id / runtime_session.
- */
-export function normalizeRuntimeRelayBody<T extends Record<string, unknown>>(
-  body: T,
-): T & { runtime_session_id?: string } {
-  const { opencode_session_id: legacyId, ...rest } = body as Record<string, unknown>;
-  const out = rest as Record<string, unknown>;
-  if (out.runtime_session_id === undefined && typeof legacyId === 'string') {
-    out.runtime_session_id = legacyId;
-  }
-  if (out.kind === 'opencode_session') out.kind = 'runtime_session';
-  return out as T & { runtime_session_id?: string };
-}
-
-/**
  * `code` on the daemon's 503 while the session runtime cannot take a request:
  * the repo is not on disk, the workspace is installing, or the harness is still
  * starting. A client renders it as "starting" and retries. The `error` text
@@ -209,47 +214,39 @@ export const BOOT_PHASE_HEADER = 'x-kortix-boot-phase';
  * `capabilities` beside the host's own entries (`file.import`, ...). A client
  * hides a control whose capability is absent.
  */
-export const RUNTIME_CAPABILITIES = [
-  /** Revert to a message and restore it (`/session/:id/revert`, `/unrevert`). */
-  'session.rewind',
-  /** Summarize the conversation on demand (`/session/:id/summarize`). */
-  'session.compact',
-  /** Project slash commands (`GET /command`, `/session/:id/command`). */
-  'session.commands',
-  /** Fork a session at a message. */
-  'session.fork',
-  /** Subagent child sessions, readable while the parent drives them. */
-  'session.subagents',
-  /** MCP servers the runtime connects itself. */
-  'session.mcp',
-  /** The runtime's todo list (`/session/:id/todo`). */
-  'session.todo',
-  /** A shell command run as a turn (`/session/:id/shell`). */
-  'session.shell',
-  /** Attach the harness's own terminal client to the session runtime. */
-  'session.attach',
-  /** A runtime config document a client may read and patch (`/global/config`). */
-  'session.config',
-  /**
-   * A message sent during a turn is read by that turn at its next step
-   * boundary (`POST /kortix/runtime/sessions/:id/steer`). The turn does not stop.
-   */
-  'session.steer',
-  /**
-   * `GET /kortix/runtime/events?schema=v2` streams the session log
-   * (`kortix.session/2`) as `log.*` frames (`@kortix/api-contract/session-log`
-   * `SESSION_LOG_EVENTS`). Without `schema` the stream is the v1 stream.
-   */
-  'session.log.v2',
+export { RUNTIME_CAPABILITIES, type RuntimeCapability } from './wire-values';
+
+/**
+ * The extensions the pi runtime loads for every agent (kortixd `harness/pi/runtime.ts`): the agent
+ * page's platform rows (apps/api `agent-capabilities.ts`) list exactly these, and the pi-harness
+ * test fails when the runtime loads a builtin that is not here.
+ */
+export const PLATFORM_EXTENSION_IDS = [
+  'kortix-nested-calls',
+  'kortix-presentation',
+  'kortix-turn',
+  'kortix-context-record',
+  'kortix-subagents',
+  'kortix-workflow',
+  'kortix-messaging',
+  'kortix-team-tasks',
+  'codemode',
 ] as const;
-export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number];
+export type PlatformExtensionId = (typeof PLATFORM_EXTENSION_IDS)[number];
 
 /**
  * The daemon serves the Kortix turn verbs: `POST /kortix/runtime/sessions/:id/prompt`,
- * `POST /kortix/runtime/sessions/:id/abort`, `GET|DELETE /kortix/runtime/messages/:id/:messageId`
+ * `POST /kortix/runtime/sessions/:id/abort`, `GET /kortix/runtime/messages/:id`
  * and `GET /kortix/runtime/agents`. Listed in `capabilities` beside the runtime's own.
  */
 export const RUNTIME_TURNS_CAPABILITY = 'runtime.turns.v1' as const;
+
+/**
+ * The box runs Claude subscription models (`claude-agent/<id>`, `./claude-agent`): its image
+ * has the `claude` program and its daemon has the provider. A box without it answers a turn on
+ * such a model with an error, so a client offers those models only where this is listed.
+ */
+export const RUNTIME_CLAUDE_AGENT_CAPABILITY = 'models.claude_agent.v1' as const;
 
 /**
  * The daemon serves `POST /kortix/runtime/messages/:id/:messageId/retract`:
@@ -258,6 +255,152 @@ export const RUNTIME_TURNS_CAPABILITY = 'runtime.turns.v1' as const;
  * message, `409 { code: MESSAGE_READ_CODE }` when a model call read it.
  */
 export const RUNTIME_RETRACT_CAPABILITY = 'runtime.retract.v1' as const;
+
+/**
+ * The runtime keeps a delivered prompt's `message_id` as its user message id,
+ * orders the transcript by position (admission order), not by id, and answers
+ * a repeated id `200 { deduplicated: true }` without storing a second message.
+ * A client may send an id minted long before delivery (a prompt that waited
+ * behind a turn), and a redelivery may send the same id again. apps/api keeps
+ * the wire id on a box that lists this; without it apps/api re-mints the id
+ * above the transcript, because OpenCode orders by id. pi lists it.
+ */
+export const RUNTIME_STABLE_MESSAGE_ID_CAPABILITY = 'runtime.stable_message_id.v1' as const;
+
+/**
+ * Session metadata key, value `true`: a cloud subagent its parent started in
+ * the background (the pi `agent` tool's `run_in_background`, kortixd
+ * `harness/pi/cloud-subagent.ts`). The parent's tool call returned at once,
+ * so the API delivers each finished turn of this session into the parent as
+ * a new message (apps/api `projects/subagent-notice.ts`).
+ */
+export const SUBAGENT_NOTIFY_PARENT_KEY = 'notify_parent' as const;
+
+/**
+ * The daemon serves the session-log action routes, under `/kortix/runtime`:
+ *
+ * | Route | Body | Answer |
+ * | --- | --- | --- |
+ * | `POST /permissions/:id/reply` | `RuntimePermissionReplyBody` | `200 { ok: true }`; `404` no such request |
+ * | `POST /questions/:id/reply` | `RuntimeQuestionReplyBody` | `200 { ok: true }`; `404` |
+ * | `POST /questions/:id/reject` | none | `200 { ok: true }`; `404` |
+ * | `POST /sessions/:id/compact` | none | `202 { ok: true }`; `501` when the runtime cannot compact |
+ * | `POST /sessions/:id/command` | `RuntimeCommandBody` | `202 { message_id }`; `400` unknown command; `403 { error: 'command_not_enabled' }` |
+ * | `PUT /sessions/:id/grants` | `RuntimeGrantsBody` | `200 { grants }` |
+ * | `GET /commands` | none | `200 { commands: RuntimeCommandInfo[] }` |
+ * | `GET /pending` | none | `200 RuntimePending` |
+ * | `GET /log?thread=&after_seq=&before_seq=&limit=` | none | `200 { generation, thread_id, messages: SessionLogMessage[], has_more }`; with `RUNTIME_LOG_CAPABILITY`, a whole `SessionLogPage` |
+ * | `GET /log/messages/:messageId` | none | `200 SessionLogMessage`; `404` |
+ * | `GET /log/blobs/:sha256` | none | the attachment bytes; `404` |
+ * | `GET /workspace` | none | `200 RuntimeWorkspaceInfo` |
+ * | `GET /workspace/diff?mode=branch\|git` | none | `200 { files: RuntimeWorkspaceFileDiff[] }` |
+ *
+ * The log routes read the box's own session log, which is ahead of the API's copy
+ * while a turn runs (the journal sends at most 5 s later).
+ */
+export const RUNTIME_ACTIONS_CAPABILITY = 'runtime.actions.v1' as const;
+
+/**
+ * The box's log reads stand in for the API's copy:
+ *  - `GET /kortix/runtime/log` answers a whole `SessionLogPage` (`session`, `generation`, thread heads),
+ *    at the seqs the API stores;
+ *  - a prompt the box admitted and pi has not appended yet (queued behind a running turn) is in
+ *    the log from its admission, at a provisional seq above every real one, on `GET /log`,
+ *    `GET /log/messages/:id` and the v2 stream; its real seq replaces it when its turn starts;
+ *  - `GET /kortix/health` `harness.session.root_thread_id` names the log's root thread.
+ */
+export const RUNTIME_LOG_CAPABILITY = 'runtime.log.v1' as const;
+
+/** `POST /kortix/runtime/permissions/:id/reply`. `always` grants the capability for the session. */
+export const RuntimePermissionReplyBodySchema = z.object({
+  reply: z.enum(['once', 'always', 'reject']),
+  message: z.string().max(4_000).optional(),
+});
+export type RuntimePermissionReplyBody = z.infer<typeof RuntimePermissionReplyBodySchema>;
+
+/** `POST /kortix/runtime/questions/:id/reply`: one list of chosen labels (or free text) per question. */
+export const RuntimeQuestionReplyBodySchema = z.object({ answers: z.array(z.array(z.string())) });
+export type RuntimeQuestionReplyBody = z.infer<typeof RuntimeQuestionReplyBodySchema>;
+
+/** `POST /kortix/runtime/sessions/:id/command`: run a slash command or a skill by name. */
+export const RuntimeCommandBodySchema = z.object({
+  /** The client-minted id of the user message the command becomes. */
+  message_id: z.string().min(1).optional(),
+  name: z.string().min(1),
+  arguments: z.string().default(''),
+  agent: z.string().min(1).optional(),
+  /** `provider/model`, as the prompt route takes it. */
+  model: z.string().min(1).optional(),
+  variant: z.string().min(1).optional(),
+});
+export type RuntimeCommandBody = z.infer<typeof RuntimeCommandBodySchema>;
+
+/**
+ * `PUT /kortix/runtime/sessions/:id/grants`: the capabilities every call of the
+ * session may use without asking (`*`: all of them), for the rest of the session.
+ * `[]` clears every grant, "always" replies included. A policy `deny` still wins.
+ */
+export const RuntimeGrantsBodySchema = z.object({ grants: z.array(z.string().min(1)) });
+export type RuntimeGrantsBody = z.infer<typeof RuntimeGrantsBodySchema>;
+
+/** One row of `GET /kortix/runtime/commands`: a project command, a prompt template, or a granted skill. */
+export interface RuntimeCommandInfo {
+  name: string;
+  description: string | null;
+  source: 'command' | 'template' | 'skill';
+  /** The agents the command is enabled for; absent when every agent may run it. */
+  agents?: string[];
+}
+
+/** What a thread does now (`log.status`); `retry` is reported as `busy` here (`toRuntimeThreadStatus`). */
+export type { RuntimeThreadStatus } from './wire-values';
+
+/** One request the runtime waits on (the session log's `pending` record). */
+export interface RuntimePendingRecord {
+  id: string;
+  thread_id: string;
+  call_id?: string;
+  /** A permission: `{ permission, patterns, always, metadata }`. A question: `{ questions }`. */
+  payload: unknown;
+  asked_at: string;
+}
+
+/** `GET /kortix/runtime/pending`: what each thread does and what waits on a person. */
+export interface RuntimePending {
+  /** The root thread and each running or known subagent thread. */
+  statuses: Record<string, RuntimeThreadStatus>;
+  permissions: RuntimePendingRecord[];
+  questions: RuntimePendingRecord[];
+}
+
+/** `GET /kortix/runtime/workspace`. */
+export interface RuntimeWorkspaceInfo {
+  /** The session's checkout, absolute. */
+  directory: string;
+  /** The agent's home directory, absolute. */
+  home: string;
+  /** `git` when the checkout is a Git work tree. */
+  vcs: 'git' | null;
+  default_branch: string;
+}
+
+/** One file of `GET /kortix/runtime/workspace/diff`: a Git-format patch, absent past the size budget. */
+export interface RuntimeWorkspaceFileDiff {
+  path: string;
+  status: 'added' | 'deleted' | 'modified';
+  additions: number;
+  deletions: number;
+  patch?: string;
+}
+
+/**
+ * The session's computer has the desktop (`kortix-desktop`: Xvfb, XFCE and voxl
+ * streaming it on port 6901). The daemon lists it beside the host's own entries
+ * when the image installs the desktop. My Kortix's minimal image, and a custom
+ * template on a base other than Ubuntu 24.04, do not; a client then hides the
+ * Desktop panel.
+ */
+export const MACHINE_DESKTOP_CAPABILITY = 'machine.desktop' as const;
 
 /**
  * `code` on the daemon's `409` to a retract: a model call read the message
@@ -322,7 +465,7 @@ export interface CompiledAgent {
   permission?: unknown;
   /** kortix.yaml v3: the registered extensions a session of this agent loads (`CompiledAgentSet.extensions`). */
   extensions?: string[];
-  /** kortix.yaml v3: pi's codemode tool. Omitted: `on`. */
+  /** kortix.yaml v3: pi's codemode tool. Omitted: `on` for the session agent, none for a subagent. */
   codemode?: 'on' | 'only' | 'off';
 }
 
@@ -337,11 +480,6 @@ export interface CompiledCommand {
 
 /** A kortix.yaml v3 extension: one implementation per harness. */
 export interface CompiledExtension {
-  /**
-   * Repo-relative module path, loaded as an OpenCode plugin.
-   * @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
-   */
-  opencode?: string;
   /** `npm:<name>@<x.y.z>`, a repo-relative path, or pi's `{ source, extensions, skills, prompts, themes }` form. */
   pi?: string | { source: string; extensions?: string[]; skills?: string[]; prompts?: string[]; themes?: string[] };
 }
@@ -360,9 +498,10 @@ export interface CompiledAgentSet {
    */
   project_tools?: Record<string, string>;
   /**
-   * The Kortix tools the project lists as `<name>: kortix:<name>`. Present
-   * only when kortix.yaml has a `tools` key; then only these Kortix tools load,
-   * plus the ones `project_tools` replaces. Absent: all of them load.
+   * The Kortix tools this compiled set loads, plus the ones `project_tools`
+   * replaces. Only the platform's My Kortix config sets it; a project's
+   * compiled set omits it, and then every Kortix tool loads (an agent's
+   * `tools` grant decides what it may call).
    */
   kortix_tools?: string[];
   /**
@@ -376,6 +515,21 @@ export interface CompiledAgentSet {
   commands?: Record<string, CompiledCommand>;
   /** v3: registered extensions, by name. An agent loads the ones its `extensions` list names. */
   extensions?: Record<string, CompiledExtension>;
+  /**
+   * kortix.yaml's validation issues, errors first, at most 50. The set is what
+   * the project applies without the broken parts; the daemon lists these in
+   * the session's config notice so the agent can fix the file. Absent: none.
+   */
+  manifest_issues?: CompiledManifestIssue[];
+}
+
+/** One kortix.yaml validation issue in a compiled agent set. `line`/`column` are 1-indexed. */
+export interface CompiledManifestIssue {
+  path: string;
+  message: string;
+  severity: 'error' | 'warning';
+  line?: number;
+  column?: number;
 }
 
 /** May an agent with this compiled `tools` map use `tool`? Its own entry, else `*`, else yes. */
@@ -387,23 +541,23 @@ export function toolAllowed(tools: Record<string, boolean> | undefined, tool: st
 
 /** The agent settings a harness applies. A setting a harness does not list is ignored there. */
 export const AGENT_SETTING_HARNESSES = {
-  description: ['opencode', 'pi'],
-  mode: ['opencode', 'pi'],
-  model: ['opencode', 'pi'],
-  variant: ['opencode', 'pi'],
-  temperature: ['opencode', 'pi'],
-  top_p: ['opencode', 'pi'],
-  options: ['opencode'],
-  color: ['opencode'],
-  steps: ['opencode', 'pi'],
-  tools: ['opencode', 'pi'],
-  hidden: ['opencode', 'pi'],
-  permission: ['opencode', 'pi'],
-  disable: ['opencode', 'pi'],
-  prompt: ['opencode', 'pi'],
-  extensions: ['opencode', 'pi'],
+  description: ['pi'],
+  mode: ['pi'],
+  model: ['pi'],
+  variant: ['pi'],
+  temperature: ['pi'],
+  top_p: ['pi'],
+  options: [],
+  color: [],
+  steps: ['pi'],
+  tools: ['pi'],
+  hidden: ['pi'],
+  permission: ['pi'],
+  disable: ['pi'],
+  prompt: ['pi'],
+  extensions: ['pi'],
   codemode: ['pi'],
-} as const satisfies Record<keyof CompiledAgent, readonly ('opencode' | 'pi')[]>;
+} as const satisfies Record<keyof CompiledAgent, readonly 'pi'[]>;
 export type AgentSetting = keyof typeof AGENT_SETTING_HARNESSES;
 
 /** The agent settings `harness` ignores, in `AGENT_SETTING_HARNESSES` order. */
@@ -430,6 +584,8 @@ export const HarnessHealthSchema = z.object({
     id: z.string().nullable(),
     /** apps/api asked this box to create the root at boot. */
     required: z.boolean(),
+    /** The root thread of the box's session log (`RUNTIME_LOG_CAPABILITY`); null while the runtime is down. */
+    root_thread_id: z.string().nullable().optional(),
   }),
   /** Present only for `?turn=1`. */
   turn: z
@@ -457,22 +613,11 @@ export function healthHarnessId(health: { harness?: unknown } | null | undefined
   return null;
 }
 
-/** The runtime process state a health body reports: the W3 `harness` block, or the pre-W3 `opencode` field. */
+/** The runtime process state a health body reports, from its `harness` block. */
 export function healthRuntimeState(health: Record<string, unknown> | null | undefined): string | null {
   const harness = health?.harness;
   if (harness && typeof harness === 'object' && typeof (harness as { state?: unknown }).state === 'string') {
     return (harness as { state: string }).state;
   }
-  return typeof health?.opencode === 'string' ? health.opencode : null;
-}
-
-/**
- * The port the runtime listens on (OpenCode's alternates on a verified reload): `harness.details.port`, or the pre-W3 `opencode_port`.
- * @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
- */
-export function healthRuntimePort(health: Record<string, unknown> | null | undefined): number | null {
-  const harness = health?.harness;
-  const details = harness && typeof harness === 'object' ? (harness as { details?: unknown }).details : null;
-  const port = details && typeof details === 'object' ? (details as { port?: unknown }).port : health?.opencode_port;
-  return typeof port === 'number' && Number.isInteger(port) && port > 0 ? port : null;
+  return null;
 }

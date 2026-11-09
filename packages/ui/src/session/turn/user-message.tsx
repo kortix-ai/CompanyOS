@@ -4,6 +4,7 @@ import { attachmentMime } from '../../internal/lib/attachment-mime';
 import { AttachmentPreview } from './attachment-preview';
 import { getFileCategory } from '../../files/viewer/preview-policy';
 import { uiRoutes } from '../../lib/routes';
+import { remindersHref } from '../../internal/lib/capability-tab-routes';
 import { MessageSenderAbove } from '../participants/session-participants';
 import { MessageAuthorLabel } from './message-author-label';
 import { MESSAGE_TEXT_CLASS, RowToolbar } from './message-row';
@@ -22,6 +23,8 @@ import {
 
 import { useTranslations } from '../../i18n';
 import {
+  channelPromptTail,
+  isChannelFileLabel,
   expandPastedContent,
   neutralizePastedTags,
   sanitizePromptUploadFilename,
@@ -34,8 +37,8 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PencilSimpleIcon,
   AlarmIcon,
-  ChatsTeardropIcon,
   LightningIcon,
+  PhoneIcon,
 } from '@phosphor-icons/react';
 
 import { CopyButton } from '../../markdown/copy-button';
@@ -81,6 +84,11 @@ import {
 } from '../thread/mention-segments';
 import { parseChannelMessage, slackConversationName, type ChannelMessageInfo } from './channel-message';
 import { SourceCard, SourcePill } from './source-pill';
+import { parseVoiceTurn, type VoiceTurnInfo } from './voice-turn';
+import { PeerMessageRow } from './peer-message-row';
+import { NoticeBatchGroup } from './notice-batch-group';
+import { parseNoticeBatch } from './subagent-notice';
+import { parsePeerMessagePrompt } from '@kortix/shared';
 import { useChannelBindings } from '../../internal/hooks/use-channel-bindings';
 import { useSessionIds } from '../../providers/session-ids';
 import { CHANNEL_BRAND_COLOR, ChannelBrandMark, channelPlatformLabel } from './channel-brand';
@@ -94,10 +102,6 @@ import {
   parseSystemNotifications,
   parseReminderPrompt,
   type ReminderPromptInfo,
-  parseRoomDigest,
-  parseRoomPrompt,
-  type RoomDigestInfo,
-  type RoomPromptInfo,
   parseTriggerEvent,
   type TriggerEventInfo,
   QUOTE_MARKER_RE,
@@ -157,10 +161,11 @@ export const BUBBLE_SURFACE = cn(
 
 /**
  * Where a channel message came from, in the pill's hover card: the platform,
- * the channel or chat it was posted in, and who posted it. A Slack prompt
- * written before channel names were recorded carries a bare id (`C0DEV`); the
- * project's Slack bindings name it, read only while this card is open. A Teams
- * conversation id names nothing a person reads, so Teams shows no channel row.
+ * the channel or chat it was posted in (an email's subject, labelled Subject),
+ * and who posted it. A Slack prompt written before channel names were recorded
+ * carries a bare id (`C0DEV`); the project's Slack bindings name it, read only
+ * while this card is open. A Teams conversation id names nothing a person
+ * reads, so Teams shows no channel row.
  */
 export function ChannelOrigin({ info, platform }: { info: ChannelMessageInfo; platform: string }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
@@ -171,12 +176,13 @@ export function ChannelOrigin({ info, platform }: { info: ChannelMessageInfo; pl
     ? data?.bindings.find((b) => b.platform === 'slack' && b.channelId === info.context)
     : undefined;
   const channel = info.platform === 'Teams' ? '' : (binding && slackConversationName(binding)) || info.context;
+  const place = info.platform === 'Email' ? tI18nComplete('text68971283841a') : tI18nComplete('textce4683e7013a');
   return (
     <SourceCard
       mark={<ChannelBrandMark platform={info.platform} className="size-3.5 shrink-0" />}
       title={platform}
       rows={[
-        { label: tI18nComplete('textce4683e7013a'), value: channel },
+        { label: place, value: channel },
         { label: tI18nComplete('text218197693424'), value: info.userName },
       ]}
     />
@@ -185,16 +191,19 @@ export function ChannelOrigin({ info, platform }: { info: ChannelMessageInfo; pl
 
 /**
  * A message that arrived from a chat channel (Slack / Microsoft Teams /
- * Telegram): a source pill — mark, platform, sender — over the same bubble a
- * typed message gets. Every `@name` in the text (`@Kortix`, `@KortixDev`,
- * `@here`) is a `MentionChip`, the chip the composer draws, static because a
- * channel mention opens nothing here. Exported for `channel-message-card.test.tsx`.
+ * Telegram): a source pill — mark, platform, sender — over the files the
+ * sender sent (the strip a composer upload gets) and the same bubble a typed
+ * message gets. Every `@name` in the text (`@Kortix`, `@KortixDev`, `@here`)
+ * is a `MentionChip`, the chip the composer draws, static because a channel
+ * mention opens nothing here. Exported for `channel-message-card.test.tsx`.
  */
 export function ChannelMessage({
   info,
+  attachments = [],
   actions,
 }: {
   info: ChannelMessageInfo;
+  attachments?: NormalizedAttachment[];
   actions?: React.ReactNode;
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
@@ -208,7 +217,8 @@ export function ChannelMessage({
         sender={info.userName}
         card={<ChannelOrigin info={info} platform={platform} />}
       />
-      {info.messageText && (
+      <MessageAttachments attachments={attachments} />
+      {info.messageText && !(attachments.length > 0 && isChannelFileLabel(info.messageText)) && (
         <div className={cn(BUBBLE_SURFACE, 'max-w-[80%]')}>
           <div className={BUBBLE_TEXT}>
             {buildMentionSegments({ text: info.messageText }).map((segment, i) =>
@@ -255,15 +265,47 @@ function PlatformPromptMessage({
 }
 
 /**
- * A reminder fire (`[REMINDER reminder.<id> …]`). The pill says Reminder and
- * whether it repeats; its card carries the id and a link to the project's
- * reminders for this session.
+ * A loop fire (`[REMINDER reminder.<id> …]`, the wire name). The pill says
+ * Loop and whether it repeats; its card carries the id and a link to the
+ * project's Loops page, filtered to this session.
  */
+/**
+ * A voice call's turn the voice answered itself (voice-turn.ts): the caller's words as their own bubble under a Call
+ * pill, and the voice's answer below it, as the agent's line, not the note the session keeps for the agent.
+ */
+function VoiceTurnMessage({ info, actions }: { info: VoiceTurnInfo; actions?: React.ReactNode }) {
+  const t = useTranslations('voiceCall');
+  return (
+    <div className="flex w-full flex-col gap-1.5" data-testid="voice-turn">
+      {info.user ? (
+        <PlatformPromptMessage
+          text={info.user}
+          actions={actions}
+          pill={
+            <SourcePill
+              mark={<PhoneIcon weight="fill" className="size-3 shrink-0" aria-hidden />}
+              source={t('call')}
+              sender={t('you')}
+              card={<SourceCard mark={<PhoneIcon weight="fill" className="size-3.5 shrink-0" aria-hidden />} title={t('title')} footer={<span className="text-muted-foreground">{t('turnNote')}</span>} />}
+            />
+          }
+        />
+      ) : null}
+      {info.said ? (
+        <p className="text-foreground max-w-[80%] self-start text-sm leading-relaxed text-pretty">
+          {info.user ? null : <PhoneIcon weight="fill" className="text-muted-foreground mr-1.5 inline size-3 align-[-1px]" aria-label={t('call')} />}
+          {info.said}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ReminderMessage({ info, actions }: { info: ReminderPromptInfo; actions?: React.ReactNode }) {
   const t = useTranslations('reminders');
   const ids = useSessionIds();
-  const manageHref =
-    ids.projectId && ids.sessionId ? uiRoutes().customize(ids.projectId, `reminders?session=${ids.sessionId}`) : null;
+  const loopsHref = ids.projectId ? remindersHref(ids.projectId) : null;
+  const manageHref = loopsHref && ids.sessionId ? `${loopsHref}?session=${ids.sessionId}` : null;
   return (
     <PlatformPromptMessage
       data-testid="reminder-turn"
@@ -292,78 +334,6 @@ function ReminderMessage({ info, actions }: { info: ReminderPromptInfo; actions?
                   )}
                 </div>
               }
-            />
-          }
-        />
-      }
-    />
-  );
-}
-
-/**
- * A room message (`[room dev · #42 · from …]`, `[direct message · #3 · from …]`).
- * The pill names the room and the sender; the card carries the seq. The bubble
- * shows the message text only: the reply instructions in the footer are for
- * the agent, not the reader. The parsed text has no room id, so there is no link.
- */
-function RoomMessage({ info, actions }: { info: RoomPromptInfo; actions?: React.ReactNode }) {
-  const t = useTranslations('rooms');
-  const source = info.room;
-  const sender = info.senderKind === 'session' ? t('agentSender', { name: info.sender }) : info.sender;
-  return (
-    <PlatformPromptMessage
-      data-testid="room-turn"
-      data-room-seq={String(info.seq)}
-      text={info.text}
-      actions={actions}
-      pill={
-        <SourcePill
-          mark={<ChatsTeardropIcon className="size-3 shrink-0" aria-hidden />}
-          source={source}
-          sender={sender}
-          card={
-            <SourceCard
-              mark={<ChatsTeardropIcon className="size-3.5 shrink-0" aria-hidden />}
-              title={t('cardRoom', { name: source })}
-              rows={[
-                { label: t('cardFrom'), value: sender },
-                { label: t('cardMessage'), value: `#${info.seq}` },
-                { label: t('cardReplyTo'), value: info.replyTo ? `#${info.replyTo}` : null },
-              ]}
-            />
-          }
-        />
-      }
-    />
-  );
-}
-
-/**
- * A room digest: room traffic not addressed to this agent, batched into one
- * turn. The pill names the room and the count; the bubble lists each message's
- * sender and first line.
- */
-function RoomDigestMessage({ info, actions }: { info: RoomDigestInfo; actions?: React.ReactNode }) {
-  const t = useTranslations('rooms');
-  const range = info.fromSeq === info.toSeq ? `#${info.toSeq}` : `#${info.fromSeq}–#${info.toSeq}`;
-  const count = t('digestCount', { count: info.count });
-  const lines = info.lines.map((line) => `#${line.seq} ${line.sender}: ${line.text}`);
-  if (info.more) lines.push(t('digestMore', { count: info.more }));
-  return (
-    <PlatformPromptMessage
-      data-testid="room-digest-turn"
-      text={lines.join('\n')}
-      actions={actions}
-      pill={
-        <SourcePill
-          mark={<ChatsTeardropIcon className="size-3 shrink-0" aria-hidden />}
-          source={info.room}
-          sender={count}
-          card={
-            <SourceCard
-              mark={<ChatsTeardropIcon className="size-3.5 shrink-0" aria-hidden />}
-              title={t('cardRoom', { name: info.room })}
-              rows={[{ label: t('cardMessage'), value: range }]}
             />
           }
         />
@@ -1750,6 +1720,15 @@ export function UserMessage({
   // scaffolds these prompts with ids and turn instructions the person never
   // typed, so the card shows only the platform, the sender, and their words.
   const channelMessageInfo = useMemo(() => parseChannelMessage(rawText), [rawText]);
+  // Its files: the `<file>` tags Kortix wrote after the sender's text, and nothing else. A tag the sender
+  // typed is text; the image block pi records for a tag repeats it, and names no path when the sender typed one.
+  const channelAttachments = useMemo(
+    () =>
+      channelMessageInfo
+        ? normalizeAttachments([], parseFileReferences(channelPromptTail(rawText, channelMessageInfo.platform)).files)
+        : [],
+    [channelMessageInfo, rawText],
+  );
 
   // Detect trigger_event in user message
   const triggerEventInfo = useMemo(() => parseTriggerEvent(rawText), [rawText]);
@@ -1757,10 +1736,16 @@ export function UserMessage({
   // A reminder fire: platform-written `[REMINDER …]` header + the reminder text.
   const reminderInfo = useMemo(() => parseReminderPrompt(rawText), [rawText]);
 
-  // A room message (flag `agent_rooms`): `[room <name> · #<seq> · from …]` or `[direct message · …]`.
-  const roomInfo = useMemo(() => parseRoomPrompt(rawText), [rawText]);
-  // A batched digest of room traffic: `[room <name> · #a–#b · N new messages]`.
-  const roomDigestInfo = useMemo(() => parseRoomDigest(rawText), [rawText]);
+  // A voice call's turn the voice answered itself (its note in the session: voice-turn.ts).
+  const voiceTurnInfo = useMemo(() => (message.origin === 'automation' || message.origin === 'steer' || message.origin === 'prompt' || !message.origin ? parseVoiceTurn(rawText) : null), [message.origin, rawText]);
+  // A message from another Kortix session (`send_message`): `[message from reviewer · session 3f2a1b9c · #m_1]`.
+  const peerInfo = useMemo(() => parsePeerMessagePrompt(rawText), [rawText]);
+  // Several notices in one prompt (`session-notice-batch.ts`), whatever the first one is: a peer
+  // idle notice first must not read as one peer message with the rest of the batch inside it.
+  const noticeBatch = useMemo(() => {
+    const batch = parseNoticeBatch(rawText);
+    return batch && batch.length > 1 ? batch : null;
+  }, [rawText]);
 
   // `messageCreatedAt`'s rule on the record's ISO time: a missing or non-positive time is no time.
   const createdAt = Date.parse(message.created_at);
@@ -1886,7 +1871,7 @@ export function UserMessage({
   const shallowNavigate = useUiShallowNavigate();
 
   const openSessionMention = (raw: string) => {
-    // `/projects/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
+    // `/workspaces/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
     // route — the tab stays mounted so the click looks fine, but the URL it
     // writes into history 404s on reload or Back. See `session-href.ts`.
     // Direct session ID (ses_...) — navigate without title lookup
@@ -1990,19 +1975,23 @@ export function UserMessage({
 
   // Channel messages (Slack / Microsoft Teams / Telegram): a branded card with the sender
   if (channelMessageInfo) {
-    return <ChannelMessage info={channelMessageInfo} actions={actions} />;
+    return <ChannelMessage info={channelMessageInfo} attachments={channelAttachments} actions={actions} />;
+  }
+
+  if (voiceTurnInfo) {
+    return <VoiceTurnMessage info={voiceTurnInfo} actions={actions} />;
   }
 
   if (reminderInfo) {
     return <ReminderMessage info={reminderInfo} actions={actions} />;
   }
 
-  if (roomInfo) {
-    return <RoomMessage info={roomInfo} actions={actions} />;
+  if (noticeBatch) {
+    return <NoticeBatchGroup items={noticeBatch} actions={actions} />;
   }
 
-  if (roomDigestInfo) {
-    return <RoomDigestMessage info={roomDigestInfo} actions={actions} />;
+  if (peerInfo) {
+    return <PeerMessageRow info={peerInfo} actions={actions} />;
   }
 
   if (triggerEventInfo) {
@@ -2097,9 +2086,12 @@ export function UserMessage({
           the bubble used to render anyway — a padded surface with nothing in
           it, hanging under the attachments. The attachments ARE the message. */}
       {(bodyText || quotedPieces || effectiveCommandInfo) && (
-        <MessageSenderAbove sender={showAuthor && author?.kind === 'member' ? author : null}>
+        <MessageSenderAbove
+          sender={showAuthor && author?.kind === 'member' ? author : null}
+          reserve={showAuthor && !author}
+        >
           <UserMessageBubble
-            tail={showAuthor && author?.kind === 'member'}
+            tail={showAuthor && author?.kind !== 'session'}
             canExpand={canExpand}
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}

@@ -1,9 +1,11 @@
 'use client';
 
+import type { ComponentProps } from 'react';
+
 import { ScheduleView } from './schedule-view';
 
 /**
- * The page body for /projects/[id]/triggers — the capability tab that
+ * The page body for /workspaces/[id]/triggers — the capability tab that
  * graduated out of the Settings overlay. A trigger is one resource with two
  * ways to start it (schedule or webhook), so this mounts one `ScheduleView`
  * listing both, not two kind-locked pages.
@@ -20,6 +22,6 @@ import { ScheduleView } from './schedule-view';
  * `max-w-2xl` heading — which is exactly what made this tab read as a
  * different product from the three beside it.
  */
-export function TriggersPage({ projectId }: { projectId: string }) {
-  return <ScheduleView projectId={projectId} />;
+export function TriggersPage(props: ComponentProps<typeof ScheduleView>) {
+  return <ScheduleView {...props} />;
 }

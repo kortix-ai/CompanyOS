@@ -13,7 +13,7 @@ import {
 } from '@kortix/ui/customize/settings/settings-tabs';
 import { STANDALONE_DEFAULT_SETTINGS_TAB } from '@/features/workspace/settings/standalone-settings-route';
 import { getItemsForSurface } from '@/lib/menu-registry';
-import { LEGACY_SETTINGS_TAB_MAP, firstChatMatchesPaletteQuery, sessionMatchesPaletteQuery } from './command-palette';
+import { firstChatMatchesPaletteQuery, sessionMatchesPaletteQuery } from './command-palette';
 import {
   PALETTE_ACCOUNT_SCOPED_TABS,
   PALETTE_NO_PROJECT_DEFAULT_TAB,
@@ -23,9 +23,11 @@ import {
 } from './settings-palette-items';
 
 // No `flags` any more: the three flag-gated rail rows (Marketplace, Review,
-// Voice) moved to `/projects/<id>/config` with the rest of project
-// configuration, so nothing left in the derived list varies by flag.
-const IN_A_PROJECT: SettingsPaletteParams = { hasProject: true };
+// Voice) moved to `/workspaces/<id>/config` with the rest of project
+// configuration. One row varies by platform instead: Kortix in Chrome, offered
+// only where the platform switch is on. These tests describe that platform.
+const IN_A_PROJECT: SettingsPaletteParams = { hasProject: true, chromeOffered: true };
+const NO_PROJECT: SettingsPaletteParams = { hasProject: false, chromeOffered: true };
 
 function tabsFor(params: SettingsPaletteParams): SettingsTab[] {
   return settingsPaletteGroups(params).flatMap((group) => group.items.map((item) => item.tab));
@@ -45,7 +47,7 @@ const paletteItems = getItemsForSurface('commandPalette');
  * ============================================================================
  *
  * `command-palette.test.tsx` used to check only that every VALUE in
- * `LEGACY_SETTINGS_TAB_MAP` was a real `SettingsTab`. That check passes just
+ * the legacy settings-tab map was a real `SettingsTab`. That check passes just
  * as happily when a tab has no palette entry at all, which is how nine of the
  * twenty-six tabs (profile, connected, snapshots, groups, roles, identity,
  * audit, experimental, upgrades) shipped unreachable from Cmd+K with a green
@@ -76,11 +78,8 @@ describe('settings tab coverage', () => {
   });
 
   test('the derivation walks every rail group and invents nothing', () => {
-    // `rail.ts` used to export a pinned `UPGRADE_ITEM` alongside
-    // `railGroups()`, and a derivation that walked only the groups silently
-    // dropped it. Upgrades is a section of `/projects/<id>/config` now and the
-    // rail has no pinned row left, so the invariant is simply that the derived
-    // list and the rail agree exactly.
+    // The rail has no pinned row, so the invariant is that the derived list
+    // and the rail agree exactly.
     expect([...tabsFor(IN_A_PROJECT)].sort()).toEqual([...SETTINGS_TABS].sort());
   });
 
@@ -135,8 +134,7 @@ describe('offered tabs survive the panel filter', () => {
   });
 
   test('with NO project, every offered tab is allowed', () => {
-    const params: SettingsPaletteParams = { hasProject: false };
-    const offered = tabsFor(params);
+    const offered = tabsFor(NO_PROJECT);
     expect(offered.length).toBeGreaterThan(0);
     for (const tab of offered) {
       expect(isSettingsTabAllowed(tab, allowedParams(false))).toBe(true);
@@ -144,17 +142,26 @@ describe('offered tabs survive the panel filter', () => {
   });
 
   test('with NO project, every live tab but Computer is offered — all of them are personal', () => {
-    const offered = tabsFor({ hasProject: false });
+    const offered = tabsFor(NO_PROJECT);
     // Computer pairs a machine from a project, so it needs one open.
     expect([...offered].sort()).toEqual(SETTINGS_TABS.filter((tab) => tab !== 'computer').sort());
     for (const tab of offered) expect(ACCOUNT_SCOPED_SETTINGS_TABS).toContain(tab);
     // The project configuration tabs specifically — these were the ones the
     // old `Customize · X` entries offered from `/accounts/**`. They are not
     // offered from anywhere in this list now: they are `?section=` values on
-    // `/projects/<id>/config`, reached through the `proj-customize` row.
+    // `/workspaces/<id>/config`, reached through the `proj-customize` row.
     for (const tab of ['general', 'secrets', 'repositories', 'sandbox', 'models']) {
       expect(offered).not.toContain(tab);
     }
+  });
+
+  test('Kortix in Chrome is offered only where the platform offers it', () => {
+    // Staging and prod until launch: the browser list answers 404, so no row
+    // leads to a page that cannot load.
+    expect(tabsFor({ hasProject: true })).not.toContain('chrome');
+    expect(tabsFor({ hasProject: false })).not.toContain('chrome');
+    expect(tabsFor(IN_A_PROJECT)).toContain('chrome');
+    expect(tabsFor(NO_PROJECT)).toContain('chrome');
   });
 
   // The "Billing disappears when billing is off" case is gone with the tab.
@@ -165,7 +172,7 @@ describe('offered tabs survive the panel filter', () => {
 
   test('the derived list is exactly the rail, with or without a project', () => {
     // It used to vary by three feature flags. Those rows are sections of
-    // `/projects/<id>/config` now and the flag composition moved there with
+    // `/workspaces/<id>/config` now and the flag composition moved there with
     // them (`project-settings-sections.ts`), so this list has one shape.
     expect([...tabsFor(IN_A_PROJECT)].sort()).toEqual([...SETTINGS_TABS].sort());
   });
@@ -187,11 +194,8 @@ describe('search terms carried across from the removed registry entries', () => 
     // `connected` left the overlay on 2026-09-03 — the account's GitHub App
     // installations are the account page's Git tab.
     ['avatar', 'profile'],
-    // API keys came back into the rail on 2026-08-18, so the two words that
-    // name a person's own key answer HERE again, not on `account-tokens` —
-    // that row is the service-account surface now.
-    ['pat', 'tokens'],
-    ['cli', 'tokens'],
+    // `pat` and `cli` left this rail with the personal keys (Workspaces,
+    // PR 1): the `account-tokens` row answers them now.
     // Everything else that used to be listed here named a tab that has left
     // this rail. The thirteen project-configuration words (secrets, env, git,
     // github, members, collaborators, slack, telegram, llm, openrouter,
@@ -243,7 +247,7 @@ describe('search terms carried across from the removed registry entries', () => 
 
   /**
    * The thirteen project-configuration sections left the derived settings list
-   * for `/projects/<id>/config` and, for a while, ALL of their vocabulary was
+   * for `/workspaces/<id>/config` and, for a while, ALL of their vocabulary was
    * absorbed into one row (`proj-customize`) on the reasoning that a section
    * is a query param rather than a page.
    *
@@ -321,10 +325,6 @@ describe('search terms carried across from the removed registry entries', () => 
  * had to go, or every tab would list twice.
  */
 describe('the registry no longer carries palette settings destinations', () => {
-  test('no commandPalette entry uses kind: "settings"', () => {
-    expect(paletteItems.filter((item) => item.kind === 'settings')).toEqual([]);
-  });
-
   test('only two commandPalette hrefs still resolve to a settings tab, both deliberate', () => {
     const resolved = paletteItems
       .map((item) => ({ id: item.id, match: resolveSettingsOverlayHref(item.href ?? '') }))
@@ -332,14 +332,14 @@ describe('the registry no longer carries palette settings destinations', () => {
 
     // Nothing does any more. `nav-accounts` left this list when the account
     // surfaces moved to `/accounts/[id]`; `proj-customize` left it when
-    // project configuration moved to `/projects/[id]/customize/settings`. Every settings
+    // project configuration moved to `/workspaces/[id]/admin/general`. Every settings
     // destination in the palette is either a derived row (which opens the
     // overlay by tab id, not by href) or a plain navigation.
     expect(resolved.map((entry) => entry.id).sort()).toEqual([]);
   });
 
   test('proj-customize points at the Customize index, and no row survives /config', () => {
-    // A bare `/projects/{id}/settings` resolved to `{ tab: undefined }`, and
+    // A bare `/workspaces/{id}/settings` resolved to `{ tab: undefined }`, and
     // `openSettings(undefined)` keeps whatever was last open — so one entry
     // landed somewhere different on every click. It named `/settings/general`
     // after that, then `/config` once General became a config section.
@@ -348,7 +348,7 @@ describe('the registry no longer carries palette settings destinations', () => {
     // names — the card grid over every capability tab, each of which has its
     // own row.
     const customize = paletteItems.find((item) => item.id === 'proj-customize');
-    expect(customize?.href).toBe('/projects/{projectId}/customize');
+    expect(customize?.href).toBe('/workspaces/{projectId}/customize');
     expect(customize?.kind).toBe('navigate');
     expect(customize?.requiresProject).toBe(true);
 
@@ -357,7 +357,7 @@ describe('the registry no longer carries palette settings destinations', () => {
     // rail.
     //
     // `proj-config-feature-flags` outlived the other two by a day. It was
-    // still shipping on 2026-09-03 with `href: '/projects/{projectId}/customize/settings
+    // still shipping on 2026-09-03 with `href: '/workspaces/{projectId}/admin/general
     // ?section=feature-flags'`, so typing "feature flag" offered it under
     // Navigation — above the derived row that works — and selecting it
     // navigated to a deleted route. `menu-registry-destinations.test.ts` now
@@ -385,11 +385,11 @@ describe('the registry no longer carries palette settings destinations', () => {
     // any more, and their absence is the point of this change. They were
     // removed here as SETTINGS TABS (`/settings/secrets`, opened through the
     // overlay); they came back as CAPABILITY PAGES with their own routes
-    // (`/projects/<id>/secrets`, the account Access pane, `?scope=channels`),
+    // (`/workspaces/<id>/secrets`, the account Access pane, `?scope=channels`),
     // which the derived settings list structurally cannot produce — the same
     // arrangement `proj-triggers` and the `account-*` rows use. What must stay
-    // gone is a row that opens the OVERLAY on a tab that no longer exists; the
-    // "no commandPalette entry uses kind: 'settings'" case above pins that,
+    // gone is a row that opens the OVERLAY on a tab that no longer exists;
+    // the menu item kind type, which no longer admits `'settings'`, pins that,
     // and `menu-registry-destinations.test.ts` pins that each of these hrefs
     // is a real destination.
     for (const id of [
@@ -414,7 +414,7 @@ describe('the registry no longer carries palette settings destinations', () => {
     // because it is no longer a settings destination.
     // `resolveSettingsOverlayHref` must not claim its href — that is what
     // would re-open the retired overlay tabs.
-    const href = '/projects/{projectId}/customize/triggers';
+    const href = '/workspaces/{projectId}/admin/triggers';
     const item = paletteItems.find((entry) => entry.id === 'proj-triggers');
     expect(item?.href).toBe(href);
     expect(item?.kind).toBe('navigate');
@@ -461,51 +461,6 @@ describe('the registry no longer carries palette settings destinations', () => {
       expect(typeof item?.accountTab).toBe('string');
       expect(item?.href).toBeUndefined();
     }
-  });
-});
-
-/**
- * `LEGACY_SETTINGS_TAB_MAP` translates the legacy `SettingsTabId` vocabulary
- * (menu-registry.ts) onto the `SettingsTab` vocabulary (settings-tabs.ts) that
- * `useSettingsPanelStore` understands. No palette entry uses `kind: 'settings'`
- * any more, but `MenuItemDef.kind` still admits it and the `userMenu` surface
- * still declares three such entries — so the map has to stay correct for the
- * day one of them is put back on the palette surface. A bug here is silent:
- * `handleOpenSettings` falls back to `DEFAULT_SETTINGS_TAB` for anything that
- * isn't a real `SettingsTab`, opening Settings on the wrong tab rather than
- * throwing.
- */
-describe('LEGACY_SETTINGS_TAB_MAP', () => {
-  test('every mapped value is a real SettingsTab', () => {
-    for (const [legacyId, tab] of Object.entries(LEGACY_SETTINGS_TAB_MAP)) {
-      expect(SETTINGS_TABS as readonly string[]).toContain(tab as string);
-      void legacyId;
-    }
-  });
-
-  test('every userMenu settings entry has a mapping', () => {
-    for (const item of getItemsForSurface('userMenu')) {
-      if (item.kind !== 'settings') continue;
-      expect(LEGACY_SETTINGS_TAB_MAP[item.settingsTab!]).toBeDefined();
-    }
-  });
-
-  test('each legacy id maps to the tab that hosts its section now', () => {
-    // Since 2026-09-02: theme/wallpaper on Appearance, sound packs on
-    // Sessions, the shortcut list (modifier picker + list) on Preferences.
-    expect(LEGACY_SETTINGS_TAB_MAP.shortcuts).toBe('preferences');
-    expect(LEGACY_SETTINGS_TAB_MAP.appearance).toBe('appearance');
-    expect(LEGACY_SETTINGS_TAB_MAP.sounds).toBe('sessions');
-  });
-
-  test('referrals has no entry and no mapping — there is no referrals tab', () => {
-    // `referrals` is not a member of `SettingsTab`, so `account-referrals`
-    // fell through to `DEFAULT_SETTINGS_TAB` and opened the project workspace
-    // General tab under a "Referrals" label. Mapping it correctly was not an
-    // option: the API has no referral routes. The entry was removed instead.
-    expect(SETTINGS_TABS as readonly string[]).not.toContain('referrals');
-    expect(LEGACY_SETTINGS_TAB_MAP.referrals).toBeUndefined();
-    expect(paletteItems.find((item) => item.id === 'account-referrals')).toBeUndefined();
   });
 });
 

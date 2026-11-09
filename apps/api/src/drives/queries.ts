@@ -6,6 +6,7 @@ import { accountGroups, accountMembers, driveConflicts, projectSessions, roleAss
 import { and, eq, inArray, isNotNull, like, or, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import type { DriveRow } from './service';
+import { projectsView } from '../workspaces/rows';
 
 /** Grants on `from` or below it follow a moved folder. True when one moved. */
 export async function moveFolderGrants(drive: DriveRow, from: string, to: string): Promise<boolean> {
@@ -99,4 +100,13 @@ export async function driveConflict(driveId: string, conflictId: string): Promis
 
 export async function dismissConflict(conflictId: string, userId: string): Promise<void> {
   await db.update(driveConflicts).set({ dismissedAt: new Date(), dismissedBy: userId }).where(eq(driveConflicts.conflictId, conflictId));
+}
+
+/** Project names by id, for the account's Files storage list. */
+export async function projectNames(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const rows = await db.select({ id: projectsView.projectId, name: projectsView.name }).from(projectsView).where(inArray(projectsView.projectId, ids));
+  for (const r of rows) out.set(r.id, r.name);
+  return out;
 }

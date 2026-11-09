@@ -1,6 +1,6 @@
 /**
- * kortixd bundles a few files from outside this package (the API contract and
- * the SDK's message-id codec) through tsconfig paths. `KORTIXD_SHARED_SOURCES`
+ * kortixd bundles a few files from outside this package (the API contract,
+ * the SDK's message-id codec, the voice runtime) through tsconfig paths. `KORTIXD_SHARED_SOURCES`
  * names them: apps/api fingerprints them with this source, so a change to one
  * rebuilds sandbox images, and the Dockerfiles copy them into the build stage.
  * An import missing from that list ships a binary whose image never rebuilds,
@@ -19,8 +19,15 @@ const REPO = resolve(APP, '../..')
  * contract module that is a directory (`session-log/`) bundles every file in it.
  */
 function sharedFilesFor(specifier: string): string[] | null {
-  if (specifier === '@kortix/shared/ssrf-guard') return ['packages/shared/src/ssrf-guard.ts']
+  const shared = /^@kortix\/shared\/(ssrf-guard|peer-message-prompt)$/.exec(specifier)
+  if (shared) return [`packages/shared/src/${shared[1]}.ts`]
   if (specifier === '@kortix/sdk/wire-message-id') return ['packages/sdk/src/core/session/wire-message-id.ts']
+  // The wire value sets: the contract file is a re-export stub over the
+  // canonical `@kortix/sdk/wire-values` file, so the standalone bundle needs
+  // both copied in and listed in KORTIXD_SHARED_SOURCES.
+  if (specifier === '@kortix/api-contract/wire-values') return ['packages/api-contract/src/wire-values.ts', 'packages/sdk/src/core/wire-values.ts']
+  // The voice package bundles whole: its entry imports the rest of its src/.
+  if (specifier === '@kortix/voice/kortix') return ['packages/voice/src']
   const contract = /^@kortix\/api-contract\/([a-z-]+)$/.exec(specifier)
   if (!contract) return null
   const dir = `packages/api-contract/src/${contract[1]}`
@@ -40,7 +47,8 @@ function productionFiles(dir: string): string[] {
 
 const imported = new Map<string, string>()
 for (const file of productionFiles(join(APP, 'src'))) {
-  for (const match of readFileSync(file, 'utf8').matchAll(/from '(@kortix\/[^']+)'/g)) {
+  // Static `from '…'` and dynamic `import('…')`: bun bundles both, so the build needs both.
+  for (const match of readFileSync(file, 'utf8').matchAll(/(?:from |import\()'(@kortix\/[^']+)'/g)) {
     const shared = sharedFilesFor(match[1]!)
     if (shared) for (const path of shared) imported.set(path, relative(APP, file))
     else throw new Error(`${relative(APP, file)} imports ${match[1]}, which kortixd cannot resolve standalone`)
@@ -48,6 +56,14 @@ for (const file of productionFiles(join(APP, 'src'))) {
 }
 
 describe('the files kortixd bundles from outside its package', () => {
+  test('the wire-value stub resolves the vendored SDK file it re-exports', async () => {
+    const api = await import('@kortix/api-contract/wire-values')
+    const sdk = await import('@kortix/sdk/wire-values')
+    expect(api.THREAD_STATUSES).toBe(sdk.THREAD_STATUSES)
+    expect(api.RUNTIME_CAPABILITIES).toBe(sdk.RUNTIME_CAPABILITIES)
+    expect(api.THREAD_STATUSES).toEqual(['idle', 'busy', 'retry', 'compacting'])
+  })
+
   test('KORTIXD_SHARED_SOURCES lists exactly the files the daemon imports', () => {
     expect([...imported.keys()].sort()).toEqual([...KORTIXD_SHARED_SOURCES].sort())
   })

@@ -3,12 +3,12 @@
  * the same list `kortix ship` runs before it commits: the sandbox Dockerfile
  * lint, the agent wiring lint, and the repository size check.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import type { ManifestIssue } from '@kortix/manifest-schema';
 import { extractSandboxTemplates } from '@kortix/shared/sandbox';
 import { lintDockerfile } from './dockerfile-lint.ts';
+import { runGit } from './git-run.ts';
 import { lintWiring } from './wiring-lint.ts';
 
 /**
@@ -26,15 +26,18 @@ const FILE_WARN_BYTES = 10 * 1024 * 1024;
 const LISTED_FILES = 5;
 const LFS_POINTER_BYTES = 200;
 
+/** A project issue. `file` is set when the issue is in a file other than the manifest (a Dockerfile). */
+export type ProjectIssue = ManifestIssue & { file?: string };
+
 export function lintProject(
   parsed: Record<string, unknown> | null,
   manifestPath: string,
-  opts: { dockerfileLint?: boolean } = {},
-): ManifestIssue[] {
+  opts: { dockerfileLint?: boolean; wiring?: boolean } = {},
+): ProjectIssue[] {
   const root = dirname(manifestPath);
   return [
     ...(opts.dockerfileLint === false ? [] : lintSandboxDockerfiles(parsed, manifestPath)),
-    ...lintWiring(parsed, root),
+    ...(opts.wiring === false ? [] : lintWiring(parsed, root)),
     ...lintRepoSize(root),
   ];
 }
@@ -51,10 +54,10 @@ export function lintProject(
 function lintSandboxDockerfiles(
   parsed: Record<string, unknown> | null,
   manifestPath: string,
-): ManifestIssue[] {
+): ProjectIssue[] {
   if (!parsed) return [];
   const root = dirname(manifestPath);
-  const issues: ManifestIssue[] = [];
+  const issues: ProjectIssue[] = [];
   for (const tpl of extractSandboxTemplates(parsed)) {
     if (!tpl.dockerfile) continue;
     const abs = resolve(root, tpl.dockerfile);
@@ -68,14 +71,14 @@ function lintSandboxDockerfiles(
     // Report the path as written in the manifest when it stays inside the
     // project, so the author sees the string they typed.
     const shown = relative(root, abs).startsWith('..') ? abs : tpl.dockerfile;
-    issues.push(...lintDockerfile(text, { path: shown }));
+    issues.push(...lintDockerfile(text, { path: shown }).map((issue) => ({ ...issue, file: abs })));
   }
   return issues;
 }
 
 function git(cwd: string, args: string[], input?: string): string | null {
-  const r = spawnSync('git', args, { cwd, input, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-  return r.status === 0 ? r.stdout : null;
+  const r = runGit(cwd, args, { input, maxBuffer: 256 * 1024 * 1024 });
+  return r.ok ? r.stdout : null;
 }
 
 const mib = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
@@ -137,7 +140,7 @@ export function lintRepoSize(dir: string): ManifestIssue[] {
     .map((f) => `${f.path} (${mib(f.bytes)})`);
   const headline =
     total > REPO_WARN_BYTES
-      ? `the files in Git total ${mib(total)}. A new session still runs the agent config, but above 512 MiB compressed Kortix builds no project snapshot, so a running session stops picking up agent config changes from the base branch until a new session starts.`
+      ? `the files in Git total ${mib(total)}. A new session still runs the agent config, but above 512 MiB compressed Kortix builds no workspace snapshot, so a running session stops picking up agent config changes from the base branch until a new session starts.`
       : `large static files are in Git. Every session downloads them, and so does every agent config change a running session picks up.`;
   return [
     {

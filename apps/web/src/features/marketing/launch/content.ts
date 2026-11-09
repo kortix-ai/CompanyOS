@@ -8,12 +8,12 @@
  */
 
 export const hero = {
-  title: 'The open-source AI Operating System',
+  title: 'The open-source CompanyOS',
   sub: 'Your agents, skills, company memory and connectors in one git repo you own. Any model, your keys, self-hosted or managed cloud.',
   ctaPrimary: 'Get started',
   ctaPrimaryHref: '/auth',
   ctaSecondary: 'Star on GitHub',
-  ctaSecondaryHref: 'https://github.com/kortix-ai/suna',
+  ctaSecondaryHref: 'https://github.com/kortix-ai/CompanyOS',
 } as const;
 
 export const pillars = {
@@ -47,7 +47,7 @@ export const pillars = {
       title: 'Everything is code',
       body: 'Versioned, reviewable, portable, governable. Work reaches main through a change request a person approves.',
       href: '/docs/project',
-      link: 'Projects',
+      link: 'Workspaces',
     },
   ],
 } as const;
@@ -78,7 +78,7 @@ export const kit = {
     { token: 'bg-kortix-green', label: 'Merged — the one accent' },
   ],
   type: [
-    { sample: 'The open-source AI Operating System', spec: 'Roobert Medium · tight tracking · headlines' },
+    { sample: 'The open-source CompanyOS', spec: 'Roobert Medium · tight tracking · headlines' },
     { sample: 'kortix ship', spec: 'Roobert Mono · commands, paths, branches only', mono: true },
   ],
   motion: [

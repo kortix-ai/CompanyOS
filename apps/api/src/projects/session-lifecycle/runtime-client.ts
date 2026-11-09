@@ -1,9 +1,9 @@
 /**
  * Every read and write the session lifecycle makes against a session's runtime:
- * the OpenCode transcript, the daemon's Quick Queue control, the agent roster,
- * legacy message parts, and the prompt POST itself. Each call goes through the
- * session's signed proxy endpoint or `forwardToSandbox`, and each read fails
- * OPEN on its own terms.
+ * the transcript, the daemon's Quick Queue control, the agent roster, and the
+ * prompt POST itself. Each call goes to a Kortix route (`runtimeVerbPaths`)
+ * through the session's signed proxy endpoint or `forwardToSandbox`, and each
+ * read fails OPEN on its own terms.
  */
 
 import { sessionAttachmentStore } from '../lib/session-attachments';
@@ -24,45 +24,40 @@ import {
 } from './agent-availability';
 import type { SandboxRecord } from '../../sandbox-proxy/backend';
 import { forwardToSandbox } from '../../sandbox-proxy/forward';
-import { sandboxOpencodeEndpoint } from '../opencode-mapping';
+import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { isRuntimeUnavailableError } from '../lib/runtime-read-failure';
 import { MESSAGE_READ_CODE, STEER_NO_ACTIVE_TURN_CODE } from '@kortix/api-contract/runtime-relay';
 import { KORTIX_SERVICE_CALL_HEADER } from '../../shared/kortix-user-context';
 import {
   WORKSPACE,
-  forgetRuntimeCapabilities,
-  runtimeServesRetract,
-  runtimeServesTurnVerbs,
-  turnVerbMissing,
   runtimeVerbPaths,
   sessionRuntimeFetch,
   type ResolvedSessionRuntime,
 } from './runtime-fetch';
-import { legacyRuntimePaths } from './legacy-runtime-rest';
+import type { SessionLogMessage } from '@kortix/api-contract/session-log';
 import { sendQuickQueueControl } from './quick-queue-control';
 import { clearTurnStopRequest, markTurnStopRequested } from '../session-turn-ledger';
 import { db } from '../../shared/db';
 import type { SessionLifecycleCommandRow, PromptOverridesWire, PromptPartWire } from './store';
-import { type PlacementTipMessage, parsePlacementTip } from './forwarded-placement';
+import type { PlacementTipMessage } from './forwarded-placement';
 import { newestWireIdTime } from '../wire-message-id';
-import type { LegacyRuntimeMessage } from './legacy-inline-attachment-repair';
 
 export const DAEMON_PORT = 8000;
 
 /**
- * The signed proxy endpoint + OpenCode root id for one session — the same
+ * The signed proxy endpoint + runtime root id (`runtime_session_id`) for one session — the same
  * resolution every drain-side transcript read uses. Exported for the turn-end
  * reconciliation (`forwarded-strand-reconcile.ts`), which has a session, not a
  * row.
  */
-export async function resolveSessionOpencodeEndpoint(
+export async function resolveSessionRuntimeEndpoint(
   sessionId: string | null | undefined,
   actorUserId?: string | null,
 ): Promise<ResolvedSessionRuntime & { externalId: string } | null> {
   if (!sessionId) return null;
   const [session] = await db
     .select({
-      opencodeSessionId: projectSessions.runtimeSessionId,
+      runtimeSessionId: projectSessions.runtimeSessionId,
       sandboxUrl: projectSessions.sandboxUrl,
       accountId: projectSessions.accountId,
       projectId: projectSessions.projectId,
@@ -71,7 +66,7 @@ export async function resolveSessionOpencodeEndpoint(
     .from(projectSessions)
     .where(eq(projectSessions.sessionId, sessionId))
     .limit(1);
-  if (!session?.opencodeSessionId) return null;
+  if (!session?.runtimeSessionId) return null;
 
   let externalId = externalIdFromSandboxUrlField(session.sandboxUrl);
   if (!externalId) {
@@ -95,56 +90,67 @@ export async function resolveSessionOpencodeEndpoint(
   // (`verifyKortixUserContext`); with no actor the call is refused as
   // `malformed`. A caller with no row of its own (turn-end reconciliation,
   // the stop settle) reads as the session's creator.
-  const endpoint = await sandboxOpencodeEndpoint(
+  const endpoint = await sandboxRuntimeEndpoint(
     externalId,
     actorUserId ?? session.createdBy ?? undefined,
   );
   if (!endpoint) return null;
-  return { endpoint, opencodeSessionId: session.opencodeSessionId, externalId };
+  return { endpoint, runtimeSessionId: session.runtimeSessionId, externalId };
 }
 
-/** The resolved session's daemon serves the Kortix turn routes. */
-function servesTurnVerbs(session: ResolvedSessionRuntime): Promise<boolean> {
-  return runtimeServesTurnVerbs(session.externalId, async () => session.endpoint);
-}
-
-/** One Kortix transcript page is at most this long (`MAX_MESSAGE_PAGE` in kortixd). */
+/** One page of the box's log is at most this long (`MAX_MESSAGE_PAGE` in kortixd). */
 const KORTIX_MESSAGE_PAGE_MAX = 200;
 /** A full read stops after this many pages (10,000 messages). */
 const KORTIX_FULL_READ_MAX_PAGES = 50;
 
 /**
- * The newest `limit` messages from the Kortix transcript route, or the whole
- * transcript paged backwards on `before` when `limit` is absent. Oldest first,
- * like the legacy list. `null` on a refused read.
+ * The newest `limit` messages of the root from the box's own session log, or the whole thread
+ * paged backwards on `before_seq` when `limit` is absent. Oldest first. A prompt the box admitted
+ * behind a running turn is in it already, at a provisional seq above every real one. `null` on a
+ * refused read.
  */
-async function readKortixTranscript(
+async function readRuntimeLogMessages(
   session: ResolvedSessionRuntime,
   opts: { limit?: number; timeoutMs?: number },
-): Promise<unknown[] | null> {
-  const pages: unknown[][] = [];
-  let before: string | null = null;
+): Promise<SessionLogMessage[] | null> {
+  const pages: SessionLogMessage[][] = [];
+  let beforeSeq: number | null = null;
   for (let page = 0; page < KORTIX_FULL_READ_MAX_PAGES; page++) {
     const limit = Math.min(opts.limit ?? KORTIX_MESSAGE_PAGE_MAX, KORTIX_MESSAGE_PAGE_MAX);
-    const res = await sessionRuntimeFetch(
-      session.endpoint,
-      'GET',
-      runtimeVerbPaths.messages(session.opencodeSessionId, { limit, before }),
-      {},
-      opts.timeoutMs,
-    );
+    const res = await sessionRuntimeFetch(session.endpoint, 'GET', runtimeVerbPaths.log({ limit, beforeSeq }), {}, opts.timeoutMs);
     if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as {
-      messages?: unknown;
-      has_more?: unknown;
-      first_message_id?: unknown;
-    } | null;
+    const body = (await res.json().catch(() => null)) as { messages?: unknown; has_more?: unknown } | null;
     if (!Array.isArray(body?.messages)) return null;
-    pages.unshift(body.messages);
-    if (opts.limit !== undefined || body.has_more !== true || typeof body.first_message_id !== 'string') break;
-    before = body.first_message_id;
+    const messages = body.messages as SessionLogMessage[];
+    pages.unshift(messages);
+    const first = messages[0]?.seq;
+    if (opts.limit !== undefined || body.has_more !== true || typeof first !== 'number') break;
+    beforeSeq = first;
   }
   return pages.flat();
+}
+
+const logTime = (iso: string | null | undefined): number | null => {
+  const ms = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isFinite(ms) ? ms : null;
+};
+
+/** Session-log messages as the tip the placement logic reads. */
+export function placementTipOfLog(messages: readonly SessionLogMessage[]): PlacementTipMessage[] {
+  return messages.flatMap((message) => {
+    if (typeof message?.message_id !== 'string' || typeof message.role !== 'string') return [];
+    const blocks = Array.isArray(message.blocks) ? message.blocks : [];
+    const autoCompaction = message.kind === 'compaction' && blocks.some((block) => block.type === 'compaction' && block.trigger === 'auto');
+    return [{
+      id: message.message_id,
+      role: message.role,
+      parentID: message.reply_to ?? null,
+      created: logTime(message.created_at),
+      completed: message.status === 'streaming' ? null : logTime(message.completed_at ?? message.created_at),
+      partIds: blocks.flatMap((block) => (typeof block?.id === 'string' ? [block.id] : [])),
+      ...(autoCompaction ? { autoCompaction: true } : {}),
+    }];
+  });
 }
 
 /** `sandboxUrl` on the session row looks like `.../p/<external_id>/8000/...`. */
@@ -160,7 +166,7 @@ export async function disarmQuickQueueInterrupt(
   actorUserId: string,
   promptId: string,
 ): Promise<void> {
-  const resolved = await resolveSessionOpencodeEndpoint(sessionId, actorUserId).catch(() => null);
+  const resolved = await resolveSessionRuntimeEndpoint(sessionId, actorUserId).catch(() => null);
   if (!resolved) return;
   await sendQuickQueueControl(resolved.endpoint, { kind: 'disarm', promptId });
   // Only the head prompt arms an interrupt, so there is one mark to withdraw.
@@ -172,7 +178,7 @@ export async function disarmAllQuickQueueInterrupt(
   sessionId: string,
   actorUserId: string,
 ): Promise<void> {
-  const resolved = await resolveSessionOpencodeEndpoint(sessionId, actorUserId).catch(() => null);
+  const resolved = await resolveSessionRuntimeEndpoint(sessionId, actorUserId).catch(() => null);
   if (!resolved) return;
   await sendQuickQueueControl(resolved.endpoint, { kind: 'disarm-all' });
   await clearTurnStopRequest(sessionId, 'QueueInterrupt');
@@ -187,14 +193,14 @@ export async function disarmAllQuickQueueInterrupt(
  */
 export async function armQuickQueueInterrupt(
   row: SessionLifecycleCommandRow,
-  identity: { opencodeSessionId: string; messageId: string },
+  identity: { runtimeSessionId: string; messageId: string },
 ): Promise<boolean> {
-  const resolved = await resolveSessionOpencodeEndpoint(row.sessionId, row.actorUserId).catch(() => null);
-  if (!resolved || resolved.opencodeSessionId !== identity.opencodeSessionId) return true;
+  const resolved = await resolveSessionRuntimeEndpoint(row.sessionId, row.actorUserId).catch(() => null);
+  if (!resolved || resolved.runtimeSessionId !== identity.runtimeSessionId) return true;
   const outcome = await sendQuickQueueControl(resolved.endpoint, {
     kind: 'arm',
     promptId: row.commandId,
-    opencodeSessionId: identity.opencodeSessionId,
+    runtimeSessionId: identity.runtimeSessionId,
     messageId: identity.messageId,
   });
   if (!outcome.ok) {
@@ -209,7 +215,7 @@ export async function armQuickQueueInterrupt(
   // sent a prompt into it. That abort is asked for, not a failure.
   if (!row.sessionId) return true;
   await markTurnStopRequested(row.sessionId, 'QueueInterrupt', {
-    opencodeSessionId: identity.opencodeSessionId,
+    runtimeSessionId: identity.runtimeSessionId,
     messageId: identity.messageId,
   });
   return true;
@@ -245,28 +251,8 @@ export async function readSessionMessageTip(
   session: ResolvedSessionRuntime,
   opts: { limit?: number; timeoutMs?: number } = {},
 ): Promise<PlacementTipMessage[] | null> {
-  if (await servesTurnVerbs(session)) {
-    const messages = await readKortixTranscript(session, opts);
-    return messages ? parsePlacementTip(messages) : null;
-  }
-  const res = await sessionRuntimeFetch(
-    session.endpoint,
-    'GET',
-    legacyRuntimePaths.messages(session.opencodeSessionId, opts.limit),
-    {},
-    opts.timeoutMs,
-  );
-  if (!res.ok) return null;
-  return parsePlacementTip(await res.json().catch(() => null));
-}
-
-/** `DELETE` one message: 2xx removed, 404 already gone, 409 the loop is running. */
-async function deleteRuntimeMessage(session: ResolvedSessionRuntime, messageId: string): Promise<Response> {
-  if (await servesTurnVerbs(session)) {
-    const res = await sessionRuntimeFetch(session.endpoint, 'DELETE', runtimeVerbPaths.message(session.opencodeSessionId, messageId));
-    if (!turnVerbMissing(session.externalId, res)) return res;
-  }
-  return sessionRuntimeFetch(session.endpoint, 'DELETE', legacyRuntimePaths.message(session.opencodeSessionId, messageId));
+  const log = await readRuntimeLogMessages(session, opts);
+  return log ? placementTipOfLog(log) : null;
 }
 
 /** What a retract did to one user message of the root transcript. */
@@ -285,44 +271,22 @@ async function refusal(res: Response): Promise<RetractOutcome> {
 }
 
 /**
- * Take back one user message no model call has read. A daemon with
- * `runtime.retract.v1` decides on every harness (pi from its own queue,
- * OpenCode by removing or emptying the message). An older daemon gets the
- * delete spelling: the whole message, then `partIds` one by one when the
- * whole delete is refused, because an OpenCode loop skips a user message with
- * no parts. Its `409` (the loop runs) reads as `read`, as it always has. A
- * transport failure throws; the caller's catch keeps its own log.
+ * Take back one user message no model call has read (`runtime.retract.v1`).
+ * The runtime decides from its own queue. A transport failure throws; the
+ * caller's catch keeps its own log.
  */
 export async function retractRuntimeMessage(
   session: ResolvedSessionRuntime,
   messageId: string,
-  partIds: readonly string[] = [],
 ): Promise<RetractOutcome> {
-  if (await runtimeServesRetract(session.externalId, async () => session.endpoint)) {
-    const res = await sessionRuntimeFetch(session.endpoint, 'POST', runtimeVerbPaths.retract(session.opencodeSessionId, messageId));
-    if (!turnVerbMissing(session.externalId, res)) {
-      if (res.ok) return { outcome: 'retracted' };
-      if (res.status === 404) return { outcome: 'gone' };
-      if (res.status === 409) {
-        const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
-        if (body?.code === MESSAGE_READ_CODE) return { outcome: 'read' };
-      }
-      return refusal(res);
-    }
+  const res = await sessionRuntimeFetch(session.endpoint, 'POST', runtimeVerbPaths.retract(session.runtimeSessionId, messageId));
+  if (res.ok) return { outcome: 'retracted' };
+  if (res.status === 404) return { outcome: 'gone' };
+  if (res.status === 409) {
+    const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
+    if (body?.code === MESSAGE_READ_CODE) return { outcome: 'read' };
   }
-  const whole = await deleteRuntimeMessage(session, messageId);
-  if (whole.ok) return { outcome: 'retracted' };
-  if (whole.status === 404) return { outcome: 'gone' };
-  if (partIds.length === 0) return whole.status === 409 ? { outcome: 'read' } : refusal(whole);
-  for (const partId of partIds) {
-    const res = await sessionRuntimeFetch(
-      session.endpoint,
-      'DELETE',
-      legacyRuntimePaths.part(session.opencodeSessionId, messageId, partId),
-    );
-    if (!res.ok && res.status !== 404) return refusal(res);
-  }
-  return { outcome: 'retracted' };
+  return refusal(res);
 }
 
 /**
@@ -332,7 +296,7 @@ export async function retractRuntimeMessage(
  * `caller`. A transport failure throws.
  */
 export async function retractSessionMessage(sessionId: string, messageId: string, caller: string): Promise<boolean> {
-  const resolved = await resolveSessionOpencodeEndpoint(sessionId);
+  const resolved = await resolveSessionRuntimeEndpoint(sessionId);
   if (!resolved) return false;
   const retracted = await retractRuntimeMessage(resolved, messageId);
   if (retracted.outcome === 'retracted' || retracted.outcome === 'gone') return true;
@@ -350,8 +314,7 @@ export async function retractSessionMessage(sessionId: string, messageId: string
 /**
  * Read the root once, for the two things a delivery needs to know.
  *
- * Uses the SAME signed-proxy resolution `queuedContinueHasStagedRevert` uses —
- * no new client. Fails OPEN (`read: false`) on every error: a transient read
+ * Fails OPEN (`read: false`) on every error: a transient read
  * failure must never block a prompt, and every caller has its own safe default.
  */
 export async function readInboxTranscriptState(
@@ -361,7 +324,7 @@ export async function readInboxTranscriptState(
 ): Promise<InboxTranscriptState> {
   const empty: InboxTranscriptState = { newest: null, answered: false, read: false, tip: null };
   try {
-    const resolved = await resolveSessionOpencodeEndpoint(row.sessionId, row.actorUserId);
+    const resolved = await resolveSessionRuntimeEndpoint(row.sessionId, row.actorUserId);
     if (!resolved) return empty;
     // A FULL read only when this row has already been posted once (a
     // redelivery / re-POST), where the `answered` guard needs the reply that
@@ -378,8 +341,7 @@ export async function readInboxTranscriptState(
       tip.map((message) => message.id),
       Date.now(),
     );
-    // Same rule the daemon's `observeOpencodeDelivery` uses: an assistant
-    // message parented on the prompt is the turn having run.
+    // An assistant message parented on the prompt is the turn having run.
     const answered = tip.some(
       (message) =>
         message.role === 'assistant' &&
@@ -414,7 +376,7 @@ export async function retractStrandedMessage(
   wireMessageId: string,
 ): Promise<boolean> {
   try {
-    const resolved = await resolveSessionOpencodeEndpoint(row.sessionId, row.actorUserId);
+    const resolved = await resolveSessionRuntimeEndpoint(row.sessionId, row.actorUserId);
     if (!resolved) return false;
     const retracted = await retractRuntimeMessage(resolved, wireMessageId);
     if (retracted.outcome === 'retracted' || retracted.outcome === 'gone') return true;
@@ -429,60 +391,6 @@ export async function retractStrandedMessage(
     return false;
   } catch (err) {
     console.warn('[session-lifecycle] stranded message retract threw', {
-      sessionId: row.sessionId,
-      commandId: row.commandId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return false;
-  }
-}
-
-/**
- * T22 — staged-revert guard for the queued `continue_session` backstop.
- *
- * OpenCode's `session.revert` is a STAGED pointer on the session row
- * (`Session.revert?: { messageID, ... }`, `@opencode-ai/sdk` `types.gen`).
- * Nothing is deleted until the NEXT prompt — from ANY producer — commits the
- * truncation. A queued continue (an approval "resume", a trigger fire) that
- * was enqueued BEFORE a user staged a revert must never be that committing
- * prompt: the user is mid-edit of their own session history, and an
- * automated continue queued against the pre-rewind trajectory is void once
- * the rewind lands. This is checked at DRAIN time (same reasoning as the
- * consumed-marker check above `executeQueuedContinue`) so a revert staged
- * after enqueue but before this row's turn to drain is still caught.
- *
- * Reuses `sandboxOpencodeEndpoint` (the same signed-proxy resolution
- * `session-transcript.ts` and `opencode-mapping.ts` already use — no new
- * client) to read the sandbox's live OpenCode session row. Any resolution
- * failure (no pin yet, sandbox unreachable, request timeout) fails OPEN —
- * returns false, i.e. delivers exactly as before this guard existed — so a
- * transient read failure never blocks a legitimate follow-up.
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
- */
-export async function queuedContinueHasStagedRevert(row: SessionLifecycleCommandRow): Promise<boolean> {
-  if (!row.sessionId) return false;
-  try {
-    const resolved = await resolveSessionOpencodeEndpoint(row.sessionId, row.actorUserId);
-    if (!resolved) return false;
-
-    if (await servesTurnVerbs(resolved)) {
-      // The runtime projection lists every conversation with its staged `revert`.
-      const res = await sessionRuntimeFetch(resolved.endpoint, 'GET', runtimeVerbPaths.state);
-      if (!res.ok) return false;
-      const doc = (await res.json().catch(() => null)) as {
-        sessions?: { known?: unknown; value?: Array<{ id?: unknown; revert?: unknown }> };
-      } | null;
-      const root = doc?.sessions?.known === true && Array.isArray(doc.sessions.value)
-        ? doc.sessions.value.find((session) => session.id === resolved.opencodeSessionId)
-        : undefined;
-      return Boolean(root?.revert);
-    }
-    const res = await sessionRuntimeFetch(resolved.endpoint, 'GET', legacyRuntimePaths.session(resolved.opencodeSessionId));
-    if (!res.ok) return false;
-    const info = (await res.json().catch(() => null)) as { revert?: unknown } | null;
-    return Boolean(info?.revert);
-  } catch (err) {
-    console.warn('[session-lifecycle] staged-revert check failed — proceeding as not staged', {
       sessionId: row.sessionId,
       commandId: row.commandId,
       error: err instanceof Error ? err.message : String(err),
@@ -520,37 +428,12 @@ async function sessionRuntimeAgentRoster(
   directory: string,
 ): Promise<{ names: readonly string[] | null }> {
   return runtimeAgentRoster(runtimeAgentRosterCacheKey(externalId, directory), async () => {
-    const resolved = await resolveSessionOpencodeEndpoint(callerSessionId, actorUserId);
+    const resolved = await resolveSessionRuntimeEndpoint(callerSessionId, actorUserId);
     if (!resolved) return null;
-    let res = (await servesTurnVerbs(resolved))
-      ? await sessionRuntimeFetch(resolved.endpoint, 'GET', runtimeVerbPaths.agents(directory))
-      : null;
-    if (!res || turnVerbMissing(resolved.externalId, res)) {
-      res = await sessionRuntimeFetch(resolved.endpoint, 'GET', legacyRuntimePaths.agents(directory));
-    }
+    const res = await sessionRuntimeFetch(resolved.endpoint, 'GET', runtimeVerbPaths.agents(directory));
     if (!res.ok) return null;
     return parseRuntimeAgentNames(await res.json().catch(() => null));
   });
-}
-
-interface LegacyRuntimePartTarget {
-  externalId: string;
-  opencodeSessionId: string;
-  sessionId: string;
-  userId: string;
-}
-
-function legacyRuntimeAccess(input: LegacyRuntimePartTarget) {
-  return {
-    kind: 'principal' as const,
-    userId: input.userId,
-    callerSessionId: input.sessionId,
-    // Same server-to-server delivery rationale as `postPrompt`: this authenticates
-    // as the account principal, not a session-bound agent token, so the caller
-    // binding is null and the trigger-session manager override is preserved.
-    boundCredentialSessionId: null,
-    sandboxAuthored: false,
-  };
 }
 
 /** Thrown out of `sendPrompt` when the runtime accepted a prompt and never
@@ -565,7 +448,7 @@ export class PromptNeverLandedError extends Error {
 /**
  * Thrown out of a `steer` POST that no running turn took. `turn_ended`: the
  * daemon answered `409 no_active_turn` (it stored nothing). `unsupported`: the
- * daemon cannot steer (`501`, or no Kortix turn routes). The caller sends the
+ * runtime cannot steer (`501`). The caller sends the
  * row as a Queue List prompt. Not a failed attempt.
  */
 export class SteerNotTaken extends Error {
@@ -575,77 +458,25 @@ export class SteerNotTaken extends Error {
   }
 }
 
-export async function readLegacyRuntimeMessage(
-  input: LegacyRuntimePartTarget & { messageId: string },
-): Promise<LegacyRuntimeMessage | null> {
-  const response = await forwardToSandbox(
-    input.externalId,
-    DAEMON_PORT,
-    legacyRuntimeAccess(input),
-    'GET',
-    `/session/${encodeURIComponent(input.opencodeSessionId)}/message/${encodeURIComponent(input.messageId)}`,
-    `?directory=${encodeURIComponent(WORKSPACE)}`,
-    new Headers(),
-    undefined,
-    config.KORTIX_URL ?? '',
-  );
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`legacy attachment message read failed (${response.status})`);
-  }
-  return (await response.json()) as LegacyRuntimeMessage;
-}
-
 /**
- * `unsupported` when the runtime edits no parts: `501` (pi). Any other refusal throws.
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
+ * One message of the session's root. `null` when the runtime answers that it does not hold it;
+ * throws when it could not be asked (the landing proof's "unknown"). The box answers from its own
+ * session log, where an admitted prompt is from its admission.
  */
-export async function updateLegacyRuntimePart(
-  input: LegacyRuntimePartTarget & { messageId: string; partId: string; text: string },
-): Promise<'updated' | 'unsupported'> {
-  const body = new TextEncoder().encode(
-    JSON.stringify({
-      id: input.partId,
-      sessionID: input.opencodeSessionId,
-      messageID: input.messageId,
-      type: 'text',
-      text: input.text,
-    }),
-  );
-  const response = await forwardToSandbox(
-    input.externalId,
-    DAEMON_PORT,
-    legacyRuntimeAccess(input),
-    'PATCH',
-    `/session/${encodeURIComponent(input.opencodeSessionId)}/message/${encodeURIComponent(input.messageId)}/part/${encodeURIComponent(input.partId)}`,
-    `?directory=${encodeURIComponent(WORKSPACE)}`,
-    new Headers({ 'Content-Type': 'application/json' }),
-    body.buffer as ArrayBuffer,
-    config.KORTIX_URL ?? '',
-  );
-  if (response.status === 501) return 'unsupported';
-  if (!response.ok) {
-    throw new Error(`legacy attachment part update failed (${response.status})`);
-  }
-  return 'updated';
+export async function readRuntimeMessage(session: ResolvedSessionRuntime, messageId: string): Promise<unknown> {
+  const res = await sessionRuntimeFetch(session.endpoint, 'GET', runtimeVerbPaths.logMessage(messageId));
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`runtime message read failed (${res.status})`);
+  return res.json();
 }
 
 /**
- * The wire `messageID` is SUPPLIED, never minted here.
- *
- * OpenCode orders its transcript by `time_created` then by the id's clock
- * prefix (`MessageV2.page()`, unchanged across 1.17.11 and 1.18.19), so an id
- * has to be placed above everything already on record. On a box running
- * opencode <= 1.18.14 that placement is also what decides "has this prompt
- * already been answered?" — the loop's exit check is an id compare there, and
- * a badly placed id means the turn never runs. From 1.18.15 the exit check is
- * `lastAssistant.parentID === lastUser.id`, so a bad id costs display order
- * rather than the turn. The process holding the transcript is the
- * one that can place it: the browser/CLI for a first delivery, and the
- * redelivery path here — which re-reads the transcript before it re-mints (see
+ * The wire `messageID` is SUPPLIED, never minted here. The runtime records a
+ * message once per id. The browser/CLI mints it for a first delivery; the
+ * drain re-reads the transcript before it sends a prompt that waited or a
+ * redelivery, and re-mints it only for a runtime that orders by id (see
  * `remintWireMessageId`). Every other producer (triggers, Slack, approval
- * resume) still sends no `messageID`, exactly as before, and gets a
- * root-scoped turn.
+ * resume) sends no `messageID` and gets a root-scoped turn.
  *
  * F2: without a messageID, `prompt-dedupe.ts`'s precedence used to fall all
  * the way to its content-hash fallback — `sessionId` + `text` only. That is
@@ -663,7 +494,7 @@ export async function updateLegacyRuntimePart(
  */
 export async function postPrompt(
   externalId: string,
-  opencodeSessionId: string,
+  runtimeSessionId: string,
   text: string,
   userId: string,
   /** The session this prompt is FOR. Passed as the caller binding so the
@@ -686,6 +517,8 @@ export async function postPrompt(
     onBodyBytes?: (bytes: number) => void;
     /** The target's sandbox row, when the delivery already read it. */
     sandboxRecord?: SandboxRecord;
+    /** The queued row's source: the turn this prompt starts records it. */
+    source?: string;
     /** Hand the message to the RUNNING turn (`POST .../steer`) instead of
      *  starting one. Kortix route only; throws {@link SteerNotTaken}. */
     steer?: boolean;
@@ -743,45 +576,24 @@ export async function postPrompt(
     });
   }
   const directory = overrides?.directory || WORKSPACE;
-  // A daemon that serves the Kortix turn routes gets the Kortix prompt; an
-  // older one gets OpenCode's `prompt_async` (legacy-runtime-rest.ts).
-  const kortixRoute = await runtimeServesTurnVerbs(externalId, () => sandboxOpencodeEndpoint(externalId, userId));
-  // OpenCode's own REST has no steer verb.
-  if (prompt?.steer && !kortixRoute) throw new SteerNotTaken('unsupported');
-  const send = (kortix: boolean) => {
-    const target = kortix
-      ? {
-          path: prompt?.steer ? runtimeVerbPaths.steer(opencodeSessionId) : runtimeVerbPaths.prompt(opencodeSessionId),
-          query: '',
-        }
-      : legacyRuntimePaths.prompt(opencodeSessionId, directory);
+  const send = () => {
+    const path = prompt?.steer ? runtimeVerbPaths.steer(runtimeSessionId) : runtimeVerbPaths.prompt(runtimeSessionId);
     const body = new TextEncoder().encode(
-      JSON.stringify(
-        kortix
-          ? {
-              ...(prompt?.wireMessageId ? { message_id: prompt.wireMessageId } : {}),
-              parts: deliverableParts,
-              ...(deliverableAgent.agent ? { agent: deliverableAgent.agent } : {}),
-              ...(overrides?.model ? { model: `${overrides.model.providerID}/${overrides.model.modelID}` } : {}),
-              ...(overrides?.variant ? { variant: overrides.variant } : {}),
-              directory,
-              ...(prompt?.noReply ? { no_reply: true } : {}),
-            }
-          : {
-              ...(prompt?.wireMessageId ? { messageID: prompt.wireMessageId } : {}),
-              parts: deliverableParts,
-              ...(deliverableAgent.agent ? { agent: deliverableAgent.agent } : {}),
-              ...(overrides?.model ? { model: overrides.model } : {}),
-              ...(overrides?.variant ? { variant: overrides.variant } : {}),
-              ...(prompt?.noReply ? { noReply: true } : {}),
-            },
-      ),
+      JSON.stringify({
+        ...(prompt?.wireMessageId ? { message_id: prompt.wireMessageId } : {}),
+        parts: deliverableParts,
+        ...(deliverableAgent.agent ? { agent: deliverableAgent.agent } : {}),
+        ...(overrides?.model ? { model: `${overrides.model.providerID}/${overrides.model.modelID}` } : {}),
+        ...(overrides?.variant ? { variant: overrides.variant } : {}),
+        directory,
+        ...(prompt?.noReply ? { no_reply: true } : {}),
+      }),
     );
     prompt?.onBodyBytes?.(body.byteLength);
     // A steer goes to the box DIRECTLY with the service-call mark: kortixd
     // refuses `/steer` without it, and the user-facing proxy strips it, so no
     // member can steer around admission's prompter check (D9.3).
-    if (prompt?.steer) return postSteerDirect(externalId, userId, target.path, new TextDecoder().decode(body));
+    if (prompt?.steer) return postSteerDirect(externalId, userId, path, new TextDecoder().decode(body));
     return forwardToSandbox(
       externalId,
       DAEMON_PORT,
@@ -801,16 +613,11 @@ export async function postPrompt(
         sandboxAuthored: false,
       },
       'POST',
-      // The producer's own directory when it named one, so a project-scoped
-      // agent resolves the same way it does on a direct browser send.
-      target.path,
-      target.query,
+      path,
+      '',
       new Headers({
         'Content-Type': 'application/json',
-        // One key per route: the proxy's dedupe claim on a Kortix-route
-        // attempt a rolled-back daemon answered 404 (never delivered) must not
-        // swallow the legacy resend, or any later legacy retry, as a duplicate.
-        'Idempotency-Key': kortix ? `${idempotencyKey}:kortix` : idempotencyKey,
+        'Idempotency-Key': idempotencyKey,
         // The inbox placed this wire id against the transcript itself (see
         // `remintWireMessageId`), so the proxy's own placement read
         // (`prompt-wire-id-repair.ts`) has nothing to add — one fewer sandbox
@@ -821,16 +628,12 @@ export async function postPrompt(
       config.KORTIX_URL ?? '',
       undefined,
       undefined,
-      { record: prompt?.sandboxRecord },
+      { record: prompt?.sandboxRecord, promptSource: prompt?.source },
     );
   };
   try {
-    let res = await send(kortixRoute);
-    if (kortixRoute && turnVerbMissing(externalId, res)) {
-      if (prompt?.steer) throw new SteerNotTaken('unsupported');
-      res = await send(false);
-    }
-    if (prompt?.steer) await throwIfSteerNotTaken(externalId, res);
+    const res = await send();
+    if (prompt?.steer) await throwIfSteerNotTaken(res);
     if (res.ok || res.status === 204) {
       if (res.status === 200) {
         const result = (await res.json().catch(() => null)) as {
@@ -841,8 +644,7 @@ export async function postPrompt(
       return 'accepted';
     }
     await throwIfPromptRefused(res);
-    if (res.status !== 404)
-      console.warn('[session-lifecycle] prompt non-ok', { status: res.status, route: kortixRoute ? 'kortix' : 'legacy' });
+    if (res.status !== 404) console.warn('[session-lifecycle] prompt non-ok', { status: res.status });
     // 502/503/504 is the PROXY saying it could not reach the box (a dead
     // ingress, a control plane refusing the forward, an attempt that timed
     // out) — not the daemon refusing the prompt. Say so, so a spent deadline
@@ -869,11 +671,8 @@ export async function postPrompt(
 }
 
 /** The two steer answers that mean "send it as a prompt instead". */
-async function throwIfSteerNotTaken(externalId: string, res: Response): Promise<void> {
-  if (res.status === 501) {
-    forgetRuntimeCapabilities(externalId);
-    throw new SteerNotTaken('unsupported');
-  }
+async function throwIfSteerNotTaken(res: Response): Promise<void> {
+  if (res.status === 501) throw new SteerNotTaken('unsupported');
   if (res.status !== 409) return;
   const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
   if (body?.code === STEER_NO_ACTIVE_TURN_CODE) throw new SteerNotTaken('turn_ended');
@@ -881,7 +680,7 @@ async function throwIfSteerNotTaken(externalId: string, res: Response): Promise<
 
 /** `POST .../steer` straight to the box, as the platform (see `postPrompt`). No endpoint: 503. */
 async function postSteerDirect(externalId: string, userId: string, path: string, body: string): Promise<Response> {
-  const endpoint = await sandboxOpencodeEndpoint(externalId, userId);
+  const endpoint = await sandboxRuntimeEndpoint(externalId, userId);
   if (!endpoint) return new Response(null, { status: 503 });
   return sessionRuntimeFetch(endpoint, 'POST', path, { headers: { [KORTIX_SERVICE_CALL_HEADER]: '1' }, body }, 30_000);
 }

@@ -6,11 +6,12 @@ import type { Agent, Command, Session } from '@kortix/sdk/react';
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import { EditorContent, useEditor } from '@tiptap/react';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 
 import { textToParagraphs } from '../composer-logic';
 import { COMPOSER_TEXT_METRICS } from '../composer-text-metrics';
 import { useLatestRef } from '../hooks/use-latest-ref';
+import type { SpaceMentionSource } from '../menus/space-mentions';
 import { createMentionSuggestion } from '../menus/mention-controller';
 import type { SlashAction } from '../menus/slash-actions';
 import { localizedSlashActions } from '../menus/slash-actions';
@@ -18,10 +19,11 @@ import { createSlashSuggestion } from '../menus/slash-controller';
 import type { SlashFile } from '../menus/slash-files';
 import type { TrackedMention } from '../types';
 import { baseExtensions } from './extensions';
-import { isCursorOnFirstVisualLine } from './first-visual-line';
+import { isCursorOnFirstVisualLine, isCursorOnLastVisualLine } from './first-visual-line';
 import { MentionNode } from './mention-node';
 import { serializeDocument } from './serialize';
 import { createSuggestionExtension } from './suggestion';
+import { UltracodeHighlight } from './ultracode';
 
 export interface ComposerEditorHandle {
   /**
@@ -51,7 +53,8 @@ export interface ComposerEditorHandle {
    * `composer-logic.ts` and written back with a plain replace, so this
    * never needed a second mode of its own. Removed as dead code.
    */
-  setContent(text: string): void;
+  /** `caret` defaults to `'end'`. Prompt history puts it at the start on Up, so the next Up steps again. */
+  setContent(text: string, caret?: 'start' | 'end'): void;
   /**
    * The JSON-content-aware counterpart to `getContent`/`setContent` — Task
    * 13. `getContent().mentions` is a ONE-WAY projection: it's derived by
@@ -121,6 +124,8 @@ export interface ComposerEditorProps {
   onSubmit: (placement: 'transcript' | 'composer') => void;
   /** Up with the caret on the first visual row — see `createSubmitOnEnterHandler`. */
   onArrowUpAtStart?: () => boolean;
+  /** Down with the caret on the last visual row. Returns whether it acted. */
+  onArrowDownAtEnd?: () => boolean;
   /**
    * Fires ONLY on the empty↔non-empty boundary — once when the first character
    * is typed, once when the last is deleted, never in between. This is the
@@ -149,6 +154,8 @@ export interface ComposerEditorProps {
   sessions?: Session[];
   /** Excluded from the `@` session list — you can't mention the session you're in. */
   currentSessionId?: string;
+  /** Inside a space: the `@` menu lists the space's people and agents only. */
+  spaceMentions?: SpaceMentionSource | null;
 
   /** `/` menu data + the two things a row selection can produce — see `menus/slash-controller.ts`. */
   commands?: Command[];
@@ -278,6 +285,8 @@ export function createSubmitOnEnterHandler(
    * to take back.
    */
   onArrowUpAtStart?: () => boolean,
+  /** Down from the last visual row, under the same rules as Up. */
+  onArrowDownAtEnd?: () => boolean,
 ): (view: EditorView, event: KeyboardEvent) => boolean {
   return (view, event) => {
     if (isDisabled() || event.isComposing || event.keyCode === 229) return false;
@@ -298,6 +307,19 @@ export function createSubmitOnEnterHandler(
       !event.isComposing &&
       isCursorOnFirstVisualLine(view) &&
       onArrowUpAtStart()
+    ) {
+      event.preventDefault();
+      return true;
+    }
+    if (
+      event.key === 'ArrowDown' &&
+      onArrowDownAtEnd &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      isCursorOnLastVisualLine(view) &&
+      onArrowDownAtEnd()
     ) {
       event.preventDefault();
       return true;
@@ -360,6 +382,12 @@ export function insertTextAtCursor(editor: Editor | null, text: string): void {
   editor.commands.insertContent(content);
 }
 
+/** The dismiss shortcut as the person's keyboard prints it. */
+function dismissKeyLabel(): string {
+  const platform = typeof navigator !== 'undefined' ? navigator.platform || navigator.userAgent : '';
+  return /Mac|iPhone|iPad/.test(platform) ? '⌥W' : 'Alt+W';
+}
+
 export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorProps>(
   function ComposerEditor(
     {
@@ -368,11 +396,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       autoFocus = false,
       onSubmit,
       onArrowUpAtStart,
+      onArrowDownAtEnd,
       onEmptyChange,
       onDocChange,
       agents,
       sessions,
       currentSessionId,
+      spaceMentions,
       commands,
       onSelectCommand,
       onSelectAction,
@@ -384,6 +414,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     ref,
   ) {
     const t = useTranslations('threads');
+    const tUltracode = useTranslations('multiAgent.ultracode');
+    // A marked `ultracode` keyword: the one-line hint under the text says what it does.
+    const [ultracodeActive, setUltracodeActive] = useState(false);
     const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
     const defaultActions = useMemo(() => localizedSlashActions(tI18nComplete), [tI18nComplete]);
     // Mirrors use-composer-focus.ts's onTypeAheadRef: @tiptap/react only
@@ -396,6 +429,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const onDocChangeRef = useLatestRef(onDocChange);
     const onSubmitRef = useLatestRef(onSubmit);
     const onArrowUpAtStartRef = useLatestRef(onArrowUpAtStart);
+    const onArrowDownAtEndRef = useLatestRef(onArrowDownAtEnd);
     const disabledRef = useLatestRef(disabled ?? false);
     const placeholderRef = useLatestRef(placeholder);
 
@@ -407,6 +441,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     // whatever was current the moment the editor first mounted.
     const agentsRef = useLatestRef(agents ?? []);
     const sessionsRef = useLatestRef(sessions ?? []);
+    const spaceMentionsRef = useLatestRef(spaceMentions ?? null);
     const currentSessionIdRef = useLatestRef(currentSessionId);
     const commandsRef = useLatestRef(commands ?? []);
 
@@ -512,8 +547,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           // An open `@`/`/` menu claims arrow keys through `mentionOwnsEnterRef`
           // / `slashOwnsEnterRef` above, so Up never reaches this while one is open.
           () => onArrowUpAtStartRef.current?.() ?? false,
+          () => onArrowDownAtEndRef.current?.() ?? false,
         ),
-      [disabledRef, onArrowUpAtStartRef, onSubmitRef],
+      [disabledRef, onArrowDownAtEndRef, onArrowUpAtStartRef, onSubmitRef],
     );
 
     const editor = useEditor({
@@ -523,6 +559,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       extensions: [
         ...baseExtensions(() => placeholderRef.current),
         MentionNode,
+        // `setUltracodeActive` is a state setter: stable, so freezing it at construction is safe.
+        UltracodeHighlight.configure({ onActiveChange: setUltracodeActive }),
         // The one `@tiptap/suggestion` code path both `@` and `/` register
         // through (editor/suggestion.ts's `createSuggestionExtension`).
         // Built fresh every render like every extension above, but only the
@@ -536,6 +574,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             getAgents: () => agentsRef.current,
             getSessions: () => sessionsRef.current,
             getCurrentSessionId: () => currentSessionIdRef.current,
+            getSpaceMentions: () => spaceMentionsRef.current,
             onOwnsEnterChange: (ownsEnter) => {
               mentionOwnsEnterRef.current = ownsEnter;
             },
@@ -644,7 +683,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       (): ComposerEditorHandle => ({
         getContent: () =>
           editor ? serializeDocument(editor.state.doc) : { text: '', mentions: [] },
-        setContent: (text) => {
+        setContent: (text, caret = 'end') => {
           if (!editor) return;
           const paragraphs = textToParagraphs(text);
           editor.commands.setContent({ type: 'doc', content: paragraphs });
@@ -673,7 +712,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
            * fire while the composer is genuinely scrolled out of view in a long
            * session — there the scroll is the point.
            */
-          editor.commands.focus('end', { scrollIntoView: false });
+          editor.commands.focus(caret, { scrollIntoView: false });
         },
         getDocument: () => getEditorDocument(editor),
         setDocument: (doc) => setEditorDocument(editor, doc),
@@ -687,17 +726,28 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     );
 
     return (
-      <EditorContent
-        editor={editor}
-        className={cn(
-          // `text-base` (16px) on mobile, NOT 15px: iOS Safari force-zooms the
-          // page on focus for any input under 16px, and the composer is the one
-          // field on the screen. `sm:text-sm` above 640px, which is the size
-          // `styles/components.css`'s slash-trigger rule already documents.
-          'kortix-composer-editor w-full text-sm',
-          disabled && 'opacity-50',
-        )}
-      />
+      <>
+        <EditorContent
+          editor={editor}
+          className={cn(
+            // `text-base` (16px) on mobile, NOT 15px: iOS Safari force-zooms the
+            // page on focus for any input under 16px, and the composer is the one
+            // field on the screen. `sm:text-sm` above 640px, which is the size
+            // `styles/components.css`'s slash-trigger rule already documents.
+            'kortix-composer-editor w-full text-sm',
+            disabled && 'opacity-50',
+          )}
+        />
+        {ultracodeActive ? (
+          <p data-slot="ultracode-hint" className="text-muted-foreground mt-1 truncate text-xs">
+            {tUltracode('hint')}
+            <span aria-hidden className="px-1">
+              ·
+            </span>
+            {tUltracode('dismiss', { key: dismissKeyLabel() })}
+          </p>
+        ) : null}
+      </>
     );
   },
 );

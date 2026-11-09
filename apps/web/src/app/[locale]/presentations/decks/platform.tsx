@@ -419,7 +419,6 @@ export function useSlides(): SlideDef[] {
                   <>
                     <Mono>{tI18nHardcoded.raw('i18nComplete.text21025012cda7')}</Mono>{' '}
                     <Mono>{tI18nHardcoded.raw('i18nComplete.textf1e8d760c12c')}</Mono>{' '}
-                    <Mono>{tI18nHardcoded.raw('i18nComplete.textac29bffc7691')}</Mono>{' '}
                     {tI18nHardcoded.raw(
                       'autoAppPresentationSlidesPlatformJsxTextTheRuntimeAgentsSkillscceeb26a',
                     )}
@@ -432,8 +431,6 @@ export function useSlides(): SlideDef[] {
             <Terminal
               title={tI18nHardcoded.raw('i18nComplete.text1965f383021e')}
               lines={[
-                { kind: 'comment', text: tI18nHardcoded.raw('i18nComplete.text61f28ba7b5a4') },
-                { kind: 'out', text: '' },
                 { kind: 'out', text: 'project:' },
                 { kind: 'out', text: tI18nHardcoded.raw('i18nComplete.textff874fb0b49f') },
                 { kind: 'out', text: '' },
@@ -480,7 +477,11 @@ export function useSlides(): SlideDef[] {
                 tI18nHardcoded.raw('i18nComplete.text9e796567bf87'),
                 tI18nHardcoded.raw('i18nComplete.textc5cd6589dcd7'),
               ],
-              ['agent', 'OpenCode', tI18nHardcoded.raw('i18nComplete.text7f33545ae2eb')],
+              [
+                'agent',
+                tI18nHardcoded.raw('i18nComplete.textf2c4b4f22668'),
+                tI18nHardcoded.raw('i18nComplete.text7f33545ae2eb'),
+              ],
               [
                 tI18nHardcoded.raw('i18nComplete.textb6e3ca291ec2'),
                 tI18nHardcoded.raw('i18nComplete.text3e032ee7d1dd'),
@@ -545,7 +546,7 @@ export function useSlides(): SlideDef[] {
           <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
               ['01', 'Boot', tI18nHardcoded.raw('i18nComplete.text802370076d02')],
-              ['02', 'Materialize', tI18nHardcoded.raw('i18nComplete.text4c1f87ad0ffa')],
+              ['02', 'Materialize', tI18nHardcoded.raw('i18nComplete.text554ee79d14bc')],
               [
                 '03',
                 tI18nHardcoded.raw('i18nComplete.textc6d640399b61'),
@@ -626,7 +627,7 @@ export function useSlides(): SlideDef[] {
       ),
     },
 
-    /* 9 — AI OS OVERVIEW ──────────────────────────────────────────────── */
+    /* 9 — CompanyOS OVERVIEW ──────────────────────────────────────────────── */
     {
       id: 'command-center',
       label: tI18nHardcoded.raw('i18nComplete.text2522f9d16f3b'),
@@ -689,7 +690,7 @@ export function useSlides(): SlideDef[] {
             'autoAppPresentationSlidesPlatformJsxAttrLeadMarkdownPersonasWith298b95be',
           )}
           bullets={[
-            tI18nHardcoded.raw('i18nComplete.textf08a83aac6c4'),
+            tI18nHardcoded.raw('i18nComplete.text1c41f3a0be11'),
             tI18nHardcoded.raw('i18nComplete.textb5ca3585c03b'),
             tI18nHardcoded.raw('i18nComplete.textbe70d00c8928'),
           ]}
@@ -1472,7 +1473,7 @@ export function useSlides(): SlideDef[] {
           <div className="mt-12 grid gap-4 md:grid-cols-2">
             {(
               [
-                [Code2, 'Developers', tI18nHardcoded.raw('i18nComplete.text474945c326bd')],
+                [Code2, 'Developers', tI18nHardcoded.raw('i18nComplete.text1b17b7fdd191')],
                 [Users, 'Companies', tI18nHardcoded.raw('i18nComplete.text82203da566c7')],
                 [Shield, 'Enterprise', tI18nHardcoded.raw('i18nComplete.text777e112466d3')],
                 [

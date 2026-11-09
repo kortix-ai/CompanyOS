@@ -1,4 +1,4 @@
-import { connectors, connectorCalls, projects } from '@kortix/db';
+import { connectorHeldCalls, connectors, connectorCalls } from '@kortix/db';
 import { composioToolkitLogo } from '../connectors/composio';
 /**
  * Approval links — the AUTHENTICATED half, mounted at /v1/approval-links.
@@ -41,6 +41,7 @@ import {
 import { db } from '../shared/db';
 import { resolveSetupLink } from './token';
 import type { AppEnv } from '../types';
+import { projectsView } from '../workspaces/rows';
 
 // AppEnv: every route here is authenticated and the project gate reads the
 // auth variables the middleware sets (authType, accountId, ...).
@@ -61,6 +62,10 @@ const ApprovalLinkSchema = z.object({
   status: z.string(),
   /** Only `pending_approval` is actionable; every other status is an outcome. */
   pending: z.boolean(),
+  /** The held call's run once approved (`approved` status): `queued`,
+   *  `dispatched`, `ok`, `error`, `refused` or `unknown`. Null when the gate
+   *  holds no input (the caller repeats the call) or is not approved. */
+  run_state: z.string().nullable(),
   args_preview: z.record(z.string(), z.unknown()).nullable(),
   review_complete: z.boolean(),
   args_summary: z.string().nullable(),
@@ -150,15 +155,15 @@ approvalLinksApp.openapi(createRoute({
               error: 'Sign in with a Kortix account to review this approval',
               code: 'APPROVAL_REQUIRES_HUMAN',
             }
-          : { error: 'Only a project manager or the session launcher can resolve this' },
+          : { error: 'Only a workspace manager or the session launcher can resolve this' },
       403,
     );
   }
 
   const [project] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ name: projectsView.name })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
 
   // The connector's own name and logo, so the approval page can say WHICH
@@ -186,6 +191,14 @@ approvalLinksApp.openapi(createRoute({
   }
 
   const expired = isApprovalExpired(row);
+  const [run] =
+    row.status === 'approved'
+      ? await db
+          .select({ state: connectorHeldCalls.state })
+          .from(connectorHeldCalls)
+          .where(eq(connectorHeldCalls.executionId, row.executionId))
+          .limit(1)
+      : [];
   // Only reached by a caller allowed to resolve: a row held before its action
   // had an enricher reads its content once (approval-enrich-pending.ts).
   const resultSummary = await enrichPendingCallOnce(row);
@@ -212,6 +225,7 @@ approvalLinksApp.openapi(createRoute({
     // A pending row past its window reads as expired before the worker flips it.
     status: expired ? 'expired' : row.status,
     pending: row.status === 'pending_approval' && !row.resolvedAt && !expired,
+    run_state: run?.state ?? null,
     args_preview: argsPreview,
     review_complete: summary.args_preview_complete === true,
     args_summary: summarizeArgsPreview(argsPreview),

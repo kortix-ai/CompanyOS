@@ -13,7 +13,7 @@ import {
 import type { SessionLifecycleCommandRow } from './store';
 
 const activeTurn = (token: string) => ({
-  [token]: { token, state: 'active', opencodeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 },
+  [token]: { token, state: 'active', runtimeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 },
 });
 
 describe('sessionHoldsTurnAuthority', () => {
@@ -27,7 +27,7 @@ describe('sessionHoldsTurnAuthority', () => {
     expect(
       sessionHoldsTurnAuthority({
         status: 'provisioning',
-        metadata: { activeTurn: { token: 't-legacy', state: 'delivering', opencodeSessionId: 'ses_1' } },
+        metadata: { activeTurn: { token: 't-legacy', state: 'delivering', runtimeSessionId: 'ses_1' } },
       }),
     ).toBe(false);
   });
@@ -143,6 +143,30 @@ describe('admitInboxPrompt', () => {
     expect(live).toMatchObject({ reason: 'turn_active', retryAfterMs: INBOX_ORDER_MAX_BACKOFF_MS });
   });
 
+  test('a row behind the head of a live turn re-polls once a minute; the head keeps the 2s cap', async () => {
+    // Prod 2026-11-03: 93 cron prompts behind live turns in 4 sessions were each
+    // re-polled every 2s (29 claims a second). Only the head is admitted next,
+    // and the turn's end wakes the head (`promoteNextInboxRow`).
+    const live = (older: boolean, inFlight: boolean) => ({
+      readSandbox: async () => ({ status: 'active', metadata: { activeTurns: activeTurn('t1') } }),
+      hasInFlightPrompt: async () => inFlight,
+      hasOlderPendingPrompt: async () => older,
+    });
+    const waiting = row({ result: { admission_reason: 'turn_active', admission_refusals: 10_000 } });
+    for (const [older, inFlight] of [[true, false], [false, true]] as const) {
+      expect(await admitInboxPrompt(waiting, live(older, inFlight))).toEqual({
+        admit: false,
+        reason: 'turn_active',
+        retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
+      });
+    }
+    expect(await admitInboxPrompt(waiting, live(false, false))).toEqual({
+      admit: false,
+      reason: 'turn_active',
+      retryAfterMs: INBOX_ORDER_MAX_BACKOFF_MS,
+    });
+  });
+
   test('a long wait on a RUNNING box keeps the 2s cap, whatever reason the refusals had', async () => {
     // `admission_refusals` counts every reason. A row that waited 64 refusals
     // behind a live turn must not get the minute at its first
@@ -216,7 +240,7 @@ describe('missed turn-end recovery', () => {
     // confirmed the turn, so ending it at a boundary is the arm's decision to
     // skip, not this gate's.
     const delivering = {
-      t1: { token: 't1', state: 'delivering', opencodeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 },
+      t1: { token: 't1', state: 'delivering', runtimeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 },
     };
     const result = await admitInboxPrompt(row({ payload: { text: 'hi', placement: 'transcript' } }), {
       readSandbox: async () => ({ status: 'active', metadata: { activeTurns: delivering } }),
@@ -236,8 +260,8 @@ describe('the boundary interrupt names the live turn', () => {
     // reporter could not stop without losing the queue (KRTX-1684, prod
     // 2026-10-06). The newest entry is the turn that is running.
     const turns = {
-      'turn-stale': { token: 'turn-stale', state: 'active', opencodeSessionId: 'ses_old', messageId: 'msg_old', startedAtMs: 1 },
-      'turn-live': { token: 'turn-live', state: 'active', opencodeSessionId: 'ses_live', messageId: 'msg_live', startedAtMs: 2 },
+      'turn-stale': { token: 'turn-stale', state: 'active', runtimeSessionId: 'ses_old', messageId: 'msg_old', startedAtMs: 1 },
+      'turn-live': { token: 'turn-live', state: 'active', runtimeSessionId: 'ses_live', messageId: 'msg_live', startedAtMs: 2 },
     };
     const result = await admitInboxPrompt(row({ payload: { text: 'hi', placement: 'transcript', mayStopAnyTurn: true } }), {
       readSandbox: async () => ({ status: 'active', metadata: { activeTurns: turns } }),
@@ -247,14 +271,14 @@ describe('the boundary interrupt names the live turn', () => {
     expect(result).toMatchObject({
       admit: false,
       reason: 'turn_active',
-      interruptAtBoundary: { opencodeSessionId: 'ses_live', messageId: 'msg_live' },
+      interruptAtBoundary: { runtimeSessionId: 'ses_live', messageId: 'msg_live' },
     });
   });
 
   test('a legacy entry without a start stamp yields to one that has one', async () => {
     const turns = {
-      'turn-legacy': { token: 'turn-legacy', state: 'active', opencodeSessionId: 'ses_old', messageId: 'msg_old' },
-      'turn-live': { token: 'turn-live', state: 'active', opencodeSessionId: 'ses_live', messageId: 'msg_live', startedAtMs: 7 },
+      'turn-legacy': { token: 'turn-legacy', state: 'active', runtimeSessionId: 'ses_old', messageId: 'msg_old' },
+      'turn-live': { token: 'turn-live', state: 'active', runtimeSessionId: 'ses_live', messageId: 'msg_live', startedAtMs: 7 },
     };
     const result = await admitInboxPrompt(row({ payload: { text: 'hi', placement: 'transcript', mayStopAnyTurn: true } }), {
       readSandbox: async () => ({ status: 'active', metadata: { activeTurns: turns } }),
@@ -262,7 +286,7 @@ describe('the boundary interrupt names the live turn', () => {
       hasOlderPendingPrompt: async () => false,
     });
     expect(result).toMatchObject({
-      interruptAtBoundary: { opencodeSessionId: 'ses_live', messageId: 'msg_live' },
+      interruptAtBoundary: { runtimeSessionId: 'ses_live', messageId: 'msg_live' },
     });
   });
 });
@@ -271,7 +295,7 @@ describe('the boundary interrupt names the live turn', () => {
 // stop that turn (`turn-stop-authority.ts`): its prompter, or the session owner
 // or a manager (`mayStopAnyTurn`, stamped at send). Any other row waits.
 describe('only a sender who may stop the turn arms its interrupt', () => {
-  const ARMED = { opencodeSessionId: 'ses_1', messageId: 'msg_1' };
+  const ARMED = { runtimeSessionId: 'ses_1', messageId: 'msg_1' };
   /** A person's Quick Queue send, as `POST .../prompts` stores it. */
   const quickQueue = (actorUserId: string, payload: Record<string, unknown> = {}) =>
     row({ actorUserId, payload: { text: 'hi', placement: 'transcript', bindTurnIdentity: true, ...payload } });
@@ -323,7 +347,7 @@ describe('only a sender who may stop the turn arms its interrupt', () => {
 });
 
 describe('boundaryWaitDecision — the bounded fallback for a silent interrupt', () => {
-  const identity = { opencodeSessionId: 'ses_live', messageId: 'msg_live' };
+  const identity = { runtimeSessionId: 'ses_live', messageId: 'msg_live' };
   const windowStart = 1_000_000;
 
   test('the first refusal starts the window and aborts nothing', () => {
@@ -350,9 +374,9 @@ describe('boundaryWaitDecision — the bounded fallback for a silent interrupt',
   test('a different live turn resets the window — the boundary already moved', () => {
     const waiting = { boundary_wait: { ...identity, sinceMs: windowStart } };
     expect(
-      boundaryWaitDecision(waiting, { opencodeSessionId: 'ses_live', messageId: 'msg_newer' }, windowStart + 1),
+      boundaryWaitDecision(waiting, { runtimeSessionId: 'ses_live', messageId: 'msg_newer' }, windowStart + 1),
     ).toEqual({
-      wait: { opencodeSessionId: 'ses_live', messageId: 'msg_newer', sinceMs: windowStart + 1 },
+      wait: { runtimeSessionId: 'ses_live', messageId: 'msg_newer', sinceMs: windowStart + 1 },
       abort: false,
     });
   });
@@ -437,7 +461,7 @@ describe('steer admission (R10)', () => {
     const delivering = steerDeps({
       sandbox: async () => ({
         status: 'active',
-        metadata: { activeTurns: { t1: { token: 't1', state: 'delivering', opencodeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 } } },
+        metadata: { activeTurns: { t1: { token: 't1', state: 'delivering', runtimeSessionId: 'ses_1', messageId: 'msg_1', startedAtMs: 1 } } },
         externalId: 'box-1',
       }),
     });

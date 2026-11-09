@@ -12,7 +12,13 @@ import { sessionSandboxes } from '@kortix/db';
 import { type SandboxStatus } from '../../platform/providers';
 import { classifySandboxProvisioningFailure } from '../../platform/services/sandbox-provisioning-error';
 import { serializeSessionSandboxConfig } from '../lib/serializers';
-import { repairInFlight } from '../session-lifecycle/readiness-clocks';
+import {
+  RUNTIME_BOOT_ERROR_AT_KEY,
+  RUNTIME_BOOT_ERROR_KEY,
+  RUNTIME_BOOT_ERROR_PARK_REASON,
+  repairInFlight,
+  runtimeBootErrorMessage,
+} from '../session-lifecycle/readiness-clocks';
 import {
   RUNTIME_IDENTITY_UNAVAILABLE,
   RUNTIME_START_MAX_FAILURES,
@@ -23,16 +29,17 @@ import {
   runtimeWakeInProgress,
   stampedRuntimeFailureState,
 } from '../session-lifecycle/runtime-wake-fence';
+import { forRequestApiUrl } from '../../shared/domain-aliases';
 
 /**
- * The relative proxy path a client uses for all OpenCode (port 8000) traffic for
+ * The relative proxy path a client uses for all daemon (port 8000) traffic for
  * a session, resolved against the SDK's configured backendUrl. Keyed by
  * `external_id` — the same id the preview proxy's `loadSandbox()` looks up — so
  * the client never has to know the proxy URL scheme. This is the one place the
  * per-session runtime URL is shaped; the SDK consumes it opaquely.
  */
 /**
- * The CONTROL transport address for a session's runtime: the OpenCode/daemon
+ * The CONTROL transport address for a session's runtime: the daemon
  * REST channel, always the path proxy.
  *
  * This is deliberately NOT a preview origin and must never be used to build
@@ -159,7 +166,7 @@ export function serializeSandboxRow(
     // A legacy `e2b` row passes through as stored: E2B support is discontinued.
     provider: row.provider as ProjectSessionSandbox['provider'],
     external_id: row.externalId,
-    base_url: row.baseUrl,
+    base_url: forRequestApiUrl(row.baseUrl),
     status: row.status,
     config: serializeSessionSandboxConfig(row.config),
     metadata: row.metadata ?? {},
@@ -180,7 +187,7 @@ export function serializeSandboxRow(
 export function stoppedWakeResult(
   row: typeof sessionSandboxes.$inferSelect | undefined,
   agentName: string | null,
-  opencodeSessionId: string | null,
+  runtimeSessionId: string | null,
   now: Date = new Date(),
 ): SessionStartResult | null {
   if (row?.status !== 'stopped' || !row.externalId) return null;
@@ -197,7 +204,7 @@ export function stoppedWakeResult(
       agent_name: agentName ?? 'default',
       retriable: true,
       sandbox: serializeSandboxRow(row),
-      opencode_session_id: opencodeSessionId,
+      runtime_session_id: runtimeSessionId,
       runtime_url: sessionRuntimeUrlPath(row.externalId),
       reason: 'runtime_waking',
     };
@@ -212,7 +219,7 @@ export function stoppedWakeResult(
       agent_name: agentName ?? 'default',
       retriable: false,
       sandbox: serializeSandboxRow(row),
-      opencode_session_id: null,
+      runtime_session_id: null,
       runtime_url: sessionRuntimeUrlPath(row.externalId),
       reason: RUNTIME_IDENTITY_UNAVAILABLE,
     };
@@ -237,17 +244,26 @@ export function stoppedWakeResult(
     metadata.stopReason === 'runtime_wake_failed'
       ? 'runtime_wake_failed'
       : (parkReason ?? 'runtime_boot_failed');
+  // The daemon named why its runtime did not start (`finishedBootError`).
+  const bootError =
+    typeof metadata[RUNTIME_BOOT_ERROR_KEY] === 'string' && metadata[RUNTIME_BOOT_ERROR_KEY]
+      ? (metadata[RUNTIME_BOOT_ERROR_KEY] as string)
+      : null;
   const evidence = {
-    check: typeof metadata.runtimeWakeError === 'string' ? metadata.runtimeWakeError : stampReason,
+    check: bootError
+      ? RUNTIME_BOOT_ERROR_PARK_REASON
+      : typeof metadata.runtimeWakeError === 'string' ? metadata.runtimeWakeError : stampReason,
     observed_at:
-      typeof metadata.runtimeStartFailedAt === 'string'
+      bootError && typeof metadata[RUNTIME_BOOT_ERROR_AT_KEY] === 'string'
+        ? (metadata[RUNTIME_BOOT_ERROR_AT_KEY] as string)
+        : typeof metadata.runtimeStartFailedAt === 'string'
         ? metadata.runtimeStartFailedAt
         : typeof metadata.runtimeWakeFailedAt === 'string'
           ? metadata.runtimeWakeFailedAt
           : typeof metadata.stoppedAt === 'string'
             ? metadata.stoppedAt
             : null,
-    error: typeof metadata.lastInitError === 'string' ? metadata.lastInitError : null,
+    error: bootError ?? (typeof metadata.lastInitError === 'string' ? metadata.lastInitError : null),
     attempts: failureCount,
     next_retry_at: retryAtMs !== null ? new Date(retryAtMs).toISOString() : null,
   };
@@ -261,13 +277,14 @@ export function stoppedWakeResult(
       agent_name: agentName ?? 'default',
       retriable: true,
       sandbox: serializeSandboxRow(row),
-      opencode_session_id: opencodeSessionId,
+      runtime_session_id: runtimeSessionId,
       runtime_url: sessionRuntimeUrlPath(row.externalId),
       reason: 'runtime_wake_cooldown',
       failure: {
         category: 'sandbox-provider',
-        message:
-          failureCount > 1
+        message: bootError
+          ? runtimeBootErrorMessage(bootError)
+          : failureCount > 1
             ? `The runtime did not start (attempt ${failureCount}). Retrying automatically.`
             : 'The runtime did not start. Retrying automatically.',
         retryable: true,
@@ -284,12 +301,14 @@ export function stoppedWakeResult(
     agent_name: agentName ?? 'default',
     retriable: false,
     sandbox: serializeSandboxRow(row),
-    opencode_session_id: opencodeSessionId,
+    runtime_session_id: runtimeSessionId,
     runtime_url: sessionRuntimeUrlPath(row.externalId),
     reason: stampReason,
     failure: {
       category: 'sandbox-provider',
-      message: `The session runtime did not become reachable after ${Math.min(failureCount, RUNTIME_START_MAX_FAILURES)} attempts. Restart the session to try again.`,
+      message: bootError
+        ? runtimeBootErrorMessage(bootError, Math.min(failureCount, RUNTIME_START_MAX_FAILURES))
+        : `The session runtime did not become reachable after ${Math.min(failureCount, RUNTIME_START_MAX_FAILURES)} attempts. Restart the session to try again.`,
       retryable: true,
       evidence,
     },

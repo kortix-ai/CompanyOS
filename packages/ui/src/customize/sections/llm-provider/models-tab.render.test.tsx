@@ -21,6 +21,11 @@ const models = [
   contextWindow: 128000, capabilities: { vision: true, toolcall: true },
   cost: { input: 3, output: 9 },
 })) as FlatModel[];
+// A Claude subscription model the member has no usable Claude account for.
+models.push({
+  providerID: 'claude-agent', providerName: 'Claude subscription', modelID: 'sonnet', modelName: 'Claude Sonnet 5.5',
+  enabled: true, available: false, contextWindow: 1000000, capabilities: { vision: true, toolcall: true },
+} as FlatModel);
 mock.module('@kortix/sdk/react', () => ({
   useProjectModels: () => models,
   useProjectModelPickerCatalog: () => ({ platformFeePercent: 5 }),
@@ -88,21 +93,22 @@ test('default scopes, hidden restrictions, wire clipboard and locked/read-only c
     const root = renderer.root;
     const managed = modelRow(root, 'deepseek-v4.1-flash');
     expect(text(managed)).toContain('your default');
-    expect(text(managed)).toContain('project default');
+    expect(text(managed)).toContain('Workspace default');
     expect(managed.findByProps({ role: 'switch' }).props.disabled).toBe(true);
     const available = modelRow(root, 'example/available');
     await click(trigger(available));
-    await click(button(available, "Start this project's sessions with it"));
-    await click(button(available, 'Make it my default everywhere'));
+    // One default to set: the workspace's (the project default). The
+    // account-wide default is not offered any more (Workspaces, PR 1).
+    await click(button(available, 'Set as workspace default'));
     expect(setProjectDefault).toHaveBeenCalledWith({ providerID: 'kortix', modelID: 'example/available' });
-    expect(setAccountDefault).toHaveBeenCalledWith({ providerID: 'kortix', modelID: 'example/available' });
+    expect(available.findAll((node) => node.type === 'div' && text(node) === 'Make it my default everywhere')).toHaveLength(0);
+    expect(setAccountDefault).not.toHaveBeenCalled();
     await click(button(available, 'Copy model ID'));
     expect(writeText).toHaveBeenCalledWith('example/available');
     const hidden = modelRow(root, 'example/hidden');
     expect(text(hidden)).toContain('direct requests still work');
     await click(trigger(hidden));
-    expect(button(hidden, "Start this project's sessions with it").props.disabled).toBe(true);
-    expect(button(hidden, 'Make it my default everywhere').props.disabled).toBe(true);
+    expect(button(hidden, 'Set as workspace default').props.disabled).toBe(true);
     const disable = hidden.findAllByType('button').find((node) => /Disable/.test(text(node)))!;
     await click(disable);
     expect(setEnabled).toHaveBeenCalledWith({ target: 'model', id: 'example/hidden', enabled: false });
@@ -148,4 +154,10 @@ test('owned search survives no-match and clear; Start over shares its row and re
     expect(input.props.value).toBe('');
     expect(root.findAll((node) => node.type === 'div' && node.props['data-model-id'])).toHaveLength(4);
   } finally { await act(async () => renderer.unmount()); }
+});
+
+test('a Claude subscription model without a usable Claude account is not listed', async () => {
+  const root = (await mount()).root;
+  expect(root.findAll((node) => node.type === 'div' && node.props['data-model-id'] === 'sonnet')).toHaveLength(0);
+  expect(text(root)).not.toContain('Claude Sonnet 5.5');
 });

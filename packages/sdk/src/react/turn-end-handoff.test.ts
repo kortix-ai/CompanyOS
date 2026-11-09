@@ -5,7 +5,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { configureKortix } from '../core/http/config';
 import type { RuntimeEventMessage } from '../core/runtime/runtime-rest-client';
-import { __resetSessionControlStreamsForTests } from '../core/session/control-stream';
+import { __resetSessionControlStreamsForTests, openSessionStream } from '../core/session/control-stream';
 import type { ProjectSession, SessionTurnStatus } from '../core/rest/projects-client/sessions';
 import { TURN_END_WATCH_FIRST_READ_MS, TURN_END_WATCH_POLL_MS } from '../core/session/turn-end-watch';
 import { qk } from './query-keys';
@@ -39,7 +39,7 @@ const RUNNING: SessionTurnStatus = {
       turn_token: 'T1',
       state: 'active',
       message_id: 'm1',
-      opencode_session_id: 'oc1',
+      runtime_session_id: 'oc1',
       started_at: null,
       accepted_at: null,
     },
@@ -263,7 +263,7 @@ describe('useTurnEndHandoff', () => {
       onError: (error) => errors.push(error),
       fetch: async (input) => {
         const url = String(input instanceof Request ? input.url : input);
-        if (!url.endsWith('/projects/P1/sessions/S1/turn')) return new Response('{}', { status: 404 });
+        if (!url.endsWith('/workspaces/P1/sessions/S1/turn')) return new Response('{}', { status: 404 });
         turnReads++;
         return turnReads === 1
           ? new Response(JSON.stringify({ error: 'boom' }), { status: 500 })
@@ -295,10 +295,12 @@ describe('useTurnEndHandoff', () => {
     expect(notified).toMatchObject([{ kind: 'task-complete', sessionId: 'S1' }]);
   });
 
-  test('by default the end arrives on the session control stream, with no timer tick', async () => {
+  test('a kortix.control.turn frame on the shared stream announces the end, with no timer tick', async () => {
     // The desktop app hidden behind another app: timers may not run, a stream
-    // frame still arrives. The default watch listens to the session's control
-    // stream (`GET …/events?channels=control`) and its poll stands down.
+    // frame still arrives. The default watch listens to the session's stream.
+    // No timer fires here, so the frame is the only way the end can arrive. A
+    // real `channels=control` connection carries a turn frame only while
+    // another full holder shares the session's reconciler.
     const urls: string[] = [];
     let push: (frame: Record<string, unknown>) => void = () => {};
     configureKortix({
@@ -353,7 +355,7 @@ describe('useTurnEndHandoff', () => {
     unmount(mount(page()));
     await settle();
     expect(urls).toHaveLength(1);
-    expect(urls[0]).toContain('/projects/P1/sessions/S1/events');
+    expect(urls[0]).toContain('/workspaces/P1/sessions/S1/events');
     push(control(1, 'kortix.control.session', { known: true }));
     push(control(2, 'kortix.control.turn', { known: true, turns: RUNNING.turns }));
     await settle();
@@ -363,6 +365,73 @@ describe('useTurnEndHandoff', () => {
 
     expect(notified).toMatchObject([{ kind: 'task-complete', sessionId: 'S1', projectId: 'P1' }]);
     expect(turnReads).toBe(0);
+    expect(turnEndHandoffWatching()).toEqual([]);
+    __resetSessionControlStreamsForTests();
+  });
+
+  test('a stream that reconnects control-only carries no turn frame: the watch polls and announces the end', async () => {
+    // The live case: the page left, the watch kept the shared stream, and the
+    // stream reconnected as `channels=control`. The server serves that as the
+    // queue only, so no `kortix.control.turn` frame ever arrives.
+    const urls: string[] = [];
+    let push: (frame: Record<string, unknown>) => void = () => {};
+    configureKortix({
+      backendUrl: 'http://kortix.invalid/v1',
+      getToken: async () => 'token',
+      onNotify: (event) => notified.push(event),
+      eventStreamTransport: async function* (request: { url: string; signal: AbortSignal }) {
+        urls.push(request.url);
+        const pending: RuntimeEventMessage[] = [];
+        let wake: () => void = () => {};
+        push = (frame) => {
+          pending.push({ data: JSON.stringify(frame) });
+          wake();
+        };
+        let ended = false;
+        request.signal.addEventListener('abort', () => {
+          ended = true;
+          wake();
+        });
+        while (!ended) {
+          if (pending.length === 0) await new Promise<void>((resolve) => (wake = resolve));
+          while (pending.length > 0) yield pending.shift()!;
+        }
+      },
+    });
+    let turnReads = 0;
+    const turnAnswers = [RUNNING, COMPLETED];
+    resetTurnEndHandoffForTests({
+      readTurn: async () => {
+        turnReads++;
+        return turnAnswers.length > 1 ? turnAnswers.shift()! : turnAnswers[0];
+      },
+      now: () => clockMs,
+      setTimer: (fn, ms) => {
+        const id = timers.size + 1;
+        timers.set(id, { at: clockMs + ms, fn });
+        return id;
+      },
+      clearTimer: (id) => {
+        timers.delete(id as number);
+      },
+    });
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+    // The session page's stream: the log dialect, every channel.
+    const pageStream = openSessionStream({ projectId: 'P1', sessionId: 'S1', runtime: true, schema: 'v2' });
+    await settle();
+    push({ channel: 'control', cepoch: 'capi_t', cseq: 1, type: 'kortix.control.session', at: 1, payload: { known: true } });
+    await settle();
+
+    unmount(mount(page()));
+    pageStream.close();
+    await settle();
+    expect(urls.at(-1)).toContain('channels=control');
+
+    await advance(TURN_END_WATCH_FIRST_READ_MS + TURN_END_WATCH_POLL_MS);
+
+    expect(turnReads).toBe(2);
+    expect(notified).toMatchObject([{ kind: 'task-complete', sessionId: 'S1', projectId: 'P1' }]);
     expect(turnEndHandoffWatching()).toEqual([]);
     __resetSessionControlStreamsForTests();
   });

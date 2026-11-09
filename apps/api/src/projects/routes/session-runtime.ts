@@ -1,7 +1,7 @@
 /** Session runtime: start (the unified open), restart, stop, and the current turn. */
 import { assertRepositoryConnected } from '../lib/git';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
-import { resolveSessionBinding } from './lib/route-bindings';
+import { loadLifecycleSession, resolveSessionBinding } from './lib/route-bindings';
 import { auth, errors, json } from '../../openapi';
 import { createRoute, z } from '@hono/zod-openapi';
 import {
@@ -18,33 +18,34 @@ import { SessionStartResultSchema, SessionTurnStatusSchema, projectsApp } from '
 import {
   sessionUsesCurrentRepository,
 } from '../lib/repository-generation';
-import { captureJournallessSessionLogOnWake } from '../lib/session-transcript-capture';
 import { isUuid } from '../../shared/validate';
 import { restartSession, startSession, stopSession } from '../session-lifecycle';
 import { START_AWAIT_MAX_MS } from '../session-lifecycle/await-stage';
 import { recoverLostSession } from '../session-lifecycle/recover-lost-session';
-import { isWarmProjectSession } from '../lib/warm-sessions';
-import { dropWarmSessionMarkerOnAdopt, warmSessionPlacement } from './warm-sessions';
+import { stoppedSubagentNotice } from '../subagent-notice';
+import { trackDetached } from '../../shared/drain';
 import { readSessionTurnState } from '../lib/session-turn-read';
 import { canStopTurns } from '../session-lifecycle/turn-stop-authority';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
+import { capturePersonEvent } from './product-events';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerSessionRuntimeRoutes(): void {
   // POST /v1/projects/:projectId/sessions/:sessionId/start
   // THE unified session-open endpoint. One idempotent call that provisions a
-  // missing sandbox, resumes a hibernated/idle one, and resolves the OpenCode pin
+  // missing sandbox, resumes a hibernated/idle one, and resolves the runtime session pin
   // once reachable — returning a single readiness payload { stage, sandbox,
-  // opencode_session_id, retriable } the client polls until stage='ready'.
+  // runtime_session_id, retriable } the client polls until stage='ready'.
 
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/start',
+      path: '/{workspaceId}/sessions/{sessionId}/start',
       tags: ['sessions'],
       summary: 'Start a session sandbox and its runtime',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         query: z.object({
           wait_ms: z.string().optional(),
           repository_mode: z.enum(['previous']).optional(),
@@ -58,7 +59,7 @@ export function registerSessionRuntimeRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 
@@ -105,41 +106,15 @@ export function registerSessionRuntimeRoutes(): void {
       // keep-alive polls must not fail because GitHub went away under it).
       if (visible.row.status !== 'running') await assertRepositoryConnected(loaded.row);
 
-      // Adoption (JAY-599/T21): a still-warm row (pre-created, never prompted)
-      // stops being speculative the instant a user's tab calls /start on it —
-      // see dropWarmSessionMarkerOnAdopt for why this is safe unconditionally.
-      // Independent of billing/provisioning below: it is a metadata fact about
-      // this row, not a spend, so it lands even if the billing gate rejects the
-      // resume that follows.
-      if (isWarmProjectSession(visible.row.metadata)) {
-        // A held browser entry can predate the project's region preference.
-        // Wait for actual placement while creation is pending; never adopt an
-        // EU or unknown active box as US, and never move an existing box.
-        const placement = await warmSessionPlacement(sessionId, projectMetadata);
-        if (placement === 'pending') {
-          return c.json({
-            stage: 'provisioning' as const,
-            agent_name: visible.row.agentName ?? 'default',
-            sandbox: null,
-            opencode_session_id: null,
-            retriable: true,
-            runtime_transport: 'rest' as const,
-          }, 200);
-        }
-        if (placement === 'mismatch') {
-          return c.json({
-            error: 'The warm session does not match the project compute region',
-            code: 'WARM_SESSION_CONFIGURATION_MISMATCH',
-          }, 409);
-        }
-        await dropWarmSessionMarkerOnAdopt(sessionId);
-        stl.mark('warm-adopted');
-      }
-
       // Same gate as wake/create: resuming or provisioning spends compute.
       const billing = await checkBillingAdmission(loaded.row.accountId);
       stl.mark('billing-checked');
       if (!billing.ok) {
+        capturePersonEvent(c, loaded, projectId, 'billing_gate_hit', {
+          reason: billing.reason,
+          where: 'session_start',
+          session_id: sessionId,
+        });
         return c.json(
           {
             error: billing.message,
@@ -173,12 +148,6 @@ export function registerSessionRuntimeRoutes(): void {
         signal: c.req.raw.signal,
       });
       stl.mark(`open-session:${result.start.stage}`);
-      // THE RUNTIME IS UP. A box without a journal gets what is already in it
-      // into the session log, once: capture otherwise runs only at turn end.
-      // Fire-and-forget and self-limiting (at most 3 attempts per session per
-      // process, none for a session with a journal). It cannot fail or delay
-      // this response.
-      if (result.start.stage === 'ready') void captureJournallessSessionLogOnWake(sessionId);
       stl.log({
         waitMs,
         repositoryMode: usesCurrentRepository ? 'current' : 'previous',
@@ -196,19 +165,19 @@ export function registerSessionRuntimeRoutes(): void {
 
   // POST /v1/projects/:projectId/sessions/:sessionId/restart
   // Reboot the existing sandbox in place via the provider SDK (stop+start) — the
-  // box and its disk (repo clone, deps, opencode) are kept, never removed. Only
+  // box and its disk (repo clone, deps, the runtime) are kept, never removed. Only
   // when the session has no sandbox (deleted / never provisioned) do we provision
   // a fresh one to recover it from the preserved git branch.
 
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/restart',
+      path: '/{workspaceId}/sessions/{sessionId}/restart',
       tags: ['sessions'],
       summary: 'Restart a session sandbox',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
       },
       responses: {
         202: json(z.any(), 'OK'),
@@ -216,7 +185,7 @@ export function registerSessionRuntimeRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
@@ -226,25 +195,29 @@ export function registerSessionRuntimeRoutes(): void {
       assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
 
       // Restart is reserved for the session owner or an account owner/admin.
-      const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-      if (!visible) return c.json({ error: 'Not found' }, 404);
       // Same tombstone rule as /start: a deleted session's restart used to 202
       // and silently do nothing the UI could see.
-      if (sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
-      if (!visible.canManageLifecycle) {
-        return c.json(
-          {
-            error: 'Only the session owner or an account owner/admin can restart this session',
-          },
-          403,
-        );
-      }
+      const gate = await loadLifecycleSession(
+        c,
+        loaded,
+        sessionId,
+        'Only the session owner or an account owner/admin can restart this session',
+        { rejectTombstoned: true },
+      );
+      if (gate.kind === 'error') return gate.response;
+      const { visible } = gate;
       const result = await restartSession({
         loaded,
         session: visible.row,
         projectId,
         sessionId,
       });
+      if (result.status < 300) {
+        capturePersonEvent(c, loaded, projectId, 'session_restarted', {
+          session_id: sessionId,
+          provider: visible.row.sandboxProvider ?? null,
+        });
+      }
       return c.json(result.body, result.status as any);
     },
   );
@@ -257,7 +230,7 @@ export function registerSessionRuntimeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/recover',
+      path: '/{workspaceId}/sessions/{sessionId}/recover',
       tags: ['sessions'],
       summary: 'Continue a lost session on a new computer',
       description:
@@ -266,7 +239,7 @@ export function registerSessionRuntimeRoutes(): void {
         '409 `session_not_lost`, `session_transcript_missing` (nothing changed) or `session_sandbox_removal_pending` (retry).',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
       },
       responses: {
         200: json(z.object({ ok: z.literal(true) }), 'The next /start boots a new computer'),
@@ -274,18 +247,21 @@ export function registerSessionRuntimeRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
       const { loaded } = binding;
       // A new computer is compute: a scoped agent token needs project.session.start.
       assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
-      if (!visible.canManageLifecycle) {
-        return c.json({ error: 'Only the session owner or an account owner/admin can continue this session' }, 403);
-      }
+      const gate = await loadLifecycleSession(
+        c,
+        loaded,
+        sessionId,
+        'Only the session owner or an account owner/admin can continue this session',
+        { rejectTombstoned: true },
+      );
+      if (gate.kind === 'error') return gate.response;
       const result = await recoverLostSession({ projectId, sessionId, accountId: loaded.row.accountId });
       if ('ok' in result) return c.json({ ok: true as const }, 200);
       return c.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, result.status);
@@ -299,12 +275,12 @@ export function registerSessionRuntimeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/stop',
+      path: '/{workspaceId}/sessions/{sessionId}/stop',
       tags: ['sessions'],
       summary: 'Stop a session (interrupt the running turn)',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
       },
       responses: {
         200: json(z.any(), 'OK'),
@@ -312,7 +288,7 @@ export function registerSessionRuntimeRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
@@ -333,15 +309,17 @@ export function registerSessionRuntimeRoutes(): void {
 
       // Stop is reserved for the session owner or an account owner/admin, same policy
       // as restart.
-      const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-      if (!visible) return c.json({ error: 'Not found' }, 404);
-      if (!visible.canManageLifecycle) {
-        return c.json(
-          { error: 'Only the session owner or an account owner/admin can stop this session' },
-          403,
-        );
-      }
+      const gate = await loadLifecycleSession(
+        c,
+        loaded,
+        sessionId,
+        'Only the session owner or an account owner/admin can stop this session',
+        { rejectTombstoned: false },
+      );
+      if (gate.kind === 'error') return gate.response;
 
+      // Read before the stop ends the turn: a background subagent's parent hears it.
+      const parentNotice = await stoppedSubagentNotice(sessionId, callerKortixSessionId(c));
       const result = await stopSession({
         projectId,
         sessionId,
@@ -350,6 +328,7 @@ export function registerSessionRuntimeRoutes(): void {
         // The person the stopped turn names; an agent credential names nobody.
         stoppedBy: isProjectSessionPrincipal(c) ? null : loaded.userId,
       });
+      if (parentNotice && result.status === 200) trackDetached(parentNotice());
       return c.json(result.body, result.status as any);
     },
   );
@@ -380,12 +359,12 @@ export function registerSessionRuntimeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/turn',
+      path: '/{workspaceId}/sessions/{sessionId}/turn',
       tags: ['sessions'],
       summary: 'Get the current turn state of a session',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
       },
       responses: {
         200: json(SessionTurnStatusSchema, 'Current turn'),
@@ -393,7 +372,7 @@ export function registerSessionRuntimeRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 

@@ -5,7 +5,6 @@ import { ApiError } from '../../core/http/api/errors';
 import {
   SessionSyncController,
   type SessionSyncPage,
-  type SessionSyncReason,
   type SessionSyncTelemetryEvent,
   loadCompleteSessionHistory,
 } from '../../core/session-sync/session-sync-controller';
@@ -15,12 +14,12 @@ import { getSessionLogPage } from '../../core/rest/projects-client/sessions';
 import { EMPTY_SESSION_LOG_STATE, applySessionLogPage, type SessionLogState } from '../../core/session-log/store';
 import { loadSessionLogPage, readSessionLogAnswer } from '../../core/session-log/source';
 import { sessionLogRowsFor, sessionLogThreadIdOf } from '../../core/session-log/v1-view';
-import { loadSavedSessionTranscriptMessages, parseKortixSessionScope } from './server-transcript-mirror';
+import { parseKortixSessionScope } from './server-transcript-mirror';
 
 interface MessagesResponse {
   data?: Array<{ info: Message; parts: Part[] }>;
   /**
-   * The generated OpenCode client RESOLVES with `{ error }` on a non-2xx
+   * The runtime REST client RESOLVES with `{ error }` on a non-2xx
    * response — it never throws unless the caller opted into `throwOnError`, and
    * we do not. So the ONLY place a 503 or a runtime failure is visible is here.
    * Reading `data ?? []` and ignoring this is exactly how a cold-boot 503
@@ -139,7 +138,7 @@ function messageKey(info: { id: string; time?: { created?: number } }): string {
 /**
  * The most specific message a failed `client.session.messages` response
  * carries. `error` is genuinely `unknown` (its shape varies per endpoint), so
- * this duck-types the same way `unwrap` (react/use-opencode-sessions/shared.ts)
+ * this duck-types the same way `unwrap` (react/use-runtime-sessions/shared.ts)
  * does, and falls back to the status code.
  */
 function messagePageErrorText(result: MessagesResponse, status: number | undefined): string {
@@ -391,14 +390,6 @@ export function retainSessionSyncController(sessionId: string, runtimeScope?: st
   };
 }
 
-export function reconcileSessionTail(
-  sessionId: string,
-  reason: SessionSyncReason,
-  runtimeScope?: string,
-): Promise<void> {
-  return getSessionSyncController(sessionId, undefined, runtimeScope).reconcile(reason);
-}
-
 /**
  * One authoritative read of a session's runtime status. `null` when the
  * runtime exposes no status endpoint — the caller decides what silence means.
@@ -470,12 +461,12 @@ async function loadSessionLogExportRows(
  * Every message of a session for an export, oldest first. The session log first: the log the
  * store holds for `kortixSessionScope` (v2), else the log's newest page read from the API. The
  * export is then the log's thread of `sessionId`, every page of it, and nothing else is read.
- * A 404 coded `session_log_missing` (a new session) leaves the runtime alone: its history, or
- * nothing. Only when the log answers a 404 without that code or an invalid page (a server older
- * than the log) does it read v1: while the computer runs, the runtime's whole history;
- * when the runtime cannot answer (asleep, stopped, failed) or answers empty, the v1 saved copy
- * (deprecated), every window of it. `kortixSessionScope` (`projectId/sessionId`) names the
- * session; without it only the runtime is read, and a runtime failure throws.
+ * Without a page the runtime's whole history answers while the computer runs. A 404 coded
+ * `session_log_missing` (a new session) answers that history, or nothing. Any other answer
+ * without a page (an unconverted mirror, a failed read) throws when the runtime has nothing: a
+ * partial export must not pass for a whole one. No v1 saved copy is read (`GET …/transcript`,
+ * P8.3). `kortixSessionScope` (`projectId/sessionId`) names the session; without it only the
+ * runtime is read, and a runtime failure throws.
  */
 export async function loadSessionExportMessages(
   sessionId: string,
@@ -485,7 +476,7 @@ export async function loadSessionExportMessages(
   let log = saved ? useSyncStore.getState().sessionLogs[saved.sessionId] : undefined;
   // The API serves the log and the session has none yet: only the runtime can hold messages.
   let missing = false;
-  if (saved && !log && loadSessionLogPage) {
+  if (saved && !log) {
     const page = await readSessionLogAnswer(loadSessionLogPage, saved.projectId, saved.sessionId, { limit: SESSION_LOG_EXPORT_PAGE_LIMIT });
     if (page === 'missing') missing = true;
     else if (page) log = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page);
@@ -498,7 +489,7 @@ export async function loadSessionExportMessages(
     if (!saved) throw error;
   }
   if (live.length > 0 || !saved || missing) return live;
-  return loadSavedSessionTranscriptMessages(saved);
+  throw new Error('The session log could not be read');
 }
 
 /**

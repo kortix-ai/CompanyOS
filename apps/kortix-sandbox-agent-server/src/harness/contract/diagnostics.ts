@@ -1,4 +1,4 @@
-import type { HarnessHealth, RuntimeCapability } from '@kortix/api-contract/runtime-relay'
+import type { HarnessHealth, RUNTIME_CLAUDE_AGENT_CAPABILITY, RUNTIME_STABLE_MESSAGE_ID_CAPABILITY, RuntimeCapability } from '@kortix/api-contract/runtime-relay'
 import type { Config } from '@/lib/config/config'
 import type { SandboxBootState } from './boot-state'
 import type { HarnessConfigReleaseReport } from './control'
@@ -13,16 +13,10 @@ export interface HarnessDiagnosticsContext {
   resources: () => ResourceMonitor | null
 }
 
-export interface HarnessHealthQuery {
+interface HarnessHealthQuery {
   /** Absence leaves the potentially expensive turn observation disabled. */
   turn?: { sessionId?: string; messageId?: string }
 }
-
-/**
- * A harness's live model-catalog signal for the health `runtime` block (see `runtimeConvergenceReport`).
- * @deprecated OpenCode only. OpenCode is sunset: no new code. See harness/README.md "OpenCode sunset".
- */
-export type CatalogSnapshot = () => { ids: string[] | null; fallbackReason: string | null }
 
 /**
  * What the selected harness reports on `GET /kortix/health`.
@@ -38,7 +32,7 @@ export interface HarnessHealthReport {
   configDirSha?: string | null
 }
 
-export interface HarnessDiagnosticReport {
+interface HarnessDiagnosticReport {
   at: string
   daemon: {
     pid: number
@@ -60,7 +54,7 @@ export interface HarnessDiagnosticReport {
   [field: string]: unknown
 }
 
-export interface HarnessLogTail {
+interface HarnessLogTail {
   label: string
   text: string | null
 }
@@ -71,13 +65,10 @@ export interface HarnessDiagnosticsService {
    * The session features this runtime serves, listed in health `capabilities`
    * (E1). A client hides the control of a feature that is absent. Read on
    * each health call: a feature can depend on the running runtime's version.
+   * `runtime.stable_message_id.v1` is how the runtime treats a prompt's id,
+   * not a control: apps/api reads it to keep the id it sends.
    */
-  capabilities(): Promise<readonly RuntimeCapability[]>
-  /**
-   * The live model-catalog signal, for a harness that has one.
-   * @deprecated OpenCode only. OpenCode is sunset: no new code. See harness/README.md "OpenCode sunset".
-   */
-  readonly catalogSnapshot?: CatalogSnapshot
+  capabilities(): Promise<readonly (RuntimeCapability | typeof RUNTIME_STABLE_MESSAGE_ID_CAPABILITY | typeof RUNTIME_CLAUDE_AGENT_CAPABILITY)[]>
   health(context: HarnessDiagnosticsContext, query: HarnessHealthQuery): Promise<HarnessHealthReport>
   report(context: HarnessDiagnosticsContext, tail: number): Promise<HarnessDiagnosticReport>
   logSources(): readonly string[]

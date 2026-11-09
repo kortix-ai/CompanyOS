@@ -1,6 +1,6 @@
 import { ApiError } from '../../http/api-client';
 import { mintWireMessageId } from '../../session/wire-message-id';
-import { createProjectSession, createSessionPrompt, getProjectSession } from './sessions';
+import { createWorkspaceSession, createSessionPrompt, getWorkspaceSession } from './sessions';
 
 export interface ChangeRequestRecoveryTarget {
   crId: string;
@@ -17,6 +17,10 @@ export interface ManifestIssue {
   severity: string;
   line?: number;
   column?: number;
+  /** The repo file the issue is in, when it is not the root manifest (an `imports:` file). */
+  file?: string;
+  /** A deprecated shape: the id of the rewrite `kortix validate --fix` applies. */
+  fix?: string;
 }
 
 export type ChangeRequestRecoveryBlocker =
@@ -123,10 +127,10 @@ export async function recoverChangeRequest(
   target: ChangeRequestRecoveryTarget,
   blocker: ChangeRequestRecoveryBlocker,
 ): Promise<string> {
-  let origin: Awaited<ReturnType<typeof getProjectSession>> | undefined;
+  let origin: Awaited<ReturnType<typeof getWorkspaceSession>> | undefined;
   if (target.originSessionId) {
     try {
-      origin = await getProjectSession(projectId, target.originSessionId, { showErrors: false });
+      origin = await getWorkspaceSession(projectId, target.originSessionId, { showErrors: false });
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 404) throw error;
     }
@@ -146,7 +150,7 @@ export async function recoverChangeRequest(
       if (!(error instanceof ApiError) || error.status !== 403 || !['forbidden', 'role', 'project_role_insufficient', 'resource_scope_insufficient'].includes(error.code ?? '')) throw error;
     }
   }
-  const session = await createProjectSession(projectId, {
+  const session = await createWorkspaceSession(projectId, {
     ...(origin ? { parent_session_id: origin.session_id, agent_name: origin.agent_name ?? undefined } : {}),
     initial_prompt: buildChangeRequestRecoveryPrompt(target, blocker),
     base_ref: target.headRef,

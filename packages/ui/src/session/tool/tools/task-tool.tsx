@@ -1,213 +1,137 @@
 'use client';
 
-import { SubSessionModal } from '../../thread/sub-session-modal';
-import {
-  BasicTool,
-  firstMeaningfulLine,
-  partInput,
-  partStatus,
-  partError,
-} from '../shared/infrastructure';
+import { SubagentDialog } from '../../agents/subagent-view';
+import { BasicTool, ToolSurfaceContext, firstMeaningfulLine, partInput, partMetadata, partStatus, partError } from '../shared/infrastructure';
 import { ToolRegistry } from '../shared/registry';
-import {
-  SubAgentActivity,
-  SubAgentStatusBanner,
-  useSubAgentThread,
-} from '../shared/sub-agent';
+import { SubAgentStatusBanner, useSubAgentThread } from '../shared/sub-agent';
 import type { ToolProps } from '../shared/types';
-import { ToolError } from '../tool-error';
 import { useTranslations } from '../../../i18n';
-import { cn } from '../../../lib/utils';
-import { getChildSessionId, getToolInfo } from '../../../internal/session-types';
-import { KanbanIcon as SquareKanban } from '@phosphor-icons/react';
-import { useCallback, useMemo, useState } from 'react';
-import { subAgentCalls } from '@kortix/sdk';
+import { getChildSessionId } from '../../../internal/session-types';
+import { useContext, useMemo, useState } from 'react';
+import type { ProjectSession, SessionLogThread } from '@kortix/sdk';
+import { useProjectSession, useSessionStateStore } from '@kortix/sdk/react';
+import { agentDisplayName } from '../../../internal/components/agent-mark';
+import { useSessionIds } from '../../../providers/session-ids';
+import type { SessionDisplayStatus } from '../../actions/session-label';
+import { agentRowOf, type AgentRowState } from '../../agents/agent-model';
+import { AgentFace, AgentFailure, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, OpenAgentButton } from '../../agents/agent-surface';
 
 /**
- * The way into the sub-agent's own session, pinned to the right edge of the row.
- *
- * It used to be a ghost `Button` at the BOTTOM of the disclosure body, and that
- * was wrong twice over. It sat at the body's left margin — the chain's icon
- * gutter — so it read as one more step in the sub-agent's list rather than as
- * an action on the agent. And it was reachable only by expanding the row, which
- * is backwards for a sub-agent that has not produced a step yet: that is the
- * one moment the full view is the ONLY thing there is to look at.
- *
- * A `span role="button"`, not a `<button>`. This node renders inside the
- * disclosure's trigger, and `DisclosureTrigger` clones that trigger into its own
- * `role="button"` element — a button nested in a button is invalid HTML. The
- * subtitle link in `InlineTriggerTitle` is the same shape for the same reason.
- * Both activation paths `stopPropagation` so reaching the full view does not
- * also toggle the row underneath it.
- *
- * Visible label "Full view", accessible name "Open full view". The row already
- * carries a title plus a live subtitle that has to truncate, so the right edge
- * gets the two words that matter; the longer name rides on `aria-label` and
- * `title`, and it CONTAINS the visible text, so WCAG 2.5.3 (Label in Name)
- * holds.
- *
- * Always visible, never hover-revealed: a hover-only affordance does not exist
- * on touch, and this is the only route to a running sub-agent's full transcript.
+ * Whether a background hand-off's child still works. The child's status is
+ * known while this tab streams it; without it, a child whose last reply has
+ * completed is not working, and any other child is taken as still at work.
  */
-function FullViewAction({ onOpen }: { onOpen: () => void }) {
-  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      aria-label={tI18nComplete.raw('text229fbeec6b2f')}
-      title={tI18nComplete.raw('text229fbeec6b2f')}
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen();
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        e.stopPropagation();
-        onOpen();
-      }}
-      className={cn(
-        'text-muted-foreground/60 hover:text-foreground',
-        'flex cursor-pointer items-center gap-1 whitespace-nowrap',
-        'underline-offset-2 transition-colors hover:underline',
-      )}
-    >
-      {tI18nComplete.raw('textdcc839a4015c')}
-    </span>
-  );
+function useBackgroundWorking(childSessionId: string | undefined, childThread: SessionLogThread | null): boolean {
+  const childStatus = useSessionStateStore((s) => (childSessionId ? s.sessionStatus[childSessionId] : undefined));
+  if (childStatus?.type === 'busy' || childStatus?.type === 'retry') return true;
+  if (childStatus?.type === 'idle') return false;
+  const last = childThread?.messages.findLast((m) => m.role === 'assistant');
+  return !last || last.completed_at === null;
 }
 
 /**
- * A task call is a disclosure row: what the sub-agent is doing, in place.
+ * An agent call (`agent`, `task`, Codex `spawn_agent`) is one tool row, the
+ * grammar of every other tool row:
  *
- * This row used to be a plain button that opened `SubSessionModal` on any
- * click. That put the only view of a running sub-agent behind a modal — the
- * reader had to leave the transcript to learn what the agent they just
- * dispatched was up to, and had to close it again to get back — while the
- * `SubAgentActivity` list this component already assembled was unreachable dead
- * code on that path. The steps are the answer to the question the row raises,
- * so they belong under the row, and the modal is now an explicit action on the
- * row rather than the row's whole behaviour.
+ *   [face] Researcher  Research competitor pricing…          ◔ Working  >
  *
- * The trigger is unchanged: while the sub-agent runs its subtitle is that
- * agent's LAST step, so a collapsed row still reports live progress.
- *
- * The body is the sub-agent's steps and NOTHING else, so it is passed only when
- * there are steps. A disclosure whose body is empty is a caret that promises a
- * body and opens onto nothing — the same verdict `ActivityBurst` reaches for a
- * burst that merges to zero rows. Before the full view moved to the trigger,
- * that button was the sole occupant of the body of a just-started sub-agent,
- * which is what kept the empty case from being empty.
+ * A click opens the agent's session in the side panel (its face, name, state,
+ * conversation and a box to message it); without a panel, in the agent dialog.
  */
 export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
-  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const t = useTranslations('tools.agent');
+  const tNotice = useTranslations('multiAgent.notice');
   const input = partInput(call);
   const status = partStatus(call);
 
-  const subagentType = (input.subagent_type as string) || 'general';
-  // `firstMeaningfulLine` splits its argument on every newline and trims each
-  // segment. A sub-agent prompt is the longest string this row ever sees, and
-  // this ran over it on every render of a row that is mostly collapsed.
+  // Tool input is the model's JSON: every field is `unknown` at runtime, and a
+  // truthy non-string used to crash the render tree (`e.replace is not a
+  // function`, KRTX-4511). Read each field by type, never by cast — an empty
+  // or junk value falls through to the same fallback as an absent one.
+  const subagentType =
+    (typeof input.subagent_type === 'string' && input.subagent_type) ||
+    (typeof input.agent === 'string' && input.agent) ||
+    'general';
+  const name = typeof input.name === 'string' ? input.name : '';
   const description = useMemo(
     () =>
-      (input.description as string) ||
+      (typeof input.description === 'string' && input.description) ||
       firstMeaningfulLine(input.prompt) ||
       // Codex `spawn_agent`.
       firstMeaningfulLine(input.message) ||
       firstMeaningfulLine(input.title, 80),
     [input],
   );
+  const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : typeof input.message === 'string' ? input.message.trim() : '';
 
   const childSessionId: string | undefined = useMemo(() => getChildSessionId(call), [call]);
-
   const childThread = useSubAgentThread(childSessionId);
-  const childCalls = useMemo(() => subAgentCalls(childThread), [childThread]);
+
+  // `agent(…, { background: true })` returns as soon as the child exists. The call is
+  // over; the work goes on in the child's own session, and the row says so.
+  const background = partMetadata(call).background === true;
+  const backgroundWorking = useBackgroundWorking(background ? childSessionId : undefined, childThread);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const openModal = useCallback(() => setModalOpen(true), []);
-
   const isRunning = status === 'running' || status === 'pending';
-  const isCompleted = status === 'completed';
-
-  // The task tool's failure reason, drawn in the body. The renderer routes
-  // errored dispatches back here (they keep their row and their child thread),
-  // and this row must still say WHY it failed — before it only announced the
-  // dispatch, never the error (KRTX-1746).
   const errorText = partError(call);
 
-  const lastActivity = useMemo(() => {
-    if (childCalls.length === 0) return null;
-    const last = childCalls[childCalls.length - 1];
-    const info = getToolInfo(last.name, partInput(last) as Record<string, any>);
-    return info.title + (info.subtitle ? ` · ${info.subtitle}` : '');
-  }, [childCalls]);
+  // The child's own session row says how it is doing; the call's status is the fallback.
+  const ids = useSessionIds();
+  const childRow = useProjectSession(ids.projectId, childSessionId, { enabled: !!ids.projectId && !!childSessionId });
+  const child = childRow.data ? agentRowOf(childRow.data as ProjectSession) : null;
+  const state: AgentRowState = errorText
+    ? 'failed'
+    : (child?.state ?? (isRunning || (background && backgroundWorking) ? 'working' : status === 'completed' ? 'completed' : 'idle'));
+  // The name its parent gave it (`agent({ name })`) reads best; else the kind of agent.
+  const handle = name || (child?.named ? child.handle : '') || subagentType;
+  const title = name || (child?.named ? child.handle : '') || agentDisplayName(subagentType);
 
-  const subtitle = isRunning ? (lastActivity ?? description) : description || undefined;
-
-  /**
-   * Whether this row can show the sub-agent's work WITHOUT leaving the
-   * transcript.
-   *
-   * It is not the same question as "does this call have a sub-agent". A child
-   * session's transcript is only resident while the parent streamed it:
-   * `useOpenCodeMessages` reads the sync store, and `pruneDetachedSessions`
-   * evicts detached sessions past `DETACHED_SESSION_LIMIT`. A turn that
-   * dispatches three agents therefore ends up with the last one's steps in
-   * memory and the first two gone — which is exactly the "clicking the row does
-   * nothing" report: two of the three rows had no body to open.
-   */
-  const hasInlineSteps = Boolean(childSessionId) && childCalls.length > 0;
-
+  // A row with a session opens it: beside the chat in the side panel, or as the agent
+  // dialog where there is no panel. Its prompt, steps and answer are that session's
+  // conversation, so the row carries no copy of them. A call that never got a
+  // session keeps what it has in place. On the panel's own surface a row is a fold
+  // (it takes no click), so there the fold holds Open.
+  const surface = useContext(ToolSurfaceContext);
+  const opensAgent = !!childSessionId && surface !== 'panel';
+  const hasBody = !opensAgent && (!!prompt || !!errorText || !!childSessionId);
   return (
-    <>
+    <AgentRowScope>
       <BasicTool
-        icon={<SquareKanban className="size-3.5 shrink-0" />}
-        trigger={{
-          title: tI18nComplete('text9471197a871a', { value0: subagentType }),
-          subtitle,
-        }}
+        icon={<AgentFace handle={handle} />}
+        trigger={<AgentTrigger title={title} subtitle={description} />}
+        triggerAction={<AgentStatus status={STATE_GLYPH[state]} label={t(`state.${state}`)} opens={opensAgent || hasBody} />}
+        onClick={opensAgent ? () => setModalOpen(true) : undefined}
         defaultOpen={defaultOpen}
         forceOpen={forceOpen}
         locked={locked}
-        badge={
-          isCompleted && childCalls.length > 0 ? `${childCalls.length} steps` : undefined
-        }
-        triggerAction={childSessionId ? <FullViewAction onOpen={openModal} /> : undefined}
-        // A click on an agent row always leads somewhere. With steps in hand
-        // the row is a disclosure and opens them in place; with the child
-        // session evicted there is nothing to disclose, so the row becomes a
-        // plain button onto the full view — the same destination the `View`
-        // action carries, so the row and its action never disagree. Without
-        // this the reader met a row that looked openable and was not.
-        // A FAILED dispatch keeps the disclosure instead: its body is the
-        // failure reason, which `ClickableToolRow` would drop, and the reason
-        // must stay readable on the row exactly as the generic error card
-        // showed it (KRTX-1746). The child thread stays one `View` away.
-        onClick={childSessionId && !hasInlineSteps && !errorText ? openModal : undefined}
       >
-        {(errorText || hasInlineSteps) ? (
-          <>
-            {errorText ? <ToolError error={errorText} toolName={call.name} /> : undefined}
-            {hasInlineSteps ? (
-              <SubAgentActivity childSessionId={childSessionId} calls={childCalls} />
-            ) : undefined}
-          </>
+        {hasBody ? (
+          <AgentRowBody>
+            {prompt && prompt !== description && (
+              <p className="text-muted-foreground line-clamp-4 whitespace-pre-wrap wrap-break-word">{prompt}</p>
+            )}
+            {errorText && <AgentFailure sentence={tNotice('failedSentence')} raw={errorText} />}
+            {childSessionId && <OpenAgentButton label={t('openAgent', { name: description || title })} onClick={() => setModalOpen(true)} />}
+          </AgentRowBody>
         ) : undefined}
       </BasicTool>
       <SubAgentStatusBanner childSessionId={childSessionId} childThread={childThread} />
       {childSessionId && (
-        <SubSessionModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          sessionId={childSessionId}
-          title={tI18nComplete('text7decbfdbacee', {
-            value0: subagentType,
-            value1: description ? tI18nComplete('textb581fd88ea24', { value0: description }) : '',
-          })}
-        />
+        <SubagentDialog open={modalOpen} onOpenChange={setModalOpen} sessionId={childSessionId} title={title} handle={handle} task={description || undefined} failure={errorText || undefined} />
       )}
-    </>
+    </AgentRowScope>
   );
 }
+
+/** The session-list glyph an agent's state draws. */
+const STATE_GLYPH: Record<AgentRowState, SessionDisplayStatus> = {
+  working: 'running',
+  needs_input: 'needs-you',
+  failed: 'failed',
+  idle: 'done',
+  completed: 'done',
+  stopped: 'stopped',
+};
+// pi's `agent` (`task` is its deprecated alias) reaches this row through its kind (`toolKind`).
 ToolRegistry.register('task', TaskTool);

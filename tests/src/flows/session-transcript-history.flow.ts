@@ -6,38 +6,31 @@ import { CliSandbox, throwIfCliInfraFailure } from "../fixtures/cli";
 import { createDatabaseSession } from "../fixtures/database-project";
 import { seedSessionTranscript } from "../fixtures/session-transcript";
 
-type Store = "mirror" | "log";
-
 /**
- * Registers `<id>` with the saved history only in the v1 mirror (an old session from before the
- * journal: the first read converts it into the session log, P8.2) and `<id>-log` with it in the
- * session log, written through the journal (Session Log Plan P5.7). Both implement spec `<id>`,
- * and both answer from the session log.
+ * Registers `<id>` with the saved history in the session log, written through the journal
+ * (Session Log Plan P5.7). Its v1 mirror twin went with the mirror (P8.2 Release B2).
  */
-function storeFlow(id: string, meta: FlowMeta, fn: (ctx: FlowContext, store: Store) => Promise<void>): void {
-  flow(id, meta, (ctx) => fn(ctx, "mirror"));
+function storeFlow(id: string, meta: FlowMeta, fn: (ctx: FlowContext) => Promise<void>): void {
   flow(
-    `${id}-log`,
+    id,
     {
       ...meta,
-      specId: id,
       routes: [
         ...(meta.routes ?? []),
         "POST /v1/accounts/tokens",
         "DELETE /v1/accounts/tokens/:tokenId",
-        "POST /v1/projects/:projectId/sessions/:sessionId/log/journal",
+        "POST /v1/workspaces/:projectId/sessions/:sessionId/log/journal",
       ],
     },
-    (ctx) => fn(ctx, "log"),
+    fn,
   );
 }
 
-/** The fixture's `log` option for `store`: the owner's current token mints the journal credential. */
-async function logOption(store: Store, owner: Principal) {
-  if (store === "mirror") return {};
-  if (owner.auth.mode !== "bearer") throw new Error(`the -log twin needs a bearer owner to journal, got auth mode ${owner.auth.mode}`);
+/** The fixture's `bearer`: the owner's current token mints the journal credential. */
+async function ownerBearer(owner: Principal) {
+  if (owner.auth.mode !== "bearer") throw new Error(`journaling needs a bearer owner, got auth mode ${owner.auth.mode}`);
   await owner.auth.ensureFresh?.();
-  return { log: { bearer: owner.auth.token } };
+  return owner.auth.token;
 }
 
 storeFlow(
@@ -46,21 +39,21 @@ storeFlow(
     domain: "sessions",
     requires: ["database"],
     routes: [
-      "GET /v1/projects/:projectId/sessions/:sessionId/transcript",
-      "PATCH /v1/projects/:projectId/features",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/transcript",
+      "PATCH /v1/workspaces/:projectId/features",
       // `kortix sessions digest` lists, then digests each session.
-      "GET /v1/projects/:projectId/sessions",
-      "GET /v1/accounts/me",
+      "GET /v1/workspaces/:projectId/sessions",
+      "GET /v1/me",
       // `kortix sessions log` locates the session, asks for its stored session
       // log (404: none), then reads its saved copy.
-      "GET /v1/projects/:projectId/sessions/:sessionId",
-      "GET /v1/projects/:projectId/sessions/:sessionId/log",
-      "GET /v1/projects/:projectId/sessions/:sessionId/snapshot",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/snapshot",
       // The CLI reads the `session_log` flag: on, the stored log is the only saved copy.
-      "GET /v1/projects/:projectId/detail",
+      "GET /v1/workspaces/:projectId/detail",
     ],
   },
-  async (ctx, store) => {
+  async (ctx) => {
     const project = await ctx.fixtures.project();
     const sessionId = await createDatabaseSession(ctx.env, {
       projectId: project.id,
@@ -92,9 +85,9 @@ storeFlow(
           parts: [{ id: "prt_subagent", sessionID: child, messageID: "msg_subagent_000000000000001", type: "text", text: "List the files." }],
         },
       ],
-      ...(await logOption(store, ctx.P.OWNER)),
+      bearer: await ownerBearer(ctx.P.OWNER),
     });
-    const route = "/v1/projects/:projectId/sessions/:sessionId/transcript";
+    const route = "/v1/workspaces/:projectId/sessions/:sessionId/transcript";
     const options = {
       params: { projectId: project.id, sessionId },
       query: { shape: "sync", history: "true" },
@@ -116,7 +109,7 @@ storeFlow(
       "the session snapshot answers the same saved window in one read, every leg in the contract shape",
       async () => {
         (
-          await owner.get("/v1/projects/:projectId/sessions/:sessionId/snapshot", {
+          await owner.get("/v1/workspaces/:projectId/sessions/:sessionId/snapshot", {
             params: { projectId: project.id, sessionId },
           })
         )
@@ -135,7 +128,7 @@ storeFlow(
       async () => {
         (
           await owner.patch(
-            "/v1/projects/:projectId/features",
+            "/v1/workspaces/:projectId/features",
             { feature: "session_transcript_history", enabled: false },
             { params: { projectId: project.id } },
           )
@@ -162,7 +155,7 @@ storeFlow(
           .has("$.source", "mirror")
           .has("$.available", true)
           .has("$.message_count", 2)
-          .has("$.opencode_session_id", fixture.root)
+          .has("$.runtime_session_id", fixture.root)
           .has(
             "$.messages[1].info.time.completed",
             fixture.messages[1].info.time.completed,
@@ -185,7 +178,7 @@ storeFlow(
           .status(200)
           .body()
           .has("$.available", true)
-          .has("$.opencode_session_id", child)
+          .has("$.runtime_session_id", child)
           .has("$.message_count", 1)
           .has("$.messages[0].parts[0].text", "List the files.");
         (
@@ -218,7 +211,7 @@ storeFlow(
         await db.connect();
         try {
           await db.query(
-            "UPDATE kortix.project_sessions SET opencode_session_id = $2 WHERE session_id = $1",
+            "UPDATE kortix.project_sessions SET runtime_session_id = $2 WHERE session_id = $1",
             [sessionId, "ses_replacement"],
           );
         } finally {
@@ -229,7 +222,7 @@ storeFlow(
           .body()
           .has("$.available", false)
           .has("$.message_count", 0)
-          .has("$.opencode_session_id", "ses_replacement");
+          .has("$.runtime_session_id", "ses_replacement");
       },
     );
     await ctx.step(
@@ -246,7 +239,7 @@ storeFlow(
         await restore.connect();
         try {
           await restore.query(
-            "UPDATE kortix.project_sessions SET opencode_session_id = $2 WHERE session_id = $1",
+            "UPDATE kortix.project_sessions SET runtime_session_id = $2 WHERE session_id = $1",
             [sessionId, fixture.root],
           );
         } finally {
@@ -296,8 +289,8 @@ storeFlow(
             throw new Error(
               `stopped session reported no transcript: ${JSON.stringify(digest.transcript)}`,
             );
-          // The CLI reads the stored session log (`GET …/log`; a mirror-only session is converted
-          // by that read), never the v1 transcript route, and says so.
+          // The CLI reads the stored session log (`GET …/log`), never the v1 transcript route,
+          // and says so.
           const source = "log";
           if (digest.transcript.source !== source)
             throw new Error(`expected source '${source}', got '${digest.transcript.source}'`);
@@ -336,8 +329,8 @@ storeFlow(
           throwIfCliInfraFailure(run, "kortix sessions log");
           if (run.exitCode !== 0)
             throw new Error(`kortix sessions log exited ${run.exitCode}: ${run.all}`);
-          // The stored session log, every thread (a mirror-only session is converted by the
-          // read). The source is reported on stderr so it cannot break scripts.
+          // The stored session log, every thread. The source is reported on stderr so it cannot
+          // break scripts.
           const expected = { source: "log", threads: [fixture.root, child], stderr: "Stored session log" };
           const log = JSON.parse(run.stdout) as {
             schema: string;
@@ -355,12 +348,12 @@ storeFlow(
             throw new Error(`log lost the saved reply: ${run.stdout}`);
           if (!run.stderr.includes(expected.stderr))
             throw new Error(`log did not say where the messages came from: ${run.stderr}`);
-          // The v1 transcript is not served to the CLI: --schema v1 exits 1, and names the way out.
+          // The v1 transcript is gone: reject the unsupported schema before reading.
           const old = await cli.run(["sessions", "log", sessionId, "--project", project.id, "--json", "--schema", "v1"]);
           throwIfCliInfraFailure(old, "kortix sessions log --schema v1");
-          if (old.exitCode !== 1 || !old.stderr.includes("Drop --schema v1"))
-            throw new Error(`--schema v1: expected exit 1 naming the way out, got ${old.exitCode}: ${old.all}`);
-          const status = (await owner.get("/v1/projects/:projectId/sessions/:sessionId", {
+          if (old.exitCode !== 2 || !old.stderr.includes('Invalid --schema "v1"'))
+            throw new Error(`--schema v1: expected exit 2 naming the invalid schema, got ${old.exitCode}: ${old.all}`);
+          const status = (await owner.get("/v1/workspaces/:projectId/sessions/:sessionId", {
             params: { projectId: project.id, sessionId },
           })).status(200).json<{ status: string }>();
           if (status.status !== "stopped")
@@ -418,21 +411,21 @@ storeFlow(
     tags: ["deployed"],
     requires: ["database"],
     routes: [
-      "POST /v1/projects/:projectId/sessions/:sessionId/attachments",
-      "GET /v1/projects/:projectId/sessions/:sessionId/attachments/:attachmentId",
-      "POST /v1/projects/:projectId/sessions/:sessionId/prompts",
-      "DELETE /v1/projects/:projectId/sessions/:sessionId",
+      "POST /v1/workspaces/:projectId/sessions/:sessionId/attachments",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/attachments/:attachmentId",
+      "POST /v1/workspaces/:projectId/sessions/:sessionId/prompts",
+      "DELETE /v1/workspaces/:projectId/sessions/:sessionId",
       // `kortix sessions attachments` logs in, locates the session, reads its
       // saved transcript as the index, then fetches the bytes.
-      "GET /v1/accounts/me",
-      "GET /v1/projects/:projectId/sessions/:sessionId",
-      "GET /v1/projects/:projectId/sessions/:sessionId/transcript",
+      "GET /v1/me",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/transcript",
       // The `session_log` flag decides which saved copy the index is: the stored log or the v1 transcript.
-      "GET /v1/projects/:projectId/detail",
-      "GET /v1/projects/:projectId/sessions/:sessionId/log",
+      "GET /v1/workspaces/:projectId/detail",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
     ],
   },
-  async (ctx, store) => {
+  async (ctx) => {
     const project = await ctx.fixtures.project();
     const sessionId = await createDatabaseSession(ctx.env, {
       projectId: project.id,
@@ -449,7 +442,7 @@ storeFlow(
     const owner = ctx.client.as(ctx.P.OWNER);
     const attachmentId = crypto.randomUUID();
     const params = { projectId: project.id, sessionId, attachmentId };
-    const upload = "/v1/projects/:projectId/sessions/:sessionId/attachments";
+    const upload = "/v1/workspaces/:projectId/sessions/:sessionId/attachments";
     const download = `${upload}/:attachmentId`;
     const ref = `kortix-attachment://${project.id}/${sessionId}/${attachmentId}`;
     const contents = "Files remain readable while the computer is stopped.";
@@ -538,7 +531,7 @@ storeFlow(
         ).status(404);
         (
           await owner.post(
-            "/v1/projects/:projectId/sessions/:sessionId/prompts",
+            "/v1/workspaces/:projectId/sessions/:sessionId/prompts",
             {
               client_message_id: crypto.randomUUID(),
               message_id: "msg_0123456789abAbCdEfGhIjKlMn",
@@ -579,7 +572,7 @@ storeFlow(
               ],
             },
           ],
-          ...(await logOption(store, ctx.P.OWNER)),
+          bearer: await ownerBearer(ctx.P.OWNER),
         });
         const pat = await ctx.fixtures.pat({ name: ctx.fixtures.name("cli-attachments") });
         const cli = new CliSandbox("attachments");
@@ -649,7 +642,7 @@ storeFlow(
           if (unknown.exitCode !== 1 || !unknown.stderr.includes("No stored file"))
             throw new Error(`unknown id was not refused: ${unknown.exitCode} ${unknown.all}`);
 
-          const session = (await owner.get("/v1/projects/:projectId/sessions/:sessionId", { params }))
+          const session = (await owner.get("/v1/workspaces/:projectId/sessions/:sessionId", { params }))
             .status(200)
             .json<{ status: string }>();
           if (session.status !== "stopped")
@@ -665,7 +658,7 @@ storeFlow(
         (
           await owner.request(
             "DELETE",
-            "/v1/projects/:projectId/sessions/:sessionId",
+            "/v1/workspaces/:projectId/sessions/:sessionId",
             { params },
           )
         ).status(200);

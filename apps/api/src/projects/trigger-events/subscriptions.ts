@@ -5,8 +5,7 @@
  */
 import { connectorConnections, connectors, projectTriggerRuntime } from '@kortix/db';
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
-import { projects } from '@kortix/db';
+import { and, eq, sql } from 'drizzle-orm';
 import { connectedAsOf } from '../../connectors/connection-identity';
 import { defaultConnectionIdForConnector } from '../../connectors/credentials';
 import { logger } from '../../lib/logger';
@@ -20,6 +19,7 @@ import { appLabel, connectorEventApp, MCP_SOURCE_ID } from './mcp-source';
 import { eventSourceFor, unknownSourceMessage } from './registry';
 import * as store from './store';
 import { EventConnectionNotReadyError, type EventSourceConnection, type EventSourceProvider } from './types';
+import { projectsView } from '../../workspaces/rows';
 
 type Resolution =
   | { kind: 'ok'; provider: EventSourceProvider; connection: EventSourceConnection }
@@ -271,10 +271,11 @@ export async function reconcileEventSubscriptions(
 ): Promise<void> {
   try {
     await store.withProjectEventLock(projectId, async () => {
-      const desired = specs.filter((s) => s.type === 'event' && s.enabled && s.event);
+      const all = await withRuntimeEventSpecs(projectId, specs);
+      const desired = all.filter((s) => s.type === 'event' && s.enabled && s.event);
       const desiredSlugs = new Set(desired.map((s) => s.slug));
       const rows = new Map((await store.listByProject(projectId)).map((r) => [r.slug, r]));
-      const [project] = await db.select({ metadata: projects.metadata }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+      const [project] = await db.select({ metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
       const flagOff = eventTriggersOffForProject(project?.metadata);
       for (const spec of desired) {
         try {
@@ -299,6 +300,29 @@ export async function reconcileEventSubscriptions(
 }
 
 /**
+ * `specs` plus the project's runtime event triggers (`lib/runtime-triggers.ts`).
+ * Callers pass the manifest's triggers; a runtime row is never in that list, so
+ * without this its subscription read as stale and was removed. Rows the caller
+ * already passed (a catalog read) are not added twice. The row's `enabled`
+ * wins over the stored spec's, as on every runtime row.
+ */
+export async function withRuntimeEventSpecs(projectId: string, specs: readonly GitTriggerSpec[]): Promise<GitTriggerSpec[]> {
+  const rows = await db
+    .select({ slug: projectTriggerRuntime.slug, enabled: projectTriggerRuntime.enabled, spec: projectTriggerRuntime.scheduleSpec })
+    .from(projectTriggerRuntime)
+    .where(and(
+      eq(projectTriggerRuntime.projectId, projectId),
+      eq(projectTriggerRuntime.triggerType, 'event'),
+      sql`position('.' in ${projectTriggerRuntime.slug}) > 0`,
+    ));
+  const passed = new Set(specs.map((s) => s.slug));
+  const runtime = rows
+    .filter((row) => row.spec && !passed.has(row.slug))
+    .map((row) => ({ ...(row.spec as unknown as GitTriggerSpec), enabled: row.enabled !== false }));
+  return [...specs, ...runtime];
+}
+
+/**
  * Reconcile from the cataloged specs (`project_trigger_runtime.schedule_spec`, no git read).
  * For paths that change a connection, not the manifest: connect, finalize, revoke, default.
  */
@@ -307,7 +331,12 @@ export async function reconcileEventSubscriptionsFromCatalog(projectId: string, 
     const rows = await db
       .select({ spec: projectTriggerRuntime.scheduleSpec })
       .from(projectTriggerRuntime)
-      .where(and(eq(projectTriggerRuntime.projectId, projectId), eq(projectTriggerRuntime.triggerType, 'event')));
+      // Manifest rows only: reconcileEventSubscriptions adds the runtime rows itself.
+      .where(and(
+        eq(projectTriggerRuntime.projectId, projectId),
+        eq(projectTriggerRuntime.triggerType, 'event'),
+        sql`position('.' in ${projectTriggerRuntime.slug}) = 0`,
+      ));
     await reconcileEventSubscriptions(projectId, accountId, rows.map((r) => r.spec as unknown as GitTriggerSpec));
   } catch (error) {
     logger.warn('[trigger-events] catalog reconcile failed', { projectId, error: errorText(error) });

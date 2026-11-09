@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { MY_KORTIX_DISPLAY_NAME } from '@kortix/shared';
 import type {
   AgentConfigBlock,
   AgentConfigResponse,
@@ -41,18 +42,18 @@ type DetailAgent = ProjectConfigSummary['agents'][number];
 
 const HELP = help`Usage: kortix agents <subcommand> [options]
 
-Per-agent settings on the linked Kortix project — the CLI half of Customize →
+Per-agent settings on the linked Kortix workspace — the CLI half of Customize →
 Agents. \`model\` pins an explicit concrete model (scope=agent); an agent with no
-pin follows the project → account → platform default. Model pins and scope apply
+pin follows the workspace → account → platform default. Model pins and scope apply
 instantly, with no kortix.yaml commit; \`default\` and \`config\` commit to
-kortix.yaml on the project's default branch.
+kortix.yaml on the workspace's default branch.
 
 Subcommands:
-  ls [--json]                     List the project's agents (name, source file,
+  ls [--json]                     List the workspace's agents (name, source file,
                                   model) + the fallback default. (Alias: \`models\`.)
   model <agent> <model-id>        Pin an agent to a plain model id (e.g. deepseek-v4.1-flash).
   model <agent> --clear           Clear the pin — the agent follows the default again.
-  default <agent>                 Make this the project's default agent.
+  default <agent>                 Make this the workspace's default agent.
   default --show [--json]         Print the current default agent.
   scope <agent> [options]         Which secrets/connectors/Apps the agent may use.
   scope <agent> --show [--json]   Print the agent's current scope.
@@ -61,12 +62,12 @@ Subcommands:
   config <agent> --set k=v ...    Change single (dotted) keys, merged in.
 
 Scope options (each replaces the field; --policy-set merges):
-  --secrets all|none|A,B          Which project secrets reach the agent's env.
+  --secrets all|none|A,B          Which workspace secrets reach the agent's env.
   --connectors all|none|a,b       Which connectors it may call as tools.
   --apps all|none|a,b             Which Kortix Apps it may open by slug, when
                                   the App is restricted or private. The agent
                                   also needs project.app.read in its Kortix
-                                  permissions. Needs kortix.yaml (kortix_version 2 or 3).
+                                  permissions.
   --policy-set <slug>=<name>      Repeatable. The connector's rule set this
                                   agent is checked against, merged per
                                   connector. <slug>=base puts it back on the
@@ -86,14 +87,14 @@ Config options:
                                   JSON when it parses, else kept as a string.
 
 Global:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   --json             Machine-readable output.
   -h, --help         Show this help.
 
 \`scope\`, \`default\` and \`config\` need \`project.agent.write\`; model pins
 need \`project.model.write\`. Model pins live in the gateway, not in the repo —
-the declarative one is kortix.yaml's \`[[agents]].model\`.
+the declarative one is kortix.yaml's \`agents.<name>.model\`.
 `;
 
 export async function runAgents(argv: string[]): Promise<number> {
@@ -120,7 +121,7 @@ export async function runAgents(argv: string[]): Promise<number> {
     requiredFlags = takeFlagValues(rest, ['--require-connector', '--required-connector']);
     policySetFlags = takeFlagValues(rest, ['--policy-set']);
     setFlags = takeFlagValues(rest, ['--set']);
-    projectFlag = takeFlagValue(rest, ['--project']);
+    projectFlag = takeFlagValue(rest, ['--project', '--workspace']);
     hostFlag = takeFlagValue(rest, ['--host']);
     secretsFlag = takeFlagValue(rest, ['--secrets', '--env']);
     connectorsFlag = takeFlagValue(rest, ['--connectors']);
@@ -196,12 +197,14 @@ function renderAgent(
   if (mode && mode !== 'primary') markers.push(mode);
   if (agent.enabled === false) markers.push('disabled');
   const tail = markers.length > 0 ? ` ${C.dim}· ${markers.join(' · ')}${C.reset}` : '';
-  return `  ${pad(agent.name, width)}   ${C.dim}${agent.path}${C.reset}   ${modelText}${tail}\n`;
+  // A built-in agent has no file: say what it is instead of a path.
+  const where = agent.platform ? `${MY_KORTIX_DISPLAY_NAME}, built in` : agent.path;
+  return `  ${pad(agent.name, width)}   ${C.dim}${where}${C.reset}   ${modelText}${tail}\n`;
 }
 
 async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
   const d = await ctx.client.get<ModelDefaultsResponse>(
-    `/projects/${ctx.projectId}/model-defaults`,
+    `/workspaces/${ctx.projectId}/model-defaults`,
   );
   // The agents live on the same /detail the web Agents page reads, so the two
   // cannot disagree about what a project declares. When /detail is unavailable
@@ -210,7 +213,7 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
   let agents: DetailAgent[] | null = null;
   let defaultAgent: string | null = null;
   try {
-    const detail = await ctx.client.get<ProjectDetail>(`/projects/${ctx.projectId}/detail`);
+    const detail = await ctx.client.get<ProjectDetail>(`/workspaces/${ctx.projectId}/detail`);
     agents = detail.config?.agents ?? [];
     defaultAgent = detail.config?.default_agent ?? null;
   } catch {
@@ -228,6 +231,9 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
               name: agent.name,
               path: agent.path,
               model: agentModel(agent, pins[agent.name]),
+              ...(agent.description ? { description: agent.description } : {}),
+              ...(agent.platform ? { builtin: true } : {}),
+              ...(agent.enabled === false ? { enabled: false } : {}),
             })),
           },
     );
@@ -237,7 +243,7 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
   const fallback = d.projectDefault ?? d.accountDefault ?? d.platformDefault ?? 'unavailable';
   process.stdout.write('\n');
   process.stdout.write(
-    `  ${C.dim}Default (project → account → platform): ${C.reset}${C.bold}${fallback}${C.reset}\n\n`,
+    `  ${C.dim}Default (workspace → account → platform): ${C.reset}${C.bold}${fallback}${C.reset}\n\n`,
   );
   if (agents === null) {
     const entries = Object.entries(pins).sort((a, b) => a[0].localeCompare(b[0]));
@@ -258,7 +264,7 @@ async function agentsLs(ctx: ProjectCtx, json: boolean): Promise<number> {
     return 0;
   }
   if (agents.length === 0) {
-    process.stdout.write(`  ${C.dim}No agents declared in this project.${C.reset}\n\n`);
+    process.stdout.write(`  ${C.dim}No agents declared in this workspace.${C.reset}\n\n`);
   } else {
     process.stdout.write(`  ${C.dim}Agents (${agents.length})${C.reset}\n`);
     const width = Math.max(...agents.map((agent) => agent.name.length));
@@ -297,7 +303,7 @@ async function agentsModel(
   clear: boolean,
 ): Promise<number> {
   if (!agent) return missing('an agent name');
-  const base = `/projects/${ctx.projectId}/model-defaults`;
+  const base = `/workspaces/${ctx.projectId}/model-defaults`;
   if (clear) {
     await ctx.client.delete(`${base}?scope=agent&agentName=${encodeURIComponent(agent)}`);
     process.stdout.write(
@@ -321,7 +327,7 @@ async function agentsDefault(
   opts: { show: boolean; json: boolean },
 ): Promise<number> {
   if (opts.show || !agent) {
-    const detail = await ctx.client.get<ProjectDetail>(`/projects/${ctx.projectId}/detail`);
+    const detail = await ctx.client.get<ProjectDetail>(`/workspaces/${ctx.projectId}/detail`);
     const current = detail.config?.default_agent ?? null;
     if (opts.json) {
       emitJson({
@@ -346,7 +352,7 @@ async function agentsDefault(
   }
 
   const resp = await ctx.client.put<{ ok: boolean; default_agent: string }>(
-    `/projects/${ctx.projectId}/default-agent`,
+    `/workspaces/${ctx.projectId}/default-agent`,
     { agent },
   );
   if (opts.json) {
@@ -377,8 +383,9 @@ function parseGrantSet(raw: string): 'all' | string[] {
     .filter(Boolean);
 }
 
-function renderGrantSet(value: AgentGrantSetV2 | undefined, fallback: string): string {
+function renderGrantSet(value: AgentGrantSetV2 | { exclude: string[] } | undefined, fallback: string): string {
   if (value === undefined) return fallback;
+  if (!Array.isArray(value) && typeof value === 'object') return value.exclude.length > 0 ? `all except ${value.exclude.join(', ')}` : 'all';
   if (value === 'all') return 'all';
   if (value === 'none') return 'none';
   return value.length === 0 ? 'none' : value.join(', ');
@@ -409,8 +416,9 @@ async function agentsScope(
     opts.policySets.length > 0;
   if (opts.show || !wantsWrite) {
     const cfg = await ctx.client.get<AgentConfigResponse>(
-      `/projects/${ctx.projectId}/agents/${encodeURIComponent(agent)}/config`,
+      `/workspaces/${ctx.projectId}/agents/${encodeURIComponent(agent)}/config`,
     );
+    if (cfg.builtin) return printBuiltinAgent(cfg, opts.json);
     const block = cfg.block ?? {};
     const assigned = (block as { policy_sets?: Record<string, string> }).policy_sets ?? {};
     const permissions = block.kortix_permissions ?? block.kortix_cli;
@@ -467,7 +475,7 @@ async function agentsScope(
   let resp: AgentScopeResponse;
   try {
     resp = await ctx.client.put<AgentScopeResponse>(
-      `/projects/${ctx.projectId}/agents/${encodeURIComponent(agent)}/scope`,
+      `/workspaces/${ctx.projectId}/agents/${encodeURIComponent(agent)}/scope`,
       body,
     );
   } catch (err) {
@@ -502,6 +510,38 @@ async function agentsScope(
   return 0;
 }
 
+/**
+ * A built-in agent (My Kortix, slug `mykortix`) has no kortix.yaml block: the
+ * config GET answers `block: null`. Print what it actually holds, never the
+ * block defaults (`secrets all`), and never a "Change it" hint: every write
+ * answers 409 builtin_agent_managed.
+ */
+function printBuiltinAgent(cfg: AgentConfigResponse, json: boolean): number {
+  const key = cfg.builtin ?? 'my_kortix';
+  if (json) {
+    emitJson({
+      agent: cfg.agent,
+      builtin: key,
+      editable: false,
+      secrets: 'none',
+      connectors: [],
+      connectors_required: [],
+      apps: 'none',
+      kortix_permissions: 'as_user',
+    });
+    return 0;
+  }
+  process.stdout.write(
+    `\n  ${C.bold}My Kortix${C.reset} ${C.dim}(${cfg.agent}, built in)${C.reset}\n` +
+      `  ${C.dim}${pad('kortix permissions', 20)}${C.reset} yours, in this workspace\n` +
+      `  ${C.dim}${pad('secrets', 20)}${C.reset} none\n` +
+      `  ${C.dim}${pad('connectors', 20)}${C.reset} none\n` +
+      `  ${C.dim}${pad('apps', 20)}${C.reset} none\n\n` +
+      `  ${C.dim}Kortix maintains its prompt, tools and model. To remove it, delete ${C.reset}builtin_agents.${key}${C.dim} from kortix.yaml or set it to false.${C.reset}\n\n`,
+  );
+  return 0;
+}
+
 /** `--policy-set gmail=read_only` (repeatable) → `{ gmail: 'read_only' }`;
  *  `<slug>=base` → `null`, which the route reads as "back to base rules". */
 export function parsePolicySetFlags(
@@ -527,11 +567,10 @@ function renderPolicySets(map: Record<string, string>, fallback: string): string
 
 // ── config ──────────────────────────────────────────────────────────────────
 
-/** The other file a saved config commits: v2 the agent's `.md`, v3 its `prompt_file` (an inline prompt stays in kortix.yaml). */
-function savedPromptFile(resp: { schema_version?: number; block: AgentConfigBlock }, sent: AgentConfigBlock): string {
-  if (!(sent.behavior ?? sent.opencode)) return '';
-  if ((resp.schema_version ?? 2) >= 3) return resp.block?.file ? ` + ${resp.block.file}` : '';
-  return ' + the agent .md';
+/** The other file a saved config commits: the agent's `prompt_file` (an inline prompt stays in kortix.yaml). */
+function savedPromptFile(resp: { block: AgentConfigBlock }, sent: AgentConfigBlock): string {
+  if (!sent.behavior) return '';
+  return resp.block?.file ? ` + ${resp.block.file}` : '';
 }
 
 /** The keys `PUT /projects/:id/agents/:name/config` accepts (AgentBlockSchema
@@ -539,7 +578,7 @@ function savedPromptFile(resp: { schema_version?: number; block: AgentConfigBloc
 const AGENT_CONFIG_PUT_KEYS = new Set([
   'enabled', 'tools', 'sandbox', 'connectors', 'connectors_required', 'connectors_personal',
   'secrets', 'skills', 'apps', 'kortix_permissions', 'subagents', 'commands', 'extensions',
-  'codemode', 'kortix_cli', 'repository_access', 'workspace', 'file', 'behavior', 'opencode',
+  'codemode', 'kortix_cli', 'repository_access', 'workspace', 'file', 'behavior',
 ]);
 
 /** `a.b.c=value` → set `a.b.c`. The value is JSON when it parses, else a
@@ -575,7 +614,7 @@ async function agentsConfig(
   opts: { file?: string; sets: string[]; json: boolean },
 ): Promise<number> {
   if (!agent) return missing('an agent name');
-  const path = `/projects/${ctx.projectId}/agents/${encodeURIComponent(agent)}/config`;
+  const path = `/workspaces/${ctx.projectId}/agents/${encodeURIComponent(agent)}/config`;
 
   if (!opts.file && opts.sets.length === 0) {
     const cfg = await ctx.client.get<AgentConfigResponse>(path);
@@ -583,9 +622,10 @@ async function agentsConfig(
       emitJson(cfg);
       return 0;
     }
+    if (cfg.builtin) return printBuiltinAgent(cfg, false);
     if (!cfg.editable) {
       process.stdout.write(
-        `  ${C.yellow}!${C.reset}  ${C.dim}kortix_version ${cfg.schema_version} manifest — this block is read-only. Run \`kortix projects upgrade\` to move it to kortix.yaml.${C.reset}\n`,
+        `  ${C.yellow}!${C.reset}  ${C.dim}This block is read-only: the workspace's manifest is not a current kortix.yaml. Run \`kortix validate\` for the fix.${C.reset}\n`,
       );
     }
     process.stdout.write(`${JSON.stringify(cfg.block ?? {}, null, 2)}\n`);
@@ -622,7 +662,7 @@ async function agentsConfig(
     }
   }
 
-  const resp = await ctx.client.put<{ ok: boolean; agent: string; schema_version?: number; block: AgentConfigBlock }>(
+  const resp = await ctx.client.put<{ ok: boolean; agent: string; block: AgentConfigBlock }>(
     path,
     block,
   );

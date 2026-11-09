@@ -41,7 +41,7 @@ Point it at a different backend without a rebuild:
 pnpm --filter @kortix/desktop-electron dev:dev-env    # https://dev.kortix.com
 pnpm --filter @kortix/desktop-electron dev:prod-env   # https://kortix.com
 # or:
-KORTIX_DESKTOP_URL=https://kortix.com/projects pnpm --filter @kortix/desktop-electron dev
+KORTIX_DESKTOP_URL=https://kortix.com/workspaces pnpm --filter @kortix/desktop-electron dev
 ```
 
 At runtime you can also switch via the native menu (the **Kortix** menu: the
@@ -56,10 +56,10 @@ remembered across launches (stored in `userData/frontend_url`).
 the real one.
 
 Launch and **Go ▸ Home** load the instance's site root (`homeUrl()` in
-`src/instance-store.js`), not the saved `/projects` URL. The web middleware
+`src/instance-store.js`), not the saved `/workspaces` URL. The web middleware
 sends a signed-in `/` into the project this profile had open last, from the
 owner-scoped `kortix_last_project` cookie — the same as `kortix.com` in a
-browser. With no remembered project it lands on the `/projects/start` door. A
+browser. With no remembered project it lands on the `/workspaces/start` door. A
 saved URL with any other path loads as saved.
 
 **Go ▸ Copy Current URL** (⌘/Ctrl+L) copies the address the window is on — the
@@ -112,7 +112,7 @@ first-launch marker, and URL precedence are `src/instance-store.js`.
   `dev.kortix.com` for dev builds). Nothing is written to `frontend_url`, so the
   app keeps following the baked default.
 - **Self-hosted** — the URL the user types. A bare host gets `https://` (a bare
-  `localhost` gets `http://`), a `/` path becomes `/projects`, and query and
+  `localhost` gets `http://`), a `/` path becomes `/workspaces`, and query and
   fragment are dropped. URLs with a username or password are rejected. The app
   sends `HEAD` with no credentials and an 8 s timeout; any HTTP status counts as
   reachable. A network error shows inline, with **Continue Anyway** for hosts
@@ -192,7 +192,7 @@ Enter starts a new session with that prompt. The same bar opens from
 - **Where the session starts.** The project the app window shows, else the
   project this profile opened last (the `kortix_last_project` cookie). The bar
   reads "New session"; its tooltip names the project. With no project known, the prompt
-  opens `/projects/start?q=…`: it fills the composer there and does not send.
+  opens `/workspaces/start?q=…`: it fills the composer there and does not send.
 - **Send to a recent session.** The picker on the right of the bar is a native
   menu: "New session", then the person's 5 most recent root sessions there
   (the sidebar's list, title and status dot, plus last activity). A pick stays
@@ -206,7 +206,7 @@ Enter starts a new session with that prompt. The same bar opens from
   main process, brings the app window forward, and pokes it
   (`kortix:quick-entry`, no text). The web app pulls the prompt once with the
   sender-gated `quick_entry_take` command and submits it from the project home
-  composer: the same agent, model, billing gate and warm session as a typed
+  composer: the same agent, model and billing gate as a typed
   message (`apps/web/src/components/desktop/desktop-quick-entry.tsx`). A
   window that is still loading, or signed out, takes it when the app mounts.
   An untaken prompt expires after 10 minutes.
@@ -441,7 +441,7 @@ section "Windows signing setup".
 
 The installed app self-updates via **electron-updater**, reading the `vX.Y.Z`
 **GitHub Releases** as its feed (the `publish: github` block in
-`electron-builder.yml` bakes an `app-update.yml` pointing at `kortix-ai/suna`).
+`electron-builder.yml` bakes an `app-update.yml` pointing at `kortix-ai/CompanyOS`).
 
 Flow (`src/updater.js`, wired from `src/main.js`):
 
@@ -460,6 +460,30 @@ Squirrel.Mac installs from. The dmg/exe/AppImage is the first-install download;
 the zip + yml are what the updater consumes. CI (`deploy-prod.yml` for prod,
 `desktop.yml` for dev and staging) builds the mac zip target and uploads all of
 these to the release.
+
+### A release ships a desktop update only when the desktop changed
+
+The desktop version is the release version of the last release that **built**
+the app, not of every release. `deploy-prod.yml` `desktop-plan` computes the
+desktop fingerprint (`scripts/release-fingerprint.mjs`) and compares it with
+the `DESKTOP-FINGERPRINT` asset of the latest `vX.Y.Z` release:
+
+| Fingerprint | Release gets | Installed apps |
+|---|---|---|
+| equal | the previous installers, `latest*.yml` and `DESKTOP-SHA256SUMS`, copied byte for byte | keep their version, no update prompt |
+| different, missing, or the previous set is partial | new signed installers stamped with this release's version | update and prompt "Restart now" |
+
+The fingerprint covers every tracked file here and in `packages/agent-tunnel`
+except tests and READMEs, the dependency closure both resolve in
+`pnpm-lock.yaml` (`@types/*` excluded), the `build-desktop` job, and `.npmrc`.
+A lockfile change elsewhere in the monorepo does not change it. Replayed over
+v0.14.0–v0.14.12, 6 of the 12 releases would have shipped no desktop update.
+
+Secrets baked at build time (the Sentry DSN, the signing certificates) are
+outside the fingerprint. After rotating one, force a build:
+`gh workflow run deploy-prod.yml --ref prod -f rebuild_desktop=true`. Print the
+fingerprint and its parts locally with
+`bun apps/desktop-electron/scripts/release-fingerprint.mjs --explain`.
 
 Each deployment's `/download` hands out the build that opens it. The web app keys
 the channel on its backend host (`deploymentChannel()` in

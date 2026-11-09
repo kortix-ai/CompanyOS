@@ -5,6 +5,252 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added: the Workspace surface (additive; nothing removed)
+A workspace is one account and its one project, like a Slack workspace. `workspace_id` is the
+project id. New names:
+- Types `Workspace`, `WorkspaceSummary`, `WorkspaceRole` (`owner | admin | manager | member`),
+  `WorkspaceSettings`, `WorkspaceUpdateInput`, `WorkspaceMember`, `WorkspaceInvitation`,
+  `InviteWorkspaceMemberInput`, `CreateWorkspaceTokenInput`, `WorkspaceProjectList`,
+  `WorkspaceHandle`.
+- `listWorkspaces`, `getWorkspace`, `updateWorkspace`; members (`listWorkspaceMembers`,
+  `inviteWorkspaceMember`, `updateWorkspaceMemberRole`, `removeWorkspaceMember`,
+  `listWorkspaceInvites`, `cancelWorkspaceInvite`, `resendWorkspaceInvite`, `leaveWorkspace`);
+  tokens (`listWorkspaceTokens`, `createWorkspaceToken`, `revokeWorkspaceToken`); billing
+  (`getWorkspaceBillingState`); IAM (`listWorkspaceAssignments`, `createWorkspaceAssignment`,
+  `revokeWorkspaceAssignment`, `listWorkspaceRoles`, `listWorkspaceGroups`,
+  `probeWorkspacePermission`, `probeWorkspacePermissions`); `resolveWorkspaceAccountId`; pure
+  helpers `buildWorkspaceSummaries`, `compareWorkspacesByRecent`, `workspaceFromProject`,
+  `workspaceRole`.
+- Facade `kortix.workspaces.{list,get,update,create}` and `kortix.workspace(id)`.
+- `@kortix/sdk/react`: `useWorkspaces`, `useWorkspace`, `workspacesState`,
+  `workspaceQueryOptions`; key `qk.project.workspace(id)`.
+- Optional `workspace_id` on `KortixProject`, `ProjectSession`, `KortixAccount`,
+  `AccountDetail`, `MyAccountInvite`.
+- Every `Workspace*` function calls the canonical `/v1/workspaces/:workspaceId/*` route with
+  the workspace id: one request per call, no account lookup first. `getWorkspace` reads the
+  `workspace` settings block and the caller's `account_role` from `GET /v1/workspaces/:id`.
+  `getWorkspaceBillingState` passes the workspace id as `account_id`. These functions need an
+  API that serves `/v1/workspaces` (this release); the older `Project*`/`Account*` functions
+  keep calling `/v1/projects` and `/v1/accounts`, which stay permanently.
+
+### Deprecated (kept permanently)
+`updateProject`, `updateAccountName`, `listAccountMembers`, `inviteAccountMember`,
+`removeAccountMember`, `updateAccountMemberRole`, `listAccountInvites`, `cancelAccountInvite`,
+`resendAccountInvite`, `leaveAccount`, `listAccountTokens`, `createAccountToken` and
+`revokeAccountToken` name their workspace equivalent. They are never removed.
+
+### Changed (notifications are on for every project)
+- The `notification_center` project flag graduated (2026-11-06): every project has the
+  notification inbox, push, session watch and alerts. `FeatureFlagKey` keeps
+  `notification_center`, marked `@deprecated`; `FEATURE_FLAG_KEYS` no longer lists it, and
+  `useFeatureFlag(projectId, 'notification_center')` reports `enabled: true`.
+  `KortixProject.experimental.notification_center` is optional now, like `meta_agent`.
+  Removed in the next major.
+- `useSession({ presencePageExit })` defaults to `true`: a closing tab ends its presence lease
+  at once, so a notification that arrives a second later reaches the person. Pass `false` to
+  keep the lease until it expires.
+- `DEFAULT_NOTIFICATION_PREFERENCES`: email is off by default for `turn_done`, `turn_error`,
+  `question`, `permission`, `shared`, `automation_recovered` and `capture_device_recovered`;
+  a person turns it on per kind. `automation_failed`, `capture_device_down` and
+  `artifact_comment` keep email on.
+
+### Added (harness-neutral name)
+- `harnessVersion` on the runtime connection store (`useSandboxConnectionStore`,
+  `useRuntimeConnectionStore`): the session runtime's harness version from `/kortix/health`,
+  `null` until a probe answers. `openCodeVersion` holds the same value and is `@deprecated`.
+  Removed in the next major.
+
+### Changed (OpenCode leftovers)
+- The runtime query keys sit under `['runtime', …]`, not `['opencode', …]`. Build a key with
+  `runtimeKeys` and drop them all with `resetRuntimeQueries`: a hand-typed `['opencode', …]`
+  key no longer matches anything.
+- No daemon or API answers "opencode not ready" since OpenCode left the box (2026-10-30).
+  `RUNTIME_NOT_READY_MARKERS` lists `runtime_not_ready` and `sandbox runtime not ready` only,
+  and `isSandboxNotReadyError`, `isRuntimeNotReadyResponse` and `isRuntimeStartingError` no
+  longer match the OpenCode phrases. `useCreateRuntimeSession` retries the daemon's current
+  not-ready answer.
+- The model picks persist in `localStorage` under `kortix-model-store-v1`, not
+  `opencode-model-store-v1`. The store reads a value saved under the old key once, writes it
+  under the new key and removes the old key. `resetIdentityState` removes both keys.
+- The message-id clock exports (`WIRE_ID_TIME_SCALE`, `WIRE_ID_TIME_MASK`,
+  `WIRE_ID_CLOCK_TOLERANCE`, `WIRE_ID_BACKDATE_MS`, `wireIdClock`, `wireIdClockAt`,
+  `wireIdClockDelta`, `maxWireIdClock`, `isWireIdAheadOf`, `newestWireIdClock`,
+  `mintWireMessageIdAbove`, `MintWireMessageIdAboveInput`, `MintedWireMessageId`) are not
+  deprecated. Their `@deprecated` tag ("Removed with OpenCode support") was wrong: the pi
+  harness mints its reply ids with `mintWireMessageIdAbove` and apps/api places prompts with
+  the clock. They are the Kortix message id format and stay.
+- The API no longer sends `ProjectConfigSummary.open_code_raw` and
+  `ProjectConfigSummary.open_code_default_agent`. Both fields are optional now, so the type
+  says what arrives. `getProjectDetail`, `selectableProjectAgents`,
+  `projectConfigAgentsToRuntimeAgents` and `useSession().defaultAgent` read `default_agent`
+  only: they no longer fall back to `open_code_default_agent`.
+- The npm `description` no longer names OpenCode.
+
+### Deprecated (OpenCode-era fields and names)
+Each is removed in the next major.
+- `LEGACY_RUNTIME_AUTH_JSON_SECRET_NAME` (`OPENCODE_AUTH_JSON`): no sign-in writes the secret,
+  and the API no longer reads it, counts it as a ChatGPT login or deletes it on disconnect.
+  The SDK connection checks still count it.
+- `ProjectConfigSummary.open_code_raw` and `ProjectConfigSummary.open_code_default_agent`
+  (read `default_agent`): the API no longer sends them.
+- The `'opencode'` member of `ProjectConfigSummary.agent_discovery`: no API sends it. The API
+  sends `'declarative'` for every project, and `null` in a response filtered by the caller's
+  `project.agent.read` access.
+- `KortixMasterProject.opencode_id`: no daemon sends it.
+- `SessionHealthResponse.opencode` and `AgentConfigBlock.opencode` now name the major that
+  removes them.
+- `useRuntimeConfig`, `configKeys`, `useRuntimeSessionTodo`, `isShellMode` and
+  `getShellModePart` serve only a daemon built before 2026-10-30. Their tags said "Removed with
+  OpenCode support"; they now say "Removed in the next major."
+
+### Removed (breaking: the OpenCode-era surface, 0.15.0)
+Every session runs pi; OpenCode is gone from the box. This release removes the names that
+only served OpenCode and the aliases kept "until the next major". No first-party host imports
+any of them (`rg -w <name> apps packages -g '!packages/sdk/**'`). The public surface lost 25
+entry points, 152 value names and 241 type names, and gained none.
+- Subpaths: `./config`, `./auth`, `./api-client`, `./projects-client`, `./feature-flags`,
+  `./fresh-sessions`, `./instance-routes`, `./platform-client`, `./event-stream`, `./files`,
+  `./session`, `./session/url`, `./turns`, `./opencode-client`, `./opencode-errors` (import the
+  same names from the root); `./sync-store`, `./server-store`, `./sandbox-connection-store`,
+  `./opencode-pending-store`, `./idb-sync-cache` and `./internal/sync-store`,
+  `./internal/server-store`, `./internal/sandbox-connection-store`,
+  `./internal/opencode-pending-store` (no replacement; read session state with `useSession`);
+  `./message-queue` and its root names (`useSession().send`).
+- Every name that contains `OpenCode` (66 names: `useOpenCode*`, `opencodeKeys`,
+  `OpencodeClient`, `OpenCodeEvent`, `formatOpenCodeRuntimeError`, …). Use the `Runtime` name.
+  `src/no-opencode-surface.test.ts` fails when a public name says "opencode".
+- The OpenCode-only hooks and calls: the MCP hooks, `useShareSession`, `useUnshareSession`,
+  `useUpdatePart`, `useDeletePart`, `useRuntimeTools`, `useUpdateRuntimeSession`,
+  `useRuntimeSessionDiff`, `useInitSession`, `useSendRuntimeMessage`, `useRuntimeAgent`,
+  `useUpdateRuntimeConfig`, `clearConfigOverrides`, `getRuntimeProviderAuthMethods`,
+  `authorizeRuntimeProvider`, `completeRuntimeProviderOAuth`, `setRuntimeProviderApiKey`,
+  `getRuntimeConfig`, `updateRuntimeConfig`, `refreshRuntimeConfiguration`, `logRuntimeEvent`,
+  `RuntimeConfigIssue`, `RuntimeConfigInvalidError`, `getRuntimeConfigInvalidError`,
+  `isRuntimeConfigInvalidError`, `NoCompactionModelError`, `resolveHiddenAutoModel`,
+  `clearProjectProviderCache`. `formatRuntimeError` no longer reports OpenCode's config error.
+- The retired admin hooks (`use-admin-analytics`, `use-admin-feedback`, `use-system-status`,
+  `use-admin-billing`, the per-sandbox admin hooks and their types, `useAdminAccountSandboxes`,
+  `useAdminSetManagedModels`, `useAdminSetEnterpriseDemo`, `useAdminSetEnterpriseEntitled`) and
+  the tunnel permission and audit hooks (`useCreateTunnelConnection`, `useTunnelPermissions`, …).
+- The OpenCode-era field aliases. Each one had a neutral twin with the same value; only the
+  twin remains. `src/no-opencode-fields.test.ts` fails to typecheck while a listed type keeps one.
+  - `opencode_session_id` → `runtime_session_id` on `ProjectSession`, `SessionStartResult`,
+    `SessionTurn`, `SessionTranscript`, `SessionTranscriptSyncEnvelope`,
+    `PublicSessionTranscript`, `AuditEvent` and the session-open runtime `identity`;
+  - `opencode_sessions` → `runtime_sessions` on `ProjectSession`;
+  - `opencode_version` → `harness_version` on the session-open runtime `identity`;
+  - `opencode_model` → `model` on `CreateProjectSessionInput` and `SessionModelChangeResult`;
+  - `opencode_reload` → `runtime_reload` on `SessionReloadResult`;
+  - `opencodeModel` → `model` on `ChannelBinding` and `UpdateChannelBindingInput`.
+- `ProjectSession.metadata` keys. The API writes the session model under `model`,
+  `model_source`, `model_picked_at`, `model_restored`, `model_repointed_from` and
+  `model_fallback_{from,from_source,reason,at,until}`, and the runtime conversation list under
+  `runtime_sessions`; a migration renamed the `opencode_model*` and `opencode_sessions` keys of
+  every stored session. `sessionModelFallback`, `sessionPickStands` and `resolveComposerModel`
+  read the new keys.
+
+### Deprecated (project detail file list)
+- `ProjectDetail.files` and `ProjectDetail.file_count` are marked `@deprecated`. `files` holds
+  only the first 300 repository paths, so on a large repository it misses files. Use
+  `listProjectFiles(projectId, { path })` for the files of one folder. Both fields stay on the
+  wire and in the type until the next major.
+- `GET /projects/:id/detail` no longer sends `config.manifest`, the parsed `kortix.yaml`. It was
+  never part of `ProjectConfigSummary`. `config.manifest_raw` still carries the file's text.
+
+### Deprecated (warm sessions removed)
+- Warm sessions were removed from the platform. The API answers `410 ENDPOINT_RETIRED` to
+  `POST /projects/:id/sessions/warm` and `/warm/claim`, and sends `experimental.warm_sessions: false`
+  for every project.
+- `ensureWarmProjectSession` and `claimWarmProjectSession` (and the facade's
+  `sessions.ensureWarm` / `sessions.claimWarm`) now reject with `ENDPOINT_RETIRED` and send no
+  request. Create the session with `createProjectSession`.
+- `createWarmSessionPool` returns a pool that never holds a session and never calls its client:
+  `take` returns `null` and `prime` returns `false`, so a host always runs its ordinary create.
+- `'warm_sessions'` stays in the `FeatureFlagKey` union, marked `@deprecated`, and leaves
+  `FEATURE_FLAG_KEYS`. The warm-pool types stay, marked `@deprecated`. No exported name is
+  removed; all of them go in the next major.
+- The session-title refresh no longer waits for an in-flight `/start` before it refetches the
+  session lists.
+
+### Added (volume storage billing)
+- `ProjectCostRow.storage_cost` / `storage_gib_hours`, `CostSummaryTotals.storage_cost` /
+  `storage_gib_hours`, `CostSeriesPoint.storage_cost`: volume storage (Files folders and session
+  /workspace volumes) charged in the window, included in `total_cost`. Optional: absent from an
+  older API.
+- `usage_this_period.storage_usd` on the account state. Optional.
+- `ADMIN_OVERRIDE_KEYS` and `ADMIN_ENTITLEMENT_OVERRIDE_KEYS` add `'storageBilling'`: switch storage
+  charges off (or on) for one account. Additive.
+
+### Changed (session notifications)
+- `onNotify`: `question` and `permission` events carry `projectId` when the SDK knows the session's
+  project, and `task-complete` and `session-error` now carry it from the live stream too. Additive.
+- `useSessionStreamConnected` answers `false` on a `channels=control` connection, which serves the
+  queue only. The polls that stand down on it read again there, and a turn-end watch announces the
+  end of a turn from `GET …/turn`.
+
+### Added (built-in skills)
+- `getBuiltinSkill(name)` and the `BuiltinSkill` / `BuiltinSkillReference` types: one skill Kortix
+  ships (`GET /v1/skills/:name`), with its description, the full SKILL.md body, the feature flag
+  that gates it, and its reference files. A built-in skill is not a file in the project's repo.
+  `getBuiltinSkill(name, { full: true })` also inlines each reference file's `content`.
+
+### Added (project catalog, project mounts)
+- `getProjectCapabilities(projectId)` and the `ProjectCapabilities` type: every tool, skill and
+  extension any agent of the project can be given (`GET /projects/:id/capabilities`).
+- `listProjectMounts(driveId)`, `projectMountsQueryOptions` and `useProjectMounts`: the Files folders
+  every new session of the project mounts (`GET /drives/:driveId/mounts`).
+- `FeatureFlagView.wip`: the flag is work in progress and not recommended yet. Optional.
+
+### Added (agent mounts)
+- `listAgentMounts(driveId, agentName)`, `agentMountsQueryOptions` and `useAgentMounts`, with the
+  `AgentMount` and `AgentMountPlan` types: the Files folders a new session of an agent mounts, at
+  which `/drives/...` path, read-only or not, and through the agent's own grant or the project's
+  (`GET /drives/:driveId/agents/:agentName/mounts`).
+
+### Added (spaces)
+- Spaces are channels: `kortix.yaml` `spaces.<slug>` (label, description, order, `header`, `tabs`) and
+  `agents.<name>.space`. `ProjectConfigSummary.spaces`, each agent's `space`, and `AgentConfigBlock.space`.
+- Types `ProjectSpace`, `SpaceTab`, `SpaceTabType`, `SpaceBlock`, `SpaceHeaderItem`, `SpaceGroup` and
+  `ResourceBinding`; helpers `listSpaces`, `groupBySpace`, `bindingSpace`, `agentsInSpace`, `spaceTabs`,
+  `spaceTabKey`, `spaceHeader`, and the constants `PROJECT_WIDE_SPACE`, `DEFAULT_SPACE_TABS`,
+  `DEFAULT_SPACE_HEADER`.
+
+### Added (portrait image grids)
+- `ImageGenGrid.strip`: `true` when the run's first call asks for portrait images (taller than
+  wide). Every row of a strip is its tiles side by side, up to four, the rows as even as they split
+  (5 = 3+2, 7 = 4+3, 10 = 4+3+3), and `imageGenGrid(views).rows` follows that split. Before, a
+  portrait run took the bento rows: the large tile of a row of three was about 1.19 × the grid's
+  width tall, and a run of ten 9:16 images took about four screens.
+- `ImageGenView.error.limit`: `'turn'` or `'session'` when the tool's own image cap refused the
+  whole call before any request (`Image limit for this turn reached …`). `imageGenGrid` gives such
+  a call no slot, and a host draws nothing for it. Before, each refused prompt took a grid slot that
+  showed the refusal text.
+
+### Changed (no v1 transcript reads, P8.3)
+- No hook and no SDK read sends `GET …/transcript` any more. `useSession`, `useSessionSync`
+  (root, `savedChild`, turn end, older pages), `readSavedSessionCopy` and
+  `loadSessionExportMessages` read only the session log (`GET …/log`). A 404 with
+  `code: 'session_log_missing'` keeps the session on the log with nothing in it. A failed read (a
+  5xx, the network, a 404 without a code, an invalid page) keeps the copy on screen and re-reads
+  the page after 2 s, 10 s and 30 s, or after the API's `Retry-After` (at most 60 s). Without a log
+  in the store, `useSession().hasOlder` / `loadOlder` page the runtime. Before, a 404 without a
+  code or a failed read fell back to the v1 saved copy, and `useSessionSync` re-read the v1 copy
+  3 s after each turn end.
+- `readSavedSessionCopy` returns `envelope: null` always; `SavedSessionCopy.envelope` is
+  deprecated.
+- `loadSessionExportMessages` throws when the log answers no page and the runtime has no
+  messages, instead of reading the v1 copy.
+- The deprecated v1 reads (`getSessionTranscript`, `getSessionTranscriptSync`, `transcript`,
+  `transcriptSync`) stay exported for older code; nothing in the SDK calls them.
+
+### Added (channel access for any chat platform)
+- `listChannelUsers`, `allowChannelUser`, `removeChannelUser`, `dismissChannelAccessRequest` and
+  `getChannelUserPhoto`: the allowed users and access requests of a chat platform's bot, keyed by
+  `platform: ChannelAccessPlatform` (`'telegram'` today). They call the same routes as the Telegram
+  functions, which keep their signatures and error texts.
+- The types `ChannelAccessPlatform`, `ChannelUser`, `ChannelAccessRequest`, `ChannelUsers` and
+  `ChannelAccessList` (`allowed_user_ids?`, `access_request_count?`: what an edit returns).
+
 ### Added (image generation card)
 - `imageGenView(call, live?)` and the `ImageGenView` / `ImageGenPhase` types: what an `image_gen`
   card draws from its `ToolCallBlock`, for any image model and for one to four images per call.
@@ -96,6 +342,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `getPublicResponse` and the `PublicResponse` type: the anonymous read of a shared response
   (`GET /public/responses/:token`); `prompt` is null unless the sharer included it. Throws `HostBoundaryError` with `status` 404 or 410.
 
+### Changed (generative UI is always on)
+- `FeatureFlagKey` `'genui'` is deprecated and no longer a flag: absent from `FEATURE_FLAG_KEYS`
+  and from the feature-flag catalog. The API sends `experimental.genui: true` for every project,
+  and `useFeatureFlag(id, 'genui')` reports `true`. `KortixProject.experimental.genui` is optional
+  in the type.
+
 ### Changed (pi runs every new session; OpenCode is sunset)
 - `FeatureFlagKey` `'pi_harness'` is deprecated and no longer a flag: absent from `FEATURE_FLAG_KEYS`
   and from the feature-flag catalog. The API sends `experimental.pi_harness: true` for every
@@ -115,9 +367,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the feature-flag catalog. The API sends `experimental.session_log: true` for every project, so
   `useFeatureFlag(id, 'session_log')` reports `true` once the project detail loads, as before.
   `KortixProject.experimental.session_log` is optional in the type.
-- `GET …/sessions/:id/log` answers `503` `{ code: 'session_log_converting' }` with `Retry-After: 60`
-  for an old session whose history is still only in the v1 mirror and over the conversion size cap;
-  retry after the delay.
+- `GET …/sessions/:id/log` no longer answers `503` `{ code: 'session_log_converting' }`: the API
+  stopped converting the v1 mirror on a read (Session Log Plan P8.2, Release B2). A session with no
+  stored log answers `404` `{ code: 'session_log_missing' }`. A client that still retries a `503`
+  after `Retry-After` keeps working.
 
 ### Added (custom LLM providers)
 - `listCustomLlmProviders(projectId)`, `putCustomLlmProvider(projectId, providerId, input)` and
@@ -307,9 +560,6 @@ members. 1 credit = $0.01.
   inline and which it downloads. The smallest fill the 1 MiB inline budget;
   only the rest download. Before, a host could only download every text of a
   turn over 1 MiB in all.
-- `hasRuntimeConfirmedMessage(sessionID, messageID)`
-  (`@kortix/sdk/internal/sync-store`): the store holds the message from a
-  runtime read or a live event, not only from a saved copy.
 
 ### Fixed (session-log follow-ups)
 - `useSessionSync` stops offering the saved copy's older pages once the
@@ -961,74 +1211,11 @@ members. 1 credit = $0.01.
 
 ### Removed in the next major
 
-The removal list for the next breaking release. No first-party host
-(`apps/*`, `packages/*` other than this one) imports any name or subpath
-below: check again with `rg -w <name> apps packages -g '!packages/sdk/**'`
-before the cut. Each name carries `@deprecated <replacement>. Removed in the
-next major.`, and `src/deprecated-exports.test.ts` fails when a tag is
-missing. Every other entry under **Deprecated** above that says "Removed in
-the next major" goes in the same release.
-
-Subpaths. For each, delete the `exports` and `publishConfig.exports` keys in
-`package.json`, its row in `SUBPATH_TIERS` (`src/index.isomorphic.test.ts`),
-its entry in `NOT_ROOT_REACHABLE` (`src/root-canonical.test.ts`) when it has
-one, and its file.
-
-| Subpath | Replacement | File |
-|---|---|---|
-| `./opencode-client`, `./config`, `./auth`, `./api-client`, `./projects-client`, `./feature-flags`, `./fresh-sessions`, `./instance-routes`, `./opencode-errors`, `./platform-client`, `./event-stream`, `./files`, `./session`, `./session/url`, `./turns` | `@kortix/sdk` (the same names) | `src/deprecated/<name>.ts` (`./session/url`: `session-url.ts`) |
-| `./idb-sync-cache` | `@kortix/sdk/internal/idb-sync-cache` | `src/deprecated/idb-sync-cache.ts` |
-| `./sync-store`, `./server-store`, `./sandbox-connection-store`, `./opencode-pending-store` | none; read session state with `useSession` | `src/deprecated/<name>.ts` |
-| `./internal/sync-store`, `./internal/server-store`, `./internal/sandbox-connection-store`, `./internal/opencode-pending-store` | none; read session state with `useSession` | `src/internal/<name>.ts` (the stores in `src/browser/stores/` stay) |
-| `./message-queue` | `useSession().send` (the server orders prompts) | `src/core/session/message-queue.ts` and its test |
-
-Names.
-
-| Name | Replacement | File |
-|---|---|---|
-| `claimNext`, `completeInFlight`, `createSessionQueue`, `editQueued`, `enqueue`, `failInFlight`, `removeQueued`, `reorderQueued`, `retryFailed`, `QueuedMessage`, `QueuedMessageInput`, `SessionQueue` (root re-export block in `src/index.ts`) | `useSession().send` | `src/core/session/message-queue.ts` |
-| every export (28 hooks, 34 types) | none: the API removed the route | `src/react/use-admin-analytics.ts` (whole file) |
-| every export (8 hooks, `useRefreshFeedbackData`, 10 types) | none: the API removed the route | `src/react/use-admin-feedback.ts` (whole file) |
-| every export (4 hooks, 5 types) | none: the API removed the route | `src/react/use-system-status.ts` (whole file) |
-| `useUserBillingSummary`, `useAdminUserTransactions`, `useAdjustCredits`, `useProcessRefund` | none: the API removed the route | `src/react/use-admin-billing.ts` (whole file) |
-| `useAdminSandboxDetail`, `useAdminSandboxHealth`, `useAdminSandboxHealthBatch`, `useAdminSandboxExec`, `useAdminSandboxAction`, `useAdminSandboxRepair`, `useDeleteAdminSandbox`, `fetchAdminSandboxProxyToken`, `AdminSandboxDetail`, `ProviderMachineDetail`, `AdminInstanceLayerStatus`, `AdminInstanceLayerAction`, `AdminInstanceLayerHealth`, `AdminSandboxHealth`, `AdminSandboxHealthBatchResponse`, `ExecResult`, `ProxyTokenResult` | none: the API removed the route | `src/react/use-admin-sandboxes.ts` (`useAdminSandboxes` stays) |
-| `useAdminAccountSandboxes`, `AdminAccountSandbox` | none: the API removed the route | `src/react/use-admin-accounts.ts` |
-| `useCreateTunnelConnection`, `useTunnelPermissions`, `useGrantTunnelPermission`, `useRevokeTunnelPermission`, `useTunnelPermissionRequests`, `useApprovePermissionRequest`, `useDenyPermissionRequest`, `useTunnelAuditLogs`, `TunnelPermission`, `TunnelPermissionRequest`, `TunnelAuditLog`, `AuditLogPage`, `TunnelConnectionCreateResponse` | device auth; a connector's `require_approval` policy | `src/react/use-tunnel.ts` |
-| `useRetiredQuery`, `useRetiredMutation` (not exported) | none: no caller remains | `src/react/retired-endpoint.ts` (whole file) |
-| `useOpenCodeRuntimeReady` | `useRuntimeReady` | `src/react/use-opencode-sessions/keys.ts` |
-| `useOpenCodeSessions`, `useOpenCodeSession`, `useCreateOpenCodeSession`, `useOpenCodeSessionTodo`, `useSummarizeOpenCodeSession` | `useRuntimeSessions`, `useRuntimeSession`, `useCreateRuntimeSession`, `useRuntimeSessionTodo`, `useSummarizeRuntimeSession` | `src/react/use-opencode-sessions/sessions.ts` |
-| `useUpdateRuntimeSession`, `useUpdateOpenCodeSession` | `updateProjectSession` (`name`) | `src/react/use-opencode-sessions/sessions.ts` |
-| `useRuntimeSessionDiff`, `useOpenCodeSessionDiff` | `useRuntimeVcsDiff` | `src/react/use-opencode-sessions/sessions.ts` |
-| `useInitSession` | `useExecuteRuntimeCommand` with `command: 'init'` | `src/react/use-opencode-sessions/sessions.ts` |
-| `useDeleteOpenCodeSession` | `deleteProjectSession` | `src/react/use-opencode-sessions/sessions.ts` |
-| `useOpenCodeMessages` | `useRuntimeMessages` | `src/react/use-opencode-sessions/messages.ts` |
-| `useSendRuntimeMessage`, `useSendOpenCodeMessage` | `useSession().send` | `src/react/use-opencode-sessions/messages.ts` |
-| `useAbortOpenCodeSession` | `useAbortRuntimeSession` | `src/react/use-opencode-sessions/messages.ts` |
-| `useOpenCodeAgents`, `useRuntimeAgent`, `useOpenCodeAgent` | `useRuntimeAgents` (select by `name`) | `src/react/use-opencode-sessions/agents.ts` |
-| `useRuntimeTools`, `useOpenCodeTools`, `useOpenCodeToolIds`, `useOpenCodeSkills` | none: OpenCode-only routes | `src/react/use-opencode-sessions/tools.ts` |
-| `useOpenCodeProjects` | none: OpenCode-only route | `src/react/use-opencode-sessions/projects.ts` |
-| `useOpenCodeCurrentProject`, `useOpenCodePathInfo` | `useRuntimeCurrentProject`, `useRuntimePathInfo` | `src/react/use-opencode-sessions/projects.ts` |
-| `useOpenCodeCommands`, `useExecuteOpenCodeCommand` | `useRuntimeCommands`, `useExecuteRuntimeCommand` | `src/react/use-opencode-sessions/commands.ts` |
-| `useOpenCodeProviders` | `useRuntimeProviders` | `src/react/use-opencode-sessions/providers.ts` |
-| `useShareSession`, `useUnshareSession` | none: OpenCode-only routes | `src/react/use-opencode-sessions/sharing.ts` (whole file) |
-| `useUpdatePart`, `useDeletePart` | none: OpenCode-only routes | `src/react/use-opencode-sessions/parts.ts` (whole file) |
-| `useOpenCodeVcsDiff` | `useRuntimeVcsDiff` | `src/react/use-opencode-sessions/vcs.ts` |
-
-Also in the same change: for a whole file, delete its `export *` line in
-`src/react/index.ts` or `src/react/use-opencode-sessions/index.ts`; delete the
-lists above from
-`src/deprecated-exports.test.ts`; re-record `src/public-surface.snapshot.json`
-and `src/public-type-surface.snapshot.json` and confirm the diff only removes
-these names; drop the `@kortix/sdk/internal/server-store` entry from
-`apps/web/eslint.config.mjs`; drop the `@kortix/sdk/turns` note from
-`apps/web/content/docs/sdk/reference.mdx`. `apps/web/scripts/split-tool-renderers.ts`
-writes `@kortix/sdk/internal/sync-store` and `useOpenCodeMessages` into the
-files it generates; it reads a `.bak` file that no longer exists, so nothing
-runs it. Comments in `apps/web` and `apps/api` still name `useOpenCodeAgents`,
-`useOpenCodeCommands`, `useOpenCodeMessages`, `useSummarizeOpenCodeSession`
-and `useOpenCodeRuntimeReady`; they compile either way.
-
-The 88 `V2Event*` type aliases are already gone (see **Removed** below).
+Done in **Removed (breaking: the OpenCode-era surface, 0.15.0)** at the top. Still deprecated,
+because a first-party host calls them: the kortix-master client and hooks (`apps/mobile`), the
+public transcript-share names (`findActiveTranscriptShare`, `apps/mobile`), the message-id clock
+helpers (`apps/api`, kortixd), `useRuntimeConfig` and `useRuntimeSessionTodo` (`packages/ui`,
+`apps/mobile`), and the shell-mode helpers (`packages/ui`).
 
 ### Fixed
 - A session stream's `question.asked`, `question.replied` and

@@ -12,14 +12,15 @@
  *
  * So this is the in-flow equivalent, built from the same parts the modal picker
  * uses — `ui/List` for navigation and windowing, `filterItems` for the query —
- * and it reads like opencode's own slash menu: a bordered block that grows
- * upward out of the input.
+ * and it reads as a slash menu: a bordered block that grows upward out of the
+ * input.
  *
  * `headerIds` marks rows that are section titles (the model picker's provider
  * groups). They render dim, `j`/`k` skip over them, and Enter on one does
  * nothing — a group name is a label, never a choice.
  */
 
+import type { KeyEvent } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -34,6 +35,13 @@ export interface InlinePickerProps {
   headerIds?: ReadonlySet<string>;
   /** The row to start on. Falls back to the first choice. */
   initialId?: string | null;
+  /** Start with this filter typed (`/sessions fix` opens filtered to "fix"). */
+  initialQuery?: string;
+  /**
+   * Letter → row id. Set, the list has no filter: a letter picks its row
+   * (a confirm's `y` / `n`). Unset, letters filter.
+   */
+  shortcuts?: Readonly<Record<string, string>>;
   /** Enter on a choice. The picker does not close itself — the caller decides. */
   onPick: (item: ListItem) => void;
   onClose: () => void;
@@ -42,6 +50,11 @@ export interface InlinePickerProps {
   /** Visible rows, excluding the border, the filter line and the rule. */
   maxRows?: number;
   hint?: string;
+  /**
+   * A row action key (`Tab`, `Ctrl+Y`) on the selected choice, read before the
+   * filter. Return true when the key was the caller's.
+   */
+  onKey?: (key: KeyEvent, item: ListItem) => boolean;
 }
 
 /** The nearest selectable row at or after `from`, searching in `step`. */
@@ -70,13 +83,16 @@ export function InlinePicker({
   items,
   headerIds = EMPTY_HEADERS,
   initialId = null,
+  initialQuery = '',
+  shortcuts,
   onPick,
   onClose,
   width,
   maxRows = 8,
   hint = 'Enter pick · Esc close',
+  onKey,
 }: InlinePickerProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const filtered = useMemo(() => {
     const matched = filterItems(items, query);
     if (!query.trim()) return matched;
@@ -126,6 +142,11 @@ export function InlinePicker({
       key.preventDefault();
       return move(1);
     }
+    const selected = filtered[index];
+    if (onKey && selected && !headerIds.has(selected.id) && onKey(key, selected)) {
+      key.preventDefault();
+      return;
+    }
     if (key.name === 'return') {
       key.preventDefault();
       const item = filtered[index];
@@ -135,6 +156,15 @@ export function InlinePicker({
     if (key.name === 'backspace') {
       key.preventDefault();
       setQuery((value) => value.slice(0, -1));
+      return;
+    }
+    if (shortcuts) {
+      const target = key.sequence ? shortcuts[key.sequence.toLowerCase()] : undefined;
+      const item = target ? items.find((entry) => entry.id === target) : undefined;
+      if (item) {
+        key.preventDefault();
+        onPick(item);
+      }
       return;
     }
     // A printable character with no Ctrl/Alt extends the filter. `j`/`k` are
@@ -156,34 +186,43 @@ export function InlinePicker({
   return (
     <box
       border
-      borderStyle="single"
-      borderColor={theme.borderFocus}
-      title={title}
-      titleColor={theme.fg}
-      bottomTitle={hint}
+      borderStyle="rounded"
+      borderColor={theme.border}
+      title={` ${title} `}
+      titleColor={theme.dim}
+      bottomTitle={` ${hint} `}
       bottomTitleAlignment="right"
-      backgroundColor={theme.surface}
+      backgroundColor={theme.bg}
       flexDirection="column"
       width={width}
       paddingLeft={1}
       paddingRight={1}
       overflow="hidden"
     >
-      <text fg={query ? theme.fg : theme.faint}>{query ? `/ ${query}` : 'Type to filter'}</text>
-      <text fg={theme.border}>{'─'.repeat(inner)}</text>
+      {shortcuts ? null : (
+        <>
+          <text fg={query ? theme.fg : theme.faint}>
+            <span fg={theme.faint}>{'› '}</span>
+            {query || 'Type to filter'}
+          </text>
+          <text fg={theme.border}>{'─'.repeat(inner)}</text>
+        </>
+      )}
       {visible.length === 0 ? (
         <text fg={theme.faint}>No match.</text>
       ) : (
         visible.map((item, offset) => {
           const isHeader = headerIds.has(item.id);
           const isSelected = start + offset === index && !isHeader;
-          const label = isHeader ? item.label : `  ${item.label}`;
+          const label = isHeader
+            ? item.label
+            : `${item.glyph ? `${item.glyph} ` : '  '}${item.label}`;
           const right = item.right ?? '';
           const padded = layoutRow(label, right, inner - 1);
           const fg = isHeader ? theme.faint : isSelected ? theme.fg : theme.dim;
           return (
             <text key={item.id} fg={fg} bg={isSelected ? theme.bg : undefined}>
-              <span fg={theme.accent}>{isSelected ? '▌' : ' '}</span>
+              <span fg={theme.brand}>{isSelected ? '▌' : ' '}</span>
               {padded}
             </text>
           );

@@ -16,14 +16,12 @@ const SCRIPT = 'apps/web/scripts/generate-cli-commands-doc.mjs';
 
 /** In the table, never in the docs. */
 const UNDOCUMENTED = {
-  // Attaches the OpenCode TUI; a pi session has no `session.attach` and the command exits 1.
-  connect: 'OpenCode only',
+  // Served only where KORTIX_CHROME_ENABLED is on (dev) until the Chrome Web Store listing is public.
+  chrome: 'not launched',
 };
 
 /** The usage cell, where the table's arguments name more than the docs describe. */
-const USAGE = {
-  schema: 'schema --version 3',
-};
+const USAGE = {};
 
 /** command → [what it does, where the docs explain it]. */
 const COMMANDS = {
@@ -34,22 +32,21 @@ const COMMANDS = {
   whoami: ['The host, the signed-in user and the active account.', '[Check who you are](#check-who-you-are)'],
   token: ['The token context: project, session, agent and grants.', '[Check who you are](#check-who-you-are)'],
   'self-host': ['Set up, start, update and stop your own Kortix instance from Docker images.', '[Self-hosting](/docs/developers#self-hosting)'],
-  accounts: ['List and switch accounts.', '[Teams](/docs/guide#teams)'],
   members: ['Invite and remove people, and change their roles.', '[Teams](/docs/guide#teams)'],
   groups: ['Groups of people that share a role.', '[Teams](/docs/guide#teams)'],
-  tokens: ['Personal access keys, service accounts and connected apps.', '[Security](/docs/guide#security)'],
+  keys: ['API keys of the workspace: create a key that acts as you, an agent or a bot, list and revoke them.', '[Get an API key](/docs/developers#get-an-api-key)'],
+  tokens: ['Older key commands: personal keys, service accounts and connected apps.', '[Security](/docs/guide#security)'],
   billing: ['The plan, credits, transactions, and costs per project and per session.', '[Billing](/docs/guide#billing)'],
-  init: ['Create a project directory from the starter, with a `kortix_version: 3` `kortix.yaml`.', '[The everyday loop](#the-everyday-loop)'],
-  projects: [
-    'List, create, clone, link, use, rename and delete projects. Also feature flags (`features`), project CLI tokens (`cli-tokens`) and the upgrade to `kortix_version: 3` (`upgrade`).',
-    '[Which project a command uses](#which-project-a-command-uses)',
+  init: ['Create a project directory from the starter, with its `kortix.yaml`.', '[The everyday loop](#the-everyday-loop)'],
+  workspaces: [
+    'Create, list, switch, link, open, rename, configure and delete workspaces. Also feature flags (`features`) and workspace CLI tokens (`cli-tokens`). `kortix projects` is the older name.',
+    '[Which workspace a command uses](#which-workspace-a-command-uses)',
   ],
   sessions: ['Start, talk to, follow, stop and delete sessions.', '[Session commands](#session-commands)'],
   chat: ["Talk to a session's agent: a line chat, or one prompt with `-p`. Same as `kortix sessions chat`.", '[Session commands](#session-commands)'],
   tui: ['The whole product as a terminal app. `kortix t` and `kortixt` start it too. Experimental.', '[Everywhere](/docs/guide#everywhere)'],
   ship: ['Validate, commit and push the current branch. A folder with no link and no default project gets a new project. `kortix deploy` is the same command.', '[Commit and push](/docs/developers#commit-and-push)'],
-  validate: ['Check `kortix.yaml` and the sandbox template Dockerfiles.', '[Check and validate](#check-and-validate)'],
-  migrate: ['Convert the project manifest to `kortix_version: 3`. It prints the plan; `--write` applies it.', '[Migrate to v3](/docs/developers#migrate-to-v3)'],
+  validate: ['Check `kortix.yaml` and the sandbox template Dockerfiles. One line per issue: `<file>:<line>:<col>  <severity>  <path>  <message>`.', '[Check and validate](#check-and-validate)'],
   doctor: ['Check the login and the project, then start a throwaway session and wait for an agent reply.', '[Check and validate](#check-and-validate)'],
   schema: ['Print the `kortix.yaml` JSON Schema.', '[Check and validate](#check-and-validate)'],
   agents: ['The default agent, model pins, scope and the full agent config.', '[Agents](/docs/guide#agents)'],
@@ -66,10 +63,12 @@ const COMMANDS = {
   marketplace: ['Search, show, install and uninstall marketplace skills.', '[Skills](/docs/guide#skills)'],
   files: ['Read the committed repository: files, history, branches, commits, diffs and a zip download.', '[Git](/docs/developers#git)'],
   drive: ["The project's Drive: list, read, upload, move and delete files, and share folders.", '[Drive](/docs/guide#drive)'],
+  artifacts: ['Publish, save, share and list docs and pages from Drive, and read their versions.', '[Artifact commands](#artifact-commands)'],
+  search: ["Search the project's Drive by file name and text, with your folder access. Inside a session it covers every folder the session may mount, also the ones past its mounts.", '[Drive](/docs/guide#drive)'],
   cr: ['Change requests: list, show, diff, open, merge, request changes, close and reopen.', '[Git](/docs/developers#git)'],
   review: ['The review inbox: change requests, held connector calls and submitted outputs.', '[Git](/docs/developers#git)'],
-  triggers: ['List, add, fire, enable, disable, pause and resume triggers.', '[Automations](/docs/guide#automations)'],
-  reminders: ['Prompt one session later or on repeat. `kortix remind "…" --in 24h` adds one.', '[Automations](/docs/guide#automations)'],
+  triggers: ['Every trigger, `kortix.yaml` and runtime: `ls` lists both, `add` writes `kortix.yaml` (with `--on`, `--session` or `--runtime` it creates a runtime trigger), `fire`, `enable`, `disable`, `run`, `pause`, `resume` and `rm` take a slug or a runtime id.', '[Triggers](/docs/guide#triggers)'],
+  loops: ['A schedule into one session (a loop: a trigger that wakes the session that created it). `kortix loop "…" --in 24h` adds one. Alias: `reminders`.', '[Triggers](/docs/guide#triggers)'],
   capture: ['Search the Capture timeline of the person you act for. Capture is off until an account admin turns it on.', '[Capture](/docs/capture)'],
   access: ['Grant, list and revoke role assignments for people, groups and agents.', '[Teams](/docs/guide#teams)'],
   roles: ['System and custom roles, and what each one permits.', '[Teams](/docs/guide#teams)'],

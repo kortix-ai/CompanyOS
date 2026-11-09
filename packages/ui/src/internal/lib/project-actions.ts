@@ -49,8 +49,7 @@ export type CustomizeSection =
   | 'channels'
   | 'sandbox'
   | 'settings'
-  | 'feature-flags'
-  | 'upgrade';
+  | 'feature-flags';
 
 /**
  * Per-section gating leaves.
@@ -74,7 +73,7 @@ export const CUSTOMIZE_SECTION_ACCESS: Record<
   CustomizeSection,
   { read: ProjectAction; write?: ProjectAction }
 > = {
-  // No `agents` entry: Agents graduated to /projects/<id>/agent, which gates
+  // No `agents` entry: Agents graduated to /workspaces/<id>/agent, which gates
   // itself on PROJECT_AGENT_READ/WRITE directly (project-settings-nav's
   // TAB_PREFERENCE and the page's own useProjectCan).
   //
@@ -139,17 +138,7 @@ export const CUSTOMIZE_SECTION_ACCESS: Record<
     read: PROJECT_ACTIONS.PROJECT_READ,
     write: PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
   },
-  // `upgrade` (migrate the manifest to v2) starts an agent session that edits the
-  // repo and opens a CR — the session itself asserts the real leaves; visibility
-  // follows settings.
-  upgrade: { read: PROJECT_ACTIONS.PROJECT_READ, write: PROJECT_ACTIONS.PROJECT_WRITE },
 };
-
-/** The distinct read leaves used to gate section visibility — handy for a single
- *  batched probe over every section the rail might show. */
-export const CUSTOMIZE_SECTION_READ_ACTIONS: readonly ProjectAction[] = Array.from(
-  new Set(Object.values(CUSTOMIZE_SECTION_ACCESS).map((a) => a.read)),
-);
 
 /**
  * Whether a section is visible in the rail, given the current user's resolved
@@ -163,7 +152,7 @@ export const CUSTOMIZE_SECTION_READ_ACTIONS: readonly ProjectAction[] = Array.fr
  * (Previously this ALSO required a write leaf, which blanked the whole panel
  * for every read-only / granular role — the bug this fixes.) This
  * is a VISIBILITY layer only; the API re-checks every mutation. Files is NOT
- * here — it's the standalone /projects/[id]/files page, gated on project.file.read.
+ * here — it's the standalone /workspaces/[id]/files page, gated on project.file.read.
  */
 export function isCustomizeSectionVisible(
   s: CustomizeSection,

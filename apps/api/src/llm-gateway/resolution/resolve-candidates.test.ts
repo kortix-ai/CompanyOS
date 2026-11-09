@@ -53,6 +53,10 @@ mock.module('../../secrets/account-resource', () => ({
   resolveProjectSharedProviderSecrets,
   encryptAccountSecret: (_accountId: string, value: string) => value,
   decryptAccountSecret: (_accountId: string, value: string) => value,
+  // Imported by modules this suite loads (subscription usage, #11816); never called here.
+  readAccountSecret: () => null,
+  resolveDefaultProviderAccountSecret: async () => null,
+  listUsableGatewaySecrets: async () => [],
 }));
 const getProjectSecretValueForConsumer = mock(async (input: { name: string }) => {
   const name = input.name;
@@ -138,8 +142,9 @@ mock.module('../routing', () => ({
   resolveGatewayRoute: async () => ({ primaryModel: 'anthropic/claude-sonnet-4.6' }),
 }));
 
-let runtimeManagedModel: { id: string } | undefined;
+let runtimeManagedModel: { id: string; private?: true } | undefined;
 let knownManagedModelId: string | null = null;
+let managedAudioModelId: string | null = null;
 const managedModels = await import('../models/managed-models');
 mock.module('../models/managed-models', () => ({
   ...managedModels,
@@ -148,6 +153,7 @@ mock.module('../models/managed-models', () => ({
     runtimeManagedModel?.id === id ? runtimeManagedModel : undefined,
   isRuntimeManagedModelId: (id: string) => runtimeManagedModel?.id === id,
   isKnownManagedModelId: (id: string) => id === knownManagedModelId,
+  isManagedAudioModelId: (id: string) => id === managedAudioModelId,
 }));
 
 let capabilities = { reasoning: false, temperature: true };
@@ -188,6 +194,7 @@ beforeEach(() => {
   catalogUpstream = null;
   runtimeManagedModel = undefined;
   knownManagedModelId = null;
+  managedAudioModelId = null;
   capabilities = { reasoning: false, temperature: true };
   livePricingCalls = [];
   getAccountTier.mockClear();
@@ -240,14 +247,15 @@ describe('resolveCandidates — selected account key pool', () => {
     expect(candidates.map((candidate) => candidate.apiKey)).toEqual(['key-a', 'key-b']);
   });
 
-  // The key exists; the agent may not use it. Its own code, so a client never
-  // offers "connect a key" for a fix that lives in the agent's secret grant.
-  test('a narrowed agent grant blocks the pool at use time', async () => {
+  // A model key is a project secret the gateway uses. The agent's secret grant
+  // governs only what reaches its sandbox, so a narrowed grant does not block it.
+  test('a narrowed agent grant still reaches the pool', async () => {
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
     pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [{ secretId: 'id-a', label: 'A', value: 'key-a' }] };
-    await expect(resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
-      'anthropic/claude-sonnet-4.6')).rejects.toMatchObject({ code: 'agent_grant_excludes' });
+    const candidates = await resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
+      'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((candidate) => candidate.apiKey)).toEqual(['key-a']);
   });
 
   // A key this API cannot decrypt is unusable, not a server error.
@@ -654,6 +662,18 @@ describe('resolveCandidates — managed model tier gating', () => {
     expect(candidates[0]).toMatchObject({ provider: 'kortix-managed' });
   });
 
+  test('a private chat model and a managed audio model resolve to the managed upstream behind the same plan gate', async () => {
+    runtimeManagedModel = { id: 'small-private', private: true };
+    managedAudioModelId = 'stt-private';
+    const p = principal();
+    expect((await resolveCandidates(p, 'small-private'))[0]).toMatchObject({ provider: 'kortix-managed', resolvedModel: 'small-private' });
+    expect((await resolveCandidates(p, 'stt-private'))[0]).toMatchObject({ provider: 'kortix-managed', resolvedModel: 'stt-private' });
+    await expect(resolveCandidates(principal({ freeModelsOnly: true }), 'stt-private'))
+      .rejects.toMatchObject({ code: 'plan_upgrade_required' });
+    modelAccess = { disabledProviders: ['kortix'], disabledModels: [] };
+    await expect(resolveCandidates(p, 'stt-private')).rejects.toMatchObject({ code: 'provider_disabled' });
+  });
+
   test('a known managed model with the provider disabled throws model_disabled_on_deployment', async () => {
     config.KORTIX_MANAGED_PROVIDER_ENABLED = false;
     runtimeManagedModel = { id: 'glm-5.3-flash' };
@@ -812,22 +832,12 @@ describe('resolveCandidates — codex + unknown provider', () => {
     expect(resolveCodexCredential).not.toHaveBeenCalled();
   });
 
-  test('a narrowed agent grant blocks a selected ChatGPT pool with its own code', async () => {
-    pooledEnabled = true;
-    pooledSecrets = { configured: true, coolingDown: false, secrets: [
-      { secretId: 'account-a', label: 'Personal', value: JSON.stringify({ openai: { access: 'oauth-a' } }) },
-    ] };
-    await expect(resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: ['GITHUB_TOKEN'] } }),
-      'codex/gpt-6.1-sol')).rejects.toMatchObject({ code: 'agent_grant_excludes' });
-    expect(resolveCodexAccountCredential).not.toHaveBeenCalled();
-  });
-
-  test('a narrowed agent grant blocks the personal ChatGPT default with its own code', async () => {
+  test('a narrowed agent grant still reaches the personal ChatGPT default', async () => {
     pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }) };
-    await expect(resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
-      'codex/gpt-6.1-sol')).rejects.toMatchObject({ code: 'agent_grant_excludes' });
-    expect(resolveCodexAccountCredential).not.toHaveBeenCalled();
+    const candidates = await resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
+      'codex/gpt-6.1-sol');
+    expect(candidates.map((candidate) => candidate.apiKey)).toEqual(['mine-token']);
   });
 
   test('an agent grant that names CODEX_AUTH_JSON reaches the personal ChatGPT default', async () => {
@@ -997,6 +1007,8 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
     expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith({
       accountId: actor.accountId, projectId: 'p1', userId: 'u1', grantUserId: null,
       providerId: 'codex', name: 'CODEX_AUTH_JSON',
+      // The session's call: its pinned shared account serves first (account-routing.ts).
+      sessionId: 'trigger-session', probe: undefined,
     });
     expect(resolveDefaultCodexAccountSecret).not.toHaveBeenCalled();
     expect(resolveCodexCredential).not.toHaveBeenCalled();
@@ -1109,26 +1121,19 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
       .rejects.toMatchObject({ code: 'provider_pool_rate_limited', retryAfterSeconds: 9 });
   });
 
-  test('an agent whose secret grant omits CODEX_AUTH_JSON never uses a shared account', async () => {
+  test('an agent whose secret grant omits CODEX_AUTH_JSON still uses a shared account', async () => {
     pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const actor = principal({ sessionId: 's', personalUserId: null, agentGrant: { env: ['OTHER'] } });
-    await expect(resolveCandidates(actor, 'codex/gpt-6')).rejects.toMatchObject({
-      code: 'agent_grant_excludes', message: 'The running agent cannot use ChatGPT connections.',
-    });
-    expect(resolveCodexAccountCredential).not.toHaveBeenCalled();
-    // The legacy project connection it could use before this change still serves it.
-    codexCredential = { access: 'legacy-token' };
-    expect((await resolveCandidates(actor, 'codex/gpt-6')).map((c) => c.apiKey)).toEqual(['legacy-token']);
+    await expect(resolveCandidates(actor, 'codex/gpt-6')).resolves.toBeDefined();
+    expect(resolveCodexAccountCredential).toHaveBeenCalled();
   });
 
-  test('an agent without the grant gets the grant refusal, not a cooldown, when every shared account cools down', async () => {
+  test('an agent without CODEX_AUTH_JSON in its grant gets the cooldown when every shared account cools down', async () => {
     pooledEnabled = true;
     sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
     const actor = principal({ sessionId: 's', personalUserId: null, agentGrant: { env: ['OTHER'] } });
-    await expect(resolveCandidates(actor, 'codex/gpt-6')).rejects.toMatchObject({
-      code: 'agent_grant_excludes', message: 'The running agent cannot use ChatGPT connections.',
-    });
+    await expect(resolveCandidates(actor, 'codex/gpt-6')).rejects.toMatchObject({ code: 'provider_pool_rate_limited' });
   });
 
   // Claude Code and other external clients reach the gateway with a project
@@ -1176,4 +1181,21 @@ describe('Free plan recovery guidance', () => {
         suggestion: 'Your plan includes no Kortix-managed models. Upgrade to Credits, or connect your own provider key or ChatGPT account. List connected models with /v1/llm/v1/models?scope=picker in your project.',
       });
   });
+});
+
+describe('Claude subscription models require session execution', () => {
+  for (const model of ['opus', 'sonnet', 'haiku', 'fable']) {
+    for (const sessionId of [undefined, 'synthetic-session']) {
+      test(`${model}, session ${sessionId ?? 'absent'}: gateway reports the execution boundary`, async () => {
+        const ref = `claude-agent/${model}`;
+        const result = resolveCandidates(principal({ sessionId }), ref);
+        await expect(result).rejects.toBeInstanceOf(GatewayResolutionError);
+        await expect(result).rejects.toMatchObject({
+          code: 'model_not_found',
+          message: `"${ref}" runs through Claude Code inside sessions only. Test it by starting a session with this model; the gateway playground and chat completions cannot execute it.`,
+          suggestion: 'Start a session with this model, or choose a gateway-compatible model for this request.',
+        });
+      });
+    }
+  }
 });

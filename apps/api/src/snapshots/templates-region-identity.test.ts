@@ -3,6 +3,7 @@ import { computeSnapshotHash } from './hash';
 import { maybeSwapAgent } from './runtime-images';
 import type { SandboxProviderAdapter } from './providers';
 import { computeTemplateIdentity, type ResolvedTemplate } from './templates';
+import { PLATFORM_DEFAULT_USER_DOCKERFILE } from './dockerfile-layer';
 
 const project = { projectId: 'proj_1', repoUrl: '', defaultBranch: 'main', manifestPath: 'kortix.yaml' };
 
@@ -22,6 +23,7 @@ function template(overrides: Partial<ResolvedTemplate> = {}): ResolvedTemplate {
     memoryGb: 4,
     diskGb: 20,
     containerRuntime: false,
+    residentialProxy: null,
     providerState: 'active',
     providerSnapshotName: null,
     contentHash: null,
@@ -52,13 +54,14 @@ test('a project image built in us-east gets its own name and swap key', async ()
   expect(us.swapKey).not.toBe(home.swapKey);
 });
 
-test('a home-region project keeps the identity it had before regions existed', async () => {
+test('a home-region identity is the tenant-scoped hash without a region segment', async () => {
   const home = await computeTemplateIdentity(project, template(), builtIn(undefined));
   const before = computeSnapshotHash({
     dockerfile: home.userDockerfile,
     contextTreeOid: 'template:app',
     spec: { cpu: 2, memory: 4, disk: 20 },
     containerRuntime: false,
+    projectId: 'proj_1',
     runtimeFingerprint: home.runtimeFingerprint,
   });
   expect(home.contentHash).toBe(before.contentHash);
@@ -92,4 +95,21 @@ test('an agent swap names the region its predecessor was built in', async () => 
 
   expect(await maybeSwapAgent(predecessor, identity, provider, 'kortix-tpl-previous')).toBe(true);
   expect(swaps).toEqual([[identity.snapshotName, 'kortix-tpl-previous', { region: 'us-east' }]]);
+});
+
+test('residential_proxy is a boot setting: it never changes the image identity', async () => {
+  const off = await computeTemplateIdentity(project, template(), builtIn(undefined));
+  for (const residentialProxy of [{}, { country: 'us' }]) {
+    const on = await computeTemplateIdentity(project, template({ residentialProxy }), builtIn(undefined));
+    expect(on.contentHash).toBe(off.contentHash);
+    expect(on.snapshotName).toBe(off.snapshotName);
+    expect(on.swapKey).toBe(off.swapKey);
+  }
+});
+
+test('a template with neither image nor dockerfile builds the platform base as its own image', async () => {
+  const identity = await computeTemplateIdentity(project, template({ image: null, dockerfilePath: null }), builtIn(undefined));
+  expect(identity.userDockerfile).toBe(PLATFORM_DEFAULT_USER_DOCKERFILE);
+  expect(identity.builtFromCommit).toBeNull();
+  expect(identity.snapshotName).toStartWith('kortix-tpl-');
 });

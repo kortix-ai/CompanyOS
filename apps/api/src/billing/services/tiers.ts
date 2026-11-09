@@ -102,7 +102,19 @@ export function topUpBonusUsd(amountUsd: number): number {
   return step ? Math.round(amountUsd * step.percent) / 100 : 0;
 }
 
-export const MAX_PROJECTS_PER_ACCOUNT = 200;
+const GIB = 1024 ** 3;
+
+/**
+ * Files storage per plan (drives/limits.ts). Every customer's Files live in
+ * Kortix's ONE Platinum org: 100 GiB per volume (one volume per project), 50
+ * TiB stored for the whole org (2026-11-01, `GET /v1/volumes/limits`). The
+ * project figure stays at or under the volume size; the account figure keeps
+ * one account from filling the org for everyone. An exception is the
+ * `driveProjectBytes` / `driveAccountBytes` override, never a plan flag.
+ */
+const FREE_DRIVE_STORAGE = { projectBytes: 5 * GIB, accountBytes: 5 * GIB };
+const CREDITS_DRIVE_STORAGE = { projectBytes: 50 * GIB, accountBytes: 250 * GIB };
+const ENTERPRISE_DRIVE_STORAGE = { projectBytes: 100 * GIB, accountBytes: 1024 * GIB };
 
 // ─── Tiers ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +151,7 @@ const TIERS: Record<string, TierConfig> = {
     canPurchaseCredits: false,
     models: [],
     appLimit: 50,
+    driveStorage: FREE_DRIVE_STORAGE,
     entitlements: SELF_SERVE,
   },
 
@@ -151,6 +164,7 @@ const TIERS: Record<string, TierConfig> = {
     // the user's own provider keys or ChatGPT subscription only.
     models: [],
     appLimit: 50,
+    driveStorage: FREE_DRIVE_STORAGE,
     entitlements: SELF_SERVE,
   },
 
@@ -163,6 +177,7 @@ const TIERS: Record<string, TierConfig> = {
     canPurchaseCredits: true,
     models: ['all'],
     appLimit: 2000,
+    driveStorage: CREDITS_DRIVE_STORAGE,
     entitlements: SELF_SERVE,
   },
 
@@ -175,6 +190,7 @@ const TIERS: Record<string, TierConfig> = {
     canPurchaseCredits: true,
     models: ['all'],
     appLimit: 5000,
+    driveStorage: ENTERPRISE_DRIVE_STORAGE,
     entitlements: ALL_ENTERPRISE,
   },
 };
@@ -452,7 +468,7 @@ export function isValidTier(name: string): boolean {
 
 /**
  * Whether a tier unlocks the full model catalog — the premium LLM gateway
- * (Claude/GPT/Gemini/…), not just OpenCode's built-in models. Pure function of
+ * (Claude/GPT/Gemini/…), not just the free and BYOK models. Pure function of
  * tier config: environment and wallet balance cannot grant it.
  */
 export function tierGrantsAllModels(tierName: string): boolean {

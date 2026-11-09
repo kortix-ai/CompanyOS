@@ -1,142 +1,186 @@
 'use client';
 
-import type { ArtifactDetail } from '@kortix/sdk';
+import {
+  getArtifact,
+  getLinkPreview,
+  readArtifactFile,
+  type ArtifactDetail,
+} from '@kortix/sdk';
 import { useArtifactMutations, useArtifactText } from '@kortix/sdk/react';
 import { ARTIFACT_DOC_CSS } from '@kortix/shared/artifact-doc';
-import { Skeleton } from '@kortix/ui/skeleton';
-import { errorToast } from '@kortix/ui/toast';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@kortix/ui/tooltip';
-import {
-  CheckSquareIcon,
-  CodeBlockIcon,
-  CodeIcon,
-  ImageIcon,
-  LinkSimpleIcon,
-  ListBulletsIcon,
-  ListNumbersIcon,
-  MinusIcon,
-  PlusIcon,
-  QuotesIcon,
-  TableIcon,
-  TextBIcon,
-  TextHOneIcon,
-  TextHThreeIcon,
-  TextHTwoIcon,
-  TextItalicIcon,
-  TextStrikethroughIcon,
-  TrashIcon,
-  type Icon,
-} from '@phosphor-icons/react';
-import Image from '@tiptap/extension-image';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
-import { TableKit } from '@tiptap/extension-table';
-import { Placeholder } from '@tiptap/extensions';
-import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
-import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus';
-import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useRef, useState } from 'react';
+import { canEmbed, fetchEmbed } from '@kortix/ui/markdown/doc-editor/doc-embed';
+import { docExtensions } from '@kortix/ui/markdown/doc-editor/doc-extensions';
+import { DocMenus } from '@kortix/ui/markdown/doc-editor/doc-menus';
+import { htmlToMarkdown, markdownToHtml } from '@kortix/ui/markdown/doc-editor/markdown';
+import { Button } from '@kortix/ui/button';
+import { ButtonGroup } from '@kortix/ui/button-group';
+import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
+import { ErrorState } from '@kortix/ui/error-state';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
+import Loading from '@kortix/ui/loading';
+import { MENU_PANEL_STATIC, menuRow } from '@kortix/ui/menu-recipe';
+import { errorToast, infoToast } from '@kortix/ui/toast';
+import { CardsIcon, LinkSimpleIcon, WarningIcon } from '@phosphor-icons/react';
+import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-import { DocCodeBlock, Video, fileBase64, isMedia, mediaPath, mediaUrls, tooLarge } from './doc-media';
-import { htmlToMarkdown, markdownToHtml } from './markdown';
+import { createDocSaver, pendingSave, type DocSaveStatus, type DocSaver, type Known } from './doc-autosave';
+import { fileBase64, isMedia, mediaPath, mediaUrls, tooLarge } from './doc-media';
+import { SlashCommand, SlashMenu, type SlashState } from './doc-slash-menu';
 
 import { useTranslations } from '@/i18n/use-translations';
 
-export type DocSaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
+export type { DocSaveStatus };
 
-/** The doc stylesheet's colors from the app's theme, so the doc follows light and dark. */
+const isConflict = (err: unknown) =>
+  (err as { status?: number }).status === 409 &&
+  (err as { code?: string }).code === 'version_conflict';
 
-const AUTOSAVE_MS = 2_000;
+/** What the editor opened on: the doc's HTML and the file version it came from. */
+type Loaded = { html: string; start: Known };
 
 /**
  * A doc artifact, edited in place: its Markdown file in Files, shown with the
  * same stylesheet the published page uses. Markdown shortcuts (`# `, `- `,
- * `1. `, `[ ] `, `> `, ``` ```), a menu on selected text, a `+` menu on an
- * empty line, tables, task lists, links and images. Changes save themselves
- * back to the file; each save is a commit of the Files volume.
+ * `1. `, `[ ] `, `> `, ``` ```), a menu on selected text, a `/` block menu,
+ * tables, task lists, links, images, and GitHub or Linear links as cards
+ * (a pasted one offers the card).
+ *
+ * Changes save themselves back to the file; each save is a commit of the Files
+ * volume (`doc-autosave.ts` has the rules).
  */
 export function DocEditor({
   projectId,
   artifact,
   editable,
   onStatus,
+  onReload,
+  onReady,
 }: {
   projectId: string;
   artifact: ArtifactDetail;
   editable: boolean;
   onStatus: (status: DocSaveStatus) => void;
+  /** Open the doc again at its current version (the conflict's Reload). */
+  onReload: () => void;
+  /** The doc's text is on screen (once per editor): the viewer restores its scroll position. */
+  onReady?: () => void;
 }) {
   const t = useTranslations('artifacts');
   const { save: saveMutation } = useArtifactMutations(projectId);
-  const [loaded, setLoaded] = useState<string | null>(null);
-  const base = useRef(artifact.entry_version);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saving = useRef<Promise<unknown> | null>(null);
-  const stopped = useRef(false);
-  const latest = useRef({ save: saveMutation, onStatus, artifact });
-  useEffect(() => {
-    latest.current = { save: saveMutation, onStatus, artifact };
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const saver = useRef<DocSaver | null>(null);
+  // Another writer changed the file under unsaved edits: autosave waits for the person's choice,
+  // shown above the doc until they make it (a toast could be closed and take the choice with it).
+  const [conflict, setConflict] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
+  const latest = useRef({ save: saveMutation, onStatus, onReload, artifact, onReady });
+  useLayoutEffect(() => {
+    latest.current = { save: saveMutation, onStatus, onReload, artifact, onReady };
   });
   // Relative media paths in the Markdown ↔ absolute URLs in the editor (the page URL of this version).
   const [media] = useState(() => mediaUrls(artifact.version.view_url));
   /** Single-file docs serve only themselves: their media must be absolute URLs. */
   const holdsMedia = !artifact.path.endsWith(`/${artifact.entry}`);
 
+  // A save from a closed editor of this doc still on its way: wait for it (undefined), then open on it.
+  const [pendingHandoff] = useState(() => pendingSave(artifact.artifact_id));
+  const [handoff, setHandoff] = useState<Known | null | undefined>(
+    pendingHandoff ? undefined : null,
+  );
+  useEffect(() => {
+    if (!pendingHandoff) return;
+    let live = true;
+    void pendingHandoff.then((result) => live && setHandoff(result));
+    return () => {
+      live = false;
+    };
+  }, [pendingHandoff]);
+
   // Usually already in the cache (prefetched by the project preloader or a hover).
   // Pinned to the version opened: our own saves move `entry_version` and must not refetch.
   const [opened] = useState(artifact);
-  const text = useArtifactText(projectId, opened);
-  if (loaded === null && text.data !== undefined) setLoaded(media.resolveHtml(markdownToHtml(text.data)));
-  // One load per mount: our own saves (which move the version) never reload the editor.
-  useEffect(() => {
-    if (text.error) errorToast(text.error.message);
-  }, [text.error]);
+  const text = useArtifactText(projectId, handoff === null ? opened : null);
+  const start: Known | null =
+    handoff ??
+    (handoff === null && text.data !== undefined
+      ? { version: opened.entry_version, text: text.data }
+      : null);
+  if (loaded === null && start)
+    setLoaded({ html: media.resolveHtml(markdownToHtml(start.text)), start });
+  // The text did not load: the doc area says so and offers a retry (below), never a spinner forever.
+  const textFailed = loaded === null && handoff === null && text.isError;
 
-  const save = async (editor: Editor) => {
-    if (stopped.current || loaded === null) return;
-    const { save: run, onStatus: report, artifact: current } = latest.current;
-    report('saving');
-    const attempt = run.mutateAsync({
-      artifactId: current.artifact_id,
-      ...(base.current ? { base_version: base.current } : {}),
-      files: { [current.entry]: { content: htmlToMarkdown(media.restore(editor.getHTML())) } },
-    });
-    saving.current = attempt;
-    try {
-      const next = await attempt;
-      base.current = next.entry_version;
-      report(timer.current ? 'unsaved' : 'saved');
-    } catch (err) {
-      const conflict = (err as { status?: number }).status === 409;
-      if (conflict) stopped.current = true;
-      report('error');
-      errorToast(conflict ? t('conflict') : (err as Error).message);
-    } finally {
-      saving.current = null;
-    }
+  const markdownOf = (editor: Editor) => htmlToMarkdown(media.restore(editor.getHTML()));
+  const readNow = async (current: ArtifactDetail): Promise<Known> => {
+    const [detail, file] = await Promise.all([
+      getArtifact(projectId, current.artifact_id),
+      readArtifactFile(projectId, current.artifact_id),
+    ]);
+    return { version: detail.entry_version, text: await file.text() };
   };
 
-  /** Pasted, dropped or picked images and videos: written next to the doc in Files (`media/…`), then placed in it. */
+  const writeEntry = async (current: ArtifactDetail, markdown: string, base: string | null) => {
+    const next = await latest.current.save.mutateAsync({
+      artifactId: current.artifact_id,
+      ...(base ? { base_version: base } : {}),
+      files: { [current.entry]: { content: markdown } },
+    });
+    return next.entry_version;
+  };
+
+  const showConflict = () => setConflict(true);
+  const keepMine = () => {
+    setConflict(false);
+    saver.current?.keepMine();
+  };
+
+  /**
+   * Pasted, dropped or picked images and videos: shown at once from a local
+   * URL with an "Uploading…" chip, written next to the doc in Files
+   * (`media/…`), then pointed at that file. A failed upload removes it.
+   */
   const upload = async (editor: Editor, files: File[], pos?: number) => {
     const { save: run, onStatus: report, artifact: current } = latest.current;
-    for (const file of files) {
+    const picked = files.flatMap((file) => {
       const kind = isMedia(file);
-      if (!kind) continue;
-      if (!holdsMedia) return errorToast(t('mediaSingleFile'));
-      if (tooLarge(file)) {
-        errorToast(t('mediaTooLarge'));
-        continue;
-      }
+      return kind ? [{ file, kind }] : [];
+    });
+    if (!picked.length) return;
+    if (!holdsMedia) return errorToast(t('mediaSingleFile'));
+    const placed = picked.flatMap(({ file, kind }) => {
+      if (!tooLarge(file)) return [{ file, kind, local: URL.createObjectURL(file) }];
+      errorToast(t('mediaTooLarge'));
+      return [];
+    });
+    if (!placed.length) return;
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(
+        pos ?? editor.state.selection.to,
+        placed.map(({ kind, local }) => ({ type: kind, attrs: { src: local, uploading: true } })),
+      )
+      .run();
+    for (const { file, kind, local } of placed) {
       const path = mediaPath(file);
       report('saving');
+      let src: string | null = null;
       try {
-        await run.mutateAsync({ artifactId: current.artifact_id, files: { [path]: { content_base64: await fileBase64(file) } } });
-      } catch (err) {
-        report('error');
-        errorToast((err as Error).message);
-        continue;
+        await run.mutateAsync({
+          artifactId: current.artifact_id,
+          files: { [path]: { content_base64: await fileBase64(file) } },
+        });
+        src = media.absolute(path);
+        // Swap to the uploaded file once it has loaded, so the picture does not blink.
+        if (kind === 'image') await preload(src);
+      } catch {
+        // The API client toasts the error; the doc's own text is unaffected.
+        report(saver.current?.busy() ? 'unsaved' : 'saved');
       }
-      const node = { type: kind, attrs: { src: media.absolute(path) } };
-      editor.chain().focus().insertContentAt(pos ?? editor.state.selection.to, node).run();
+      if (!editor.isDestroyed) replaceMedia(editor, local, src);
+      URL.revokeObjectURL(local);
     }
   };
   const uploadRef = useRef(upload);
@@ -144,29 +188,54 @@ export function DocEditor({
     uploadRef.current = upload;
   });
 
+  const [slash, setSlash] = useState<SlashState | null>(null);
+  const slashKeys = useRef<(event: KeyboardEvent) => boolean>(() => false);
+  // eslint-disable-next-line react-hooks/refs -- configure stores this callback; slash-menu events read the ref after render.
+  const [slashExtension] = useState(() =>
+    SlashCommand.configure({ onChange: setSlash, onKey: (event) => slashKeys.current(event) }),
+  );
+  /** A GitHub or Linear link just pasted: the offer to show it as a card. */
+  const [offer, setOffer] = useState<Offer | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+
   const editor = useEditor(
     {
       immediatelyRender: false,
       editable,
       extensions: [
-        StarterKit.configure({ codeBlock: false, link: { openOnClick: !editable, autolink: true, defaultProtocol: 'https' } }),
-        DocCodeBlock,
-        TableKit.configure({ table: { resizable: false } }),
-        Image,
-        Video,
-        TaskList,
-        TaskItem.configure({ nested: true }),
-        Placeholder.configure({
-          placeholder: ({ node }) => (node.type.name === 'heading' ? t('placeholderHeading') : t('placeholder')),
+        ...docExtensions({
+          editable,
+          // None in a code block: it would sit on the block's language caption.
+          placeholder: (node) =>
+            node.type.name === 'codeBlock' ? '' : node.type.name === 'heading' ? t('placeholderHeading') : t('placeholder'),
         }),
+        slashExtension,
       ],
-      content: loaded ?? '',
+      content: loaded?.html ?? '',
       editorProps: {
         handlePaste: (view, event) => {
-          const files = Array.from(event.clipboardData?.files ?? []).filter(isMedia);
-          if (!editable || !files.length) return false;
           const ed = editorRef.current;
-          if (ed) void uploadRef.current(ed, files);
+          if (!editable || !ed) return false;
+          const files = Array.from(event.clipboardData?.files ?? []).filter(isMedia);
+          if (files.length) {
+            void uploadRef.current(ed, files);
+            return true;
+          }
+          // A lone link on an empty selection: paste it as a link, then offer the card.
+          const href = event.clipboardData?.getData('text/plain').trim() ?? '';
+          const { selection } = view.state;
+          if (
+            !canEmbed(href) ||
+            /\s/.test(href) ||
+            !selection.empty ||
+            selection.$from.parent.type.spec.code
+          )
+            return false;
+          ed.chain()
+            .focus()
+            .insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] })
+            .run();
+          setOffer({ from: selection.from, to: selection.from + href.length, href });
           return true;
         },
         handleDrop: (view, event) => {
@@ -179,14 +248,8 @@ export function DocEditor({
           return true;
         },
       },
-      onUpdate: ({ editor: e }) => {
-        if (!editable) return;
-        latest.current.onStatus('unsaved');
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-          timer.current = null;
-          void save(e);
-        }, AUTOSAVE_MS);
+      onUpdate: ({ editor: updated }) => {
+        if (editable && !updated.isDestroyed) saver.current?.edited();
       },
     },
     [loaded, editable],
@@ -194,157 +257,324 @@ export function DocEditor({
   const editorRef = useRef<Editor | null>(null);
   useEffect(() => {
     editorRef.current = editor;
+    return () => {
+      if (editorRef.current === editor) editorRef.current = null;
+    };
   }, [editor]);
 
-  // Save now on ⌘S, and before the page goes away.
+  // The text is on screen: once per editor.
   useEffect(() => {
-    if (!editor || !editable) return;
-    const flush = () => {
-      if (!timer.current) return;
-      clearTimeout(timer.current);
-      timer.current = null;
-      void save(editor);
+    if (editor && loaded) latest.current.onReady?.();
+  }, [editor, loaded]);
+
+  // The file moved (an agent wrote it, the artifact says so): an editor with nothing unsaved shows the new text.
+  const fileVersion = artifact.entry_version;
+  useEffect(() => {
+    const docSaver = saver.current;
+    if (!editor || !docSaver) return;
+    let live = true;
+    void docSaver.refresh(fileVersion).then((now) => {
+      if (!live || !now || editor.isDestroyed) return;
+      editor.commands.setContent(media.resolveHtml(markdownToHtml(now.text)), {
+        emitUpdate: false,
+      });
+    });
+    return () => {
+      live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileVersion]);
+
+  // One saver per editor; save now on ⌘S, warn before the page goes away with changes not in the file.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !editable || !loaded) return;
+    const current = latest.current.artifact;
+    const docSaver = createDocSaver(loaded.start, {
+      artifactId: current.artifact_id,
+      write: (markdown, base) => writeEntry(current, markdown, base),
+      read: () => readNow(current),
+      text: () => markdownOf(editor),
+      onStatus: (status) => latest.current.onStatus(status),
+      onConflict: showConflict,
+      isConflict,
+    });
+    saver.current = docSaver;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        flush();
+        docSaver.flush();
       }
     };
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (timer.current || saving.current) e.preventDefault();
+      if (docSaver.busy()) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('beforeunload', onLeave);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('beforeunload', onLeave);
-      flush();
+      setConflict(false);
+      docSaver.close();
+      if (saver.current === docSaver) saver.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, editable]);
+  }, [editor, editable, loaded]);
 
   return (
     <div className="kx-doc min-h-full">
       <style>{ARTIFACT_DOC_CSS}</style>
-      {loaded === null || !editor ? (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-10 w-2/3" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
+      {textFailed ? (
+        <div className="grid min-h-60 place-items-center">
+          <ErrorState
+            size="sm"
+            title={t('docLoadError')}
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={text.isFetching}
+                onClick={() => void text.refetch()}
+              >
+                {text.isFetching ? <Loading className="size-4 shrink-0" /> : null}
+                {t('retry')}
+              </Button>
+            }
+          />
+        </div>
+      ) : loaded === null || !editor ? (
+        // One quiet spinner while the text loads (usually cached: no wait at all).
+        <div className="grid min-h-60 place-items-center">
+          <Loading className="size-4" />
         </div>
       ) : (
         <>
-          {editable ? <DocMenus editor={editor} onPickMedia={(files) => void upload(editor, files)} /> : null}
+          {editable ? <DocMenus editor={editor} blockMenu={false} editable /> : null}
+          {editable && slash ? (
+            <SlashMenu
+              editor={editor}
+              state={slash}
+              keysRef={slashKeys}
+              onPickMedia={() => picker.current?.click()}
+            />
+          ) : null}
+          {editable && offer ? (
+            <EmbedOffer
+              projectId={projectId}
+              editor={editor}
+              offer={offer}
+              onClose={() => setOffer(null)}
+            />
+          ) : null}
+          {editable && conflict ? (
+            // Pinned to the top of the doc while it scrolls: the choice stays in reach.
+            <div className="bg-background sticky top-0 z-10 mb-6 pt-2">
+              <BannerAlert variant="warning" ><BannerAlertMedia><WarningIcon /></BannerAlertMedia><BannerAlertTitle>{t('conflictTitle')}</BannerAlertTitle><BannerAlertDescription>
+                {t('conflict')}
+              </BannerAlertDescription><BannerAlertActions>{<ButtonGroup>
+                    <Button size="xs" variant="outline" onClick={keepMine}>
+                      {t('conflictKeepMine')}
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => setConfirmReload(true)}>
+                      {t('conflictReload')}
+                    </Button>
+                  </ButtonGroup>}</BannerAlertActions></BannerAlert>
+            </div>
+          ) : null}
+          <ConfirmDialog
+            open={confirmReload && conflict}
+            onOpenChange={setConfirmReload}
+            title={t('conflictReloadTitle')}
+            description={t('conflictReloadHint')}
+            confirmLabel={t('conflictReload')}
+            confirmVariant="destructive"
+            onConfirm={() => {
+              setConfirmReload(false);
+              latest.current.onReload();
+            }}
+          />
           <EditorContent editor={editor} />
+          <input
+            ref={picker}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              void upload(editor, Array.from(e.target.files ?? []));
+              e.target.value = '';
+            }}
+          />
         </>
       )}
     </div>
   );
 }
 
-function MenuButton({ icon: IconCmp, label, active, onClick }: { icon: Icon; label: string; active?: boolean; onClick: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={active}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onClick}
-          className="hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground text-muted-foreground grid size-7 place-items-center rounded-sm"
-          data-active={active || undefined}
-        >
-          <IconCmp className="size-4" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
+/** Resolves when the image at `src` has loaded or failed (5 s at most). */
+function preload(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    const done = () => resolve();
+    img.onload = done;
+    img.onerror = done;
+    window.setTimeout(done, 5_000);
+    img.src = src;
+  });
 }
 
-const MENU = 'bg-popover text-popover-foreground flex items-center gap-0.5 rounded-md border p-1 shadow-md';
-
-function DocMenus({ editor, onPickMedia }: { editor: Editor; onPickMedia: (files: File[]) => void }) {
-  const t = useTranslations('artifacts');
-  const state = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      strike: e.isActive('strike'),
-      code: e.isActive('code'),
-      link: e.isActive('link'),
-      h1: e.isActive('heading', { level: 1 }),
-      h2: e.isActive('heading', { level: 2 }),
-      h3: e.isActive('heading', { level: 3 }),
-      quote: e.isActive('blockquote'),
-      table: e.isActive('table'),
-    }),
+/** The uploading media at `local`: pointed at its uploaded `src`, or removed (null). */
+function replaceMedia(editor: Editor, local: string, src: string | null) {
+  let at = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (at >= 0) return false;
+    if (node.attrs.src === local) at = pos;
   });
-  const chain = () => editor.chain().focus();
-  const setLink = () => {
-    const previous = editor.getAttributes('link').href as string | undefined;
-    const url = window.prompt(t('linkPrompt'), previous ?? 'https://');
-    if (url === null) return;
-    if (url.trim() === '') chain().extendMarkRange('link').unsetLink().run();
-    else chain().extendMarkRange('link').setLink({ href: url.trim() }).run();
-  };
-  const picker = useRef<HTMLInputElement>(null);
-  const addMedia = () => picker.current?.click();
+  if (at < 0) return;
+  const node = editor.state.doc.nodeAt(at)!;
+  const tr = src
+    ? editor.state.tr.setNodeMarkup(at, undefined, { ...node.attrs, src, uploading: false })
+    : editor.state.tr.delete(at, at + node.nodeSize);
+  editor.view.dispatch(tr);
+}
 
-  return (
-    <>
-      <BubbleMenu editor={editor} options={{ placement: 'top' }} shouldShow={({ editor: e, from, to }) => from !== to && !e.isActive('image')}>
-        <div className={MENU}>
-          <MenuButton icon={TextBIcon} label={t('bold')} active={state.bold} onClick={() => chain().toggleBold().run()} />
-          <MenuButton icon={TextItalicIcon} label={t('italic')} active={state.italic} onClick={() => chain().toggleItalic().run()} />
-          <MenuButton icon={TextStrikethroughIcon} label={t('strike')} active={state.strike} onClick={() => chain().toggleStrike().run()} />
-          <MenuButton icon={CodeIcon} label={t('inlineCode')} active={state.code} onClick={() => chain().toggleCode().run()} />
-          <MenuButton icon={LinkSimpleIcon} label={t('link')} active={state.link} onClick={setLink} />
-          <span className="bg-border mx-0.5 h-5 w-px" />
-          <MenuButton icon={TextHOneIcon} label={t('heading1')} active={state.h1} onClick={() => chain().toggleHeading({ level: 1 }).run()} />
-          <MenuButton icon={TextHTwoIcon} label={t('heading2')} active={state.h2} onClick={() => chain().toggleHeading({ level: 2 }).run()} />
-          <MenuButton icon={TextHThreeIcon} label={t('heading3')} active={state.h3} onClick={() => chain().toggleHeading({ level: 3 }).run()} />
-          <MenuButton icon={QuotesIcon} label={t('quote')} active={state.quote} onClick={() => chain().toggleBlockquote().run()} />
-          {state.table ? (
-            <>
-              <span className="bg-border mx-0.5 h-5 w-px" />
-              <MenuButton icon={PlusIcon} label={t('addRow')} onClick={() => chain().addRowAfter().run()} />
-              <MenuButton icon={ListBulletsIcon} label={t('addColumn')} onClick={() => chain().addColumnAfter().run()} />
-              <MenuButton icon={MinusIcon} label={t('deleteRow')} onClick={() => chain().deleteRow().run()} />
-              <MenuButton icon={TrashIcon} label={t('deleteTable')} onClick={() => chain().deleteTable().run()} />
-            </>
-          ) : null}
-        </div>
-      </BubbleMenu>
-      <FloatingMenu editor={editor} options={{ placement: 'bottom-start', offset: 6 }}>
-        <div className={MENU}>
-          <MenuButton icon={TextHOneIcon} label={t('heading1')} onClick={() => chain().setHeading({ level: 1 }).run()} />
-          <MenuButton icon={TextHTwoIcon} label={t('heading2')} onClick={() => chain().setHeading({ level: 2 }).run()} />
-          <MenuButton icon={TextHThreeIcon} label={t('heading3')} onClick={() => chain().setHeading({ level: 3 }).run()} />
-          <MenuButton icon={ListBulletsIcon} label={t('bulletList')} onClick={() => chain().toggleBulletList().run()} />
-          <MenuButton icon={ListNumbersIcon} label={t('numberedList')} onClick={() => chain().toggleOrderedList().run()} />
-          <MenuButton icon={CheckSquareIcon} label={t('taskList')} onClick={() => chain().toggleTaskList().run()} />
-          <MenuButton icon={QuotesIcon} label={t('quote')} onClick={() => chain().toggleBlockquote().run()} />
-          <MenuButton icon={CodeBlockIcon} label={t('codeBlock')} onClick={() => chain().toggleCodeBlock().run()} />
-          <MenuButton icon={TableIcon} label={t('table')} onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
-          <MenuButton icon={ImageIcon} label={t('image')} onClick={addMedia} />
-          <MenuButton icon={MinusIcon} label={t('divider')} onClick={() => chain().setHorizontalRule().run()} />
-        </div>
-      </FloatingMenu>
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*,video/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          onPickMedia(Array.from(e.target.files ?? []));
-          e.target.value = '';
-        }}
-      />
-    </>
+type Offer = { from: number; to: number; href: string };
+
+/**
+ * Under a pasted link: keep it as a link, or show it as a card. ↑ ↓ move
+ * between the two, Enter picks, Escape keeps the link; those keys belong to
+ * the menu while it is open (the caret stays put). Typing, clicking elsewhere
+ * or scrolling keeps the link.
+ */
+function EmbedOffer({
+  projectId,
+  editor,
+  offer,
+  onClose,
+}: {
+  projectId: string;
+  editor: Editor;
+  offer: Offer;
+  onClose: () => void;
+}) {
+  const t = useTranslations('artifacts');
+  const [loading, setLoading] = useState(false);
+  // 0: Keep as link, 1: Show embed (the default, the reason the menu opened).
+  const [active, setActive] = useState(1);
+  const activeRef = useRef(1);
+  const choose = (i: number) => {
+    activeRef.current = i;
+    setActive(i);
+  };
+  const close = useRef(onClose);
+  const pick = useRef<(choice: number) => void>(() => {});
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    const onTransaction = ({
+      transaction,
+    }: {
+      transaction: { docChanged: boolean; selection: { from: number } };
+    }) => {
+      if (transaction.docChanged || transaction.selection.from !== offer.to) close.current();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      const own = (run: () => void) => {
+        e.preventDefault();
+        e.stopPropagation();
+        run();
+      };
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp')
+        own(() => choose(activeRef.current === 0 ? 1 : 0));
+      else if (e.key === 'Enter') own(() => pick.current(activeRef.current));
+      else if (e.key === 'Escape') own(() => close.current());
+    };
+    const onScroll = () => close.current();
+    editor.on('transaction', onTransaction);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      editor.off('transaction', onTransaction);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [editor, offer]);
+
+  const embed = async () => {
+    setLoading(true);
+    const meta = await fetchEmbed(offer.href, (url) => getLinkPreview(projectId, url));
+    // Closed while the preview loaded (Escape, typing, Keep as link): the link stays a link.
+    if (!mounted.current) return;
+    if (!meta) {
+      infoToast(t('embedUnavailable'));
+      close.current();
+      return;
+    }
+    const { doc } = editor.state;
+    // The link must still be where it was pasted.
+    if (offer.to <= doc.content.size && doc.textBetween(offer.from, offer.to) === offer.href) {
+      const $from = doc.resolve(offer.from);
+      // A top-level paragraph that holds only the link becomes the card; otherwise the card splits it
+      // (a list item must start with a paragraph).
+      const alone =
+        $from.depth === 1 &&
+        $from.parent.type.name === 'paragraph' &&
+        $from.parent.textContent.trim() === offer.href;
+      const range = alone
+        ? { from: $from.before(), to: $from.after() }
+        : { from: offer.from, to: offer.to };
+      editor.chain().focus().insertContentAt(range, { type: 'linkEmbed', attrs: meta }).run();
+    }
+    close.current();
+  };
+  useEffect(() => {
+    close.current = onClose;
+    pick.current = (choice) => (choice === 0 ? onClose() : void embed());
+  });
+
+  let at: { left: number; bottom: number };
+  try {
+    at = editor.view.coordsAtPos(offer.to);
+  } catch {
+    return null;
+  }
+  return createPortal(
+    <div
+      role="menu"
+      aria-label={t('embedOffer')}
+      style={{ top: at.bottom + 6, left: at.left }}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`${MENU_PANEL_STATIC} fixed z-50 w-48`}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        data-highlighted={active === 0 ? '' : undefined}
+        onMouseMove={() => choose(0)}
+        className={menuRow('sm', 'default')}
+        onClick={onClose}
+      >
+        <LinkSimpleIcon className="text-muted-foreground" /> {t('keepAsLink')}
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        data-highlighted={active === 1 ? '' : undefined}
+        onMouseMove={() => choose(1)}
+        className={menuRow('sm', 'default')}
+        disabled={loading}
+        aria-busy={loading}
+        onClick={() => void embed()}
+      >
+        {loading ? <Loading className="size-4" /> : <CardsIcon className="text-muted-foreground" />}{' '}
+        {t('showEmbed')}
+      </button>
+    </div>,
+    document.body,
   );
 }

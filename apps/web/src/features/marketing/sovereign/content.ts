@@ -1,6 +1,8 @@
+import { MARKETING_RELEASE_TRANSLATION_KEYS } from '@/i18n/marketing-release-translation-keys.generated';
+import { localizeUiCatalog } from '@kortix/ui/i18n';
 /**
  * `/sovereign` copy, laid out like the home page: a hero with one walkthrough,
- * four pillars, one tab per topic, the no-lock-in band, the FAQ. English only.
+ * four pillars, one tab per topic, the no-lock-in band, the FAQ. Localized.
  *
  * Every line was checked on 2026-10-28 against the source named above its
  * block. Standing rules (kortix-brand `claims.md`):
@@ -26,7 +28,7 @@ export const hero = {
   title: 'Sovereign and open.',
   titleMuted: 'Open source, on your infrastructure, with any model.',
   sub: 'Read every line of Kortix. Run it on Kortix Cloud, in your VPC or on your own on-prem network. Bring any model with your own keys, and keep your company in a git repository you own.',
-  github: { label: 'View on GitHub', href: 'https://github.com/kortix-ai/suna' },
+  github: { label: 'View on GitHub', href: 'https://github.com/kortix-ai/CompanyOS' },
   selfHost: { label: 'Self-host Kortix', href: '/self-hosted' },
   caption: 'Kortix Cloud or your own server.',
   captionMuted: 'The same images either way.',
@@ -81,10 +83,20 @@ export const startLines = [
 
 /** Model sources. Families only; a self-hosted instance has no managed models. */
 export const modelSources = [
-  { id: 'keys', k: 'Your own keys', v: 'GPT, Claude, Gemini, Mistral, DeepSeek and more', tag: 'Any provider' },
+  {
+    id: 'keys',
+    k: 'Your own keys',
+    v: 'GPT, Claude, Gemini, Mistral, DeepSeek and more',
+    tag: 'Any provider',
+  },
   { id: 'chatgpt', k: 'ChatGPT plan', v: 'The plan you already pay for', tag: 'Subscription' },
   { id: 'custom', k: 'Your endpoint', v: 'Any OpenAI-compatible base URL', tag: 'Custom' },
-  { id: 'managed', k: 'Kortix-managed', v: 'Open-weight DeepSeek and GLM, zero data retention', tag: 'Kortix Cloud' },
+  {
+    id: 'managed',
+    k: 'Kortix-managed',
+    v: 'Open-weight DeepSeek and GLM, zero data retention',
+    tag: 'Kortix Cloud',
+  },
 ] as const;
 
 /** `kortix projects clone`, then the starter's top level. */
@@ -105,25 +117,41 @@ export const pillars = {
       id: 'code',
       name: 'Open source',
       line: 'Read it, fork it, audit it.',
-      facts: ['The whole platform in one public repository', 'An open-source agent harness', 'No black box to trust'],
+      facts: [
+        'The whole platform in one public repository',
+        'An open-source agent harness',
+        'No black box to trust',
+      ],
     },
     {
       id: 'infra',
       name: 'Your infrastructure',
       line: 'Kortix Cloud, your VPC or on-prem.',
-      facts: ['One Docker Compose stack', 'The same images Kortix Cloud runs', 'Updates daily, or pin a version'],
+      facts: [
+        'One Docker Compose stack',
+        'The same images Kortix Cloud runs',
+        'Updates daily, or pin a version',
+      ],
     },
     {
       id: 'models',
       name: 'Any model',
       line: 'Your providers, your keys.',
-      facts: ['Any provider with your own keys', 'Your ChatGPT plan', 'A model per agent or per session'],
+      facts: [
+        'Any provider with your own keys',
+        'Your ChatGPT plan',
+        'A model per agent or per session',
+      ],
     },
     {
       id: 'files',
       name: 'Your files',
       line: 'A git repository you own.',
-      facts: ['Agents, skills and memory as files', 'Clone it with any git client', 'Secret values stay out of git'],
+      facts: [
+        'Agents, skills and memory as files',
+        'Clone it with any git client',
+        'Secret values stay out of git',
+      ],
     },
   ],
 } as const;
@@ -238,7 +266,7 @@ export const updateTracks = [
 export const modelOrder = [
   'The session, channel or automation',
   'The agent',
-  'The project default',
+  'The workspace default',
   'The account default',
   'The platform default',
 ] as const;
@@ -295,7 +323,7 @@ export const faqItems = [
     id: 'open-source',
     question: 'Is Kortix open source?',
     answer:
-      'Yes. The web app, the API, the LLM gateway, the CLI and @kortix/sdk live in one public repository, kortix-ai/suna. Every new session runs an open-source agent harness.',
+      'Yes. The web app, the API, the LLM gateway, the CLI and @kortix/sdk live in one public repository, kortix-ai/CompanyOS. Every new session runs an open-source agent harness.',
   },
   {
     id: 'self-host-where',
@@ -340,3 +368,28 @@ export const faqItems = [
       'The updater runs once a day at a time you set. Track stable, which Kortix promotes after it runs in production, or latest, or pin one exact version. A failed migration swaps nothing.',
   },
 ] as const;
+
+export function localizeMarketingContent(tMarketing: import('@/i18n/translator').UiTranslator) {
+  return localizeUiCatalog(
+    {
+      hero,
+      steps,
+      repoTree,
+      startLines,
+      modelSources,
+      cloneLines,
+      pillars,
+      topics,
+      whereRows,
+      installLines,
+      updateTracks,
+      modelOrder,
+      filesLines,
+      secretsYaml,
+      lockIn,
+      faqItems,
+    },
+    tMarketing,
+    MARKETING_RELEASE_TRANSLATION_KEYS,
+  );
+}

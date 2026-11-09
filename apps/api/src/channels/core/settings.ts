@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { chatChannelBindings, chatInstalls } from '@kortix/db';
 import { db } from '../../shared/db';
 import { PROJECT_ACTIONS } from '../../iam/actions';
@@ -9,6 +9,8 @@ import {
   setChannelConversationPolicy,
 } from '../slack/selection';
 import { type ChatUser, resolveProjectChatActor } from './identity';
+
+export { currentChannelSelection, setChannelAgent, setChannelModel, type ChannelSelection } from '../slack/selection';
 
 /**
  * Channel settings: the project a chat channel runs, and the agent, model and
@@ -106,7 +108,7 @@ export async function switchChannelProject(
     .where(
       and(
         eq(chatInstalls.platform, platform),
-        eq(chatInstalls.workspaceId, channel.teamId),
+        eq(chatInstalls.platformTeamId, channel.teamId),
         eq(chatInstalls.projectId, projectId),
       ),
     )
@@ -114,12 +116,57 @@ export async function switchChannelProject(
   if (!install) return { ok: false, reason: 'not_installed' };
   await db
     .insert(chatChannelBindings)
-    .values({ platform, workspaceId: channel.teamId, channelId: channel.channelId, projectId, pickerTs: null })
+    .values({ platform, platformTeamId: channel.teamId, channelId: channel.channelId, projectId, pickerTs: null })
     .onConflictDoUpdate({
-      target: [chatChannelBindings.platform, chatChannelBindings.workspaceId, chatChannelBindings.channelId],
+      target: [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId],
       set: { projectId, pickerTs: null },
     });
   return { ok: true };
+}
+
+/**
+ * Give a chat a settings row in `projectId`, for a platform whose admitted senders change settings
+ * with no Kortix login (Telegram's and Discord's allowed users). 'not_installed': the platform has
+ * no install of this workspace in the project. A row of this project stays as it is. A row another
+ * project left (a Telegram bot reused across projects) is taken over with its agent and model
+ * cleared; with `keepsOtherProjects` (Discord, where `/connect` moves a channel) it stays, and the
+ * answer is 'held'. `lookupName` runs only for a row this call writes and a `name` that is null;
+ * it never throws.
+ */
+// ponytail: a reconnect with another bot between the check and the write leaves at most one row on
+// the old bot id, which no read keys on. Upgrade: one INSERT … SELECT … WHERE EXISTS.
+export async function ensureChatBinding(
+  settings: SettingsChannel,
+  projectId: string,
+  label: { name: string | null; type: string | null; lookupName?: () => Promise<string | null> },
+  opts: { keepsOtherProjects?: boolean } = {},
+): Promise<'bound' | 'not_installed' | 'held'> {
+  const platform = settings.platform ?? 'slack';
+  const [install] = await db
+    .select({ id: chatInstalls.installId })
+    .from(chatInstalls)
+    .where(and(eq(chatInstalls.platform, platform), eq(chatInstalls.platformTeamId, settings.teamId), eq(chatInstalls.projectId, projectId)))
+    .limit(1);
+  if (!install) return 'not_installed';
+  const current = await currentChannelSelection(settings);
+  if (opts.keepsOtherProjects && current && current.projectId !== projectId) return 'held';
+  const name = label.name ?? (label.lookupName && current?.projectId !== projectId ? await label.lookupName() : null);
+  const values = { platform, platformTeamId: settings.teamId, channelId: settings.channelId, projectId, channelName: name, channelType: label.type };
+  const target = [chatChannelBindings.platform, chatChannelBindings.platformTeamId, chatChannelBindings.channelId];
+  if (opts.keepsOtherProjects) {
+    // A row another project wrote since the read stays; the read back says whose it is.
+    await db.insert(chatChannelBindings).values(values).onConflictDoNothing({ target });
+    return (await currentChannelSelection(settings))?.projectId === projectId ? 'bound' : 'held';
+  }
+  await db
+    .insert(chatChannelBindings)
+    .values(values)
+    .onConflictDoUpdate({
+      target,
+      set: { projectId, agentName: null, model: null, channelName: name, channelType: label.type },
+      setWhere: sql`${chatChannelBindings.projectId} IS DISTINCT FROM ${projectId}`,
+    });
+  return 'bound';
 }
 
 /** Remove the channel's binding. An unbound channel is already done. */
@@ -134,7 +181,7 @@ export async function unbindChannel(user: ChatUser, channel: SettingsChannel): P
     .where(
       and(
         eq(chatChannelBindings.platform, channel.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, channel.teamId),
+        eq(chatChannelBindings.platformTeamId, channel.teamId),
         eq(chatChannelBindings.channelId, channel.channelId),
       ),
     );

@@ -7,11 +7,16 @@
   "exports": {
     ".": "./src/index.ts",
     "./audit-labels": "./src/audit-labels.ts",
+    "./my-kortix-agent": "./src/my-kortix-agent.ts",
+    "./channel-descriptors": "./src/channel-descriptors.ts",
     "./artifact-doc": "./src/artifact-doc.ts",
     "./brand-css": "./src/brand-css.generated.ts",
+    "./wordmark": "./src/wordmark.ts",
+    "./pixel-mark": "./src/pixel-mark.ts",
     "./tools": "./src/tools/index.ts",
     "./utils": "./src/utils/index.ts",
     "./guards": "./src/utils/guards.ts",
+    "./rate-limit": "./src/rate-limit.ts",
     "./constants": "./src/constants/upload-limits.ts",
     "./runtime-versions": "./src/runtime-versions.ts",
     "./email-url": "./src/email-url.ts",
@@ -38,11 +43,17 @@
     "./subprocessors": "./src/subprocessors.ts",
     "./terms": "./src/terms.ts",
     "./ssrf-guard": "./src/ssrf-guard.ts",
-    "./well-known": "./src/well-known.ts"
+    "./well-known": "./src/well-known.ts",
+    "./workspace-actions": "./src/workspace-actions.ts",
+    "./workspace-routes": "./src/workspace-routes.ts",
+    "./workspace-settings": "./src/workspace-settings.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsgo.tsbuildinfo",
     "test": "node ../../scripts/test-guard.mjs \"bun test --timeout ${KORTIX_TEST_TIMEOUT_MS:-15000}\""
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",

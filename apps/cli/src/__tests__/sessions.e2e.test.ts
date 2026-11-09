@@ -27,10 +27,7 @@ let previousDisableSandboxEnvFile: string | undefined;
 let server: ReturnType<typeof Bun.serve> | null = null;
 let sessionCreateBody: Record<string, unknown> | null = null;
 let sessionList: Record<string, unknown>[] = [];
-let transcriptRequests: URL[] = [];
-/** Per-session transcript origin, so a test can say which sessions the server
- *  serves live and which it serves from the durable mirror. */
-let transcriptSources: Record<string, 'live' | 'mirror'> = {};
+let logRequests: URL[] = [];
 let apiRequests: string[] = [];
 let clientCreatesBranch = false;
 let readinessStage = 'ready';
@@ -54,7 +51,7 @@ describe('sessions new CLI flow', () => {
     // Park the process OUTSIDE any git repository for the whole file. A
     // timed-out beforeEach used to leave cwd inside the checkout, so `sessions
     // new` pushed the session branch with the CLI's own git credentials and
-    // targeted github.com/kortix-ai/suna. It only failed because the CI
+    // targeted github.com/kortix-ai/CompanyOS. It only failed because the CI
     // checkout is a detached HEAD with no refs/heads/main. From a non-repo
     // directory the same path can only produce an immediate local git error.
     parkedCwd = await mkdtemp(join(tmpdir(), 'kortix-cli-session-parked-'));
@@ -102,8 +99,7 @@ describe('sessions new CLI flow', () => {
     process.env.KORTIX_DISABLE_SANDBOX_ENV_FILE = '1';
     sessionCreateBody = null;
     sessionList = [];
-    transcriptRequests = [];
-    transcriptSources = {};
+    logRequests = [];
     apiRequests = [];
     clientCreatesBranch = false;
     readinessStage = 'ready';
@@ -130,7 +126,7 @@ describe('sessions new CLI flow', () => {
       fetch: async (req) => {
         const url = new URL(req.url);
         apiRequests.push(`${req.method} ${url.pathname}`);
-        if (req.method === 'GET' && url.pathname === `/v1/projects/${PROJECT_ID}`) {
+        if (req.method === 'GET' && url.pathname === `/v1/workspaces/${PROJECT_ID}`) {
           return Response.json({
             project_id: PROJECT_ID,
             account_id: ACCOUNT_ID,
@@ -145,7 +141,7 @@ describe('sessions new CLI flow', () => {
             updated_at: '2026-01-01T00:00:00.000Z',
           });
         }
-        if (req.method === 'POST' && url.pathname === `/v1/projects/${PROJECT_ID}/sessions`) {
+        if (req.method === 'POST' && url.pathname === `/v1/workspaces/${PROJECT_ID}/sessions`) {
           sessionCreateBody = await req.json() as Record<string, unknown>;
           const sessionId = (sessionCreateBody.session_id as string | undefined)
             ?? '00000000-0000-4000-a000-000000000333';
@@ -158,7 +154,7 @@ describe('sessions new CLI flow', () => {
             sandbox_provider: 'daytona',
             sandbox_id: `sandbox-${sessionId}`,
             sandbox_url: null,
-            opencode_session_id: null,
+            runtime_session_id: null,
             name: null,
             agent_name: 'default',
             status: 'provisioning',
@@ -174,55 +170,38 @@ describe('sessions new CLI flow', () => {
         }
         if (
           req.method === "GET" &&
-          url.pathname.startsWith(`/v1/projects/${PROJECT_ID}/sessions/`) &&
-          !url.pathname.endsWith("/transcript")
+          new RegExp(`^/v1/workspaces/${PROJECT_ID}/sessions/[^/]+$`).test(url.pathname)
         ) {
           return Response.json({
             session_id: "00000000-0000-4000-a000-000000000333",
             status: readinessStage === "ready" ? "running" : readinessStage,
           });
         }
-        if (req.method === 'GET' && url.pathname === `/v1/projects/${PROJECT_ID}/sessions`) {
+        if (req.method === 'GET' && url.pathname === `/v1/workspaces/${PROJECT_ID}/sessions`) {
           return Response.json(sessionList);
         }
-        const transcriptMatch = url.pathname.match(new RegExp(`^/v1/projects/${PROJECT_ID}/sessions/([^/]+)/transcript$`));
-        if (req.method === 'GET' && transcriptMatch) {
-          transcriptRequests.push(url);
-          const source = transcriptSources[transcriptMatch[1]!] ?? 'live';
+        const logMatch = url.pathname.match(new RegExp(`^/v1/workspaces/${PROJECT_ID}/sessions/([^/]+)/log$`));
+        if (req.method === 'GET' && logMatch) {
+          logRequests.push(url);
+          const common = {
+            schema: 'kortix.session/2', v: 1, thread_id: 'ses_test', kind: 'turn', status: 'complete',
+            in_context: true, model: null, usage: null, finish: 'stop', error: null,
+            producer: { harness: 'pi', harness_version: '1', adapter_version: '1' },
+            created_at: '2026-06-20T00:00:00.000Z', completed_at: '2026-06-20T00:02:00.000Z',
+          };
           return Response.json({
-            available: true,
-            reason:
-              source === 'mirror'
-                ? 'session is stopped; live transcript requires a running sandbox'
-                : null,
-            source,
-            // A mirror read reports completeness for itself; a live read is
-            // whatever the sandbox holds right now.
-            complete: source === 'mirror',
-            opencode_session_id: 'ses_test',
-            message_count: 2,
+            session: { session_id: logMatch[1] }, generation: 0, thread_id: 'ses_test', has_more: false,
+            threads: [{ schema: 'kortix.session/2', v: 1, thread_id: 'ses_test', parent_thread_id: null,
+              spawned_by: null, agent: null, title: null, created_at: common.created_at }],
             messages: [
-              {
-                role: 'user',
-                created: '2026-06-20T00:00:00.000Z',
-                completed: null,
-                text: 'Review recent sessions',
-                tools: [],
-                files: [],
-                reasoning_omitted: false,
-                error: null,
-              },
-              {
-                role: 'assistant',
-                created: '2026-06-20T00:01:00.000Z',
-                completed: '2026-06-20T00:02:00.000Z',
-                text: 'Found the important changes.',
-                tools: [{ tool: 'bash', status: 'completed', output: 'must not leak' }],
-                files: [],
-                reasoning_omitted: true,
-                error: null,
-                output: 'must not leak',
-              },
+              { ...common, message_id: 'user', seq: 1, role: 'user', blocks: [{ id: 'request', type: 'text', text: 'Review recent sessions' }] },
+              { ...common, message_id: 'assistant', seq: 2, role: 'assistant', blocks: [
+                { id: 'response', type: 'text', text: 'Found the important changes.' },
+                { id: 'reasoning', type: 'reasoning', text: 'must not leak' },
+                { id: 'call', type: 'tool_call', call_id: 'bash-call', name: 'bash', kind: 'shell',
+                  input: { command: 'must not leak' }, status: 'complete',
+                  result: { is_error: false, content: [{ type: 'text', text: 'must not leak' }] } },
+              ] },
             ],
           });
         }
@@ -444,7 +423,7 @@ describe('sessions new CLI flow', () => {
     expect(sessionCreateBody).toBeNull();
   });
 
-  test('digest uses compact project transcript endpoint', async () => {
+  test('digest reads the stored session log for running and stopped sessions', async () => {
     const runningId = '11111111-1111-4111-8111-111111111111';
     const stoppedId = '22222222-2222-4222-8222-222222222222';
     sessionList = [
@@ -457,12 +436,12 @@ describe('sessions new CLI flow', () => {
         sandbox_provider: 'daytona',
         sandbox_id: runningId,
         sandbox_url: `http://127.0.0.1/v1/p/external-${runningId}/8000`,
-        opencode_session_id: 'ses_test',
+        runtime_session_id: 'ses_test',
         name: 'Digest target',
         agent_name: 'harness-reflector',
         status: 'running',
         error: null,
-        metadata: { opencode_sessions: [{ title: 'Digest target' }] },
+        runtime_sessions: [{ title: 'Digest target' }],
         created_at: '2026-06-20T00:00:00.000Z',
         updated_at: '2026-06-20T00:05:00.000Z',
       },
@@ -475,7 +454,7 @@ describe('sessions new CLI flow', () => {
         sandbox_provider: 'daytona',
         sandbox_id: stoppedId,
         sandbox_url: null,
-        opencode_session_id: null,
+        runtime_session_id: null,
         name: 'Stopped target',
         agent_name: 'default',
         status: 'stopped',
@@ -486,27 +465,18 @@ describe('sessions new CLI flow', () => {
       },
     ];
 
-    transcriptSources[stoppedId] = 'mirror';
-
     const { code, stdout } = await captureStdout(() =>
       runSessions(['digest', '--all', '--messages', '5', '--chars', '120', '--json']),
     );
 
     expect(code).toBe(0);
-    // EVERY session is asked, not only the running one. The API serves a
-    // stopped session from its durable transcript mirror, so skipping the
-    // request here is how the digest used to lose a transcript it could read.
-    expect(transcriptRequests).toHaveLength(2);
-    expect(transcriptRequests.map((u) => u.pathname)).toEqual(
-      expect.arrayContaining([
-        `/v1/projects/${PROJECT_ID}/sessions/${runningId}/transcript`,
-        `/v1/projects/${PROJECT_ID}/sessions/${stoppedId}/transcript`,
-      ]),
-    );
-    for (const request of transcriptRequests) {
-      expect(request.searchParams.get('limit')).toBe('5');
-      expect(request.searchParams.get('chars')).toBe('120');
-    }
+    expect(logRequests).toHaveLength(2);
+    expect(logRequests.map((url) => url.pathname)).toEqual(expect.arrayContaining([
+      `/v1/workspaces/${PROJECT_ID}/sessions/${runningId}/log`,
+      `/v1/workspaces/${PROJECT_ID}/sessions/${stoppedId}/log`,
+    ]));
+    for (const request of logRequests) expect(request.searchParams.get('limit')).toBe('5');
+    expect(apiRequests.filter((request) => request.includes('/transcript'))).toEqual([]);
 
     const parsed = JSON.parse(stdout) as {
       sessions: Array<{
@@ -519,24 +489,16 @@ describe('sessions new CLI flow', () => {
       }>;
     };
     expect(parsed.sessions).toHaveLength(2);
-    // The API here predates W4 (only opencode_* names); the digest still
-    // serves the neutral keys, with the pre-W4 ones beside them.
     expect((parsed.sessions[0] as unknown as { session: unknown }).session).toMatchObject({
       runtime_session_id: 'ses_test',
       runtime_titles: ['Digest target'],
-      opencode_session_id: 'ses_test',
-      opencode_titles: ['Digest target'],
     });
-    expect(parsed.sessions[0]!.transcript).toMatchObject({ available: true, source: 'live' });
-    // The stopped session: served, and honest about where from.
-    expect(parsed.sessions[1]!.transcript).toMatchObject({
-      available: true,
-      source: 'mirror',
-      complete: true,
-    });
+    for (const session of parsed.sessions) {
+      expect(session.transcript).toMatchObject({ available: true, source: 'log', complete: true });
+    }
     expect(JSON.stringify(parsed)).not.toContain('must not leak');
     expect(parsed.sessions[0]!.transcript.messages[1]!.tools).toEqual([
-      { tool: 'bash', status: 'completed' },
+      { tool: 'bash', status: 'complete' },
     ]);
   });
 });

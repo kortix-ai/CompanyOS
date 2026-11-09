@@ -1,5 +1,5 @@
 import type { UpdateConnectionCredentialInput } from '@kortix/api-contract';
-import { connectorConnections, connectors, projects, projectSessionConnectorBindings } from '@kortix/db';
+import { connectorConnections, connectors, projectSessionConnectorBindings } from '@kortix/db';
 /**
  * Connector CRUD that round-trips `kortix.yaml` — the web UI "Add connector"
  * flow (mirrors triggers). The manifest holds the connector definition.
@@ -25,14 +25,15 @@ import {
   type DefaultMode,
   type ProjectPolicySpec,
   extractProjectPolicies,
-  projectPoliciesToTomlEntries,
-  projectPolicySettingsToToml,
+  projectPoliciesToManifestEntries,
+  projectPolicySettingsToManifest,
 } from '../projects/policies';
 import { db } from '../shared/db';
 import { featureDisabledBody } from '../feature-flags/gate';
 import { resolveFeatureFlag } from '../feature-flags/registry';
 import { defaultConnectionIdForConnector, upsertCredential, upsertOAuth2Credential } from './credentials';
-import { areValidConditions, isValidMatcher, normalizeConditions } from './policy';
+import { areValidConditions, isValidMatcher } from '@kortix/manifest-schema';
+import { normalizeConditions } from './policy';
 import { canonicalConnectorAlias } from '../shared/connector-alias';
 import {
   MAX_POLICY_SETS_PER_CONNECTOR,
@@ -49,6 +50,7 @@ import {
   type ManifestMutationResult,
   mutateManifestWithRetry,
 } from './manifest-mutation';
+import { projectsView } from '../workspaces/rows';
 
 export interface ConnectorDraft {
   slug: string;
@@ -173,7 +175,7 @@ export function mergeConnectorDraftEntry(
 }
 
 async function loadRow(projectId: string) {
-  const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   return row ?? null;
 }
 
@@ -373,7 +375,7 @@ export async function setConnectorCredentialShared(
   if (connector.authSecret) {
     return {
       ok: false,
-      error: 'Clear the project secret binding before storing a connector credential',
+      error: 'Clear the workspace secret binding before storing a connector credential',
       status: 409,
     };
   }
@@ -417,6 +419,28 @@ export async function setConnectorCredentialShared(
   };
 }
 
+async function mutateConnectorEntry(
+  projectId: string, accountId: string, operation: string, slug: string, commitMessage: string,
+  mutate: (entry: Record<string, unknown>) => void,
+): Promise<CrudResult> {
+  return mutateProjectConnectorManifest(
+    projectId, accountId, operation,
+    (manifest) => {
+      const current = connectorEntries(manifest);
+      const entry = current.find((candidate) => candidate?.slug === slug);
+      if (!entry) return { ok: false, error: 'connector not found', status: 404 };
+      mutate(entry);
+      manifest.raw.connectors = current;
+      const error = extractConnectors(manifest).errors.find(
+        (candidate) => candidate.slug === slug,
+      );
+      if (error) return { ok: false, error: error.error, status: 400 };
+      return { ok: true, commitMessage };
+    },
+    slug,
+  );
+}
+
 /**
  * `shared` is now the only credential mode (`per_user` removed 2026-07-05).
  * This entry
@@ -431,25 +455,12 @@ export async function setConnectorCredentialModeInManifest(
   slug: string,
   mode: 'shared',
 ): Promise<CrudResult> {
-  return mutateProjectConnectorManifest(
-    projectId,
-    accountId,
+  return mutateConnectorEntry(projectId, accountId,
     `the connector ${slug} credential mode was being updated`,
-    (manifest) => {
-      const current = Array.isArray(manifest.raw.connectors)
-        ? (manifest.raw.connectors as Record<string, unknown>[])
-        : [];
-      const entry = current.find((candidate) => candidate?.slug === slug);
-      if (!entry) return { ok: false, error: 'connector not found', status: 404 };
+    slug, `chore: set ${slug} credential mode → ${mode}`,
+    (entry) => {
       delete entry.credential;
-      manifest.raw.connectors = current;
-      const error = extractConnectors(manifest).errors.find(
-        (candidate) => candidate.slug === slug,
-      );
-      if (error) return { ok: false, error: error.error, status: 400 };
-      return { ok: true, commitMessage: `chore: set ${slug} credential mode → ${mode}` };
     },
-    slug,
   );
 }
 
@@ -460,28 +471,12 @@ export async function setConnectorAuthorizationStrategyInManifest(
   slug: string,
   authorizationStrategy: ConnectorAuthorizationStrategy,
 ): Promise<CrudResult> {
-  return mutateProjectConnectorManifest(
-    projectId,
-    accountId,
+  return mutateConnectorEntry(projectId, accountId,
     `the connector ${slug} connection strategy was being updated`,
-    (manifest) => {
-      const current = Array.isArray(manifest.raw.connectors)
-        ? (manifest.raw.connectors as Record<string, unknown>[])
-        : [];
-      const entry = current.find((candidate) => candidate?.slug === slug);
-      if (!entry) return { ok: false, error: 'connector not found', status: 404 };
+    slug, `chore: set ${slug} connection strategy to ${authorizationStrategy}`,
+    (entry) => {
       entry.authorization_strategy = authorizationStrategy;
-      manifest.raw.connectors = current;
-      const error = extractConnectors(manifest).errors.find(
-        (candidate) => candidate.slug === slug,
-      );
-      if (error) return { ok: false, error: error.error, status: 400 };
-      return {
-        ok: true,
-        commitMessage: `chore: set ${slug} connection strategy to ${authorizationStrategy}`,
-      };
     },
-    slug,
   );
 }
 
@@ -497,29 +492,13 @@ export async function setConnectorSensitiveInManifest(
   slug: string,
   sensitive: boolean,
 ): Promise<CrudResult> {
-  return mutateProjectConnectorManifest(
-    projectId,
-    accountId,
+  return mutateConnectorEntry(projectId, accountId,
     `the connector ${slug} sensitivity was being updated`,
-    (manifest) => {
-      const current = Array.isArray(manifest.raw.connectors)
-        ? (manifest.raw.connectors as Record<string, unknown>[])
-        : [];
-      const entry = current.find((candidate) => candidate?.slug === slug);
-      if (!entry) return { ok: false, error: 'connector not found', status: 404 };
+    slug, `chore: mark ${slug} ${sensitive ? 'sensitive' : 'not sensitive'}`,
+    (entry) => {
       if (sensitive) entry.sensitive = true;
       else delete entry.sensitive;
-      manifest.raw.connectors = current;
-      const error = extractConnectors(manifest).errors.find(
-        (candidate) => candidate.slug === slug,
-      );
-      if (error) return { ok: false, error: error.error, status: 400 };
-      return {
-        ok: true,
-        commitMessage: `chore: mark ${slug} ${sensitive ? 'sensitive' : 'not sensitive'}`,
-      };
     },
-    slug,
   );
 }
 
@@ -533,25 +512,12 @@ export async function setConnectorNameInManifest(
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'name is required', status: 400 };
   if (trimmed.length > 255) return { ok: false, error: 'name is too long (max 255)', status: 400 };
-  return mutateProjectConnectorManifest(
-    projectId,
-    accountId,
+  return mutateConnectorEntry(projectId, accountId,
     `the connector ${slug} name was being updated`,
-    (manifest) => {
-      const current = Array.isArray(manifest.raw.connectors)
-        ? (manifest.raw.connectors as Record<string, unknown>[])
-        : [];
-      const entry = current.find((candidate) => candidate?.slug === slug);
-      if (!entry) return { ok: false, error: 'connector not found', status: 404 };
+    slug, `chore: rename connector ${slug} → ${trimmed}`,
+    (entry) => {
       entry.name = trimmed;
-      manifest.raw.connectors = current;
-      const error = extractConnectors(manifest).errors.find(
-        (candidate) => candidate.slug === slug,
-      );
-      if (error) return { ok: false, error: error.error, status: 400 };
-      return { ok: true, commitMessage: `chore: rename connector ${slug} → ${trimmed}` };
     },
-    slug,
   );
 }
 
@@ -842,16 +808,13 @@ export function agentsUsingPolicySet(
     .sort();
 }
 
-/** Shared guard: a v2/v3 manifest and a connector that may carry sets. */
+/** Shared guard: a connector that may carry sets. */
 function policySetTarget(
-  manifest: { raw: Record<string, unknown>; schemaVersion?: number },
+  manifest: { raw: Record<string, unknown> },
   slug: string,
 ):
   | { ok: true; current: Record<string, unknown>[]; entry: Record<string, unknown> }
   | ReturnType<typeof policySetError> {
-  if ((manifest.schemaVersion ?? 1) < 2) {
-    return policySetError(400, 'unsupported_in_v1', 'policy sets need kortix_version 2 or 3');
-  }
   const current = connectorEntries(manifest);
   const entry = current.find((candidate) => candidate?.slug === slug);
   if (!entry) return policySetError(404, 'connector_not_found', 'connector not found');
@@ -1097,11 +1060,11 @@ export async function setProjectPoliciesInManifest(
     accountId,
     'the project connector policies were being updated',
     (manifest) => {
-      const entries = projectPoliciesToTomlEntries(policies);
+      const entries = projectPoliciesToManifestEntries(policies);
       if (entries.length > 0) manifest.raw.policies = entries;
       else delete manifest.raw.policies;
 
-      const settingsBlock = projectPolicySettingsToToml({ defaultMode });
+      const settingsBlock = projectPolicySettingsToManifest({ defaultMode });
       if (settingsBlock) manifest.raw.policy = settingsBlock;
       else delete manifest.raw.policy;
 

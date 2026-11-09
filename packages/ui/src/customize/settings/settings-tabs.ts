@@ -6,7 +6,7 @@ import { accountPanelUrl, hubTarget } from '../../internal/stores/account-panel-
  * This is the merged vocabulary for Kortix's three former settings surfaces —
  * the project Customize overlay, the user settings modal, and the account
  * settings page — now collapsed into one project-scoped settings overlay at
- * `/projects/[id]/settings(/<tab>)?`. It reads its active tab from the path
+ * `/workspaces/[id]/settings(/<tab>)?`. It reads its active tab from the path
  * segment or, for legacy links, the old `?section=` / `?customize=` query
  * params. This module keeps the tab enum, the default, and a parser in one
  * spot so the overlay, the sidebar, and any deep-link helpers all agree on
@@ -20,7 +20,7 @@ import { accountPanelUrl, hubTarget } from '../../internal/stores/account-panel-
  * many. Those ids live in `ACCOUNT_GRADUATED` now and redirect to that page.
  *
  * Files, Changes, Agent(s), Connectors, and Skills are NOT settings tabs —
- * they are standalone `/projects/[id]/<section>` pages (any member can
+ * they are standalone `/workspaces/[id]/<section>` pages (any member can
  * browse Files; Agent/Connectors/Skills gate on their own read leaf — see
  * capabilities/capability-tab-routes.ts). Everything else that used to live
  * across the three old surfaces now lives here, in some cases under a new
@@ -32,6 +32,7 @@ import {
   capabilityTabHref,
   channelsHref,
 } from '../../internal/lib/capability-tab-routes';
+import { adminPath } from '../../lib/routes';
 
 export type SettingsTab =
   | 'profile'
@@ -45,6 +46,10 @@ export type SettingsTab =
   | 'sessions'
   | 'preferences'
   | 'connected'
+  // The browsers a person connected with the Kortix Chrome extension. The API
+  // and the CLI link here (`/settings/chrome`) when an agent needs a browser
+  // and none is connected.
+  | 'chrome'
   // API keys came BACK, and only half of what left returned. The old
   // `api-keys` tab listed three kinds of credential at once — a person's own
   // keys, service-account bearers, and the connector tokens the runtime mints
@@ -87,13 +92,13 @@ export type SettingsTab =
   // with no label on the way naming what it does.
   //
   // The id is `workspace`, not `general`: `general` is already spent on a
-  // GRADUATED redirect to `/projects/<id>/config` (see the map below), and a
+  // GRADUATED redirect to `/workspaces/<id>/config` (see the map below), and a
   // live tab sharing that key would shadow every bookmark pointing at it. The
   // rail row is still LABELLED "General" under a "Workspace" group, which is
   // what it was called before it graduated — see `rail.ts`.
   //
   // It renders `tabs/general-tab.tsx`. That component had two mounts while
-  // `/projects/<id>/config?section=general` existed; since that page was
+  // `/workspaces/<id>/config?section=general` existed; since that page was
   // retired on 2026-09-02 this tab is its ONLY mount, and the `general`
   // redirect below is all that is left of the other one.
   | 'workspace'
@@ -108,16 +113,15 @@ export type SettingsTab =
   // the config page, while `/settings/sandbox` opens this overlay.
   | 'sandbox'
   | 'feature-flags'
-  // Upgrades MOVED here outright on 2026-09-02 (Jay: "move this upgrade
-  // section over the settings panel") — it is no longer a section of
-  // `/projects/<id>/config`. `UpgradesView` has one mount now, this one.
-  | 'upgrades'
   // The two connect pages, at the foot of the rail (KRTX-1997). Each was a
   // dialog reachable only from a dismissible sidebar promo; a dismissed promo
   // left no way back. `computer` is singular on purpose: `computers` is a
   // `GRADUATED` redirect to the Connectors page and must stay one.
   | 'mcp'
-  | 'computer';
+  | 'computer'
+  // The caller's personal keys (`GET /v1/me/tokens`): keys bound to no
+  // workspace, which act as the person in each workspace of theirs.
+  | 'personal-keys';
 // Organization (General, Billing, Usage, Groups, Roles, Identity, Audit log)
 // and API keys are gone: every one of them configured the ACCOUNT, not the
 // project, and the account already owns a full page for them at
@@ -125,18 +129,18 @@ export type SettingsTab =
 //
 // The project's own configuration left too — General, Members, Secrets,
 // Channels, Repositories, Models, Sandbox templates, Snapshots, Marketplace,
-// Review, Voice, Feature flags (was `experimental`) and Upgrades. All thirteen
-// became sections of the Customize bar's Settings tab, `/projects/[id]/config
+// Review, Voice and Feature flags (was `experimental`). All twelve
+// became sections of the Customize bar's Settings tab, `/workspaces/[id]/config
 // ?section=<key>`, and that page was itself retired on 2026-09-02: each id now
 // resolves through `GRADUATED` to a capability page, or is a live tab of this
-// overlay again (`workspace`, `sandbox`, `feature-flags`, `upgrades`).
+// overlay again (`workspace`, `sandbox`, `feature-flags`).
 // Nothing routes to `/config` any more — `menu-registry-destinations.test.ts`
 // fails on a palette row that tries.
 
 /**
  * The default must be a tab that survives every gate, or the overlay opens on
  * nothing. It was `general` until project configuration moved to
- * `/projects/[id]/config`; `profile` is the first surviving tab and the one
+ * `/workspaces/[id]/config`; `profile` is the first surviving tab and the one
  * every signed-in user can always open — no permission, no flag, no project.
  */
 export const DEFAULT_SETTINGS_TAB: SettingsTab = 'profile';
@@ -147,15 +151,15 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   'appearance',
   'sessions',
   'preferences',
-  'tokens',
+  'chrome',
+  'personal-keys',
   'mcp',
   'computer',
-  // `connected` is a legacy alias for the person's Profile tab in RENAMED.
-  // `credits` and `plan` are still in the type but NOT here: the overlay's
-  // Account group was removed on 2026-09-03 (Marko) — a wallet and a
-  // subscription belong to the account page, `/accounts/[id]`, and both ids
-  // resolve there through `ACCOUNT_GRADUATED`.
-  // `workspace`, `sandbox`, `feature-flags` and `upgrades` are still in the
+  // `tokens`, `connected`, `credits` and `plan` are still in the type but NOT
+  // here: a workspace's keys, GitHub connections, wallet and plan live in
+  // Workspace settings, and each id resolves there through
+  // `ACCOUNT_GRADUATED`.
+  // `workspace`, `sandbox` and `feature-flags` are still in the
   // type — `settings-panel.tsx` keeps their panes mountable — but NOT here:
   // the overlay's Workspace group was removed on 2026-09-03 (Marko), so no
   // route or palette row may open them. Each id resolves through `GRADUATED`
@@ -173,8 +177,8 @@ export function parseSettingsTab(raw: string | null | undefined): SettingsTab | 
  * land on the new page instead of opening the overlay.
  */
 export const GRADUATED: Record<string, (projectId: string) => string> = {
-  files: (p) => `/projects/${p}/files`,
-  changes: (p) => `/projects/${p}/files?panel=proposed-changes`,
+  files: (p) => `/workspaces/${p}/files`,
+  changes: (p) => `/workspaces/${p}/files?panel=proposed-changes`,
   // The overlay section was `agents`; the route segment is `agent`. Both
   // spellings redirect, because every bookmark and stale href in the wild
   // points at the plural one.
@@ -196,29 +200,26 @@ export const GRADUATED: Record<string, (projectId: string) => string> = {
   webhooks: (p) => capabilityTabHref(p, 'triggers'),
 
   // ── Project configuration → the Customize bar's Settings tab ────────────
-  // `/projects/<id>/config` holds General, Sandbox templates, Feature flags
-  // and Upgrades. It was retired on 2026-09-02 for the overlay's Workspace
+  // `/workspaces/<id>/config` holds General, Sandbox templates and Feature
+  // flags. It was retired on 2026-09-02 for the overlay's Workspace
   // group and brought back on 2026-09-03 (Marko), and the overlay group went
   // — so every id that ever named one of these sections, the overlay's own
   // tab ids included, lands on the page. Review, the one section that was an
   // inbox rather than configuration, is a capability tab of its own.
-  workspace: (p) => `${capabilityTabHref(p, 'config')}`,
-  general: (p) => `${capabilityTabHref(p, 'config')}`,
-  settings: (p) => `${capabilityTabHref(p, 'config')}`,
+  workspace: (p) => capabilityTabHref(p, 'config'),
+  general: (p) => capabilityTabHref(p, 'config'),
+  settings: (p) => capabilityTabHref(p, 'config'),
   // Repositories and its pre-rename `git` are the Git repo section — its own
   // section of the Settings tab since 2026-09-03.
-  repositories: (p) => `${capabilityTabHref(p, 'config')}?section=git`,
-  git: (p) => `${capabilityTabHref(p, 'config')}?section=git`,
-  sandbox: (p) => `${capabilityTabHref(p, 'config')}?section=sandbox`,
+  repositories: (p) => adminPath(p, 'git'),
+  git: (p) => adminPath(p, 'git'),
+  sandbox: (p) => adminPath(p, 'sandbox'),
   // Snapshots merged into Sandbox templates — a snapshot is a template's
   // build history.
-  snapshots: (p) => `${capabilityTabHref(p, 'config')}?section=sandbox`,
-  'feature-flags': (p) => `${capabilityTabHref(p, 'config')}?section=feature-flags`,
+  snapshots: (p) => adminPath(p, 'sandbox'),
+  'feature-flags': (p) => adminPath(p, 'feature-flags'),
   // `experimental` was renamed Feature flags on the way.
-  experimental: (p) => `${capabilityTabHref(p, 'config')}?section=feature-flags`,
-  upgrades: (p) => `${capabilityTabHref(p, 'config')}?section=upgrades`,
-  // `upgrade`, singular, is the old Customize id for the Upgrades pane.
-  upgrade: (p) => `${capabilityTabHref(p, 'config')}?section=upgrades`,
+  experimental: (p) => adminPath(p, 'feature-flags'),
   review: (p) => capabilityTabHref(p, 'review'),
   // Secrets, Channels, and Models graduated a SECOND time — off the Settings
   // sub-nav entirely and onto their own top-level Customize tab. `models` and
@@ -234,7 +235,7 @@ export const GRADUATED: Record<string, (projectId: string) => string> = {
   secrets: (p) => capabilityTabHref(p, 'secrets'),
   // Channels graduated a second time and then came back down: it is a scope of
   // the Connectors page now, not a tab of its own. `channelsHref` is that one
-  // URL, shared with the retired `/projects/<id>/channels` route so the two
+  // URL, shared with the retired `/workspaces/<id>/channels` route so the two
   // cannot disagree about the param.
   channels: (p) => channelsHref(p),
   models: (p) => capabilityTabHref(p, 'models'),
@@ -249,7 +250,7 @@ export const GRADUATED: Record<string, (projectId: string) => string> = {
   // closest honest destination for a stale bookmark is the Customize index —
   // it lists every surface that replaced it, rather than a 404 or a pane that
   // no longer exists.
-  marketplace: (p) => `/projects/${p}/customize`,
+  marketplace: (p) => `/workspaces/${p}/customize`,
 };
 
 /**
@@ -296,38 +297,26 @@ export const ACCOUNT_GRADUATED: Record<string, string> = {
   roles: 'roles',
   identity: 'identity',
   audit: 'audit',
-  // `api-keys` and `tokens` are NOT here any more. Both used to send a stale
-  // link to `/accounts/<id>?tab=tokens`, which was right while every
-  // credential lived on that one page. Since 2026-08-18 a person's own API
-  // keys are back in this overlay as the `tokens` tab and only the automation
-  // half stayed on the account page, so both ids resolve to the overlay
-  // instead: `tokens` through `parseSettingsTab` (it names a live tab now) and
-  // `api-keys` through `RENAMED` below. That is the better default for a stale
-  // link — someone who bookmarked "API keys" wanted a key they could use, and
-  // the pane they land on carries a one-line pointer to the account page for
-  // the other kind.
   members: 'access-projects',
+  // Workspaces (FAQ, PR 1): `/settings` keeps only what is the person's own.
+  // Personal access keys act in ONE workspace, so they live in Workspace
+  // settings › API keys; the account's GitHub connections in Git repo. Each
+  // lands on the current workspace's section (`account-hub-router.tsx`), or
+  // on the chooser with no workspace.
+  tokens: 'tokens',
+  'api-keys': 'tokens',
+  connected: 'git',
 };
 
 /**
- * Legacy ids that came BACK into the overlay under a new name.
- *
- * One entry, and it is a rename rather than a graduation: `api-keys` was this
- * overlay's tab for a person's own API keys before every credential surface
- * moved to `/accounts/[id]`. The personal half has returned as `tokens`, so a
- * stale `/settings/api-keys` or `/customize/api-keys` link lands on the pane
- * that holds what it was a link to, not on the account page's automation tab.
- *
- * Checked BEFORE `ACCOUNT_GRADUATED` so the answer does not depend on whether
- * the caller happened to have resolved an account id yet.
+ * Legacy ids that came BACK into the overlay under a new name. None today:
+ * `api-keys` and `connected` resolve to Workspace settings. Checked BEFORE
+ * `ACCOUNT_GRADUATED` so an entry never depends on an account id.
  */
 export const RENAMED: Record<string, SettingsTab> = {
-  // Personal sign-in details live on Profile, not the organization's Git pane.
-  connected: 'profile',
-  'api-keys': 'tokens',
-  // Every project-configuration spelling (`general`, `git`, `snapshots`,
-  // `experimental`, `upgrade`, …) is in `GRADUATED` above: they name the
-  // Customize bar's Settings tab, not a tab of this overlay.
+  // `connected` and `api-keys` left this overlay for Workspace settings
+  // (`ACCOUNT_GRADUATED`). Every project-configuration spelling (`general`,
+  // `git`, `snapshots`, `experimental`, …) is in `GRADUATED` above.
 };
 
 /**
@@ -366,7 +355,7 @@ export function isProjectGraduatedSection(rawSection: string | null | undefined)
  * `/settings/<id>`; anything unrecognized returns `null`.
  *
  * There is no rename map left. Every id that used to be renamed INTO the
- * overlay (`settings`, `git`, `upgrade`, the seven `llm-*` ids) now names a
+ * overlay (`settings`, `git`, the seven `llm-*` ids) now names a
  * surface outside it, so all of them are entries in `GRADUATED` above.
  *
  * **`accountId` is optional and is checked FIRST.** It is the caller's
@@ -389,7 +378,7 @@ export function legacySectionRedirect(
   // depends on whether the caller has an account id in hand yet. `Object.hasOwn`
   // for the same prototype-pollution reason as the two maps below.
   const tab = resolveOverlayTab(rawSection);
-  if (tab) return `/projects/${projectId}/settings/${tab}`;
+  if (tab) return `/workspaces/${projectId}/settings/${tab}`;
 
   // `isAccountGraduatedSection`, not a bare `ACCOUNT_GRADUATED[rawSection]`:
   // a plain object literal inherits `Object.prototype`, so the bare lookup
@@ -406,13 +395,13 @@ export function legacySectionRedirect(
     // a screen they never chose.
     //
     // `members` is scoped, every other account-graduated id is not: a stale
-    // `/projects/<id>/members` bookmark should open the account's Access ›
+    // `/workspaces/<id>/members` bookmark should open the account's Access ›
     // Projects pane pre-filtered to the project it was a bookmark for, not
     // every project the account can see. No other legacy id carries a
     // project-specific destination, so this stays a narrow special case rather
     // than a second parameter every entry pays for.
     return accountPanelUrl(
-      projectId ? `/projects/${projectId}` : '/projects',
+      projectId ? `/workspaces/${projectId}` : '/workspaces',
       hubTarget(accountId, {
         tab: ACCOUNT_GRADUATED[rawSection],
         transactions: rawSection === 'credits' ? 'credit-ledger' : undefined,

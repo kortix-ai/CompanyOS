@@ -1,3 +1,5 @@
+import type { SubscriptionUsage } from '../usage/subscription-usage';
+import type { ClaudeCodeHooks } from '../claude-code/passthrough';
 import type { ModelCatalog } from './catalog';
 import type { UpstreamDescriptor } from './descriptor';
 import type { AuthedPrincipal } from './principal';
@@ -57,11 +59,24 @@ export interface GatewayHooks {
   resolveUpstream: (principal: AuthedPrincipal, model: string) => Promise<UpstreamDescriptor[]>;
   notePoolRateLimit?: (principal: AuthedPrincipal, secretId: string, seconds: number) => Promise<void>;
   /**
+   * The plan usage a subscription account's response reported (ChatGPT, Claude).
+   * `createGateway` throttles it per account; a failure never reaches the response.
+   */
+  notePoolUsage?: (principal: AuthedPrincipal, secretId: string, usage: SubscriptionUsage) => Promise<void>;
+  /**
    * A fresh descriptor for a refreshable login the provider refused with 401,
    * or null when the login cannot be refreshed (the host marks it for
    * reconnection). Called once per request.
    */
   refreshCredential?: (principal: AuthedPrincipal, descriptor: UpstreamDescriptor) => Promise<UpstreamDescriptor | null>;
+  /**
+   * The Claude accounts a principal may use for Claude Code's model calls
+   * (claude-code/passthrough.ts), best first, or why none. Absent: the
+   * passthrough answers 404.
+   */
+  claudeCredentials?: ClaudeCodeHooks['claudeCredentials'];
+  /** Anthropic refused a Claude account's token (401): mark it for reconnection. */
+  claudeRefused?: ClaudeCodeHooks['claudeRefused'];
   // Resolves (or throws) once the account's billing state is checked. May
   // return a `holdUsd` when it took an atomic admission hold against the
   // wallet — the handler attaches it to the principal so settle() can

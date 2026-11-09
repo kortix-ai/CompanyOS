@@ -1,7 +1,5 @@
 /** Change request resolution: merge, close, and reopen. */
 import { createRoute, z } from '@hono/zod-openapi';
-import { changeRequests } from '@kortix/db';
-import { eq } from 'drizzle-orm';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayPerform, assertAgentScope, getAgentGrant, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { logger } from '../../lib/logger';
@@ -11,11 +9,18 @@ import { refusesSelfMerge } from '../change-request-policy';
 import { manifestChange } from '../change-request-governance';
 import { assertNoGrantEscalation } from '../../iam/agent-grant-ceiling';
 import { auth, boundedIssues, errors, json, lenientBody } from '../../openapi';
-import { db } from '../../shared/db';
 import { kickProjectTemplatePrebuilds } from '../../snapshots/builder';
 import { kickPiPackageBundle } from '../../pi-packages/bundle';
 import { resolveManifestPiPackageLists } from '../lib/compile-agent-config';
-import { getCrById, markChangeRequestsLanded, serializeChangeRequest } from '../change-requests';
+import {
+  closeChangeRequest,
+  getCrById,
+  markChangeRequestsLanded,
+  recordChangeRequestMerge,
+  reopenChangeRequest,
+  serializeChangeRequest,
+} from '../change-requests';
+import { wakeGoalForMergedChangeRequest } from '../lib/goal-wake';
 import {
   headRefsLandedIn,
   invalidateProjectMirror,
@@ -30,6 +35,7 @@ import { enqueueProjectSnapshot } from '../../git-proxy/project-snapshot';
 import { normalizeString } from '../lib/serializers';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerChangeRequestActionsRoutes(): void {
   // POST /v1/projects/:projectId/change-requests/:crId/merge
@@ -38,12 +44,12 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/merge',
+      path: '/{workspaceId}/change-requests/{crId}/merge',
       tags: ['change-requests'],
       summary: 'Merge a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             message: z.string().optional().openapi({ description: 'Merge commit message. Optional; the body itself is optional.' }),
           }) } } },
@@ -54,7 +60,7 @@ export function registerChangeRequestActionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const body = await readJsonObject(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -148,20 +154,18 @@ export function registerChangeRequestActionsRoutes(): void {
 
       // Manifest gate: a CR cannot merge if the would-be-merged manifest doesn't
       // validate against the canonical schema. We read the manifest from the HEAD
-      // branch (what's about to be merged), preferring kortix.yaml over kortix.toml.
-      // If the head doesn't have a manifest, that's fine — projects with a
-      // `.kortix/`-only layout still merge. The same validator runs in the CLI's
+      // branch (what's about to be merged), preferring kortix.yaml over kortix.yml.
+      // If the head doesn't have a manifest, that's fine: it still merges. The same validator runs in the CLI's
       // `kortix ship` pre-flight, so CLI users see the same diagnostic before push.
       try {
-        const { validateManifest, manifestFormatForPath, manifestCandidatePaths, ManifestImportError } =
-          await import('@kortix/manifest-schema');
+        const { validateManifest, manifestCandidatePaths, ManifestImportError } = await import('@kortix/manifest-schema');
         // `found.content` is the MERGED document when the head declares
         // `imports:`, so the gate validates what the platform will actually run.
         // A broken import (missing file, duplicate name, cycle) blocks the merge
         // with the same 422 a schema violation gets.
         const found = await readManifestFromRepo(
           projectForGit,
-          manifestCandidatePaths(projectForGit.manifestPath).map((cand) => cand.path),
+          manifestCandidatePaths(projectForGit.manifestPath),
           cr.headRef,
         ).catch((err: unknown) => {
           if (err instanceof ManifestImportError) return { importError: err.message } as const;
@@ -178,7 +182,8 @@ export function registerChangeRequestActionsRoutes(): void {
           );
         }
         if (found && found.content.trim()) {
-          const verdict = validateManifest(found.content, manifestFormatForPath(found.path));
+          // The root text carries line numbers; a merged `imports:` document has none to give.
+          const verdict = validateManifest(found.imports ? found.imports.raw : found.content);
           if (!verdict.valid) {
             return c.json(
               {
@@ -241,28 +246,28 @@ export function registerChangeRequestActionsRoutes(): void {
         });
       });
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'merged',
-          mergedAt: new Date(),
-          mergedBy: loaded.userId,
-          mergeCommitSha: result.merge_commit_sha,
-          // Capture the SHAs that were active at merge time. head_commit_sha
-          // intentionally stays at the head branch's tip (not the merge commit)
-          // so the merged-CR diff can re-render the changes via base...head.
-          headCommitSha: result.fast_forward
-            ? result.merge_commit_sha
-            : (cr.headCommitSha ?? result.merge_commit_sha),
-          baseCommitSha: result.base_sha_before,
-          updatedAt: new Date(),
-        })
-        // crId here is whatever the caller sent (a UUID, a number, "#233"):
-        // bind the write to the RESOLVED row's canonical id, never the raw path
-        // param — a numeric id that matched above must not 22P02 this update
-        // after the merge has already landed.
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // crId here is whatever the caller sent (a UUID, a number, "#233"):
+      // bind the write to the RESOLVED row's canonical id, never the raw path
+      // param — a numeric id that matched above must not 22P02 this update
+      // after the merge has already landed. A close that raced this merge
+      // loses to it (the code is on the base branch); a second merge of the
+      // same request that raced this one records nothing and answers 409.
+      const merged = await recordChangeRequestMerge(cr.crId, {
+        mergedAt: new Date(),
+        mergedBy: loaded.userId,
+        mergeCommitSha: result.merge_commit_sha,
+        // Capture the SHAs that were active at merge time. head_commit_sha
+        // intentionally stays at the head branch's tip (not the merge commit)
+        // so the merged-CR diff can re-render the changes via base...head.
+        headCommitSha: result.fast_forward
+          ? result.merge_commit_sha
+          : (cr.headCommitSha ?? result.merge_commit_sha),
+        baseCommitSha: result.base_sha_before,
+      });
+      if (!merged.applied) {
+        return c.json({ error: 'Change request is merged' }, 409);
+      }
+      const row = merged.row;
 
       // The merge can carry other open requests' commits (the requests below
       // it in a stack, or a second request on the same branch): they landed
@@ -283,6 +288,29 @@ export function registerChangeRequestActionsRoutes(): void {
       });
 
       invalidateProjectMirror(projectId);
+      // SEAM (Triggers, "change request merged" source): a merge wakes the
+      // goal the CR's origin session works on (lib/goal-wake.ts). Best-effort.
+      void wakeGoalForMergedChangeRequest({ project: loaded.row, changeRequest: cr }).catch((error: unknown) =>
+        logger.warn('[cr-merge] goal wake failed', { projectId, error: error instanceof Error ? error.message : String(error) }),
+      );
+      // The `change_request` trigger source: every trigger this merge
+      // matches fires (lib/change-request-triggers.ts). Best-effort and not
+      // awaited: the merge is durable and its response must not wait on a fire.
+      void import('../lib/change-request-triggers')
+        .then(({ fireChangeRequestMergedTriggers }) =>
+          fireChangeRequestMergedTriggers(loaded.row, [
+            {
+              cr_id: cr.crId,
+              number: cr.number,
+              title: cr.title,
+              base_ref: cr.baseRef,
+              head_ref: cr.headRef,
+              merge_commit_sha: result.merge_commit_sha,
+            },
+            ...alsoMerged.map((other) => ({ cr_id: other.cr_id, number: other.number, base_ref: cr.baseRef, merge_commit_sha: result.merge_commit_sha })),
+          ]),
+        )
+        .catch(() => {});
       // The merge moved the CR's base branch. Sessions on it converge.
       void import('../lib/config-convergence-triggers')
         .then((triggers) => triggers.notifyBaseBranchMoved(projectId, cr.baseRef, 'change-request-merge'))
@@ -339,12 +367,12 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/close',
+      path: '/{workspaceId}/change-requests/{crId}/close',
       tags: ['change-requests'],
       summary: 'Close a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
       },
       responses: {
         200: json(z.any(), 'OK'),
@@ -352,7 +380,7 @@ export function registerChangeRequestActionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -367,17 +395,16 @@ export function registerChangeRequestActionsRoutes(): void {
         return c.json({ error: 'Cannot close a merged change request' }, 409);
       }
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'closed',
-          closedAt: new Date(),
-          closedBy: loaded.userId,
-          updatedAt: new Date(),
-        })
-        // Bind the write to the resolved row's canonical id (see the merge route).
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // Bind the write to the resolved row's canonical id (see the merge route).
+      const closed = await closeChangeRequest(cr.crId, loaded.userId);
+      if (!closed.applied) {
+        // The row moved after the read: a merge that raced the close wins,
+        // and a close that raced another close answers with that close.
+        const now = await getCrById(cr.crId, projectId);
+        if (now?.status === 'closed') return c.json(serializeChangeRequest(now));
+        return c.json({ error: 'Cannot close a merged change request' }, 409);
+      }
+      const row = closed.row;
       return c.json(serializeChangeRequest(row));
     },
   );
@@ -387,12 +414,12 @@ export function registerChangeRequestActionsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/change-requests/{crId}/reopen',
+      path: '/{workspaceId}/change-requests/{crId}/reopen',
       tags: ['change-requests'],
       summary: 'Reopen a change request',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), crId: z.string() }),
+        params: z.object({ workspaceId: z.string(), crId: z.string() }),
       },
       responses: {
         200: json(z.any(), 'OK'),
@@ -400,7 +427,7 @@ export function registerChangeRequestActionsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -415,17 +442,13 @@ export function registerChangeRequestActionsRoutes(): void {
         return c.json({ error: `Cannot reopen a ${cr.status} change request` }, 409);
       }
 
-      const [row] = await db
-        .update(changeRequests)
-        .set({
-          status: 'open',
-          closedAt: null,
-          closedBy: null,
-          updatedAt: new Date(),
-        })
-        // Bind the write to the resolved row's canonical id (see the merge route).
-        .where(eq(changeRequests.crId, cr.crId))
-        .returning();
+      // Bind the write to the resolved row's canonical id (see the merge route).
+      const reopened = await reopenChangeRequest(cr.crId);
+      if (!reopened.applied) {
+        const now = await getCrById(cr.crId, projectId);
+        return c.json({ error: `Cannot reopen a ${now?.status ?? cr.status} change request` }, 409);
+      }
+      const row = reopened.row;
       return c.json(serializeChangeRequest(row));
     },
   );

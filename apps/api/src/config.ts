@@ -17,6 +17,20 @@ hydrateEnvironmentSecret();
  */
 export const SANDBOX_VERSION = process.env.SANDBOX_VERSION || 'unknown';
 
+/**
+ * The environment of a child process: this process's environment plus
+ * `extra`. A child process is the one reader of the raw environment outside
+ * this file.
+ */
+export function childProcessEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...process.env, ...extra };
+}
+
+// No git process the API starts may download a missing object on its own
+// (projects/git/object-store.ts): it would run without credentials, one object
+// per round trip, with no size bound. Every child inherits this.
+process.env.GIT_NO_LAZY_FETCH = '1';
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 // Platinum is the reference provider. Daytona is a legacy fallback: its
@@ -183,10 +197,27 @@ const envSchema = z.object({
   // whose DNS does not fit that shape. A deployment with neither keeps previews
   // on the path proxy. See sandbox-proxy/preview-hosts.ts.
   KORTIX_PREVIEW_BASE_DOMAIN: optStr,
+  // Self-host alias domains (KORTIX_DOMAIN_ALIASES, derived by the CLI): extra
+  // Apps / preview base domains this deployment also serves, comma-separated.
+  // Hosts under them resolve exactly like hosts under the primary base, so
+  // links handed out before a domain move keep working. URLs this API hands
+  // out always use the primary base. See apps/hostnames.ts and
+  // sandbox-proxy/preview-hosts.ts.
+  KORTIX_APPS_BASE_DOMAIN_ALIASES: optStr,
+  // Self-host: extra domains this instance serves in full (web app, API, Apps,
+  // previews), comma-separated. See shared/domain-aliases.ts.
+  KORTIX_DOMAIN_ALIASES: optStr,
+  KORTIX_PREVIEW_BASE_DOMAIN_ALIASES: optStr,
   // Master switch: turns on real billing (Stripe + credit ledger), makes
   // KORTIX_URL fatal-required, mounts the proxy-auth gate, hides /v1/setup.
   // Set to true on managed/cloud deployments; leave false for self-host + dev.
   KORTIX_BILLING_INTERNAL_ENABLED: optBoolFalse,
+  // Stopped and archived computers' disk (billing/services/box-disk-charges.ts):
+  // metered and recorded always; charged in credits only when true. Off until
+  // the owner decides (2026-11-02: 35,420 stopped boxes in prod, p99 63 per
+  // account, Platinum never deletes archived boxes). Turning it on charges the
+  // days still open (up to 3 days back), never earlier ones.
+  KORTIX_BOX_DISK_CHARGE_ENABLED: optBoolFalse,
   // Kortix Apps: a `static` App is served by the API from content-addressed
   // storage, with no runtime. `false` builds it into a sandbox, as before.
   KORTIX_APPS_STATIC_HOSTING: optBoolTrue,
@@ -196,14 +227,61 @@ const envSchema = z.object({
   // New server Apps run 24/7 unless the request says otherwise. Existing Apps
   // keep their own setting. Static Apps have no runtime and ignore it.
   KORTIX_APPS_DEFAULT_ALWAYS_ON: optBoolTrue,
+  // The unmodified Claude Code binary the Claude subscription login runs
+  // (`claude setup-token`). The API image installs the pinned version on PATH.
+  CLAUDE_CODE_PATH: z.string().trim().optional().default('claude'),
   // 'false' stops the Apps deployment worker; 'static' drives only static deployments.
   KORTIX_APPS_WORKER_ENABLED: optStr,
   // Global background-worker switch. API-only and migration-shadow deployments
   // keep request handling active while disabling every recurring write loop.
   KORTIX_WORKERS_ENABLED: optBoolTrue,
+  // Which part of the API this `src/index.ts` process runs. `all` (default):
+  // HTTP plus the scheduled jobs, which run on whichever `all` process holds
+  // the leader lease. Self-host, local dev, previews and the test stack run
+  // one `all` process. `web`: HTTP only; the process never joins the leader
+  // election. Production web servers run `web` next to the worker service
+  // (`src/worker.ts`), which runs the scheduled jobs. ecs-deploy.sh sets it
+  // per service, never in the shared secret blob.
+  KORTIX_PROCESS_ROLE: z.enum(['all', 'web']).optional().default('all'),
+  // '0' keeps the bundled model pricing / gateway model catalog and never
+  // fetches the live ones. The local test stack sets both.
+  KORTIX_MODEL_PRICING_LIVE_ENABLED: optStr,
+  KORTIX_MODEL_CATALOG_LIVE_ENABLED: optStr,
+  // /health/live answers 503 above this event-loop lag.
+  HEALTH_MAX_EVENT_LOOP_LAG_MS: optInt(5000),
+  // The space watcher (flag `spaces_proactive`, projects/lib/space-watch/):
+  // how long an ask stays open before it wakes the watcher, and the least time
+  // between two wakes of one space. Local verification shortens them.
+  KORTIX_SPACE_WATCH_ASK_OVERDUE_MS: optInt(2 * 60 * 60_000),
+  KORTIX_SPACE_WATCH_DEBOUNCE_MS: optInt(10 * 60_000),
+  // True runs the durable job queue even when KORTIX_WORKERS_ENABLED is false.
+  // The deterministic test stack sets it: held connector calls and Capture
+  // ingest run only as queued jobs.
+  KORTIX_JOB_WORKER_ENABLED: optBoolFalse,
   // Kill switch for the scheduled account-deletion sweep. True skips every
   // scheduled run; immediate deletion is unaffected. Default off (sweep runs).
   ACCOUNT_DELETION_SWEEP_PAUSED: optBoolFalse,
+  // The retention backstop (billing/services/retention-erasure.ts): erases an
+  // account whose closure (account_deletion_requests) is still open
+  // RETENTION_ERASURE_AFTER_DAYS after its date, inside the 90-day promise.
+  // `dry_run` (default) records the decision in kortix.retention_erasures and
+  // deletes nothing; `execute` runs the deletion routine; `off` stops the tick.
+  // ACCOUNT_DELETION_SWEEP_PAUSED forces dry_run.
+  RETENTION_ERASURE_MODE: z.enum(['off', 'dry_run', 'execute']).optional().default('dry_run'),
+  // The workspace split (workspaces/split/): splits each project of a legacy
+  // multi-project account into its own workspace. `off` stops the tick,
+  // `dry_run` writes the plan into kortix.workspace_split_runs and moves
+  // nothing, `apply` moves one project per transaction. Unset: `dry_run` on a
+  // cloud deployment (INTERNAL_KORTIX_ENV set explicitly), `off` locally and on
+  // self-host. A `workspace_split` row in kortix.platform_settings
+  // (`{"mode": "..."}`) overrides it at runtime.
+  WORKSPACE_SPLIT_MODE: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim().toLowerCase().replace('-', '_') : value),
+    z.enum(['off', 'dry_run', 'apply']).optional(),
+  ),
+  RETENTION_ERASURE_AFTER_DAYS: optInt(80).refine((days) => days >= 0, {
+    message: 'Must be 0 or more days: the retention backstop never erases an account before its date',
+  }),
   /**
    * Enforce the sandbox egress pin on the secret-broker route (default ON).
    *
@@ -273,20 +351,14 @@ const envSchema = z.object({
   // disables title generation entirely — nothing else writes `metadata.name`,
   // so sessions then stay untitled and clients fall back to their display chain.
   SESSION_TITLE_GENERATION_ENABLED: optBoolTrue,
-  // Generative UI kill switch. On by default; false => no session is taught the genui catalog,
-  // whatever the project flag says. Blocks already in transcripts still render.
-  GENUI_ENABLED: optBoolTrue,
   // Operator switch for the session-log journal ingest (`POST …/sessions/:s/log/journal`).
   // On by default. Off answers 503: each daemon keeps its unacknowledged changes and
   // retries with backoff, so turning it back on loses nothing the boxes still hold.
   SESSION_LOG_INGEST_ENABLED: optBoolTrue,
-  // Operator switch for the session-log restore (`POST …/sessions/:s/log/restore`, P6.1).
-  // On by default. Off answers 503 and claims nothing: the box boots without a restore.
+  // Operator switch for the session-log restore (`POST …/sessions/:s/log/restore`, P6.1). On by
+  // default. Off answers 503 and claims nothing: every box boots on its own native store. The
+  // project flag `session_log_restore` graduated on 2026-11-05; this switch is the only way off.
   SESSION_LOG_RESTORE_ENABLED: optBoolTrue,
-  // Default of the project flag `session_log_restore` for a project with no stored value. Off by
-  // default; dev turns it on in its deploy overrides (deploy-dev.yml). A project's stored value wins.
-  // Rollback: set it to "false" in the overrides. Removing the key keeps the running task's value.
-  SESSION_LOG_RESTORE_DEFAULT_ENABLED: optBoolFalse,
   // The largest restore the API answers (`POST …/log/restore`), in bytes: the live messages' stored
   // JSON lengths plus 2/5 of the session's live blob bytes (full texts, attachments; ~15x in the daemon,
   // 30 MB of images: +455 MB; `SESSION_LOG_BLOB_WEIGHT`). So 24 MiB allows 24 MiB of records or 60 MiB
@@ -299,25 +371,19 @@ const envSchema = z.object({
   // How long `PUT …/log/blobs/<sha256>` waits for its body (P2.13): a body not read by then is
   // cancelled with 408 and its upload slot freed. Under the route's 95 s request deadline.
   SESSION_LOG_BLOB_READ_MS: optInt(60_000),
+  // The largest page `GET …/log` reads from Postgres, in bytes of stored record size
+  // (`pg_column_size`, a lower bound of the JSON's wire length). The route serves the window's
+  // newest messages whole and stops the window at the first one that would overflow it; the
+  // first message is served however large it is. First cause (KRTX-4508, prod 2026-11-08): a heavy
+  // session's 500-record page carried 100+ MB — every page read cost 1–5 s (`db;dur` was 96 %
+  // of it), and the fleet's session-log pollers pushed the route's p95 to 1074–2240 ms while
+  // ordinary sessions stayed at 40 ms. 2 MiB bounds the page read at ~100–300 ms on the prod
+  // link and keeps a normal page (40 recent turn messages, ≤ ~1 MB) whole.
+  SESSION_LOG_PAGE_MAX_BYTES: optInt(2 * 1024 * 1024),
   // Operator switch for the retention purge of session content (P2.8, decision D6): session
   // rows 30 days after a delete, 80 days after a subscription end (inert until decision D6b), their files 7 days later.
   // On by default. Off stops the worker's tick; nothing it has not yet purged is touched.
   SESSION_LOG_PURGE_ENABLED: optBoolTrue,
-  // The backfill of old sessions (P3.1, `projects/session-log-backfill.ts`): each session with
-  // history only in the v1 mirror gets its v2 log. `write` (default since P8.2: no read serves the
-  // mirror, so a self-hosted upgrade converts its own history) writes the logs (it also needs
-  // SESSION_LOG_INGEST_ENABLED). `dry` converts in memory, writes nothing, and logs counts per
-  // tick and per pass. `off` runs nothing. Leader only. The pass resumes across leaders
-  // (`kortix.session_log_backfill_state`). A dry pass runs once per build (KORTIX_COMMIT): a new
-  // build runs it again; on the same build, `DELETE FROM kortix.session_log_backfill_state`.
-  // A mirror over the capture's size cap (~SESSION_LOG_RESTORE_MAX_BYTES of JSON) converts in a
-  // Worker thread, only while the process has room for it (SESSION_LOG_BACKFILL_MEMORY_MB).
-  SESSION_LOG_BACKFILL: z.enum(['off', 'dry', 'write']).optional().default('write'),
-  // The API task's memory in MiB (prod and dev ECS tasks: 4096). The backfill starts a conversion
-  // thread only while RSS plus its estimate stays under 75 % of this, or of cgroup memory.max when lower.
-  SESSION_LOG_BACKFILL_MEMORY_MB: optInt(4096),
-  // The source commit the image was built from (Dockerfile ARG, kept across the prod retag). 'unknown' locally.
-  KORTIX_COMMIT: optStrDefault('unknown'),
   // Serve the public OpenAPI spec (/v1/openapi.json) + Scalar docs UI (/v1/docs).
   // On by default — the base API surface is meant to be discoverable. Internal
   // routers (/v1/admin, /v1/ops) are ALWAYS stripped from the spec regardless
@@ -335,6 +401,16 @@ const envSchema = z.object({
       message: 'Must be major.minor.patch',
     },
   ),
+  // A Kortix CLI older than CLI_MIN_VERSION (`major.minor.patch`) gets `426`
+  // with the update command on every /v1 request (middleware/cli-min-version.ts).
+  // It only raises the built-in minimum (BUILT_IN_CLI_MIN_VERSION, 0.14.13);
+  // unset or lower: the built-in minimum. A malformed value is a boot error, as above.
+  CLI_MIN_VERSION: optStr.refine(
+    (v) => v.trim() === '' || /^v?\d+(\.\d+){0,2}$/.test(v.trim()),
+    {
+      message: 'Must be major.minor.patch',
+    },
+  ),
   MOBILE_STORE_URL_IOS: optUrl(''),
   MOBILE_STORE_URL_ANDROID: optUrl(''),
   // Self-host enterprise license: when the operator has purchased/holds a
@@ -345,16 +421,24 @@ const envSchema = z.object({
   // billing/services/entitlements.ts. Off by default; billing is irrelevant
   // for a self-host license check.
   ENTERPRISE_LICENSE_AVAILABLE: optBoolFalse,
+  // Self-host sign-up policy (shared/self-host-signup-policy.ts): who may
+  // create an account by signing up. `open`, `invite` (an address with a
+  // pending account invitation) or `closed`; an SSO sign-in always passes, and
+  // KORTIX_PLATFORM_ADMIN_EMAILS can never be claimed by signing up. The
+  // self-host CLI sets it and points the auth service's before-user-created
+  // hook at kortix.before_user_created_hook. Unset (Kortix cloud): no policy.
+  KORTIX_SIGNUP_MODE: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['open', 'invite', 'closed']).optional()),
   // Self-host account-creation restriction: when true, POST /v1/accounts
   // (creating an ADDITIONAL/org account) is blocked with 403 for everyone
   // except a platform admin (KORTIX_PLATFORM_ADMIN_EMAILS — see
   // shared/platform-roles.ts's isPlatformAdmin). Deliberately narrower than
   // the removed KORTIX_SINGLE_ACCOUNT_MODE: signups still work, teams/orgs
   // still fully function, SSO/JIT still lands users in their org — only the
-  // CREATION of new accounts by ordinary users is gated. The personal-account
-  // bootstrap path (bootstrapPersonalAccount, called directly from GET
-  // /v1/accounts on first login) does NOT route through this gate — every
-  // user still gets their own landing account. Off by default (cloud is
+  // CREATION of new accounts by ordinary users is gated: POST /v1/accounts and
+  // a new workspace (`new_workspace: true` on POST /v1/projects/provision)
+  // that would need a new account answer 403 `account_creation_restricted`.
+  // No account is created at sign-up (Workspaces D3), so on such a
+  // deployment a new user joins through an invite. Off by default (cloud is
   // unaffected); the self-host CLI defaults this to 'true'
   // (SHARED_FEATURE_FLAG_DEFAULTS) since a VPS operator usually wants to be
   // the only one who can spin up new organizations. The frontend mirrors this
@@ -428,10 +512,6 @@ const envSchema = z.object({
   // behavior (absence of `[[agents]]` → unrestricted) untouched.
   KORTIX_REQUIRE_DECLARED_AGENTS: optBoolFalse,
 
-  // Supabase Storage bucket holding the durable per-sandbox backup bundle
-  // (workspace files + OpenCode chat-history store). Source for rehydrate.
-  LEGACY_MIGRATION_BACKUP_BUCKET: optStrDefault('legacy-migrations'),
-
   // ── Channels — Slack adapter (optional) ──────────────────────────────────
   SLACK_SIGNING_SECRET: optStr,
   SLACK_CLIENT_ID: optStr,
@@ -464,6 +544,32 @@ const envSchema = z.object({
 
   // ── Channels — Telegram Bot API. Overridable for tests. ──
   TELEGRAM_API_URL: optUrl('https://api.telegram.org'),
+
+  // ── Channels — the Kortix Discord application (optional) ──────────────────
+  // One application for every project, like the Kortix Slack app: projects
+  // install it in a server with "Add to Discord". Unset: Discord is off.
+  // From the Developer Portal: General Information → Application ID and
+  // Public Key; OAuth2 → Client Secret; Bot → Token.
+  DISCORD_APPLICATION_ID: optStr,
+  DISCORD_PUBLIC_KEY: optStr,
+  DISCORD_CLIENT_SECRET: optStr,
+  DISCORD_BOT_TOKEN: optStr,
+  // The privileged Message Content intent, switched on for the application in
+  // the Developer Portal (Bot → Privileged Gateway Intents). On: every message in
+  // a thread a Kortix session holds reaches the agent. Off (default, like Slack):
+  // only a message that mentions the app, and every direct message.
+  DISCORD_MESSAGE_CONTENT: optBoolFalse,
+  // The OAuth2 redirect URI registered in the Developer Portal. Unset:
+  // `${KORTIX_URL}/v1/webhooks/discord/oauth/callback`.
+  DISCORD_REDIRECT_URI: optStr,
+  // The REST API base and the Gateway URL. Overridable for tests.
+  DISCORD_API_URL: optUrl('https://discord.com/api/v10'),
+  DISCORD_CDN_URL: optUrl('https://cdn.discordapp.com'),
+  DISCORD_GATEWAY_URL: z
+    .string()
+    .optional()
+    .default('wss://gateway.discord.gg')
+    .refine((v) => /^wss?:\/\//.test(v), { message: 'Must be a ws(s):// URL' }),
 
   // ── MCP apps — Kortix-owned OAuth clients ───────────────
   // JSON: {"google":{"client_id":"…","client_secret":"…"},"github":{…}}. One
@@ -580,9 +686,12 @@ const envSchema = z.object({
   // project's `workspace_volume` flag says. A session that already has one keeps
   // it (platform/services/workspace-volume.ts).
   KORTIX_WORKSPACE_VOLUMES: optStr,
-  // The fresh-session Git fast path: KORTIX_SESSION_FRESH, the base-tip +
-  // scaffold-delta hint (inline or remote bundle), and the OpenCode config-dir
-  // hint that lets the daemon spawn OpenCode before the checkout. Default ON;
+  // The `us_region` default for a project that has made no choice: true puts
+  // its new Files and sessions in KORTIX_PLATINUM_US_REGION. Off by default;
+  // dev sets it (deploy-dev.yml). Inert while KORTIX_PLATINUM_US_REGION is unset.
+  KORTIX_PLATINUM_US_REGION_DEFAULT: optBoolFalse,
+  // The fresh-session Git fast path: KORTIX_SESSION_FRESH and the base-tip +
+  // scaffold-delta hint (inline or remote bundle). Default ON;
   // `false` restores the pre-2026-08-27 create-time contract. The daemon side
   // is additive and falls back to the clone path without these hints.
   // ── Project snapshot archives (S3 config provider) ─────────────────────
@@ -601,6 +710,10 @@ const envSchema = z.object({
     .enum(['git', 'prefer-s3', 'require-s3'])
     .optional()
     .default('git'),
+  // What the API keeps of each project repository (projects/git/object-store.ts).
+  // `partial`: commits, then trees and files only when a read names them.
+  // `full`: the whole-history clone of before 2026-11-02 (the kill switch).
+  KORTIX_GIT_OBJECT_STORE: z.enum(['partial', 'full']).optional().default('partial'),
   KORTIX_PROJECT_SNAPSHOT_S3_BUCKET: optStr,
   KORTIX_PROJECT_SNAPSHOT_S3_REGION: optStr,
   KORTIX_PROJECT_SNAPSHOT_S3_ENDPOINT: optUrl(''),
@@ -611,6 +724,18 @@ const envSchema = z.object({
    */
   KORTIX_PROJECT_SNAPSHOT_S3_PUBLIC_ENDPOINT: optUrl(''),
   KORTIX_PROJECT_SNAPSHOT_S3_FORCE_PATH_STYLE: optBoolFalse,
+  /**
+   * Self-host's bundled store (MinIO) starts empty, so the API creates the
+   * bucket and its expiry rule (`ensureProjectSnapshotBucket`). AWS:
+   * Terraform owns both (infra/terraform/modules/project-snapshots-bucket).
+   */
+  KORTIX_PROJECT_SNAPSHOT_S3_CREATE_BUCKET: optBoolFalse,
+  /**
+   * The store's in-network origin for the `/<bucket>/*` passthrough on the API
+   * origin (self-host without a domain; object-store/bucket-proxy.ts). Domain
+   * mode leaves it unset: Caddy serves the prefix.
+   */
+  KORTIX_PROJECT_SNAPSHOT_S3_PROXY_TARGET: optUrl(''),
   // S3 Transfer Acceleration for the SANDBOX downloads only: presigned URLs
   // target <bucket>.s3-accelerate.amazonaws.com, so a box's connection ends at
   // the nearest AWS edge and the distance to the bucket rides AWS's backbone.
@@ -712,7 +837,7 @@ const envSchema = z.object({
   KORTIX_CAPTURE_ALERT_AFTER_MINUTES: optInt(30),
   /** The update manifest that names the newest published Capture version. Empty: no version check. */
   KORTIX_CAPTURE_UPDATE_MANIFEST_URL: optUrl(
-    'https://github.com/kortix-ai/suna/releases/latest/download/capture-update.json',
+    'https://github.com/kortix-ai/CompanyOS/releases/latest/download/capture-update.json',
   ),
 
   // ── Platinum — Sandbox provisioning (conditional: required if platinum provider enabled) ──
@@ -779,6 +904,11 @@ const envSchema = z.object({
   // its stopped box after this many minutes (projects/reaping/idle-volume-retire.ts);
   // the next open boots a fresh box on the volume. -1 keeps every stopped box.
   KORTIX_SANDBOX_IDLE_DELETE_MINUTES: optInt(60),
+  // Platinum writes per second the worker's background sweeps may send from one process (the
+  // reaper, the idle lane, the active-turn renewal; shared/platinum-write-lane.ts). Platinum gives
+  // an org 20 writes/s in all (`org_mutation`), so 8 leaves 12/s for session starts and previews.
+  // 0 turns the pacing off.
+  KORTIX_PLATINUM_BACKGROUND_WRITES_PER_SECOND: optInt(8),
   // The PROVIDER-NATIVE idle timer (Daytona autoStopInterval / Platinum
   // auto_stop_minutes) — a LAST-RESORT backstop for boxes this API can no
   // longer reach, NOT the primary stop. It used to be derived from
@@ -811,6 +941,21 @@ const envSchema = z.object({
   // Exported collection JSON and Postman-managed Git repositories need no key.
   POSTMAN_API_KEY: optStr,
 
+  // ── Kortix in Chrome ─────────────────────────────────────────────────────
+  // Master switch until launch: on in local and dev only. Off, /v1/chrome/* and
+  // the extension's control socket answer 404 and the `chrome` project flag is
+  // unavailable (feature-flags/registry.ts).
+  KORTIX_CHROME_ENABLED: optBoolFalse,
+
+  // ── Residential proxy ────────────────────────────────────────────────────
+  // Operator switch, off by default. Turn it on in an environment only after
+  // that environment's Platinum serves `network.residential_proxy`: an older
+  // Platinum drops the field and the box keeps its data-center address. Off, a
+  // sandbox template's `residential_proxy` fails its session closed and the
+  // billing worker does not run (platform/services/residential-proxy.ts,
+  // worker/jobs/residential-proxy-billing.ts). Dev sets it in deploy-dev.yml.
+  KORTIX_PLATINUM_RESIDENTIAL_PROXY: optBoolFalse,
+
   // ── Tunnel (optional, all have sane defaults) ────────────────────────────
   TUNNEL_SIGNING_SECRET: optStr,
   TUNNEL_ENABLED: optBoolTrue,
@@ -833,6 +978,9 @@ const envSchema = z.object({
   // Per-credential bound on the LLM gateway mount (/v1/llm and its
   // /v1/llm-gateway alias). Defence-in-depth at the boundary, not a quota:
   // 600/min is ~10/s per credential, far above any real inference pattern.
+  // The standalone gateway reads the same setting and applies the same limit
+  // (apps/llm-gateway/src/token-rate-limit.ts), so sandboxes that call it
+  // directly (LLM_GATEWAY_BASE_URL) are bound too.
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: optInt(600),
   KORTIX_PROXY_REQS_PER_MIN: optInt(600),
   // Proxies in front of the API that APPEND to X-Forwarded-For. The client is
@@ -913,6 +1061,14 @@ const envSchema = z.object({
     .optional()
     .default('true')
     .transform((v) => !['0', 'false'].includes(v.trim().toLowerCase())),
+  // Kill switch for running a held connector call on approve. On by default;
+  // `0`, `false` or `off` writes no new held row, so a new gate asks the agent
+  // to repeat the call. Rows already held or queued still run, expire and wipe.
+  KORTIX_APPROVAL_RUNS_HELD_CALL: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((v) => !['0', 'false', 'off'].includes(v.trim().toLowerCase())),
   // Local-only HTTP capture. The deterministic test profile points this at
   // Supabase Mailpit. Deployed environments leave it unset.
   MAILPIT_API_URL: optStr,
@@ -942,9 +1098,16 @@ const envSchema = z.object({
   // ── Signup webhook (signup → sales factory) ─────────────────────────────
   // Every genuinely new account POSTs one `account.signup` event here, signed
   // `X-Kortix-Signature: sha256=<HMAC-SHA256 of the raw body>` with the secret.
-  // Inert unless both are set (accounts/signup-webhook.ts).
+  // Inert unless both are set (accounts/sales-outbox.ts).
+  SALES_RECONCILIATION_TOKEN: optStr,
   SIGNUP_WEBHOOK_URL: optStr,
   SIGNUP_WEBHOOK_SECRET: optStr,
+
+  // ── Product analytics (PostHog, shared/product-analytics.ts) ─────────────
+  // The project key is public (the web app ships it to every browser). Unset
+  // = no server events: self-host and tests send nothing.
+  POSTHOG_PROJECT_KEY: optStr,
+  POSTHOG_HOST: z.string().optional().default('https://eu.i.posthog.com'),
 
   // ── Better Stack Observability (optional — graceful degradation) ────────
   BETTERSTACK_API_LOG_TOKEN: optStr, // Logtail source token for structured logs
@@ -1005,8 +1168,30 @@ function validateEnv(): z.infer<typeof envSchema> {
   if (!result.success) {
     for (const issue of result.error.issues) {
       const varName = issue.path.join('.');
-      issues.push({ var: varName, message: issue.message, level: 'error' });
+      // zod 4 words a missing variable as "Invalid input: expected string, received undefined".
+      const missing = issue.code === 'invalid_type' && process.env[varName] === undefined;
+      issues.push({ var: varName, message: missing ? 'Required' : issue.message, level: 'error' });
     }
+  }
+
+  // ── Values dotenvx did not decrypt ─────────────────────────────────────
+  // With no private key, dotenvx leaves `encrypted:…` in place and still exits
+  // 0. The schema then fails with an unrelated-looking message ("Must be a
+  // valid HTTP(S) URL"), so name the real cause. A warning only: it never
+  // decides whether the server starts.
+  const stillEncrypted = Object.keys(process.env)
+    .filter((name) => process.env[name]?.startsWith('encrypted:'))
+    .sort();
+  if (stillEncrypted.length > 0) {
+    const shown = stillEncrypted.slice(0, 3).join(', ');
+    const more = stillEncrypted.length > 3 ? ` and ${stillEncrypted.length - 3} more` : '';
+    issues.push({
+      var: 'dotenvx',
+      message:
+        `${stillEncrypted.length} value(s) are still encrypted (${shown}${more}): no dotenvx private key was found. ` +
+        'Run `dotenvx armor login` (dotenvx 2.7.1 or newer), or set DOTENV_PRIVATE_KEY, or restore apps/api/.env.keys.',
+      level: 'warn',
+    });
   }
 
   // Use raw values for conditional checks (schema may have failed)
@@ -1220,7 +1405,11 @@ function validateEnv(): z.infer<typeof envSchema> {
     }
     console.error('\x1b[31m' + '='.repeat(70) + '\x1b[0m');
     console.error('');
-    console.error('\x1b[31m  Fix the above in your .env file and restart.\x1b[0m');
+    console.error(
+      stillEncrypted.length > 0
+        ? '\x1b[31m  Values were never decrypted: fix the dotenvx warning above first, then restart.\x1b[0m'
+        : '\x1b[31m  Fix the above in your .env file and restart.\x1b[0m',
+    );
     console.error('');
     process.exit(1);
   }
@@ -1265,14 +1454,30 @@ export const config = {
   // blank value must not turn into an instance called "".
   KORTIX_INSTANCE_ID: env.KORTIX_INSTANCE_ID || undefined,
   KORTIX_PREVIEW_BASE_DOMAIN: env.KORTIX_PREVIEW_BASE_DOMAIN,
+  KORTIX_APPS_BASE_DOMAIN_ALIASES: env.KORTIX_APPS_BASE_DOMAIN_ALIASES,
+  KORTIX_DOMAIN_ALIASES: env.KORTIX_DOMAIN_ALIASES,
+  KORTIX_PREVIEW_BASE_DOMAIN_ALIASES: env.KORTIX_PREVIEW_BASE_DOMAIN_ALIASES,
   // Single master switch — see schema docstring above.
   KORTIX_BILLING_INTERNAL_ENABLED: env.KORTIX_BILLING_INTERNAL_ENABLED,
+  KORTIX_BOX_DISK_CHARGE_ENABLED: env.KORTIX_BOX_DISK_CHARGE_ENABLED,
   KORTIX_APPS_STATIC_HOSTING: env.KORTIX_APPS_STATIC_HOSTING,
   KORTIX_APPS_RETAINED_DEPLOYMENTS: Math.max(1, env.KORTIX_APPS_RETAINED_DEPLOYMENTS),
   KORTIX_APPS_DEFAULT_ALWAYS_ON: env.KORTIX_APPS_DEFAULT_ALWAYS_ON,
+  CLAUDE_CODE_PATH: env.CLAUDE_CODE_PATH || 'claude',
   KORTIX_APPS_WORKER_ENABLED: env.KORTIX_APPS_WORKER_ENABLED,
   KORTIX_WORKERS_ENABLED: env.KORTIX_WORKERS_ENABLED,
+  KORTIX_PROCESS_ROLE: env.KORTIX_PROCESS_ROLE,
+  KORTIX_MODEL_PRICING_LIVE_ENABLED: env.KORTIX_MODEL_PRICING_LIVE_ENABLED,
+  KORTIX_MODEL_CATALOG_LIVE_ENABLED: env.KORTIX_MODEL_CATALOG_LIVE_ENABLED,
+  HEALTH_MAX_EVENT_LOOP_LAG_MS: env.HEALTH_MAX_EVENT_LOOP_LAG_MS,
+  KORTIX_JOB_WORKER_ENABLED: env.KORTIX_JOB_WORKER_ENABLED,
+  KORTIX_SPACE_WATCH_ASK_OVERDUE_MS: Math.max(60_000, env.KORTIX_SPACE_WATCH_ASK_OVERDUE_MS),
+  KORTIX_SPACE_WATCH_DEBOUNCE_MS: Math.max(60_000, env.KORTIX_SPACE_WATCH_DEBOUNCE_MS),
   ACCOUNT_DELETION_SWEEP_PAUSED: env.ACCOUNT_DELETION_SWEEP_PAUSED,
+  RETENTION_ERASURE_MODE: env.RETENTION_ERASURE_MODE,
+  RETENTION_ERASURE_AFTER_DAYS: env.RETENTION_ERASURE_AFTER_DAYS,
+  WORKSPACE_SPLIT_MODE: (env.WORKSPACE_SPLIT_MODE
+    ?? (process.env.INTERNAL_KORTIX_ENV ? 'dry_run' : 'off')) as 'off' | 'dry_run' | 'apply',
   KORTIX_SANDBOX_EGRESS_PIN_ENFORCED: env.KORTIX_SANDBOX_EGRESS_PIN_ENFORCED,
   KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS: env.KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS.split(',')
     .map((host) => host.trim())
@@ -1286,21 +1491,19 @@ export const config = {
   KORTIX_RELAY_HEADERS_TIMEOUT_MS: env.KORTIX_RELAY_HEADERS_TIMEOUT_MS,
   KORTIX_RELAY_UPSTREAM_IDLE_TIMEOUT_MS: env.KORTIX_RELAY_UPSTREAM_IDLE_TIMEOUT_MS,
   SESSION_TITLE_GENERATION_ENABLED: env.SESSION_TITLE_GENERATION_ENABLED,
-  GENUI_ENABLED: env.GENUI_ENABLED,
   SESSION_LOG_INGEST_ENABLED: env.SESSION_LOG_INGEST_ENABLED,
   SESSION_LOG_RESTORE_ENABLED: env.SESSION_LOG_RESTORE_ENABLED,
-  SESSION_LOG_RESTORE_DEFAULT_ENABLED: env.SESSION_LOG_RESTORE_DEFAULT_ENABLED,
   SESSION_LOG_RESTORE_MAX_BYTES: env.SESSION_LOG_RESTORE_MAX_BYTES,
   SESSION_LOG_BLOB_READ_MS: env.SESSION_LOG_BLOB_READ_MS,
   SESSION_LOG_PURGE_ENABLED: env.SESSION_LOG_PURGE_ENABLED,
-  SESSION_LOG_BACKFILL: env.SESSION_LOG_BACKFILL,
-  SESSION_LOG_BACKFILL_MEMORY_MB: env.SESSION_LOG_BACKFILL_MEMORY_MB,
-  KORTIX_COMMIT: env.KORTIX_COMMIT,
+  SESSION_LOG_PAGE_MAX_BYTES: env.SESSION_LOG_PAGE_MAX_BYTES,
   OPENAPI_PUBLIC_DOCS: env.OPENAPI_PUBLIC_DOCS,
   MOBILE_MIN_VERSION: env.MOBILE_MIN_VERSION.trim(),
+  CLI_MIN_VERSION: env.CLI_MIN_VERSION.trim(),
   MOBILE_STORE_URL_IOS: env.MOBILE_STORE_URL_IOS,
   MOBILE_STORE_URL_ANDROID: env.MOBILE_STORE_URL_ANDROID,
   ENTERPRISE_LICENSE_AVAILABLE: env.ENTERPRISE_LICENSE_AVAILABLE,
+  KORTIX_SIGNUP_MODE: env.KORTIX_SIGNUP_MODE,
   KORTIX_RESTRICT_ACCOUNT_CREATION: env.KORTIX_RESTRICT_ACCOUNT_CREATION,
 
   // ─── Database ──────────────────────────────────────────────────────────────
@@ -1355,9 +1558,6 @@ export const config = {
   CODE_STORAGE_GIT_HOST: env.CODE_STORAGE_GIT_HOST,
   KORTIX_REQUIRE_DECLARED_AGENTS: env.KORTIX_REQUIRE_DECLARED_AGENTS,
 
-  // ─── Legacy migration ─────────────────────────────────────────────────────
-  LEGACY_MIGRATION_BACKUP_BUCKET: env.LEGACY_MIGRATION_BACKUP_BUCKET,
-
   // ─── Channels (Slack) ─────────────────────────────────────────────────────
   SLACK_SIGNING_SECRET: env.SLACK_SIGNING_SECRET,
   SLACK_CLIENT_ID: env.SLACK_CLIENT_ID,
@@ -1372,6 +1572,15 @@ export const config = {
   RESEND_MANAGED_DOMAIN: env.RESEND_MANAGED_DOMAIN,
   RESEND_MANAGED_EMAIL_ENABLED: env.RESEND_MANAGED_EMAIL_ENABLED,
   TELEGRAM_API_URL: env.TELEGRAM_API_URL,
+  DISCORD_APPLICATION_ID: env.DISCORD_APPLICATION_ID,
+  DISCORD_PUBLIC_KEY: env.DISCORD_PUBLIC_KEY,
+  DISCORD_CLIENT_SECRET: env.DISCORD_CLIENT_SECRET,
+  DISCORD_BOT_TOKEN: env.DISCORD_BOT_TOKEN,
+  DISCORD_MESSAGE_CONTENT: env.DISCORD_MESSAGE_CONTENT,
+  DISCORD_REDIRECT_URI: env.DISCORD_REDIRECT_URI,
+  DISCORD_API_URL: env.DISCORD_API_URL,
+  DISCORD_CDN_URL: env.DISCORD_CDN_URL,
+  DISCORD_GATEWAY_URL: env.DISCORD_GATEWAY_URL,
   KORTIX_OAUTH_CLIENTS: env.KORTIX_OAUTH_CLIENTS,
 
   // ─── Channels (Microsoft Teams) ───────────────────────────────────────────
@@ -1417,12 +1626,16 @@ export const config = {
   KORTIX_DRIVES_SESSION_MOUNT: env.KORTIX_DRIVES_SESSION_MOUNT,
   KORTIX_DRIVES_SYNC: env.KORTIX_DRIVES_SYNC,
   KORTIX_WORKSPACE_VOLUMES: env.KORTIX_WORKSPACE_VOLUMES,
+  KORTIX_PLATINUM_US_REGION_DEFAULT: env.KORTIX_PLATINUM_US_REGION_DEFAULT,
   KORTIX_PROJECT_SNAPSHOT_MODE: env.KORTIX_PROJECT_SNAPSHOT_MODE,
+  KORTIX_GIT_OBJECT_STORE: env.KORTIX_GIT_OBJECT_STORE,
   KORTIX_PROJECT_SNAPSHOT_S3_BUCKET: env.KORTIX_PROJECT_SNAPSHOT_S3_BUCKET,
   KORTIX_PROJECT_SNAPSHOT_S3_REGION: env.KORTIX_PROJECT_SNAPSHOT_S3_REGION,
   KORTIX_PROJECT_SNAPSHOT_S3_ENDPOINT: env.KORTIX_PROJECT_SNAPSHOT_S3_ENDPOINT,
   KORTIX_PROJECT_SNAPSHOT_S3_PUBLIC_ENDPOINT: env.KORTIX_PROJECT_SNAPSHOT_S3_PUBLIC_ENDPOINT,
   KORTIX_PROJECT_SNAPSHOT_S3_FORCE_PATH_STYLE: env.KORTIX_PROJECT_SNAPSHOT_S3_FORCE_PATH_STYLE,
+  KORTIX_PROJECT_SNAPSHOT_S3_CREATE_BUCKET: env.KORTIX_PROJECT_SNAPSHOT_S3_CREATE_BUCKET,
+  KORTIX_PROJECT_SNAPSHOT_S3_PROXY_TARGET: env.KORTIX_PROJECT_SNAPSHOT_S3_PROXY_TARGET,
   KORTIX_PROJECT_SNAPSHOT_S3_ACCELERATE: env.KORTIX_PROJECT_SNAPSHOT_S3_ACCELERATE,
   KORTIX_PROJECT_SNAPSHOT_S3_PREFIX: env.KORTIX_PROJECT_SNAPSHOT_S3_PREFIX,
   KORTIX_PROJECT_SNAPSHOT_S3_ACCESS_KEY_ID: env.KORTIX_PROJECT_SNAPSHOT_S3_ACCESS_KEY_ID,
@@ -1465,6 +1678,7 @@ export const config = {
   // Sandbox lifecycle intervals (minutes) — see schema comment above.
   KORTIX_SANDBOX_AUTOSTOP_MINUTES: env.KORTIX_SANDBOX_AUTOSTOP_MINUTES,
   KORTIX_SANDBOX_IDLE_DELETE_MINUTES: env.KORTIX_SANDBOX_IDLE_DELETE_MINUTES,
+  KORTIX_PLATINUM_BACKGROUND_WRITES_PER_SECOND: env.KORTIX_PLATINUM_BACKGROUND_WRITES_PER_SECOND,
   KORTIX_SANDBOX_AUTOARCHIVE_MINUTES: env.KORTIX_SANDBOX_AUTOARCHIVE_MINUTES,
   KORTIX_SANDBOX_AUTODELETE_MINUTES: env.KORTIX_SANDBOX_AUTODELETE_MINUTES,
   KORTIX_SANDBOX_PROVIDER_AUTOSTOP_MINUTES: env.KORTIX_SANDBOX_PROVIDER_AUTOSTOP_MINUTES,
@@ -1539,6 +1753,8 @@ export const config = {
 
   // ─── Tunnel (Reverse-Tunnel to Local Machine) ──────────────────────────────
   TUNNEL_SIGNING_SECRET: env.TUNNEL_SIGNING_SECRET,
+  KORTIX_CHROME_ENABLED: env.KORTIX_CHROME_ENABLED,
+  KORTIX_PLATINUM_RESIDENTIAL_PROXY: env.KORTIX_PLATINUM_RESIDENTIAL_PROXY,
   TUNNEL_ENABLED: env.TUNNEL_ENABLED,
   TUNNEL_HEARTBEAT_INTERVAL_MS: env.TUNNEL_HEARTBEAT_INTERVAL_MS,
   TUNNEL_HEARTBEAT_MAX_MISSED: env.TUNNEL_HEARTBEAT_MAX_MISSED,
@@ -1588,6 +1804,7 @@ export const config = {
   EXPO_ACCESS_TOKEN: env.EXPO_ACCESS_TOKEN,
   EXPO_PUSH_ENABLED: env.EXPO_PUSH_ENABLED ?? !env.KORTIX_INSTANCE_ID,
   PUSH_NOTIFICATIONS_ENABLED: env.PUSH_NOTIFICATIONS_ENABLED,
+  KORTIX_APPROVAL_RUNS_HELD_CALL: env.KORTIX_APPROVAL_RUNS_HELD_CALL,
   MAILPIT_API_URL: env.MAILPIT_API_URL,
   MAILTRAP_API_TOKEN: env.MAILTRAP_API_TOKEN,
   MAILTRAP_FROM_EMAIL: env.MAILTRAP_FROM_EMAIL,
@@ -1603,8 +1820,13 @@ export const config = {
   MAILTRAP_BUSINESS_SIGNUPS_LIST_ID: env.MAILTRAP_BUSINESS_SIGNUPS_LIST_ID,
 
   // ─── Signup webhook (signup → sales factory) ──────────────────────────────
+  SALES_RECONCILIATION_TOKEN: env.SALES_RECONCILIATION_TOKEN,
   SIGNUP_WEBHOOK_URL: env.SIGNUP_WEBHOOK_URL,
   SIGNUP_WEBHOOK_SECRET: env.SIGNUP_WEBHOOK_SECRET,
+
+  // ─── Product analytics (PostHog) ──────────────────────────────────────────
+  POSTHOG_PROJECT_KEY: env.POSTHOG_PROJECT_KEY,
+  POSTHOG_HOST: env.POSTHOG_HOST,
 
   // ─── Stray env vars (centralized from other files) ────────────────────────
   CORS_ALLOWED_ORIGINS: env.CORS_ALLOWED_ORIGINS,

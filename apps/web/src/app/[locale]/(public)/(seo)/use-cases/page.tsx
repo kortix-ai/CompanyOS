@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
     keywords: [
       'Kortix use cases',
       'AI agent case studies',
-      'AI Operating System',
+      'CompanyOS',
       'AI workforce',
       'loop engineering',
       'agent automation',
@@ -91,11 +91,9 @@ export default async function UseCasesIndexPage() {
             <MarketingButton size="md" className="hit-area-y-1" asChild>
               <Link href="/auth">Start for free</Link>
             </MarketingButton>
-            {isServicesPagesEnabled() ? (
-              <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
-                <Link href="/case-studies">See case studies</Link>
-              </MarketingButton>
-            ) : null}
+            <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
+              <Link href="/case-studies">See case studies</Link>
+            </MarketingButton>
           </>
         }
       />

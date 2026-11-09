@@ -5,12 +5,12 @@ date: "2026-08-02"
 canonical: "https://kortix.com/blog/kortix-vs-qm"
 author: "marko"
 tags: ["Comparisons", "Architecture", "Open Source"]
-updated: "2026-10-21"
+updated: "2026-11-06"
 slug: "/kortix-vs-qm"
 coverLogos: [{"domain": "github.com", "name": "QM"}]
 cover: "/banner.png"
 ---
-QM is a serious bet that an AI colleague belongs to a person or a room. Kortix, the open-source AI Operating System, bets that work belongs to a repository, and that each session's result should be reviewed before it lands. Both are multiplayer, both keep state outside the model, and both hand the agent a real computer. What separates them is the unit of work a company organizes around.
+QM is a serious bet that an AI colleague belongs to a person or a room. Kortix CompanyOS bets that work belongs to a repository, and that each session's result should be reviewed before it lands. Both are multiplayer, both keep state outside the model, and both hand the agent a real computer. What separates them is the unit of work a company organizes around.
 
 QM details come from its main branch at [`f5d40e7`](https://github.com/yc-software/qm/tree/f5d40e73f39730bc383768d5fda67759a3166eaa), its [README](https://github.com/yc-software/qm/blob/f5d40e73f39730bc383768d5fda67759a3166eaa/README.md) and [spec](https://github.com/yc-software/qm/blob/f5d40e73f39730bc383768d5fda67759a3166eaa/docs/SPEC.md) at that commit, and the [`@yc-software/qm` `0.1.15` package](https://www.npmjs.com/package/@yc-software/qm), published 2026-10-20. Kortix details come from [its project docs](https://kortix.com/docs/project/agents). Both were checked in October 2026.
 
@@ -88,7 +88,7 @@ rows:
     lean: both
   - dimension: Agent runtime
     them: Pi or Claude Code
-    kortix: OpenCode
+    kortix: pi, an open-source agent harness
     lean: them
   - dimension: Durable write path
     them: Scope store and resident computer

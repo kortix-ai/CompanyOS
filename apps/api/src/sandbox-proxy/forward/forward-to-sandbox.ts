@@ -1,4 +1,4 @@
-import { clientAbortTarget, clientRevertMessage } from '../client-abort';
+import { clientAbortTarget, clientRevertMessage, parseForkPath } from '../client-abort';
 import { NOT_TURN_PROMPTER, NOT_TURN_PROMPTER_MESSAGE } from '../../shared/turn-stop-refusal';
 import { extractTurnIdentity, markTurnStopRequested } from '../../projects/session-turn-ledger';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
@@ -14,7 +14,6 @@ import {
 } from '../pre-prompt-env-sync';
 import { isNonIdempotentSessionWrite } from '../prompt-dedupe';
 import { canonicalProxyPath } from '../proxy-path';
-import { stripInBoxProxyPrefix } from '../runtime-request';
 import { carriesSessionData } from '../session-data-ports';
 import {
   agentSwitchRefusal,
@@ -26,7 +25,7 @@ import {
 } from './access';
 import { decideClientAbort, decideClientRewind } from './abort-authority';
 import { forwardWithRetry } from './retry';
-import { claimPromptDeliveryOnce, convergeTurnStartRuntime, createTurnLifecycle } from './turn-start';
+import { claimPromptDeliveryOnce, convergeTurnStartRuntime, createTurnLifecycle, markMessageForPeople } from './turn-start';
 import { wakeOrRefuseInactiveSandbox } from './wake';
 
 // === Core HTTP forwarder ======================================================
@@ -66,7 +65,11 @@ export async function forwardToSandbox(
   // and the HTTP route (the row read while this request authenticated). The
   // turn-begin write below re-checks the box's status in the database, so a
   // row that went stale in between cannot deliver a turn.
-  opts: { originMode?: boolean; record?: SandboxRecord } = {},
+  //
+  // `promptSource`: the queued row's source, when the API forwards its prompt
+  // (`postPrompt`). The turn record keeps it (`beginSandboxTurn`). No HTTP
+  // edge sets it.
+  opts: { originMode?: boolean; record?: SandboxRecord; promptSource?: string } = {},
 ): Promise<Response> {
   let requestBody = body;
 
@@ -79,6 +82,7 @@ export async function forwardToSandbox(
   if (!record) {
     return jsonProxyError({ error: 'sandbox not found' }, 404, origin);
   }
+  sandboxId = record.externalId;
   bindSandboxRequestContext(record, sandboxId);
   const userId = principalUserId(access);
   const callerSessionId = access.kind === 'principal' ? access.callerSessionId : null;
@@ -121,6 +125,13 @@ export async function forwardToSandbox(
     transport: 'http' as const,
   };
   const upstreamPort = routeSandboxIngress(record, ingressRequest).effectivePort;
+  // The two turn predicates, computed ONCE (KRTX-4477): every gate below and the
+  // one inside `forwardWithRetry` re-read the same `upstreamPort`/`method`/
+  // `remainingPath`, which cannot change from here on — five repeated
+  // evaluations became two (the env-sync boolean rides into the retry loop
+  // through `ForwardRequest`).
+  const turnStartRequest = isTurnStartRequest(upstreamPort, method, remainingPath);
+  const turnStartEnvSync = isTurnStartEnvSync(upstreamPort, method, remainingPath);
   // Did the BOX author this request? It holds two credentials that authenticate
   // perfectly well, and every deadline decision below — the turn-start
   // observation, the preview-use extend, the auto-resume — must exclude them or
@@ -147,6 +158,7 @@ export async function forwardToSandbox(
     remainingPath,
     queryString,
     origin,
+    method,
   });
   if (accessRefusal) return accessRefusal;
   // A turn whose required connectors cannot serve it is refused HERE — before the
@@ -168,7 +180,7 @@ export async function forwardToSandbox(
   // then sees the session's own agent. Sandbox-authored turns included: they
   // skip the authorization gate, which is exactly why the name must be gone
   // before the re-mint reads it. See `undeclared-prompt-agent.ts`.
-  // A client asking OpenCode to abort is a stop somebody REQUESTED. Record it on
+  // A client asking the runtime to abort is a stop somebody REQUESTED. Record it on
   // the open turn before the abort is forwarded: the end frame that follows is
   // the same "Aborted" as an abort nobody asked for. A sandbox-authored call is
   // the agent acting, not a person, so it is left to read as what it is.
@@ -176,10 +188,10 @@ export async function forwardToSandbox(
   // Only the turn's prompter, the session owner or a project manager may stop
   // a running turn (`abort-authority.ts`). A refusal forwards nothing and
   // stamps nothing. `by` names the person on the stamp ("Stopped by <name>").
-  const abortedOpencodeSessionId = sandboxAuthored
+  const abortedRuntimeSessionId = sandboxAuthored
     ? null
     : clientAbortTarget(upstreamPort, method, remainingPath);
-  if (abortedOpencodeSessionId) {
+  if (abortedRuntimeSessionId) {
     const stop = await decideClientAbort(access, record);
     if (!stop.allowed) {
       return jsonProxyError({ error: NOT_TURN_PROMPTER_MESSAGE, code: NOT_TURN_PROMPTER }, 403, origin);
@@ -187,7 +199,7 @@ export async function forwardToSandbox(
     await markTurnStopRequested(
       record.sessionId,
       'UserStop',
-      { opencodeSessionId: abortedOpencodeSessionId },
+      { runtimeSessionId: abortedRuntimeSessionId },
       stop.by,
     );
   }
@@ -203,7 +215,7 @@ export async function forwardToSandbox(
     );
   }
 
-  if (isTurnStartEnvSync(upstreamPort, method, remainingPath)) {
+  if (turnStartEnvSync) {
     const guardProjectId = record.projectId;
     const checked = await dropUndeclaredPromptAgent({
       body: requestBody,
@@ -225,7 +237,7 @@ export async function forwardToSandbox(
   // Was `isConnectorGatedTurn`, a byte-identical second copy of the predicate
   // below. One definition: "a USER turn", i.e. `isTurnStartRequest` minus
   // `/summarize`.
-  if (!sandboxAuthored && isTurnStartEnvSync(upstreamPort, method, remainingPath)) {
+  if (!sandboxAuthored && turnStartEnvSync) {
     const promptAgent = requestedPromptAgent(requestBody, incomingHeaders);
     // Authorization FIRST. The connector gate below reads this agent's manifest,
     // and its refusal names the connectors that agent requires — not something a
@@ -240,9 +252,7 @@ export async function forwardToSandbox(
   }
   if (
     record.status === 'stopped' &&
-    carriesSessionData(upstreamPort) &&
-    method === 'POST' &&
-    /^\/session\/[^/?#]+\/fork\/?(?:$|[?#])/.test(stripInBoxProxyPrefix(remainingPath))
+    parseForkPath(upstreamPort, method, remainingPath) !== null
   ) {
     // Fork cannot wait for the asynchronous wake. Return a non-retryable
     // conflict so the caller displays the recovery action instead of a 503.
@@ -293,7 +303,7 @@ export async function forwardToSandbox(
   //
   // Config does not converge here: a box that is behind converges after its
   // turn ends (`convergeConfigIfBehind`), and the prompt never waits for it.
-  if (!sandboxAuthored && isTurnStartRequest(upstreamPort, method, remainingPath)) {
+  if (!sandboxAuthored && turnStartRequest) {
     const converged = await convergeTurnStartRuntime({
       record,
       ingressRequest,
@@ -307,6 +317,9 @@ export async function forwardToSandbox(
     if (converged.refusal) return converged.refusal;
   }
 
+  // A message to people only joins the thread with no turn: marked before the claim and the turn identity read it.
+  requestBody = await markMessageForPeople({ record, userId, sandboxAuthored, method, path: remainingPath, body: requestBody });
+
   const claim = claimPromptDeliveryOnce({
     promptDelivery,
     incomingHeaders,
@@ -319,7 +332,7 @@ export async function forwardToSandbox(
   const { promptDedupeKey } = claim;
 
   const turnIdentity =
-    !sandboxAuthored && isTurnStartRequest(upstreamPort, method, remainingPath)
+    !sandboxAuthored && turnStartRequest
       ? extractTurnIdentity(remainingPath, requestBody)
       : null;
 
@@ -348,13 +361,12 @@ export async function forwardToSandbox(
       prefetchedIngress,
       promptDedupeKey,
       turnIdentity,
-      turn: createTurnLifecycle(sandboxId, turnIdentity),
+      turnStartEnvSync,
+      turn: createTurnLifecycle(sandboxId, turnIdentity, opts.promptSource),
     },
     requestBody,
   );
-  const forkSource = carriesSessionData(upstreamPort) && method.toUpperCase() === 'POST'
-    ? /^\/?session\/([^/]+)\/fork$/.exec(remainingPath)?.[1]
-    : undefined;
+  const forkSource = parseForkPath(upstreamPort, method, remainingPath);
   if (forkSource && response.ok) {
     const { registerRuntimeFork } = await import('../../projects/surface');
     await registerRuntimeFork({

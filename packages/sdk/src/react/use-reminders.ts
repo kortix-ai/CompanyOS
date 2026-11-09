@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   deleteSessionReminder,
   deleteSessionReminders,
-  listProjectReminders,
+  listWorkspaceReminders,
   listSessionReminders,
   runSessionReminder,
   updateSessionReminder,
@@ -15,7 +15,7 @@ import { contract } from './query-contracts';
 import { qk } from './query-keys';
 
 /**
- * Every reminder in a project the caller can see, plus pause/resume
+ * Every reminder (a loop, in product copy) in a project the caller can see, plus pause/resume
  * (`update`), `remove` and `run` (fire once now). A reminder changes when it fires, when its agent
  * sets one, and from other members, so this is the `inventory` tier.
  *
@@ -23,11 +23,11 @@ import { qk } from './query-keys';
  * time, each reminder reported in the result, and the list refreshed once
  * when the batch settles, not once per reminder.
  */
-export function useProjectReminders(projectId: string | null | undefined) {
+export function useWorkspaceReminders(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: qk.project.reminders(projectId ?? ''),
-    queryFn: () => listProjectReminders(projectId as string),
+    queryFn: () => listWorkspaceReminders(projectId as string),
     enabled: !!projectId,
     ...contract('inventory'),
   });
@@ -60,6 +60,9 @@ export function useProjectReminders(projectId: string | null | undefined) {
   });
   return { ...query, update, remove, run, updateMany, removeMany };
 }
+
+/** @deprecated Use `useWorkspaceReminders`. Kept permanently. */
+export const useProjectReminders = useWorkspaceReminders;
 
 /** One session's reminders, with the same mutations bound to that session, and `run`. */
 export function useSessionReminders(

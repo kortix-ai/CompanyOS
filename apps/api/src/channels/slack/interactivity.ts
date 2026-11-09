@@ -1,11 +1,13 @@
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { and, eq } from 'drizzle-orm';
-import { chatChannelBindings, chatInstalls, projectSessions, projects } from '@kortix/db';
+import { chatChannelBindings, chatInstalls, projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { config } from '../../config';
 import { loadSlackTokenForProject } from '../install-store';
 import { openModal, updateMessage } from '../slack-api';
 import { dispatchSlackEvent, spawnAgentTurn } from './dispatch';
+import { parseQuestionButton } from '../core/question-token';
+import { QUESTION_EARLIER } from './questions';
 import { backfillSlackBindingLabel } from './binding-label';
 import { notifyAdminsOfAccessRequest } from './identity';
 import { chatUser, createChatAccessRequest, resolveChatActor } from '../core/identity';
@@ -44,8 +46,9 @@ import {
   type SlackInbound,
 } from './inbound';
 import type { SlackEnvelope, SlackEvent, SlackInteractionPayload } from './types';
+import { projectsView } from '../../workspaces/rows';
 
-const OTHER_PROJECT_NOTICE = 'This Slack app is tied to a different Kortix project.';
+const OTHER_PROJECT_NOTICE = 'This Slack app is tied to a different Kortix workspace.';
 
 /** spawnAgentTurn options for a request from `inbound`. */
 function turnScope(inbound: SlackInbound): { ownThreadsOnly: boolean } {
@@ -121,10 +124,13 @@ async function handleAgentClick(
 }
 
 // A click on one of the agent's `question` options (rendered as buttons by
-// buildQuestionBlocks, action_id `qa_<q>_<o>`). Resolve the original message to a
-// confirmation so it can't be re-clicked, then resume the thread's session with
-// the chosen answer as a follow-up turn — the SAME path an in-thread reply takes,
-// so questions behave natively in Slack instead of dead-ending.
+// buildQuestionBlocks, action_id `qa_<q>_<o>`). A `kq:` value names the stored
+// question: the answer is the stored option, the message is edited to show who
+// gave it (other questions keep their buttons), and only the question's own
+// session hears it (dispatch.ts `answerSlackQuestion`). Any other value is a
+// button posted before that: its label goes to the thread's session as a
+// follow-up. Either way each click has its own follow-up key, so a second click
+// is never dropped, and a click never starts or revives a session.
 async function handleQuestionAnswer(
   payload: SlackInteractionPayload,
   action: NonNullable<SlackInteractionPayload['actions']>[number],
@@ -136,32 +142,35 @@ async function handleQuestionAnswer(
   const messageTs = payload.message?.ts ?? '';
   const threadTs = payload.message?.thread_ts ?? messageTs;
   if (!teamId || !channelId || !userId || !threadTs) return;
-
-  let parsed: { q?: string; a?: string } = {};
-  try {
-    parsed = JSON.parse(action.value ?? '{}') as { q?: string; a?: string };
-  } catch {
-    parsed = {};
-  }
-  const label = (parsed.a ?? action.text?.text ?? '').trim();
-  const question = (parsed.q ?? '').trim();
-
-  // Ephemeral ack only — NOT replace_original. A message may carry several
-  // questions; replacing it would wipe the sibling questions' buttons. (Matches
-  // handleAgentClick.) The buttons stay; a re-click just sends another follow-up.
-  await respondViaUrl(payload.response_url, {
-    response_type: 'ephemeral',
-    text: `On it — *${escapeMrkdwn(label)}*.`,
-  });
-
-  const thread = await findSlackThread(inbound, teamId, threadTs);
-  if (!thread) return;
+  const ephemeral = (text: string) => respondViaUrl(payload.response_url, { response_type: 'ephemeral', text });
+  // The click's own key: without it, this click could not be told from another.
+  if (!payload.trigger_id) return ephemeral("Couldn't record that click. Click the option again.");
+  const button = parseQuestionButton(action.value ?? '');
 
   const lines: string[] = [];
-  if (question) lines.push(`Answering your question "${question}":`);
-  lines.push(label || 'see the selection above');
-  lines.push('', 'Continue the turn based on this answer.');
+  if (!button) {
+    let parsed: { q?: string; a?: string } = {};
+    try {
+      parsed = JSON.parse(action.value ?? '{}') as { q?: string; a?: string };
+    } catch {
+      parsed = {};
+    }
+    const label = (parsed.a ?? action.text?.text ?? '').trim();
+    const question = (parsed.q ?? '').trim();
+    // Ephemeral ack only: this message is never edited.
+    await ephemeral(`On it — *${escapeMrkdwn(label)}*.`);
+    if (question) lines.push(`Answering your question "${question}":`);
+    lines.push(label || 'see the selection above');
+    lines.push('', 'Continue the turn based on this answer.');
+  }
 
+  const thread = await findSlackThread(inbound, teamId, threadTs);
+  if (!thread) {
+    if (button) await ephemeral(QUESTION_EARLIER);
+    return;
+  }
+
+  // A `kq:` click's text is the stored answer, set at delivery.
   const event: SlackEvent = {
     type: 'message',
     user: userId,
@@ -172,7 +181,15 @@ async function handleQuestionAnswer(
     team: teamId,
   };
   const envelope: SlackEnvelope = { type: 'event_callback', team_id: teamId, event };
-  await spawnAgentTurn(thread.projectId, envelope, event, turnScope(inbound));
+  await spawnAgentTurn(thread.projectId, envelope, event, {
+    ...turnScope(inbound),
+    press: {
+      key: `slack:${button ? 'kq' : 'qa'}:${teamId}:${channelId}:${messageTs}:${payload.trigger_id}`,
+      ...(button ? { button } : {}),
+      responseUrl: payload.response_url,
+      blocks: payload.message?.blocks,
+    },
+  });
 }
 
 // A click on a Review Center card button (rendered by buildReviewCardBlocks,
@@ -265,16 +282,24 @@ async function handleReviewAction(
       text:
         actor.reason === 'unlinked'
           ? 'Connect your Kortix account first (`/kortix login`) to act on reviews.'
-          : "You don't have access to act on this project's reviews.",
+          : "You don't have access to act on this Kortix workspace's reviews.",
     });
     return;
   }
 
-  await applyVerdict(parsed.id, thread.projectId, {
+  const decided = await applyVerdict(parsed.id, thread.projectId, {
     verdict,
     feedback: null,
     actingUserId: actor.userId,
   });
+  if (decided === null) {
+    // Someone decided it first (another click, the web inbox): change nothing.
+    await respondViaUrl(payload.response_url, {
+      response_type: 'ephemeral',
+      text: `*${escapeMrkdwn(item.title)}* was already decided.`,
+    });
+    return;
+  }
 
   // Ephemeral ack only (NOT replace_original) — keep the card so a sibling button
   // or a re-click still works, mirroring handleQuestionAnswer.
@@ -342,7 +367,7 @@ async function handleSwitchProject(
       response_type: 'ephemeral',
       replace_original: true,
       text: result.reason === 'not_installed'
-        ? 'That project is no longer connected to this workspace.'
+        ? 'That Kortix workspace is no longer connected to this Slack workspace.'
         : settingsRefusalText(result.reason, '/kortix', ''),
     });
     return;
@@ -350,9 +375,9 @@ async function handleSwitchProject(
   await backfillSlackBindingLabel(teamId, channelId, projectId);
 
   const [p] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ name: projectsView.name })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
 
   await respondViaUrl(payload.response_url, {
@@ -396,7 +421,7 @@ async function handleSetSelection(
   }
   const requested = value.a || null;
   const result = await changeChannelAgent(slackUserOf({ teamId, slackUserId }), slackSettingsChannel(ctx), requested);
-  const text = agentChangeText(result, requested ?? '', '/kortix', 'That channel is no longer bound to a project — run `/kortix switch` first.');
+  const text = agentChangeText(result, requested ?? '', '/kortix', 'That channel is no longer bound to a Kortix workspace — run `/kortix switch` first.');
   await reply(`${result.ok ? '✓' : '⚠️'} ${text}`);
 }
 
@@ -508,7 +533,7 @@ async function handleRequestAccess(
         : result.status === 'already-member'
           ? 'You already have access — mention me again and I’ll get on it.'
           : result.status === 'no-project'
-            ? 'That project isn’t connected to this Slack workspace.'
+            ? 'That Kortix workspace isn’t connected to this Slack workspace.'
             : 'I couldn’t request access — connect your Kortix account first, then try again.';
   await respondViaUrl(payload.response_url, { replace_original: true, text: message });
 
@@ -733,17 +758,21 @@ export async function handleViewSubmission(
     await notify(
       actor.reason === 'unlinked'
         ? 'Connect your Kortix account first (`/kortix login`) to act on reviews.'
-        : "You don't have access to act on this project's reviews.",
+        : "You don't have access to act on this Kortix workspace's reviews.",
     );
     return;
   }
 
   const feedback = readReviewFeedback(payload.view ?? {});
-  await applyVerdict(meta.reviewItemId, meta.projectId, {
+  const decided = await applyVerdict(meta.reviewItemId, meta.projectId, {
     verdict: 'changes',
     feedback,
     actingUserId: actor.userId,
   });
+  if (decided === null) {
+    await notify(`*${escapeMrkdwn(item.title)}* was already decided.`);
+    return;
+  }
 
   await notify(
     feedback
@@ -896,7 +925,7 @@ export async function handleBlockAction(
     .where(
       and(
         eq(chatInstalls.platform, 'slack'),
-        eq(chatInstalls.workspaceId, teamId),
+        eq(chatInstalls.platformTeamId, teamId),
         eq(chatInstalls.projectId, projectId),
       ),
     )
@@ -907,7 +936,7 @@ export async function handleBlockAction(
         token,
         channelId,
         pickerTs,
-        'That project is no longer connected here — @mention me again to pick another.',
+        'That Kortix workspace is no longer connected here — @mention me again to pick another.',
       );
     }
     return;
@@ -919,15 +948,15 @@ export async function handleBlockAction(
     .where(
       and(
         eq(chatChannelBindings.platform, 'slack'),
-        eq(chatChannelBindings.workspaceId, teamId),
+        eq(chatChannelBindings.platformTeamId, teamId),
         eq(chatChannelBindings.channelId, channelId),
       ),
     );
 
   const [proj] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ name: projectsView.name })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (token && pickerTs) {
     // DM channel ids start with 'D' — a <#D…> mention renders as a dead link

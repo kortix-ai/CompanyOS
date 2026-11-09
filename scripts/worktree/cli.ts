@@ -110,7 +110,7 @@ function warnOnStackPressure(current: string, reg: Registry): void {
  * delivery, session-lifecycle commands, sandbox env sync. Whichever API instance
  * grabs a job pushes ITS `KORTIX_URL`-derived gateway URL into the box. If that
  * other stack's tunnel has rotted (quick tunnels do, every few hours), the next
- * prompt it picks up dies inside OpenCode with
+ * prompt it picks up dies inside the agent runtime with
  * `Cannot connect to API … <other-stack>.trycloudflare.com/v1/llm-gateway`, and
  * nothing in THIS stack's log explains it. 2026-08-22: `mw-perf`'s dead tunnel
  * was pushed into a `timeline-parity` box this way. Say it at start, where the
@@ -127,7 +127,7 @@ function warnOnSharedDbCrosstalk(current: string, reg: Registry): void {
   if (others.length === 0) return;
   warn(`${plural(others.length, 'other stack is', 'other stacks are')} live on the SAME shared DB: ${others.join(', ')}`);
   sub('they share one work queue (prompt delivery, session lifecycle, env sync) — whichever API grabs a job pushes ITS KORTIX_URL into the sandbox;');
-  sub(`a rotted tunnel over there surfaces HERE as OpenCode "Cannot connect to API …trycloudflare.com/v1/llm-gateway" on the first prompt.`);
+  sub(`a rotted tunnel over there surfaces HERE as "Cannot connect to API …trycloudflare.com/v1/llm-gateway" on the first prompt.`);
   sub(`run one stack at a time (${pc.cyan('pnpm worktree stop <name>')}), or recreate this worktree with ${pc.cyan('--db')} for an isolated database.`);
 }
 
@@ -411,6 +411,16 @@ async function cmdCreate(a: Args) {
   }
 
   const root = repoRoot();
+  // An absolute core.hooksPath makes every worktree run the primary
+  // checkout's hooks, from whatever branch the primary has checked out.
+  // 2026-11-08: the primary's stale pre-commit ran `dotenvx protect` from a
+  // worktree and pointed the global git filter at that worktree. `.githooks`
+  // is what `pnpm install` sets (package.json `prepare`).
+  const hooksPath = sh(['git', '-C', root, 'config', '--get', 'core.hooksPath']).stdout.trim();
+  if (hooksPath && isAbsolute(hooksPath)) {
+    sh(['git', '-C', root, 'config', 'core.hooksPath', '.githooks']);
+    sub(`core.hooksPath was ${hooksPath}; set it to .githooks so each worktree runs its own hooks`);
+  }
   const wtPath = defaultWorktreePath(root, name);
   const branch = (typeof a.flags.branch === 'string' && a.flags.branch) || name;
   // `dev` (the default) resolves to a freshly fetched origin/dev, never the
@@ -647,7 +657,7 @@ async function cmdStart(a: Args) {
   // The API's KORTIX_URL is baked at spawn, so a tunnel rotation has to
   // respawn it — keep the spawn in a function and the handle mutable.
   const spawnApi = (kortixUrl: string | undefined) =>
-    Bun.spawn(['pnpm', '--filter', API_FILTER, 'dev'], { cwd: e.path, env: { ...process.env, ...apiLaunchEnv(e.ports, creds, { kortixUrl, stripeWebhookSecret: stripe?.secret, billing, instanceId: name }) }, stdout: 'inherit', stderr: 'inherit' });
+    Bun.spawn(['pnpm', '--filter', API_FILTER, 'dev'], { cwd: e.path, env: { ...process.env, ...apiLaunchEnv(e.ports, creds, { kortixUrl, stripeWebhookSecret: stripe?.secret, billing, instanceId: name, dbMode }) }, stdout: 'inherit', stderr: 'inherit' });
   let api = spawnApi(tunnel?.url);
   let apiRestarting = false;
   const gateway = Bun.spawn(['pnpm', '--filter', GATEWAY_FILTER, 'dev'], { cwd: e.path, env: { ...process.env, ...gatewayLaunchEnv(e.ports) }, stdout: 'inherit', stderr: 'inherit' });
@@ -835,7 +845,13 @@ async function nukeOne(name: string, e: SlotEntry, flags: Record<string, string 
   if (e.branch) {
     const del = sh(['git', '-C', root, 'branch', '-d', e.branch]);
     if (del.ok) sub(`deleted branch "${e.branch}"`);
-    else if (flags.force) { sh(['git', '-C', root, 'branch', '-D', e.branch]); sub(`force-deleted branch "${e.branch}" (had unmerged commits)`); }
+    // --force drops a branch only when every commit on it also exists on a remote.
+    // A branch with unpushed commits is the only copy of that work: 2026-11-05 a
+    // `nuke --force` deleted a 60-commit branch that had never been pushed.
+    else if (flags.force && sh(['git', '-C', root, 'rev-list', '--count', e.branch, '--not', '--remotes']).stdout.trim() === '0') {
+      sh(['git', '-C', root, 'branch', '-D', e.branch]); sub(`force-deleted branch "${e.branch}" (had unmerged commits, all pushed)`);
+    }
+    else if (flags.force) sub(`kept branch "${e.branch}": it has commits on no remote. Push it, or run \`git branch -D ${e.branch}\` to drop them`);
     else sub(`kept branch "${e.branch}" (unmerged commits) — \`git branch -D ${e.branch}\` or \`nuke --force\` to drop it`);
   }
   try { rmSync(slotDir(name), { recursive: true, force: true }); } catch {}

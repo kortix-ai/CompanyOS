@@ -2,17 +2,16 @@
  * Model resolution for the pi harness.
  *
  * Every model a session can run is served by the Kortix LLM gateway under
- * the synthetic `kortix` provider — the same provider OpenCode's config
- * registers. pi talks to it through its OpenAI-completions API, pointed at the
+ * the synthetic `kortix` provider. pi talks to it through its
+ * OpenAI-completions API, pointed at the
  * daemon's localhost LLM proxy when one runs (credential injection, image
  * window) and at the gateway directly otherwise.
  *
- * The picker's catalog comes from the image-baked file the OpenCode path also
- * reads; the selected model comes from `KORTIX_MODEL` (the control
+ * The catalog is the project's servable list, fetched live from the gateway
+ * (`GET /models?scope=picker`); the selected model comes from `KORTIX_MODEL` (the control
  * plane's resolved session model — the variable is named for the first
  * harness, the value is harness-neutral), then the compiled agent config.
  */
-import { readFileSync } from 'node:fs'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import {
   InMemoryCredentialStore,
@@ -27,12 +26,9 @@ import { LLM_PROXY_PLACEHOLDER_KEY } from '@/services/llm-proxy/llm-proxy'
 import { logger } from '@/lib/log/logger'
 import type { KortixGatewayModel } from '@kortix/api-contract/fallback-models'
 import { variantsFromReasoningOptions } from '../shared/reasoning-variants'
+import { CLAUDE_AGENT_EFFORTS, CLAUDE_AGENT_PROVIDER_ID, claudeAgentModelId } from '@kortix/api-contract/claude-agent'
+import { claudeModelFor, createClaudeProvider, type ClaudeProviderOptions } from './claude/provider'
 
-/** Staged unconditionally by apps/api's snapshot build-context. A host that
- *  really bakes one (every Kortix sandbox image) can hide it from the test
- *  suite through KORTIX_BAKED_LLM_CATALOG_PATH. */
-export const BAKED_LLM_CATALOG_PATH =
-  process.env.KORTIX_BAKED_LLM_CATALOG_PATH || '/opt/kortix/llm-catalog.json'
 export const KORTIX_PROVIDER_ID = 'kortix'
 const PI_THINKING_LEVELS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
@@ -47,35 +43,29 @@ export interface CatalogModel {
   reasoning_options?: KortixGatewayModel['reasoning_options']
 }
 
-export function readCatalogFile(path: string = process.env.KORTIX_LLM_CATALOG_FILE || BAKED_LLM_CATALOG_PATH): Record<string, CatalogModel> {
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { models?: Record<string, CatalogModel> } | Record<string, CatalogModel>
-    const models = (parsed && typeof parsed === 'object' && 'models' in parsed ? (parsed as { models?: Record<string, CatalogModel> }).models : (parsed as Record<string, CatalogModel>)) ?? {}
-    return models
-  } catch {
-    return {}
-  }
-}
-
 /**
  * The project's servable models with their real limits: `GET /models?scope=picker`,
- * the list the web picker shows. It carries what the image-baked catalog cannot:
- * custom endpoints, Platinum BYOK and models newer than the image. Empty on failure.
+ * the list the web picker shows, including custom endpoints and Platinum BYOK.
+ * Tried twice; null when both fail.
  */
-export async function fetchPickerCatalog(env: NodeJS.ProcessEnv): Promise<Record<string, CatalogModel>> {
+export async function fetchPickerCatalog(env: NodeJS.ProcessEnv): Promise<Record<string, CatalogModel> | null> {
   const base = env.KORTIX_LLM_BASE_URL?.trim()
   const token = env.KORTIX_TOKEN?.trim()
-  if (!base || !token) return {}
-  try {
-    const res = await fetch(`${base.replace(/\/+$/, '')}/models?scope=picker`, {
-      headers: { authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(3_000),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return ((await res.json()) as { models?: Record<string, CatalogModel> }).models ?? {}
-  } catch (err) {
-    logger.warn('[pi] live model catalog unavailable; the baked catalog sizes the models', { err: String(err) })
-    return {}
+  if (!base || !token) return null
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(`${base.replace(/\/+$/, '')}/models?scope=picker`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(3_000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return ((await res.json()) as { models?: Record<string, CatalogModel> }).models ?? {}
+    } catch (err) {
+      if (attempt === 2) {
+        logger.warn('[pi] live model catalog unavailable; models use default limits until it answers', { err: String(err) })
+        return null
+      }
+    }
   }
 }
 
@@ -100,7 +90,11 @@ export function compactionSettings(catalog: Record<string, CatalogModel>, config
   return { modelOverrides }
 }
 
-/** `kortix/<id>` and bare `<id>` both name the gateway model `<id>`. */
+/**
+ * The id `PiModels.select` takes for a model ref: `kortix/<id>` and bare `<id>` both name the
+ * gateway model `<id>`; `claude-agent/<id>` stays whole, it names a model of the Claude
+ * subscription provider (`claude/provider.ts`).
+ */
 export function nativeModelId(ref: string | undefined | null): string | null {
   const raw = (ref ?? '').trim()
   if (!raw) return null
@@ -108,7 +102,21 @@ export function nativeModelId(ref: string | undefined | null): string | null {
   return id || null
 }
 
-/** OpenCode `variant` names that pi can honour as a thinking level. */
+/**
+ * The `select` id of a prompt's `{ providerID, modelID }`: a gateway model is its wire id
+ * (`kortix/<id>` is `<id>`, another provider's `<p>/<id>` is the wire id `<p>/<id>`), a
+ * Claude subscription model is `claude-agent/<id>`.
+ */
+export function promptModelId(model: { providerID: string; modelID: string }): string | null {
+  return nativeModelId(`${model.providerID}/${model.modelID}`)
+}
+
+/** The `select` id of a provider's model: the inverse of `SelectedModel`'s `providerID` + `modelID`. */
+export function selectId(providerID: string, modelID: string): string {
+  return providerID === CLAUDE_AGENT_PROVIDER_ID ? `${CLAUDE_AGENT_PROVIDER_ID}/${modelID}` : modelID
+}
+
+/** The catalog's `variant` names that pi can honour as a thinking level. */
 export function reasoningVariants(entry: CatalogModel | undefined): string[] {
   if (!entry?.reasoning) return []
   const names = [...Object.keys(entry.variants ?? {}), ...Object.keys(variantsFromReasoningOptions(entry) ?? {})]
@@ -145,7 +153,19 @@ export interface PiModels {
   select(modelId: string | null): SelectedModel
   /** The catalog the picker lists. */
   catalog: Record<string, CatalogModel>
+  /** False when the live catalog did not answer: every model runs on default limits. */
+  live: boolean
 }
+
+/**
+ * How pi fits an image before it enters the history (the `read` tool, tool results, prompts).
+ * pi keeps an image under `maxBytes` of base64 as it is, so a 1600x1200 aerial PNG went as
+ * 4.7 MB; with this cap pi sends the same pixels as a JPEG (q80: 0.61 MB, measured 2026-11-06).
+ * The gateway refuses a request with more than 22 MiB of images (`image-window.ts`), and
+ * Bedrock one over ~32 MB: twelve 3.6 MB PNG reads failed every retry on 2026-11-02.
+ * A screenshot PNG under 1.5 MB stays a sharp PNG.
+ */
+export const IMAGE_RESIZE = { maxWidth: 2000, maxHeight: 2000, maxBytes: 1_500_000, jpegQuality: 80 } as const
 
 function gatewayModel(id: string, entry: CatalogModel | undefined, target: GatewayTarget): Model<'openai-completions'> {
   return {
@@ -156,6 +176,7 @@ function gatewayModel(id: string, entry: CatalogModel | undefined, target: Gatew
     baseUrl: target.baseUrl,
     reasoning: entry?.reasoning === true,
     input: entry?.attachment ? ['text', 'image'] : ['text'],
+    ...(entry?.attachment ? { inputLimits: { images: { resize: { ...IMAGE_RESIZE } } } } : {}),
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     // No source knows the window: pi's own default for a model it cannot size.
     contextWindow: entry?.limit?.context ?? 128_000,
@@ -172,6 +193,10 @@ function gatewayModel(id: string, entry: CatalogModel | undefined, target: Gatew
 export async function createPiModels(input: {
   env?: NodeJS.ProcessEnv
   defaultModelRef?: string | null
+  /** The live catalog already fetched (null: it did not answer). Omitted: fetch it now. */
+  catalog?: Record<string, CatalogModel> | null
+  /** Where Claude subscription models keep their state and run. Omitted: there are none. */
+  claude?: ClaudeProviderOptions
 }): Promise<PiModels> {
   const env = input.env ?? process.env
   const credentials = new InMemoryCredentialStore()
@@ -179,7 +204,8 @@ export async function createPiModels(input: {
 
   const target = resolveGatewayTarget(env)
   if (!target) throw new Error('pi harness needs KORTIX_LLM_BASE_URL and KORTIX_TOKEN (the Kortix LLM gateway)')
-  const catalog = { ...readCatalogFile(env.KORTIX_LLM_CATALOG_FILE), ...(await fetchPickerCatalog(env)) }
+  const live = input.catalog === undefined ? await fetchPickerCatalog(env) : input.catalog
+  const catalog = live ?? {}
   const provider = createProvider({
     id: KORTIX_PROVIDER_ID,
     name: 'Kortix',
@@ -189,19 +215,54 @@ export async function createPiModels(input: {
     api: { 'openai-completions': openAICompletionsApi() },
   })
   models.setProvider(provider)
+  if (input.claude) {
+    const gatewayApi = openAICompletionsApi()
+    models.setProvider(createClaudeProvider({
+      ...input.claude,
+      // The ref stays `claude-agent/<id>`: the gateway answers it with the project's fallback model.
+      // The Claude model's window and image input, so the step is the one Claude would have taken.
+      // No output cap: Claude's (64k) is above many fallbacks' own, which refuse it with a 400.
+      gatewayStep: (model, context, options) => gatewayApi.streamSimple(
+        gatewayModel(`${CLAUDE_AGENT_PROVIDER_ID}/${model.id}`, { attachment: true, limit: { context: model.contextWindow, output: model.maxTokens } }, target),
+        context,
+        {
+          ...options,
+          apiKey: target.apiKey,
+          onPayload: async (payload, payloadModel) => {
+            const next = ((await options.onPayload?.(payload, payloadModel)) ?? payload) as Record<string, unknown>
+            const { max_tokens: _maxTokens, max_completion_tokens: _maxCompletionTokens, ...rest } = next
+            return rest
+          },
+        },
+      ),
+    }))
+  }
   await credentials.modify(KORTIX_PROVIDER_ID, async () => ({ type: 'api_key', key: target.apiKey }))
   const fallback = nativeModelId(input.defaultModelRef) ?? Object.keys(catalog)[0] ?? null
-  if (!fallback) throw new Error('pi harness has no model: no KORTIX_MODEL and no baked catalog')
-  logger.info('[pi] gateway models ready', { baseUrl: target.baseUrl, catalog: Object.keys(catalog).length, fallback })
+  if (!fallback) throw new Error('pi harness has no model: no KORTIX_MODEL and no live model catalog')
+  logger.info('[pi] gateway models ready', { baseUrl: target.baseUrl, catalog: Object.keys(catalog).length, live: live !== null, fallback })
 
   return {
     models,
     catalog,
+    live: live !== null,
     select(modelId) {
       const id = modelId ?? fallback
+      const claudeId = claudeAgentModelId(id)
+      if (claudeId && input.claude) {
+        const model = models.getModel(CLAUDE_AGENT_PROVIDER_ID, claudeId) ?? claudeModelFor(claudeId)
+        return {
+          model,
+          providerID: CLAUDE_AGENT_PROVIDER_ID,
+          modelID: claudeId,
+          variants: [...CLAUDE_AGENT_EFFORTS],
+          images: true,
+          contextWindow: model.contextWindow,
+        }
+      }
       const entry = catalog[id]
-      // A model the picker offers but the baked catalog lacks still routes:
-      // the gateway resolves ids server-side, the catalog only sizes the window.
+      // A model the catalog lacks still routes: the gateway resolves ids
+      // server-side, the catalog only sizes the window.
       const model = models.getModel(KORTIX_PROVIDER_ID, id) ?? gatewayModel(id, entry, target)
       return {
         model,

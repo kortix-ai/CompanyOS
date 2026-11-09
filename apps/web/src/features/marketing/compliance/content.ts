@@ -1,7 +1,9 @@
+import { MARKETING_RELEASE_TRANSLATION_KEYS } from '@/i18n/marketing-release-translation-keys.generated';
+import { localizeUiCatalog } from '@kortix/ui/i18n';
 /**
  * `/compliance` copy: the page for IT and compliance reviewers, laid out like
  * the home page: a hero with one walkthrough of the admin view, four pillars,
- * one tab per topic, the trust band, the FAQ. English only. The buyer story
+ * one tab per topic, the trust band, the FAQ. Localized. The buyer story
  * (rollout, hosting, models, contract) lives on /enterprise.
  *
  * Every line was checked on 2026-10-28 against the source named above its
@@ -28,7 +30,7 @@ export const hero = {
   title: 'Compliance and control.',
   titleMuted: 'Your sign-in, your roles, your audit trail.',
   sub: 'What IT and compliance reviewers ask about: how people sign in, who may run which agent, which actions wait for a person, and what gets recorded.',
-  caption: 'One account for the whole company.',
+  caption: 'One workspace for the whole company.',
   captionMuted: 'Owners and admins set it up in Account settings.',
 } as const;
 
@@ -136,14 +138,22 @@ export const pillars = {
     {
       id: 'access',
       name: 'Your roles and groups',
-      line: 'Who opens which project, and runs which agent.',
-      facts: ['Account and project roles', 'Groups and custom roles', 'All agents, or only the ones you pick'],
+      line: 'Who opens which workspace, and runs which agent.',
+      facts: [
+        'Account and project roles',
+        'Groups and custom roles',
+        'All agents, or only the ones you pick',
+      ],
     },
     {
       id: 'governance',
       name: 'Rules you set',
       line: 'Agents ask before the actions you choose.',
-      facts: ['Allow, Ask or Block per action', 'Project rules no agent can loosen', 'One approval per exact call'],
+      facts: [
+        'Allow, Ask or Block per action',
+        'Project rules no agent can loosen',
+        'One approval per exact call',
+      ],
     },
     {
       id: 'audit',
@@ -183,7 +193,7 @@ export const topics = {
     {
       id: 'access',
       title: 'Roles, groups and agents',
-      description: 'Who opens which project, and runs which agent.',
+      description: 'Who opens which workspace, and runs which agent.',
       body: [
         'Each person holds an account role and a role in each project. Grant a project to a group, and everyone in it gets it.',
         'Each grant names the agents its people may run. Custom roles allow only the actions you pick.',
@@ -222,7 +232,7 @@ export const groupMappings = [
 /** guide.mdx "Teams": account and project roles. */
 export const roleTable = [
   { scope: 'Account', roles: ['Owner', 'Admin', 'Member'] },
-  { scope: 'Project', roles: ['Manager', 'Member'] },
+  { scope: 'Workspace', roles: ['Manager', 'Member'] },
   { scope: 'Custom', roles: ['Your own actions'] },
 ] as const;
 
@@ -230,7 +240,7 @@ export const roleTable = [
 export const policyYaml = {
   title: 'kortix.yaml',
   lines: [
-    '# project rules run first',
+    '# workspace rules run first',
     'policies:',
     '  - match: gmail.send_email',
     '    action: require_approval',
@@ -249,10 +259,11 @@ export const policyYaml = {
 export const auditOutputs = [
   { k: 'Read', v: 'Account settings → Audit log, filtered by person, action or outcome.' },
   { k: 'Export', v: 'CSV or JSONL.' },
-  { k: 'Stream', v: 'Each new event to your webhook, signed with HMAC-SHA256. Failed deliveries can be replayed.' },
+  {
+    k: 'Stream',
+    v: 'Each new event to your webhook, signed with HMAC-SHA256. Failed deliveries can be replayed.',
+  },
 ] as const;
-
-
 
 /* Trust band. Sources: claims.md Hosting, Source, Compliance rows;
    security-page/model.ts trust cells. */
@@ -334,3 +345,29 @@ export const faqItems = [
     answer: 'Yes. On a self-hosted instance, Enterprise turns them on for every account.',
   },
 ] as const;
+
+export function localizeMarketingContent(tMarketing: import('@/i18n/translator').UiTranslator) {
+  return localizeUiCatalog(
+    {
+      hero,
+      steps,
+      ssoRows,
+      groupRows,
+      accessProject,
+      accessRows,
+      heldCall,
+      auditRows,
+      auditStream,
+      pillars,
+      topics,
+      groupMappings,
+      roleTable,
+      policyYaml,
+      auditOutputs,
+      trust,
+      faqItems,
+    },
+    tMarketing,
+    MARKETING_RELEASE_TRANSLATION_KEYS,
+  );
+}

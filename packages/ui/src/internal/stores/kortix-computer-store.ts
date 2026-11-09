@@ -22,7 +22,7 @@ export interface ReadyChipState {
 }
 
 /** The panel surfaces reachable from outside the panel. */
-export type QuickView = 'terminal' | 'audit' | 'browser' | 'files' | 'reminders';
+export type QuickView = 'terminal' | 'audit' | 'browser' | 'files' | 'reminders' | 'desktop';
 
 /**
  * Extra aim for a quick-view request — "open the browser" vs "open the browser
@@ -41,6 +41,18 @@ export interface QuickViewTarget {
   title?: string;
   /** `files`: land on the Changes diff rather than All files. */
   changes?: boolean;
+}
+
+/** An agent's session the side panel opens: the child session and what the chat row calls it. */
+export interface FocusedAgent {
+  sessionId: string;
+  title: string;
+  /** The agent's handle, for its pixel mark. */
+  handle: string;
+  /** What it works on: the chat row's muted line. */
+  task?: string;
+  /** Why it did not finish, when the chat row knows (the raw platform text). */
+  failure?: string;
 }
 
 interface KortixComputerState {
@@ -132,6 +144,10 @@ interface KortixComputerState {
   // correct regardless of ordering.
   focusedToolCallId: string | null;
 
+  // An agent row clicked in the chat: the side panel opens that agent's
+  // session (its face, name, state, transcript). One-shot, like the tool focus.
+  focusedAgent: FocusedAgent | null;
+
   // W1 — the deliverable announces itself while the panel is closed.
   readyChip: ReadyChipState | null;
   // Chip tap → open the panel WITH the primary deliverable already open.
@@ -160,6 +176,7 @@ interface KortixComputerState {
   // from the Easy/Advanced panel — no `isSidePanelOpen`, no pending consume.
   // Closing the drawer lands back on chat. Desktop never sets this.
   mobileToolView: QuickView | null;
+  mobileToolTarget: QuickViewTarget | null;
 
   // === ACTIONS ===
 
@@ -179,6 +196,10 @@ interface KortixComputerState {
   focusToolCall: (callId: string) => void;
   // Clear the focus request after the panel has jumped to it.
   clearFocusedToolCall: () => void;
+
+  // Open the side panel on an agent's session.
+  focusAgent: (agent: FocusedAgent) => void;
+  clearFocusedAgent: () => void;
 
   // Panel control
   clearShouldOpenPanel: () => void;
@@ -269,7 +290,7 @@ interface KortixComputerState {
   ) => { view: QuickView; target?: QuickViewTarget } | null;
 
   /** Mobile only — open `view` in the standalone tool drawer. */
-  openMobileTool: (view: QuickView) => void;
+  openMobileTool: (view: QuickView, target?: QuickViewTarget) => void;
   closeMobileTool: () => void;
 
   // Reset all state (full reset)
@@ -293,6 +314,7 @@ const initialState = {
   skipNextExpandAnimation: false,
   pendingToolNavIndex: null as number | null,
   focusedToolCallId: null as string | null,
+  focusedAgent: null as FocusedAgent | null,
   readyChip: null as ReadyChipState | null,
   pendingPrimaryOpenSessionId: null as string | null,
   pendingQuickView: null as {
@@ -302,6 +324,7 @@ const initialState = {
     target?: QuickViewTarget;
   } | null,
   mobileToolView: null as QuickView | null,
+  mobileToolTarget: null as QuickViewTarget | null,
   /** A quick-view consumed by the transient BOOT shell (e.g. Terminal clicked
    *  while the sandbox boots). The shell's provider dies at the boot→ready
    *  handoff, taking the view with it — this remembers the intent so
@@ -383,6 +406,16 @@ export const useKortixComputerStore = create<KortixComputerState>()(
 
       clearFocusedToolCall: () => {
         set({ focusedToolCallId: null });
+      },
+
+      focusAgent: (agent: FocusedAgent) => {
+        const update: Partial<KortixComputerState> = { focusedAgent: agent, isSidePanelOpen: true };
+        clearSessionChip(update, get().readyChip, get()._activeSessionId);
+        set(update);
+      },
+
+      clearFocusedAgent: () => {
+        set({ focusedAgent: null });
       },
 
       clearShouldOpenPanel: () => {
@@ -588,9 +621,11 @@ export const useKortixComputerStore = create<KortixComputerState>()(
           // the entire point of it.)
           shouldOpenPanel: false,
           focusedToolCallId: null,
+          focusedAgent: null,
           pendingToolNavIndex: null,
           // A tool drawer belonging to the session the user just left.
           mobileToolView: null,
+          mobileToolTarget: null,
           // The ⌘I restore memory dies with the session. Within a session the
           // key is a minimise/restore pair; across one it is not, and a detail
           // last seen on a page the user has navigated away from must never be
@@ -622,27 +657,36 @@ export const useKortixComputerStore = create<KortixComputerState>()(
         // invariant instead of a patch: this is the single point where
         // "does this session have detail content" changes, so there is no
         // second route into the broken state to remember later.
+        //
+        // It closes the side panel itself, not only `detailOpen`: the layout
+        // shows the right side on `isSidePanelOpen` alone, so a lone
+        // `detailOpen` reset left it open and white. Not `setIsSidePanelOpen`:
+        // the person did not close it, so the panel memory stays and the
+        // provider's arrival restore reopens what it showed.
         const losingDetail = has === null || has === false;
         const isActive = get()._activeSessionId === sessionId;
         const closeDetail = losingDetail && isActive && get().detailOpen;
+        const closePatch = closeDetail
+          ? { ...CLOSED_PANEL_PATCH, detailOpen: false, skipNextExpandAnimation: true }
+          : {};
 
         if (has === null) {
           if (!(sessionId in map)) {
-            if (closeDetail) set({ detailOpen: false });
+            if (closeDetail) set(closePatch);
             return;
           }
           const next = { ...map };
           delete next[sessionId];
-          set({ _detailContentBySession: next, ...(closeDetail ? { detailOpen: false } : {}) });
+          set({ _detailContentBySession: next, ...closePatch });
           return;
         }
         if (map[sessionId] === has) {
-          if (closeDetail) set({ detailOpen: false });
+          if (closeDetail) set(closePatch);
           return;
         }
         set({
           _detailContentBySession: { ...map, [sessionId]: has },
-          ...(closeDetail ? { detailOpen: false } : {}),
+          ...closePatch,
         });
       },
 
@@ -739,11 +783,11 @@ export const useKortixComputerStore = create<KortixComputerState>()(
         return { view: pending.view, target: pending.target };
       },
 
-      openMobileTool: (view: QuickView) => {
-        set({ mobileToolView: view });
+      openMobileTool: (view: QuickView, target?: QuickViewTarget) => {
+        set({ mobileToolView: view, mobileToolTarget: target ? { ...target } : null });
       },
       closeMobileTool: () => {
-        set({ mobileToolView: null });
+        set({ mobileToolView: null, mobileToolTarget: null });
       },
 
       reset: () => {
@@ -764,6 +808,9 @@ export const useFocusedToolCallId = () =>
 
 export const useClearFocusedToolCall = () =>
   useKortixComputerStore((state) => state.clearFocusedToolCall);
+
+// An agent row clicked in chat: the agent the panel should open.
+export const useFocusedAgent = () => useKortixComputerStore((state) => state.focusedAgent);
 
 // Side panel state selectors
 export const useIsSidePanelOpen = () => useKortixComputerStore((state) => state.isSidePanelOpen);

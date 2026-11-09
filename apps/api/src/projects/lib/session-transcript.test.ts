@@ -1,27 +1,8 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { MIRROR_WINDOW_MAX_CHARS, type MirrorSnapshot } from './session-transcript-mirror';
 
-// A running session reads its transcript live: pin the root, resolve the
-// daemon endpoint, fetch the messages. These stand in for the sandbox.
-let endpointThrow: Error | null = null;
-let endpointResult: { url: string; headers: Record<string, string> } | null = null;
-const realOpencodeMapping = await import('../opencode-mapping');
-mock.module('../opencode-mapping', () => ({
-  ...realOpencodeMapping,
-  sandboxOpencodeEndpoint: async () => {
-    if (endpointThrow) throw endpointThrow;
-    return endpointResult;
-  },
-  ensureOpencodeSessionPin: async () => ({
-    pin: 'ses_root',
-    changed: false,
-    reason: 'unchanged',
-    sessions: [],
-  }),
-}));
-
-const { buildSessionTranscriptDigest, buildSessionTranscriptSyncEnvelope, mirrorIsComplete } =
+const { buildSessionTranscriptDigest, buildSessionTranscriptSyncEnvelope, lastAssistantAnswer, mirrorIsComplete } =
   await import('./session-transcript');
 
 const session = (status: string) =>
@@ -34,7 +15,7 @@ const session = (status: string) =>
 
 function snapshot(over: Partial<MirrorSnapshot> = {}): MirrorSnapshot {
   return {
-    opencode_session_id: 'ses_mirror',
+    runtime_session_id: 'ses_mirror',
     captured_at: '2026-08-26T06:00:00.000Z',
     total: 2,
     head_complete: true,
@@ -65,16 +46,13 @@ const build = (status: string, mirror: MirrorSnapshot | null) =>
   buildSessionTranscriptDigest(
     {
       session: session(status),
-      projectId: 'proj-1',
-      accountId: 'acct-1',
-      userId: 'user-1',
       limit: 40,
       maxChars: 700,
     },
     { readMirror: async () => mirror },
   );
 
-describe('a stopped session serves the mirror instead of nothing', () => {
+describe('the digest is the stored session log, for a running or a stopped session', () => {
   test('source is "mirror", available is true, and the messages carry their ids', async () => {
     // THE BUG THIS CLOSES: every non-running session returned
     // `available:false, messages:[]`, so opening a hibernated session showed a
@@ -88,13 +66,13 @@ describe('a stopped session serves the mirror instead of nothing', () => {
     expect(digest.messages[1].parent_id).toBe('msg_1');
     expect(digest.messages[1].completed).toBe(new Date(1200).toISOString());
     expect(digest.captured_at).toBe('2026-08-26T06:00:00.000Z');
-    expect(digest.opencode_session_id).toBe('ses_mirror');
+    expect(digest.runtime_session_id).toBe('ses_mirror');
     expect(digest.runtime_session_id).toBe('ses_mirror');
   });
 
-  test('the reason still says WHY it is not live — the mirror does not hide it', async () => {
-    const digest = await build('stopped', snapshot());
-    expect(digest.reason).toBe('session is stopped; live transcript requires a running sandbox');
+  test('a running session reads the same stored copy, with no reason', async () => {
+    const digest = await build('running', snapshot());
+    expect(digest).toMatchObject({ available: true, source: 'mirror', reason: null, message_count: 2 });
   });
 
   test('a tool call survives the mirror round trip', async () => {
@@ -112,9 +90,72 @@ describe('with no mirror, the old honest answer is unchanged', () => {
     expect(digest.source).toBe('none');
     expect(digest.complete).toBe(false);
     expect(digest.messages).toEqual([]);
-    expect(digest.reason).toBe('session is stopped; live transcript requires a running sandbox');
-    expect(digest.opencode_session_id).toBe('ses_pin');
+    expect(digest.reason).toBe('nothing is saved for this session yet');
     expect(digest.runtime_session_id).toBe('ses_pin');
+    expect(digest.runtime_session_id).toBe('ses_pin');
+  });
+});
+
+describe('lastAssistantAnswer is the turn that just ended', () => {
+  // The three former inline readers (`recordResultExcerpt`, `lastTurnAnswer`,
+  // subagent-notice `readReport`) all selected the assistant window after the
+  // last user message. These pins hold their shared selection, call-site
+  // post-processing aside.
+  const mirrorWith = (
+    messages: MirrorSnapshot['messages'],
+  ) => build('stopped', snapshot({ messages, total: messages.length }));
+
+  test('the newest assistant text after the last user message, under its own id', async () => {
+    const digest = await mirrorWith([
+      { info: { id: 'u1', role: 'user', time: { created: 1 } }, parts: [{ id: 'p1', type: 'text', text: 'go' }] },
+      { info: { id: 'a1', role: 'assistant', parentID: 'u1', time: { created: 2, completed: 3 } }, parts: [{ id: 'p2', type: 'text', text: 'half answer' }] },
+      { info: { id: 'u2', role: 'user', time: { created: 4 } }, parts: [{ id: 'p3', type: 'text', text: 'again' }] },
+      { info: { id: 'a2', role: 'assistant', parentID: 'u2', time: { created: 5, completed: 6 } }, parts: [{ id: 'p4', type: 'text', text: ' final answer ' }] },
+    ]);
+    expect(lastAssistantAnswer(digest)).toEqual({
+      id: 'a2',
+      text: 'final answer',
+      error: null,
+    });
+  });
+
+  test('no user message reads the whole window', async () => {
+    const digest = await mirrorWith([
+      { info: { id: 'a1', role: 'assistant', time: { created: 2, completed: 3 } }, parts: [{ id: 'p1', type: 'text', text: 'resumed answer' }] },
+    ]);
+    expect(lastAssistantAnswer(digest)).toEqual({ id: 'a1', text: 'resumed answer', error: null });
+  });
+
+  test('no assistant message after the last user is null', async () => {
+    const digest = await mirrorWith([
+      { info: { id: 'u1', role: 'user', time: { created: 1 } }, parts: [{ id: 'p1', type: 'text', text: 'asked' }] },
+    ]);
+    expect(lastAssistantAnswer(digest)).toBeNull();
+  });
+
+  test('no assistant text: empty text, and the last assistant message still carries the turn error', async () => {
+    const digest = await mirrorWith([
+      { info: { id: 'u1', role: 'user', time: { created: 1 } }, parts: [{ id: 'p1', type: 'text', text: 'asked' }] },
+      { info: { id: 'a1', role: 'assistant', parentID: 'u1', time: { created: 2, completed: 3 }, error: { name: 'ProviderError', message: 'stream cut' } }, parts: [{ id: 'p2', type: 'tool', tool: 'bash', state: { status: 'completed' } }] },
+    ]);
+    expect(lastAssistantAnswer(digest)).toEqual({
+      id: null,
+      text: '',
+      error: { name: 'ProviderError', message: 'stream cut' },
+    });
+  });
+
+  test('the error is the LAST assistant message\'s, the text the newest one that wrote text', async () => {
+    const digest = await mirrorWith([
+      { info: { id: 'u1', role: 'user', time: { created: 1 } }, parts: [{ id: 'p1', type: 'text', text: 'asked' }] },
+      { info: { id: 'a1', role: 'assistant', parentID: 'u1', time: { created: 2, completed: 3 } }, parts: [{ id: 'p2', type: 'text', text: 'the report' }] },
+      { info: { id: 'a2', role: 'assistant', parentID: 'u1', time: { created: 4, completed: 5 }, error: { name: 'ProviderError', message: 'stream cut' } }, parts: [{ id: 'p3', type: 'tool', tool: 'bash', state: { status: 'completed' } }] },
+    ]);
+    expect(lastAssistantAnswer(digest)).toEqual({
+      id: 'a1',
+      text: 'the report',
+      error: { name: 'ProviderError', message: 'stream cut' },
+    });
   });
 });
 
@@ -300,15 +341,15 @@ describe("a sub-agent's saved transcript is its own window", () => {
     const envelope = await buildSessionTranscriptSyncEnvelope(
       { session: session('stopped'), limit: 40, child: 'ses_child' },
       {
-        readMirror: async (_id, _limit, _before, opencodeSessionId) => {
-          asked.push(opencodeSessionId);
-          return snapshot({ opencode_session_id: 'ses_child' });
+        readMirror: async (_id, _limit, _before, runtimeSessionId) => {
+          asked.push(runtimeSessionId);
+          return snapshot({ runtime_session_id: 'ses_child' });
         },
       },
     );
     expect(asked).toEqual(['ses_child']);
     expect(envelope.available).toBe(true);
-    expect(envelope.opencode_session_id).toBe('ses_child');
+    expect(envelope.runtime_session_id).toBe('ses_child');
     expect(envelope.runtime_session_id).toBe('ses_child');
   });
 
@@ -317,8 +358,8 @@ describe("a sub-agent's saved transcript is its own window", () => {
     await buildSessionTranscriptSyncEnvelope(
       { session: session('stopped'), limit: 40 },
       {
-        readMirror: async (_id, _limit, _before, opencodeSessionId) => {
-          asked.push(opencodeSessionId);
+        readMirror: async (_id, _limit, _before, runtimeSessionId) => {
+          asked.push(runtimeSessionId);
           return snapshot();
         },
       },
@@ -333,7 +374,7 @@ describe("a sub-agent's saved transcript is its own window", () => {
     );
     expect(envelope.available).toBe(false);
     expect(envelope.source).toBe('none');
-    expect(envelope.opencode_session_id).toBe('ses_child');
+    expect(envelope.runtime_session_id).toBe('ses_child');
     expect(envelope.runtime_session_id).toBe('ses_child');
   });
 });
@@ -346,86 +387,15 @@ describe('early history requires the current server-owned root', () => {
     );
     expect(envelope.available).toBe(false);
     expect(envelope.messages).toEqual([]);
-    expect(envelope.opencode_session_id).toBe('ses_pin');
+    expect(envelope.runtime_session_id).toBe('ses_pin');
     expect(envelope.runtime_session_id).toBe('ses_pin');
   });
   test('a matching root serves completed messages without reading the runtime', async () => {
     const envelope = await buildSessionTranscriptSyncEnvelope(
       { session: session('stopped'), limit: 40, requireCurrentRoot: true },
-      { readMirror: async () => snapshot({ opencode_session_id: 'ses_pin' }) },
+      { readMirror: async () => snapshot({ runtime_session_id: 'ses_pin' }) },
     );
     expect(envelope.available).toBe(true);
     expect(envelope.messages[1].info.time).toEqual({ created: 1100, completed: 1200 });
-  });
-});
-
-describe('a running session reads the daemon, and degrades instead of failing', () => {
-  // `sandboxUrl` names the external id (`/p/<externalId>/`), so no row lookup.
-  const running = {
-    sessionId: 'sess-1',
-    status: 'running',
-    runtimeSessionId: 'ses_root',
-    sandboxUrl: 'https://preview.example.test/v1/p/sandbox-ext-1/8000',
-  } as never;
-  const read = () =>
-    buildSessionTranscriptDigest(
-      {
-        session: running,
-        projectId: 'proj-1',
-        accountId: 'acct-1',
-        userId: 'user-1',
-        limit: 40,
-        maxChars: 700,
-      },
-      { readMirror: async () => null },
-    );
-
-  afterEach(() => {
-    endpointThrow = null;
-    endpointResult = null;
-  });
-
-  // A provider rate limit (for example a 429 on preview-link resolution) must
-  // not 500 the transcript read. It becomes a reason on an unavailable digest.
-  test('a provider throw on endpoint resolution is a reason, not an error', async () => {
-    endpointThrow = new Error('ThrottlerException: Too Many Requests');
-    const digest = await read();
-    expect(digest).toMatchObject({
-      available: false,
-      message_count: 0,
-      opencode_session_id: 'ses_root',
-    });
-    expect(digest.reason).toBe('could not reach sandbox: ThrottlerException: Too Many Requests');
-  });
-
-  test('a sandbox with no service key is unavailable', async () => {
-    const digest = await read();
-    expect(digest.available).toBe(false);
-    expect(digest.reason).toBe('sandbox service key unavailable');
-  });
-
-  test('a daemon answer is the live transcript, read under the pinned root', async () => {
-    endpointResult = { url: 'http://daemon.test', headers: {} };
-    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify([
-          {
-            info: { role: 'assistant', time: { created: 1000, completed: 2000 } },
-            parts: [{ type: 'text', text: 'hello' }],
-          },
-        ]),
-        { status: 200 },
-      ),
-    );
-    try {
-      const digest = await read();
-      expect(digest).toMatchObject({ available: true, source: 'live', message_count: 1 });
-      expect(digest.messages[0].text).toBe('hello');
-      const url = new URL(String(fetchSpy.mock.calls[0]![0]));
-      expect(url.pathname).toBe('/session/ses_root/message');
-      expect(url.searchParams.get('limit')).toBe('40');
-    } finally {
-      fetchSpy.mockRestore();
-    }
   });
 });

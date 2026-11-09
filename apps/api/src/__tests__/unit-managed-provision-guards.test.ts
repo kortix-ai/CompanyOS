@@ -169,7 +169,6 @@ mock.module('../projects/git', () => ({
   isRepoFileNotFoundError: () => false,
   grepRepoFiles: async () => [],
   searchRepoFileNames: async () => [],
-  createRemoteSessionBranch: async () => undefined,
   archiveRepoSubtree: async () => undefined,
   listRepoFiles: async () => [],
   loadProjectConfig: async () => ({ env: { required: [], optional: [] } }),
@@ -202,7 +201,7 @@ mock.module('../projects/git', () => ({
 
 mock.module("../snapshots/builder", () => ({
   ensureSandboxImage: async () => ({ snapshotName: "kortix-default-test", slug: "default", contentHash: "a".repeat(64), built: false, isDefault: true }),
-  ensureMetaSandboxImage: async () => ({ snapshotName: "kortix-meta-test", slug: "meta", contentHash: "b".repeat(64), built: false, isDefault: false }),
+  ensureMyKortixSandboxImage: async () => ({ snapshotName: "kortix-meta-test", slug: "meta", contentHash: "b".repeat(64), built: false, isDefault: false }),
   deleteSandboxImage: async () => ({ deleted: false, snapshotName: "kortix-default-test", slug: "default" }),
   listSnapshotBuilds: async () => [],
   listSandboxTemplates: async () => [],
@@ -225,6 +224,8 @@ mock.module('../platform/services/session-sandbox', () => ({
 
 mock.module('../shared/resolve-account', () => ({
   resolveAccountId: async () => ACCOUNT_ID,
+  // No workspace id resolves to an account key in this suite.
+  accountKeyForWorkspaceId: async () => null,
 }));
 
 mock.module('../shared/supabase', () => ({
@@ -280,6 +281,9 @@ function existingProjectRow() {
 mock.module('../shared/db', () => ({
   hasDatabase: true,
   db: {
+    // `workspaceFactsOf` (iam/workspace-facts.ts) reads the account's shape in
+    // one raw query: no active project and no open deletion request.
+    execute: async () => [{ active_projects: [], deletion_open: false }],
     select: (projection?: any) => ({
       from: (table: unknown) => ({
         where: () => {
@@ -300,6 +304,10 @@ mock.module('../shared/db', () => ({
                 return [{ projectRole: 'manager' }];
               }
               if (table === projects) {
+                // The one-project check (`workspaceHasProjectDenial`) and the
+                // idempotency replay read only `projectId`: the account holds
+                // no active project and no earlier create.
+                if (projection && Object.keys(projection).join() === 'projectId') return [];
                 return [existingProjectRow()];
               }
               if (table === projectGitConnections) {

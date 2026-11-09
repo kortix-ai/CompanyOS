@@ -27,6 +27,7 @@ import { accountTokens, projectSessions } from '@kortix/db';
 import { config } from '../../config';
 import { db } from '../../shared/db';
 import { membershipExistsSql, membershipRow } from '../../iam/membership-read';
+import { errorMessage } from '../../shared/error-message';
 
 // The request reader `getRequestOnBehalfOf` lives in `middleware/on-behalf-of.ts`.
 // Re-exported here so every importer and mock keeps working.
@@ -61,9 +62,9 @@ export function decideSessionOnBehalfOf(input: OnBehalfOfInput): string | null {
   if (input.origin && UNATTENDED_ORIGINS.has(input.origin)) return null;
   if (meta.trigger_kind != null || meta.trigger_slug != null || meta.trigger_source != null) return null;
   const source = typeof meta.source === 'string' ? meta.source : '';
-  // Email and Telegram sessions run as the account-owner stand-in: the sender
-  // is not a Kortix identity.
-  if (source === 'email' || source === 'telegram') return null;
+  // Email, Telegram and Discord sessions run as the account-owner stand-in: the
+  // sender is not a Kortix identity.
+  if (source === 'email' || source === 'telegram' || source === 'discord') return null;
   if (source === 'slack' && !input.slackRequiresUserIdentity) return null;
   if (source === 'teams' && !input.teamsRequiresUserIdentity) return null;
   if (typeof meta.spawned_by_session === 'string' && meta.spawned_by_session) {
@@ -97,7 +98,7 @@ export function channelPrompterForOnBehalfOf(input: {
   // `bindTurnIdentity` at fire time instead (trigger-fire.ts) and never gets here.
   if (input.source === 'trigger:reminder') return undefined;
   if (input.source.startsWith('trigger:')) return null;
-  if (input.source === 'email' || input.source === 'telegram') return null;
+  if (input.source === 'email' || input.source === 'telegram' || input.source === 'discord') return null;
   if (input.source === 'slack') return input.slackRequiresUserIdentity ? input.userId : null;
   if (input.source === 'teams') return input.teamsRequiresUserIdentity ? input.userId : null;
   return undefined;
@@ -152,7 +153,7 @@ export async function resolveSessionOnBehalfOf(input: {
   } catch (err) {
     console.warn('[on-behalf-of] mint resolution failed; minting without a human', {
       sessionId: input.sessionId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     return null;
   }

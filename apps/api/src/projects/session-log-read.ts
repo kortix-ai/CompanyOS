@@ -10,11 +10,7 @@
  * one (OpenCode) and a native one (pi, no `kortix.transcript.v1` ext), whose v1 rows are the ones
  * the SDK renders through `toV1`.
  *
- * Neither read serves the v1 mirror (P8.2). A session with no log at all may be history from
- * before the journal that the backfill has not converted yet: both reads convert it first
- * (`convertMirrorOnRead`, `session-log-backfill.ts`) and then answer from the log. A mirror over
- * the capture's size cap is not converted on a request: the read throws
- * `SessionLogConvertingError` and the backfill's thread converts it.
+ * A session with no log answers as one with nothing saved: the v1 mirror is gone (P8.2 Release B2).
  *
  * The v1 window over a `fromV1` thread equals the mirror's window (deep equality), with these named differences:
  * - `captured_at` is the log's last write (the read thread's newest message write, or the session
@@ -27,7 +23,7 @@
  *   the whole text. A text over 256 kB is a preview in the row (F3, `session-log-blobs.ts`):
  *   this read puts the whole text back from its object, after the transaction.
  * Paging: a `fromV1` thread serves the mirror order (`created`, then id), which is its seq order
- * (the OpenCode adapter issues seqs in `fromV1`'s order). A cursor that names a message anchors on
+ * (the OpenCode adapter issued seqs in `fromV1`'s order). A cursor that names a message anchors on
  * the `created_at` column, while rows sort on `info.time.created` (`-Infinity` when absent; the
  * column then holds the ingest time). The two agree for every row with a creation time. A native
  * thread serves seq order, pi's append order: two of its messages can share a millisecond with ids
@@ -45,8 +41,9 @@ import {
   type V1Row,
 } from '@kortix/api-contract/session-log';
 import { KORTIX_TRANSCRIPT_SCHEMA } from '@kortix/api-contract/transcript';
-import { projectSessions, sessionLogMessages, sessionLogs, sessionLogThreads, sessionTranscriptMirrors } from '@kortix/db';
-import { and, asc, desc, eq, inArray, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
+import { projectSessions, sessionLogMessages, sessionLogs, sessionLogThreads } from '@kortix/db';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
+import { config } from '../config';
 import { db } from '../shared/db';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
 import {
@@ -54,8 +51,6 @@ import {
   UnknownTranscriptCursorError,
   type MirrorSnapshot,
 } from './lib/session-transcript-mirror';
-import { convertMirrorOnRead } from './session-log-backfill';
-import { mirrorDrained } from './session-log-capture';
 import { rehydrateLargeTexts } from './session-log-blobs';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -91,30 +86,45 @@ function readThreads(tx: Tx, sessionId: string): Promise<ThreadRow[]> {
 
 type PageInput = { sessionId: string; threadId: string | null; beforeSeq: number | null; limit: number };
 
+const threadScope = (input: PageInput, threadId: string) =>
+  and(
+    eq(sessionLogMessages.sessionId, input.sessionId),
+    eq(sessionLogMessages.threadId, threadId),
+    isNull(sessionLogMessages.deletedAt),
+    input.beforeSeq === null ? undefined : lt(sessionLogMessages.seq, input.beforeSeq),
+  ) as SQL;
+
+/** Rows the page window would carry, newest first, each with its stored record size (`pg_column_size`, bytes on disk ≈ a lower bound of the JSON payload). */
+type SizedWindowRow = { seq: number; bytes: number };
+
 /**
- * One page of one thread. Null when the session has no stored log and no v1 mirror to convert
- * (a new session), or no stored log once the mirror is drained (`mirrorDrained`: no mirror table
- * is read). `'mirror_unconverted'`: no log, but a mirror this read did not convert (another read
- * holds the session's conversion lock, or ingest is off), so the history exists and a client must
- * not read it as "nothing saved".
+ * How many window rows the page budget serves.
+ *
+ * Rows arrive seq-descending (newest first). The page keeps the newest whole
+ * messages and drops the tail rows that would overflow `budget`; the newest
+ * message is served however large it is (an empty page answers nothing, and the
+ * route's clients read that as no log). A dropped tail means older messages
+ * exist: the caller answers `has_more: true` and clients read on with `before_seq`.
  */
-export async function readSessionLogPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' | 'mirror_unconverted' | null> {
-  const page = await readPage(input);
-  if (page !== null) return page;
-  if (await convertMirrorOnRead(input.sessionId)) return readPage(input);
-  const again = await readPage(input);
-  if (again !== null) return again;
-  // Drained: no mirror table is read (Release B1).
-  if (await mirrorDrained()) return null;
-  const [mirror] = await db
-    .select({ sessionId: sessionTranscriptMirrors.sessionId })
-    .from(sessionTranscriptMirrors)
-    .where(eq(sessionTranscriptMirrors.sessionId, input.sessionId))
-    .limit(1);
-  return mirror ? 'mirror_unconverted' : null;
+export function keptUnderBudget(rows: SizedWindowRow[], budget: number): {
+  keptCount: number;
+  /** The oldest kept row's `seq`; `null` when nothing was dropped (no lower bound needed). */
+  oldestKeptSeq: number | null;
+  dropped: boolean;
+} {
+  let acc = 0;
+  let keptCount = 0;
+  for (const row of rows) {
+    if (keptCount > 0 && acc + row.bytes > budget) break;
+    acc += row.bytes;
+    keptCount += 1;
+  }
+  const dropped = keptCount < rows.length;
+  return { keptCount, oldestKeptSeq: dropped ? rows[keptCount - 1]!.seq : null, dropped };
 }
 
-function readPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' | null> {
+/** One page of one thread. Null when the session has no stored log (a new session). */
+export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' | null> {
   return db.transaction(async (tx) => {
     const [log] = await tx
       .select({ generation: sessionLogs.generation, record: sessionLogs.record })
@@ -136,22 +146,36 @@ function readPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' |
       threadId = first?.threadId ?? null;
     }
     const threadRecord = threads.find((t) => t.threadId === threadId)?.record;
+    // The page budget bounds the read's wire cost: `GET …/log` serves a window of whole stored
+    // records and a heavy session's page carried tens of MB (the read scales with the page
+    // payload: 40 MB ran ~330 ms on loopback; prod `db;dur` was ~96 % of a 1–5 s read —
+    // KRTX-4508). Probe the window's seq and sizes first (TOAST pointers, no payload), keep
+    // the newest run under `SESSION_LOG_PAGE_MAX_BYTES`, then read only those records in full.
+    let budgetCut = false;
     const rows =
       threadId === null
         ? []
-        : await tx
-            .select({ record: sessionLogMessages.record })
-            .from(sessionLogMessages)
-            .where(
-              and(
-                eq(sessionLogMessages.sessionId, input.sessionId),
-                eq(sessionLogMessages.threadId, threadId),
-                isNull(sessionLogMessages.deletedAt),
-                input.beforeSeq === null ? undefined : lt(sessionLogMessages.seq, input.beforeSeq),
-              ),
-            )
-            .orderBy(desc(sessionLogMessages.seq))
-            .limit(input.limit + 1);
+        : await (async () => {
+            const scope = threadScope(input, threadId);
+            const window = await tx
+              .select({ seq: sessionLogMessages.seq, bytes: sql<number>`pg_column_size(${sessionLogMessages.record})::int` })
+              .from(sessionLogMessages)
+              .where(scope)
+              .orderBy(desc(sessionLogMessages.seq))
+              .limit(input.limit + 1);
+            const kept = keptUnderBudget(window, config.SESSION_LOG_PAGE_MAX_BYTES);
+            budgetCut = kept.dropped;
+            let payloadScope = scope;
+            if (kept.dropped) {
+              payloadScope = and(scope, gte(sessionLogMessages.seq, kept.oldestKeptSeq!)) as SQL;
+            }
+            return (await tx
+              .select({ record: sessionLogMessages.record })
+              .from(sessionLogMessages)
+              .where(payloadScope)
+              .orderBy(desc(sessionLogMessages.seq))
+              .limit(kept.keptCount));
+          })();
     return {
       session: log.record as SessionLogPage['session'],
       generation: log.generation,
@@ -161,7 +185,7 @@ function readPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' |
         .slice(0, input.limit)
         .reverse()
         .map((r) => withKeptToolInputs(log.record as J, threadRecord, r.record as SessionLogMessage)),
-      has_more: rows.length > input.limit,
+      has_more: budgetCut || rows.length > input.limit,
     };
   }, READ_ONLY);
 }
@@ -212,20 +236,8 @@ type WindowInput = {
   limit: number;
   before?: string | null;
   /** A runtime session inside this session (a sub-agent); omitted: the root. */
-  opencodeSessionId?: string | null;
+  runtimeSessionId?: string | null;
 };
-
-/** The stored transcript window: `toV1` of the log, after `convertMirrorOnRead` for a session with no log. */
-export async function readStoredTranscriptWindow(input: WindowInput): Promise<MirrorSnapshot | null> {
-  const window = await readLogTranscriptWindow(input);
-  if (window !== NO_LOG) return window;
-  if (!(await convertMirrorOnRead(input.sessionId))) return null;
-  const again = await readLogTranscriptWindow(input);
-  return again === NO_LOG ? null : again;
-}
-
-/** The session exists and has no `session_logs` row. */
-const NO_LOG = 'no_log' as const;
 
 /** The mirror order: `created` (missing first), then id. */
 const created = (r: V1Row) => {
@@ -237,8 +249,8 @@ const keyCompare = (a: { at: number; id: string }, b: { at: number; id: string }
   a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const keyOf = (r: V1Row) => ({ at: created(r), id: idOf(r) });
 
-/** The window over the log; null when the log has nothing to serve, `NO_LOG` when the session has no log. */
-async function readLogTranscriptWindow(input: WindowInput): Promise<MirrorSnapshot | null | typeof NO_LOG> {
+/** The stored transcript window: `toV1` of the log. Null when the session has no log or the log has nothing to serve. */
+export async function readStoredTranscriptWindow(input: WindowInput): Promise<MirrorSnapshot | null> {
   // One round trip for the session record and the threads.
   const [row] = await db
     .select({
@@ -252,13 +264,13 @@ async function readLogTranscriptWindow(input: WindowInput): Promise<MirrorSnapsh
     .where(eq(projectSessions.sessionId, input.sessionId))
     .limit(1);
   if (!row) return null;
-  if (row.record === null || row.updatedAt === null || row.projectId === null) return NO_LOG;
+  if (row.record === null || row.updatedAt === null || row.projectId === null) return null;
   const log = { record: row.record, updatedAt: row.updatedAt, projectId: row.projectId };
   const threads = row.threads ?? [];
   const root = rootOf(threads);
   const stated = v1Ext(log.record)?.data;
   const rootId = stated && 'root_id' in stated ? ((stated.root_id as string | null) ?? null) : root ? nativeOf(root) : null;
-  const target = input.opencodeSessionId || rootId;
+  const target = input.runtimeSessionId || rootId;
   // A runtime session that is no thread of its own is an old root, merged into the root thread.
   const thread = threads.find((t) => nativeOf(t) === target) ?? root;
   if (!target || !thread) return null;
@@ -327,8 +339,8 @@ async function readLogTranscriptWindow(input: WindowInput): Promise<MirrorSnapsh
     : nativeRows(records.flatMap((r) => toRows([r])), anchor?.inclusive ? input.before : null).reverse();
   const kept = rows.slice(0, input.limit);
   return {
-    opencode_session_id: target,
-    root_opencode_session_id: rootId,
+    runtime_session_id: target,
+    root_runtime_session_id: rootId,
     captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), Math.floor(totals.writtenMs ?? 0))).toISOString(),
     total: totals.total,
     head_complete: true,

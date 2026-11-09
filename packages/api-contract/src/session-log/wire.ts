@@ -31,10 +31,10 @@
  * the caller's session read permission, the transcript route's gate (a session-bound token included).
  * It reads Postgres only, never the box. 200 `SessionLogPage`: one page of one thread. 404 `{ error,
  * code: 'session_log_missing' }` when the session has no stored log yet (a client stays on the log;
- * an API without this route answers 404 with no code), and 404 when `thread` is not one of its threads. A session whose history is
- * only in the old v1 mirror is converted to the log first (P8.2); 503 `{ error, code:
- * 'session_log_converting' }` with `Retry-After: 60` when that history is over the conversion size
- * cap and the backfill has not converted it yet.
+ * an API without this route answers 404 with no code), and 404 when `thread` is not one of its threads.
+ * Releases before P8.2 Release B2 also converted a session whose history was only in the old v1
+ * mirror, and answered 503 `{ error, code: 'session_log_converting' }` with `Retry-After: 60` for one
+ * over the conversion size cap; Release B2 removed both.
  *
  * Restore (P6.1): `POST /v1/projects/:p/sessions/:s/log/restore`, sandbox token only, no body.
  * The daemon of a fresh box calls it once, before its harness starts. It claims the session:
@@ -62,7 +62,7 @@
  * - 503: the operator switch `SESSION_LOG_RESTORE_ENABLED` is off; nothing was claimed.
  *
  * Switch preflight (P7.1): `POST /v1/projects/:p/sessions/:s/log/switch-preflight`, body
- * `{ to: 'pi' | 'opencode' }`, the caller's session read permission (the `GET …/log` gate). Read
+ * `{ to: 'pi' }`, the caller's session read permission (the `GET …/log` gate). Read
  * only: it claims nothing and changes nothing. 200 `SessionLogSwitchPreflight`: whether the switch
  * can happen (`available`, `reason`) and restores the log (`restores`), what the session would lose
  * (`losses`) and everything `to` lacks (`unsupported`) (`switchPreflight`, `capabilities.ts`). A
@@ -123,6 +123,9 @@ export const SessionLogManifestSchema = z.object({
  * - `thread_id`: the paged thread, `thread` or else the root thread (null: no thread stored).
  * - `messages`: that thread's newest `limit` messages (default 40, at most 500) with
  *   `seq < before_seq`, ascending by `seq`. A tombstoned message is left out; its seq is a gap.
+ *   A page carries whole messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload
+ *   (default 2 MiB): an over-budget window answers fewer than `limit` with `has_more: true`,
+ *   the newest message served however large it is.
  * - `has_more`: an older message exists. Read it with `before_seq` = the first message's `seq`.
  */
 export const SessionLogPageSchema = z.object({
@@ -146,9 +149,9 @@ export const SessionLogRestoreBlobSchema = z.object({
 export const SessionLogRestoreSchema = z.object({
   generation: z.number().int().positive(),
   log: SessionLogSchema,
-  revs: z.record(rev),
+  revs: z.record(z.string(), rev),
   /** The highest seq each thread holds, tombstoned messages included; the box numbers new messages above it. Absent from an API before P6.2. */
-  seq_max: z.record(z.number().int().nonnegative()).optional(),
+  seq_max: z.record(z.string(), z.number().int().nonnegative()).optional(),
   blobs: z.array(SessionLogRestoreBlobSchema),
 });
 export const SessionLogRestoreMissingSchema = z.object({ error: z.literal('no_session_log') });
@@ -169,9 +172,14 @@ export const SessionLogRestoreTooLargeSchema = SessionLogRestoreSchema.extend({
   kept: z.enum(['model_view', 'newest']).optional(),
 });
 
-/** A harness a session can run on: the adapters with a capability manifest (`capabilities.ts`). */
+/**
+ * A harness a stored log names: the adapters with a capability manifest
+ * (`capabilities.ts`). Every session runs pi; `opencode` names the logs of
+ * sessions that ran before 2026-10-30.
+ */
 export const SessionLogHarnessSchema = z.enum(['pi', 'opencode']);
-export const SessionLogSwitchPreflightRequestSchema = z.object({ to: SessionLogHarnessSchema });
+/** A switch can only target pi: no session runs on OpenCode any more. */
+export const SessionLogSwitchPreflightRequestSchema = z.object({ to: z.literal('pi') });
 /** One thing the target harness handles worse than the source harness (`switchPreflight` in `capabilities.ts`). */
 export const SessionLogSwitchGapSchema = z.object({
   /** A `CapabilityFeatures` path (`todos`, `attachments.user`, `compaction`, ...), a `RuntimeCapability` (`session.mcp`, ...), or `history` (no restore). */
@@ -195,7 +203,7 @@ export const SessionLogSwitchPreflightSchema = z.object({
   available: z.boolean(),
   /** `same_harness`: the log already runs on `to`. */
   reason: z.enum(['same_harness']).nullable(),
-  /** The new box restores the model's context (`session_log_restore` on, the log or its model view under the restore cap). False: it starts without the earlier conversation (`losses` begins with `history`). */
+  /** The new box restores the model's context (the deployment's restore switch on, the log or its model view under the restore cap). False: it starts without the earlier conversation (`losses` begins with `history`). */
   restores: z.boolean(),
   /** What the session uses that `to` handles worse, with counts. */
   losses: z.array(SessionLogSwitchLossSchema),

@@ -6,12 +6,10 @@ import {
   sessionLogMessages,
   sessionLogThreads,
   sessionLogs,
-  sessionTranscriptMessages,
-  sessionTranscriptMirrors,
 } from '@kortix/db';
 import { inArray } from 'drizzle-orm';
 
-// `reply_count` read from the two transcript stores. Runs in the `db-suites`
+// `reply_count` read from the session log. Runs in the `db-suites`
 // lane against a throwaway migrated database.
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required for the reply count suite');
@@ -21,24 +19,11 @@ const { readSessionReplyCounts, replyCount } = await import('./session-reply-cou
 
 const accountId = crypto.randomUUID();
 const projectId = crypto.randomUUID();
-const mirrorSession = crypto.randomUUID();
 const logSession = crypto.randomUUID();
 const emptySession = crypto.randomUUID();
-const sessionIds = [mirrorSession, logSession, emptySession];
+const sessionIds = [logSession, emptySession];
 
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 21, 10, minute));
-
-async function mirrorRow(sessionId: string, messageId: string, role: string, parent: string | null, runtime: string, minute: number) {
-  await db.insert(sessionTranscriptMessages).values({
-    sessionId,
-    messageId,
-    parentMessageId: parent,
-    runtimeSessionId: runtime,
-    role,
-    messageCreatedAt: at(minute),
-    info: { id: messageId, role },
-  });
-}
 
 let seq = 0;
 async function logRow(
@@ -80,21 +65,11 @@ beforeAll(async () => {
     })),
   );
 
-  // Mirror: two prompts, the first answered in two steps, the second in one,
-  // and a sub-agent conversation under another runtime session.
-  await db.insert(sessionTranscriptMirrors).values({ sessionId: mirrorSession, projectId, accountId, runtimeSessionId: 'ses_root' });
-  await mirrorRow(mirrorSession, 'msg_u1', 'user', null, 'ses_root', 1);
-  await mirrorRow(mirrorSession, 'msg_a1', 'assistant', 'msg_u1', 'ses_root', 2);
-  await mirrorRow(mirrorSession, 'msg_a2', 'assistant', 'msg_u1', 'ses_root', 3);
-  await mirrorRow(mirrorSession, 'msg_u2', 'user', null, 'ses_root', 4);
-  await mirrorRow(mirrorSession, 'msg_a3', 'assistant', 'msg_u2', 'ses_root', 5);
-  await mirrorRow(mirrorSession, 'msg_cu', 'user', null, 'ses_child', 6);
-  await mirrorRow(mirrorSession, 'msg_ca', 'assistant', 'msg_cu', 'ses_child', 7);
-
   // Session log: a prompt answered in two steps, a steer answered once, and
   // rows that are not replies: an automation prompt, a hidden failed attempt,
-  // a tombstone, a compaction and a sub-agent thread. A mirror copy of the
-  // same session is ignored: the log wins.
+  // a tombstone, a compaction and a sub-agent thread. A background worker's
+  // report arrives as a platform notice with no origin: its answer is a
+  // reply, the notice itself is not.
   await db.insert(sessionLogs).values({
     sessionId: logSession, projectId, accountId, v: 1, harnessCurrent: 'pi', restoreGrade: 'full', record: {},
   });
@@ -108,13 +83,17 @@ beforeAll(async () => {
   await logRow('u2', 'user', { origin: 'steer' });
   await logRow('a3', 'assistant', { reply_to: 'u2' });
   await logRow('u3', 'user', { origin: 'automation' });
+  await logRow('n1', 'user', {
+    blocks: [{ type: 'text', text: 'A background subagent you started has finished. This message is from the platform, not from the user.\ntask_id: x' }],
+  });
+  await logRow('a6', 'assistant', { reply_to: 'n1' });
+  await logRow('n2', 'user', { blocks: [{ type: 'text', text: 'Your teammate reviewer finished its turn and is idle. This message is from the platform, not from the user.' }] });
+  await logRow('n3', 'user', { blocks: [{ type: 'text', text: '[idle notice from reviewer · session 3f2a1b9c · #m_1]' }] });
   await logRow('a4', 'assistant', { reply_to: 'u9', hidden_reason: 'failed_attempt' });
   await logRow('a5', 'assistant', { reply_to: 'u8' }, { deletedAt: at(50) });
   await logRow('c1', 'assistant', { reply_to: 'u1' }, { kind: 'compaction' });
   await logRow('s1', 'user', { origin: 'prompt' }, { threadId: 'child' });
   await logRow('s2', 'assistant', { reply_to: 's1' }, { threadId: 'child' });
-  await db.insert(sessionTranscriptMirrors).values({ sessionId: logSession, projectId, accountId, runtimeSessionId: 'ses_log' });
-  await mirrorRow(logSession, 'msg_x1', 'user', null, 'ses_log', 1);
 });
 
 afterAll(async () => {
@@ -130,17 +109,13 @@ test('replies are the person messages after the first plus one answer per answer
   expect(replyCount(0, 0)).toBe(0);
 });
 
-test('the mirror counts the root conversation: 1 follow-up + 2 answers, sub-agent rows excluded', async () => {
+test('the session log count drops automation, platform notices, hidden, deleted, compaction and sub-agent rows', async () => {
   const counts = await readSessionReplyCounts(sessionIds);
-  expect(counts.get(mirrorSession)).toBe(3);
+  // u2 + the answers to u1, u2 and the notice n1.
+  expect(counts.get(logSession)).toBe(4);
 });
 
-test('the session log wins over the mirror and drops automation, hidden, deleted, compaction and sub-agent rows', async () => {
-  const counts = await readSessionReplyCounts(sessionIds);
-  expect(counts.get(logSession)).toBe(3);
-});
-
-test('a session with no transcript store answers 0', async () => {
+test('a session with no log answers 0', async () => {
   const counts = await readSessionReplyCounts(sessionIds);
   expect(counts.get(emptySession)).toBe(0);
   expect((await readSessionReplyCounts([])).size).toBe(0);

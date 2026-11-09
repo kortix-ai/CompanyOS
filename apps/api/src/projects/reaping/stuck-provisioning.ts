@@ -27,14 +27,19 @@ import { getProvider } from '../../platform/providers';
 import { db } from '../../shared/db';
 import { finalizeRecoveredRuntimeIfRunning, preserveEstablishedRuntime } from '../runtime-identity';
 import { runtimeWakeInProgress } from '../session-lifecycle/runtime-wake-fence';
-import { stripMetadataKeys } from '../session-lifecycle/sandbox-metadata-sql';
+
 import {
   DELETED_SESSION_CLEARED_KEYS,
   PROVIDER_REMOVAL_PENDING_KEY,
   attemptArchivedBoxRemoval,
 } from './archived-box-removal';
 import { applyStoppedState } from './sandbox-state-sync';
-import { transitionSandbox, transitionSession } from '../session-lifecycle/status-transitions';
+import { recoverRemovedParkedRuntime } from './parked-runtime-verification';
+import {
+  transitionSandbox,
+  transitionSession,
+  patchedSandboxMetadata,
+} from '../session-lifecycle/status-transitions';
 
 /** A row with no lease that has not changed for this long has no live owner. */
 export const STUCK_WITHOUT_LEASE_MS = 30 * 60_000;
@@ -174,7 +179,11 @@ export async function convergeStuckProvisioningRuntimes(now = new Date()): Promi
       }
 
       if (action === 'preserve-lost') {
-        await preserveEstablishedRuntime(row, 'provisioning_runtime_removed', 'provider_removed', now);
+        // Platinum's removed status also covers recoverable failed starts and
+        // backed-up identities. Use the shared recovery fence before declaring loss.
+        const { outcome, row: lossRow } = await recoverRemovedParkedRuntime(row, externalId, now);
+        if (outcome !== 'preserve-lost') continue;
+        await preserveEstablishedRuntime(lossRow, 'provisioning_runtime_removed', 'provider_removed', now);
         out.lost += 1;
         continue;
       }
@@ -204,7 +213,7 @@ export async function convergeStuckProvisioningRuntimes(now = new Date()): Promi
       const [claimed] = await db
         .update(sessionSandboxes)
         .set({
-          metadata: sql`(${stripMetadataKeys(LEASE_KEYS)}) || ${JSON.stringify({ provisioningConvergedAt: now.toISOString() })}::jsonb`,
+          metadata: patchedSandboxMetadata({ strip: LEASE_KEYS, merge: { provisioningConvergedAt: now.toISOString() } }),
           updatedAt: now,
         })
         .where(

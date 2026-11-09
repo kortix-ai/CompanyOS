@@ -25,12 +25,14 @@ import { ParticipantAvatar } from '../ParticipantAvatar';
 import { KortixLoader } from '@/components/kortix/kortix-loader';
 import { SlackIcon } from '@/components/icons/slack-icon';
 import { TeamsIcon } from '@/components/icons/teams-icon';
+import { DiscordIcon } from '@/components/icons/discord-icon';
 import { TelegramIcon } from '@/components/icons/telegram-icon';
 import {
   AlarmIcon,
   ChatCircleIcon,
   CheckIcon,
   CopyIcon,
+  EnvelopeIcon,
   LightningIcon,
   PencilIcon,
   TextTIcon,
@@ -40,8 +42,11 @@ import { MOTION, THEME, withAlpha } from '@/lib/utils/theme';
 import type { Command } from '@/lib/session/runtime-data';
 import type { SessionLogTurn } from '@kortix/sdk';
 import { recordTimeMs } from '@/lib/session/turn-meta';
-import { type ChannelPlatform, parseChannelMessage } from '@kortix/shared';
-import { parseReminderPrompt, parseRoomDigest, parseRoomPrompt, parseTriggerEvent, type ChannelMessageInfo } from '@kortix/shared';
+import { type ChannelPlatform, channelPromptTail, isChannelFileLabel, parseChannelMessage } from '@kortix/shared';
+import { parsePeerMessagePrompt, parseReminderPrompt, parseTriggerEvent, type ChannelMessageInfo } from '@kortix/shared';
+import { agentNoticeOf } from '@/lib/session/agent-notice';
+import { AgentNotice } from './agent-notice';
+import { PeerMessage } from './peer-message';
 import { KortixLogo } from '@/components/kortix/KortixLogo';
 import { SourcePill } from './source-pill';
 import { CopyContentButton, KortixBottomSheetModal } from '@/components/kortix/sheet';
@@ -57,8 +62,11 @@ import {
   planAttachmentGrid,
 } from '@/lib/session/attachment-tile';
 import {
+  channelPlaceLabel,
   commandMessageText,
+  messageAttachments,
   parseUserMessageBlocks,
+  parseUserMessageText,
   type MessageAttachment,
   queuedPromptStatusLabel,
   quoteMarginBottom,
@@ -117,23 +125,31 @@ const META_TEXT_STYLE = { fontSize: 13, lineHeight: 16 } as const;
 // A channel card's mark and label, as web draws them (`channel-brand.tsx`). The
 // label colors are the platforms' fixed brand colors, never the app theme. Slack
 // has no hue to tint with: its mark is four colors and its name reads like
-// Slack's wordmark, in the text color.
+// Slack's wordmark, in the text color. Email is no brand: its envelope and its
+// label take the text color too.
 const TELEGRAM_BRAND_COLOR = 'hsl(198.7 91.9% 56.3%)'; // hex-allowlist: Telegram blue, web CHANNEL_BRAND_COLOR.Telegram hsl(198.7 91.9% 56.3%)
 const CHANNEL_LABEL_COLOR: Record<ChannelPlatform, string | undefined> = {
   Slack: undefined,
   Teams: '#5B5FC7', // hex-allowlist: Microsoft Teams purple #5B5FC7, web CHANNEL_BRAND_COLOR.Teams
   Telegram: TELEGRAM_BRAND_COLOR,
+  Email: undefined,
+  Discord: '#5865F2', // hex-allowlist: Discord blurple #5865F2, web CHANNEL_BRAND_COLOR.Discord
 };
 const CHANNEL_LABEL: Record<ChannelPlatform, string> = {
   Slack: 'Slack',
   Teams: 'Microsoft Teams',
   Telegram: 'Telegram',
+  Email: 'Email',
+  Discord: 'Discord',
 };
 
-function ChannelMark({ platform, size }: { platform: ChannelPlatform; size: number }) {
+/** `className` colors only the glyphs with no brand: Email's envelope, and the neutral chat glyph of a platform this build does not know. */
+function ChannelMark({ platform, size, className }: { platform: ChannelPlatform; size: number; className?: string }) {
   if (platform === 'Teams') return <TeamsIcon size={size} />;
   if (platform === 'Slack') return <SlackIcon size={size} />;
-  return <TelegramIcon size={size} />;
+  if (platform === 'Telegram') return <TelegramIcon size={size} />;
+  if (platform === 'Discord') return <DiscordIcon size={size} />;
+  return <Icon as={platform === 'Email' ? EnvelopeIcon : ChatCircleIcon} size={size} className={className} />;
 }
 
 /** `isDark` is passed down from SessionTurn. */
@@ -185,14 +201,14 @@ export interface SessionSourceAuthor {
   agent?: string;
 }
 
-/** Slack / Teams / Telegram: mark · platform · sender; the sheet names the channel and sender. */
+/** Slack / Teams / Telegram / Email: mark · platform · sender; the sheet names the channel (an email's subject) and sender. */
 function ChannelSourcePill({ info }: { info: ChannelMessageInfo }) {
   const platform = CHANNEL_LABEL[info.platform];
   // A Teams conversation id names nothing a person reads: no channel row.
   const channel = info.platform === 'Teams' ? null : info.context;
   return (
     <SourcePill
-      mark={<ChannelMark platform={info.platform} size={12} />}
+      mark={<ChannelMark platform={info.platform} size={12} className="text-muted-foreground" />}
       sheetMark={<ChannelMark platform={info.platform} size={22} />}
       source={platform}
       sourceColor={CHANNEL_LABEL_COLOR[info.platform]}
@@ -200,7 +216,7 @@ function ChannelSourcePill({ info }: { info: ChannelMessageInfo }) {
       title={info.userName}
       subtitle={channel ? `${platform} · ${channel}` : platform}
       rows={[
-        { label: 'Channel', value: channel },
+        { label: channelPlaceLabel(info.platform), value: channel },
         { label: 'From', value: info.userName },
       ]}
     />
@@ -354,13 +370,41 @@ function UserMessageImpl({
   // Both parsers are linear in the prompt: a channel or a webhook chooses this
   // text, and a regex version of each froze the JS thread on a crafted prompt.
   const channelMessageInfo = useMemo(() => parseChannelMessage(rawText), [rawText]);
+  // Its files: the `<file>` tags Kortix wrote after the sender's text, and nothing else. A tag the sender
+  // typed is text; the image block pi records for a tag repeats it, and names no path when the sender typed one.
+  const channelAttachments = useMemo(
+    () =>
+      channelMessageInfo
+        ? messageAttachments([], parseUserMessageText(channelPromptTail(rawText, channelMessageInfo.platform)))
+        : [],
+    [channelMessageInfo, rawText],
+  );
   const triggerEventInfo = useMemo(() => parseTriggerEvent(rawText), [rawText]);
   // A reminder fire: platform-written `[REMINDER …]` header + the reminder text.
   const reminderInfo = useMemo(() => parseReminderPrompt(rawText), [rawText]);
-  // A message from a room or a direct conversation: `[room dev · #2 · from …]` + the text.
-  const roomInfo = useMemo(() => parseRoomPrompt(rawText), [rawText]);
-  // Room traffic batched into one turn: `[room dev · #a–#b · N new messages]`.
-  const roomDigestInfo = useMemo(() => parseRoomDigest(rawText), [rawText]);
+  // A background sub-agent's or a workflow run's end, delivered as a prompt: nobody typed it.
+  // The API delivers it as harness context (`synthetic`), which `rawText` leaves out, so it is
+  // read from every text block, as `peerInfo` below and web `useTurnUserContent` do.
+  const agentNotice = useMemo(() => {
+    for (const block of message.blocks) {
+      if (block.type !== 'text') continue;
+      const notice = agentNoticeOf(block.text);
+      if (notice) return notice;
+    }
+    return agentNoticeOf(rawText);
+  }, [message.blocks, rawText]);
+  // A message from another Kortix session (`send_message`): `[message from reviewer · session 3f2a1b9c · #m_1]`.
+  // The API delivers it as harness context (`synthetic`), which `rawText` leaves out, so it is read from
+  // every text block (web `useTurnUserContent`).
+  const peerInfo = useMemo(() => {
+    if (agentNotice) return undefined;
+    for (const block of message.blocks) {
+      if (block.type !== 'text') continue;
+      const info = parsePeerMessagePrompt(block.text);
+      if (info) return info;
+    }
+    return undefined;
+  }, [agentNotice, message.blocks]);
 
   // Queued dim: `duration-slow transition-opacity` + `opacity-50`.
   const dim = useSharedValue(queueState ? 0.5 : 1);
@@ -380,7 +424,7 @@ function UserMessageImpl({
   // under the bubble; only a queued status line (or Select text's Done)
   // stays there. The bubble's own long press opens it through the trigger's
   // ref: the bubble is already a Pressable (tap expands a long message).
-  const canEdit = !!onEditStart && !rewindDisabled && !channelMessageInfo && !triggerEventInfo && !reminderInfo && !roomInfo && !roomDigestInfo;
+  const canEdit = !!onEditStart && !rewindDisabled && !channelMessageInfo && !triggerEventInfo && !reminderInfo;
   const menuRef = useRef<TriggerRef>(null);
   // Select text: the bubble's text becomes selectable in place until Done.
   const [selecting, setSelecting] = useState(false);
@@ -435,13 +479,19 @@ function UserMessageImpl({
     );
   }
 
+  // An agent's finish: a quiet line and its report, not a bubble (web `SubagentNoticeRow`).
+  if (agentNotice) return <AgentNotice prompt={agentNotice} onOpenSession={onSessionMention} />;
+  if (peerInfo) return <PeerMessage info={peerInfo} />;
+
   // A prompt a person did not type here (Slack / Teams / Telegram, a reminder,
-  // a trigger): the source pill over the same bubble a typed message uses,
-  // web's `ChannelMessage` / `PlatformPromptMessage`. Long press keeps Copy.
-  const platformMessage = (pill: React.ReactNode, body: React.ReactNode, fullText?: string) => (
+  // a trigger): the source pill over the files a channel sender sent and the
+  // same bubble a typed message uses, web's `ChannelMessage` /
+  // `PlatformPromptMessage`. Long press keeps Copy.
+  const platformMessage = (pill: React.ReactNode, body: React.ReactNode, fullText?: string, files?: MessageAttachment[]) => (
     <Reanimated.View className="px-4" style={dimStyle}>
       <View className="items-end self-end" style={{ maxWidth: '80%', gap: webSpace(1.5) }}>
         {pill}
+        {files?.length ? <MessageAttachments attachments={files} onOpenPath={onFileMention} /> : null}
         {body ? (
           <MessageMenu {...menuProps}>
             <View className="items-end">
@@ -459,50 +509,11 @@ function UserMessageImpl({
   if (channelMessageInfo) {
     return platformMessage(
       <ChannelSourcePill info={channelMessageInfo} />,
-      channelMessageInfo.messageText ? <ChannelMessageText text={channelMessageInfo.messageText} /> : null,
+      channelMessageInfo.messageText && !(channelAttachments.length > 0 && isChannelFileLabel(channelMessageInfo.messageText))
+        ? <ChannelMessageText text={channelMessageInfo.messageText} />
+        : null,
       channelMessageInfo.messageText,
-    );
-  }
-
-  if (roomInfo) {
-    const source = roomInfo.room;
-    const sender = roomInfo.senderKind === 'session' ? `Agent ${roomInfo.sender}` : roomInfo.sender;
-    return platformMessage(
-      <SourcePill
-        mark={<Icon as={ChatCircleIcon} size={12} className="text-muted-foreground" />}
-        sheetMark={<Icon as={ChatCircleIcon} size={22} className="text-foreground" />}
-        source={source}
-        sender={sender}
-        title={source}
-        subtitle={sender}
-        rows={[
-          { label: 'Message', value: `#${roomInfo.seq}` },
-          ...(roomInfo.replyTo ? [{ label: 'Reply to', value: `#${roomInfo.replyTo}` }] : []),
-        ]}
-      />,
-      roomInfo.text ? <Text style={BUBBLE_TEXT_STYLE}>{roomInfo.text}</Text> : null,
-      roomInfo.text,
-    );
-  }
-
-  if (roomDigestInfo) {
-    const range = roomDigestInfo.fromSeq === roomDigestInfo.toSeq ? `#${roomDigestInfo.toSeq}` : `#${roomDigestInfo.fromSeq}–#${roomDigestInfo.toSeq}`;
-    const count = `${roomDigestInfo.count} new message${roomDigestInfo.count === 1 ? '' : 's'}`;
-    const lines = roomDigestInfo.lines.map((line) => `#${line.seq} ${line.sender}: ${line.text}`);
-    if (roomDigestInfo.more) lines.push(`… and ${roomDigestInfo.more} more`);
-    const body = lines.join('\n');
-    return platformMessage(
-      <SourcePill
-        mark={<Icon as={ChatCircleIcon} size={12} className="text-muted-foreground" />}
-        sheetMark={<Icon as={ChatCircleIcon} size={22} className="text-foreground" />}
-        source={roomDigestInfo.room}
-        sender={count}
-        title={roomDigestInfo.room}
-        subtitle={count}
-        rows={[{ label: 'Messages', value: range }]}
-      />,
-      <Text style={BUBBLE_TEXT_STYLE}>{body}</Text>,
-      body,
+      channelAttachments,
     );
   }
 
@@ -512,9 +523,9 @@ function UserMessageImpl({
       <SourcePill
         mark={<Icon as={AlarmIcon} size={12} className="text-muted-foreground" />}
         sheetMark={<Icon as={AlarmIcon} size={22} className="text-foreground" />}
-        source="Reminder"
+        source="Loop"
         sender={kind}
-        title="Reminder"
+        title="Loop"
         subtitle={kind}
         rows={[{ label: 'ID', value: reminderInfo.id }]}
       />,

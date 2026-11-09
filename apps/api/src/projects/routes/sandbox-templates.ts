@@ -8,12 +8,14 @@ import {
   listSandboxTemplates,
   templateBuildProviders,
 } from '../../snapshots/builder';
+import { sessionDefaultSlug } from '../../snapshots/sandbox-status';
 import {
   createTemplate,
   deleteTemplate,
   getTemplateById,
   updateTemplate,
 } from '../../snapshots/templates';
+import { parseResidentialProxy, type SandboxResidentialProxy } from '@kortix/shared/sandbox';
 import { createRoute, z } from '@hono/zod-openapi';
 import { loadProjectForUser, assertProjectCapability } from '../lib/access';
 import { SandboxTemplateSchema, projectsApp } from '../lib/app';
@@ -23,7 +25,10 @@ import { serializeTemplate } from '../lib/serializers';
 import { templateProviderObservation } from '../lib/template-provider-observation';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { isPlatformAdmin } from '../../shared/platform-roles';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerSandboxTemplatesRoutes(): void {
   // ─── Template CRUD ─────────────────────────────────────────────────────────
@@ -36,12 +41,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sandbox-templates',
+      path: '/{workspaceId}/sandbox-templates',
       tags: ['sandboxes'],
       summary: 'List sandbox templates',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.array(SandboxTemplateSchema), 'Sandbox templates'),
@@ -49,7 +54,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     // A page view: serve the warm git mirror, refresh it behind the response.
@@ -60,7 +65,7 @@ export function registerSandboxTemplatesRoutes(): void {
       const templates = await listSandboxTemplates(project, observation.listOptions);
       return c.json({
         items: templates.map((t) => serializeTemplate(t)),
-        default_slug: templates.find((t) => t.isDefault)?.slug ?? templates[0]?.slug ?? null,
+        default_slug: sessionDefaultSlug(templates, loaded.row.metadata, DEFAULT_SANDBOX_SLUG),
         provider_mode: observation.providerMode,
         selected_provider: observation.selectedProvider,
       });
@@ -77,12 +82,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sandbox-templates',
+      path: '/{workspaceId}/sandbox-templates',
       tags: ['sandboxes'],
       summary: 'Create a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               slug: z.string().openapi({ description: 'Template slug.' }),
               name: z.string().optional().openapi({ description: 'Display name.' }),
@@ -92,6 +97,9 @@ export function registerSandboxTemplatesRoutes(): void {
               cpu: z.number().optional().openapi({ description: 'CPU cores.' }),
               memory_gb: z.number().optional().openapi({ description: 'Memory in GB.' }),
               disk_gb: z.number().optional().openapi({ description: 'Disk in GB.' }),
+              residential_proxy: z.union([z.boolean(), z.object({ country: z.string().optional() })]).nullable().optional().openapi({
+                description: "Residential IP: true, false, or { country } (ISO 3166-1 alpha-2). Sessions start only where the deployment offers it.",
+              }),
             }) } } },
         },
       responses: {
@@ -100,7 +108,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
@@ -132,6 +140,8 @@ export function registerSandboxTemplatesRoutes(): void {
     const cpu = typeof body.cpu === 'number' ? body.cpu : undefined;
     const memoryGb = typeof body.memory_gb === 'number' ? body.memory_gb : undefined;
     const diskGb = typeof body.disk_gb === 'number' ? body.disk_gb : undefined;
+    const residentialProxy = bodyResidentialProxy(body.residential_proxy);
+    if (residentialProxy === 'invalid') return c.json({ error: RESIDENTIAL_PROXY_BODY_ERROR }, 400);
     if (templateBuildProviders().length === 0) {
       return c.json({ error: 'No sandbox template provider is enabled' }, 503);
     }
@@ -148,6 +158,7 @@ export function registerSandboxTemplatesRoutes(): void {
         cpu,
         memoryGb,
         diskGb,
+        residentialProxy,
         source: 'ui',
       });
       // Kick a build in the background so the template is ready for the next session.
@@ -174,12 +185,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch',
-      path: '/{projectId}/sandbox-templates/{templateId}',
+      path: '/{workspaceId}/sandbox-templates/{templateId}',
       tags: ['sandboxes'],
       summary: 'Update a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               name: z.string().optional().openapi({ description: 'Display name.' }),
               image: z.string().optional().openapi({ description: 'Container image.' }),
@@ -188,6 +199,9 @@ export function registerSandboxTemplatesRoutes(): void {
               cpu: z.number().optional().openapi({ description: 'CPU cores.' }),
               memory_gb: z.number().optional().openapi({ description: 'Memory in GB.' }),
               disk_gb: z.number().optional().openapi({ description: 'Disk in GB.' }),
+              residential_proxy: z.union([z.boolean(), z.object({ country: z.string().optional() })]).nullable().optional().openapi({
+                description: "Residential IP: true, false, or { country } (ISO 3166-1 alpha-2). Sessions start only where the deployment offers it.",
+              }),
             }) } } },
         },
       responses: {
@@ -196,7 +210,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -206,6 +220,8 @@ export function registerSandboxTemplatesRoutes(): void {
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
 
     const body = await readJsonObject(c);
+    const residentialProxy = bodyResidentialProxy(body.residential_proxy);
+    if (residentialProxy === 'invalid') return c.json({ error: RESIDENTIAL_PROXY_BODY_ERROR }, 400);
 
     const patch = {
       name: typeof body.name === 'string' ? body.name.trim() : undefined,
@@ -219,6 +235,7 @@ export function registerSandboxTemplatesRoutes(): void {
       cpu: 'cpu' in body ? (typeof body.cpu === 'number' ? body.cpu : null) : undefined,
       memoryGb: 'memory_gb' in body ? (typeof body.memory_gb === 'number' ? body.memory_gb : null) : undefined,
       diskGb: 'disk_gb' in body ? (typeof body.disk_gb === 'number' ? body.disk_gb : null) : undefined,
+      residentialProxy,
     };
 
     // Ownership check BEFORE the write. updateTemplate keys the UPDATE on
@@ -266,12 +283,12 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/sandbox-templates/{templateId}',
+      path: '/{workspaceId}/sandbox-templates/{templateId}',
       tags: ['sandboxes'],
       summary: 'Delete a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -279,7 +296,7 @@ export function registerSandboxTemplatesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -318,20 +335,20 @@ export function registerSandboxTemplatesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sandbox-templates/{templateId}/build',
+      path: '/{workspaceId}/sandbox-templates/{templateId}/build',
       tags: ['sandboxes'],
       summary: 'Build a sandbox template',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), templateId: z.string() }),
+          params: z.object({ workspaceId: z.string(), templateId: z.string() }),
         },
       responses: {
           202: json(z.any(), 'OK'),
-          ...errors(404, 503),
+          ...errors(403, 404, 503),
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const templateId = c.req.param('templateId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -344,6 +361,17 @@ export function registerSandboxTemplatesRoutes(): void {
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (row.projectId !== null && row.projectId !== projectId) {
       return c.json({ error: 'Not found' }, 404);
+    }
+    // A shared platform row is not this project's to build — the same
+    // shared-row refusal the rebuild route enforces (KRTX-4465). Only a
+    // PERSON acting as a platform admin owns the platform image: an agent
+    // session carries its launcher's userId, so the session-principal
+    // predicate rides next to isPlatformAdmin. Building it here would let a
+    // project-scoped caller force the platform-owned default image build on
+    // every enabled provider and mutate the shared row's build state; the
+    // platform's own startup pre-build owns that image.
+    if (row.isShared && (isProjectSessionPrincipal(c) || !(await isPlatformAdmin(c.get('userId'))))) {
+      return c.json({ error: 'Shared platform templates cannot be built from a project.', code: 'TEMPLATE_SHARED' }, 403);
     }
 
     const project = await loadGitProject(loaded);
@@ -364,4 +392,17 @@ export function registerSandboxTemplatesRoutes(): void {
     }, 202);
   },
   );
+}
+
+const RESIDENTIAL_PROXY_BODY_ERROR = '`residential_proxy` must be true, false, or { "country": "<ISO 3166-1 alpha-2 code>" }.';
+
+/** `residential_proxy` in a create or PATCH body: undefined = not sent, null = off. */
+function bodyResidentialProxy(value: unknown): SandboxResidentialProxy | null | undefined | 'invalid' {
+  if (value === undefined) return undefined;
+  if (value === null || value === false) return null;
+  if (value === true) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) return 'invalid';
+  const country = (value as { country?: unknown }).country;
+  if (country !== undefined && !(typeof country === 'string' && /^[A-Za-z]{2}$/.test(country.trim()))) return 'invalid';
+  return parseResidentialProxy(value) ?? null;
 }

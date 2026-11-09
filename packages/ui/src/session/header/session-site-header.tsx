@@ -36,7 +36,8 @@ import { SessionPendingApprovalsIndicator } from './session-pending-approvals-in
 import { SessionGoalIndicator } from './session-goal-indicator';
 import { SessionRemindersIndicator } from './session-reminders-indicator';
 import { SessionTitleInput } from './session-title-input';
-import { SubagentHoverCard, subagentTitle } from './subagent-hover-card';
+import { subagentTitle } from '../agents/agent-model';
+import { SubagentHoverCard } from './subagent-hover-card';
 import { Copy } from '../../icons/copy';
 import { Home } from '../../internal/icons/home';
 import { openSessionQuickView } from '../panel/open-session-quick-view';
@@ -44,7 +45,6 @@ import { useDesktopShell } from '../../internal/layout/sidebar-opener';
 import { SidebarToggle } from '../../internal/layout/sidebar-toggle';
 import { useRenameSession } from '../actions/use-rename-session';
 import { SessionDeleteModal } from '../actions/session-delete-modal';
-import { useNotificationCenter } from '../../internal/hooks/use-notification-center';
 import {
   useUiComponents,
   useUiHostConfig,
@@ -65,8 +65,10 @@ import {
 import { createProjectSession, directSubsessions, restartProjectSession, stopProjectSession } from '@kortix/sdk';
 import {
   qk,
+  useHasSessionDesktop,
   useProjectSession,
   useRuntimeSupports,
+  useSessionChildren,
   useSessionParticipants,
   useSessionWatch,
 } from '@kortix/sdk/react';
@@ -83,6 +85,7 @@ import {
   FileArrowDownIcon as FileDown,
   FolderSimpleIcon,
   GlobeSimpleIcon,
+  MonitorIcon,
   StackIcon as Layers,
   PencilSimpleIcon,
   PushPinIcon,
@@ -106,6 +109,8 @@ const DEV_TOOLS: {
 }[] = [
     { view: 'terminal', label: 'Terminal', Icon: TerminalIcon },
     { view: 'browser', label: 'Browser', Icon: GlobeSimpleIcon },
+    // The computer's live screen (`session-desktop.tsx`).
+    { view: 'desktop', label: 'Desktop', Icon: MonitorIcon },
     { view: 'files', label: 'Files', Icon: FolderSimpleIcon },
   ];
 
@@ -133,9 +138,14 @@ export function SessionSiteHeader({
   const localizedDevTools = useLocalizedUiCatalog(DEV_TOOLS);
   // A host that cannot reach the pty WebSocket turns the terminal off (`config.terminalEnabled`).
   const { terminalEnabled } = useUiHostConfig();
+  // A template on a base other than Ubuntu 24.04, or an old image, has no desktop.
+  const hasDesktop = useHasSessionDesktop() === true;
   const devTools = useMemo(
-    () => (terminalEnabled ? localizedDevTools : localizedDevTools.filter((tool) => tool.view !== 'terminal')),
-    [localizedDevTools, terminalEnabled],
+    () =>
+      localizedDevTools.filter(
+        (tool) => (tool.view !== 'terminal' || terminalEnabled) && (tool.view !== 'desktop' || hasDesktop),
+      ),
+    [localizedDevTools, terminalEnabled, hasDesktop],
   );
   const router = useUiRouter();
   const pathname = useUiPathname();
@@ -157,6 +167,9 @@ export function SessionSiteHeader({
   const [compactOpen, setCompactOpen] = useState(false);
   // E1: a runtime without on-demand compaction (pi) offers no Compact item.
   const canCompact = useRuntimeSupports('session.compact');
+  // A runtime with the context record starts a fresh context: nothing is summarized.
+  const contextRecord = useRuntimeSupports('session.context_record');
+  const tReset = useTranslations('contextReset');
   const [shareOpen, setShareOpen] = useState(false);
   const { ShareSessionModal } = useUiComponents();
   // The name edits in place: the name button swaps for a field. The menu's
@@ -173,7 +186,7 @@ export function SessionSiteHeader({
   // The ids come from the session view (`SessionIdsProvider`); a host whose
   // URL has another shape still gets them. apps/web's route is the fallback.
   const sessionIds = useSessionIds();
-  const projectRoute = pathname?.match(/^\/projects\/([^/]+)\/sessions\/([^/]+)/);
+  const projectRoute = pathname?.match(/^\/(?:workspaces|projects)\/([^/]+)\/sessions\/([^/]+)/);
   const projectId = sessionIds.projectId ?? projectRoute?.[1];
   const projectSessionId = sessionIds.sessionId ?? projectRoute?.[2];
   const isProjectSession = !!projectId && !!projectSessionId;
@@ -197,17 +210,14 @@ export function SessionSiteHeader({
   });
   // Mute: the caller's watch on this session (KRTX-1742). Anyone who can open
   // it may mute it; unmuting a session you never watched makes you a watcher.
-  // Only with the project's `notification_center` flag on: off, the watch
-  // routes answer 403 and the item does not exist.
   const viewerId = useUiViewerId();
-  const notificationCenter = useNotificationCenter(projectId);
   const sessionWatch = useSessionWatch({
     userId: viewerId,
     projectId,
     sessionId: projectSessionId,
-    enabled: isProjectSession && !parent && notificationCenter,
+    enabled: isProjectSession && !parent,
   });
-  const watching = notificationCenter ? sessionWatch.data?.watching : undefined;
+  const watching = sessionWatch.data?.watching;
   const toggleWatch = () => {
     if (watching === undefined) return;
     sessionWatch
@@ -261,6 +271,10 @@ export function SessionSiteHeader({
   const renameMutation = useRenameSession(projectId ?? '', projectSessionId ?? null);
   const canRename = isProjectSession && !!projectSession && !parent;
   const subsessions = projectSession && !parent ? directSubsessions(projectSession) : [];
+  const childSessions = useSessionChildren(projectId ?? '', projectSessionId ?? '', {
+    enabled: isProjectSession && !parent,
+    refetchInterval: 5_000,
+  });
   const startRename = () => {
     if (canRename) setIsRenaming(true);
   };
@@ -494,7 +508,7 @@ export function SessionSiteHeader({
           onClick={() => setCompactOpen(true)}
         >
           <Layers />
-          {tI18nHardcoded.raw('i18nComplete.textca838377bb5a')}
+          {contextRecord ? tReset('dialogAction') : tI18nHardcoded.raw('i18nComplete.textca838377bb5a')}
         </DropdownMenuItem>
       )}
 
@@ -592,7 +606,7 @@ export function SessionSiteHeader({
                 // No name yet: `SavedSessionSkeleton` renders this header
                 // before the session row has answered.
                 <Skeleton className="mx-2.5 h-3.5 w-24 py-0 motion-reduce:animate-none" />
-              ) : canRename && subsessions.length > 0 ? (
+              ) : isProjectSession && !parent && (subsessions.length > 0 || childSessions.sessions.length > 0) ? (
                 // A parent session: hovering its name lists the subagents it
                 // spawned. The card replaces the "Rename" hint — two floating
                 // surfaces on one hover is one too many; a click still renames.
@@ -600,6 +614,9 @@ export function SessionSiteHeader({
                   projectId={projectId!}
                   projectSessionId={projectSessionId!}
                   subsessions={subsessions}
+                  spawnedSessions={childSessions.sessions}
+                  onLoadMore={childSessions.hasNextPage ? () => { void childSessions.fetchNextPage(); } : undefined}
+                  loadingMore={childSessions.isFetchingNextPage}
                 >
                   {titleButton}
                 </SubagentHoverCard>
@@ -688,7 +705,7 @@ export function SessionSiteHeader({
                     size="icon"
                     aria-label={label}
                     onClick={() => openSessionQuickView(view, 'header')}
-                    className="text-foreground/80 hover:text-foreground cursor-pointer transition-colors active:scale-[0.96]"
+                    className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors active:scale-[0.96]"
                   >
                     <Icon className="h-4 w-4" />
                   </Button>
@@ -708,7 +725,7 @@ export function SessionSiteHeader({
                     variant="ghost"
                     size="icon"
                     aria-label={tI18nHardcoded.raw('i18nComplete.text96f0c06bbcb7')}
-                    className="text-foreground/80 hover:text-foreground cursor-pointer transition-colors active:scale-[0.96] lg:hidden"
+                    className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors active:scale-[0.96] lg:hidden"
                   >
                     <Code2 className="h-4 w-4" />
                   </Button>
@@ -789,7 +806,7 @@ export function SessionSiteHeader({
                   aria-label={tI18nHardcoded.raw('i18nComplete.text2534086de9fe')}
                   aria-expanded={isActionPanelOpen}
                   onClick={toggleActionPanel}
-                  className="text-foreground/80 hover:text-foreground cursor-pointer transition-colors active:scale-[0.96]"
+                  className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors active:scale-[0.96]"
                 >
                   <span className="relative inline-flex">
                     <CaretDoubleLeftIcon className="size-4" />

@@ -1,5 +1,5 @@
 /**
- * The last gates before a provider-running, OpenCode-answering box is handed
+ * The last gates before a provider-running, runtime-answering box is handed
  * to a session: the runtime guarantee and Rule 4 admission enforcement.
  * Split out of the former routes/shared.ts (KRTX-274); every block below
  * moved verbatim.
@@ -30,7 +30,7 @@ export async function enforceRuntimeGuarantee(
   // ── Session-open runtime guarantee ──────────────────────────────────────
   // "Open any session and it works, or it says precisely why not." Same
   // chokepoint as Rule 4 below (`!booting`, box confirmed provider-running,
-  // OpenCode answered). A box stuck `components.agent: 'staged'` for 31 days
+  // the runtime answered). A box stuck `components.agent: 'staged'` for 31 days
   // with `cli: 'failed'` every pass is exactly the failure this closes. Gated
   // only by the reaper's own kill switch (`LEGACY_RUNTIME_BOOTSTRAP`), so an
   // operator can turn BOTH the background and the open-time repair off with
@@ -59,10 +59,9 @@ export async function enforceRuntimeGuarantee(
     // imports (transitively) this file's route registration, so a static
     // top-level import here closed a cycle that threw
     // `ReferenceError: Cannot access 'preview' before initialization` at
-    // server boot (CI run 36351579974: the whole stack never came up). Same
-    // pattern as `session-lifecycle/stop.ts`'s `captureJournallessSessionLog`
-    // dynamic import — this call site is already inside an async function,
-    // so the dynamic import costs nothing extra on the hot path.
+    // server boot (CI run 36351579974: the whole stack never came up). This
+    // call site is already inside an async function, so the dynamic import
+    // costs nothing extra on the hot path.
     const { guaranteeCurrentRuntimeOnOpen } = await import('../lib/legacy-runtime-bootstrap-wiring');
     const guarantee = await guaranteeCurrentRuntimeOnOpen({
       sandboxId: row.sandboxId,
@@ -83,7 +82,7 @@ export async function enforceRuntimeGuarantee(
         agent_name: visible.row.agentName ?? 'default',
         retriable: true,
         sandbox: serializeSandboxRow(row),
-        opencode_session_id: null,
+        runtime_session_id: null,
         runtime_url: sessionRuntimeUrlPath(runningExternalId),
         reason: 'runtime_updating',
       };
@@ -124,7 +123,7 @@ export async function enforceRuntimeGuarantee(
         agent_name: visible.row.agentName ?? 'default',
         retriable: false,
         sandbox: serializeSandboxRow(row),
-        opencode_session_id: null,
+        runtime_session_id: null,
         runtime_url: sessionRuntimeUrlPath(runningExternalId),
         reason: 'runtime_update_blocked',
         failure: {
@@ -154,7 +153,7 @@ export async function enforceRuntimeGuarantee(
         // than treat this as a dead end.
         retriable: true,
         sandbox: serializeSandboxRow(row),
-        opencode_session_id: null,
+        runtime_session_id: null,
         runtime_url: sessionRuntimeUrlPath(runningExternalId),
         reason: 'runtime_update_exhausted',
         failure: {
@@ -197,11 +196,11 @@ export async function enforceAdmission(
   // "Before a box is handed to a session, it must prove its runtime identity…
   // A box that fails admission is replaced, not used." This is the ONE
   // chokepoint every session-open path shares — `runOpenSession` is what
-  // `/start`, warm-session adoption, restart, and resume-from-stopped all
+  // `/start`, restart, and resume-from-stopped all
   // funnel through (see the flows into `openSession` above) — so gating here
   // covers all of them without touching each caller.
   //
-  // Only checked once the box is CONFIRMED provider-running and OpenCode has
+  // Only checked once the box is CONFIRMED provider-running and the runtime has
   // answered (`!booting`) — never while still booting, where a health 503 is
   // completely normal and must not read as an admission failure.
   if (!booting) {

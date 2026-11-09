@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import { chatEventDedup, chatThreads, projectSessions } from '@kortix/db';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
@@ -23,7 +23,7 @@ export interface ChatThreadKey {
 function threadRow(key: ChatThreadKey, projectId?: string) {
   return and(
     eq(chatThreads.platform, key.platform),
-    eq(chatThreads.workspaceId, key.workspaceId),
+    eq(chatThreads.platformTeamId, key.workspaceId),
     eq(chatThreads.threadId, key.threadId),
     projectId ? eq(chatThreads.projectId, projectId) : undefined,
   );
@@ -50,6 +50,7 @@ export interface ChatThreadSession {
   metadata: unknown;
   status: string | null;
   agentName: string | null;
+  createdAt: Date | null;
 }
 
 /** The thread's live session row (owner, metadata, status); null when the session row is gone. */
@@ -65,6 +66,7 @@ export async function findChatThreadSession(
       metadata: projectSessions.metadata,
       status: projectSessions.status,
       agentName: projectSessions.agentName,
+      createdAt: projectSessions.createdAt,
     })
     .from(chatThreads)
     .innerJoin(projectSessions, eq(projectSessions.sessionId, chatThreads.sessionId))
@@ -86,11 +88,11 @@ export async function bindChatThread(
     .values({
       projectId: key.projectId,
       platform: key.platform,
-      workspaceId: key.workspaceId,
+      platformTeamId: key.workspaceId,
       threadId: key.threadId,
       sessionId: key.sessionId,
     })
-    .onConflictDoNothing({ target: [chatThreads.platform, chatThreads.workspaceId, chatThreads.threadId] })
+    .onConflictDoNothing({ target: [chatThreads.platform, chatThreads.platformTeamId, chatThreads.threadId] })
     .returning({ sessionId: chatThreads.sessionId, projectId: chatThreads.projectId });
   return inserted ?? (await findChatThread(key));
 }
@@ -132,10 +134,10 @@ const CREATE_CLAIM_TTL_MS = 10 * 60_000;
  * Claim the first create of a thread. An expired claim (a create that never
  * finished) is taken over in the same statement. Returns the owner token for
  * `releaseThreadCreate`, or null while another create holds it. A DB error
- * throws: no create runs unclaimed.
+ * throws: no create runs unclaimed. `ttlMs`: a once-per-period claim of another key.
  */
-export async function claimThreadCreate(key: string): Promise<Date | null> {
-  const expiresAt = new Date(Date.now() + CREATE_CLAIM_TTL_MS);
+export async function claimThreadCreate(key: string, ttlMs = CREATE_CLAIM_TTL_MS): Promise<Date | null> {
+  const expiresAt = new Date(Date.now() + ttlMs);
   const rows = await db
     .insert(chatEventDedup)
     .values({ eventId: key, expiresAt })
@@ -146,6 +148,16 @@ export async function claimThreadCreate(key: string): Promise<Date | null> {
     })
     .returning({ eventId: chatEventDedup.eventId });
   return rows.length > 0 ? expiresAt : null;
+}
+
+/** A create holds the thread: its claim is there and has not expired. */
+export async function threadCreateHeld(key: string): Promise<boolean> {
+  const [row] = await db
+    .select({ eventId: chatEventDedup.eventId })
+    .from(chatEventDedup)
+    .where(and(eq(chatEventDedup.eventId, key), gt(chatEventDedup.expiresAt, sql`now()`)))
+    .limit(1);
+  return !!row;
 }
 
 /** Release only our own claim: after a takeover, the row belongs to the new owner. */

@@ -124,6 +124,10 @@ mock.module('../session-lifecycle/inbox-rows', () => ({
     return inboxRows;
   },
 }));
+// Accepted prompts the log lacks: none here. Its real module reads the DB this test mocks.
+mock.module('../session-lifecycle/sent-prompts', () => ({
+  listSentPrompts: async () => [],
+}));
 mock.module('./session-prompt-view', () => ({
   serializePrompt: (row: Record<string, unknown>) => row,
 }));
@@ -201,6 +205,8 @@ describe('emission', () => {
     expect(queue!.payload).toEqual({
       known: true,
       prompts: [{ id: 'p1', state: 'waiting', reason: 'held' }],
+      // Accepted prompts the log does not hold yet (`listSentPrompts`).
+      sent: [],
       // The derived bit the client would otherwise recompute.
       held: true,
       // The server clock at the read — the frame's rank among queue snapshots.
@@ -362,7 +368,7 @@ describe('emission', () => {
 
 describe('the runtime control snapshot', () => {
   test('the mirror is not read and no mirror frame is sent (P8.2)', async () => {
-    mirrorRow = { capturedAt: new Date('2026-08-27T00:00:00Z'), headComplete: true, opencodeSessionId: 'synthetic-session' };
+    mirrorRow = { capturedAt: new Date('2026-08-27T00:00:00Z'), headComplete: true, runtimeSessionId: 'synthetic-session' };
     const handle = acquireControlReconciler(`${SESSION}-log`);
     await handle.ready();
     const types = handle.snapshot().map((event) => event.type);
@@ -681,7 +687,6 @@ describe('R5.2: the server owns session state', () => {
     state: 'active',
     message_id: null,
     runtime_session_id: 'ses_root',
-    opencode_session_id: 'ses_root',
     started_at: '2026-10-06T10:00:00.000Z',
     accepted_at: null,
   };

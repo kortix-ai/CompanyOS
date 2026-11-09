@@ -33,6 +33,9 @@ const EXTENSION_PROTOCOL_PREFIXES = [
 
 const INJECTED_APP_SOURCE_PATTERNS = [
   /^app:\/\/\/scripts\/inpage\.js$/,
+  // Injected extension content script; KRTX-3704's onMessage TypeError has
+  // only this source, never a first-party _next bundle or resolved source.
+  /^app:\/\/\/js\/content\.js$/,
   // CookieYes (https://www.cookieyes.com) cookie-consent SDK runtime, served
   // from its own CDN workspace directory
   // `https://cdn-cookieyes.com/client_data/<workspace-id>/…`: `script.js` is
@@ -95,6 +98,15 @@ const INJECTED_APP_SOURCE_PATTERNS = [
   // pattern matches. The chunk id varies with the extension's build, so the
   // stable anchor is the `executors/<digits>.js` shape, not one file name.
   /^app:\/\/\/executors\/\d+\.js$/,
+  // A browser extension's main-world bridge, a Parcel bundle (`newRequire`,
+  // module `Object.fIhds`) loaded as `dragOutMainWorldBridge.<hash>.js?<ms>?r=<ms>`.
+  // Sentry's `NextjsClientStackFrameNormalization` rewrites every frame origin,
+  // `chrome-extension://<id>` included, to `app://` before `beforeSend`. The
+  // bridge calls `chrome.runtime.connect` in the page world, where
+  // `chrome.runtime` is undefined: `TypeError: Cannot read properties of
+  // undefined (reading 'connect')` (KRTX-4430, pattern `7268998c…`, 1
+  // occurrence, 0 users, `https://kortix.com/`). The app ships no such file.
+  /^app:\/\/\/dragOutMainWorldBridge\.[0-9a-f]+\.js(?:\?|$)/,
 ] as const;
 
 export function isExtensionSource(filename: unknown): boolean {
@@ -675,8 +687,9 @@ export function isCaptchaInterceptorNoise(input: {
 
 /**
  * An injected wallet provider rejecting a pending request with the EIP-1474
- * default internal error, `{ code: -32603, message: 'Internal JSON-RPC error.' }`
- * (the wording of the wallet RPC error library). The rejected value is a plain
+ * default internal error, `{ code: -32603, message: 'Internal JSON-RPC error.' }`,
+ * or the exact missing-account error captured in KRTX-2150 (code 4001).
+ * Both use the wallet provider's own wording. The rejected value is a plain
  * object with no `stack`, so Sentry reports a frameless synthetic
  * "Object captured as promise rejection with keys: code, message" and the
  * extension-stack anchor above cannot see it. Better Stack, Kortix Frontend
@@ -694,7 +707,11 @@ function isWalletInternalRpcRejectionNoise(input: {
   if (!serialized || typeof serialized !== 'object') return false;
   const value = serialized as Record<string, unknown>;
   if (Object.keys(value).sort().join(',') !== 'code,message') return false;
-  if (value.code !== -32603 || value.message !== 'Internal JSON-RPC error.') return false;
+  // KRTX-2150 recurred with a second frameless wallet payload (2026-10-29).
+  // Match the exact pair, not EIP-1193 code 4001 alone (user rejection).
+  const internal = value.code === -32603 && value.message === 'Internal JSON-RPC error.';
+  const missingAccount = value.code === 4001 && value.message === 'wallet must has at least one account';
+  if (!internal && !missingAccount) return false;
   return !sourcesOf(input).some((source) => isBrowserBundleSource(source) || isFirstPartyResolvedSource(source));
 }
 
@@ -739,6 +756,26 @@ function isWalletProviderDisconnectedRejectionNoise(input: {
 }
 
 export const EXTENSION_RULES: readonly NoiseRule[] = [
+  {
+    // Talisman's injected page.js rejects before wallet onboarding (KRTX-3678).
+    // Require its exact message and response frame; page.js alone is ambiguous.
+    id: 'talisman-onboarding',
+    appliesTo: 'sentry',
+    match: ({ message, frames }) =>
+      normalizeString(message) === 'Talisman extension has not been configured yet. Please continue with onboarding.' &&
+      !frames.some((frame) => isFirstPartyResolvedSource(frame.filename)) &&
+      frames.some((frame) => frame.filename === 'app:///page.js' && frame.function === 'ne.handleResponse'),
+  },
+  {
+    // The locked Shield wallet rejects a dapp request from its background.js
+    // (KRTX-4433). Require its exact message and that script's frame.
+    id: 'shield-wallet-locked',
+    appliesTo: 'sentry',
+    match: ({ message, frames }) =>
+      normalizeString(message) === 'NotUnlocked: Unlock Shield to use a DApp.' &&
+      !frames.some((frame) => isFirstPartyResolvedSource(frame.filename)) &&
+      frames.some((frame) => frame.filename === 'app:///background.js'),
+  },
   {
     id: 'injected-app-source',
     appliesTo: 'both',

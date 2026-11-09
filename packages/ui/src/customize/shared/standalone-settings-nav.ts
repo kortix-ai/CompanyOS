@@ -22,6 +22,7 @@
  */
 import { uiRoutes } from '../../lib/routes';
 import { useUiRouter } from '../../providers/ui-provider';
+import { useGuardedLeave } from './leave-guard';
 import { useCallback, useMemo } from 'react';
 
 import {
@@ -58,7 +59,7 @@ export function projectCapabilityNavTarget(
   // `'members'` — not a `CapabilityTab['key']`: Members graduated off the
   // project entirely, onto the account hub's Access tab. Still named here
   // (rather than left to the `isAccountGraduatedSection` fallback) so the
-  // result routes through `/projects/<id>/members` — the redirect route that
+  // result routes through `/workspaces/<id>/members` — the redirect route that
   // already knows how to resolve `account_id` and append the `&project=`
   // scoping — instead of duplicating that resolution here.
   if (tab === 'members') return 'members';
@@ -127,7 +128,7 @@ export function buildStandaloneCapabilityNav(state: {
       // this branch, `tab` matched none of the checks above or below and the
       // click did nothing at all. Deliberately NOT `legacySectionRedirect` —
       // that helper's own fallback also resolves overlay-still ids
-      // (`preferences` -> `/projects/<id>/settings/preferences`, a route),
+      // (`preferences` -> `/workspaces/<id>/settings/preferences`, a route),
       // which would bypass the store-based `openSettings()` call below and
       // break this adapter's "opens the overlay, not a route" contract.
       if (state.accountId && isAccountGraduatedSection(tab)) {
@@ -151,7 +152,12 @@ export function useStandaloneCapabilityNav(
 ): SettingsNav {
   const router = useUiRouter();
   const membersTab = useSettingsPanelStore((s) => s.membersTab);
-  const navigateTo = useCallback((href: string) => router.push(href), [router]);
+  // Under a page with unsaved edits (the agent editor), leaving asks first.
+  const guardedLeave = useGuardedLeave();
+  const navigateTo = useCallback(
+    (href: string) => guardedLeave(() => router.push(href)),
+    [router, guardedLeave],
+  );
 
   return useMemo(
     () => buildStandaloneCapabilityNav({ projectId, activeTab, membersTab, accountId, navigateTo }),

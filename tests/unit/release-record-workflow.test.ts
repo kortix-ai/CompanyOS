@@ -21,10 +21,10 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readRepoFile } from '../src/fixtures/repo';
 
-const root = resolve(import.meta.dirname, '../..');
 const workflowPath = '.github/workflows/deploy-prod.yml';
-const workflow = readFileSync(resolve(root, workflowPath), 'utf8');
+const workflow = readRepoFile(workflowPath);
 
 /** Every npm publish job in deploy-prod.yml. */
 const NPM_PUBLISH_JOBS = [
@@ -149,7 +149,7 @@ describe('deploy-prod: the release record is not gated on npm', () => {
     // Guards the reader itself: a `needs:` written as a block sequence, or a
     // job this reader cannot see, would silently make every assertion below
     // vacuous.
-    expect(jobs.size).toBe(33);
+    expect(jobs.size).toBe(34);
     expect(jobs.has('github-release')).toBe(true);
     for (const job of NPM_PUBLISH_JOBS) expect(jobs.has(job)).toBe(true);
     expect(workflow).not.toMatch(/^ {4}needs:\s*$/m);

@@ -12,7 +12,7 @@
  * surfaced via /kortix/health `boot_error`, a terminal /start answer, or the
  * connect loop's own timeout), the failure is a card with the composer's
  * surface, the detail, Restart, and a way back to project home, centred in the
- * page, with no composer (Jay, 2026-10-02: nothing can be sent). Web parity with the dashboard's "OpenCode runtime is not ready"
+ * page, with no composer (Jay, 2026-10-02: nothing can be sent). Web parity with the dashboard's "Session runtime is not ready"
  * screen (apps/web/.../sessions/[sessionId]/page.tsx InlineSessionError).
  *
  * With a SAVED COPY (`thread`: the copy this device kept, then the server's;
@@ -28,10 +28,16 @@
  * The composer is disabled until the thread replaces this view: no typing,
  * no keyboard (Jay, 2026-10-02). A waking composer that took text had no agent
  * chip, no attach, no keyboard avoidance, and a dead send button.
+ *
+ * While the session waits on its sandbox image (`imageStep`, `/start`'s
+ * `boot.image`), the status card names that step and counts the time since it
+ * began, in every layout: a first image build takes minutes, and a bare loader
+ * for that long reads as a hang (Marko, 2026-11-02). It is the one timer here.
  */
 
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, View, type ScrollViewInstance } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   sessionLogTurns,
   type SessionLogThread,
@@ -39,6 +45,7 @@ import {
   type SessionMessageAuthors,
   type SessionParticipants,
 } from '@kortix/sdk';
+import { useNow } from '@kortix/sdk/react';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowCounterClockwiseIcon as RotateCcw } from '@/lib/icons';
@@ -64,6 +71,7 @@ import { webSpace } from '@/lib/session/user-message';
 import { useSessionMessageAuthors, useSessionParticipants } from '@/lib/projects/hooks';
 import { messageAvatarPerson } from '@/lib/session/participants';
 import { turnStoppedBy } from '@/lib/session/turn-stop';
+import { formatImageElapsed, type SessionImageStep } from '@/lib/session/connect-step';
 
 export interface SessionConnectError {
   title: string;
@@ -82,6 +90,7 @@ export function SessionConnecting({
   firstMessage,
   firstFiles,
   error,
+  imageStep = null,
   onCancel,
   onRestart,
   restarting,
@@ -99,6 +108,8 @@ export function SessionConnecting({
   firstFiles?: AttachedFile[];
   /** When set, the centre shows the failure instead of the loader. */
   error?: SessionConnectError | null;
+  /** The sandbox image step the session waits on, for the status card. */
+  imageStep?: SessionImageStep | null;
   /** Leaves the failed start and returns to project home. */
   onCancel: () => void;
   onRestart?: () => void;
@@ -144,6 +155,7 @@ export function SessionConnecting({
         turns={turns}
         sessionId={sessionId}
         statusLabel={statusLabel ?? null}
+        imageStep={imageStep}
         error={error}
         onCancel={onCancel}
         onRestart={onRestart}
@@ -158,7 +170,7 @@ export function SessionConnecting({
     return (
       <View style={{ flex: 1 }} className="bg-background">
         <FloatingComposerArea>
-          {statusLabel ? <WakingStatus label={statusLabel} /> : null}
+          {imageStep ? <ImageStatus step={imageStep} /> : statusLabel ? <WakingStatus label={statusLabel} /> : null}
           <View className="px-4 pb-3 pt-1">
             <WakingComposer />
           </View>
@@ -231,6 +243,7 @@ export function SessionConnecting({
         <View style={{ height: insets.bottom }} />
       ) : (
         <FloatingComposerArea onHeight={setBottomHeight}>
+          {imageStep ? <ImageStatus step={imageStep} /> : null}
           <View className="px-4 pb-3 pt-1">
             <WakingComposer />
           </View>
@@ -297,6 +310,41 @@ function WakingStatus({ label }: { label: string }) {
 }
 
 /**
+ * The sandbox image step: `WakingStatus`'s card, dot and inset, with a title,
+ * the step's own line and the time since it began. The image name is left
+ * out: a provider snapshot name tells a phone user nothing.
+ */
+export function ImageStatus({ step }: { step: SessionImageStep }) {
+  const { t } = useTranslation();
+  const now = useNow();
+  const line = t(`sessionImage.states.${step.state}`);
+  return (
+    <View className="px-4 pb-2" accessibilityLiveRegion="polite" testID="session-image-status">
+      <View className={COMPOSER_CARD_CLASS}>
+        <View className="flex-row items-start gap-2.5 px-2 py-1">
+          <View className="h-5 justify-center">
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: THEME.accent.yellow }} />
+          </View>
+          <View className="flex-1" accessible accessibilityLabel={`${t('sessionImage.title')}. ${line}`}>
+            <View className="flex-row items-baseline justify-between gap-3">
+              <Text variant="small" className="flex-1 leading-5" numberOfLines={1}>
+                {t('sessionImage.title')}
+              </Text>
+              <Text variant="muted" className="leading-5 tabular-nums" testID="session-image-elapsed">
+                {formatImageElapsed(step.since, now)}
+              </Text>
+            </View>
+            <Text variant="muted" className="leading-5">
+              {line}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
  * The thread as its saved copy shows it: the turns, read-only, opened at the
  * newest message like the live thread; then the status card and the composer.
  * A failure takes the composer's slot and the thread stays readable.
@@ -305,6 +353,7 @@ function SavedThread({
   turns,
   sessionId,
   statusLabel,
+  imageStep,
   error,
   onCancel,
   onRestart,
@@ -313,6 +362,7 @@ function SavedThread({
   messageAuthors,
 }: {
   turns: SessionLogTurn[];
+  imageStep?: SessionImageStep | null;
   participants?: SessionParticipants;
   messageAuthors?: SessionMessageAuthors;
   sessionId?: string;
@@ -323,7 +373,7 @@ function SavedThread({
   restarting?: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  const scrollRef = React.useRef<ScrollView>(null);
+  const scrollRef = React.useRef<ScrollViewInstance>(null);
   const viewerId = participants?.participants.find((person) => person.is_viewer)?.user_id;
   // The floating composer area's height: the newest turn rests above it.
   const [bottomHeight, setBottomHeight] = React.useState(0);
@@ -347,7 +397,7 @@ function SavedThread({
                 sessionId={sessionId}
                 onFileMention={openFilePreview}
                 rewindDisabled
-                sender={messageAvatarPerson(messageAuthors, participants, viewerId, turn.id)}
+                sender={messageAvatarPerson(messageAuthors, turn.id)}
                 stoppedBy={turnStoppedBy(messageAuthors, viewerId, turn.id)}
               />
             </View>
@@ -362,7 +412,7 @@ function SavedThread({
           </View>
         ) : (
           <>
-            {statusLabel ? <WakingStatus label={statusLabel} /> : null}
+            {imageStep ? <ImageStatus step={imageStep} /> : statusLabel ? <WakingStatus label={statusLabel} /> : null}
             <View className="px-4 pb-3 pt-1">
               <WakingComposer />
             </View>
@@ -416,7 +466,7 @@ function ConnectErrorState({
       ) : null}
       <View className="flex-row gap-2">
         <Button variant="secondary" onPress={onCancel} className="flex-1 rounded-full">
-          <Text>Back to project</Text>
+          <Text>Back to workspace</Text>
         </Button>
         {onRestart ? (
           <Button variant="default" onPress={onRestart} disabled={restarting} className="flex-1 rounded-full">

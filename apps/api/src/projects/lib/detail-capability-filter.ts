@@ -6,9 +6,9 @@
 // sections they can't read. Pure + exported so the gating is unit-tested
 // independent of git/DB (the handler just supplies the resolved booleans).
 
-import { restrictedManifestVerdict } from './manifest-verdict';
+import { manifestHealthWithout } from './manifest-health';
 
-export interface DetailCaps {
+interface DetailCaps {
   /** project.file.read — the repo file list. */
   canFiles: boolean;
   /** project.agent.read — the agents summary + discovery mode. */
@@ -41,23 +41,20 @@ export function applyDetailCapabilityFilter<C extends object, F>(
     // alphabetically and run it instead of the project default.
     ...(caps.canAgents
       ? {}
-      : { agents: [], agent_discovery: null, default_agent: null, open_code_default_agent: null }),
+      : { agents: [], agent_discovery: null, default_agent: null }),
     ...(caps.canSkills ? {} : { skills: [] }),
     ...(caps.canCommands ? {} : { commands: [] }),
-    // The raw manifest and OpenCode config are repository files, so
-    // project.file.read governs them like every other file.
+    // The raw manifest is a repository file, so project.file.read governs it
+    // like every other file.
     ...(caps.canFiles
       ? {}
       : {
           manifest_raw: null,
           manifest: {},
           env: [],
-          open_code_raw: null,
-          // The verdict is derived FROM the raw manifest, so it has to be
-          // blanked with it — otherwise a caller who cannot read the config
-          // still learns its version, and worse, is shown an upgrade prompt
-          // for a manifest they have no permission to change.
-          manifest_version: restrictedManifestVerdict(),
+          // The health is derived FROM the raw manifest, so it is blanked with
+          // it: a caller who cannot read the config must not learn its issues.
+          manifest_health: manifestHealthWithout('restricted'),
         }),
   } as C;
   return {

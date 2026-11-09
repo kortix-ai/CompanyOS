@@ -30,7 +30,7 @@ function row(overrides: Partial<InboxNotification> = {}): InboxNotification {
     session_id: 'ses-b',
     trigger_slug: null,
     actor_user_id: null,
-    url: `/projects/p1/sessions/ses-b?notification=n${next}`,
+    url: `/workspaces/p1/sessions/ses-b?notification=n${next}`,
     read: false,
     created_at: '2026-10-09T10:00:00.000Z',
     ...overrides,
@@ -39,14 +39,14 @@ function row(overrides: Partial<InboxNotification> = {}): InboxNotification {
 
 describe('withoutNotificationParam', () => {
   test('drops only the notification key', () => {
-    expect(withoutNotificationParam('/projects/p1/sessions/s?notification=n1')).toBe(
-      '/projects/p1/sessions/s',
+    expect(withoutNotificationParam('/workspaces/p1/sessions/s?notification=n1')).toBe(
+      '/workspaces/p1/sessions/s',
     );
-    expect(withoutNotificationParam('/projects/p1?a=1&notification=n1&b=2#top')).toBe(
-      '/projects/p1?a=1&b=2#top',
+    expect(withoutNotificationParam('/workspaces/p1?a=1&notification=n1&b=2#top')).toBe(
+      '/workspaces/p1?a=1&b=2#top',
     );
-    expect(withoutNotificationParam('/projects/p1/customize/triggers')).toBe(
-      '/projects/p1/customize/triggers',
+    expect(withoutNotificationParam('/workspaces/p1/admin/triggers')).toBe(
+      '/workspaces/p1/admin/triggers',
     );
   });
 });
@@ -78,7 +78,14 @@ describe('newArrivals', () => {
 });
 
 describe('planArrivals', () => {
-  const context = { onScreen: () => false, unseen: [] as string[], os: false };
+  const context = {
+    onScreen: () => false,
+    otherProject: () => false,
+    unseen: [] as string[],
+    os: false,
+  };
+  // `p1` is the project on screen. A row without a project belongs to none.
+  const otherProject = (projectId: string | null) => projectId !== null && projectId !== 'p1';
 
   test('toasts at most three rows per poll', () => {
     const fresh = [row(), row(), row(), row(), row()];
@@ -92,9 +99,9 @@ describe('planArrivals', () => {
     const announced = row({ session_id: 'ses-done', kind: 'turn_done' });
     const other = row({ session_id: 'ses-other' });
     const plan = planArrivals([onScreen, announced, other], {
+      ...context,
       onScreen: (sessionId) => sessionId === 'ses-open',
       unseen: ['ses-done'],
-      os: false,
     });
     expect(plan.toast).toEqual([other]);
   });
@@ -116,6 +123,68 @@ describe('planArrivals', () => {
   test('a renderer without Web Push in the background raises OS notifications instead', () => {
     const fresh = [row(), row()];
     expect(planArrivals(fresh, { ...context, os: true })).toEqual({ toast: [], os: fresh });
+  });
+
+  test('a row of another project does not toast', () => {
+    const elsewhere = row({ project_id: 'p2' });
+    const here = row({ project_id: 'p1' });
+    const plan = planArrivals([elsewhere, here], { ...context, otherProject });
+    expect(plan).toEqual({ toast: [here], os: [] });
+  });
+
+  test('rows of another project do not use up the cap', () => {
+    const elsewhere = [row({ project_id: 'p2' }), row({ project_id: 'p2' }), row({ project_id: 'p2' })];
+    const here = row({ project_id: 'p1' });
+    const plan = planArrivals([...elsewhere, here], { ...context, otherProject });
+    expect(plan.toast).toEqual([here]);
+  });
+
+  test('rows of the session on screen do not use up the cap', () => {
+    const open = [
+      row({ session_id: 'ses-open' }),
+      row({ session_id: 'ses-open' }),
+      row({ session_id: 'ses-open' }),
+    ];
+    const other = row({ session_id: 'ses-other' });
+    const plan = planArrivals([...open, other], {
+      ...context,
+      onScreen: (sessionId) => sessionId === 'ses-open',
+    });
+    expect(plan.toast).toEqual([other]);
+  });
+
+  test('the os path keeps a row of another project and a row of the session on screen', () => {
+    const elsewhere = row({ project_id: 'p2' });
+    const open = row({ session_id: 'ses-open' });
+    const plan = planArrivals([elsewhere, open], {
+      ...context,
+      otherProject,
+      onScreen: (sessionId) => sessionId === 'ses-open',
+      os: true,
+    });
+    expect(plan).toEqual({ toast: [], os: [elsewhere, open] });
+  });
+
+  test('the os path drops an unseen finished turn and caps the rest', () => {
+    const done = row({ session_id: 'ses-a', kind: 'turn_done' });
+    const fresh = [row(), row(), row(), row()];
+    const plan = planArrivals([done, ...fresh], { ...context, unseen: ['ses-a'], os: true });
+    expect(plan.os).toEqual(fresh.slice(0, MAX_ARRIVAL_ALERTS));
+  });
+
+  test('an automation alert of another project does not toast', () => {
+    const alert = row({
+      kind: 'automation_failed',
+      project_id: 'p2',
+      session_id: null,
+      trigger_slug: 'nightly',
+    });
+    expect(planArrivals([alert], { ...context, otherProject }).toast).toEqual([]);
+  });
+
+  test('a row without a project is not another project', () => {
+    const bare = row({ project_id: null, session_id: null });
+    expect(planArrivals([bare], { ...context, otherProject }).toast).toEqual([bare]);
   });
 });
 
@@ -148,10 +217,14 @@ describe('tags and types', () => {
     expect(rowDestination(row({ session_id: 'ses-b' }))).toBe('session');
     const alert = { kind: 'automation_failed', session_id: null } as const;
     expect(
-      rowDestination(row({ ...alert, trigger_slug: 'reminder.0a1b2c3d4e5f', url: '/projects/p1/reminders?notification=n1' })),
+      rowDestination(row({ ...alert, trigger_slug: 'reminder.0a1b2c3d4e5f', url: '/workspaces/p1/admin/loops?notification=n1' })),
+    ).toBe('reminders');
+    // A row stored before 2026-10-28 carries the old path.
+    expect(
+      rowDestination(row({ ...alert, trigger_slug: 'reminder.0a1b2c3d4e5f', url: '/workspaces/p1/reminders?notification=n1' })),
     ).toBe('reminders');
     expect(
-      rowDestination(row({ ...alert, trigger_slug: 'nightly', url: '/projects/p1/customize/triggers?notification=n1' })),
+      rowDestination(row({ ...alert, trigger_slug: 'nightly', url: '/workspaces/p1/admin/triggers?notification=n1' })),
     ).toBe('triggers');
   });
 
@@ -164,7 +237,7 @@ describe('tags and types', () => {
 
 describe('openedNotificationId', () => {
   const id = '0192f0c4-0000-7000-8000-000000000009';
-  const message = { type: 'kortix:notification-open', url: `https://app.example.test/projects/p1/sessions/s?notification=${id}` };
+  const message = { type: 'kortix:notification-open', url: `https://app.example.test/workspaces/p1/sessions/s?notification=${id}` };
 
   test('reads the id from the service worker message', () => {
     expect(openedNotificationId(message)).toBe(id);
@@ -172,8 +245,8 @@ describe('openedNotificationId', () => {
 
   test('ignores another message, a url without an id, and a non-uuid id', () => {
     expect(openedNotificationId({ ...message, type: 'other' })).toBeNull();
-    expect(openedNotificationId({ ...message, url: 'https://app.example.test/projects/p1' })).toBeNull();
-    expect(openedNotificationId({ ...message, url: '/projects/p1?notification=n1' })).toBeNull();
+    expect(openedNotificationId({ ...message, url: 'https://app.example.test/workspaces/p1' })).toBeNull();
+    expect(openedNotificationId({ ...message, url: '/workspaces/p1?notification=n1' })).toBeNull();
     expect(openedNotificationId({ type: message.type })).toBeNull();
     expect(openedNotificationId(null)).toBeNull();
   });

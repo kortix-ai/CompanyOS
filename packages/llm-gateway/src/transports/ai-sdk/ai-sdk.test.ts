@@ -794,7 +794,7 @@ describe('ai-sdk anthropic/bedrock extended thinking (ported from native)', () =
     }
     for (const id of ['us.amazon.nova-micro-v1:0', 'xai.grok-4.6']) {
       // No verified mapping for these families yet: the effort is DROPPED and
-      // the plain Converse request goes out. opencode sends a default effort
+      // the plain Converse request goes out. opencode sent a default effort
       // for every reasoning-capable model, so refusing it (as #6887 briefly
       // did) refused the model — including the managed Grok default.
       const args = buildAiSdkArgs({ messages: [], reasoning_effort: 'high' }, 'bedrock', {
@@ -1485,6 +1485,84 @@ describe('Piece A — OpenAI Responses API absorbed into the ai-sdk engine', () 
       expect((failure as UpstreamHttpError).body).toContain('unauthorized_unknown');
     });
 
+    // KRTX-3421: these threw a raw TypeError outside the error mapping, which
+    // counted as a network failure, so five of them opened a shared breaker.
+    it('a tools or tool_calls item that is not an object fails as a 400 before any fetch', async () => {
+      for (const patch of [
+        { tools: [null] },
+        { messages: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: '', tool_calls: [null] }] },
+      ]) {
+        let fetched = 0;
+        const failure = await callUpstreamViaAiSdk({ messages: [{ role: 'user', content: 'hi' }], ...patch }, codex, {
+          fetch: async () => {
+            fetched++;
+            return new Response('{}', { status: 200 });
+          },
+        }).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        const status = failure instanceof UpstreamHttpError ? failure.status : String(failure);
+        expect({ patch, status, fetched }).toEqual({ patch, status: 400, fetched: 0 });
+      }
+    });
+
+    // Strix on #11455: nesting hidden inside a tool-call `arguments` string passed
+    // the wire-JSON depth bound, then overflowed in the SDK outside the build
+    // step's catch, and a raw RangeError counted as a retryable network failure.
+    it('a tool-call arguments string nested 50,000 levels deep fails as a 400, never a network error', async () => {
+      const deepArguments = '{"a":'.repeat(50_000) + '1' + '}'.repeat(50_000);
+      const failure = await callUpstreamViaAiSdk({
+        messages: [
+          { role: 'user', content: 'hi' },
+          { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'f', arguments: deepArguments } }] },
+          { role: 'tool', tool_call_id: 'c1', content: 'done' },
+          { role: 'user', content: 'go on' },
+        ],
+      }, codex, { fetch: async () => new Response('{}', { status: 200 }) }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const status = failure instanceof UpstreamHttpError ? failure.status : String(failure).slice(0, 80);
+      expect(status).toBe(400);
+    });
+
+    // Strix on #11455: an object-shaped but ill-typed tools item passed every
+    // guard, then the SDK threw a raw TypeError before any fetch, which counted
+    // as a network failure and tripped the shared breaker.
+    it.each([false, true])('an ill-typed tools item fails as a 400 before any fetch (client stream: %p)', async (stream) => {
+      let fetched = 0;
+      const failure = await callUpstreamViaAiSdk({
+        stream,
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ type: 'function', function: { name: 'f', description: 5, parameters: { type: 'object', properties: {} } } }],
+      }, codex, {
+        fetch: async () => {
+          fetched++;
+          return new Response('{}', { status: 200 });
+        },
+      }).then(
+        async (response) => (response.ok ? null : response.status),
+        (error: unknown) => error,
+      );
+      const status = failure instanceof UpstreamHttpError ? failure.status : String(failure).slice(0, 80);
+      expect({ status, fetched }).toEqual({ status: 400, fetched: 0 });
+    });
+
+    // The guard rail of that rule: a failure after the request left is still a
+    // network failure, so the fallback chain and the breaker still see it.
+    it('a fetch that throws stays a NetworkError', async () => {
+      const failure = await callUpstreamViaAiSdk({ messages: [{ role: 'user', content: 'hi' }] }, codex, {
+        fetch: async () => {
+          throw new TypeError('fetch failed');
+        },
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(NetworkError);
+    });
+
     it('collapses a streamed tool call into the same JSON shape generateText would produce', async () => {
       const call = { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'get_weather' };
       const { json, sentBodies } = await collapse(
@@ -1913,5 +1991,64 @@ describe('buildAiSdkArgs — extra OpenAI-only fields via providerOptions (logit
   it('never maps these OpenAI-only fields for anthropic/bedrock — matches native, which has no equivalent for either transport', () => {
     expect(buildAiSdkArgs(body, 'anthropic').providerOptions).toBeUndefined();
     expect(buildAiSdkArgs(body, 'bedrock').providerOptions).toBeUndefined();
+  });
+});
+
+describe('ai-sdk mid-stream failure keeps the usage estimate', () => {
+  // The relay settles an estimate only when the stream reported no usage
+  // (simple-handler settle: `!reported && outputChars > 0`). A failed stream
+  // must therefore end with no zero-usage frame and no `stop` finish.
+  const failedFinishes = (sse: string) =>
+    frames(sse).flatMap((c: any) => (c.choices ?? []).map((ch: any) => ch?.finish_reason)).filter(Boolean);
+
+  it('an error part after output emits no stop finish and no usage frame', async () => {
+    const sse = await readAll(
+      openAiSseFromFullStream(
+        parts(
+          { type: 'text-delta', id: '1', text: 'partial answer' },
+          { type: 'error', error: Object.assign(new Error('overloaded'), { statusCode: 529 }) },
+        ),
+        CTX,
+      ),
+    );
+    const scanned = scan(sse);
+    expect(scanned.error?.code).toBe(529);
+    expect(scanned.usage).toBeNull();
+    expect(scanned.outputChars).toBeGreaterThan(0);
+    expect(failedFinishes(sse)).toEqual([]);
+  });
+
+  it('an iterator throw after output emits no stop finish and no usage frame', async () => {
+    async function* cut() {
+      yield { type: 'text-delta', id: '1', text: 'partial' } as { type: string; [k: string]: unknown };
+      throw new Error('socket hang up');
+    }
+    const sse = await readAll(openAiSseFromFullStream(cut(), CTX));
+    const scanned = scan(sse);
+    expect(scanned.error?.message).toBe('socket hang up');
+    expect(scanned.usage).toBeNull();
+    expect(failedFinishes(sse)).toEqual([]);
+  });
+
+  it('an abort part reads as a failure, not a clean stop', async () => {
+    const sse = await readAll(
+      openAiSseFromFullStream(parts({ type: 'text-delta', id: '1', text: 'partial' }, { type: 'abort' }), CTX),
+    );
+    expect(scan(sse).usage).toBeNull();
+    expect(failedFinishes(sse)).toEqual([]);
+  });
+
+  it('a failure after the provider reported usage keeps the real usage', async () => {
+    const sse = await readAll(
+      openAiSseFromFullStream(
+        parts(
+          { type: 'text-delta', id: '1', text: 'partial' },
+          { type: 'finish-step', finishReason: 'stop', usage: usage() },
+          { type: 'error', error: new Error('cut') },
+        ),
+        CTX,
+      ),
+    );
+    expect(scan(sse).usage?.promptTokens).toBe(100);
   });
 });

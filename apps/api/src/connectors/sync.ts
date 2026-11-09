@@ -1,16 +1,5 @@
-import {
-  connectorConnections,
-  connectorActions,
-  connectorPolicies,
-  connectorPolicySets,
-  connectors,
-  connectorProjectPolicies,
-  connectorProjectSettings,
-  connectorSyncFences,
-  projectSessionConnectorBindings,
-  projects,
-  tunnelConnections,
-} from '@kortix/db';
+import { createHash } from 'node:crypto';
+import { connectorConnections, connectorActions, connectorPolicies, connectorPolicySets, connectors, connectorProjectPolicies, connectorProjectSettings, connectorSyncFences, projectSessionConnectorBindings, tunnelConnections } from '@kortix/db';
 /**
  * Connector materialization sweep — read `connectors:` from kortix.yaml,
  * fetch + normalize each connector's catalog, and upsert into the DB
@@ -22,7 +11,7 @@ import {
  */
 import { and, eq, inArray, isNotNull, notExists, or, sql } from 'drizzle-orm';
 import { getImpersonationContext } from '../shared/impersonation';
-import { parse as parseToml } from 'smol-toml';
+import { parse as parseYaml } from 'yaml';
 import { hasEmailInboxes, loadSlackInstall, purgeLegacyEmailState } from '../channels/install-store';
 import { assertAllowedEndpointUrl, assertAllowedSourceAddress } from '../marketplace/catalog';
 import { safeEgressFetch, UnsafeEgressError } from '../shared/ssrf-guard';
@@ -35,7 +24,7 @@ import {
 } from '../projects/connectors';
 import { type GitBackedProject, isRepoFileNotFoundError, readRepoFile } from '../projects/git';
 import { mapWithConcurrency } from '../shared/map-with-concurrency';
-import { MANIFEST_PROJECT_NAME_KEY, metadataMerge, projectNameAction, withProjectGitAuth } from '../projects/surface';
+import { MANIFEST_PROJECT_NAME_KEY, metadataMerge, projectNameAction, renameAccountOfSoleProject, withProjectGitAuth } from '../projects/surface';
 import { extractProjectPolicies } from '../projects/policies';
 import { hideSupersededSlack } from './channel-rules';
 import {
@@ -43,7 +32,7 @@ import {
   getProjectSecretValueForConsumer,
 } from '../projects/secrets';
 import { SecretUndecryptableError } from '../secrets/undecryptable';
-import { type GitTriggerSpec, extractTriggers, readManifest } from '../projects/triggers';
+import { type GitTriggerSpec, extractTriggers, readManifest, runtimeManifest } from '../projects/triggers';
 import { syncDeclaredApps } from '../apps/app-manifest';
 import { reconcileProjectTriggerRuntime } from '../projects/trigger-runtime-catalog';
 import { reconcileEventSubscriptions } from '../projects/surface';
@@ -51,7 +40,7 @@ import { db } from '../shared/db';
 import { isUniqueViolation } from '../shared/postgres-errors';
 import { ensureChannelConnectorDeclared, removeChannelConnectorDeclared } from './channel-manifest';
 import { synthesizeChannelConnectors } from './channel-materialize';
-import { channelApiBase, channelCatalog, channelDefaultSlug } from './channels';
+import { channelApiBase, channelCatalog } from './channels';
 import {
   COMPUTER_CONNECTOR_NAME,
   COMPUTER_SLUG,
@@ -90,6 +79,7 @@ import {
   mergeAuthDiscoveries,
 } from './auth-discovery';
 import type { HttpRouteSpec, NormalizedAction } from './types';
+import { projectsView, updateProjectRows, updateProjectRowsReturning } from '../workspaces/rows';
 
 export interface SyncResult {
   synced: number;
@@ -108,11 +98,30 @@ export function shouldReuseConnectorCatalog(input: {
     !input.force &&
     input.hasExisting &&
     input.existingStatus !== 'error' &&
-    input.provider !== 'channel' &&
-    input.provider !== 'computer' &&
     (input.provider !== 'mcp' || input.mcpHasActions) &&
     input.manifestMatches
   );
+}
+
+/** The catalog a channel or computer connector gets from code, never from the network. */
+function builtCatalog(spec: ConnectorSpec): { actions: NormalizedAction[]; server: string | null } | null {
+  // Server = the platform API base.
+  if (spec.provider === 'channel') return { actions: channelCatalog(spec.platform ?? ''), server: channelApiBase(spec.platform ?? '') };
+  // The tunnel RPC method set. The connector config binds the machine at materialization.
+  if (spec.provider === 'computer') return { actions: computerCatalog(), server: null };
+  return null;
+}
+
+/**
+ * The `manifest_hash` a connector row stores. For a catalog built from code it
+ * covers that catalog too, so a release that changes it re-materializes the
+ * row, and an unchanged one is reused instead of deleted and re-inserted on
+ * every sweep pass (51,732 computer action rows per ~45 min on prod, 2026-10-30).
+ */
+function storedManifestHash(spec: ConnectorSpec): string {
+  const built = builtCatalog(spec);
+  const hash = manifestHashForConnector(spec);
+  return built ? createHash('sha256').update(hash).update(JSON.stringify(built)).digest('hex') : hash;
 }
 
 export async function rematerializeCatalogAfterCredentialUpdate(
@@ -243,7 +252,7 @@ export async function discoverDraftConnectorAuth(
   projectId: string,
   draft: Record<string, unknown>,
 ): Promise<ConnectorAuthDiscovery> {
-  const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   if (!row) throw new Error('project not found');
   return discoverConnectorAuthFromSource(await withProjectGitAuth(row), draft);
 }
@@ -383,9 +392,9 @@ export async function reconcileChannelConnectors(
 ): Promise<void> {
   try {
     const [row] = await db
-      .select({ accountId: projects.accountId, metadata: projects.metadata })
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
+      .select({ accountId: projectsView.accountId, metadata: projectsView.metadata })
+      .from(projectsView)
+      .where(eq(projectsView.projectId, projectId))
       .limit(1);
     if (!row) return;
     const slackInstalled = (await loadSlackInstall(projectId).catch(() => null)) != null;
@@ -464,7 +473,7 @@ export async function syncProjectConnectors(
   _accountId: string,
   opts: SyncOptions = {},
 ): Promise<SyncResult> {
-  const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+  const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
   if (!row)
     return {
       synced: 0,
@@ -480,7 +489,7 @@ export async function syncProjectConnectors(
 }
 
 async function syncProjectConnectorsFenced(
-  row: typeof projects.$inferSelect,
+  row: typeof projectsView.$inferSelect,
   accountId: string,
   fence: ConnectorSyncFence,
   opts: SyncOptions,
@@ -522,7 +531,9 @@ async function syncProjectConnectorsFenced(
   let declaredSpecs: ConnectorSpec[] = [];
   let triggerSpecs: GitTriggerSpec[] | null = null;
   if (manifest) {
-    const triggers = extractTriggers(manifest);
+    // The triggers a running project applies: one with a validation error is
+    // kept, off (`runtimeManifest`), so its runtime row and grants survive.
+    const triggers = extractTriggers(runtimeManifest(manifest));
     triggerSpecs = triggers.specs;
     await reconcileProjectTriggerRuntime(projectId, triggers.specs);
     errors.push(...triggers.errors.map((e) => ({ slug: e.slug, error: e.error })));
@@ -649,25 +660,17 @@ async function syncProjectConnectorsFenced(
       // unchanged (hash match) and it last materialized cleanly, skip the
       // network catalog fetch. The DB row's cheap fields (name/enabled/
       // policies) are still reconciled inside upsertConnector. `force` (manual
-      // sync) always re-fetches; error rows always retry.
-      //
-      // EXCEPT for channel connectors, which are never skipped. Their catalog is
-      // not fetched at all — `resolveCatalog` builds it locally from
-      // `channelCatalog(platform)`, i.e. from OUR OWN CODE — so there is no
-      // network cost to save, and `manifestHashForConnector` deliberately hashes
-      // only the spec (provider/platform/auth/...), which a code-side action
-      // change does not touch. Skipping therefore froze every existing channel
-      // connector's action list at whatever shipped the day it materialized:
-      // the same was true of any Slack/Teams/email action ever added.
-      // Re-resolving locally on every sync is free and keeps deployed projects
-      // honest.
+      // sync) always re-fetches; error rows always retry. A channel or computer
+      // catalog is built from our own code, and its stored hash covers that
+      // catalog (`storedManifestHash`): a release that adds a Slack, Teams,
+      // email or computer action re-materializes every such connector once.
       const catalogUnchanged = shouldReuseConnectorCatalog({
         force: opts.force === true,
         hasExisting: !!ex,
         existingStatus: ex?.status ?? null,
         provider: spec.provider,
         mcpHasActions: ex ? connectorsWithActions.has(ex.connectorId) : false,
-        manifestMatches: ex?.manifestHash === manifestHashForConnector(spec),
+        manifestMatches: ex?.manifestHash === storedManifestHash(spec),
       });
       let catalogCredential: string | null = null;
       let memberPublished = false;
@@ -753,22 +756,25 @@ async function syncProjectConnectorsFenced(
   // and the marketplace gate) follows every push, not only PUT /default-agent.
   const declaredDefaultAgent = typeof manifest?.raw.default_agent === 'string' ? manifest.raw.default_agent.trim() : '';
   if (declaredDefaultAgent) {
-    await db.update(projects)
-      .set({ metadata: metadataMerge({ default_agent: declaredDefaultAgent }) })
-      .where(and(eq(projects.projectId, projectId), sql`coalesce(${projects.metadata}->>'default_agent', '') <> ${declaredDefaultAgent}`));
+    await updateProjectRows(
+      and(eq(projectsView.projectId, projectId), sql`coalesce(${projectsView.metadata}->>'default_agent', '') <> ${declaredDefaultAgent}`),
+      { metadata: metadataMerge({ default_agent: declaredDefaultAgent }) },
+    );
   }
 
   // kortix.yaml owns project.name: a push that changes it renames the project.
   if (manifest) {
-    const [current] = await db.select({ name: projects.name, metadata: projects.metadata }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    const [current] = await db.select({ name: projectsView.name, metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     const project = manifest.raw.project as { name?: unknown } | undefined;
     const marker = (current?.metadata as Record<string, unknown> | null)?.[MANIFEST_PROJECT_NAME_KEY];
     const action = current ? projectNameAction(project?.name, marker, current.name) : 'none';
     if (action !== 'none') {
       const declaredName = String(project!.name).trim();
-      await db.update(projects)
-        .set({ ...(action === 'apply' ? { name: declaredName } : {}), metadata: metadataMerge({ [MANIFEST_PROJECT_NAME_KEY]: declaredName }) })
-        .where(eq(projects.projectId, projectId));
+      const [renamed] = await updateProjectRowsReturning(eq(projectsView.projectId, projectId), {
+        ...(action === 'apply' ? { name: declaredName } : {}),
+        metadata: metadataMerge({ [MANIFEST_PROJECT_NAME_KEY]: declaredName }),
+      });
+      if (action === 'apply' && renamed) await renameAccountOfSoleProject(renamed, declaredName);
     }
   }
 
@@ -890,7 +896,7 @@ async function upsertConnector(
   existingId: string | null,
   fence: ConnectorSyncFence | null = null,
 ): Promise<void> {
-  const manifestHash = manifestHashForConnector(spec);
+  const manifestHash = storedManifestHash(spec);
   const { status, lastError } = catalogPersistenceState(spec.enabled, catalog);
   // New connector definitions never carry a secret reference. An existing
   // authSecret is an explicit control-plane binding and must survive sync.
@@ -1260,13 +1266,13 @@ export async function ensureProjectComputer(
   // allows reads, and the rows would outlive it.
   if (!config.TUNNEL_ENABLED || getImpersonationContext()) return;
   const [project] = await db
-    .select({ accountId: projects.accountId, existing: connectors.connectorId })
-    .from(projects)
+    .select({ accountId: projectsView.accountId, existing: connectors.connectorId })
+    .from(projectsView)
     .leftJoin(
       connectors,
-      and(eq(connectors.projectId, projects.projectId), eq(connectors.providerType, 'computer')),
+      and(eq(connectors.projectId, projectsView.projectId), eq(connectors.providerType, 'computer')),
     )
-    .where(eq(projects.projectId, projectId))
+    .where(eq(projectsView.projectId, projectId))
     .orderBy(sql`${connectors.slug} = ${COMPUTER_SLUG} desc`, connectors.createdAt)
     .limit(1);
   if (!project) return;
@@ -1431,18 +1437,9 @@ export async function resolveCatalog(
         });
         return { actions: normalizeComposio(tools, spec.app), server: null };
       }
-      case 'channel': {
-        // Fixed, local catalog — no network fetch. Server = the platform API base.
-        return {
-          actions: channelCatalog(spec.platform ?? ''),
-          server: channelApiBase(spec.platform ?? ''),
-        };
-      }
-      case 'computer': {
-        // Fixed, local catalog (the tunnel RPC method set) — no network, no
-        // server. The connector config binds the machine at materialization.
-        return { actions: computerCatalog(), server: null };
-      }
+      case 'channel':
+      case 'computer':
+        return builtCatalog(spec)!;
       default:
         return { actions: [], server: null };
     }
@@ -1641,7 +1638,7 @@ async function loadHttpRoutes(
       throw err;
     }
   }
-  const parsed = /\.toml$/i.test(spec) ? (parseToml(raw) as any) : JSON.parse(raw);
+  const parsed = /\.ya?ml$/i.test(spec) ? parseYaml(raw) : JSON.parse(raw);
   const routes = Array.isArray(parsed?.routes) ? parsed.routes : [];
   return routes as HttpRouteSpec[];
 }

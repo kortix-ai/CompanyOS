@@ -33,10 +33,10 @@ export const FANOUT_CONCURRENCY = 6;
  *
  * T3 (2026-09-14, #7016): every `/prompt_async|/message|/command` used to
  * post `refreshModels: true` unconditionally. The daemon's `/kortix/env`
- * already gates the actual reload on a value DELTA (`routes/env.ts`'s
- * `result.changed || opencodeEnvChanged`), so a byte-identical resend never
- * disposes/respawns OpenCode by itself — but it still paid for the round trip
- * on every turn.
+ * already gates the actual reload on a value DELTA (pi's
+ * `result.changed || runtimeEnvChanged` in kortixd `harness/pi/control.ts`),
+ * so a byte-identical resend never reloads the runtime by itself — but it
+ * still paid for the round trip on every turn.
  *
  * INCIDENT (2026-09-27): this memo is in-PROCESS, and the API runs at more
  * than one replica (`desired_count = 2` on dev; see
@@ -44,7 +44,8 @@ export const FANOUT_CONCURRENCY = 6;
  * requests, so a session's consecutive turns routinely land on DIFFERENT
  * replicas — each one's memo is cold for a sandbox it has never personally
  * pushed to, so it re-posted `/kortix/env` and re-triggered a full OpenCode
- * respawn almost every turn instead of only the first. Measured: `send →
+ * respawn (the runtime of that date) almost every turn instead of only the
+ * first. Measured: `send →
  * model starts` at 4.9s / 2.5s / 7.0s across three back-to-back trivial
  * prompts in ONE session, with the daemon logging a full
  * `[env] project env applied` 3.3–5.3s after every send.
@@ -151,42 +152,109 @@ export function __pendingEnvChecksForTests(): Promise<void>[] {
 }
 
 /**
+ * A new session's first prompt resolves the box's env (session rows, the
+ * agent's secret grant through a manifest read, the network boundary) AFTER the
+ * box is ready: preview 2026-11-03, 104–123 ms p50 and 295–398 ms p90 of every
+ * first prompt, with the grant read up to 466 ms. None of those reads needs the
+ * box. The delivery starts them when the box row goes active, about a second
+ * before the daemon is ready (`prefetchPromptEnv`), and the first sync takes
+ * them once.
+ *
+ * Freshness: the result is at most `PROMPT_ENV_PREFETCH_TTL_MS` old and only
+ * serves the agent and the person it was read for: a prompt bound to another
+ * person (the turn-identity bind runs just before the sync) resolves afresh, so
+ * no one's personal secrets reach a turn that acts for someone else. A prefetch that failed in any part is not
+ * used: the sync resolves afresh, so a failure still surfaces where and how it
+ * always did. A secret written in the second between the prefetch and the push
+ * reaches the box at the next prompt, as with the trusted fast path below.
+ */
+export const PROMPT_ENV_PREFETCH_TTL_MS = 15_000;
+const PROMPT_ENV_PREFETCH_MAX = 2_000;
+type PrefetchedPromptEnv = {
+  /** The person the session token acted for when the reads ran (personal secrets depend on it). */
+  person: string | null;
+  context: Awaited<ReturnType<typeof loadSessionSecretContext>>;
+  boundary: Awaited<ReturnType<typeof resolveSessionNetworkBoundary>>;
+  snapshot: Awaited<ReturnType<typeof resolveSandboxEnvSnapshot>>;
+};
+// replica-local: the delivery that prefetches is the one that forwards the prompt.
+const prefetchedPromptEnv = new Map<string, { agent: string; atMs: number; ready: Promise<PrefetchedPromptEnv | null> }>();
+
+export function prefetchPromptEnv(projectId: string, sessionId: string, requestedAgent: string | null | undefined): void {
+  const agent = requestedAgent ?? '';
+  const now = Date.now();
+  const existing = prefetchedPromptEnv.get(sessionId);
+  if (existing && existing.agent === agent && now - existing.atMs < PROMPT_ENV_PREFETCH_TTL_MS) return;
+  for (const [key, entry] of prefetchedPromptEnv) {
+    if (now - entry.atMs >= PROMPT_ENV_PREFETCH_TTL_MS || prefetchedPromptEnv.size >= PROMPT_ENV_PREFETCH_MAX) {
+      prefetchedPromptEnv.delete(key);
+    } else break;
+  }
+  const ready = (async () => {
+    const person = await sessionTokenPerson(sessionId);
+    const secretContext = loadSessionSecretContext(projectId, sessionId, requestedAgent ?? null);
+    const [context, boundary, snapshot] = await Promise.all([
+      secretContext,
+      resolveSessionNetworkBoundary(projectId, sessionId, requestedAgent ?? null, secretContext),
+      resolveSandboxEnvSnapshot(projectId, sessionId, requestedAgent ?? null, secretContext),
+    ]);
+    return { person, context, boundary, snapshot };
+  })().catch(() => null);
+  prefetchedPromptEnv.delete(sessionId);
+  prefetchedPromptEnv.set(sessionId, { agent, atMs: now, ready });
+}
+
+/** The prefetch for this session and agent, at most once and only while fresh. */
+function takePrefetchedPromptEnv(sessionId: string, requestedAgent: string | null | undefined): Promise<PrefetchedPromptEnv | null> | null {
+  const entry = prefetchedPromptEnv.get(sessionId);
+  if (!entry) return null;
+  prefetchedPromptEnv.delete(sessionId);
+  if (entry.agent !== (requestedAgent ?? '') || Date.now() - entry.atMs >= PROMPT_ENV_PREFETCH_TTL_MS) return null;
+  return entry.ready;
+}
+
+export function __resetPromptEnvPrefetchForTests(): void {
+  prefetchedPromptEnv.clear();
+}
+
+/**
  * Digest of EVERY value `syncSandboxEnvForPrompt` sends that can move the
- * daemon's `result.changed || opencodeEnvChanged` gate (`routes/env.ts:196`):
+ * daemon's `result.changed || runtimeEnvChanged` gate (kortixd
+ * `harness/pi/control.ts`):
  *
  *   - `snapshot.revision` — a sha256 of the full granted project-secrets env
  *     (`projectSecretsRevision`), so any secret add/remove/rotation changes it.
  *     This is NOT limited to "model-relevant" secrets on purpose: a project
- *     secret delta is the daemon's ONLY signal to respawn opencode so its
- *     process env picks the new value up (see the comment on
+ *     secret delta is the daemon's ONLY signal to reload the runtime so its
+ *     env picks the new value up (see the comment on
  *     `pushSessionScopeToSandbox`), and the per-turn sync is sometimes the
  *     only path that ever re-delivers it (see `runPrePromptEnvSync`'s comment
  *     on `/command` self-heal). Narrowing this to a "model tokens" subset
  *     would silently stop propagating an unrelated secret rotation.
  *   - `snapshot.capabilitiesJson` — pushed as `KORTIX_SECRET_CAPABILITIES`,
- *     which is on the daemon's `RESPAWN_REQUIRED_ENV_NAMES` list.
+ *     which is on pi's `RUNTIME_ENV_NAMES` list.
  *   - the LLM gateway base URL.
- *   - `args.opencodeEnv` — an explicit runtime-env push a caller asked this
+ *   - `args.runtimeEnv` — an explicit runtime-env push a caller asked this
  *     same call to carry (see `continueSession`/continue-session.ts). Omitting it would silently drop that
  *     caller's request to apply its own change.
  *
- * Keys of `opencodeEnv` are sorted so caller-side object literal order never
+ * Keys of `runtimeEnv` are sorted so caller-side object literal order never
  * produces a spurious digest change.
  */
 function promptModelSignature(input: {
   revision: string;
   capabilitiesJson: string;
   llmGatewayBaseUrl: string;
-  opencodeEnv?: Record<string, string | null>;
+  runtimeEnv?: Record<string, string | null>;
 }): string {
-  const opencodeEnvEntries = Object.entries(input.opencodeEnv ?? {}).sort(([a], [b]) =>
+  const runtimeEnvEntries = Object.entries(input.runtimeEnv ?? {}).sort(([a], [b]) =>
     a.localeCompare(b),
   );
   return JSON.stringify([
     input.revision,
     input.capabilitiesJson,
     input.llmGatewayBaseUrl,
-    opencodeEnvEntries,
+    runtimeEnvEntries,
   ]);
 }
 
@@ -264,9 +332,9 @@ async function sessionTokenPerson(sessionId: string): Promise<string | null> {
  * triggering prompt, synchronously, before this function is ever reached).
  *
  * `refreshModels: true` is safe to send unconditionally here: the daemon's
- * `/kortix/env` no-ops a byte-identical push (`routes/env.ts`'s
- * `result.changed || opencodeEnvChanged` gate) — this call cannot itself
- * cause a respawn, so it can never interrupt whatever turn is running on the
+ * `/kortix/env` no-ops a byte-identical push (the
+ * `result.changed || runtimeEnvChanged` gate) — this call cannot itself
+ * cause a reload, so it can never interrupt whatever turn is running on the
  * box concurrently with it.
  */
 function scheduleBackgroundEnvRefresh(args: {
@@ -276,7 +344,7 @@ function scheduleBackgroundEnvRefresh(args: {
   providerHeaders: Record<string, string>;
   serviceKey: string;
   snapshot: SandboxEnvSnapshot;
-  opencodeEnv?: Record<string, string | null>;
+  runtimeEnv?: Record<string, string | null>;
   llmGatewayBaseUrl: string;
   signature: string;
   agent: string;
@@ -297,7 +365,7 @@ function scheduleBackgroundEnvRefresh(args: {
         serviceKey: args.serviceKey,
         snapshot: args.snapshot,
         refreshModels: true,
-        opencodeEnv: args.opencodeEnv,
+        runtimeEnv: args.runtimeEnv,
         llmGatewayBaseUrl: args.llmGatewayBaseUrl,
       });
       const appliedAtMs = Date.now();
@@ -347,8 +415,8 @@ interface PromptEnvSyncArgs {
    *  grant is resolved from THIS, not from the session's create-time agent —
    *  see resolveOwnerRawEnv. Null/'default' means "the session's own agent". */
   requestedAgent?: string | null;
-  /** Runtime env the daemon applies before the prompt reaches OpenCode. */
-  opencodeEnv?: Record<string, string | null>;
+  /** Runtime env the daemon applies before the prompt reaches the runtime. */
+  runtimeEnv?: Record<string, string | null>;
 }
 
 /**
@@ -370,7 +438,7 @@ interface PromptEnvSyncArgs {
  * Never trusted: a different agent (its grant is resolved and pushed before it
  * runs), a different person (the session token now acts for someone else: the
  * box may hold the previous person's personal secrets), a caller's explicit
- * `opencodeEnv`, a process that has not confirmed this box itself, and a memo
+ * `runtimeEnv`, a process that has not confirmed this box itself, and a memo
  * the durable record no longer confirms (the box's daemon restarted, or
  * another replica pushed a different env — `memoConfirmedBy`).
  */
@@ -379,7 +447,7 @@ export async function syncSandboxEnvForPrompt(args: PromptEnvSyncArgs): Promise<
   const known = lastPromptModelSignature.get(args.externalId);
   const candidate =
     known &&
-    !args.opencodeEnv &&
+    !args.runtimeEnv &&
     known.agent === (args.requestedAgent ?? '') &&
     Date.now() - known.pushedAtMs < ENV_SYNC_BACKGROUND_REFRESH_STALE_MS
       ? known
@@ -423,22 +491,33 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
   // boundary's fail-closed grant error included.
   // Both read the session row, the project row, the running agent's grant and
   // the personal-override owner. One context answers both.
-  const secretContext = loadSessionSecretContext(args.projectId, args.sessionId, args.requestedAgent);
+  // The first prompt's reads, started while the box booted (`prefetchPromptEnv`).
+  // A sync takes it only when every read succeeded; otherwise everything below
+  // resolves afresh, exactly as before.
+  const taken = mode === 'sync' ? await takePrefetchedPromptEnv(args.sessionId, args.requestedAgent) : null;
+  const prefetched = taken && taken.person === person ? taken : null;
+  const secretContext = prefetched
+    ? Promise.resolve(prefetched.context)
+    : loadSessionSecretContext(args.projectId, args.sessionId, args.requestedAgent);
   secretContext.catch(() => undefined);
-  const boundaryRead = resolveSessionNetworkBoundary(
-    args.projectId,
-    args.sessionId,
-    args.requestedAgent,
-    secretContext,
-  );
+  // When the snapshot's inputs landed (ms from t0): the session rows, then the
+  // agent's secret grant (a manifest read). Logged beside `timing` to split the
+  // per-prompt `snapshot` cost of a large project.
+  const at: Record<string, number> = {};
+  if (prefetched) at.prefetched = 1;
+  secretContext.then(() => {
+    at.context = Math.round(performance.now() - t0);
+  }, () => {});
+  const boundaryRead = prefetched
+    ? Promise.resolve(prefetched.boundary)
+    : resolveSessionNetworkBoundary(args.projectId, args.sessionId, args.requestedAgent, secretContext);
   boundaryRead.catch(() => undefined);
-  const snapshot = await resolveSandboxEnvSnapshot(
-    args.projectId,
-    args.sessionId,
-    args.requestedAgent,
-    secretContext,
-  );
+  const snapshot = prefetched
+    ? prefetched.snapshot
+    : await resolveSandboxEnvSnapshot(args.projectId, args.sessionId, args.requestedAgent, secretContext);
   lap('snapshot');
+  const grantSettled = (await secretContext).grantSettledAt?.();
+  if (grantSettled != null) at.grant = Math.round(grantSettled - t0);
   if (!snapshot) return;
   // Resolving the bindings stays FAIL-CLOSED: it re-reads the agent's grant, and
   // an unresolvable grant must refuse the prompt (the caller maps
@@ -517,7 +596,7 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
   lap('arm');
   const llmGatewayBaseUrl = resolveLlmGatewayBaseUrl(config.KORTIX_URL);
   // Only ask the daemon to reload when something that could move ITS
-  // `result.changed || opencodeEnvChanged` gate has actually changed since the
+  // `result.changed || runtimeEnvChanged` gate has actually changed since the
   // last CONFIRMED-applied signature for this sandbox. "Confirmed" is checked
   // first against this process's own memo, then — only on a memo miss —
   // against the DURABLE per-session record any replica may have written
@@ -532,7 +611,7 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
     revision: snapshot.revision,
     capabilitiesJson: snapshot.capabilitiesJson,
     llmGatewayBaseUrl,
-    opencodeEnv: args.opencodeEnv,
+    runtimeEnv: args.runtimeEnv,
   });
   if (mode === 'check') {
     if (lastPromptModelSignature.get(args.externalId)?.signature !== signature) {
@@ -575,7 +654,7 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
         providerHeaders: args.providerHeaders,
         serviceKey: args.serviceKey,
         snapshot,
-        opencodeEnv: args.opencodeEnv,
+        runtimeEnv: args.runtimeEnv,
         llmGatewayBaseUrl,
         signature,
         agent,
@@ -584,20 +663,20 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
     }
     console.log(
       `[env-sync] timing sandbox=${args.externalId} push=skipped ` +
-        `background_refresh=${backgroundRefreshScheduled} ${JSON.stringify(timing)}`,
+        `background_refresh=${backgroundRefreshScheduled} ${JSON.stringify({ ...timing, at })}`,
     );
     return;
   }
   // `decision.action === 'push'`: either the first prompt of a session (no
   // memo, no durable record) or a genuine change (the signature matches
   // neither) — always a real reload request.
-  const { opencodeState } = await postEnvToDaemon({
+  const { runtimeState } = await postEnvToDaemon({
     previewUrl: args.previewUrl,
     providerHeaders: args.providerHeaders,
     serviceKey: args.serviceKey,
     snapshot,
     refreshModels: true,
-    opencodeEnv: args.opencodeEnv,
+    runtimeEnv: args.runtimeEnv,
     llmGatewayBaseUrl,
   });
   // Remember only AFTER a successful push — in-process AND durably. A throw
@@ -611,23 +690,23 @@ async function resolveAndSyncEnv(args: PromptEnvSyncArgs, mode: 'sync' | 'check'
   // stale by observation.
   backgroundRefreshBackoffUntil.delete(args.externalId);
   lap('push');
-  // A model-affecting change just restarted opencode (state !== 'ok'). The prompt
-  // is forwarded the instant this returns, so block until opencode is serving —
-  // otherwise the forward hits the restart window and 503s "opencode not ready",
+  // A model-affecting change just restarted the runtime (state !== 'ok'). The
+  // prompt is forwarded the instant this returns, so block until the runtime
+  // is serving — otherwise the forward hits the restart window and 503s,
   // dropping the session's first prompt (the user then has to resend).
-  if (opencodeState && opencodeState !== 'ok') {
+  if (runtimeState && runtimeState !== 'ok') {
     const waitStartedAt = Date.now();
     const ready = await waitForDaemonRuntimeReady({
       previewUrl: args.previewUrl,
       providerHeaders: args.providerHeaders,
     });
     console.log(
-      `[env-sync] opencode restarted by prompt env-sync (state=${opencodeState}); ` +
+      `[env-sync] runtime restarted by prompt env-sync (state=${runtimeState}); ` +
         `waited ${Date.now() - waitStartedAt}ms for readiness before forwarding ` +
         `(ready=${ready}) session=${args.sessionId}`,
     );
   }
-  console.log(`[env-sync] timing sandbox=${args.externalId} push=sent refreshModels=true ${JSON.stringify(timing)}`);
+  console.log(`[env-sync] timing sandbox=${args.externalId} push=sent refreshModels=true ${JSON.stringify({ ...timing, at })}`);
 }
 
 export async function runBounded<T>(

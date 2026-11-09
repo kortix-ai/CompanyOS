@@ -7,7 +7,7 @@ canonical: "https://kortix.com/blog/kortix-vs-librechat"
 author: "team"
 tags: ["Comparisons"]
 ---
-LibreChat is the strong self-hosted chat interface teams use to reach many model providers from one window; Kortix is the open-source AI Operating System a company adopts when work has to leave the chat window. Both point at the models you choose, and both self-host. They part ways when a team needs one shared brain across every agent and every session, and a way to review work before it lands.
+LibreChat is the strong self-hosted chat interface teams use to reach many model providers from one window; Kortix is the open-source CompanyOS a company adopts when work has to leave the chat window. Both point at the models you choose, and both self-host. They part ways when a team needs one shared brain across every agent and every session, and a way to review work before it lands.
 
 ```logos
 label: 'Compared here:'
@@ -61,7 +61,7 @@ Agents are markdown, memory is plain files, and `kortix.yaml` declares the machi
 
 ## Every session lands as a change request
 
-Each Kortix session runs on its own isolated cloud computer, on a branch named after the session. The agent can install packages, run code, and break things, and only what it commits survives ([Kortix on GitHub](https://github.com/kortix-ai/suna)).
+Each Kortix session runs on its own isolated cloud computer, on a branch named after the session. The agent can install packages, run code, and break things, and only what it commits survives ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS)).
 
 Work reaches the default branch through a change request a person reads as a diff, so nothing lands unreviewed. You set each connector call to allow, ask or block, and you choose the model per agent with your own keys. Run it on Kortix Cloud, in your VPC or on-prem, or self-host for free.
 

@@ -1,0 +1,141 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import type { HarnessTurnService, RuntimePromptInput } from '@/harness/contract/turns'
+import { KORTIX_SERVICE_CALL_HEADER } from '@/lib/kortix-api/kortix-user-context'
+import { observeLoopLag, resetLoopLagSampleForTests } from '@/lib/loop-lag'
+import { createRuntimeRouter, parseRuntimePromptBody } from '@/routes/kortix/runtime'
+
+const TOKEN = 'sandbox-token'
+const cfg = { sandboxToken: TOKEN } as Parameters<typeof createRuntimeRouter>[0]
+const noQueries = {} as Parameters<typeof createRuntimeRouter>[1]
+
+describe('parseRuntimePromptBody', () => {
+  test.each([
+    [null, 'body must be a JSON object'],
+    [{ parts: [] }, 'parts must be a non-empty array'],
+    [{ parts: ['x'] }, 'parts must be objects'],
+    [{ parts: [{}], agent: 1 }, 'agent must be a string'],
+    [{ parts: [{}], model: 'bare' }, 'model must be "provider/model"'],
+    [{ parts: [{}], model: 'kortix/' }, 'model must be "provider/model"'],
+    [{ parts: [{}], no_reply: 'yes' }, 'no_reply must be a boolean'],
+    [{ parts: [{}], system: 5 }, 'system must be a string'],
+    [{ parts: [{}], system: 'x'.repeat(16_001) }, 'system must be at most 16000 characters'],
+  ])('%j is refused', (body, error) => {
+    expect(parseRuntimePromptBody(body)).toBe(error)
+  })
+
+  test('system is the turn system text, up to 16,000 characters; a blank one or none leaves the input as before', () => {
+    const parts = [{ type: 'text', text: 'hi' }]
+    expect(parseRuntimePromptBody({ parts, system: '  ## Memory\n- Q4 launch  ' })).toEqual({ parts, system: '## Memory\n- Q4 launch' })
+    expect(parseRuntimePromptBody({ parts, system: 'x'.repeat(16_000) })).toEqual({ parts, system: 'x'.repeat(16_000) })
+    expect(parseRuntimePromptBody({ parts, system: '  ' })).toEqual({ parts })
+    expect(parseRuntimePromptBody({ parts })).toEqual({ parts })
+  })
+})
+
+describe('thread_files', () => {
+  test('the prompt route passes thread_files on (the API sets it; the router reads it); a non-object is dropped', () => {
+    const parts = [{ type: 'text', text: 'hi' }]
+    const files = { folder: '/drives/general/threads/t-1a2b3c4d', context: '/drives/general/context.md', message: '/drives/general/threads/t-1a2b3c4d/messages/0001-a.md' }
+    expect(parseRuntimePromptBody({ parts, thread_files: files })).toEqual({ parts, threadFiles: files })
+    expect(parseRuntimePromptBody({ parts, thread_files: 'x' })).toEqual({ parts })
+  })
+})
+
+describe('the turn system text', () => {
+  test('the steer route drops a system field; the prompt route passes it on', async () => {
+    const seen: Array<[string, RuntimePromptInput]> = []
+    const record = (verb: string) => async (_id: string, input: RuntimePromptInput) => {
+      seen.push([verb, input])
+      return { status: 202, body: {} }
+    }
+    const turns = { prompt: record('prompt'), steer: record('steer') } as unknown as HarnessTurnService
+    const app = createRuntimeRouter({ sandboxToken: 'sandbox-token' } as Parameters<typeof createRuntimeRouter>[0], {} as Parameters<typeof createRuntimeRouter>[1], { turns })
+    const body = JSON.stringify({ message_id: 'msg_1', parts: [{ type: 'text', text: 'hi' }], system: 'LIST' })
+    const headers = { Authorization: 'Bearer sandbox-token', 'content-type': 'application/json', [KORTIX_SERVICE_CALL_HEADER]: '1' }
+    expect((await app.request('/sessions/ses_1/steer', { method: 'POST', headers, body })).status).toBe(202)
+    expect((await app.request('/sessions/ses_1/prompt', { method: 'POST', headers, body })).status).toBe(202)
+    expect(seen.map(([verb, input]) => [verb, input.system])).toEqual([
+      ['steer', undefined],
+      ['prompt', 'LIST'],
+    ])
+  })
+})
+
+describe('the Kortix turn routes keep the runtime gate of the proxy they replace (W5 E4)', () => {
+  const post = (app: ReturnType<typeof createRuntimeRouter>, path: string) =>
+    app.request(path, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ parts: [{ type: 'text', text: 'hi' }] }),
+    })
+
+  test('a runtime that is not ready answers 503 with its boot phase, and the verb never runs', async () => {
+    const seen: string[] = []
+    const verb = (name: string) => async () => {
+      seen.push(name)
+      return { status: 204, body: null }
+    }
+    const turns = { prompt: verb('prompt'), abort: verb('abort'), retractMessage: verb('retractMessage') } as unknown as HarnessTurnService
+    const app = createRuntimeRouter(cfg, noQueries, {
+      turns,
+      readiness: async () => ({ ready: false, phase: 'workspace_not_ready', details: { reason: 'installing dependencies' } }),
+    })
+    for (const path of ['/sessions/ses_1/prompt', '/sessions/ses_1/abort', '/messages/ses_1/msg_1/retract']) {
+      const res = await post(app, path)
+      expect(res.status).toBe(503)
+      expect(res.headers.get('X-Kortix-Boot-Phase')).toBe('workspace_not_ready')
+      // `code` is the one machine answer a client matches; the harness's own details follow it.
+      expect(await res.json()).toEqual({ code: 'runtime_not_ready', reason: 'installing dependencies', phase: 'workspace_not_ready' })
+    }
+    expect(seen).toEqual([])
+  })
+
+  test('an upstream that cannot be reached answers 502, not 500', async () => {
+    const unreachable = async (): Promise<never> => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:4096')
+    }
+    const app = createRuntimeRouter(cfg, noQueries, {
+      turns: { prompt: unreachable } as unknown as HarnessTurnService,
+      readiness: async () => ({ ready: true }),
+    })
+    const res = await post(app, '/sessions/ses_1/prompt')
+    expect(res.status).toBe(502)
+    expect(res.headers.get('X-Kortix-Turn-Verb')).toBe('1')
+    expect(await res.json()).toEqual({ error: 'upstream unreachable', details: 'connect ECONNREFUSED 127.0.0.1:4096' })
+  })
+})
+
+describe('the turn-verb answer stamps its own wall time and the loop lag (KRTX-4459)', () => {
+  // Balanced reset (the test-state tripwire): a clean sampler on the way in
+  // AND no running interval left behind on the way out.
+  beforeEach(() => {
+    resetLoopLagSampleForTests()
+  })
+
+  afterEach(() => {
+    resetLoopLagSampleForTests()
+  })
+
+  const app = createRuntimeRouter(cfg, noQueries, {
+    turns: {
+      pending: async () => ({ status: 200, body: { statuses: {} } }),
+    } as unknown as HarnessTurnService,
+    readiness: async () => ({ ready: true }),
+  })
+  const timing = (res: Response) => res.headers.get('Server-Timing') ?? ''
+  const lagOf = (res: Response) => Number(/lag;dur=([\d.]+)/.exec(timing(res))?.[1])
+
+  test('/pending answers with Server-Timing: daemon;dur=<wrapper wall>, lag;dur=<peak slip>', async () => {
+    const res = await app.request('/pending', { headers: { Authorization: `Bearer ${TOKEN}` } })
+    expect(res.status).toBe(200)
+    expect(/daemon;dur=([\d.]+)/.exec(timing(res))?.[1]).toBeDefined()
+    expect(lagOf(res)).toBeGreaterThanOrEqual(0)
+    expect(lagOf(res)).toBeLessThan(50)
+  })
+
+  test('a loop the interval caught late reads as the lag', async () => {
+    observeLoopLag(4_200)
+    const res = await app.request('/pending', { headers: { Authorization: `Bearer ${TOKEN}` } })
+    expect(Math.round(lagOf(res))).toBeGreaterThanOrEqual(4_000)
+  })
+})

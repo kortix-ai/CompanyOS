@@ -9,7 +9,7 @@ updated: "2026-10-22"
 slug: "/best-self-hosted-ai-workspace"
 coverLogos: [{"domain": "openwebui.com", "name": "Open WebUI"}, {"domain": "anythingllm.com", "name": "AnythingLLM"}, {"domain": "dify.ai", "name": "Dify"}]
 ---
-Most self-hosted AI lists are written for one person with a free weekend. Day one looks the same everywhere: a chat window, a model picker, a folder of PDFs. The differences arrive in the second month, when a second person needs what the first one taught the agent, when a session installs a package nobody vetted, or when finished work lands where nobody looked first. Six projects are worth running on your own hardware once a team is involved, five of them open source and one fair-code. Kortix, the open-source AI Operating System, is the one built for that second month. The rest are strongest at a narrower job.
+Most self-hosted AI lists are written for one person with a free weekend. Day one looks the same everywhere: a chat window, a model picker, a folder of PDFs. The differences arrive in the second month, when a second person needs what the first one taught the agent, when a session installs a package nobody vetted, or when finished work lands where nobody looked first. Six projects are worth running on your own hardware once a team is involved, five of them open source and one fair-code. Kortix CompanyOS is the one built for that second month. The rest are strongest at a narrower job.
 
 ## Three tests a demo never reaches
 
@@ -21,7 +21,7 @@ A demo is judged on the first conversation. A team needs three properties that o
 
 ## Kortix: memory in files, a machine per session, one gate
 
-A Kortix project is a git repository your company controls. Agents, skills, the memory they read and the rules for each connector are files in that repository, so any change to them arrives as a diff with an author and a date. Memory is plain files today, which means you can read it, grep it, and restore last week's copy with git.
+A Kortix workspace is backed by a git repository your company controls. Agents, skills, the memory they read and the rules for each connector are files in that repository, so any change to them arrives as a diff with an author and a date. Memory is plain files today, which means you can read it, grep it, and restore last week's copy with git.
 
 The same git loop is the review path, and the [git docs](https://kortix.com/docs/git) show the whole of it. The clone lands in a directory named after the project id, not the project name, so that is the path the second line uses:
 

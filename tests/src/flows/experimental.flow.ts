@@ -21,8 +21,8 @@ flow(
     domain: 'projects',
     tags: ['experimental', 'feature-flags'],
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'PATCH /v1/projects/:projectId/experimental',
+      'PATCH /v1/workspaces/:projectId/features',
+      'PATCH /v1/workspaces/:projectId/experimental',
     ],
   },
   async (ctx) => {
@@ -32,7 +32,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'marketplace', enabled: false },
           { params: { projectId: p.id } },
         );
@@ -43,7 +43,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'marketplace', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -54,7 +54,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'marketplace', enabled: null },
           { params: { projectId: p.id } },
         );
@@ -65,7 +65,7 @@ flow(
       for (const feature of ['connectors_v2', 'connectors_api_discover']) {
         const r = await ctx.client
           .as(ctx.P.OWNER)
-          .patch('/v1/projects/:projectId/features', { feature, enabled: true }, { params: { projectId: p.id } });
+          .patch('/v1/workspaces/:projectId/features', { feature, enabled: true }, { params: { projectId: p.id } });
         r.status(400);
       }
     });
@@ -74,7 +74,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'agent_tunnel', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -85,7 +85,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'pi_worker', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -93,8 +93,8 @@ flow(
       const project = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
-          { feature: 'genui', enabled: null },
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
           { params: { projectId: p.id } },
         );
       project.status(200);
@@ -112,7 +112,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'pi_harness', enabled: false },
           { params: { projectId: p.id } },
         );
@@ -120,8 +120,8 @@ flow(
       const project = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
-          { feature: 'genui', enabled: null },
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
           { params: { projectId: p.id } },
         );
       project.status(200);
@@ -135,11 +135,38 @@ flow(
       }
     });
 
+    await ctx.step('genui graduated (generative UI is always on) → 400, absent from the catalog, experimental.genui true', async () => {
+      const r = await ctx.client
+        .as(ctx.P.OWNER)
+        .patch(
+          '/v1/workspaces/:projectId/features',
+          { feature: 'genui', enabled: false },
+          { params: { projectId: p.id } },
+        );
+      r.status(400);
+      const project = await ctx.client
+        .as(ctx.P.OWNER)
+        .patch(
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
+          { params: { projectId: p.id } },
+        );
+      project.status(200);
+      const body = project.json<{
+        experimental: Record<string, boolean>;
+        experimental_features: Array<{ key: string }>;
+      }>();
+      if (body.experimental.genui !== true) throw new Error(`experimental.genui is ${body.experimental.genui}, not true`);
+      if (body.experimental_features.some((f) => f.key === 'genui')) {
+        throw new Error('the catalog still lists genui');
+      }
+    });
+
     await ctx.step('unknown feature → 400', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'not_a_feature', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -150,7 +177,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: 'yes' },
           { params: { projectId: p.id } },
         );
@@ -161,7 +188,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -172,7 +199,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.ANON)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: true },
           { params: { projectId: p.id } },
         );

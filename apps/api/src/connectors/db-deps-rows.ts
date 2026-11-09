@@ -15,6 +15,7 @@ import {
   loadSlackInstall,
   loadTeamsInstall,
   loadTelegramInstall,
+  loadDiscordInstall,
 } from '../channels/install-store';
 import { agentPolicySet } from '../iam/agent-scope';
 import { canonicalConnectorAlias, resolveSessionConnectorConnection } from '../projects/lib/session-connector-bindings';
@@ -25,7 +26,7 @@ import {
   connectionCredentialExists,
 } from './credentials';
 import type { ConnectorAuth } from './call';
-import { type DefaultMode, type Policy, type Risk, parseStoredConditions, resolveEffectiveAction } from './policy';
+import { type DefaultMode, type Policy, type PolicyAction, type Risk, parseStoredConditions, resolveEffectiveAction } from './policy';
 import { principalMayUseConnector } from './principal-access';
 import type { ConnectorPrincipal } from './router-contract';
 
@@ -35,12 +36,6 @@ const DEFAULT_AUTH: ConnectorAuth = {
   name: null,
   prefix: null,
 };
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
 
 export type ConnectorRow = typeof connectors.$inferSelect;
 
@@ -120,6 +115,7 @@ async function channelInstalled(
   if (platform === 'slack') return (await loadSlackInstall(projectId).catch(() => null)) != null;
   if (platform === 'teams') return (await loadTeamsInstall(projectId).catch(() => null)) != null;
   if (platform === 'telegram') return (await loadTelegramInstall(projectId).catch(() => null)) != null;
+  if (platform === 'discord') return (await loadDiscordInstall(projectId).catch(() => null)) != null;
   if (platform === 'email') return hasEmailInboxes(projectId).catch(() => false);
   return false;
 }
@@ -258,18 +254,24 @@ export async function connectorActionAlwaysRuns(input: {
   );
 }
 
-export async function loadConnectorPoliciesFor(connectorId: string): Promise<Policy[]> {
-  const rows = await db
-    .select()
-    .from(connectorPolicies)
-    .where(eq(connectorPolicies.connectorId, connectorId));
-  return rows.map((r) => ({
+/** One stored rule row → the engine's `Policy`. `connector_policies`,
+ *  `connector_project_policies` and a stored set's rules carry the same shape. */
+function toPolicy(r: { match: string; action: PolicyAction; position: number; conditions: unknown }): Policy {
+  return {
     match: r.match,
     action: r.action,
     position: r.position,
     // Conditions are re-validated on READ, never trusted from storage.
     ...parseStoredConditions(r.conditions),
-  }));
+  };
+}
+
+export async function loadConnectorPoliciesFor(connectorId: string): Promise<Policy[]> {
+  const rows = await db
+    .select()
+    .from(connectorPolicies)
+    .where(eq(connectorPolicies.connectorId, connectorId));
+  return rows.map(toPolicy);
 }
 
 /** `loadConnectorPoliciesFor`, batched over many connectors in one query
@@ -284,12 +286,7 @@ export async function loadConnectorPoliciesForMany(
     .from(connectorPolicies)
     .where(inArray(connectorPolicies.connectorId, connectorIds));
   for (const r of rows) {
-    const policy: Policy = {
-      match: r.match,
-      action: r.action,
-      position: r.position,
-      ...parseStoredConditions(r.conditions),
-    };
+    const policy = toPolicy(r);
     const list = map.get(r.connectorId);
     if (list) list.push(policy);
     else map.set(r.connectorId, [policy]);
@@ -308,7 +305,7 @@ export function policiesOfStoredSet(raw: unknown): Policy[] | null {
     if (typeof match !== 'string' || (action !== 'always_run' && action !== 'require_approval' && action !== 'block')) {
       return null;
     }
-    out.push({ match, action, position, ...parseStoredConditions(conditions) });
+    out.push(toPolicy({ match, action, position, conditions }));
   }
   return out;
 }
@@ -349,12 +346,7 @@ export async function loadProjectPoliciesFor(projectId: string): Promise<Policy[
     .select()
     .from(connectorProjectPolicies)
     .where(eq(connectorProjectPolicies.projectId, projectId));
-  return rows.map((r) => ({
-    match: r.match,
-    action: r.action,
-    position: r.position,
-    ...parseStoredConditions(r.conditions),
-  }));
+  return rows.map(toPolicy);
 }
 
 export async function loadDefaultModeFor(projectId: string): Promise<DefaultMode> {

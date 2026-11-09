@@ -9,14 +9,15 @@
  * so one session is one hook (SPEC §1.3) no matter how many components render
  * it.
  *
- * Scroll model: one `<scrollbox stickyScroll stickyStart="bottom">`. Sticky
- * stays on until the reader moves the viewport themselves; `G` turns it back
- * on and jumps to the newest turn. `PgUp` at the very top is the "load older"
- * gesture, not a scroll.
+ * Scroll model: one `<scrollbox stickyScroll stickyStart="bottom">`, and the
+ * scrollbox owns "follow the newest turn". Any scroll away from the bottom
+ * (wheel, keys, scrollbar drag) stops the follow; scrolling back to the bottom
+ * or `G` resumes it. Nothing here pins the viewport while the reader is up in
+ * the thread. `PgUp` at the very top is the "load older" gesture, not a scroll.
  */
 
 import { classifySessionLogMessage, sessionLogTurns } from '@kortix/sdk';
-import { type useSession, useSessionLogThread } from '@kortix/sdk/react';
+import { type UseSessionPromptsResult, type useSession, useSessionLogThread } from '@kortix/sdk/react';
 import type { ScrollBoxRenderable } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -32,6 +33,7 @@ import { PermissionPrompt } from '../prompts/permission-prompt.tsx';
 import { QuestionPrompt } from '../prompts/question-prompt.tsx';
 import { ErrorBanner, describeSendError, describeStartError } from './error-banner.tsx';
 import { matchesTranscriptBinding } from './keys.ts';
+import { TranscriptSessionProvider } from './session-context.tsx';
 import { Turn } from './turn.tsx';
 import { WorkingLine } from './working-line.tsx';
 
@@ -41,6 +43,8 @@ export type SessionState = ReturnType<typeof useSession>;
 export interface TranscriptProps {
   session: SessionState;
   focused: boolean;
+  /** The input has focus: PgUp/PgDn still scroll the transcript. */
+  pageKeys?: boolean;
   width: number;
   height: number;
   onToast?(message: string, kind?: 'info' | 'error'): void;
@@ -51,6 +55,18 @@ export interface TranscriptProps {
    * `<PermissionPrompt/>` from `features/session/prompts` instead.
    */
   renderPrompts?: boolean;
+  /**
+   * The session's inbox (`useSessionPrompts`). Its prompts join the thread from the moment the
+   * API accepts them (queued, sending, or accepted while the box journals them), under the id
+   * the log will hold them by. Omitted: the log's messages only.
+   */
+  inbox?: Pick<UseSessionPromptsResult, 'prompts' | 'sent'>;
+}
+
+/** The viewport shows the last row. One row of slack absorbs a fractional
+ *  scroll position left by wheel acceleration. */
+export function isAtBottom(box: Pick<ScrollBoxRenderable, 'scrollTop' | 'scrollHeight' | 'viewport'>): boolean {
+  return box.scrollTop >= box.scrollHeight - box.viewport.height - 1;
 }
 
 /** Rows the header clock re-renders on. One second is the finest unit any
@@ -60,18 +76,19 @@ const CLOCK_INTERVAL_MS = 1000;
 export function Transcript({
   session,
   focused,
+  pageKeys = false,
   width,
   height,
   onToast,
   renderPrompts = true,
+  inbox,
 }: TranscriptProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null);
-  const [sticky, setSticky] = useState(true);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [cursorIndex, setCursorIndex] = useState(-1);
   const [now, setNow] = useState(() => Date.now());
 
-  const thread = useSessionLogThread(session);
+  const thread = useSessionLogThread(session, undefined, inbox ? { prompts: inbox } : undefined);
   const ordered = useMemo(() => (thread ? orderedMessages(sessionLogTurns(thread)) : []), [thread]);
 
   // Every collapsible row in the whole transcript, in document order. The
@@ -106,7 +123,6 @@ export function Transcript({
   }, []);
 
   const scrollBy = useCallback((delta: number) => {
-    setSticky(false);
     scrollRef.current?.scrollBy(delta);
   }, []);
 
@@ -117,16 +133,27 @@ export function Transcript({
   useKeyboard((key) => {
     // An open prompt owns the keyboard: `j`/`k` must move its option cursor,
     // not scroll the transcript out from under the question.
-    if (!focused || promptOpen) return;
+    if (promptOpen) return;
+    // From the input (`pageKeys`), only PgUp/PgDn reach the transcript: every
+    // other key is a character being typed. Tab no longer enters the
+    // transcript while the sidebar is hidden, so this is how it scrolls.
+    if (!focused) {
+      if (!pageKeys) return;
+      if (
+        !matchesTranscriptBinding(key, 'transcript.older') &&
+        !matchesTranscriptBinding(key, 'transcript.pageDown')
+      ) {
+        return;
+      }
+      key.preventDefault();
+    }
 
     if (matchesTranscriptBinding(key, 'transcript.bottom')) {
-      setSticky(true);
       const box = scrollRef.current;
       if (box) box.scrollTo(box.scrollHeight);
       return;
     }
     if (matchesTranscriptBinding(key, 'transcript.top')) {
-      setSticky(false);
       scrollRef.current?.scrollTo(0);
       return;
     }
@@ -170,7 +197,7 @@ export function Transcript({
   const lastMessageId = ordered.at(-1)?.message_id;
   const startFailed = session.phase === 'error';
 
-  // Re-pin to the bottom after EVERY commit while sticky is on.
+  // Re-pin to the bottom after a commit, only while the reader is at the bottom.
   //
   // `stickyScroll` alone does not survive a content-height jump: expanding a
   // steps group adds ~30 rows in one commit, and the viewport stayed where it
@@ -179,21 +206,26 @@ export function Transcript({
   // native setter, and a commit only happens when something actually changed,
   // so running it unconditioned is cheaper than tracking a content signature
   // that has to include every streaming part.
+  //
+  // The bottom check reads the layout from BEFORE this commit (OpenTUI lays
+  // out on its next frame), so it asks "was the reader following?". A reader
+  // who scrolled up stays where they are: the old effect pinned on every
+  // commit, and the 1 s clock plus each streamed delta yanked them back down.
   useEffect(() => {
-    if (!sticky) return;
     const box = scrollRef.current;
-    if (box) box.scrollTo(box.scrollHeight);
+    if (box && isAtBottom(box)) box.scrollTo(box.scrollHeight);
   });
 
   return (
     // `overflow: hidden` is load-bearing, not tidiness: without it the
     // scrollbox's last row painted over the working line below it ("idle"
     // overwrote "◆ kortix · now" in a live frame).
+    <TranscriptSessionProvider projectId={session.projectId ?? null} sessionId={session.sessionId ?? null}>
     <box flexDirection="column" width={width} height={height} overflow="hidden">
       <scrollbox
         ref={scrollRef}
         focused={focused}
-        stickyScroll={sticky}
+        stickyScroll
         stickyStart="bottom"
         flexGrow={1}
         // NOT `scrollbarOptions={{ visible: true }}` — forcing both bars on
@@ -234,6 +266,7 @@ export function Transcript({
         phase={session.phase}
         stage={session.stage}
         reason={session.reason}
+        image={session.bootImage}
         failure={session.failure}
       />
 
@@ -241,6 +274,7 @@ export function Transcript({
         <SessionPrompts session={session} focused={focused} width={width} onToast={onToast} />
       ) : null}
     </box>
+    </TranscriptSessionProvider>
   );
 }
 

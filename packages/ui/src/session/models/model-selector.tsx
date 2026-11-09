@@ -56,6 +56,11 @@ import {
 import { modelInDefaultView } from '@kortix/sdk';
 import { isClaudeSubscriptionModel, isSubscriptionModel, pickerModelName, shouldShowFreeTag } from './model-tags';
 import { useModelConnectionGate } from './use-model-connection-gate';
+import {
+  ReasoningEffortPane,
+  effortLabel,
+  reasoningEffortChoices,
+} from '../composer/reasoning-effort-selector';
 
 // Re-export for consumers
 export { Tag };
@@ -362,6 +367,19 @@ function GroupHeading({ children }: { children: React.ReactNode }) {
   return <span className="text-muted-foreground font-medium tracking-wide">{children}</span>;
 }
 
+/**
+ * Thinking effort, merged into the model popover as a right-hand pane. It is
+ * the session's model variant: the same value `ReasoningEffortSelector` sets.
+ */
+export interface ModelReasoningControls {
+  /** The selected model's variant ids (`Object.keys(model.variants)`). */
+  variants: readonly string[] | undefined;
+  /** The session's current variant, or null = model default. */
+  selectedVariant: string | null | undefined;
+  /** Absent = the host cannot apply a variant: no pane, no trigger suffix. */
+  onVariantChange?: (variant: string | null) => void;
+}
+
 export interface ModelSelectorProps {
   models: FlatModel[];
   selectedModel: { providerID: string; modelID: string } | null;
@@ -401,8 +419,8 @@ export interface ModelSelectorProps {
    * the picker stayed shut, because this component's `open` was internal
    * state with no way in.
    *
-   * "Set reasoning effort" does not route here — it opens the toolbar's
-   * `ReasoningEffortSelector`, which sets the session variant.
+   * "Set reasoning effort" routes here too: the composer passes `reasoning`,
+   * so effort is the right-hand pane of this popover.
    *
    * Controlled/uncontrolled is decided by whether `open` is `undefined`, the
    * same rule Radix itself uses — so every existing call site keeps its
@@ -410,6 +428,14 @@ export interface ModelSelectorProps {
    */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+
+  /**
+   * Thinking effort in the same popover (`chip` appearance only). When the
+   * selected model publishes variants, the popover grows a right-hand pane
+   * with Auto + those levels, and the trigger names the level after the model.
+   * A model with no variants keeps the single-column popover.
+   */
+  reasoning?: ModelReasoningControls;
 }
 
 export function ModelSelector({
@@ -426,6 +452,7 @@ export function ModelSelector({
   offerProviderAccounts = false,
   open: openProp,
   onOpenChange,
+  reasoning,
 }: ModelSelectorProps) {
   const tModel = useTranslations('modelSelector');
   const tDefault = useTranslations('workspaces.models');
@@ -491,6 +518,17 @@ export function ModelSelector({
       m.modelID === availableSelectedModel?.modelID,
   );
   const displayName = current?.modelName || unsetLabel || t('noModel');
+
+  const effortChoices =
+    appearance === 'chip'
+      ? reasoningEffortChoices(reasoning?.variants, !!reasoning?.onVariantChange)
+      : [];
+  const showEffort = effortChoices.length > 0 && !!reasoning?.onVariantChange;
+  // A stale per-model pick reads as Auto, the same rule as the pane.
+  const currentEffort =
+    reasoning?.selectedVariant && effortChoices.includes(reasoning.selectedVariant)
+      ? reasoning.selectedVariant
+      : null;
 
   useEffect(() => {
     if (!open) {
@@ -629,9 +667,31 @@ export function ModelSelector({
       // A Claude model signs in under Anthropic, in the provider list.
       if (connect === 'claude' || connect === 'provider') return handleOpenProviderModal('providers');
       onSelect({ providerID: model.providerID, modelID: model.modelID });
+      // With the effort pane on, a model that has levels keeps the popover
+      // open: the pane switches to its levels so both can be set in one visit.
+      const keepOpen =
+        appearance === 'chip' &&
+        !!reasoning?.onVariantChange &&
+        Object.keys(model.variants ?? {}).length > 0;
+      if (!keepOpen) setOpen(false);
+    },
+    [
+      onSelect,
+      setOpen,
+      chatGptAvailable,
+      handleOpenChatGpt,
+      handleOpenProviderModal,
+      appearance,
+      reasoning?.onVariantChange,
+    ],
+  );
+
+  const handleEffortChange = useCallback(
+    (variant: string | null) => {
+      reasoning?.onVariantChange?.(variant);
       setOpen(false);
     },
-    [onSelect, setOpen, chatGptAvailable, handleOpenChatGpt, handleOpenProviderModal],
+    [reasoning, setOpen],
   );
 
   const handleUpgrade = useCallback(() => {
@@ -920,6 +980,11 @@ export function ModelSelector({
             className={cn('min-w-0 shrink rounded-lg hit-area-y-3', triggerVariant === 'ghost' && 'text-muted-foreground')}
           >
             <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
+            {showEffort && (
+              <span className="shrink-0">
+                {currentEffort ? effortLabel(currentEffort) : t('auto')}
+              </span>
+            )}
             <ChevronDown
               className={cn(
                 'duration-moderate size-3 transition-transform ease-out',
@@ -937,9 +1002,28 @@ export function ModelSelector({
           side="top"
           align="start"
           sideOffset={8}
-          className="w-[min(300px,calc(100vw-1.5rem))]"
+          className={
+            showEffort
+              ? 'w-[min(29rem,calc(100vw-1.5rem))]'
+              : 'w-[min(300px,calc(100vw-1.5rem))]'
+          }
         >
-          {listBody}
+          {showEffort ? (
+            /* Side by side from `sm`; stacked under the list on a phone, where
+               two columns would leave each too narrow to read a model name. */
+            <div className="flex min-h-0 flex-col sm:flex-row">
+              <div className="flex min-w-0 flex-1 flex-col">{listBody}</div>
+              <ReasoningEffortPane
+                choices={effortChoices}
+                selectedVariant={reasoning?.selectedVariant}
+                onVariantChange={handleEffortChange}
+                modelName={current ? pickerModelName(current) : undefined}
+                className="border-t sm:w-40 sm:shrink-0 sm:border-t-0 sm:border-l"
+              />
+            </div>
+          ) : (
+            listBody
+          )}
         </CommandPopoverContent>
       </CommandPopover>
     </>

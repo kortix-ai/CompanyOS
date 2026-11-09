@@ -2,6 +2,7 @@ import type { NoiseRule } from '../evidence';
 import {
   isBrowserBundleSource,
   isFirstPartyResolvedSource,
+  isResolvableFrameSource,
   normalizeString,
   sourcesOf,
   stripErrorWrappers,
@@ -258,8 +259,17 @@ export function isInjectedWalletProviderWriteNoise(input: {
  * googletag` (WebKit). Better Stack, Kortix Frontend prod, 2026-10-27
  * (KRTX-3549): 71 events in 2 s from one `<anonymous>` frame, 0 users. Kortix
  * never loads or calls `googletag`; its Google Tag Manager writes only to
- * `dataLayer`. A frame in our bundles or resolved first-party source keeps
- * reporting.
+ * `dataLayer`.
+ *
+ * KRTX-4571 recurrence (2026-11-09): 39 events in 1 s from a ByteDance web
+ * crawler (Bytespider) rendering the marketing site, 0 users, and the stack
+ * now carried a FIRST-PARTY frame — Sentry's `browserapierrors.setInterval`
+ * instrumentation wrapper, compiled into an `app:///_next/…` chunk, sits
+ * OUTERMOST in the reported stack around the third-party callback it
+ * instrumented. A bundled frame in the stack would have meant our own code
+ * threw under the old rule; the throw site decides instead. A first-party
+ * bundle frame at the INNERMOST (throw-site) position keeps reporting; a
+ * de-minified `apps/web/src/…` source anywhere keeps reporting.
  */
 const GOOGLETAG_UNDEFINED_MESSAGE = /^(?:googletag is not defined|Can't find variable: googletag)$/;
 
@@ -268,10 +278,40 @@ export function isGoogletagUndefinedNoise(input: {
   filename?: unknown;
   frames?: Array<{ filename?: unknown } | undefined>;
 }): boolean {
-  return (
-    GOOGLETAG_UNDEFINED_MESSAGE.test(stripErrorWrappers(normalizeString(input.message))) &&
-    !sourcesOf(input).some((source) => isBrowserBundleSource(source) || isFirstPartyResolvedSource(source))
+  if (!GOOGLETAG_UNDEFINED_MESSAGE.test(stripErrorWrappers(normalizeString(input.message)))) {
+    return false;
+  }
+  // A de-minified first-party frame means our own code referenced `googletag`
+  // → an actionable first-party regression; keep so the call site can be
+  // found + fixed.
+  if (sourcesOf(input).some(isFirstPartyResolvedSource)) {
+    return false;
+  }
+  // Location evidence decides, never the outmost wrapper frame Sentry's
+  // browserapierrors instrumentation adds around third-party callbacks:
+  // the throw site is the innermost resolvable frame in the stack (sent)
+  // or the `onerror` `filename` (runtime captures carry no frames). A
+  // first-party bundle frame THERE means our own code threw → keep
+  // reporting; anything else — the `<anonymous>` eval frame of an injected
+  // tag, a third-party script URL — is third-party noise. No location
+  // evidence at all (frameless global `onerror`, the `undefined` filename
+  // placeholder) → the throw is unattributable; the message class only
+  // ever comes from third-party GPT code → noise.
+  const frames = (input.frames ?? []).filter((frame): frame is { filename?: unknown } =>
+    Boolean(frame),
   );
+  const throwSite =
+    frames.length > 0
+      ? [...frames]
+          .reverse()
+          .find((frame) => isResolvableFrameSource(frame.filename))?.filename
+      : isResolvableFrameSource(input.filename)
+        ? input.filename
+        : undefined;
+  if (throwSite === undefined) {
+    return true;
+  }
+  return !isBrowserBundleSource(throwSite);
 }
 
 /**

@@ -21,6 +21,7 @@ import { CliSandbox } from '../fixtures/cli';
 import { AgentPrincipalsWorld, openDb } from '../fixtures/agent-principals';
 import { PASSWORD } from '../fixtures/principals';
 import { passwordGrantSession, refreshGrant } from '../fixtures/supabase';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 const FENCE = 'credential_fence_refused';
 
@@ -476,7 +477,7 @@ flow(
           [sessionId, team.id, w.id],
         );
         await db.query(
-          `UPDATE kortix.account_tokens SET session_id = $2, agent_grant = $3::jsonb, service_account_id = NULL WHERE token_id = $1`,
+          lockProjectFirst(`UPDATE kortix.account_tokens SET session_id = $2, agent_grant = $3::jsonb, service_account_id = NULL WHERE token_id = $1`),
           [token_id, sessionId, JSON.stringify(grant)],
         );
         session = ctx.client.withBearer(secret_key, 'MY_KORTIX_SESSION');

@@ -22,6 +22,9 @@ export {
   type GitProxyAuth,
 } from './lib/git';
 
+// A My Kortix session's grant, with the list a person allowed a colleague (consumed by platform/services/session-sandbox).
+export { myKortixSessionGrant } from './lib/colleague-access';
+
 // Idle sessions off a fallback model (consumed by worker/jobs/session-model-fallback).
 export { revertIdleSessionFallbacks } from './lib/session-model-fallback-revert';
 

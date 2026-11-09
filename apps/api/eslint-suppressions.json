@@ -323,11 +323,6 @@
       "count": 7
     }
   },
-  "src/billing/services/free-tier-rotation.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
   "src/billing/services/legacy-stripe-sync.ts": {
     "no-console": {
       "count": 1
@@ -341,6 +336,11 @@
   "src/billing/services/revenuecat-webhooks.ts": {
     "no-console": {
       "count": 15
+    }
+  },
+  "src/billing/services/rotation-batch.ts": {
+    "no-console": {
+      "count": 2
     }
   },
   "src/billing/services/stripe-checkout-webhooks.ts": {
@@ -361,11 +361,6 @@
   "src/billing/services/webhooks.ts": {
     "no-console": {
       "count": 24
-    }
-  },
-  "src/billing/services/yearly-rotation.ts": {
-    "no-console": {
-      "count": 2
     }
   },
   "src/billing/wallet/index.ts": {
@@ -490,7 +485,7 @@
   },
   "src/channels/slack/dedup.ts": {
     "no-console": {
-      "count": 4
+      "count": 2
     }
   },
   "src/channels/slack/dispatch.ts": {
@@ -547,9 +542,6 @@
     "no-console": {
       "count": 1
     },
-    "no-restricted-imports": {
-      "count": 2
-    },
     "no-restricted-syntax": {
       "count": 8
     }
@@ -567,7 +559,7 @@
       "count": 2
     },
     "no-console": {
-      "count": 5
+      "count": 4
     }
   },
   "src/channels/slack/stop.ts": {
@@ -583,7 +575,7 @@
       "count": 2
     },
     "no-console": {
-      "count": 9
+      "count": 8
     },
     "no-restricted-properties": {
       "count": 1
@@ -1482,7 +1474,7 @@
   },
   "src/platform/services/session-sandbox.ts": {
     "kortix-api/projects-surface": {
-      "count": 12
+      "count": 11
     },
     "no-console": {
       "count": 19
@@ -2477,7 +2469,7 @@
   },
   "src/projects/session-open/session-open-recovery.ts": {
     "no-console": {
-      "count": 2
+      "count": 1
     }
   },
   "src/projects/session-open/session-open.ts": {

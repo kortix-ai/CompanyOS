@@ -9,7 +9,7 @@ import { useTranslations } from '../../../i18n';
 import { getChildSessionId } from '../../../internal/session-types';
 import { useContext, useMemo, useState } from 'react';
 import type { ProjectSession, SessionLogThread } from '@kortix/sdk';
-import { useProjectSession, useSessionStateStore } from '@kortix/sdk/react';
+import { useProjectSession, useSessionAsks, useSessionStateStore } from '@kortix/sdk/react';
 import { agentDisplayName } from '../../../internal/components/agent-mark';
 import { useSessionIds } from '../../../providers/session-ids';
 import type { SessionDisplayStatus } from '../../actions/session-label';
@@ -85,9 +85,16 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const ids = useSessionIds();
   const childRow = useProjectSession(ids.projectId, childSessionId, { enabled: !!ids.projectId && !!childSessionId });
   const child = childRow.data ? agentRowOf(childRow.data as ProjectSession) : null;
+  // A colleague whose access waits for the person (pi `awaitingApproval`): no session exists yet.
+  // "Needs you" while its ask is open; once decided, the call is over and a new call starts the colleague.
+  const askId = !childSessionId && partMetadata(call).awaitingApproval === true ? partMetadata(call).askId : undefined;
+  const openAsks = useSessionAsks(ids.projectId ?? '', { enabled: !!ids.projectId && typeof askId === 'string' });
+  const awaitingApproval = typeof askId === 'string' && !!openAsks.data?.asks.some((ask) => ask.id === askId);
   const state: AgentRowState = errorText
     ? 'failed'
-    : (child?.state ?? (isRunning || (background && backgroundWorking) ? 'working' : status === 'completed' ? 'completed' : 'idle'));
+    : awaitingApproval
+      ? 'needs_input'
+      : (child?.state ?? (isRunning || (background && backgroundWorking) ? 'working' : status === 'completed' ? 'completed' : 'idle'));
   // The name its parent gave it (`agent({ name })`) reads best; else the kind of agent.
   const handle = name || (child?.named ? child.handle : '') || subagentType;
   const title = name || (child?.named ? child.handle : '') || agentDisplayName(subagentType);

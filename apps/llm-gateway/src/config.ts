@@ -47,8 +47,7 @@ export const config = {
   // has not yet validated (token-rate-limit.ts, KRTX-4528). It bounds what an
   // unauthenticated caller can push, so it is far above one credential's own
   // budget: a real caller spends a slot only until the API answers it with a
-  // principal, and gets it back. 0 or less disables it, keeping the shared
-  // bucket at one credential's budget.
+  // principal, and gets it back.
   requestsPerMinuteUnvalidated: optionalInt('KORTIX_LLM_GATEWAY_UNVALIDATED_REQS_PER_MIN', 10_000),
   langfuse: {
     publicKey: process.env.LANGFUSE_PUBLIC_KEY,

@@ -28,7 +28,6 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
  * flood large enough to spend the whole shared allowance can refuse a real
  * credential still waiting on that first validation until the window refills.
  * That is the trade for a bounded, unauthenticated allowance.
-
  *
  * Each gateway task counts alone, so the fleet allows limit × tasks. This
  * stops a runaway loop or a flood on one credential. It is not a quota.

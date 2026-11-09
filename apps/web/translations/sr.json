@@ -2075,8 +2075,13 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Надогради",
-      "barTitle": "Ниједан модел није повезан",
-      "barDescription": "повежите модел да бисте започели разговор",
+      "promptTitle": "Povežite model da biste počeli",
+      "promptDescription": "Prijavite se planom koji već plaćate.",
+      "useChatGpt": "Koristi ChatGPT",
+      "chatGptPlan": "Plus ili Pro plan",
+      "useClaude": "Koristi Claude",
+      "claudePlan": "Pro ili Max plan",
+      "useApiKey": "Koristi API ključ",
       "connectModel": "Повежи модел",
       "imagesUnsupported": "{model} не може да чита слике",
       "imagesUnsupportedHint": "уклони их или изабери други модел"

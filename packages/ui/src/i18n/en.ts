@@ -1473,8 +1473,13 @@ const catalog = {
   "sessionUi": {
     "modelGate": {
       "upgrade": "Upgrade",
-      "barTitle": "No model connected",
-      "barDescription": "connect one to start chatting",
+      "promptTitle": "Connect a model to start",
+      "promptDescription": "Sign in with a plan you already pay for.",
+      "useChatGpt": "Use ChatGPT",
+      "chatGptPlan": "Plus or Pro plan",
+      "useClaude": "Use Claude",
+      "claudePlan": "Pro or Max plan",
+      "useApiKey": "Use an API key",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
       "imagesUnsupportedHint": "remove them or pick another model"

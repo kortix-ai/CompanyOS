@@ -119,4 +119,23 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     expect(limit(fake(1))).toBeNull();
     expect(limit(fake(1))?.status).toBe(429);
   });
+
+  test('a whitespace-bearing bearer is counted like the pipeline counts it', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(1);
+    // The pipeline's bearer grammar accepts internal whitespace
+    // (`/^Bearer\s+(\S.*)$/i` in create-gateway.ts), so the limiter must count
+    // it too: the first such credential is admitted, the second is refused.
+    expect(limit(request('/v1/chat/completions', { authorization: 'Bearer fake one' }))).toBeNull();
+    expect(
+      limit(request('/v1/chat/completions', { authorization: 'Bearer fake two' }))?.status,
+    ).toBe(429);
+  });
+
+  test('the charged-shared set is capped: a flood cannot grow it without bound', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(1_000_000);
+    for (let i = 0; i < 50_001; i++) limit(fake(i));
+    expect(limit.chargedCount()).toBe(50_000);
+  });
 });

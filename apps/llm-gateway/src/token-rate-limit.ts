@@ -19,15 +19,21 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
  * credential's own budget), whatever its value: a caller that sends a fresh
  * made-up bearer per request cannot buy a private bucket each time, so the
  * shared allowance bounds how many requests reach the API unverified (CWE-770)
- * and the bucket map cannot grow one entry per request. `validated(credential)`
- * moves a real credential onto its own budget and gives back the shared slot it
- * took, once, so real traffic does not drain the allowance every new credential
- * shares. A request without a credential is not counted: the pipeline refuses
- * it with 401 before it calls the API. The cost this accepts: a credential's
- * first request spends a shared slot, refunded when the API validates it, so a
- * flood large enough to spend the whole shared allowance can refuse a real
- * credential still waiting on that first validation until the window refills.
- * That is the trade for a bounded, unauthenticated allowance.
+ * and the bucket map cannot grow one entry per request. One source can spend
+ * only a small fraction of that allowance (its own bucket, keyed on the
+ * address the Cloudflare edge overwrites), so a single caller cannot pin the
+ * shared bucket and deny every not-yet-validated credential its first
+ * admission. `validated(credential)` moves a real credential onto its own
+ * budget and gives back the shared slot it took, once, so real traffic does
+ * not drain the allowance every new credential shares; the set of charged
+ * credentials that makes the refund one-time is capped, so neither it nor the
+ * bucket map grows with the flood. A request without a credential is not
+ * counted: the pipeline refuses it with 401 before it calls the API. The cost
+ * this accepts: a credential's first request spends a shared slot, refunded
+ * when the API validates it, so a flood large enough to spend the whole shared
+ * allowance can refuse a real credential still waiting on that first
+ * validation until the window refills. That is the trade for a bounded,
+ * unauthenticated allowance.
  *
  * Each gateway task counts alone, so the fleet allows limit × tasks. This
  * stops a runaway loop or a flood on one credential. It is not a quota.
@@ -44,28 +50,54 @@ export function createTokenRateLimit(
   validated: (credential: string) => void;
   /** The live bucket keys; KRTX-4528 proves a flood of fakes leaves only the shared one. */
   buckets: () => string[];
+  /** The credentials waiting for a shared-slot refund; KRTX-4528 proves a flood cannot grow it without bound. */
+  chargedCount: () => number;
 } {
   const limiter = new TokenBucketRateLimiter('gateway_token');
+  // The credentials the API has answered with a principal. Only a real
+  // credential gets in, so the set is bounded by the credential store, never by
+  // what a caller sends.
   const validatedKeys = new Set<string>();
   // Credentials charged to the shared bucket while unvalidated; their slot is
-  // refunded once, when the API validates them. Bounded by the shared
-  // allowance itself: only an admitted request adds a key, and the bucket
-  // admits at most `limit` of them per window, so the set cannot outgrow it.
+  // refunded once, when the API validates them. The shared allowance bounds
+  // how fast keys arrive, not how many accumulate — entries leave only through
+  // `validated()`, which needs the API to answer a principal — so the oldest
+  // key is dropped at the cap, as the bucket map drops its own oldest
+  // (MAX_BUCKETS in packages/shared/src/rate-limit.ts). A credential whose
+  // entry was evicted forfeits only its one-slot refund.
   const chargedShared = new Set<string>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
   const sharedPolicy = { limit: Math.max(1, unvalidatedPerMinute), windowMs: 60_000 };
+  // One source may spend only a small fraction of the shared allowance: a
+  // request refused here never reaches the API, so a credential it refuses can
+  // never validate and stays refused while a flood runs — one shared bucket
+  // with no per-source bound is pinnable by a single caller. Per-source keys
+  // live in the same limiter, whose bucket count is capped.
+  const sourcePolicy = {
+    limit: Math.max(1, Math.floor(unvalidatedPerMinute / 100)),
+    windowMs: 60_000,
+  };
   const limit = (request: Request, headers = new Headers()): Response | null => {
     const credential = credentialOf(request);
     if (!credential) return null;
     const key = hashOf(credential);
+    const validated = validatedKeys.has(key);
     // A validated credential keeps its own budget; anything else shares one
     // bucket, so a rotating fake bearer spends the shared allowance, never its
-    // own private one.
-    const result = limiter.check(
-      validatedKeys.has(key) ? key : UNVALIDATED,
-      validatedKeys.has(key) ? policy : sharedPolicy,
-    );
-    if (!validatedKeys.has(key) && result.allowed) chargedShared.add(key);
+    // own private one — after its source has spent its own small share.
+    const source = validated ? null : request.headers.get('cf-connecting-ip')?.trim() || null;
+    const fromSource = source ? limiter.check(`${UNVALIDATED}:${source}`, sourcePolicy) : null;
+    const result =
+      fromSource && !fromSource.allowed
+        ? fromSource
+        : limiter.check(validated ? key : UNVALIDATED, validated ? policy : sharedPolicy);
+    if (!validated && result.allowed) {
+      if (chargedShared.size >= MAX_CHARGED_SHARED) {
+        const oldest = chargedShared.values().next().value;
+        if (oldest !== undefined) chargedShared.delete(oldest);
+      }
+      chargedShared.add(key);
+    }
     headers.set('RateLimit-Limit', String(result.limit));
     headers.set('RateLimit-Remaining', String(result.remaining));
     headers.set('RateLimit-Reset', String(Math.ceil(result.resetMs / 1000)));
@@ -88,16 +120,26 @@ export function createTokenRateLimit(
     if (chargedShared.delete(key)) limiter.refund(UNVALIDATED, sharedPolicy);
   };
   limit.buckets = () => limiter.keys();
+  limit.chargedCount = () => chargedShared.size;
   return limit;
 }
 
 /** The bucket every credential this task has not validated shares. */
 const UNVALIDATED = 'distinct_credentials';
 
-/** The bearer token, or the `x-api-key` that Anthropic SDKs send instead. */
+/** The cap on the charged-shared set, as MAX_BUCKETS caps the bucket map. */
+const MAX_CHARGED_SHARED = 50_000;
+
+/**
+ * The credential the pipeline will extract — the same grammar as `bearer()` in
+ * `create-gateway.ts` (`/^Bearer\s+(\S.*)$/i`, trimmed) — or the `x-api-key`
+ * that Anthropic SDKs send instead. Counting exactly the headers the pipeline
+ * acts on leaves no header that reaches the API uncounted: a whitespace-bearing
+ * bearer used to fall through here and flood the API under the limiter's feet.
+ */
 function credentialOf(request: Request): string | null {
-  const bearer = /^Bearer\s+(\S+)$/i.exec((request.headers.get('authorization') ?? '').trim())?.[1];
-  return bearer || request.headers.get('x-api-key')?.trim() || null;
+  const bearer = /^Bearer\s+(\S.*)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
+  return bearer?.trim() || request.headers.get('x-api-key')?.trim() || null;
 }
 
 function hashOf(credential: string): string {

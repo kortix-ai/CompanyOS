@@ -172,4 +172,52 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
     // Its shared slot was refunded: a fake still fits the shared allowance.
     expect((await app.request(call('kortix_fake_1'))).status).toBe(401);
   });
+
+  test('a whitespace-bearing bearer is charged at the route too, not passed uncounted', async () => {
+    // `Bearer fake one` carries internal whitespace: the pipeline's bearer
+    // grammar (`/^(B|\S.*)$/` — see create-gateway.ts) accepts it and calls the
+    // API, so the limiter must count it as well, else the flood reopens.
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    useFakeApi();
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 1,
+      requestsPerMinuteUnvalidated: 1,
+    });
+    const spaced = (n: string) =>
+      new Request('https://gateway.test/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer fake ${n}` },
+        body: JSON.stringify({ model: 'x', max_tokens: 8, messages: [] }),
+      });
+    expect((await app.request(spaced('one'))).status).toBe(401);
+    expect((await app.request(spaced('two'))).status).toBe(429);
+    // The second request was refused by the limiter, before any API round trip.
+    expect(apiCalls).toHaveLength(1);
+  });
+
+  test('one source cannot pin the shared allowance: the per-source allowance is far below it', async () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    useFakeApi();
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 1,
+      requestsPerMinuteUnvalidated: 200,
+    });
+    const from = (ip: string, n: number) =>
+      new Request('https://gateway.test/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer kortix_fake_${n}`,
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ model: 'x', max_tokens: 8, messages: [] }),
+      });
+    // One source may spend 1% of the 200-per-minute shared allowance: two
+    // admissions, then a refusal WHILE the shared allowance still holds 198.
+    expect((await app.request(from('1.2.3.4', 1))).status).toBe(401);
+    expect((await app.request(from('1.2.3.4', 2))).status).toBe(401);
+    expect((await app.request(from('1.2.3.4', 3))).status).toBe(429);
+    // A different source admits on the same shared allowance.
+    expect((await app.request(from('5.6.7.8', 4))).status).toBe(401);
+  });
 });

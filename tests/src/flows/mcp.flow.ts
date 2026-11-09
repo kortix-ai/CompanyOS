@@ -929,12 +929,21 @@ flow(
       if (secrets.out?.exit_code !== 0 || !secrets.out.stdout.includes("ls")) throw new Error(secrets.text.slice(0, 300));
     });
     await ctx.step("[\"whoami\",\"--json\"] answers as the token's user through this API", async () => {
-      const r = await cli(5, ["whoami", "--json"]);
+      // A user of its own, in exactly one workspace. `whoami --json` lists every
+      // membership, and the shared OWNER joins one team per flow: by the middle
+      // of a full run its list passed the tool's 45 000-character stdout cap,
+      // so the reply was a cut string (release run 42709749119). The cut is the
+      // tool's documented contract (`truncated`), not what this step checks.
+      const member = await team.addMember("member");
+      const minted = await ctx.client.as(member).post("/v1/accounts/tokens", { name: "MCP-6 whoami" });
+      minted.status(201);
+      const memberPat = minted.json<{ secret_key: string }>().secret_key;
+      const r = await cli(5, ["whoami", "--json"], {}, memberPat);
       if (r.isError || r.out?.exit_code !== 0) throw new Error(r.text.slice(0, 500));
-      // `--json` output arrives as a JSON value (`json`), never as a cut string, even for a user with many accounts.
+      // `--json` output arrives as one whole JSON value (`json`), never as a string.
       if (r.out.json === undefined || r.out.truncated) throw new Error(`whoami --json is not whole JSON: ${r.text.slice(0, 300)}`);
       const who = r.out.json;
-      const me = JSON.parse((await call(6, "call_api", { method: "GET", path: "/v1/accounts/me" })).text.split("\n").slice(1).join("\n"));
+      const me = JSON.parse((await call(6, "call_api", { method: "GET", path: "/v1/accounts/me" }, memberPat)).text.split("\n").slice(1).join("\n"));
       const id = who.user_id ?? who.user?.user_id ?? who.user?.id;
       if (!id || ![me.user_id, me.id, me.user?.id, me.user?.user_id].includes(id)) throw new Error(`whoami ${JSON.stringify(who).slice(0, 300)} vs me ${JSON.stringify(me).slice(0, 300)}`);
     });

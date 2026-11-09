@@ -605,6 +605,17 @@ withDb('project transfer', () => {
     expect(moved?.accountId).toBe(TARGET_ACCOUNT);
   });
 
+  test('a colleague access ask follows the project', async () => {
+    const { sessionColleagueAccess } = await import('@kortix/db');
+    const [ask] = await db.insert(sessionColleagueAccess).values({
+      accountId: SOURCE_ACCOUNT, projectId: PROJECT_ID, sessionId: SESSION_ID, title: 'synthetic task',
+      secrets: ['SYNTHETIC_KEY'], accessHash: 'a'.repeat(64), expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    }).returning();
+    await transferProjectOwnership({ projectId: PROJECT_ID, fromAccountId: SOURCE_ACCOUNT, toAccountId: TARGET_ACCOUNT });
+    const [moved] = await db.select().from(sessionColleagueAccess).where(eq(sessionColleagueAccess.id, ask!.id));
+    expect(moved?.accountId).toBe(TARGET_ACCOUNT);
+  });
+
   test('App hosting rows follow the project by app_id and the site blobs are copied to the target prefix', async () => {
     const { apps, appDeployments, appSiteFiles, appSiteBlobs, appVolumes, appRuntimes } = await import('@kortix/db');
     const [app] = await db.insert(apps).values({

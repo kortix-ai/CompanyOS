@@ -40,6 +40,9 @@ function hookFor(url: string): Parameters<typeof deliverTestEvent>[0] {
     createdBy: null,
     createdAt: now,
     updatedAt: now,
+    // Workspaces R1 expand: set by a BEFORE trigger from account_id in the real
+    // table; the stub never writes it, so the fixture carries the row shape.
+    workspaceId: null,
   };
 }
 

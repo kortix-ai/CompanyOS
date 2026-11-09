@@ -97,11 +97,11 @@ jobs:
       TEST_ARGS: ${{ matrix.args }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       # The supabase CLI pulls storage-api from public.ecr.aws by default, and
-      # ECR Public's data quota is shared per runner IP: the core-db lane died
-      # twice on release gate 42716922285 ("error from registry: Data limit
-      # exceeded" → supabase_rest_kortix-local 503, no shard signal) while the
-      # same lane's ghcr.io pulls answered. GHCR hosts the same official
-      # mirrors; pin every supabase image pull to it.
+      # ECR Public's data quota is shared per runner IP: the core lane died
+      # twice on release gates 42696873451 and 42716922285 ("error from
+      # registry: Data limit exceeded" → supabase_rest_kortix-local 503, no
+      # shard signal) while the same lane's ghcr.io pulls answered. GHCR hosts
+      # the same official mirrors; pin every supabase image pull to it.
       SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

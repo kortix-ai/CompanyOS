@@ -1,9 +1,9 @@
 'use client';
 
-import { ArrowRightIcon } from '@phosphor-icons/react';
 import { useWorkspaceModels } from '@kortix/sdk/react';
 
 import { useTranslations } from '../../i18n';
+import { SolidRightArrow } from '../../icons/solid-right-arrow';
 import { ClaudeCode } from '../../internal/icons/claude-code';
 import { ProviderLogo } from '../../internal/lib/provider-branding';
 import { hasRunnableSubscriptionModel } from './model-availability';
@@ -62,7 +62,7 @@ export function SubscriptionOffer({ projectId }: { projectId: string }) {
               )}
               <span className="text-foreground shrink-0 text-sm">{t(plan.labelKey)}</span>
               <span className="text-muted-foreground truncate text-sm">{t(plan.planKey)}</span>
-              <ArrowRightIcon className="text-muted-foreground group-hover:text-foreground ml-auto size-4 shrink-0 transition-colors" />
+              <SolidRightArrow className="text-muted-foreground group-hover:text-foreground ml-auto size-4 shrink-0 transition-colors" />
             </button>
           ))}
         </div>

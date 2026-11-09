@@ -132,6 +132,11 @@ test('click opens an accessible popover, actions retain their inputs, and Escape
     ),
   );
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+  // Radix restores focus to the trigger on a queued timer after the close,
+  // so flush it before asserting the trigger has focus back.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   expect(document.activeElement).toBe(trigger());
   await act(async () => trigger().click());
   await act(async () => button('Dismiss').click());

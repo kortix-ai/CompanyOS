@@ -107,7 +107,7 @@ describe('public-share port root without a trailing slash', () => {
 
   for (const [label, search] of [
     ['', ''],
-    [' with a query', '?public_share=' + TOKEN],
+    [' with a query', `?public_share=${TOKEN}`],
   ] as const) {
     test(`reaches the share token gate, not the authenticated proxy${label}`, async () => {
       const res = await get(`/v1/p/public-share/${TOKEN}/3000${search}`);

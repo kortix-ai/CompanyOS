@@ -36,7 +36,10 @@ export function userAccountNameRows(userId: string) {
     })
     .from(accountMembers)
     .innerJoin(accountsView, eq(accountMembers.accountId, accountsView.accountId))
-    .where(eq(accountMembers.userId, userId));
+    .where(eq(accountMembers.userId, userId))
+    // A fixed order: without it two reads of /v1/me may list the same
+    // accounts in a different order (WS-ROUTE-3 saw it under load).
+    .orderBy(asc(accountMembers.joinedAt), asc(accountMembers.accountId));
 }
 
 /**

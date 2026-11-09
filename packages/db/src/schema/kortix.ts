@@ -4431,6 +4431,8 @@ export const oauthAuthorizationCodes = kortixSchema.table(
     uniqueIndex('idx_oauth_codes_code').on(table.code),
     index('idx_oauth_codes_client').on(table.clientId),
     index('idx_oauth_codes_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_authorization_codes_account_id').on(table.accountId),
   ],
 );
 
@@ -4461,6 +4463,8 @@ export const oauthAccessTokens = kortixSchema.table(
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),
     index('idx_oauth_access_tokens_client').on(table.clientId),
     index('idx_oauth_access_tokens_user').on(table.userId),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_access_tokens_account_id').on(table.accountId),
   ],
 );
 
@@ -6134,6 +6138,8 @@ export const appVolumes = kortixSchema.table(
     uniqueIndex('app_volumes_machine_live_unique')
       .on(table.machineId)
       .where(sql`${table.deletedAt} IS NULL AND ${table.machineId} IS NOT NULL`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_volumes_account_id').on(table.accountId),
   ],
 );
 
@@ -6186,6 +6192,8 @@ export const appRuntimes = kortixSchema.table(
     uniqueIndex('app_runtimes_one_live_per_machine')
       .on(table.deploymentId, sql`coalesce(${table.machineId}, ${table.runtimeId})`)
       .where(sql`${table.status} IN ('provisioning', 'starting', 'running', 'stopping')`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_runtimes_account_id').on(table.accountId),
   ],
 );
 
@@ -8791,6 +8799,8 @@ export const captureDeviceGrants = kortixSchema.table(
     uniqueIndex('idx_capture_device_grants_user_code').on(table.userCode),
     uniqueIndex('idx_capture_device_grants_device_code').on(table.deviceCodeHash),
     index('idx_capture_device_grants_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_capture_device_grants_account_id').on(table.accountId),
     check(
       'capture_device_grants_status',
       sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`,
@@ -9803,6 +9813,8 @@ export const cliDeviceGrants = kortixSchema.table('cli_device_grants', {
   workspaceId: uuid('workspace_id'),
 }, (table) => [
   check('cli_device_grants_status_check', sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`),
+  // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+  index('idx_cli_device_grants_account_id').on(table.accountId),
 ]);
 
 /**

@@ -41,7 +41,7 @@ See `plan.md`. Specific to this plan:
 - Modify: `apps/web/translations/{en,de,es,fr,it,ja,pt,sr,zh}.json` (next to `"pi_harness"`, en ~L1007)
 
 **Interfaces:**
-- Produces: `FeatureFlagKey` includes `'genui'`; `resolveFeatureFlag(metadata, 'genui'): boolean`; web `useProjectFeatureFlags(projectId).genui: boolean`.
+- Produces: `FeatureFlagKey` includes `'genui'`; `resolveFeatureFlag(metadata, 'genui'): boolean`; web `useFeatureFlags(projectId).flags.genui: boolean`.
 
 - [ ] **Step 1: List every holder before editing (registry header instruction)**
 

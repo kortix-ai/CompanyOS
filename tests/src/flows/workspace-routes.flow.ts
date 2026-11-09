@@ -546,6 +546,8 @@ flow(
       'GET /v1/me/tokens',
       'GET /v1/accounts/me/tokens',
       'DELETE /v1/me/tokens/:tokenId',
+      'DELETE /v1/me/tokens/self',
+      'DELETE /v1/accounts/me/tokens/self',
     ],
   },
   async (ctx) => {
@@ -587,6 +589,20 @@ flow(
       if (list.find((t) => t.token_id === personalId)?.status !== 'revoked') throw new Error('the key is not revoked');
       (await owner.del(`/v1/me/tokens/${personalId}`)).status(404);
       (await owner.del('/v1/me/tokens/not-a-uuid')).status(400);
+    });
+
+    await ctx.step('DELETE /v1/me/tokens/self (kortix logout) → 200 revokes the bearer key itself; it then answers 401; a browser session or a workspace key cannot', async () => {
+      const minted = (await owner.post('/v1/accounts/tokens', { name: 'wsr10-self', account_id: team.id, expires_at })).status(201)
+        .json<{ token_id: string; secret_key: string }>();
+      const key = ctx.client.withBearer(minted.secret_key, 'WSR10_SELF');
+      (await key.get('/v1/me/tokens')).status(200);
+      (await owner.del('/v1/me/tokens/self')).status(404);
+      (await owner.del('/v1/accounts/me/tokens/self')).status(404);
+      (await ctx.client.withBearer(workspaceKey, 'WSR10_KEY').del('/v1/me/tokens/self')).status(403);
+      (await key.del('/v1/me/tokens/self')).status(200).body().has('$.ok', true);
+      const list = (await owner.get('/v1/me/tokens')).status(200).json<Array<{ token_id: string; status: string }>>();
+      if (list.find((t) => t.token_id === minted.token_id)?.status !== 'revoked') throw new Error('the self-revoked key is not revoked');
+      (await key.get('/v1/me/tokens')).status(401);
     });
 
     await ctx.step('GET /billing/account-state?workspace_id= answers for that workspace, like ?account_id=; never the default one', async () => {

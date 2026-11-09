@@ -42,7 +42,7 @@ export async function loadCustomRole(accountId: string, roleId: string) {
   return row ?? null;
 }
 
-const Any = z.any();
+const Any = z.unknown();
 const PolicyIdParam = z.object({ workspaceId: z.string(), policyId: z.string() });
 
 // Allow-only with no conditions: every binding is an unconditional allow. We
@@ -120,7 +120,7 @@ export function registerPolicyListRoute() {
     request: { params: AccountIdParam },
     responses: { 200: json(z.object({ policies: z.array(Any) }), 'Policies'), ...errors(401, 403) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_READ);
 
@@ -159,15 +159,15 @@ export function registerPolicyWriteRoutes() {
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Any } } } },
     responses: { 201: json(Any, 'Created policy'), ...errors(400, 401, 403, 404) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_CREATE);
     const denied = await requireEntitlement(c, accountId, 'rbac');
-    if (denied) return denied;
+    if (denied) return denied as never;
 
     const body = await readJsonObject(c);
     const parsed = await parsePolicyInput(accountId, body);
-    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status as never);
 
     // THE write: it enforces the delegability ceiling (a role carrying a
     // non-delegable action cannot be BOUND, not just created), busts the caches,
@@ -211,7 +211,7 @@ export function registerPolicyWriteRoutes() {
     request: { params: PolicyIdParam },
     responses: { 200: json(z.object({ deleted: z.boolean() }), 'Deleted'), ...errors(401, 403, 404) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     const policyId = c.req.param('policyId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_DELETE);
@@ -251,7 +251,7 @@ export function registerPolicyWriteRoutes() {
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Any } } } },
     responses: { 200: json(z.object({ deleted: z.number() }), 'Deleted count'), ...errors(400, 401, 403) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_DELETE);
     // No entitlement gate: bulk policy revocation is cleanup, always allowed.
@@ -281,13 +281,13 @@ export function registerPolicyWriteRoutes() {
     request: { params: PolicyIdParam, body: { content: { 'application/json': { schema: Any } } } },
     responses: { 200: json(Any, 'Updated policy'), ...errors(400, 401, 403, 404) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     const policyId = c.req.param('policyId');
     // Editing an assignment is a create-class action — gate on POLICY_CREATE.
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_CREATE);
     const denied = await requireEntitlement(c, accountId, 'rbac');
-    if (denied) return denied;
+    if (denied) return denied as never;
 
     const existing = await resolveBindingId(accountId, policyId);
     if (!existing) return c.json({ error: 'policy not found' }, 404);
@@ -307,7 +307,7 @@ export function registerPolicyWriteRoutes() {
       // membership (a since-removed member must not 404 a scope/role/expiry edit).
       { validatePrincipal: false },
     );
-    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+    if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status as never);
 
     // An in-place re-point, NOT revoke+grant: the id is part of this route's
     // contract, and a caller that PATCHes then DELETEs holds it.
@@ -339,11 +339,11 @@ export function registerPolicyWriteRoutes() {
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Any } } } },
     responses: { 200: json(Any, 'Import result'), ...errors(400, 401, 403) },
   }),
-  async (c: any) => {
+  async (c) => {
     const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.POLICY_CREATE);
     const denied = await requireEntitlement(c, accountId, 'rbac');
-    if (denied) return denied;
+    if (denied) return denied as never;
 
     const body = await readJsonObject(c);
     const entries = Array.isArray(body.policies) ? (body.policies as Array<Record<string, unknown>>) : [];

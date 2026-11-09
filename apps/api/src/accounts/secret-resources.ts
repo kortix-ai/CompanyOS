@@ -58,7 +58,7 @@ async function loadSecret(accountId: string, secretId: string) {
 }
 /** The caller may manage a resource they created, or any resource with account.write. */
 async function mayManage(c: Context<AppEnv>, accountId: string, creatorId: string) {
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   if (creatorId === userId) return Boolean(await getMembership(userId, accountId));
   return mayWriteAccount(c, accountId);
 }
@@ -119,7 +119,7 @@ export function registerSecretResourceRoutes() {
     const accountId = accountIdParam(c);
     const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
     if (!projectId) return c.json({ error: 'project_id is required' }, 400);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
     const rows = await db.select().from(accountSecretResources).where(and(
       eq(accountSecretResources.accountId, accountId),
@@ -143,7 +143,7 @@ export function registerSecretResourceRoutes() {
     const { storage } = c.req.valid('query');
     const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
     if (!projectId) return c.json({ error: 'project_id is required' }, 400);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
     if (storage !== 'account_resource') {
       const result = await refreshLegacySubscriptionUsage({ accountId, projectId, userId, secretId, storage });
@@ -162,9 +162,9 @@ export function registerSecretResourceRoutes() {
     summary: 'List account secret resources granted to the caller', ...auth,
     request: { params: AccountIdParam },
     responses: { 200: json(z.object({ secrets: z.array(View) }), 'Granted secret resources'), ...errors(403) },
-  }), async (c: any) => {
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     const membership = await getMembership(userId, accountId);
     if (!membership) return c.json({ error: 'Forbidden' }, 403);
     const projectId = await scopedProjectId(c, c.req.query('project_id') as string | undefined);
@@ -185,9 +185,9 @@ export function registerSecretResourceRoutes() {
     summary: 'Create an account secret resource', ...auth,
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Create } } } },
     responses: { 201: json(View, 'Created secret metadata'), ...errors(400, 403) },
-  }), async (c: any) => {
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
     const parsed = Create.safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid secret resource' }, 400);
@@ -244,9 +244,9 @@ export function registerSecretResourceRoutes() {
       mode: z.enum(['project', 'members']), user_ids: z.array(z.string().uuid()).max(200),
     }).strict() } } } },
     responses: { 200: json(View, 'Updated access'), ...errors(400, 403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const actorId = c.get('userId') as string;
+    const actorId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!row.projectId || !(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -284,9 +284,9 @@ export function registerSecretResourceRoutes() {
     summary: 'Rotate one secret value', ...auth,
     request: { params: SecretIdParam, body: { content: { 'application/json': { schema: z.object({ value: z.string().min(1).max(65536) }) } } } },
     responses: { 200: json(View, 'Rotated secret metadata'), ...errors(400, 403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -313,7 +313,7 @@ export function registerSecretResourceRoutes() {
   }), async (c) => {
     const { secretId } = c.req.valid('param');
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, secretId);
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -331,7 +331,7 @@ export function registerSecretResourceRoutes() {
   }), async (c) => {
     const { secretId } = c.req.valid('param');
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
     const row = await loadSecret(accountId, secretId);
     if (!row) return c.json({ error: 'Not found' }, 404);
@@ -354,9 +354,9 @@ export function registerSecretResourceRoutes() {
     summary: 'Delete one secret resource and its grants', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(z.object({ ok: z.boolean() }), 'Deleted'), ...errors(403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const userId = c.get('userId') as string;
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -373,10 +373,10 @@ export function registerSecretResourceRoutes() {
     method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
     summary: 'Grant a member use of one secret', ...auth,
     request: { params: GrantParam },
-    responses: { 200: json(View, 'Updated secret grants'), ...errors(403, 404) },
-  }), async (c: any) => {
+    responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const actorId = c.get('userId') as string;
+    const actorId = c.get('userId');
     const userId = c.req.param('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
@@ -399,17 +399,17 @@ export function registerSecretResourceRoutes() {
       }
     }
     await db.insert(accountSecretGrants).values({ accountId, secretId: row.secretId, userId, grantedBy: actorId }).onConflictDoNothing();
-    return c.json(await view(row, actorId));
+    return c.json(await view(row, actorId), 200);
   });
 
   accountsRouter.openapi(createRoute({
     method: 'delete', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
     summary: 'Revoke a member secret grant', ...auth,
     request: { params: GrantParam },
-    responses: { 200: json(View, 'Updated secret grants'), ...errors(403, 404) },
-  }), async (c: any) => {
+    responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },
+  }), async (c) => {
     const accountId = accountIdParam(c);
-    const actorId = c.get('userId') as string;
+    const actorId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -418,6 +418,6 @@ export function registerSecretResourceRoutes() {
       return c.json({ error: 'The connection owner keeps access' }, 400);
     }
     await db.delete(accountSecretGrants).where(and(eq(accountSecretGrants.secretId, row.secretId), eq(accountSecretGrants.userId, c.req.param('userId'))));
-    return c.json(await view(row, actorId));
+    return c.json(await view(row, actorId), 200);
   });
 }

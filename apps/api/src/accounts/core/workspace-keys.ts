@@ -122,7 +122,7 @@ type WorkspaceRefusal =
 async function keysWorkspace(
   c: Context<AppEnv>,
 ): Promise<{ ok: true; workspaceId: string; accountId: string } | WorkspaceRefusal> {
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   const binding = await pathTokenBinding(c);
   if (binding.kind === 'ambiguous') {
     return { ok: false, status: 409, body: { error: 'This account holds several workspaces. Name one: use /v1/workspaces/<workspace id>/keys.', code: WORKSPACE_AMBIGUOUS_CODE } };
@@ -194,7 +194,7 @@ async function listKeys(c: Context<AppEnv>) {
   if (c.get('authType') === 'service_account') {
     return c.json({ error: 'A service account cannot list keys', code: 'not_a_member' }, 403);
   }
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   const ws = await keysWorkspace(c);
     if (!ws.ok) {
     const { status, body } = ws;
@@ -294,7 +294,7 @@ async function mintServiceAccountKey(c: Context<AppEnv>, body: Record<string, un
       403,
     );
   }
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name) return c.json({ error: 'name is required' }, 400);
   if (name.length > 255) return c.json({ error: 'name too long (max 255 chars)' }, 400);
@@ -448,7 +448,7 @@ async function mintKey(c: Context<AppEnv>) {
     const { status, body: refusal } = mint;
     return status === 400 ? c.json(refusal, 400) : status === 403 ? c.json(refusal, 403) : c.json(refusal, 409);
   }
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   const emails = await lookupEmailsByUserIds([userId]);
   return c.json(
     {
@@ -471,7 +471,7 @@ async function mintKey(c: Context<AppEnv>) {
  * caller's own, or a disabled bot's bearer.
  */
 async function revokeKey(c: Context<AppEnv>) {
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   const keyId = c.req.param('keyId') ?? '';
   if (!isUuid(keyId)) return c.json({ error: `"${keyId}" is not a valid key id (a key id is a UUID)` }, 400);
   const ws = await keysWorkspace(c);

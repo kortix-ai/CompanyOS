@@ -111,7 +111,7 @@ export function registerIamMembersRoutes(): void {
         ...errors(400, 401, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const accountId = accountIdParam(c);
     const targetUserId = c.req.param('userId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.MEMBER_SUPER_ADMIN_GRANT);
@@ -200,8 +200,8 @@ export function registerIamMembersRoutes(): void {
         ...errors(400, 401, 403),
       },
     }),
-    async (c: any) => {
-    const callerId = c.get('userId') as string;
+    async (c) => {
+    const callerId = c.get('userId');
     const accountId = accountIdParam(c);
     const targetUserId = c.req.param('userId');
 
@@ -245,8 +245,8 @@ export function registerIamMembersRoutes(): void {
         ...errors(400, 401, 403),
       },
     }),
-    async (c: any) => {
-    const callerId = c.get('userId') as string;
+    async (c) => {
+    const callerId = c.get('userId');
     const accountId = accountIdParam(c);
     const targetUserId = c.req.param('userId');
 
@@ -417,8 +417,8 @@ export function registerIamMembersRoutes(): void {
         ...errors(400, 401, 403),
       },
     }),
-    async (c: any) => {
-    const callerId = c.get('userId') as string;
+    async (c) => {
+    const callerId = c.get('userId');
     const accountId = accountIdParam(c);
     const targetUserId = c.req.param('userId');
 
@@ -466,8 +466,8 @@ export function registerIamMembersRoutes(): void {
         ...errors(400, 401, 403),
       },
     }),
-    async (c: any) => {
-    const callerId = c.get('userId') as string;
+    async (c) => {
+    const callerId = c.get('userId');
     const accountId = accountIdParam(c);
     const targetUserId = c.req.param('userId');
 

@@ -14,20 +14,27 @@ const { buildServer } = await import('./server');
 // the credential is real; an unknown one comes back refused as unauthenticated.
 const apiCalls: string[] = [];
 const realFetch = globalThis.fetch;
+const refused = { ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' };
+const billingRefused = {
+  ok: false,
+  status: 402,
+  errorCode: 'subscription_required',
+  principal: { accountId: 'acct', role: 'user' },
+};
 const fakeApi = (async (url: string, init: RequestInit) => {
   apiCalls.push(String(url));
   if (!String(url).endsWith('/admit')) return new Response('not found', { status: 404 });
   const { token } = JSON.parse(String(init.body)) as { token?: string };
-  const admission =
-    token === 'kortix_real'
-      ? {
-          ok: false,
-          status: 402,
-          errorCode: 'subscription_required',
-          principal: { accountId: 'acct', role: 'user' },
-        }
-      : { ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' };
-  return Response.json({ admission });
+  return Response.json({ admission: token === 'kortix_real' ? billingRefused : refused });
+}) as typeof fetch;
+// An API in the pre-`/admit` rollout: the gateway falls back to `/authorize`,
+// which is the hook that must also validate a credential the API knows.
+const fakeApiWithoutAdmit = (async (url: string, init: RequestInit) => {
+  apiCalls.push(String(url));
+  if (!String(url).endsWith('/authorize'))
+    return Response.json({ error: 'not found' }, { status: 404 });
+  const { token } = JSON.parse(String(init.body)) as { token?: string };
+  return Response.json(token === 'kortix_real' ? billingRefused : refused);
 }) as typeof fetch;
 const useFakeApi = () => {
   apiCalls.length = 0;
@@ -52,7 +59,10 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
     // five reaches the API under its own bucket.
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     useFakeApi();
-    const { app } = buildServer({ requestsPerMinutePerCredential: 2 });
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 1,
+      requestsPerMinuteUnvalidated: 2,
+    });
     const statuses: number[] = [];
     for (let n = 1; n <= 5; n++)
       statuses.push((await app.request(call(`kortix_fake_${n}`))).status);
@@ -61,11 +71,41 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
     expect(apiCalls).toHaveLength(2);
   });
 
+  test('the shared allowance is its own setting, not one credential\u2019s budget', async () => {
+    // A per-credential limit of 1 with the default shared setting must not
+    // refuse real callers: ten credentials the API has never seen are each
+    // admitted, where sharing the 1/min budget would refuse nine. The shared
+    // bucket is a separate, far larger number (KRTX-4528: 600/min per
+    // credential was never an unauthenticated-flood bound).
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    useFakeApi();
+    const { app } = buildServer({ requestsPerMinutePerCredential: 1 });
+    const served: number[] = [];
+    for (let n = 1; n <= 10; n++) served.push((await app.request(call(`kortix_new_${n}`))).status);
+    expect(served).toEqual(Array<number>(10).fill(401));
+  });
+
+  test('fakes are refused once the shared allowance is spent, and a real credential keeps its own budget', async () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    useFakeApi();
+    // 3 shared slots: the fourth distinct fake is refused.
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 2,
+      requestsPerMinuteUnvalidated: 3,
+    });
+    const fakes: number[] = [];
+    for (let n = 1; n <= 6; n++) fakes.push((await app.request(call(`kortix_fake_${n}`))).status);
+    expect(fakes).toEqual([401, 401, 401, 429, 429, 429]);
+  });
+
   test('a credential the API answers with a principal gets its own budget back', async () => {
     // One pinned minute: a real clock would refill the budget.
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     useFakeApi();
-    const { app } = buildServer({ requestsPerMinutePerCredential: 2 });
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 2,
+      requestsPerMinuteUnvalidated: 2,
+    });
     // The first request reaches the fake API, which answers its principal. That
     // request took a shared slot, and validation gives it back once: the
     // credential's own budget of two admits two more, and the fourth is
@@ -93,7 +133,10 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
     // each fake a private bucket and admit all five.
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     useFakeApi();
-    const { app } = buildServer({ requestsPerMinutePerCredential: 2 });
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 1,
+      requestsPerMinuteUnvalidated: 2,
+    });
     const statuses: number[] = [];
     for (let n = 1; n <= 5; n++)
       statuses.push(
@@ -109,5 +152,24 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
       );
     expect(statuses).toEqual([401, 401, 429, 429, 429]);
     expect(apiCalls).toHaveLength(2);
+  });
+
+  test('the authorize hook validates a credential too, not only admit', async () => {
+    // An API without `/admit` answers `/authorize`, which carries the principal
+    // as well. Without the authorize wrapper the real credential would stay on
+    // the shared bucket, so its second request would be refused by the shared
+    // limit instead of its own budget — the same status, so assert the bucket
+    // the second request drew from via the fake that follows: a fake must still
+    // be admitted, which a shared charge would refuse at limit 1.
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    useFakeApi();
+    globalThis.fetch = fakeApiWithoutAdmit;
+    const { app } = buildServer({
+      requestsPerMinutePerCredential: 1,
+      requestsPerMinuteUnvalidated: 1,
+    });
+    expect((await app.request(call('kortix_real'))).status).toBe(402);
+    // Its shared slot was refunded: a fake still fits the shared allowance.
+    expect((await app.request(call('kortix_fake_1'))).status).toBe(401);
   });
 });

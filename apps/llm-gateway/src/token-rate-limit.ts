@@ -15,17 +15,19 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
  * from a fabricated one. A credential the API has answered with a principal is
  * real and keeps its own bucket, keyed on the credential's SHA-256 so no raw
  * secret stays in memory. Every other credential is charged to ONE shared
- * bucket, whatever its value: a caller that sends a fresh made-up bearer per
- * request cannot buy a private bucket each time, so the shared allowance bounds
- * how many requests reach the API unverified (CWE-770) and the bucket map
- * cannot grow one entry per request. `validated(credential)` moves a real
- * credential onto its own budget and gives back the shared slot it took, once,
- * so real traffic does not drain the allowance every new credential shares. A
- * request without a credential is not counted: the pipeline refuses it with
- * 401 before it calls the API. The cost this accepts: every credential's first
- * request spends a shared slot, so a flood can exhaust the shared bucket and
- * refuse a real credential still waiting on that first validation until the
- * window refills. That is the trade for a bounded, unauthenticated allowance.
+ * bucket, given by `unvalidatedPerMinute` (order of magnitude above one
+ * credential's own budget), whatever its value: a caller that sends a fresh
+ * made-up bearer per request cannot buy a private bucket each time, so the
+ * shared allowance bounds how many requests reach the API unverified (CWE-770)
+ * and the bucket map cannot grow one entry per request. `validated(credential)`
+ * moves a real credential onto its own budget and gives back the shared slot it
+ * took, once, so real traffic does not drain the allowance every new credential
+ * shares. A request without a credential is not counted: the pipeline refuses
+ * it with 401 before it calls the API. The cost this accepts: a credential's
+ * first request spends a shared slot, refunded when the API validates it, so a
+ * flood large enough to spend the whole shared allowance can refuse a real
+ * credential still waiting on that first validation until the window refills.
+ * That is the trade for a bounded, unauthenticated allowance.
 
  *
  * Each gateway task counts alone, so the fleet allows limit × tasks. This
@@ -33,7 +35,10 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
  *
  * Returns the 429 response, or null when the request may continue.
  */
-export function createTokenRateLimit(limitPerMinute: number): {
+export function createTokenRateLimit(
+  limitPerMinute: number,
+  unvalidatedPerMinute = limitPerMinute,
+): {
   /** The limit for one request, charged to the credential's own bucket once validated, else to the shared one. */
   (request: Request, headers?: Headers): Response | null;
   /** The API answered this credential with a principal; it keeps its own bucket from now on. */
@@ -49,6 +54,7 @@ export function createTokenRateLimit(limitPerMinute: number): {
   // admits at most `limit` of them per window, so the set cannot outgrow it.
   const chargedShared = new Set<string>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
+  const sharedPolicy = { limit: Math.max(1, unvalidatedPerMinute), windowMs: 60_000 };
   const limit = (request: Request, headers = new Headers()): Response | null => {
     const credential = credentialOf(request);
     if (!credential) return null;
@@ -56,7 +62,10 @@ export function createTokenRateLimit(limitPerMinute: number): {
     // A validated credential keeps its own budget; anything else shares one
     // bucket, so a rotating fake bearer spends the shared allowance, never its
     // own private one.
-    const result = limiter.check(validatedKeys.has(key) ? key : UNVALIDATED, policy);
+    const result = limiter.check(
+      validatedKeys.has(key) ? key : UNVALIDATED,
+      validatedKeys.has(key) ? policy : sharedPolicy,
+    );
     if (!validatedKeys.has(key) && result.allowed) chargedShared.add(key);
     headers.set('RateLimit-Limit', String(result.limit));
     headers.set('RateLimit-Remaining', String(result.remaining));
@@ -77,7 +86,7 @@ export function createTokenRateLimit(limitPerMinute: number): {
     validatedKeys.add(key);
     // Give back the shared slot this credential's pre-validation request took,
     // once: it now has its own budget to be counted against.
-    if (chargedShared.delete(key)) limiter.refund(UNVALIDATED, policy);
+    if (chargedShared.delete(key)) limiter.refund(UNVALIDATED, sharedPolicy);
   };
   limit.buckets = () => limiter.keys();
   return limit;

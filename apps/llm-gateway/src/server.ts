@@ -98,7 +98,11 @@ export function messagesAuthorization(
 }
 
 export function buildServer(
-  options: { inflight?: InflightBudget; requestsPerMinutePerCredential?: number } = {},
+  options: {
+    inflight?: InflightBudget;
+    requestsPerMinutePerCredential?: number;
+    requestsPerMinuteUnvalidated?: number;
+  } = {},
 ): GatewayServer {
   const inflight = options.inflight ?? defaultInflight;
   const api = createApiClient({
@@ -127,6 +131,7 @@ export function buildServer(
   const { recordOutcome, recordUpstream, trafficSnapshot, upstreamSignals } = createTraffic();
   const rateLimit = createTokenRateLimit(
     options.requestsPerMinutePerCredential ?? config.requestsPerMinutePerCredential,
+    options.requestsPerMinuteUnvalidated ?? config.requestsPerMinuteUnvalidated,
   );
   // An API answer that carries a principal means the credential is real (even
   // when a later gate denied the request: 402/403 carry the principal too). So

@@ -126,7 +126,10 @@ export type ParkedRemovalOutcome = 'recovered' | 'preserve-lost' | 'recovery-in-
  * historical one: preserve the identity. When another caller already owns a
  * recovery for the row (`claim` false), the sweep leaves it alone rather than
  * racing a restore that is in progress. Only an explicit `unavailable` from the
- * provider authorizes the loss.
+ * provider authorizes the loss. A THROWN probe is a failed round-trip, not a
+ * provider statement — Platinum's `/start` can refuse for a passing reason
+ * (the org write rate limit, a 5xx, network) that has nothing to do with
+ * whether the data exists — so it leaves the row for the next pass instead.
  */
 export async function decideRemovedParkedOutcome(input: {
   externalId: string;
@@ -137,7 +140,12 @@ export async function decideRemovedParkedOutcome(input: {
   if (!input.recoverInPlace) return 'preserve-lost';
   const claimed = await input.claim();
   if (!claimed) return 'recovery-in-flight';
-  const recovery = await input.recoverInPlace(input.externalId).catch(() => 'unavailable' as const);
+  // A throw says "this probe could not run", never "the box is gone": the
+  // gate's explicit `unavailable` is the only loss authority (doc above).
+  const recovery = await input
+    .recoverInPlace(input.externalId)
+    .catch(() => 'recovery-in-flight' as const);
+  if (recovery === 'recovery-in-flight') return 'recovery-in-flight';
   if (recovery === 'running' || recovery === 'recovering') {
     // The mark is the write that ends the recovery. If another writer beat us to
     // the row the provider still recovered, but this sweep no longer owns the

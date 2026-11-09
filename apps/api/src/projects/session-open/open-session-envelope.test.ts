@@ -420,6 +420,27 @@ describe('openSession response envelope — one pin per orchestration branch', (
     expect(preservedRows).toEqual([]);
   });
 
+  test('a recovery this open claimed but lost mid-mark answers the same retryable card', async () => {
+    // The claim was won and the provider answered, but the accept-write was
+    // raced by another writer: the row is recovering somewhere else, so the
+    // answer is the retryable card, not a terminal one and not a loss.
+    const removedAt = new Date(NOW_MS() - 10 * 60_000).toISOString();
+    selectQueue = [[row('active', { initSucceededAt: removedAt })]];
+    providerStatuses = ['removed'];
+    recoverInPlaceResult = 'recovering';
+    recoveryClaims = [{ row: row('active', { initSucceededAt: removedAt }), id: 'claim-1' }];
+    recoveryAcceptedRows = [];
+
+    const result = await openSession(args('default', 'oc-current'));
+
+    expect(result.stage).toBe('starting');
+    expect(result.retriable).toBe(true);
+    expect(result.reason).toBe('runtime_recovery_in_progress');
+    expect(preservedRows).toEqual([]);
+    // The provider still recovered: nothing must undo or report it.
+    expect(recoveryAcceptedRows).toEqual([]);
+  });
+
   test('a removed box already parked as lost skips the recovery claim and answers the terminal card', async () => {
     // The row was preserved as lost on an earlier open (its report already
     // fired once). Re-claiming would overwrite runtimeIdentityState before the

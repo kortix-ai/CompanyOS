@@ -61,7 +61,10 @@ test('the reviewed WS-AUTH-10 minter label is suppressed by the pinned scanner',
     gitleaks,
     [
       'git',
-      `--log-opts=-1 ${minterEntry[1]}`,
+      // Only the flagged file of the flagged commit: the commit is the
+      // workspaces rename (2,463 files), and scanning all of it took >30 s on
+      // a CI runner (release run 42709749119). The fingerprint names the path.
+      `--log-opts=-1 ${minterEntry[1]} -- ${minterEntry[2]}`,
       '--redact',
       '--exit-code',
       '1',

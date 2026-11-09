@@ -237,6 +237,24 @@ withDb('machines and volumes — real PostgreSQL', () => {
     expect(after!.attachedRuntimeId).toBe(restored!.runtimeId);
   });
 
+  test('a failed runtime insert surfaces as itself and removes the box it just created', async () => {
+    await seedApp();
+    const v1 = await deploy(stateless, 1);
+    const [live] = await liveInstances(v1.deploymentId);
+    const app = await appRow();
+    calls.length = 0;
+    // One live instance per machine of a release: a second insert for the same
+    // (deployment, machine) violates app_runtimes_one_live_per_machine. The
+    // rollback removes the box it just created and rethrows the real error —
+    // never a masking `hosting.remove is not a function`.
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment: v1, config: stateless,
+      env: await machines.releaseEnvironment(app, v1),
+      group: 'app', machineId: live!.machineId!,
+    })).rejects.toThrow(/insert into "kortix"\."app_runtimes"/);
+    expect(calls).toContain('remove box-2');
+  });
+
   test('scale reconcile: up creates machines (a mounted group gets one new volume each), down destroys the newest and keeps their volumes', async () => {
     await seedApp();
     const v1 = await deploy(stateful, 1);

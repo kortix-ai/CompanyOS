@@ -1447,7 +1447,6 @@ const catalog = {
       "upgradeDescription": "Upgrade or connect your own provider to start using this session."
     },
     "favorites": "Favorites",
-    "otherModels": "Other models",
     "favoritesEmpty": "Star a model to keep it here.",
     "addFavorite": "Add {model} to favorites",
     "removeFavorite": "Remove {model} from favorites",

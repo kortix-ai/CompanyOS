@@ -2049,7 +2049,6 @@
       "upgradeDescription": "升级或连接你自己的提供商后即可开始使用此会话。"
     },
     "favorites": "收藏",
-    "otherModels": "其他模型",
     "favoritesEmpty": "为模型加星标即可保留在这里。",
     "addFavorite": "将 {model} 加入收藏",
     "removeFavorite": "将 {model} 移出收藏",

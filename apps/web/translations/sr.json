@@ -2049,7 +2049,6 @@
       "upgradeDescription": "Надоградите или повежите сопственог добављача да бисте започели коришћење ове сесије."
     },
     "favorites": "Omiljeni",
-    "otherModels": "Ostali modeli",
     "favoritesEmpty": "Označite model zvezdicom da biste ga zadržali ovde.",
     "addFavorite": "Dodaj {model} u omiljene",
     "removeFavorite": "Ukloni {model} iz omiljenih",

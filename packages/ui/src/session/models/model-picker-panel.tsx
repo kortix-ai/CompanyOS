@@ -1,11 +1,11 @@
 'use client';
 
 import type { FlatModel } from '@kortix/sdk/react';
-import { CheckIcon, DotsThreeIcon, StarIcon } from '@phosphor-icons/react';
+import { CheckIcon, StarIcon } from '@phosphor-icons/react';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
-import { ProviderLogo } from '../../internal/lib/provider-branding';
+import { MODEL_SELECTOR_PROVIDER_IDS, ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
 import { foreignDialogOpen } from '../../lib/z-stack';
 import { Button } from '../../primitives/button';
@@ -75,9 +75,10 @@ export interface ModelPickerPanelProps {
 }
 
 /**
- * The composer's model popover: a rail of model groups on the left, the
- * group's models in the middle, and the selected model's thinking effort on
- * the right.
+ * The composer's model popover: a rail on the left (Favorites, Kortix,
+ * ChatGPT, then one tab per connected provider), the tab's models in the
+ * middle, and the selected model's thinking effort on the right. Picking a
+ * model or a level keeps it open; Escape or a click outside closes it.
  *
  * The star on a row is a FAVORITE (per browser, `useModelStore`), not the
  * workspace default: favorites collect in the first tab, the way a member
@@ -108,7 +109,11 @@ export function ModelPickerPanel({
   const tPooled = useTranslations('pooledSecrets');
 
   const tabs = useMemo(
-    () => pickerTabs(browseModels, { canConnectChatGpt: !!onConnectChatGpt }),
+    () =>
+      pickerTabs(browseModels, {
+        canConnectChatGpt: !!onConnectChatGpt,
+        providerOrder: MODEL_SELECTOR_PROVIDER_IDS,
+      }),
     [browseModels, onConnectChatGpt],
   );
   const favorites = useMemo(() => browseModels.filter(isFavorite), [browseModels, isFavorite]);
@@ -153,18 +158,7 @@ export function ModelPickerPanel({
     return browseModels.filter((m) => pickerTabOf(m) === tab);
   }, [searching, searchModels, tab, favorites, browseModels]);
 
-  // "Other" spans many providers: one heading per provider, in rail order.
-  const sections = useMemo(() => {
-    if (searching || tab !== 'other') return [{ id: tab, label: null as string | null, models: rows }];
-    const byProvider = new Map<string, { id: string; label: string; models: FlatModel[] }>();
-    for (const m of rows) {
-      const id = pickerGroupId(m);
-      const entry = byProvider.get(id) ?? { id, label: pickerGroupLabel(id, m), models: [] };
-      entry.models.push(m);
-      byProvider.set(id, entry);
-    }
-    return Array.from(byProvider.values());
-  }, [searching, tab, rows]);
+  const sections = useMemo(() => [{ id: searching ? 'search' : tab, models: rows }], [searching, tab, rows]);
   const ordered = useMemo(() => sections.flatMap((s) => s.models), [sections]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -177,21 +171,19 @@ export function ModelPickerPanel({
     onPick(model);
   };
 
-  const tabLabel = (id: PickerTabId) =>
-    id === 'favorites'
-      ? t('favorites')
-      : id === 'kortix'
-        ? 'Kortix'
-        : id === 'chatgpt'
-          ? 'ChatGPT'
-          : t('otherModels');
+  const tabLabel = (id: PickerTabId) => {
+    if (id === 'favorites') return t('favorites');
+    if (id === 'kortix') return 'Kortix';
+    if (id === 'chatgpt') return 'ChatGPT';
+    const sample = browseModels.find((m) => pickerTabOf(m) === id);
+    return sample ? pickerGroupLabel(id, sample) : id;
+  };
 
   const tabIcon = (id: PickerTabId) => {
-    if (id === 'favorites') return <StarIcon weight="fill" className="size-4" />;
-    if (id === 'other') return <DotsThreeIcon weight="bold" className="size-4" />;
+    if (id === 'favorites') return <StarIcon weight="fill" className="text-kortix-yellow size-5" />;
     return (
       <ProviderLogo
-        providerID={id === 'kortix' ? 'kortix' : 'codex'}
+        providerID={id === 'chatgpt' ? 'codex' : id}
         name={tabLabel(id)}
         size="xs"
         className="size-5"
@@ -224,14 +216,7 @@ export function ModelPickerPanel({
     let index = 0;
     body = sections.map((section) => (
       <Fragment key={section.id}>
-        <CommandGroup
-          forceMount
-          heading={
-            section.label ? (
-              <span className="text-muted-foreground font-medium">{section.label}</span>
-            ) : undefined
-          }
-        >
+        <CommandGroup forceMount>
           {section.models.map((model) => {
             index += 1;
             return (
@@ -259,7 +244,7 @@ export function ModelPickerPanel({
           role="tablist"
           aria-label={t('groups')}
           aria-orientation="vertical"
-          className="flex w-12 shrink-0 flex-col items-center gap-1 border-r py-2"
+          className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r py-2"
         >
           {tabs.map((id) => {
             const active = !searching && id === tab;
@@ -275,7 +260,7 @@ export function ModelPickerPanel({
                     if (searching) onSearchChange('');
                   }}
                   className={cn(
-                    'text-muted-foreground flex size-8 cursor-pointer items-center justify-center rounded-md outline-none',
+                    'text-muted-foreground flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md outline-none',
                     'hover:bg-hover hover:text-foreground focus-visible:ring-kortix-base focus-visible:ring-2',
                     active && 'bg-active text-foreground',
                   )}
@@ -351,6 +336,7 @@ function PickerRow({
         providerID={groupID}
         name={pickerGroupLabel(groupID, model)}
         size="xs"
+        className="size-5"
       />
       <span className={cn('min-w-0 truncate leading-tight', unavailable && 'opacity-60')}>
         <span className="text-foreground font-medium">{lead}</span>
@@ -381,7 +367,7 @@ function PickerRow({
         }}
         className={cn(
           'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md',
-          'text-muted-foreground hover:text-foreground hover:bg-foreground/10',
+          'text-muted-foreground hover:text-kortix-yellow hover:bg-foreground/10',
           'duration-normal transition-[color,background-color,transform] ease-out motion-safe:active:scale-[0.96]',
           'focus-visible:ring-kortix-base focus-visible:ring-2 focus-visible:outline-none',
           // Hidden means unclickable too; a favorite keeps its star at rest.

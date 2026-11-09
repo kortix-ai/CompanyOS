@@ -670,13 +670,9 @@ export function ModelSelector({
       // A Claude model signs in under Anthropic, in the provider list.
       if (connect === 'claude' || connect === 'provider') return handleOpenProviderModal('providers');
       onSelect({ providerID: model.providerID, modelID: model.modelID });
-      // With the effort pane on, a model that has levels keeps the popover
-      // open: the pane switches to its levels so both can be set in one visit.
-      const keepOpen =
-        appearance === 'chip' &&
-        !!reasoning?.onVariantChange &&
-        Object.keys(model.variants ?? {}).length > 0;
-      if (!keepOpen) setOpen(false);
+      // The chip popover stays open: a model and its thinking level are set
+      // in one visit, and Escape or a click outside closes it.
+      if (appearance !== 'chip') setOpen(false);
     },
     [
       onSelect,
@@ -685,16 +681,13 @@ export function ModelSelector({
       handleOpenChatGpt,
       handleOpenProviderModal,
       appearance,
-      reasoning?.onVariantChange,
     ],
   );
 
+  // Stays open too: the check moves, and the model list is still in reach.
   const handleEffortChange = useCallback(
-    (variant: string | null) => {
-      reasoning?.onVariantChange?.(variant);
-      setOpen(false);
-    },
-    [reasoning, setOpen],
+    (variant: string | null) => reasoning?.onVariantChange?.(variant),
+    [reasoning],
   );
 
   const closePicker = useCallback(() => setOpen(false), [setOpen]);

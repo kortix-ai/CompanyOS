@@ -2049,7 +2049,6 @@
       "upgradeDescription": "アップグレードするか、自分のプロバイダーに接続すると、このセッションを利用できます。"
     },
     "favorites": "お気に入り",
-    "otherModels": "その他のモデル",
     "favoritesEmpty": "モデルにスターを付けるとここに表示されます。",
     "addFavorite": "{model} をお気に入りに追加",
     "removeFavorite": "{model} をお気に入りから削除",

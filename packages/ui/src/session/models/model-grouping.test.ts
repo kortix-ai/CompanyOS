@@ -294,20 +294,34 @@ describe('buildPickerSections', () => {
 describe('picker rail tabs', () => {
   const managed = { providerID: 'kortix', modelID: 'glm-5.3-flash', provider: 'kortix' };
   const chatgpt = { providerID: 'kortix', modelID: 'codex/gpt-6.1-sol', provider: 'codex' };
-  const byok = { providerID: 'kortix', modelID: 'anthropic/claude-opus-5-5', provider: 'anthropic' };
+  const anthropic = { providerID: 'kortix', modelID: 'anthropic/claude-opus-5-5', provider: 'anthropic' };
+  const deepseek = { providerID: 'kortix', modelID: 'deepseek/deepseek-v4', provider: 'deepseek' };
   const claudePlan = { providerID: 'claude-agent', modelID: 'claude-opus-5-5' };
 
-  test('each model lands in exactly one source tab', () => {
+  test('each model lands in exactly one tab: Kortix, ChatGPT, or its own provider', () => {
     expect(pickerTabOf(managed)).toBe('kortix');
     expect(pickerTabOf(chatgpt)).toBe('chatgpt');
     expect(pickerTabOf({ providerID: 'kortix', modelID: 'codex/gpt-6-luna' })).toBe('chatgpt');
-    expect(pickerTabOf(byok)).toBe('other');
-    expect(pickerTabOf(claudePlan)).toBe('other');
+    expect(pickerTabOf(anthropic)).toBe('anthropic');
+    expect(pickerTabOf(claudePlan)).toBe('claude-agent');
   });
 
-  test('Favorites is always first; empty source tabs are left out', () => {
-    expect(pickerTabs([managed, byok])).toEqual(['favorites', 'kortix', 'other']);
+  test('Favorites first, then Kortix, ChatGPT, then providers in picker order; empty tabs left out', () => {
+    expect(pickerTabs([deepseek, anthropic, managed], { providerOrder: ['kortix', 'anthropic', 'deepseek'] })).toEqual([
+      'favorites',
+      'kortix',
+      'anthropic',
+      'deepseek',
+    ]);
     expect(pickerTabs([])).toEqual(['favorites']);
+  });
+
+  test('providers outside the picker order follow it, by id', () => {
+    expect(pickerTabs([deepseek, anthropic], { providerOrder: ['deepseek'] })).toEqual([
+      'favorites',
+      'deepseek',
+      'anthropic',
+    ]);
   });
 
   test('ChatGPT shows with no models when the member can connect a plan', () => {
@@ -315,8 +329,8 @@ describe('picker rail tabs', () => {
   });
 
   test('the picker opens where the current model is', () => {
-    const tabs = pickerTabs([managed, chatgpt, byok]);
-    expect(initialPickerTab({ tabs, selected: chatgpt, selectedIsFavorite: false, hasFavorites: true })).toBe('chatgpt');
+    const tabs = pickerTabs([managed, chatgpt, anthropic]);
+    expect(initialPickerTab({ tabs, selected: anthropic, selectedIsFavorite: false, hasFavorites: true })).toBe('anthropic');
     expect(initialPickerTab({ tabs, selected: chatgpt, selectedIsFavorite: true, hasFavorites: true })).toBe('favorites');
     expect(initialPickerTab({ tabs, selected: null, selectedIsFavorite: false, hasFavorites: true })).toBe('favorites');
     expect(initialPickerTab({ tabs, selected: null, selectedIsFavorite: false, hasFavorites: false })).toBe('kortix');

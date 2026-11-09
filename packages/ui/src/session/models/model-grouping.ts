@@ -152,35 +152,42 @@ export function buildPickerSections(
 }
 
 /**
- * The picker's left rail: Favorites, then where a model comes from. Kortix
- * holds the managed set, ChatGPT the models billed to a connected ChatGPT
- * plan, Other every provider the workspace connected itself.
+ * The picker's left rail: Favorites, then where a model comes from. `kortix`
+ * holds the managed set, `chatgpt` the models billed to a connected ChatGPT
+ * plan, and every provider the workspace connected itself gets its own tab,
+ * keyed by its real provider id (`pickerGroupId`: `anthropic`, `deepseek`, …).
  */
-export type PickerTabId = 'favorites' | 'kortix' | 'chatgpt' | 'other';
+export type PickerTabId = 'favorites' | 'kortix' | 'chatgpt' | (string & {});
 
-export function pickerTabOf(
-  model: Pick<FlatModel, 'providerID' | 'modelID' | 'provider'>,
-): Exclude<PickerTabId, 'favorites'> {
+export function pickerTabOf(model: Pick<FlatModel, 'providerID' | 'modelID' | 'provider'>): string {
   if (model.provider === 'codex' || model.modelID.startsWith('codex/')) return 'chatgpt';
-  return pickerGroupId(model as FlatModel) === 'kortix' ? 'kortix' : 'other';
+  return pickerGroupId(model as FlatModel);
 }
 
 /**
- * The rail's tabs, in order. Favorites is always first: it is where a star
- * lands, and its empty state says how to fill it. A source tab shows only
- * when it holds a model, except ChatGPT, which also shows when the member can
- * connect a ChatGPT plan from it.
+ * The rail's tabs, in order: Favorites (always: it is where a star lands, and
+ * its empty state says how to fill it), Kortix, ChatGPT, then each provider in
+ * `providerOrder` (the picker's provider order), then the rest by id. A source
+ * tab shows only when it holds a model, except ChatGPT, which also shows when
+ * the member can connect a ChatGPT plan from it.
  */
 export function pickerTabs(
   models: readonly Pick<FlatModel, 'providerID' | 'modelID' | 'provider'>[],
-  opts: { canConnectChatGpt?: boolean } = {},
+  opts: { canConnectChatGpt?: boolean; providerOrder?: readonly string[] } = {},
 ): PickerTabId[] {
   const present = new Set(models.map(pickerTabOf));
   const tabs: PickerTabId[] = ['favorites'];
   if (present.has('kortix')) tabs.push('kortix');
   if (present.has('chatgpt') || opts.canConnectChatGpt) tabs.push('chatgpt');
-  if (present.has('other')) tabs.push('other');
-  return tabs;
+  const order = opts.providerOrder ?? [];
+  const rank = (id: string) => {
+    const i = order.indexOf(id);
+    return i === -1 ? order.length : i;
+  };
+  const providers = [...present]
+    .filter((id) => id !== 'kortix' && id !== 'chatgpt')
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  return [...tabs, ...providers];
 }
 
 /**

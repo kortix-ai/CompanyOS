@@ -2049,7 +2049,6 @@
       "upgradeDescription": "Mettez à niveau votre offre ou connectez votre propre fournisseur pour commencer à utiliser cette session."
     },
     "favorites": "Favoris",
-    "otherModels": "Autres modèles",
     "favoritesEmpty": "Ajoutez une étoile à un modèle pour le garder ici.",
     "addFavorite": "Ajouter {model} aux favoris",
     "removeFavorite": "Retirer {model} des favoris",

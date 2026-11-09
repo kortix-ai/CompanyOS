@@ -169,8 +169,8 @@ export function ModelPickerPanel({
       <ProviderLogo
         providerID={id === 'kortix' ? 'kortix' : 'codex'}
         name={tabLabel(id)}
-        size="small"
-        className="size-4 rounded-none bg-transparent"
+        size="xs"
+        className="size-5"
       />
     );
   };
@@ -326,8 +326,7 @@ function PickerRow({
       <ProviderLogo
         providerID={groupID}
         name={pickerGroupLabel(groupID, model)}
-        size="small"
-        className="size-4 rounded-none bg-transparent"
+        size="xs"
       />
       <span className={cn('min-w-0 truncate leading-tight', unavailable && 'opacity-60')}>
         <span className="text-foreground font-medium">{lead}</span>

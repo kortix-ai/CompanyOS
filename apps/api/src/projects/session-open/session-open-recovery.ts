@@ -12,9 +12,7 @@ import { db } from '../../shared/db';
 import { recoverRemovedParkedRuntime } from '../reaping/parked-runtime-verification';
 import { runStoppedObservationFollowUp } from '../session-lifecycle/stopped-observation-followup';
 import type { StartCallLog } from '../session-lifecycle/start-envelope';
-import {
-  finalizeRecoveredRuntimeIfRunning,
-} from '../runtime-identity';
+import { finalizeRecoveredRuntimeIfRunning } from '../runtime-identity';
 import type {
   OpenSessionArgs,
   OpenSessionRow,
@@ -77,24 +75,15 @@ export async function openRemovedBox(
       row.externalId,
       new Date(),
     );
-    if (outcome === 'recovery-in-flight') {
-      // Another caller owns the recovery — or the probe could not run (a 429,
-      // a 5xx, a network blip: a failed round-trip is no provider verdict, the
-      // same indeterminate answer the background lanes get). The row carries
-      // the recovery lease; the client polls and every background pass re-asks
-      // the gate until a definitive answer lands.
-      return {
-        stage: 'starting',
-        agent_name: visible.row.agentName ?? 'default',
-        retriable: true,
-        sandbox: serializeSandboxRow(settledRow),
-        runtime_session_id: visible.row.runtimeSessionId,
-        runtime_url: sessionRuntimeUrlPath(row.externalId),
-        reason: 'runtime_recovery_in_progress',
-      };
-    }
-    if (outcome === 'recovered') {
-      log.did('restored');
+    if (outcome !== 'preserve-lost') {
+      // `recovery-in-flight`: another caller owns the recovery — or the probe
+      // could not run (a 429, a 5xx, a network blip: a failed round-trip is no
+      // provider verdict, the same indeterminate answer the background lanes
+      // get). The row carries the recovery lease; the client polls and every
+      // background pass re-asks the gate until a definitive answer lands.
+      // `recovered`: the gate accepted the provider's answer and marked the
+      // row — the user-visible reasons keep the running/restoring distinction.
+      if (outcome === 'recovered') log.did('restored');
       return {
         stage: 'starting',
         agent_name: visible.row.agentName ?? 'default',
@@ -103,10 +92,15 @@ export async function openRemovedBox(
         runtime_session_id: visible.row.runtimeSessionId,
         runtime_url: sessionRuntimeUrlPath(row.externalId),
         reason:
-          recovery === 'running' ? 'runtime_recovered_in_place' : 'runtime_restoring_in_place',
+          outcome === 'recovered'
+            ? (recovery === 'running' ? 'runtime_recovered_in_place' : 'runtime_restoring_in_place')
+            : 'runtime_recovery_in_progress',
       };
     }
     log.did('reconciled');
+    // The gate returned `preserve-lost`: the provider's own explicit
+    // `unavailable` (or a provider without the recovery gate) — the sole loss
+    // authority. The settled row carries the recovery lease the claim wrote.
     return preserveEstablishedRuntimeOnOpen(
       loaded,
       visible,

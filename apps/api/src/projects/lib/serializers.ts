@@ -8,14 +8,7 @@ import type {
 } from '@kortix/api-contract';
 import { normalizeRuntimeSessionSnapshots } from './runtime-session-snapshot';
 import { normalizeDefaultReasoningEffort } from './effort-default';
-import {
-  type accountGithubInstallations,
-  type projectGitConnections,
-  type projectGitCredentials,
-  projectSecrets,
-  type projectSessions,
-  type projects,
-} from '@kortix/db';
+import { type accountGithubInstallations, type projectGitConnections, type projectGitCredentials, projectSecrets, type projectSessions } from '@kortix/db';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { sessionInitiatorLabel } from './session-initiator';
 import { sessionRestoreUntil } from '../session-log-purge';
@@ -40,16 +33,17 @@ import type { ProjectRole } from '../access';
 import type { ProjectConfigSummary } from '../git/types';
 import { type GitHubRepo, isGithubAppConfigured } from '../github';
 import { parseGitHubRepoUrl } from './git';
-import { isPlaceholderOpencodeTitle, runtimeRootTitleFromSnapshot } from './opencode-title';
+import { isPlaceholderSessionTitle, runtimeRootTitleFromSnapshot } from './session-title-placeholder';
 import { normalizeProjectGlyph } from './project-glyph';
 import { normalizeProjectIcon } from './project-icon';
 import { probeProjectSecret } from '../secrets/envelope';
 import { isDeprecatedProvider } from '../../platform/providers/deprecated';
 import { isPlatinumConfigured } from '../../shared/platinum';
+import { projectsView } from '../../workspaces/rows';
 
 export const CODEX_AUTH_JSON_SECRET_NAME = 'CODEX_AUTH_JSON';
 
-export type ProjectRow = typeof projects.$inferSelect;
+export type ProjectRow = typeof projectsView.$inferSelect;
 
 export type ProjectGitConnectionRow = typeof projectGitConnections.$inferSelect;
 
@@ -169,15 +163,15 @@ export function serializeSession(
 ): ProjectSession {
   // Computed BEFORE the metadata-derived fields below, because name,
   // custom_name and runtime_sessions are all derived FROM metadata — redacting
-  // the metadata object alone would still have leaked the OpenCode-synced title
+  // the metadata object alone would still have leaked the runtime-synced title
   // (which summarises the conversation) and the conversation-tree snapshot.
   const canAccess = ctx?.canAccess ?? true;
-  const opencodeSessions = canAccess
+  const runtimeSessions = canAccess
     ? normalizeRuntimeSessionSnapshots(row.metadata?.runtime_sessions)
     : [];
   const isOwner = ctx?.viewerId ? row.createdBy === ctx.viewerId : false;
   // A user-set name (metadata.custom_name) is authoritative and ALWAYS wins
-  // over the auto title (metadata.name) mirrored from OpenCode server-side
+  // over the auto title (metadata.name) mirrored from the runtime server-side
   // during session reads. `name` is the resolved display value;
   // `custom_name` is exposed separately so clients can tell an override apart
   // from the auto title.
@@ -188,12 +182,12 @@ export function serializeSession(
   // display chain instead of a junk title (heals old rows with no backfill).
   const rawAutoName =
     canAccess && typeof row.metadata?.name === 'string' ? row.metadata.name : null;
-  const autoName = isPlaceholderOpencodeTitle(rawAutoName) ? null : rawAutoName;
+  const autoName = isPlaceholderSessionTitle(rawAutoName) ? null : rawAutoName;
   // The runtime's own root-conversation title (already access-gated: the
   // snapshot above is [] when canAccess is false). It outranks the generated
   // auto title so list reads resolve the SAME string the session header shows
   // live, but never a user rename.
-  const runtimeTitle = runtimeRootTitleFromSnapshot(opencodeSessions, row.runtimeSessionId);
+  const runtimeTitle = runtimeRootTitleFromSnapshot(runtimeSessions, row.runtimeSessionId);
   return {
     model: canAccess
       ? (ctx?.conversationModel ?? (typeof row.metadata?.model === 'string'
@@ -203,6 +197,8 @@ export function serializeSession(
     session_id: row.sessionId,
     account_id: row.accountId,
     project_id: row.projectId,
+    // The workspace id is the project id (design §0): every record that names a workspace carries it.
+    workspace_id: row.projectId,
     branch_name: row.branchName,
     base_ref: row.baseRef,
     // A legacy `e2b` row passes through as stored: E2B support is discontinued.
@@ -226,7 +222,7 @@ export function serializeSession(
         ? trimSessionMetadataForList(row.metadata ?? {})
         : (row.metadata ?? {})
       : {},
-    runtime_sessions: opencodeSessions,
+    runtime_sessions: runtimeSessions,
     // Ownership + org-visibility (Phase 2 session sharing).
     created_by: row.createdBy,
     owner_email: ctx?.ownerEmail ?? null,
@@ -312,6 +308,8 @@ export function serializeProject(
 ): Project {
   return {
     project_id: row.projectId,
+    // The workspace id is the project id (design §0): one entity, one public id.
+    workspace_id: row.projectId,
     account_id: row.accountId,
     name: row.name,
     repo_url: row.repoUrl,
@@ -335,7 +333,7 @@ export function serializeProject(
     updated_at: row.updatedAt.toISOString(),
     project_role: access?.projectRole ?? null,
     effective_project_role: access?.effectiveRole ?? null,
-    dashboard_url: `${dashboardBaseUrl()}/projects/${row.projectId}`,
+    dashboard_url: `${dashboardBaseUrl()}/workspaces/${row.projectId}`,
     // Feature flags (Settings → Feature flags) — `experimental` is the effective
     // on/off map; `experimental_features` is the self-describing catalog the UI
     // renders from. Both wire names are historical and STABLE; do not rename
@@ -358,8 +356,14 @@ export function serializeProject(
     // `volumes` and `drives` graduated on 2026-11-02: every project has a Drive
     // where the platform stores one. Both keys stay, equal to that availability,
     // because older web, SDK, TUI and CLI builds show the Drive only while they read true.
+    // `artifacts` graduated on 2026-11-06 the same way (an Artifact is a path in the
+    // Drive) and stays, equal to that availability. `artifact_comments` was removed on
+    // 2026-11-06 and stays `false`: older web, SDK, TUI and mobile builds show
+    // comments, presence and co-editing only while they read true.
     // `project_channels` merged into `chat` (2026-11) and stays, equal to `chat`:
     // released TUI, mobile and CLI builds show Channels only while they read true.
+    // `notification_center` graduated on 2026-11-06 and stays `true`: older web, SDK
+    // and mobile builds show the bell, Web Push and session follow only while they read true.
     experimental: {
       ...resolveFeatureFlags(row.metadata),
       apps: true,
@@ -371,9 +375,12 @@ export function serializeProject(
       connectors_v2: true,
       connectors_api_discover: true,
       meta_agent: true,
+      notification_center: true,
       warm_sessions: false,
       volumes: isPlatinumConfigured(),
       drives: isPlatinumConfigured(),
+      artifacts: isPlatinumConfigured(),
+      artifact_comments: false,
       project_channels: resolveFeatureFlag(row.metadata, 'chat'),
     },
     experimental_features: buildFeatureFlagCatalog(row.metadata),
@@ -497,15 +504,9 @@ function grantAdmits(list: string[], identifier: string): boolean {
  * identifier, never by the env-var `name` — several identifiers may share one
  * name.
  *
- * The tri-state forbids guessing, so read `agent_discovery` for what
- * `resolveConfigAgents` (../git/config.ts) actually means by it:
+ * The tri-state forbids guessing. `agent_discovery` is `declarative` for every
+ * project (`resolveConfigAgents`, ../git/config.ts), so the agents decide:
  *
- *   `opencode`   — the manifest yielded NO agent specs AND NO parse errors, i.e.
- *                  it declared no `agents:` at all (or there is no manifest).
- *                  `grantFromLoadedAgents` then resolves to a null grant, which
- *                  `resolveSecretDelivery` withholds. CERTAIN: no session can
- *                  ever receive this secret. A native `.opencode` agent does not
- *                  rescue it — grants come only from manifest specs.
  *   `declarative`, agents non-empty — the manifest parsed and its declarations
  *                  are the complete grant set. CERTAIN either way.
  *   `declarative`, agents EMPTY — the only ambiguous state, and it is reached
@@ -525,8 +526,7 @@ export function secretDeliveryBlockedReason(
 ): SecretDeliveryBlockedReason | null {
   if (strategy !== 'egress' && strategy !== 'broker') return null;
   if (!config) return null;
-  if (config.agent_discovery === 'opencode') return 'no_agent_grant';
-  // Anything other than the two known modes is a config we do not understand —
+  // Anything other than `declarative` is a config we do not understand —
   // including a partial object from a caller that resolved only part of it.
   if (config.agent_discovery !== 'declarative') return null;
   const agents = config.agents;
@@ -617,6 +617,7 @@ export function buildSecretView(input: {
     identifier,
     name,
     project_id: (shared ?? personal)!.projectId,
+    workspace_id: (shared ?? personal)!.projectId,
     secret_id: shared?.secretId ?? null,
     created_by: shared?.createdBy ?? null,
     created_at: (shared?.createdAt ?? personal?.createdAt)?.toISOString() ?? null,
@@ -655,7 +656,6 @@ export function buildSecretView(input: {
     delivery_blocked_reason: secretDeliveryBlockedReason(identifier, strategy, input.agentGrants),
     agents: strategy === 'denied' ? []
       : !input.agentGrants ? null
-      : input.agentGrants.agent_discovery === 'opencode' ? (strategy === 'runtime' ? 'all' : [])
       : input.agentGrants.agent_discovery !== 'declarative' || !input.agentGrants.agents.length ? null
       : input.agentGrants.agents.filter((agent) => {
           if (agent.enabled === false) return false;

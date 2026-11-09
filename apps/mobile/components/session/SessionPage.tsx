@@ -39,7 +39,6 @@ import Reanimated, {
   useReducedMotion,
   useSharedValue,
   withTiming,
-  interpolate,
 } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -627,7 +626,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     delivery: SessionPromptDelivery = 'steer',
   ) => {
     if (!projectId || !projectSessionId) {
-      toast.error('No project session to queue a prompt');
+      toast.error('No session to queue a prompt');
       throw new Error('No project session to queue a prompt');
     }
     const nowMs = Date.now();
@@ -951,9 +950,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => ({ projectId: projectId ?? null, requestConnect: requestConnectorConnect }),
     [projectId, requestConnectorConnect],
   );
-  // Only a runtime with a config document (OpenCode) is asked for it; pi
-  // has none, and the project's model defaults cover the composer.
-  // (the SDK asks only a runtime that lists `session.config`).
+  // Only a runtime that lists `session.config` is asked for it (the SDK's
+  // rule); pi does not, and the project's model defaults cover the composer.
   const { data: config } = useRuntimeConfig();
   // A runtime without slash commands (pi) gets no list: no "/" or "#"
   // suggestions and no AutoContinue, so nothing dispatches to /command (E1).
@@ -966,7 +964,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     agents: rawAgents,
     boundAgent: boundAgentName,
     latestAgent,
-    defaultAgent: projectConfig?.default_agent ?? projectConfig?.open_code_default_agent,
+    defaultAgent: projectConfig?.default_agent,
     models,
     providers,
     modelDefaults,

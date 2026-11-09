@@ -62,6 +62,7 @@ import { registerGroupGrantsRoutes } from './routes/group-grants';
 import { registerProviderSecretPoolsRoutes } from './routes/provider-secret-pools';
 import { registerProjectSessionsRoutes, registerSessionLookupRoutes } from './routes/project-sessions';
 import { registerChatThreadRoutes } from './routes/chat-threads';
+import { registerSpaceProactiveRoutes } from './routes/space-proactive';
 import { registerSessionTranscriptsRoutes } from './routes/session-transcripts';
 import { registerSessionAttachmentsRoutes } from './routes/session-attachments';
 import { registerSessionOpenBundleRoutes } from './routes/session-open-bundle';
@@ -87,11 +88,9 @@ import { registerSessionPromptsRoutes } from './routes/session-prompts';
 import { registerPeerMessagesRoutes } from './routes/peer-messages';
 import { registerTeamTasksRoutes } from './routes/team-tasks';
 import { registerArtifactRoutes } from './routes/artifacts';
-import { registerArtifactCommentRoutes } from './routes/artifact-comments';
-import { registerArtifactLiveRoutes } from './routes/artifact-live';
-import { registerArtifactDocRoutes } from './routes/artifact-doc';
 import { registerLinkPreviewRoutes } from './routes/link-preview';
 import { registerSessionRemindersRoutes } from './routes/session-reminders';
+import { registerGoalRoutes } from './routes/goals';
 import { registerRuntimeTriggersRoutes } from './routes/runtime-triggers';
 import { registerProjectSpacesRoutes } from './routes/project-spaces';
 import { registerProjectMemoryRoutes } from './routes/project-memory';
@@ -169,6 +168,7 @@ export function registerAllProjectRoutes(): void {
   registerProviderSecretPoolsRoutes();
   registerProjectSessionsRoutes();
   registerChatThreadRoutes();
+  registerSpaceProactiveRoutes();
   registerSessionTranscriptsRoutes();
   registerSessionAttachmentsRoutes();
   registerSessionOpenBundleRoutes();
@@ -193,11 +193,9 @@ export function registerAllProjectRoutes(): void {
   registerPeerMessagesRoutes();
   registerTeamTasksRoutes();
   registerArtifactRoutes();
-  registerArtifactCommentRoutes();
-  registerArtifactLiveRoutes();
-  registerArtifactDocRoutes();
   registerLinkPreviewRoutes();
   registerSessionRemindersRoutes();
+  registerGoalRoutes();
   registerRuntimeTriggersRoutes();
   registerProjectSpacesRoutes();
   registerProjectMemoryRoutes();
@@ -221,6 +219,9 @@ export function registerAllProjectRoutes(): void {
 export { projectsApp, projectWebhooksApp, sessionsApp };
 // `/v1/sessions` (one session by id). app.ts calls it right before mounting sessionsApp.
 export { registerSessionLookupRoutes };
+// The canonical workspace records (`workspaces/routes.ts` declares the routes).
+export { ProjectSchema } from './lib/app';
+export { createWorkspace, listCallerWorkspaces, patchWorkspace, readWorkspace } from './routes/workspace-records';
 
 // The service surface (git-proxy, session, trigger and manifest helpers).
 export * from './surface';

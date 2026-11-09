@@ -1,0 +1,19 @@
+import { describe, expect, test } from 'bun:test';
+import { agentDisplayName } from './agent-mark';
+
+describe('agentDisplayName', () => {
+  test('humanizes a slug: separators become spaces, the first letter is capitalized', () => {
+    expect(agentDisplayName('session-reviewer')).toBe('Session reviewer');
+  });
+
+  test('the My Kortix agent keeps its display name', () => {
+    expect(agentDisplayName('mykortix')).toBe('My Kortix');
+  });
+
+  test('a truthy non-string slug from model tool input degrades to a label, never throws (KRTX-4511)', () => {
+    expect(agentDisplayName(42 as unknown as string)).toBe('42');
+    expect(agentDisplayName({ name: 'explorer' } as unknown as string)).toBe(
+      String({ name: 'explorer' }),
+    );
+  });
+});

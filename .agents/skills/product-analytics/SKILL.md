@@ -38,8 +38,11 @@ person.
 3. **A business fact is an API event.** Sign-up, project, session, message,
    checkout and payment events fire on the server after the database write. The
    browser loses events to ad blockers; the server does not.
-4. **Only Kortix hosts report.** `kortix.com`, `staging.kortix.com` and
-   `dev.kortix.com` send to the project; every event carries `environment`.
+4. **Only production reports** (decision 2026-11-06; the free plan has one
+   project). The web client reports on `kortix.com` only; dev, staging, self-host,
+   white-label and preview hosts never download posthog-js. The API sends only
+   where `POSTHOG_PROJECT_KEY` is set: the prod blob, not dev or staging.
+   Every event carries `environment`.
    A self-hosted, white-label or preview host never downloads posthog-js. The
    API sends only when `POSTHOG_PROJECT_KEY` is set.
 5. **URLs are reduced before they leave the browser.** On signed-in and
@@ -66,14 +69,14 @@ person.
 | `cta_signup_clicked` | web | a sign-up button on a marketing page | `location` |
 | `auth_completed` | web | the browser lands after sign-up or sign-in | `kind` (`signup`/`login`), `method` |
 | panel events (`panel_opened`, …) | web (`@kortix/ui`) | session panel and conversation UI | `source`, `kind`, `count` |
-| `user_signed_up` | API | a new user's personal account is created | `method` (email, google, github, apple) |
+| `user_signed_up` | API | a new person's first `GET /v1/accounts` with no workspace (`accounts/core/signup-event.ts`) | `method` (email, google, github, apple), `invited` (an invitation to the email was open at sign-up); sets the person property `signup_kind` (`invited`, `self_serve`) once |
 | `user_logged_in` | API | a CLI device login or a headless sign-in (not a token refresh) | `method` |
 | `project_created` | API | a project is provisioned or linked | `origin` (blank, template, marketplace, github_import), `provider` |
 | `session_created` | API | a person creates a session (not triggers, channels, agents) | `session_id`, `source`, `with_prompt` |
-| `session_started` | API | the session's runtime answers for the first time this boot | `provider`, `boot_ms` |
+| `session_started` | API | the session's runtime answers for the first time in one boot: first open, every wake after sleep, every restart. It counts boots, not sessions | `provider`, `boot_ms` |
 | `session_restarted` | API | a person restarts a session | `provider` |
 | `session_stopped` | API | a person's session's sandbox stops | `reason`, `active_ms` |
-| `prompt_sent` | API | a person sends a prompt | `model` (`default` = the project default), `attachment_count` |
+| `prompt_sent` | API | a person sends a prompt: the prompt POST, or inside the session create (workspace home, mobile, sessions board) | `model` (`default` = the project default), `attachment_count`, `at_create` |
 | `turn_completed` | API | an agent turn of a person's session ends | `status` (ok, error, aborted), `end_reason`, `duration_ms` |
 | `secret_created` | API | a new project secret (never its name or value) | `name_kind` (provider, other), `strategy` |
 | `provider_configured` | API | an LLM provider is connected | `provider`, `method` (api_key, oauth, subscription) |
@@ -90,12 +93,31 @@ person.
 | `subscription_activated` | API | a paid plan becomes active (Stripe or app store) | `tier`, `amount_usd`, `store`, `via` |
 | `subscription_cancelled` | API | a paid plan ends | `store`, `previous_tier`, `amount_usd` |
 | `credits_topped_up` | API | a one-off credit purchase is paid | `amount_usd`, `store` |
-| `member_joined` | API | a user joins an account by invite | `via`, `role` |
+| `member_joined` | API | a person joins a workspace someone else made | `via` (invite, auto_claim, direct_add, project_invite, access_request), `role` |
 
 Request-driven events carry `source` (web, cli, mobile, desktop). API events
 that two code paths can report carry a fixed uuid (`dedupeKey`), and the
 Stripe activation and credit grant report only when their keyed wallet grant
 was not a replay.
+
+## Activation funnels
+
+The Kortix · Activation dashboard has two funnels, both inside 24 h. A
+completed turn is `turn_completed` with `status = ok`: a failed turn (no
+model, a plan refusal) also fires `turn_completed`.
+
+| Funnel | Steps |
+|---|---|
+| Self-serve | `user_signed_up` (`invited` ≠ true) → `project_created` → `provider_configured` (optional step) → `session_created` → `prompt_sent` → `turn_completed` ok |
+| Invited | `member_joined` → `session_created` → `prompt_sent` → `turn_completed` ok |
+
+- `provider_configured` is optional because only the Free plan needs a
+  connected provider: it cannot use Kortix models (`plan_upgrade_required`).
+  A paid plan skips the step and still counts.
+- The funnels use `session_created`, not `session_started`: one session boots
+  many times.
+- An invited person never creates a workspace, so the self-serve funnel would
+  count them as lost at `project_created`.
 
 ## Campaign attribution
 
@@ -125,8 +147,13 @@ Examples:
 
 A viewer who types `kortix.com` by hand arrives as `$direct`. The PostHog
 survey "Acquisition: how did you hear about us" catches them: one question,
-shown once, 15 s after an app page (`/projects…`) loads, to people whose
-`signed_up_at` is within 7 days. The answer is the event property
+shown once, 15 s after an app page (`/projects…`, now `/workspaces`) loads, to
+people whose `signed_up_at` is within 7 days — and only once a workspace
+exists: automatic survey display is off (`posthog-client.ts`) because the
+survey pinned the create-first-workspace landing of an empty account behind
+itself (dogfood signature `dogfood:auth-signup-onboarding:survey-modal-blocks-first-landing`).
+The chooser displays it through `apps/web/src/lib/analytics/survey-gate.ts`.
+The answer is the event property
 `$survey_response_709452a5-5925-4704-a85a-0618d2f78ed3` on `survey sent`.
 
 ## Where to look
@@ -136,7 +163,7 @@ README). They follow the design of the closed PR #7144.
 
 | Question | Dashboard |
 |---|---|
-| Do new users reach a completed turn, and how fast? | Kortix · Activation |
+| Do new users reach a completed turn, and how fast? Self-serve and invited apart | Kortix · Activation |
 | DAU/WAU/MAU, retention, stickiness, surface mix | Kortix · Engagement |
 | Providers, key checks, prompts by model | Kortix · Providers & models |
 | Boot time, active time, turn outcomes | Kortix · Sessions |
@@ -165,12 +192,12 @@ staging events never reach the charts.
 
 ## Where the key lives
 
-- Web: `POSTHOG_PROJECT_KEY` in `posthog-config.ts`, selected by host. No
-  hosting setting is involved.
-- API: `POSTHOG_PROJECT_KEY` in the Secrets Manager blob of each deployed env
-  (`kortix-dev-env` us-east-2, `kortix-staging-env` and `kortix-prod-env`
-  eu-west-2), mirrored in `apps/api/.env.dev` / `.env.staging` / `.env.prod`
-  (the dotenvx-secrets skill). Unset = no server events.
+- Web: `POSTHOG_PROJECT_KEY` in `posthog-config.ts`, used on `kortix.com` only.
+  No hosting setting is involved.
+- API: `POSTHOG_PROJECT_KEY` in the prod Secrets Manager blob `kortix-prod-env`
+  (eu-west-2), mirrored in `apps/api/.env.prod` (the dotenvx-secrets skill).
+  `kortix-dev-env` and `kortix-staging-env` do not carry it (removed
+  2026-11-06), so dev and staging send nothing. Unset = no server events.
 
 ## PostHog MCP
 
@@ -180,11 +207,17 @@ analytics questions and edits insights, dashboards and surveys directly.
 
 ## Verify an event
 
-1. Local: put `NEXT_PUBLIC_POSTHOG_KEY=phc_…` in `apps/web/.env.local` (any
-   localhost run reports as `environment=local` only with this variable).
+Never point a test at the Kortix project. Use your own free PostHog project,
+or a local capture sink that logs what the API sends.
+
+1. Web, local: put your own project's `NEXT_PUBLIC_POSTHOG_KEY=phc_…` in
+   `apps/web/.env.local`. A localhost run reports only with this variable, as
+   `environment=local`, and keeps bot traffic (scripted browsers) tagged
+   `$browser_type: bot`.
 2. In the browser console run `localStorage.setItem('ph_debug', 'true')` and
    reload: posthog-js logs every event with its properties before it sends it.
-3. API: set `POSTHOG_PROJECT_KEY` in `apps/api/.env.local`, trigger the action,
-   then find the event in PostHog → Activity, filtered on `environment = local`.
-4. Production dashboards filter out `environment != production` through the
-   project's test-account filter.
+3. API, local: set `POSTHOG_PROJECT_KEY` (your project, or any `phc_` value)
+   and `POSTHOG_HOST=http://localhost:<port>` (a sink that logs each `/batch/`
+   body) in `apps/api/.env.local`, trigger the action, read the sink.
+4. Production: PostHog → Activity, filter `environment = production`. The
+   dashboards apply the project's test-account filter by default.

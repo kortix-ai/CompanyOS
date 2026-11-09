@@ -1,6 +1,6 @@
 'use client';
 
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { successToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import type { SessionScope } from '@kortix/sdk';
@@ -276,7 +276,9 @@ export function SessionOverridesToolbar({
   const secretRead = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ);
   const secretsDenied = !secretRead.isLoading && !secretRead.allowed;
   // Choosing a session's provider keys is a lifecycle action: the pools route
-  // refuses anyone who cannot manage the session (`mayChangeSessionModel`).
+  // refuses anyone who cannot manage the session (`mayChangeSessionModel`) and,
+  // except the session's own person, anyone without `project.secret.read`. An
+  // existing session's pool list says which (`can_edit`).
   // A new session is the caller's own. An existing one shows the row only once
   // its row says the viewer manages it.
   const sessionRow = useProjectSession(projectId, sessionId, { enabled: !!sessionId }).data;
@@ -428,7 +430,7 @@ export function SessionOverridesToolbar({
     // card it showed. Credentials are not a session-minting decision: the agent
     // may use every account it is entitled to and names one at call time
     // (`kortix connectors call --account`, `accounts` to see them).
-    if (pooledSecretsEnabled && managesSession) list.push(providerKeysRow(projectId, sessionId,
+    if (pooledSecretsEnabled && managesSession && (!secretsDenied || (!!sessionId && providerPools.data?.can_edit === true))) list.push(providerKeysRow(projectId, sessionId,
       providerPoolDraft, providerDrafts, providerPools.isError, providerPools.isLoading,
       saving, onProviderDraftChange, onProviderSecretPoolsChange, tPooled));
     list.push(sandboxRow(sandboxSlot, sandbox, tI18nComplete));
@@ -460,6 +462,7 @@ export function SessionOverridesToolbar({
     saving,
     providerPools.isError,
     providerPools.isLoading,
+    providerPools.data?.can_edit,
     onProviderSecretPoolsChange,
     projectId,
     sessionId,
@@ -541,9 +544,9 @@ export function SessionOverridesToolbar({
     initialized && scopeDraftSignature(draft) !== scopeDraftSignature(draftState.base);
   const chatInputDirty = scopeDirty || hasProviderChanges;
   const chatInputNotice = retroactive === false ? (
-    <InfoBanner tone="warning" icon={TriangleAlert} title={tI18nComplete.raw('texta6cd531093d4')}>
+    <BannerAlert variant="warning" ><BannerAlertMedia><TriangleAlert /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('texta6cd531093d4')}</BannerAlertTitle><BannerAlertDescription>
       {tI18nComplete.raw('text54a4e6b3594a')}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   ) : null;
   const chatInputPendingNote = hasProviderChanges ? tPooled('unsavedChanges') : undefined;
   const chatInputSave = useCallback(() => handleSave(), [handleSave]);
@@ -617,13 +620,9 @@ export function SessionOverridesToolbar({
       hideSave={!rows.some((row) => row.id === 'secrets' || row.id === 'provider-keys')}
       notice={
         retroactive === false ? (
-          <InfoBanner
-            tone="warning"
-            icon={TriangleAlert}
-            title={tI18nComplete.raw('texta6cd531093d4')}
-          >
+          <BannerAlert variant="warning" ><BannerAlertMedia><TriangleAlert /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('texta6cd531093d4')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nComplete.raw('text54a4e6b3594a')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : null
       }
       onSave={handleSave}

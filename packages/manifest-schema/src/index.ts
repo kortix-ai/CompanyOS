@@ -43,6 +43,8 @@ import {
   type ConnectorProvider,
   ENV_NAME_RE,
   GRANTABLE_KORTIX_PERMISSIONS,
+  isGrantableKortixPermission,
+  isHumanOnlyKortixPermission,
   LEGACY_SANDBOX_KEYS,
   LEGACY_TOLERATED_KORTIX_PERMISSIONS,
   RETIRED_KORTIX_PERMISSIONS,
@@ -144,7 +146,7 @@ export {
   renderManifest,
   splitFrontmatter,
 } from './legacy';
-export { type AppliedFix, type Deprecation, DEPRECATIONS, applyDeprecations, fixManifestText, rewriteManifestText } from './deprecations';
+export { type AppliedFix, CANONICAL_REWRITES, type Deprecation, DEPRECATIONS, applyDeprecations, fixManifestText, rewriteManifestText } from './deprecations';
 export {
   type PolicyArgCondition,
   FORBIDDEN_ARG_SEGMENTS,
@@ -226,6 +228,9 @@ export {
   type ConnectorProvider,
   ENV_NAME_RE,
   GRANTABLE_KORTIX_PERMISSIONS,
+  GRANTABLE_KORTIX_WORKSPACE_PERMISSIONS,
+  isGrantableKortixPermission,
+  isHumanOnlyKortixPermission,
   HEX_COLOR_RE_V2,
   PI_PACKAGE_NPM_RE,
   PI_PACKAGE_PATH_RE,
@@ -272,7 +277,7 @@ export {
   EXTENSION_HARNESSES,
   KORTIX_SKILL_NAMES,
   KORTIX_SKILL_PREFIX,
-  OPENCODE_BUILTIN_AGENTS_V3,
+  RUNTIME_BUILTIN_AGENTS,
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
 } from './constants';
@@ -317,7 +322,12 @@ export {
   type AppBlockV2,
   type AppResourcesV2,
   type PiPackageEntryV2,
+  EVERY_GRANT,
+  isEveryGrant,
+  normalizePermissionAction,
+  normalizePermissionConfig,
   resolveGrantSet,
+  TOOLS_SHAPE_ERROR,
   validatePermissionConfig,
   validateAgentMdFrontmatter,
 } from './index.v2';
@@ -506,7 +516,7 @@ function listSectionHint(key: string): string {
 // ─── Section validators ───────────────────────────────────────────────────
 
 /**
- * Validate a `connectors` / `kortix_permissions` grant value (array | "all" | "none").
+ * Validate a `connectors` / `kortix_permissions` grant value (array | "*" | "all" | "none").
  *
  * `version` only changes how a `kortix_permissions` entry from
  * `LEGACY_TOLERATED_KORTIX_PERMISSIONS` is treated (only reachable when
@@ -534,7 +544,7 @@ export function validateGrantList(
     if (v !== '' && v !== 'all' && v !== '*' && v !== 'none') {
       issues.push({
         path: where,
-        message: `${label} string must be "all", "*" or "none" (or an array of names).`,
+        message: `${label} must be "*" (every name; alias all), "none", or a list of names.`,
         severity: 'error',
       });
     }
@@ -543,7 +553,7 @@ export function validateGrantList(
   if (!Array.isArray(value)) {
     issues.push({
       path: where,
-      message: `${label} must be an array of strings, "all", or "none".`,
+      message: `${label} must be "*" (every name; alias all), "none", or a list of names.`,
       severity: 'error',
     });
     return;
@@ -558,7 +568,8 @@ export function validateGrantList(
       return;
     }
     const s = item.trim();
-    if (checkAction && s !== '*' && !GRANTABLE_KORTIX_PERMISSIONS.includes(s)) {
+    // Either name is grantable: `project.session.start` or `workspace.session.start`.
+    if (checkAction && s !== '*' && !isGrantableKortixPermission(s)) {
       const renamedTo = DEPRECATED_KORTIX_PERMISSION_ALIASES[s];
       if (renamedTo) {
         // A RENAMED action, not a dead one: it still resolves to a real
@@ -579,6 +590,14 @@ export function validateGrantList(
           message: `"${s}" belongs to a removed feature and grants nothing. Remove it from the manifest.`,
           severity: 'warning',
         });
+      } else if (isHumanOnlyKortixPermission(s)) {
+        // HUMAN_ONLY: no agent ever holds it. A warning, never a failed parse:
+        // a manifest that fails gives its agent an EMPTY grant.
+        issues.push({
+          path: `${where}[${k}]`,
+          message: `"${s}" is reserved for people (minting credentials or moving money): no agent ever holds it, so the entry grants nothing. Remove it from the manifest.`,
+          severity: 'warning',
+        });
       } else if (LEGACY_TOLERATED_KORTIX_PERMISSIONS.includes(s)) {
         issues.push({
           path: `${where}[${k}]`,
@@ -588,7 +607,7 @@ export function validateGrantList(
       } else {
         issues.push({
           path: `${where}[${k}]`,
-          message: `"${s}" is not a grantable Kortix permission (allowed: project.*; account-scoped actions can never be granted to an agent).`,
+          message: `"${s}" is not a Kortix permission (allowed: a workspace.* action or its legacy name; see kortix validate --scopes).`,
           severity: 'error',
         });
       }

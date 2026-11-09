@@ -37,9 +37,7 @@ describe('startsFrontThread', () => {
 describe('the chat_front flag', () => {
   test('is the router, off by default', () => {
     const def = featureFlagDef('chat_front');
-    expect(def.name).toBe('Router');
-    expect(def.description).toContain('is a router: it hands the work to your agents and writes back like a person');
-    expect(def.description).toContain('the router passes file paths, not retyped text');
+    expect(def.name).toBe('Spaces-Router');
     expect(resolveFeatureFlag({}, 'chat_front')).toBe(false);
   });
 });

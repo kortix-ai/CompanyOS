@@ -33,6 +33,7 @@ import {
   executeCall,
   mcpJsonRpcError,
   paramHintsFromSchema,
+  missingPathArg,
 } from './call';
 import { configuredTimeoutMs, withTimeout } from '../shared/with-timeout';
 /**
@@ -546,6 +547,44 @@ const MAX_UPSTREAM_RESPONSE_BYTES = 64 * 1024 * 1024;
 /** Reason prefix of a call that hit the upstream deadline. */
 export const UPSTREAM_TIMEOUT = 'upstream_timeout';
 
+/**
+ * The upstream-failure warn is rate-limited per call path. A provider outage
+ * plus one agent repeating the failed call every few seconds used to log one
+ * warn per attempt: prod, 2026-11-07, 28 warns in one hour for
+ * `linear.run_query_or_mutation` against a baseline near zero (KRTX-4446),
+ * and it read as a new log-pattern anomaly. KRTX-614 learning ("rate limit
+ * the warning for expected backpressure", also #8212): the FIRST failure of
+ * a call path always warns, then at most one per interval. Every failure
+ * still returns its `reason` and writes its own audit row.
+ */
+const UPSTREAM_WARN_INTERVAL_MS = 60_000;
+const UPSTREAM_WARN_MAX_PATHS = 128;
+// replica-local: per-process warn throttle. A throttle shared across replicas would
+// either need a database round-trip per failure or leave one window open, and
+// a per-replica window can only over-report by one line per replica per interval.
+const lastUpstreamWarnAt = new Map<string, number>();
+
+function shouldLogUpstreamWarn(path: string): boolean {
+  const now = Date.now();
+  if (lastUpstreamWarnAt.size >= UPSTREAM_WARN_MAX_PATHS && !lastUpstreamWarnAt.has(path)) {
+    for (const [key, at] of lastUpstreamWarnAt) {
+      if (now - at >= UPSTREAM_WARN_INTERVAL_MS) lastUpstreamWarnAt.delete(key);
+      if (lastUpstreamWarnAt.size < UPSTREAM_WARN_MAX_PATHS) break;
+    }
+    if (lastUpstreamWarnAt.size >= UPSTREAM_WARN_MAX_PATHS) {
+      // A flood of distinct failing paths inside one interval (an outage on a
+      // large catalogue) drops the oldest entry, in insertion order, so the
+      // map stays bounded; that path's next failure warns again.
+      const oldest = lastUpstreamWarnAt.keys().next().value;
+      if (oldest !== undefined) lastUpstreamWarnAt.delete(oldest);
+    }
+  }
+  const last = lastUpstreamWarnAt.get(path);
+  if (last !== undefined && now - last < UPSTREAM_WARN_INTERVAL_MS) return false;
+  lastUpstreamWarnAt.set(path, now);
+  return true;
+}
+
 /** A channel call with an argument its action does not declare (HTTP 400). */
 export const INVALID_ARGS = 'invalid_args';
 
@@ -886,6 +925,23 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
   if (undeclared) {
     await audit(deps, input, connector, 'denied', action.risk, { reason: INVALID_ARGS, message: undeclared });
     return { status: 'denied', reason: INVALID_ARGS, message: undeclared };
+  }
+
+  // A path argument the caller left empty goes out as an empty URL segment and
+  // the provider answers a misleading error for the truncated URL — Stripe:
+  // `GET /v1/payment_intents/` 404 "Unrecognized request URL" (prod 2026-11-09:
+  // a caller refetched without the id 101 times in one burst, KRTX-4539).
+  // Answer here with the argument the caller must fill, before any credential,
+  // approval or upstream call. Channel calls fill their path values from the
+  // session context later, so they are exempt.
+  const emptyPathArg =
+    connector.provider !== 'channel' && (action.binding.kind === 'openapi' || action.binding.kind === 'http')
+      ? missingPathArg(action.binding.path, input.args)
+      : null;
+  if (emptyPathArg !== null) {
+    const message = `The required argument ${emptyPathArg} is missing or empty. Call ${fullPath} again with a non-empty ${emptyPathArg}.`;
+    await audit(deps, input, connector, 'denied', action.risk, { reason: INVALID_ARGS, message });
+    return { status: 'denied', reason: INVALID_ARGS, message };
   }
 
   // Before any credential, approval or provider call: a read of another
@@ -1555,7 +1611,10 @@ async function runConnectorAction(
     });
     const message = `[connector] ${fullPath} failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
     if (connector.provider === 'composio' && result.status === 400) logger.debug(message);
-    else logger.warn(message);
+    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message);
+    // A suppressed repeat still lands at debug: prod (LOG_LEVEL=info) never
+    // ships it, a developer debugging the retry path still sees every failure.
+    else logger.debug(message);
     return {
       status: 'error',
       reason,
@@ -1912,7 +1971,7 @@ function teamsReadConsentHint(connector: GatewayConnector, result: ExecResult): 
   return (
     'Kortix cannot read messages in this team yet: the Kortix app in the team has no permission to read them. ' +
     'A team owner updates the app in Teams (the team → ⋯ → Manage team → Apps → Update) and accepts the new permission. ' +
-    'If no update is offered, a Teams admin first publishes the latest app from the Kortix project ' +
+    'If no update is offered, a Teams admin first publishes the latest app from the Kortix workspace ' +
     '(Connectors → Channels → Microsoft Teams). '
   );
 }

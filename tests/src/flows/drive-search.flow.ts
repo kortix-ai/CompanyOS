@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { flow } from '../core/flow';
 import type { FlowContext } from '../core/types';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 type Db = {
   query<T = Record<string, unknown>>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
@@ -39,13 +40,13 @@ flow(
     requires: ['database'],
     timeoutMs: 180_000,
     routes: [
-      'GET /v1/projects/:projectId/search',
+      'GET /v1/workspaces/:projectId/search',
       'GET /v1/drives',
       'PUT /v1/drives/:driveId/access',
       'POST /v1/accounts/tokens',
-      'GET /v1/projects/:projectId/resource-grants',
-      'POST /v1/projects/:projectId/resource-grants',
-      'PATCH /v1/projects/:projectId/features',
+      'GET /v1/workspaces/:projectId/resource-grants',
+      'POST /v1/workspaces/:projectId/resource-grants',
+      'PATCH /v1/workspaces/:projectId/features',
     ],
   },
   async (ctx) => {
@@ -55,11 +56,10 @@ flow(
     const project = await team.project({ managedGit: true });
     const member = await team.addMember('member');
     await team.grantProjectRole(project.id, member.userId!, 'user');
-    const outsider = await team.addMember('member');
     const owner = ctx.client.as(ctx.P.OWNER);
     const asMember = ctx.client.as(member);
     const params = { projectId: project.id };
-    const search = (as: { get: typeof owner.get }, query: Record<string, string>) => as.get('/v1/projects/:projectId/search', { params, query });
+    const search = (as: { get: typeof owner.get }, query: Record<string, string>) => as.get('/v1/workspaces/:projectId/search', { params, query });
     const paths = (r: { json<T>(): T }) => r.json<Page>().hits.map((h) => h.path).sort();
     // One word nothing else in the drive holds.
     const word = `zephyrine${randomUUID().slice(0, 6)}`;
@@ -73,7 +73,7 @@ flow(
 
     try {
       await ctx.step('ANON searches → 401', async () => {
-        (await ctx.client.as(ctx.P.ANON).get('/v1/projects/:projectId/search', { params, query: { q: word } })).status(401);
+        (await ctx.client.as(ctx.P.ANON).get('/v1/workspaces/:projectId/search', { params, query: { q: word } })).status(401);
       });
 
       await ctx.step('OWNER and the member open Files → 200: one drive, each with their own folder', async () => {
@@ -88,7 +88,7 @@ flow(
       });
 
       await ctx.step('OWNER turns shared_drives on, adds the agent to /Sales (write) and the nine team Drives (read) → 200; a share with a person or the project → 400', async () => {
-        (await owner.patch('/v1/projects/:projectId/features', { feature: 'shared_drives', enabled: true }, { params })).status(200);
+        (await owner.patch('/v1/workspaces/:projectId/features', { feature: 'shared_drives', enabled: true }, { params })).status(200);
         (await owner.put('/v1/drives/:driveId/access', { path: AGENT_DRIVE, principalType: 'agent', principalId: AGENT, level: 'write' }, { params: { driveId } })).status(200);
         (await owner.put('/v1/drives/:driveId/access', { path: '/Shared', principalType: 'user', principalId: member.userId, level: 'read' }, { params: { driveId } })).status(400);
         (await owner.put('/v1/drives/:driveId/access', { path: '/Shared', principalType: 'project', level: 'read' }, { params: { driveId } })).status(400);
@@ -99,7 +99,7 @@ flow(
 
       await ctx.step('OWNER lets the member use the agent → 201; every API process sees it within 45 s', async () => {
         (await owner.post(
-          '/v1/projects/:projectId/resource-grants',
+          '/v1/workspaces/:projectId/resource-grants',
           { resource_type: 'agent', resource_id: AGENT, principal_type: 'member', principal_id: member.userId },
           { params },
         )).status(201);
@@ -184,7 +184,7 @@ flow(
           `INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')`,
           [sessionId, team.id, project.id],
         );
-        await db.query(`UPDATE kortix.account_tokens SET account_id = $2, project_id = $3, session_id = $4 WHERE token_id = $1`, [tokenId, team.id, project.id, sessionId]);
+        await db.query(lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, project_id = $3, session_id = $4 WHERE token_id = $1`), [tokenId, team.id, project.id, sessionId]);
         const asSession = ctx.client.withBearer(minted.secret_key, 'SESSION_TOKEN');
         const got = paths((await search(asSession, { q: word, limit: '100' })).status(200));
         const want = [`${AGENT_DRIVE}/${word}-logo.png`, `${AGENT_DRIVE}/plan.md`, `${ownerFolder}/diary.md`, ...TEAM_FOLDERS.map((f) => `${f}/brief.md`)].sort();
@@ -196,8 +196,9 @@ flow(
         (await search(owner, { q: word, limit: 'ten' })).status(400).body().has('$.code', 'invalid_input');
       });
 
-      await ctx.step('an account member without access to the project → 403', async () => {
-        (await search(ctx.client.as(outsider), { q: word })).status(403);
+      await ctx.step('a person outside the workspace → 404 workspace_not_found', async () => {
+        // Membership is access (design.md C3): an account member is in the 1:1 workspace.
+        (await search(ctx.client.as(ctx.P.NONMEMBER), { q: word })).status(404).body().has('$.code', 'workspace_not_found');
       });
     } finally {
       if (tokenId) await db.query('DELETE FROM kortix.account_tokens WHERE token_id = $1', [tokenId]).catch(() => {});

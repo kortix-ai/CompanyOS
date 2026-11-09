@@ -1,7 +1,7 @@
 {
   "name": "@kortix/sdk",
   "version": "0.3.0",
-  "description": "Official Kortix frontend TypeScript SDK — one typed client for the Kortix API. Unifies project/session lifecycle and live agent streaming behind a single ergonomic Session handle, so web, mobile, and white-label apps never touch the raw HTTP API or OpenCode semantics.",
+  "description": "Official Kortix frontend TypeScript SDK — one typed client for the Kortix API. Unifies project/session lifecycle and live agent streaming behind a single ergonomic Session handle, so web, mobile, and white-label apps never touch the raw HTTP API or the agent runtime's wire protocol.",
   "type": "module",
   "license": "Elastic-2.0",
   "homepage": "https://github.com/kortix-ai/CompanyOS/tree/dev/packages/sdk",
@@ -41,6 +41,7 @@
     "./internal/diagnostics-store": "./src/internal/diagnostics-store.ts",
     "./internal/managed-storage": "./src/internal/managed-storage.ts",
     "./wire-message-id": "./src/core/session/wire-message-id.ts",
+    "./wire-values": "./src/core/wire-values.ts",
     "./capture-rules": "./src/core/capture/rules.ts",
     "./workspace-search": "./src/workspace-search/index.ts"
   },
@@ -70,6 +71,10 @@
       "./wire-message-id": {
         "types": "./dist/core/session/wire-message-id.d.ts",
         "import": "./dist/core/session/wire-message-id.js"
+      },
+      "./wire-values": {
+        "types": "./dist/core/wire-values.d.ts",
+        "import": "./dist/core/wire-values.js"
       },
       "./capture-rules": {
         "types": "./dist/core/capture/rules.d.ts",

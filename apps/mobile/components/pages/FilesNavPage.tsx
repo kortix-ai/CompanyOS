@@ -109,7 +109,7 @@ const ext = (name: string) => {
 };
 
 /** Pinned config dirs: always first (web parity). */
-const ELEVATED = new Set(['.kortix', '.opencode']);
+const ELEVATED = new Set(['.kortix']);
 
 type SortBy = 'name' | 'type';
 type SortOrder = 'asc' | 'desc';
@@ -858,7 +858,7 @@ export function FilesNavPage({
               className="rounded-full"
               onPress={downloadDir}
               disabled={downloadingDir || !ref_}
-              accessibilityLabel={path ? 'Download this folder' : 'Download the project'}>
+              accessibilityLabel={path ? 'Download this folder' : 'Download all files'}>
               <Icon as={DownloadSimpleIcon} size={18} className="text-foreground" />
             </Button>
           </PinnedBar>

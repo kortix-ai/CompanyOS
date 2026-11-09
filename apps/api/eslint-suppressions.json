@@ -12,16 +12,6 @@
       "count": 5
     }
   },
-  "src/accounts/core/accounts.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
-  "src/accounts/core/bootstrap-personal-account.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
   "src/accounts/core/invites.ts": {
     "kortix-api/projects-surface": {
       "count": 1
@@ -282,11 +272,6 @@
       "count": 1
     }
   },
-  "src/billing/routes/account-deletion.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
   "src/billing/routes/account-state.ts": {
     "no-console": {
       "count": 2
@@ -338,11 +323,6 @@
       "count": 7
     }
   },
-  "src/billing/services/free-tier-rotation.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
   "src/billing/services/legacy-stripe-sync.ts": {
     "no-console": {
       "count": 1
@@ -356,6 +336,11 @@
   "src/billing/services/revenuecat-webhooks.ts": {
     "no-console": {
       "count": 15
+    }
+  },
+  "src/billing/services/rotation-batch.ts": {
+    "no-console": {
+      "count": 2
     }
   },
   "src/billing/services/stripe-checkout-webhooks.ts": {
@@ -375,12 +360,7 @@
   },
   "src/billing/services/webhooks.ts": {
     "no-console": {
-      "count": 25
-    }
-  },
-  "src/billing/services/yearly-rotation.ts": {
-    "no-console": {
-      "count": 2
+      "count": 24
     }
   },
   "src/billing/wallet/index.ts": {
@@ -521,7 +501,7 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 3
@@ -673,7 +653,7 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     }
   },
   "src/channels/teams/identity.ts": {
@@ -1118,7 +1098,7 @@
   },
   "src/iam/sso-sync.ts": {
     "no-console": {
-      "count": 3
+      "count": 2
     }
   },
   "src/inbound-dispatch.ts": {
@@ -1500,7 +1480,7 @@
       "count": 12
     },
     "no-console": {
-      "count": 20
+      "count": 19
     },
     "no-restricted-properties": {
       "count": 1
@@ -1648,6 +1628,11 @@
       "count": 1
     }
   },
+  "src/projects/lib/project-detail-config.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
   "src/projects/lib/project-registration.ts": {
     "no-console": {
       "count": 1
@@ -1770,11 +1755,8 @@
     }
   },
   "src/projects/managed-repo-seed.ts": {
-    "kortix-api/replica-local": {
-      "count": 1
-    },
     "no-console": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/prompt-attachment-cleanup.ts": {
@@ -1894,7 +1876,7 @@
   },
   "src/projects/routes/agent-config.ts": {
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 3
@@ -1922,9 +1904,6 @@
   "src/projects/routes/change-request-actions.ts": {
     "no-console": {
       "count": 3
-    },
-    "no-restricted-imports": {
-      "count": 2
     },
     "no-restricted-syntax": {
       "count": 3
@@ -2093,10 +2072,10 @@
   },
   "src/projects/routes/project-detail.ts": {
     "no-console": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     }
   },
   "src/projects/routes/project-files.ts": {
@@ -2138,7 +2117,7 @@
   },
   "src/projects/routes/project-settings.ts": {
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 5
@@ -2146,7 +2125,7 @@
   },
   "src/projects/routes/projects.ts": {
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     },
     "no-restricted-properties": {
       "count": 1
@@ -2309,7 +2288,7 @@
   },
   "src/projects/routes/trigger-webhooks.ts": {
     "no-restricted-imports": {
-      "count": 2
+      "count": 1
     }
   },
   "src/projects/routes/triggers.ts": {
@@ -2404,7 +2383,7 @@
   },
   "src/projects/session-lifecycle/deliver.ts": {
     "no-console": {
-      "count": 4
+      "count": 2
     }
   },
   "src/projects/session-lifecycle/forwarded-placement.ts": {
@@ -2681,7 +2660,7 @@
   },
   "src/sandbox-proxy/forward/retry.ts": {
     "no-console": {
-      "count": 7
+      "count": 6
     }
   },
   "src/sandbox-proxy/forward/turn-start.ts": {
@@ -2751,10 +2730,7 @@
   },
   "src/sandbox-proxy/routes/share.ts": {
     "no-console": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/sandbox-proxy/sse-stall.ts": {
@@ -2783,9 +2759,6 @@
     }
   },
   "src/scim/users.ts": {
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 6
     }
@@ -2850,7 +2823,7 @@
   },
   "src/shared/account-limits.ts": {
     "kortix-api/layers": {
-      "count": 3
+      "count": 2
     }
   },
   "src/shared/actor-context.ts": {
@@ -2939,11 +2912,6 @@
       "count": 1
     }
   },
-  "src/shared/opencode-audit-rate-guard.ts": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/shared/pg-broadcast.ts": {
     "kortix-api/layers": {
       "count": 1
@@ -2973,12 +2941,9 @@
       "count": 1
     }
   },
-  "src/shared/resolve-account.ts": {
-    "kortix-api/layers": {
-      "count": 3
-    },
-    "no-console": {
-      "count": 2
+  "src/shared/runtime-audit-rate-guard.ts": {
+    "no-restricted-properties": {
+      "count": 1
     }
   },
   "src/shared/self-host-operator.ts": {
@@ -3124,7 +3089,7 @@
   },
   "src/snapshots/templates.ts": {
     "kortix-api/projects-surface": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 3

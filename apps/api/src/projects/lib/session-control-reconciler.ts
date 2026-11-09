@@ -57,6 +57,7 @@ import {
   readSessionAuditWatermark,
   readSessionControlState,
 } from './session-control-readers';
+import { errorMessage } from '../../shared/error-message';
 export type { RuntimeControlState, AuditWatermark, SessionControlState } from './session-control-readers';
 import { deriveSessionWorking } from './session-working';
 import type { SessionTurnStatus } from '@kortix/api-contract';
@@ -568,7 +569,7 @@ async function driveWakeLadder(sessionId: string, reconciler: Reconciler): Promi
   } catch (error) {
     logger.warn('[wake-ladder] step failed', {
       sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
   } finally {
     ladder.acting = false;
@@ -644,7 +645,7 @@ function emit(
 /**
  * Publish a runtime-state projection frame for a session.
  *
- * Called by the stream when it has just read `/kortix/opencode/state` — the
+ * Called by the stream when it has just read `/kortix/runtime/state` — the
  * frame goes through the same channel and the same cseq space as every other
  * control snapshot, so a client applies it with the same reducer and dedupes it
  * with the same cursor.

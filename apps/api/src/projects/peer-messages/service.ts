@@ -44,7 +44,7 @@ import {
   type ReachableScope,
   type SessionInbound,
 } from '@kortix/api-contract/multi-agent';
-import { projectSessions, projects, sessionLifecycleCommands, sessionPeerMessages } from '@kortix/db';
+import { projectSessions, sessionLifecycleCommands, sessionPeerMessages } from '@kortix/db';
 import { peerMessagePromptText, type PeerMessageKind } from '@kortix/shared';
 import { and, desc, eq, gt, gte, inArray, lte, or, sql } from 'drizzle-orm';
 import { randomAlphanumeric } from '../../shared/crypto';
@@ -55,9 +55,10 @@ import { db } from '../../shared/db';
 import { trackDetached } from '../../shared/drain';
 import { isUuid } from '../../shared/validate';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
-import { buildSessionTranscriptDigest } from '../lib/session-transcript';
+import { buildSessionTranscriptDigest, lastAssistantAnswer } from '../lib/session-transcript';
 import { RESULT_EXCERPT_KEY, RESULT_EXCERPT_MAX_CHARS, plainExcerpt, readSessionBoards, sessionInbound, sessionTeamLead } from '../lib/session-board';
 import { projectSessionMetadataMerge } from '../lib/session-metadata-merge';
+import { sessionTitleFromMetadata } from '../lib/session-title-placeholder';
 import { readSessionsWorking } from '../lib/session-working-read';
 import type { ProjectSessionRow } from '../lib/serializers';
 import { buildContinueSessionCommandValues, drainSessionLifecycleQueue } from '../session-lifecycle';
@@ -65,6 +66,18 @@ import { stopSession } from '../session-lifecycle/stop';
 import { enqueueSessionNotice } from '../session-notice-batch';
 import { teamHandle } from '../team-tasks/service';
 import { mintWireMessageId } from '../wire-message-id';
+import { projectsView } from '../../workspaces/rows';
+
+/**
+ * A cross-project address names only a project of the caller's account. The
+ * row is read fresh on every call — never through a cached lookup: a project
+ * can move between accounts (project transfer), and a stale allow here would
+ * hand the old owner's sessions access to the new owner's project.
+ */
+async function requireAccountProject(projectId: string, accountId: string): Promise<void> {
+  const [project] = await db.select({ accountId: projectsView.accountId }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
+  if (!project || project.accountId !== accountId) throw new PeerMessageError(404, 'Project not found', 'project_not_found');
+}
 
 /** Sessions one reachable list returns at most. */
 export const REACHABLE_MAX = 200;
@@ -86,6 +99,7 @@ export class PeerMessageError extends Error {
 
 type SessionRow = ProjectSessionRow;
 type PeerRow = typeof sessionPeerMessages.$inferSelect;
+type PeerTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** What the route resolved about the caller. */
 export interface PeerCaller {
@@ -100,11 +114,6 @@ const isLive = (row: Pick<SessionRow, 'metadata'>) =>
   typeof ((row.metadata ?? {}) as Record<string, unknown>).deletedAt !== 'string';
 
 const liveSql = sql`coalesce(${projectSessions.metadata}->>'deletedAt', '') = ''`;
-
-function title(row: SessionRow): string | null {
-  const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  return [meta.custom_name, meta.name].find((v): v is string => typeof v === 'string' && !!v.trim()) ?? null;
-}
 
 /** How `other` relates to `self`. */
 export function relationOf(self: SessionRow, other: SessionRow): AgentRelation {
@@ -166,7 +175,7 @@ async function describe(self: SessionRow, rows: SessionRow[], caller: PeerCaller
       short_id: row.sessionId.slice(0, 8),
       project_id: row.projectId,
       agent_name: row.agentName,
-      title: title(row),
+      title: sessionTitleFromMetadata(row.metadata),
       relation,
       state: boards.get(row.sessionId)?.board_state ?? 'idle',
       inbound,
@@ -189,8 +198,7 @@ export async function reachableAgents(input: {
   const { self, caller } = input;
   const otherProject = input.projectId && input.projectId !== self.projectId ? input.projectId : null;
   if (otherProject) {
-    const [project] = await db.select({ accountId: projects.accountId }).from(projects).where(eq(projects.projectId, otherProject)).limit(1);
-    if (!project || project.accountId !== self.accountId) throw new PeerMessageError(404, 'Project not found', 'project_not_found');
+    await requireAccountProject(otherProject, self.accountId);
     if (input.scope !== 'project') throw new PeerMessageError(400, 'project_id needs scope=project', 'project_id_needs_project_scope');
   }
   const candidates = input.scope === 'project' ? await projectSessionsOf(otherProject ?? self.projectId) : await circleOf(self);
@@ -293,8 +301,8 @@ export function serializePeerMessage(row: PeerRow): PeerMessage {
   };
 }
 
-/** The durable delivery row of a peer message into its receiver. */
-function deliveryValues(row: PeerRow, receiver: SessionRow, noReply = false) {
+/** The durable delivery row of a peer message into its receiver, in the caller's transaction; returns the drain key. */
+async function deliverInTx(tx: PeerTx, row: PeerRow, receiver: SessionRow, noReply = false): Promise<string> {
   const text = peerMessagePromptText({
     kind: row.type as PeerMessageKind,
     from: row.fromHandle,
@@ -304,29 +312,33 @@ function deliveryValues(row: PeerRow, receiver: SessionRow, noReply = false) {
     text: row.message,
   });
   const key = `peer:${row.id}`;
-  return {
-    key,
-    values: buildContinueSessionCommandValues({
-      source: 'system:peer-message',
-      projectId: receiver.projectId,
-      accountId: receiver.accountId,
-      sessionId: receiver.sessionId,
-      actorUserId: row.actorUserId,
-      text,
-      // Another session's words, not the person's: the transcript draws a
-      // "Message from @handle" row (parsePeerMessagePrompt), never a typed turn.
-      parts: [{ type: 'text', text, synthetic: true }],
-      idempotencyKey: key,
-      clientMessageId: key,
-      wireMessageId: mintWireMessageId({ nowMs: Date.now() }).id,
-      remintOnDelivery: true,
-      placement: 'composer',
-      delivery: 'steer',
-      authorSessionId: row.fromSessionId,
-      // A space post that asks nothing: it joins the transcript, no turn runs (`space-posts.ts`).
-      ...(noReply ? { noReply: true } : {}),
-    }),
-  };
+  await tx.insert(sessionLifecycleCommands).values(buildContinueSessionCommandValues({
+    source: 'system:peer-message',
+    projectId: receiver.projectId,
+    accountId: receiver.accountId,
+    sessionId: receiver.sessionId,
+    actorUserId: row.actorUserId,
+    text,
+    // Another session's words, not the person's: the transcript draws a
+    // "Message from @handle" row (parsePeerMessagePrompt), never a typed turn.
+    parts: [{ type: 'text', text, synthetic: true }],
+    idempotencyKey: key,
+    clientMessageId: key,
+    wireMessageId: mintWireMessageId({ nowMs: Date.now() }).id,
+    remintOnDelivery: true,
+    placement: 'composer',
+    delivery: 'steer',
+    authorSessionId: row.fromSessionId,
+    // A space post that asks nothing: it joins the transcript, no turn runs (`space-posts.ts`).
+    ...(noReply ? { noReply: true } : {}),
+  }))
+    .onConflictDoNothing({ target: sessionLifecycleCommands.idempotencyKey });
+  return key;
+}
+
+function kickDrain(key: string | null): void {
+  // Fire-and-forget: the send never waits for the receiver's box.
+  if (key) drainSessionLifecycleQueue({ idempotencyKey: key, burst: false }).catch(() => {});
 }
 
 /** One sentence for the sender about where the message is now. */
@@ -350,16 +362,10 @@ async function storeMessage(values: typeof sessionPeerMessages.$inferInsert, rec
   let key: string | null = null;
   const row = await db.transaction(async (tx) => {
     const [stored] = await tx.insert(sessionPeerMessages).values(values).returning();
-    if (stored!.status === 'delivered') {
-      const delivery = deliveryValues(stored!, receiver, noReply);
-      key = delivery.key;
-      await tx.insert(sessionLifecycleCommands).values(delivery.values)
-        .onConflictDoNothing({ target: sessionLifecycleCommands.idempotencyKey });
-    }
+    if (stored!.status === 'delivered') key = await deliverInTx(tx, stored!, receiver, noReply);
     return stored!;
   });
-  // Fire-and-forget: the send never waits for the receiver's box.
-  if (key) drainSessionLifecycleQueue({ idempotencyKey: key, burst: false }).catch(() => {});
+  kickDrain(key);
   return row;
 }
 
@@ -405,8 +411,7 @@ export async function sendPeerMessage(input: {
   }
   const projectId = body.project_id ?? sender.projectId;
   if (projectId !== sender.projectId) {
-    const [project] = await db.select({ accountId: projects.accountId }).from(projects).where(eq(projects.projectId, projectId)).limit(1);
-    if (!project || project.accountId !== sender.accountId) throw new PeerMessageError(404, 'Project not found', 'project_not_found');
+    await requireAccountProject(projectId, sender.accountId);
   }
   const found = await resolveRecipient(sender, body.to, projectId);
   // A session the caller's person may not see does not exist for this send:
@@ -534,15 +539,10 @@ export async function decideHeldMessage(input: { receiver: SessionRow; messageId
       .where(and(eq(sessionPeerMessages.id, row.id), eq(sessionPeerMessages.status, 'held')))
       .returning();
     if (!updated) throw new PeerMessageError(409, 'This message was decided already', 'peer_message_not_held');
-    if (status === 'delivered') {
-      const delivery = deliveryValues(updated, receiver);
-      key = delivery.key;
-      await tx.insert(sessionLifecycleCommands).values(delivery.values)
-        .onConflictDoNothing({ target: sessionLifecycleCommands.idempotencyKey });
-    }
+    if (status === 'delivered') key = await deliverInTx(tx, updated, receiver);
     return updated;
   });
-  if (key) drainSessionLifecycleQueue({ idempotencyKey: key, burst: false }).catch(() => {});
+  kickDrain(key);
   return serializePeerMessage(decided);
 }
 
@@ -566,11 +566,9 @@ export async function recordResultExcerpt(sessionId: string): Promise<string | n
     const session = await loadSession(sessionId);
     if (!session) return null;
     const transcript = await buildSessionTranscriptDigest({ session, limit: 12, maxChars: RESULT_EXCERPT_MAX_CHARS * 2 });
-    const messages = transcript.messages;
-    const lastUser = messages.map((m) => m.role).lastIndexOf('user');
-    const text = messages.slice(lastUser + 1).filter((m) => m.role === 'assistant').map((m) => m.text.trim()).filter(Boolean).at(-1);
-    if (!text) return null;
-    const excerpt = plainExcerpt(text).slice(0, RESULT_EXCERPT_MAX_CHARS);
+    const answer = lastAssistantAnswer(transcript);
+    if (!answer || !answer.text) return null;
+    const excerpt = plainExcerpt(answer.text).slice(0, RESULT_EXCERPT_MAX_CHARS);
     await db.update(projectSessions)
       .set({ metadata: projectSessionMetadataMerge({ [RESULT_EXCERPT_KEY]: excerpt }) })
       .where(eq(projectSessions.sessionId, sessionId));
@@ -651,18 +649,16 @@ export async function lastTurnAnswer(sessionId: string): Promise<{ id: string | 
   const session = await loadSession(sessionId);
   if (!session) return null;
   const transcript = await buildSessionTranscriptDigest({ session, limit: 24, maxChars: 40_000 });
-  const messages = transcript.messages;
-  const lastUser = messages.map((m) => m.role).lastIndexOf('user');
-  const answer = messages.slice(lastUser + 1).filter((m) => m.role === 'assistant' && m.text.trim()).at(-1);
-  return answer ? { id: answer.id, text: answer.text.trim() } : null;
+  const answer = lastAssistantAnswer(transcript);
+  return answer && answer.text ? { id: answer.id, text: answer.text } : null;
 }
 
 /** A turn of `sessionId` closed (`settleTurnEnd`): stamp its excerpt, then send the idle notices it owes. Never throws. */
 export async function onPeerTurnEnded(sessionId: string, outcome: 'idle' | 'error', errorName?: string | null): Promise<void> {
-  // A space thread's answer as its next message file (`memory/thread-files.ts`), off this path.
   if (outcome === 'idle') {
-    void import('../../memory/thread-files')
-      .then(({ recordThreadReply }) => recordThreadReply(sessionId, lastTurnAnswer))
+    // The space watcher (`spaces_proactive`): a watched thread's turn as a feed line, or the watcher's own decision.
+    void import('../lib/space-watch/act')
+      .then(({ onSpaceSessionTurnEnded }) => onSpaceSessionTurnEnded(sessionId))
       .catch(() => undefined);
   }
   try {

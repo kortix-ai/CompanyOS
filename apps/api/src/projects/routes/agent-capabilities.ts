@@ -56,17 +56,24 @@ async function projectCatalog(c: Parameters<typeof loadProjectForUser>[0], proje
   await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_AGENT_READ);
 
   const gitProject = await withProjectGitAuth(loaded.row);
-  const manifest = await readManifest(gitProject).catch(() => null);
-  if (!manifest) {
+  // `rethrowReadErrors`: a failed git read throws, so only a repository with
+  // no kortix.yaml reads as null. That repository (a linked repo before setup)
+  // still has the built-in catalog: Customize › Skills lists it instead of an error.
+  const manifest = await readManifest(gitProject, { rethrowReadErrors: true }).catch(() => undefined);
+  if (manifest === undefined) {
     return { error: { body: { error: 'The project has no readable kortix.yaml.', code: 'manifest_read' }, status: 400 as const } };
   }
-  if (agentName !== null) {
+  if (manifest === null && agentName !== null) {
+    return { error: { body: { error: `No agent "${agentName}" declared: the project has no kortix.yaml.`, code: 'agent_not_found' }, status: 404 as const } };
+  }
+  const raw: Record<string, unknown> = manifest?.raw ?? {};
+  if (manifest && agentName !== null) {
     const builtin = enabledBuiltinAgentKey(agentName, projectBuiltinAgents(manifest.raw));
     const notDeclared = builtin ? null : agentNotDeclaredError(manifest, agentName);
     if (notDeclared) return { error: { body: notDeclared, status: 404 as const } };
   }
 
-  const registered = manifest.raw.skills;
+  const registered = raw.skills;
   const folders = registered && typeof registered === 'object' && !Array.isArray(registered) ? Object.entries(registered) : [];
   const projectSkillDescriptions = Object.fromEntries(
     await Promise.all(
@@ -79,7 +86,7 @@ async function projectCatalog(c: Parameters<typeof loadProjectForUser>[0], proje
   return {
     catalog: buildAgentCapabilities({
       agentName: agentName ?? '',
-      manifest: manifest.raw,
+      manifest: raw,
       managedSkills: listManagedSkills(),
       projectSkillDescriptions,
       enabledFlags: new Set(featureFlagsEnvValue(loaded.row.metadata).split(',')),
@@ -91,17 +98,17 @@ export function registerAgentCapabilitiesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/capabilities',
+      path: '/{workspaceId}/capabilities',
       tags: ['projects'],
       summary: "List the project's tools, skills and extensions",
       description:
         'Every tool, skill and extension an agent of this project can be given: the built-in ones (with the feature flag a skill needs) and the ones kortix.yaml registers.',
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(ProjectCapabilitiesSchema, 'The project capability catalog'), ...errors(400, 403, 404) },
     }),
     async (c) => {
-      const { projectId } = c.req.valid('param');
+      const { workspaceId: projectId } = c.req.valid('param');
       const out = await projectCatalog(c, projectId, null);
       if ('error' in out && out.error) return c.json(out.error.body, out.error.status);
       const { agent: _agent, ...catalog } = out.catalog!;
@@ -112,15 +119,15 @@ export function registerAgentCapabilitiesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/agents/{agentName}/capabilities',
+      path: '/{workspaceId}/agents/{agentName}/capabilities',
       tags: ['projects'],
       summary: "List an agent's tools, skills and extensions",
       ...auth,
-      request: { params: z.object({ projectId: z.string(), agentName: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), agentName: z.string() }) },
       responses: { 200: json(CapabilitiesSchema, 'The agent capability catalog'), ...errors(400, 403, 404) },
     }),
     async (c) => {
-      const { projectId, agentName } = c.req.valid('param');
+      const { workspaceId: projectId, agentName } = c.req.valid('param');
       const out = await projectCatalog(c, projectId, agentName);
       if ('error' in out && out.error) return c.json(out.error.body, out.error.status);
       return c.json(out.catalog!, 200);

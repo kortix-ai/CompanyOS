@@ -28,8 +28,29 @@ import { approvalNotExpired } from '../../connectors/approval-expiry';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { approvalCallerOf } from '../lib/http-approval-caller';
 import { hiddenSpaceIds, sessionsInSpaces } from '../../shared/space-access';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const APPROVAL_EXPIRED_BODY = { error: 'This approval expired', code: 'APPROVAL_EXPIRED' };
+
+const pendingApprovalWhere = (projectId: string) =>
+  and(
+    eq(connectorCalls.projectId, projectId),
+    eq(connectorCalls.status, 'pending_approval'),
+    isNull(connectorCalls.approvedBy),
+    isNull(connectorCalls.resolvedAt),
+    approvalNotExpired,
+  );
+
+const pendingAskWhere = (
+  projectId: string,
+  table: typeof sessionPendingQuestions | typeof sessionPendingPermissions,
+  resolvedColumn: typeof sessionPendingQuestions.answeredAt | typeof sessionPendingPermissions.decidedAt,
+) =>
+  and(
+    eq(table.projectId, projectId),
+    isNull(resolvedColumn),
+    or(isNull(table.expiresAt), gt(table.expiresAt, sql`NOW()`)),
+  );
 
 export function registerApprovalsRoutes(): void {
   // GET /v1/projects/:projectId/approvals
@@ -42,12 +63,12 @@ export function registerApprovalsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/approvals',
+      path: '/{workspaceId}/approvals',
       tags: ['access'],
       summary: 'List approvals of a project',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         query: z.object({ limit: z.string().optional() }),
       },
       responses: {
@@ -56,7 +77,7 @@ export function registerApprovalsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertProjectCapability(
@@ -82,15 +103,7 @@ export function registerApprovalsRoutes(): void {
           expiresAt: connectorCalls.expiresAt,
         })
         .from(connectorCalls)
-        .where(
-          and(
-            eq(connectorCalls.projectId, projectId),
-            eq(connectorCalls.status, 'pending_approval'),
-            isNull(connectorCalls.approvedBy),
-            isNull(connectorCalls.resolvedAt),
-            approvalNotExpired,
-          ),
-        )
+        .where(pendingApprovalWhere(projectId))
         .orderBy(desc(connectorCalls.createdAt))
         .limit(limit.value);
       // Calls of a private channel's threads the manager is not in are not listed.
@@ -134,18 +147,18 @@ export function registerApprovalsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/approvals/needs-input',
+      path: '/{workspaceId}/approvals/needs-input',
       tags: ['access'],
       summary: 'List approvals waiting for input',
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: {
         200: json(AnyObject, 'Sessions awaiting a human decision'),
         ...errors(400, 404),
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
 
@@ -172,15 +185,7 @@ export function registerApprovalsRoutes(): void {
       const pendingRows = await db
         .select({ sessionId: connectorCalls.sessionId })
         .from(connectorCalls)
-        .where(
-          and(
-            eq(connectorCalls.projectId, projectId),
-            eq(connectorCalls.status, 'pending_approval'),
-            isNull(connectorCalls.approvedBy),
-            isNull(connectorCalls.resolvedAt),
-            approvalNotExpired,
-          ),
-        );
+        .where(pendingApprovalWhere(projectId));
 
       // Open agent questions (`question` tool) and permission asks wait on a
       // human too, and survive their sandbox (lib/session-asks.ts). Counted
@@ -188,23 +193,11 @@ export function registerApprovalsRoutes(): void {
       const questionRows = await db
         .select({ sessionId: sessionPendingQuestions.sessionId, surfaceSessionId: sessionPendingQuestions.surfaceSessionId })
         .from(sessionPendingQuestions)
-        .where(
-          and(
-            eq(sessionPendingQuestions.projectId, projectId),
-            isNull(sessionPendingQuestions.answeredAt),
-            or(isNull(sessionPendingQuestions.expiresAt), gt(sessionPendingQuestions.expiresAt, sql`NOW()`)),
-          ),
-        );
+        .where(pendingAskWhere(projectId, sessionPendingQuestions, sessionPendingQuestions.answeredAt));
       const permissionRows = await db
         .select({ sessionId: sessionPendingPermissions.sessionId, surfaceSessionId: sessionPendingPermissions.surfaceSessionId })
         .from(sessionPendingPermissions)
-        .where(
-          and(
-            eq(sessionPendingPermissions.projectId, projectId),
-            isNull(sessionPendingPermissions.decidedAt),
-            or(isNull(sessionPendingPermissions.expiresAt), gt(sessionPendingPermissions.expiresAt, sql`NOW()`)),
-          ),
-        );
+        .where(pendingAskWhere(projectId, sessionPendingPermissions, sessionPendingPermissions.decidedAt));
 
       // Count per (Kortix) session id: the session that asked, and the
       // session a person opens for it when that differs (a hidden worker's
@@ -228,12 +221,12 @@ export function registerApprovalsRoutes(): void {
       if (kortixIds.length === 0) return c.json({ total: 0, sessions: {} });
 
       // Look these sessions up to (a) gate non-managers to their own and (b) map to
-      // the OpenCode session id the sidebar list keys on. The response carries BOTH
+      // the runtime session id (`runtime_session_id`) the sidebar list keys on. The response carries BOTH
       // id forms → the caller matches whichever it holds.
       const sess = await db
         .select({
           sessionId: projectSessions.sessionId,
-          opencodeSessionId: projectSessions.runtimeSessionId,
+          runtimeSessionId: projectSessions.runtimeSessionId,
           createdBy: projectSessions.createdBy,
           origin: projectSessions.origin,
           spaceId: projectSessions.spaceId,
@@ -268,7 +261,7 @@ export function registerApprovalsRoutes(): void {
           : 0;
         if (n <= 0) continue;
         sessions[s.sessionId] = (sessions[s.sessionId] ?? 0) + n;
-        if (s.opencodeSessionId) sessions[s.opencodeSessionId] = sessions[s.sessionId]!;
+        if (s.runtimeSessionId) sessions[s.runtimeSessionId] = sessions[s.sessionId]!;
         for (const surface of surfacesOf[s.sessionId] ?? []) sessions[surface] = (sessions[surface] ?? 0) + n;
         total += n;
       }
@@ -285,12 +278,12 @@ export function registerApprovalsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/approvals/{executionId}',
+      path: '/{workspaceId}/approvals/{executionId}',
       tags: ['access'],
       summary: 'Approve or deny a gated action',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), executionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), executionId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             decision: z.enum(['approve', 'deny']).openapi({ description: 'Approve or deny exactly this gated call.' }),
             note: z.string().optional().openapi({ description: 'Note the agent receives with the decision.' }),
@@ -302,7 +295,7 @@ export function registerApprovalsRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const executionId = c.req.param('executionId');
       if (!isUuid(executionId)) return c.json({ error: 'Invalid execution id' }, 400);
       const body = await readJsonObject(c);
@@ -358,7 +351,7 @@ export function registerApprovalsRoutes(): void {
                   error: 'Sign in with a Kortix account to resolve this approval',
                   code: 'APPROVAL_REQUIRES_HUMAN',
                 }
-              : { error: 'Only a project manager or the session launcher can resolve this' },
+              : { error: 'Only a workspace manager or the session launcher can resolve this' },
           403,
         );
       }

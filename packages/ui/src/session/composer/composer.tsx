@@ -24,6 +24,7 @@ import {
   memo,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -114,6 +115,7 @@ import { useComposerFocus } from './hooks/use-composer-focus';
 import { useMenuRevalidation } from './hooks/use-file-search';
 import { controlToOpenFor, hostSlashActions, localizedSlashActions, slashActionShown, type SlashAction } from './menus/slash-actions';
 import type { SlashFile } from './menus/slash-files';
+import { outsideAgentMentions, SpaceMentionContext } from './menus/space-mentions';
 import { promptHistoryEntries, stepPromptHistory } from './prompt-history';
 import { QuoteList } from './quote-list';
 import { createSubmitLatch } from './submit-latch';
@@ -600,6 +602,15 @@ function ComposerImpl(props: SessionChatInputProps) {
   const tThreads = useTranslations('threads');
 
   const dockId = `composer-slash-dock-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  // Inside a space (flag `chat`): the agents a sent message named from outside
+  // it. Mentioning one never adds it; the line above the card asks first.
+  const spaceMentions = useContext(SpaceMentionContext);
+  const spaceMentionsRef = useRef(spaceMentions);
+  useEffect(() => {
+    spaceMentionsRef.current = spaceMentions;
+  }, [spaceMentions]);
+  const [outsideAsk, setOutsideAsk] = useState<string[]>([]);
 
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   // Synchronous mirror of `attachedFiles`, for the one reader that cannot
@@ -1481,20 +1492,12 @@ function ComposerImpl(props: SessionChatInputProps) {
   }, [quoteRequests, appendQuoteTexts]);
 
   /**
-   * The model popover's open state, hoisted out of `ModelSelector` so the `/`
-   * palette can open it. `focusSection` is what separates the palette's two
-   * model-related rows: reasoning effort is a footer row INSIDE this popover
-   * rather than a control of its own (see `model-selector.tsx`), so both rows
-   * open the same element and only the landing point differs.
-   */
-  /**
-   * Open state for the two toolbar controls the `/` palette can reach.
-   * Hoisted out of the controls themselves so a palette row can open them;
-   * both stay uncontrolled for every other consumer.
+   * Open state for the pickers the `/` palette can reach, hoisted so a
+   * palette row can open them.
    *
-   * Two separate flags, not one with a "which section" discriminator: model
-   * and reasoning effort are now two distinct dropdowns, so a single flag
-   * would open both or neither.
+   * Two flags for model and reasoning effort: the toolbar opens its one
+   * merged model + effort popover for either, and the `chat_input` control
+   * uses them to pick which row opens highlighted (`initialRow`).
    */
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -1819,6 +1822,8 @@ function ComposerImpl(props: SessionChatInputProps) {
       // right after the paint (`deliverAfterPaint`), so the next Send never waits
       // behind them. The host releases the uploads after its POST; a send it keeps
       // on screen as failed still holds them for its Retry.
+      const outside = spaceMentionsRef.current ? outsideAgentMentions(spaceMentionsRef.current, trimmed) : [];
+      if (outside.length > 0) setOutsideAsk(outside);
       await runComposerSend({
         submission: attachmentSubmission,
         controller: promptAttachments,
@@ -2156,6 +2161,10 @@ function ComposerImpl(props: SessionChatInputProps) {
     quotes,
     quoteListLabels,
     handleRemoveQuote,
+    spaceAsk:
+      outsideAsk.length > 0 && spaceMentions?.renderOutsideAsk
+        ? spaceMentions.renderOutsideAsk(outsideAsk[0]!, () => setOutsideAsk((list) => list.slice(1)))
+        : null,
   };
 
   return (

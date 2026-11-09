@@ -33,7 +33,7 @@ const repo = process.env.VOICE_WORKSPACE ?? process.env.KORTIX_WORKSPACE
 // Code files only, not tests, benches or notes: their names ("named-evidence-proof", "personas") took prompt slots real words need.
 const files = repo ? Bun.spawnSync(['git', '-C', repo, 'ls-files']).stdout.toString().split('\n').filter((f) => /\.(?:tsx?|jsx?|mjs|py|go|rs|rb|java|kt|swift|cs|php|vue|svelte)$/.test(f) && !/(?:^|\/)(?:bench|tests?|__tests__|fixtures|runs|spec)\//.test(f) && !/\.(?:test|spec)\.[^/]+$/.test(f)) : []
 const names = files.sort((a, b) => a.split('/').length - b.split('/').length).map((f) => f.split('/').pop()!.replace(/\.\w+$/, ''))
-const terms = [...(process.env.VOCAB ?? `${NAME},Kortix,OpenCode,Bun,TypeScript`).split(',').map((t) => t.trim()), ...names.filter((n) => /^\w[\w-]{2,23}$/.test(n))]
+const terms = [...(process.env.VOCAB ?? `${NAME},Kortix,Bun,TypeScript`).split(',').map((t) => t.trim()), ...names.filter((n) => /^\w[\w-]{2,23}$/.test(n))]
 const VOCAB = terms.filter((t, i) => terms.findIndex((u) => u.toLowerCase() === t.toLowerCase()) === i).slice(0, 40)
 /** The names Whisper is biased toward (the product's and the project's), for reading a turn as it was said. */
 export const vocab = () => VOCAB
@@ -229,7 +229,7 @@ async function transcribe(pcm: Uint8Array, strict = true, keep?: (t: string) => 
   const sure = segments.every((s) => (s.no_speech_prob < 0.3 && s.avg_logprob > -0.8) || s.avg_logprob > -0.4)
   if (strict && text.split(/\s+/).length <= 2 && !sure && !COMMAND.test(text) && !keep?.(text)) text = ''
   if (process.env.DEBUG && !text) console.error('whisper dropped', JSON.stringify(segments.map((s) => [s.text, s.no_speech_prob.toFixed(2), s.avg_logprob.toFixed(2), s.compression_ratio.toFixed(1)])))
-  // On unclear audio Whisper can read back its own prompt ("OpenCode, Bun, TypeScript").
+  // On unclear audio Whisper can read back its own prompt ("Kortix, Bun, TypeScript").
   const said = text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? []
   // Whisper's stock phrases on noise ("Thank you.") are also what callers say last: kept when Whisper is certain.
   const certain = segments.every((s) => s.no_speech_prob < 0.1 && s.avg_logprob > -0.7)
@@ -490,18 +490,19 @@ export const ttss: Record<string, (lang?: string, model?: string) => Tts> = {
 // fetched once. A call's voice can be one by name, or a few words picked against them ("deep calm British male").
 export type Voice = { id: string; about: string }
 let voiceList: Promise<Voice[]> | undefined
+// No source (no models base, no key) is not a catalog: [] is not kept, so a call once a source is set still fetches it.
 export const inworldVoices = (): Promise<Voice[]> =>
-  (voiceList ??= viaModels()
-    ? fetch(voicesUrl(), { headers: modelsHeaders(), signal: AbortSignal.timeout(5000) })
-        .then((r) => (r.ok ? (r.json() as Promise<{ data?: { id: string; description?: string; tags?: string[]; languages?: string[] }[] }>) : Promise.reject(Error(`voices ${r.status}`))))
-        .then((j) => (known = (j.data ?? []).map((v) => ({ id: v.id, about: `${voiceName(v.id)} ${v.description ?? ''} ${(v.tags ?? []).join(' ')} ${(v.languages ?? []).join(' ')}`.toLowerCase() }))))
-        .catch(() => ((voiceList = undefined), []))
-    : process.env.INWORLD_API_KEY
-    ? fetch('https://api.inworld.ai/tts/v1/voices', { headers: { Authorization: `Basic ${process.env.INWORLD_API_KEY}` }, signal: AbortSignal.timeout(5000) })
-        .then((r) => (r.ok ? (r.json() as Promise<{ voices?: { voiceId: string; description?: string; tags?: string[]; languages?: string[] }[] }>) : Promise.reject(Error(`voices ${r.status}`)))) // a failed fetch is tried again next time, not kept as none
-        .then((j) => (known = (j.voices ?? []).map((v) => ({ id: v.voiceId, about: `${voiceName(v.voiceId)} ${v.description ?? ''} ${(v.tags ?? []).join(' ')} ${(v.languages ?? []).join(' ')}`.toLowerCase() }))))
-        .catch(() => ((voiceList = undefined), []))
-    : Promise.resolve([]))
+  viaModels() || process.env.INWORLD_API_KEY
+    ? (voiceList ??= (viaModels()
+      ? fetch(voicesUrl(), { headers: modelsHeaders(), signal: AbortSignal.timeout(5000) })
+          .then((r) => (r.ok ? (r.json() as Promise<{ data?: { id: string; description?: string; tags?: string[]; languages?: string[] }[] }>) : Promise.reject(Error(`voices ${r.status}`))))
+          .then((j) => (known = (j.data ?? []).map((v) => ({ id: v.id, about: `${voiceName(v.id)} ${v.description ?? ''} ${(v.tags ?? []).join(' ')} ${(v.languages ?? []).join(' ')}`.toLowerCase() }))))
+          .catch(() => ((voiceList = undefined), []))
+      : fetch('https://api.inworld.ai/tts/v1/voices', { headers: { Authorization: `Basic ${process.env.INWORLD_API_KEY}` }, signal: AbortSignal.timeout(5000) })
+          .then((r) => (r.ok ? (r.json() as Promise<{ voices?: { voiceId: string; description?: string; tags?: string[]; languages?: string[] }[] }>) : Promise.reject(Error(`voices ${r.status}`)))) // a failed fetch is tried again next time, not kept as none
+          .then((j) => (known = (j.voices ?? []).map((v) => ({ id: v.voiceId, about: `${voiceName(v.voiceId)} ${v.description ?? ''} ${(v.tags ?? []).join(' ')} ${(v.languages ?? []).join(' ')}`.toLowerCase() }))))
+          .catch(() => ((voiceList = undefined), []))))
+    : Promise.resolve([])
 let known: Voice[] = [] // filled by inworldVoices() (the relay calls it at start)
 /** An Inworld voice id for a name or a description: the name itself when it is one, else the voice whose description
  * shares the most of its words (gender words count double); the words as given when nothing is known yet. */

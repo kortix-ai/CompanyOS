@@ -31,6 +31,7 @@ mock.module('../../../config', () => ({
 }));
 
 mock.module('../../../shared/db', () => ({
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
   hasDatabase: () => true,
   db: {
     select: () => ({
@@ -147,10 +148,16 @@ function awakeSession(extra: Record<string, unknown> = {}) {
     projectId: PROJECT_ID,
     status: 'running',
     metadata: {},
-    opencodeSessionId: OC_SESSION_ID,
+    runtimeSessionId: OC_SESSION_ID,
     ...extra,
   };
-  boxRow = { status: 'active', externalId: EXTERNAL_ID };
+  // An open proved this box at the runtime floor (#11748): only then does a
+  // delivery take the fast path instead of waiting for a full open.
+  boxRow = {
+    status: 'active',
+    externalId: EXTERNAL_ID,
+    metadata: { runtimeFloor: { current: { externalId: EXTERNAL_ID, at: new Date().toISOString() } } },
+  };
 }
 
 const lastVariant = (): unknown => forwardedBodies.at(-1)?.variant;
@@ -163,18 +170,10 @@ beforeEach(() => {
 });
 
 describe('continueSession — project default reasoning effort', () => {
-  test('the last authorization check replaces captured text and parts before the runtime receives them', async () => {
+  test('a delivery the last check refuses never reaches the runtime prompt endpoint', async () => {
     awakeSession();
-    expect(await continueSession({ sessionId: SESSION_ID, source: 'system:artifact-comment', text: 'Deleted snapshot.',
-      parts: [{ type: 'text', text: 'Deleted snapshot.' }] }, undefined, undefined, async () => ({ text: 'Current comment text.' }))).toBe('delivered');
-    expect(JSON.stringify(forwardedBodies)).toContain('Current comment text.');
-    expect(JSON.stringify(forwardedBodies)).not.toContain('Deleted snapshot.');
-  });
-
-  test('a revoked delivery never reaches the runtime prompt endpoint', async () => {
-    awakeSession();
-    await expect(continueSession({ sessionId: SESSION_ID, source: 'system:artifact-comment', text: 'Private feedback.' }, undefined, undefined,
-      async () => { throw new PromptDeliveryRefused(403, 'artifact_comment_agent_forbidden', 'Access was revoked'); })).rejects.toBeInstanceOf(PromptDeliveryRefused);
+    await expect(continueSession({ sessionId: SESSION_ID, source: 'trigger:reminder', text: 'Check the goal.' }, undefined, undefined,
+      async () => { throw new PromptDeliveryRefused(409, 'goal_not_running', 'The goal is paused'); })).rejects.toBeInstanceOf(PromptDeliveryRefused);
     expect(forwardedBodies).toHaveLength(0);
   });
 

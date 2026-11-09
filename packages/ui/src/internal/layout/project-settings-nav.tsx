@@ -66,7 +66,7 @@ const TAB_ICONS: Record<CapabilityTab['key'], Icon> = {
  * ProjectCustomizeNavItem, top of the panel under New session, navigating to
  * the capability pages (Agents, Repo, Review, Settings — the libraries Skills /
  * Connectors / Triggers / Reminders / Models / Secrets moved to `/admin`,
- * `ADMIN_MANAGED_TABS`). Gated, because those pages can 403.
+ * `ADMIN_SECTION`). Gated, because those pages can 403.
  *
  * The bottom-of-footer "Settings" row that used to sit beside it is gone
  * (Jay, 2026-08-17): it opened the same User Settings overlay a click on the
@@ -91,7 +91,7 @@ const TAB_ICONS: Record<CapabilityTab['key'], Icon> = {
  * a working row, rather than a link to a page that 403s.
  *
  * Commands is intentionally absent: its standalone capability page was removed,
- * so there is no `/projects/<id>/commands` route to land on. Commands stays
+ * so there is no `/workspaces/<id>/commands` route to land on. Commands stays
  * reachable through the Customize overlay (`/customize/commands` via the
  * `proj-commands` palette entry and the Settings row).
  */
@@ -175,7 +175,7 @@ export const TAB_PREFERENCE: readonly {
     action: PROJECT_ACTIONS.PROJECT_REVIEW_READ,
     manage: [PROJECT_ACTIONS.PROJECT_REVIEW_ACT],
   },
-  // Settings (`/projects/<id>/admin/general`) is configuration by
+  // Settings (`/workspaces/<id>/admin/general`) is configuration by
   // definition: its read leaf is already a write leaf.
   { key: 'config', action: PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE },
 ];

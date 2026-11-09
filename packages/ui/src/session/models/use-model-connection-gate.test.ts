@@ -13,7 +13,6 @@ const selectorSource = readFileSync(join(import.meta.dir, 'model-selector.tsx'),
 // it just stops being able to find what it is looking for, which is exactly
 // what happened here.
 const chatInputSource = readFileSync(join(import.meta.dir, '..', 'composer', 'composer.tsx'), 'utf8');
-const chatGateSource = readFileSync(join(import.meta.dir, 'model-connection-gate.tsx'), 'utf8');
 const availabilitySource = readFileSync(join(import.meta.dir, 'model-availability.ts'), 'utf8');
 
 describe('model management entry-point routing', () => {
@@ -67,10 +66,10 @@ describe('model management entry-point routing', () => {
 });
 
 /**
- * THE `/new` dead-click fix. The gate used to derive its project purely from
+ * THE `/workspaces/new` dead-click fix. The gate used to derive its project purely from
  * `useParams<{ id?: string }>()`. Every original caller lives under
- * `/projects/[id]`, so that was invisible — until the onboarding wizard's plan
- * step started rendering on `/new` (`app/[locale]/(app)/new`), a route with NO `[id]`
+ * `/workspaces/[id]`, so that was invisible — until the onboarding wizard's plan
+ * step started rendering on `/workspaces/new` (`app/[locale]/(app)/workspaces/new`), a route with NO `[id]`
  * segment. There `params.id` is `undefined`, `projectId` resolved to `null`,
  * `modal` was therefore `null`, and picking "Bring your own API key" rendered
  * nothing AND never called `onContinue()` — the wizard could not advance past
@@ -120,7 +119,7 @@ describe('useModelConnectionGate: the options argument is backward compatible', 
    * The callers that predate the options argument must keep behaving
    * EXACTLY as they did: none passes options, so the route stays their single
    * source of truth. If one of them ever starts passing an id, that is a
-   * behaviour change on `/projects/[id]` that somebody has to decide on.
+   * behaviour change on `/workspaces/[id]` that somebody has to decide on.
    */
   test('the composer calls the hook with models only', () => {
     expect(chatInputSource).toContain('useModelConnectionGate(models)');
@@ -130,10 +129,5 @@ describe('useModelConnectionGate: the options argument is backward compatible', 
   test('model-selector calls the hook with models only', () => {
     expect(selectorSource).toContain('useModelConnectionGate(models)');
     expect(selectorSource).not.toContain('useModelConnectionGate(models,');
-  });
-
-  test('the model-connection-gate call site still passes no live data and no options', () => {
-    expect(chatGateSource.match(/useModelConnectionGate\(EMPTY_MODELS\)/g)?.length).toBe(1);
-    expect(chatGateSource).not.toContain('useModelConnectionGate(EMPTY_MODELS,');
   });
 });

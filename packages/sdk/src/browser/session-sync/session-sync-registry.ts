@@ -5,7 +5,6 @@ import { ApiError } from '../../core/http/api/errors';
 import {
   SessionSyncController,
   type SessionSyncPage,
-  type SessionSyncReason,
   type SessionSyncTelemetryEvent,
   loadCompleteSessionHistory,
 } from '../../core/session-sync/session-sync-controller';
@@ -20,7 +19,7 @@ import { parseKortixSessionScope } from './server-transcript-mirror';
 interface MessagesResponse {
   data?: Array<{ info: Message; parts: Part[] }>;
   /**
-   * The generated OpenCode client RESOLVES with `{ error }` on a non-2xx
+   * The runtime REST client RESOLVES with `{ error }` on a non-2xx
    * response — it never throws unless the caller opted into `throwOnError`, and
    * we do not. So the ONLY place a 503 or a runtime failure is visible is here.
    * Reading `data ?? []` and ignoring this is exactly how a cold-boot 503
@@ -139,7 +138,7 @@ function messageKey(info: { id: string; time?: { created?: number } }): string {
 /**
  * The most specific message a failed `client.session.messages` response
  * carries. `error` is genuinely `unknown` (its shape varies per endpoint), so
- * this duck-types the same way `unwrap` (react/use-opencode-sessions/shared.ts)
+ * this duck-types the same way `unwrap` (react/use-runtime-sessions/shared.ts)
  * does, and falls back to the status code.
  */
 function messagePageErrorText(result: MessagesResponse, status: number | undefined): string {
@@ -391,14 +390,6 @@ export function retainSessionSyncController(sessionId: string, runtimeScope?: st
   };
 }
 
-export function reconcileSessionTail(
-  sessionId: string,
-  reason: SessionSyncReason,
-  runtimeScope?: string,
-): Promise<void> {
-  return getSessionSyncController(sessionId, undefined, runtimeScope).reconcile(reason);
-}
-
 /**
  * One authoritative read of a session's runtime status. `null` when the
  * runtime exposes no status endpoint — the caller decides what silence means.
@@ -485,7 +476,7 @@ export async function loadSessionExportMessages(
   let log = saved ? useSyncStore.getState().sessionLogs[saved.sessionId] : undefined;
   // The API serves the log and the session has none yet: only the runtime can hold messages.
   let missing = false;
-  if (saved && !log && loadSessionLogPage) {
+  if (saved && !log) {
     const page = await readSessionLogAnswer(loadSessionLogPage, saved.projectId, saved.sessionId, { limit: SESSION_LOG_EXPORT_PAGE_LIMIT });
     if (page === 'missing') missing = true;
     else if (page) log = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page);

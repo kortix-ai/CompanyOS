@@ -11,9 +11,9 @@
  *
  *   - Platinum suspends and resumes a VM, it does not reboot it, so the
  *     daemon's process env survives untouched;
- *   - `KORTIX_OPENCODE_MODEL` is read when the daemon builds OpenCode's config
- *     AT SPAWN (see `session-model-change.ts`), so the model a running box
- *     uses is the one baked at its ORIGINAL provision;
+ *   - `KORTIX_MODEL` lives in the daemon's env (see
+ *     `session-model-change.ts`), so the model a running box uses is the one
+ *     baked at its ORIGINAL provision;
  *   - nothing re-pushed it, so the row and the box drift apart and stay apart.
  *
  * Measured on one real dev project, 2026-09-28. The session row said
@@ -37,6 +37,7 @@ import { repointRetiredSessionModel } from '../../llm-gateway/resolution/session
 import { accountMayUseManagedModels } from '../../billing/services/entitlements';
 import { logger } from '../../lib/logger';
 import { pushSessionModelToSandbox } from './sandbox-env-sync';
+import { errorMessage } from '../../shared/error-message';
 
 export interface SessionModelRepairInput {
   projectId: string;
@@ -99,8 +100,8 @@ export async function repairRetiredSessionModelOnOpen(
     if (next === pin) return NO_REPAIR; // nothing servable to move to
 
     // The row is now right. A box that is already up still has the OLD model
-    // baked into OpenCode's config, so push it — `refreshModels: true`
-    // restarts OpenCode against the new env. `pushSessionModelToSandbox`
+    // baked into its runtime env, so push it — `refreshModels: true` makes
+    // the runtime apply the new env. `pushSessionModelToSandbox`
     // reports `applied: false` (never throws) for a box that is not active,
     // which is the ordinary, correct answer for a cold session: its next boot
     // reads the row.
@@ -136,7 +137,7 @@ export async function repairRetiredSessionModelOnOpen(
         logger.warn('[projects] retired session model push failed', {
           session_id: input.sessionId,
           pin,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
       });
     return { repointed: next };
@@ -144,7 +145,7 @@ export async function repairRetiredSessionModelOnOpen(
     logger.warn('[projects] retired session model repair failed', {
       session_id: input.sessionId,
       pin,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return NO_REPAIR;
   }

@@ -25,6 +25,7 @@ import { noteControlPlaneResponse, sessionTokenPresumedDead } from '@/lib/kortix
 import type { InitialTurnClaim } from '@/types/control-plane'
 import { flushSessionLogJournal } from './session-log-journal'
 import { runOnIdleHook } from './on-idle-hook'
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
 
 export type TurnStreamFrame = Omit<TurnStreamRelayBody, 'session_id' | 'kind'> & { kind: DaemonTurnStreamKind }
 
@@ -33,7 +34,7 @@ export async function postTurnStream(frame: TurnStreamFrame, timeoutMs = 15_000)
   const ctx = sandboxRelayContext()
   if (!ctx) return null
   const body: TurnStreamRelayBody = { session_id: ctx.sessionId, ...frame }
-  return fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-stream`, {
+  return kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
     body: JSON.stringify(body),
@@ -173,6 +174,8 @@ export async function relayTurnBegin(runtimeSessionId: string, messageId: string
       const text = await response.text().catch(() => '')
       noteControlPlaneResponse(response.status, text)
       logger.warn('[turn-relay] turn-begin relay non-ok', { status: response.status, attempt, body: text.slice(0, 200) })
+      // A non-5xx is definitive (KRTX-4456); same rule as relaySteerRead.
+      if (response.status < 500) return
     } catch (err) {
       logger.warn('[turn-relay] turn-begin relay fetch failed', { err: (err as Error).message, attempt })
     }
@@ -338,6 +341,9 @@ export async function relayTurnEnd(
       const text = await response.text().catch(() => '')
       noteControlPlaneResponse(response.status, text)
       logger.warn('[turn-relay] turn-end relay non-ok', { status: response.status, attempt, body: text.slice(0, 200) })
+      // A non-5xx is definitive — the doc above already says so (KRTX-4456:
+      // the ladder used to retry all four attempts through a refused lease).
+      if (response.status < 500) return false
     } catch (err) {
       logger.warn('[turn-relay] turn-end relay fetch failed', { err: (err as Error).message, attempt })
     }
@@ -361,6 +367,9 @@ export async function relayMemoryGuardTurnEnd(input: {
   /** The turn that was running when the guard fired, read before the abort. */
   turnMessageId: string | null
 }): Promise<boolean> {
+  // A refused lease cannot take this frame (KRTX-4456): skip while the
+  // credential is presumed dead, and feed the shared breaker on a refusal.
+  if (sessionTokenPresumedDead()) return false
   const turnMessageId = input.aborted ? input.turnMessageId : null
   try {
     const response = await postTurnStream(
@@ -380,6 +389,7 @@ export async function relayMemoryGuardTurnEnd(input: {
       10_000,
     )
     if (!response) return false
+    if (!response.ok) noteControlPlaneResponse(response.status, await response.text().catch(() => ''))
     logger.warn('[resources] memory guard relayed to the control plane', {
       status: response.status,
       turnMessageId,
@@ -434,7 +444,7 @@ export async function relayQuestion(
   }
   let relayed: RelayedAsk | null = null
   try {
-    const response = await fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-question`, {
+    const response = await kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-question`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
       body: JSON.stringify(body),
@@ -492,7 +502,7 @@ export async function relayPermission(
     ...(call ? { tool: call.tool, args_hash: call.argsHash, args: relayArgs(request.metadata) } : {}),
   }
   try {
-    const response = await fetch(`${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/turn-permission`, {
+    const response = await kortixApiFetch(`${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/turn-permission`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ctx.token}` },
       body: JSON.stringify(body),

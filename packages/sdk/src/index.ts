@@ -5,7 +5,7 @@
  * session, turns, files, message queue, event stream, errors, REST clients)
  * is exported here. Configure once at startup, then use one import. Every
  * host — web, mobile, demo — shares this single implementation; nothing talks
- * to the raw API or OpenCode directly.
+ * to the raw API or the session runtime directly.
  *
  * "Canonical" is asserted, not asserted-in-prose: `root-canonical.test.ts`
  * fails if any name exported by an isomorphic subpath is missing here. The
@@ -39,7 +39,7 @@ export {
 /**
  * The opinionated single entry point. `createKortix({ getToken })` wires the
  * platform seam and returns one client whose methods cover the whole REST +
- * opencode surface — so a host app imports ONLY from `@kortix/sdk`.
+ * session runtime surface — so a host app imports ONLY from `@kortix/sdk`.
  */
 export {
   createKortix,
@@ -61,7 +61,7 @@ export {
   fileDownloadRequest,
   findFiles,
   findText,
-  getCurrentProject,
+  getCurrentWorkspace, getCurrentProject,
   getFileStatus,
   getServerHealth,
   isServerReachable,
@@ -108,9 +108,37 @@ export {
  */
 export type { RuntimeCapability, SessionHealthResponse, SessionHealthResult } from './core/session/health';
 export { hasSessionDesktop, runtimeSupports } from './core/session/health';
+export {
+  CREDIT_ACCOUNT_PAYMENT_STATUSES,
+  RUNTIME_CAPABILITIES,
+  SESSION_CONTROL_FRAME_TYPES,
+  SESSION_PROMPT_REASONS,
+  SESSION_START_RESUMING_REASONS,
+  SESSION_START_TRANSPORT_REASONS,
+  SESSION_STREAM_FRAME_TYPES,
+  THREAD_STATUSES,
+  isParkedRuntimeDownReason,
+  isSessionPromptReason,
+  isSessionStartTransportReason,
+  isThreadWorking,
+  toKortixSessionStatusType,
+  toRuntimeThreadStatus,
+} from './core/wire-values';
+export type {
+  CreditAccountPaymentStatus,
+  KortixSessionStatusType,
+  SessionControlFrameType,
+  SessionPromptAdmissionReason,
+  SessionPromptReason,
+  SessionStartResumingReason,
+  SessionStartTransportReason,
+  SessionStreamFrameType,
+  ThreadActivity,
+  ThreadStatus,
+} from './core/wire-values';
 
 /**
- * A session's resolved runtime (opencode session id + runtime URL + sandbox
+ * A session's resolved runtime (runtime session id + runtime URL + sandbox
  * id) — the shape `ensureReady()` resolves to and the shared session-runtime
  * registry stores. Re-exported so it's nameable from the package's public
  * surface (TS's declaration emit needs this to describe `SessionHandle`'s
@@ -119,7 +147,7 @@ export { hasSessionDesktop, runtimeSupports } from './core/session/health';
 export type { SessionRuntimeEntry } from './core/session/session-runtime-registry';
 
 /**
- * The OpenCode wire message-id clock. `mintWireMessageId` mints the `messageId`
+ * The Kortix message-id clock. `mintWireMessageId` mints the `messageId`
  * for `session.prompts.create()`: the id is the prompt's position in the
  * transcript, and a hand-rolled encoding sorts wrong. The rest decode, order,
  * and place ids on the wrapping 48-bit clock. Also at `@kortix/sdk/wire-message-id`,
@@ -186,6 +214,8 @@ export {
   featureDisabledKey,
   REPOSITORY_DISCONNECTED_CODE,
   isRepositoryDisconnectedError,
+  NO_WORKSPACE_CODE,
+  isNoWorkspaceError,
   repositoryDisconnectedReason,
   type RepositoryDisconnectedReason,
   type ApiErrorFields,
@@ -195,7 +225,7 @@ export {
 
 /**
  * Exhaustive part/turn classification for building chat UIs — framework-free.
- * `classifyPart` normalizes every opencode `Part` variant (text, reasoning,
+ * `classifyPart` normalizes every transcript `Part` variant (text, reasoning,
  * tool, file, subtask, patch, snapshot, agent, retry, compaction, step) into
  * a `ClassifiedPart`, with a compile-time exhaustiveness check plus a runtime
  * 'unknown' fallback for forward-compat. `classifyTurn` classifies every part
@@ -271,11 +301,11 @@ export {
  */
 export type {
   // Projects
-  KortixProject,
-  ProjectConfigSummary,
-  ProjectDetail,
+  KortixProject, KortixWorkspace,
+  ProjectConfigSummary, WorkspaceConfigSummary,
+  ProjectDetail, WorkspaceDetail,
   GatewayCatalogModel,
-  ProjectLlmCatalogResponse,
+  ProjectLlmCatalogResponse, WorkspaceLlmCatalogResponse,
   // Accounts / IAM
   KortixAccount,
   AccountDetail,
@@ -285,15 +315,15 @@ export type {
   AccountMember,
   AccountRole,
   ProjectRole,
-  ProjectAccessMember,
-  ProjectAccessRequest,
-  ProjectGroupGrant,
-  ProjectResourceGrant,
-  PendingProjectInvite,
+  ProjectAccessMember, WorkspaceAccessMember,
+  ProjectAccessRequest, WorkspaceAccessRequest,
+  ProjectGroupGrant, WorkspaceGroupGrant,
+  ProjectResourceGrant, WorkspaceResourceGrant,
+  PendingProjectInvite, PendingWorkspaceInvite,
   PendingApproval,
   // Secrets / connectors
-  ProjectSecret,
-  ProjectGitConnection,
+  ProjectSecret, WorkspaceSecret,
+  ProjectGitConnection, WorkspaceGitConnection,
   ConnectorSharing,
   AdminConnector,
   ConnectorConfig,
@@ -303,7 +333,7 @@ export type {
   ExecutableConnectorAuth,
   DiscoveredAuthScheme,
   // Sessions
-  ProjectSession,
+  ProjectSession, WorkspaceSession,
   SessionPublicShare,
   SessionAudit,
   SessionTranscript,
@@ -315,18 +345,18 @@ export type {
   ChangeRequest,
   ChangeRequestDiffResponse,
   ChangeRequestMergePreview,
-  ProjectCommit,
-  ProjectCommitDetail,
-  ProjectCommitFile,
-  ProjectBranch,
-  ProjectBranchSession,
+  ProjectCommit, WorkspaceCommit,
+  ProjectCommitDetail, WorkspaceCommitDetail,
+  ProjectCommitFile, WorkspaceCommitFile,
+  ProjectBranch, WorkspaceBranch,
+  ProjectBranchSession, WorkspaceBranchSession,
   // Triggers
-  ProjectTrigger,
-  ProjectTriggerListing,
+  ProjectTrigger, WorkspaceTrigger,
+  ProjectTriggerListing, WorkspaceTriggerListing,
   // Sandbox
   SandboxTemplate,
-  ProjectSandboxHealth,
-  ProjectSnapshotBuild,
+  ProjectSandboxHealth, WorkspaceSandboxHealth,
+  ProjectSnapshotBuild, WorkspaceSnapshotBuild,
   // Gateway (LLM observability / budgets)
   GatewayLogRow,
   GatewayLogDetail,
@@ -336,8 +366,8 @@ export type {
   // Tokens (CLI PATs)
   AccountToken,
   CreatedAccountToken,
-  ProjectCliToken,
-  CreatedProjectCliToken,
+  ProjectCliToken, WorkspaceCliToken,
+  CreatedProjectCliToken, CreatedWorkspaceCliToken,
   // Billing
   AccountState,
   BillingTransaction,
@@ -365,7 +395,7 @@ export type {
   ConnectorRequestLink,
   // Manifest validate / git token
   ManifestValidationResult,
-  ProjectGitToken,
+  ProjectGitToken, WorkspaceGitToken,
   // Gateway playground
   GatewayPlaygroundResponse,
   // Billing mutations
@@ -489,6 +519,7 @@ export * from './core/http/instance-routes';
 export * from './core/http/runtime-errors';
 export * from './core/rest/platform-client';
 export * from './core/rest/projects-client';
+export * from './core/multi-agent/tool-data';
 export * from './core/cache/persisted-query-cache';
 export * from './core/files/image-cache';
 export * from './core/attachments/limits';
@@ -517,16 +548,9 @@ export { getSandboxUrlForExternalId } from './core/session/server-store/url-help
 /** How this deployment addresses previews (`GET /v1/p/config`), cached per backend. */
 export { loadPreviewUrlTemplate } from './core/session/preview-config';
 export * from './core/stream/event-stream';
-/** Live presence on an Artifact: who is here, their cursors, and change pings. */
-export * from './core/artifact-live';
-/** Live co-editing of an Artifact doc: the byte-based sync engine over the doc REST calls. */
-export * from './core/artifact-doc';
 export * from './core/stream/fetch-sse';
 export * from './core/turns';
 export * from './transcript';
-
-// Runtime-neutral names are the declarations; each pre-W4 OpenCode name is a
-// separate `@deprecated` binding beside it, public until the next major.
 
 /**
  * Kortix Apps — the viewer, in the browser. An App hosted by Kortix is opened
@@ -651,7 +675,7 @@ export {
   connectorAccountVisibility,
   connectorAudienceVisibility,
   connectorConnectionRows,
-  emptyProjectConnectionSlot,
+  emptyWorkspaceConnectionSlot, emptyProjectConnectionSlot,
   grantConnectionAccess,
   listedConnectorAccounts,
   newConnectorAccountAudienceFor,
@@ -670,16 +694,16 @@ export {
 export {
   CONNECT_LINK_POLL_INTERVAL_MS,
   CONNECT_LINK_TIMEOUT_MS,
-  DEFAULT_PROJECT_CONNECTION_LABEL,
+  DEFAULT_PROJECT_CONNECTION_LABEL, DEFAULT_WORKSPACE_CONNECTION_LABEL,
   connectLinkTimeoutMessage,
   connectLinkUrl,
   isSharedDefaultConnectConflict,
   pollConnectLinkFinalize,
-  projectConnectionConnectRestDeps,
-  projectConnectionConnectSteps,
+  projectConnectionConnectRestDeps, workspaceConnectionConnectRestDeps,
+  workspaceConnectionConnectSteps, projectConnectionConnectSteps,
   type ConnectLinkPollOptions,
-  type ProjectConnectRoute,
-  type ProjectConnectionConnectDeps,
+  type ProjectConnectRoute, type WorkspaceConnectRoute,
+  type ProjectConnectionConnectDeps, type WorkspaceConnectionConnectDeps,
 } from './core/connectors/connect-link';
 export {
   buildOAuth2ClientRegistrationInput,

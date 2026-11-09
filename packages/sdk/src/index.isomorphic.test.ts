@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
  *      which `config-node.ts` needs for per-request config isolation. Not a
  *      blanket allowance for arbitrary Node built-ins creeping in.
  *   3. Browser-only stores (idb-sync-cache, server-store, sync-store,
- *      sandbox-connection-store, opencode-pending-store): these are zustand
+ *      sandbox-connection-store, runtime-pending-store): these are zustand
  *      stores (zustand is fine here, it's framework-glue-light and works
  *      outside React) meant to run in a browser — real `window`/
  *      `sessionStorage`/`localStorage`/`indexedDB` globals are expected and
@@ -199,6 +199,8 @@ const SUBPATH_TIERS: Subpath[] = [
   { name: './workspace-search', file: 'workspace-search/index.ts', tier: 'isomorphic-core' },
   // Zero imports: `apps/api` loads the wire-id clock without the whole root barrel.
   { name: './wire-message-id', file: 'core/session/wire-message-id.ts', tier: 'isomorphic-core' },
+  // Zero imports: the canonical wire value sets (re-exported by @kortix/api-contract/wire-values).
+  { name: './wire-values', file: 'core/wire-values.ts', tier: 'isomorphic-core' },
   { name: './capture-rules', file: 'core/capture/rules.ts', tier: 'isomorphic-core' },
 ];
 

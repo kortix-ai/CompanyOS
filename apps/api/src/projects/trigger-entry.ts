@@ -131,7 +131,7 @@ export function parseTargetField(
   if (payload !== undefined && (!isPlainObject(payload) || JSON.stringify(payload).length > 64 * 1024)) {
     return { error: 'target.payload must be an object of at most 64 KiB' };
   }
-  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this project' };
+  if (typeof app !== 'string' || !APP_SLUG_RE.test(app.trim())) return { error: 'target.app must be the slug of an App in this workspace' };
   if (typeof path !== 'string' || !path.startsWith('/') || /[\r\n]/.test(path) || path.length > 2048) return { error: 'target.path must be an HTTP path starting with /' };
   if (method !== 'POST' && method !== 'GET') return { error: 'target.method must be POST or GET' };
   return { target: { app: app.trim(), path, method, ...(payload ? { payload: payload as Record<string, unknown> } : {}) } };
@@ -399,7 +399,6 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
     }
     entry.timezone = spec.timezone;
     if (spec.maxLatenessSeconds) entry.max_lateness = formatDurationSeconds(spec.maxLatenessSeconds);
-  if (spec.expectEventWithinSeconds) entry.expect_event_within = formatDurationSeconds(spec.expectEventWithinSeconds);
   } else if (spec.type === 'event' && spec.event) {
     entry.connector = spec.event.connector;
     if (spec.event.account) entry.account = spec.event.account;
@@ -411,6 +410,8 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
   } else if (spec.secretEnv) {
     entry.secret_env = spec.secretEnv;
   }
+  // An app trigger's silence alert; written outside the type branch so an edit of any type that holds it keeps it.
+  if (spec.expectEventWithinSeconds) entry.expect_event_within = formatDurationSeconds(spec.expectEventWithinSeconds);
   if (spec.target) entry.target = spec.target;
   if (spec.promptTemplate) entry.prompt = spec.promptTemplate;
   return entry;

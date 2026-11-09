@@ -146,7 +146,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       pooled_provider_secrets: false,
       us_region: false,
       event_triggers: false,
-      notification_center: false,
+      notification_center: true,
       volumes: false,
       drives: false,
       session_log_restore: false,
@@ -163,6 +163,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       voice_call: false,
       chat_input: false,
       chat_front: false,
+      spaces_proactive: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -864,13 +865,10 @@ describe('envelopes', () => {
       'pooled_provider_secrets',
       'us_region',
       'event_triggers',
-      'notification_center',
       'chat',
       'shared_drives',
       'goals',
       'workspace_volume',
-      'artifacts',
-      'artifact_comments',
       'email_channel',
       'session_groups',
       'chrome',
@@ -878,6 +876,7 @@ describe('envelopes', () => {
       'voice_call',
       'chat_input',
       'chat_front',
+      'spaces_proactive',
     ]);
   });
 
@@ -1251,7 +1250,7 @@ describe('session scope contracts', () => {
       connector_bindings_inherit_unbound: true,
       applied_live: true,
       detail:
-        'Applied to the running sandbox now — the OpenCode process and new shells see the new scope.',
+        'Applied to the running sandbox now — the agent runtime and new shells see the new scope.',
     };
     expect(SessionScopeSchema.parse(value)).toEqual(value);
   });

@@ -10,12 +10,11 @@
  */
 
 import { HoverPrefetchLink } from '../../internal/components/hover-prefetch-link';
-import { useNow } from '../../internal/reminders/use-refetch-after-fire';
 import { Button } from '../../primitives/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popover';
 import { StatusDot } from '../../primitives/status';
 import { useLocale, useTranslations } from '../../i18n';
-import { useFeatureFlag, useSessionGoal } from '@kortix/sdk/react';
+import { useFeatureFlag, useNow, useSessionGoal } from '@kortix/sdk/react';
 import { TargetIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useSessionIds } from '../../providers/session-ids';
@@ -23,7 +22,10 @@ import {
   formatGoalTime,
   GoalHealthDot,
   goalHref,
+  goalLastWake,
+  goalNextWake,
   goalOpenAsks,
+  goalPaused,
   goalProgress,
   GoalStatusBadge,
   useGoalIssueText,
@@ -32,7 +34,7 @@ import {
 export function SessionGoalIndicator() {
   const t = useTranslations('goals');
   const locale = useLocale();
-  const now = useNow();
+  const now = useNow(30_000);
   const { projectId, sessionId } = useSessionIds<{ projectId: string; sessionId: string }>();
   const gate = useFeatureFlag(projectId, 'goals');
   const { goal, role } = useSessionGoal(gate.enabled ? projectId : null, sessionId);
@@ -64,7 +66,7 @@ export function SessionGoalIndicator() {
         <div className="flex flex-col gap-2 border-b px-4 pt-4 pb-3">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-foreground text-sm font-medium">{t('sessionChip')}</h3>
-            <GoalStatusBadge status={doc?.status} />
+            <GoalStatusBadge status={doc?.status} paused={goalPaused(goal)} />
           </div>
           <p className="text-foreground line-clamp-2 text-sm">{doc?.objective ?? goal.slug}</p>
           <p className="text-muted-foreground text-xs">{t(`sessionRole.${role}`)}</p>
@@ -90,16 +92,16 @@ export function SessionGoalIndicator() {
               <>
                 <dt>{t('heartbeat')}</dt>
                 <dd className="text-foreground">
-                  {goal.heartbeat?.state === 'active' && goal.heartbeat.next_fire_at
-                    ? t('nextWake', { time: formatGoalTime(goal.heartbeat.next_fire_at, locale, now) })
+                  {goalNextWake(goal)
+                    ? t('nextWake', { time: formatGoalTime(goalNextWake(goal), locale, now) })
                     : t('noWake')}
                 </dd>
               </>
             ) : null}
-            {goal.heartbeat?.last_fired_at ? (
+            {goalLastWake(goal) ? (
               <>
                 <dt>{t('lastWakeLabel')}</dt>
-                <dd className="text-foreground">{formatGoalTime(goal.heartbeat.last_fired_at, locale, now)}</dd>
+                <dd className="text-foreground">{formatGoalTime(goalLastWake(goal), locale, now)}</dd>
               </>
             ) : null}
           </dl>

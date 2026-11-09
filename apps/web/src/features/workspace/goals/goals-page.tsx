@@ -39,14 +39,15 @@ import { GoalStarter } from './goal-starter';
 import { NewGoalModal } from './new-goal-modal';
 
 /**
- * /projects/[id]/goals — every goal the viewer can see, grouped by who acts
+ * /workspaces/[id]/goals — every goal the API lets the viewer read (their own,
+ * the ones assigned to them, the ones in folders shared with them, all of
+ * them for a project admin), grouped by who acts
  * next: the goals that need the viewer, the ones with a problem, the ones the
  * agent is working, the paused ones, and the closed ones. Each row says in
  * one sentence where the goal stands and what happens next
  * (`useGoalStateText`, the same sentence the goal's page leads with), and
  * re-reads every 60 seconds (`useProjectGoals`), so an overdue wake shows up
- * without a reload. "Assigned to me" keeps the goals whose GOAL.md names the
- * viewer as `assigned_user`.
+ * without a reload. "Assigned to me" keeps the goals assigned to the viewer.
  */
 export function GoalsPage({ projectId }: { projectId: string }) {
   const t = useTranslations('goals');
@@ -241,7 +242,7 @@ function GoalGroup({
       <ul className="flex flex-col">
         {goals.map((goal) => (
           <GoalRow
-            key={`${goal.scope}/${goal.slug}`}
+            key={goal.goalId}
             projectId={projectId}
             goal={goal}
             space={spaceLabel(goal)}
@@ -306,13 +307,13 @@ function GoalRow({
           <span className="text-muted-foreground flex min-w-0 text-xs">
             <span className="min-w-0 truncate">{stateText(goal, locale, now)}</span>
             {meta.length ? (
-              <span className="shrink-0 whitespace-nowrap">&nbsp;· {meta.join(' · ')}</span>
+              <span className="shrink-0 whitespace-nowrap">{`\u00a0· ${meta.join(' · ')}`}</span>
             ) : null}
           </span>
         </span>
         <span className="hidden shrink-0 self-center sm:inline-flex">
           {/* The icon's pie draws the progress; the row keeps the number. */}
-          <GoalCriteriaProgress goal={doc} ring={false} />
+          <GoalCriteriaProgress goal={goal} ring={false} />
         </span>
       </Link>
     </li>

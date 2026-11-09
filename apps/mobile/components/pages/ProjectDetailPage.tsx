@@ -3,7 +3,7 @@
  * Ported from web's /projects/[id]/page.tsx.
  */
 
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Pressable,
@@ -1322,19 +1322,6 @@ export function ProjectDetailPage({
                       color: isDark ? THEME.light.mutedForeground : THEME.dark.mutedForeground,
                     }}>
                     {taskStats.done}/{taskStats.total} tasks complete
-                  </RNText>
-                </View>
-              )}
-              {project.opencode_id && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <FolderGit2 size={14} color={mutedStrong} />
-                  <RNText
-                    style={{
-                      fontSize: 12,
-                      fontFamily: monoFont,
-                      color: isDark ? THEME.light.mutedForeground : THEME.dark.mutedForeground,
-                    }}>
-                    {project.opencode_id}
                   </RNText>
                 </View>
               )}

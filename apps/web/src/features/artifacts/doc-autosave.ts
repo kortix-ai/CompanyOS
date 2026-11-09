@@ -89,10 +89,9 @@ const ownIndex = (artifactId: string, text: string) =>
  * The file's text after a 409, against `mine` (the text this tab wrote) on
  * top of `base` (the text it edited): `same` (the mount re-versioned it),
  * `ours` (a text this tab had at or before `base`: an older copy came back),
- * or `theirs` (another writer). The co-editing leader (`doc-coedit.ts`) asks
- * the same question.
+ * or `theirs` (another writer).
  */
-export function fileVerdict(
+function fileVerdict(
   artifactId: string,
   text: string,
   mine: string,
@@ -267,20 +266,18 @@ export function createDocSaver(start: Known, deps: DocSaverDeps) {
         void save(deps.text());
       }, AUTOSAVE_MS);
     },
-    /** Save now (⌘S, leaving), when an edit waits. */
+    /**
+     * Save now (⌘S, leaving), when an edit waits. A failed save waiting out its backoff (up to
+     * 30 s) is tried as soon as the gap between saves allows instead.
+     */
     flush() {
-      if (debounce === null) return;
-      debounce = stop(debounce);
-      void save(deps.text());
-    },
-    async snapshot(): Promise<Known> {
-      if (conflict) throw new Error('The document has a save conflict');
-      this.flush();
-      const waiting = landing.get(id);
-      const saved = waiting ? await waiting : known;
-      if (!saved || debounce !== null || saving || next !== null || queued !== null || conflict)
-        throw new Error('The document has unsaved changes');
-      return saved;
+      if (debounce !== null) {
+        debounce = stop(debounce);
+        void save(deps.text());
+        return;
+      }
+      if (next !== null && queued !== null && !saving && !conflict)
+        later(Math.max(0, ended + SAVE_GAP_MS - clock.now()));
     },
     /** The conflict's Keep mine: write this tab's text over theirs, then autosave resumes. */
     keepMine() {

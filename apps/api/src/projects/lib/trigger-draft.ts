@@ -22,9 +22,14 @@ import { readAccountAutomationPause } from '../../accounts/automation-pause';
 
 // GET /v1/projects
 
+/**
+ * The URL Kortix shows for a webhook trigger: the canonical workspace path.
+ * `/v1/webhooks/projects/<id>/<slug>` answers the same, permanently, so a
+ * sender configured with the old URL needs no change.
+ */
 export function buildPublicWebhookUrl(projectId: string, slug: string): string {
   const root = deriveKortixApiRoot(config.KORTIX_URL);
-  return `${root}/v1/webhooks/projects/${projectId}/${slug}`;
+  return `${root}/v1/webhooks/workspaces/${projectId}/${slug}`;
 }
 
 // ── Git-backed trigger CRUD helpers ─────────────────────────────────────────
@@ -156,6 +161,10 @@ export async function loadTriggersForResponse(
       // `expect_event_within` (the open silence alert). Null on other types.
       last_event_at: spec.type === 'app' ? (runtimeBySlug.get(spec.slug)?.lastEventAt?.toISOString() ?? null) : null,
       silent_since: runtimeBySlug.get(spec.slug)?.alertSource === 'silence'
+        ? (runtimeBySlug.get(spec.slug)?.alertFailingSince?.toISOString() ?? null)
+        : null,
+      // The always-on App it names is down past its restart budget (app-health-alerts.ts).
+      crashed_since: runtimeBySlug.get(spec.slug)?.alertSource === 'crash'
         ? (runtimeBySlug.get(spec.slug)?.alertFailingSince?.toISOString() ?? null)
         : null,
       app: spec.app ?? null,

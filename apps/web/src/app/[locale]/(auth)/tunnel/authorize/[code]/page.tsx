@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import Loading from '@kortix/ui/loading';
 import { RadioGroup, RadioGroupItem } from '@kortix/ui/radio-group';
@@ -58,7 +58,7 @@ function DeviceAuthorize() {
   const { data: info, isLoading, error } = useDeviceAuthInfo(code);
   const approve = useApproveDeviceAuth();
   const deny = useDenyDeviceAuth();
-  const { sections } = useProjectSelectorData();
+  const { openable: workspaces } = useProjectSelectorData();
 
   // `null` until the user types: a machine already paired to the caller keeps
   // its name, a new one starts from its hostname.
@@ -70,11 +70,8 @@ function DeviceAuthorize() {
   // the caller's project list (absent while it loads, or without access).
   const projectId = info?.projectId ?? undefined;
   const project = useMemo(
-    () =>
-      sections
-        .flatMap((section) => section.projects)
-        .find((candidate) => candidate.project_id === projectId),
-    [sections, projectId],
+    () => workspaces.map((row) => row.project).find((candidate) => candidate.project_id === projectId),
+    [workspaces, projectId],
   );
   const canShare =
     useProjectCan(project ? projectId : undefined, PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE)
@@ -191,13 +188,9 @@ function DeviceAuthorize() {
           ) : null}
 
           {registered ? (
-            <InfoBanner
-              tone="info"
-              icon={ArrowsClockwiseIcon}
-              title={t('alreadyConnected', { name: registered.name })}
-            >
+            <BannerAlert variant="default" ><BannerAlertMedia><ArrowsClockwiseIcon /></BannerAlertMedia><BannerAlertTitle>{t('alreadyConnected', { name: registered.name })}</BannerAlertTitle><BannerAlertDescription>
               {registered.isLive ? t('alreadyConnectedLive') : t('alreadyConnectedHint')}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           ) : null}
 
           <div className="space-y-3">

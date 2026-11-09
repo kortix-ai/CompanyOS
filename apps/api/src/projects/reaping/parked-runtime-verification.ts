@@ -35,7 +35,7 @@
  */
 
 import { sessionSandboxes } from '@kortix/db';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 
 import { endComputeSession } from '../../billing/services/compute-metering';
 import { type SandboxProviderName, config } from '../../config';
@@ -48,7 +48,9 @@ import {
   preserveEstablishedRuntime,
 } from '../runtime-identity';
 import { runtimeWakeInProgress } from '../session-lifecycle/runtime-wake-fence';
+import { patchedSandboxMetadata } from '../session-lifecycle/status-transitions';
 import { logger } from '../../lib/logger';
+import { mergeMetadata } from './sandbox-state-sync';
 
 /** How many parked rows one pass may examine. */
 const PARKED_VERIFY_BATCH = 60;
@@ -124,7 +126,10 @@ export type ParkedRemovalOutcome = 'recovered' | 'preserve-lost' | 'recovery-in-
  * historical one: preserve the identity. When another caller already owns a
  * recovery for the row (`claim` false), the sweep leaves it alone rather than
  * racing a restore that is in progress. Only an explicit `unavailable` from the
- * provider authorizes the loss.
+ * provider authorizes the loss. A THROWN probe is a failed round-trip, not a
+ * provider statement — Platinum's `/start` can refuse for a passing reason
+ * (the org write rate limit, a 5xx, network) that has nothing to do with
+ * whether the data exists — so it leaves the row for the next pass instead.
  */
 export async function decideRemovedParkedOutcome(input: {
   externalId: string;
@@ -135,7 +140,12 @@ export async function decideRemovedParkedOutcome(input: {
   if (!input.recoverInPlace) return 'preserve-lost';
   const claimed = await input.claim();
   if (!claimed) return 'recovery-in-flight';
-  const recovery = await input.recoverInPlace(input.externalId).catch(() => 'unavailable' as const);
+  // A throw says "this probe could not run", never "the box is gone": the
+  // gate's explicit `unavailable` is the only loss authority (doc above).
+  const recovery = await input
+    .recoverInPlace(input.externalId)
+    .catch(() => 'recovery-in-flight' as const);
+  if (recovery === 'recovery-in-flight') return 'recovery-in-flight';
   if (recovery === 'running' || recovery === 'recovering') {
     // The mark is the write that ends the recovery. If another writer beat us to
     // the row the provider still recovered, but this sweep no longer owns the
@@ -192,9 +202,9 @@ export async function recoverRemovedParkedRuntime(
   return { outcome, row: current };
 }
 
-/** Clear the loss flags from a row whose runtime is provably back. */
-function healMetadataPatch(): Record<string, unknown> {
-  return { runtimeRestoredAt: new Date().toISOString() };
+/** Verified and stop/settle write the same patch: drop the pending-stop flag, stamp this pass. */
+function stopPendingStamp(now: Date): SQL {
+  return patchedSandboxMetadata({ strip: ['providerStopPendingAt'], merge: { parkedVerifiedAt: now.toISOString() } });
 }
 
 export async function verifyParkedRuntimes(now = new Date()): Promise<{
@@ -266,15 +276,16 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
       }
 
       if (action === 'heal-restored') {
+        // Clear the loss flags from a row whose runtime is provably back. Both
+        // stamps ride the pass clock, so a restore observed during this pass
+        // reports the pass's own instant.
         await db
           .update(sessionSandboxes)
           .set({
-            metadata: sql`(
-              coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                - 'runtimeIdentityState'
-                - 'runtimeUnavailableReason'
-                - 'runtimeUnavailableAt'
-              ) || ${JSON.stringify({ ...healMetadataPatch(), parkedVerifiedAt: now.toISOString() })}::jsonb`,
+            metadata: patchedSandboxMetadata({
+              strip: ['runtimeIdentityState', 'runtimeUnavailableReason', 'runtimeUnavailableAt'],
+              merge: { runtimeRestoredAt: now.toISOString(), parkedVerifiedAt: now.toISOString() },
+            }),
             updatedAt: now,
           })
           .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
@@ -314,13 +325,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
           await endComputeSession(row.sandboxId);
           await tx
             .update(sessionSandboxes)
-            .set({
-              metadata: sql`(
-                coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                  - 'providerStopPendingAt'
-                ) || ${JSON.stringify({ parkedVerifiedAt: now.toISOString() })}::jsonb`,
-              updatedAt: now,
-            })
+            .set({ metadata: stopPendingStamp(now), updatedAt: now })
             .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
         });
         continue;
@@ -331,12 +336,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
         // nothing interesting was found.
         await db
           .update(sessionSandboxes)
-          .set({
-            metadata: sql`(
-              coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                - 'providerStopPendingAt'
-              ) || ${JSON.stringify({ parkedVerifiedAt: now.toISOString() })}::jsonb`,
-          })
+          .set({ metadata: stopPendingStamp(now) })
           .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
       }
     } catch (error) {
@@ -356,11 +356,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
   if (rows.length > 0) {
     await db
       .update(sessionSandboxes)
-      .set({
-        metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
-          parkedVerifiedAt: now.toISOString(),
-        })}::jsonb`,
-      })
+      .set({ metadata: mergeMetadata({ parkedVerifiedAt: now.toISOString() }) })
       .where(and(inArray(sessionSandboxes.sandboxId, rows.map((row) => row.sandboxId)), eq(sessionSandboxes.status, 'stopped')))
       .catch((error) =>
         logger.warn('[parked-verify] batch stamp failed', { error: error instanceof Error ? error.message : String(error) }),

@@ -17,7 +17,7 @@ import {
   takeFlagBool,
   takeFlagValue,
 } from '../command-helpers.ts';
-import { C, pad, status } from '../style.ts';
+import { C, formatUtcInstant, pad, status } from '../style.ts';
 
 export const RUNTIME_HELP = `Runtime triggers (no kortix.yaml commit):
   add "<prompt>" --on <source> | --session <id> | --runtime [options]
@@ -36,7 +36,7 @@ Runtime source (add):
   --on event --connector <slug> --event <TYPE> [--config <json>]
                            A connector event.
   --on app --app <slug> [--expect-event-within <dur>]
-                           An event an App of this project emits. With
+                           An event an App of this workspace emits. With
                            --expect-event-within (5m to 30d, e.g. 1h), no event
                            for that long alerts this trigger's owner once.
   --on cr-merged [--cr <id>] [--base <branch>]
@@ -83,12 +83,10 @@ export function describeTarget(target: TriggerTarget): string {
   return `session ${target.session_name || target.session_id.slice(0, 8)}`;
 }
 
-const instant = (iso: string | null) => (iso ? `${iso.slice(0, 16).replace('T', ' ')} UTC` : '—');
-
 /** The runtime rows of `GET /triggers/all`, or null when the server has no such route. */
 export async function listRuntimeTriggers(client: ApiClient, projectId: string): Promise<UnifiedTrigger[] | null> {
   try {
-    const list = await client.get<UnifiedTriggerList>(`/projects/${projectId}/triggers/all`);
+    const list = await client.get<UnifiedTriggerList>(`/workspaces/${projectId}/triggers/all`);
     return list.triggers.filter((t) => t.origin === 'runtime');
   } catch {
     // ponytail: an older API has no /triggers/all; `ls` then shows kortix.yaml only.
@@ -109,7 +107,7 @@ export function printRuntimeTriggers(rows: UnifiedTrigger[]): void {
   process.stdout.write(`  ${C.dim}${pad('ID', idW)}  ${pad('SOURCE', srcW)}  ${pad('TARGET', tgtW)}  STATE    NEXT                  LAST FIRED${C.reset}\n`);
   for (const r of listed) {
     process.stdout.write(
-      `  ${pad(r.t.id, idW)}  ${pad(r.source.slice(0, srcW), srcW)}  ${pad(r.target.slice(0, tgtW), tgtW)}  ${pad(r.t.state, 7)}  ${pad(instant(r.t.next_fire_at), 20)}  ${instant(r.t.last_fired_at)}\n`,
+      `  ${pad(r.t.id, idW)}  ${pad(r.source.slice(0, srcW), srcW)}  ${pad(r.target.slice(0, tgtW), tgtW)}  ${pad(r.t.state, 7)}  ${pad(formatUtcInstant(r.t.next_fire_at), 20)}  ${formatUtcInstant(r.t.last_fired_at)}\n`,
     );
     if (r.t.last_error) process.stdout.write(`  ${' '.repeat(idW)}  ${C.red}${r.t.last_error}${C.reset}\n`);
   }
@@ -175,7 +173,7 @@ export async function runRuntimeTriggers(argv: string[]): Promise<number> {
       session: takeFlagValue(rest, ['--session']),
       agent: takeFlagValue(rest, ['--agent']),
       name: takeFlagValue(rest, ['--name']),
-      project: takeFlagValue(rest, ['--project']),
+      project: takeFlagValue(rest, ['--project', '--workspace']),
       host: takeFlagValue(rest, ['--host']),
     };
     json = takeFlagBool(rest, ['--json']);
@@ -203,7 +201,7 @@ export async function runRuntimeTriggers(argv: string[]): Promise<number> {
   const ctx = await resolveProjectContext({ projectArg: flags.project, hostArg: flags.host });
   if (!ctx) return 1;
   const { client, projectId } = ctx;
-  const base = `/projects/${projectId}/triggers/runtime`;
+  const base = `/workspaces/${projectId}/triggers/runtime`;
   try {
     if (body) {
       const created = await client.post<UnifiedTrigger>(base, body);
@@ -248,7 +246,7 @@ export async function runRuntimeTriggers(argv: string[]): Promise<number> {
   } catch (err) {
     const code = surfaceApiError(err);
     if ((err as { body?: { code?: unknown } })?.body?.code === 'feature_disabled') {
-      process.stderr.write(`  ${C.dim}Turn it on: kortix projects features enable reminders${C.reset}\n`);
+      process.stderr.write(`  ${C.dim}Turn it on: kortix workspaces features enable reminders${C.reset}\n`);
     }
     return code;
   }

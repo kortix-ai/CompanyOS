@@ -30,7 +30,7 @@ import {
   toSessionModelRef,
 } from '../../llm-gateway/resolution/effective';
 import { checkClaudeAgentRef } from '../../llm-gateway/resolution/claude-agent';
-import { claudeSubscriptionRequiredBody, missingClaudeSubscription } from '../claude-subscription/gate';
+import { claudeSubscriptionRequiredBody, missingClaudeSubscription, promptModelRef } from '../claude-subscription/gate';
 
 import { selectProvider } from '../../platform/services/provider-balancer';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
@@ -94,7 +94,8 @@ import { projectSessionMetadataMerge } from './session-metadata-merge';
 import { transitionSession } from '../session-lifecycle/status-transitions';
 import { mergeSessionSandboxEnv, parseSessionRuntimeContext, reservedRuntimeContextRefusal } from './session-runtime-context';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
-import { FRONT_THREAD_CONTEXT_KEY, FRONT_THREAD_METADATA_KEY, sessionIsFrontThread, startsFrontThread } from './front-thread';
+import { FRONT_THREAD_CONTEXT_KEY, FRONT_THREAD_METADATA_KEY, sessionIsFrontThread, sessionSpaceAgents, spaceRosterAllows, startsFrontThread } from './front-thread';
+import { SPACE_WATCHER_SOURCE, WATCHER_CONTEXT_KEY } from './space-watch/keys';
 import { resolveMyKortixSandbox } from './my-kortix-agent';
 import { spaceAccessFor } from '../../shared/space-access';
 import { FIRST_PROMPT_MAX_CHARS, SPACE_NOT_FOUND, ensureDefaultSpace, findForkSourceSpace, forkSourceVisibility, findLiveChannel, findSessionSpace, inheritedPrivateSpace, spaceSessionVisibility } from './project-spaces';
@@ -111,6 +112,8 @@ import type { Actor } from '../../iam/actor';
 import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
+import { isInlineColleagueContext } from './inline-colleague';
+import { childSessionLimitRefusal } from './child-session-limit';
 import type { SessionInvocationSource } from '../session-lifecycle/types';
 import { captureProductEvent } from '../../shared/product-analytics';
 /** Every status a failed create answers with. Routes that create a session
@@ -161,6 +164,12 @@ type PostgresErrorFields = {
  * A `23505` unique violation on the session PK means the caller retried a
  * create with a `session_id` that already exists; that is an idempotent race,
  * not a defect, so it maps to a typed 409 (`createProjectGoal` retries rely on it).
+ *
+ * A `42703` undefined column or `42P01` undefined table means the schema is
+ * ahead of this code: a release migration renamed or dropped what this
+ * (previous) API task still names, and the task serves until the rollout
+ * replaces it (v0.15.0: ~8 min, KRTX-4341). That window is accepted downtime,
+ * so it maps to a typed, retryable 503 the web does not report as an error.
  */
 export function resolveSessionInsertFailure(error: unknown): SessionCreateError {
   // Drizzle throws its own `Failed query: …` error and keeps the postgres.js
@@ -189,6 +198,13 @@ export function resolveSessionInsertFailure(error: unknown): SessionCreateError 
     return {
       status: 409,
       body: { error: 'A session with this id already exists', code: 'session_already_exists' },
+    };
+  }
+  if (pg.code === '42703' || pg.code === '42P01') {
+    return {
+      status: 503,
+      headers: { 'Retry-After': '30' },
+      body: { error: 'An update is in progress. Try again in a moment.', code: 'deploy_in_progress', retry: true },
     };
   }
   return {
@@ -578,7 +594,7 @@ async function resolveSessionAgent(params: {
   // A session that names no agent runs `default_agent`. A project that runs My
   // Kortix and sets no `default_agent` runs My Kortix; the mirrored default is
   // not read then, since it can name an agent the file turned off.
-  let agentName =
+  const agentName =
     metaAgentEnabled && !requestedAgent && !manifestDefaultAgent && !callerIsMeta
       ? MY_KORTIX_AGENT_NAME
       : resolveSessionAgentName({
@@ -587,10 +603,10 @@ async function resolveSessionAgent(params: {
           mirroredDefaultAgent,
         });
   // My Kortix starting a session without naming an agent, in a project whose
-  // `default_agent` is My Kortix: the first enabled primary agent the file declares.
-  if (callerIsMeta && !requestedAgent && isMyKortixAgentName(agentName)) {
-    agentName = loadedAgents.specs.find((spec) => spec.enabled && !spec.subagent)?.name ?? agentName;
-  }
+  // `default_agent` is My Kortix. Nothing is guessed: a router's child is a My
+  // Kortix worker and an inline colleague runs as My Kortix (both below);
+  // anything else is refused with the agents to name.
+  const unnamedMyKortixChild = callerIsMeta && !requestedAgent && isMyKortixAgentName(agentName);
   // kortix.yaml is not YAML: repair mode. Only My Kortix runs, so the file can
   // be fixed. Any other agent is a typed refusal that names the error, never a 500.
   if (loadedAgents.manifestSyntaxError && !isMyKortixAgentName(agentName)) {
@@ -624,13 +640,45 @@ async function resolveSessionAgent(params: {
     isWorkflowRunnerContext(body.runtime_context) &&
     !(await sessionIsWorkflowRunner(input.callerSessionId!));
   // A router (flag `chat_front`, front-thread.ts) only talks: it may start My Kortix workers.
-  const frontWorker =
-    platformMetaAgent &&
+  const callerIsFront =
     callerIsMeta &&
     !myKortixWorkflowRunner &&
     resolveFeatureFlag(input.project.metadata, 'chat_front') &&
     (await sessionIsFrontThread(input.callerSessionId!));
-  if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker) {
+  const frontWorker = platformMetaAgent && callerIsFront;
+  // A space's agents are a boundary: a router's worker runs only an agent of its space.
+  if (callerIsFront) {
+    const spaceAgents = await sessionSpaceAgents(input.callerSessionId!);
+    const check = spaceAgents ? spaceRosterAllows(spaceAgents, projectDefaultAgent, agentName) : null;
+    if (check && !check.allowed) {
+      return {
+        error: {
+          status: 400,
+          body: {
+            error: `"${agentName}" is not an agent of this space. Pick one of: ${check.roster.join(', ')}.`,
+            code: 'AGENT_NOT_IN_SPACE',
+            roster: check.roster,
+          },
+        },
+      };
+    }
+  }
+  // An inline colleague (inline-colleague.ts) has My Kortix's own access and its own prompt.
+  const myKortixColleague = platformMetaAgent && callerIsMeta && isInlineColleagueContext(body.runtime_context);
+  if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker && !myKortixColleague) {
+    if (unnamedMyKortixChild) {
+      const agents = loadedAgents.specs.filter((spec) => spec.enabled && !spec.subagent).map((spec) => spec.name);
+      return {
+        error: {
+          status: 400,
+          body: {
+            error: `My Kortix is this workspace's default agent, so a session My Kortix starts names its agent: ${agents.join(', ') || 'none is declared'}. To start a colleague with your own access, give the agent tool inline instructions.`,
+            code: 'AGENT_REQUIRED',
+            agents,
+          },
+        },
+      };
+    }
     return {
       error: {
         status: 400,
@@ -705,11 +753,11 @@ async function resolveSessionModel(params: {
   let providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
 
   // Model: normalize + fail-fast at create. Validate against the same
-  // servability resolver the gateway uses and store the OPENCODE ref form
+  // servability resolver the gateway uses and store the runtime ref form
   // (`kortix/<wire>`). An unservable / retired / typo'd pin previously only
   // failed at prompt time (a dead turn); a bare managed id (`claude-opus-4-8`)
-  // silently dropped to the daemon's default because opencode addresses
-  // managed models as `kortix/<id>`.
+  // silently dropped to the daemon's default because OpenCode addressed
+  // managed models only as `kortix/<id>`.
   //
   // Runs BEFORE the billing hold so a bad model never costs a credit
   // reservation. Mirrors the channel-model gate (routes/channel-bindings.ts).
@@ -1101,11 +1149,6 @@ function resolveSessionIdentity(params: {
         sessionId,
         actorUserId: userId,
         authorSessionId: input.callerSessionId ?? null,
-        ...(input.metadata?.source === 'system:artifact-comment' ? {
-          source: 'system:artifact-comment' as const,
-          artifactId: input.artifactId,
-          artifactCommentDelivery: input.metadata.artifactCommentDelivery as { job_id: string; target_key: string } | undefined,
-        } : {}),
       })
     : null;
   if (pendingPromptConversion?.error) {
@@ -1171,7 +1214,7 @@ function buildSessionCreateMetadata(params: {
   // `metadata.custom_name`, NOT `metadata.name`: `name` is the auto-title slot
   // the first prompt fills, and it is the WEAKEST link in the display chain
   // (`custom_name ?? runtimeTitle ?? name`). Writing it there let the runtime's
-  // own auto-title (`runtimeTitle` from the OpenCode snapshot, and the client
+  // own auto-title (`runtimeTitle` from the runtime snapshot, and the client
   // mirror that copies it) displace the name the user chose, seconds after the
   // first prompt. `custom_name` is the single authoritative key every reader
   // (`serializeSession`, `getSessionDisplayTitle`, `patchKortixSessionTitleMirrors`)
@@ -1331,8 +1374,8 @@ async function insertSessionAndBindings(
       baseRef,
       sandboxProvider: providerName,
       sandboxId: sessionId,
-      // Do not set opencodeSessionId during wrapper-session creation.
-      // Runtime root discovery persists it only after OpenCode creates its root.
+      // Do not set runtimeSessionId during wrapper-session creation.
+      // Runtime root discovery persists it only after the runtime creates its root.
       agentName,
       status: 'provisioning',
       // Sessions are private to their creator by default; share via the
@@ -1544,7 +1587,7 @@ async function provisionCreatedSession(params: {
     // with gitAuth (folded into the env-build chain, not awaited inline).
     let fastBootHintTimeout: ReturnType<typeof setTimeout> | undefined;
     // The hint is what lets the daemon boot with ZERO proxied git requests
-    // (scaffold + delta) and spawn OpenCode before the checkout. Bounded by the 2 s race below; a miss
+    // (scaffold + delta) and start the runtime before the checkout. Bounded by the 2 s race below; a miss
     // just means the daemon's fetch fallback.
     const fastBootGitHintPromise = Promise.race([
       projectWithGitAuthPromise
@@ -1677,7 +1720,6 @@ async function provisionCreatedSession(params: {
 }
 
 export async function createProjectSession(input: {
-  artifactId?: string;
   attachmentSourceCommandId?: string;
   /** The `create_session` command to link the new session to, atomically. */
   createCommandId?: string;
@@ -1728,6 +1770,11 @@ export async function createProjectSession(input: {
     if (!parentId.success || !parentId.data) return { error: { status: 400, body: { error: 'Invalid parent session' } } };
     const parent = await loadVisibleSession({ row: project, userId, actor: input.parentActor }, parentId.data, null, null);
     if (!parent || sessionIsTombstoned(parent.row)) return { error: { status: 404, body: { error: 'Not found' } } };
+  }
+  // A session starting its own child: the cap on children per window (child-session-limit.ts), before any side effect.
+  if (input.callerSessionId) {
+    const limited = await childSessionLimitRefusal(input.callerSessionId, projectId);
+    if (limited) return { error: limited };
   }
 
   // The id first: a /workspace-volume session starts opening its volume now,
@@ -1947,9 +1994,13 @@ export async function createProjectSession(input: {
     source: (input.metadata as Record<string, unknown> | undefined)?.source,
   });
   const sessionMetadata = front ? { ...metadata, [FRONT_THREAD_METADATA_KEY]: true } : metadata;
+  // A space's watcher (flag `spaces_proactive`, space-watch/): only the API's own create sets this source.
+  const watcher = (input.metadata as Record<string, unknown> | undefined)?.source === SPACE_WATCHER_SOURCE;
   const runtimeContext = front
     ? { ...parsedRuntimeContext.context, [FRONT_THREAD_CONTEXT_KEY]: true }
-    : parsedRuntimeContext.context;
+    : watcher
+      ? { ...parsedRuntimeContext.context, [WATCHER_CONTEXT_KEY]: true }
+      : parsedRuntimeContext.context;
 
   let sessionRow: ProjectSessionRow | null = null;
   try {
@@ -2028,6 +2079,28 @@ export async function createProjectSession(input: {
         with_prompt: Boolean(body.pending_prompt ?? body.initial_prompt),
       },
     });
+    // The first prompt rides inside the create on the workspace home, mobile
+    // and the sessions board, and never reaches the prompt POST that reports
+    // every later one. Same properties as that route.
+    const createPrompt = pendingPromptConversion?.rowValues ?? null;
+    if (createPrompt || initialPrompt) {
+      const pendingModel = (body.pending_prompt as Record<string, unknown> | undefined)?.model;
+      const parts = (createPrompt?.payload as { parts?: Array<{ type?: unknown }> } | undefined)?.parts ?? [];
+      captureProductEvent({
+        userId: input.userId,
+        accountId,
+        event: 'prompt_sent',
+        dedupeKey: createPrompt?.idempotencyKey ?? `prompt:${sessionId}:initial`,
+        properties: {
+          project_id: projectId,
+          session_id: sessionId,
+          model: promptModelRef(pendingModel) ?? sessionModel ?? 'default',
+          attachment_count: parts.filter((part) => part.type === 'file').length,
+          source: source === 'ui' ? 'web' : typeof source === 'string' ? source : null,
+          at_create: true,
+        },
+      });
+    }
   }
 
   // A prompt supplied at create is claimed by the session daemon. This is the

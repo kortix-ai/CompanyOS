@@ -74,6 +74,7 @@ import {
   viewerAuthor,
 } from '../turn/message-author';
 import { stopRefusalMessage } from '../status/stop-refusal';
+import { createStopLatch, runStopSequence, stopLeftTurnRunning } from './stop-sequence';
 import { QueuedPromptList } from '../composer/queued-prompt-list';
 import { ComposerAutoFocusContext } from '../composer/composer-focus-context';
 import { ChatQueueLines } from '../composer/chat-queue-lines';
@@ -135,7 +136,7 @@ import { inboxHoldsLivePrompt } from '../composer/inbox-live-prompt';
 import { type TurnSpan } from '../outcomes/anchor-outcomes';
 import type { Outcome } from '../../internal/outcomes/outcome-types';
 import { SessionOutcomesProvider } from '../outcomes/session-outcomes-provider';
-import { deleteMessageLinkParams, readMessageLinkParams, resolveMessageLinkTurn } from './message-link';
+import { deleteMessageLinkParams, readMessageLinkParams, resolveMessageLinkTurn } from '../../internal/lib/navigation/message-link';
 
 /** How long a message link waits for the transcript's turns to mount before it jumps anyway. */
 const MESSAGE_LINK_MOUNT_WAIT_MS = 8_000;
@@ -432,7 +433,7 @@ interface SessionChatProps {
    * the not-found card — rather than its own "starting" loader.
    *
    * The project-session route crossfades the instant boot shell into this
-   * component over 300ms. It used to start that fade as soon as an OpenCode
+   * component over 300ms. It used to start that fade as soon as a runtime
    * session id existed, which is earlier than this component has anything to
    * show: the fade landed on the compact `SessionStartingLoader` below, which
    * then swapped to the transcript. Two handovers where the user asked for one.
@@ -514,7 +515,7 @@ export function SessionChat({
   // only the visible tab may be treated as "active" — otherwise every busy
   // session would react to global shortcuts (ESC-to-stop, auto question
   // handling) at the same time. The standalone project session route
-  // (/projects/[id]/sessions/[sessionId]) mounts a single SessionChat whose id
+  // (/workspaces/[id]/sessions/[sessionId]) mounts a single SessionChat whose id
   // is never registered in this tab store; there it's the only chat mounted, so
   // it's always active.
   //
@@ -898,9 +899,8 @@ export function SessionChat({
    */
   const issueSessionCancel = useCallback((): Promise<AbortSettlement> => {
     // The stop's own receipt, taken before the cancel goes out and settled
-    // when it is acknowledged. `applyOptimisticAbort` writes an idle status
-    // frame, which invalidates the `/turn` query — and the read that comes
-    // back still shows the turn, because the cancel needs ~1.6s to reach the
+    // when it is acknowledged. A `/turn` read issued inside the abort round
+    // trip still shows the turn, because the cancel needs ~1.6s to reach the
     // daemon. Without this the composer flipped Send back to Stop ~120ms after
     // the click and stayed there for the whole abort. See `AbortReceipt`.
     useSessionWorkingStore.getState().noteAbortReceipt(projectSessionId ?? '', Date.now());
@@ -938,9 +938,9 @@ export function SessionChat({
     () =>
       channelRunnableAgents(
         projectSpaces?.find((space) => space.space_id === projectSessionRow?.space_id),
-        projectConfig?.default_agent ?? projectConfig?.open_code_default_agent,
+        projectConfig?.default_agent,
       ),
-    [projectSpaces, projectSessionRow?.space_id, projectConfig?.default_agent, projectConfig?.open_code_default_agent],
+    [projectSpaces, projectSessionRow?.space_id, projectConfig?.default_agent],
   );
   const agents = useMemo(() => withChannelAgents(rosterAgents, threadChannelAgents), [rosterAgents, threadChannelAgents]);
   // Edit-and-rewind only on the viewer's own message with nobody else's after it.
@@ -959,7 +959,7 @@ export function SessionChat({
     config,
     sessionId,
     boundAgentName,
-    defaultAgentName: projectConfig?.default_agent ?? projectConfig?.open_code_default_agent,
+    defaultAgentName: projectConfig?.default_agent,
     projectSession: projectSessionRow,
     lastPromptModel: latestPromptModel(messages),
   });
@@ -975,7 +975,7 @@ export function SessionChat({
   const composerAgent = resolveComposerAgent({
     agents,
     boundAgent: boundAgentName,
-    defaultAgent: projectConfig?.default_agent ?? projectConfig?.open_code_default_agent,
+    defaultAgent: projectConfig?.default_agent,
     selectedAgent: local.agent.current?.name ?? null,
   });
   const composerAgentName = composerAgent.selected;
@@ -1191,7 +1191,7 @@ export function SessionChat({
   // every other session of the same agent, and was skipped whenever the
   // account had a default model.
   // A NEW user bubble in the transcript is a queue row that just landed —
-  // OpenCode persisted a forwarded prompt. Re-read the inbox NOW so the row
+  // the runtime persisted a forwarded prompt. Re-read the inbox NOW so the row
   // leaves the strip in the same beat its bubble appears, instead of on the
   // next poll: the two were visible together for up to a poll interval.
   const newestUserBubbleId = lastUserMessage?.message_id;
@@ -1242,7 +1242,7 @@ export function SessionChat({
   const canStop = sessionState?.canStop ?? true;
 
   // The one transcript-derived gate that survives, and the only one that
-  // carries proof: during a provider 429 OpenCode stamps `info.error` with
+  // carries proof: during a provider 429 the runtime stamps `info.error` with
   // `data.isRetryable === true` and keeps writing the SAME assistant message,
   // while the status frame this tab holds can read non-busy for all of it. The
   // projection cannot substitute — a frame stamped after the last `/turn` read
@@ -1285,17 +1285,28 @@ export function SessionChat({
   // Short visual fade (300ms) — matches the reference's 260ms delay-hide.
   // Goes true immediately, stays visible briefly after going idle so the
   // UI doesn't flicker between agentic steps. NOT a 2s debounce.
-  const [isBusy, setIsBusy] = useState(effectiveBusy);
+  const [debouncedBusy, setDebouncedBusy] = useState(effectiveBusy);
   const busyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (effectiveBusy) {
       clearTimeout(busyTimerRef.current);
-      setIsBusy(true);
+      setDebouncedBusy(true);
     } else {
-      busyTimerRef.current = setTimeout(() => setIsBusy(false), 300);
+      busyTimerRef.current = setTimeout(() => setDebouncedBusy(false), 300);
     }
     return () => clearTimeout(busyTimerRef.current);
   }, [effectiveBusy]);
+  // A Stop the server refused, or never confirmed (`timed-out`, `failed`).
+  // The abort receipt can hold `effectiveBusy` false for up to
+  // OPTIMISTIC_ABORT_MAX_MS while the turn runs, and Stop and Esc×3 are gated
+  // on `isBusy`. So the Stop control stays while the server still reports an
+  // open turn (`serverOpenTurnToken`), and clears when it reports none.
+  const [stopUnconfirmed, setStopUnconfirmed] = useState(false);
+  const serverHoldsTurn = working.serverOpenTurnToken !== null;
+  useEffect(() => {
+    if (stopUnconfirmed && !serverHoldsTurn) setStopUnconfirmed(false);
+  }, [stopUnconfirmed, serverHoldsTurn]);
+  const isBusy = debouncedBusy || (stopUnconfirmed && serverHoldsTurn);
 
   // Read by `handleSend` for its ANCHORING decision only (a send into a running
   // turn must not yank the viewport). Refs, not the values: `handleSend` is a stable callback
@@ -1580,7 +1591,7 @@ export function SessionChat({
         undoLabel: tHardcodedUi.raw('i18nComplete.texta737e54996f8'),
         // The SAME `clientMessageId`, so an undo re-creates ONE row and a
             // double-click cannot create two. A FRESH wire id, because
-            // OpenCode orders by id and the original one was minted before the
+            // the runtime orders by id and the original one was minted before the
             // turn that has been writing higher ids since. The parts and
             // overrides are the ORIGINALS, straight from the delete's own
             // response — see `createQueueUndoAction`.
@@ -1879,7 +1890,7 @@ export function SessionChat({
   /**
    * The runtime is parked on an answer only the user can give.
    *
-   * Both lists are already session-scoped above. Either one means OpenCode has
+   * Both lists are already session-scoped above. Either one means the runtime has
    * stopped inside the turn and is blocked on a reply — the `question` tool, or
    * a tool asking for permission — so the turn row stays `active` and every
    * observer keeps reporting `working` with nothing to bound it but the reader.
@@ -1940,6 +1951,22 @@ export function SessionChat({
       }
     };
   }, []);
+  // The composer locks into answer mode exactly while the docked question can
+  // still be answered: a LIVE question (the runtime holds the turn on it) or a
+  // PARKED ask (decided here through the asks API). The old gate was
+  // `renderedQuestion && isBusy`, and it dropped the lock exactly when it
+  // mattered: a parked ask docks on an idle session — the ask no longer holds
+  // the turn — so a typed answer left as a new prompt while the question card
+  // stayed open (KRTX-4450). A question in neither list is one just answered,
+  // held only for its fade-out: unlocked, so text typed into the fade is a
+  // message, never a swallowed answer.
+  const questionLock = useMemo(() => {
+    if (!renderedQuestion) return false;
+    return (
+      liveQuestions.some((q) => q.id === renderedQuestion.id) ||
+      parkedAskIdByRequest.has(renderedQuestion.id)
+    );
+  }, [renderedQuestion, liveQuestions, parkedAskIdByRequest]);
   // Quick Queue entries share the turn renderer. The inbox marks their IDs as
   // pending until delivery; a client-minted wire ID does not place a message.
   // Each is the user message `sessionLogPromptMessage` mints for its prompt.
@@ -2703,7 +2730,7 @@ export function SessionChat({
   // ============================================================================
   // Billing: DISABLED — billing is handled server-side by the LLM gateway
   // (it deducts credits per LLM call).
-  // This frontend useEffect was causing double-billing once opencode.jsonc
+  // This frontend useEffect was causing double-billing once the runtime config
   // got cost config and step-finish.cost became non-zero.
   // ============================================================================
 
@@ -3059,13 +3086,13 @@ export function SessionChat({
         // actual response body still arrives via the sync store.
         //
         // Don't send part IDs. `ascendingId` encodes the HIGH bits of the id
-        // clock where opencode encodes the LOW 48 (see the warning on it in the
+        // clock where the wire id encodes the LOW 48 (see the warning on it in the
         // SDK), so a client id of that shape sorts before EVERY server id: the
         // server's "has this prompt already been answered?" ordering check reads
         // a stale assistant reply as the answer and the turn never runs.
         //
         // The `messageID` is a different matter and IS sent — by the SDK, not
-        // from here. `promptOpenCodeMessage` mints it in opencode's own wire
+        // from here. `promptRuntimeMessage` mints it in the Kortix message id
         // format and places it above everything already in this session's
         // transcript, which is what makes it safe; without one, two identical
         // prompts inside 60s hash to a single proxy delivery and the second is
@@ -3112,7 +3139,7 @@ export function SessionChat({
 
         // THE ONE SEND PATH: the server-side prompt inbox.
         //
-        // This used to POST straight into the sandbox's OpenCode server, and
+        // This used to POST straight into the sandbox's runtime server, and
         // anything the user typed while the agent was busy went into a browser
         // queue instead — which meant a closed tab, a second device, or a crash
         // lost it silently, and two tabs on one session disagreed about what was
@@ -3122,7 +3149,7 @@ export function SessionChat({
         // guess whether a turn is in flight.
         //
         // The WIRE id is minted here, by the SDK, and never by the control plane:
-        // OpenCode resolves "has this prompt already been answered?" by id ORDER,
+        // The runtime resolves "has this prompt already been answered?" by id ORDER,
         // and only this process holds the transcript to place one against. It is
         // `messageID` above. `clientMessageId` is only the inbox idempotency key.
         // The prompt is out of this tab's hands the moment the row lands, so the
@@ -3144,9 +3171,9 @@ export function SessionChat({
               // the two, and the server orders racing sends by THIS.
               clientSentAtMs: sentAtMs,
               overrides: {
-                // Pass the session's directory so opencode resolves project-scoped
-                // agents (.opencode/agent/*.md under the project) and applies them
-                // when the user picked a project agent from the picker.
+                // Pass the session's directory so the runtime resolves project-scoped
+                // agents and applies them when the user picked a project agent
+                // from the picker.
                 ...(session?.directory ? { directory: session.directory } : {}),
                 ...(selectedAgent ? { agent: selectedAgent } : {}),
                 ...(selectedModel ? { model: formatPromptModel(selectedModel) } : {}),
@@ -3180,7 +3207,7 @@ export function SessionChat({
             // A kept send is settled below: its painted message stays.
             if (keepsPainted) return { ok: false, cause, error: null } as const;
             // Ask the INBOX, not the runtime. This prompt's home is a durable
-            // control-plane row; OpenCode's transcript cannot see it until the
+            // control-plane row; the runtime's transcript cannot see it until the
             // admission gate delivers it, so a rehydrate always reports it
             // missing and the recovery used to delete the bubble on that answer —
             // while the row was already running. Reported from a live self-host:
@@ -3276,7 +3303,7 @@ export function SessionChat({
   // "Changes" side panel's "Ask agent to open a change request" button) can
   // drive the agent through the SAME robust path the input uses — optimistic
   // message, SSE wiring, error propagation — instead of copying a prompt to the
-  // clipboard. Keyed by the OpenCode chat session id (`sessionId`).
+  // clipboard. Keyed by the runtime chat session id (`sessionId`).
   const registerSender = useChatSendStore((s) => s.registerSender);
   const unregisterSender = useChatSendStore((s) => s.unregisterSender);
   useEffect(() => {
@@ -3397,83 +3424,56 @@ export function SessionChat({
     [sessionState, promptInbox.prompts, promptInbox.remove, handleSend, tHardcodedUi],
   );
 
+  // One Stop = one inbox hold + one abort. `runStopSequence` (stop-sequence.ts)
+  // owns the order: with `sessionState` the SDK's `cancel()` holds the inbox
+  // and aborts; without it the host holds, then aborts. `stopLatch` is the
+  // synchronous double-Stop guard: a click, then Esc×3, then a click sends one
+  // stop, not three. It stays closed until the abort settles.
+  const [stopLatch] = useState(createStopLatch);
   const handleStop = useCallback(async () => {
-    // Guard against rapid clicks — ignore if an abort is already in flight
-    if (abortSession.isPending) {
-      console.log(`[handleStop] Ignoring - abort already in flight for session ${sessionId}`);
-      return;
-    }
-    // Stop means stop: a held command would otherwise start a new turn the
-    // moment this one ends.
-    setHeldCommands([]);
-    console.log(`[handleStop] Stopping session ${sessionId}`);
-    // Optimistically mark the session idle + patch an abort error onto the
-    // last assistant message (so the turn reads as stopped instantly — no
-    // waiting for the SSE session.error round-trip, and no error row in the
-    // gap: `TurnErrorDisplay` renders nothing for an abort). Also clear the
-    // busy debounce timer to bypass the 2s delay.
-    applyOptimisticAbort(sessionId);
-    clearTimeout(busyTimerRef.current);
-    setIsBusy(false);
-    // Stop means the send this tab was still waiting on is over too.
-    clearSendReceipt();
-
-    // Stopping means stop doing things, and that includes the queue. Without
-    // this the interrupt is followed a beat later by exactly the message the
-    // user was trying to get ahead of.
-    //
-    // ONE hold, on the server, because the queue is not in this tab any more.
-    // Pausing a browser drain left every OTHER tab's view of the queue running
-    // and never reached the server at all.
-    //
-    // AWAITED, and BEFORE the abort. A prompt is now forwarded to OpenCode the
-    // moment it is admitted, so at stop time the session's queue can hold rows
-    // that OpenCode already has. The abort drops OpenCode's in-memory queue,
-    // and the reaper then sees those messages unanswered and hands them back —
-    // due now — unless the hold has already marked them stop-paused. Ordering
-    // the two calls makes "the hold precedes the abort" a fact instead of an
-    // argument about reaper cadence. The user sees no delay: the optimistic
-    // paint above already ran, so only the network abort moves one hop later.
-    //
-    // BOUNDED, because the abort is now sequenced behind a network call and
-    // `holdSessionPrompts` carries no client timeout of its own. A stalled
-    // socket can hang for minutes, and every one of those is the agent still
-    // running, still calling tools and still spending tokens under a UI that
-    // says it stopped. Past the bound the abort goes out anyway and the hold
-    // finishes on its own — the ordering is a preference, the abort is not.
-    let refusal = null as string | null;
-    await Promise.race([
-      promptInbox.hold(true).catch((error) => {
-        // The server refused the stop: this viewer did not start the run and
-        // does not own or manage the session. The abort would be refused for
-        // the same reason, so none goes out; the run goes on.
-        refusal = stopRefusalMessage(error);
-        if (refusal) return;
-        // Caught, never rethrown: a failed hold must not also cost the user
-        // their abort. The cost of that path is the one this ordering removes —
-        // a stopped prompt can still come back a reaper pass later.
-        //
-        // SURFACED, not swallowed. A failed hold means the queue is NOT paused,
-        // so a prompt the user pressed Stop to get ahead of can still be
-        // delivered a reaper pass later — silently. The user has to know the
-        // stop did not also pause the queue, and that pressing Stop again (or
-        // Resume/Send-now) is how they recover.
-        console.warn('[session-chat] failed to hold the prompt inbox on stop', error);
-        errorToast(tHardcodedUi.raw('i18nComplete.text57a524b52549'), {
-          description: tHardcodedUi.raw('i18nComplete.text45eca4a01ff2'),
-        });
-      }),
-      new Promise((resolve) => setTimeout(resolve, STOP_HOLD_DEADLINE_MS)),
-    ]);
-
-    if (refusal) {
-      errorToast(refusal);
-      setIsBusy(isBusyRef.current);
-      return;
-    }
-    issueSessionCancel();
+    if (stopLatch.inFlight) return;
+    await stopLatch.run(async () => {
+      // Stop means stop: a held command would otherwise start a new turn the
+      // moment this one ends.
+      setHeldCommands([]);
+      // The composer reads idle at once; `stopUnconfirmed` brings Stop back
+      // if the server never confirms the abort.
+      clearTimeout(busyTimerRef.current);
+      setDebouncedBusy(false);
+      setStopUnconfirmed(false);
+      // Why the hold goes out before the abort, and why it is bounded: a
+      // prompt admitted mid-turn is already on the wire, the abort drops the
+      // runtime's queue, and the reaper redelivers it unless the hold marked
+      // it stop-paused first. A stalled hold must not delay the abort by more
+      // than STOP_HOLD_DEADLINE_MS.
+      const outcome = await runStopSequence({
+        ...(sessionState ? { sdkCancel: issueSessionCancel } : {}),
+        holdInbox: () => promptInbox.hold(true),
+        fallbackCancel: issueSessionCancel,
+        paintOptimisticAbort: () => {
+          // "Interrupted" on the newest assistant message, before the
+          // round trip. The SDK path paints it inside `cancel()`.
+          applyOptimisticAbort(sessionId);
+          clearSendReceipt();
+        },
+        refusalOf: stopRefusalMessage,
+        onHoldFailed: (error) => {
+          // The queue is NOT paused: a prompt the user stopped to get ahead
+          // of can still go out. Say so; Stop again or Resume recovers.
+          console.warn('[session-chat] failed to hold the prompt inbox on stop', error);
+          errorToast(tHardcodedUi.raw('i18nComplete.text57a524b52549'), {
+            description: tHardcodedUi.raw('i18nComplete.text45eca4a01ff2'),
+          });
+        },
+        holdDeadlineMs: STOP_HOLD_DEADLINE_MS,
+      });
+      if (outcome.kind === 'refused') errorToast(outcome.message);
+      // A refused, failed or timed-out stop leaves the turn running: keep
+      // Stop and Esc×3 on screen while the server still holds the turn.
+      if (stopLeftTurnRunning(outcome)) setStopUnconfirmed(true);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, abortSession, issueSessionCancel, promptInbox.hold]);
+  }, [sessionId, sessionState, stopLatch, issueSessionCancel, promptInbox.hold]);
 
   // Release the Stop hold for the WHOLE queue at once. `hold(false)` un-pauses
   // every held row on the server (shared across tabs), and the hook clears the
@@ -3684,7 +3684,7 @@ export function SessionChat({
       const handleCommandError = (err?: unknown) => {
         // A command that was DELIVERED and then lost its connection is not a
         // failed command. `/command` blocks for the whole turn, so both proxy
-        // hops routinely stop waiting while opencode is still working — and the
+        // hops routinely stop waiting while the runtime is still working — and the
         // request was already on the wire when they did. Clearing the session
         // to `idle` and painting an error here told the user their message had
         // not sent while the agent was actively answering it, and invited the
@@ -3868,15 +3868,15 @@ export function SessionChat({
     [local.model],
   );
 
-  // Only the ACCOUNT default is settable from the picker now — it is the one
-  // scope with no screen of its own. The project default lives in the provider
-  // modal's Models tab and the agent default on the agent's detail page, both
-  // of which also SHOW and can CLEAR what is set. See ModelDefaultControls.
+  // The picker's star sets the WORKSPACE default — the project default, since
+  // a workspace is one account and its project (Workspaces, PR 1). An
+  // account-wide default set earlier still applies as the fallback. See
+  // ModelDefaultControls.
   const chatModelDefaultControls: ModelDefaultControls = useMemo(
     () => ({
-      accountDefault: local.model.defaults.accountDefault ?? null,
+      accountDefault: local.model.defaults.projectDefault ?? null,
       onSetAccountDefault: (m) => {
-        void local.model.defaults.setAccountDefault(m);
+        void local.model.defaults.setProjectDefault(m);
       },
     }),
     [local.model.defaults],
@@ -3903,7 +3903,7 @@ export function SessionChat({
   /**
    * Where this session's unsent draft is persisted.
    *
-   * `projectSessionId` — the KORTIX session id — not the OpenCode `sessionId`:
+   * `projectSessionId` — the KORTIX session id — not the runtime `sessionId`:
    * it is the id the boot shell also keys on, so a draft typed in the instant
    * shell is still there after the crossfade into this component, and it is
    * the same id every other per-session handoff store uses
@@ -4212,7 +4212,7 @@ export function SessionChat({
   // `SessionComposerReadiness`.
   const runtimePhase = useRuntimePhase();
   // Covers the one gap `unreachable` can't: a sandbox proxy that keeps
-  // answering with a 503 (OpenCode wedged mid-boot) resets the probe's
+  // answering with a 503 (a runtime wedged mid-boot) resets the probe's
   // failure counter every tick, so `unreachable` never fires no matter how
   // long it stays wedged. See `useRuntimeBootStalled`.
   const runtimeStalled = useRuntimeBootStalled();
@@ -4324,7 +4324,7 @@ export function SessionChat({
       // already resolved client-side, so there is no server data to fetch.
       // Under Next.js `router.replace` would run a COLD RSC FETCH on every
       // open/close of this dialog, on the hottest route in the app (see
-      // app/(app)/projects/[id]/sessions/[sessionId]/page.tsx:1309); Next
+      // app/(app)/workspaces/[id]/sessions/[sessionId]/page.tsx:1309); Next
       // observes `history.replaceState`, which `useUiShallowNavigate` writes
       // when the host router observes history and routes through it otherwise.
       shallowNavigate(qs ? `${pathname}?${qs}` : pathname, { replace: true });
@@ -5212,13 +5212,9 @@ export function SessionChat({
                 onCompactClick={runtimeCanCompact ? handleCompactClick : undefined}
                 quoteRequests={quoteRequests}
                 onQuoteRequestsApplied={handleQuoteRequestsApplied}
-                // Only lock the input into question-answer mode while the session is
-                // actually busy (a live question keeps the run busy). If a question
-                // chip is ever showing while the session is idle — e.g. a dead /
-                // abandoned question the agent left behind — the input stays unlocked
-                // so a typed message is sent to the agent instead of being swallowed
-                // as a custom answer.
-                lockForQuestion={!!renderedQuestion && isBusy}
+                // Locks while the docked question is answerable — a live
+                // question or a parked ask — see `questionLock` above.
+                lockForQuestion={questionLock}
                 // Same dead-prompt guard as questions: only lock while the agent is
                 // actually paused on the decision (isBusy), so a stale card can't
                 // swallow the composer on an idle session.

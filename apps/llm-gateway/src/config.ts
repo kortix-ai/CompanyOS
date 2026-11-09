@@ -39,9 +39,23 @@ export const config = {
   // Requests per minute per credential on every model route (token-rate-limit.ts).
   // The same setting as the API's /v1/llm limit, so one value covers both paths.
   // A value of 0 or less falls back to 600, as in the API.
-  requestsPerMinutePerCredential: optionalInt('KORTIX_LLM_GATEWAY_REQS_PER_MIN', 600) > 0
-    ? optionalInt('KORTIX_LLM_GATEWAY_REQS_PER_MIN', 600)
-    : 600,
+  requestsPerMinutePerCredential:
+    optionalInt('KORTIX_LLM_GATEWAY_REQS_PER_MIN', 600) > 0
+      ? optionalInt('KORTIX_LLM_GATEWAY_REQS_PER_MIN', 600)
+      : 600,
+  // Requests per minute per gateway task shared by every credential this task
+  // has not yet validated (token-rate-limit.ts, KRTX-4528). It bounds what an
+  // unauthenticated caller can push, so it is far above one credential's own
+  // budget: a real caller spends a slot only until the API answers it with a
+  // principal, and gets it back.
+  requestsPerMinuteUnvalidated: optionalInt('KORTIX_LLM_GATEWAY_UNVALIDATED_REQS_PER_MIN', 10_000),
+  // Whether the edge in front of this task overwrites `cf-connecting-ip` (the
+  // shipped Kortix edge: a Cloudflare-locked ALB — see server.ts). It decides
+  // whether the per-source share of the unvalidated allowance may key on the
+  // caller's address (token-rate-limit.ts): a front that forwards caller
+  // headers verbatim (a plain Caddy or nginx) must set it off, or one caller
+  // rotates the header and buys a fresh source allowance per request.
+  trustEdgeClientIp: flag('KORTIX_LLM_GATEWAY_TRUST_EDGE_CLIENT_IP', true),
   langfuse: {
     publicKey: process.env.LANGFUSE_PUBLIC_KEY,
     secretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -51,8 +65,9 @@ export const config = {
   // refused with 413 before a byte is read. 0 disables the per-request cap.
   maxRequestBytes: optionalInt('GATEWAY_MAX_REQUEST_BYTES', DEFAULT_MAX_REQUEST_BYTES),
   // Inline-image cap per request (see @kortix/llm-gateway pipeline/image-window.ts).
-  // Default 20 (Bedrock Converse's hard limit); on overflow the 12 most recent
-  // images survive. GATEWAY_MAX_INLINE_IMAGES=0 disables pruning.
+  // Count: default 20 (a choice: Bedrock accepts 600); on overflow 13 images survive.
+  // Bytes: default 22 MiB of base64 images (Bedrock and Anthropic refuse a ~32 MB
+  // body); on overflow 16 MiB survive. 0 disables either cap.
   // Anthropic's origin for Claude Code's model calls on Claude accounts
   // (@kortix/llm-gateway claude-code/passthrough.ts). A test points it at a
   // local stand-in.
@@ -62,6 +77,11 @@ export const config = {
     keepOnOverflow: optionalInt(
       'GATEWAY_IMAGE_KEEP_ON_OVERFLOW',
       DEFAULT_IMAGE_WINDOW.keepOnOverflow,
+    ),
+    maxBytes: optionalInt('GATEWAY_MAX_INLINE_IMAGE_BYTES', DEFAULT_IMAGE_WINDOW.maxBytes ?? 0),
+    keepBytesOnOverflow: optionalInt(
+      'GATEWAY_IMAGE_KEEP_BYTES_ON_OVERFLOW',
+      DEFAULT_IMAGE_WINDOW.keepBytesOnOverflow ?? 0,
     ),
   },
 };

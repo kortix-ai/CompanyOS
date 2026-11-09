@@ -17,7 +17,7 @@
  */
 
 import { Button } from '../../../primitives/button';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions} from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import { Label } from '../../../primitives/label';
 import Loading from '../../../primitives/loading';
@@ -35,7 +35,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../primitives/ta
 import { successToast } from '../../../primitives/toast';
 import { agentDisplayLabel } from '../../../session/composer/session-chat-input';
 import { useTranslations as useI18nTranslations } from '../../../i18n';
-import { useProjectFeatureFlags } from '../../../internal/lib/use-project-feature-flags';
 import { UiLink as Link, useUiViewerId } from '../../../providers/ui-provider';
 import { uiRoutes } from '../../../lib/routes';
 import { projectSettingsSectionHref } from '../../project-settings/project-settings-sections';
@@ -45,6 +44,7 @@ import {
   useProjectApps,
   useProjectTriggerEventApps,
   useVisibleAgents,
+  useFeatureFlags,
 } from '@kortix/sdk/react';
 import { AppWindowIcon, GitMergeIcon, LightningIcon, TimerIcon, WebhooksLogoIcon } from '@phosphor-icons/react';
 import { useMutation } from '@tanstack/react-query';
@@ -159,9 +159,9 @@ const KIND_LABEL_KEY = {
 /** A source this project cannot use yet: one sentence on why, and the link that fixes it. */
 function Unavailable({ children, action }: { children: ReactNode; action: ReactNode }) {
   return (
-    <InfoBanner tone="info" className="text-xs" action={action}>
+    <BannerAlert variant="default" className="text-xs"><BannerAlertDescription>
       {children}
-    </InfoBanner>
+    </BannerAlertDescription><BannerAlertActions>{action}</BannerAlertActions></BannerAlert>
   );
 }
 
@@ -181,7 +181,7 @@ function ComposerForm({
   const tComposer = useI18nTranslations('triggerComposer');
   // Connector events are a beta feature behind the project flag `event_triggers`. Off: the tab
   // stays and its panel says how to turn it on; no catalog request is sent.
-  const eventsOn = useProjectFeatureFlags(projectId).flags.event_triggers === true;
+  const eventsOn = useFeatureFlags(projectId).flags.event_triggers === true;
   const [draft, setDraft] = useState<ComposerDraft>(() => ({
     ...initialDraft({
       kind: initialKind ?? (initialApp || initialConnector ? 'event' : null),
@@ -575,9 +575,9 @@ function ComposerForm({
 
           {error ? (
             <div ref={errorRef}>
-              <InfoBanner tone="destructive" className="text-xs">
+              <BannerAlert variant="destructive" className="text-xs"><BannerAlertDescription>
                 {error}
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
             </div>
           ) : null}
         </div>

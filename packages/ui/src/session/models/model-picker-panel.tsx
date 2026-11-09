@@ -180,13 +180,14 @@ export function ModelPickerPanel({
   };
 
   const tabIcon = (id: PickerTabId) => {
-    if (id === 'favorites') return <StarIcon weight="fill" className="text-kortix-yellow size-5" />;
+    // One size for every rail glyph: the star, the Kortix mark, each provider.
+    if (id === 'favorites') return <StarIcon weight="fill" className="text-kortix-orange size-4.5" />;
     return (
       <ProviderLogo
         providerID={id === 'chatgpt' ? 'codex' : id}
         name={tabLabel(id)}
         size="xs"
-        className="size-5"
+        className="size-4.5"
       />
     );
   };
@@ -336,9 +337,7 @@ function PickerRow({
         providerID={groupID}
         name={pickerGroupLabel(groupID, model)}
         size="xs"
-        // The 20px box draws a 16px mark; pull the name in by one step so it
-        // sits beside the mark, not beside the box.
-        className="-mr-1 size-5"
+        className="size-4.5"
       />
       <span className={cn('min-w-0 truncate leading-tight', unavailable && 'opacity-60')}>
         <span className="text-foreground font-medium">{lead}</span>
@@ -369,16 +368,21 @@ function PickerRow({
         }}
         className={cn(
           'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md',
-          'text-muted-foreground hover:text-kortix-yellow hover:bg-foreground/10',
+          'text-muted-foreground hover:text-kortix-orange hover:bg-foreground/10',
           'duration-normal transition-[color,background-color,transform] ease-out motion-safe:active:scale-[0.96]',
           'focus-visible:ring-kortix-base focus-visible:ring-2 focus-visible:outline-none',
           // Hidden means unclickable too; a favorite keeps its star at rest.
           favorite
-            ? 'text-kortix-yellow hover:text-kortix-yellow'
+            ? 'text-kortix-orange hover:text-kortix-orange'
             : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-data-[selected=true]:pointer-events-auto group-data-[selected=true]:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100',
         )}
       >
-        <StarIcon weight={favorite ? 'fill' : 'regular'} className="size-3.5" />
+        {/* The colour sits on the svg: CommandItem paints every svg that has no
+            `text-*` class of its own muted, over the button's colour. */}
+        <StarIcon
+          weight={favorite ? 'fill' : 'regular'}
+          className={cn('size-3.5', favorite ? 'text-kortix-orange' : 'text-current')}
+        />
       </button>
 
       {shortcut ? (

@@ -254,6 +254,9 @@ export function ProviderLogo({
           onError={() => setFailedSrc(src)}
           className={cn(
             'object-contain',
+            // Inline, the mark IS the box: a caller that sizes the box sizes
+            // the logo, so every provider matches a star or a Kortix mark.
+            size === 'xs' && 'size-full',
             !light && 'dark:invert',
           )}
         />

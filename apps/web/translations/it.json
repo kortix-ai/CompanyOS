@@ -19128,6 +19128,7 @@
       "textfd792ae48d11": "Questa slide",
       "textfd7c62b85d07": "Snapshot corretto con l'agente",
       "textfd7e911ee733": "Sandbox sottoposte a provisioning per provider e giorno.",
+      "textfd8b8dae4421": "Zona pericolosa",
       "textfd94861c802e": "Limiti per membro (",
       "textfdac955a2fcf": "Grazie.",
       "textfdb55672b8c6": "Provisioning → \"To App\" → Edit → abilita Create / Update / Deactivate Users → Save. Le assegnazioni e i gruppi inviati vengono quindi sincronizzati automaticamente quando cambiano.",
@@ -21293,8 +21294,7 @@
       "text16ba47efb9f2": "Una traccia completa e filtrabile di ogni azione di amministratori e agenti in questo workspace: chi ha fatto cosa, dove e quando.",
       "text4b892277843c": "Crea workspace",
       "text41018e566b60": "nuovo workspace crea aggiungi team",
-      "texta99ac8f9050b": "Workspace · Accesso",
-      "textfd8b8dae4421": "Zona pericolosa"
+      "texta99ac8f9050b": "Workspace · Accesso"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",

@@ -19128,6 +19128,7 @@
       "textfd792ae48d11": "Este slide",
       "textfd7c62b85d07": "Snapshot corrigido com o agente",
       "textfd7e911ee733": "Sandboxes provisionados por provedor e por dia.",
+      "textfd8b8dae4421": "Zona de perigo",
       "textfd94861c802e": "Limites por membro (",
       "textfdac955a2fcf": "Grazie.",
       "textfdb55672b8c6": "Provisioning → \"To App\" → Edit → ative Create / Update / Deactivate Users → Save. As atribuições e os grupos enviados serão sincronizados automaticamente conforme forem alterados.",
@@ -21293,8 +21294,7 @@
       "text16ba47efb9f2": "Um registro completo e filtrável de cada ação de administradores e agentes neste espaço de trabalho: quem fez o quê, onde e quando.",
       "text4b892277843c": "Criar espaço de trabalho",
       "text41018e566b60": "novo espaço de trabalho criar adicionar equipe",
-      "texta99ac8f9050b": "Espaço de trabalho · Acesso",
-      "textfd8b8dae4421": "Zona de perigo"
+      "texta99ac8f9050b": "Espaço de trabalho · Acesso"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",

@@ -19128,6 +19128,7 @@
       "textfd792ae48d11": "Cette diapositive",
       "textfd7c62b85d07": "Instantané corrigé avec l’agent",
       "textfd7e911ee733": "Sandbox mis à disposition par fournisseur et par jour.",
+      "textfd8b8dae4421": "Zone de danger",
       "textfd94861c802e": "Plafonds par membre (",
       "textfdac955a2fcf": "Merci.",
       "textfdb55672b8c6": "Provisioning → « To App » → Edit → activez Create / Update / Deactivate Users → Save. Les affectations et les groupes envoyés sont ensuite synchronisés automatiquement lors de leurs changements.",
@@ -21293,8 +21294,7 @@
       "text16ba47efb9f2": "Une trace complète et filtrable de chaque action d'administrateur et d'agent dans cet espace de travail : qui a fait quoi, où et quand.",
       "text4b892277843c": "Créer un espace de travail",
       "text41018e566b60": "nouvel espace de travail créer ajouter équipe",
-      "texta99ac8f9050b": "Espace de travail · Accès",
-      "textfd8b8dae4421": "Zone de danger"
+      "texta99ac8f9050b": "Espace de travail · Accès"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",

@@ -19128,6 +19128,7 @@
       "textfd792ae48d11": "Diese Folie",
       "textfd7c62b85d07": "Snapshot mit Agent repariert",
       "textfd7e911ee733": "Pro Anbieter und Tag bereitgestellte Sandboxes.",
+      "textfd8b8dae4421": "Gefahrenzone",
       "textfd94861c802e": "Limits pro Mitglied (",
       "textfdac955a2fcf": "Danke.",
       "textfdb55672b8c6": "Provisioning → „To App“ → Edit → Create / Update / Deactivate Users aktivieren → Save. Zuweisungen und übertragene Gruppen werden danach automatisch synchronisiert.",
@@ -21293,8 +21294,7 @@
       "text16ba47efb9f2": "Eine vollständige, filterbare Spur jeder Admin- und Agentenaktion in diesem Workspace: wer was wo und wann getan hat.",
       "text4b892277843c": "Workspace erstellen",
       "text41018e566b60": "neuer workspace erstellen hinzufügen team",
-      "texta99ac8f9050b": "Workspace · Zugriff",
-      "textfd8b8dae4421": "Gefahrenzone"
+      "texta99ac8f9050b": "Workspace · Zugriff"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",

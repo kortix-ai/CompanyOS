@@ -77,13 +77,8 @@ Arguments: `description`, `prompt`, `subagent_type` (a declared agent) or
   `all`, named in the caller's `subagents` grant. pi has no built-in
   `general` or `explore` subagent. An inline agent needs no grant: leave
   `agent` and `task` out of `tools` to stop an agent from delegating.
-- A subagent runs with its own prompt, model and permission. A call must
-  pass both the subagent's rules and the caller's: a `deny` from either wins.
-  A child never gets a tool its caller lacks.
-- An inline agent runs as the caller's own agent, with the caller's access:
-  its grant, connectors, secrets, computer type and the channel the caller's
-  chat came from. Its `instructions` are its whole system prompt (at most
-  4,096 characters in a separate session).
+- A subagent runs with its own prompt, model and permission. A call must pass both the subagent's rules and the caller's: a `deny` from either wins. A child never gets a tool its caller lacks.
+- An inline agent runs as the caller's own agent, with the caller's access: its grant, connectors, secrets, computer type and the channel the caller's chat came from. Its `instructions` are its whole system prompt (at most 4,096 characters in a separate session).
 - `session: "separate"` (the default) runs the subagent in its own new
   session with its own sandbox and branch. The one call waits until that
   session finishes (up to 30 minutes) and returns its final message: ask the

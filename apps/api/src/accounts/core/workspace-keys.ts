@@ -270,12 +270,15 @@ async function listKeys(c: Context<AppEnv>) {
         has_role: await loadServiceAccountActivation(b.serviceAccountId, accountId),
       })),
   );
-  return c.json({
-    keys,
-    can_manage_principals: canManage,
-    agents: agents.map((name) => ({ name })),
-    bots: botChoices,
-  });
+  return c.json(
+    {
+      keys,
+      can_manage_principals: canManage,
+      agents: agents.map((name) => ({ name })),
+      bots: botChoices,
+    },
+    200,
+  );
 }
 
 /** `acts_as: agent | bot`: a key that authorizes as a service account. */
@@ -441,7 +444,10 @@ async function mintKey(c: Context<AppEnv>) {
     return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
   }
   const mint = await mintAccountToken(c, { ...body, project_id: undefined });
-  if (!mint.ok) return mint.res;
+  if (!mint.ok) {
+    const { status, body: refusal } = mint;
+    return status === 400 ? c.json(refusal, 400) : status === 403 ? c.json(refusal, 403) : c.json(refusal, 409);
+  }
   const userId = c.get('userId') as string;
   const emails = await lookupEmailsByUserIds([userId]);
   return c.json(
@@ -482,11 +488,11 @@ async function revokeKey(c: Context<AppEnv>) {
     await assertAuthorized(actor, ACCOUNT_ACTIONS.TOKEN_PERSONAL_REVOKE);
     if (deleteRevoked) {
       return (await deleteRevokedPersonalAccountToken(keyId, accountId))
-        ? c.json({ ok: true, deleted: true })
+        ? c.json({ ok: true, deleted: true }, 200)
         : c.json({ error: 'revoked key not found' }, 404);
     }
     return (await revokeAccountToken(keyId, accountId, workspaceId))
-      ? c.json({ ok: true })
+      ? c.json({ ok: true }, 200)
       : c.json({ error: 'key not found or already revoked' }, 404);
   }
 
@@ -495,7 +501,7 @@ async function revokeKey(c: Context<AppEnv>) {
   await assertAuthorized(actor, ACCOUNT_ACTIONS.TOKEN_REVOKE);
   if (await getServiceAccountKey(keyId, accountId, workspaceId)) {
     return (await revokeAccountToken(keyId, accountId, workspaceId))
-      ? c.json({ ok: true })
+      ? c.json({ ok: true }, 200)
       : c.json({ error: 'key not found or already revoked' }, 404);
   }
   const bot = await getServiceAccount(accountId, keyId);
@@ -504,7 +510,7 @@ async function revokeKey(c: Context<AppEnv>) {
       if (bot.status === 'active') return c.json({ error: 'Revoke the bot bearer before deleting it.', code: 'key_active' }, 409);
       await deleteServiceAccount(accountId, keyId);
       invalidateIamCacheForUser(keyId);
-      return c.json({ ok: true, deleted: true });
+      return c.json({ ok: true, deleted: true }, 200);
     }
     const ok = await disableServiceAccount({ accountId, serviceAccountId: keyId, disabledBy: userId });
     if (!ok) return c.json({ error: 'key not found or already revoked' }, 404);
@@ -517,7 +523,7 @@ async function revokeKey(c: Context<AppEnv>) {
       before: { name: bot.name, status: bot.status },
       after: { name: bot.name, status: 'disabled' },
     });
-    return c.json({ ok: true });
+    return c.json({ ok: true }, 200);
   }
   return c.json({ error: 'key not found' }, 404);
 }

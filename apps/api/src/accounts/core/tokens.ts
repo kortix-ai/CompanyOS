@@ -560,19 +560,19 @@ export async function mintAccountToken(
   body: Record<string, unknown>,
 ): Promise<
   | { ok: true; token: CreateAccountTokenResult; expiryRenewDays: number | null }
-  | { ok: false; res: Response }
+  | { ok: false; status: 400 | 403 | 409; body: { error: string; code?: string; permissions?: string[] } }
 > {
   const userId = c.get('userId') as string;
   // A connected app's revocable `kortix_oat_` token must not mint a durable one.
   if (c.get('authType') === 'oauth') {
-    return { ok: false, res: c.json({ error: 'Connected apps cannot mint personal access tokens.' }, 403) };;
+    return { ok: false, status: 403, body: { error: 'Connected apps cannot mint personal access tokens.' } };
   }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name) {
-    return { ok: false, res: c.json({ error: 'name is required' }, 400) };;
+    return { ok: false, status: 400, body: { error: 'name is required' } };
   }
   if (name.length > 255) {
-    return { ok: false, res: c.json({ error: 'name too long (max 255 chars)' }, 400) };;
+    return { ok: false, status: 400, body: { error: 'name too long (max 255 chars)' } };
   }
   const accountOverride =
     pathAccountOf(c) ??
@@ -585,7 +585,7 @@ export async function mintAccountToken(
     rethrowDatabaseError(err);
     // 409 `no_workspace`: a person with no account has nowhere to mint into.
     if (isNoWorkspaceError(err)) throw err;
-    return { ok: false, res: c.json({ error: (err as Error).message }, 403) };;
+    return { ok: false, status: 403, body: { error: (err as Error).message } };
   }
 
   // A PAT authenticates AS the person who minted it and is authorized against
@@ -603,7 +603,7 @@ export async function mintAccountToken(
   // Default 90 days, at most the workspace maximum (365 days by default); no
   // expiry only when the key policy allows it (resolveMintExpiry).
   const expiry = await resolveMintExpiry(accountId, Object.hasOwn(body, 'expires_at') ? body.expires_at : undefined);
-  if (!expiry.ok) return { ok: false, res: c.json({ error: expiry.error, code: expiry.code }, expiry.status) };;
+  if (!expiry.ok) return { ok: false, status: expiry.status, body: { error: expiry.error, code: expiry.code } };
   const parentTokenId = c.get('tokenProjectId') ? (c.get('iamTokenId') as string | undefined) : undefined;
   const expiresAt = Object.hasOwn(body, 'expires_at')
     ? expiry.expiresAt
@@ -613,7 +613,7 @@ export async function mintAccountToken(
     c.get('tokenProjectId') ? (c.get('iamTokenId') as string | undefined) : undefined,
   );
   if (expiryRefusal) {
-    return { ok: false, res: c.json({ error: expiryRefusal.error, code: expiryRefusal.code }, expiryRefusal.status) };;
+    return { ok: false, status: expiryRefusal.status, body: { error: expiryRefusal.error, code: expiryRefusal.code } };
   }
 
   // Optional project scope. A project-scoped key only ever works on that one
@@ -626,20 +626,21 @@ export async function mintAccountToken(
   const binding = await pathTokenBinding(c);
   if (binding.kind === 'workspace') {
     if (projectId && projectId !== binding.projectId) {
-      return { ok: false, res: c.json({ error: 'project_id names another workspace than the one in the path' }, 400) };;
+      return { ok: false, status: 400, body: { error: 'project_id names another workspace than the one in the path' } };
     }
     projectId = binding.projectId;
   } else if (binding.kind === 'ambiguous' && !projectId) {
-    return { ok: false, res: c.json(
-      {
+    return {
+      ok: false,
+      status: 409,
+      body: {
         error: 'This account holds several workspaces. Name one: mint under /v1/workspaces/<workspace id>/tokens, or pass project_id.',
         // No id list: a member of a legacy account must not learn the ids of
         // workspaces they cannot read (finding 34). GET /v1/workspaces lists
         // the ones they can.
         code: WORKSPACE_AMBIGUOUS_CODE,
       },
-      409,
-    ) };;
+    };
   }
 
   if (projectId) {
@@ -650,24 +651,25 @@ export async function mintAccountToken(
     const fullIdentity = actsAsFullIdentity(c.get('authType') as string | undefined, actor);
     const loaded = await loadProjectForUser(c, projectId, fullIdentity ? 'read' : 'credentials');
     if (!loaded?.row || loaded.row.accountId !== accountId) {
-      return { ok: false, res: c.json({ error: 'Workspace not found' }, 403) };;
+      return { ok: false, status: 403, body: { error: 'Workspace not found' } };
     }
   }
 
   // The key's scope (design.md §3.2 C4a). Omitted: full, or the minting key's
   // own scope, so a scoped key never mints a wider one.
   const parsedScopes = parseKeyScopesInput(body.scopes);
-  if (!parsedScopes.ok) return { ok: false, res: c.json({ error: parsedScopes.error, code: parsedScopes.code }, 400) };;
+  if (!parsedScopes.ok) return { ok: false, status: 400, body: { error: parsedScopes.error, code: parsedScopes.code } };
   const parentScopes = callerKeyScopes(c);
   const scopes = parsedScopes.explicit ? parsedScopes.scopes : parentScopes;
   if (scopes && !projectId) {
-    return { ok: false, res: c.json(
-      { error: 'A scoped key is a workspace key: mint it under /v1/workspaces/<workspace id>/tokens.', code: 'invalid_scopes' },
-      400,
-    ) };;
+    return {
+      ok: false,
+      status: 400,
+      body: { error: 'A scoped key is a workspace key: mint it under /v1/workspaces/<workspace id>/tokens.', code: 'invalid_scopes' },
+    };
   }
   if (!keyScopeWithin(scopes, parentScopes)) {
-    return { ok: false, res: c.json({ error: 'A scoped key can only mint keys inside its own scope.', code: 'key_scope_exceeds_parent' }, 403) };;
+    return { ok: false, status: 403, body: { error: 'A scoped key can only mint keys inside its own scope.', code: 'key_scope_exceeds_parent' } };
   }
   if (scopes && 'permissions' in scopes && projectId) {
     // Every listed permission must be one the creator holds NOW in this
@@ -678,14 +680,15 @@ export async function mintAccountToken(
       if (!(await authorize(actor, permission, { type: 'workspace', id: projectId })).allowed) denied.push(permission);
     }
     if (denied.length > 0) {
-      return { ok: false, res: c.json(
-        {
+      return {
+        ok: false,
+        status: 403,
+        body: {
           error: `Your role in this workspace does not include ${denied.map((p) => `"${p}"`).join(', ')}. A key cannot hold a permission its creator lacks.`,
           code: 'key_scope_exceeds_role',
           permissions: denied,
         },
-        403,
-      ) };;
+      };
     }
   }
 
@@ -699,7 +702,7 @@ export async function mintAccountToken(
     created = await createAccountToken({ accountId, userId, name, expiresAt, projectId, scopes, expiryRenewDays });
   } catch (err) {
     if (err instanceof PatPolicyError) {
-      return { ok: false, res: c.json({ error: err.message, code: err.code }, 400) };
+      return { ok: false, status: 400, body: { error: err.message, code: err.code } };
     }
     throw err;
   }
@@ -709,7 +712,10 @@ export async function mintAccountToken(
 /** The `POST …/tokens` handler: the mint core rendered through `tokenWire`. */
 export async function mintTokenFromBody(c: Context, body: Record<string, unknown>): Promise<Response> {
   const mint = await mintAccountToken(c, body);
-  if (!mint.ok) return mint.res;
+  if (!mint.ok) {
+    const { status, body: refusal } = mint;
+    return status === 400 ? c.json(refusal, 400) : status === 409 ? c.json(refusal, 409) : c.json(refusal, 403);
+  }
   return c.json(
     tokenWire({ ...mint.token, expiryRenewDays: mint.expiryRenewDays }, { secretKey: mint.token.secretKey }),
     201,

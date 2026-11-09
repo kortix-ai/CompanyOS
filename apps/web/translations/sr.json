@@ -2076,6 +2076,7 @@
     "modelGate": {
       "upgrade": "Надогради",
       "promptTitle": "Povežite model da biste počeli",
+      "offerTitle": "Koristite svoj ChatGPT ili Claude plan",
       "promptDescription": "Prijavite se planom koji već plaćate.",
       "useChatGpt": "Koristi ChatGPT",
       "chatGptPlan": "Plus ili Pro plan",

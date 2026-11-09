@@ -2076,6 +2076,7 @@
     "modelGate": {
       "upgrade": "アップグレード",
       "promptTitle": "モデルを接続して始めましょう",
+      "offerTitle": "ChatGPT または Claude のプランを使う",
       "promptDescription": "すでに契約中のプランでサインインできます。",
       "useChatGpt": "ChatGPT を使う",
       "chatGptPlan": "Plus または Pro プラン",

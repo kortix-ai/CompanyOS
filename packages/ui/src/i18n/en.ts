@@ -1474,6 +1474,7 @@ const catalog = {
     "modelGate": {
       "upgrade": "Upgrade",
       "promptTitle": "Connect a model to start",
+      "offerTitle": "Use your ChatGPT or Claude plan",
       "promptDescription": "Sign in with a plan you already pay for.",
       "useChatGpt": "Use ChatGPT",
       "chatGptPlan": "Plus or Pro plan",

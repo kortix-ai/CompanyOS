@@ -2076,6 +2076,7 @@
     "modelGate": {
       "upgrade": "Mejorar plan",
       "promptTitle": "Conecta un modelo para empezar",
+      "offerTitle": "Usa tu plan de ChatGPT o Claude",
       "promptDescription": "Inicia sesión con un plan que ya pagas.",
       "useChatGpt": "Usar ChatGPT",
       "chatGptPlan": "Plan Plus o Pro",

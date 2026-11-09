@@ -2076,6 +2076,7 @@
     "modelGate": {
       "upgrade": "升级",
       "promptTitle": "连接一个模型即可开始",
+      "offerTitle": "使用你的 ChatGPT 或 Claude 套餐",
       "promptDescription": "使用你已订阅的套餐登录。",
       "useChatGpt": "使用 ChatGPT",
       "chatGptPlan": "Plus 或 Pro 套餐",

@@ -45,23 +45,36 @@ const SUBSCRIPTION_OPTIONS = [
  * "Use an API key" opens the same dialog on the full provider list. "Upgrade"
  * shows only where billing sells a plan (`showUpgradeOption`).
  *
+ * `required`: no model can run, so the row says "Connect a model to start".
+ * Otherwise the project runs on Kortix models and the row is an offer ("Use
+ * your ChatGPT or Claude plan") shown on an empty chat, without Upgrade.
+ *
  * `show` must only flip on settled data (see `entitlementsPending`) — the
  * animation assumes it renders once with the final answer, not per-query.
  */
-export function ModelConnectionBar({ show }: { show: boolean }) {
+export function ModelConnectionBar({ show, required }: { show: boolean; required: boolean }) {
   const t = useTranslations('sessionUi.modelGate');
   const reduceMotion = useReducedMotion();
-  const { canConnectProvider, openConnectProvider, openUpgrade, modal, showUpgradeOption } =
-    useModelConnectionGate(EMPTY_MODELS);
+  const {
+    canConnectProvider,
+    canWriteProviders,
+    openConnectProvider,
+    openUpgrade,
+    modal,
+    showUpgradeOption,
+  } = useModelConnectionGate(EMPTY_MODELS);
+  // The optional offer is for people who can act on it. A read-only member
+  // with working Kortix models has nothing to do here.
+  const visible = show && (required || (canConnectProvider && canWriteProviders));
 
   return (
     <>
       {modal}
       <AnimatePresence initial={false}>
-        {show && (
+        {visible && (
           <m.section
             key="model-connection-prompt"
-            aria-label={t('promptTitle')}
+            aria-label={required ? t('promptTitle') : t('offerTitle')}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0, transition: PROMPT_ENTER }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, transition: PROMPT_EXIT }}
@@ -69,7 +82,9 @@ export function ModelConnectionBar({ show }: { show: boolean }) {
           >
             <div className="flex min-h-7 items-center justify-between gap-3 px-1">
               <p className="min-w-0 text-sm text-pretty">
-                <span className="text-foreground font-medium">{t('promptTitle')}</span>
+                <span className="text-foreground font-medium">
+                  {required ? t('promptTitle') : t('offerTitle')}
+                </span>
                 <span className="text-muted-foreground hidden sm:inline">
                   {' '}
                   {t('promptDescription')}
@@ -88,7 +103,7 @@ export function ModelConnectionBar({ show }: { show: boolean }) {
                     {t('useApiKey')}
                   </Button>
                 )}
-                {showUpgradeOption && (
+                {required && showUpgradeOption && (
                   <Button
                     type="button"
                     variant="ghost"

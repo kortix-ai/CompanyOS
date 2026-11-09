@@ -32,7 +32,7 @@ export interface ApiAnswer {
  * delivery, a watch is recorded), so a normal answer takes well under 2 s and
  * this only bounds a hung network.
  */
-export const CONTROL_PLANE_CALL_TIMEOUT_MS = 10_000
+const CONTROL_PLANE_CALL_TIMEOUT_MS = 10_000
 
 /** One JSON call. A network failure or the timeout throws; any HTTP status is an answer. */
 export async function callApi(plane: ControlPlane, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, signal?: AbortSignal): Promise<ApiAnswer> {
@@ -60,7 +60,7 @@ export function sessionPath(projectId: string, sessionId: string, suffix = ''): 
 }
 
 /** The tools whose result is a card (`KortixToolResult` with one of these names). */
-export type MultiAgentToolName = 'send_message' | 'list_agents' | 'task_create' | 'task_list' | 'task_get' | 'task_update' | 'task_stop'
+type MultiAgentToolName = 'send_message' | 'list_agents' | 'task_create' | 'task_list' | 'task_get' | 'task_update' | 'task_stop'
 
 /**
  * `KortixToolResult` (`@kortix/api-contract/kortix-tool-card`) for a

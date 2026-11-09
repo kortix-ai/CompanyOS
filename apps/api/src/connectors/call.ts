@@ -410,7 +410,7 @@ export function missingPathArg(
   args: Record<string, unknown> | null | undefined,
 ): string | null {
   for (const match of pathTemplate.matchAll(/\{([^}]+)\}/g)) {
-    const name = match[1]!;
+    const name = match[1];
     const value = args?.[name];
     const segment = (value == null ? '' : String(value)).trim();
     if (segment === '' || segment === '.' || segment === '..') return name.trim();

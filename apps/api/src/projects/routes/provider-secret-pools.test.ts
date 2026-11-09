@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { buildDenialError } from '../../iam/denial-message';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { projectSessions, sessionProviderSecretPools } from '@kortix/db';
@@ -41,6 +42,10 @@ let keyChecks: Array<{ grantUserId: string | null; providerId?: string; name?: s
 let memberListings: Array<{ userId: string; grantUserId?: string | null }> = [];
 /** Each project-access gate (`memberMayReadProject`), by user. */
 let readGates: string[] = [];
+/** The leaves IAM is asked for, in order (`assertProjectCapability`). */
+let capabilityChecks: string[] = [];
+/** Leaves this caller is refused (`assertProjectCapability` throws, as the real one 403s). */
+let deniedLeaves: string[] = [];
 /** Who makes the request. */
 let callerId = managerId;
 /** The session model as stored by `PUT /sessions/:id/model`. */
@@ -73,8 +78,11 @@ mock.module('../lib/access', () => ({
     userId: callerId,
     row: { accountId, metadata: {}, repoUrl: 'https://example.test/repo', defaultBranch: null, manifestPath: null },
   }),
-  assertProjectCapability: async () => {},
-  projectCapabilityAllowed: async () => true,
+  assertProjectCapability: async (_c: unknown, _userId: string, _accountId: string, _projectId: string, action: string) => {
+    capabilityChecks.push(action);
+    // The real assertion throws this 403 (a role without the leaf) before the handler runs.
+    if (deniedLeaves.includes(action)) throw buildDenialError(action, 'project_role_insufficient');
+  },
   loadVisibleSession: async (_loaded: unknown, target: string, caller: string | null, bound: string | null) => {
     // `PUT /model` passes the raw context session id: a browser login's is not a Kortix session.
     if ((caller && caller !== 'browser-login' && caller !== target) || (bound && bound !== target)) return null;
@@ -167,9 +175,9 @@ const fakeDb = {
       return [{ sessionId }];
     } }),
   }) }),
-  update: (table: unknown) => ({ set: (values: { metadata: { opencode_model: string } }) => ({ where: async () => {
+  update: (table: unknown) => ({ set: (values: { metadata: { model: string } }) => ({ where: async () => {
     if (table !== projectSessions) throw new Error('unexpected update');
-    storedModel = values.metadata.opencode_model;
+    storedModel = values.metadata.model;
   } }) }),
   delete: () => ({ where: async (condition: SQL) => {
     writes++;
@@ -182,7 +190,7 @@ mock.module('../../shared/db', () => ({ db: fakeDb }));
 const { MAX_KEYS_PER_PROVIDER } = await import('../../secrets/provider-key-selection');
 
 const putModel = (model: string) => app.request(`/${projectId}/sessions/${sessionId}/model`, {
-  method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ opencode_model: model }),
+  method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: model }),
 });
 
 const put = (providerId: string, secretIds: string[] | null) => app.request(`${base}/${providerId}`, {
@@ -203,6 +211,8 @@ beforeEach(() => {
   keyChecks = [];
   memberListings = [];
   readGates = [];
+  capabilityChecks = [];
+  deniedLeaves = [];
   callerId = managerId;
   storedModel = null;
   writes = 0;
@@ -314,7 +324,7 @@ test('a selection is refused when the session owner cannot read the project', as
   const owner = await put('anthropic', [keyId(1)]);
   expect(owner.status).toBe(403);
   expect(await owner.json()).toEqual({
-    error: 'The session owner can no longer read this project, so the session cannot use provider secrets',
+    error: 'The session owner can no longer read this workspace, so the session cannot use provider secrets',
     code: 'SESSION_OWNER_NO_PROJECT_ACCESS',
   });
   expect(writes).toBe(0);
@@ -347,7 +357,7 @@ test('a shared session whose owner cannot read the project names that cause, not
   const response = await put('anthropic', [keyId(1)]);
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({
-    error: 'The session owner can no longer read this project, so the session cannot use provider secrets',
+    error: 'The session owner can no longer read this workspace, so the session cannot use provider secrets',
     code: 'SESSION_OWNER_NO_PROJECT_ACCESS',
   });
   expect(writes).toBe(0);
@@ -405,6 +415,50 @@ test('a service-account caller cannot select a key granted to one member', async
   expect(writes).toBe(0);
 });
 
+// The pool decides which keys the session may spend at the gateway, and the
+// answer echoes `secret_ids`, so the route asks `project.secret.read` — the leaf
+// the sibling secret routes ask. A custom role can grant session control and
+// omit it; such a caller is refused before the selection is written.
+test('a caller without project.secret.read cannot select, and gets the capability 403', async () => {
+  deniedLeaves = ['project.secret.read'];
+  keys = [projectKey(1)];
+  const response = await put('anthropic', [keyId(1)]);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ status: 403, action: 'project.secret.read' });
+  // Refused before the write: the pool keeps whatever it held.
+  expect(pools.has('anthropic')).toBe(false);
+  expect(writes).toBe(0);
+  expect(capabilityChecks).toEqual(['project.session.stop', 'project.secret.read']);
+});
+
+// The control: a caller with the leaf is answered with the selection. The gate
+// really fires on this route — the sibling test below denies the *other* leaf
+// this route asserts (`project.session.stop`) and gets a 403 — so the 200 here
+// means `project.secret.read` was applied and held, not skipped.
+test('a caller that holds project.secret.read selects and is handed the key ids', async () => {
+  keys = [projectKey(1)];
+  const response = await put('anthropic', [keyId(1)]);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    provider_id: 'anthropic',
+    configured: true,
+    secret_ids: [keyId(1)],
+  });
+  expect(pools.get('anthropic')).toEqual([keyId(1)]);
+  expect(capabilityChecks).toEqual(['project.session.stop', 'project.secret.read']);
+});
+
+// Proves the mock gate actually refuses on this route: the same caller, the
+// leaf held, but the session-control assert denied.
+test('the gates on this route really fire: denying project.session.stop alone is refused', async () => {
+  deniedLeaves = ['project.session.stop'];
+  keys = [projectKey(1)];
+  const response = await put('anthropic', [keyId(1)]);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ status: 403, action: 'project.session.stop' });
+  expect(writes).toBe(0);
+});
+
 describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {
   const model = 'anthropic/claude-sonnet-4-5';
 
@@ -414,7 +468,7 @@ describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {
     const response = await putModel(model);
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.opencode_model).toBe(storedModel!);
+    expect(body.model).toBe(storedModel!);
     expect(storedModel).toContain(model);
     expect(pools.get('anthropic')).toEqual([keyId(1), keyId(2)]);
     // Listed as the owner, a member, with nobody's grants: the caller is not the owner.
@@ -434,7 +488,7 @@ describe('PUT /sessions/:id/model to a model only pooled keys reach', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.model).toBe(storedModel!);
-    expect(body.opencode_model).toBe(storedModel!);
+    expect(body.model).toBe(storedModel!);
     expect(storedModel).toContain(model);
   });
 

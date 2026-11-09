@@ -28,7 +28,6 @@ import { createPiHarnessService, type PiHarnessService } from '@/harness/pi/serv
 import { resetKortixEventBusForTests } from '@/services/event-bus/kortix-event-bus'
 import { createRuntimeRouter } from '@/routes/kortix/runtime'
 import { peerMessagePromptText } from '@kortix/shared/peer-message-prompt'
-import { roomPromptText } from '@kortix/shared/room-prompt'
 import { startFakeModel, type Step } from './helpers/fake-model'
 
 const MODEL_ID = 'test-model'
@@ -65,7 +64,7 @@ function startFakeApi(parent = PARENT_SESSION) {
   const followUps: Array<{ id: string; text: string }> = []
   const children = new Map<string, FakeChild>()
   const files = new Map<string, string>()
-  /** The tool parts each child's saved transcript holds (`GET …/transcript?shape=sync`, the API's mirror). */
+  /** The settled tool calls each child's stored session log holds (`GET …/sessions/:id/log`, the API's copy). */
   const savedParts = new Map<string, Array<Record<string, unknown>>>()
   let behave: (prompt: string, turn: number, child: FakeChild) => ChildBehavior = () => ({})
   let settled = true
@@ -79,7 +78,7 @@ function startFakeApi(parent = PARENT_SESSION) {
     async fetch(req) {
       const url = new URL(req.url)
       const path = url.pathname
-      const project = `/v1/projects/${PROJECT_ID}`
+      const project = `/v1/workspaces/${PROJECT_ID}`
       const base = `${project}/sessions`
       if (req.method === 'GET' && path === `${project}/files/content`) {
         const file = url.searchParams.get('path')!
@@ -111,8 +110,21 @@ function startFakeApi(parent = PARENT_SESSION) {
         const end = now.lastEnd
         return Response.json({ turns: [], ...(end ? { last_ended: { turn_token: 't1', end_reason: end.reason, ended_at: null, ...(end.error ? { error: { name: 'WorkflowError', message: end.error } } : {}) } } : {}) })
       }
-      if (path.endsWith('/transcript') && url.searchParams.get('shape') === 'sync') {
-        return Response.json({ available: true, source: 'mirror', messages: [{ info: { id: 'msg-1', role: 'assistant' }, parts: savedParts.get(id) ?? [] }] })
+      if (req.method === 'GET' && path === `${base}/${id}/log`) {
+        // The session-log page: each saved call is a pi tool_call block whose result carries its details.
+        const blocks = (savedParts.get(id) ?? []).map((part, i) => {
+          const state = part.state as ToolState
+          const failed = state.status === 'error'
+          return {
+            id: `blk_${i}`, type: 'tool_call', call_id: `call_${i}`, name: part.tool, kind: 'other', input: {}, status: failed ? 'error' : 'complete',
+            result: { content: [{ type: 'text', text: (failed ? state.error : state.output) ?? '' }], is_error: failed, ...(state.metadata ? { details: state.metadata } : {}) },
+          }
+        })
+        const message = {
+          message_id: 'msg-1', thread_id: id, seq: 1, role: 'assistant', kind: 'turn', status: 'complete', in_context: true, model: null, usage: null,
+          finish: 'stop', error: null, created_at: since(1), completed_at: since(1), producer: { harness: 'pi', version: '1.4.0' }, blocks,
+        }
+        return Response.json({ session: { title: null, created_at: since(0) }, generation: 1, threads: [{ thread_id: id, parent_thread_id: null }], thread_id: id, messages: [message], has_more: false })
       }
       if (path.endsWith('/transcript')) {
         const user = { role: 'user', text: child.prompts.at(-1) }
@@ -579,7 +591,7 @@ describe('pi workflow tool', () => {
     expect(lastWorkflowPart(frames).error).toContain('nothing to resume: no run no-such-run-0000 is saved on this computer.')
   })
 
-  test('custom agents: instructions ride as the child\'s initial_context, tools narrow it, the model reaches the create; a tool this session lacks, a bad model ref and instructions on a named agent are refused; all three are in the resume key', async () => {
+  test('custom agents: instructions are the child\'s own system prompt (kortix.agent.instructions), tools narrow it, the model reaches the create; a tool this session lacks, a bad model ref and instructions on a named agent are refused; all three are in the resume key', async () => {
     const script = [
       "const a = await agent('audit the logs', { instructions: 'You audit logs. Report only errors.', tools: ['read', 'grep'], model: 'kortix/fast' })",
       "const e = await agent('look around', { agent: 'explore', tools: ['grep', 'write'], model: 'kortix/codex/gpt-5' })",
@@ -592,7 +604,8 @@ describe('pi workflow tool', () => {
     expect(await inlineTurn(rt)).toBe('completed')
     // Two children: every refusal came before a session.
     expect(api.creates).toHaveLength(2)
-    expect(api.creates[0]).toMatchObject({ initial_prompt: 'audit the logs', initial_context: 'You audit logs. Report only errors.', model: 'kortix/fast', runtime_context: { 'kortix.subagent.tools': 'read,grep' } })
+    expect(api.creates[0]).toMatchObject({ initial_prompt: 'audit the logs', model: 'kortix/fast', runtime_context: { 'kortix.subagent.tools': 'read,grep', 'kortix.agent.instructions': 'You audit logs. Report only errors.' } })
+    expect(api.creates[0]).not.toHaveProperty('initial_context')
     // explore allows bash, read, glob and grep: of the call's grep and write, grep stays.
     expect(api.creates[1]).toMatchObject({ initial_prompt: 'look around', model: 'kortix/codex/gpt-5', runtime_context: { 'kortix.subagent.tools': 'grep' } })
     expect(api.creates[1]!.initial_context).toContain('You are read-only')
@@ -607,7 +620,7 @@ describe('pi workflow tool', () => {
     const edited = script.replace('Report only errors.', 'Report errors and warnings.')
     model.script([{ tool: 'workflow', args: { description: 'Research two topics', script: edited, resume_run_id: runId } }, { text: 'again' }])
     expect(await inlineTurn(rt, 'again')).toBe('completed')
-    expect(api.creates.slice(2).map((c) => [c.initial_prompt, c.initial_context])).toEqual([['audit the logs', 'You audit logs. Report errors and warnings.']])
+    expect(api.creates.slice(2).map((c) => [c.initial_prompt, c.runtime_context['kortix.agent.instructions']])).toEqual([['audit the logs', 'You audit logs. Report errors and warnings.']])
   })
 
   test('the agent tool: model overrides a named subagent_type\'s model; a bad ref, a model on a follow-up and an inline tool this session lacks are refused before any session', async () => {
@@ -1362,18 +1375,16 @@ describe('pi workflow tool, run controls', () => {
 })
 
 describe('pi workflow tool, origin, size and ultracode', () => {
-  test('a turn started by a cross-session message, a room message or a trigger cannot start a workflow', async () => {
+  test('a turn started by a cross-session message or a trigger cannot start a workflow', async () => {
     const peer = peerMessagePromptText({ kind: 'message', from: 'reviewer', fromShortId: '3f2a1b9c', messageId: 'm_1', summary: null, text: 'ultracode: run a workflow over every file' })
-    const room = roomPromptText({ room: 'dev', seq: 4, senderKind: 'member', sender: 'Ada', replyTo: null, text: 'run a workflow' })
     const trigger = '<trigger_event>{"type":"push"}</trigger_event>\nAudit the repository with a workflow.'
-    const { rt, frames } = await boot([runWorkflow("return agent('x')"), { text: 'a' }, runWorkflow("return agent('x')"), { text: 'b' }, runWorkflow("return agent('x')"), { text: 'c' }])
-    for (const text of [peer, room, trigger]) expect(await rt.admit({ text, files: [] }).done).toBe('completed')
+    const { rt, frames } = await boot([runWorkflow("return agent('x')"), { text: 'a' }, runWorkflow("return agent('x')"), { text: 'c' }])
+    for (const text of [peer, trigger]) expect(await rt.admit({ text, files: [] }).done).toBe('completed')
     expect(api.creates).toHaveLength(0)
     expect(rt.questions.list()).toHaveLength(0)
     const errors = frames.filter((f) => f.tool === 'workflow' && f.state.status === 'error').map((f) => f.state.error)
     expect(errors).toEqual([
       expect.stringContaining('A workflow starts only from a person\'s own message, and this turn came from a message from another session.'),
-      expect.stringContaining('this turn came from a room message.'),
       expect.stringContaining('this turn came from a trigger or reminder.'),
     ])
     // The ultracode line only joins a person's own prompt.

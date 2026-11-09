@@ -13,12 +13,11 @@
  */
 
 import { and, eq, ne, or, sql } from 'drizzle-orm';
-import { sandboxTemplates, projects } from '@kortix/db';
+import { sandboxTemplates } from '@kortix/db';
 type DbSandboxTemplate = typeof sandboxTemplates.$inferSelect;
 import { db } from '../shared/db';
 import { DEFAULT_CPU, DEFAULT_DISK_GB, DEFAULT_MEMORY_GB } from './build-context';
 import { isWarmBuildSlug, templateSlugFromBuildSlug } from './build-slug';
-import { metadataMerge } from '../projects/lib/metadata-merge';
 import { isReapableTemplatePredecessor } from './predecessor-reap-policy';
 import { readManifest } from '../projects/triggers';
 import { resolveCommitSha, readRepoFile, type GitBackedProject } from '../projects/git';
@@ -45,6 +44,7 @@ export {
 import { getSandboxProvider } from './providers';
 import { BoundedMap } from '../shared/bounded-map';
 import { resolveSessionPlacement } from '../platform/services/sandbox-region';
+import { metadataMerge, projectsView, updateProjectRows } from '../workspaces/rows';
 
 /** Pretty resolved view used by both the boot path and the UI. */
 export interface ResolvedTemplate {
@@ -391,7 +391,8 @@ export async function refreshTemplateState(
 /**
  * Resolve a template's snapshot identity: derive the content-addressed
  * snapshot name from (Dockerfile bytes or FROM image, runtime fingerprint,
- * spec). Used by builder.ts to know what to ask the provider for.
+ * spec, the owning tenant and the template entrypoint for project templates).
+ * Used by builder.ts to know what to ask the provider for.
  */
 /**
  * The region a project's own image is built in: the region its sessions boot
@@ -412,9 +413,9 @@ export async function refreshTemplateState(
 export async function projectImageRegion(projectId: string): Promise<string | undefined> {
   if (!projectId) return undefined;
   const [row] = await db
-    .select({ metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   return (await resolveSessionPlacement(projectId, row?.metadata ?? null)).location;
 }
@@ -438,10 +439,20 @@ export async function computeTemplateIdentity(
    * NON-agent runtime layer (contentHash with the non-agent runtime fingerprint
    * in place of the full one). The builder swaps the agent ONLY when this matches
    * the predecessor's STORED swapKey (→ the agent binary is the sole delta);
-   * otherwise it does a full rebuild. Never ships stale opencode/CLI/entrypoint.
+   * otherwise it does a full rebuild. Never ships a stale CLI/entrypoint.
    */
   swapKey: string;
 }> {
+  // Trust boundary (KRTX-4469): the snapshot namespace is shared by every
+  // account, so an identity computed here names the image the CALLING project
+  // may delete or re-bake. The caller must have resolved this row for its own
+  // project; a row that names another project must never reach the provider
+  // under this project's identity of it.
+  if (!template.isShared && template.projectId && template.projectId !== project.projectId) {
+    throw new Error(
+      `Sandbox template "${template.slug}" belongs to a different project; refusing to compute its snapshot identity.`,
+    );
+  }
   const runtimeFingerprint = await currentRuntimeArtifactFingerprint();
   const { dockerfile: userDockerfile, commit } = await resolveUserDockerfile(project, template);
   const region = template.isShared
@@ -455,10 +466,22 @@ export async function computeTemplateIdentity(
     // In swapKey too: an agent swap patches its predecessor in the
     // predecessor's region, so a region change must rebuild instead.
     region,
+    // Tenant-scoped (KRTX-4469, CWE-639: one provider namespace serves every
+    // account): a project template's identity carries its projectId, so two
+    // projects that declare identical template content can never derive the
+    // same `kortix-tpl-<hash>` name and a project-scoped rebuild can never
+    // delete or re-bake a name another project derives. The shared default
+    // stays project-independent (one image serves every project).
+    projectId: template.isShared ? undefined : template.projectId ?? project.projectId,
+    // The builder bakes `template.entrypoint` at build time (builder.ts), so
+    // it must move the identity: an entrypoint change re-bakes under a new
+    // name instead of overwriting live image content. It moves swapKey too —
+    // an entrypoint change is not agent drift.
+    entrypoint: template.isShared ? undefined : template.entrypoint ?? undefined,
   };
   const hash = computeSnapshotHash({ ...hashInputs, runtimeFingerprint });
   // swapKey identifies EVERYTHING the agent-swap does NOT touch: the user image,
-  // the spec, and the NON-agent runtime layer (opencode/entrypoint/CLI/slack-cli/
+  // the spec, and the NON-agent runtime layer (entrypoint/CLI/slack-cli/
   // SDK/manifest-schema/layer+browser versions). It is computed by hashing
   // the same inputs with the non-agent runtime fingerprint in place of the full one.
   // Two identities with the SAME swapKey differ ONLY by the agent binary → the swap
@@ -634,17 +657,7 @@ async function reapPredecessorSnapshot(
     if (!config.KORTIX_SNAPSHOT_REAP_PREDECESSOR) return;
     if (!isReapableTemplatePredecessor(snapshotName)) return;
     // Still referenced by a DIFFERENT template row? Leave it shared.
-    const stillUsed = await db
-      .select({ id: sandboxTemplates.templateId })
-      .from(sandboxTemplates)
-      .where(
-        and(
-          eq(sandboxTemplates.providerSnapshotName, snapshotName),
-          ne(sandboxTemplates.templateId, templateId),
-        ),
-      )
-      .limit(1);
-    if (stillUsed.length > 0) return;
+    if (await templateSnapshotReferencedByAnotherRow(snapshotName, templateId)) return;
     await getSandboxProvider(provider).deleteSnapshot(snapshotName);
     console.log(`[snapshots] reaped superseded snapshot ${snapshotName} (provider=${provider})`);
   } catch (err) {
@@ -669,6 +682,32 @@ export async function recordTemplateFailed(
     })
     .where(eq(sandboxTemplates.templateId, templateId))
     .catch(() => {});
+}
+
+/**
+ * Is the snapshot name still referenced by a template row other than
+ * `exceptTemplateId`? Pre-fix identities were content-addressed once per
+ * provider namespace, so a legacy `kortix-tpl-<hash>` name can be the CURRENT
+ * name of rows in several projects. The name's latest provider image is the
+ * `contentHash`/snapshotName every such row still matches
+ * (KRTX-4469): deletion that skips this check deletes another tenant's
+ * image.
+ */
+export async function templateSnapshotReferencedByAnotherRow(
+  snapshotName: string,
+  exceptTemplateId: string | null = null,
+): Promise<boolean> {
+  const stillUsed = await db
+    .select({ id: sandboxTemplates.templateId })
+    .from(sandboxTemplates)
+    .where(
+      and(
+        eq(sandboxTemplates.providerSnapshotName, snapshotName),
+        exceptTemplateId ? ne(sandboxTemplates.templateId, exceptTemplateId) : sql`true`,
+      ),
+    )
+    .limit(1);
+  return stillUsed.length > 0;
 }
 
 // ─── Internals ────────────────────────────────────────────────────────────
@@ -787,9 +826,9 @@ async function syncManifestTemplatesForProject(project: GitBackedProject): Promi
     const validDefault =
       wantedDefault && tomlTemplates.some((t) => t.slug === wantedDefault) ? wantedDefault : null;
     const [projectRow] = await db
-      .select({ metadata: projects.metadata })
-      .from(projects)
-      .where(eq(projects.projectId, project.projectId))
+      .select({ metadata: projectsView.metadata })
+      .from(projectsView)
+      .where(eq(projectsView.projectId, project.projectId))
       .limit(1);
     const meta = (projectRow?.metadata ?? {}) as Record<string, unknown>;
     const current = typeof meta.default_sandbox_slug === 'string' ? meta.default_sandbox_slug : null;
@@ -797,15 +836,12 @@ async function syncManifestTemplatesForProject(project: GitBackedProject): Promi
       // FIX-J: SQL-side atomic merge of ONLY `default_sandbox_slug` (set / delete)
       // so this manifest-sync write can't revert a routing pin written between the
       // read above and this write.
-      await db
-        .update(projects)
-        .set({
-          metadata: validDefault
-            ? metadataMerge({ default_sandbox_slug: validDefault })
-            : metadataMerge({}, ['default_sandbox_slug']),
-          updatedAt: new Date(),
-        })
-        .where(eq(projects.projectId, project.projectId));
+      await updateProjectRows(eq(projectsView.projectId, project.projectId), {
+        metadata: validDefault
+          ? metadataMerge({ default_sandbox_slug: validDefault })
+          : metadataMerge({}, ['default_sandbox_slug']),
+        updatedAt: new Date(),
+      });
     }
   } catch (err) {
     console.warn(

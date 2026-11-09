@@ -1,3 +1,4 @@
+import { asLegacyWorkspaceRoute } from '@kortix/shared/workspace-routes';
 import {
   isRepositoryDisconnectedError,
   repositoryDisconnectedBody,
@@ -25,9 +26,11 @@ import { resolvePrefixEscape } from './sandbox-proxy/prefix-escape';
 import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
+  DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogDecision,
   deadCredentialLogKey,
   isDeadCredential,
+  isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
@@ -331,8 +334,8 @@ function handleHttpException(
   // Better Stack groups on the message string, so `-> 403 [HTTPException]`
   // collapsed every possible denial into one unactionable bucket: 2,338
   // boot-timeline 403s over 7 days never revealed that the rejecting branch
-  // was `enforceTokenProjectScope`'s default-deny (see
-  // SESSION_BOUND_PLATFORM_SINKS in middleware/auth.ts). Bounded at 200 chars
+  // was `enforceTokenProjectScope`'s default-deny (the route had no binding in
+  // middleware/workspace-binding.ts). Bounded at 200 chars
   // so a long upstream message cannot shard the grouping without limit.
   const reason = (err.message ?? '').slice(0, 200);
   // SEVERITY FOLLOWS THE CAUSE. A 4xx here is the gate working: an expired
@@ -360,7 +363,14 @@ function handleHttpException(
   // (first per window per normalized key, best-effort count in `suppressed`), never
   // the response; see shared/dead-credential-log.ts. Every other HTTPException
   // keeps its per-request line.
-  if (isDeadCredential(err)) {
+  // The invalid-or-expired-token 401 shares that treatment (KRTX-4442): one
+  // external client retrying an expired JWT put 78 warn lines on
+  // GET /v1/auth/user in one hour, every one a per-request line of the same
+  // signal. The credential CAN come back, so the response keeps its global
+  // body with no session_token_revoked code — only the line is throttled,
+  // first per window per normalized key, next line carrying `suppressed`.
+  // auth-audit's auditLoginFail at each throw site keeps exact accounting.
+  if (isDeadCredential(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
@@ -368,7 +378,14 @@ function handleHttpException(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );
-    if (log) appLogger.warn(line, { ...fields, suppressed });
+    // SEVERITY FOLLOWS THE VOLUME (KRTX-4454). The steady state of this class
+    // is designed churn — every session stop leaves its box probing with a
+    // dead credential, forever — so a flat warn level keeps a 0-baseline warn
+    // pattern alive that re-trips the infra-sweep's new-pattern detector every
+    // time. The pending count the decision just measured separates churn from
+    // a caller ignoring the typed stop code: under the band ships at info
+    // (still queryable, same grouping), above it the line stays warn.
+    if (log) appLogger[suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED ? 'warn' : 'info'](line, { ...fields, suppressed });
   } else {
     appLogger[level](line, fields);
   }
@@ -451,7 +468,7 @@ function handleDatabaseOrUnknownError(
     if (
       databaseError.pgCode === '57014'
       && method === 'GET'
-      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions)\/?$/.test(path)
+      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions)\/?$/.test(asLegacyWorkspaceRoute(path))
     ) {
       appLogger.warn(`${method} ${path} -> 503 [gateway-analytics-timeout]`, {
         method, path, pgCode: databaseError.pgCode,

@@ -307,6 +307,60 @@
       "slack": {
         "status": "skipped"
       }
+    },
+    "2026-W45": {
+      "week": "2026-W45",
+      "start": "2026-11-02T00:00:00.000Z",
+      "end": "2026-11-09T00:00:00.000Z",
+      "releases": [
+        "v0.15.1",
+        "v0.15.0",
+        "v0.14.19",
+        "v0.14.18",
+        "v0.14.17",
+        "v0.14.16",
+        "v0.14.15"
+      ],
+      "highlights": [
+        {
+          "text": "Agent questions and permission asks no longer block a session: after a short wait they park in Review, and the answer arrives as a new message.",
+          "tags": [
+            "v0.15.0"
+          ]
+        },
+        {
+          "text": "Slack-style Spaces make every message a thread, a router hands work to agents, and proactive watchers speak up only when it matters.",
+          "tags": [
+            "v0.15.0",
+            "v0.15.1"
+          ]
+        },
+        {
+          "text": "Agents can join Google Meet and any web call with their voice, and they can speak into and transcribe audio files.",
+          "tags": [
+            "v0.15.0",
+            "v0.14.19"
+          ]
+        },
+        {
+          "text": "Goals now run on the server: create, pause, resume, restart and answer them, with role-based brief templates and a Goals page.",
+          "tags": [
+            "v0.15.0",
+            "v0.15.1"
+          ]
+        },
+        {
+          "text": "Watcher Apps run a 24/7 watcher in one function, with an event log, wiring tests, health on the App page, and a repair agent when one goes silent.",
+          "tags": [
+            "v0.15.0",
+            "v0.15.1"
+          ]
+        }
+      ],
+      "generated_at": "2026-11-09T06:06:24.232Z",
+      "slack": {
+        "status": "skipped"
+      }
     }
   }
 }

@@ -141,14 +141,14 @@ export function buildServer(
   // (KRTX-4528). A request the shared bucket refuses never reaches the API, so
   // its credential stays unvalidated until a later admitted request does; the
   // refund of the shared slot happens there, in `validated()`, not here.
-  const validatedIfReal = (token: string, principal: AuthedPrincipal | undefined) => {
+  const validatedIfReal = (token: string, principal: AuthedPrincipal | null | undefined) => {
     if (principal) rateLimit.validated(token);
   };
   const gateway = createGateway(
     {
       authenticate: async (token) => {
         const principal = await api.authenticate(token);
-        validatedIfReal(token, principal ?? undefined);
+        validatedIfReal(token, principal);
         return principal;
       },
       // Combined authentication + budget gate. Billing runs after model resolution.

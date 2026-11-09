@@ -52,7 +52,9 @@ interface CliResult {
 }
 
 let server: ReturnType<typeof Bun.serve> | null = null;
+let bigServer: ReturnType<typeof Bun.serve> | null = null;
 let apiPort = 0;
+let bigApiPort = 0;
 
 function startApi(): void {
   server = Bun.serve({
@@ -73,8 +75,36 @@ function startApi(): void {
   apiPort = server.port ?? 0;
 }
 
+/** A person with more memberships than any machine consumer's output budget. */
+const MANY_ACCOUNTS = 400;
+const ME_MANY: MeShape = {
+  ...ME,
+  accounts: Array.from({ length: MANY_ACCOUNTS }, (_, i) => ({
+    account_id: `aaaaaaaa-${String(i).padStart(4, '0')}-4111-8111-111111111111`,
+    slug: `workspace-${i}`,
+    name: `workspace number ${i} with a fairly long descriptive name for realism`,
+    role: 'member',
+  })),
+};
+
+function startBigApi(): void {
+  bigServer = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      if (req.headers.get('authorization') !== `Bearer ${TOKEN}`) {
+        return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      }
+      if (new URL(req.url).pathname.endsWith('/me')) {
+        return Response.json(ME_MANY);
+      }
+      return Response.json({ error: 'not found' }, { status: 404 });
+    },
+  });
+  bigApiPort = bigServer.port ?? 0;
+}
+
 /** A throwaway HOME + multi-host config pointing `test` at the local API. */
-function seedConfig(token: string): { dir: string; config: string } {
+function seedConfig(token: string, port: number = apiPort): { dir: string; config: string } {
   const dir = mkdtempSync(join(tmpdir(), 'kortix-whoami-json-'));
   const config = join(dir, 'config.json');
   writeFileSync(
@@ -83,7 +113,7 @@ function seedConfig(token: string): { dir: string; config: string } {
       active: HOST_NAME,
       hosts: {
         [HOST_NAME]: {
-          url: `http://127.0.0.1:${apiPort}/v1`,
+          url: `http://127.0.0.1:${port}/v1`,
           token,
           user_id: ME.user_id,
           user_email: EMAIL,
@@ -147,18 +177,20 @@ describe('machine-readable output (--json) is pure JSON on stdout, silent on std
 
   beforeAll(async () => {
     startApi();
+    startBigApi();
     // One throwaway config per case: the cases run concurrently and must not
     // share a directory one of them would clean up under another.
-    const cases: Array<[string, string[], string]> = [
-      ['whoami --json', ['whoami', '--json'], TOKEN],
-      ['whoami --host test --json', ['whoami', '--host', HOST_NAME, '--json'], TOKEN],
-      ['accounts ls --json', ['accounts', 'ls', '--json'], TOKEN],
-      ['whoami (human)', ['whoami'], TOKEN],
-      ['whoami --json (revoked token)', ['whoami', '--json'], REVOKED_TOKEN],
+    const cases: Array<[string, string[], string, number | undefined]> = [
+      ['whoami --json', ['whoami', '--json'], TOKEN, undefined],
+      ['whoami --host test --json', ['whoami', '--host', HOST_NAME, '--json'], TOKEN, undefined],
+      ['accounts ls --json', ['accounts', 'ls', '--json'], TOKEN, undefined],
+      ['whoami (human)', ['whoami'], TOKEN, undefined],
+      ['whoami --json (revoked token)', ['whoami', '--json'], REVOKED_TOKEN, undefined],
+      ['whoami --json (many accounts)', ['whoami', '--json'], TOKEN, bigApiPort],
     ];
     await Promise.all(
-      cases.map(async ([name, args, token]) => {
-        const { dir, config } = seedConfig(token);
+      cases.map(async ([name, args, token, port]) => {
+        const { dir, config } = seedConfig(token, port);
         dirs.push(dir);
         results.set(name, await runCli(args, dir, config));
       }),
@@ -167,6 +199,7 @@ describe('machine-readable output (--json) is pure JSON on stdout, silent on std
 
   afterAll(() => {
     server?.stop(true);
+    bigServer?.stop(true);
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
   });
 
@@ -181,7 +214,25 @@ describe('machine-readable output (--json) is pure JSON on stdout, silent on std
     expect(code).toBe(0);
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     expect(parsed.user_email).toBe(EMAIL);
-    expect(Array.isArray(parsed.accounts)).toBe(true);
+    // The identity carries the ACTIVE membership and the count, never the
+    // whole list: the list is unbounded and is `accounts ls --json`'s job.
+    expect(parsed.account).toMatchObject({ account_id: ME.accounts[0]!.account_id });
+    expect(parsed.accounts_count).toBe(ME.accounts.length);
+    expect(parsed.accounts).toBeUndefined();
+  });
+
+  test('whoami --json: a user with many accounts still arrives whole, under the kortix MCP tool result budget', () => {
+    // The MCP `kortix` tool cuts CLI stdout at 45 000 characters; a cut
+    // `--json` output loses its `json:` value (release gate MCP-6, run
+    // 42716922285). The identity payload must stay far under it no matter how
+    // many workspaces the person belongs to.
+    const { code, stdout, stderr } = get('whoami --json (many accounts)');
+    expect(code).toBe(0);
+    expect(stderr).toBe('');
+    expect(stdout.length).toBeLessThan(30_000);
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    expect(parsed.accounts_count).toBe(MANY_ACCOUNTS);
+    expect(JSON.stringify(parsed).length).toBeLessThan(30_000);
   });
 
   test('whoami --json: stderr is empty', () => {

@@ -12,6 +12,8 @@ const ACTIONS = ['me', 'who_can_grant'] as const
 interface Me {
   user_id?: string
   email?: string
+  /** The active membership. CLI ≥ the whoami payload change emits this; older CLIs emit `accounts`. */
+  account?: { account_id?: string; name?: string; role?: string; account_role?: string }
   accounts?: Array<{ account_id?: string; name?: string; role?: string; account_role?: string }>
 }
 
@@ -20,7 +22,12 @@ async function me(context: PlatformToolContext) {
   if ('error' in read) return fail(TOOL, 'me', 'Could not read your access', read.error, context)
   const roster = (await projectRoster(context)) ?? []
   const self = roster.find((member) => member.user_id === read.value.user_id)
-  const accountRole = self?.account_role ?? read.value.accounts?.[0]?.role ?? read.value.accounts?.[0]?.account_role ?? null
+  // The active membership's role first; the accounts-array head is the older
+  // CLI shape (the array is no longer emitted once the payload must stay small).
+  const accountRole = self?.account_role
+    ?? read.value.account?.account_role ?? read.value.account?.role
+    ?? read.value.accounts?.[0]?.account_role ?? read.value.accounts?.[0]?.role
+    ?? null
   // One workspace role on the owner > admin > manager > member ladder.
   const role = self ? workspaceRole(self) : accountRole === 'owner' || accountRole === 'admin' ? accountRole : null
   const manages = managesWorkspace(role)

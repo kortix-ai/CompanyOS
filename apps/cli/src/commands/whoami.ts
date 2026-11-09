@@ -160,7 +160,14 @@ function whoamiJson(
     workspace_id: boundWorkspaceId(me) ?? def?.project_id ?? null,
     account_id: active?.account_id ?? auth.account_id ?? null,
     account: active ?? null,
-    accounts: me.accounts,
+    // The count, never the list: a person's membership list is unbounded (the
+    // workspaces migration gives every team a workspace), and a machine
+    // consumer of `whoami --json` needs the identity, not every membership —
+    // `accounts ls --json` lists them. The full array made the payload exceed
+    // the kortix MCP tool's 45 000-character stdout cap, which cut it into a
+    // string and broke every `json:` consumer (release gate MCP-6, run
+    // 42716922285).
+    accounts_count: me.accounts.length,
     token_context: me.token_context ?? null,
     default_project: def,
   });

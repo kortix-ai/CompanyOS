@@ -35,6 +35,7 @@ mock.module('./hosting', () => ({
     }
     async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
     async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
+    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');
@@ -88,6 +89,10 @@ const USER_ID = '00000000-0000-4000-a000-00000000f105';
 const PROVIDER = 'platinum';
 
 async function cleanup(): Promise<void> {
+  // A setAppScale leaves a background reconcile running (fire-and-forget by
+  // design). Settle it before the cascade below, or the reconcile's in-flight
+  // app_runtimes insert deadlocks against this delete (40P01, release gate).
+  await machines.settleAppReconciles(APP_ID);
   await db.update(apps).set({ activeDeploymentId: null }).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(apps).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(appArtifacts).where(eq(appArtifacts.projectId, PROJECT_ID));

@@ -56,11 +56,8 @@ import {
 import { modelInDefaultView } from '@kortix/sdk';
 import { isClaudeSubscriptionModel, isSubscriptionModel, pickerModelName, shouldShowFreeTag } from './model-tags';
 import { useModelConnectionGate } from './use-model-connection-gate';
-import {
-  ReasoningEffortPane,
-  effortLabel,
-  reasoningEffortChoices,
-} from '../composer/reasoning-effort-selector';
+import { ModelPickerPanel } from './model-picker-panel';
+import { effortLabel, reasoningEffortChoices } from '../composer/reasoning-effort-selector';
 
 // Re-export for consumers
 export { Tag };
@@ -545,27 +542,33 @@ export function ModelSelector({
   // `enabled` stamping `/model-picker` gives gateway catalogs. See
   // modelInDefaultView.
   const pickerModelStore = useModelStore(models);
-  const visibleModels = useMemo(() => {
-    const q = search.toLowerCase();
-    return models
-      .filter(
-        (m) =>
-          m.enabled !== false &&
-          // Claude subscription models appear once the member signed in to Claude
-          // (Customize → Models → Anthropic), like ChatGPT subscription models.
-          !(isClaudeSubscriptionModel(m) && m.available === false) &&
-          (!q ||
-            (m.modelName || '').toLowerCase().includes(q) ||
-            (m.modelID || '').toLowerCase().includes(q) ||
-            (m.providerName || '').toLowerCase().includes(q)) &&
-          modelInDefaultView(m, {
-            search,
-            isStoreVisible: pickerModelStore.isVisible,
-            selected: selectedModel,
-          }),
-      )
-      .sort((a, b) => a.modelName.localeCompare(b.modelName));
-  }, [models, search, pickerModelStore.isVisible, selectedModel]);
+  const filterModels = useCallback(
+    (query: string) => {
+      const q = query.toLowerCase();
+      return models
+        .filter(
+          (m) =>
+            m.enabled !== false &&
+            // Claude subscription models appear once the member signed in to Claude
+            // (Customize → Models → Anthropic), like ChatGPT subscription models.
+            !(isClaudeSubscriptionModel(m) && m.available === false) &&
+            (!q ||
+              (m.modelName || '').toLowerCase().includes(q) ||
+              (m.modelID || '').toLowerCase().includes(q) ||
+              (m.providerName || '').toLowerCase().includes(q)) &&
+            modelInDefaultView(m, {
+              search: query,
+              isStoreVisible: pickerModelStore.isVisible,
+              selected: selectedModel,
+            }),
+        )
+        .sort((a, b) => a.modelName.localeCompare(b.modelName));
+    },
+    [models, pickerModelStore.isVisible, selectedModel],
+  );
+  const visibleModels = useMemo(() => filterModels(search), [filterModels, search]);
+  // The chip popover's rail and tabs read the unsearched list.
+  const browseModels = useMemo(() => filterModels(''), [filterModels]);
 
   /** Is there anything to pick AT ALL, ignoring the search box? The empty
    *  state below branches on this: "no models match your search" and "you have
@@ -699,6 +702,71 @@ export function ModelSelector({
     openUpgrade();
   }, [openUpgrade, setOpen]);
 
+  const searchRight =
+    canManageModels && canConnectProvider ? (
+    <div className="-mr-0.5 flex shrink-0 items-center gap-0.5">
+      <Hint label={tModel('connectProvider')} side="top" className="z-50">
+        <button
+          type="button"
+          aria-label={tModel('addProvider')}
+          onClick={() => handleOpenProviderModal('providers')}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+        >
+          <Plus className="size-4" />
+        </button>
+      </Hint>
+      <Hint label={tModel('manageModels')} side="top" className="z-50">
+        <button
+          type="button"
+          aria-label={tModel('manageModels')}
+          onClick={() => handleOpenProviderModal('models')}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+        >
+          <SlidersHorizontal className="size-4" />
+        </button>
+      </Hint>
+    </div>
+    ) : undefined;
+
+  const searchEmptyState = (
+    <ModelSearchEmpty
+      search={search}
+      modelCount={models.filter((model) => model.enabled !== false && !(isClaudeSubscriptionModel(model) && model.available === false)).length}
+      onClear={() => setSearch('')}
+      onUpgrade={showUpgradeOption ? handleUpgrade : undefined}
+    />
+  );
+
+  const noModelsState = (
+    <div className="px-3 py-5 text-center">
+      <div className="text-foreground text-sm font-medium">{tModel('empty.title')}</div>
+      <p className="text-muted-foreground mx-auto mt-1 max-w-[220px] text-xs leading-5">
+        {showUpgradeOption
+          ? tModel('empty.upgradeDescription')
+          : tModel('empty.description')}
+      </p>
+      <div className="mt-4 flex items-center justify-center gap-2">
+        {showUpgradeOption && (
+          <Button type="button" size="xs" onClick={handleUpgrade}>
+            <CreditCard className="size-3.5" />
+            {tModel('upgrade')}
+          </Button>
+        )}
+        {canConnectProvider && (
+          <Button
+            type="button"
+            size="xs"
+            variant={showUpgradeOption ? 'outline' : 'default'}
+            onClick={() => handleOpenProviderModal('providers')}
+          >
+            <KeyRound className="size-3.5" />
+            {tModel('connectProvider')}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
   const inline = appearance === 'inline';
   const listBody = (
     <>
@@ -707,32 +775,7 @@ export function ModelSelector({
         placeholder={tModel('search')}
         value={search}
         onValueChange={setSearch}
-        rightElement={
-          canManageModels && canConnectProvider ? (
-          <div className="-mr-0.5 flex shrink-0 items-center gap-0.5">
-            <Hint label={tModel('connectProvider')} side="top" className="z-50">
-              <button
-                type="button"
-                aria-label={tModel('addProvider')}
-                onClick={() => handleOpenProviderModal('providers')}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-              >
-                <Plus className="size-4" />
-              </button>
-            </Hint>
-            <Hint label={tModel('manageModels')} side="top" className="z-50">
-              <button
-                type="button"
-                aria-label={tModel('manageModels')}
-                onClick={() => handleOpenProviderModal('models')}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-              >
-                <SlidersHorizontal className="size-4" />
-              </button>
-            </Hint>
-          </div>
-          ) : undefined
-        }
+        rightElement={searchRight}
       />
 
       {/* Same condition as the group headings below: with one group the
@@ -883,40 +926,9 @@ export function ModelSelector({
              filtered by `search`, so the branch below could not tell the
              two apart: typing "zzz" with 40 models connected showed
              "No models available" and a Connect-provider CTA. */
-          <ModelSearchEmpty
-            search={search}
-            modelCount={models.filter((model) => model.enabled !== false && !(isClaudeSubscriptionModel(model) && model.available === false)).length}
-            onClear={() => setSearch('')}
-            onUpgrade={showUpgradeOption ? handleUpgrade : undefined}
-          />
+          searchEmptyState
         ) : (
-          <div className="px-3 py-5 text-center">
-            <div className="text-foreground text-sm font-medium">{tModel('empty.title')}</div>
-            <p className="text-muted-foreground mx-auto mt-1 max-w-[220px] text-xs leading-5">
-              {showUpgradeOption
-                ? tModel('empty.upgradeDescription')
-                : tModel('empty.description')}
-            </p>
-            <div className="mt-4 flex items-center justify-center gap-2">
-              {showUpgradeOption && (
-                <Button type="button" size="xs" onClick={handleUpgrade}>
-                  <CreditCard className="size-3.5" />
-                  {tModel('upgrade')}
-                </Button>
-              )}
-              {canConnectProvider && (
-                <Button
-                  type="button"
-                  size="xs"
-                  variant={showUpgradeOption ? 'outline' : 'default'}
-                  onClick={() => handleOpenProviderModal('providers')}
-                >
-                  <KeyRound className="size-3.5" />
-                  {tModel('connectProvider')}
-                </Button>
-              )}
-            </div>
-          </div>
+          noModelsState
         )}
       </CommandList>
     </>
@@ -1004,26 +1016,35 @@ export function ModelSelector({
           sideOffset={8}
           className={
             showEffort
-              ? 'w-[min(29rem,calc(100vw-1.5rem))]'
-              : 'w-[min(300px,calc(100vw-1.5rem))]'
+              ? 'w-[min(38rem,calc(100vw-1.5rem))]'
+              : 'w-[min(28rem,calc(100vw-1.5rem))]'
           }
         >
-          {showEffort ? (
-            /* Side by side from `sm`; stacked under the list on a phone, where
-               two columns would leave each too narrow to read a model name. */
-            <div className="flex min-h-0 flex-col sm:flex-row">
-              <div className="flex min-w-0 flex-1 flex-col">{listBody}</div>
-              <ReasoningEffortPane
-                choices={effortChoices}
-                selectedVariant={reasoning?.selectedVariant}
-                onVariantChange={handleEffortChange}
-                modelName={current ? pickerModelName(current) : undefined}
-                className="border-t sm:w-40 sm:shrink-0 sm:border-t-0 sm:border-l"
-              />
-            </div>
-          ) : (
-            listBody
-          )}
+          <ModelPickerPanel
+            browseModels={browseModels}
+            searchModels={visibleModels}
+            search={search}
+            onSearchChange={setSearch}
+            searchRight={searchRight}
+            selected={availableSelectedModel ?? null}
+            onPick={handleSelect}
+            isFavorite={pickerModelStore.isFavorite}
+            setFavorite={pickerModelStore.setFavorite}
+            loading={modelsLoading || entitlementsPending}
+            emptyState={noModelsState}
+            searchEmpty={searchEmptyState}
+            onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
+            connectLabel={tPooled('connect')}
+            effort={
+              showEffort
+                ? {
+                    choices: effortChoices,
+                    selectedVariant: reasoning?.selectedVariant,
+                    onChange: handleEffortChange,
+                  }
+                : undefined
+            }
+          />
         </CommandPopoverContent>
       </CommandPopover>
     </>

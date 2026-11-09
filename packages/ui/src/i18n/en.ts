@@ -1445,7 +1445,14 @@ const catalog = {
       "title": "No models available",
       "description": "Connect your own provider to start using this session.",
       "upgradeDescription": "Upgrade or connect your own provider to start using this session."
-    }
+    },
+    "favorites": "Favorites",
+    "otherModels": "Other models",
+    "favoritesEmpty": "Star a model to keep it here.",
+    "addFavorite": "Add {model} to favorites",
+    "removeFavorite": "Remove {model} from favorites",
+    "thinking": "Thinking",
+    "groups": "Model groups"
   },
   "sessionScope": {
     "resetDefault": "Reset to default",

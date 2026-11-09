@@ -150,3 +150,55 @@ export function buildPickerSections(
     models: group.models,
   }));
 }
+
+/**
+ * The picker's left rail: Favorites, then where a model comes from. Kortix
+ * holds the managed set, ChatGPT the models billed to a connected ChatGPT
+ * plan, Other every provider the workspace connected itself.
+ */
+export type PickerTabId = 'favorites' | 'kortix' | 'chatgpt' | 'other';
+
+export function pickerTabOf(
+  model: Pick<FlatModel, 'providerID' | 'modelID' | 'provider'>,
+): Exclude<PickerTabId, 'favorites'> {
+  if (model.provider === 'codex' || model.modelID.startsWith('codex/')) return 'chatgpt';
+  return pickerGroupId(model as FlatModel) === 'kortix' ? 'kortix' : 'other';
+}
+
+/**
+ * The rail's tabs, in order. Favorites is always first: it is where a star
+ * lands, and its empty state says how to fill it. A source tab shows only
+ * when it holds a model, except ChatGPT, which also shows when the member can
+ * connect a ChatGPT plan from it.
+ */
+export function pickerTabs(
+  models: readonly Pick<FlatModel, 'providerID' | 'modelID' | 'provider'>[],
+  opts: { canConnectChatGpt?: boolean } = {},
+): PickerTabId[] {
+  const present = new Set(models.map(pickerTabOf));
+  const tabs: PickerTabId[] = ['favorites'];
+  if (present.has('kortix')) tabs.push('kortix');
+  if (present.has('chatgpt') || opts.canConnectChatGpt) tabs.push('chatgpt');
+  if (present.has('other')) tabs.push('other');
+  return tabs;
+}
+
+/**
+ * The tab the picker opens on: Favorites when the current model is starred,
+ * else the tab that holds the current model, else Favorites when anything is
+ * starred, else the first source tab.
+ */
+export function initialPickerTab(input: {
+  tabs: readonly PickerTabId[];
+  selected: Pick<FlatModel, 'providerID' | 'modelID' | 'provider'> | null | undefined;
+  selectedIsFavorite: boolean;
+  hasFavorites: boolean;
+}): PickerTabId {
+  if (input.selected && input.selectedIsFavorite) return 'favorites';
+  if (input.selected) {
+    const tab = pickerTabOf(input.selected);
+    if (input.tabs.includes(tab)) return tab;
+  }
+  if (input.hasFavorites) return 'favorites';
+  return input.tabs.find((t) => t !== 'favorites') ?? 'favorites';
+}

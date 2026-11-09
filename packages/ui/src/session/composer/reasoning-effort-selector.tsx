@@ -223,6 +223,8 @@ interface ReasoningEffortPaneProps {
   onVariantChange: (variant: string | null) => void;
   /** The model the levels belong to, named in the pane's header. */
   modelName?: string;
+  /** The pane's heading. Defaults to "Thinking effort". */
+  title?: string;
   className?: string;
 }
 
@@ -241,6 +243,7 @@ export function ReasoningEffortPane({
   selectedVariant,
   onVariantChange,
   modelName,
+  title,
   className,
 }: ReasoningEffortPaneProps) {
   const t = useTranslations('threads');
@@ -268,7 +271,7 @@ export function ReasoningEffortPane({
   return (
     <div className={cn('flex min-w-0 flex-col', className)}>
       <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3 text-sm">
-        <span className="text-muted-foreground shrink-0">{t('thinkingEffort')}</span>
+        <span className="text-muted-foreground shrink-0">{title ?? t('thinkingEffort')}</span>
         {modelName ? (
           <span className="text-muted-foreground min-w-0 truncate text-xs">{modelName}</span>
         ) : null}

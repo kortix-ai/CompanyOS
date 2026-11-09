@@ -2047,7 +2047,14 @@
       "title": "Nessun modello disponibile",
       "description": "Connetti un provider personale per iniziare a usare questa sessione.",
       "upgradeDescription": "Effettua l’upgrade o connetti un provider personale per iniziare a usare questa sessione."
-    }
+    },
+    "favorites": "Preferiti",
+    "otherModels": "Altri modelli",
+    "favoritesEmpty": "Aggiungi una stella a un modello per tenerlo qui.",
+    "addFavorite": "Aggiungi {model} ai preferiti",
+    "removeFavorite": "Rimuovi {model} dai preferiti",
+    "thinking": "Ragionamento",
+    "groups": "Gruppi di modelli"
   },
   "sessionScope": {
     "resetDefault": "Ripristina predefinito",

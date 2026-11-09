@@ -2061,11 +2061,11 @@ export const useSyncStore = create<SyncState>()((set, get) => ({
 			for (const info of incoming) {
 				if (info.role !== "assistant" || !isStubShaped(info.id)) continue;
 				if (!(info as { error?: unknown }).error) continue;
-			if (sessionScratch.get(sessionID)?.stubAssistantIds.has(info.id)) continue;
-			trackStub(sessionID, info.id, info.parentID ?? null);
-		}
+				if (sessionScratch.get(sessionID)?.stubAssistantIds.has(info.id)) continue;
+				trackStub(sessionID, info.id, info.parentID ?? null);
+			}
 
-		const trackedStubIds = sessionScratch.get(sessionID)?.stubAssistantIds;
+			const trackedStubIds = sessionScratch.get(sessionID)?.stubAssistantIds;
 			/** Stubs held back from the merge below until their parent turn is
 			 *  known (an optimistic parent may be superseded by the server's own
 			 *  copy in this very snapshot). */

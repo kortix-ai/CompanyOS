@@ -395,6 +395,24 @@ function joinUrl(base: string, path: string): string {
 }
 
 /**
+ * The first path placeholder the args leave empty: a missing, null, or
+ * whitespace-only string value where the template needs one. Null when
+ * every placeholder has a usable value. Callers deny the call with this name
+ * so the provider never sees a truncated URL (KRTX-4539).
+ */
+export function missingPathArg(
+  pathTemplate: string,
+  args: Record<string, unknown> | null | undefined,
+): string | null {
+  for (const match of pathTemplate.matchAll(/\{([^}]+)\}/g)) {
+    const name = match[1]!.trim();
+    const value = args?.[name];
+    if (typeof value === 'string' ? value.trim() === '' : value == null) return name;
+  }
+  return null;
+}
+
+/**
  * Build an HTTP request for openapi/http bindings. Path params are substituted
  * into the template; the rest are routed by hint (query/header) or, lacking a
  * hint, into the body for body-methods else the query string. `args.body`

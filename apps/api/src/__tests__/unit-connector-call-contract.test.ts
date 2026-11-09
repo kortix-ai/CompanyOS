@@ -8,7 +8,7 @@
  *   - the upstream deadline answers `upstream_timeout` before any client gives up.
  * Fake deps, no database.
  */
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import {
   type GatewayAction,
   type GatewayConnector,
@@ -215,6 +215,60 @@ describe('connectorErrorHttpStatus()', () => {
     expect(connectorErrorHttpStatus('upstream_502', 502)).toBe(500);
     expect(connectorErrorHttpStatus('upstream_timeout: x')).toBe(500);
     expect(connectorErrorHttpStatus('computer_offline: x', 429)).toBe(409);
+  });
+});
+
+describe('handleCall() path arguments', () => {
+  // KRTX-4539: an empty path argument went out as an empty URL segment and the
+  // provider answered a misleading 404 for the truncated URL (Stripe: 101
+  // `GET /v1/payment_intents/` "Unrecognized request URL" calls in one burst).
+  const fetches: string[] = [];
+  const ARGS_ACTION = action({ kind: 'openapi', method: 'GET', path: '/intents/{intentId}', server: 'https://crm.example.test' });
+
+  beforeEach(() => {
+    fetches.length = 0;
+  });
+
+  const inputWithArgs = (args: Record<string, unknown>) => ({ ...INPUT, args });
+  // Like gatewayDeps(), but the fake fetch records the URL it was asked for.
+  const trackedDeps = (overrides: Partial<GatewayDeps> = {}) =>
+    gatewayDeps(async () => { throw new Error('untracked fetch'); }, {
+      fetchImpl: (async (url: string) => {
+        fetches.push(new URL(url).pathname);
+        return { status: 200, ok: true, text: async () => '{"id":"c1"}', headers: new Headers() };
+      }),
+      ...overrides,
+    });
+
+  test.each([
+    ['empty string', { intentId: '' }],
+    ['argument absent', {}],
+    ['whitespace only', { intentId: '  ' }],
+  ])('path argument that is %s → denied before the upstream, message names it', async (_case, args) => {
+    const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs(args));
+    expect(res).toMatchObject({ status: 'denied', reason: 'invalid_args' });
+    if (res.status !== 'denied') return;
+    expect(res.message).toContain('intentId');
+    expect(fetches).toEqual([]);
+  });
+
+  test('a non-empty path argument still calls the upstream with the encoded value', async () => {
+    const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs({ intentId: 'pi_1' }));
+    expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
+    expect(fetches).toEqual(['/intents/pi_1']);
+  });
+
+  test('two placeholders: the first empty one is named; both filled go through', async () => {
+    const deps = () => trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/a/{xId}/b/{yId}', server: 'https://crm.example.test' }) });
+    const res = await handleCall(deps(), inputWithArgs({ xId: '1' }));
+    expect(res).toMatchObject({ status: 'denied', reason: 'invalid_args' });
+    if (res.status !== 'denied') return;
+    expect(res.message).toContain('yId');
+    expect(fetches).toEqual([]);
+
+    const ok = await handleCall(deps(), inputWithArgs({ xId: '1', yId: '2' }));
+    expect(ok.status).toBe('ok');
+    expect(fetches).toEqual(['/a/1/b/2']);
   });
 });
 

@@ -113,38 +113,28 @@ type WorkspaceKeyWire = z.infer<typeof WorkspaceKeySchema>;
 const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
 
 /** The workspace in the path and its account, or the refusal to answer with. */
-/** The declared error responses of the three key routes: everything the shared workspace check may answer with. */
-type WorkspaceRefusal = {
-  ok: false;
-  res: Extract<
-    | RouteConfigToTypedResponse<typeof keysListRoute>
-    | RouteConfigToTypedResponse<typeof keysMintRoute>
-    | RouteConfigToTypedResponse<typeof keysRevokeRoute>,
-    { status: 403 | 404 | 409 }
-  >;
-};
+/** The workspace refusal: the status and body the caller renders. Per-status
+ *  shape, so each call site `c.json`s a declared response of its route. */
+type WorkspaceRefusal =
+  | { ok: false; status: 409; body: { error: string; code: string } }
+  | { ok: false; status: 404; body: { error: string } }
+  | { ok: false; status: 403; body: { error: string } };
 async function keysWorkspace(
   c: Context<AppEnv>,
 ): Promise<{ ok: true; workspaceId: string; accountId: string } | WorkspaceRefusal> {
   const userId = c.get('userId') as string;
   const binding = await pathTokenBinding(c);
   if (binding.kind === 'ambiguous') {
-    return {
-      ok: false,
-      res: c.json(
-        { error: 'This account holds several workspaces. Name one: use /v1/workspaces/<workspace id>/keys.', code: WORKSPACE_AMBIGUOUS_CODE },
-        409,
-      ),
-    };
+    return { ok: false, status: 409, body: { error: 'This account holds several workspaces. Name one: use /v1/workspaces/<workspace id>/keys.', code: WORKSPACE_AMBIGUOUS_CODE } };
   }
-  if (binding.kind !== 'workspace') return { ok: false, res: c.json({ error: 'Workspace not found' }, 404) };
+  if (binding.kind !== 'workspace') return { ok: false, status: 404, body: { error: 'Workspace not found' } };
   try {
     const accountId = await resolveAccountForUser(userId, pathAccountOf(c));
     return { ok: true, workspaceId: binding.projectId, accountId };
   } catch (err) {
     rethrowDatabaseError(err);
     if (isNoWorkspaceError(err)) throw err;
-    return { ok: false, res: c.json({ error: (err as Error).message }, 403) };
+    return { ok: false, status: 403, body: { error: (err as Error).message } };
   }
 }
 
@@ -206,7 +196,10 @@ async function listKeys(c: Context<AppEnv>) {
   }
   const userId = c.get('userId') as string;
   const ws = await keysWorkspace(c);
-  if (!ws.ok) return ws.res;
+    if (!ws.ok) {
+    const { status, body } = ws;
+    return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
+  }
   const { workspaceId, accountId } = ws;
   const actor = await actorOf(c, accountId);
   await assertAuthorized(actor, ACCOUNT_ACTIONS.TOKEN_READ);
@@ -303,7 +296,10 @@ async function mintServiceAccountKey(c: Context<AppEnv>, body: Record<string, un
   if (!name) return c.json({ error: 'name is required' }, 400);
   if (name.length > 255) return c.json({ error: 'name too long (max 255 chars)' }, 400);
   const ws = await keysWorkspace(c);
-  if (!ws.ok) return ws.res;
+    if (!ws.ok) {
+    const { status, body } = ws;
+    return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
+  }
   const { workspaceId, accountId } = ws;
   const actor = await actorOf(c, accountId);
   await assertAuthorized(actor, ACCOUNT_ACTIONS.TOKEN_CREATE);
@@ -440,7 +436,10 @@ async function mintKey(c: Context<AppEnv>) {
   // `me`: exactly the workspace-key mint of `POST …/tokens`, answered as a key
   // row rendered off the inserted token — not off a re-parse of the mint reply.
   const ws = await keysWorkspace(c);
-  if (!ws.ok) return ws.res;
+    if (!ws.ok) {
+    const { status, body } = ws;
+    return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
+  }
   const mint = await mintAccountToken(c, { ...body, project_id: undefined });
   if (!mint.ok) return mint.res;
   const userId = c.get('userId') as string;
@@ -470,7 +469,10 @@ async function revokeKey(c: Context<AppEnv>) {
   const keyId = c.req.param('keyId') ?? '';
   if (!isUuid(keyId)) return c.json({ error: `"${keyId}" is not a valid key id (a key id is a UUID)` }, 400);
   const ws = await keysWorkspace(c);
-  if (!ws.ok) return ws.res;
+    if (!ws.ok) {
+    const { status, body } = ws;
+    return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
+  }
   const { workspaceId, accountId } = ws;
   const actor = await actorOf(c, accountId);
   const deleteRevoked = c.req.query('delete_revoked') === 'true';

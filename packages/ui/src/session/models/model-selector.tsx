@@ -514,7 +514,8 @@ export function ModelSelector({
       m.providerID === availableSelectedModel?.providerID &&
       m.modelID === availableSelectedModel?.modelID,
   );
-  const displayName = current?.modelName || unsetLabel || t('noModel');
+  // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
+  const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
 
   const effortChoices =
     appearance === 'chip'

@@ -35,6 +35,10 @@ mock.module('./hosting', () => ({
     }
     async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
     async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
+    // The reconcile's error paths roll the runtime back through hosting.remove
+    // (machines.ts); a stub without it turned any real failure — a deadlock, a
+    // failed row insert — into a masking `hosting.remove is not a function`.
+    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');

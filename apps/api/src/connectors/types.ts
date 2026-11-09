@@ -92,6 +92,16 @@ export interface ComposioToolLike {
 }
 
 /** A declared HTTP route (provider=http, from the connector's routes spec: a `.yaml`/`.yml` or JSON file, or URL). */
+/** The `inputSchema` of a hand-curated action: `null` when it takes no input. */
+export function actionInputSchema(
+  properties: Record<string, unknown>,
+  required: readonly string[],
+): Record<string, unknown> | null {
+  return Object.keys(properties).length
+    ? { type: 'object', properties, ...(required.length ? { required } : {}) }
+    : null;
+}
+
 export interface HttpRouteSpec {
   /** Relative tool path, e.g. `users.get`. */
   name: string;

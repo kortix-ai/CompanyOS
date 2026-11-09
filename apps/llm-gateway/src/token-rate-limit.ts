@@ -77,7 +77,7 @@ export function createTokenRateLimit(limitPerMinute: number): {
     validatedKeys.add(key);
     // Give back the shared slot this credential's pre-validation request took,
     // once: it now has its own budget to be counted against.
-    if (chargedShared.delete(key)) limiter.refund(UNVALIDATED);
+    if (chargedShared.delete(key)) limiter.refund(UNVALIDATED, policy);
   };
   limit.buckets = () => limiter.keys();
   return limit;

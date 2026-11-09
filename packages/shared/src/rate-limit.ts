@@ -4,7 +4,6 @@
 interface Bucket {
   tokens: number;
   lastRefill: number;
-  limit: number;
 }
 
 export interface RateLimitPolicy {
@@ -59,7 +58,7 @@ export class TokenBucketRateLimiter {
 
     if (!bucket) {
       this.evictIfNeeded();
-      bucket = { tokens: limit, lastRefill: now, limit };
+      bucket = { tokens: limit, lastRefill: now };
       this.buckets.set(bucketKey, bucket);
     }
 
@@ -92,9 +91,9 @@ export class TokenBucketRateLimiter {
   }
 
   /** Return one token to a bucket (a request that turned out to belong to a real key). */
-  refund(key: string): void {
+  refund(key: string, policy: RateLimitPolicy): void {
     const bucket = this.buckets.get(`${this.namespace}:${key}`);
-    if (bucket) bucket.tokens = Math.min(bucket.limit, bucket.tokens + 1);
+    if (bucket) bucket.tokens = Math.min(Math.max(1, Math.floor(policy.limit)), bucket.tokens + 1);
   }
 
   /** The live bucket keys, for a test that asserts how many a path leaves behind. */

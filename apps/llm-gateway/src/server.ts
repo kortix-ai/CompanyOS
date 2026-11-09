@@ -1,4 +1,3 @@
-import { wellKnownResponse } from '@kortix/shared/well-known';
 import {
   type AuthedPrincipal,
   DEFAULT_BODY_AMPLIFICATION,
@@ -6,6 +5,7 @@ import {
   InflightBudget,
   createGateway,
 } from '@kortix/llm-gateway';
+import { wellKnownResponse } from '@kortix/shared/well-known';
 import { automaticInflightBudgetBytes } from './memory-budget';
 
 // One admission budget protects one standalone process. Work beyond capacity
@@ -40,10 +40,10 @@ const defaultInflight = new InflightBudget({
 import { Hono } from 'hono';
 import { createApiClient } from './clients/api-client';
 import { config } from './config';
-import { type TraceSink, createLangfuseSink } from './observability/langfuse';
-import { createGatewayLogger } from './observability/logger';
 import { registerHealth } from './health';
 import { trackInflight } from './inflight';
+import { type TraceSink, createLangfuseSink } from './observability/langfuse';
+import { createGatewayLogger } from './observability/logger';
 import { registerRoutes } from './routes';
 import { createTokenRateLimit } from './token-rate-limit';
 import { createTraffic } from './traffic';
@@ -184,7 +184,10 @@ export function buildServer(
     c.header('Content-Security-Policy', "default-src 'none';frame-ancestors 'none'");
     c.header('X-Frame-Options', 'DENY');
     // Permissions-Policy has no wildcard directive: deny each browser capability explicitly.
-    c.header('Permissions-Policy', 'accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), autoplay=(), battery=(), bluetooth=(), browsing-topics=(), camera=(), clipboard-read=(), clipboard-write=(), compute-pressure=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), keyboard-map=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), storage-access=(), sync-xhr=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=()');
+    c.header(
+      'Permissions-Policy',
+      'accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), autoplay=(), battery=(), bluetooth=(), browsing-topics=(), camera=(), clipboard-read=(), clipboard-write=(), compute-pressure=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), keyboard-map=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), storage-access=(), sync-xhr=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=()',
+    );
   });
   for (const path of ['/.well-known/security.txt', '/robots.txt', '/sitemap.xml']) {
     app.get(path, (c) => wellKnownResponse(c.req.path) ?? c.notFound());

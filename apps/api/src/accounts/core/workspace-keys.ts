@@ -484,7 +484,7 @@ async function revokeKey(c: Context<AppEnv>) {
   const deleteRevoked = c.req.query('delete_revoked') === 'true';
 
   const owner = await getAccountTokenOwner(keyId, accountId);
-  if (owner?.personal && owner.userId === userId && actsAsFullIdentity(c.get('authType') as string | undefined, actor)) {
+  if (owner?.personal && owner.userId === userId && actsAsFullIdentity(c.get('authType'), actor)) {
     await assertAuthorized(actor, ACCOUNT_ACTIONS.TOKEN_PERSONAL_REVOKE);
     if (deleteRevoked) {
       return (await deleteRevokedPersonalAccountToken(keyId, accountId))

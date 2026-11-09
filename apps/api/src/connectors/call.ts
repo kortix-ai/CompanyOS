@@ -396,19 +396,20 @@ function joinUrl(base: string, path: string): string {
 
 /**
  * The first `{placeholder}` whose rendered segment the args leave unusable.
- * Judged as buildHttpRequest sends it: every `{capture}` in the segment
- * becomes `encodeURIComponent(String(value ?? ''))` — plus a deliberate
- * value trim first, so the blank-identifier class the deny already covers
- * (a nullish, whitespace-only, or JSON-serialize-empty value such as `[]`)
- * keeps its denial even though its encoded form (`%20%20`) is a literal
- * segment. The deny values for the COMPLETE segment are exactly `''`, `.`
- * and `..` — the only segments URL normalization collapses (RFC 3986
- * remove_dot_segments). A dot value with literal segment text around it
- * (`/files/{id}.json` → `..json`) or a longer dot run (`...`) is a literal
- * segment a caller may legitimately pass. Returns the segment's first
- * placeholder name; null when every rendered segment is usable. Callers
- * deny the call with this name so the provider never sees a truncated or
- * escaping URL (KRTX-4539).
+ * Judged as buildHttpRequest sends it. Each value is judged on its RAW form
+ * first: one that is nullish or trim-empty (`''`, `[]`, `['']`, whitespace)
+ * is the blank-identifier mistake the provider 404s, whatever it would
+ * encode to — answer with the placeholder name. A non-blank value renders
+ * UNTRIMMED, the exact bytes buildHttpRequest substitutes, so URL
+ * normalization alone decides traversal: it collapses only `.` and `..`
+ * (RFC 3986 remove_dot_segments), never the padded-dot rendering a caller
+ * may legitimately pass (`' . '` → `%20.%20`, `' .. '` → `%20..%20`), a dot
+ * value embedded in literal segment text (`/files/{id}.json` → `..json`),
+ * or a longer dot run (`...`). Denies only when the COMPLETE rendered
+ * segment is exactly `.` or `..`. Returns the segment's first placeholder
+ * name; null when every rendered segment is usable. Callers deny the call
+ * with this name so the provider never sees a truncated or escaping URL
+ * (KRTX-4539).
  */
 export function missingPathArg(
   pathTemplate: string,
@@ -417,14 +418,20 @@ export function missingPathArg(
   for (const rawSegment of pathTemplate.split('/')) {
     const first = rawSegment.match(/\{([^}]+)\}/);
     if (!first) continue; // A literal segment carries no caller value.
+    // The builder replaces the capture with the value for args[untrimmed
+    // capture name]; a blank one renders empty there, a whitespace-only one
+    // as an encoded-space segment — both are the missing-identifier class.
+    for (const [, name] of rawSegment.matchAll(/\{([^}]+)\}/g)) {
+      if (String(args?.[name] ?? '').trim() === '') return name.trim();
+    }
     const segment = rawSegment
       .replace(/\{([^}]+)\}/g, (_capture, name: string) =>
-        // Trim the value like the pre-embedded guard did: a whitespace-only
-        // substitute (its encoded form `%20%20` is the literal segment a
-        // later `.trim()` cannot see) is the same blank-identifier mistake.
-        encodeURIComponent(String(args?.[name] ?? '').trim()))
+        // No trim: the upstream URL receives the value's own encoding, and
+        // trimming would turn `' . '` into the collapsed `.` the deny
+        // reports, a call the provider can answer.
+        encodeURIComponent(String(args?.[name] ?? '')))
       .trim();
-    if (segment === '' || segment === '.' || segment === '..') return first[1].trim();
+    if (segment === '.' || segment === '..') return first[1].trim();
   }
   return null;
 }

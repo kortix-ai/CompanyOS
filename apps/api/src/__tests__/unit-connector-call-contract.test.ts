@@ -300,6 +300,26 @@ describe('handleCall() path arguments', () => {
     expect(fetches).toEqual(['/files/..json']);
   });
 
+  test('a padded dot value renders unchanged and reaches the upstream as its encoded form', async () => {
+    // `' . '` is not a dot segment: encodeURIComponent makes it `%20.%20`, a
+    // literal segment URL normalization never collapses into `.` — denying it
+    // would block a call the provider can answer (review of KRTX-4539's fix).
+    const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs({ intentId: ' . ' }));
+    expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
+    expect(fetches).toEqual(['/intents/%20.%20']);
+  });
+
+  test('a padded two-dot value embedded in a rendered segment goes through', async () => {
+    // Same class with the cycle-4 embedded shape: `' .. '` on a `.json` route
+    // renders `%20..%20.json`, and only a WHOLE segment of `.` / `..`
+    // collapses (remove_dot_segments) (review of KRTX-4539's fix).
+    const deps = () =>
+      trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/files/{intentId}.json', server: 'https://crm.example.test' }) });
+    const res = await handleCall(deps(), inputWithArgs({ intentId: ' .. ' }));
+    expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
+    expect(fetches).toEqual(['/files/%20..%20.json']);
+  });
+
   test('two placeholders: the first empty one is named; both filled go through', async () => {
     const deps = () => trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/a/{xId}/b/{yId}', server: 'https://crm.example.test' }) });
     const res = await handleCall(deps(), inputWithArgs({ xId: '1' }));

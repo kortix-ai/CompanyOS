@@ -35,9 +35,7 @@ mock.module('./hosting', () => ({
     }
     async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
     async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
-    // The reconcile's error paths roll the runtime back through hosting.remove
-    // (machines.ts); a stub without it turned any real failure — a deadlock, a
-    // failed row insert — into a masking `hosting.remove is not a function`.
+    // Production's error paths roll a runtime back through hosting.remove (machines.ts:230, :568).
     async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
   },
 }));
@@ -243,10 +241,8 @@ withDb('machines and volumes — real PostgreSQL', () => {
     const [live] = await liveInstances(v1.deploymentId);
     const app = await appRow();
     calls.length = 0;
-    // One live instance per machine of a release: a second insert for the same
-    // (deployment, machine) violates app_runtimes_one_live_per_machine. The
-    // rollback removes the box it just created and rethrows the real error —
-    // never a masking `hosting.remove is not a function`.
+    // A second live row for the same machine violates app_runtimes_one_live_per_machine:
+    // the rollback removes the box and rethrows the real error, never a masking TypeError.
     await expect(machines.createInstance({
       hosting: new AppHostingProvider(), app, deployment: v1, config: stateless,
       env: await machines.releaseEnvironment(app, v1),

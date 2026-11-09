@@ -7,7 +7,13 @@ import { useTranslations } from '../../i18n';
 import { useIsMobile } from '../../internal/hooks';
 import { uiRoutes } from '../../lib/routes';
 import { cn } from '../../lib/utils';
-import { InputGroupSearch, InputGroupSearchIcon, InputGroupSearchInput } from '../../primitives/input-group';
+import {
+  InputGroupSearch,
+  InputGroupSearchClear,
+  InputGroupSearchIcon,
+  InputGroupSearchInput,
+} from '../../primitives/input-group';
+import { useDebounce } from '../../hooks/use-debounce';
 import { Skeleton } from '../../primitives/skeleton';
 import {
   SidebarGroup,
@@ -16,7 +22,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '../../primitives/sidebar';
-import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
+import {
+  UiLink as Link,
+  useUiPathname,
+  useUiSearchParams,
+  useUiShallowNavigate,
+} from '../../providers/ui-provider';
 import { parseProjectAdminSection } from '../../customize/project-settings/project-admin-sections';
 import {
   useWorkspaceSettingsRailStore,
@@ -112,6 +123,24 @@ const LIST_SCROLL_CLASS =
  * empty, the ranked results while it holds a query. The field keeps focus;
  * ↑ ↓ move the selected result, Enter opens it, Escape clears the field.
  */
+/**
+ * The settings search query in the URL. Opening a result keeps the query: the
+ * result's link carries it, so the page it opens shows the same results, and
+ * a reload or a remount of the rail reads it back.
+ */
+const SEARCH_PARAM = 'settings_q';
+
+/** `href` with the settings query set, or removed when `query` is empty. */
+export function withSettingsQuery(href: string, query: string): string {
+  const [rest, hash] = href.split('#');
+  const [path, existing = ''] = rest.split('?');
+  const params = new URLSearchParams(existing);
+  if (query.trim()) params.set(SEARCH_PARAM, query);
+  else params.delete(SEARCH_PARAM);
+  const search = params.toString();
+  return `${path}${search ? `?${search}` : ''}${hash !== undefined ? `#${hash}` : ''}`;
+}
+
 function SettingsSearch({
   projectId,
   rail,
@@ -127,7 +156,10 @@ function SettingsSearch({
 }) {
   const tSettings = useTranslations('workspaces.settings');
   const setPendingFind = useWorkspaceSettingsRailStore((s) => s.setPendingFind);
-  const [query, setQuery] = useState('');
+  const searchParams = useUiSearchParams();
+  const pathname = useUiPathname();
+  const shallowNavigate = useUiShallowNavigate();
+  const [query, setQuery] = useState(() => searchParams.get(SEARCH_PARAM) ?? '');
   // `null`: no row picked by hand yet, so Enter opens the best match.
   const [cursor, setCursor] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -144,6 +176,20 @@ function SettingsSearch({
     wasShown.current = shown;
   }, [shown, isMobile]);
   const listId = useId();
+
+  // The URL follows the field, 250 ms after the last keystroke, replacing the
+  // entry so typing adds no history.
+  const { debouncedValue: settledQuery } = useDebounce(query, 250);
+  const urlQuery = searchParams.get(SEARCH_PARAM) ?? '';
+  useEffect(() => {
+    // Only a settled value: a result opened mid-debounce already carries the
+    // newer query in its link, and a stale write would overwrite it.
+    if (settledQuery !== query || settledQuery.trim() === urlQuery.trim()) return;
+    const current = searchParams.toString();
+    shallowNavigate(withSettingsQuery(`${pathname}${current ? `?${current}` : ''}`, settledQuery), {
+      replace: true,
+    });
+  }, [settledQuery, query, urlQuery, pathname, searchParams, shallowNavigate]);
 
   // Every section the caller may open, in rail order, with its glyph.
   const { sections, icons } = useMemo(() => {
@@ -166,18 +212,18 @@ function SettingsSearch({
     const flat: SearchItem[] = grouped.flatMap((group) => [
       {
         key: `section:${group.section.key}`,
-        href: group.section.href,
+        href: withSettingsQuery(group.section.href, query),
         section: group.section,
       },
       ...group.children.map((result) => ({
         key: result.id,
-        href: settingsSearchHref(result),
+        href: withSettingsQuery(settingsSearchHref(result), query),
         section: group.section,
         result,
       })),
     ]);
     return { groups: grouped, items: flat };
-  }, [results]);
+  }, [results, query]);
   const indexOf = useMemo(() => new Map(items.map((item, index) => [item.key, index])), [items]);
   // The best match leads, not the first row: a section that heads its group
   // only to hold a match (it did not match itself) is not what Enter opens.
@@ -194,7 +240,8 @@ function SettingsSearch({
     const entry = item.result?.entry;
     const find = entry && entry.find !== null ? (entry.find ?? entry.label) : null;
     setPendingFind(find ? { projectId, section: item.section.key, text: find } : null);
-    reset();
+    // The query stays: the next result is one click away.
+    setCursor(null);
     onNavigate();
   };
 
@@ -244,9 +291,9 @@ function SettingsSearch({
             <MagnifyingGlassIcon />
           </InputGroupSearchIcon>
           <InputGroupSearchInput
-            type="search"
+            type="text"
             size="xs"
-            className="text-sm"
+            className="pr-9 text-sm"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -261,6 +308,15 @@ function SettingsSearch({
             aria-expanded={items.length > 0}
             aria-controls={results ? listId : undefined}
           />
+          {query ? (
+            <InputGroupSearchClear
+              className="opacity-100"
+              onClick={() => {
+                reset();
+                inputRef.current?.focus();
+              }}
+            />
+          ) : null}
         </InputGroupSearch>
       </div>
 

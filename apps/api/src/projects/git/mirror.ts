@@ -1003,9 +1003,16 @@ const BARE_CLONE_TIMEOUT_MS = bareCloneTimeoutMs();
 /** A cold clone OR a warm fetch can transiently fail (timeout, network blip, or
  * GitHub's ambiguous `repository … not found` for a private mirror whose token
  * is momentarily unusable); retry a bounded number of times before surfacing —
- * most clear on a later attempt. See `isTransientGitMirrorError`. */
-const MIRROR_RETRY_MAX_ATTEMPTS = 3;
-const MIRROR_RETRY_DELAY_MS = 500;
+ * most clear on a later attempt. See `isTransientGitMirrorError`.
+ *
+ * The budget has to cover GitHub's visibility window for a BRAND-NEW repo:
+ * the first session of a freshly provisioned project clones a repo created
+ * ~2 s earlier, and GitHub kept answering `repository … not found` past the
+ * old budget (3 × 500 ms ≈ 1.6 s; release gate 42666114535, attempt 3 on
+ * staging, 2026-11-09). 5 × 2 s surfaces a genuinely dead upstream in ~10 s
+ * while surviving the propagation window. */
+const MIRROR_RETRY_MAX_ATTEMPTS = 5;
+const MIRROR_RETRY_DELAY_MS = 2000;
 
 function looksLikeBareMirror(repoPath: string): boolean {
   return (

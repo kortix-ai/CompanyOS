@@ -155,3 +155,13 @@ paths = [
 regexes = [
   '''^phc_[A-Za-z0-9]{20,64}$''',
 ]
+
+[[allowlists]]
+description = "False-positive workspaces key-minting test fixture labels (tests/src/flows/workspace-auth.flow.ts). The generic-api-key rule matched the literal 'WSA10_MINTER' (v0.16.0 release branch, commit 45da88f99d) — a deterministic, human-readable test principal label passed to the test keyPrincipal() helper inside .json<{secret_key: string}> parsing, not a credential; the release-PR commit-range scan trips it because gitleaks walks the whole merge history of the PR. Scoped to the one flow file AND the WSA10_* test-label family so any real random-entropy secret in this file still fails."
+condition = "AND"
+paths = [
+  '''^tests/src/flows/workspace-auth\.flow\.ts$''',
+]
+regexes = [
+  '''WSA10_[A-Za-z0-9_]+''',
+]

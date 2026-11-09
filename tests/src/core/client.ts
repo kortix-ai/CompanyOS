@@ -167,6 +167,11 @@ export class Res {
       expected: codes,
       actual: this.statusCode,
       pass: codes.includes(this.statusCode),
+      // A failed status assert keeps what the response says: origin vs edge and
+      // the body, cut. A deployed smoke's 5xx body names the cause (provider
+      // capacity, GITHUB_RATE_LIMITED, …) — without it the run log is a bare
+      // status and every triage starts from zero (release gate 42666114535).
+      ...(codes.includes(this.statusCode) ? {} : { detail: statusAssertDetail(this) }),
     });
     return this;
   }
@@ -334,6 +339,17 @@ export function describeEdgeResponse(
     `x-maintenance-mode=${maintenance ?? 'absent'} ` +
     `x-request-id=${requestId ? 'present' : 'absent'}]`
   );
+}
+
+/** The `detail` a failed status assert carries: origin/edge classification plus
+ *  the body, cut. A deployed 5xx body names its cause ("provider at capacity",
+ *  `GITHUB_RATE_LIMITED`, `KORTIX_URL_UNREACHABLE`) — a bare "got 503" does not. */
+export function statusAssertDetail(res: Res): string {
+  const body = res.text().trim();
+  return [
+    describeEdgeResponse(res.statusCode, res.captured.res.headers),
+    body ? `body=${body.slice(0, 500)}` : 'body=<empty>',
+  ].join(' ');
 }
 
 const RETRY_BASE_DELAY_MS = Number(process.env.KE2E_RETRY_BASE_DELAY_MS ?? 500);

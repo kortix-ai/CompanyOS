@@ -9,6 +9,7 @@ import {
   transientBreaker,
   transientRetryDelayMs,
 } from '../src/core/client';
+import { AssertionError } from '../src/core/expect';
 import type { Captured } from '../src/core/result';
 
 function capturedResponse(status: number, headers: Record<string, string>): Res {
@@ -272,5 +273,61 @@ describe('edge response diagnostics (P3.3)', () => {
     expect(error.message).toContain('after 3/3 attempt(s)');
     expect(error.message).toContain('ECONNRESET');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A failed status assert keeps what the response says (release gate
+// 42666114535: the deployed smoke's only failure line was "got 503" — the
+// origin classification and the body that names the cause were dropped, so
+// every triage started from zero).
+// ---------------------------------------------------------------------------
+
+describe('failed status assert detail', () => {
+  it('carries the origin classification and the body of a failed status assert', () => {
+    const response = new Res({
+      routeTemplate: 'POST /v1/projects/:projectId/sessions',
+      req: { method: 'POST', url: 'https://example.test/v1/projects/p/sessions', headers: {} },
+      res: {
+        status: 503,
+        headers: { 'x-request-id': 'req-1', 'content-type': 'application/json' },
+        bodyText:
+          '{"error":"The sandbox provider is at capacity right now. Try again in a minute.","code":"capacity"}',
+      },
+      ms: 1,
+    } satisfies Captured);
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AssertionError);
+    const message = (error as Error).message;
+    expect(message).toContain(
+      '[origin status=503 x-maintenance-mode=absent x-request-id=present]',
+    );
+    expect(message).toContain('body={"error":"The sandbox provider is at capacity');
+    expect(message).toContain('"code":"capacity"');
+  });
+
+  it('records body=<empty> when the failed response has no body', () => {
+    const response = capturedResponse(503, { 'x-request-id': 'req-1' });
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect((error as Error).message).toContain('body=<empty>');
+  });
+
+  it('a passing status assert attaches no detail', () => {
+    const response = capturedResponse(201, {});
+    expect(() => response.status(201)).not.toThrow();
   });
 });

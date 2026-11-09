@@ -16,6 +16,7 @@ import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import type { FlowContext } from '../core/types';
 import { createDatabaseSession } from '../fixtures/database-project';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 const UNKNOWN_SESSION_ID = '00000000-0000-4000-a000-000000000000';
 
@@ -98,9 +99,9 @@ async function seedBoundSession(
     [sessionId, accountId, project.id],
   );
   await db.query(
-    `UPDATE kortix.account_tokens
+    lockProjectFirst(`UPDATE kortix.account_tokens
         SET account_id = $2, user_id = $3, project_id = $4, session_id = $5
-      WHERE token_id = $1`,
+      WHERE token_id = $1`),
     [credential.token_id, accountId, ownerUserId, project.id, sessionId],
   );
   return { sessionId, tokenId: credential.token_id, token: credential.secret_key };

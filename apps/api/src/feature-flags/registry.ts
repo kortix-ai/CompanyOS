@@ -423,8 +423,8 @@ const FLAGS: readonly FeatureFlagDef[] = [
     stability: 'experimental',
     // Every workspace volume is a Platinum volume.
     available: () => Boolean(config.PLATINUM_API_KEY),
-    // Off unless the operator sets KORTIX_WORKSPACE_VOLUMES=on (dev does,
-    // deploy-dev.yml). Self-host leaves it unset.
+    // Off unless the operator sets KORTIX_WORKSPACE_VOLUMES=on (dev and prod
+    // do: deploy-dev.yml, deploy-prod.yml). Staging and self-host leave it unset.
     platformDefault: () => workspaceVolumesSwitch() === 'on',
     // Internal-only, never a Settings toggle. A Kortix operator sets one
     // project's choice (PUT /v1/admin/api/projects/:id/features); `false` keeps

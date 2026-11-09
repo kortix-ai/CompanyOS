@@ -2052,7 +2052,6 @@
     "favoritesEmpty": "Označite model zvezdicom da biste ga zadržali ovde.",
     "addFavorite": "Dodaj {model} u omiljene",
     "removeFavorite": "Ukloni {model} iz omiljenih",
-    "thinking": "Razmišljanje",
     "groups": "Grupe modela"
   },
   "sessionScope": {

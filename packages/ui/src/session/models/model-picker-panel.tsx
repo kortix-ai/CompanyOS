@@ -1,12 +1,13 @@
 'use client';
 
 import type { FlatModel } from '@kortix/sdk/react';
-import { CheckIcon, StarIcon } from '@phosphor-icons/react';
+import { StarIcon } from '@phosphor-icons/react';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { MODEL_SELECTOR_PROVIDER_IDS, ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
+import { SolidCheckIcon } from '../../internal/icons/solid-check-icon';
 import { foreignDialogOpen } from '../../lib/z-stack';
 import { Button } from '../../primitives/button';
 import { CommandGroup, CommandInput, CommandItem, CommandList } from '../../primitives/command';
@@ -290,11 +291,9 @@ export function ModelPickerPanel({
 
       {effort && effort.choices.length > 0 ? (
         <ReasoningEffortPane
-          title={t('thinking')}
           choices={effort.choices}
           selectedVariant={effort.selectedVariant}
           onVariantChange={effort.onChange}
-          modelName={selectedModel ? pickerModelName(selectedModel) : undefined}
           className="border-t sm:w-44 sm:shrink-0 sm:border-t-0 sm:border-l"
         />
       ) : null}
@@ -346,7 +345,7 @@ function PickerRow({
         <span className="text-foreground font-medium">{lead}</span>
         {trail ? <span className="text-muted-foreground font-normal"> {trail}</span> : null}
       </span>
-      {isSelected ? <CheckIcon className="text-muted-foreground size-3.5 shrink-0" /> : null}
+      {isSelected ? <SolidCheckIcon className="text-ring size-3.5 shrink-0" /> : null}
       <span className="flex-1" />
 
       {unavailable ? (

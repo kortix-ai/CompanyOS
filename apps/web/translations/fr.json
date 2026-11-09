@@ -2052,7 +2052,6 @@
     "favoritesEmpty": "Ajoutez une étoile à un modèle pour le garder ici.",
     "addFavorite": "Ajouter {model} aux favoris",
     "removeFavorite": "Retirer {model} des favoris",
-    "thinking": "Réflexion",
     "groups": "Groupes de modèles"
   },
   "sessionScope": {

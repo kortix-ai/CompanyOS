@@ -2052,7 +2052,6 @@
     "favoritesEmpty": "モデルにスターを付けるとここに表示されます。",
     "addFavorite": "{model} をお気に入りに追加",
     "removeFavorite": "{model} をお気に入りから削除",
-    "thinking": "思考",
     "groups": "モデルグループ"
   },
   "sessionScope": {

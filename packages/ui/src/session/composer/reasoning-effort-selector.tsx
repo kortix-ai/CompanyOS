@@ -37,9 +37,9 @@ import {
   DropdownMenuTrigger,
 } from '../../primitives/dropdown-menu';
 import { cn } from '../../lib/utils';
+import { SolidCheckIcon } from '../../internal/icons/solid-check-icon';
 import {
   CaretDownIcon,
-  CheckIcon,
   CellSignalFullIcon,
   CellSignalHighIcon,
   CellSignalLowIcon,
@@ -188,7 +188,7 @@ export function ReasoningEffortSelector({
           <span className="max-w-[7rem] truncate">{current ? effortLabel(current) : t('auto')}</span>
           <CaretDownIcon
             className={cn(
-              'size-3 opacity-50 transition-transform duration-200 ease-out',
+              'size-3 opacity-50 transition-transform duration-moderate ease-out',
               open && 'rotate-180',
             )}
           />
@@ -222,10 +222,6 @@ interface ReasoningEffortPaneProps {
   /** The session's current variant, or null = model default. */
   selectedVariant: string | null | undefined;
   onVariantChange: (variant: string | null) => void;
-  /** The model the levels belong to, named in the pane's header. */
-  modelName?: string;
-  /** The pane's heading. Defaults to "Thinking effort". */
-  title?: string;
   className?: string;
 }
 
@@ -243,8 +239,6 @@ export function ReasoningEffortPane({
   choices,
   selectedVariant,
   onVariantChange,
-  modelName,
-  title,
   className,
 }: ReasoningEffortPaneProps) {
   const t = useTranslations('threads');
@@ -270,13 +264,9 @@ export function ReasoningEffortPane({
   };
 
   return (
+    // No heading: the levels say what they are, and the model is the checked
+    // row beside them. The group keeps its name for assistive tech.
     <div className={cn('flex min-w-0 flex-col', className)}>
-      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3 text-sm">
-        <span className="text-muted-foreground shrink-0">{title ?? t('thinkingEffort')}</span>
-        {modelName ? (
-          <span className="text-muted-foreground min-w-0 truncate text-xs">{modelName}</span>
-        ) : null}
-      </div>
       <div
         role="radiogroup"
         aria-label={t('thinkingEffort')}
@@ -300,7 +290,7 @@ export function ReasoningEffortPane({
               )}
             >
               <span className="min-w-0 flex-1 truncate">{label}</span>
-              {checked ? <CheckIcon className="size-4 shrink-0" /> : null}
+              {checked ? <SolidCheckIcon className="text-ring size-4 shrink-0" /> : null}
             </button>
           );
         })}

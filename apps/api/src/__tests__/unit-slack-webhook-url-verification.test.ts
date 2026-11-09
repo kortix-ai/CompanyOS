@@ -232,6 +232,36 @@ describe('BYO Slack Events API URL verification', () => {
   });
 });
 
+describe('the Slack webhook app refuses an oversized body unread', () => {
+  test('a declared body over the 1 MiB ceiling answers 413 without reading it or checking a signature', async () => {
+    const res = await slackWebhookApp.request('/3f1c2b7e-0000-4000-8000-000000000001/commands', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'x'.repeat(1024 * 1024 + 1),
+    });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'Payload too large' });
+    // Refused ahead of the route: no signing secret was even loaded.
+    expect(loadSigningSecretCalls).toBe(0);
+  });
+
+  test('an oversized chunked stream is cut at the ceiling instead of fully buffered', async () => {
+    // No Content-Length: the middleware counts the stream.
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024).fill(120));
+      },
+    });
+    const res = await slackWebhookApp.request('/3f1c2b7e-0000-4000-8000-000000000001/commands', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: stream,
+    });
+    expect(res.status).toBe(413);
+    expect(loadSigningSecretCalls).toBe(0);
+  });
+});
+
 // An unsigned request is invalid even when this host has no OAuth installation.
 test('OAuth webhook rejects unsigned requests before checking installation configuration', async () => {
   const response = await slackWebhookApp.request('/', {

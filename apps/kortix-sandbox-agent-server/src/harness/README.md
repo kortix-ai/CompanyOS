@@ -1312,7 +1312,13 @@ characters) and the child's runtime uses them as its base prompt in place of
 its agent's, exactly as the in-process path does. Under My Kortix every spec
 prompt (a built-in's, a fork's) rides there, because My Kortix's coordinator
 prompt never runs in a child; the API lets such a My Kortix child through
-its recursion stop (`apps/api/src/projects/lib/inline-colleague.ts`). Any
+its recursion stop (`apps/api/src/projects/lib/inline-colleague.ts`). Under My
+Kortix an inline spec may also carry `connectors` and `secrets`: they ride as the
+create's `colleague_access`, and the API answers 409
+`COLLEAGUE_ACCESS_APPROVAL_REQUIRED` until a person allows that list
+(`apps/api/src/projects/lib/colleague-access.ts`). The tool then returns
+`<task_awaiting_approval>` with no task id, and its details carry
+`awaitingApproval` and the `askId`. Any
 other spec prompt is a note beside the agent's own prompt in
 `initial_context`, which the child pastes into its first message. Every child, named ones included, gets the parent agent's
 effective tool list (the tools that pass `rootToolAllowed`), intersected with

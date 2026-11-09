@@ -161,12 +161,26 @@ export class Res {
       (error as any).ke2eRetryAfterMs = retryAfterMs(this.header('retry-after'));
       throw error;
     }
+    const pass = codes.includes(this.statusCode);
+    // A failed status assert is only actionable when the log says WHAT answered:
+    // the app 503s (deploy_in_progress, model resolution, ...) carry an
+    // x-request-id and a JSON body, the edge-laundered ones do not — name the
+    // body and the deciding headers in the description, or a red release gate
+    // stays unexplained (staging ships no logs of its own).
+    const diagnose = () => {
+      const h = (n: string) => {
+        const v = this.header(n);
+        return v === undefined ? '-' : String(v).replace(/\s+/g, ' ').slice(0, 80);
+      };
+      const body = (this.captured.res.bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      return ` [x-request-id=${h('x-request-id')} retry-after=${h('retry-after')} content-type=${h('content-type')}] body: ${body || '(empty)'}`;
+    };
     assert({
       kind: 'status',
-      description: `status in [${codes.join(', ')}]`,
+      description: `status in [${codes.join(', ')}]${pass ? '' : diagnose()}`,
       expected: codes,
       actual: this.statusCode,
-      pass: codes.includes(this.statusCode),
+      pass,
     });
     return this;
   }

@@ -33,6 +33,13 @@ mock.module('./hosting', () => ({
       calls.push(`ready? ${externalId}`);
       if (failReadyFor.has(externalId)) throw new Error('kortix-appd failed: exit 1');
     }
+    // The create/insert-failure paths (machines.ts createInstance and
+    // runReleaseCommand catch handlers) call hosting.remove to clean up the
+    // box. Missing here, the TypeError escaped the .catch(() => {}) that was
+    // meant to swallow it — property access throws before .catch attaches —
+    // and the broken reconcile cascade deadlocked the suite (release run
+    // 42716922285). Same disease the stub-spreading rule names.
+    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
     async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
     async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
   },

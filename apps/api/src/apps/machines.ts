@@ -34,6 +34,7 @@ import { qualifiedColumn } from '../shared/sql-qualified-column';
 import { resolveAppRuntimeEnvironment } from './environment';
 import { AppHostingProvider, type AppMachineSpec } from './hosting';
 import { teardownAppRuntimes } from './images';
+import { retryOnDeadlock } from '../shared/error-cause';
 import { groupAlwaysOn, groupScale, releaseConfigOf } from './release-config';
 import { appRuntimeIdentityEnv } from './viewer';
 import { appServiceUrl } from './hostnames';
@@ -470,6 +471,18 @@ async function orphanedMachineIds(appId: string, group: string): Promise<string[
  * release rolls out (it plans machines itself) and for a stopped App.
  */
 export async function reconcileAppMachines(
+  appId: string,
+  options: { hosting?: AppHostingProvider; exceptDeploymentId?: string } = {},
+): Promise<{ created: number; destroyed: number; skipped?: string }> {
+  // The reconcile is idempotent: it re-reads state, the provider calls it
+  // re-runs are remove-safe (the create's insert-catch cleans a rolled-back
+  // box), and the per-write transactions commit separately. A 40P01 deadlock
+  // victim (two reconcile passes deleting the same release's app_runtimes —
+  // release run 42716922285, the db-suites lane) therefore just re-runs.
+  return retryOnDeadlock(() => reconcileAppMachinesOnce(appId, options));
+}
+
+async function reconcileAppMachinesOnce(
   appId: string,
   options: { hosting?: AppHostingProvider; exceptDeploymentId?: string } = {},
 ): Promise<{ created: number; destroyed: number; skipped?: string }> {

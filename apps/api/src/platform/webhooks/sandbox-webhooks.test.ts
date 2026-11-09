@@ -200,7 +200,20 @@ describe('handlePlatinumWebhook', () => {
     expect(removedCalls).toEqual(['sbx_synthetic_2']);
   });
 
-  // A payload that names its sandbox in `id` (line 163 reads it as the sandbox
+  // Never DROP a delivery: a body whose sandbox field this handler does not
+  // read (one new provider field away, like `sandboxId` was) is still a
+  // distinct, signed event. "Not understood" may mean "acknowledged", never
+  // "already ran". Only a byte-identical body is a replay.
+  test('acknowledges a delivery it cannot classify instead of declaring it a replay', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    const body = JSON.stringify({ event: 'sandbox.state_updated', box: 'sbx_unread', ts: 7 });
+    const first = await handlePlatinumWebhook(body, hmacHeader(body));
+    const second = await handlePlatinumWebhook(body, hmacHeader(body));
+    expect(first.body).toMatchObject({ ok: true });
+    expect(second.body).toEqual({ ok: true, deduped: true });
+  });
+
+  // A payload that names its sandbox in `id` (`externalId` reads it as the sandbox
   // id) still gets distinct dedup keys per event: the bodies differ, so their
   // hashes differ. Keying on the payload `id` folds every event of that box
   // into one key — the drop again.
@@ -227,6 +240,24 @@ describe('handlePlatinumWebhook', () => {
     expect(again.status).toBe(200);
     expect(again.body).toEqual({ ok: true, deduped: true });
     expect(removedCalls).toEqual(['pReplay']);
+  });
+
+  // Platinum stamps EVERY delivery with a sent-at `ts` in the signed body. Two
+  // distinct transitions of one sandbox therefore differ at least in `ts`, so
+  // they are distinct deliveries even when nothing else differs: keying on the
+  // body's content instead of the delivery's identity folds them into one key
+  // and drops the second (CWE-345, KRTX-4502).
+  test('applies two distinct deliveries of one sandbox that differ only in the delivery ts', async () => {
+    cfg.PLATINUM_WEBHOOK_SECRET = secret;
+    // The only field that differs is the delivery `ts`: same sandbox, same
+    // event, same state. The deleted init-time fallback
+    // `platinum:${externalId}:${eventType}:` (it read `event.timestamp`, which no
+    // Platinum delivery carries) saw the same key twice and dropped the second.
+    const body = (ts: number) => JSON.stringify({ event: 'sandbox.state_updated', sandbox_id: 'sbx_ts', ts, state: 'stopped' });
+    await handlePlatinumWebhook(body(100), hmacHeader(body(100)));
+    const second = await handlePlatinumWebhook(body(200), hmacHeader(body(200)));
+    expect(second.body).not.toMatchObject({ deduped: true });
+    expect(stoppedCalls).toEqual(['sbx_ts', 'sbx_ts']);
   });
 
   // Every key derives from the signed body, so the unsigned `webhook-id`

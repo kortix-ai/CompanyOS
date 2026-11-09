@@ -289,6 +289,17 @@ describe('handleCall() path arguments', () => {
     expect(fetches).toEqual(['/intents/...']);
   });
 
+  test('a dot value embedded in a rendered segment with literal text around it goes through', async () => {
+    // `.` inside a `.json` route: the complete rendered segment is `..json`, a
+    // literal segment URL normalization leaves alone — only a WHOLE segment of
+    // `.` / `..` collapses (remove_dot_segments) (review of KRTX-4539's fix).
+    const deps = () =>
+      trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/files/{intentId}.json', server: 'https://crm.example.test' }) });
+    const res = await handleCall(deps(), inputWithArgs({ intentId: '.' }));
+    expect(res).toMatchObject({ status: 'ok', output: { id: 'c1' } });
+    expect(fetches).toEqual(['/files/..json']);
+  });
+
   test('two placeholders: the first empty one is named; both filled go through', async () => {
     const deps = () => trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/a/{xId}/b/{yId}', server: 'https://crm.example.test' }) });
     const res = await handleCall(deps(), inputWithArgs({ xId: '1' }));

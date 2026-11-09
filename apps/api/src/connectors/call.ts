@@ -395,25 +395,34 @@ function joinUrl(base: string, path: string): string {
 }
 
 /**
- * The first path placeholder the args leave unusable, judged against the
- * exact value the URL builder substitutes: `String(value ?? '')` for the
- * untrimmed `{…}` capture. That segment is empty (a nullish value, or a JSON
- * value whose serialization is empty such as `[]` or `['']`, or whitespace)
- * or exactly `.` / `..` — the only segments URL normalization collapses
- * (RFC 3986 remove_dot_segments); a longer dot run such as `...` is a
- * literal segment a caller may legitimately pass. Null when every
- * placeholder has a usable value. Callers deny the call with this name so
- * the provider never sees a truncated or escaping URL (KRTX-4539).
+ * The first `{placeholder}` whose rendered segment the args leave unusable,
+ * judged exactly the way buildHttpRequest renders it: every `{capture}` in
+ * the segment becomes `encodeURIComponent(String(value ?? ''))`, and the
+ * complete segment is what matters. A segment that is empty (a nullish or
+ * JSON-serialize-empty value such as `[]`), or exactly `.` /
+ * `..` — the only segments URL normalization collapses (RFC 3986
+ * remove_dot_segments) — is unusable. A dot value with literal segment text
+ * around it (`/files/{id}.json` → `..json`) or a longer dot run (`...`) is a
+ * literal segment a caller may legitimately pass. Returns the segment's
+ * first placeholder name; null when every rendered segment is usable.
+ * Callers deny the call with this name so the provider never sees a
+ * truncated or escaping URL (KRTX-4539).
  */
 export function missingPathArg(
   pathTemplate: string,
   args: Record<string, unknown> | null | undefined,
 ): string | null {
-  for (const match of pathTemplate.matchAll(/\{([^}]+)\}/g)) {
-    const name = match[1];
-    const value = args?.[name];
-    const segment = (value == null ? '' : String(value)).trim();
-    if (segment === '' || segment === '.' || segment === '..') return name.trim();
+  for (const rawSegment of pathTemplate.split('/')) {
+    const first = rawSegment.match(/\{([^}]+)\}/);
+    if (!first) continue; // A literal segment carries no caller value.
+    const segment = rawSegment
+      .replace(/\{([^}]+)\}/g, (_capture, name: string) =>
+        // Trim the value like the pre-embedded guard did: a whitespace-only
+        // substitute (its encoded form `%20%20` is the literal segment a
+        // later `.trim()` cannot see) is the same blank-identifier mistake.
+        encodeURIComponent(String(args?.[name] ?? '').trim()))
+      .trim();
+    if (segment === '' || segment === '.' || segment === '..') return first[1].trim();
   }
   return null;
 }

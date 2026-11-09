@@ -3,11 +3,23 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 const deleted: number[] = [];
 /** Makes the next claim-release delete reject (a DB blip during the release). */
 let deleteFails = false;
+/** Held open: the next claim-release delete only settles when the test calls
+ * its gate — a release that overlaps the work's settlement like a slow DB.
+ */
+let releaseGates: Array<(release: () => void) => void> = [];
 mock.module('../shared/db', () => ({
   db: {
     delete: () => ({
       where: () => {
         if (deleteFails) return Promise.reject(new Error('db down'));
+        if (releaseGates.length) {
+          return new Promise<void>((resolve) => {
+            releaseGates[0](() => {
+              deleted.push(1);
+              resolve();
+            });
+          });
+        }
         deleted.push(1);
         return Promise.resolve();
       },
@@ -38,6 +50,7 @@ beforeEach(() => {
   warnings.length = 0;
   errors.length = 0;
   deleteFails = false;
+  releaseGates = [];
   resetDrainForTests();
 });
 
@@ -283,5 +296,29 @@ describe('runWebhookWork', () => {
     await Bun.sleep(30);
     const logged = errors.find((e) => e.message.includes('redelivery scheduling failed'));
     expect(logged).toBeDefined();
+  });
+
+  test('awaitSettlement waits out a fast failure whose claim release overlaps the ack timer', async () => {
+    let release!: () => void;
+    releaseGates.push((open) => (release = open));
+    const hookCalls: Array<{ acked: boolean; claimsReleased: boolean }> = [];
+    const settled = runWebhookWork(
+      'slack-event-redelivery',
+      async () => {
+        recordClaim('slack:event:held');
+        throw new Error('fast failure');
+      },
+      { ackWaitMs: 20, awaitSettlement: true, onFailure: (info) => void hookCalls.push({ ...info }) },
+    );
+    // The timer fired while the release sat on the DB: `outcome` is already
+    // 'failed', which must not shortcut the settlement wait.
+    await Bun.sleep(40);
+    expect(hookCalls).toEqual([]); // the release has not settled, so the hook has not run
+    release(); // the delete comes back
+    expect(await settled).toBe('failed');
+    // Settlement held the caller until the release finished and the hook ran:
+    // the redeliver reads `claimsReleased` straight out of it for its TTL hold.
+    expect(hookCalls).toEqual([{ acked: true, claimsReleased: true }]);
+    expect(deleted).toHaveLength(1);
   });
 });

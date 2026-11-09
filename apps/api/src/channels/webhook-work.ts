@@ -30,9 +30,12 @@
  * scheduler must wait the claim out first.
  *
  * A background caller that must not complete while the work runs (the redelivery
- * job: a completed job is never retried) passes `awaitSettlement`: the budget
- * then only bounds the ack-budget warn, and the call resolves to the work's
- * settled outcome.
+ * job: a completed job is never retried) passes `awaitSettlement`: the call
+ * then resolves to the work's settled outcome every way it ends — the timer,
+ * a late failure, a fast failure — and only after the failed path's claim
+ * release and `onFailure` hook finished. A settlement caller therefore always
+ * reads the hook's effect (whoever scheduled the redelivery set it) intact;
+ * a rushed one would retry the job on a claim that is still live.
  *
  * Not covered: a crash (OOM, SIGKILL) while the work runs. The claim then holds
  * until it expires, and the event is lost.
@@ -142,17 +145,19 @@ export async function runWebhookWork(
         // The scheduler decides what a failure means: post-ack it is a lost
         // event (enqueue a redelivery); a held claim (the release failed)
         // means any replay scheduled now would skip. A failed schedule is
-        // loud, never fatal.
-        trackDetached(
-          Promise.resolve()
-            .then(() => options.onFailure?.({ acked: Boolean(ackedAt), claimsReleased }))
-            .catch((err) =>
-              logger.error('[webhook-work] redelivery scheduling failed', {
-                label,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            ),
-        );
+        // loud, never fatal. A settlement caller waits for this hook before
+        // the call resolves — it reads the scheduler's effect through it —
+        // the HTTP routes keep it detached: their ack budget owns their return.
+        const scheduled = Promise.resolve()
+          .then(() => options.onFailure?.({ acked: Boolean(ackedAt), claimsReleased }))
+          .catch((err) =>
+            logger.error('[webhook-work] redelivery scheduling failed', {
+              label,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+        if (options.awaitSettlement) await scheduled;
+        else trackDetached(scheduled);
       }
     },
   );
@@ -177,10 +182,12 @@ export async function runWebhookWork(
         ackWaitMs,
         ...stageFields(),
       });
-      // A caller that must not complete while the work runs waits it out; the
-      // outcome handlers above have set (or will set) the settled outcome.
-      if (options.awaitSettlement) await running;
     }
   }
+  // A settlement caller waits the work out on every path, not only the
+  // pending one: a fast failure whose release overlaps the ack timer has
+  // 'failed' set while the release (and the failure hook above) still run,
+  // and the awaiting caller must not return while they are in flight.
+  if (options.awaitSettlement) await running;
   return outcome;
 }

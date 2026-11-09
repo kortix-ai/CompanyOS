@@ -1,7 +1,4 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { and, eq } from 'drizzle-orm';
-import { chatInstalls } from '@kortix/db';
-import { db } from '../../shared/db';
 import { config } from '../../config';
 import { generateSlackManifest, resolveBaseUrl } from '../slack-manifest';
 import { loadSlackSigningSecretForProject } from '../install-store';
@@ -27,6 +24,7 @@ import {
   CANONICAL_SLACK_INBOUND,
   inboundProjectId,
   scopeProjectSlackRequest,
+  slackInstalledProjectIds,
   type ProjectSlackInbound,
   type SlackInbound,
 } from './inbound';
@@ -68,6 +66,32 @@ async function verifyProjectSlackRequest(
   const inbound = await scopeProjectSlackRequest(projectId, bodyTeamId);
   if (!inbound) return { refusal: c.json(WORKSPACE_MISMATCH, 403) };
   return { inbound };
+}
+
+/**
+ * Verify a canonical (Kortix-owned Slack app) request: the body is signed with
+ * the Kortix app's own secret, so a valid signature proves the request is
+ * Slack's own. `refuseUnconfigured` is the caller's own 503 copy for an
+ * unconfigured OAuth mode (the slash command answers ephemeral, the other two
+ * a bare JSON error). Returns the verified raw body, or the refusal.
+ */
+async function verifyCanonicalSlackRequest(
+  c: {
+    req: { header(name: string): string | undefined; text(): Promise<string> };
+    json(object: unknown, status: number): Response;
+  },
+  refuseUnconfigured: () => Response,
+): Promise<{ rawBody: string } | { refusal: Response }> {
+  const mode = slackOauthMode();
+  if (!mode.available || !mode.signingSecret) return { refusal: refuseUnconfigured() };
+  const rawBody = await c.req.text();
+  const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
+  const signature = c.req.header('x-slack-signature') ?? '';
+  if (!verifySlackSignature(rawBody, timestamp, signature, mode.signingSecret)) {
+    return { refusal: c.json({ error: 'Invalid signature' }, 401) };
+  }
+  bindIntegrationPrincipal('slack');
+  return { rawBody };
 }
 
 function interactionPayload(rawBody: string): SlackInteractionPayload | null {
@@ -196,16 +220,9 @@ async function processOauthEventCallback(envelope: SlackEnvelope): Promise<void>
   } else if (resolution.kind === 'ambiguous') {
     await maybePostPicker(teamId, resolution.projectIds, envelope);
   } else if (resolution.kind === 'pending') {
-    const installs = await db
-      .select({ projectId: chatInstalls.projectId })
-      .from(chatInstalls)
-      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)));
+    const installs = await slackInstalledProjectIds(teamId);
     if (installs.length > 0) {
-      await maybePostPicker(
-        teamId,
-        installs.map((i) => i.projectId),
-        envelope,
-      );
+      await maybePostPicker(teamId, installs, envelope);
     }
   }
 }
@@ -341,21 +358,16 @@ export function registerSlackWebhookRoutes(): void {
       },
     }),
     async (c: any) => {
+      // The missing-header 401 answers first, before the mode's 503.
       if (!c.req.header('x-slack-request-timestamp') || !c.req.header('x-slack-signature')) {
         return c.json({ error: 'Invalid signature' }, 401);
       }
-      const mode = slackOauthMode();
-      if (!mode.available || !mode.signingSecret) {
-        return c.json({ error: 'OAuth mode not configured' }, 503);
-      }
-
-      const rawBody = await c.req.text();
-      const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
-      const signature = c.req.header('x-slack-signature') ?? '';
-      if (!verifySlackSignature(rawBody, timestamp, signature, mode.signingSecret)) {
-        return c.json({ error: 'Invalid signature' }, 401);
-      }
-      bindIntegrationPrincipal('slack');
+      const verified = await verifyCanonicalSlackRequest(
+        c,
+        () => c.json({ error: 'OAuth mode not configured' }, 503),
+      );
+      if ('refusal' in verified) return verified.refusal;
+      const rawBody = verified.rawBody;
 
       const envelope = parseEnvelope(rawBody);
       if (!envelope) return c.json({ error: 'Invalid JSON' }, 400);
@@ -369,6 +381,7 @@ export function registerSlackWebhookRoutes(): void {
         ackWaitMs: EVENT_ACK_WAIT_MS,
         onFailure: (info) =>
           info.acked ? enqueueSlackEventRedelivery(envelope, undefined, { claimsReleased: info.claimsReleased }) : undefined,
+
       });
       if (outcome === 'failed') return c.json({ error: 'processing failed' }, 500);
 
@@ -391,20 +404,14 @@ export function registerSlackWebhookRoutes(): void {
       },
     }),
     async (c: any) => {
-      const mode = slackOauthMode();
-      if (!mode.available || !mode.signingSecret) {
-        return c.json({ error: 'OAuth mode not configured' }, 503);
-      }
-      const rawBody = await c.req.text();
-      const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
-      const signature = c.req.header('x-slack-signature') ?? '';
-      if (!verifySlackSignature(rawBody, timestamp, signature, mode.signingSecret)) {
-        return c.json({ error: 'Invalid signature' }, 401);
-      }
-      bindIntegrationPrincipal('slack');
+      const verified = await verifyCanonicalSlackRequest(
+        c,
+        () => c.json({ error: 'OAuth mode not configured' }, 503),
+      );
+      if ('refusal' in verified) return verified.refusal;
       // An empty body closes a modal; `{ok:true}` would be read as a malformed
       // `response_action` and show the reviewer an error.
-      const { type, outcome } = await runInteractivityBody(rawBody);
+      const { type, outcome } = await runInteractivityBody(verified.rawBody);
       if (outcome === 'failed') return c.json({ error: 'processing failed' }, 500);
       if (type === 'view_submission') return c.body('', 200);
       return c.json({ ok: true });
@@ -433,22 +440,13 @@ export function registerSlackWebhookRoutes(): void {
       },
     }),
     async (c: any) => {
-      const mode = slackOauthMode();
-      if (!mode.available || !mode.signingSecret) {
-        return c.json(
-          { response_type: 'ephemeral', text: 'OAuth mode not configured on this server.' },
-          503,
-        );
-      }
-      const rawBody = await c.req.text();
-      const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
-      const signature = c.req.header('x-slack-signature') ?? '';
-      if (!verifySlackSignature(rawBody, timestamp, signature, mode.signingSecret)) {
-        return c.json({ error: 'Invalid signature' }, 401);
-      }
-      bindIntegrationPrincipal('slack');
+      const verified = await verifyCanonicalSlackRequest(
+        c,
+        () => c.json({ response_type: 'ephemeral', text: 'OAuth mode not configured on this server.' }, 503),
+      );
+      if ('refusal' in verified) return verified.refusal;
 
-      return c.json(await runSlashCommandBody(rawBody));
+      return c.json(await runSlashCommandBody(verified.rawBody));
     },
   );
 

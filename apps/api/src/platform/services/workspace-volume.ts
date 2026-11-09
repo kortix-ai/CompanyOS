@@ -31,7 +31,7 @@ import { projectSessions } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 
 import { config } from '../../config';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
+import { resolveFeatureFlag, workspaceVolumesSwitch } from '../../feature-flags/registry';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { platinumJson, platinumRateLimitWaitMs, platinumRegionControlPlane } from '../../shared/platinum';
@@ -56,11 +56,6 @@ const UNRECORDED_OPEN_TTL_MS = 120_000;
 
 export function workspaceVolumeName(sessionId: string): string {
   return `kws-${sessionId}`;
-}
-
-/** Operator switch: KORTIX_WORKSPACE_VOLUMES=off gives no new session a volume. */
-function workspaceVolumesKillSwitchOff(): boolean {
-  return /^(0|off|false|no)$/.test((config.KORTIX_WORKSPACE_VOLUMES ?? '').trim().toLowerCase());
 }
 
 /** The session's recorded volume, when the record names its own volume and a valid region. */
@@ -101,7 +96,7 @@ export function startWorkspaceVolume(input: {
   location: string | undefined;
 }): WorkspaceVolume | null {
   const { sessionId } = input;
-  if (!config.PLATINUM_API_KEY || workspaceVolumesKillSwitchOff() || !resolveFeatureFlag(input.projectMetadata, 'workspace_volume')) {
+  if (!config.PLATINUM_API_KEY || workspaceVolumesSwitch() === 'off' || !resolveFeatureFlag(input.projectMetadata, 'workspace_volume')) {
     return null;
   }
   const volume: WorkspaceVolume = { name: workspaceVolumeName(sessionId), location: input.location ?? null };

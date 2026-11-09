@@ -222,6 +222,7 @@ export {
   appDeploymentEvents,
   sessionPendingQuestions,
   sessionPendingPermissions,
+  sessionColleagueAccess,
   yoloMemberTokens,
   stripeWebhookEventsProcessed,
   // Tunnel

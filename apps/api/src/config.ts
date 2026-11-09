@@ -682,9 +682,11 @@ const envSchema = z.object({
   // mounts, with the folders synced in by the box's daemon.
   KORTIX_DRIVES_SESSION_MOUNT: optStr,
   KORTIX_DRIVES_SYNC: optStr,
+  // `on` (or 1/true/yes): `workspace_volume` (stateless sandboxes) is on for
+  // every project without its own choice; dev sets it (deploy-dev.yml).
   // `off` (or 0/false/no): no new session gets a /workspace volume, whatever its
-  // project's `workspace_volume` flag says. A session that already has one keeps
-  // it (platform/services/workspace-volume.ts).
+  // project's flag says. Unset: each project's own choice, default off. A
+  // session that already has a volume keeps it (platform/services/workspace-volume.ts).
   KORTIX_WORKSPACE_VOLUMES: optStr,
   // The `us_region` default for a project that has made no choice: true puts
   // its new Files and sessions in KORTIX_PLATINUM_US_REGION. Off by default;

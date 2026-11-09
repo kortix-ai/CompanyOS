@@ -2280,6 +2280,88 @@ describe('pi subagents extension', () => {
     }
   })
 
+  test('My Kortix: a colleague with connectors and secrets waits for the person, then starts on the same call; same-session and a non-coordinator are refused', async () => {
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname
+        if (req.method === 'POST' && path === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+          // The first start waits for the person; the person allows; the second start runs.
+          if (creates.length === 1) {
+            return Response.json({ error: 'The person must allow this colleague access first (connector gmail and secret STRIPE_KEY).', code: 'COLLEAGUE_ACCESS_APPROVAL_REQUIRED', ask_id: 'access:a1' }, { status: 409 })
+          }
+          return Response.json({ session_id: 'colleague-1' }, { status: 201 })
+        }
+        if (req.method === 'GET' && path.startsWith('/v1/workspaces/proj-pi-test/sessions')) return Response.json([])
+        return new Response('not found', { status: 404 })
+      },
+    })
+    const colleague = { instructions: 'You check invoices.', connectors: ['gmail'], secrets: ['STRIPE_KEY'] }
+    try {
+      const r = await boot({
+        script: [
+          TASK({ description: 'Check invoices', subagent_type: undefined, agent: colleague }),
+          TASK({ description: 'Check invoices', subagent_type: undefined, agent: colleague }),
+          TASK({ description: 'Check invoices here', subagent_type: undefined, agent: colleague, session: 'same' }),
+          { text: 'parent done' },
+        ],
+        env: {
+          KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { mykortix: { mode: 'primary', prompt: 'You are My Kortix.' } } }),
+          KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`,
+          KORTIX_AGENT_NAME: 'mykortix',
+          KORTIX_META_AGENT: '1',
+        },
+      })
+      await promptAndSettle(r, 'start a colleague with gmail')
+      expect(creates.map((c) => c.colleague_access)).toEqual([
+        { connectors: ['gmail'], secrets: ['STRIPE_KEY'] },
+        { connectors: ['gmail'], secrets: ['STRIPE_KEY'] },
+      ])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const parts = toolParts(page, 'task')
+      expect(parts).toHaveLength(3)
+      // Waiting for the person is a result, not a failure, and it carries no task id.
+      expect(parts[0]!.state.status).toBe('completed')
+      expect(parts[0]!.state.output).toContain('<task_awaiting_approval>')
+      expect(parts[0]!.state.output).not.toContain('task_id:')
+      expect(parts[0]!.state.metadata).toMatchObject({ awaitingApproval: true, askId: 'access:a1' })
+      expect(parts[1]!.state.output).toContain('task_id: colleague-1')
+      expect(parts[2]!.state.status).toBe('error')
+      expect(parts[2]!.state.error).toContain('runs in its own session')
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test('only the coordinator hands an inline agent connectors or secrets', async () => {
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        if (req.method === 'POST' && new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+        }
+        return Response.json([])
+      },
+    })
+    try {
+      const r = await boot({
+        script: [TASK({ description: 'Mail it', subagent_type: undefined, agent: { instructions: 'You send mail.', connectors: ['gmail'] } }), { text: 'parent done' }],
+        env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1` },
+      })
+      await promptAndSettle(r, 'hand out gmail')
+      expect(creates).toEqual([])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const [part] = toolParts(page, 'task')
+      expect(part!.state.status).toBe('error')
+      expect(part!.state.error).toContain('Only My Kortix hands an inline agent connectors or secrets')
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('run_in_background: the call returns the child task_id at once, asks the API to notify this session, and the turn goes on', async () => {
     const creates: Array<Record<string, any>> = []
     const reads: string[] = []

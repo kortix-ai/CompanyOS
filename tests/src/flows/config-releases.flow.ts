@@ -27,6 +27,7 @@ import {
 } from '../fixtures/session-run';
 import { withTransientGitRetry } from '../fixtures/git-transient';
 import { isKe2eRetryableError, transientRetryDelayMs } from '../core/client';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 /**
  * `fetch` for the idempotent reads and descriptor mints of this file. Bun
@@ -379,9 +380,9 @@ async function setup(ctx: FlowContext): Promise<Fixture> {
       );
       // Bind the API-minted credential exactly as the sandbox's KORTIX_TOKEN is bound.
       await db.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
             SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-          WHERE token_id = $1`,
+          WHERE token_id = $1`),
         [
           tokenId,
           team.id,

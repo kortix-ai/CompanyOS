@@ -9,6 +9,7 @@ import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { type CliResult, CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 function parseCliJson<T>(result: CliResult, action: string): T {
   throwIfCliInfraFailure(result, action);
@@ -2575,10 +2576,10 @@ flow(
         // The stale narrow grant a token minted before the manifest changed
         // would hold: only `stripe`, no provenance at all.
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
              SET account_id = $2, user_id = $3, project_id = $4,
                  session_id = $5, agent_grant = $6::jsonb
-           WHERE token_id = $1`,
+           WHERE token_id = $1`),
           [
             tokenId,
             team.id,
@@ -2777,7 +2778,7 @@ flow(
             [childSessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`,
+            lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`),
             [childTokenId, team.id, ownerUserId, p.id, childSessionId],
           );
           const child = ctx.client.withBearer(childCredential.secret_key, 'SESSION_TOKEN');
@@ -3060,9 +3061,9 @@ flow(
             [sessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-             WHERE token_id = $1`,
+             WHERE token_id = $1`),
             [
               tokenId,
               team.id,
@@ -4115,9 +4116,9 @@ flow(
             const credential = minted.json<{ token_id: string; secret_key: string }>();
             tokenIds.push(credential.token_id);
             await db.query(
-              `UPDATE kortix.account_tokens
+              lockProjectFirst(`UPDATE kortix.account_tokens
                  SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-               WHERE token_id = $1`,
+               WHERE token_id = $1`),
               [
                 credential.token_id,
                 team.id,
@@ -6082,9 +6083,9 @@ flow(
           // A grant without manifest provenance: the gateway re-derives it
           // from kortix.yaml on the first call, policy sets included.
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                 SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-              WHERE token_id = $1`,
+              WHERE token_id = $1`),
             [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent, connectors: [], permissions: [], env: [] })],
           );
         }
@@ -6472,9 +6473,9 @@ flow(
           [sessionId, team.id, p.id],
         );
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
               SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-            WHERE token_id = $1`,
+            WHERE token_id = $1`),
           [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent: 'support', connectors: 'all', permissions: ['project.connector.read', 'project.connector.write'], env: [] })],
         );
         const refused = await agentClient.post(

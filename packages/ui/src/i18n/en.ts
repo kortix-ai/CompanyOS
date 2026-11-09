@@ -2163,6 +2163,9 @@ const catalog = {
     },
     "inbox": {
       "title": "Inbox",
+      "viewReview": "Review",
+      "viewNotifications": "Notifications",
+      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",
@@ -6281,7 +6284,8 @@ const catalog = {
         "question": "Question",
         "permission": "Permission",
         "approval": "Connector approval"
-      }
+      },
+      "allowed": "Allowed"
     },
     "reviewBulk": {
       "approve": "Approve",
@@ -6351,7 +6355,21 @@ const catalog = {
       "senderUnavailable": "Couldn't load the sending account. Check the From row.",
       "quoted": "“{text}”"
     },
-    "promptHistory": "History {index}/{total}"
+    "promptHistory": "History {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix asks to give a colleague access",
+      "task": "Task",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "The colleague gets only these, for this one task.",
+      "deny": "Deny",
+      "allow": "Allow",
+      "allowed": "Access allowed",
+      "allowedDescription": "My Kortix starts the colleague.",
+      "denied": "Access denied",
+      "deniedDescription": "My Kortix gets your answer.",
+      "failed": "Could not send your decision. Try again."
+    }
   },
   "commandPalette": {
     "title": "Command Palette",
@@ -8148,8 +8166,6 @@ const catalog = {
       "requiredConnectorsHelp": "Listed in kortix.yaml (connectors_required). Not enforced: sessions start without them.",
       "models": "Models",
       "tabCapabilities": "Capabilities",
-      "pinToSidebar": "Pin to sidebar",
-      "unpinFromSidebar": "Unpin from sidebar",
       "spaceHelp": "The space this agent works in: a slug like engineering or sales. Empty: Workspace-wide.",
       "spacePlaceholder": "e.g. engineering"
     },
@@ -9392,6 +9408,7 @@ const catalog = {
     "replacedBy": "Replaced by {path}.",
     "projectTool": "Module {path}",
     "loadError": "Could not load this agent's tools, skills and extensions.",
+    "skillsLoadError": "Could not load the skills.",
     "retry": "Try again",
     "emptyProjectSkills": "No workspace skills. Register one under skills in kortix.yaml.",
     "emptyProjectExtensions": "No workspace extensions. Register one under extensions in kortix.yaml.",
@@ -9429,6 +9446,7 @@ const catalog = {
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "Mount a folder from Files to give this agent's sessions its files.",
+    "projectEmptyDescription": "Mount a folder from Files to give every new session its files.",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -9439,6 +9457,7 @@ const catalog = {
     "alreadyMounted": "Mounted",
     "changeFailed": "Could not change this mount.",
     "loadError": "Could not load this agent's mounts.",
+    "projectLoadError": "Could not load the mounted folders.",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "Files folders every new session mounts.",
@@ -9909,6 +9928,7 @@ const catalog = {
         "help": "Help",
         "plan": "Plan",
         "usage": "Usage",
+        "agents": "Agents",
         "connectors": "Connectors",
         "skills": "Skills",
         "triggers": "Triggers",

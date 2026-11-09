@@ -6,6 +6,7 @@
  * lib/secret-write-input.ts.
  */
 import { randomUUID } from 'node:crypto';
+import { isMyKortixAgentName } from '@kortix/shared';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayUseEnv, getAgentGrant, isBorrowedSessionPrincipal, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { auth, errors, json, lenientBody } from '../../openapi';
@@ -224,7 +225,9 @@ export function registerSecretsRoutes(): void {
       agentGrants,
     }))
       .filter((item) => !item.system)
-      .filter((item) => agentMayUseEnv(agentGrant, item.identifier));
+      // My Kortix holds no secret but hands them to colleagues, a person approving each list
+      // (lib/colleague-access.ts): it reads the names. This route never returns a value.
+      .filter((item) => agentMayUseEnv(agentGrant, item.identifier) || isMyKortixAgentName(agentGrant?.agent ?? ''));
 
     // Audience of each shared value, for the person and agent this read acts
     // for. A value

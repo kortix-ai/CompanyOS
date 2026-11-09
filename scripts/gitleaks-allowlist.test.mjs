@@ -56,8 +56,12 @@ function binary() {
   const dir = mkdtempSync(join(tmpdir(), 'gitleaks-download-'));
   // CWE-494, as secret-scan.yml does it: fetch the published checksum for THIS
   // archive and refuse a mismatch before the downloaded binary ever runs.
+  // --retry: GitHub release downloads answer a transient 504 (2026-11-09
+  // nightly); curl retries 408/429/5xx and timeouts.
   execFileSync('curl', [
     '-sSfL',
+    '--retry',
+    '3',
     `${base}/gitleaks_${PIN}_checksums.txt`,
     '-o',
     join(dir, 'checksums.txt'),
@@ -67,7 +71,7 @@ function binary() {
     .find((line) => line.endsWith(` ${archive}`))
     ?.split(' ')[0];
   assert.ok(expected, `${archive} is missing from the published checksums.txt`);
-  execFileSync('curl', ['-sSfL', `${base}/${archive}`, '-o', join(dir, archive)]);
+  execFileSync('curl', ['-sSfL', '--retry', '3', `${base}/${archive}`, '-o', join(dir, archive)]);
   const actual = createHash('sha256')
     .update(readFileSync(join(dir, archive)))
     .digest('hex');

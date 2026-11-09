@@ -11,18 +11,20 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { chatEventDedup } from '@kortix/db';
 import { inArray } from 'drizzle-orm';
 import { db } from '../../shared/db';
-import { alreadyHandled } from './dedup';
+import { alreadyHandled, claimInboundMessage, inboundMessageKey } from './dedup';
 
 const PROJECT_A = '3f1c2b7e-0000-4000-8000-00000000d0a1';
 const PROJECT_B = '3f1c2b7e-0000-4000-8000-00000000d0b2';
 const EVENT_ID = 'Ev-krtx-4443-1';
 const EVENT_ID_CANONICAL = 'Ev-krtx-4443-2';
+const MESSAGE_KEY = inboundMessageKey(PROJECT_A, 'Tkrtx4015', { channel: 'Ckrtx4015', ts: '11.01' })!;
 
 const KEYS = [
   `slack:event:${EVENT_ID}`,
   `slack:event:${PROJECT_A}:${EVENT_ID}`,
   `slack:event:${PROJECT_B}:${EVENT_ID}`,
   `slack:event:${EVENT_ID_CANONICAL}`,
+  MESSAGE_KEY,
 ];
 
 async function reset(): Promise<void> {
@@ -67,5 +69,23 @@ describe('the Slack event claim is scoped to the project that received it', () =
     });
     expect(await alreadyHandled(EVENT_ID)).toBe(false);
     expect(await alreadyHandled(EVENT_ID)).toBe(true); // the re-taken claim is live again
+  });
+
+  test('a replay whose ENVELOPE and MESSAGE claims both expired runs both gates again', async () => {
+    // The replay path holds two claims before it dispatches: the event
+    // envelope (`slack:event:*`) and the inbound message
+    // (`slack:msg:*`). A failed release can leave BOTH behind; neither may
+    // suppress the replay once its TTL passed — a job that clears only one
+    // gate completes with the message undelivered.
+    await reset();
+    await db.insert(chatEventDedup).values([
+      { eventId: `slack:event:${EVENT_ID}`, expiresAt: new Date(Date.now() - 1_000) },
+      { eventId: MESSAGE_KEY, expiresAt: new Date(Date.now() - 1_000) },
+    ]);
+    expect(await alreadyHandled(EVENT_ID)).toBe(false); // envelope claim re-taken
+    expect(await claimInboundMessage(MESSAGE_KEY)).toBe(true); // message claim re-taken
+    // The re-taken claims are live: a duplicate replay is still suppressed.
+    expect(await alreadyHandled(EVENT_ID)).toBe(true);
+    expect(await claimInboundMessage(MESSAGE_KEY)).toBe(false);
   });
 });

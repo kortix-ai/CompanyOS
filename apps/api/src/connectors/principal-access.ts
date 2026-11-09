@@ -17,6 +17,7 @@
  * `project_sessions.metadata.source` — never from the request.
  */
 import type { AgentGrant } from '@kortix/db';
+import { isMyKortixAgentName } from '@kortix/shared';
 import { agentMayUseConnector, agentPolicySet } from '../iam/agent-scope';
 import { canonicalConnectorAlias } from '../shared/connector-alias';
 import type { CallPolicySet } from './gateway';
@@ -114,9 +115,12 @@ export function connectorDenialBody(
         granted: grant ? grant.connectors : 'all',
         manifest_revision: grant?.manifestRevision ?? null,
         manifest_commit: grant?.manifestCommit ?? null,
-        hint: grant
-          ? `Agent "${grant.agent}" is not granted connector "${input.connector}". Add it to agents.${grant.agent}.connectors in kortix.yaml (or set connectors: "*"), then send another message so the session re-reads the manifest.`
-          : `Connector "${input.connector}" is not assigned to this principal.`,
+        hint: !grant
+          ? `Connector "${input.connector}" is not assigned to this principal.`
+          : isMyKortixAgentName(grant.agent)
+            // My Kortix is not in kortix.yaml: it hands connector work on (projects/lib/colleague-access.ts).
+            ? `My Kortix holds no connector "${input.connector}". Hand the work to a workspace agent that has it, or start a colleague with agent.connectors: ["${input.connector}"] (the person approves it).`
+            : `Agent "${grant.agent}" is not granted connector "${input.connector}". Add it to agents.${grant.agent}.connectors in kortix.yaml (or set connectors: "*"), then send another message so the session re-reads the manifest.`,
       };
     case 'connector_not_connected': {
       // Three different situations behind one reason, and naming the wrong one

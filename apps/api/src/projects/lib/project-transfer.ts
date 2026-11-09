@@ -25,7 +25,7 @@
  */
 import { and, eq, getTableName, inArray, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { artifacts, projectGoals, sessionSandboxIdentities, projectSessionGroups, projectSpaces, rooms, sessionIdleWatches, accountModelPreferences, accountSecretResources, accountSecretGrants, accountTokens, appArtifacts, apps, changeRequests, connectorAttachments, connectorCalls, connectorHeldCalls, connectorConnections, connectionOAuthApplications, connectionOAuthSessions, connectors, drives, gatewayApiKeys, projectAccessRequests, projectGitConnections, projectGitCredentials, projectMonitorBoxes, projectSessionConnectorBindings, projectSessionPublicShares, projectSessions, projectSnapshotBuilds, projectTriggerEventSubscriptions, projectTriggerEventPolls, iamRoles, promptAttachments, providerTransitions, reviewItems, roleAssignments, sandboxTemplates, serviceAccounts, sessionContentPurges, sessionLifecycleCommands, sessionLogs, sessionPendingPermissions, sessionPendingQuestions, sessionRuntimeProjections, sessionSandboxes, sessionTurns } from '@kortix/db';
+import { artifacts, projectGoals, sessionSandboxIdentities, projectSessionGroups, projectSpaces, rooms, sessionIdleWatches, accountModelPreferences, accountSecretResources, accountSecretGrants, accountTokens, appArtifacts, apps, changeRequests, connectorAttachments, connectorCalls, connectorHeldCalls, connectorConnections, connectionOAuthApplications, connectionOAuthSessions, connectors, drives, gatewayApiKeys, projectAccessRequests, projectGitConnections, projectGitCredentials, projectMonitorBoxes, projectSessionConnectorBindings, projectSessionPublicShares, projectSessions, projectSnapshotBuilds, projectTriggerEventSubscriptions, projectTriggerEventPolls, iamRoles, promptAttachments, providerTransitions, reviewItems, roleAssignments, sandboxTemplates, serviceAccounts, sessionColleagueAccess, sessionContentPurges, sessionLifecycleCommands, sessionLogs, sessionPendingPermissions, sessionPendingQuestions, sessionRuntimeProjections, sessionSandboxes, sessionTurns } from '@kortix/db';
 import { db } from '../../shared/db';
 import { logger } from '../../lib/logger';
 import { decryptAccountSecret, encryptAccountSecret } from '../../secrets/account-resource';
@@ -70,6 +70,9 @@ export const PROJECT_TRANSFER_TABLES: readonly PgTable[] = [
   sessionPendingQuestions,
   // A parked tool call waits in its session; a person of the project decides it.
   sessionPendingPermissions,
+  // A colleague access ask and its allow: a person of the project decides it,
+  // and the colleague's grant reads it on every turn.
+  sessionColleagueAccess,
   sandboxTemplates,
   projectSnapshotBuilds,
   providerTransitions,

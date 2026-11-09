@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { gatewayErrorResponse } from '@kortix/llm-gateway';
 import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
 
@@ -167,8 +167,12 @@ function credentialOf(request: Request): string | null {
   return bearer?.trim() || request.headers.get('x-api-key')?.trim() || null;
 }
 
+// Keyed per process: the bucket key never leaves memory, and a HMAC cannot be
+// correlated against an externally computed digest of a stolen key anyway.
+const BUCKET_KEY_SALT = randomBytes(32).toString('hex');
+
 function hashOf(credential: string): string {
-  return createHash('sha256').update(credential).digest('hex');
+  return createHmac('sha256', BUCKET_KEY_SALT).update(credential).digest('hex');
 }
 
 const MESSAGE = 'Too many requests for this credential. Retry shortly.';

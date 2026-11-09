@@ -25,6 +25,9 @@ export type SlackInbound =
   | { kind: 'canonical' }
   | { kind: 'project'; projectId: string; teamId: string };
 
+/** The inbound scope of a per-project (BYO) request — the only kind `scopeProjectSlackRequest` returns. */
+export type ProjectSlackInbound = Extract<SlackInbound, { kind: 'project' }>;
+
 export const CANONICAL_SLACK_INBOUND: SlackInbound = { kind: 'canonical' };
 
 /** The project a per-project request is confined to; undefined for the canonical app. */
@@ -99,7 +102,7 @@ export async function slackInstalledProjectIds(
 export async function scopeProjectSlackRequest(
   projectId: string,
   bodyTeamId: string | null | undefined,
-): Promise<SlackInbound | null> {
+): Promise<ProjectSlackInbound | null> {
   if (!bodyTeamId) return null;
   const teams = await provenSlackWorkspaces(projectId);
   if (!teams.includes(bodyTeamId)) return null;

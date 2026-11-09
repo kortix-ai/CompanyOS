@@ -254,7 +254,7 @@ export function isTypedRetryableApiDegradation(response: Res): boolean {
 
 function describeTypedRetryableResponse(response: Res): string {
   const body = response.captured.res.json as
-    | { code?: unknown; message?: unknown; status?: unknown }
+    | { code?: unknown; message?: unknown }
     | undefined;
   const code = typeof body?.code === 'string' ? body.code : '<no code>';
   const message = typeof body?.message === 'string' ? body.message : '<no message>';

@@ -2477,7 +2477,7 @@
   },
   "src/projects/session-open/session-open-recovery.ts": {
     "no-console": {
-      "count": 2
+      "count": 1
     }
   },
   "src/projects/session-open/session-open.ts": {

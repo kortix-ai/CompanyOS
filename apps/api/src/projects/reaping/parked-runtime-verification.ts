@@ -142,9 +142,18 @@ export async function decideRemovedParkedOutcome(input: {
   if (!claimed) return 'recovery-in-flight';
   // A throw says "this probe could not run", never "the box is gone": the
   // gate's explicit `unavailable` is the only loss authority (doc above).
+  // The warn keeps the round-trip failure diagnosable in prod — the same
+  // breadcrumb the pre-gate open path used to write before it duplicated this
+  // decision (KRTX-4570).
   const recovery = await input
     .recoverInPlace(input.externalId)
-    .catch(() => 'recovery-in-flight' as const);
+    .catch((error: unknown) => {
+      logger.warn('[recovery-gate] in-place recovery probe failed', {
+        externalId: input.externalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 'recovery-in-flight' as const;
+    });
   if (recovery === 'recovery-in-flight') return 'recovery-in-flight';
   if (recovery === 'running' || recovery === 'recovering') {
     // The mark is the write that ends the recovery. If another writer beat us to
@@ -158,13 +167,19 @@ export async function decideRemovedParkedOutcome(input: {
 /**
  * Run the removed-parked decision for one row against its REAL provider: claim
  * the recovery lease, ask the in-place recovery gate, persist an accepted
- * recovery. Shared by the parked sweep and the wake-maintenance reconcile, so
- * one `removed` observation carries the same weight on every background path.
+ * recovery. Shared by the parked sweep, the wake-maintenance reconcile, the
+ * stuck-provisioning convergence and the `/start` open path, so one `removed`
+ * observation carries the same weight — and a thrown probe the same
+ * indeterminate answer — on every surface (the 2026-10-03 learning).
  * Runs the already-lost skip first: a condemned identity is not recoverable
  * here (the sweep's `decideParkedRuntime` skips it before this helper), so the
  * callers' loss handling stands for it. Returns the row the decision ended on:
  * a claimed recovery transitions the row, so the caller that preserves a loss
- * must write the row the claim returned, not its own older snapshot.
+ * must write the row the claim returned, not its own older snapshot, and the
+ * caller that serves a user must read the marked row after an accepted
+ * recovery. `recovery` carries the provider's accepted answer so the
+ * user-facing reasons (`recovered_in_place` vs `restoring_in_place`) survive
+ * the shared gate.
  */
 export async function recoverRemovedParkedRuntime(
   row: typeof sessionSandboxes.$inferSelect,
@@ -173,6 +188,7 @@ export async function recoverRemovedParkedRuntime(
 ): Promise<{
   outcome: ParkedRemovalOutcome;
   row: typeof sessionSandboxes.$inferSelect;
+  recovery?: 'running' | 'recovering';
 }> {
   const metadata = (row.metadata ?? {}) as Record<string, unknown>;
   // Intentional teardown must never be undone by background recovery.
@@ -186,6 +202,8 @@ export async function recoverRemovedParkedRuntime(
   const provider = getProvider(row.provider as SandboxProviderName);
   let claim: Awaited<ReturnType<typeof claimInPlaceRuntimeRecovery>> = null;
   let current = row;
+  let accepted: typeof sessionSandboxes.$inferSelect | null = null;
+  let recovery: 'running' | 'recovering' | undefined;
   const outcome = await decideRemovedParkedOutcome({
     externalId,
     recoverInPlace: provider.recoverInPlace?.bind(provider),
@@ -194,12 +212,16 @@ export async function recoverRemovedParkedRuntime(
       if (claim) current = claim.row;
       return claim !== null;
     },
-    markRecovered: async (recovery) => {
+    markRecovered: async (which) => {
       if (!claim) return false;
-      return (await markInPlaceRuntimeRecoveryAccepted(claim, recovery, now)) !== null;
+      const marked = await markInPlaceRuntimeRecoveryAccepted(claim, which, now);
+      if (!marked) return false;
+      accepted = marked;
+      recovery = which;
+      return true;
     },
   });
-  return { outcome, row: current };
+  return { outcome, row: accepted ?? current, recovery };
 }
 
 /** Verified and stop/settle write the same patch: drop the pending-stop flag, stamp this pass. */

@@ -9,12 +9,11 @@ import { sessionSandboxes } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { type SandboxStatus, getProvider } from '../../platform/providers';
 import { db } from '../../shared/db';
+import { recoverRemovedParkedRuntime } from '../reaping/parked-runtime-verification';
 import { runStoppedObservationFollowUp } from '../session-lifecycle/stopped-observation-followup';
 import type { StartCallLog } from '../session-lifecycle/start-envelope';
 import {
-  claimInPlaceRuntimeRecovery,
   finalizeRecoveredRuntimeIfRunning,
-  markInPlaceRuntimeRecoveryAccepted,
 } from '../runtime-identity';
 import type {
   OpenSessionArgs,
@@ -36,12 +35,16 @@ import {
  * The removed-box phase: grace, the in-place recovery claim, or the preserve
  * path. Body verbatim from the original `runOpenSession` (KRTX-274 split);
  * answers `null` when the provider did not report `removed`.
+ * The loss arbiter is the SHARED gate (`recoverRemovedParkedRuntime`, the one
+ * every discovery path routes through — the 2026-10-03 learning): the claim,
+ * probe and mark wiring was duplicated here, and while the gate's policy
+ * changed (KRTX-4567 condemned a thrown probe), this copy kept turning the
+ * throw into a loss verdict (KRTX-4570). One gate, one policy.
  */
 export async function openRemovedBox(
   args: OpenSessionArgs,
   log: StartCallLog,
   row: OpenSessionRowWithExternalId,
-  provider: ReturnType<typeof getProvider>,
   providerStatus: SandboxStatus,
 ): Promise<SessionStartResult | null> {
   const { loaded, visible, projectId, sessionId } = args;
@@ -58,66 +61,45 @@ export async function openRemovedBox(
         reason: 'runtime_removed_checking',
       };
     }
-    // An identity already parked as lost has had its in-place recovery attempt —
-    // the park that recorded the loss also ended it, dropping the lease. A
-    // re-claim would overwrite runtimeIdentityState ('unavailable' →
-    // 'recovery_claimed') before the once-per-identity guard inside
-    // `preserveEstablishedRuntime` reads it: every poll re-reported the same
-    // loss (2026-10-16: 163 duplicate `runtime.lost` reports in ~3 min from
-    // one session's 1 Hz /start poll) and re-requested a restore-from-backup
-    // Platinum refuses for tombstoned rows anyway. The loss is settled:
-    // preserve again — idempotent, silent. Continuing goes through /recover.
-    const parkedMetadata = sandboxMetadata(row);
-    if (
-      parkedMetadata.runtimeIdentityState === 'unavailable' &&
-      parkedMetadata.preservedExternalId === row.externalId
-    ) {
-      log.did('reconciled');
-      return preserveEstablishedRuntimeOnOpen(
-        loaded,
-        visible,
-        projectId,
-        sessionId,
-        row,
-        'runtime_removed',
-        'provider_removed',
-        'removed',
-      );
-    }
-    const claim = await claimInPlaceRuntimeRecovery(row);
-    if (!claim) {
+    // An identity the gate cannot recover — Kortix-initiated teardown, or one
+    // already condemned (`runtimeIdentityState: 'unavailable'`, whose park
+    // ended its lease) — arrives here as `preserve-lost`: the same settled
+    // skip `decideParkedRuntime` runs for the background sweep. Preserve
+    // again — idempotent, silent. Re-claiming that row would overwrite
+    // runtimeIdentityState ('unavailable' → 'recovery_claimed') before the
+    // once-per-identity guard inside `preserveEstablishedRuntime` reads it:
+    // every poll re-reported the same loss (2026-10-16: 163 duplicate
+    // `runtime.lost` reports in ~3 min from one session's 1 Hz /start poll);
+    // the restore-from-backup it would re-request is one Platinum refuses for
+    // tombstoned rows anyway.
+    const { outcome, row: settledRow, recovery } = await recoverRemovedParkedRuntime(
+      row,
+      row.externalId,
+      new Date(),
+    );
+    if (outcome === 'recovery-in-flight') {
+      // Another caller owns the recovery — or the probe could not run (a 429,
+      // a 5xx, a network blip: a failed round-trip is no provider verdict, the
+      // same indeterminate answer the background lanes get). The row carries
+      // the recovery lease; the client polls and every background pass re-asks
+      // the gate until a definitive answer lands.
       return {
         stage: 'starting',
         agent_name: visible.row.agentName ?? 'default',
         retriable: true,
-        sandbox: serializeSandboxRow(row),
+        sandbox: serializeSandboxRow(settledRow),
         runtime_session_id: visible.row.runtimeSessionId,
         runtime_url: sessionRuntimeUrlPath(row.externalId),
         reason: 'runtime_recovery_in_progress',
       };
     }
-    const recovery = await provider.recoverInPlace?.(row.externalId).catch((err) => {
-      console.warn(`[start] in-place recovery failed for ${row.externalId}:`, err);
-      return 'unavailable' as const;
-    });
-    if (recovery === 'running' || recovery === 'recovering') {
+    if (outcome === 'recovered') {
       log.did('restored');
-      const recoveringRow = await markInPlaceRuntimeRecoveryAccepted(claim, recovery);
-      if (!recoveringRow) {
-        return {
-          stage: 'stopped',
-          agent_name: visible.row.agentName ?? 'default',
-          retriable: false,
-          sandbox: null,
-          runtime_session_id: null,
-          reason: 'runtime_recovery_cancelled',
-        };
-      }
       return {
         stage: 'starting',
         agent_name: visible.row.agentName ?? 'default',
         retriable: true,
-        sandbox: serializeSandboxRow(recoveringRow),
+        sandbox: serializeSandboxRow(settledRow),
         runtime_session_id: visible.row.runtimeSessionId,
         runtime_url: sessionRuntimeUrlPath(row.externalId),
         reason:
@@ -130,7 +112,7 @@ export async function openRemovedBox(
       visible,
       projectId,
       sessionId,
-      claim.row,
+      settledRow,
       'runtime_removed',
       // The provider itself answered `removed` and in-place recovery came back
       // unavailable — a real Path D2 removal, not a wake that ran out of time.

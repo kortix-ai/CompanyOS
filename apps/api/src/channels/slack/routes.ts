@@ -6,6 +6,7 @@ import { slackOauthMode } from '../slack-oauth-mode';
 import { json, errors } from '../../openapi';
 import { slackWebhookApp } from './app';
 import { alreadyHandled } from './dedup';
+import { EVENT_DEDUPE_TTL_MS } from './app';
 import { parseEnvelope, verifySlackSignature } from './util';
 import {
   dispatchSlackEvent,
@@ -24,12 +25,15 @@ import {
   inboundProjectId,
   scopeProjectSlackRequest,
   slackInstalledProjectIds,
+  type ProjectSlackInbound,
   type SlackInbound,
 } from './inbound';
-import type { SlackInteractionPayload, SlashResponse } from './types';
+import type { SlackEnvelope, SlackInteractionPayload, SlashResponse } from './types';
 import { bindIntegrationPrincipal } from '../../shared/audit-scope';
-import { runWebhookWork, type WebhookOutcome } from '../webhook-work';
+import { EVENT_ACK_WAIT_MS, runWebhookWork, type WebhookOutcome } from '../webhook-work';
 import { workspaceIdParam } from '../../shared/route-params';
+import { emitIntegrationEvent, registerEventConsumer, type IntegrationEvent } from '../../integrations/event-inbox';
+import { logger } from '../../lib/logger';
 
 // ── Shared slash + interactivity processing ───────────────────────────────────
 // The canonical OAuth app and per-project (BYO) apps run the SAME logic. They
@@ -48,7 +52,7 @@ async function verifyProjectSlackRequest(
   projectId: string,
   rawBody: string,
   bodyTeamId: string | null | undefined,
-): Promise<{ inbound: SlackInbound } | { refusal: Response }> {
+): Promise<{ inbound: ProjectSlackInbound } | { refusal: Response }> {
   const signingSecret = await loadSlackSigningSecretForProject(projectId);
   if (!signingSecret) return { refusal: c.json({ error: 'Not configured' }, 404) };
   const timestamp = c.req.header('x-slack-request-timestamp') ?? '';
@@ -173,6 +177,168 @@ async function runInteractivityBody(
   return { type: payload.type ?? null, outcome };
 }
 
+// ── Slack event-callback work ────────────────────────────────────────────────────
+// The two event routes' work bodies, named so the durable redelivery (a failed
+// post-ack event, replayed from the job queue) runs the EXACT same steps.
+
+/** The canonical OAuth app's event-callback work (`POST /v1/webhooks/slack`). */
+async function processOauthEventCallback(envelope: SlackEnvelope): Promise<void> {
+  if (await alreadyHandled(envelope.event_id)) return;
+  const teamId = envelope.team_id ?? envelope.event?.team ?? '';
+  if (!teamId) return;
+  if (envelope.event?.type === 'member_joined_channel') {
+    await maybePostChannelIntro(teamId, envelope.event);
+    return;
+  }
+  if (
+    envelope.event?.type === 'app_home_opened' &&
+    envelope.event.tab === 'home' &&
+    envelope.event.user
+  ) {
+    await publishHomeForUser(teamId, envelope.event.user);
+    return;
+  }
+  // Opening the Kortix DM (AI-Assistant pane) → greet with the project picker.
+  // The channel/thread live on event.assistant_thread, NOT the top-level event,
+  // so resolveOauthProject can't see it — handle it before that branch.
+  if (envelope.event?.type === 'assistant_thread_started') {
+    await handleAssistantThreadStarted(teamId, envelope.event);
+    return;
+  }
+  // A `/kortix …` typed in a DM (the Assistant pane can't run real slash
+  // commands) arrives as a plain message — run it as the command it is.
+  if (envelope.event && (await maybeHandleDmCommand(teamId, envelope.event))) {
+    return;
+  }
+  const resolution = await resolveOauthProject(
+    teamId,
+    envelope.event?.channel,
+    envelope.event?.thread_ts,
+  );
+  if (resolution.kind === 'project') {
+    await dispatchSlackEvent(resolution.projectId, envelope);
+  } else if (resolution.kind === 'ambiguous') {
+    await maybePostPicker(teamId, resolution.projectIds, envelope);
+  } else if (resolution.kind === 'pending') {
+    const installs = await slackInstalledProjectIds(teamId);
+    if (installs.length > 0) {
+      await maybePostPicker(teamId, installs, envelope);
+    }
+  }
+}
+
+/** A per-project (BYO) app's event-callback work (`POST /v1/webhooks/slack/:workspaceId`). */
+async function processByoEventCallback(envelope: SlackEnvelope, inbound: ProjectSlackInbound): Promise<void> {
+  // Scoped per project: this is a BYO app with its own event id space, and
+  // another project (or the canonical app) may deliver the same event_id.
+  if (await alreadyHandled(envelope.event_id, { projectId: inbound.projectId })) return;
+  const teamId = inbound.teamId;
+  if (envelope.event && (await maybeHandleDmCommand(teamId, envelope.event, inbound.projectId))) {
+    return;
+  }
+  await dispatchSlackEvent(inbound.projectId, envelope, { ownThreadsOnly: true });
+}
+
+/** The redelivery job's ack-budget warn point, and the claim visibility that must exceed the work's worst run. */
+const SLACK_REDELIVERY_WAIT_MS = 5 * 60_000;
+const SLACK_REDELIVERY_VISIBILITY_MS = 10 * 60_000;
+
+/** The durable-enqueue retry schedule (~8.6 min of coverage — longer than the 500-retry window of the 2 s-budget code, which is the recovery this replaces). Tests shrink the waits. */
+export const REDELIVERY_RETRY_DELAYS_MS = [0, 1_000, 5_000, 30_000, 60_000, 120_000, 300_000];
+
+/**
+ * A failure that lands after the ack went out loses the event: the provider got
+ * its 2xx and will not redeliver, and releasing the dedup claim schedules
+ * nothing. Enqueue the event on the durable job queue (retries with backoff,
+ * dead-letters, runbook in integrations/event-inbox.ts) so the work replays.
+ * The enqueue itself is retried over minutes: a DB blip or a short outage must
+ * not be the thing that eats the redelivery — the schedule covers more than the
+ * Slack-retry window the 500 path used to get. When even that fails, the throw
+ * is the loss signal. When the dedup claim's release failed, the redelivery
+ * waits out the claim's TTL (`runAt`) so the consumer can re-take it.
+ */
+export async function enqueueSlackEventRedelivery(
+  envelope: SlackEnvelope,
+  inbound: SlackInbound | undefined,
+  opts: { claimsReleased: boolean },
+): Promise<void> {
+  if (!envelope.event_id) {
+    logger.warn('[slack-webhook] event work failed after the ack; the event has no id, so it cannot be redelivered');
+    return;
+  }
+  const projectId = inbound?.kind === 'project' ? inbound.projectId : undefined;
+  const eventId = envelope.event_id;
+  const runAt = opts.claimsReleased
+    ? undefined
+    : new Date(Date.now() + EVENT_DEDUPE_TTL_MS + 60_000);
+  const store = (): Promise<boolean> =>
+    emitIntegrationEvent({
+      id: eventId,
+      source: projectId ? `slack:${projectId}` : 'slack:canonical',
+      type: 'slack.event.redelivery',
+      time: new Date().toISOString(),
+      subject: null,
+      projectId: projectId ?? '',
+      data: { envelope, inbound: inbound ?? null },
+    }, { ...(runAt ? { runAt } : {}) });
+  let inserted = false;
+  let scheduled = false;
+  for (const delay of REDELIVERY_RETRY_DELAYS_MS) {
+    await Bun.sleep(delay);
+    try {
+      inserted = await store();
+      scheduled = true; // true: queued; false: the (queue, key) exists — scheduled either way
+      break;
+    } catch (err) {
+      logger.error('[slack-webhook] redelivery enqueue attempt failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  if (!scheduled) throw new Error('redelivery enqueue failed after every retry — the event is lost');
+  if (inserted) logger.warn('[slack-webhook] event work failed after the ack — durable redelivery queued');
+}
+
+/**
+ * Replay one stored event. Runs inside `runWebhookWork` so a failed replay
+ * releases its dedup claim (the queue's next attempt must be able to re-take
+ * it) and is drain-tracked; `awaitSettlement` holds the job open until the work
+ * settles, so a `failed` throw retries the job with backoff and dead-letters it
+ * after its attempts (the runbook above) — a completed job is never retried.
+ */
+export async function redeliverSlackEvent(event: IntegrationEvent): Promise<void> {
+  const { envelope, inbound } = (event.data ?? {}) as {
+    envelope?: SlackEnvelope;
+    inbound?: ProjectSlackInbound | null;
+  };
+  if (!envelope?.event) throw new Error('slack event redelivery payload has no envelope');
+  if (inbound) bindIntegrationPrincipal('slack', { projectId: inbound.projectId });
+  else bindIntegrationPrincipal('slack');
+  // A replay whose dedup claim failed to release leaves the claim LIVE; the
+  // queue's next attempt (10 s backoff) would find it held and skip the replay,
+  // completing the job with the event undelivered. Hold THIS job open past the
+  // claim's TTL instead: the retry then re-takes the stale claim (dedup.ts
+  // re-takes an expired one) and actually runs the event.
+  let claimsStale = false;
+  const outcome = await runWebhookWork(
+    'slack-event-redelivery',
+    () => (inbound ? processByoEventCallback(envelope, inbound) : processOauthEventCallback(envelope)),
+    {
+      ackWaitMs: SLACK_REDELIVERY_WAIT_MS,
+      awaitSettlement: true,
+      onFailure: (info) => {
+        claimsStale = !info.claimsReleased;
+      },
+    },
+  );
+  if (outcome === 'failed') {
+    if (claimsStale) await Bun.sleep(EVENT_DEDUPE_TTL_MS + 60_000);
+    throw new Error('slack event redelivery failed — the job queue retries it with backoff');
+  }
+}
+
+registerEventConsumer('slack.', redeliverSlackEvent, { visibilityMs: SLACK_REDELIVERY_VISIBILITY_MS });
+
 export function registerSlackWebhookRoutes(): void {
   slackWebhookApp.openapi(
     createRoute({
@@ -207,51 +373,15 @@ export function registerSlackWebhookRoutes(): void {
       if (!envelope) return c.json({ error: 'Invalid JSON' }, 400);
       if (envelope.type === 'url_verification') return c.json({ challenge: envelope.challenge });
       if (envelope.type !== 'event_callback' || !envelope.event) return c.json({ ok: true });
-      const outcome = await runWebhookWork('slack-oauth-event', async () => {
-        if (await alreadyHandled(envelope.event_id)) return;
-        const teamId = envelope.team_id ?? envelope.event?.team ?? '';
-        if (!teamId) return;
-        if (envelope.event?.type === 'member_joined_channel') {
-          await maybePostChannelIntro(teamId, envelope.event);
-          return;
-        }
-        if (
-          envelope.event?.type === 'app_home_opened' &&
-          envelope.event.tab === 'home' &&
-          envelope.event.user
-        ) {
-          await publishHomeForUser(teamId, envelope.event.user);
-          return;
-        }
-        // Opening the Kortix DM (AI-Assistant pane) → greet with the project picker.
-        // The channel/thread live on event.assistant_thread, NOT the top-level event,
-        // so resolveOauthProject can't see it — handle it before that branch.
-        if (envelope.event?.type === 'assistant_thread_started') {
-          await handleAssistantThreadStarted(teamId, envelope.event);
-          return;
-        }
-        // A `/kortix …` typed in a DM (the Assistant pane can't run real slash
-        // commands) arrives as a plain message — run it as the command it is.
-        if (envelope.event && (await maybeHandleDmCommand(teamId, envelope.event))) {
-          return;
-        }
-        const resolution = await resolveOauthProject(
-          teamId,
-          envelope.event?.channel,
-          envelope.event?.thread_ts,
-        );
-        if (resolution.kind === 'project') {
-          await dispatchSlackEvent(resolution.projectId, envelope);
-        } else if (resolution.kind === 'ambiguous') {
-          await maybePostPicker(teamId, resolution.projectIds, envelope);
-        } else if (resolution.kind === 'pending') {
-          // A picker is the resolution path's own offering, so this read keeps
-          // no archived filter of its own — the resolution above judged none.
-          const installs = await slackInstalledProjectIds(teamId);
-          if (installs.length > 0) {
-            await maybePostPicker(teamId, installs, envelope);
-          }
-        }
+      // The 200 body is `{ok:true}` Slack never reads — ack fast
+      // (EVENT_ACK_WAIT_MS) and let the work finish detached. A failure that
+      // lands after the ack is enqueued for durable redelivery (Slack will not
+      // retry a 2xx, and releasing the claim alone schedules nothing).
+      const outcome = await runWebhookWork('slack-oauth-event', () => processOauthEventCallback(envelope), {
+        ackWaitMs: EVENT_ACK_WAIT_MS,
+        onFailure: (info) =>
+          info.acked ? enqueueSlackEventRedelivery(envelope, undefined, { claimsReleased: info.claimsReleased }) : undefined,
+
       });
       if (outcome === 'failed') return c.json({ error: 'processing failed' }, 500);
 
@@ -361,15 +491,13 @@ export function registerSlackWebhookRoutes(): void {
       bindIntegrationPrincipal('slack', { projectId });
 
       if (envelope.type !== 'event_callback' || !envelope.event) return c.json({ ok: true });
-      const outcome = await runWebhookWork('slack-byo-event', async () => {
-        // Scoped per project: this is a BYO app with its own event id space, and
-        // another project (or the canonical app) may deliver the same event_id.
-        if (await alreadyHandled(envelope.event_id, { projectId })) return;
-        const teamId = inbound.kind === 'project' ? inbound.teamId : '';
-        if (envelope.event && (await maybeHandleDmCommand(teamId, envelope.event, projectId))) {
-          return;
-        }
-        await dispatchSlackEvent(projectId, envelope, { ownThreadsOnly: true });
+      // The 200 body is `{ok:true}` Slack never reads — ack fast
+      // (EVENT_ACK_WAIT_MS) and let the work finish detached; a post-ack
+      // failure is enqueued for durable redelivery (see the canonical route).
+      const outcome = await runWebhookWork('slack-byo-event', () => processByoEventCallback(envelope, inbound), {
+        ackWaitMs: EVENT_ACK_WAIT_MS,
+        onFailure: (info) =>
+          info.acked ? enqueueSlackEventRedelivery(envelope, inbound, { claimsReleased: info.claimsReleased }) : undefined,
       });
       if (outcome === 'failed') return c.json({ error: 'processing failed' }, 500);
       return c.json({ ok: true });

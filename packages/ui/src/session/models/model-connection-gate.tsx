@@ -1,10 +1,11 @@
 'use client';
 
-import { CreditCardIcon, ImageBrokenIcon, KeyIcon } from '@phosphor-icons/react';
+import { ArrowRightIcon, CreditCardIcon, ImageBrokenIcon, KeyIcon } from '@phosphor-icons/react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from '../../i18n';
 
+import { ProviderLogo } from '../../internal/lib/provider-branding';
 import { Button } from '../../primitives/button';
 import type { FlatModel } from '@kortix/sdk/react';
 import { useModelConnectionGate } from './use-model-connection-gate';
@@ -19,71 +20,126 @@ const EMPTY_MODELS: FlatModel[] = [];
 const BAR_ENTER = { type: 'spring', duration: 0.5, bounce: 0, delay: 0.15 } as const;
 const BAR_EXIT = { type: 'spring', duration: 0.35, bounce: 0 } as const;
 
+// Enter waits a beat so the composer paints first, then the prompt rises into
+// place. Exit is shorter: once a model connects, the row is no longer news.
+const PROMPT_ENTER = { duration: 0.2, ease: [0.23, 1, 0.32, 1], delay: 0.15 } as const;
+const PROMPT_EXIT = { duration: 0.15, ease: [0.23, 1, 0.32, 1] } as const;
+
+/** The two subscriptions most people already pay for, in the order the prompt offers them. */
+const SUBSCRIPTION_OPTIONS = [
+  { providerId: 'openai', titleKey: 'useChatGpt', planKey: 'chatGptPlan' },
+  { providerId: 'anthropic', titleKey: 'useClaude', planKey: 'claudePlan' },
+] as const;
+
 /**
- * Non-blocking variant of the gate — a slim status strip that slides out from
- * under the chat input card (the composer stays visible; sends are already
- * disabled by `modelUnavailable`). Left side says what's wrong, right side
- * offers the same two ways out as the full gate.
+ * The "no model connected" prompt: a row of its own UNDER the composer, a gap
+ * apart, that names the fastest way in — sign in with a ChatGPT or Claude plan
+ * the member already pays for. Each tile opens the provider dialog with that
+ * provider already expanded, so the next click is the sign-in itself.
  *
- * ## It is a TRAY, not a box below the composer
+ * It replaced a muted strip tucked behind the card ("No model connected —
+ * connect one to start chatting" + one small button). New projects stalled
+ * between `project_created` and `session_started`: the strip read as status,
+ * not as the next step, and "Connect model" did not say which model or how.
  *
- * This renders as the card's next sibling and pulls itself UP behind it
- * (`-mt-4` on the clipper, cancelled by `pt-4` on the strip), so the card —
- * `isolate z-10`, opaque `bg-sidebar` — paints over the overlap. What is left
- * is one surface: the composer, with a deeper strip hanging off its bottom
- * edge and showing through the card's own rounded bottom corners.
+ * "Use an API key" opens the same dialog on the full provider list. "Upgrade"
+ * shows only where billing sells a plan (`showUpgradeOption`).
  *
- * The overlap is why the card needs NO conditional radius. A flush seam would
- * have meant `rounded-b-none` on the card while this is mounted, and the card
- * would snap its corners back the instant `show` flipped — 350ms of square
- * corner sitting above a strip that is still animating out. Here the card is
- * untouched and only the tray moves.
- *
- * `-mt-4` lives on the clipper, never on the strip inside it: the clipper is
- * `overflow-hidden` for the height animation, so a negative margin on its
- * child would be clipped away instead of overlapping anything.
+ * With models already running, the project home offers the same two plans
+ * instead (`SubscriptionOffer`).
  *
  * `show` must only flip on settled data (see `entitlementsPending`) — the
  * animation assumes it renders once with the final answer, not per-query.
  */
 export function ModelConnectionBar({ show }: { show: boolean }) {
   const t = useTranslations('sessionUi.modelGate');
+  const reduceMotion = useReducedMotion();
   const { canConnectProvider, openConnectProvider, openUpgrade, modal, showUpgradeOption } =
     useModelConnectionGate(EMPTY_MODELS);
 
   return (
     <>
       {modal}
-      <ComposerTray show={show} trayKey="model-connection-bar">
-        <div className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs">
-          <KeyIcon className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {t('barTitle')}
-            <span className="hidden sm:inline"> — {t('barDescription')}</span>
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {showUpgradeOption && (
-            <Button type="button" variant="ghost" size="xs" onClick={openUpgrade}>
-              <CreditCardIcon className="size-3.5 shrink-0" />
-              {t('upgrade')}
-            </Button>
-          )}
-          {canConnectProvider && (
-            <Button type="button" size="xs" onClick={() => openConnectProvider('providers')}>
-              {t('connectModel')}
-            </Button>
-          )}
-        </div>
-      </ComposerTray>
+      <AnimatePresence initial={false}>
+        {show && (
+          <m.section
+            key="model-connection-prompt"
+            aria-label={t('promptTitle')}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0, transition: PROMPT_ENTER }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, transition: PROMPT_EXIT }}
+            className="mt-4 flex flex-col gap-2.5"
+          >
+            <div className="flex min-h-7 items-center justify-between gap-3 px-1">
+              <p className="min-w-0 text-sm text-pretty">
+                <span className="text-foreground font-medium">{t('promptTitle')}</span>
+                <span className="text-muted-foreground hidden sm:inline">
+                  {' '}
+                  {t('promptDescription')}
+                </span>
+              </p>
+              <div className="flex shrink-0 items-center gap-1">
+                {canConnectProvider && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="text-muted-foreground"
+                    onClick={() => openConnectProvider('providers')}
+                  >
+                    <KeyIcon className="size-3.5 shrink-0" />
+                    {t('useApiKey')}
+                  </Button>
+                )}
+                {showUpgradeOption && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="text-muted-foreground"
+                    onClick={openUpgrade}
+                  >
+                    <CreditCardIcon className="size-3.5 shrink-0" />
+                    {t('upgrade')}
+                  </Button>
+                )}
+              </div>
+            </div>
+            {canConnectProvider && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {SUBSCRIPTION_OPTIONS.map((option) => (
+                  <Button
+                    key={option.providerId}
+                    type="button"
+                    variant="outline"
+                    className="bg-background group h-auto justify-start gap-3 rounded-xl px-3 py-2.5 text-left"
+                    onClick={() => openConnectProvider('providers', option.providerId)}
+                  >
+                    <ProviderLogo providerID={option.providerId} size="small" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="text-foreground truncate text-sm font-medium">
+                        {t(option.titleKey)}
+                      </span>
+                      <span className="text-muted-foreground truncate text-xs font-normal">
+                        {t(option.planKey)}
+                      </span>
+                    </span>
+                    <ArrowRightIcon className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-colors" />
+                  </Button>
+                ))}
+              </div>
+            )}
+          </m.section>
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
 /**
  * One line under the card when the selected model cannot read an attached image
- * (`modelRejectingAttachedImages`). Send is refused with the same words. The same
- * tray as `ModelConnectionBar`; the composer never shows both at once.
+ * (`modelRejectingAttachedImages`). Send is refused with the same words. The
+ * composer never shows it beside `ModelConnectionBar`.
  */
 export function ImagesUnsupportedBar({ modelName }: { modelName: string | null }) {
   const t = useTranslations('sessionUi.modelGate');
@@ -104,7 +160,14 @@ export function ImagesUnsupportedBar({ modelName }: { modelName: string | null }
   );
 }
 
-/** The tray both strips share. See `ModelConnectionBar` for why it hangs behind the card. */
+/**
+ * A strip that hangs behind the card's bottom edge: rendered as the card's next
+ * sibling, pulled up under it (`-mt-4` on the clipper, cancelled by `pt-4` on
+ * the strip), so the card — `isolate z-10`, opaque — paints over the overlap.
+ * `-mt-4` lives on the clipper, never on the strip: the clipper is
+ * `overflow-hidden` for the height animation and would clip a negative margin
+ * on its child.
+ */
 function ComposerTray({
   show,
   trayKey,

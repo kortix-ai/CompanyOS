@@ -302,6 +302,7 @@ export function ModelPickerPanel({
 
       {effort && effort.choices.length > 0 ? (
         <ReasoningEffortPane
+          title={t('thinking')}
           choices={effort.choices}
           selectedVariant={effort.selectedVariant}
           onVariantChange={effort.onChange}

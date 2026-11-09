@@ -2052,7 +2052,8 @@
     "favoritesEmpty": "为模型加星标即可保留在这里。",
     "addFavorite": "将 {model} 加入收藏",
     "removeFavorite": "将 {model} 移出收藏",
-    "groups": "模型分组"
+    "groups": "模型分组",
+    "thinking": "思考"
   },
   "sessionScope": {
     "resetDefault": "重置为默认设置",

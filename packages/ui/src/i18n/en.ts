@@ -1450,7 +1450,8 @@ const catalog = {
     "favoritesEmpty": "Star a model to keep it here.",
     "addFavorite": "Add {model} to favorites",
     "removeFavorite": "Remove {model} from favorites",
-    "groups": "Model groups"
+    "groups": "Model groups",
+    "thinking": "Thinking"
   },
   "sessionScope": {
     "resetDefault": "Reset to default",

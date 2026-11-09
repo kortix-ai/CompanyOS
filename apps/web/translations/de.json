@@ -2052,7 +2052,8 @@
     "favoritesEmpty": "Markiere ein Modell mit einem Stern, um es hier zu behalten.",
     "addFavorite": "{model} zu Favoriten hinzufügen",
     "removeFavorite": "{model} aus Favoriten entfernen",
-    "groups": "Modellgruppen"
+    "groups": "Modellgruppen",
+    "thinking": "Denken"
   },
   "sessionScope": {
     "resetDefault": "Auf Standard zurücksetzen",

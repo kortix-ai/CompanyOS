@@ -222,6 +222,8 @@ interface ReasoningEffortPaneProps {
   /** The session's current variant, or null = model default. */
   selectedVariant: string | null | undefined;
   onVariantChange: (variant: string | null) => void;
+  /** The pane's heading. Defaults to "Thinking effort". */
+  title?: string;
   className?: string;
 }
 
@@ -239,6 +241,7 @@ export function ReasoningEffortPane({
   choices,
   selectedVariant,
   onVariantChange,
+  title,
   className,
 }: ReasoningEffortPaneProps) {
   const t = useTranslations('threads');
@@ -267,9 +270,11 @@ export function ReasoningEffortPane({
   };
 
   return (
-    // No heading: the levels say what they are, and the model is the checked
-    // row beside them. The group keeps its name for assistive tech.
+    // The heading names the knob only: the model is the checked row beside it.
     <div className={cn('flex min-w-0 flex-col', className)}>
+      <div className="text-muted-foreground flex h-9 shrink-0 items-center border-b px-3 text-sm">
+        {title ?? t('thinkingEffort')}
+      </div>
       <div
         role="radiogroup"
         aria-label={t('thinkingEffort')}

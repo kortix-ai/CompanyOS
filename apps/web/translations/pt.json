@@ -2052,7 +2052,8 @@
     "favoritesEmpty": "Marque um modelo com estrela para mantê-lo aqui.",
     "addFavorite": "Adicionar {model} aos favoritos",
     "removeFavorite": "Remover {model} dos favoritos",
-    "groups": "Grupos de modelos"
+    "groups": "Grupos de modelos",
+    "thinking": "Raciocínio"
   },
   "sessionScope": {
     "resetDefault": "Redefinir para o padrão",

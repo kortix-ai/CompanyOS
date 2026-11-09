@@ -395,19 +395,24 @@ function joinUrl(base: string, path: string): string {
 }
 
 /**
- * The first path placeholder the args leave empty: a missing, null, or
- * whitespace-only string value where the template needs one. Null when
- * every placeholder has a usable value. Callers deny the call with this name
- * so the provider never sees a truncated URL (KRTX-4539).
+ * The first path placeholder the args leave unusable, judged against the
+ * exact value the URL builder substitutes: `String(value ?? '')` for the
+ * untrimmed `{…}` capture. That segment is empty (a nullish value, or a JSON
+ * value whose serialization is empty such as `[]` or `['']`, or whitespace)
+ * or dot-only (`.` / `..` — URL normalization collapses it into a parent
+ * path). Null when every placeholder has a usable value. Callers deny the
+ * call with this name so the provider never sees a truncated or escaping URL
+ * (KRTX-4539).
  */
 export function missingPathArg(
   pathTemplate: string,
   args: Record<string, unknown> | null | undefined,
 ): string | null {
   for (const match of pathTemplate.matchAll(/\{([^}]+)\}/g)) {
-    const name = match[1]!.trim();
+    const name = match[1]!;
     const value = args?.[name];
-    if (typeof value === 'string' ? value.trim() === '' : value == null) return name;
+    const segment = (value == null ? '' : String(value)).trim();
+    if (segment === '' || /^[.]+$/.test(segment)) return name.trim();
   }
   return null;
 }

@@ -105,7 +105,15 @@ test('a catalog (openapi) action denies an empty path argument before any upstre
     expect(empty).toMatchObject({ status: 'denied', reason: 'invalid_args' });
     if (empty.status !== 'denied') return;
     expect(empty.message).toContain('intentId');
+    // Edge cases reachable only through caller JSON, not the seed above:
+    // String([]) renders the same empty segment (review of KRTX-4539's fix).
     // The configured credential needs no connection row: the deny fires before it.
+    const emptyArray = await handleCall(makeDbGatewayDeps(principal(owner, 'Solog')),
+      { projectId: PROJECT, accountId: ACCOUNT, subject: { userId: owner, groupIds: [] }, sessionId: null,
+        connectorSlug: 'ogfake', actionPath: 'get_intent', args: { intentId: [] } });
+    expect(emptyArray).toMatchObject({ status: 'denied', reason: 'invalid_args' });
+    if (emptyArray.status !== 'denied') return;
+    expect(emptyArray.message).toContain('intentId');
     const filled = await handleCall(makeDbGatewayDeps(principal(owner, 'Solog')), {
       projectId: PROJECT, accountId: ACCOUNT, subject: { userId: owner, groupIds: [] }, sessionId: null,
       connectorSlug: 'ogfake', actionPath: 'get_intent', args: { intentId: 'pi_1' },

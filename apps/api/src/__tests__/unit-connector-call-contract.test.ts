@@ -244,8 +244,29 @@ describe('handleCall() path arguments', () => {
     ['empty string', { intentId: '' }],
     ['argument absent', {}],
     ['whitespace only', { intentId: '  ' }],
-  ])('path argument that is %s → denied before the upstream, message names it', async (_case, args) => {
+    ['null', { intentId: null }],
+    // The builder renders String(value): [] → '', [''] → '' — these are
+    // JSON arg values whose serialized path segment is empty.
+    ['empty array', { intentId: [] }],
+    ['array of one empty string', { intentId: [''] }],
+    // URL normalization collapses a dot-only segment into a parent path.
+    ['dot-only', { intentId: '.' }],
+    ['parent-segment dots', { intentId: '..' }],
+  ])('path argument that serializes to nothing usable (%s) → denied before the upstream, message names it', async (_case, args) => {
     const res = await handleCall(trackedDeps({ loadAction: async () => ARGS_ACTION }), inputWithArgs(args));
+    expect(res).toMatchObject({ status: 'denied', reason: 'invalid_args' });
+    if (res.status !== 'denied') return;
+    expect(res.message).toContain('intentId');
+    expect(fetches).toEqual([]);
+  });
+
+  test('a template with padding around the name reads the untrimmed capture the builder reads', async () => {
+    // buildHttpRequest substitutes args[' intentId '] for `{ intentId }` — the
+    // caller's un-padded key is invisible to it, so this renders an empty
+    // segment just like a missing argument (review of KRTX-4539's fix).
+    const deps = () =>
+      trackedDeps({ loadAction: async () => action({ kind: 'openapi', method: 'GET', path: '/intents/{ intentId }', server: 'https://crm.example.test' }) });
+    const res = await handleCall(deps(), inputWithArgs({ intentId: 'pi_1' }));
     expect(res).toMatchObject({ status: 'denied', reason: 'invalid_args' });
     if (res.status !== 'denied') return;
     expect(res.message).toContain('intentId');

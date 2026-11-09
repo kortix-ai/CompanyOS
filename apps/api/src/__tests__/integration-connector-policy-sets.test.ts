@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { accounts, connectorActions, connectorPolicies, connectorProjectPolicies, connectorPolicySets, connectors, projects } from '@kortix/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { parse as parseYaml } from 'yaml';
 
 import { dbConnectorRouterDeps } from '../connectors/db-deps';
@@ -139,12 +139,10 @@ describe('connector policy sets', () => {
     const id = await connectorId();
     // A stored conditions value that is not a valid condition list (a direct SQL
     // edit, or a row written before validation existed) must fail closed:
-    // `conditionsInvalid`, never a silent drop of the restriction.
-    const malformed = { arg: 'to' } as unknown as NonNullable<
-      typeof connectorPolicies.$inferInsert['conditions']
-    >;
+    // `conditionsInvalid`, never a silent drop of the restriction. Seeded as a
+    // raw jsonb fragment, the way a hand-written row would arrive.
     await db.insert(connectorPolicies).values({
-      connectorId: id, match: 'purg_*', action: 'block', position: 7, conditions: malformed,
+      connectorId: id, match: 'purg_*', action: 'block', position: 7, conditions: sql`'{"arg":"to"}'::jsonb`,
     });
     const single = await loadConnectorPoliciesFor(id);
     expect(await loadConnectorPoliciesForMany([id])).toEqual(new Map([[id, single]]));
@@ -153,7 +151,7 @@ describe('connector policy sets', () => {
     });
     // The project loader projects the same shape from connector_project_policies.
     await db.insert(connectorProjectPolicies).values({
-      projectId: PROJECT, match: `${SLUG}.purg_*`, action: 'block', position: 7, conditions: malformed,
+      projectId: PROJECT, match: `${SLUG}.purg_*`, action: 'block', position: 7, conditions: sql`'{"arg":"to"}'::jsonb`,
     });
     expect(await loadProjectPoliciesFor(PROJECT)).toContainEqual({
       match: `${SLUG}.purg_*`, action: 'block', position: 7, conditions: null, conditionsInvalid: true,

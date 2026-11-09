@@ -14,24 +14,34 @@ describe('per-credential request limit', () => {
   test('refuses the request over the limit with 429 and Retry-After, and the next minute admits it again', async () => {
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     const limit = createTokenRateLimit(2);
-    const call = () => limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }));
+    limit.validated('kortix_sb_a');
+    const call = () =>
+      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }));
     expect(call()).toBeNull();
     expect(call()).toBeNull();
     const refused = call();
     expect(refused?.status).toBe(429);
     expect(refused?.headers.get('retry-after')).toBe('30');
-    const body = (await refused!.json()) as { error: { code: string } };
+    const body = (await refused?.json()) as { error: { code: string } };
     expect(body.error.code).toBe('rate_limited');
 
     setSystemTime(new Date('2026-11-02T12:00:30Z'));
     expect(call()).toBeNull();
   });
 
-  test('counts each credential apart, and x-api-key is a credential', () => {
+  test('counts each validated credential apart, and x-api-key is a credential', () => {
     const limit = createTokenRateLimit(1);
-    expect(limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }))).toBeNull();
-    expect(limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }))?.status).toBe(429);
-    expect(limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_b' }))).toBeNull();
+    for (const credential of ['kortix_sb_a', 'kortix_sb_b', 'kortix_gw_c'])
+      limit.validated(credential);
+    expect(
+      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' })),
+    ).toBeNull();
+    expect(
+      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }))?.status,
+    ).toBe(429);
+    expect(
+      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_b' })),
+    ).toBeNull();
     expect(limit(request('/v1/messages', { 'x-api-key': 'kortix_gw_c' }))).toBeNull();
     expect(limit(request('/v1/messages', { 'x-api-key': 'kortix_gw_c' }))?.status).toBe(429);
   });
@@ -45,13 +55,56 @@ describe('per-credential request limit', () => {
     const limit = createTokenRateLimit(1);
     for (const path of ['/v1/messages', '/v1/claude-code/v1/messages']) {
       const headers = { authorization: `Bearer kortix_sb_${path.length}` };
+      limit.validated(`kortix_sb_${path.length}`);
       limit(request(path, headers));
       const refused = limit(request(path, headers));
       expect(refused?.status).toBe(429);
-      expect(await refused!.json()).toEqual({
+      expect(await refused?.json()).toEqual({
         type: 'error',
-        error: { type: 'rate_limit_error', message: 'Too many requests for this credential. Retry shortly.' },
+        error: {
+          type: 'rate_limit_error',
+          message: 'Too many requests for this credential. Retry shortly.',
+        },
       });
     }
+  });
+});
+
+describe('credentials the gateway has not validated (KRTX-4528)', () => {
+  const fake = (n: number) =>
+    request('/v1/chat/completions', { authorization: `Bearer kortix_fake_${n}` });
+
+  test('refuses a flood of never-validated credentials once the shared allowance is spent', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(2);
+    // Two requests on unseen credentials take the two shared slots and pass.
+    expect(limit(fake(1))).toBeNull();
+    expect(limit(fake(2))).toBeNull();
+    // A third unseen credential is refused: a fresh fake cannot buy a bucket.
+    const refused = limit(fake(3));
+    expect(refused?.status).toBe(429);
+    expect(refused?.headers.get('retry-after')).toBe('30');
+    // Repeating a fake already admitted does not buy anything either.
+    expect(limit(fake(1))?.status).toBe(429);
+  });
+
+  test('a flood of never-validated credentials leaves only the one shared bucket', () => {
+    const limit = createTokenRateLimit(5);
+    for (let i = 0; i < 200; i++) limit(fake(i));
+    expect(limit.buckets()).toEqual(['gateway_token:distinct_credentials']);
+  });
+
+  test('a credential the API validated keeps its own budget, also after the shared one refused it', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(1);
+    expect(limit(fake(1))).toBeNull();
+    expect(limit(fake(2))?.status).toBe(429);
+    // `kortix_fake_2`'s request was refused for sharing, not for being fake: the
+    // API answered it with a principal, so it now has its own budget.
+    limit.validated('kortix_fake_2');
+    expect(limit(fake(2))).toBeNull();
+    expect(limit(fake(2))?.status).toBe(429);
+    // The shared allowance still refuses a fake: the two budgets are apart.
+    expect(limit(fake(3))?.status).toBe(429);
   });
 });

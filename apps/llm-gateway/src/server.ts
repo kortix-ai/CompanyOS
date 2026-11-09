@@ -1,5 +1,6 @@
 import { wellKnownResponse } from '@kortix/shared/well-known';
 import {
+  type AuthedPrincipal,
   DEFAULT_BODY_AMPLIFICATION,
   DEFAULT_MAX_REQUEST_BYTES,
   InflightBudget,
@@ -96,7 +97,9 @@ export function messagesAuthorization(
   return key ? `Bearer ${key}` : undefined;
 }
 
-export function buildServer(options: { inflight?: InflightBudget } = {}): GatewayServer {
+export function buildServer(
+  options: { inflight?: InflightBudget; requestsPerMinutePerCredential?: number } = {},
+): GatewayServer {
   const inflight = options.inflight ?? defaultInflight;
   const api = createApiClient({
     baseUrl: config.apiUrl,
@@ -122,12 +125,36 @@ export function buildServer(options: { inflight?: InflightBudget } = {}): Gatewa
     );
 
   const { recordOutcome, recordUpstream, trafficSnapshot, upstreamSignals } = createTraffic();
+  const rateLimit = createTokenRateLimit(
+    options.requestsPerMinutePerCredential ?? config.requestsPerMinutePerCredential,
+  );
+  // An API answer that carries a principal means the credential is real (even
+  // when a later gate denied the request: 402/403 carry the principal too). So
+  // every internal call that authenticates a token marks that token validated,
+  // whatever route the request took, and `x-api-key` (Anthropic SDKs send the
+  // key there) marks the key it carries: without this a real credential would
+  // stay on the shared distinct-credential allowance for good (KRTX-4528).
+  const validatedIfReal = (token: string, principal: AuthedPrincipal | undefined) => {
+    if (principal) rateLimit.validated(token);
+  };
   const gateway = createGateway(
     {
-      authenticate: api.authenticate,
+      authenticate: async (token) => {
+        const principal = await api.authenticate(token);
+        validatedIfReal(token, principal ?? undefined);
+        return principal;
+      },
       // Combined authentication + budget gate. Billing runs after model resolution.
-      authorize: api.authorize,
-      admit: api.admit,
+      authorize: async (token) => {
+        const result = await api.authorize(token);
+        validatedIfReal(token, result.principal);
+        return result;
+      },
+      admit: async (token, input) => {
+        const result = await api.admit(token, input);
+        validatedIfReal(token, result?.admission?.principal);
+        return result;
+      },
       resolveRoute: api.resolveRoute,
       resolveUpstream: api.resolveUpstream,
       notePoolRateLimit: api.notePoolRateLimit,
@@ -162,7 +189,12 @@ export function buildServer(options: { inflight?: InflightBudget } = {}): Gatewa
   }
   const inflightRequests = trackInflight(app);
   registerHealth(app, api, inflight, traces, trafficSnapshot, upstreamSignals);
-  registerRoutes(app, gateway, inflight, recordOutcome, createTokenRateLimit(config.requestsPerMinutePerCredential));
+  // `x-api-key` carries a credential the limit already counted, so a route that
+  // rewrites it into an Authorization bearer validates the key it came from.
+  registerRoutes(app, gateway, inflight, recordOutcome, rateLimit, (request) => {
+    const key = request.headers.get('authorization') ? undefined : request.headers.get('x-api-key')?.trim();
+    if (key) rateLimit.validated(key);
+  });
   // Register fallbacks after the handlers so supported methods keep their behavior.
   const methodsByPath = new Map<string, Set<string>>();
   for (const { path, method } of app.routes) {

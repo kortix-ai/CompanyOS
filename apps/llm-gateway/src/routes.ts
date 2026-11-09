@@ -187,12 +187,18 @@ export function registerRoutes(
   inflight: InflightBudget,
   recordOutcome: (status: number) => void,
   rateLimit: (request: Request, headers?: Headers) => Response | null,
+  /** A credential an admitted request carried, once the request passed the limit. */
+  onCredential?: (request: Request) => void,
 ) {
   // Every model route checks the per-credential limit first (token-rate-limit.ts).
   const limited = <C extends { req: { raw: Request } }>(handler: (c: C) => Promise<Response>) =>
     async (c: C) => {
       const headers = new Headers();
-      const response = rateLimit(c.req.raw, headers) ?? await handler(c);
+      const refusal = rateLimit(c.req.raw, headers);
+      if (refusal) return refusal;
+      // Admitted: the route may validate the credential it carried (x-api-key).
+      onCredential?.(c.req.raw);
+      const response = await handler(c);
       headers.forEach((value, name) => response.headers.set(name, value));
       return response;
     };

@@ -151,6 +151,15 @@ export function settingsQueryWriteStillValid(current: string, startedFrom: strin
   return current === startedFrom;
 }
 
+/**
+ * The query the field shows after a dropped write: the one in the URL now.
+ * The page moved under the field (Back, Forward, a link), possibly to an entry
+ * that differs only in another param, so the field follows the URL.
+ */
+export function settingsQueryAfterDroppedWrite(locationSearch: string): string {
+  return new URLSearchParams(locationSearch).get(SEARCH_PARAM) ?? '';
+}
+
 function SettingsSearch({
   projectId,
   rail,
@@ -213,7 +222,13 @@ function SettingsSearch({
     const here = () => `${window.location.pathname}${window.location.search}`;
     const startedFrom = here();
     const write = () => {
-      if (!settingsQueryWriteStillValid(here(), startedFrom)) return;
+      if (!settingsQueryWriteStillValid(here(), startedFrom)) {
+        const restored = settingsQueryAfterDroppedWrite(window.location.search);
+        setWritten(`${window.location.pathname}|${restored}`);
+        setQuery(restored);
+        setCursor(null);
+        return;
+      }
       // The guard proved the page has not moved, so `pathname` is still it.
       setWritten(`${pathname}|${value}`);
       const { search, hash } = window.location;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { settingsQueryWriteStillValid, withSettingsQuery } from './workspace-settings-sidebar-nav';
+import { settingsQueryAfterDroppedWrite, settingsQueryWriteStillValid, withSettingsQuery } from './workspace-settings-sidebar-nav';
 
 describe('withSettingsQuery', () => {
   test('adds the query to a plain path', () => {
@@ -38,5 +38,17 @@ describe('settingsQueryWriteStillValid', () => {
 
   test('a result opened mid-debounce already carries the newer query: the write is dropped', () => {
     expect(settingsQueryWriteStillValid('/s/security?settings_q=keys', '/s/general?settings_q=ke')).toBe(false);
+  });
+});
+
+describe('settingsQueryAfterDroppedWrite', () => {
+  test('Back to an entry with the same path and query but another param: the field takes the URL query', () => {
+    // Typed "git" on general?tab=b&settings_q=key, Back to general?tab=a&settings_q=key within 250 ms.
+    expect(settingsQueryWriteStillValid('/s/general?tab=a&settings_q=key', '/s/general?tab=b&settings_q=key')).toBe(false);
+    expect(settingsQueryAfterDroppedWrite('?tab=a&settings_q=key')).toBe('key');
+  });
+
+  test('no param: the field empties', () => {
+    expect(settingsQueryAfterDroppedWrite('?tab=a')).toBe('');
   });
 });

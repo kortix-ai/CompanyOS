@@ -353,7 +353,7 @@ describe('failed status assert detail redaction (Strix CWE-532)', () => {
     }
 
     const message = (error as Error).message;
-    expect(message).not.toContain('eyJhbGciOiJIUzI1NiJ9');
+    expect(message).not.toContain('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
     expect(message).toContain('***[');
   });
 });

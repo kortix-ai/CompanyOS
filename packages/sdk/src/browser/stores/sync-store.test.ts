@@ -4454,3 +4454,136 @@ describe("hydrate keeps what did not change", () => {
 		expect((after.parts.msg_k_a1?.[0] as TextPart).text).toBe("hello world");
 	});
 });
+
+// ============================================================================
+// Released sessions hold no per-session mark
+//
+// The store keeps per-session marks of "what this tab has already marked
+// about this session's ids" in module-level collections. Every release path
+// (`clearSession`, eviction, `reset`) must forget ALL of them, or a stale
+// mark leaks for the lifetime of the tab — the leak class three of these
+// collections already recorded once (deltaActiveParts, bridgedPartIds,
+// deltaEventTails/deltaOffsets). One test per release path; the marks are
+// driven through the store's real actions and read back through its public
+// surface.
+// ============================================================================
+
+/**
+ * Drive `sessionID` into every per-session mark the store keeps. Marks that
+ * confirm each other use separate message ids: the store's own correlation
+ * releases a mark the moment the next one is written (a confirmed optimistic
+ * id stops being optimistic).
+ */
+function markEveryCollection(sessionID: string): void {
+	const store = useSyncStore.getState();
+	// The optimistic marks on msg_a — never confirmed, so they survive until
+	// the release under test.
+	store.optimisticAdd(sessionID, userMessage("msg_a", sessionID), [
+		textPart("prt_a", "msg_a", "typed", sessionID),
+	]);
+	store.markOptimisticDispatched(sessionID, "msg_a");
+	store.markOptimisticInboxBacked(sessionID, "msg_a");
+	// The echo alias marks. The echo id is not on screen, so registering only
+	// records the pairing.
+	store.registerOptimisticEcho(sessionID, "msg_a", "msg_reminted");
+	// The control-plane ownership mark and the bridge on msg_c: an
+	// inbox-backed send the runtime confirms under its own id, with no server
+	// parts yet — the optimistic parts bridge onto the confirmed id.
+	store.optimisticAdd(sessionID, userMessage("msg_c", sessionID), [
+		textPart("prt_c", "msg_c", "typed", sessionID),
+	]);
+	store.markOptimisticInboxBacked(sessionID, "msg_c");
+	store.hydrate(sessionID, [{ info: userMessage("msg_c", sessionID), parts: [] }]);
+	// The cancelled tombstone on msg_d: the user deleted the prompt.
+	store.forgetControlPlaneMessage(sessionID, "msg_d");
+	// The cache-provenance mark on msg_e: painted from the disk transcript
+	// cache. Its id sorts before every other id used here, so no later read
+	// covers it and settles the mark away.
+	store.hydrate(
+		sessionID,
+		[
+			{
+				info: userMessage("msg_e", sessionID),
+				parts: [textPart("prt_e", "msg_e", "cached", sessionID)],
+			},
+		],
+		{ source: "cache" },
+	);
+	// The streaming-delta marks on prt_a.
+	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "typed", sessionID), sessionID);
+	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", " grew", "evt_delta_1");
+	// The error-stub mark.
+	store.applyEvent({
+		id: "evt_error",
+		type: "session.error",
+		properties: { sessionID, error: { name: "UnknownError", data: { message: "boom" } } },
+	} as never);
+}
+
+/**
+ * After the release, a fresh lifetime for the same session must behave as if
+ * no mark had ever existed. Each probe reads one mark collection's release
+ * through the store's public surface.
+ */
+function expectFreshLifetime(sessionID: string): void {
+	const store = useSyncStore.getState();
+	// The optimistic marks are gone.
+	expect(store.isOptimisticMessage(sessionID, "msg_a")).toBe(false);
+	expect(store.hasOptimisticMessages(sessionID)).toBe(false);
+	// The echo alias marks are gone.
+	expect(store.optimisticEchoOf(sessionID, "msg_a")).toBeUndefined();
+	expect(store.optimisticOriginOf(sessionID, "msg_reminted")).toBeUndefined();
+	// The streaming-delta marks are gone: the same (part, eventID) pair
+	// applies again instead of being treated as an already-applied redelivery.
+	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "", sessionID), sessionID);
+	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", "Hi", "evt_delta_1");
+	expect((useSyncStore.getState().parts.msg_a[0] as TextPart).text).toBe("Hi");
+	// The bridge mark is gone: real parts for a re-used id append normally
+	// instead of wiping the bucket as if optimistic parts were still bridged.
+	store.upsertPart("msg_c", {
+		id: "prt_step",
+		sessionID,
+		messageID: "msg_c",
+		type: "step-start",
+	} as Part);
+	store.upsertPart("msg_c", textPart("prt_text", "msg_c", "fresh", sessionID));
+	const ids = useSyncStore.getState().parts.msg_c?.map((p) => p.id) ?? [];
+	expect(ids).toContain("prt_step");
+	expect(ids).toContain("prt_text");
+	// The cache-provenance mark is gone: a re-added id is not treated as
+	// painted from a saved copy.
+	store.optimisticAdd(sessionID, userMessage("msg_e", sessionID), []);
+	expect(hasOnlyCacheSourcedMessages(sessionID)).toBe(false);
+	// The cancelled tombstone is gone: a re-read shows the deleted id.
+	store.hydrate(sessionID, [{ info: userMessage("msg_d", sessionID), parts: [] }]);
+	expect(useSyncStore.getState().messages[sessionID]?.some((m) => m.id === "msg_d")).toBe(true);
+	// The control-plane ownership mark is gone: a removal of a re-added
+	// optimistic message is a deletion, not a re-placement in progress.
+	store.optimisticAdd(sessionID, userMessage("msg_c", sessionID), []);
+	expect(store.reclaimRemovedMessage(sessionID, "msg_c")).toBe(false);
+}
+
+test("clearSession releases every per-session mark", () => {
+	markEveryCollection("ses_release");
+	useSyncStore.getState().clearSession("ses_release");
+	expectFreshLifetime("ses_release");
+});
+
+test("eviction releases every per-session mark", () => {
+	// Detach the marked session, then detach eight more so it is the oldest
+	// past the detached window (DETACHED_SESSION_LIMIT = 8); the next mount
+	// prunes it.
+	markEveryCollection("ses_release");
+	const store = useSyncStore.getState();
+	store.retainSession("ses_release")();
+	for (let i = 0; i < 8; i++) store.retainSession(`ses_detached_${i}`)();
+	store.retainSession("ses_trigger");
+	expect(store.wasTranscriptEvicted("ses_release")).toBe(true);
+	expectFreshLifetime("ses_release");
+});
+
+test("reset releases every per-session mark", () => {
+	markEveryCollection("ses_release");
+	useSyncStore.getState().reset();
+	expectFreshLifetime("ses_release");
+});

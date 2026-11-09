@@ -2075,8 +2075,17 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Mejorar plan",
-      "barTitle": "No hay ningún modelo conectado",
-      "barDescription": "conecta uno para empezar a chatear",
+      "promptTitle": "Conecta un modelo para empezar",
+      "offerTitle": "Usa tu plan de ChatGPT o Claude",
+      "connectChatGpt": "Conectar ChatGPT",
+      "connectClaude": "Conectar Claude",
+      "hidePlan": "No mostrar {name}",
+      "promptDescription": "Inicia sesión con un plan que ya pagas.",
+      "useChatGpt": "Usar ChatGPT",
+      "chatGptPlan": "Plan Plus o Pro",
+      "useClaude": "Usar Claude",
+      "claudePlan": "Plan Pro o Max",
+      "useApiKey": "Usar una clave de API",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} no puede leer imágenes",
       "imagesUnsupportedHint": "quítalas o elige otro modelo"

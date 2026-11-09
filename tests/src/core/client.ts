@@ -211,13 +211,38 @@ export class Res {
 }
 
 /**
- * Detect a gateway-generated outage response.
+ * The API's own documented-retryable mirror 503. When a project's git mirror
+ * is momentarily unavailable (a freshly provisioned managed repo whose
+ * credential/visibility has not settled), the API answers 503 with the stable
+ * code `git_mirror_unavailable` and `Retry-After` — the same contract the
+ * SDK (`packages/sdk` `response-error.ts`) classifies and retries. The client
+ * honors it like the SDK does instead of failing the assertion (release run
+ * 42666114535: the deployed smoke's warm-up session create answered this 503
+ * on every attempt while the mirror's own bounded clone retries never
+ * outlasted the blip).
+ */
+export const GIT_MIRROR_UNAVAILABLE_CODE = 'git_mirror_unavailable';
+
+/**
+ * Detect a retryable outage response: a gateway-generated one (no
+ * x-request-id — Cloudflare host failures carry none) or the API's own
+ * documented-retryable mirror 503 (`GIT_MIRROR_UNAVAILABLE_CODE`).
  *
  * API responses carry x-request-id. Cloudflare host failures do not. This
- * distinction prevents retries from hiding a real API 5xx contract failure.
+ * distinction prevents retries from hiding a real API 5xx contract failure —
+ * an API 5xx WITHOUT the mirror code is still a contract failure, only the
+ * documented mirror code on the API's own 503 upgrades to retryable.
  */
 export function isKe2eTransientGatewayResponse(response: Res): boolean {
   if (![502, 503, 504].includes(response.statusCode)) return false;
+  if (
+    response.statusCode === 503 &&
+    response.header('x-request-id') !== undefined &&
+    (response.json() as { code?: unknown } | undefined)?.code ===
+      GIT_MIRROR_UNAVAILABLE_CODE
+  ) {
+    return true;
+  }
   if (response.header('x-request-id')) return false;
   return (
     response.header('retry-after') !== undefined ||

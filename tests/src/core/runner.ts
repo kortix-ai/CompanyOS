@@ -315,10 +315,32 @@ export async function runSuite(opts: RunOptions): Promise<RunResult> {
         const fixtures = world.makeFixtures(stack);
         const project = await fixtures.sharedSeededProject();
         const client = new Client(env.apiUrl).as(world.principals.OWNER);
-        const created = await client.post('/v1/projects/:projectId/sessions', {},
-          { params: { projectId: project.id } });
-        created.status(201);
-        const sessionId = created.json<{ session_id: string }>().session_id;
+        // The warm-up create can answer the API's documented-retryable 503
+        // (code `git_mirror_unavailable`, Retry-After): a freshly provisioned
+        // managed repo's mirror credential settles for a moment, and the
+        // mirror's own bounded clone retries don't always outlast it (release
+        // run 42666114535 attempt 3: every attempt's warm-up create 503'd and
+        // this block hard-asserted). Honor the contract the SDK gets: wait the
+        // Retry-After and re-send, up to three attempts. The failed attempt
+        // threw before the session row was written (the mirror refresh throws
+        // in loadProjectAgents), and the fixture's project teardown deletes
+        // anything a late drain retry minted, so a re-send cannot double-create.
+        const WARMUP_CREATE_ATTEMPTS = 3;
+        let sessionId = '';
+        for (let attempt = 1; attempt <= WARMUP_CREATE_ATTEMPTS; attempt++) {
+          const created = await client.post('/v1/projects/:projectId/sessions', {},
+            { params: { projectId: project.id } });
+          try {
+            created.status(201);
+          } catch (err) {
+            if (!isKe2eRetryableError(err) || attempt === WARMUP_CREATE_ATTEMPTS) throw err;
+            log.warn(`sandbox setup: warm-up session create answered a retryable 503, retrying (attempt ${attempt}/${WARMUP_CREATE_ATTEMPTS})`);
+            await new Promise((resolve) => setTimeout(resolve, ke2eRetryDelayMs(err)));
+            continue;
+          }
+          sessionId = created.json<{ session_id: string }>().session_id;
+          break;
+        }
         if (!sessionId) throw new Error('sandbox setup returned no session_id');
         stack.push('session', sessionId, { projectId: project.id });
         // TWO SEQUENTIAL PHASES, TWO INDEPENDENT BUDGETS.

@@ -24,6 +24,20 @@ Options:
   -h, --help        Show this help.
 `;
 
+/** The most memberships `whoami --json` lists; the rest is a count (`accounts_total`). */
+export const WHOAMI_ACCOUNTS_CAP = 50;
+
+/** The active account always leads; past the cap the list is cut and only
+ *  `accounts_total` (the full membership count) is reported. */
+export function boundedAccounts(
+  accounts: AccountMembership[],
+  active: AccountMembership | undefined,
+): { accounts: AccountMembership[]; total?: number } {
+  const ordered = active ? [active, ...accounts.filter((a) => a.account_id !== active.account_id)] : accounts;
+  const capped = ordered.slice(0, WHOAMI_ACCOUNTS_CAP);
+  return ordered.length > capped.length ? { accounts: capped, total: ordered.length } : { accounts: capped };
+}
+
 export async function runWhoami(argv: string[]): Promise<number> {
   const flags = takeFlags(argv, HELP, (rest) => ({
     host: takeFlagValue(rest, ['--host']),
@@ -152,6 +166,12 @@ function whoamiJson(
   active: AccountMembership | undefined,
   def: DefaultProjectRef | null,
 ): void {
+  // `accounts` is bounded: whoami is an identity answer, not an account
+  // listing, and a payload that grows with membership count breaks the
+  // machines that read it (the MCP tool's whole-reply budget, 2026-11-09
+  // release gate). The active account always leads; `accounts_total` says
+  // when the list was cut.
+  const { accounts, total } = boundedAccounts(me.accounts, active);
   emitJson({
     host: resolvedHost ?? null,
     url: auth.api_base,
@@ -160,7 +180,8 @@ function whoamiJson(
     workspace_id: boundWorkspaceId(me) ?? def?.project_id ?? null,
     account_id: active?.account_id ?? auth.account_id ?? null,
     account: active ?? null,
-    accounts: me.accounts,
+    accounts,
+    ...(total !== undefined ? { accounts_total: total } : {}),
     token_context: me.token_context ?? null,
     default_project: def,
   });

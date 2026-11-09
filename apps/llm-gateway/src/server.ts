@@ -192,7 +192,9 @@ export function buildServer(
   // `x-api-key` carries a credential the limit already counted, so a route that
   // rewrites it into an Authorization bearer validates the key it came from.
   registerRoutes(app, gateway, inflight, recordOutcome, rateLimit, (request) => {
-    const key = request.headers.get('authorization') ? undefined : request.headers.get('x-api-key')?.trim();
+    const key = request.headers.get('authorization')
+      ? undefined
+      : request.headers.get('x-api-key')?.trim();
     if (key) rateLimit.validated(key);
   });
   // Register fallbacks after the handlers so supported methods keep their behavior.

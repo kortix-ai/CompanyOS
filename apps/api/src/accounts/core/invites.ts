@@ -86,7 +86,7 @@ export function registerMemberInviteRoute(): void {
     }),
     async (c) => {
       const userId = c.get('userId');
-      const callerEmail = (c.get('userEmail') as string | undefined) ?? null;
+      const callerEmail = c.get('userEmail');
       const accountId = accountIdParam(c);
 
       const membership = await getMembership(userId, accountId);
@@ -449,7 +449,7 @@ export function registerInviteRoutes(): void {
     }),
     async (c) => {
       const userId = c.get('userId');
-      const callerEmail = (c.get('userEmail') as string | undefined) ?? null;
+      const callerEmail = c.get('userEmail');
       const accountId = accountIdParam(c);
       const inviteId = c.req.param('inviteId');
 

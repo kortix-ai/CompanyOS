@@ -113,7 +113,7 @@ function inviteRefusal(c: any, caller: CallerInviteEmail, invite: { email: strin
     };
   }
   // The token names the invite's email, but the SSO identity cannot prove it.
-  if (normalizeEmail(c.get('userEmail') as string | undefined) === address) {
+  if (normalizeEmail(c.get('userEmail')) === address) {
     return {
       code: 'sso_email_domain_unverified',
       error:

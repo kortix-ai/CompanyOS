@@ -1,4 +1,5 @@
 import type { AgentGrant } from '@kortix/db';
+import type { TokenBinding } from './iam/actor';
 import type { BillingState } from './billing/services/billing-state';
 
 // === Billing Types (Router billing service) ===
@@ -46,6 +47,12 @@ export interface AuthVariables {
   sessionId?: string;
   /** PAT token identity for the IAM engine (token-as-principal evaluation). */
   iamTokenId?: string;
+  /** The token's IAM binding, set by `middleware/auth-principal.ts` when the validated
+   *  PAT names its `service_account_id`. Read directly for the `token_context`
+   *  probe and by `middleware/actor.ts` instead of re-reading the token row. */
+  iamTokenBinding?: TokenBinding & { tokenId: string };
+  /** The Supabase session's MFA assurance level (`aal1`/`aal2`), from `auth-principal`. */
+  mfaAal?: string;
   /** Per-agent authorization grant — non-null only for agent-session tokens.
    *  Read by assertAgentScope() to gate Kortix CLI/API actions on top of the
    *  user's own role (net = userRole ∩ agentGrant). Null = full access. */

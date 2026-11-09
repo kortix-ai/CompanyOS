@@ -54,8 +54,9 @@ export function isKe2eRetryableError(error: unknown): boolean {
 /** True when the error was raised by the API's OWN typed, no-write degrade. */
 export function isKe2eAppTransientError(error: unknown): boolean {
   return (
-    error !== null &&
     typeof error === 'object' &&
+    error !== null &&
+    'ke2eAppTransient' in error &&
     (error as { ke2eAppTransient?: unknown }).ke2eAppTransient === true
   );
 }

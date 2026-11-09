@@ -72,6 +72,7 @@ export function reasoningEffortChoices(
 /** `medium` → `Medium`. The catalog ships lowercase ids; the trigger and the
  *  menu should not. */
 export function effortLabel(value: string): string {
+  if (value === 'xhigh') return 'Extra high';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 

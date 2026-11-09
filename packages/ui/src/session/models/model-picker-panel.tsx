@@ -2,11 +2,12 @@
 
 import type { FlatModel } from '@kortix/sdk/react';
 import { CheckIcon, DotsThreeIcon, StarIcon } from '@phosphor-icons/react';
-import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
+import { foreignDialogOpen } from '../../lib/z-stack';
 import { Button } from '../../primitives/button';
 import { CommandGroup, CommandInput, CommandItem, CommandList } from '../../primitives/command';
 import Hint from '../../primitives/hint';
@@ -60,6 +61,11 @@ export interface ModelPickerPanelProps {
   onConnectChatGpt?: () => void;
   /** Tag for a model whose provider is not connected. */
   connectLabel: string;
+  /**
+   * Another dialog opened (the command palette, a modal). The popover sits
+   * above every top-level dialog, so it must close rather than float over it.
+   */
+  onForeignDialog?: () => void;
   /** Thinking effort for the selected model. Absent = no right pane. */
   effort?: {
     choices: readonly string[];
@@ -96,6 +102,7 @@ export function ModelPickerPanel({
   onConnectChatGpt,
   connectLabel,
   effort,
+  onForeignDialog,
 }: ModelPickerPanelProps) {
   const t = useTranslations('modelSelector');
   const tPooled = useTranslations('pooledSecrets');
@@ -122,6 +129,23 @@ export function ModelPickerPanel({
   });
   const tab = chosenTab && tabs.includes(chosenTab) ? chosenTab : openingTab;
   const searching = search.trim().length > 0;
+
+  // Mounted only while the popover is open, so this watches exactly then.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!onForeignDialog) return;
+    const check = () => {
+      if (foreignDialogOpen(rootRef.current)) onForeignDialog();
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-state'],
+    });
+    return () => observer.disconnect();
+  }, [onForeignDialog]);
 
   const rows = useMemo(() => {
     if (searching) return searchModels;
@@ -229,7 +253,7 @@ export function ModelPickerPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-col sm:flex-row" onKeyDown={onKeyDown}>
+    <div ref={rootRef} className="flex min-h-0 flex-col sm:flex-row" onKeyDown={onKeyDown}>
       <div className="flex h-[min(22rem,55vh)] min-w-0 flex-1">
         <div
           role="tablist"

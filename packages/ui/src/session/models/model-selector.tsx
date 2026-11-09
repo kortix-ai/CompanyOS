@@ -697,6 +697,8 @@ export function ModelSelector({
     [reasoning, setOpen],
   );
 
+  const closePicker = useCallback(() => setOpen(false), [setOpen]);
+
   const handleUpgrade = useCallback(() => {
     setOpen(false);
     openUpgrade();
@@ -1034,6 +1036,7 @@ export function ModelSelector({
             emptyState={noModelsState}
             searchEmpty={searchEmptyState}
             onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
+            onForeignDialog={closePicker}
             connectLabel={tPooled('connect')}
             effort={
               showEffort

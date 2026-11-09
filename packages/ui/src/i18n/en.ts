@@ -1477,6 +1477,7 @@ const catalog = {
       "offerTitle": "Use your ChatGPT or Claude plan",
       "connectChatGpt": "Connect ChatGPT",
       "connectClaude": "Connect Claude",
+      "hidePlan": "Don’t show {name}",
       "promptDescription": "Sign in with a plan you already pay for.",
       "useChatGpt": "Use ChatGPT",
       "chatGptPlan": "Plus or Pro plan",

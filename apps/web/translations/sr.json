@@ -2079,6 +2079,7 @@
       "offerTitle": "Koristite svoj ChatGPT ili Claude plan",
       "connectChatGpt": "Poveži ChatGPT",
       "connectClaude": "Poveži Claude",
+      "hidePlan": "Ne prikazuj {name}",
       "promptDescription": "Prijavite se planom koji već plaćate.",
       "useChatGpt": "Koristi ChatGPT",
       "chatGptPlan": "Plus ili Pro plan",

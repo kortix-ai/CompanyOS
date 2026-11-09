@@ -2079,6 +2079,7 @@
       "offerTitle": "Usa tu plan de ChatGPT o Claude",
       "connectChatGpt": "Conectar ChatGPT",
       "connectClaude": "Conectar Claude",
+      "hidePlan": "No mostrar {name}",
       "promptDescription": "Inicia sesión con un plan que ya pagas.",
       "useChatGpt": "Usar ChatGPT",
       "chatGptPlan": "Plan Plus o Pro",

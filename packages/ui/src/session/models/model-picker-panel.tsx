@@ -336,7 +336,9 @@ function PickerRow({
         providerID={groupID}
         name={pickerGroupLabel(groupID, model)}
         size="xs"
-        className="size-5"
+        // The 20px box draws a 16px mark; pull the name in by one step so it
+        // sits beside the mark, not beside the box.
+        className="-mr-1 size-5"
       />
       <span className={cn('min-w-0 truncate leading-tight', unavailable && 'opacity-60')}>
         <span className="text-foreground font-medium">{lead}</span>

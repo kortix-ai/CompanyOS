@@ -2047,7 +2047,13 @@
       "title": "利用できるモデルがありません",
       "description": "自分のプロバイダーに接続すると、このセッションを利用できます。",
       "upgradeDescription": "アップグレードするか、自分のプロバイダーに接続すると、このセッションを利用できます。"
-    }
+    },
+    "favorites": "お気に入り",
+    "favoritesEmpty": "モデルにスターを付けるとここに表示されます。",
+    "addFavorite": "{model} をお気に入りに追加",
+    "removeFavorite": "{model} をお気に入りから削除",
+    "groups": "モデルグループ",
+    "thinking": "思考"
   },
   "sessionScope": {
     "resetDefault": "デフォルトに戻す",
@@ -3387,6 +3393,9 @@
     },
     "inbox": {
       "title": "受信トレイ",
+      "viewReview": "Review",
+      "viewNotifications": "通知",
+      "viewLabel": "受信トレイの表示",
       "description": "あなたに関係するセッション、トリガー、アーティファクトの最新情報を、すべてのワークスペースから表示します。",
       "unreadLabel": "受信トレイ：未読 {count} 件",
       "unreadCount": "未読 {count} 件",
@@ -21406,7 +21415,8 @@
         "question": "質問",
         "permission": "権限",
         "approval": "コネクタ承認"
-      }
+      },
+      "allowed": "許可しました"
     },
     "reviewBulk": {
       "approve": "承認",
@@ -21477,7 +21487,21 @@
       "senderUnavailable": "送信アカウントを読み込めませんでした。差出人の行を確認してください。",
       "quoted": "「{text}」"
     },
-    "promptHistory": "履歴 {index}/{total}"
+    "promptHistory": "履歴 {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix が同僚へのアクセスを求めています",
+      "task": "タスク",
+      "connector": "コネクター",
+      "secret": "シークレット",
+      "onlyThis": "同僚が受け取るのはこれだけで、このタスク限りです。",
+      "deny": "拒否",
+      "allow": "許可",
+      "allowed": "アクセスを許可しました",
+      "allowedDescription": "My Kortix が同僚を開始します。",
+      "denied": "アクセスを拒否しました",
+      "deniedDescription": "My Kortix にあなたの回答が届きます。",
+      "failed": "決定を送信できませんでした。もう一度お試しください。"
+    }
   },
   "commandPalette": {
     "title": "コマンドパレット",
@@ -24775,8 +24799,6 @@
       "models": "モデル",
       "tabCapabilities": "機能",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "サイドバーに固定",
-      "unpinFromSidebar": "サイドバーから固定解除",
       "spaceHelp": "このエージェントが作業するスペース。engineeringやsalesなどの識別子を指定します。空欄の場合はワークスペース全体です。",
       "spacePlaceholder": "例: engineering"
     },
@@ -25219,6 +25241,7 @@
     "replacedBy": "{path} に置き換えられています。",
     "projectTool": "モジュール {path}",
     "loadError": "このエージェントのツール、スキル、拡張機能を読み込めませんでした。",
+    "skillsLoadError": "スキルを読み込めませんでした。",
     "retry": "再試行",
     "emptyProjectSkills": "ワークスペースのスキルはありません。kortix.yaml の skills に登録してください。",
     "emptyProjectExtensions": "ワークスペースの拡張機能はありません。kortix.yaml の extensions に登録してください。",
@@ -26056,6 +26079,7 @@
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "「ファイル」からフォルダーをマウントして、このエージェントのセッションにファイルを渡します。",
+    "projectEmptyDescription": "「ファイル」からフォルダーをマウントして、新しいセッションごとにファイルを渡します。",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -26066,6 +26090,7 @@
     "alreadyMounted": "Mounted",
     "changeFailed": "このマウントを変更できませんでした。",
     "loadError": "このエージェントのマウントを読み込めませんでした。",
+    "projectLoadError": "マウントしたフォルダーを読み込めませんでした。",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "新しいセッションがマウントする Files のフォルダー。",
@@ -26548,6 +26573,7 @@
         "help": "ヘルプ",
         "plan": "プラン",
         "usage": "使用量",
+        "agents": "エージェント",
         "connectors": "コネクター",
         "skills": "スキル",
         "triggers": "トリガー",

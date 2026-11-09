@@ -9,6 +9,7 @@ import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { type CliResult, CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 function parseCliJson<T>(result: CliResult, action: string): T {
   throwIfCliInfraFailure(result, action);
@@ -2575,10 +2576,10 @@ flow(
         // The stale narrow grant a token minted before the manifest changed
         // would hold: only `stripe`, no provenance at all.
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
              SET account_id = $2, user_id = $3, project_id = $4,
                  session_id = $5, agent_grant = $6::jsonb
-           WHERE token_id = $1`,
+           WHERE token_id = $1`),
           [
             tokenId,
             team.id,
@@ -2777,7 +2778,7 @@ flow(
             [childSessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`,
+            lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`),
             [childTokenId, team.id, ownerUserId, p.id, childSessionId],
           );
           const child = ctx.client.withBearer(childCredential.secret_key, 'SESSION_TOKEN');
@@ -3060,9 +3061,9 @@ flow(
             [sessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-             WHERE token_id = $1`,
+             WHERE token_id = $1`),
             [
               tokenId,
               team.id,
@@ -4115,9 +4116,9 @@ flow(
             const credential = minted.json<{ token_id: string; secret_key: string }>();
             tokenIds.push(credential.token_id);
             await db.query(
-              `UPDATE kortix.account_tokens
+              lockProjectFirst(`UPDATE kortix.account_tokens
                  SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-               WHERE token_id = $1`,
+               WHERE token_id = $1`),
               [
                 credential.token_id,
                 team.id,
@@ -5163,11 +5164,13 @@ flow(
 
     let slowStarted = 0;
     let slowClosedAfterMs = -1;
+    const upstreamHits: string[] = [];
     const upstream = createServer((req, res) => {
       const json = (status: number, body: unknown, headers: Record<string, string> = {}) => {
         res.writeHead(status, { 'content-type': 'application/json', ...headers });
         res.end(JSON.stringify(body));
       };
+      upstreamHits.push(req.url ?? '');
       if (req.url === '/api/ok') return json(200, { items: [1, 2] });
       if (req.url === '/api/limited') return json(429, { message: 'slow down' }, { 'retry-after': '2' });
       if (req.url === '/api/unavailable') return json(503, { message: 'maintenance' }, { 'retry-after': '30' });
@@ -5198,6 +5201,7 @@ flow(
         if (req.url === '/graphql') {
           return json(200, { data: { issue: null }, errors: [{ message: 'Entity not found: issue' }] });
         }
+        if (req.url.startsWith('/api/intents/')) return json(200, { id: req.url.slice('/api/intents/'.length) });
         json(404, { message: 'no route' });
       });
     });
@@ -5250,7 +5254,8 @@ flow(
           }
         };
         const route = (path: string) => ({ path, binding: { kind: 'openapi', method: 'GET', path: `/api/${path}`, server: base } });
-        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('slow')]);
+        const intentRoute = { path: 'intent_fetch', binding: { kind: 'openapi', method: 'GET', path: '/api/intents/{intentId}', server: base } };
+        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('slow'), intentRoute]);
         await seed(slug.mcp, 'mcp', { url: `${base}/mcp` }, [{ path: 'get_issue', binding: { kind: 'mcp', tool: 'get_issue' } }]);
         await seed(slug.gql, 'graphql', { endpoint: `${base}/graphql` }, [
           { path: 'issue', binding: { kind: 'graphql', operation: 'query', field: 'issue' } },
@@ -5266,6 +5271,29 @@ flow(
           .has('$.upstream_status', 200)
           .has('$.data.items[1]', 2)
           .has('$.output', undefined);
+      });
+
+      await ctx.step('an empty path argument → 400 invalid_args naming the argument, with NO upstream request', async () => {
+        // KRTX-4539: the empty id used to go out as `/api/intents/` and the
+        // provider answered a misleading 404 for the truncated URL.
+        upstreamHits.length = 0;
+        const r = await call(slug.api, 'intent_fetch', { intentId: '' });
+        r.status(400)
+          .body()
+          .has('$.ok', false)
+          .has('$.status', 'denied')
+          .has('$.reason', 'invalid_args');
+        if (!r.json<{ message?: string }>().message?.includes('intentId')) {
+          throw new Error(`message does not name the argument: ${r.text()}`);
+        }
+        if (upstreamHits.length > 0) throw new Error(`the empty-id call reached the upstream: ${upstreamHits.join(' ')}`);
+      });
+
+      await ctx.step('a non-empty path argument goes through and reaches the upstream segment', async () => {
+        upstreamHits.length = 0;
+        const r = await call(slug.api, 'intent_fetch', { intentId: 'pi_789' });
+        r.status(200).body().has('$.data.id', 'pi_789').has('$.binding', 'openapi').has('$.upstream_status', 200);
+        if (!upstreamHits.includes('/api/intents/pi_789')) throw new Error(`junk upstream hits: ${upstreamHits.join(' ')}`);
       });
 
       await ctx.step('upstream 429 → HTTP 429 with Retry-After: 2 and retry_after_seconds; reason unchanged', async () => {
@@ -6055,9 +6083,9 @@ flow(
           // A grant without manifest provenance: the gateway re-derives it
           // from kortix.yaml on the first call, policy sets included.
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                 SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-              WHERE token_id = $1`,
+              WHERE token_id = $1`),
             [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent, connectors: [], permissions: [], env: [] })],
           );
         }
@@ -6445,9 +6473,9 @@ flow(
           [sessionId, team.id, p.id],
         );
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
               SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-            WHERE token_id = $1`,
+            WHERE token_id = $1`),
           [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent: 'support', connectors: 'all', permissions: ['project.connector.read', 'project.connector.write'], env: [] })],
         );
         const refused = await agentClient.post(

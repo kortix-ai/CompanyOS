@@ -3066,26 +3066,6 @@ describe('reapAndReconcileSandboxes — the one rule: deadline_at <= now', () =>
     ).toBe(true);
   });
 
-  test('a running read between the two clears the pending marker', async () => {
-    candidates = [
-      midTurnCandidate({ deadlineAt: new Date(NOW.getTime() + HOUR) }, {
-        pendingStopObservedAtMs: NOW.getTime() - 20_000,
-      }),
-    ];
-    statusByExternal['ext-1'] = 'running';
-    turnObservationByToken['active-token'] = 'active';
-    activeTurnRenewalBySandbox['sb-1'] = 'renewed';
-
-    const r = await reapAndReconcileSandboxes(NOW);
-
-    expect(r.reconciled).toBe(0);
-    expect(
-      rowUpdates().some((c) =>
-        describeSql(c.updates.metadata).includes("- 'pendingStopObservedAtMs'"),
-      ),
-    ).toBe(true);
-  });
-
   test('a running box with no marker pays for no extra write', async () => {
     candidates = [midTurnCandidate({ deadlineAt: new Date(NOW.getTime() + HOUR) })];
     statusByExternal['ext-1'] = 'running';

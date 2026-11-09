@@ -7,6 +7,7 @@ import { subscribe } from '../fixtures/billing';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
 import { log } from '../core/log';
 import type { FlowContext } from '../core/types';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 /**
  * Run a flow that inserts `active` sandbox rows for its session-bound tokens,
@@ -645,7 +646,7 @@ flow('SEC-POOL-6', {
   await database.connect();
   try {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
-    await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, sessionId,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -754,7 +755,7 @@ flow('SEC-POOL-3', {
   await database.connect();
   try {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [first, team.id, project.id]);
-    await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, first,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -810,7 +811,7 @@ flow('SEC-9', {
         await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
         sandboxInserted = true;
       }
-      await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+      await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
         credential.token_id, project.id, sessionId,
         JSON.stringify({ agent: 'worker', permissions, connectors: 'all', env: 'all' }), team.id,
       ]);
@@ -1872,7 +1873,7 @@ flow('SEC-AUD-1', {
     minted.status(201);
     const credential = minted.json<{ token_id: string; secret_key: string }>();
     await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
-    await db.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await db.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, sessionId,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -1987,7 +1988,7 @@ async function agentSessionToken(
   const credential = minted.json() as { token_id: string; secret_key: string };
   await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, input.team.id, input.projectId]);
   await db.query(
-    'UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5, service_account_id = $6 WHERE token_id = $1',
+    lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5, service_account_id = $6 WHERE token_id = $1'),
     [credential.token_id, input.projectId, sessionId, JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), input.team.id, input.serviceAccountId],
   );
   return { sessionId, client: ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION') };

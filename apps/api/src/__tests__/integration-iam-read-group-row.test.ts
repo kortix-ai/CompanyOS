@@ -1,11 +1,10 @@
 /**
  * Characterization pin for the account fence the one `account_groups` row
  * reader keeps (KRTX-4587). The codebase-analysis pass (unit api-identity)
- * found the fence duplicated once per projection — `accountGroupFullRow`,
- * `accountGroupRow`, `groupInAccountRow`, `accountGroupNameRow`,
- * `groupNameInAccountRow`, `scimGroupRow` and `scimGroupRowById` — and the
- * dedupe collapses them into one reader. The fence must survive the collapse:
- * the account's own group row resolves, a group id of another account does not.
+ * found the fence duplicated once per projection, seven single-row readers of
+ * `account_groups`, and the dedupe collapses them into one. The fence must
+ * survive the collapse: the account's own group row resolves, a group id of
+ * another account does not.
  */
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { accountGroups, accounts } from '@kortix/db';

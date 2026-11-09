@@ -2,9 +2,9 @@
  * Characterization pin for the malformed-account-id guard on the member probe
  * (KRTX-4587). A slug, a truncated id or a stray path segment in a uuid-typed
  * predicate dies as SQLSTATE 22P02 → an opaque 500 (Better Stack pattern
- * 97669531, KRTX-211). The read-model dedupe moves the guard onto the one
- * `account_members` member reader. It must answer no row with zero DB reads
- * for a malformed account id, and reach the DB for a well-formed one.
+ * 97669531, KRTX-211). The read-model dedupe moved the guard onto the one
+ * full-row member reader. It must answer no row with zero DB reads for a
+ * malformed account id, and reach the DB for a well-formed one.
  */
 import { describe, expect, mock, test } from 'bun:test';
 
@@ -26,8 +26,8 @@ mock.module('../shared/db', () => ({
 
 const USER = '00000000-0000-4000-a000-000000000001';
 
-// Imported after the mock: the guard-owning reader. The dedupe (KRTX-4587)
-// moved the guard here from `userAccountMembershipRow`.
+// Imported after the mock so the reader binds to the mocked db: the
+// guard-owning reader (KRTX-4587).
 const { accountMemberRow: readGuardedMemberRow } = (await import(
   '../iam/membership-read'
 )) as typeof import('../iam/membership-read');

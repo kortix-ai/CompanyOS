@@ -395,18 +395,20 @@ function joinUrl(base: string, path: string): string {
 }
 
 /**
- * The first `{placeholder}` whose rendered segment the args leave unusable,
- * judged exactly the way buildHttpRequest renders it: every `{capture}` in
- * the segment becomes `encodeURIComponent(String(value ?? ''))`, and the
- * complete segment is what matters. A segment that is empty (a nullish or
- * JSON-serialize-empty value such as `[]`), or exactly `.` /
- * `..` — the only segments URL normalization collapses (RFC 3986
- * remove_dot_segments) — is unusable. A dot value with literal segment text
- * around it (`/files/{id}.json` → `..json`) or a longer dot run (`...`) is a
- * literal segment a caller may legitimately pass. Returns the segment's
- * first placeholder name; null when every rendered segment is usable.
- * Callers deny the call with this name so the provider never sees a
- * truncated or escaping URL (KRTX-4539).
+ * The first `{placeholder}` whose rendered segment the args leave unusable.
+ * Judged as buildHttpRequest sends it: every `{capture}` in the segment
+ * becomes `encodeURIComponent(String(value ?? ''))` — plus a deliberate
+ * value trim first, so the blank-identifier class the deny already covers
+ * (a nullish, whitespace-only, or JSON-serialize-empty value such as `[]`)
+ * keeps its denial even though its encoded form (`%20%20`) is a literal
+ * segment. The deny values for the COMPLETE segment are exactly `''`, `.`
+ * and `..` — the only segments URL normalization collapses (RFC 3986
+ * remove_dot_segments). A dot value with literal segment text around it
+ * (`/files/{id}.json` → `..json`) or a longer dot run (`...`) is a literal
+ * segment a caller may legitimately pass. Returns the segment's first
+ * placeholder name; null when every rendered segment is usable. Callers
+ * deny the call with this name so the provider never sees a truncated or
+ * escaping URL (KRTX-4539).
  */
 export function missingPathArg(
   pathTemplate: string,

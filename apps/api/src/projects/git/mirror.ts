@@ -483,6 +483,9 @@ export function isGitOperationError(err: unknown): err is GitOperationError {
 const TRANSIENT_MIRROR_ERROR_PATTERN =
   /repository '[^']*' not found|could not resolve host|temporary failure in name resolution|network is unreachable|couldn't connect to server|connection (?:reset|refused|timed out|closed)|remote end hung up unexpectedly|early eof|rpc failed|the requested url returned error: 5\d\d|operation timed out|timed out|ssl_error|gnutls_handshake|tls handshake|cannot fork\(\) for|resource temporarily unavailable|spawn(?: \S+)? EAGAIN|\bEMFILE\b|\bENFILE\b|too many open files/i;
 
+/** "could not resolve host" for a .test, .invalid, .example or .localhost name. */
+const RESERVED_NAME_UNRESOLVED_PATTERN = /could not resolve host: [^\s'"]*\.(?:test|invalid|example|localhost)\b/i;
+
 /**
  * A push the REMOTE rejected with its own server-side 5xx reason (KRTX-1683,
  * Better Stack FE pattern `a1ed728e…`):
@@ -508,6 +511,8 @@ export function isTransientGitMirrorError(err: unknown): err is GitOperationErro
   if (!isGitOperationError(err)) return false;
   if (err.kind === 'timeout' || err.kind === 'busy') return true;
   const text = `${err.message}\n${err.stderr}\n${err.stdout}`;
+  // A reserved name (RFC 2606 / RFC 6761) never resolves: not a DNS blip.
+  if (RESERVED_NAME_UNRESOLVED_PATTERN.test(text)) return false;
   if (err.gitArgs[0] === 'push' && REMOTE_PUSH_TRANSIENT_REJECTION_PATTERN.test(text)) return true;
   return TRANSIENT_MIRROR_ERROR_PATTERN.test(text);
 }

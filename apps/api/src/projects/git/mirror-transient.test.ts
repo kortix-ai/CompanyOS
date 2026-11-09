@@ -132,6 +132,26 @@ describe('isTransientGitMirrorError', () => {
     expect(isTransientGitMirrorError(err)).toBe(false);
   });
 
+  // RFC 2606 / RFC 6761 reserve .test, .invalid, .example and .localhost: such
+  // a name never resolves, so "could not resolve host" for one is permanent.
+  // Retried, every read of a project whose repository URL names one (each
+  // test fixture) waited the whole budget, ~8 s (DRIVE-3, 2026-11-09).
+  test.each([
+    ['a .invalid host', 'ke2e.invalid'],
+    ['a .test host', 'example.test'],
+    ['an example. host', 'repo.example'],
+  ])('does NOT classify an unresolvable reserved name as transient: %s', (_name, host) => {
+    const stderr = `fatal: unable to access 'https://${host}/r.git/': Could not resolve host: ${host}`;
+    const err = classifyGitError({ stderr, code: 128, message: 'Command failed' }, CLONE_ARGS, 90_000);
+    expect(isTransientGitMirrorError(err)).toBe(false);
+  });
+
+  test('still classifies an unresolvable real host as transient (a DNS blip)', () => {
+    const stderr = "fatal: unable to access 'https://github.com/a/b.git/': Could not resolve host: github.com";
+    const err = classifyGitError({ stderr, code: 128, message: 'Command failed' }, CLONE_ARGS, 90_000);
+    expect(isTransientGitMirrorError(err)).toBe(true);
+  });
+
   test('does NOT classify a non-GitOperationError as transient', () => {
     expect(isTransientGitMirrorError(new Error('repository not found'))).toBe(false);
     expect(isTransientGitMirrorError('repository not found')).toBe(false);

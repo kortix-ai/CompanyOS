@@ -49,6 +49,15 @@ export function ResultCard({ result, width }: { result: KortixToolResult; width:
         </text>
       ))}
       {rows.length > shown.length ? <text fg={theme.faint}>{`  … ${rows.length - shown.length} more`}</text> : null}
+      {/* A sign-in or save link is the card's action: printed whole, so a terminal can open it. */}
+      {(card.links ?? [])
+        .filter((link) => link.external)
+        .map((link) => (
+          <text key={link.href} wrapMode="none">
+            <span fg={theme.fg}>{`  ${printable(link.label)}: `}</span>
+            <span fg={theme.brand}>{printable(link.href)}</span>
+          </text>
+        ))}
     </box>
   );
 }

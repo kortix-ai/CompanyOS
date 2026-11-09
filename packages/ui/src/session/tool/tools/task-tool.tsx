@@ -48,9 +48,14 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   // truthy non-string used to crash the render tree (`e.replace is not a
   // function`, KRTX-4511). Read each field by type, never by cast — an empty
   // or junk value falls through to the same fallback as an absent one.
+  // pi's `agent` field is an object by schema: an inline agent spec
+  // (`{ instructions, model?, tools?, description? }`). Its child runs as the
+  // `inline` agent (`INLINE_AGENT` in the pi subagents extension), so the row
+  // names it that way, never as `general`.
   const subagentType =
     (typeof input.subagent_type === 'string' && input.subagent_type) ||
     (typeof input.agent === 'string' && input.agent) ||
+    (typeof input.agent === 'object' && input.agent !== null ? INLINE_AGENT : '') ||
     'general';
   const name = typeof input.name === 'string' ? input.name : '';
   const description = useMemo(
@@ -123,6 +128,9 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
     </AgentRowScope>
   );
 }
+
+/** The agent name an inline agent spec's child runs under (pi `INLINE_AGENT`). */
+const INLINE_AGENT = 'inline';
 
 /** The session-list glyph an agent's state draws. */
 const STATE_GLYPH: Record<AgentRowState, SessionDisplayStatus> = {

@@ -3308,7 +3308,7 @@
           "prompt_file": {
             "type": "string",
             "pattern": "^(?!-)(?!(?:.*/)?\\.\\.?(?:/|$))(?:[\\w .-]+/)*[\\w .-]+\\.md$",
-            "description": "A repository path to a `.md` file. The whole file is the system prompt."
+            "description": "A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is."
           },
           "enabled": {
             "type": "boolean",

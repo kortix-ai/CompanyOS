@@ -253,14 +253,6 @@ export class Res {
 }
 
 /**
- * Detect a gateway-generated outage response.
- *
- * API responses carry x-request-id. Cloudflare host failures do not. This
- * distinction prevents retries from hiding a real API 5xx contract failure.
- */
-export const GIT_MIRROR_UNAVAILABLE = 'git_mirror_unavailable';
-
-/**
  * Detect the API's own TYPED, retryable pre-commit degradation.
  *
  * `git_mirror_unavailable` (a session's git-mirror cold clone/fetch failed for
@@ -272,6 +264,8 @@ export const GIT_MIRROR_UNAVAILABLE = 'git_mirror_unavailable';
  * `x-request-id`. Without this, a response the API already promised is
  * retryable breaks `.status()` as a plain contract assertion.
  */
+const GIT_MIRROR_UNAVAILABLE = 'git_mirror_unavailable';
+
 export function isTypedRetryableApiDegradation(response: Res): boolean {
   if (response.statusCode < 500) return false;
   if (isKe2eTransientGatewayResponse(response)) return false;
@@ -292,6 +286,12 @@ function describeTypedRetryableResponse(response: Res): string {
   return `${code}: ${message.slice(0, 160)}`;
 }
 
+/**
+ * Detect a gateway-generated outage response.
+ *
+ * API responses carry x-request-id. Cloudflare host failures do not. This
+ * distinction prevents retries from hiding a real API 5xx contract failure.
+ */
 export function isKe2eTransientGatewayResponse(response: Res): boolean {
   if (![502, 503, 504].includes(response.statusCode)) return false;
   if (response.header('x-request-id')) return false;

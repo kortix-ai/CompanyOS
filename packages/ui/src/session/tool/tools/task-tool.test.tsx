@@ -227,13 +227,23 @@ describe('TaskTool — one agent row that opens the agent', () => {
 
   test('a pi inline agent spec (`agent` is an object by schema) renders the row as Inline, the agent its child runs as (KRTX-4511)', () => {
     childMessages = undefined;
+    // The prod shape (v0.15.1 crash): a Codex model fills every optional field,
+    // so `subagent_type` and `name` arrive as empty strings beside the object.
     const markup = render(
       taskPart({
         childSessionId: null,
         input: {
           description: 'Audit the pricing page',
           prompt: 'Audit the pricing page for stale plan names.',
-          agent: { instructions: 'You audit pricing pages.', description: 'Pricing auditor', tools: ['read'] },
+          subagent_type: '',
+          name: '',
+          task_id: '',
+          model: '',
+          session: 'same',
+          team: false,
+          fork: false,
+          run_in_background: false,
+          agent: { instructions: 'You audit pricing pages.', description: 'Pricing auditor', model: '', tools: ['read'] },
         },
       }),
     );

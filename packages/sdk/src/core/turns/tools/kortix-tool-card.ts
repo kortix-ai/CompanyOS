@@ -237,7 +237,9 @@ export function parseKortixToolResult(raw: string | undefined, callName?: string
         ? 'done'
         : 'error';
   const rawSubtitle = text(value.card.subtitle);
-  const subtitle = rawSubtitle && rawSubtitle !== error?.message ? rawSubtitle : undefined;
+  // A subtitle the tool backed with `error.note` is the person's, even when the model reads the same words.
+  const note = isObject(value.error) ? text(value.error.note) : undefined;
+  const subtitle = rawSubtitle && (rawSubtitle === note || rawSubtitle !== error?.message) ? rawSubtitle : undefined;
   return {
     ok: value.ok,
     tool,

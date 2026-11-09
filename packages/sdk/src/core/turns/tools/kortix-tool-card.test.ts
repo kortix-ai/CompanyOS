@@ -138,4 +138,10 @@ describe('parseKortixToolResult: a failure card never shows text written for the
     const raw = JSON.stringify({ ok: false, tool: 'kortix_memory', action: 'list', card: { title: 'Memory is off in this workspace', subtitle: 'Files is off.', status: 'error' }, error: { kind: 'failed', message: 'model text', note: 'Files is off.' } });
     expect(parseKortixToolResult(raw)!.card.subtitle).toBe('Files is off.');
   });
+
+  test('a note equal to the model message still shows: the tool wrote it for the person', () => {
+    const FILES_OFF = 'Memory lives in Files, and Files is off in this workspace. Ask a workspace admin to turn Files on.';
+    const raw = JSON.stringify({ ok: false, tool: 'kortix_memory', action: 'list', card: { title: 'Memory is off in this workspace', subtitle: FILES_OFF, status: 'error' }, error: { kind: 'failed', message: FILES_OFF, note: FILES_OFF } });
+    expect(parseKortixToolResult(raw)!.card.subtitle).toBe(FILES_OFF);
+  });
 });

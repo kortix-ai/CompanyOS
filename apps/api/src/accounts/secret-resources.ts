@@ -120,7 +120,7 @@ export function registerSecretResourceRoutes() {
     const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
     if (!projectId) return c.json({ error: 'project_id is required' }, 400);
     const userId = c.get('userId');
-    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
+    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
     const rows = await db.select().from(accountSecretResources).where(and(
       eq(accountSecretResources.accountId, accountId),
       sql`(${accountSecretResources.projectId} is null or ${accountSecretResources.projectId} = ${projectId})`,
@@ -144,7 +144,7 @@ export function registerSecretResourceRoutes() {
     const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
     if (!projectId) return c.json({ error: 'project_id is required' }, 400);
     const userId = c.get('userId');
-    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
+    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
     if (storage !== 'account_resource') {
       const result = await refreshLegacySubscriptionUsage({ accountId, projectId, userId, secretId, storage });
       return result ? c.json(result, 200) : c.json({ error: 'Not found' }, 404);
@@ -170,7 +170,7 @@ export function registerSecretResourceRoutes() {
     const projectId = await scopedProjectId(c, c.req.query('project_id') as string | undefined);
     if (projectId && !(await projectInAccount(accountId, projectId))) return c.json({ error: 'Forbidden' }, 403);
     // This route authorizes the caller's own request here, so MFA counts.
-    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') as string | undefined }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     const manager = await mayWriteAccount(c, accountId);
@@ -203,7 +203,7 @@ export function registerSecretResourceRoutes() {
       if (
         !project ||
         project.accountId !== accountId ||
-        !(await memberMayReadProject(accountId, body.project_id, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))
+        !(await memberMayReadProject(accountId, body.project_id, userId, { mfaAal: c.get('mfaAal') as string | undefined }))
       ) {
         return c.json({ error: 'Workspace unavailable' }, 403);
       }
@@ -252,7 +252,7 @@ export function registerSecretResourceRoutes() {
     if (!row.projectId || !(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
     // Narrowing a key to its creator skips the `authorize` below: the caller's
     // own request, with its MFA level, is checked here instead.
-    if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: c.get('mfaAal') as string | undefined }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     const parsed = z.object({ mode: z.enum(['project', 'members']), user_ids: z.array(z.string().uuid()).max(200) }).strict().safeParse(await readJsonObject(c));
@@ -337,7 +337,7 @@ export function registerSecretResourceRoutes() {
     if (!row) return c.json({ error: 'Not found' }, 404);
     const { project_id: projectId } = c.req.valid('query');
     if (projectId && !(await projectInAccount(accountId, projectId))) return c.json({ error: 'Forbidden' }, 403);
-    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') as string | undefined }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     // The same rule as the list: a manager sees every login, a member the ones they may use.
@@ -387,7 +387,7 @@ export function registerSecretResourceRoutes() {
     // who may read the project, and sharing beyond the creator needs
     // `project.secret.write`; the grantee must be able to read the project.
     if (row.projectId) {
-      if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+      if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: c.get('mfaAal') as string | undefined }))) {
         return c.json({ error: 'Forbidden' }, 403);
       }
       if (userId !== row.createdBy) {

@@ -40,6 +40,9 @@ function hookFor(url: string): Parameters<typeof deliverTestEvent>[0] {
     createdBy: null,
     createdAt: now,
     updatedAt: now,
+    // Workspaces R1: set by a BEFORE trigger from account_id; a literal row
+    // carries it as null (the column is part of $inferSelect).
+    workspaceId: null,
   };
 }
 

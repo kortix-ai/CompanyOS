@@ -49,16 +49,12 @@ export function keyWire(t: { scopes?: KeyScopes | null; expiryRenewDays?: number
 }
 
 /**
- * The AccountToken wire (the `AccountTokenSchema` shape): the one renderer of
- * a key's eleven wire fields. The three token routes render it directly; the
- * workspace-key list builds its `tokenRow` on it.
- *
- *   - `last_used_at`/`revoked_at` and `project_id`/`workspace_id` follow the
- *     row: a list row carries them (a never-used key answers null), a fresh
- *     mint does not, and a personal key is bound to no workspace;
- *   - `secret_key` rides once, on the mint response.
- *   - `withWorkspace: false` drops the two workspace fields: the key wire has
- *     a single `key_id` instead, so its caller owns them.
+ * The AccountToken wire: the one renderer of a key's eleven wire fields — the
+ * three token routes render it directly; the workspace-key list builds its
+ * `tokenRow` on it. `last_used_at`/`revoked_at` and `project_id`/`workspace_id`
+ * follow the row's shape; `secret_key` rides once, on the mint response; and
+ * `withWorkspace: false` drops the two workspace fields (the key wire has a
+ * single `key_id`, so its caller owns them).
  */
 export function tokenWire(
   t: {
@@ -551,9 +547,9 @@ accountsRouter.openapi(
 
 /**
  * Mint a key that acts as the caller, from a parsed body: the created row, or
- * the refusal to answer with (`{ ok: false; res }` like `keysWorkspace`). The
- * `acts_as: "me"` branch of `POST /v1/workspaces/:workspaceId/keys` takes the
- * row itself instead of round-tripping an HTTP body.
+ * the refusal (`{ status; body }`) to answer with. The `acts_as: "me"` branch
+ * of `POST /v1/workspaces/:workspaceId/keys` takes the row itself instead of
+ * round-tripping an HTTP body.
  */
 export async function mintAccountToken(
   c: Context,

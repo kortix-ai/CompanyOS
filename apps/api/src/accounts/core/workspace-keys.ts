@@ -13,7 +13,7 @@
 // An agent or bot key stores the service account in `user_id` (the principal)
 // and the person in `created_by`. A bot created before 2026-11-07 also holds
 // its own `kortix_sa_` bearer; the list shows that bearer as a bot key too.
-import { createRoute, z, type RouteConfigToTypedResponse } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 
 import type { AppEnv } from '../../types';
@@ -112,9 +112,9 @@ type WorkspaceKeyWire = z.infer<typeof WorkspaceKeySchema>;
 
 const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
 
-/** The workspace in the path and its account, or the refusal to answer with. */
-/** The workspace refusal: the status and body the caller renders. Per-status
- *  shape, so each call site `c.json`s a declared response of its route. */
+/** The workspace in the path and its account, or the refusal to answer with:
+ *  a per-status shape, so each call site `c.json`s a declared response of its
+ *  route. */
 type WorkspaceRefusal =
   | { ok: false; status: 409; body: { error: string; code: string } }
   | { ok: false; status: 404; body: { error: string } }
@@ -196,7 +196,7 @@ async function listKeys(c: Context<AppEnv>) {
   }
   const userId = c.get('userId');
   const ws = await keysWorkspace(c);
-    if (!ws.ok) {
+  if (!ws.ok) {
     const { status, body } = ws;
     return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
   }
@@ -299,7 +299,7 @@ async function mintServiceAccountKey(c: Context<AppEnv>, body: Record<string, un
   if (!name) return c.json({ error: 'name is required' }, 400);
   if (name.length > 255) return c.json({ error: 'name too long (max 255 chars)' }, 400);
   const ws = await keysWorkspace(c);
-    if (!ws.ok) {
+  if (!ws.ok) {
     const { status, body } = ws;
     return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
   }
@@ -439,7 +439,7 @@ async function mintKey(c: Context<AppEnv>) {
   // `me`: exactly the workspace-key mint of `POST …/tokens`, answered as a key
   // row rendered off the inserted token — not off a re-parse of the mint reply.
   const ws = await keysWorkspace(c);
-    if (!ws.ok) {
+  if (!ws.ok) {
     const { status, body } = ws;
     return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
   }
@@ -475,7 +475,7 @@ async function revokeKey(c: Context<AppEnv>) {
   const keyId = c.req.param('keyId') ?? '';
   if (!isUuid(keyId)) return c.json({ error: `"${keyId}" is not a valid key id (a key id is a UUID)` }, 400);
   const ws = await keysWorkspace(c);
-    if (!ws.ok) {
+  if (!ws.ok) {
     const { status, body } = ws;
     return status === 403 ? c.json(body, 403) : status === 409 ? c.json(body, 409) : c.json(body, 404);
   }

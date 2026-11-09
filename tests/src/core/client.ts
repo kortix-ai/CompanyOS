@@ -348,7 +348,7 @@ export function describeEdgeResponse(
  *  The body goes through the same redaction as a captured response (key-based,
  *  capture-time) and then the shape scrub (`scrub.ts`, the last line the runner
  *  writes to public CI logs — Strix CWE-532 on the first version of this line). */
-export function statusAssertDetail(res: Res): string {
+function statusAssertDetail(res: Res): string {
   const body = redactBodyText(res.text().trim()) ?? '';
   return [
     describeEdgeResponse(res.statusCode, res.captured.res.headers),

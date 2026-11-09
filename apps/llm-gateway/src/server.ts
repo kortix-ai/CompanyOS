@@ -130,10 +130,12 @@ export function buildServer(
   );
   // An API answer that carries a principal means the credential is real (even
   // when a later gate denied the request: 402/403 carry the principal too). So
-  // every internal call that authenticates a token marks that token validated,
-  // whatever route the request took, and `x-api-key` (Anthropic SDKs send the
-  // key there) marks the key it carries: without this a real credential would
-  // stay on the shared distinct-credential allowance for good (KRTX-4528).
+  // every internal call that reaches the API to authenticate a token marks that
+  // token validated, whatever route the request took: without this a real
+  // credential would stay on the shared distinct-credential allowance for good
+  // (KRTX-4528). A request the shared bucket refuses never reaches the API, so
+  // its credential stays unvalidated until a later admitted request does; the
+  // refund of the shared slot happens there, in `validated()`, not here.
   const validatedIfReal = (token: string, principal: AuthedPrincipal | undefined) => {
     if (principal) rateLimit.validated(token);
   };

@@ -78,9 +78,11 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
 
   test('a flood of distinct never-validated x-api-key credentials is refused too', async () => {
     // The Anthropic path takes its credential from `x-api-key` and rewrites it
-    // into a bearer BEFORE the pipeline authenticates it, so a key must be
-    // validated by the API's answer, never by the route that carried it: a
-    // fake x-api-key that marked itself validated would buy a private bucket.
+    // into a bearer BEFORE the pipeline runs, so a key must be validated by the
+    // API's answer, never by the route that carried it: these five fakes never
+    // reach a principal, so they all stay on the one shared bucket and the
+    // third is refused. A route that marked its own key validated would hand
+    // each fake a private bucket and admit all five.
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     useFakeApi();
     const { app } = buildServer({ requestsPerMinutePerCredential: 2 });

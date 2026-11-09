@@ -33,15 +33,11 @@ describe('per-credential request limit', () => {
     const limit = createTokenRateLimit(1);
     for (const credential of ['kortix_sb_a', 'kortix_sb_b', 'kortix_gw_c'])
       limit.validated(credential);
-    expect(
-      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' })),
-    ).toBeNull();
-    expect(
-      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_a' }))?.status,
-    ).toBe(429);
-    expect(
-      limit(request('/v1/chat/completions', { authorization: 'Bearer kortix_sb_b' })),
-    ).toBeNull();
+    const call = (credential: string) =>
+      limit(request('/v1/chat/completions', { authorization: `Bearer ${credential}` }));
+    expect(call('kortix_sb_a')).toBeNull();
+    expect(call('kortix_sb_a')?.status).toBe(429);
+    expect(call('kortix_sb_b')).toBeNull();
     expect(limit(request('/v1/messages', { 'x-api-key': 'kortix_gw_c' }))).toBeNull();
     expect(limit(request('/v1/messages', { 'x-api-key': 'kortix_gw_c' }))?.status).toBe(429);
   });
@@ -77,7 +73,6 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
   test('refuses a flood of never-validated credentials once the shared allowance is spent', () => {
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     const limit = createTokenRateLimit(2);
-    // Two requests on unseen credentials take the two shared slots and pass.
     expect(limit(fake(1))).toBeNull();
     expect(limit(fake(2))).toBeNull();
     // A third unseen credential is refused: a fresh fake cannot buy a bucket.
@@ -94,17 +89,17 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     expect(limit.buckets()).toEqual(['gateway_token:distinct_credentials']);
   });
 
-  test('a credential the API validated keeps its own budget, also after the shared one refused it', () => {
+  test('validating a credential moves it off the shared bucket and refunds its slot', () => {
     setSystemTime(new Date('2026-11-02T12:00:00Z'));
     const limit = createTokenRateLimit(1);
+    // `kortix_fake_1` spends the one shared slot while it is unvalidated.
     expect(limit(fake(1))).toBeNull();
     expect(limit(fake(2))?.status).toBe(429);
-    // `kortix_fake_2`'s request was refused for sharing, not for being fake: the
-    // API answered it with a principal, so it now has its own budget.
-    limit.validated('kortix_fake_2');
-    expect(limit(fake(2))).toBeNull();
-    expect(limit(fake(2))?.status).toBe(429);
-    // The shared allowance still refuses a fake: the two budgets are apart.
-    expect(limit(fake(3))?.status).toBe(429);
+    // The API answered `kortix_fake_1` with a principal: it leaves the shared
+    // allowance (refunded, so a fake is admitted again) and gets its own budget.
+    limit.validated('kortix_fake_1');
+    expect(limit(fake(9))).toBeNull();
+    expect(limit(fake(1))).toBeNull();
+    expect(limit(fake(1))?.status).toBe(429);
   });
 });

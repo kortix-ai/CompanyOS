@@ -52,7 +52,7 @@ describe('menu registry feature-flag gating', () => {
     const reviewRow = menuRegistry.find((item) => item.id === 'proj-review-inbox');
     expect(reviewRow).toBeDefined();
     expect(reviewRow?.requiresFlag).toBeUndefined();
-    expect(reviewRow?.href).toBe('/workspaces/{projectId}/review');
+    expect(reviewRow?.href).toBe('/workspaces/{projectId}/inbox?view=review');
 
     // None of them is a settings tab any more, so the derived palette list
     // must not offer one — that would open the overlay on nothing.

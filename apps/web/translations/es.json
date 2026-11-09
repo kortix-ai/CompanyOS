@@ -3383,6 +3383,9 @@
     },
     "inbox": {
       "title": "Bandeja de entrada",
+      "viewReview": "Review",
+      "viewNotifications": "Notificaciones",
+      "viewLabel": "Vista de la bandeja de entrada",
       "description": "Novedades de las sesiones, los disparadores y los artefactos que te afectan, de todos los espacios de trabajo.",
       "unreadLabel": "Bandeja de entrada: {count} sin leer",
       "unreadCount": "{count} sin leer",

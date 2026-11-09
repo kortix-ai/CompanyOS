@@ -828,8 +828,8 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    // Review's own page (`reviewHref`), outside Customize since 2026-11-04.
-    href: '/workspaces/{projectId}/review',
+    // The Inbox's Review tab (`reviewHref`) since 2026-11-08.
+    href: '/workspaces/{projectId}/inbox?view=review',
     requiresProject: true,
     keywords: 'review center inbox approvals awaiting waiting needs you outputs queue',
   },

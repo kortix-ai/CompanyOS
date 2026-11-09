@@ -298,6 +298,7 @@
     "./workspace/home/mobile-app-promo",
     "./workspace/home/sandbox-picker",
     "./workspace/home/welcome-body",
+    "./workspace/inbox/workspace-inbox",
     "./workspace/layout/project-files-skeleton",
     "./workspace/layout/project-home",
     "./workspace/layout/sidebar-cookie",

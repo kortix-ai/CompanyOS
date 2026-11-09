@@ -526,6 +526,7 @@
     "./workspace/home/mobile-app-promo": "./src/workspace/home/mobile-app-promo.tsx",
     "./workspace/home/sandbox-picker": "./src/workspace/home/sandbox-picker.tsx",
     "./workspace/home/welcome-body": "./src/workspace/home/welcome-body.tsx",
+    "./workspace/inbox/workspace-inbox": "./src/workspace/inbox/workspace-inbox.tsx",
     "./workspace/layout/project-files-skeleton": "./src/workspace/layout/project-files-skeleton.tsx",
     "./workspace/layout/project-home": "./src/workspace/layout/project-home.tsx",
     "./workspace/layout/sidebar-cookie": "./src/workspace/layout/sidebar-cookie.ts",
@@ -2556,6 +2557,10 @@
       "./workspace/home/welcome-body": {
         "types": "./dist/workspace/home/welcome-body.d.ts",
         "import": "./dist/workspace/home/welcome-body.js"
+      },
+      "./workspace/inbox/workspace-inbox": {
+        "types": "./dist/workspace/inbox/workspace-inbox.d.ts",
+        "import": "./dist/workspace/inbox/workspace-inbox.js"
       },
       "./workspace/layout/project-files-skeleton": {
         "types": "./dist/workspace/layout/project-files-skeleton.d.ts",

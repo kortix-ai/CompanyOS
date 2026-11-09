@@ -3383,6 +3383,9 @@
     },
     "inbox": {
       "title": "受信トレイ",
+      "viewReview": "Review",
+      "viewNotifications": "通知",
+      "viewLabel": "受信トレイの表示",
       "description": "あなたに関係するセッション、トリガー、アーティファクトの最新情報を、すべてのワークスペースから表示します。",
       "unreadLabel": "受信トレイ：未読 {count} 件",
       "unreadCount": "未読 {count} 件",

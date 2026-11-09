@@ -845,7 +845,9 @@ async function resolveSessionModel(params: {
   //
   // Runs BEFORE the billing hold so a bad model never costs a credit
   // reservation. Mirrors the channel-model gate (routes/channel-bindings.ts).
-  const requestedModel = normalizeString(body.model);
+  // `opencode_model` is the pin an old CLI (v0.13.0–v0.14.19) sends beside
+  // `model`; `model` wins (see SessionCreateInputSchema).
+  const requestedModel = normalizeString(body.model ?? body.opencode_model);
   let sessionModel: string | null = null;
   let sessionModelSource: ModelSource | null = null;
   if (requestedModel) {

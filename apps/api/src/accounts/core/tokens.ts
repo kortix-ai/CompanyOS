@@ -49,12 +49,10 @@ export function keyWire(t: { scopes?: KeyScopes | null; expiryRenewDays?: number
 }
 
 /**
- * The AccountToken wire: the one renderer of a key's eleven wire fields — the
- * three token routes render it directly; the workspace-key list builds its
- * `tokenRow` on it. `last_used_at`/`revoked_at` and `project_id`/`workspace_id`
- * follow the row's shape; `secret_key` rides once, on the mint response; and
- * `withWorkspace: false` drops the two workspace fields (the key wire has a
- * single `key_id`, so its caller owns them).
+ * The AccountToken wire: the one renderer of a key's eleven wire fields. The
+ * three token routes render it directly. `project_id`/`workspace_id` follow the
+ * row's `projectId` (null for a personal key); `last_used_at`/`revoked_at` the
+ * row's dates; `secret_key` rides once, on the mint response.
  */
 export function tokenWire(
   t: {
@@ -70,14 +68,13 @@ export function tokenWire(
     lastUsedAt?: Date | null;
     revokedAt?: Date | null;
   },
-  { secretKey, withWorkspace = true }: { secretKey?: string; withWorkspace?: boolean } = {},
+  { secretKey }: { secretKey?: string } = {},
 ) {
   return {
     token_id: t.tokenId,
     name: t.name,
-    ...(withWorkspace
-      ? { project_id: t.projectId ?? null, workspace_id: t.projectId ?? null }
-      : {}),
+    project_id: t.projectId ?? null,
+    workspace_id: t.projectId ?? null,
     public_key: t.publicKey,
     ...(secretKey !== undefined ? { secret_key: secretKey } : {}),
     status: t.status,

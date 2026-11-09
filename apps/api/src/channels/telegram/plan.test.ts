@@ -14,12 +14,25 @@ import type { IntegrationEvent } from '../../integrations/event-inbox';
 // the Telegram API); the settings read and the model planning are mocked one
 // layer in (core/settings, model-access), so no database runs.
 
-// The row the handler reads; only the fields the plan reads.
-const project = {
+// The row the handler reads: a complete projects row, so the fixture is typed
+// without a cast; the plan reads only the ids and the metadata.
+const project: ChannelSessionPlan['project'] = {
   projectId: 'p1',
   accountId: 'a1',
+  name: 'channels',
+  repoUrl: 'https://git.example.test/o/channels',
+  defaultBranch: 'main',
+  manifestPath: 'kortix.yaml',
+  status: 'active',
+  secretDefaultStrategy: 'runtime',
   metadata: {},
-} as ChannelSessionPlan['project'];
+  idempotencyKey: null,
+  sandboxProviderGeneration: 0,
+  lastOpenedAt: null,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+  splitPending: false,
+};
 
 let selection: Record<string, unknown> | null = null;
 let selectionThrows: unknown = null;
@@ -138,17 +151,16 @@ const message = {
   text: 'status?',
 };
 
-const event = (): IntegrationEvent =>
-  ({
-    id: '9',
-    source: 'telegram:555',
-    type: 'telegram.message.created',
-    time: new Date(1_760_000_000_000).toISOString(),
-    subject: '-100123',
-    sequence: 9,
-    projectId: 'p1',
-    data: { message },
-  }) as unknown as IntegrationEvent;
+const event = (): IntegrationEvent => ({
+  id: '9',
+  source: 'telegram:555',
+  type: 'telegram.message.created',
+  time: new Date(1_760_000_000_000).toISOString(),
+  subject: '-100123',
+  sequence: 9,
+  projectId: 'p1',
+  data: { message },
+});
 
 beforeEach(() => {
   selection = null;
@@ -165,7 +177,9 @@ beforeEach(() => {
 async function planOf(): Promise<ReturnType<ChannelMessage['plan']>> {
   await handleTelegramEvent(event());
   expect(routed).toHaveLength(1);
-  return routed[0]!.plan();
+  const [routedMessage] = routed;
+  if (!routedMessage) throw new Error('routeChannelMessage received no message');
+  return routedMessage.plan();
 }
 
 describe('the plan a new Telegram chat session starts with (the adapter boundary)', () => {
@@ -181,7 +195,8 @@ describe('the plan a new Telegram chat session starts with (the adapter boundary
   test('a settings read that throws starts on the defaults, and the session still starts', async () => {
     selectionThrows = new Error('connection refused');
 
-    const plan = (await planOf())!;
+    const plan = await planOf();
+    if (!plan) throw new Error('the chat started without a plan');
 
     expect(plan.body).toEqual({ agent_name: 'default', title_source: 'status?' });
     expect(plan.project).toBe(project);
@@ -204,7 +219,9 @@ describe('the plan a new Telegram chat session starts with (the adapter boundary
     expect(plan).toBeNull();
     const told = sent.filter((s) => s.method === 'sendMessage');
     expect(told).toHaveLength(1);
-    expect(told[0]!.args).toMatchObject({
+    const [toldMessage] = told;
+    if (!toldMessage) throw new Error('the chat was told nothing');
+    expect(toldMessage.args).toMatchObject({
       chat_id: -100123,
       text: "Kortix did not send your message: this chat's model kortix/gone is not available any more. Pick another with /model, then send your message again.",
       reply_parameters: { message_id: 7 },
@@ -215,7 +232,8 @@ describe('the plan a new Telegram chat session starts with (the adapter boundary
     selection = { projectId: 'p1', agentName: 'reviewer', sessionModel: 'codex/gpt-6-astra' };
     planResult = { agentName: 'reviewer', model: 'codex/gpt-6-astra', pools: { codex: ['k1', 'k2'] } };
 
-    const plan = (await planOf())!;
+    const plan = await planOf();
+    if (!plan) throw new Error('the chat started without a plan');
 
     expect(plan.body).toEqual({
       agent_name: 'reviewer',

@@ -29,8 +29,25 @@ mock.module('../model-access', () => ({
 const { chatSessionPlan } = await import('./model-choice');
 
 const settings = { platform: 'telegram', teamId: 'bot-1', channelId: 'chat-1' };
-// The rows the adapters pass through; only the fields the plan reads.
-const project = { projectId: 'p1', accountId: 'a1', metadata: {} } as Parameters<typeof chatSessionPlan>[0]['project'];
+// The row the adapters pass through: a complete projects row, so the fixture
+// is typed without a cast; the plan reads only the ids and the metadata.
+const project: Parameters<typeof chatSessionPlan>[0]['project'] = {
+  projectId: 'p1',
+  accountId: 'a1',
+  name: 'channels',
+  repoUrl: 'https://git.example.test/o/channels',
+  defaultBranch: 'main',
+  manifestPath: 'kortix.yaml',
+  status: 'active',
+  secretDefaultStrategy: 'runtime',
+  metadata: {},
+  idempotencyKey: null,
+  sandboxProviderGeneration: 0,
+  lastOpenedAt: null,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+  splitPending: false,
+};
 const prompt: ChannelEnvelope = {
   platform: 'Telegram',
   sender: '@synthetic_user',

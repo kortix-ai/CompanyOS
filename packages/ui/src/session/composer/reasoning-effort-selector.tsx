@@ -251,7 +251,10 @@ export function ReasoningEffortPane({
   ];
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Escape closes the popover, Tab leaves the pane, and a modifier
+    // combination (Mod+1..9 picks a model) belongs to the panel around it.
     if (event.key === 'Escape' || event.key === 'Tab') return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     event.stopPropagation();
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();

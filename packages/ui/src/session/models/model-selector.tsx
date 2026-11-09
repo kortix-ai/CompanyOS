@@ -570,6 +570,14 @@ export function ModelSelector({
   const visibleModels = useMemo(() => filterModels(search), [filterModels, search]);
   // The chip popover's rail and tabs read the unsearched list.
   const browseModels = useMemo(() => filterModels(''), [filterModels]);
+  // Favorites skip the default-view curation: a starred model stays listed.
+  const pickableModels = useMemo(
+    () =>
+      models.filter(
+        (m) => m.enabled !== false && !(isClaudeSubscriptionModel(m) && m.available === false),
+      ),
+    [models],
+  );
 
   /** Is there anything to pick AT ALL, ignoring the search box? The empty
    *  state below branches on this: "no models match your search" and "you have
@@ -1018,6 +1026,7 @@ export function ModelSelector({
         >
           <ModelPickerPanel
             browseModels={browseModels}
+            pickableModels={pickableModels}
             searchModels={visibleModels}
             search={search}
             onSearchChange={setSearch}

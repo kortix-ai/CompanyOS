@@ -42,6 +42,12 @@ const sameModel = (a: ModelRef | null | undefined, b: ModelRef) =>
 export interface ModelPickerPanelProps {
   /** Every pickable model with no search applied: the rail and the tabs read these. */
   browseModels: FlatModel[];
+  /**
+   * Every model the member may pick, before the default-view curation. Favorites
+   * read these: a model starred from a search stays in Favorites after the
+   * search is cleared, though the default view would hide it.
+   */
+  pickableModels: FlatModel[];
   /** The models that match the search box. Used only while a search is typed. */
   searchModels: FlatModel[];
   search: string;
@@ -90,6 +96,7 @@ export interface ModelPickerPanelProps {
  */
 export function ModelPickerPanel({
   browseModels,
+  pickableModels,
   searchModels,
   search,
   onSearchChange,
@@ -109,6 +116,7 @@ export function ModelPickerPanel({
   const t = useTranslations('modelSelector');
   const tPooled = useTranslations('pooledSecrets');
 
+  const favorites = useMemo(() => pickableModels.filter(isFavorite), [pickableModels, isFavorite]);
   const tabs = useMemo(
     () =>
       pickerTabs(browseModels, {
@@ -117,15 +125,14 @@ export function ModelPickerPanel({
       }),
     [browseModels, onConnectChatGpt],
   );
-  const favorites = useMemo(() => browseModels.filter(isFavorite), [browseModels, isFavorite]);
   const selectedModel = useMemo(
     () => (selected ? browseModels.find((m) => sameModel(selected, m)) : undefined),
     [browseModels, selected],
   );
 
-  // Chosen on open, then the member's: switching models inside the popover
-  // must not yank the rail to another tab. The popover unmounts this panel on
-  // close, so every open starts from the opening tab again.
+  // The tab is fixed once the models are there, then moves only on a rail
+  // click: picking or starring a model must not yank the rail elsewhere. The
+  // popover unmounts this panel on close, so every open starts afresh.
   const [chosenTab, setChosenTab] = useState<PickerTabId | null>(null);
   const openingTab = initialPickerTab({
     tabs,
@@ -133,6 +140,9 @@ export function ModelPickerPanel({
     selectedIsFavorite: !!selectedModel && isFavorite(selectedModel),
     hasFavorites: favorites.length > 0,
   });
+  // Set during render (React's "adjust state on a prop change" pattern): the
+  // first render with models pins the tab, before anything can move it.
+  if (chosenTab === null && !loading && browseModels.length > 0) setChosenTab(openingTab);
   const tab = chosenTab && tabs.includes(chosenTab) ? chosenTab : openingTab;
   const searching = search.trim().length > 0;
 
@@ -264,6 +274,7 @@ export function ModelPickerPanel({
                     setChosenTab(id);
                     if (searching) onSearchChange('');
                   }}
+                  onKeyDown={keepKeyOnButton}
                   className={cn(
                     'text-muted-foreground flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md outline-none',
                     'hover:bg-hover hover:text-foreground focus-visible:ring-kortix-base focus-visible:ring-2',
@@ -299,6 +310,15 @@ export function ModelPickerPanel({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Enter and Space activate the focused button. cmdk handles both on its root
+ * and would select the highlighted model row instead, so they stop here; the
+ * browser's own activation still runs. Escape and Mod+digit still bubble.
+ */
+function keepKeyOnButton(event: KeyboardEvent<HTMLButtonElement>) {
+  if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
 }
 
 function PickerRow({
@@ -364,6 +384,7 @@ function PickerRow({
         aria-pressed={favorite}
         // cmdk selects on the item's click: a star must not also switch models.
         onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={keepKeyOnButton}
         onClick={(e) => {
           e.stopPropagation();
           onToggleFavorite(!favorite);

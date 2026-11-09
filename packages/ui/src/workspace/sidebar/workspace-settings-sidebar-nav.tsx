@@ -13,7 +13,6 @@ import {
   InputGroupSearchIcon,
   InputGroupSearchInput,
 } from '../../primitives/input-group';
-import { useDebounce } from '../../hooks/use-debounce';
 import { Skeleton } from '../../primitives/skeleton';
 import {
   SidebarGroup,
@@ -157,7 +156,6 @@ function SettingsSearch({
   const tSettings = useTranslations('workspaces.settings');
   const setPendingFind = useWorkspaceSettingsRailStore((s) => s.setPendingFind);
   const searchParams = useUiSearchParams();
-  const pathname = useUiPathname();
   const shallowNavigate = useUiShallowNavigate();
   const [query, setQuery] = useState(() => searchParams.get(SEARCH_PARAM) ?? '');
   // `null`: no row picked by hand yet, so Enter opens the best match.
@@ -177,19 +175,36 @@ function SettingsSearch({
   }, [shown, isMobile]);
   const listId = useId();
 
-  // The URL follows the field, 250 ms after the last keystroke, replacing the
-  // entry so typing adds no history.
-  const { debouncedValue: settledQuery } = useDebounce(query, 250);
+  // The URL follows the field, debounced 250 ms after the last keystroke,
+  // replacing the entry so typing adds no history. `written` is what the field
+  // last wrote: a URL change that differs from it came from elsewhere (Back,
+  // Forward, a pasted link) and puts that query in the field instead.
   const urlQuery = searchParams.get(SEARCH_PARAM) ?? '';
-  useEffect(() => {
-    // Only a settled value: a result opened mid-debounce already carries the
-    // newer query in its link, and a stale write would overwrite it.
-    if (settledQuery !== query || settledQuery.trim() === urlQuery.trim()) return;
-    const current = searchParams.toString();
-    shallowNavigate(withSettingsQuery(`${pathname}${current ? `?${current}` : ''}`, settledQuery), {
-      replace: true,
-    });
-  }, [settledQuery, query, urlQuery, pathname, searchParams, shallowNavigate]);
+  const [written, setWritten] = useState(urlQuery);
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery);
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery);
+    if (urlQuery !== written) {
+      setWritten(urlQuery);
+      setQuery(urlQuery);
+      setCursor(null);
+    }
+  }
+  const writeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(writeTimer.current), []);
+  const writeQuery = (next: string, delayMs: number) => {
+    clearTimeout(writeTimer.current);
+    const value = next.trim() ? next : '';
+    const write = () => {
+      setWritten(value);
+      // Read at write time: a result opened mid-debounce has already moved
+      // the page, and the query lands on that page, not the old one.
+      const { pathname, search, hash } = window.location;
+      shallowNavigate(withSettingsQuery(`${pathname}${search}${hash}`, value), { replace: true });
+    };
+    if (delayMs === 0) write();
+    else writeTimer.current = setTimeout(write, delayMs);
+  };
 
   // Every section the caller may open, in rail order, with its glyph.
   const { sections, icons } = useMemo(() => {
@@ -234,6 +249,7 @@ function SettingsSearch({
   const reset = () => {
     setQuery('');
     setCursor(null);
+    writeQuery('', 0);
   };
 
   const open = (item: SearchItem) => {
@@ -298,6 +314,7 @@ function SettingsSearch({
             onChange={(event) => {
               setQuery(event.target.value);
               setCursor(null);
+              writeQuery(event.target.value, 250);
             }}
             ref={inputRef}
             onKeyDown={onKeyDown}

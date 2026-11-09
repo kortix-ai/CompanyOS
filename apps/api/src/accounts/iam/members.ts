@@ -7,8 +7,8 @@ import { json, errors, auth } from '../../openapi';
 import { and, eq } from 'drizzle-orm';
 import { accountMemberships } from '@kortix/db';
 import { db } from '../../shared/db';
-import { membershipSuperAdminRow } from '../../iam/membership-read';
-import { groupIdsOfUser, groupNamesByIds } from '../../iam/group-read';
+import { membershipRow } from '../../iam/membership-read';
+import { groupIdsOfUser, groupRows } from '../../iam/group-read';
 import { logger } from '../../lib/logger';
 import { invalidateIamCacheForUser } from '../../iam/cache-invalidation';
 import {
@@ -142,7 +142,7 @@ export function registerIamMembersRoutes(): void {
     // Snapshot the prior flag so an audit reader can see "Alice already had
     // super-admin → no-op" vs "Alice was promoted on March 5". Cheap query
     // since the row is small and the update runs against the same key.
-    const [before] = await membershipSuperAdminRow(accountId, targetUserId);
+    const [before] = await membershipRow(accountId, targetUserId);
 
     // `is_super_admin` is IDENTITY, not a role (spec §1: a hard, audited bypass
     // that 22,408 of 33,363 local rows carry), so it lives on
@@ -342,7 +342,7 @@ export function registerIamMembersRoutes(): void {
 
     const groupNameById = new Map<string, string>();
     if (groupIds.length > 0) {
-      const groupNameRows = await groupNamesByIds(groupIds);
+      const groupNameRows = await groupRows({ groupIds });
       for (const g of groupNameRows) groupNameById.set(g.groupId, g.name);
     }
 

@@ -3,8 +3,8 @@ import { and, eq } from 'drizzle-orm';
 import { serviceAccounts } from '@kortix/db';
 import { json, errors, auth } from '../../openapi';
 import { db } from '../../shared/db';
-import { groupInAccountRow } from '../../iam/group-read';
-import { userAccountMemberRow } from '../../iam/membership-read';
+import { groupRow } from '../../iam/group-read';
+import { accountMemberRow } from '../../iam/membership-read';
 import { accountCustomRoles, customRoleRow } from '../../iam/role-read';
 import { ACCOUNT_ACTIONS, assertAuthorized } from '../../iam';
 import { actorOf } from '../../iam/actor';
@@ -461,11 +461,11 @@ async function parsePolicyInput(
   // creates an inert policy (the engine resolves by account membership) — reject
   // it with a clear error instead, matching the token + project ownership checks.
   if (validatePrincipal && principalType === 'member') {
-    const [m] = await userAccountMemberRow(principalId, accountId);
+    const [m] = await accountMemberRow(accountId, principalId);
     if (!m) return { ok: false, status: 404, error: 'principalId is not a member of this account' };
   }
   if (validatePrincipal && principalType === 'group') {
-    const [g] = await groupInAccountRow(principalId, accountId);
+    const [g] = await groupRow(accountId, principalId);
     if (!g) return { ok: false, status: 404, error: 'principalId is not a group in this account' };
   }
 

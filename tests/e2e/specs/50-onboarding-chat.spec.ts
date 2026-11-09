@@ -152,9 +152,8 @@ test.describe('50 — a new project opens on the first chat, which runs the onbo
       await expect(page.getByText('What you can do with Kortix')).toBeVisible();
       await expect(page.getByRole('link', { name: 'Your first chat with Kortix' })).toBeVisible();
       expect(new URL(page.url()).searchParams.get('chat')).toBe('first');
-      await expect(page.getByText('Connect a model to start')).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByRole('button', { name: /Use ChatGPT/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Use Claude/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Connect ChatGPT/ })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole('button', { name: /Connect Claude/ })).toBeVisible();
       await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveCount(0);
 
       // The promo opens right after hydration; give it the time it would take.

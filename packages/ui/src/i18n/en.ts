@@ -1445,7 +1445,13 @@ const catalog = {
       "title": "No models available",
       "description": "Connect your own provider to start using this session.",
       "upgradeDescription": "Upgrade or connect your own provider to start using this session."
-    }
+    },
+    "favorites": "Favorites",
+    "favoritesEmpty": "Star a model to keep it here.",
+    "addFavorite": "Add {model} to favorites",
+    "removeFavorite": "Remove {model} from favorites",
+    "groups": "Model groups",
+    "thinking": "Thinking"
   },
   "sessionScope": {
     "resetDefault": "Reset to default",
@@ -1473,17 +1479,12 @@ const catalog = {
   "sessionUi": {
     "modelGate": {
       "upgrade": "Upgrade",
-      "promptTitle": "Connect a model to start",
       "offerTitle": "Use your ChatGPT or Claude plan",
       "connectChatGpt": "Connect ChatGPT",
       "connectClaude": "Connect Claude",
       "hidePlan": "Don’t show {name}",
-      "promptDescription": "Sign in with a plan you already pay for.",
-      "useChatGpt": "Use ChatGPT",
       "chatGptPlan": "Plus or Pro plan",
-      "useClaude": "Use Claude",
       "claudePlan": "Pro or Max plan",
-      "useApiKey": "Use an API key",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
       "imagesUnsupportedHint": "remove them or pick another model"

@@ -331,3 +331,29 @@ describe('failed status assert detail', () => {
     expect(() => response.status(201)).not.toThrow();
   });
 });
+
+describe('failed status assert detail redaction (Strix CWE-532)', () => {
+  it('masks a credential-shaped body before it reaches the thrown message', () => {
+    const response = new Res({
+      routeTemplate: 'POST /v1/projects/:projectId/sessions',
+      req: { method: 'POST', url: 'https://example.test/v1/projects/p/sessions', headers: {} },
+      res: {
+        status: 503,
+        headers: { 'x-request-id': 'req-1' },
+        bodyText: '{"error":"upstream refused","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc_sig"}',
+      },
+      ms: 1,
+    } satisfies Captured);
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    const message = (error as Error).message;
+    expect(message).not.toContain('eyJhbGciOiJIUzI1NiJ9');
+    expect(message).toContain('***[');
+  });
+});

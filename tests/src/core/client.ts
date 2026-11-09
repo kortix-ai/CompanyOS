@@ -10,6 +10,7 @@ import { currentRecorder } from './context';
 import { assert, BodyAssert } from './expect';
 import { log } from './log';
 import type { Captured } from './result';
+import { scrubSecretShapes } from './scrub';
 
 export type Auth =
   | { mode: 'none' }
@@ -343,12 +344,15 @@ export function describeEdgeResponse(
 
 /** The `detail` a failed status assert carries: origin/edge classification plus
  *  the body, cut. A deployed 5xx body names its cause ("provider at capacity",
- *  `GITHUB_RATE_LIMITED`, `KORTIX_URL_UNREACHABLE`) — a bare "got 503" does not. */
+ *  `GITHUB_RATE_LIMITED`, `KORTIX_URL_UNREACHABLE`) — a bare "got 503" does not.
+ *  The body goes through the same redaction as a captured response (key-based,
+ *  capture-time) and then the shape scrub (`scrub.ts`, the last line the runner
+ *  writes to public CI logs — Strix CWE-532 on the first version of this line). */
 export function statusAssertDetail(res: Res): string {
-  const body = res.text().trim();
+  const body = redactBodyText(res.text().trim()) ?? '';
   return [
     describeEdgeResponse(res.statusCode, res.captured.res.headers),
-    body ? `body=${body.slice(0, 500)}` : 'body=<empty>',
+    body ? `body=${scrubSecretShapes(body).slice(0, 500)}` : 'body=<empty>',
   ].join(' ');
 }
 

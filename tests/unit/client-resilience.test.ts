@@ -407,7 +407,11 @@ describe('the API mirror-unavailable 503 (run 42666114535)', () => {
     for (let i = 0; i < breakerOptions.threshold; i++) transientBreaker.record();
     expect(transientBreaker.isOpen()).toBe(true);
 
-    const response = launderedMaintenance503();
+    const response = capturedResponse(503, {
+      'content-type': 'text/html',
+      'retry-after': '1',
+      'x-maintenance-mode': 'blocking',
+    });
 
     let error: unknown;
     try {
@@ -416,6 +420,7 @@ describe('the API mirror-unavailable 503 (run 42666114535)', () => {
       error = caught;
     }
 
+    expect((error as Error).message).toContain('circuit open');
     expect(isKe2eRetryableError(error)).toBe(false);
     transientBreaker.reset();
   });

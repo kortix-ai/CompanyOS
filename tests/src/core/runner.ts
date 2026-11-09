@@ -317,16 +317,16 @@ export async function runSuite(opts: RunOptions): Promise<RunResult> {
         const project = await fixtures.sharedSeededProject();
         const client = new Client(env.apiUrl).as(world.principals.OWNER);
         // The create honors the API's own typed PRE-COMMIT degradations as
-        // retryable — `git_mirror_unavailable` (the mirror's cold-clone/fetch
-        // race) and `retry: true` (deploy in progress). .status() marks those
-        // `ke2eRetryable`, but this pre-build is NOT a flow, so it owns its own
-        // retry. Re-sending the create is SAFE: both degradations happen
-        // before the session row is written (the edge-laundered case would be
-        // caught above, and the session id is per-attempt generated — a stray
-        // committed row at worst, never a duplicate-key failure). Without a
-        // retry here, one transient mirror blip on a cold deploy red-gates the
-        // whole release (run 42666114535 attempt 3: 503 GitOperationError at
-        // 17:54:38, thirty seconds after the provision returned 201).
+        // retryable — `git_mirror_unavailable` (cold-clone/fetch race) and
+        // `retry: true` (deploy in progress). .status() marks both, but this
+        // pre-build is NOT a flow, so it owns its own retry; only those
+        // proven-pre-commit responses are re-sent (ambiguous marked errors —
+        // a laundered synthetic 503 or a network failure that may have
+        // committed — are never replayed, the POST replay-safety contract).
+        // Without a retry here one transient mirror blip on a cold deploy
+        // red-gates the release (run 42666114535 attempt 3: 503
+        // GitOperationError at 17:54:38, thirty seconds after the provision
+        // returned 201).
         const created = await postSessionWithRetry(client, project);
         const sessionId = created.json<{ session_id: string }>().session_id;
         if (!sessionId) throw new Error('sandbox setup returned no session_id');

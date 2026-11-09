@@ -27,6 +27,41 @@ export interface Identity {
 
 export const ANON: Identity = { label: 'ANON', auth: { mode: 'none' } };
 
+/**
+ * A marked-retryable failure carrying its provenance as typed fields.
+ *
+ * `ke2ePreCommit` is the replay guarantee: true only when the API's own
+ * response BODY classified the failure as a transient pre-commit degradation
+ * (`git_mirror_unavailable` / `retry: true`). An ambiguous mark — a
+ * edge-laundered synthetic 503 or a network error, where the origin may have
+ * already committed — carries `ke2ePreCommit: false`, so a caller that re-sends
+ * creates (the sandbox pre-build) must retry on the proven shape only.
+ */
+export class Ke2eRetryableError extends Error {
+  readonly ke2eRetryable = true;
+  readonly ke2eRetryAfterMs?: number;
+  readonly ke2ePreCommit: boolean;
+
+  constructor(
+    message: string,
+    opts: { retryAfterMs?: number; preCommit?: boolean } = {},
+  ) {
+    super(message);
+    this.name = 'Ke2eRetryableError';
+    this.ke2eRetryAfterMs = opts.retryAfterMs;
+    this.ke2ePreCommit = opts.preCommit === true;
+  }
+}
+
+/**
+ * True when a marked-retryable error was PROVEN pre-commit by the API's own
+ * response body — the only shape re-sending a POST/GET-create cannot duplicate
+ * resources on. An ambiguous mark must fail to the caller.
+ */
+export function isKe2ePreCommitRetryableError(error: unknown): boolean {
+  return error instanceof Ke2eRetryableError && error.ke2ePreCommit;
+}
+
 /** True when the HTTP client marked an error as a transient network failure. */
 export function isKe2eRetryableError(error: unknown): boolean {
   return (
@@ -165,18 +200,14 @@ export class Res {
       // The API itself classified this failure: `code: 'git_mirror_unavailable'`
       // (a session's git-mirror cold-clone/fetch failed for a TRANSIENT upstream
       // reason — projects/git/mirror.ts) or `retry: true` on a 5xx (the deploy
-      // in progress, session insert). Both are PRE-COMMIT: no row was written,
-      // so the same marked-retryable class the edge-laundered branch raises
-      // applies, and the flow-level budget re-runs the flow against fresh
-      // fixtures exactly as the design comment above describes. The in-request
-      // retry stays untouched: POST is still never re-sent here.
-      const error = new Error(
+      // in progress, session insert). Both are PRE-COMMIT and proven by the
+      // response body, so the flow-level budget and the pre-build may re-send.
+      // The in-request retry stays untouched: POST is still never re-sent here.
+      throw new Ke2eRetryableError(
         `typed retryable api degradation ${this.statusCode}; expected [${codes.join(', ')}] ` +
           `body=${describeTypedRetryableResponse(this)}`,
+        { retryAfterMs: retryAfterMs(this.header('retry-after')), preCommit: true },
       );
-      (error as any).ke2eRetryable = true;
-      (error as any).ke2eRetryAfterMs = retryAfterMs(this.header('retry-after'));
-      throw error;
     }
     assert({
       kind: 'status',

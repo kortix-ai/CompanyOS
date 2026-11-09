@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import {
+  Client,
+  Ke2eRetryableError,
   isKe2eRetryableError,
   isTypedRetryableApiDegradation,
   Res,
@@ -30,16 +32,13 @@ function capturedJson(
   return new Res(captured);
 }
 
-function postSessions(client: { post: unknown }): Client {
-  return { post: client.post } as unknown as Client;
-}
-
 beforeEach(() => {
   transientBreaker.reset();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 // ---------------------------------------------------------------------------
@@ -47,7 +46,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('typed retryable api degradation (Res.status)', () => {
-  it('marks a git_mirror_unavailable 503 retryable', () => {
+  it('marks a git_mirror_unavailable 503 as a proven-pre-commit retryable error', () => {
     const response = capturedJson(503, { 'x-request-id': 'req-1', 'retry-after': '10' }, {
       error: true,
       code: 'git_mirror_unavailable',
@@ -62,12 +61,14 @@ describe('typed retryable api degradation (Res.status)', () => {
       error = caught;
     }
 
-    expect(isKe2eRetryableError(error)).toBe(true);
-    expect((error as Error & { ke2eRetryAfterMs?: number }).ke2eRetryAfterMs).toBe(10_000);
-    expect((error as Error).message).toContain('git_mirror_unavailable');
+    expect(error).toBeInstanceOf(Ke2eRetryableError);
+    const retryable = error as Ke2eRetryableError;
+    expect(retryable.ke2eRetryAfterMs).toBe(10_000);
+    expect(retryable.ke2ePreCommit).toBe(true);
+    expect(retryable.message).toContain('git_mirror_unavailable');
   });
 
-  it('marks a retry:true 5xx (deploy in progress) retryable', () => {
+  it('marks a retry:true 5xx (deploy in progress) as a proven-pre-commit retryable error', () => {
     const response = capturedJson(503, { 'x-request-id': 'req-2', 'retry-after': '30' }, {
       error: 'An update is in progress. Try again in a moment.',
       code: 'deploy_in_progress',
@@ -81,8 +82,10 @@ describe('typed retryable api degradation (Res.status)', () => {
       error = caught;
     }
 
-    expect(isKe2eRetryableError(error)).toBe(true);
-    expect((error as Error & { ke2eRetryAfterMs?: number }).ke2eRetryAfterMs).toBe(30_000);
+    expect(error).toBeInstanceOf(Ke2eRetryableError);
+    const retryable = error as Ke2eRetryableError;
+    expect(retryable.ke2eRetryAfterMs).toBe(30_000);
+    expect(retryable.ke2ePreCommit).toBe(true);
   });
 
   it('does not mark an unrelated 5xx body retryable', () => {
@@ -120,61 +123,128 @@ describe('typed retryable api degradation (Res.status)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The sandbox pre-build's bounded create retry.
+// The sandbox pre-build's bounded create retry, over a REAL Client and a
+// mocked fetch so the full request path (capture -> Res -> .status() -> the
+// marked class) runs exactly as the gate will.
 // ---------------------------------------------------------------------------
 
-describe('sandbox pre-build create retry', () => {
-  it('retries a marked git_mirror_unavailable 503 and returns the 201', async () => {
-    vi.useFakeTimers();
-    const retryable = new Error(
-      "typed retryable api degradation 503; expected [201] body=git_mirror_unavailable: git mirror is temporarily unavailable",
-    );
-    (retryable as { ke2eRetryable?: boolean }).ke2eRetryable = true;
-    (retryable as { ke2eRetryAfterMs?: number }).ke2eRetryAfterMs = 1;
-    const post = vi
-      .fn()
-      .mockRejectedValueOnce(retryable)
-      .mockResolvedValueOnce(capturedJson(201, {}, { session_id: 's1' }));
+const MIRROR_503 = {
+  error: true,
+  code: 'git_mirror_unavailable',
+  message: 'git mirror is temporarily unavailable',
+  status: 503,
+};
 
-    const promise = postSessionWithRetry(postSessions({ post }), { id: 'p1' });
-    const settled = promise.catch((err) => err);
-    await vi.runAllTimersAsync();
-    const value = await settled;
+/** A origin-typed pre-commit degradation: the API's own response body. */
+function typedMirrorResponse(retryAfterSeconds = '0'): Response {
+  return jsonResponse(503, { 'x-request-id': 'origin-x', 'retry-after': retryAfterSeconds }, MIRROR_503);
+}
 
-    expect(value).toBeTruthy();
-    expect((value as Res).statusCode).toBe(201);
-    expect(post).toHaveBeenCalledTimes(2);
+/** An edge-laundered synthetic 503: ambiguous — the origin may have committed. */
+function launderedResponse(): Response {
+  return jsonResponse(503, { 'retry-after': '5' }, { error: 'maintenance' });
+}
+
+function jsonResponse(status: number, headers: Record<string, string>, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...headers },
+  });
+}
+
+describe('sandbox pre-build create retry (real Client, mocked fetch)', () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('gives up after the attempt budget and throws the last marked error', async () => {
+  it('retries a proven pre-commit git_mirror_unavailable 503 and returns the 201', async () => {
     vi.useFakeTimers();
-    const post = vi.fn().mockResolvedValue(
-      capturedJson(503, { 'x-request-id': 'req-4', 'retry-after': '0' }, {
-        error: true,
-        code: 'git_mirror_unavailable',
-        message: 'git mirror is temporarily unavailable',
-        status: 503,
-      }),
-    );
+    fetchSpy
+      .mockImplementationOnce(async () => typedMirrorResponse())
+      .mockImplementationOnce(async () =>
+        jsonResponse(201, {}, { session_id: 's1' }));
 
-    const promise = postSessionWithRetry(postSessions({ post }), { id: 'p1' });
+    const client = new Client('https://api.test/v1');
+    const promise = postSessionWithRetry(client, { id: 'p1' });
+    const settled = promise.catch((err) => err as Error);
+    await vi.runAllTimersAsync();
+    const value = await settled as Res;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(value.statusCode).toBe(201);
+    expect(value.json<{ session_id?: string }>().session_id).toBe('s1');
+    expect(value.captured.req.url).toBe('https://api.test/v1/projects/p1/sessions');
+  });
+
+  it('gives up after the attempt budget and throws the last typed error', async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockImplementation(async () => typedMirrorResponse());
+
+    const client = new Client('https://api.test/v1');
+    const promise = postSessionWithRetry(client, { id: 'p1' });
+    const settled = promise.catch((err) => err as Ke2eRetryableError);
+    await vi.runAllTimersAsync();
+    const error = await settled;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(SANDBOX_PREBUILD_CREATE_ATTEMPTS);
+    expect(error).toBeInstanceOf(Ke2eRetryableError);
+    expect(error.message).toContain('git_mirror_unavailable');
+  });
+
+  it('does NOT replay the POST when the 503 is an ambiguous laundered response', async () => {
+    vi.useFakeTimers();
+    // The second response is what the wrong version collapses to a duplicate
+    // create: a 201 the flow would never have reached, on a POST the origin
+    // may have already committed.
+    fetchSpy
+      .mockImplementationOnce(async () => launderedResponse())
+      .mockImplementationOnce(async () =>
+        jsonResponse(201, {}, { session_id: 'unexpected-duplicate' }));
+
+    const client = new Client('https://api.test/v1');
+    const promise = postSessionWithRetry(client, { id: 'p1' });
     const settled = promise.catch((err) => err as Error);
     await vi.runAllTimersAsync();
     const error = await settled;
 
-    expect(post).toHaveBeenCalledTimes(SANDBOX_PREBUILD_CREATE_ATTEMPTS);
-    expect(isKe2eRetryableError(error)).toBe(true);
-    expect((error as Error).message).toContain('git_mirror_unavailable');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(error.message).toContain('transient gateway status 503');
+  });
+
+  it('does NOT replay the POST after a network failure', async () => {
+    vi.useFakeTimers();
+    // The second response exists only to prove the re-send would have
+    // "succeeded": without the guard the wrapper would loop its full budget
+    // against this mock instead of stopping after the first send.
+    fetchSpy
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockImplementationOnce(async () =>
+        jsonResponse(201, {}, { session_id: 'unexpected-duplicate' }));
+
+    const client = new Client('https://api.test/v1');
+    const promise = postSessionWithRetry(client, { id: 'p1' });
+    const settled = promise.catch((err) => err as Error);
+    await vi.runAllTimersAsync();
+    const error = await settled;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(error.message).toContain('network error POST');
   });
 
   it('does not retry an unmarked contract failure', async () => {
-    const post = vi.fn().mockResolvedValue(
-      capturedJson(402, { 'x-request-id': 'req-5' }, { error: 'Insufficient credits' }),
-    );
+    vi.useFakeTimers();
+    fetchSpy.mockImplementation(async () =>
+      jsonResponse(402, { 'x-request-id': 'req-5' }, { error: 'Insufficient credits' }));
 
-    await expect(
-      postSessionWithRetry(postSessions({ post }), { id: 'p1' }),
-    ).rejects.toThrow('expected [201]');
-    expect(post).toHaveBeenCalledTimes(1);
+    const client = new Client('https://api.test/v1');
+    const promise = postSessionWithRetry(client, { id: 'p1' });
+    const settled = promise.catch((err) => err as Error);
+    await vi.runAllTimersAsync();
+    const error = await settled;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(error.message).toContain('expected [201]');
   });
 });

@@ -1,24 +1,24 @@
 /**
  * The sandbox pre-build's session create (tests/src/core/runner.ts).
  *
- * Bounded retry on the API's own typed PRE-COMMIT degradations (marked
- * `ke2eRetryable` by `.status()` — the git mirror's cold-clone
- * `git_mirror_unavailable` and a `retry: true` 5xx), and on a marked
- * client-side rejection from the request itself.
+ * Bounded retry ONLY on the API's own typed PRE-COMMIT degradations, which
+ * `.status()` raises as `Ke2eRetryableError` with `ke2ePreCommit: true` — the
+ * git mirror's cold-clone `git_mirror_unavailable` and a `retry: true` 5xx,
+ * both declared pre-commit by the response body itself.
  *
  * NOT a flow, so no flow-level budget exists to honor the mark: without this
  * retry one transient mirror blip red-gated the whole release
  * (run 42666114535 attempt 3: 503 GitOperationError at 17:54:38, thirty
  * seconds after the provision returned 201).
  *
- * Re-sending is safe: both degradations happen before the session row is
- * written, and the session id is per-attempt generated — a stray committed
- * row at worst, never a duplicate-key failure. The edge-laundered route
- * stays as-is: that branch raises its own mark and this loop's re-send of a
- * completed POST would duplicate the resource.
+ * AMBIGUOUS marked errors are never replayed here: an edge-laundered
+ * synthetic 503 or a network failure may have been committed at the origin,
+ * and re-sending the create would duplicate the resource (the create-replay-
+ * safety contract — REPLAY_SAFE_METHODS). They fail the pre-build as-is. The
+ * proven shapes are pre-insert, so the re-send cannot duplicate a session row.
  */
 import type { Client, Res } from './client';
-import { isKe2eRetryableError, ke2eRetryDelayMs } from './client';
+import { isKe2ePreCommitRetryableError, ke2eRetryDelayMs } from './client';
 import { log } from './log';
 import { sleep } from './poll';
 
@@ -37,7 +37,7 @@ export async function postSessionWithRetry(
     } catch (error) {
       const nextAttempt = attempt + 1;
       if (
-        !isKe2eRetryableError(error) ||
+        !isKe2ePreCommitRetryableError(error) ||
         nextAttempt > SANDBOX_PREBUILD_CREATE_ATTEMPTS
       ) {
         throw error;

@@ -105,13 +105,24 @@ describe('typed retryable api degradation (Res.status)', () => {
   });
 
   it('exactly recognizes the degradation in isTypedRetryableApiDegradation', () => {
-    const mirror = capturedJson(503, {}, { code: 'git_mirror_unavailable' });
-    const retryFlag = capturedJson(502, {}, { retry: true });
-    const other = capturedJson(500, {}, { code: 'SESSION_CREATE_FAILED' });
+    // Provenance: only a body the origin signed (x-request-id present) can
+    // prove pre-commit. The mirror contract is carried by the 503 only.
+    const mirror = capturedJson(503,
+      { 'x-request-id': 'req-4' }, { code: 'git_mirror_unavailable' });
+    const retryFlag = capturedJson(502,
+      { 'x-request-id': 'req-5' }, { retry: true });
+    // Unproven shapes: without x-request-id the body may be edge laundering.
+    const mirrorUnproven = capturedJson(503, {}, { code: 'git_mirror_unavailable' });
+    const mirrorOnOtherStatus = capturedJson(502,
+      { 'x-request-id': 'req-6' }, { code: 'git_mirror_unavailable' });
+    const other = capturedJson(500,
+      { 'x-request-id': 'req-7' }, { code: 'SESSION_CREATE_FAILED' });
     const ok = capturedJson(201, {}, { session_id: 's1' });
 
     expect(isTypedRetryableApiDegradation(mirror)).toBe(true);
     expect(isTypedRetryableApiDegradation(retryFlag)).toBe(true);
+    expect(isTypedRetryableApiDegradation(mirrorUnproven)).toBe(false);
+    expect(isTypedRetryableApiDegradation(mirrorOnOtherStatus)).toBe(false);
     expect(isTypedRetryableApiDegradation(other)).toBe(false);
     expect(isTypedRetryableApiDegradation(ok)).toBe(false);
   });

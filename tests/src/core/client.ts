@@ -200,8 +200,10 @@ export class Res {
       // The API itself classified this failure: `code: 'git_mirror_unavailable'`
       // (a session's git-mirror cold-clone/fetch failed for a TRANSIENT upstream
       // reason — projects/git/mirror.ts) or `retry: true` on a 5xx (the deploy
-      // in progress, session insert). Both are PRE-COMMIT and proven by the
-      // response body, so the flow-level budget and the pre-build may re-send.
+      // in progress, session insert). Both are PRE-COMMIT and PROVEN by the
+      // origin's response body (its x-request-id signature — see
+      // isTypedRetryableApiDegradation), so the flow-level budget and the
+      // pre-build may re-send.
       // The in-request retry stays untouched: POST is still never re-sent here.
       throw new Ke2eRetryableError(
         `typed retryable api degradation ${this.statusCode}; expected [${codes.join(', ')}] ` +
@@ -253,27 +255,45 @@ export class Res {
 }
 
 /**
- * Detect the API's own TYPED, retryable pre-commit degradation.
- *
- * `git_mirror_unavailable` (a session's git-mirror cold clone/fetch failed for
- * a transient, upstream reason — see `projects/git/mirror.ts`) and a 5xx body
- * carrying `retry: true` (the deploy in progress, the session insert) are
- * the API's own declaration that it took no committed action and the caller
- * may re-send. The edge-laundered branch above covers the gateway case; this
- * covers the origin case, which that branch deliberately excludes by
- * `x-request-id`. Without this, a response the API already promised is
- * retryable breaks `.status()` as a plain contract assertion.
+ * The API's own documented-retryable mirror 503 code. When a project's git
+ * mirror is momentarily unavailable (a freshly provisioned managed repo whose
+ * credential/visibility has not settled), the API answers 503 with the stable
+ * code `git_mirror_unavailable` and `Retry-After` — the same contract the
+ * SDK (`packages/sdk` `response-error.ts`) classifies and retries. The client
+ * honors it like the SDK does instead of failing the assertion (release run
+ * 42666114535: the deployed smoke's warm-up session create answered this 503
+ * on every attempt while the mirror's own bounded clone retries never
+ * outlasted the blip).
  */
-const GIT_MIRROR_UNAVAILABLE = 'git_mirror_unavailable';
+export const GIT_MIRROR_UNAVAILABLE_CODE = 'git_mirror_unavailable';
 
+/**
+ * Detect the API's own TYPED, proven-PRE-COMMIT retryable degradation.
+ *
+ * `git_mirror_unavailable` (a session's git-mirror cold clone/fetch failed
+ * for a transient, upstream reason — see `projects/git/mirror.ts`; only the
+ * 503 carries that contract — KRTX-4578) and a 5xx body carrying
+ * `retry: true` (the deploy in progress, the session insert) are the API's
+ * own declaration that it took no committed action and the caller may
+ * re-send. But a body is proven only when it is the origin's: without
+ * `x-request-id` the body may be the edge's synthetic laundering, and those
+ * responses stay in the ambiguous gateway lane below
+ * (`isKe2eTransientGatewayResponse`, which matches host failures by the
+ * ABSENCE of x-request-id) — never replayed. The provenance a POST re-send
+ * needs is the proven-pre-commit contract the sandbox pre-build retries on
+ * (`isKe2ePreCommitRetryableError`); folding KRTX-4578's gateway marking of
+ * the same mirror 503 here is where the provenance is actually checked
+ * before anything replays. Without this, a response the API already promised
+ * is retryable breaks `.status()` as a plain contract assertion.
+ */
 export function isTypedRetryableApiDegradation(response: Res): boolean {
   if (response.statusCode < 500) return false;
-  if (isKe2eTransientGatewayResponse(response)) return false;
+  if (response.header('x-request-id') === undefined) return false;
   const body = response.captured.res.json as
     | { code?: unknown; retry?: unknown; message?: unknown }
     | undefined;
   if (typeof body !== 'object' || body === null) return false;
-  if (body.code === GIT_MIRROR_UNAVAILABLE) return true;
+  if (body.code === GIT_MIRROR_UNAVAILABLE_CODE) return response.statusCode === 503;
   return body.retry === true;
 }
 

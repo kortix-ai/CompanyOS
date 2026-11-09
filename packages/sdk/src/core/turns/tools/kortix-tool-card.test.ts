@@ -157,4 +157,11 @@ describe('parseKortixToolResult: a failure card never shows text written for the
     const projectList = JSON.stringify({ ok: true, tool: 'kortix_schedules', action: 'list', card: { title: '1 follow-up', subtitle: 'The project schedules could not be read: boom', status: 'done' } });
     expect(parseKortixToolResult(projectList)!.card.subtitle).toBe('The project schedules could not be read.');
   });
+
+  test('legacy schedules argument-check titles read as an incomplete call; a server refusal keeps its title', () => {
+    for (const title of ['Name the automation', 'An App or an agent', 'Check the filter', 'Check the sample', 'Check the event name']) {
+      expect(parseKortixToolResult(legacy(title, 'invalid'))!.card.title).toBe('The agent left out a required detail');
+    }
+    expect(parseKortixToolResult(legacy('Could not test triage', 'invalid'))!.card.title).toBe('Could not test triage');
+  });
 });

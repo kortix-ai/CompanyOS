@@ -203,9 +203,12 @@ const INCOMPLETE_CALL_TITLE = 'The agent left out a required detail';
  * as a question to the model ("What should the follow-up check?"). Those
  * transcripts still load, so the parser reads them the way kortixd now writes them.
  */
-function personTitle(title: string, error: KortixToolError | undefined): string {
+function personTitle(tool: KortixCardTool, title: string, error: KortixToolError | undefined): string {
   if (error?.kind !== 'invalid') return title;
-  return title.endsWith('?') || title === 'Unknown action' ? INCOMPLETE_CALL_TITLE : title;
+  if (title.endsWith('?') || title === 'Unknown action') return INCOMPLETE_CALL_TITLE;
+  // kortix_schedules `automate` and `test` titled their argument checks as orders to the model.
+  const order = tool === 'kortix_schedules' && (title === 'Name the automation' || title === 'An App or an agent' || title.startsWith('Check the '));
+  return order ? INCOMPLETE_CALL_TITLE : title;
 }
 
 /**
@@ -261,7 +264,7 @@ export function parseKortixToolResult(raw: string | undefined, callName?: string
     tool,
     action,
     card: {
-      title: personTitle(title, error),
+      title: personTitle(tool, title, error),
       ...(subtitle ? { subtitle } : {}),
       status,
       rows: list(value.card.rows, row),

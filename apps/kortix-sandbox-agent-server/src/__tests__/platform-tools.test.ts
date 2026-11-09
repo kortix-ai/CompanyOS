@@ -685,6 +685,9 @@ describe('kortix_schedules automate tolerance', () => {
     const result = await run('kortix_schedules', { action: 'automate', name: 'form-leads', on: 'webhook', secret_env: 'FORM_SECRET', prompt: 'Draft a reply.' })
     expect(result.ok).toBe(false)
     expect(result.card.title).toBe('FORM_SECRET needs saving for webhooks')
+    // The person saves it from the card: one link, a plain note, no model instruction.
+    expect(result.card.links).toEqual([{ label: 'Save secret', href: 'https://app.example.test/secret-intake/ksl_abc123' }])
+    expect(result.card.subtitle).toBe('Save the value on the linked page. It never passes through chat.')
     expect(result.error?.message).toContain('https://app.example.test/secret-intake/ksl_abc123')
     expect((result as { data?: { secret_intake_url?: string } }).data?.secret_intake_url).toBe('https://app.example.test/secret-intake/ksl_abc123')
     expect(argvs()[1]).toBe('secrets request FORM_SECRET --scope=connector')

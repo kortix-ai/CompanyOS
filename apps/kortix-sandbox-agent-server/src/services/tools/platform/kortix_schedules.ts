@@ -615,7 +615,10 @@ async function automate(args: Record<string, any>, context: PlatformToolContext)
       const link = 'text' in intake ? intake.text.match(/https?:\/\/\S+/)?.[0] : undefined
       if (link) {
         const message = `${made.error.message} Give the person this link to save ${secret} for webhooks (they paste the value there, never in chat), then call automate again: ${link}`
-        return { ...(await fail(TOOL, 'automate', `${secret} needs saving for webhooks`, { kind: 'invalid', message }, context)), data: { secret_intake_url: link } }
+        const note = 'Save the value on the linked page. It never passes through chat.'
+        const result = await fail(TOOL, 'automate', `${secret} needs saving for webhooks`, { kind: 'invalid', message, note }, context)
+        // The person saves it: the card carries the link (`card.links`), the model reads it in `data`.
+        return { ...result, card: { ...result.card, links: [{ label: 'Save secret', href: link }] }, data: { secret_intake_url: link } }
       }
     }
     return fail(TOOL, 'automate', 'Could not set up the automation', made.error, context)

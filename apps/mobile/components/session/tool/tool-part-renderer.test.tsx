@@ -78,7 +78,7 @@ mock.module('./shared/infrastructure', () => ({
 }));
 /** The sign-in button prints its href so a test can assert the link it opens. */
 const opened: string[] = [];
-mock.module('expo-web-browser', () => ({ openBrowserAsync: async (url: string) => void opened.push(url) }));
+mock.module('@/lib/utils/open-link', () => ({ openExternalLink: (url: string) => void opened.push(url) }));
 mock.module('@/components/ui/button', () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) => React.createElement('view', { onPress }, children),
 }));
@@ -265,6 +265,24 @@ describe('ToolPartRenderer dispatch', () => {
     const button = tree!.root.findAll((node) => node.type === 'view' && typeof node.props.onPress === 'function')[0]!;
     await act(async () => button.props.onPress());
     expect(opened).toEqual(['https://auth.example.com/connect/abc']);
+  });
+
+  test('a platform card shows its rows and changes; in-app links and data stay hidden', async () => {
+    const result = JSON.stringify({
+      ok: true,
+      tool: 'kortix_agents',
+      action: 'update',
+      card: {
+        title: 'Updated Researcher',
+        status: 'done',
+        rows: [{ title: 'Researcher', detail: 'Finds sources', badge: 'active' }],
+        changes: [{ field: 'model', before: 'a', after: 'b' }],
+        links: [{ label: 'Agents', href: '/workspaces/p-1/customize/agents' }],
+      },
+      data: { model_only: 'never shown' },
+    });
+    await renderPart({ type: 'tool', id: 'part-r', callID: 'call-r', tool: 'kortix_agents', state: { status: 'completed', input: { action: 'update' }, output: result } });
+    expect(texts()).toEqual(['Updated Researcher', 'Researcher', '  Finds sources · active', 'model', '  a → b']);
   });
 
   test('a failed image_gen call renders the image card, which draws its own failure', async () => {

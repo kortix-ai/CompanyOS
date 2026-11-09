@@ -48,8 +48,11 @@ import { registerRoutes } from './routes';
 import { createTokenRateLimit } from './token-rate-limit';
 import { createTraffic } from './traffic';
 
+/** The app type every registered route set takes: `clientIp` is the socket peer (main.ts). */
+export type GatewayApp = Hono<{ Bindings: { clientIp?: string | null } }>;
+
 export interface GatewayServer {
-  app: Hono;
+  app: GatewayApp;
   traces: TraceSink | null;
   /** Requests still being served, including streams still relaying. */
   inflightRequests: () => number;
@@ -102,6 +105,7 @@ export function buildServer(
     inflight?: InflightBudget;
     requestsPerMinutePerCredential?: number;
     requestsPerMinuteUnvalidated?: number;
+    trustEdgeClientIp?: boolean;
   } = {},
 ): GatewayServer {
   const inflight = options.inflight ?? defaultInflight;
@@ -132,6 +136,7 @@ export function buildServer(
   const rateLimit = createTokenRateLimit(
     options.requestsPerMinutePerCredential ?? config.requestsPerMinutePerCredential,
     options.requestsPerMinuteUnvalidated ?? config.requestsPerMinuteUnvalidated,
+    { trustEdgeClientIp: options.trustEdgeClientIp ?? config.trustEdgeClientIp },
   );
   // An API answer that carries a principal means the credential is real (even
   // when a later gate denied the request: 402/403 carry the principal too). So
@@ -182,7 +187,10 @@ export function buildServer(
     },
     { logger, imageWindow: config.imageWindow, claudeCodeUpstream: config.claudeCodeUpstream },
   );
-  const app = new Hono();
+  // `clientIp` is the socket peer (main.ts), which the public edge (a
+  // Cloudflare-locked ALB) makes an infrastructure value: the per-source share
+  // of the unvalidated allowance keys on it (token-rate-limit.ts).
+  const app: GatewayApp = new Hono();
   app.use('*', async (c, next) => {
     await next();
     c.header('Cache-Control', 'private, no-store');
@@ -198,7 +206,7 @@ export function buildServer(
     app.get(path, (c) => wellKnownResponse(c.req.path) ?? c.notFound());
   }
   const inflightRequests = trackInflight(app);
-  registerHealth(app, api, inflight, traces, trafficSnapshot, upstreamSignals);
+  registerHealth(app, api, inflight, traces, trafficSnapshot, upstreamSignals, rateLimit);
   registerRoutes(app, gateway, inflight, recordOutcome, rateLimit);
   // Register fallbacks after the handlers so supported methods keep their behavior.
   const methodsByPath = new Map<string, Set<string>>();

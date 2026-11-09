@@ -3,6 +3,23 @@ import { gatewayErrorResponse } from '@kortix/llm-gateway';
 import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
 
 /**
+ * The limit the gateway applies on every route whose handler can reach the API
+ * with a caller-supplied credential (model routes, and the `/health` probe
+ * that forwards a caller bearer to `authenticate`). `source` is the caller's
+ * address as the trusted hop reported it (`clientIp` in the Hono env, set from
+ * the socket peer in `main.ts`) — null when there is none.
+ */
+export type TokenRateLimit = {
+  (request: Request, headers?: Headers, source?: string | null): Response | null;
+  /** The API answered this credential with a principal; it keeps its own bucket from now on. */
+  validated: (credential: string) => void;
+  /** The live bucket keys; KRTX-4528 proves a flood of fakes leaves only the shared one. */
+  buckets: () => string[];
+  /** The credentials waiting for a shared-slot refund; KRTX-4528 proves a flood cannot grow it without bound. */
+  chargedCount: () => number;
+};
+
+/**
  * The per-credential request limit on every model route of this service. It
  * runs before the body is read and before the admit call to the API.
  *
@@ -43,17 +60,14 @@ import { TokenBucketRateLimiter } from '@kortix/shared/rate-limit';
 export function createTokenRateLimit(
   limitPerMinute: number,
   unvalidatedPerMinute = limitPerMinute,
-): {
-  /** The limit for one request, charged to the credential's own bucket once validated, else to the shared one. */
-  (request: Request, headers?: Headers): Response | null;
-  /** The API answered this credential with a principal; it keeps its own bucket from now on. */
-  validated: (credential: string) => void;
-  /** The live bucket keys; KRTX-4528 proves a flood of fakes leaves only the shared one. */
-  buckets: () => string[];
-  /** The credentials waiting for a shared-slot refund; KRTX-4528 proves a flood cannot grow it without bound. */
-  chargedCount: () => number;
-} {
+  options: { trustEdgeClientIp?: boolean } = {},
+): TokenRateLimit {
   const limiter = new TokenBucketRateLimiter('gateway_token');
+  // Per-source buckets live in their OWN limiter: source keys are caller-shaped
+  // (one address per caller), so a flood of them in a shared map would evict
+  // the shared bucket and every validated credential's bucket out from under
+  // them — resetting the very allowances this limit promises (KRTX-4528).
+  const sourceLimiter = new TokenBucketRateLimiter('gateway_source');
   // The credentials the API has answered with a principal. Only a real
   // credential gets in, so the set is bounded by the credential store, never by
   // what a caller sends.
@@ -72,12 +86,21 @@ export function createTokenRateLimit(
   // request refused here never reaches the API, so a credential it refuses can
   // never validate and stays refused while a flood runs — one shared bucket
   // with no per-source bound is pinnable by a single caller. Per-source keys
-  // live in the same limiter, whose bucket count is capped.
+  // live in their own limiter, whose bucket count is capped; the source is
+  // charged only when the operator's edge vouches for it (`trustEdgeClientIp`,
+  // default on: the shipped Kortix edge is a Cloudflare-locked ALB — see
+  // server.ts — where the address is edge-set). A deployment without such an
+  // edge sets it off: an untrusted header would let one caller rotate
+  // addresses and buy a fresh source allowance each time.
   const sourcePolicy = {
     limit: Math.max(1, Math.floor(unvalidatedPerMinute / 100)),
     windowMs: 60_000,
   };
-  const limit = (request: Request, headers = new Headers()): Response | null => {
+  const limit = (
+    request: Request,
+    headers = new Headers(),
+    source?: string | null,
+  ): Response | null => {
     const credential = credentialOf(request);
     if (!credential) return null;
     const key = hashOf(credential);
@@ -85,8 +108,10 @@ export function createTokenRateLimit(
     // A validated credential keeps its own budget; anything else shares one
     // bucket, so a rotating fake bearer spends the shared allowance, never its
     // own private one — after its source has spent its own small share.
-    const source = validated ? null : request.headers.get('cf-connecting-ip')?.trim() || null;
-    const fromSource = source ? limiter.check(`${UNVALIDATED}:${source}`, sourcePolicy) : null;
+    const fromSource =
+      !validated && source && (options.trustEdgeClientIp ?? true)
+        ? sourceLimiter.check(source, sourcePolicy)
+        : null;
     const result =
       fromSource && !fromSource.allowed
         ? fromSource

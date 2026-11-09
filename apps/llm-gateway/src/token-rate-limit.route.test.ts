@@ -214,10 +214,48 @@ describe('per-credential limit on the gateway route (KRTX-4528)', () => {
       });
     // One source may spend 1% of the 200-per-minute shared allowance: two
     // admissions, then a refusal WHILE the shared allowance still holds 198.
-    expect((await app.request(from('1.2.3.4', 1))).status).toBe(401);
-    expect((await app.request(from('1.2.3.4', 2))).status).toBe(401);
-    expect((await app.request(from('1.2.3.4', 3))).status).toBe(429);
+    const fromSource = (ip: string, n: number) =>
+      app.request(from(ip, n), undefined, { clientIp: ip });
+    expect((await fromSource('1.2.3.4', 1)).status).toBe(401);
+    expect((await fromSource('1.2.3.4', 2)).status).toBe(401);
+    expect((await fromSource('1.2.3.4', 3)).status).toBe(429);
     // A different source admits on the same shared allowance.
-    expect((await app.request(from('5.6.7.8', 4))).status).toBe(401);
+    expect((await fromSource('5.6.7.8', 4)).status).toBe(401);
+  });
+
+  test('the /health probe draws from the same allowance when it forwards a caller bearer', async () => {
+    // The probe reads a caller bearer and calls `/authenticate` with it: the
+    // same unbounded-per-credential work the model routes guard. The shared
+    // allowance is 2, so at most the FIRST two probe credentials reach it —
+    // counted as distinct tokens asked, independent of the client's retries.
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const realFetch = globalThis.fetch;
+    const askedTokens = new Set<string>();
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/authenticate')) {
+        const { token } = JSON.parse(String(init?.body)) as { token?: string };
+        askedTokens.add(token ?? '');
+      }
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+    try {
+      const { app } = buildServer({
+        requestsPerMinutePerCredential: 1,
+        requestsPerMinuteUnvalidated: 2,
+      });
+      for (let n = 1; n <= 5; n++) {
+        const res = await app.request(
+          new Request('https://gateway.test/health', {
+            headers: { authorization: `Bearer kortix_fake_${n}` },
+          }),
+        );
+        // Probes 3-5 are refused by the allowance: 503 is the honest probe
+        // answer for the first two (the fake API is down), 429 the refusal.
+        if (n > 2) expect(res.status).toBe(429);
+      }
+      expect(askedTokens.size).toBeLessThanOrEqual(2);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

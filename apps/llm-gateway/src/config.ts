@@ -49,6 +49,13 @@ export const config = {
   // budget: a real caller spends a slot only until the API answers it with a
   // principal, and gets it back.
   requestsPerMinuteUnvalidated: optionalInt('KORTIX_LLM_GATEWAY_UNVALIDATED_REQS_PER_MIN', 10_000),
+  // Whether the edge in front of this task overwrites `cf-connecting-ip` (the
+  // shipped Kortix edge: a Cloudflare-locked ALB — see server.ts). It decides
+  // whether the per-source share of the unvalidated allowance may key on the
+  // caller's address (token-rate-limit.ts): a front that forwards caller
+  // headers verbatim (a plain Caddy or nginx) must set it off, or one caller
+  // rotates the header and buys a fresh source allowance per request.
+  trustEdgeClientIp: flag('KORTIX_LLM_GATEWAY_TRUST_EDGE_CLIENT_IP', true),
   langfuse: {
     publicKey: process.env.LANGFUSE_PUBLIC_KEY,
     secretKey: process.env.LANGFUSE_SECRET_KEY,

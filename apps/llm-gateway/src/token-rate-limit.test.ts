@@ -138,4 +138,38 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     for (let i = 0; i < 50_001; i++) limit(fake(i));
     expect(limit.chargedCount()).toBe(50_000);
   });
+
+  test('a flood of rotating source addresses never resets the shared allowance', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(1_000_000, 10);
+    // 50 001 distinct sources: in a shared map this evicts the shared bucket
+    // (created first) and re-creates it full, renewing the flood bound forever.
+    let admitted = 0;
+    for (let i = 0; i < 50_001; i++) {
+      const r = new Request('https://gateway.test/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer kortix_fake_${i}`,
+          'cf-connecting-ip': `10.0.${Math.floor(i / 256) % 256}.${i % 256}`,
+        },
+        body: '{"model":"x","messages":[]}',
+      });
+      if (limit(r, new Headers(), `10.0.${Math.floor(i / 256) % 256}.${i % 256}`) === null)
+        admitted++;
+    }
+    // The shared allowance is 10/min; a reset would admit far more.
+    expect(admitted).toBeLessThanOrEqual(12);
+  });
+
+  test('turning the edge trust off skips the per-source share: the shared allowance alone applies', () => {
+    setSystemTime(new Date('2026-11-02T12:00:00Z'));
+    const limit = createTokenRateLimit(1_000_000, 10, { trustEdgeClientIp: false });
+    let admitted = 0;
+    for (let i = 0; i < 20; i++)
+      admitted += limit(fake(i), new Headers(), '10.0.0.1') === null ? 1 : 0;
+    // One source at 1% of a 10-per-minute allowance would admit 1; with the
+    // share skipped, the shared 10 apply.
+    expect(admitted).toBe(10);
+  });
 });

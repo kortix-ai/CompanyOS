@@ -9,6 +9,7 @@ import {
   transientBreaker,
   transientRetryDelayMs,
 } from '../src/core/client';
+import { AssertionError } from '../src/core/expect';
 import type { Captured } from '../src/core/result';
 
 function capturedResponse(status: number, headers: Record<string, string>): Res {
@@ -272,5 +273,99 @@ describe('edge response diagnostics (P3.3)', () => {
     expect(error.message).toContain('after 3/3 attempt(s)');
     expect(error.message).toContain('ECONNRESET');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The API's documented-retryable mirror 503 (code `git_mirror_unavailable`)
+// is classified ke2e-retryable; an opaque API 503 is still a contract failure.
+// Release run 42666114535: the deployed smoke's warm-up session create
+// answered this 503 on every attempt and the hard assert failed the gate.
+// ---------------------------------------------------------------------------
+
+function capturedJsonResponse(status: number, headers: Record<string, string>, body: unknown): Res {
+  const captured: Captured = {
+    routeTemplate: 'POST /v1/projects/:projectId/sessions',
+    req: { method: 'POST', url: 'https://example.test/v1/projects/p/sessions', headers: {} },
+    res: { status, headers, bodyText: JSON.stringify(body), json: body },
+    ms: 1,
+  };
+  return new Res(captured);
+}
+
+describe('the API mirror-unavailable 503 (run 42666114535)', () => {
+  it('classifies the documented code on the API 503 as ke2e-retryable', () => {
+    const response = capturedJsonResponse(503, {
+      'content-type': 'application/json',
+      'x-request-id': 'mw9k9hxr-2no',
+      'retry-after': '10',
+    }, { error: true, code: 'git_mirror_unavailable', message: 'git mirror is temporarily unavailable', status: 503 });
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeDefined();
+    expect(isKe2eRetryableError(error)).toBe(true);
+    expect((error as { ke2eRetryAfterMs?: number }).ke2eRetryAfterMs).toBe(10_000);
+  });
+
+  it('keeps an opaque API 503 a hard contract failure', () => {
+    const response = capturedJsonResponse(503, {
+      'content-type': 'application/json',
+      'x-request-id': 'mw9k9hxr-2no',
+    }, { error: true, message: 'boom', status: 503 });
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isKe2eRetryableError(error)).toBe(false);
+    expect(error).toBeInstanceOf(AssertionError);
+  });
+
+  it('keeps an API 502 with the mirror code a contract failure (only 503 carries the contract)', () => {
+    const response = capturedJsonResponse(502, {
+      'content-type': 'application/json',
+      'x-request-id': 'mw9k9hxr-2no',
+    }, { error: true, code: 'git_mirror_unavailable', status: 502 });
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isKe2eRetryableError(error)).toBe(false);
+    expect(error).toBeInstanceOf(AssertionError);
+  });
+
+  it('honors the breaker: no retryable mark once the breaker is open', () => {
+    const breakerOptions = readBreakerOptions();
+    for (let i = 0; i < breakerOptions.threshold; i++) transientBreaker.record();
+    expect(transientBreaker.isOpen()).toBe(true);
+
+    const response = capturedJsonResponse(503, {
+      'content-type': 'application/json',
+      'x-request-id': 'mw9k9hxr-2no',
+      'retry-after': '10',
+    }, { error: true, code: 'git_mirror_unavailable', status: 503 });
+
+    let error: unknown;
+    try {
+      response.status(201);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isKe2eRetryableError(error)).toBe(false);
+    transientBreaker.reset();
   });
 });

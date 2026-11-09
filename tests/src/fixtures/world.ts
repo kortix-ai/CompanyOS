@@ -33,6 +33,7 @@ import {
   createDatabaseProject,
   createDatabaseSession,
   deleteDatabaseProject,
+  fundDatabaseAccount,
   mergeDatabaseProjectMetadata,
 } from './database-project';
 import { mapWithConcurrency } from '../core/concurrency';
@@ -232,10 +233,14 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
     const accountId = res.json<any>()?.account_id;
     if (!accountId) throw new Error(`workspace account create returned no id: ${res.text()}`);
     stack.push('account', accountId);
-    // The run's OWNER already has a first workspace, so this one starts at 0
-    // credits, and a session in it answers 402 (release suite 42666114535,
-    // the deployed smoke's warm-up session). Fund it like a team fixture.
-    await fundFixtureAccount(accountId, 'workspace');
+    // The run's OWNER already has a first workspace, so this one starts on
+    // the free tier with 0 credits. Credits alone are not enough: on staging a
+    // free-tier account has no platform default model, so pi refuses to boot
+    // ("no KORTIX_MODEL and no live model catalog"; release suite 42678542534,
+    // after 42666114535 answered 402). Give it the OWNER's footing, a paid tier
+    // with credits, as the database-project fixture already does.
+    if (env.capabilities.database) await fundDatabaseAccount(env, accountId);
+    else await fundFixtureAccount(accountId, 'workspace');
     return accountId;
   }
 

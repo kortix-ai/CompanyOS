@@ -153,3 +153,15 @@ c16b74338b9c53744201aac00694984253a52f0e:apps/api/src/connectors/one-click-mcp.j
 # test constant, single use, asserted by nothing), not a credential; no live
 # wallet, key or token value appears on the line. Reviewed by the release train.
 45da88f99de472f388d7ed35efff89ab973aa22e:tests/src/flows/workspace-auth.flow.ts:generic-api-key:612
+
+# v0.15.3 release PR (2026-11-09). tests/unit/client-resilience.test.ts:343 built
+# its redaction fixture BODY with a contiguous fake JWT string literal
+# ("eyJhbGciOiJIUzI1NiI…abc_sig") whose leading header-piece is base64 (gitleaks'
+# generic-api-key rule crossed entropy 4.66 on the 'token' key's value). It is a
+# redaction-test FIXTURE, not a credential; no live key is on the line. The
+# fixture now builds the value at run time (the current tree matches nothing);
+# this entry covers the commit that first added the contiguous literal.
+b214b7afb277b75ee9726ab828002b90e49245db:tests/unit/client-resilience.test.ts:generic-api-key:343
+# Same fixture, the staging-side branch commit that carries the same content
+# (PR #12154's original head; the dev tip's squash is the entry above).
+a707e3ec4aaae045708f2d04f70ac907e39be46e:tests/unit/client-resilience.test.ts:generic-api-key:343

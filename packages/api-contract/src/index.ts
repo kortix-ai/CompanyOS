@@ -1102,6 +1102,20 @@ export const SessionCreateInputSchema = z
     // means inject zero project secrets. Backend origin required — a non-backend
     // caller supplying it is rejected 403 (canOverride 'secrets').
     secrets: SessionSecretsAllowlistSchema.optional(),
+    /**
+     * Connectors (slugs) and project secrets (identifiers) My Kortix hands one
+     * colleague: an inline child that runs as My Kortix. Only a My Kortix
+     * session starting a colleague sends it. A person allows the exact list
+     * first; until then the create answers 409
+     * `COLLEAGUE_ACCESS_APPROVAL_REQUIRED` with the ask id, and no session exists.
+     */
+    colleague_access: z
+      .object({
+        connectors: z.array(z.string().min(1).max(128)).max(20).optional(),
+        secrets: z.array(z.string().min(1).max(128)).max(20).optional(),
+      })
+      .strict()
+      .optional(),
     // Deprecated camelCase compatibility accepted by the pre-contract route.
     // New SDK/API consumers use the snake_case fields above.
     baseRef: z.string().min(1).optional(),

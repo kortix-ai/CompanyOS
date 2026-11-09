@@ -21415,7 +21415,8 @@
         "question": "Pregunta",
         "permission": "Permiso",
         "approval": "Aprobación de conector"
-      }
+      },
+      "allowed": "Permitido"
     },
     "reviewBulk": {
       "approve": "Aprobar",
@@ -21486,7 +21487,21 @@
       "senderUnavailable": "No se pudo cargar la cuenta de envío. Revisa la fila De.",
       "quoted": "«{text}»"
     },
-    "promptHistory": "Historial {index}/{total}"
+    "promptHistory": "Historial {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix pide dar acceso a un compañero",
+      "task": "Tarea",
+      "connector": "Conector",
+      "secret": "Secreto",
+      "onlyThis": "El compañero recibe solo esto, para esta única tarea.",
+      "deny": "Denegar",
+      "allow": "Permitir",
+      "allowed": "Acceso permitido",
+      "allowedDescription": "My Kortix inicia al compañero.",
+      "denied": "Acceso denegado",
+      "deniedDescription": "My Kortix recibe tu respuesta.",
+      "failed": "No se pudo enviar tu decisión. Inténtalo de nuevo."
+    }
   },
   "commandPalette": {
     "title": "Paleta de comandos",

@@ -21415,7 +21415,8 @@
         "question": "Pitanje",
         "permission": "Dozvola",
         "approval": "Odobrenje konektora"
-      }
+      },
+      "allowed": "Dozvoljeno"
     },
     "reviewBulk": {
       "approve": "Одобри",
@@ -21486,7 +21487,21 @@
       "senderUnavailable": "Налог пошиљаоца није могуће учитати. Проверите ред Од.",
       "quoted": "„{text}“"
     },
-    "promptHistory": "Историја {index}/{total}"
+    "promptHistory": "Историја {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix тражи приступ за колегу",
+      "task": "Задатак",
+      "connector": "Конектор",
+      "secret": "Тајна",
+      "onlyThis": "Колега добија само ово, само за овај задатак.",
+      "deny": "Одбиј",
+      "allow": "Дозволи",
+      "allowed": "Приступ дозвољен",
+      "allowedDescription": "My Kortix покреће колегу.",
+      "denied": "Приступ одбијен",
+      "deniedDescription": "My Kortix добија ваш одговор.",
+      "failed": "Ваша одлука није послата. Покушајте поново."
+    }
   },
   "commandPalette": {
     "title": "Палета команди",

@@ -5587,6 +5587,59 @@ export const sessionPendingPermissions = kortixSchema.table(
   ],
 ).enableRLS();
 
+/**
+ * Access My Kortix asked to hand a colleague: connectors and project secrets
+ * that My Kortix itself does not hold (api projects/lib/colleague-access.ts).
+ * A person allows or denies the exact list. My Kortix's next start of a
+ * colleague with the same list consumes an allow once, and the colleague it
+ * creates (`consumed_by_session_id`) runs with that list on every turn. Only
+ * the API writes this table: no box route inserts or decides a row.
+ */
+export const sessionColleagueAccess = kortixSchema.table(
+  'session_colleague_access',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    accountId: uuid('account_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    /** The My Kortix session that asked. */
+    sessionId: text('session_id').notNull(),
+    /** As `session_pending_questions.surface_session_id`. */
+    surfaceSessionId: text('surface_session_id'),
+    /** The colleague's task, one line: what the card names. */
+    title: text().notNull(),
+    /** Canonical connector slugs, sorted. */
+    connectors: jsonb().default([]).notNull(),
+    /** Project secret identifiers, sorted. */
+    secrets: jsonb().default([]).notNull(),
+    /** sha256 of the sorted lists: the key a re-run matches. */
+    accessHash: text('access_hash').notNull(),
+    askedAt: timestamp('asked_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    /** Null while open. */
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }),
+    /** allow | deny. */
+    decision: text(),
+    decidedBy: uuid('decided_by'),
+    /** The start that used an allow, and the colleague it created. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    consumedBySessionId: text('consumed_by_session_id'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('session_colleague_access_open_uniq').on(table.sessionId, table.accessHash).where(sql`decided_at IS NULL`),
+    index('session_colleague_access_project_open_idx').on(table.projectId).where(sql`decided_at IS NULL`),
+    uniqueIndex('session_colleague_access_colleague_uniq')
+      .on(table.consumedBySessionId)
+      .where(sql`consumed_by_session_id IS NOT NULL`),
+    foreignKey({
+      name: 'session_colleague_access_session_fk',
+      columns: [table.sessionId],
+      foreignColumns: [projectSessions.sessionId],
+    }).onDelete('cascade'),
+  ],
+).enableRLS();
+
 export const sandboxComputeSessions = kortixSchema.table(
   'sandbox_compute_sessions',
   {

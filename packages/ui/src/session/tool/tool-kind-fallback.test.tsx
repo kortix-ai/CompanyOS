@@ -1,16 +1,14 @@
-import '@kortix/ui/session/tool/tools/register';
-import { TooltipProvider } from '@kortix/ui/tooltip';
-import { FOREIGN_TOOL_CALLS } from '@kortix/ui/session/tool/foreign-tool-calls';
-import { parseListing } from '@kortix/ui/session/tool/shared/file-list';
-import { patchFilesFromText } from '@kortix/ui/session/tool/shared/patch-helpers';
-import { ToolRegistry, ToolPartRenderer } from '@kortix/ui/session';
+import './tools/register';
+import { FOREIGN_TOOL_CALLS } from './foreign-tool-calls';
+import { parseListing } from './shared/file-list';
+import { patchFilesFromText } from './shared/patch-helpers';
+import { ToolRegistry } from './shared/registry';
+import { ToolPartRenderer } from './tool-part-renderer';
+import { renderStatic } from './render-static';
 import type { ToolCallBlock } from '@kortix/sdk';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, test } from 'bun:test';
-import { NextIntlClientProvider } from 'next-intl';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { renderToStaticMarkup } from 'react-dom/server';
 
 /**
  * Session Log Plan P5.3: the registry looks up the tool name, then the session-log block
@@ -18,16 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
  * with its kind's renderer, and the renderer reads the foreign input shape.
  */
 
-const render = (call: ToolCallBlock) =>
-  renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{}} onError={() => {}}>
-      <QueryClientProvider client={new QueryClient()}>
-        <TooltipProvider>
-          <ToolPartRenderer call={call} defaultOpen />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </NextIntlClientProvider>,
-  );
+const render = (call: ToolCallBlock) => renderStatic(<ToolPartRenderer call={call} defaultOpen />);
 
 /** Block kind → the registered name whose renderer draws it. */
 const KIND_RENDERER: Array<[kind: string, name: string]> = [
@@ -95,14 +84,14 @@ describe('a session with foreign tool names renders no generic fallback', () => 
     test(`${call.name} (${call.kind}) renders with a registered renderer`, () => {
       expect(ToolRegistry.get(call.name, call.kind)).toBeDefined();
       // Text content: a highlighted command is split across spans.
-      const text = render(call).split('<').map((chunk, i) => (i ? chunk.slice(chunk.indexOf('>') + 1) : chunk)).join('').replaceAll('&amp;', '&');
+      const { text } = render(call);
       for (const shown of SHOWS[call.id]!) expect(text).toContain(shown);
     });
   }
 });
 
 describe('the codex and claude-code golden sessions', () => {
-  const FIXTURES = join(import.meta.dir, '../../../../../../packages/api-contract/src/__tests__/fixtures/session-log');
+  const FIXTURES = join(import.meta.dir, '../../../../../packages/api-contract/src/__tests__/fixtures/session-log');
   const toolCalls = (value: unknown): ToolCallBlock[] =>
     Array.isArray(value)
       ? value.flatMap(toolCalls)
@@ -118,7 +107,7 @@ describe('the codex and claude-code golden sessions', () => {
       expect(calls.length).toBeGreaterThan(0);
       for (const call of calls) {
         expect({ name: call.name, renderer: ToolRegistry.get(call.name, call.kind) !== undefined }).toEqual({ name: call.name, renderer: true });
-        expect(render(call).length).toBeGreaterThan(0);
+        expect(render(call).html.length).toBeGreaterThan(0);
       }
     });
   }
@@ -162,26 +151,26 @@ const completed = (id: string, name: string, kind: string, input: unknown, outpu
 
 describe('a kind renderer that cannot read the call shows what the call has', () => {
   test('a foreign glob (pi `find`, relative paths) shows its output, not "no matches"', () => {
-    const html = render(completed('find', 'find', 'glob', { pattern: '*.ts' }, 'src/a.ts\nsrc/b.ts'));
+    const { html } = render(completed('find', 'find', 'glob', { pattern: '*.ts' }, 'src/a.ts\nsrc/b.ts'));
     expect(html).not.toContain('no matches');
     expect(html).toContain('src/a.ts');
   });
 
   test('an OpenCode glob with no match still reads "no matches"', () => {
-    expect(render(completed('glob', 'glob', 'glob', { pattern: '*.ts' }, 'No files found'))).toContain('no matches');
+    expect(render(completed('glob', 'glob', 'glob', { pattern: '*.ts' }, 'No files found')).html).toContain('no matches');
   });
 
   // A shell call with no command (Claude Code `BashOutput`, Codex `write_stdin`) renders the
   // generic row: name, input and output.
   test('Claude Code BashOutput shows its name, input and output', () => {
-    const html = render(completed('bash-output', 'BashOutput', 'shell', { bash_id: 'shell-1' }, 'build finished'));
+    const { html } = render(completed('bash-output', 'BashOutput', 'shell', { bash_id: 'shell-1' }, 'build finished'));
     expect(html).toContain('BashOutput');
     expect(html).toContain('bash_id=shell-1');
     expect(html).toContain('build finished');
   });
 
   test('Codex write_stdin shows its name, input and output', () => {
-    const html = render(completed('stdin', 'write_stdin', 'shell', { session_id: 3, chars: 'y' }, 'Process exited with code 0'));
+    const { html } = render(completed('stdin', 'write_stdin', 'shell', { session_id: 3, chars: 'y' }, 'Process exited with code 0'));
     expect(html).toContain('Write Stdin');
     expect(html).toContain('session_id=3');
     expect(html).toContain('Process exited with code 0');
@@ -219,6 +208,6 @@ describe('parseListing', () => {
   });
 
   test('an empty OpenCode listing still reads "Directory is empty"', () => {
-    expect(render(completed('empty', 'list', 'list', { path: '/w/src' }, '/w/src/\n'))).toContain('Directory is empty');
+    expect(render(completed('empty', 'list', 'list', { path: '/w/src' }, '/w/src/\n')).html).toContain('Directory is empty');
   });
 });

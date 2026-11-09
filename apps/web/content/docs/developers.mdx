@@ -2675,6 +2675,7 @@ These are the codes clients branch on most. The linked section explains each fix
 | `no_account` | `402` | The account has no credit account yet. Its setup is not complete. | [Billing](/docs/guide#billing) |
 | `entitlement_required` | `402` | The plan lacks `sso`, `scim`, `rbac`, `auditAccess`, or `branding`. The body names `entitlement`. | [Security](/docs/guide#security) |
 | `budget_exceeded` | `402` | A model budget set to block reached its limit. | [Models](/docs/guide#models) |
+| `branding_unavailable` | `403` | Kortix Cloud does not offer branding. A write to `…/branding` answers this before any entitlement check. | [Self-hosting](/docs/developers#self-hosting) |
 | `feature_disabled` | `403` | The workspace has this feature flag off. The body names `feature`. | **Workspace admin** → **Feature flags** |
 | `feature_operator_only` | `403` | Only Kortix (a platform admin) may change this flag. | Ask a platform admin. |
 | `account_mfa_required` | `403` | The account requires two-factor, and this sign-in did not use it. | [Security](/docs/guide#security) |

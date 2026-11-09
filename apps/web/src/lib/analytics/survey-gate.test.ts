@@ -14,7 +14,7 @@ interface FakeSurvey {
 }
 interface DisplayCall {
   id: string;
-  options: { displayType?: string; ignoreConditions?: boolean };
+  options: { displayType?: string; ignoreConditions?: boolean; ignoreDelay?: boolean };
 }
 /** The slice of the PostHog client the gate talks to. */
 interface FakeSurveys {

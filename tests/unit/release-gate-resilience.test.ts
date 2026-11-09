@@ -447,5 +447,23 @@ describe('release gate transient failure resilience', () => {
       );
       expect(post).toHaveBeenCalledTimes(1);
     });
+
+    it('fails fast while the transient breaker is open — the warmup must not re-amplify', async () => {
+      // Default threshold is 20; load it until it trips deterministically.
+      for (let i = 0; i < 20; i++) transientBreaker.record();
+      expect(transientBreaker.isOpen()).toBe(true);
+      const post = vi
+        .fn()
+        .mockResolvedValue(
+          createResponse(503, transientBody, { 'retry-after': '10', 'x-request-id': 'req-4' }),
+        );
+
+      // The typed 503 error names ke2eRetryable: false while the breaker is open,
+      // so the create is not re-sent despite being app-transient.
+      await expect(createSandboxWarmupSession(clientWithPost(post), 'project-4')).rejects.toThrow(
+        /app git_mirror_unavailable/,
+      );
+      expect(post).toHaveBeenCalledTimes(1);
+    });
   });
 });

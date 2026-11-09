@@ -397,7 +397,11 @@ export async function createSandboxWarmupSession(
       until: (id) => !!id,
       timeoutMs: 300_000,
       intervalMs: 5000,
-      retryOnError: isKe2eAppTransientError,
+      // Both markers: the typed no-write degrade (ke2eAppTransient) AND the
+      // client's own permission to re-amplify (ke2eRetryable is false with the
+      // transient breaker open) — the warmup must not hammer the API the way a
+      // flow must not when the edge is degrading for everything.
+      retryOnError: (error) => isKe2eRetryableError(error) && isKe2eAppTransientError(error),
       description: 'sandbox warmup session create',
     },
   );

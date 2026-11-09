@@ -90,6 +90,7 @@ export async function resolveSessionSecretReach(
     defaultBranch: project.defaultBranch,
     manifestPath: project.manifestPath,
     sessionAgent: agent,
+    sessionId,
     // The human may have just changed the grant in Customize; read it fresh.
     forceRefresh: true,
   });

@@ -210,4 +210,31 @@ describe('cloneBareWithRetry', () => {
     expect(attempts).toBe(3);
     expect(cleanups).toBe(3);
   });
+
+  test('pins the DEFAULT budget: 5 attempts with a ≥1 s wait, so a freshly provisioned repo wins its visibility window', async () => {
+    // Release gate 42666114535 attempt 3 (staging, 2026-11-09): the pre-flow's
+    // first session cloned a repo created ~2.4 s earlier and GitHub kept
+    // answering `fatal: repository … not found`; the then-default budget
+    // (3 × 500 ms) was exhausted inside the window and the session create
+    // surfaced a retryable 503. The default budget has to out-wait that
+    // window while still surfacing a genuinely dead upstream in ~10 s.
+    let attempts = 0;
+    const slept: number[] = [];
+    await expect(
+      cloneBareWithRetry({
+        run: async () => {
+          attempts += 1;
+          if (attempts >= 5) return;
+          throw incidentError();
+        },
+        cleanup: async () => {},
+        sleep: async (ms) => {
+          slept.push(ms);
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(attempts).toBe(5);
+    expect(slept.length).toBe(attempts - 1);
+    for (const ms of slept) expect(ms).toBeGreaterThanOrEqual(1000);
+  });
 });

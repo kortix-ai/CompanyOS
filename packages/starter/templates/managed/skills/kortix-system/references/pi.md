@@ -79,6 +79,7 @@ Arguments: `description`, `prompt`, `subagent_type` (a declared agent) or
   `agent` and `task` out of `tools` to stop an agent from delegating.
 - A subagent runs with its own prompt, model and permission. A call must pass both the subagent's rules and the caller's: a `deny` from either wins. A child never gets a tool its caller lacks.
 - An inline agent runs as the caller's own agent, with the caller's access: its grant, connectors, secrets, computer type and the channel the caller's chat came from. Its `instructions` are its whole system prompt (at most 4,096 characters in a separate session).
+- Only My Kortix may give an inline agent more: `connectors` and `secrets` in the spec. A person allows that exact list first; the call starts nothing until then and says so, and the decision arrives as a new message. After an allow, the same call starts the colleague with exactly that list.
 - `session: "separate"` (the default) runs the subagent in its own new
   session with its own sandbox and branch. The one call waits until that
   session finishes (up to 30 minutes) and returns its final message: ask the

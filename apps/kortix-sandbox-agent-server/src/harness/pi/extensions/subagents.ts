@@ -202,6 +202,12 @@ export interface SpawnSessionInput {
   tools?: string[]
   /** The compiled `permission` block for the child's tools. */
   permission?: unknown
+  /**
+   * Connectors and secrets a coordinator's inline agent gets beyond the
+   * coordinator's own access (`colleague_access` on the create). A person
+   * approves the exact list first: until then the result is `awaiting_approval`.
+   */
+  access?: { connectors: string[]; secrets: string[] }
   prompt: string
   /** More `runtime_context` keys for a new separate session (the workflow runner's script). The subagent keys win. */
   runtimeContext?: Record<string, string | number | boolean>
@@ -220,8 +226,11 @@ export interface SpawnSessionInput {
 
 export interface SpawnSessionResult {
   sessionId: string
-  /** `started`: a background child that is still running; its report arrives later as a message. */
-  status: 'completed' | 'error' | 'aborted' | 'started'
+  /**
+   * `started`: a background child that is still running; its report arrives later as a message.
+   * `awaiting_approval`: no child exists yet; a person must allow its access first (`text` says so).
+   */
+  status: 'completed' | 'error' | 'aborted' | 'started' | 'awaiting_approval'
   text: string
   error?: string
   model: { providerID: string; modelID: string }
@@ -233,6 +242,8 @@ export interface SpawnSessionResult {
   notice?: string
   /** The child made no progress for `SpawnSessionInput.stallMs` and was stopped. */
   stalled?: true
+  /** `awaiting_approval`: the ask the person decides (`access:<id>`). */
+  askId?: string
 }
 
 interface SubagentType {
@@ -310,6 +321,18 @@ const inlineAgent = Type.Object(
     description: Type.Optional(Type.String({ description: 'A short description of this ephemeral agent.' })),
     model: Type.Optional(Type.String({ description: 'A `provider/model` ref for this ephemeral agent; the parent model when absent.' })),
     tools: Type.Optional(Type.Array(Type.String(), { description: 'Workspace tool names this ephemeral agent may use; all of them when absent.' })),
+    connectors: Type.Optional(
+      Type.Array(Type.String(), {
+        description:
+          'Platform coordinator only: connectors (slugs, as kortix_connectors list shows them) this agent gets beyond your own access. The person approves this exact list before the agent starts. Omit it when the agent needs none.',
+      }),
+    ),
+    secrets: Type.Optional(
+      Type.Array(Type.String(), {
+        description:
+          'Platform coordinator only: project secrets (identifiers, as `kortix secrets ls` shows them) this agent gets as env vars beyond your own access. The person approves this exact list before the agent starts. Omit it when the agent needs none.',
+      }),
+    ),
   },
   { description: 'An inline, ephemeral agent defined here instead of a named subagent_type. Pass one, not both: a call with subagent_type is refused.' },
 )
@@ -376,6 +399,8 @@ interface InlineAgent {
   description?: string
   model?: string
   tools?: string[]
+  connectors?: string[]
+  secrets?: string[]
 }
 
 function describe(types: Map<string, SubagentType>, anyProjectAgent = false, top = false, teams = false): string {
@@ -389,6 +414,11 @@ function describe(types: Map<string, SubagentType>, anyProjectAgent = false, top
     '',
     'Usage:',
     '- Set subagent_type to one of the types above (omitted: general), OR pass an inline `agent` spec ({ instructions, model?, tools?, description? }) to define one on the fly: its own system prompt, its own model, and a subset of your tools.',
+    ...(anyProjectAgent
+      ? [
+          "- An inline agent works with your own access: no connectors and no secrets. When the work needs some, prefer a project agent that already has them. Otherwise list exactly what it needs in agent.connectors and agent.secrets: the person approves that list first. The call then returns at once without starting anything; their decision arrives later as a new message, and after an allow you call agent again with the same spec.",
+        ]
+      : []),
     '- model (provider/model) runs this hand-off on another model, for a named subagent_type too.',
     '- Write the task and the facts it depends on. The subagent does not see this conversation, but it knows your session_id and reads this conversation itself (`kortix sessions log`) when your prompt leaves something out: never paste the conversation into the prompt.',
     '- Launch several subagents in one message when their work is independent.',
@@ -490,6 +520,12 @@ function register(pi: ExtensionAPI, host: KortixHost): void {
         // A follow-up (task_id, or the name of a finished child) continues that child as it was: never a new teammate.
         const followUp = !!params.task_id || result.continued === true
         const teammate = shape.teammate && !followUp ? shape.teammate : undefined
+        if (result.status === 'awaiting_approval') {
+          return {
+            content: [{ type: 'text' as const, text: `<task_awaiting_approval>\n${result.text}\n</task_awaiting_approval>` }],
+            details: { awaitingApproval: true, ...(result.askId ? { askId: result.askId } : {}), ...(handle ? { name: handle } : {}) },
+          }
+        }
         const body =
           result.status === 'error'
             ? `<task_error>\n${result.error ?? 'The subagent failed.'}\n</task_error>`
@@ -620,6 +656,25 @@ function resolveSpawn(params: SubagentParams, host: KortixHost): Omit<SpawnSessi
   return model ? { ...spec, model } : spec
 }
 
+/**
+ * The connectors and secrets an inline agent asks for beyond this session's
+ * access. Only the platform coordinator hands them out, and only to a child in
+ * its own session: the API asks the person and grants them there. Null: none.
+ */
+function inlineAccess(inline: InlineAgent, params: SubagentParams, host: KortixHost): { connectors: string[]; secrets: string[] } | null {
+  const clean = (list: string[] | undefined) => [...new Set((list ?? []).map((item) => item.trim()).filter(Boolean))]
+  const connectors = clean(inline.connectors)
+  const secrets = clean(inline.secrets)
+  if (connectors.length === 0 && secrets.length === 0) return null
+  if (host.anyProjectAgent?.() !== true) {
+    throw new Error('Only My Kortix hands an inline agent connectors or secrets. Name a project agent that has them (subagent_type), or omit agent.connectors and agent.secrets.')
+  }
+  if (params.session === 'same') {
+    throw new Error('An inline agent with its own connectors or secrets runs in its own session: omit session "same".')
+  }
+  return { connectors, secrets }
+}
+
 /** The spawn input for a call: an inline ephemeral agent, else the named subagent type. */
 function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessionInput, 'prompt' | 'signal' | 'onSession' | 'sessionId' | 'session' | 'background'> {
   // A fork continues this conversation as this session's own agent.
@@ -636,6 +691,7 @@ function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessio
   }
   if (inline) {
     const instructions = inline.instructions?.trim()
+    const access = inlineAccess(inline, params, host)
     return {
       title: `${params.description} (inline agent)`,
       agent: INLINE_AGENT,
@@ -643,6 +699,7 @@ function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessio
       ...(instructions ? { ownPrompt: true } : {}),
       ...(inline.model ? { model: inline.model } : {}),
       ...(inline.tools ? { tools: inline.tools } : {}),
+      ...(access ? { access } : {}),
     }
   }
   const types = subagentTypes(host)

@@ -1003,9 +1003,21 @@ const BARE_CLONE_TIMEOUT_MS = bareCloneTimeoutMs();
 /** A cold clone OR a warm fetch can transiently fail (timeout, network blip, or
  * GitHub's ambiguous `repository … not found` for a private mirror whose token
  * is momentarily unusable); retry a bounded number of times before surfacing —
- * most clear on a later attempt. See `isTransientGitMirrorError`. */
-const MIRROR_RETRY_MAX_ATTEMPTS = 3;
-const MIRROR_RETRY_DELAY_MS = 500;
+ * most clear on a later attempt. See `isTransientGitMirrorError`.
+ *
+ * The budget has to cover GitHub's visibility window for a BRAND-NEW repo:
+ * the first session of a freshly provisioned project clones a repo created
+ * ~2 s earlier, and GitHub kept answering `repository … not found` past the
+ * old budget (3 × 500 ms ≈ 1.6 s; release gate 42666114535, attempt 3 on
+ * staging, 2026-11-09). 5 × 2 s surfaces a genuinely dead upstream in ~10 s
+ * while surviving the propagation window. */
+const MIRROR_RETRY_MAX_ATTEMPTS = 5;
+const MIRROR_RETRY_DELAY_MS = 2000;
+/** The refresh-epoch cap is a CONCURRENCY budget, not a transient-network one:
+ * how many times a refresh may retry while a base move keeps invalidating the
+ * mirror under it (`kind: "busy"`). Its neighbor test pins the move count —
+ * deliberately unchanged, and not the transient budget above. */
+const MIRROR_EPOCH_MAX_ATTEMPTS = 3;
 
 function looksLikeBareMirror(repoPath: string): boolean {
   return (
@@ -1355,7 +1367,7 @@ async function refreshStore(
   // reader) is finishing. Dropping its proof is not enough: this reader must
   // not ground a new session on the checkout that the move invalidated.
   if (epoch !== (invalidations.get(project.projectId) ?? 0)) {
-    if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+    if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
     return refreshMirror(project, force, opts, epochRetries + 1);
   }
   return repoPath;
@@ -1412,7 +1424,7 @@ async function lockedRefreshMirror(
       // Timed as git: a request that waits out another caller's fetch shows the wait.
       const repoPath = await timeStage('git', () => current.promise);
       if (current.epoch === (invalidations.get(project.projectId) ?? 0)) return repoPath;
-      if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+      if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
       return refreshMirror(project, force, opts, epochRetries + 1);
     }
     // The in-flight refresh belongs to another caller, often with another

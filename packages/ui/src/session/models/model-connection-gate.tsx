@@ -1,17 +1,11 @@
 'use client';
 
-import { ArrowRightIcon, CreditCardIcon, ImageBrokenIcon, KeyIcon } from '@phosphor-icons/react';
+import { ImageBrokenIcon } from '@phosphor-icons/react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from '../../i18n';
 
-import { ProviderLogo } from '../../internal/lib/provider-branding';
-import { Button } from '../../primitives/button';
-import type { FlatModel } from '@kortix/sdk/react';
-import { useModelConnectionGate } from './use-model-connection-gate';
-
-/** Stable empty list so the hook's `models = []` default isn't re-allocated per render. */
-const EMPTY_MODELS: FlatModel[] = [];
+import { ConnectPlanRows } from './subscription-offer';
 
 // Enter waits a beat (delay) so the composer paints first, then the bar slides
 // out from under it — height opens the space while the strip translates down,
@@ -20,120 +14,20 @@ const EMPTY_MODELS: FlatModel[] = [];
 const BAR_ENTER = { type: 'spring', duration: 0.5, bounce: 0, delay: 0.15 } as const;
 const BAR_EXIT = { type: 'spring', duration: 0.35, bounce: 0 } as const;
 
-// Enter waits a beat so the composer paints first, then the prompt rises into
-// place. Exit is shorter: once a model connects, the row is no longer news.
-const PROMPT_ENTER = { duration: 0.2, ease: [0.23, 1, 0.32, 1], delay: 0.15 } as const;
-const PROMPT_EXIT = { duration: 0.15, ease: [0.23, 1, 0.32, 1] } as const;
-
-/** The two subscriptions most people already pay for, in the order the prompt offers them. */
-const SUBSCRIPTION_OPTIONS = [
-  { providerId: 'openai', titleKey: 'useChatGpt', planKey: 'chatGptPlan' },
-  { providerId: 'anthropic', titleKey: 'useClaude', planKey: 'claudePlan' },
-] as const;
-
 /**
- * The "no model connected" prompt: a row of its own UNDER the composer, a gap
- * apart, that names the fastest way in — sign in with a ChatGPT or Claude plan
- * the member already pays for. Each tile opens the provider dialog with that
- * provider already expanded, so the next click is the sign-in itself.
+ * No model can run: the composer shows the same "Connect ChatGPT" and "Connect
+ * Claude" rows the project home offers (`ConnectPlanRows`), a gap below the
+ * composer, not dismissible. Sending is already disabled by `modelUnavailable`.
  *
- * It replaced a muted strip tucked behind the card ("No model connected —
- * connect one to start chatting" + one small button). New projects stalled
- * between `project_created` and `session_started`: the strip read as status,
- * not as the next step, and "Connect model" did not say which model or how.
+ * It used to be a heading ("Connect a model to start"), two bordered tiles,
+ * "Use an API key" and "Upgrade". On the project home it stacked on top of the
+ * optional offer and read as a block. Other providers and API keys stay one
+ * click away in the model picker and the provider dialog.
  *
- * "Use an API key" opens the same dialog on the full provider list. "Upgrade"
- * shows only where billing sells a plan (`showUpgradeOption`).
- *
- * With models already running, the project home offers the same two plans
- * instead (`SubscriptionOffer`).
- *
- * `show` must only flip on settled data (see `entitlementsPending`) — the
- * animation assumes it renders once with the final answer, not per-query.
+ * `show` must only flip on settled data (see `entitlementsPending`).
  */
 export function ModelConnectionBar({ show }: { show: boolean }) {
-  const t = useTranslations('sessionUi.modelGate');
-  const reduceMotion = useReducedMotion();
-  const { canConnectProvider, openConnectProvider, openUpgrade, modal, showUpgradeOption } =
-    useModelConnectionGate(EMPTY_MODELS);
-
-  return (
-    <>
-      {modal}
-      <AnimatePresence initial={false}>
-        {show && (
-          <m.section
-            key="model-connection-prompt"
-            aria-label={t('promptTitle')}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0, transition: PROMPT_ENTER }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, transition: PROMPT_EXIT }}
-            className="mt-4 flex flex-col gap-2.5"
-          >
-            <div className="flex min-h-7 items-center justify-between gap-3 px-1">
-              <p className="min-w-0 text-sm text-pretty">
-                <span className="text-foreground font-medium">{t('promptTitle')}</span>
-                <span className="text-muted-foreground hidden sm:inline">
-                  {' '}
-                  {t('promptDescription')}
-                </span>
-              </p>
-              <div className="flex shrink-0 items-center gap-1">
-                {canConnectProvider && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className="text-muted-foreground"
-                    onClick={() => openConnectProvider('providers')}
-                  >
-                    <KeyIcon className="size-3.5 shrink-0" />
-                    {t('useApiKey')}
-                  </Button>
-                )}
-                {showUpgradeOption && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className="text-muted-foreground"
-                    onClick={openUpgrade}
-                  >
-                    <CreditCardIcon className="size-3.5 shrink-0" />
-                    {t('upgrade')}
-                  </Button>
-                )}
-              </div>
-            </div>
-            {canConnectProvider && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {SUBSCRIPTION_OPTIONS.map((option) => (
-                  <Button
-                    key={option.providerId}
-                    type="button"
-                    variant="outline"
-                    className="bg-background group h-auto justify-start gap-3 rounded-xl px-3 py-2.5 text-left"
-                    onClick={() => openConnectProvider('providers', option.providerId)}
-                  >
-                    <ProviderLogo providerID={option.providerId} size="small" />
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-foreground truncate text-sm font-medium">
-                        {t(option.titleKey)}
-                      </span>
-                      <span className="text-muted-foreground truncate text-xs font-normal">
-                        {t(option.planKey)}
-                      </span>
-                    </span>
-                    <ArrowRightIcon className="text-muted-foreground group-hover:text-foreground size-4 shrink-0 transition-colors" />
-                  </Button>
-                ))}
-              </div>
-            )}
-          </m.section>
-        )}
-      </AnimatePresence>
-    </>
-  );
+  return show ? <ConnectPlanRows dismissible={false} className="mt-4" /> : null;
 }
 
 /**

@@ -2075,17 +2075,12 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Fazer upgrade",
-      "promptTitle": "Conecte um modelo para começar",
       "offerTitle": "Use seu plano do ChatGPT ou Claude",
       "connectChatGpt": "Conectar o ChatGPT",
       "connectClaude": "Conectar o Claude",
       "hidePlan": "Não mostrar {name}",
-      "promptDescription": "Entre com um plano que você já paga.",
-      "useChatGpt": "Usar o ChatGPT",
       "chatGptPlan": "Plano Plus ou Pro",
-      "useClaude": "Usar o Claude",
       "claudePlan": "Plano Pro ou Max",
-      "useApiKey": "Usar uma chave de API",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} não consegue ler imagens",
       "imagesUnsupportedHint": "remova-as ou escolha outro modelo"

@@ -4466,6 +4466,18 @@ describe("hydrate keeps what did not change", () => {
 // deltaEventTails/deltaOffsets). One test per release path; the marks are
 // driven through the store's real actions and read back through its public
 // surface.
+//
+// Probe coverage, collection by collection: the optimistic trio
+// (`optimisticIds`/`dispatchedOptimisticIds`/`inboxBackedOptimisticIds`) via
+// `isOptimisticMessage`; `optimisticEchoes`/`optimisticOrigins` via the echo
+// getters; `deltaEventTails`/`deltaOffsets` via the same eventID reapplying;
+// `bridgedPartIds` via the part-wipe probe; `cacheSourcedIds` via
+// `hasOnlyCacheSourcedMessages`; `cancelledMessageIds` via the tombstone
+// probe; `controlPlaneOwnedIds` via `reclaimRemovedMessage`.
+// `stubAssistantIds` has no stale-mark observable (a stale mapping holds the
+// same parent a fresh adoption would write), so its release rests on the
+// collapse itself: the record is one `delete`/`clear` away, and the setup
+// still drives the mark through the real handler.
 // ============================================================================
 
 /**
@@ -4509,15 +4521,17 @@ function markEveryCollection(sessionID: string): void {
 		],
 		{ source: "cache" },
 	);
-	// The streaming-delta marks on prt_a.
-	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "typed", sessionID), sessionID);
-	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", " grew", "evt_delta_1");
-	// The error-stub mark.
+	// The error-stub mark. Fired BEFORE the delta writes below: the error
+	// handler itself clears this session's delta marks, so firing it last
+	// would wipe the very marks the release probe reads.
 	store.applyEvent({
 		id: "evt_error",
 		type: "session.error",
 		properties: { sessionID, error: { name: "UnknownError", data: { message: "boom" } } },
 	} as never);
+	// The streaming-delta marks on prt_a.
+	store.upsertPart("msg_a", textPart("prt_a", "msg_a", "typed", sessionID), sessionID);
+	store.applyPartDelta(sessionID, "msg_a", "prt_a", "text", " grew", "evt_delta_1");
 }
 
 /**

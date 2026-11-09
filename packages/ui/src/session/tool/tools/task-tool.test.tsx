@@ -225,6 +225,23 @@ describe('TaskTool — one agent row that opens the agent', () => {
     expect(markup).toContain('>Find the bug</span>');
   });
 
+  test('a pi inline agent spec (`agent` is an object by schema) renders the row as Inline, the agent its child runs as (KRTX-4511)', () => {
+    childMessages = undefined;
+    const markup = render(
+      taskPart({
+        childSessionId: null,
+        input: {
+          description: 'Audit the pricing page',
+          prompt: 'Audit the pricing page for stale plan names.',
+          agent: { instructions: 'You audit pricing pages.', description: 'Pricing auditor', tools: ['read'] },
+        },
+      }),
+    );
+    expect(markup).toContain('>Inline</span>');
+    expect(markup).not.toContain('>General</span>');
+    expect(markup).toContain('>Audit the pricing page</span>');
+  });
+
   test('a model that sent a truthy non-string name falls back to the agent kind, never crashes (KRTX-4511)', () => {
     childMessages = undefined;
     const markup = render(

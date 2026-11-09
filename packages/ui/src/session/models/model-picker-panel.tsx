@@ -239,10 +239,10 @@ export function ModelPickerPanel({
   }
 
   return (
-    // `bg-card`: one step below the white canvas (#f4f4f4 light), so the
-    // popover reads as a surface of its own without the grey of `muted`. It
-    // covers the `Command` root's `bg-popover`, which matches the page.
-    <div ref={rootRef} className="bg-card flex min-h-0 flex-col sm:flex-row" onKeyDown={onKeyDown}>
+    // `bg-surface`: a hair below the white canvas (#fcfcfc light), so the
+    // popover reads as a surface of its own; `card` (#f4f4f4) was too dark.
+    // It covers the `Command` root's `bg-popover`, which matches the page.
+    <div ref={rootRef} className="bg-surface flex min-h-0 flex-col sm:flex-row" onKeyDown={onKeyDown}>
       <div className="flex h-[min(22rem,55vh)] min-w-0 flex-1">
         <div
           role="tablist"

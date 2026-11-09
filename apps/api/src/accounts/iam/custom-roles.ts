@@ -186,7 +186,7 @@ export type AgentIdentity = {
 
 export type EagerProvisionProjectRow = Parameters<typeof loadConfigWithFilesCached>[0];
 
-export interface EagerProvisionDeps {
+interface EagerProvisionDeps {
   // `enabled` is optional on purpose: the config summary lists disabled agents
   // (`enabled: false`) and this loader may stand in for one.
   loadConfig: (row: EagerProvisionProjectRow) => Promise<{ agents: Array<{ name: string; enabled?: boolean }> }>;

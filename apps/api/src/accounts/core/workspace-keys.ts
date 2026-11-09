@@ -73,7 +73,7 @@ const ActsAsSchema = z
   })
   .openapi('WorkspaceKeyActsAs');
 
-export const WorkspaceKeySchema = z
+const WorkspaceKeySchema = z
   .object({
     key_id: z.string(),
     name: z.string(),

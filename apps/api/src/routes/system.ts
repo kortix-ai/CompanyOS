@@ -165,5 +165,4 @@ app.openapi(
   }),
   healthHandler,
 );
-
 }

@@ -262,7 +262,10 @@ export const uncoveredAllow: AllowEntry[] = [
   // over the real Hono app + PostgreSQL in
   // apps/api/src/__tests__/integration-self-token-revocation.test.ts
   // (revoke, then the revoked key stops authenticating; the credential
-  // cannot widen itself).
+  // cannot widen itself). Surfaced by the route contract of
+  // check-pr-evidence on the billing restructure PR and fixed forward there;
+  // the drift predates that PR (the route shipped with no ke2e flow in
+  // KRTX-4493).
   {
     method: "DELETE",
     path: "/v1/me/tokens/self",

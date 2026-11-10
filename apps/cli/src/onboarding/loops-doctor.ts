@@ -64,9 +64,15 @@ async function get<T>(client: ApiClient, path: string): Promise<T | null> {
   return client.get<T>(path).catch(() => null);
 }
 
-async function defaultFetchHealth(url: string): Promise<number> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  return res.status;
+/**
+ * The tunnel probe goes through the CLI's own client: the check runs only when
+ * that client's base IS the tunnel, so a health call is the same request.
+ */
+function clientHealth(client: ApiClient | null): (url: string) => Promise<number> {
+  return async () => {
+    if (!client) return 0;
+    return client.get('/health').then(() => 200, () => 0);
+  };
 }
 
 export async function collectLoopChecks(ctx: DoctorContext): Promise<Check[]> {
@@ -86,7 +92,7 @@ export async function collectLoopChecks(ctx: DoctorContext): Promise<Check[]> {
 
   if (isQuickTunnel(ctx.apiBase)) {
     const url = `${sdkBackendUrl(ctx.apiBase!)}/health`;
-    const code = await (ctx.fetchHealth ?? defaultFetchHealth)(url).catch(() => 0);
+    const code = await (ctx.fetchHealth ?? clientHealth(ctx.client))(url).catch(() => 0);
     checks.push(
       code >= 200 && code < 300
         ? { name: 'public URL', state: 'ok', detail: `${new URL(url).host} answers /v1/health` }

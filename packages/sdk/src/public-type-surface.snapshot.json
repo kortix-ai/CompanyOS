@@ -84,6 +84,8 @@
     "AgentPart",
     "AgentPartInput",
     "AgentRelation",
+    "AgentWorkspaceConfig",
+    "AgentWorkspaceRepo",
     "AllVersionsResponse",
     "ApiAuth",
     "ApiClientOptions",

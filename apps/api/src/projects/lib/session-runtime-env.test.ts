@@ -243,3 +243,24 @@ describe('audit relay emission knobs', () => {
     });
   });
 });
+
+describe('buildSessionRuntimeEnv — KORTIX_WORKSPACE_SETUP', () => {
+  const decode = (env: Record<string, string>) => JSON.parse(Buffer.from(env.KORTIX_WORKSPACE_SETUP!, 'base64').toString('utf8'));
+  const spec = { repos: [{ path: '/workspace', sparse: ['apps/web'] }], setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }] };
+
+  test('no workspace declared: no key, nothing is prepared', () => {
+    expect(buildSessionRuntimeEnv(BASE_INPUT)).not.toHaveProperty('KORTIX_WORKSPACE_SETUP');
+    expect(buildSessionRuntimeEnv({ ...BASE_INPUT, workspaceSetup: null })).not.toHaveProperty('KORTIX_WORKSPACE_SETUP');
+  });
+
+  test('with repository access the box gets the clones and the setup', () => {
+    expect(decode(buildSessionRuntimeEnv({ ...BASE_INPUT, workspaceSetup: spec, repositoryAccess: true }))).toEqual({ version: 1, ...spec });
+  });
+
+  test('without repository access the clones are withheld, the setup still runs, and the box is told why', () => {
+    const body = decode(buildSessionRuntimeEnv({ ...BASE_INPUT, workspaceSetup: spec, repositoryAccess: false }));
+    expect(body.repos).toEqual([]);
+    expect(body.setup).toEqual(spec.setup);
+    expect(body.repos_skipped).toContain('project.gitops.read');
+  });
+});

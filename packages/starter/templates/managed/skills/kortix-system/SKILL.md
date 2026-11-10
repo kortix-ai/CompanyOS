@@ -53,9 +53,10 @@ media and datasets in object storage; add build output to `.gitignore`.
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
-0. Work in a clone: `/workspace` has none at boot. `kortix workspaces clone`
-   puts the repository on your session branch; `cd` into it. Run every step
-   below there.
+0. Work in a clone: `/workspace` has none at boot unless your agent's
+   `workspace.repos` declares one (your prompt then names it and its setup
+   progress). Otherwise `kortix workspaces clone` puts the repository on your
+   session branch; `cd` into it. Run every step below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`

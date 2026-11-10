@@ -186,7 +186,7 @@ describe('connectors_required — an agent\'s required-connector declaration', (
 });
 
 describe('workspace — obsolete on an agent', () => {
-  test('every old shape loads the agent without an error', async () => {
+  test('every legacy shape loads the agent; a typo in the current map turns that agent off', async () => {
     manifestFile = {
       path: 'kortix.yaml',
       content: [
@@ -206,12 +206,13 @@ describe('workspace — obsolete on an agent', () => {
 
     const loaded = await loadProjectAgents(fakeProject());
 
-    expect(loaded.errors).toEqual([]);
+    // The legacy shapes load; `workspace` is a live key again, so a typo in it is an
+    // error that turns that agent off, like a typo in any other key.
     expect(loaded.specs.map((spec) => [spec.name, spec.enabled])).toEqual([
       ['engineer', true],
       ['old', true],
       ['support', true],
-      ['typo', true],
+      ['typo', false],
     ]);
   });
 });

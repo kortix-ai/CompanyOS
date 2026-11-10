@@ -190,7 +190,10 @@ function parseAgentEntry(name: string, block: unknown, filename: string): ParseO
   // Only a literal `false` disables (the validator rejects any other value).
   const enabled = row.enabled !== false;
   const model = typeof row.model === 'string' ? row.model : null;
-  const sandbox = typeof row.sandbox === 'string' && row.sandbox.trim() ? row.sandbox.trim() : null;
+  // `workspace.sandbox` is the same choice as `sandbox` (the validator refuses two different ones).
+  const workspaceSandbox = (row.workspace as { sandbox?: unknown } | undefined)?.sandbox;
+  const sandboxValue = typeof row.sandbox === 'string' && row.sandbox.trim() ? row.sandbox : workspaceSandbox;
+  const sandbox = typeof sandboxValue === 'string' && sandboxValue.trim() ? sandboxValue.trim() : null;
 
   const connectorsResolved = resolveGrantSet(row.connectors, 'none');
   const connectorsRequired = Array.isArray(row.connectors_required)

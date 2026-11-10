@@ -1314,7 +1314,51 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       kortix_cli: { ...deprecatedKortixCliGrantSetSchema(), description: 'Deprecated: use `kortix_permissions` (same value).' },
       connectors_personal: { ...v2.properties.connectors_personal, deprecated: true, description: 'Deprecated: use `connectors_required` (same value).' },
       repository_access: { type: 'boolean', deprecated: true, description: 'Deprecated and ignored: a session never checks out the project repository at boot. Delete the key.' },
-      workspace: { deprecated: true, description: 'Deprecated and ignored: a session never checks out the project repository at boot. Delete the key; an agent that needs the files runs `kortix workspaces clone`.' },
+      workspace: {
+        description:
+          "What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. `repos` and `setup` run in the background after the session starts: they never hold its first turn.",
+        anyOf: [
+          {
+            type: 'object',
+            properties: {
+              sandbox: { type: 'string', pattern: SLUG_SCHEMA.pattern, description: 'A `sandbox.templates` slug, or `default`: the machine. Same as the agent\'s `sandbox` key.' },
+              repos: {
+                type: 'array',
+                description: 'Explicit clones of the workspace repository, on the session branch. Needs `workspace.gitops.read` in `kortix_permissions`. None by default.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', pattern: '^/workspace(/.*)?$', description: 'Where the clone goes: `/workspace` or a folder under it. Default `/workspace`.' },
+                    sparse: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 }, description: 'Monorepo subset: the repository folders a cone sparse-checkout keeps.' },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              setup: {
+                type: 'array',
+                description: 'Steps run in order after the clones, each in its own login shell with the agent\'s secrets, in the first clone\'s folder (or `/workspace`). A `cd` does not carry to the next step. A failure stops the rest; the session keeps running.',
+                items: {
+                  anyOf: [
+                    { type: 'string', minLength: 1 },
+                    {
+                      type: 'object',
+                      required: ['run'],
+                      properties: {
+                        run: { type: 'string', minLength: 1, description: 'The shell command.' },
+                        cwd: { type: 'string', minLength: 1, description: 'Where it runs: relative to the first clone\'s folder, or absolute under `/workspace`.' },
+                      },
+                      additionalProperties: false,
+                    },
+                  ],
+                },
+              },
+              project_repository: { type: 'boolean', deprecated: true, description: 'Deprecated: `true` becomes `workspace.gitops.read` in `kortix_permissions`.' },
+            },
+            additionalProperties: false,
+          },
+          { type: 'string', deprecated: true, description: 'Deprecated: `branch` becomes `workspace.gitops.read`; `runtime` and `read` mean nothing.' },
+        ],
+      },
     },
     additionalProperties: false,
     not: { required: ['prompt', 'prompt_file'] },

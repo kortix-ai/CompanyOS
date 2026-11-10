@@ -911,7 +911,15 @@ const catalog = {
       "history": "History",
       "historyDescription": "What every session cost, and every credit added or spent.",
       "openLedger": "Open ledger",
-      "unit": "{count, plural, one {credit} other {credits}}"
+      "unit": "{count, plural, one {credit} other {credits}}",
+      "dailySpend": "Daily spend",
+      "heatLess": "Less",
+      "heatMore": "More",
+      "busiestDay": "{name}: {amount} on {day}, the busiest day",
+      "noSpendInRange": "{name}: no spend in this range",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspaces}} with no spend in this range",
+      "showIdle": "Show",
+      "hideIdle": "Hide"
     },
     "tokens": {
       "keyRevoked": "API key revoked",
@@ -7751,7 +7759,11 @@ const catalog = {
     "folderTree": "Folders",
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
-    "treeCollapse": "Close {name}"
+    "treeCollapse": "Close {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",

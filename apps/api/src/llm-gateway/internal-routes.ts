@@ -113,7 +113,11 @@ export function createInternalGatewayRoutes() {
       // return the typed error in a 200 body so the api-client can re-throw it
       // as a GatewayResolutionError and the in-process hook contract holds.
       if (err instanceof GatewayResolutionError) {
-        if (logFirstResolutionFailure(`${model}:${err.code}`)) {
+        // The model string is client-controlled (the box names its model) and
+        // unbounded on this route; cap the retained key at the same 200 the
+        // sibling /models route caps the field at, so a huge id cannot pin
+        // its bytes in the process (Strix review of this PR).
+        if (logFirstResolutionFailure(`${model.slice(0, 200)}:${err.code}`)) {
           logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
         }
         return c.json({

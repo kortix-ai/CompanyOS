@@ -423,11 +423,13 @@ harnessFlow(
     const done = `RUN7_DONE_${Date.now()}`;
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
+      // Sessions no longer check the repository out at boot (#12136): the agent
+      // clones it first, then writes into the checkout it will commit.
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        `Run \`kortix workspaces clone\` to check the workspace repository out into /workspace. Then create the file ${path} in the checkout, containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).

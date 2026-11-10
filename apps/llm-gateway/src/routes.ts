@@ -8,7 +8,10 @@ import type { AudioRequest, ClaudeCodeRequest, RequestOrigin, VoicesRequest } fr
 import type { Hono } from 'hono';
 import { type GatewayApp, cloudflareSafe, messagesAuthorization, perRequestCapBytes } from './server';
 
-type Protocol = 'chat' | 'messages' | 'responses' | 'images' | 'audio';
+// The image operations are distinct replay scopes (`images:generations` vs
+// `images:edits`): a body with prompt + images[] is valid on both ingresses
+// — generations ignores images[] — so the protocol tag must separate them.
+type Protocol = 'chat' | 'messages' | 'responses' | 'audio' | `images:${'generations' | 'edits'}`;
 type InferenceRequest = { authorization: string | undefined; rawBody: string; signal?: AbortSignal; origin?: RequestOrigin };
 type Gateway = {
   chatCompletions: (request: InferenceRequest) => Promise<Response>;
@@ -213,9 +216,10 @@ export function registerRoutes(
   const messages = limited(inference(inflight, recordOutcome, 'messages', replay, gateway.messages));
   const responses = limited(inference(inflight, recordOutcome, 'responses', replay, gateway.responses));
   // The project's ChatGPT login generates and edits images (pipeline/images.ts).
-  // A thrown error gets the Responses-style 503 envelope.
+  // A thrown error gets the Responses-style 503 envelope. The replay scope is
+  // per operation: one key + body can be valid on both ingresses.
   const images = (operation: 'generations' | 'edits') =>
-    limited(inference(inflight, recordOutcome, 'images', replay, (request) => gateway.images({ ...request, operation })));
+    limited(inference(inflight, recordOutcome, `images:${operation}`, replay, (request) => gateway.images({ ...request, operation })));
   const generations = images('generations');
   const edits = images('edits');
   const transcriptions = limited(audio(gateway, inflight, recordOutcome, 'transcriptions'));

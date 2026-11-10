@@ -120,9 +120,12 @@ export function createIdempotencyReplay(now: () => number = Date.now, options: R
     }
     if (streaming) return call(request);
 
-    // Scoped to the wire protocol too: one cache serves chat/messages/
-    // responses/images, and the same key + body bytes on a second endpoint
-    // must not replay the first endpoint's answer shape.
+    // Scoped to the wire operation too: one cache serves every inference
+    // endpoint, and the same key + body bytes on a second endpoint must not
+    // replay the first endpoint's answer shape. The image operations get one
+    // tag each (images:generations / images:edits): a body with prompt +
+    // images[] is valid on both — generations ignores images[] — so the
+    // bytes alone do not separate them.
     const key = createHash('sha256')
       .update(`${protocol}\u0000${request.authorization ?? ''}\u0000${idempotencyKey}\u0000`)
       .update(request.rawBody)

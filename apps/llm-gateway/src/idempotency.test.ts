@@ -24,7 +24,7 @@ const CHAT_BODY = JSON.stringify({
 describe('inference Idempotency-Key replay', () => {
   /** Boots the real server with the control plane and provider stubbed, and exact call counts. */
   async function serve(opts: { providerStatus?: number } = {}) {
-    const counts = { provider: 0, usage: 0 };
+    const counts = { provider: 0, usage: 0, images: { generations: 0, edits: 0 } };
     // The credential gate the replay's reauthorize and the pipeline both hit.
     const gates = { admitted: true, up: true };
     const originalFetch = globalThis.fetch;
@@ -49,6 +49,16 @@ describe('inference Idempotency-Key replay', () => {
         if (!gates.admitted) return Response.json({ ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' });
         return Response.json({ ok: true, principal: { userId: 'u', accountId: 'a' } });
       }
+      if (url.endsWith('/internal/gateway/resolve-route')) {
+        return Response.json({ route: { policyId: 'direct', primaryModel: 'test-model' } });
+      }
+      if (url.endsWith('/internal/gateway/resolve-upstream')) {
+        return Response.json({
+          candidates: [
+            { provider: 'mock', kind: 'openai-compat', baseUrl: 'https://provider.test/v1', apiKey: 'key', billingMode: 'none', markup: 0 },
+          ],
+        });
+      }
       if (url.endsWith('/internal/gateway/budget-check')) return Response.json({ exceeded: false });
       if (url.endsWith('/internal/gateway/usage')) {
         counts.usage += 1;
@@ -56,6 +66,22 @@ describe('inference Idempotency-Key replay', () => {
       }
       if (url.endsWith('/internal/gateway/trace')) return Response.json({ ok: true });
       if (url === 'https://provider.test/v1/chat/completions') {
+        // The chat-image adapter (an openai-compat candidate) posts its image
+        // execution to the same URL: `modalities` marks it. A string content
+        // is a generations call; the content array (the reference images) is
+        // an edits call. Each operation gets its own answer to read.
+        const sent = JSON.parse(String(init?.body ?? '{}')) as {
+          modalities?: unknown;
+          messages?: { content?: unknown }[];
+        };
+        if (sent.modalities) {
+          const operation = typeof sent.messages?.[0]?.content === 'string' ? 'generations' : 'edits';
+          counts.images[operation] += 1;
+          return Response.json({
+            choices: [{ message: { images: [{ image_url: { url: `data:image/png;base64,${Buffer.from(`image-${operation}`).toString('base64')}` } }] } }],
+            usage: { prompt_tokens: 10, completion_tokens: 20 },
+          });
+        }
         counts.provider += 1;
         if (opts.providerStatus !== undefined && opts.providerStatus !== 200) {
           return new Response('provider down', { status: opts.providerStatus });
@@ -189,6 +215,33 @@ describe('inference Idempotency-Key replay', () => {
       const messagesBody = (await messages.json()) as Record<string, unknown>;
       expect(messagesBody.type).toBe('message');
       expect(gateway.counts.provider).toBe(2);
+      expect(gateway.counts.usage).toBe(2);
+    } finally {
+      gateway.stop();
+    }
+  });
+
+  test('the same key and body bytes on the second image operation execute again — no cross-operation replay', async () => {
+    const gateway = await serve();
+    try {
+      // Byte-identical body valid on BOTH image ingresses: generations reads
+      // `prompt` and ignores `images[]`, edits requires it — only the
+      // operation scopes the entries apart, so an edits request must execute
+      // its own answer, never replay the generations answer.
+      const shared = JSON.stringify({
+        model: 'stub-model',
+        prompt: 'a red cube on a table',
+        images: [{ image_url: 'https://ref.test/cube.png' }],
+      });
+      const generations = await gateway.appPost('/v1/images/generations', shared, 'img-key-1');
+      const edits = await gateway.appPost('/v1/images/edits', shared, 'img-key-1');
+      expect(generations.status).toBe(200);
+      expect(edits.status).toBe(200);
+      const generationsBody = (await generations.json()) as { data: { b64_json: string }[] };
+      const editsBody = (await edits.json()) as { data: { b64_json: string }[] };
+      expect(Buffer.from(generationsBody.data[0].b64_json, 'base64').toString()).toBe('image-generations');
+      expect(Buffer.from(editsBody.data[0].b64_json, 'base64').toString()).toBe('image-edits');
+      expect(gateway.counts.images).toEqual({ generations: 1, edits: 1 });
       expect(gateway.counts.usage).toBe(2);
     } finally {
       gateway.stop();

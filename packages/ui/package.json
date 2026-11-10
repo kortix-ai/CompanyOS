@@ -437,6 +437,7 @@
     "./session/composer/menus/slash-actions": "./src/session/composer/menus/slash-actions.ts",
     "./session/composer/queue-projection": "./src/session/composer/queue-projection.ts",
     "./session/composer/session-chat-input": "./src/session/composer/session-chat-input.tsx",
+    "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
     "./session/models/model-grouping": "./src/session/models/model-grouping.ts",
     "./session/models/model-search-empty": "./src/session/models/model-search-empty.tsx",
     "./session/models/model-selector": "./src/session/models/model-selector.tsx",
@@ -2208,6 +2209,10 @@
       "./session/composer/session-chat-input": {
         "types": "./dist/session/composer/session-chat-input.d.ts",
         "import": "./dist/session/composer/session-chat-input.js"
+      },
+      "./session/models/ask-owner-for-credits-button": {
+        "types": "./dist/session/models/ask-owner-for-credits-button.d.ts",
+        "import": "./dist/session/models/ask-owner-for-credits-button.js"
       },
       "./session/models/model-grouping": {
         "types": "./dist/session/models/model-grouping.d.ts",

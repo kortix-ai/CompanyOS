@@ -98,6 +98,11 @@ const EXEMPT_FRAGMENTS = [
   '/oauth/', // provider OAuth device flow — `start` runs
   // the provider's device grant + waits for the device challenge, which
   // can exceed the deadline on a cold replica
+  '/config-release', // the daemon's descriptor tick (60 s poll): a git-bound
+  // cold build, every op self-bounded (git 30 s, gzip 60 s, db statement
+  // timeout), whose client aborts at 20 s and retries the tick — the 503 only
+  // paged work that finished and cached anyway (prod: ~100–230 503s/day).
+  // The `/v1/workspaces` alias exempts identically (`asLegacyWorkspaceRoute`).
 ];
 
 // Long synchronous creates that can't be matched by fragment without

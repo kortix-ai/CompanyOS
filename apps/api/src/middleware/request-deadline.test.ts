@@ -42,6 +42,25 @@ describe('requestDeadline exemptions', () => {
   ])('leaves existing exemption %s unchanged', (path) => {
     expect(isExempt(ctx(path))).toBe(true);
   });
+
+  // KRTX-4615: the daemon's config-release descriptor tick (the 60 s
+  // runtime-truth poll). Its cold build is git-bound (mirror fetch, tree
+  // reads, archive tar+gzip — each op bounded by its own 30–60 s timeout),
+  // and the client aborts at 20 s: the 25 s guard only 503'd work that
+  // finished and cached anyway. The legacy `/v1/workspaces` spelling must
+  // exempt identically (`asLegacyWorkspaceRoute`).
+  test.each([
+    '/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config-release',
+    '/v1/workspaces/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config-release',
+  ])('exempts the config-release descriptor tick %s', (path) => {
+    expect(isExempt(ctx(path))).toBe(true);
+  });
+
+  test('still bounds the config etag read, which the fragment must not sweep up', () => {
+    expect(
+      isExempt(ctx('/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config', 'GET')),
+    ).toBe(false);
+  });
 });
 
 /**

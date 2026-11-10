@@ -1,15 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 
-import { TEMPLATES } from './content';
+import { TEMPLATES, type HomeTemplate } from './content';
 
 // The home shows the hand-approved templates. A name, summary or excerpt line
 // that is not in the template's own files is a claim the product does not make.
 const ROOT = join(__dirname, '../../../../../../packages/starter/templates');
 
 describe('one-prompt home templates', () => {
-  test.each(TEMPLATES.map((t) => [t.id, t] as const))('%s matches packages/starter/templates', (id, template) => {
+  test.each(TEMPLATES.map((t) => [t.id, t] as const))('%s matches packages/starter/templates', (id: string, template: HomeTemplate) => {
     const meta = JSON.parse(readFileSync(join(ROOT, id, 'template.json'), 'utf8')) as { name: string; summary: string };
     expect(template.name).toBe(meta.name);
     expect(template.summary).toBe(meta.summary);

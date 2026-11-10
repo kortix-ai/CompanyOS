@@ -10,6 +10,7 @@ import {
   commitIfNeeded,
   currentBranch,
   detectOrigin,
+  sameGitHubRepository,
   ensureOrigin,
   explainLinkedProjectError,
   isGitHubUrl,
@@ -25,6 +26,7 @@ import { type EnvSpec, type LocalManifest, formatIssueLine, loadLocalManifest, v
 import {
   type ProjectGitTarget,
   configureProjectGitAuth,
+  projectIsManaged,
   resolveProjectGitTarget,
 } from '../project-git.ts';
 import { isKortixProject, loadLink, saveLink } from '../project-link.ts';
@@ -500,7 +502,13 @@ async function shipExisting(
     if (handled !== null) return handled;
     throw err;
   }
-  const target = resolveProjectGitTarget(project);
+  // A workspace linked to the person's own GitHub repository keeps their
+  // `origin`: when it already names that repository, push there with their
+  // own git credentials. Kortix reads the repository from GitHub either way,
+  // and a developer's remote must never be rewritten to a Kortix proxy.
+  const origin = detectOrigin();
+  const ownGitHubOrigin = !projectIsManaged(project) && origin !== null && sameGitHubRepository(origin, project.repo_url);
+  const target = ownGitHubOrigin ? { repoUrl: origin, credentialMode: 'none' as const } : resolveProjectGitTarget(project);
   const mintsProviderToken = target.credentialMode === 'managed-git-token';
   const kortixOwnsOrigin = target.credentialMode !== 'none';
   const repoUrl = target.repoUrl;

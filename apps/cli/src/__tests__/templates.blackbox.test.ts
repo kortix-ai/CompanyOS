@@ -89,3 +89,11 @@ test('an unknown template is refused with the list', () => {
   expect(r.code).toBe(1);
   expect(r.stderr).toContain('software-factory, security-loop, aeo-loop, changelog');
 });
+
+test('sameGitHubRepository: https, ssh and scp forms of one repository match; another repository or a proxy URL does not', async () => {
+  const { sameGitHubRepository } = await import('../git-ops.ts');
+  expect(sameGitHubRepository('git@github.com:Acme/Shop.git', 'https://github.com/acme/shop.git')).toBe(true);
+  expect(sameGitHubRepository('ssh://git@github.com/acme/shop', 'https://github.com/acme/shop')).toBe(true);
+  expect(sameGitHubRepository('https://github.com/acme/other.git', 'https://github.com/acme/shop.git')).toBe(false);
+  expect(sameGitHubRepository('https://api.kortix.com/v1/git/123', 'https://github.com/acme/shop.git')).toBe(false);
+});

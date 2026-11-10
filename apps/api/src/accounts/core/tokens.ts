@@ -703,7 +703,7 @@ export async function mintAccountToken(
 }
 
 /** The `POST …/tokens` handler: the mint core rendered through `tokenWire`. */
-export async function mintTokenFromBody(c: Context, body: Record<string, unknown>): Promise<Response> {
+async function mintTokenFromBody(c: Context, body: Record<string, unknown>): Promise<Response> {
   const mint = await mintAccountToken(c, body);
   if (!mint.ok) {
     const { status, body: refusal } = mint;

@@ -25,9 +25,8 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   permission rules, and the things it may use.
 - Every session starts from the default branch. A change reaches other
   sessions only when its change request merges.
-- `/workspace` starts empty. Kortix never checks out the repository there.
-- To work on the workspace's files, run `kortix workspaces clone`. It clones
-  the repository onto your session branch. Send the change with `kortix cr`.
+- `/workspace` starts empty; `kortix workspaces clone` puts the repository on
+  your session branch. Send the change with `kortix cr`.
 - Only your session branch accepts your push. The push needs
   `workspace.gitops.read` in your agent's `kortix_permissions`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
@@ -39,8 +38,7 @@ Your session runs on its own microVM: a whole Linux computer, root through
 - `/workspace`: this session's files, kept for the life of the session.
 - `/drives` (Drive): your files and the company's, kept until deleted. Save what the user keeps in `/drives/me` (`kortix-drives`). No `/drives`: Drive is off.
 - Anything else (home, `/tmp`, installed packages) can be gone when the session reopens.
-  To keep a package for every session, add it to a sandbox template
-  (`references/kortix/kortix-yaml.md` → sandbox) and install it now too.
+  To keep a package for every session, add it to a sandbox template (`references/kortix/kortix-yaml.md` → sandbox) and install it now too.
 - "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on
   your screen, which the user watches in the **Desktop** panel, or on their own
   computer. The `kortix-computer` skill decides which (`<which-desktop>`).
@@ -54,9 +52,8 @@ media and datasets in object storage; add build output to `.gitignore`.
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
 0. Work in a clone: `/workspace` has none at boot unless your agent's
-   `workspace.repos` declares one (your prompt then names it and its setup
-   progress). Otherwise `kortix workspaces clone` puts the repository on your
-   session branch; `cd` into it. Run every step below there.
+   `workspace.repos` declares one. Otherwise `kortix workspaces clone` puts
+   the repository on your session branch; `cd` in. Run every step below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
@@ -165,9 +162,8 @@ watch), set up this session's wake-up before you end the turn. Nobody asks.
 - On each fire: check, act, report what changed. After empty checks, replace
   the loop with a slower one. Done or past the end date: `kortix loops rm`
   and `kortix triggers rm` every one. Playbook: `references/scheduling.md`.
-- Long jobs (many parts, many days): plan, delegate (`agent`, `workflow`),
-  set the wake-ups, keep the state in `out/status.md`, set Kortix up when the
-  work repeats, close out: `references/scheduling.md` → Long jobs.
+- Long jobs (many parts, many days): plan, delegate (`agent`, `workflow`), set the
+  wake-ups, keep state in `out/status.md`: `references/scheduling.md` → Long jobs.
 
 | Workspace work | A `kortix.yaml` trigger (fields: `references/kortix/kortix-yaml.md`) |
 | --- | --- |

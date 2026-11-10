@@ -1,9 +1,8 @@
 # Scheduling playbook
 
-Read this when you decide whether and how to schedule work, every time you
-start something whose result comes later, and before a long job. The decision tables are in
-`SKILL.md` → `<scheduling>`; trigger fields are in `kortix/kortix-yaml.md`
-→ triggers.
+Read this when you decide whether and how to schedule work, every time you start
+something whose result comes later, and before a long job. The decision tables are
+in `SKILL.md` → `<scheduling>`; trigger fields in `kortix/kortix-yaml.md` → triggers.
 
 ## Follow-through
 
@@ -32,8 +31,7 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
 2. **Add a fallback loop** whenever the event might not come: a reply may
    never arrive, a webhook may never be called. With no event, the loop is
    the signal.
-3. **Pace it to the wait**, and give it an end date: 14 days unless the
-   person names one.
+3. **Pace it to the wait**, and give it an end date: 14 days unless the person names one.
 
    | Waiting on | First check | Then |
    | --- | --- | --- |

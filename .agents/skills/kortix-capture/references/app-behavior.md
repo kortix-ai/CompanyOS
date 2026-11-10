@@ -162,6 +162,7 @@ agents ──> kortix-capture list|usage|query|now|link|grab-screen (read-only S
 | Path | Content |
 |---|---|
 | `memory.db` | SQLite: `frame`, `segment`, `application`, `domain`, `video`, `ocr`, `window_bound`, `ocr_fts` (FTS5, porter), `ax_blob`/`ax_snapshot`, `timezone`, `app_version`, `metadata`, `once_tasks` (one-shot data migrations already applied), `audio`, `audio_transcript`, `audio_fts` (FTS5, porter) |
+| `memory.db-wal` | SQLite write-ahead log. `journal_size_limit` is 64 MB. The finalize loop runs `PRAGMA optimize` and `wal_checkpoint(TRUNCATE)` every hour (`store::maintain`) |
 | `frames/` | Staged JPEG stills awaiting OCR and encoding |
 | `videos/` | 1 fps HEVC MP4 chunks, frame *i* at *t* = *i* s, ≤ 30 frames each |
 | `icons/` | App icons and website favicons |
@@ -446,6 +447,13 @@ depth), `audio_pending`, `actions_pending` (and `_uploaded`, `_remote_only`),
 (remote deletes queued), `multipart_in_progress`, `throughput_bps`,
 `bytes_uploaded`, `last_error`, `last_error_class`, `next_retry_ms`,
 `encrypted`, `key_id` and `clock_offset_ms`.
+
+The sync thread ticks every 5 s. It reads the queue counters again only when
+a new row, a new upload, a tombstone or its own write changes the queue, and
+at least every 60 s (`STATE_REFRESH_MS`). It writes `sync.json` only when the
+content changes (`updated_at_ms` does not count). With a queue,
+`oldest_unsent_ms` is at most 60 s old. A change from another process that
+adds no row and no upload (retention, `forget`) shows within 60 s.
 
 | Setting | Default | Meaning |
 |---|---|---|

@@ -1987,11 +1987,16 @@ fn group_staged(staged: &[Staged], max: usize) -> Vec<Group<'_>> {
     groups
 }
 
+/// How often the finalize loop runs [`store::maintain`].
+const MAINTENANCE_EVERY: Duration = Duration::from_secs(3600);
+
 fn finalize_loop(paths: MemoryPaths, stop: Arc<AtomicBool>) -> Result<()> {
     let conn = store::open(&paths)?;
     let mut engine = Engine::new()?;
     let mut settings = SettingsWatch::new(&paths);
     let mut last_retention = Instant::now() - Duration::from_secs(3600);
+    // The first maintenance runs 10 minutes after the start, then every hour.
+    let mut last_maintenance = Instant::now() - MAINTENANCE_EVERY + Duration::from_secs(600);
     let favicon_rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
@@ -2010,6 +2015,13 @@ fn finalize_loop(paths: MemoryPaths, stop: Arc<AtomicBool>) -> Result<()> {
             last_retention = Instant::now();
             if let Err(err) = retention::enforce(&conn, &paths, &mut engine, &s) {
                 tracing::warn!("retention pass failed: {err:#}");
+            }
+        }
+        // The one place that maintains the library: planner statistics and WAL size.
+        if last_maintenance.elapsed() > MAINTENANCE_EVERY {
+            last_maintenance = Instant::now();
+            if let Err(err) = store::maintain(&conn) {
+                tracing::warn!("library maintenance failed: {err:#}");
             }
         }
         for _ in 0..40 {

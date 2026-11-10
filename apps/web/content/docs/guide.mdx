@@ -267,7 +267,7 @@ A change to an agent takes effect when it lands in the workspace. New sessions s
 | **Skills** | The procedures the agent may load. |
 | **Apps** | The workspace's Apps whose access is restricted or private. |
 | **Kortix permissions** | Actions in Kortix itself, such as starting sessions or merging changes. |
-| **Workspace repository access** | A copy of the workspace's repository in `/workspace` on the session's computer, on the session's own branch. `worker` has it. In `kortix.yaml` this is `workspace.project_repository: true`. |
+| **Workspace repository access** | The right to clone the workspace's repository into the session's computer with `kortix workspaces clone`, on the session's own branch. `/workspace` starts empty. In `kortix.yaml` this is `workspace.gitops.read` in `kortix_permissions`; `worker` has it. |
 | **Tools** | Built-in abilities such as web search, image search, image generation, reading web pages and workspace memory. See [Kortix tools](/docs/developers#kortix-tools). |
 
 **An agent acts as itself, not as you.** Kortix gives each agent its own identity in each workspace, so the agent does the same thing whoever runs it. Your role does not lend it extra power.
@@ -536,6 +536,10 @@ Open the connector's **Tools** tab. It shows each action and whether it runs, ne
 An app that is not in the catalog can still connect. Select **New** → **MCP server** and paste its address, or **New** → **Add a custom connector** for another kind of API. **New** → **Create in chat** lets an agent set it up and open a change request for you to review.
 
 When an agent needs an app that nobody has connected yet, the session shows a **Connect** button. It opens the same sign-in and creates a private account by default.
+
+An agent acts with your rights, no more and no less. If you may share an account with the workspace, your agent may start that sign-in for you (`kortix connectors connect <slug> --owner workspace`). You still sign in. A refusal names the missing permission and who holds it.
+
+The catalog lists apps; it does not decide what may connect. When an agent adds a server that the catalog does not publish and the workspace does not use yet, a person who manages connectors approves that exact address once. The agent gives you a link. It opens **MCP server** with the address filled in, and adding it is the approval.
 
 ### Allow, Ask, Block
 
@@ -1373,7 +1377,7 @@ When you connect an app such as Gmail or Linear, Kortix stores the login, and it
 
 The audit log records who did what in the workspace, when, how they signed in, and whether it was allowed. Recording is always on, and refused requests are recorded too. When an agent acts, the log also names the person it acted for. The log never stores a key.
 
-Owners and admins read the log under **Workspace settings** → **Audit log**. Events stay readable there for 90 days. Events from 90 to 365 days old stay in a locked archive that nobody can shorten or delete, and you can export them. You can also stream every new event to your own security tools.
+Owners and admins read the log under **Workspace settings** → **Audit log**. The log there shows the last 14 days. Events from 14 to 365 days old stay in a locked archive that nobody can shorten or delete, and the export (CSV or JSONL) reads them back. You can also stream every new event to your own security tools.
 
 Reading, exporting and streaming the log are Enterprise features.
 

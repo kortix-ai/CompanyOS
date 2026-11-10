@@ -44,6 +44,7 @@ import {
 } from '../shared/audit-query';
 import { AuditActorTypeSchema, AuditListSchema } from '../shared/audit-schema';
 import { readExportPage } from '../shared/audit-archive/export-page';
+import { HOT_DAYS, RETENTION_DAYS } from '../shared/audit-archive/format';
 import { auditArchiveStore } from '../shared/audit-archive/store';
 import { reconcileAuditEvents } from '../shared/audit-reconciliation';
 import type { AppEnv } from '../types';
@@ -122,6 +123,7 @@ auditRouter.openapi(
     path: '/{workspaceId}/audit',
     tags: ['accounts'],
     summary: 'List audit events (cursor-paginated)',
+    description: `Newest first. Covers the last ${HOT_DAYS} days, which PostgreSQL holds. Older events, up to ${RETENTION_DAYS} days: GET /{workspaceId}/audit/export.`,
     ...auth,
     request: {
       params: AccountIdParam,
@@ -424,7 +426,7 @@ auditRouter.openapi(
     tags: ['accounts'],
     summary: 'Export audit events as CSV or JSONL',
     description:
-      'Oldest first, 10,000 events per page (follow X-Audit-Next-Cursor). Reaches back 365 days: events older than 90 days are read from the S3 archive. The list endpoint covers the last 90 days only.',
+      `Oldest first, 10,000 events per page (follow X-Audit-Next-Cursor). Reaches back ${RETENTION_DAYS} days: events older than ${HOT_DAYS} days are read from the S3 archive. The list endpoint covers the last ${HOT_DAYS} days only.`,
     ...auth,
     request: {
       params: AccountIdParam,
@@ -498,7 +500,7 @@ auditRouter.openapi(
 
     await flushAuditEvents({ waitMs: AUDIT_READ_FLUSH_BARRIER_MS });
 
-    // Ascending, across the archive (weeks older than 90 days, S3) and PostgreSQL. A bucket that is
+    // Ascending, across the archive (weeks older than HOT_DAYS, S3) and PostgreSQL. A bucket that is
     // not configured means PostgreSQL only.
     const page = await readExportPage(
       { db, store: auditArchiveStore().configured ? auditArchiveStore() : null },

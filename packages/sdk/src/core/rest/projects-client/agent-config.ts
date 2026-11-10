@@ -6,7 +6,7 @@ import { unwrap } from './shared';
 // ── Full agent-config editor (the "agent builder", agent-first spec §2.2,
 // redirected 2026-07-05 — "one home per concern") ──
 // Round-trips the agent's TWO homes as one wire shape: `block` (governance —
-// connectors/secrets/skills/kortix_permissions/repository_access/enabled, written to
+// connectors/secrets/skills/kortix_permissions/enabled, written to
 // kortix.yaml) and `block.behavior` (the agent's BEHAVIOR — mode/model/
 // temperature/top_p/steps/variant/color/hidden/permission/prompt, written to
 // the agent's own `.md` (`block.file`, e.g. `agents/<name>.md`) frontmatter +
@@ -98,10 +98,13 @@ export interface AgentConfigBlock {
   /** @deprecated Renamed to `kortix_permissions`. Servers accept it as an input
    *  alias and answer with `kortix_permissions`. Removed in the next major. */
   kortix_cli?: AgentGrantSetV2;
-  /** Whether new sessions can access the project repository. The API always answers it; an
-   *  omitted value is false. */
+  /**
+   * @deprecated Ignored since 2026-11-08: a session never checks out the project
+   * repository at boot, so there is nothing to grant. The SDK neither sends nor
+   * returns it. An agent that needs the files runs `kortix workspaces clone`.
+   */
   repository_access?: boolean;
-  /** @deprecated Use repository_access. Legacy read requires an explicit choice. */
+  /** @deprecated Ignored since 2026-11-08, like `repository_access`. */
   workspace?: 'runtime' | 'read' | 'branch';
   /** The agent's behavior half: its `.md` frontmatter, plus the body as `prompt`. */
   behavior?: RuntimeAgentConfig;
@@ -169,18 +172,11 @@ export async function updateAgentConfig(
   };
 }
 
-function canonicalizeAgentBlock(block: AgentConfigBlock, writing = false): AgentConfigBlock {
-  const next = canonicalizeRequiredConnectors(block);
-  if (next.workspace === undefined) return next;
-  const legacyAccess = next.workspace === 'branch';
-  if (next.repository_access !== undefined && next.repository_access !== legacyAccess) {
-    throw new Error('repository_access conflicts with workspace');
-  }
-  if (writing && next.workspace === 'read' && next.repository_access === undefined) {
-    throw new Error('Legacy read is unavailable. Set repository_access explicitly.');
-  }
-  next.repository_access ??= legacyAccess;
-  delete next.workspace;
+function canonicalizeAgentBlock(block: AgentConfigBlock, _writing = false): AgentConfigBlock {
+  // `repository_access` and `workspace` are obsolete: a session never checks out
+  // the project repository at boot. An older API may still answer them, and an
+  // older caller may still send them; neither reaches the other side.
+  const { repository_access: _access, workspace: _workspace, ...next } = canonicalizeRequiredConnectors(block);
   return next;
 }
 

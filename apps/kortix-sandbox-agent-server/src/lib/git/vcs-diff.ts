@@ -133,7 +133,10 @@ export async function vcsDiff(cwd: string, mode: string, defaultBranch: string):
 
   const rows = tracked.map((t, i) => finish(t.file, t.status, chunkFor(i)))
   const newFiles = untracked.code === 0 ? untracked.stdout.split('\0').filter(Boolean) : []
-  const staged = newFiles.slice(0, MAX_UNTRACKED_PATCHES)
+  // An embedded git repo lists as `dir/` — not stageable, no file patch. The old
+  // per-file diff degraded just that row (its own --no-index errored); filtering
+  // it out of the batch keeps the other files' patches with it.
+  const staged = newFiles.filter((f) => !f.endsWith('/')).slice(0, MAX_UNTRACKED_PATCHES)
   const untrackedChunks = (await untrackedPatchText(cwd, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
   // `git diff --cached` writes the patch in the same sorted order as `ls-files --others`:
   // one `diff --git` chunk per staged file, matched by position like the tracked chunks above.

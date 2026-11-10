@@ -138,6 +138,27 @@ describe('vcsDiff', () => {
     }
   })
 
+  test('an untracked nested repository costs the other files nothing', async () => {
+    const root = await makeRepo()
+    try {
+      // `ls-files --others` lists an embedded repo as `dir/` — a row the old
+      // per-file diff degraded on its own. The batch must keep that isolation.
+      await realRunGit(['init', '-q', 'nested'], { cwd: root })
+      await writeFile(join(root, 'nested/f.txt'), 'x\n')
+      await writeFile(join(root, 'fresh.txt'), 'fresh\n')
+      const files = await vcsDiff(root, 'branch', 'main')
+      const fresh = files.find((f) => f.file === 'fresh.txt')
+      expect(fresh?.status).toBe('added')
+      expect(fresh?.additions).toBe(1)
+      expect(fresh?.patch).toContain('+fresh')
+      const nested = files.find((f) => f.file === 'nested/')
+      expect(nested?.status).toBe('added')
+      expect(nested?.patch).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a directory that is not a git repo has no changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-vcs-diff-plain-'))
     try {

@@ -59,7 +59,7 @@ export function registerIamResourceGrantsRoutes(): void {
         ...errors(401, 403),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const accountId = accountIdParam(c);
       // Read-only account-wide access-footprint view — same gate the member
       // detail page already uses for "which projects does this person reach"

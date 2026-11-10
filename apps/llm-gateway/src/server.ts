@@ -207,7 +207,23 @@ export function buildServer(
   }
   const inflightRequests = trackInflight(app);
   registerHealth(app, api, inflight, traces, trafficSnapshot, upstreamSignals, rateLimit);
-  registerRoutes(app, gateway, inflight, recordOutcome, rateLimit);
+  registerRoutes(app, gateway, inflight, recordOutcome, rateLimit, async (request) => {
+    // A replayed Idempotency-Key answer is still a request: re-run the same
+    // credential + budget composition the pipeline's admission runs before a
+    // cached answer is served (KRTX-4612 review). Hits only; the first
+    // execution passes through the pipeline's own admission as before.
+    const token = request.authorization?.match(/^Bearer\s+(\S.*)$/i)?.[1]?.trim();
+    if (!token) return false;
+    const result = await api.authorize(token);
+    validatedIfReal(token, result.principal);
+    if (!result.ok || !result.principal) return false;
+    try {
+      await api.assertBudget(result.principal);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   // Register fallbacks after the handlers so supported methods keep their behavior.
   const methodsByPath = new Map<string, Set<string>>();
   for (const { path, method } of app.routes) {

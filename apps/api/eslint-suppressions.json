@@ -15,17 +15,11 @@
   "src/accounts/core/invites.ts": {
     "kortix-api/projects-surface": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/accounts/core/members.ts": {
     "no-console": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/accounts/core/owner-emails.ts": {
@@ -44,27 +38,16 @@
   "src/accounts/iam/assignments.ts": {
     "kortix-api/projects-surface": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/accounts/iam/custom-roles-policy.ts": {
-    "no-restricted-syntax": {
-      "count": 6
     }
   },
   "src/accounts/iam/custom-roles.ts": {
     "kortix-api/projects-surface": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 9
     }
   },
   "src/accounts/iam/groups.ts": {
     "no-restricted-syntax": {
-      "count": 10
+      "count": 1
     }
   },
   "src/accounts/iam/http-helpers.ts": {
@@ -72,55 +55,19 @@
       "count": 1
     }
   },
-  "src/accounts/iam/members.ts": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "src/accounts/iam/mfa.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/accounts/iam/oauth-clients.ts": {
     "no-restricted-syntax": {
-      "count": 7
-    }
-  },
-  "src/accounts/iam/policies.ts": {
-    "no-restricted-syntax": {
-      "count": 6
+      "count": 1
     }
   },
   "src/accounts/iam/resource-grants.ts": {
     "kortix-api/projects-surface": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/accounts/iam/scim-tokens.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/accounts/iam/service-accounts.ts": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/accounts/iam/session-oversight.ts": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/accounts/iam/sso.ts": {
     "no-console": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 8
     }
   },
   "src/accounts/invites.ts": {
@@ -128,17 +75,12 @@
       "count": 4
     },
     "no-restricted-syntax": {
-      "count": 6
+      "count": 1
     }
   },
   "src/accounts/mailtrap-contacts.ts": {
     "no-console": {
       "count": 1
-    }
-  },
-  "src/accounts/secret-resources.ts": {
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/admin/analytics.ts": {

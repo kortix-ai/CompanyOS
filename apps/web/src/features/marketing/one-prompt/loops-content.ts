@@ -97,7 +97,8 @@ export function catalogViews(): Array<{ name: string; line: string; available: b
     name: entry.name,
     line: entry.line,
     available: entry.template !== undefined && built.has(entry.template),
-    id: entry.template && built.has(entry.template) ? entry.template : undefined,
+    // Only featured loops have a showcase to link to.
+    id: entry.template && built.has(entry.template) && FEATURED.has(entry.template) ? entry.template : undefined,
   }));
 }
 

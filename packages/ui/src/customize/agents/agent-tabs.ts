@@ -155,7 +155,6 @@ export const YAML_KEY_ROW = {
   apps: 'apps',
   kortix_permissions: 'actions',
   sandbox: 'workspace',
-  workspace: 'workspace',
   network_egress: 'workspace',
   workspace: 'workspace',
 } as const satisfies Record<(typeof AGENT_BLOCK_KEYS_V3)[number], AgentRailKey>;

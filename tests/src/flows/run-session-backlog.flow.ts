@@ -28,6 +28,7 @@ import { waitFor } from '../core/poll';
 import type { FlowContext } from '../core/types';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
 import { CliSandbox } from '../fixtures/cli';
+import { RUN7_YAML } from '../fixtures/run7-manifest';
 import { subscribe } from '../fixtures/billing';
 import {
   abortTurn,
@@ -415,57 +416,84 @@ harnessFlow(
     ],
   },
   async (ctx, harness) => {
-    // Git flows need the seeded repository agent, not the default My Kortix workspace.
-    const session = await bootSession(ctx, harness, { agentName: 'worker' });
-    const { projectId, sessionId } = session;
-    const path = `ke2e-run7-${Date.now()}.md`;
-    const content = `ke2e-run7-${crypto.randomUUID()}`;
-    const done = `RUN7_DONE_${Date.now()}`;
-    await ctx.step('the agent writes the requested file in the workspace', async () => {
-      const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
-      await sendPrompt(
-        ctx,
-        projectId,
-        sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
-      );
-      // The file is the proof, not the closing marker: a model sometimes ends
-      // the turn without echoing it (staging, 2026-10-11).
-      await waitForTurn(ctx, projectId, sessionId, endedAfter(before), 'the write turn to end');
-      const file = await ctx.client
-        .as(ctx.P.OWNER)
-        .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(path)}`));
-      file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
-    });
-    await ctx.step('POST .../commit-push → 200 pushed', async () => {
-      const r = await ctx.client
-        .as(ctx.P.OWNER)
-        .post(
-          '/v1/workspaces/:projectId/sessions/:sessionId/commit-push',
-          { message: 'ke2e RUN-7 agent change' },
-          { params: { projectId, sessionId } },
+    // Its own project: the manifest above is this flow's alone.
+    const project = await ctx.fixtures.project({ seed: true });
+    const world = await AgentPrincipalsWorld
+      .open(ctx, { accountId: project.accountId ?? ctx.P.OWNER.accountId!, projectId: project.id });
+    try {
+      await ctx.step("the flow's worker declares the /workspace clone (the no-checkout contract) on main", async () => {
+        await world.commitToMain({ 'kortix.yaml': RUN7_YAML }, 'ke2e RUN-7: the worker clones /workspace on the session branch');
+      });
+      // Git flows need the seeded repository agent, not the default My Kortix workspace.
+      const session = await bootSession(ctx, harness, { agentName: 'worker', project });
+      const { projectId, sessionId } = session;
+      const path = `ke2e-run7-${Date.now()}.md`;
+      const content = `ke2e-run7-${crypto.randomUUID()}`;
+      const done = `RUN7_DONE_${Date.now()}`;
+      await ctx.step('the agent writes the requested file in the workspace', async () => {
+        const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
+        await sendPrompt(
+          ctx,
+          projectId,
+          sessionId,
+          `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
         );
-      r.status(200).body().has('$.pushed', true);
-    });
-    await ctx.step('the project API reads the file on branch <sessionId>', async () => {
-      const file = await waitFor(
-        async () =>
-          ctx.client
-            .as(ctx.P.OWNER)
-            .get('/v1/workspaces/:projectId/files/content', {
-              params: { projectId },
-              query: { path, ref: sessionId },
-            }),
-        {
-          until: (r) => r.statusCode === 200,
-          timeoutMs: 120_000,
-          intervalMs: 5_000,
-          description: `${path} on branch ${sessionId}`,
-          retryOnError: isKe2eRetryableError,
-        },
-      );
-      file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
-    });
+        // The file is the proof, not the closing marker: a model sometimes ends
+        // the turn without echoing it (staging, 2026-10-11).
+        await waitForTurn(ctx, projectId, sessionId, endedAfter(before), 'the write turn to end');
+        // No repository checkout at boot (#12136): the background clone usually
+        // beats the first turn, but the commit-push below needs it — wait for
+        // it the way the branch-read step at the end waits.
+        await waitFor(
+          async () =>
+            ctx.client
+              .as(ctx.P.OWNER)
+              .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent('kortix.yaml')}`)),
+          {
+            until: (r) => r.statusCode === 200,
+            timeoutMs: 300_000,
+            intervalMs: 10_000,
+            description: 'the /workspace clone to land (kortix.yaml of the project readable in the session)',
+            retryOnError: isKe2eRetryableError,
+          },
+        );
+        const file = await ctx.client
+          .as(ctx.P.OWNER)
+          .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(path)}`));
+        file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
+      });
+      await ctx.step('POST .../commit-push → 200 pushed', async () => {
+        const r = await ctx.client
+          .as(ctx.P.OWNER)
+          .post(
+            '/v1/workspaces/:projectId/sessions/:sessionId/commit-push',
+            { message: 'ke2e RUN-7 agent change' },
+            { params: { projectId, sessionId } },
+          );
+        r.status(200).body().has('$.pushed', true);
+      });
+      await ctx.step('the project API reads the file on branch <sessionId>', async () => {
+        const file = await waitFor(
+          async () =>
+            ctx.client
+              .as(ctx.P.OWNER)
+              .get('/v1/workspaces/:projectId/files/content', {
+                params: { projectId },
+                query: { path, ref: sessionId },
+              }),
+          {
+            until: (r) => r.statusCode === 200,
+            timeoutMs: 120_000,
+            intervalMs: 5_000,
+            description: `${path} on branch ${sessionId}`,
+            retryOnError: isKe2eRetryableError,
+          },
+        );
+        file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
+      });
+    } finally {
+      await world.close();
+    }
   },
 );
 

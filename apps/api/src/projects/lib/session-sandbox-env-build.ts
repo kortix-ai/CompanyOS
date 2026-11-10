@@ -397,7 +397,14 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
       // My Kortix holds every secret its person can use (`myKortixAgentGrant`);
       // the person's reach filters the values in `loadSessionRuntimeSecrets`.
       const grantEnvForSession = intersectSecretGrants(
-        input.platformMetaAgent ? (await myKortixSessionGrant(input.sessionId)).env : agentGrantEnv,
+        input.platformMetaAgent
+          ? (await myKortixSessionGrant(input.sessionId, {
+              projectId: input.projectId,
+              repoUrl: input.repoUrl,
+              defaultBranch: input.defaultBranch,
+              manifestPath: input.manifestPath,
+            })).env
+          : agentGrantEnv,
         sessionPolicyRow?.secretsAllowlist ?? null,
       );
       return tl.span('secrets', () =>

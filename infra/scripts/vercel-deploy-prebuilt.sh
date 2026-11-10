@@ -83,6 +83,16 @@ done
 # refuses an ID that the project already used, so the run and the attempt are
 # part of it (at most 32 characters, never starting with dpl_).
 export VERCEL=1
+# The two flags Vercel's own build machines set. NEXT_ENABLE_ADAPTER: @vercel/next
+# builds through the Next adapter, as on Vercel (without it the log says
+# "Adapter none" and the output takes the older path). VERCEL_IMMUTABLE_STATIC_FILES_ENABLED:
+# scripts go to /_next/static/immutable/, which Vercel serves from a store shared
+# by every deployment of the project. A script that did not change keeps its URL,
+# so browser and CDN caches survive a deploy and a tab still on the old release
+# loads its chunks. Without it every script URL carries ?dpl=<id> and changes
+# on every deploy.
+export NEXT_ENABLE_ADAPTER=1
+export VERCEL_IMMUTABLE_STATIC_FILES_ENABLED=1
 sha="$(git rev-parse HEAD)"
 export KORTIX_VERCEL_DEPLOYMENT_ID="k${sha:0:12}-${GITHUB_RUN_ID:-$(date +%s)}-${GITHUB_RUN_ATTEMPT:-1}"
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=6144}"

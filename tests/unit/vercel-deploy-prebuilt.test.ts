@@ -29,6 +29,8 @@ case "$cmd" in
   build)
     {
       echo "VERCEL=$VERCEL"
+      echo "NEXT_ENABLE_ADAPTER=$NEXT_ENABLE_ADAPTER"
+      echo "VERCEL_IMMUTABLE_STATIC_FILES_ENABLED=$VERCEL_IMMUTABLE_STATIC_FILES_ENABLED"
       echo "OVERRIDE=$OVERRIDE"
       echo "DEPLOYMENT_ID=$KORTIX_VERCEL_DEPLOYMENT_ID"
       cat .vercel/.env.*.local
@@ -98,6 +100,10 @@ describe('vercel-deploy-prebuilt.sh', () => {
     // What a build on Vercel gets from the platform: VERCEL=1 bakes the
     // runtime config, and a unique deployment ID keeps Skew Protection.
     expect(r.buildEnv).toContain('VERCEL=1\n');
+    // The flags Vercel's build machines set: the Next adapter, and scripts on
+    // /_next/static/immutable/ so their URLs survive a deploy.
+    expect(r.buildEnv).toContain('NEXT_ENABLE_ADAPTER=1\n');
+    expect(r.buildEnv).toContain('VERCEL_IMMUTABLE_STATIC_FILES_ENABLED=1\n');
     const id = /DEPLOYMENT_ID=(\S+)/.exec(r.buildEnv)?.[1] ?? '';
     expect(id).toBe(`k${r.sha.slice(0, 12)}-42425195629-2`);
     expect(id.length).toBeLessThanOrEqual(32);

@@ -35,10 +35,6 @@ jobs:
         env:
           npm_config_engine_strict: "false"
           SOURCE_SHA: ${{ github.sha }}
-          # Probe 3: the flags Vercel's own builders set: the Next adapter, and
-          # stable /_next/static/immutable/ paths.
-          NEXT_ENABLE_ADAPTER: "1"
-          VERCEL_IMMUTABLE_STATIC_FILES_ENABLED: "1"
         run: |
           set -euo pipefail
           export VERCEL_ORG_ID="$VERCEL_TEAM_ID"
@@ -77,3 +73,40 @@ jobs:
           echo "PROBE_ELAPSED $(( $(date +%s) - start ))s"
           echo "PROBE_URL ${url}"
           jq -c '{deploymentId}' .vercel/output/config.json || true
+
+  # Probe 4: the production path of the same script, stopped before the upload:
+  # the stub passes pull and build to the real CLI and skips deploy.
+  production-build:
+    runs-on: ${{ vars.CI_RUNNER_M || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/aws-env
+        with:
+          keys: |
+            VERCEL_ORG_ID=kortix-ci-env:VERCEL_TEAM_ID
+            VERCEL_PROJECT_ID
+            VERCEL_TOKEN
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: corepack enable pnpm
+      - name: Production build, no upload
+        env:
+          npm_config_engine_strict: "false"
+        run: |
+          set -euo pipefail
+          cat >"$RUNNER_TEMP/cli.sh" <<'STUB'
+          #!/usr/bin/env bash
+          if [ "$1" = deploy ]; then echo "SKIPPED deploy $*" >&2; echo "https://skipped.invalid"; exit 0; fi
+          exec npx --yes vercel@65.14.0 "$@"
+          STUB
+          export VERCEL_CLI="bash $RUNNER_TEMP/cli.sh"
+          bash infra/scripts/vercel-deploy-prebuilt.sh production \
+            --env "KORTIX_PUBLIC_VERSION=0.0.0-prod-probe" \
+            --build-env "NEXT_PUBLIC_KORTIX_VERSION=0.0.0-prod-probe" \
+            --build-env "NEXT_PUBLIC_KORTIX_COMMIT=${{ github.sha }}"
+          jq -c '{deploymentId}' .vercel/output/config.json
+          echo "functions: $(find .vercel/output/functions -maxdepth 3 -name '.vc-config.json' | wc -l)"
+          grep -rl 'staging-api.kortix.com' .vercel/output/static 2>/dev/null | head -3 || true
+          echo "prod backend baked: $(grep -rl 'api.kortix.com/v1' .vercel/output/static 2>/dev/null | wc -l) files"

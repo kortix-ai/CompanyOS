@@ -1388,11 +1388,6 @@
       "count": 1
     }
   },
-  "src/platform/services/boot-timeline-store.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/platform/services/github-app-identity.ts": {
     "no-console": {
       "count": 1
@@ -2899,11 +2894,8 @@
     }
   },
   "src/shared/session-failure-notifier.ts": {
-    "kortix-api/replica-local": {
-      "count": 1
-    },
     "no-console": {
-      "count": 2
+      "count": 1
     }
   },
   "src/shared/session-public-shares.ts": {

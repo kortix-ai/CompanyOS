@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { RUNTIME_AUDIT_SUMMARY_KEYS } from '@kortix/api-contract/runtime-relay';
 import { parseRuntimeAuditBatch } from './runtime-audit-ingestion';
 
 const scope = {
@@ -346,76 +347,18 @@ describe('parseRuntimeAuditBatch', () => {
 });
 
 describe('parseRuntimeAuditBatch: the summary allowlist (KRTX-4621 characterization)', () => {
-  // The standard allowlist keys the ingestion guard and the relay sanitizer
-  // each maintained by hand before KRTX-4621 single-sourced them in
-  // @kortix/api-contract/runtime-relay. The relay additionally admits
-  // `custom`; ingestion does not (yet — the one declared reconciliation).
-  const STANDARD_SUMMARY_KEYS = [
-    'id',
-    'sessionID',
-    'sessionId',
-    'session_id',
-    'parentID',
-    'parentId',
-    'messageID',
-    'messageId',
-    'partID',
-    'partId',
-    'callID',
-    'callId',
-    'toolCallID',
-    'toolCallId',
-    'executionID',
-    'executionId',
-    'tool',
-    'name',
-    'status',
-    'role',
-    'type',
-    'path',
-    'filename',
-    'mime',
-    'size',
-    'bytes',
-    'duration',
-    'durationMs',
-    'agent',
-    'agentID',
-    'agentId',
-    'agentName',
-    'depth',
-    'multiple',
-    'session',
-    'message',
-    'part',
-    'error',
-    'info',
-    'count',
-    'state',
-    'time',
-    'start',
-    'end',
-    'created',
-    'completed',
-    'updated',
-    'compacting',
-    'archived',
-    'providerID',
-    'modelID',
-    'mode',
-    'delivery',
-  ];
-
-  test('ingests a summary carrying every standard allowlist key', () => {
-    const summary = Object.fromEntries(STANDARD_SUMMARY_KEYS.map((key) => [key, 'x']));
+  test('ingests a summary carrying every allowlist key the contract defines', () => {
+    const summary = Object.fromEntries([...RUNTIME_AUDIT_SUMMARY_KEYS].map((key) => [key, 'x']));
     const parsed = parseRuntimeAuditBatch({ events: [event({ input_summary: summary })] }, scope);
     expect(parsed.accepted).toBe(1);
   });
 
-  test('a summary carrying the relay-admitted custom key fails the whole event', () => {
-    expect(() =>
-      parseRuntimeAuditBatch({ events: [event({ input_summary: { custom: 'note' } })] }, scope),
-    ).toThrow('disallowed input_summary key: custom');
+  test('the relay-admitted custom key is ingested (the one declared reconciliation, KRTX-4621)', () => {
+    const parsed = parseRuntimeAuditBatch(
+      { events: [event({ input_summary: { custom: 'note' } })] },
+      scope,
+    );
+    expect(parsed.values[0]?.inputSummary).toEqual({ custom: 'note' });
   });
 });
 

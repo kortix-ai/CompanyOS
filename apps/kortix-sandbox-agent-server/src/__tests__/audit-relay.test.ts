@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { RUNTIME_AUDIT_SUMMARY_KEYS } from '@kortix/api-contract/runtime-relay';
 import {
   DEFAULT_BATCH_SIZE,
   DEFAULT_COALESCED_EVENT_TYPES,
@@ -833,15 +834,15 @@ describe('audit relay emission volume', () => {
 });
 
 describe('the audit summary allowlist (KRTX-4621 characterization)', () => {
-  test('the sanitizer keeps a custom summary property the way it keeps every other allowlisted key', () => {
+  test('the sanitizer keeps every key the contract allowlist defines, custom included', () => {
+    const properties = Object.fromEntries(
+      [...RUNTIME_AUDIT_SUMMARY_KEYS].map((key) => [key, 'x']),
+    );
     const sanitized = sanitizeRuntimeEvent(
-      {
-        type: 'tool.execute.after',
-        properties: { sessionID: 'ses_1', custom: 'note', tool: 'bash' },
-      },
+      { type: 'tool.execute.after', properties },
       new Date('2026-08-07T12:00:00Z'),
     );
-    expect(sanitized?.input_summary).toMatchObject({ sessionID: 'ses_1', custom: 'note', tool: 'bash' });
+    expect(sanitized?.input_summary).toMatchObject({ custom: 'x', name: 'x' });
   });
 
   test('a spool event whose summary carries custom reloads', async () => {

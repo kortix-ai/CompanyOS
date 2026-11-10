@@ -12,7 +12,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, create } from 'react-test-renderer';
 
-import { ConnectorLogo } from '../../../../../../../../packages/ui/src/internal/connector-logo/connector-logo';
+import { ConnectorLogo } from './connector-logo';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

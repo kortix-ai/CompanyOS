@@ -65,7 +65,6 @@
     "./count-badge": "./src/primitives/count-badge.tsx",
     "./customize": "./src/customize/index.ts",
     "./customize/agents/agent-apps-grant": "./src/customize/agents/agent-apps-grant.ts",
-    "./customize/agents/agent-detail-aside": "./src/customize/agents/agent-detail-aside.tsx",
     "./customize/agents/agent-page": "./src/customize/agents/agent-page.tsx",
     "./customize/connectors/connector-routes": "./src/customize/connectors/connector-routes.ts",
     "./customize/connectors/connectors-app-return-bar": "./src/customize/connectors/connectors-app-return-bar.tsx",
@@ -732,10 +731,6 @@
       "./customize/agents/agent-apps-grant": {
         "types": "./dist/customize/agents/agent-apps-grant.d.ts",
         "import": "./dist/customize/agents/agent-apps-grant.js"
-      },
-      "./customize/agents/agent-detail-aside": {
-        "types": "./dist/customize/agents/agent-detail-aside.d.ts",
-        "import": "./dist/customize/agents/agent-detail-aside.js"
       },
       "./customize/agents/agent-page": {
         "types": "./dist/customize/agents/agent-page.d.ts",

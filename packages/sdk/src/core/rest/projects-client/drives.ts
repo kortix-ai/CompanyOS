@@ -12,6 +12,13 @@ import { stripTrailingSlashes } from '../../../platform/strings';
 
 export type FolderLevel = 'read' | 'write' | 'manage';
 export type FolderAccess = 'none' | FolderLevel;
+/**
+ * Who a folder grant names. A grant anyone makes names an `agent` (a shared
+ * Drive added to it, with `shared_drives` on): a person reaches it through an
+ * agent they may use. `user` and `group` are only Kortix's own grants (a
+ * person's folder, a private channel's members). `project` is never returned
+ * or accepted since 2026-11-03 (kept so existing code compiles).
+ */
 export type FolderPrincipalType = 'user' | 'group' | 'agent' | 'project';
 
 export interface Drive {
@@ -33,8 +40,10 @@ export interface Drive {
   personalFolder: string | null;
   /** "(conflict ...)" copies in folders the caller can see that nobody resolved or dismissed yet. */
   openConflicts?: number;
-  /** Folders other people shared with the caller, outside their own folder. */
+  /** The shared Drives the caller reaches through an agent they may use; empty while `shared_drives` is off. */
   sharedWithMe?: Array<{ path: string; access: FolderAccess }>;
+  /** The project's `shared_drives` flag: off, Drive is My files only. Absent from an API older than 2026-11-03. */
+  sharedDrives?: boolean;
 }
 
 /**
@@ -81,7 +90,11 @@ export interface DriveUsage {
   folders: DriveFolderUsage[];
 }
 
-/** One project's Files in {@link AccountStorageUsage}. */
+/**
+ * One project's Files in {@link AccountStorageUsage}.
+ *
+ * @deprecated Use `AccountStorageWorkspace`. Kept permanently.
+ */
 export interface AccountStorageProject {
   projectId: string;
   name: string;
@@ -90,6 +103,9 @@ export interface AccountStorageProject {
   usedBytes: number | null;
   fileCount: number | null;
 }
+
+/** The workspace name of {@link AccountStorageProject}: the same type. */
+export type AccountStorageWorkspace = AccountStorageProject;
 
 /** What an account's Files hold, per project, against the plan's limits. */
 export interface AccountStorageUsage {
@@ -210,14 +226,14 @@ export interface FolderAccessView {
 
 /** One folder a new session of an agent mounts (`listAgentMounts`). */
 export interface AgentMount {
-  /** The Files folder, e.g. `/Company/Reports`. */
+  /** The Files folder, e.g. `/Sales`. */
   path: string;
-  /** Where a session sees it, e.g. `/drives/Company/Reports`. */
+  /** Where a session sees it, e.g. `/drives/sales`. */
   mountPath: string;
   readOnly: boolean;
-  /** `agent`: shared with the agent. `project`: shared with everyone in the project. */
+  /** `agent`: a shared Drive added to the agent. `project`: only from an API older than 2026-11-03. */
   via: 'agent' | 'project';
-  /** The agent's own grant on the folder, to change or remove. Absent when it comes through the project. */
+  /** The agent's grant on the folder, to change or remove. */
   grantId?: string;
   level: FolderLevel;
 }
@@ -256,6 +272,11 @@ export interface SessionDrive {
   /** `me`: the session owner's own folder, their desktop. */
   role?: 'me' | 'drive';
   openConflicts?: number;
+  /**
+   * When the newest of `openConflicts` was detected (ISO 8601), null with none.
+   * Absent from an API older than 2026-11-04.
+   */
+  latestConflictAt?: string | null;
 }
 
 export interface SessionDrives {
@@ -285,7 +306,7 @@ export interface SessionDrives {
 const drivePath = (driveId: string) => `/drives/${encodeURIComponent(driveId)}`;
 
 /** The project's Files. Creates the drive and the caller's own folder on first use. */
-export async function getProjectDrive(projectId: string): Promise<Drive> {
+export async function getWorkspaceDrive(projectId: string): Promise<Drive> {
   const drives = unwrap(
     await backendApi.get<{ drives: Drive[] }>(`/drives?${new URLSearchParams({ projectId })}`),
     'Failed to load files',
@@ -293,6 +314,9 @@ export async function getProjectDrive(projectId: string): Promise<Drive> {
   if (!drives[0]) throw new ApiError('Files not found', { status: 404 });
   return drives[0];
 }
+
+/** @deprecated Use `getWorkspaceDrive`. Kept permanently. */
+export const getProjectDrive = getWorkspaceDrive;
 
 /**
  * Who has access to a folder: its own grants and the ones it inherits. A
@@ -355,9 +379,8 @@ export async function listAgentMounts(driveId: string, agentName: string): Promi
 }
 
 /**
- * The Files folders every new session of the project mounts: the ones shared
- * with everyone in the project. `grantId` is the project grant to change or
- * remove; the folders Kortix made (Company) carry none.
+ * @deprecated Always empty since 2026-11-03: nothing mounts in every session
+ * of the project. Read an agent's plan with {@link listAgentMounts}.
  */
 export async function listProjectMounts(driveId: string): Promise<AgentMountPlan> {
   return unwrap(await backendApi.get<AgentMountPlan>(`${drivePath(driveId)}/mounts`), 'Failed to load mounts');
@@ -717,7 +740,7 @@ export async function restoreDriveVersion(driveId: string, versionId: string): P
 }
 
 const sessionDrivesPath = (projectId: string, sessionId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/drives`;
+  `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/drives`;
 
 /** What the project's Files hold, their limits, and each folder sessions mount against the folder-mount cap. */
 export async function getDriveUsage(driveId: string): Promise<DriveUsage> {

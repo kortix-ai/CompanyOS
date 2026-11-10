@@ -476,7 +476,7 @@ export const USE_CASE_PACK_TITLE = "Use-case pack";
 
 const STARTER_KIT_README = `# Kortix Starter
 
-The default Kortix project — a general knowledge worker that's ready to do real
+The default Kortix workspace — a general knowledge worker that's ready to do real
 work from the very first message.
 
 It comes preloaded with the core Kortix skill floor: documents (PDF, DOCX,
@@ -531,7 +531,7 @@ function buildStarterKitProjectItem(): RegistryItem {
     type: "registry:project",
     title: "Kortix Starter",
     description:
-      "The default Kortix project — a general knowledge worker preloaded with the core skill floor (documents, slides, spreadsheets, web apps, browser automation, and more), ready to work from the first session.",
+      "The default Kortix workspace — a general knowledge worker preloaded with the core skill floor (documents, slides, spreadsheets, web apps, browser automation, and more), ready to work from the first session.",
     categories: ["project", "starter"],
     registryDependencies: skillNames,
     files,
@@ -606,7 +606,7 @@ function buildUseCasePackProjectItem(): RegistryItem {
 
 let BASE: Catalog | null = null;
 
-const KORTIX_REPO = "https://github.com/kortix-ai/suna";
+const KORTIX_REPO = "https://github.com/kortix-ai/CompanyOS";
 
 /** Source-of-truth GitHub path for a bundled `kortix-projects` item — these
  *  are real files in this repo, not a synthetic/external registry, so "View

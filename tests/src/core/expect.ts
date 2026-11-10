@@ -18,12 +18,19 @@ export class AssertionError extends Error {
   }
 }
 
+/** Throw with `what` and, when given, `detail` (a string as is, anything else as JSON cut to 1,200 characters). */
+export function fail(what: string, detail?: unknown): never {
+  if (detail === undefined) throw new Error(what);
+  throw new Error(`${what}: ${typeof detail === 'string' ? detail : JSON.stringify(detail).slice(0, 1_200)}`);
+}
+
 /** Record an assertion and throw if it failed. */
 export function assert(a: Assertion): void {
   currentRecorder()?.pushAssertion(a);
   if (!a.pass) {
     throw new AssertionError(
-      `${a.description} — expected ${JSON.stringify(a.expected)}, got ${JSON.stringify(a.actual)}`,
+      `${a.description} — expected ${JSON.stringify(a.expected)}, got ${JSON.stringify(a.actual)}` +
+        (a.detail ? ` (${a.detail})` : ''),
       a,
     );
   }

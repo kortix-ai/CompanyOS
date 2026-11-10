@@ -38,9 +38,11 @@ flow(
     // One wait for every API process to see the new member (≤45 s).
     timeoutMs: 300_000,
     routes: [
-      'GET /v1/projects/:projectId',
-      'PATCH /v1/projects/:projectId/features',
+      'GET /v1/workspaces/:projectId',
+      'PATCH /v1/workspaces/:projectId/features',
       'GET /v1/drives',
+      'GET /v1/workspaces/:projectId/resource-grants',
+      'POST /v1/workspaces/:projectId/resource-grants',
       'GET /v1/drives/:driveId/files',
       'GET /v1/drives/:driveId/files/content',
       'PUT /v1/drives/:driveId/files/content',
@@ -62,7 +64,8 @@ flow(
   },
   async (ctx) => {
     const team = await ctx.fixtures.team();
-    const project = await team.project();
+    // A managed repository, so a step can declare an agent in kortix.yaml.
+    const project = await team.project({ managedGit: true });
     const member = await team.addMember('member');
     await team.grantProjectRole(project.id, member.userId!, 'user');
     // Another account member: a plain member may not see them (MEM-8).
@@ -81,13 +84,13 @@ flow(
     });
 
     await ctx.step('every project has a Drive: the detail sends drives true; volumes and drives are no flags → 400', async () => {
-      (await owner.get('/v1/projects/:projectId', { params: { projectId: project.id } }))
+      (await owner.get('/v1/workspaces/:projectId', { params: { projectId: project.id } }))
         .status(200)
         .body()
         .has('$.experimental.volumes', true)
         .has('$.experimental.drives', true);
       for (const feature of ['volumes', 'drives']) {
-        (await owner.patch('/v1/projects/:projectId/features', { feature, enabled: false }, { params: { projectId: project.id } })).status(400);
+        (await owner.patch('/v1/workspaces/:projectId/features', { feature, enabled: false }, { params: { projectId: project.id } })).status(400);
       }
       (await owner.get('/v1/drives', listFiles)).status(200);
     });
@@ -115,7 +118,7 @@ flow(
         throw new Error(`member saw ${JSON.stringify(drive)}`);
       }
       memberFolder = drive.personalFolder;
-      if (drive.sharedWithMe?.length) throw new Error(`nothing is shared yet: ${JSON.stringify(drive.sharedWithMe)}`);
+      if (drive.sharedWithMe?.length) throw new Error(`nothing is shared with a person: ${JSON.stringify(drive.sharedWithMe)}`);
     });
 
     await ctx.step('NONMEMBER cannot open Files → 403/404', async () => {
@@ -137,31 +140,65 @@ flow(
       (await asMember.get('/v1/drives/:driveId/access', files(ownerFolder))).status(404);
     });
 
-    await ctx.step('OWNER shares a folder inside their own with the member (read); the member walks to it', async () => {
-      const shared = `${ownerFolder}/shared`;
-      const r = await owner.put(
-        '/v1/drives/:driveId/access',
-        { path: shared, principalType: 'user', principalId: member.userId!, level: 'read' },
-        { params: { driveId } },
-      );
-      r.status(200);
-      const grantId = r.json<{ grantId: string }>().grantId;
-      const users = entries((await asMember.get('/v1/drives/:driveId/files', files('/Users'))).status(200));
-      if (users.join(',') !== [ownerFolder, memberFolder].sort().join(',')) throw new Error(`Users lists ${users.join(',')}`);
-      const way = entries((await asMember.get('/v1/drives/:driveId/files', files(ownerFolder))).status(200));
-      if (way.join(',') !== shared) throw new Error(`owner folder lists ${way.join(',')} for the member`);
-      (await asMember.get('/v1/drives/:driveId/files', files(shared))).status(200).body().has('$.access', 'read');
+    await ctx.step('shared_drives is on by default; a project turns it off: Drive is My files only; every share → 403 feature_disabled; no Company folder', async () => {
+      const before = (await asMember.get('/v1/drives', listFiles)).status(200).json<{ drives: any[] }>().drives[0];
+      if (before.sharedDrives !== true) throw new Error(`shared Drives are not on by default: ${JSON.stringify(before)}`);
+      (await owner.patch('/v1/projects/:projectId/features', { feature: 'shared_drives', enabled: false }, { params: { projectId: project.id } })).status(200);
       const drive = (await asMember.get('/v1/drives', listFiles)).status(200).json<{ drives: any[] }>().drives[0];
-      if (JSON.stringify(drive.sharedWithMe) !== JSON.stringify([{ path: shared, access: 'read' }])) {
-        throw new Error(`sharedWithMe ${JSON.stringify(drive.sharedWithMe)}`);
+      if (drive.sharedDrives !== false || drive.sharedWithMe?.length) throw new Error(`member Drive ${JSON.stringify(drive)}`);
+      (await owner.put('/v1/drives/:driveId/access', { path: '/Sales', principalType: 'agent', principalId: 'worker', level: 'read' }, { params: { driveId } }))
+        .status(403)
+        .body()
+        .has('$.code', 'feature_disabled')
+        .has('$.feature', 'shared_drives');
+      const top = entries((await asMember.get('/v1/drives/:driveId/files', files('/'))).status(200));
+      if (top.join(',') !== '/Users') throw new Error(`a member sees ${top.join(',')} at the top`);
+      (await asMember.get('/v1/drives/:driveId/files', files('/Company'))).status(404);
+      (await asMember.get('/v1/drives/:driveId/files', files('/Company/Memory'))).status(404);
+      (await asMember.put('/v1/drives/:driveId/files/content', 'x', { ...files('/Company/x.txt'), raw: true })).status(404);
+    });
+
+    await ctx.step('shared_drives on: a share with a person, a team or the project → 400; with an agent → 200', async () => {
+      (await owner.patch('/v1/workspaces/:projectId/features', { feature: 'shared_drives', enabled: true }, { params: { projectId: project.id } })).status(200);
+      for (const body of [
+        { path: `${ownerFolder}/shared`, principalType: 'user', principalId: member.userId!, level: 'read' },
+        { path: '/Sales', principalType: 'project', level: 'read' },
+      ]) {
+        (await owner.put('/v1/drives/:driveId/access', body, { params: { driveId } })).status(400);
       }
-      (await asMember.put('/v1/drives/:driveId/files/content', 'x', { ...files(`${shared}/x.txt`), raw: true })).status(403);
-      (await asMember.put('/v1/drives/:driveId/access', { path: shared, principalType: 'project', level: 'read' }, { params: { driveId } })).status(403);
-      const access = (await owner.get('/v1/drives/:driveId/access', files(shared))).status(200);
-      if (!access.json<{ grants: { grantId: string }[] }>().grants.some((g) => g.grantId === grantId)) throw new Error('share missing from the folder access');
-      (await owner.del('/v1/drives/:driveId/access/:grantId', { params: { driveId, grantId } })).status(204);
-      (await asMember.get('/v1/drives/:driveId/files', files(shared))).status(404);
-      (await asMember.get('/v1/drives/:driveId/files', files(ownerFolder))).status(404);
+    });
+
+    await ctx.step("a member reaches a shared Drive only once they may use an agent added to it, at the agent's level", async () => {
+      const params = { projectId: project.id };
+      const catalog = (await owner.get('/v1/workspaces/:projectId/resource-grants', { params })).status(200);
+      const agents = catalog.json<{ resources: { agents: Array<{ id: string }> } }>().resources.agents.map((a) => a.id);
+      const agent = agents.find((a) => a !== 'mykortix' && a !== 'meta');
+      if (!agent) throw new Error(`no agent to grant: ${catalog.text().slice(0, 400)}`);
+      (await owner.put('/v1/drives/:driveId/access', { path: '/Sales', principalType: 'agent', principalId: agent, level: 'write' }, { params: { driveId } })).status(200);
+      // Not yet a user of the agent: nothing.
+      (await asMember.get('/v1/drives/:driveId/files', files('/Sales'))).status(404);
+      (await owner.post(
+        '/v1/workspaces/:projectId/resource-grants',
+        { resource_type: 'agent', resource_id: agent, principal_type: 'member', principal_id: member.userId },
+        { params },
+      )).status(201);
+      // Access caches per API process for up to 15 s: read until every process agrees.
+      const deadline = Date.now() + 45_000;
+      let seen: unknown = null;
+      for (let streak = 0; streak < 6; ) {
+        if (Date.now() > deadline) throw new Error(`member never reached /Sales: ${JSON.stringify(seen)}`);
+        const d = (await asMember.get('/v1/drives', listFiles)).status(200).json<{ drives: any[] }>().drives[0];
+        seen = d.sharedWithMe;
+        streak = JSON.stringify(d.sharedWithMe) === JSON.stringify([{ path: '/Sales', access: 'write' }]) ? streak + 1 : 0;
+        if (streak === 0) await new Promise((r) => setTimeout(r, 500));
+      }
+      // The local profile stores no bytes: the access answer is the proof.
+      (await asMember.get('/v1/drives/:driveId/files', files('/Sales'))).status(200).body().has('$.access', 'write');
+      const top = entries((await asMember.get('/v1/drives/:driveId/files', files('/'))).status(200));
+      if (top.join(',') !== '/Sales,/Users') throw new Error(`a member sees ${top.join(',')} at the top`);
+      (await owner.patch('/v1/workspaces/:projectId/features', { feature: 'shared_drives', enabled: false }, { params })).status(200);
+      // Off again: the grant stays stored but reaches nobody.
+      (await asMember.get('/v1/drives/:driveId/files', files('/Sales'))).status(404);
     });
 
     await ctx.step('OWNER can name the people of the project to share with', async () => {
@@ -178,6 +215,15 @@ flow(
         throw new Error(`invalid project mount plan: ${JSON.stringify(plan)}`);
       }
       (await ctx.client.as(ctx.P.ANON).get(route, { params: { driveId } })).status(401);
+    });
+
+    await ctx.step('a plain member reads the project mounts (the Drive page asks on every open): 200, never a folder they cannot see', async () => {
+      const plan = (await asMember.get('/v1/drives/:driveId/mounts', { params: { driveId } }))
+        .status(200)
+        .json<{ mounts: { path: string }[] }>();
+      if (plan.mounts.some((m) => m.path === ownerFolder || m.path.startsWith(`${ownerFolder}/`))) {
+        throw new Error(`a member sees the owner's folder in the mount plan: ${JSON.stringify(plan.mounts)}`);
+      }
     });
 
     await ctx.step("an agent's mounts are the session plan: the project's folders at /drives paths; ANON 401", async () => {
@@ -248,22 +294,27 @@ flow(
     domain: 'drives',
     requires: ['sandbox', 'funded'],
     timeoutMs: 300_000,
-    routes: ['GET /v1/projects/:projectId/sessions/:sessionId/drives'],
+    routes: ['GET /v1/workspaces/:projectId/sessions/:sessionId/drives'],
   },
   async (ctx) => {
     const p = await ctx.fixtures.sharedSeededProject();
     const s = await ctx.fixtures.session(p);
-    const route = '/v1/projects/:projectId/sessions/:sessionId/drives';
+    const route = '/v1/workspaces/:projectId/sessions/:sessionId/drives';
     const params = { params: { projectId: p.id, sessionId: s.id } };
 
-    await ctx.step("OWNER lists the session's drives → 200, each at a distinct /drives path", async () => {
+    await ctx.step("OWNER lists the session's drives → 200, each at a distinct /drives path, with its open conflicts and the newest one's time", async () => {
       const r = await ctx.client.as(ctx.P.OWNER).get(route, params);
       r.status(200);
-      const drives = r.json<{ drives: { mountPath: string }[] }>().drives;
+      const drives = r.json<{ drives: { mountPath: string; openConflicts: number; latestConflictAt: string | null }[] }>().drives;
       const paths = drives.map((d) => d.mountPath);
       if (new Set(paths).size !== paths.length || paths.some((m) => !m.startsWith('/drives/'))) {
         throw new Error(`bad mount paths ${paths.join(',')}`);
       }
+      // The conflict notice compares latestConflictAt across reads: null with no open conflict.
+      const badConflicts = drives.filter((d) =>
+        d.openConflicts === 0 ? d.latestConflictAt !== null : Number.isNaN(Date.parse(d.latestConflictAt ?? '')),
+      );
+      if (badConflicts.length) throw new Error(`bad conflict fields ${JSON.stringify(badConflicts)}`);
     });
     await ctx.step('non-uuid session id → 400; unknown session → 404', async () => {
       (await ctx.client.as(ctx.P.OWNER).get(route, { params: { projectId: p.id, sessionId: 'nope' } })).status(400);
@@ -414,7 +465,7 @@ flow(
       'PUT /v1/drives/:driveId/files/content',
       'POST /v1/drives/:driveId/files/upload',
       'PUT /v1/admin/api/accounts/:id/overrides',
-      'POST /v1/projects/:projectId/artifacts',
+      'POST /v1/workspaces/:projectId/artifacts',
     ],
   },
   async (ctx) => {
@@ -464,7 +515,8 @@ flow(
         (await ctx.client.as(ctx.P.ANON).get('/v1/drives/usage', { query: { account_id: team.id } })).status(401);
       });
 
-      await ctx.step("an account member with no access to the project never sees its name or storage in the account's list", async () => {
+      await ctx.step("an account member of the 1:1 workspace is in it: the account's storage list names the project", async () => {
+        // Membership is access (design.md C3). A non-member is refused above.
         const member = await team.addMember('member');
         // Membership reaches every API process within 15 s; until then the route may answer 403.
         const deadline = Date.now() + 45_000;
@@ -476,8 +528,8 @@ flow(
         if (r.statusCode === 403) return; // no billing.read: nothing is disclosed either
         r.status(200);
         const listed = r.json<{ projects: { projectId: string; name: string }[] }>().projects;
-        if (listed.some((p) => p.projectId === project.id)) {
-          throw new Error(`a member without project access sees the project in the storage list: ${JSON.stringify(listed)}`);
+        if (!listed.some((p) => p.projectId === project.id)) {
+          throw new Error(`a member of the workspace does not see it in the storage list: ${JSON.stringify(listed)}`);
         }
       });
 
@@ -507,9 +559,8 @@ flow(
       });
 
       await ctx.step('an Artifact publish is held to the same limit → refused with storage_limit_exceeded', async () => {
-        (await owner.patch('/v1/projects/:projectId/features', { feature: 'artifacts', enabled: true }, { params: { projectId: project.id } })).status(200);
         const r = await owner.post(
-          '/v1/projects/:projectId/artifacts',
+          '/v1/workspaces/:projectId/artifacts',
           { files: { 'index.md': { content: `# Big\n\n${'z'.repeat(4096)}` } } },
           { params: { projectId: project.id } },
         );

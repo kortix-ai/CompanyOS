@@ -1,6 +1,6 @@
 /**
- * Read/write for an OpenCode agent's native `.md` file — YAML frontmatter +
- * body (the system prompt). This is now the ONE home for agent BEHAVIOR
+ * Read/write for an agent's `.md` file — YAML frontmatter + body (the system
+ * prompt). This is now the ONE home for agent BEHAVIOR
  * (decision 2026-07-05: "OpenCode behavior lives in the native .md; Kortix
  * governance lives in kortix.yaml — one home per concern").
  *
@@ -14,7 +14,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/;
 
-export interface ParsedAgentMarkdown {
+interface ParsedAgentMarkdown {
   frontmatter: Record<string, unknown>;
   body: string;
 }

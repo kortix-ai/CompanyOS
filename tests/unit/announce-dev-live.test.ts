@@ -3,8 +3,8 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
+import { REPO_ROOT as root, readWorkflow } from '../src/fixtures/repo';
 
-const root = resolve(import.meta.dirname, '../..');
 const script = resolve(root, 'scripts/ci/announce-dev-live.sh');
 
 const SHA = 'a'.repeat(40);
@@ -62,6 +62,8 @@ interface Fixture {
   existingComment?: { pr: number; id: number };
   health?: { api?: string; web?: string; gateway?: string };
   write?: 'ok' | 'fail';
+  /** Recent merged pull requests outside the range, for the stale sweep. */
+  recent?: { number: number; merge: string; comment: string; compare: Record<string, string> }[];
 }
 
 function run(fixture: Fixture) {
@@ -78,23 +80,33 @@ function run(fixture: Fixture) {
   const put = (path: string, value: unknown) =>
     writeFileSync(join(fixtures, `${path.replaceAll('/', '_')}.json`), JSON.stringify(value));
 
-  put(`repos/kortix-ai/suna/compare/${BASE}...${SHA}`, {
+  put(`repos/kortix-ai/CompanyOS/compare/${BASE}...${SHA}`, {
     commits: (fixture.compare ?? [SHA]).map((sha) => ({ sha })),
   });
   for (const sha of [SHA, BASE, OTHER]) {
     const number = fixture.pulls?.[sha];
     put(
-      `repos/kortix-ai/suna/commits/${sha}/pulls`,
+      `repos/kortix-ai/CompanyOS/commits/${sha}/pulls`,
       number ? [{ number, merged_at: '2026-09-26T17:00:00Z', base: { ref: 'dev' } }] : [],
     );
     if (number) {
-      put(`repos/kortix-ai/suna/pulls/${number}`, { number, merged_at: '2026-09-26T17:00:00Z' });
+      put(`repos/kortix-ai/CompanyOS/pulls/${number}`, { number, merged_at: '2026-09-26T17:00:00Z' });
       put(
-        `repos/kortix-ai/suna/issues/${number}/comments`,
+        `repos/kortix-ai/CompanyOS/issues/${number}/comments`,
         fixture.existingComment?.pr === number
           ? [{ id: 11, body: 'unrelated' }, { id: fixture.existingComment.id, body: '<!-- dev-live -->\nold' }]
           : [{ id: 11, body: 'unrelated' }],
       );
+    }
+  }
+  put(
+    'repos/kortix-ai/CompanyOS/pulls?state=closed&base=dev&sort=updated&direction=desc&per_page=30',
+    (fixture.recent ?? []).map((pr) => ({ number: pr.number, merged_at: '2026-09-25T10:00:00Z', merge_commit_sha: pr.merge })),
+  );
+  for (const pr of fixture.recent ?? []) {
+    put(`repos/kortix-ai/CompanyOS/issues/${pr.number}/comments`, [{ id: pr.number * 10, body: pr.comment }]);
+    for (const [served, status] of Object.entries(pr.compare)) {
+      put(`repos/kortix-ai/CompanyOS/compare/${pr.merge}...${served}`, { status });
     }
   }
   const health = { api: SHA, web: SHA, gateway: SHA, ...fixture.health };
@@ -110,10 +122,10 @@ function run(fixture: Fixture) {
       PATH: `${join(dir, 'bin')}:${process.env.PATH ?? ''}`,
       STUB_DIR: dir,
       STUB_WRITE: fixture.write ?? 'ok',
-      GITHUB_REPOSITORY: 'kortix-ai/suna',
+      GITHUB_REPOSITORY: 'kortix-ai/CompanyOS',
       SHA,
       BASE,
-      RUN_URL: 'https://github.com/kortix-ai/suna/actions/runs/1',
+      RUN_URL: 'https://github.com/kortix-ai/CompanyOS/actions/runs/1',
       API_RESULT: 'success',
       GATEWAY_RESULT: 'unchanged',
       WEB_RESULT: 'success',
@@ -147,17 +159,17 @@ describe('announce-dev-live.sh', () => {
     expect(r.stderr).not.toContain('unhandled');
     expect(r.status).toBe(0);
     expect(r.writes).toEqual([
-      'POST repos/kortix-ai/suna/issues/7750/comments',
-      'POST repos/kortix-ai/suna/issues/7751/comments',
+      'POST repos/kortix-ai/CompanyOS/issues/7750/comments',
+      'POST repos/kortix-ai/CompanyOS/issues/7751/comments',
     ]);
-    const body = r.body('repos/kortix-ai/suna/issues/7751/comments');
+    const body = r.body('repos/kortix-ai/CompanyOS/issues/7751/comments');
     expect(body.startsWith('<!-- dev-live -->\n')).toBe(true);
     expect(body).toContain('### Live on dev — 6m 12s after merge');
     expect(body).toContain('| API · dev-api.kortix.com | serving `aaaaaaaaaa` |');
     expect(body).toContain('| Web · dev.kortix.com | serving `aaaaaaaaaa` |');
     expect(body).not.toContain('gateway');
     expect(body).toContain('Shipped together with #7750.');
-    expect(body).toContain('https://github.com/kortix-ai/suna/actions/runs/1');
+    expect(body).toContain('https://github.com/kortix-ai/CompanyOS/actions/runs/1');
     expect(r.summary).toContain('#7750');
   });
 
@@ -165,15 +177,15 @@ describe('announce-dev-live.sh', () => {
     const r = run({ pulls: { [SHA]: 7751 }, existingComment: { pr: 7751, id: 99 } });
 
     expect(r.status).toBe(0);
-    expect(r.writes).toEqual(['PATCH repos/kortix-ai/suna/issues/comments/99']);
-    expect(r.body('repos/kortix-ai/suna/issues/comments/99')).toContain('### Live on dev');
+    expect(r.writes).toEqual(['PATCH repos/kortix-ai/CompanyOS/issues/comments/99']);
+    expect(r.body('repos/kortix-ai/CompanyOS/issues/comments/99')).toContain('### Live on dev');
   });
 
   it('says "Not live on dev yet" and names the surface when a deploy failed', () => {
     const r = run({ pulls: { [SHA]: 7751 }, env: { WEB_RESULT: 'failure' } });
 
     expect(r.status).toBe(0);
-    const body = r.body('repos/kortix-ai/suna/issues/7751/comments');
+    const body = r.body('repos/kortix-ai/CompanyOS/issues/7751/comments');
     expect(body).toContain('### Not live on dev yet');
     expect(body).toContain('| Web · dev.kortix.com | deploy failure |');
     expect(body).toContain('The next deploy from `dev` retries');
@@ -182,7 +194,7 @@ describe('announce-dev-live.sh', () => {
   it('never claims live when /health reports another commit', () => {
     const r = run({ pulls: { [SHA]: 7751 }, health: { api: OTHER } });
 
-    const body = r.body('repos/kortix-ai/suna/issues/7751/comments');
+    const body = r.body('repos/kortix-ai/CompanyOS/issues/7751/comments');
     expect(body).toContain('### Not live on dev yet');
     expect(body).toContain('| API · dev-api.kortix.com | deployed; `/health` reports `cccccccccc` |');
   });
@@ -190,7 +202,7 @@ describe('announce-dev-live.sh', () => {
   it('announces only the head commit when the deploy base is unknown', () => {
     const r = run({ pulls: { [SHA]: 7751, [OTHER]: 7750 }, env: { BASE: '' } });
 
-    expect(r.writes).toEqual(['POST repos/kortix-ai/suna/issues/7751/comments']);
+    expect(r.writes).toEqual(['POST repos/kortix-ai/CompanyOS/issues/7751/comments']);
   });
 
   it('comments on nothing for a direct push without a pull request', () => {
@@ -207,8 +219,46 @@ describe('announce-dev-live.sh', () => {
     expect(r.stdout + r.stderr).toContain('::warning::');
   });
 
+  it('corrects a stale "Not live on dev yet" outside the range once every surface contains its merge', () => {
+    const MERGE = 'd'.repeat(40);
+    const stale = '<!-- dev-live -->\n### Not live on dev yet\n\nold';
+    const r = run({
+      pulls: { [SHA]: 7751 },
+      recent: [{ number: 7700, merge: MERGE, comment: stale, compare: { [SHA]: 'ahead' } }],
+    });
+
+    expect(r.stderr).not.toContain('unhandled');
+    expect(r.writes).toEqual([
+      'POST repos/kortix-ai/CompanyOS/issues/7751/comments',
+      'PATCH repos/kortix-ai/CompanyOS/issues/comments/77000',
+    ]);
+    const body = r.body('repos/kortix-ai/CompanyOS/issues/comments/77000');
+    expect(body.startsWith('<!-- dev-live -->\n### Live on dev')).toBe(true);
+    expect(body).toContain('`dddddddddd`');
+    expect(r.summary).toContain('| #7700 | live (corrected) |');
+  });
+
+  it('leaves a stale comment when a surface does not contain the merge, or this run is not live', () => {
+    const MERGE = 'd'.repeat(40);
+    const stale = '<!-- dev-live -->\n### Not live on dev yet\n\nold';
+    const behind = run({
+      pulls: { [SHA]: 7751 },
+      health: { gateway: OTHER },
+      env: { GATEWAY_RESULT: 'unchanged' },
+      recent: [{ number: 7700, merge: MERGE, comment: stale, compare: { [SHA]: 'ahead', [OTHER]: 'behind' } }],
+    });
+    expect(behind.writes).toEqual(['POST repos/kortix-ai/CompanyOS/issues/7751/comments']);
+
+    const failed = run({
+      pulls: { [SHA]: 7751 },
+      env: { WEB_RESULT: 'failure' },
+      recent: [{ number: 7700, merge: MERGE, comment: stale, compare: { [SHA]: 'ahead' } }],
+    });
+    expect(failed.writes).toEqual(['POST repos/kortix-ai/CompanyOS/issues/7751/comments']);
+  });
+
   it('is wired as the last Deploy Dev job with pull-request write access only', () => {
-    const workflow = readFileSync(resolve(root, '.github/workflows/deploy-dev.yml'), 'utf8');
+    const workflow = readWorkflow('deploy-dev.yml');
     const start = workflow.indexOf('\n  announce-live:\n');
     expect(start).toBeGreaterThan(0);
     const job = workflow.slice(start);

@@ -18,15 +18,16 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { json, errors, auth } from '../../openapi';
 import { eq } from 'drizzle-orm';
-import { projects } from '@kortix/db';
 import { objectGrantRows } from '../../iam/read-models';
 import { db } from '../../shared/db';
-import { accountGroupNamesAmong } from '../../iam/group-read';
+import { groupRows } from '../../iam/group-read';
 import { ACCOUNT_ACTIONS, assertAuthorized } from '../../iam';
 import { actorOf } from '../../iam/actor';
 import { lookupEmailsByUserIds } from '../../projects/lib/access';
 import { isUuid } from '../../shared/validate';
 import { iamRouter, AccountIdParam } from './app';
+import { accountIdParam } from '../../shared/route-params';
+import { projectsView } from '../../workspaces/rows';
 
 const ResourceGrantRowSchema = z
   .object({
@@ -48,7 +49,7 @@ export function registerIamResourceGrantsRoutes(): void {
   iamRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/{accountId}/iam/resource-grants',
+      path: '/{workspaceId}/iam/resource-grants',
       tags: ['iam'],
       summary: 'List every resource grant across the account (optionally filtered)',
       ...auth,
@@ -58,8 +59,8 @@ export function registerIamResourceGrantsRoutes(): void {
         ...errors(401, 403),
       },
     }),
-    async (c: any) => {
-      const accountId = c.req.param('accountId');
+    async (c) => {
+      const accountId = accountIdParam(c);
       // Read-only account-wide access-footprint view — same gate the member
       // detail page already uses for "which projects does this person reach"
       // (members.ts's /project-access route). No entitlement check: this
@@ -83,9 +84,9 @@ export function registerIamResourceGrantsRoutes(): void {
           ...(projectId && isUuid(projectId) ? { projectId } : {}),
         }),
         db
-          .select({ projectId: projects.projectId, name: projects.name })
-          .from(projects)
-          .where(eq(projects.accountId, accountId)),
+          .select({ projectId: projectsView.projectId, name: projectsView.name })
+          .from(projectsView)
+          .where(eq(projectsView.accountId, accountId)),
       ]);
       const projectById = new Map(projectRows.map((p) => [p.projectId, p] as const));
 
@@ -135,8 +136,8 @@ export function registerIamResourceGrantsRoutes(): void {
         : new Map<string, string | null>();
       const groupNameById = new Map<string, string>();
       if (groupIds.length) {
-        const groupRows = await accountGroupNamesAmong(accountId, groupIds);
-        for (const g of groupRows) groupNameById.set(g.groupId, g.name);
+        const groupRowList = await groupRows({ accountId, groupIds });
+        for (const g of groupRowList) groupNameById.set(g.groupId, g.name);
       }
 
       return c.json({

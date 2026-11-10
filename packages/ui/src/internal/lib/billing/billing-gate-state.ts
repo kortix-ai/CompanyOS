@@ -104,6 +104,26 @@ export function billingStateNeedsTopUp(state: BillingState | null): boolean {
   return state === 'out_of_credits' || state === 'payment_failed';
 }
 
+/** The server's run floor in USD (`MINIMUM_CREDIT_FOR_RUN`, billing/services/tier-facts.ts). */
+export const RUN_FLOOR_USD = 0.01;
+
+/**
+ * Whether the billing modal opens on the compact out-of-credits view. True
+ * when the account cannot run: out of credits, a failed payment, or a Free
+ * account below the run floor. The last case is a further workspace that gets
+ * no free credits, or a Free account that spent them: the modal offers the
+ * subscription there, never only "Continue on Free" (review finding 10).
+ */
+export function billingModalNeedsTopUp(
+  accountState: AccountStateLike | null | undefined,
+  state: BillingState | null,
+): boolean {
+  if (billingStateNeedsTopUp(state)) return true;
+  if (state !== 'no_subscription') return false;
+  const balance = accountState?.credits?.total;
+  return typeof balance === 'number' && balance < RUN_FLOOR_USD;
+}
+
 /**
  * Warn below this wallet value (dollars) on an account that is still running,
  * or below a fifth of what the account has been given, whichever is lower
@@ -170,8 +190,8 @@ export function walletAlertCopy(
   action: string;
 } {
   return severity === 'blocked'
-    ? { label: tI18nComplete.raw('textf1c24ec92034'), action: 'Top up' }
-    : { label: tI18nComplete.raw('text9757b0277bb1'), action: 'Top up' };
+    ? { label: tI18nComplete.raw('textf1c24ec92034'), action: 'Add credits' }
+    : { label: tI18nComplete.raw('text9757b0277bb1'), action: 'Add credits' };
 }
 
 export interface BillingModalCopy {
@@ -246,7 +266,7 @@ export function billingGateCopy(
       return {
         title: tI18nComplete.raw('textf1c24ec92034'),
         message: tI18nComplete.raw('text6821e42be2c1'),
-        ctaLabel: 'Top up credits',
+        ctaLabel: 'Add credits',
         dialogReason: 'insufficient_credits',
       };
     case 'payment_failed':

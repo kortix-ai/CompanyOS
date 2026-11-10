@@ -38,7 +38,7 @@ A company rule such as mail going out from the shared inbox is, on a personal as
 
 ## The setup a second colleague can read
 
-Kortix keeps a project's configuration in a `kortix.yaml` manifest and one markdown file per agent, both in the project's git repo. The starter manifest explains the split in its own header: the `agents:` map is `governance only`, holding the connectors, secrets, permissions, skills and workspace grants alongside `file`, the path of the agent's markdown file, while agent behavior "lives entirely in that `.md`" ([starter manifest](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/kortix.yaml)).
+Kortix keeps a project's configuration in a `kortix.yaml` manifest and one markdown file per agent, both in the project's git repo. The starter manifest explains the split in its own header: the `agents:` map is `governance only`, holding the connectors, secrets, permissions, skills and workspace grants alongside `file`, the path of the agent's markdown file, while agent behavior "lives entirely in that `.md`" ([starter manifest](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/kortix.yaml)).
 
 ```yaml
 agents:
@@ -56,7 +56,7 @@ Vellum's setup is also files, and good ones, but they sit in one account's works
 
 ## Work lands as a diff
 
-The starter agent file calls the session an isolated sandbox and "an ephemeral branch of this repo", where "Only what you commit + push survives" ([starter agent](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/agents/kortix.md)). Session work reaches `main` through a change request. Merge is default-deny for agents. A teammate therefore reads the result the way they read code: a diff, with the agent's reasoning behind it and a rollback one commit away.
+The starter agent file calls the session an isolated sandbox and "an ephemeral branch of this repo", where "Only what you commit + push survives" ([starter agent](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/agents/kortix.md)). Session work reaches `main` through a change request. Merge is default-deny for agents. A teammate therefore reads the result the way they read code: a diff, with the agent's reasoning behind it and a rollback one commit away.
 
 Per-resource permissions for people and agents. Roles, groups, and an audit trail. Every action is recorded. Reading, exporting and streaming the audit log depend on the plan.
 
@@ -83,7 +83,7 @@ The hosted version is the part with an expiry. Plans run $30, $100 or $200 a mon
 
 Pick Vellum if you are one person who will run the harness yourself, on a Mac, a Windows PC or a VPS, and you accept owning the model keys and the backups. The files are plain text, so a move is a copy and a config edit.
 
-Pick Kortix when the assistant has to outlive one person's machine, or when two people have to agree on what it may do. The paid plan starts at $50 a month with unlimited members sharing one credit pool. The free plan gives one project 500 credits a month ([Kortix pricing](https://kortix.com/pricing)).
+Pick Kortix when the assistant has to outlive one person's machine, or when two people have to agree on what it may do. The paid plan starts at $50 a month with unlimited members sharing one credit pool. The free plan gives your first workspace 500 credits a month ([Kortix pricing](https://kortix.com/pricing)).
 
 If you are still drawing the line between a personal assistant and a company system, [personal AI agents vs a company OS](/blog/personal-ai-agents-vs-company-os) covers the same question across other tools. [Kortix vs OpenClaw](/blog/kortix-vs-openclaw) takes the single-operator case further.
 

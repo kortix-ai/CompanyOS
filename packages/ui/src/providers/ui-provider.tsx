@@ -422,6 +422,8 @@ export interface UiHostComponents {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     defaultTab?: 'providers' | 'models';
+    /** Opens the Providers tab with this provider's row already expanded. */
+    defaultProviderId?: string;
     /** False or missing: read only. */
     canWrite?: boolean;
   }>;
@@ -437,14 +439,7 @@ export interface UiHostComponents {
    * (apps/web: its mobile app). Without it, nothing is shown.
    */
   HomeAnnouncement?: React.ComponentType;
-  /**
-   * One room's conversation (flag `agent_rooms`): its messages and a composer,
-   * by room NAME. A room that does not exist yet shows an empty state, and the
-   * first post creates it with `emptyTopic`. A space page renders its own room
-   * (the room named like the space's slug) through it, `fill` in its room
-   * tab: no frame, no header, the container's full height. Without it, a link
-   * to the rooms page.
-   */
+  /** @deprecated Rooms were removed (2026-11); ignored. Removed in the next major. */
   RoomPanel?: React.ComponentType<{
     projectId: string;
     roomName: string;

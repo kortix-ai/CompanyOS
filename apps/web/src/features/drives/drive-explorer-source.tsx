@@ -22,7 +22,6 @@ import {
   makeDriveFolder,
   moveDriveFile,
   readDriveFile,
-  shareFolder,
   uploadDriveFile,
 } from '@kortix/sdk';
 import { qk } from '@kortix/sdk/react';
@@ -74,7 +73,13 @@ const MAX_CACHED_ENTRIES = 1_000;
 
 /** `Users/ana` or `/Users/ana/` -> `/Users/ana`; the root is `/`. */
 export function toDrivePath(p: string | null | undefined): string {
-  const trimmed = (p ?? '').replace(/^\/+|\/+$/g, '');
+  // A loop, not `/^\/+|\/+$/`: that regex backtracks quadratically on a long run of `/`.
+  const raw = p ?? '';
+  let start = 0;
+  let end = raw.length;
+  while (start < end && raw[start] === '/') start += 1;
+  while (end > start && raw[end - 1] === '/') end -= 1;
+  const trimmed = raw.slice(start, end);
   return trimmed ? `/${trimmed}` : '/';
 }
 
@@ -379,7 +384,9 @@ export const driveExplorerSource: FileExplorerSource = {
   useFileMkdir: () => {
     const queryClient = useQueryClient();
     return useDriveMutation<{ dirPath: string; everyone?: boolean }>(
-      async (driveId, { dirPath, everyone }) => {
+      // `everyone` is ignored: nothing is shared with the whole project. A new
+      // folder inherits its parent's agents; an admin adds more in Share.
+      async (driveId, { dirPath }) => {
         const path = toDrivePath(dirPath);
         // A new folder is empty: its card reads 0 at once and never lists a
         // folder the server has not made yet. Access is its parent's, which
@@ -389,11 +396,7 @@ export const driveExplorerSource: FileExplorerSource = {
           const parent = queryClient.getQueryData<FolderListing>(qk.drives.files(driveId, parentOf(path)));
           queryClient.setQueryData<FolderListing>(key, { entries: [], access: parent?.access ?? 'write' });
         }
-        const made = await makeDriveFolder(driveId, path);
-        // A team folder says who can open it when it is made. Should the share
-        // fail, the folder stays admins-only, which its badge shows.
-        if (everyone) await shareFolder(driveId, { path, principalType: 'project', level: 'write' });
-        return made;
+        return makeDriveFolder(driveId, path);
       },
       ({ dirPath }) => [parentOf(toDrivePath(dirPath))],
     );

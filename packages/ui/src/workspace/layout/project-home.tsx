@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hubTarget } from '../../internal/stores/account-panel-store';
+import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
+import { SplitNoticeBanner } from '../settings/split-notice-banner';
 import { useTranslations } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -23,7 +24,7 @@ import {
 import { ProjectScope } from '../../internal/project-scope';
 import { useUiComponents, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import {
-  getProjectDetail,
+  getProject,
   listProjectAccessRequests,
   listProjectSandboxes,
   setProjectOnboardingComplete,
@@ -31,10 +32,11 @@ import {
   type SessionPromptOverrides,
 } from '@kortix/sdk';
 import type { AttachmentSubmission } from '../../session/composer/attachment-submission';
-import { contract, invalidateProject, qk, type Command } from '@kortix/sdk/react';
+import { contract, invalidateProject, qk, useProjectConfig, useRuntimeAgents, type Command } from '@kortix/sdk/react';
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName } from '@kortix/shared';
 import { AccessRequestsBell } from '../home/access-requests-bell';
-import { notificationCenterOn } from '../../internal/hooks/use-notification-center';
+import { NoAgentHome, type NoAgentReason } from '../home/no-agent-home';
+import { composerSelectableAgents } from '../../session/composer/composer-agent-access';
 import { FirstChat } from '../home/first-chat';
 import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
@@ -49,6 +51,9 @@ const ONBOARDING_ACTIONS = [
   PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE,
   PROJECT_ACTIONS.PROJECT_SESSION_START,
 ] as const;
+
+/** How often a home with no runnable agent re-reads the project, waiting for one. */
+const NO_AGENT_POLL_MS = 15_000;
 
 export interface ProjectHomeSendOptions extends ComposerOptions {
   sandbox_slug?: string;
@@ -180,22 +185,21 @@ function ProjectHomeView({
     refetchOnWindowFocus: false,
   });
 
-  // Same query key page.tsx (`ProjectIndexPage`) already fetches for this
-  // project — this dedupes against that cache entry rather than firing a
-  // second request. Needed here only to resolve `account_id` for the pending
-  // access requests bell below, which now routes into the account hub's
-  // Access tab (`/accounts/<id>?tab=access-projects`) instead of the deleted
-  // project Members capability tab.
-  const projectDetailQuery = useQuery({
-    queryKey: qk.project.detail(projectId),
-    queryFn: () => getProjectDetail(projectId),
+  // The bare project row (`GET /projects/:id`, one database read), the same
+  // entry page.tsx and the shell read. Not the detail: it reads the
+  // repository and can take seconds, and the home must not wait on it. It
+  // resolves `account_id` for the access-requests bell, the onboarding stamp
+  // and the notification-center flag.
+  const projectRowQuery = useQuery({
+    queryKey: qk.project.summary(projectId),
+    queryFn: () => getProject(projectId),
     enabled: !!projectId,
     ...contract('config'),
   });
-  const accountId = projectDetailQuery.data?.project?.account_id;
+  const accountId = projectRowQuery.data?.account_id;
   // The promo waits for the onboarding stamp (KRTX-2378).
   const onboarded = Boolean(
-    (projectDetailQuery.data?.project?.metadata as { onboarding_completed_at?: string } | undefined)
+    (projectRowQuery.data?.metadata as { onboarding_completed_at?: string } | undefined)
       ?.onboarding_completed_at,
   );
   // Only someone who can finish the onboarding is sent into it: the kickoff
@@ -208,25 +212,74 @@ function ProjectHomeView({
   const canSetUpProject = ONBOARDING_ACTIONS.every(
     (action) => onboardingCans[action]?.allowed === true,
   );
+  // No agent the viewer may run: every send would be refused ("No agents
+  // available to you"), so the chat area is a blocked state instead
+  // (`home/no-agent-home.tsx`). The roster is the composer's own
+  // (`useRuntimeAgents`), so the two never disagree. `undefined` while it
+  // loads: a pending roster blocks nothing.
+  const projectConfig = useProjectConfig(projectId);
+  const { data: roster } = useRuntimeAgents({ projectId });
+  const writeProbe = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_WRITE);
+  const canWriteProject = writeProbe.allowed;
+  // Waits for the permission probe too, so an owner never sees the member
+  // variant flash before the setup one.
+  const noAgent =
+    roster !== undefined && !writeProbe.isLoading && composerSelectableAgents(roster).length === 0;
+  // A member is told `restricted`, never `missing`: only someone who can read
+  // the manifest learns the repository has none, and only someone who can
+  // push gets the setup prompt.
+  const noAgentReason: NoAgentReason | null = !noAgent
+    ? null
+    : projectConfig?.manifest_health?.state === 'missing' && canWriteProject
+      ? 'setup'
+      : canWriteProject
+        ? 'empty'
+        : 'noAccess';
+  // The detail key is the prefix of the roster's key, so both re-read.
+  const recheckAgents = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: qk.project.detail(projectId) }),
+    [queryClient, projectId],
+  );
+  // A push on the upstream is seen within one mirror refresh (60 s): re-read
+  // while blocked, and when the tab regains focus (the person comes back from
+  // their editor), so the home turns into the chat by itself.
+  useEffect(() => {
+    if (!noAgent) return;
+    const timer = setInterval(recheckAgents, NO_AGENT_POLL_MS);
+    window.addEventListener('focus', recheckAgents);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', recheckAgents);
+    };
+  }, [noAgent, recheckAgents]);
   const onboarding =
-    onboardingEnabled && projectDetailQuery.isSuccess && !onboarded && canSetUpProject;
+    onboardingEnabled && projectRowQuery.isSuccess && !onboarded && canSetUpProject && !noAgent;
   // The onboarding lands on the first chat: it starts the chat (the sidebar
   // row) and moves the address to it. Rendered as the first chat from this
   // render on, so the usual home never paints in between.
+  // An old account-settings link (`?accountId=`, or a bare `?accountTab=`) is
+  // the hub router's to resolve (`account-hub-router.tsx`): replacing the
+  // address here first would drop it, and the link would land on the first
+  // chat instead of its section.
+  const hubLinkPending = Boolean(searchParams?.get(ACCOUNT_PANEL_PARAM) || searchParams?.get('accountTab'));
   useEffect(() => {
-    if (!onboarding) return;
+    if (!onboarding || hubLinkPending) return;
     useFirstChatStore.getState().start(projectId);
     if (!firstChatRequested) router.replace(firstChatHref(projectId));
-  }, [onboarding, firstChatRequested, projectId, router]);
+  }, [onboarding, hubLinkPending, firstChatRequested, projectId, router]);
   const firstChat = (firstChatPending && firstChatRequested) || onboarding;
 
-  // Once per mount: a second prefill id would send a second kickoff.
+  // Once per mount: a second prefill id would send a second kickoff. Not
+  // before the config is read: a repository that runs no agent turns the
+  // home into the setup page, and a kickoff queued before that is known
+  // would be refused.
+  const configRead = roster !== undefined;
   const kickoffQueuedRef = useRef(false);
   useEffect(() => {
-    if (!onboarding || kickoffQueuedRef.current) return;
+    if (!onboarding || !configRead || kickoffQueuedRef.current) return;
     kickoffQueuedRef.current = true;
     setPrefill({ text: tFirstChat('kickoff'), id: Date.now(), submit: 'when-ready' });
-  }, [onboarding, tFirstChat]);
+  }, [onboarding, configRead, tFirstChat]);
   // Resolved during render so the bell is an anchor and Next holds its payload
   // in the segment cache. `account_id` arrives on a different query than the
   // count, so the bell can paint before the destination exists.
@@ -385,7 +438,6 @@ function ProjectHomeView({
       <AccessRequestsBell
         requests={accessRequests.data?.requests ?? []}
         to={accessRequestsTo}
-        notificationCenter={notificationCenterOn(projectDetailQuery.data?.project)}
       />
       {/* Not while the project is in its first-chat era, and not over the
           onboarding wizard: onboarding owns those screens. The era starts when
@@ -395,15 +447,27 @@ function ProjectHomeView({
           stamps the project) can never be followed by the promo popping over
           the project page the user just asked for (KRTX-2635). On later
           projects, which the create flow stamps without a wizard, the era
-          never starts and the promo shows as before. */}
-      {firstChatPending || !onboarded || !HomeAnnouncement ? null : <HomeAnnouncement />}
+          never starts and the promo shows as before. Not over the no-agent
+          state either: that page has one job. */}
+      {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
+
+      {/* What changed when a legacy account's workspaces became their own (C9). */}
+      <div className="relative z-10 mx-auto w-full max-w-2xl px-4 pt-14 empty:hidden">
+        <SplitNoticeBanner workspaceId={projectId} />
+      </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays
           the welcome screen with the sentence held in the composer until the
           create resolves and the session route opens; the instant shell draws
           the first turn there (`useFirstPromptPreviewStore`). Painting the turn
           here left a slow or stuck create looking like a live session. */}
-      {firstChat ? (
+      {noAgentReason ? (
+        <NoAgentHome
+          reason={noAgentReason}
+          repoUrl={projectRowQuery.data?.repo_url}
+          branch={projectRowQuery.data?.default_branch}
+        />
+      ) : firstChat ? (
         <FirstChat composer={composer} />
       ) : (
         <ProjectHomeWelcomeBody

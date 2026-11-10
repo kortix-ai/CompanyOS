@@ -1,15 +1,31 @@
 /**
- * Rate-limit marked dead-credential warnings by method, normalized route,
- * status and reason. Responses and emitted message text stay unchanged.
- * A ten-minute window permits six lines per route/reason per process per hour.
- * Suppression counts are best-effort: they appear only on the next warning.
- * A final quiet burst, eviction or process restart can lose pending counts;
- * use request-completion logs or auth audits for exact refusal accounting.
+ * Rate-limit marked dead-credential refusals and agent-grant denials by
+ * method, normalized route, status and reason, and ship the throttled line at
+ * a severity that follows the window's volume. Responses and emitted message
+ * text stay unchanged. A ten-minute window permits six lines per route/reason
+ * per process per hour. Suppression counts are best-effort: they appear only
+ * on the next warning. A final quiet burst, eviction or process restart can
+ * lose pending counts; use request-completion logs or auth audits for exact
+ * refusal accounting.
  */
 import { HTTPException } from 'hono/http-exception';
 
 const WINDOW_MS = 10 * 60_000;
 const MAX_TRACKED_MESSAGES = 10_000;
+
+/**
+ * The suppressed count at which a throttled refusal line ships at `warn`
+ * instead of `info` (KRTX-4454). The steady state of this class is DESIGNED
+ * churn: every session stop leaves its box probing with a dead credential,
+ * 1-2 refusals per stop, forever — so the window trips forever and a flat
+ * warn level keeps a 0-baseline warn pattern alive that re-trips the
+ * infra-sweep's new-pattern detector every time (~10 lines/h on the
+ * audit-events route, 2026-11-07). Measured prod steady state: a pending
+ * count of 0-4 per route/reason per replica window; the KRTX-1039 storm ran
+ * ~200. Above this band is a caller ignoring the typed stop code — that
+ * stays warn.
+ */
+export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 
 const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
 
@@ -27,6 +43,9 @@ export function deadCredentialLogKey(method: string, path: string, status: numbe
 }
 
 const deadCredentials = new WeakSet<HTTPException>();
+
+// Same throttle, second mark: the agent-grant denial family (below).
+const agentGrantDenials = new WeakSet<HTTPException>();
 
 type Window = { loggedAt: number; suppressed: number };
 // replica-local: a log-noise limiter; each replica rate-limits its own lines.
@@ -89,6 +108,51 @@ export function deadCredential401(message: string): HTTPException {
 /** True for an exception `markDeadCredential` marked. */
 export function isDeadCredential(err: HTTPException): boolean {
   return deadCredentials.has(err);
+}
+
+/**
+ * Mark an exception as an agent-grant denial: a stable, caller-actionable
+ * refusal of the agent principal itself (the kortix_permissions grant, the
+ * agent ceiling, an agent-only action, a service-account role). The response
+ * already names the remedy in its typed body (`buildDenialError`), so a
+ * caller that cannot or will not act on it — an in-sandbox agent looping a
+ * denied command — receives the SAME refusal forever, and per-request logging
+ * turns its loop into a warn storm (KRTX-4635: one prod lane, 590 lines in
+ * two hours on one route, 8.8k in eight days across ~10 routes). The mark
+ * routes the LINE through the shared window throttle without touching the
+ * response, exactly as `deadCredential401` does for a dead credential.
+ * Called by `buildDenialError`, the one constructor every such refusal throws.
+ */
+export function markAgentGrantDenial(err: HTTPException): void {
+  agentGrantDenials.add(err);
+}
+
+/** True for an exception `markAgentGrantDenial` marked. */
+export function isAgentGrantDenial(err: HTTPException): boolean {
+  return agentGrantDenials.has(err);
+}
+
+/**
+ * The 401 message `resolveJwt` throws when a presented Supabase JWT fails
+ * verification (expired, bad signature, malformed) or rejects at the network
+ * fallback. Shared verbatim between every throw site and the error handler,
+ * so the throttle below cannot silently drift from what is thrown.
+ */
+export const INVALID_OR_EXPIRED_TOKEN_MESSAGE = 'Invalid or expired token';
+
+/**
+ * True for the plain 401 `resolveJwt` throws for a Supabase JWT that does not
+ * verify. Unlike a deadCredential401 the credential CAN come back (a
+ * refresh), so the response stays untouched — but a client that neither
+ * refreshes nor stops turns every refusal into a warn line (KRTX-4442: 78
+ * lines in one hour on GET /v1/auth/user, one external client retrying an
+ * expired JWT every few seconds). Route the LINE through the same per-route
+ * window throttle; the reason already differs from every dead-credential
+ * refusal, so the buckets stay separate, and `auditLoginFail` at the throw
+ * site keeps exact per-request accounting.
+ */
+export function isInvalidExpiredTokenRefusal(status: number, reason: string): boolean {
+  return status === 401 && reason === INVALID_OR_EXPIRED_TOKEN_MESSAGE;
 }
 
 /** First warning logs immediately; the next window reports pending suppression. */

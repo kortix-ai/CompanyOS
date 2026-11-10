@@ -30,6 +30,8 @@ mock.module('../shared/db', () => ({
 // mirrors the config summary's wire field: a registered agent may be disabled.
 let projectConfig: { agents: Array<{ name: string; description?: string | null; mode?: string | null; enabled?: boolean }>; agent_discovery?: string } = { agents: [] };
 mock.module('../projects/lib/git', () => ({ withProjectGitAuth: async (p: unknown) => p }));
+// No saved config summary: the governance below reads the live config.
+mock.module('../projects/surface', () => ({ savedProjectConfig: async () => null }));
 mock.module('../projects/git', () => ({
   listRepoFiles: async () => [],
   loadProjectConfig: async () => projectConfig,
@@ -50,14 +52,14 @@ beforeEach(() => {
 
 describe('currentChannelSelection', () => {
   test('returns the binding + its agent/model overrides', async () => {
-    dbResults = [[{ projectId: 'p1', agentName: 'reviewer', opencodeModel: 'anthropic/claude-opus-4-8', conversationPolicy: 'owner_approval' }]];
+    dbResults = [[{ projectId: 'p1', agentName: 'reviewer', sessionModel: 'anthropic/claude-opus-4-8', conversationPolicy: 'owner_approval' }]];
     const sel = await currentChannelSelection({ teamId: 'T1', channelId: 'C1' });
-    expect(sel).toEqual({ projectId: 'p1', agentName: 'reviewer', opencodeModel: 'anthropic/claude-opus-4-8', conversationPolicy: 'owner_approval' });
+    expect(sel).toEqual({ projectId: 'p1', agentName: 'reviewer', sessionModel: 'anthropic/claude-opus-4-8', conversationPolicy: 'owner_approval' });
   });
   test('null agent/model overrides surface as null', async () => {
-    dbResults = [[{ projectId: 'p1', agentName: null, opencodeModel: null, conversationPolicy: null }]];
+    dbResults = [[{ projectId: 'p1', agentName: null, sessionModel: null, conversationPolicy: null }]];
     const sel = await currentChannelSelection({ teamId: 'T1', channelId: 'C1' });
-    expect(sel).toEqual({ projectId: 'p1', agentName: null, opencodeModel: null, conversationPolicy: null });
+    expect(sel).toEqual({ projectId: 'p1', agentName: null, sessionModel: null, conversationPolicy: null });
   });
   test('unbound channel → null', async () => {
     dbResults = [[]];
@@ -69,7 +71,7 @@ describe('currentChannelSelection', () => {
       [{ projectId: 'p1' }],
     ];
     const sel = await currentChannelSelection({ teamId: 'T1', channelId: 'C1' });
-    expect(sel).toEqual({ projectId: 'p1', agentName: null, opencodeModel: null, conversationPolicy: null });
+    expect(sel).toEqual({ projectId: 'p1', agentName: null, sessionModel: null, conversationPolicy: null });
   });
   test('no channel id → null (no query)', async () => {
     expect(await currentChannelSelection({ teamId: 'T1', channelId: '' })).toBeNull();
@@ -98,7 +100,7 @@ describe('setChannelAgent / setChannelModel', () => {
     expect(await setChannelAgent({ teamId: 'T1', channelId: 'C1' }, null)).toEqual({ ok: true });
   });
   test('missing optional override columns returns false instead of crashing', async () => {
-    dbResults = [new Error('PostgresError: column "opencode_model" does not exist')];
+    dbResults = [new Error('PostgresError: column "model" does not exist')];
     expect(await setChannelModel({ teamId: 'T1', channelId: 'C1' }, 'anthropic/claude-opus-4-8')).toBe(false);
   });
 });

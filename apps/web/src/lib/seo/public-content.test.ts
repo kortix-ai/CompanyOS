@@ -139,7 +139,7 @@ describe('public SEO/AEO content coverage', () => {
   test('renders MDX source documents as clean agent-readable Markdown', () => {
     const resolved = resolvePublicMarkdown(['docs', 'guide.md']);
     expect(resolved?.markdown).toContain(
-      'A plain-language guide to Kortix',
+      'What each part of Kortix CompanyOS does',
     );
     // The developer reference is its own page, apart from the Guide.
     expect(resolvePublicMarkdown(['docs', 'developers.md'])?.markdown).toContain('## Quickstart');
@@ -267,6 +267,9 @@ Run the install script.
     }
     expect(showsMarketingLink('/services')).toBe(false);
     expect(urls.has(absoluteUrl('/case-studies'))).toBe(true);
+    // The two public pages that are not content records.
+    expect(urls.has(absoluteUrl('/a1o'))).toBe(true);
+    expect(urls.has(absoluteUrl('/changelog/releases'))).toBe(true);
     expect(
       [...urls].every((url) => url.startsWith(CANONICAL_ORIGIN) && !url.includes('www.')),
     ).toBe(true);

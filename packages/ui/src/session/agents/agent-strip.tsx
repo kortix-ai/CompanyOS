@@ -6,7 +6,7 @@ import { CountBadge } from '../../primitives/count-badge';
 import { Hint } from '../../primitives/hint';
 import Loading from '../../primitives/loading';
 import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popover';
-import { Tabs, TabsContent, TabsListCompact, TabsTriggerCompact } from '../../primitives/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import { agentDisplayName } from '../../internal/components/agent-mark';
@@ -20,13 +20,15 @@ import { stopProjectSession, type SessionTask, type WorkflowRunMetadata } from '
 import {
   qk,
   useFeatureFlag,
+  useNow,
   useSessionChildren,
   useSessionWorkflows,
   useTeamTasks,
   useTeammates,
 } from '@kortix/sdk/react';
 import { countAgents, parseWorkflowRun, type WorkflowRun, type WorkflowRunAgent } from '../tool/tools/workflow-run';
-import { WorkflowProgress, type AgentStopState } from '../tool/tools/workflow-progress';
+import { RunProgressRing, type AgentStopState } from '../tool/tools/workflow-progress';
+import { WorkflowRunRows } from '../tool/tools/workflow-run-card';
 import {
   isActive,
   lineSummary,
@@ -41,7 +43,6 @@ import {
   isLargeRun,
   LargeRunBadge,
   useLiveWorkflowRun,
-  useNow,
   useRestartAgent,
   WorkflowRunControls,
 } from './workflow-run-controls';
@@ -157,6 +158,25 @@ export function AgentsLineView({
 
   if (rows.length === 0 && runs.length === 0) return null;
 
+  // One agent and nothing else to list: the line opens it, not a one-row popover.
+  const only = rows.length === 1 && runs.length === 0 && !tasks ? rows[0]! : null;
+  if (only) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        data-testid="agents-line"
+        aria-label={t('openAgent', { name: only.handle })}
+        onClick={() => onOpen({ sessionId: only.sessionId, title: only.handle })}
+        className="text-muted-foreground hit-area-y-3 min-w-0 shrink gap-1.5 rounded-lg px-2 text-xs font-normal tabular-nums"
+      >
+        <AgentStateMark state={LINE_STATE[summary.mark]} />
+        <span className="max-w-64 min-w-0 truncate">{text}</span>
+      </Button>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -217,7 +237,7 @@ export interface AgentsPanelProps extends Omit<AgentsLineViewProps, 'compact' | 
 export function AgentsPanel({ projectId, sessionId, agents, team, runs, tasks, onOpen, onStop, stopping, live }: AgentsPanelProps) {
   const t = useTranslations('multiAgent.strip');
   const anyWorking = live && [...agents, ...team].some((row) => row.state === 'working');
-  const now = useNow(anyWorking);
+  const now = useNow(1_000, anyWorking);
   const sections = [agents.length > 0, team.length > 0, runs.length > 0].filter(Boolean).length;
 
   const renderRows = (list: AgentRow[], teammate: boolean) => (
@@ -272,13 +292,13 @@ export function AgentsPanel({ projectId, sessionId, agents, team, runs, tasks, o
         <TasksPanel tasks={tasks} />
       </TabsContent>
       <div className="border-t p-1">
-        <TabsListCompact animate="none" className="w-full">
-          <TabsTriggerCompact value="agents">{t('label')}</TabsTriggerCompact>
-          <TabsTriggerCompact value="tasks" className="gap-1.5">
+        <TabsList size="xs" animate="none" className="w-full">
+          <TabsTrigger value="agents">{t('label')}</TabsTrigger>
+          <TabsTrigger value="tasks" className="gap-1.5">
             {t('tasks')}
             {openTasks > 0 && <CountBadge count={openTasks} />}
-          </TabsTriggerCompact>
-        </TabsListCompact>
+          </TabsTrigger>
+        </TabsList>
       </div>
     </Tabs>
   );
@@ -416,7 +436,7 @@ function WorkflowLineRow({
   const [open, setOpen] = useState(false);
   // A background run's progress is read from its runner, so it keeps moving after this turn ended.
   const { run, controlSessionId } = useLiveWorkflowRun(projectId, sessionId, listed);
-  const now = useNow(open && run?.status === 'running');
+  const now = useNow(1_000, open && run?.status === 'running');
   const restart = useRestartAgent(projectId, controlSessionId, run);
   const queryClient = useQueryClient();
   const stopAgent = useMutation({
@@ -451,7 +471,12 @@ function WorkflowLineRow({
           onClick={() => setOpen((value) => !value)}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 pl-2 text-left text-xs outline-none"
         >
-          <AgentStateMark state={RUN_STATE[run.status]} />
+          <RunProgressRing
+            done={counts.done}
+            failed={counts.failed}
+            total={Math.max(counts.total, 1)}
+            ended={run.status === 'done' ? 'done' : run.status === 'stopped' ? 'stopped' : undefined}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="text-foreground min-w-0 truncate font-medium" title={title}>
@@ -488,13 +513,12 @@ function WorkflowLineRow({
       </div>
       {open && run.agents.length > 0 && (
         <div className="pl-5">
-          <WorkflowProgress
+          {/* The same rows as the run's card in the chat. */}
+          <WorkflowRunRows
             run={run}
             live={live}
             now={now}
-            onOpen={(agent) =>
-              agent.sessionId && onOpen({ sessionId: agent.sessionId, title: agent.agent ? `${agent.label} · ${agent.agent}` : agent.label })
-            }
+            onOpen={(agent) => agent.sessionId && onOpen({ sessionId: agent.sessionId, title: agent.label })}
             stop={stop}
           />
         </div>

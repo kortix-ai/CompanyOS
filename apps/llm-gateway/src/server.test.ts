@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 
 // `config` (imported transitively by `./server`) reads required env vars at
 // module-load time — set them before the dynamic import below so this file
@@ -198,6 +198,71 @@ describe('standalone gateway inference routes', () => {
   }, 30_000);
 });
 
+// KRTX-4427: an OpenAI-compatible client picks its model from `GET /v1/models`.
+// Unscoped, that route served the whole discovery catalog as a `{models:{}}`
+// map, so a key with no plan and no provider got thousands of ids that all
+// answer 400. Unscoped now lists only what the key's project offers (the
+// `scope=picker` set) in the OpenAI list shape; `scope=all` keeps the catalog.
+describe('standalone model listing', () => {
+  const { app } = buildServer();
+  const PICKER = {
+    'kortix/callable': { name: 'Callable', provider: 'kortix', enabled: true },
+    'openai/turned-off': { name: 'Turned off', provider: 'openai', enabled: false },
+    'anthropic/not-connected': { name: 'Not connected', provider: 'anthropic', enabled: true, available: false },
+  };
+  const ALL = { ...PICKER, 'acme/needs-a-key': { name: 'Needs a key', availability: 'provider' } };
+
+  // Only the API's internal endpoints are faked; routes, gateway and API client run for real.
+  async function list(path: string) {
+    const asked: unknown[] = [];
+    const api = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/internal/gateway/authenticate')) {
+        return Response.json({ principal: { userId: 'u', accountId: 'a', projectId: 'p' } });
+      }
+      if (url.endsWith('/internal/gateway/models')) {
+        const body = JSON.parse(String(init?.body)) as { managedOnly: boolean; scope?: string };
+        asked.push({ managedOnly: body.managedOnly, scope: body.scope });
+        return Response.json({ models: body.scope === 'picker' ? PICKER : ALL });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }, { preconnect: globalThis.fetch.preconnect }));
+    try {
+      const res = await app.request(path, { headers: { authorization: 'Bearer kortix_gw_test' } });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown>, asked };
+    } finally {
+      api.mockRestore();
+    }
+  }
+
+  for (const path of ['/models', '/v1/models', '/v1/llm/models', '/v1/openai/models', '/v1/models?scope=unknown']) {
+    test(`${path} lists only the models the key can call, in the OpenAI list shape`, async () => {
+      const { status, body, asked } = await list(path);
+      expect(status).toBe(200);
+      expect(asked).toEqual([{ managedOnly: false, scope: 'picker' }]);
+      expect(body).toEqual({
+        object: 'list',
+        data: [{ id: 'kortix/callable', object: 'model', created: 0, owned_by: 'kortix', name: 'Callable', provider: 'kortix', enabled: true }],
+      });
+    });
+  }
+
+  test('scope=all keeps the full discovery catalog as the keyed map', async () => {
+    const { body, asked } = await list('/v1/models?scope=all');
+    expect(asked).toEqual([{ managedOnly: false, scope: undefined }]);
+    expect(body).toEqual({ models: ALL });
+  });
+
+  test('scope=picker and scope=managed keep the keyed map sandboxes read at boot', async () => {
+    const picker = await list('/v1/models?scope=picker');
+    expect(picker.asked).toEqual([{ managedOnly: false, scope: 'picker' }]);
+    expect(picker.body).toEqual({ models: PICKER });
+    const managed = await list('/v1/models?scope=managed');
+    expect(managed.asked).toEqual([{ managedOnly: true, scope: undefined }]);
+    expect(managed.body).toEqual({ models: ALL });
+  });
+});
+
 describe('cloudflareSafe', () => {
   test('maps a JSON 502 to 503, keeps the original status in header and body, sets retry-after', async () => {
     const res = await cloudflareSafe(
@@ -339,9 +404,10 @@ describe('standalone image routes', () => {
   function imageApp(inflight = new InflightBudget({ maxBytes: 1024 * 1024, perRequestMaxBytes: 1024 * 1024, amplification: 1 })) {
     const calls: { authorization: string | undefined; rawBody: string; operation: string }[] = [];
     const unused = async (): Promise<Response> => { throw new Error('not an image route'); };
-    const app = new Hono();
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
     registerRoutes(app, {
       chatCompletions: unused, messages: unused, responses: unused, listModels: unused, claudeCode: unused,
+      audio: unused, voices: unused,
       images: async (request) => {
         calls.push({ authorization: request.authorization, rawBody: request.rawBody, operation: request.operation });
         return Response.json({ data: [{ b64_json: 'AAAA' }] });
@@ -378,13 +444,79 @@ describe('standalone image routes', () => {
   });
 });
 
+describe('standalone audio routes', () => {
+  function audioApp(inflight = new InflightBudget({ maxBytes: 1024 * 1024, perRequestMaxBytes: 1024 * 1024, amplification: 1 })) {
+    const calls: { operation: string; authorization: string | undefined; contentType: string; body: Uint8Array<ArrayBuffer> }[] = [];
+    const voices: { authorization: string | undefined; model: string }[] = [];
+    const unused = async (): Promise<Response> => { throw new Error('not an audio route'); };
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
+    registerRoutes(app, {
+      chatCompletions: unused, messages: unused, responses: unused, listModels: unused, images: unused, claudeCode: unused,
+      audio: async (request) => {
+        calls.push({ operation: request.operation, authorization: request.authorization, contentType: request.contentType, body: request.body });
+        return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/pcm' } });
+      },
+      voices: async (request) => {
+        voices.push({ authorization: request.authorization, model: request.model });
+        return Response.json({ object: 'list', data: [] });
+      },
+    }, inflight, () => {}, () => null);
+    return { app, calls, voices, inflight };
+  }
+
+  test('a multipart upload reaches gateway.audio byte for byte, on every alias prefix', async () => {
+    const { app, calls, inflight } = audioApp();
+    // Bytes that are not valid UTF-8: a text decode would replace them.
+    const audioBytes = new Uint8Array([0xff, 0xfe, 0x00, 0x80, 0xc3]);
+    const form = new FormData();
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('file', new File([audioBytes], 'clip.wav', { type: 'audio/wav' }));
+    const upload = new Request('http://gateway/v1/audio/transcriptions', { method: 'POST', body: form });
+    const contentType = upload.headers.get('content-type')!;
+    const bytes = new Uint8Array(await upload.arrayBuffer());
+    for (const path of ['/audio/transcriptions', '/v1/audio/transcriptions', '/v1/llm/audio/transcriptions', '/v1/openai/audio/transcriptions']) {
+      const res = await app.request(path, { method: 'POST', headers: { authorization: 'Bearer t', 'content-type': contentType }, body: bytes });
+      expect(res.status).toBe(200);
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    }
+    expect(calls).toHaveLength(4);
+    for (const call of calls) {
+      expect(call).toMatchObject({ operation: 'transcriptions', authorization: 'Bearer t', contentType });
+      expect(call.body).toEqual(bytes);
+    }
+    const parsed = await new Response(calls[0]!.body, { headers: { 'content-type': contentType } }).formData();
+    expect(new Uint8Array(await (parsed.get('file') as File).arrayBuffer())).toEqual(audioBytes);
+    expect(inflight.inflightBytes).toBe(0);
+  });
+
+  test('speech reaches gateway.audio with operation speech; voices reads ?model=', async () => {
+    const { app, calls, voices } = audioApp();
+    const body = JSON.stringify({ model: 'tts-x', input: 'hello', voice: 'v1' });
+    expect((await app.request('/v1/audio/speech', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(200);
+    expect(calls.map((call) => [call.operation, new TextDecoder().decode(call.body)])).toEqual([['speech', body]]);
+    expect((await app.request('/v1/llm/audio/voices?model=tts-x', { headers: { authorization: 'Bearer t' } })).status).toBe(200);
+    expect(voices).toEqual([{ authorization: 'Bearer t', model: 'tts-x' }]);
+  });
+
+  test('an oversized upload is 413 before gateway.audio runs', async () => {
+    const { app, calls, inflight } = audioApp(new InflightBudget({ maxBytes: 1024, perRequestMaxBytes: 1024, amplification: 1 }));
+    const res = await app.request('/v1/audio/transcriptions', {
+      method: 'POST', headers: { 'content-length': '1025' }, body: 'x'.repeat(1025),
+    });
+    expect(res.status).toBe(413);
+    expect(calls).toHaveLength(0);
+    expect(inflight.inflightBytes).toBe(0);
+  });
+});
+
 describe('standalone Claude Code passthrough routes', () => {
   function claudeApp() {
     const calls: Array<{ method: string; path: string; search: string; body: string | null; auth: string | null }> = [];
     const unused = async (): Promise<Response> => { throw new Error('not a Claude Code route'); };
-    const app = new Hono();
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
     registerRoutes(app, {
       chatCompletions: unused, messages: unused, responses: unused, listModels: unused, images: unused,
+      audio: unused, voices: unused,
       claudeCode: async (request) => {
         calls.push({ method: request.method, path: request.path, search: request.search,
           body: request.body ? new TextDecoder().decode(request.body) : null, auth: request.headers.get('authorization') });

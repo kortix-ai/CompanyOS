@@ -44,6 +44,9 @@ import {
   isLaunchableAgentName,
   loadProjectAgents,
 } from '../agents';
+import { isMyKortixAgentName } from '@kortix/shared';
+import { errorMessage } from '../../shared/error-message';
+import { readColleagueAccess, withColleagueAccess } from './colleague-access';
 
 /**
  * The grant could not be resolved (manifest unreadable, loader threw). Callers
@@ -58,7 +61,7 @@ export class SecretGrantResolutionError extends Error {
   ) {
     super(
       `could not resolve the secrets grant for agent '${agentName}': ${
-        cause instanceof Error ? cause.message : String(cause)
+        errorMessage(cause)
       }`,
       { cause },
     );
@@ -70,7 +73,7 @@ export class SecretGrantResolutionError extends Error {
  * Which agent a prompt actually runs.
  *
  * The `'default'` sentinel is non-binding on the request side: the proxy strips
- * it from the body so OpenCode resolves its own `default_agent`, i.e. the agent
+ * it from the body so the runtime resolves its own `default_agent`, i.e. the agent
  * the session booted with. So it resolves to the session's own agent, NOT to a
  * fresh sentinel lookup — otherwise a session bound to a concrete agent would
  * have its grant recomputed against `'default'` on every ordinary turn.
@@ -152,7 +155,7 @@ function grantAppsKey(apps: string[] | 'all' | undefined): string {
  *
  *     create session with agent A (connectors: all)
  *     prompt {"agent": "B"} where B declares connectors: [calendar]
- *       -> opencode runs B
+ *       -> the runtime runs B
  *       -> the token still carries A's grant
  *       -> B calls A's connectors, including ones its own manifest denies it
  *
@@ -214,6 +217,8 @@ export interface SessionSecretGrantInput {
   manifestPath: string | null | undefined;
   /** The agent this session is bound to (`project_sessions.agent_name`). */
   sessionAgent: string;
+  /** The session itself: a My Kortix colleague's allowed list is read by it (colleague-access.ts). */
+  sessionId?: string | null;
   /** The agent this prompt asked to run, when the caller is a prompt. Omit at
    *  boot — the session's own agent is the one that runs. */
   requestedAgent?: string | null;
@@ -322,8 +327,13 @@ async function loadGrantForRunningAgent(
     throw new SecretGrantResolutionError(runningAgent, err);
   }
 
-  const env = secretGrantEnvForRunningAgent(loaded, runningAgent);
-  return { grant: withGrantProvenance(grantFromLoadedAgents(runningAgent, loaded), loaded), env };
+  const grant = withGrantProvenance(grantFromLoadedAgents(runningAgent, loaded), loaded);
+  // A My Kortix colleague also holds the list a person allowed it (colleague-access.ts).
+  if (grant && input.sessionId && isMyKortixAgentName(runningAgent)) {
+    const colleague = withColleagueAccess(grant, await readColleagueAccess(input.sessionId));
+    return { grant: colleague, env: colleague.env };
+  }
+  return { grant, env: secretGrantEnvForRunningAgent(loaded, runningAgent) };
 }
 
 /**

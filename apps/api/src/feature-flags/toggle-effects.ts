@@ -10,9 +10,9 @@
  * the API response does not wait for them. Every effect is retried once and
  * failures are logged at error level with the flag + project; the reconcilers
  * they call are themselves idempotent. The connector and event-subscription
- * ones re-run on their periodic sweeps. The `project_channels` backfill re-runs
+ * ones re-run on their periodic sweeps. The `chat` backfill re-runs
  * only from the call that creates `#general` (`ensureDefaultSpace`: a channel
- * list, a session create or a warm claim): a failure after `#general` exists is
+ * list or a session create): a failure after `#general` exists is
  * not retried until the flag is toggled again.
  */
 import type { FeatureFlagKey } from '@kortix/api-contract';
@@ -22,7 +22,6 @@ import {
   reconcileEventSubscriptionsFromCatalog,
   recordChannelsReenabled,
   releaseProjectEventSubscriptions,
-  retireWarmProjectSessions,
   turnOnChannels,
 } from '../projects/surface';
 import { resolveFeatureFlag } from './registry';
@@ -63,10 +62,10 @@ const TOGGLE_EFFECTS: Partial<Record<FeatureFlagKey, ToggleEffect>> = {
   // project's members (no intro on a second turn-on) and record the `#general` line with the count.
   // A `#general` made after the write (a channel list in the window before this effect) is a first on.
   // Both: running threads' /drives/README.md gains or drops its channel section (that never throws).
-  project_channels: async ({ projectId, accountId, metadata, previousMetadata, writtenAt }) => {
-    if (resolveFeatureFlag(metadata, 'project_channels')) {
+  chat: async ({ projectId, accountId, metadata, previousMetadata, writtenAt }) => {
+    if (resolveFeatureFlag(metadata, 'chat')) {
       const { generalCreatedAt, filed } = await turnOnChannels(projectId, accountId);
-      if (writtenAt && generalCreatedAt < writtenAt && !resolveFeatureFlag(previousMetadata, 'project_channels')) {
+      if (writtenAt && generalCreatedAt < writtenAt && !resolveFeatureFlag(previousMetadata, 'chat')) {
         await recordChannelsReenabled({ accountId, projectId }, filed, writtenAt);
       }
     }
@@ -94,13 +93,8 @@ export async function toggleEffectsSettled(): Promise<void> {
 }
 
 async function runWithRetry(ctx: FeatureFlagToggleContext): Promise<void> {
-  // Every flag reaches the box as boot-only env (KORTIX_FEATURE_FLAGS): a warm box
-  // from before the change must not be adopted, or its skills and CLI keep the old flag.
-  const own = TOGGLE_EFFECTS[ctx.key];
-  const effect: ToggleEffect = async (c) => {
-    await retireWarmProjectSessions(c.projectId);
-    if (own) await own(c);
-  };
+  const effect = TOGGLE_EFFECTS[ctx.key];
+  if (!effect) return;
   try {
     await effect(ctx);
     return;
@@ -111,7 +105,7 @@ async function runWithRetry(ctx: FeatureFlagToggleContext): Promise<void> {
     } catch (second) {
       console.error(
         `[feature-flags] toggle effect failed twice for '${ctx.key}' on project ${ctx.projectId}; ` +
-          'not retried here: connectors and event subscriptions converge on their periodic sweeps; project_channels converges only if #general did not exist yet (the call that creates it files unassigned sessions), else on the next toggle',
+          'not retried here: connectors and event subscriptions converge on their periodic sweeps; chat converges only if #general did not exist yet (the call that creates it files unassigned sessions), else on the next toggle',
         second instanceof Error ? second.message : second,
         first instanceof Error ? `(first attempt: ${first.message})` : '',
       );

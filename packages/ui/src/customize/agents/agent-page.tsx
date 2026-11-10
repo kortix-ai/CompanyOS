@@ -4,13 +4,13 @@ import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
 import { adminPath } from '../../lib/routes';
 
 /**
- * /projects/[id]/customize/agents/[name]: one agent, as a page with a rail.
+ * /workspaces/[id]/admin/agents/[name]: one agent, as a page with a rail, in the Workspace settings pane.
  *
  * Customize is agent-first. My Kortix is the one agent a person talks to; every
  * other agent is a work product with only the access its work needs. So the
  * page is the agent: one identity header, one rail, and room to edit.
  *
- *   ┌ Agents › ▣ Researcher  Default         [Share] [Start session] [⋯] ┐
+ *   ┌ Agents › ▣ Researcher  Default  [Share] [Call] [Start session] [⋯] ┐
  *   ├ General      ┬ the row's content, one centered column              ┤
  *   │  Overview    │                                                     │
  *   │  Basics      │                                                     │
@@ -64,6 +64,7 @@ import { useLocale, useTranslations as useI18nTranslations } from '../../i18n';
 import { AgentMark, agentDisplayName } from '../../internal/components/agent-mark';
 import { useAgentConfig, useUpdateAgentConfig } from '../../internal/hooks/projects/use-agent-config';
 import { useNewProjectSession } from '../../internal/hooks/projects/use-new-project-session';
+import { AgentCallButton } from '../../session/voice/voice-call';
 import { agentHref, capabilityTabHref } from '../../internal/lib/capability-tab-routes';
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectCan } from '../../internal/lib/use-project-can';
@@ -79,7 +80,7 @@ import {
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
 import Hint from '../../primitives/hint';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { errorToast, successToast } from '../../primitives/toast';
 import { UiLink as Link, useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import { configEntitySourcePath } from '../sections/component/config-entity-source-path';
@@ -122,7 +123,6 @@ import {
 } from './agent-page-chrome';
 import { AgentModelView } from './agent-model-view';
 import { AgentApprovalRules } from './agent-approval-rules';
-import { AgentPinButton } from './agent-pin-button';
 import { AgentShareControl } from './agent-share-control';
 import {
   ACCESS_VIEWS,
@@ -356,7 +356,7 @@ function useAgentUseCounts(projectId: string, agentName: string, config: Project
     ...contract('inventory'),
   });
   // A trigger stored as `default` starts the project's default agent.
-  const fallback = config.default_agent ?? config.open_code_default_agent ?? null;
+  const fallback = config.default_agent ?? null;
   return {
     triggerCount: triggers.data
       ? triggers.data.triggers.filter(
@@ -406,7 +406,7 @@ function HeaderBadges({ agent, config, block }: { agent: Agent; config: ProjectC
   const tPage = useI18nTranslations('agentEditor.page');
   const enabled = block.enabled !== false;
   const mode = (block.behavior?.mode ?? agent.mode ?? 'primary').toLowerCase();
-  const isDefault = (config.default_agent ?? config.open_code_default_agent) === agent.name;
+  const isDefault = config.default_agent === agent.name;
   return (
     <>
       {isDefault ? (
@@ -544,8 +544,10 @@ function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }
 // ─── Header actions ──────────────────────────────────────────────────────────
 
 /**
- * Share, Start session, and the ⋯ menu. Share renders for everyone and gates
+ * Share, Call, Start session, and the ⋯ menu. Share renders for everyone and gates
  * itself on `project.members.manage`. The ⋯ menu needs `project.agent.write`.
+ * Call (behind the project's `voice_call` flag) starts a session on this agent
+ * with its call open, so it is offered only where Start session is.
  * Start session boots a session
  * on THIS agent through the sidebar's New session hook. A subagent is called
  * by other agents, never picked for a session, so its button is disabled with
@@ -571,7 +573,7 @@ function AgentActions({
   const configure = useConfigureThread(projectId);
   const makeDefault = useDefaultAgent(projectId);
   const [confirm, setConfirm] = useState<'edit' | 'delete' | null>(null);
-  const isDefault = (config.default_agent ?? config.open_code_default_agent) === agent.name;
+  const isDefault = config.default_agent === agent.name;
   const mode = agent.mode?.toLowerCase();
   const startBlocked =
     agent.enabled === false
@@ -605,8 +607,9 @@ function AgentActions({
 
   return (
     <>
-      <AgentPinButton projectId={projectId} agent={agent.name} />
       <AgentShareControl projectId={projectId} agentName={agent.name} open={share.open} onOpenChange={share.setOpen} />
+      {/* A call starts its own session on this agent, so it is offered where Start session is. */}
+      {startBlocked ? null : <AgentCallButton projectId={projectId} agentName={agent.name} />}
       {startBlocked ? (
         <Hint label={startBlocked}>
           <span className="inline-flex">{start}</span>
@@ -767,7 +770,7 @@ function EditableAgentPage({
   );
   const policySetControl = useAgentPolicySetControls(projectId, editor, policySetOptions);
   const surface = { kind: 'agent', agentName: agent.name } as const;
-  const defaultAgent = config.default_agent ?? config.open_code_default_agent;
+  const defaultAgent = config.default_agent;
   const name = agentDisplayName(agent.name);
   const sourcePath = editor.draft.file ?? configEntitySourcePath(agent.path);
 
@@ -1060,9 +1063,9 @@ function ReadOnlyAgentPage({
   // A reader has a page for Kortix permissions and Model only. Every other
   // Access row shows its grant by name on the Overview and links nowhere.
   const banner = (
-    <InfoBanner tone="neutral" icon={LockSimpleIcon} title={t('readOnlyTitle')}>
+    <BannerAlert variant="default" ><BannerAlertMedia><LockSimpleIcon /></BannerAlertMedia><BannerAlertTitle>{t('readOnlyTitle')}</BannerAlertTitle><BannerAlertDescription>
       {t.rich('readOnlyBody', { code: (chunks) => <span className="font-mono">{chunks}</span> })}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   );
 
   const body = (() => {
@@ -1128,7 +1131,7 @@ function ReadOnlyAgentPage({
             <TriggersPage
               projectId={projectId}
               surface={{ kind: 'agent', agentName: agent.name }}
-              defaultAgent={config.default_agent ?? config.open_code_default_agent}
+              defaultAgent={config.default_agent}
             />
           </Embedded>
         );

@@ -4,12 +4,14 @@ import { ApiError, clientFromAuth } from '../api/client.ts';
 import { activeHostEntry, defaultProject, getHost, listHosts } from '../api/config.ts';
 import type { AccountMembership, MeResponse } from '../api/types.ts';
 import { takeFlags } from '../command-argv.ts';
-import { emitJson, takeFlagBool, takeFlagValue, tokenRejectedLine } from '../command-helpers.ts';
+import { takeFlagBool, takeFlagValue, tokenRejectedLine } from '../command-helpers.ts';
 import { C, help, status } from '../style.ts';
+import { NO_WORKSPACE_LINE } from '../api/no-workspace.ts';
+import { boundWorkspaceId, listWorkspaceRowsReport } from '../project-bind.ts';
 
 const HELP = help`Usage: kortix whoami [options]
 
-Print the currently authenticated user + active account on the
+Print the currently authenticated user + default workspace on the
 selected host.
 
 Shortcut for the active host — same as \`kortix hosts whoami\`. Use
@@ -21,6 +23,81 @@ Options:
   --token-only      Print only the active token context.
   -h, --help        Show this help.
 `;
+
+/** The most memberships `whoami --json` lists; the rest is a count (`accounts_total`). */
+export const WHOAMI_ACCOUNTS_CAP = 50;
+
+/** The serialized-bytes ceiling of the whole `--json` output, inside the MCP
+ *  tool's 45 000-byte stdout capture (`STDOUT_CAP`, apps/api/src/mcp/cli.ts):
+ *  a capture cut at the cap is not valid JSON at all. Names are UTF-8
+ *  multi-byte, so the widest valid one (255 astral chars, the DB's
+ *  varchar(255)) is ~1.3 kB on its own — a count cap alone does not bound it. */
+export const WHOAMI_JSON_MAX_BYTES = 40_000;
+
+/** The accounts list for `--json`: the active account first, then the rest,
+ *  capped at WHOAMI_ACCOUNTS_CAP entries. */
+export function boundedAccounts(
+  accounts: AccountMembership[],
+  active: AccountMembership | undefined,
+): AccountMembership[] {
+  const ordered = accounts.length && active ? [active, ...accounts.filter((a) => a.account_id !== active.account_id)] : accounts;
+  return ordered.slice(0, WHOAMI_ACCOUNTS_CAP);
+}
+
+/** The exact `--json` output text (`emitJson`'s format), with the accounts list
+ *  bounded twice over: at most WHOAMI_ACCOUNTS_CAP entries (active first) and
+ *  within WHOAMI_JSON_MAX_BYTES serialized. A list cut by either bound reports
+ *  `accounts_total` (the full membership count) and always keeps the active
+ *  account. */
+export function renderWhoamiJson(
+  me: MeResponse,
+  auth: Auth,
+  resolvedHost: string | null,
+  active: AccountMembership | undefined,
+  def: DefaultProjectRef | null,
+): string {
+  const payload: {
+    host: string | null;
+    url: string;
+    user_id: string;
+    user_email: string | null;
+    workspace_id: string | null;
+    account_id: string | null;
+    account: AccountMembership | null;
+    accounts: AccountMembership[];
+    token_context: MeResponse['token_context'] | null;
+    default_project: DefaultProjectRef | null;
+    accounts_total?: number;
+  } = {
+    host: resolvedHost ?? null,
+    url: auth.api_base,
+    user_id: me.user_id,
+    user_email: me.email || null,
+    workspace_id: boundWorkspaceId(me) ?? def?.project_id ?? null,
+    account_id: active?.account_id ?? auth.account_id ?? null,
+    account: active ?? null,
+    accounts: boundedAccounts(me.accounts, active),
+    token_context: me.token_context ?? null,
+    default_project: def,
+  };
+  // A cut list (by entry count or by bytes) names the full membership count;
+  // a full list leaves the field off. The field is part of the measured text:
+  // it is in place before every size measurement, so the ceiling holds on the
+  // whole payload, not on everything but the last field.
+  const total = me.accounts.length;
+  const cut = () => void (total > payload.accounts.length && (payload.accounts_total = total));
+  cut();
+  let text = JSON.stringify(payload, null, 2);
+  while (
+    new TextEncoder().encode(text).length > WHOAMI_JSON_MAX_BYTES &&
+    payload.accounts.length > 1
+  ) {
+    payload.accounts.pop();
+    cut();
+    text = JSON.stringify(payload, null, 2);
+  }
+  return text;
+}
 
 export async function runWhoami(argv: string[]): Promise<number> {
   const flags = takeFlags(argv, HELP, (rest) => ({
@@ -40,7 +117,7 @@ export async function runWhoami(argv: string[]): Promise<number> {
 const TOKEN_HELP = help`Usage: kortix token [options]
 
 Print only the active token context on the selected host: the kind of
-credential in use and its project/session/agent grants — never the
+credential in use and its workspace/session/agent grants — never the
 secret value itself. Same as \`kortix whoami --token-only\`.
 
 Options:
@@ -94,7 +171,7 @@ export async function performWhoami(opts: PerformWhoamiOptions): Promise<number>
 
   let me: MeResponse;
   try {
-    me = await clientFromAuth(auth).get<MeResponse>('/accounts/me');
+    me = await clientFromAuth(auth).get<MeResponse>('/me');
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       process.stderr.write(`${status.err(tokenRejectedLine(err.message))}\n`);
@@ -117,8 +194,29 @@ export async function performWhoami(opts: PerformWhoamiOptions): Promise<number>
     whoamiTokenOnly(me);
     return 0;
   }
-  whoamiHuman(me, auth, resolvedHost, active, def);
+  whoamiHuman(me, auth, resolvedHost, active, def, await hasAnyWorkspace(auth, me, def));
   return 0;
+}
+
+/**
+ * Tell "pick one" apart from "none exists" from `/accounts/me` alone: a bound
+ * credential, a default, or a membership that names its workspace all mean
+ * one exists. Only memberships that name none (an account with no project,
+ * or several older projects) need the list read, and a failed read never
+ * claims "none".
+ */
+async function hasAnyWorkspace(auth: Auth, me: MeResponse, def: DefaultProjectRef | null): Promise<boolean> {
+  if (boundWorkspaceId(me) || def) return true;
+  if (me.accounts.length === 0) return false;
+  if (me.accounts.some((a) => a.workspace_id)) return true;
+  // An older server reports no workspace_id at all: an account is enough.
+  if (me.accounts.every((a) => a.workspace_id === undefined)) return true;
+  try {
+    const report = await listWorkspaceRowsReport(auth, undefined, me);
+    return report.rows.length > 0 || report.failed.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 /** The machine-readable rendering (`--json`): the raw identity payload. */
@@ -129,17 +227,11 @@ function whoamiJson(
   active: AccountMembership | undefined,
   def: DefaultProjectRef | null,
 ): void {
-  emitJson({
-    host: resolvedHost ?? null,
-    url: auth.api_base,
-    user_id: me.user_id,
-    user_email: me.email || null,
-    account_id: active?.account_id ?? auth.account_id ?? null,
-    account: active ?? null,
-    accounts: me.accounts,
-    token_context: me.token_context ?? null,
-    default_project: def,
-  });
+  // The payload is bounded in full (renderWhoamiJson): whoami is an identity
+  // answer, not an account listing, and a payload that grows with membership
+  // count breaks the machines that read it (the MCP tool's whole-reply budget,
+  // 2026-11-09 release gate).
+  process.stdout.write(`${renderWhoamiJson(me, auth, resolvedHost, active, def)}\n`);
 }
 
 /** The `--token-only` rendering: just the active token's context block. */
@@ -157,32 +249,42 @@ function whoamiTokenOnly(me: MeResponse): void {
   process.stdout.write('\n');
 }
 
-/** The default human rendering: identity, account, then the token context. */
+/** The default human rendering: identity, workspace, then the token context. */
 function whoamiHuman(
   me: MeResponse,
   auth: Auth,
   resolvedHost: string | null,
   active: AccountMembership | undefined,
   def: DefaultProjectRef | null,
+  hasWorkspace = me.accounts.length > 0,
 ): void {
   process.stdout.write(`\n  ${C.bold}${me.email || me.user_id}${C.reset}\n`);
   if (me.email) {
     process.stdout.write(`  ${C.dim}email     ${C.reset}${me.email}\n`);
   }
   process.stdout.write(`  ${C.dim}user_id   ${C.reset}${me.user_id}\n`);
-  if (active) {
+  const bound = boundWorkspaceId(me);
+  if (bound) {
+    // A workspace key, session or agent token reaches one workspace.
+    const owner = me.accounts.find((a) => a.workspace_id === bound);
+    const label = owner?.name ? `${owner.name} ${C.faded}(${bound}, ${owner.role ? `${owner.role}, ` : ''}bound)${C.reset}` : `${bound} ${C.faded}(bound)${C.reset}`;
+    process.stdout.write(`  ${C.dim}workspace ${C.reset}${label}\n`);
+  } else if (!hasWorkspace) {
+    // A new user belongs to no workspace: say how to get one.
+    process.stdout.write(`  ${C.dim}workspace ${C.reset}${C.dim}${NO_WORKSPACE_LINE}${C.reset}\n`);
+  } else if (def) {
+    const role = active && active.account_id === def.account_id ? `${active.role}, ` : '';
     process.stdout.write(
-      `  ${C.dim}account   ${C.reset}${active.name} ${C.faded}(${active.slug}, ${active.role})${C.reset}\n`,
+      `  ${C.dim}workspace ${C.reset}${def.name || def.project_id} ${C.faded}(${role}default)${C.reset}\n`,
+    );
+  } else {
+    process.stdout.write(
+      `  ${C.dim}workspace ${C.reset}${C.dim}none selected. Pick one with ${C.reset}${C.cyan}kortix workspaces use${C.reset}\n`,
     );
   }
-  if (me.accounts.length > 1) {
+  if (me.accounts.length > 1 && def && !bound) {
     process.stdout.write(
-      `  ${C.dim}${me.accounts.length} accounts total — switch with ${C.reset}${C.cyan}kortix accounts use <slug>${C.reset}\n`,
-    );
-  }
-  if (def) {
-    process.stdout.write(
-      `  ${C.dim}project   ${C.reset}${def.name || def.project_id} ${C.faded}(default)${C.reset}\n`,
+      `  ${C.dim}switch workspace with ${C.reset}${C.cyan}kortix workspaces use${C.reset}\n`,
     );
   }
   process.stdout.write(
@@ -203,7 +305,7 @@ function whoamiHuman(
 }
 
 /**
- * The token-kind label and the project/session/agent/connectors detail lines
+ * The token-kind label and the workspace/session/agent/connectors detail lines
  * that the `--token-only` block and the human summary both render.
  *
  * `fallbackKind` exists because the two renderings drifted before they were
@@ -218,10 +320,10 @@ function renderTokenContext(
   const kind = ctx?.session_id
     ? 'session token'
     : ctx?.project_id
-      ? 'project token'
+      ? 'workspace token'
       : ctx?.auth_type || fallbackKind;
   let details = '';
-  if (ctx?.project_id) details += `  ${C.dim}project   ${C.reset}${ctx.project_id}\n`;
+  if (ctx?.project_id) details += `  ${C.dim}workspace ${C.reset}${ctx.project_id}\n`;
   if (ctx?.session_id) details += `  ${C.dim}session   ${C.reset}${ctx.session_id}\n`;
   if (ctx?.agent) details += `  ${C.dim}agent     ${C.reset}${ctx.agent}\n`;
   if (ctx?.connectors != null) {

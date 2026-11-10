@@ -183,6 +183,15 @@ export function runWithContext<T>(method: string, path: string, fn: () => T, inc
 }
 
 /**
+ * Run `fn` outside any request context: background work started by a request
+ * (a rebuild behind the response) must not inherit its per-request flags,
+ * caches or Server-Timing stages.
+ */
+export function runOutsideRequestContext<T>(fn: () => T): T {
+  return storage.exit(fn);
+}
+
+/**
  * Get the current request context (or undefined if not in a request).
  */
 export function getRequestContext(): RequestContext | undefined {
@@ -245,6 +254,13 @@ const CLOUDWATCH_SAFE_FIELDS = [
   // makes the herd shape (many concurrent reads to one box, KRTX-471) one
   // query instead of a hand rebuild from completion timestamps.
   'sandbox_inflight',
+  // What the box said about itself on a proxied turn-verb answer
+  // (forward/daemon-timing.ts): the daemon's own handler wall and the peak
+  // event-loop slip it sampled. Aggregate-only. They split a slow upstream
+  // wait into 'the box answered slowly' vs 'the ingress hop took the time'
+  // (KRTX-4459) from the raw log line, not a post-hoc reconstruction.
+  'sandbox_daemon_ms',
+  'sandbox_loop_lag_ms',
   'config_pending_stages',
   'config_project_access_ms',
   'config_session_access_ms',

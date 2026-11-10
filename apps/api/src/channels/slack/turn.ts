@@ -21,6 +21,7 @@ import {
   type StreamTaskChunk,
 } from '../slack-api';
 import { STREAM_TTL_MS, WORKING_EMOJI } from './app';
+import { claimExpiringKey } from './dedup';
 import { SLACK_STOP_ACTION } from './stop-action';
 import { classifyTurnError, type TurnErrorInfo } from './errors';
 import type { SlackEvent, LiveTurn } from './types';
@@ -543,7 +544,7 @@ function buildFinalPlanBlocks(
 
 // ── Turn-stream relays ──────────────────────────────────────────────────────
 // Driven by the in-sandbox agent CLI (POST /turn-stream: `step`/`answer`) and by
-// the sandbox's opencode session.idle/error watcher (`end`). They own the live
+// kortixd's turn-end relay (`end`, harness/shared/turn-relay.ts). They own the live
 // in-thread message lifecycle, so they live with the rest of it here in turn.ts.
 
 /**
@@ -695,24 +696,14 @@ const ANSWER_RESCUE_TTL_MS = STREAM_TTL_MS;
 // reaches the thread. It was one rescue per session per TTL, which silenced
 // every answer after the first within 15 minutes: the "No active Slack turn
 // to answer" an agent saw on its second turn (INC-2026-09-08-CONNECTOR-GATEWAY).
-async function claimAnswerRescue(sessionId: string, text: string): Promise<boolean> {
+export async function claimAnswerRescue(sessionId: string, text: string): Promise<boolean> {
   const digest = createHash('sha256').update(text).digest('hex').slice(0, 16);
-  try {
-    const inserted = await db
-      .insert(chatEventDedup)
-      .values({
-        eventId: `slack:answerrescue:${sessionId}:${digest}`,
-        expiresAt: new Date(Date.now() + ANSWER_RESCUE_TTL_MS),
-      })
-      .onConflictDoNothing({ target: chatEventDedup.eventId })
-      .returning({ eventId: chatEventDedup.eventId });
-    return inserted.length > 0;
-  } catch (err) {
-    // Fail CLOSED. The whole point is to not post twice into a thread someone is
-    // reading; a dropped rescue is still recoverable from the session link.
-    console.warn('[slack-webhook] answer-rescue claim failed (suppressing)', err);
-    return false;
-  }
+  // Fail CLOSED. The whole point is to not post twice into a thread someone is
+  // reading; a dropped rescue is still recoverable from the session link.
+  return claimExpiringKey(`slack:answerrescue:${sessionId}:${digest}`, ANSWER_RESCUE_TTL_MS, {
+    onDbError: false,
+    log: 'answer-rescue claim failed (suppressing)',
+  });
 }
 
 export async function postAnswerWithoutTurnDetailed(
@@ -750,9 +741,9 @@ export async function postAnswerWithoutTurnDetailed(
   return fallback != null ? { ok: true } : { ok: false, reason: 'post_failed' };
 }
 
-// Called when the agent's turn ends — opencode `session.idle` (finished) or
-// `session.error` (died) on the ROOT session, relayed by the sandbox. The
-// sandbox already filters to the root by opencode's parentID before relaying, so
+// Called when the agent's turn ends — `session.idle` (finished) or
+// `session.error` (died) on the ROOT runtime session, relayed by kortixd. The
+// daemon relays only the root session's turn end, so
 // we finalize unconditionally: there is NO server-side pin re-check. Comparing
 // the relayed id against a possibly-stale DB pin is exactly what used to drop a
 // real turn's idle and leave the ⏳ spinning forever. If the agent already
@@ -809,7 +800,7 @@ export async function relayTurnEnd(
   }
   if (!(await claimFinalize(sessionId))) return false;
   if (status === 'error') {
-    // Turn the opencode error into honest, specific copy (out of credits /
+    // Turn the runtime error into honest, specific copy (out of credits /
     // usage limit / provider auth / the real error), not a blank failure line.
     const classified = classifyTurnError(errorInfo);
     await finalizeTurn(
@@ -851,7 +842,7 @@ registerSessionFailureNotifier(relayProvisioningFailure);
 
 /**
  * Closing the card is not ending the run. A turn this sweep reaps has been
- * silent for 30 minutes, but OpenCode can still hold its assistant message
+ * silent for 30 minutes, but the runtime can still hold its assistant message
  * OPEN — and while it does, every later prompt in that conversation is
  * accepted and never runs. Seen on dev 2026-09-19: two messages vanished that
  * way over two days. Imported lazily so the channel modules keep no static

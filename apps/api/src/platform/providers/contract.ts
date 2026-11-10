@@ -44,7 +44,7 @@ export interface CreateSandboxOpts {
   /**
    * True ⇒ the box runs in `location` or not at all. False/absent ⇒ Platinum
    * boots it in its home region when `location` cannot hold the image and no
-   * copy is running (platinum.ts). Set for warm (speculative) session boxes.
+   * copy is running (platinum.ts). Set for a box that mounts the project's Files.
    */
   locationRequired?: boolean;
   /**
@@ -74,7 +74,7 @@ export interface CreateSandboxOpts {
    * for backward compatibility with every existing caller.
    *
    * `monitor` is the per-project monitor box: the SAME image and the SAME agent port as a session, running the
-   * daemon in monitor mode instead of opencode. It differs from a session only
+   * daemon in monitor mode instead of the session runtime. It differs from a session only
    * in lifecycle (`autoStopInterval: 0` → persistent) and in having no
    * `session_sandboxes` row.
    */

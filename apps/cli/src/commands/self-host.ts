@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes, createHmac, generateKeyPairSync } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -16,15 +16,32 @@ import {
 } from '../self-host/config.ts';
 import type { SelfHostCommandFlags } from '../self-host/types.ts';
 import {
+  caddyEnvironmentKeys,
   LAPTOP_APP_REPLICAS,
   PROD_APP_REPLICAS,
   renderFullDockerCompose,
+  ROLLING_APP_SERVICES,
   writeKortixRuntimeAssets,
   writeSupabaseVendorAssets,
 } from '../self-host/compose-assets.ts';
 import { SHARED_AUTH_DEFAULTS, SHARED_SELF_HOST_DEFAULTS } from '../self-host/shared-runtime-defaults.ts';
 import { applyEmailWiring } from '../self-host/email-wiring.ts';
+import { signupModeOf } from '../self-host/signup-policy.ts';
+import createAdminScript from '../self-host/assets/create-admin.js.txt' with { type: 'text' };
 import { deriveDomainAliasHosts, normalizeHostname, parseDomainList, planDomainMove } from '../self-host/domain-aliases.ts';
+import {
+  accountFileName,
+  type AcmeDnsAccount,
+  checkDelegation,
+  defaultAcmeDnsZone,
+  delegationRecords,
+  enabledWildcardBases,
+  isIPv4,
+  parseAcmeDnsAccount,
+  renderAcmeDnsConfig,
+  wildcardBases,
+  wildcardTlsConfigured,
+} from '../self-host/wildcard-tls.ts';
 import { parseEmailTargets, redactUrl } from '@kortix/shared/email-url';
 import {
   CATEGORY_LABELS,
@@ -87,6 +104,12 @@ Subcommands:
   env rotate KEY|--all-generated  Regenerate a rotatable generated secret.
   domain show             The primary domain and its alias domains.
   domain move <domain>    Make <domain> primary; the current domain keeps working as an alias.
+  admin add <email>       Create a platform admin account with a one-time password. Operator
+                          addresses cannot be claimed by signing up.
+  tls show                How each host gets its TLS certificate.
+  tls wildcard            One wildcard certificate for all Apps and previews (keeps their
+                          host names out of the public certificate logs). Prints the DNS
+                          records to add once; run again after adding them.
 
 Options:
   --instance <name>       Instance name (default: ${DEFAULT_INSTANCE}).
@@ -100,7 +123,7 @@ Options:
   --local-images          Run locally-built images (dev mode); forces auto-update off.
   --enterprise-license    Unlock SSO/SCIM/RBAC/audit (kortix.com/enterprise).
   --admin-email <email>   Grant platform-admin to this account.
-  --no-restrict-account-creation   Let any signed-in user create new accounts/orgs (default: admin-only).
+  --no-restrict-account-creation   Let any signed-in user create new workspaces (default: admin-only).
   --restrict-account-creation      Explicitly re-enable the admin-only restriction (the default).
   --disable-signup        Turn self sign-up off (DISABLE_SIGNUP=true); nobody can sign up, the admin included.
   --json                  Machine-readable output where supported.
@@ -297,6 +320,10 @@ export async function runSelfHost(argv: string[]): Promise<number> {
       return selfHostEnv(args, flags);
     case 'domain':
       return selfHostDomain(args, flags);
+    case 'tls':
+      return selfHostTls(args, flags);
+    case 'admin':
+      return selfHostAdmin(args, flags);
     default:
       process.stderr.write(`${status.err(`unknown subcommand "${sub}"`)}\n\n${HELP}`);
       return 2;
@@ -381,6 +408,7 @@ async function selfHostInit(flags: GlobalFlags): Promise<number> {
   applyImagesForTag(env, resolveTag(flags, existing));
   applyFeatureFlags(env, flags);
   applyReachabilityFlags(env, flags);
+  if (existing === null) applyDomainHostingDefaults(env);
   applyAdminEmail(env, flags);
   // Non-interactive fresh init never reaches promptAdminEmail below, so a
   // missing admin email would otherwise fail silently — and the operator only
@@ -446,6 +474,7 @@ function renderInitSummary(instance: string, dir: string, env: SelfHostEnv, refr
   process.stdout.write(`  ${C.dim}Images    ${C.reset}${env.FRONTEND_IMAGE}, ${env.API_IMAGE}\n`);
   process.stdout.write(`  ${C.dim}Channel   ${C.reset}${env.KORTIX_CHANNEL}${C.dim} (auto-update: ${env.KORTIX_AUTO_UPDATE === 'true' ? 'on' : 'off'}, nightly at ${env.KORTIX_UPDATE_TIME} ${env.KORTIX_UPDATE_TZ})${C.reset}\n`);
   process.stdout.write(`  ${C.dim}Reachability ${C.reset}${describeReachability(env)}\n`);
+  printDomainDnsRecords(env);
   if (reachabilityMode(env) !== 'domain') {
     process.stdout.write(`  ${C.dim}${VPS_FIRST_NOTICE}${C.reset}\n`);
   }
@@ -501,7 +530,7 @@ async function selfHostStart(flags: GlobalFlags): Promise<number> {
 
   if (!gitProviderConfigured(env)) {
     process.stdout.write(
-      `${C.dim}  note     managed git not configured yet — connect GitHub in the dashboard (Settings → Git) before creating projects.${C.reset}\n\n`,
+      `${C.dim}  note     managed git not configured yet — connect GitHub in the dashboard (Settings → Git) before creating workspaces.${C.reset}\n\n`,
     );
   }
 
@@ -628,13 +657,18 @@ function selfHostDoctor(flags: GlobalFlags): number {
     // Kortix Capture devices upload to the bundled store. A compose file
     // rendered by an older CLI has none, so every device gets 503
     // capture_credentials_unavailable until `update` re-renders it.
-    const hasStore = readFileSync(composePath(flags.instance), 'utf8').includes('\n  capture-store:\n');
+    // An instance with KORTIX_CAPTURE_STORE=external renders no bundled store
+    // by design: its devices upload to the operator's own S3-compatible store.
+    const externalStore = loadEnv(flags.instance)?.KORTIX_CAPTURE_STORE?.trim() === 'external';
+    const hasStore = externalStore || readFileSync(composePath(flags.instance), 'utf8').includes('\n  capture-store:\n');
     checks.push({
       name: 'capture-store',
       ok: hasStore,
-      detail: hasStore
-        ? 'bundled Kortix Capture store present'
-        : 'this instance has no Kortix Capture store, so Capture devices cannot sync — run: kortix self-host update',
+      detail: externalStore
+        ? 'external Kortix Capture store (KORTIX_CAPTURE_STORE=external)'
+        : hasStore
+          ? 'bundled Kortix Capture store present'
+          : 'this instance has no Kortix Capture store, so Capture devices cannot sync — run: kortix self-host update',
     });
   }
   if (existsSync(envPath(flags.instance))) {
@@ -706,6 +740,20 @@ function selfHostDoctor(flags: GlobalFlags): number {
             + `Point a *.${suggested} DNS record at this instance, then: `
             + `kortix self-host env set KORTIX_PREVIEW_BASE_DOMAIN=${suggested} KORTIX_PREVIEW_ALLOW_DIRECT_EDGE=true`,
       });
+      // One certificate per App or preview host lists every one of those host
+      // names, random preview labels included, in the public Certificate
+      // Transparency logs, which threat-intelligence feeds read (wildcard-tls.ts).
+      const perHost = wildcardBases(env).filter((base) => !enabledWildcardBases(env).includes(base));
+      if (wildcardBases(env).length > 0) {
+        checks.push({
+          name: 'wildcard-tls',
+          ok: perHost.length === 0,
+          detail: perHost.length === 0
+            ? 'Apps and previews use wildcard certificates'
+            : `${perHost.map((b) => `*.${b}`).join(', ')} get one public certificate per host, which lists every App and preview host name in the certificate logs. `
+              + 'Run: kortix self-host tls wildcard',
+        });
+      }
     }
   }
   if (existsSync(envPath(flags.instance))) {
@@ -761,8 +809,11 @@ async function selfHostUpdate(flags: GlobalFlags): Promise<number> {
   applyFeatureFlags(env, flags);
   const changedFlagKeys = Object.keys(env).filter((key) => env[key] !== beforeFlags[key]);
   applyReachabilityFlags(env, flags);
+  const caddyfilePath = join(instanceDir(flags.instance), 'Caddyfile');
+  const caddyfileBefore = existsSync(caddyfilePath) ? readFileSync(caddyfilePath, 'utf8') : null;
   writeEnv(flags.instance, env);
   writeCompose(flags.instance, env);
+  const caddyfileChanged = existsSync(caddyfilePath) && readFileSync(caddyfilePath, 'utf8') !== caddyfileBefore;
 
   process.stdout.write(`  ${C.dim}version  ${C.reset}${oldVersion} ${C.dim}→${C.reset} ${C.cyan}${env.KORTIX_VERSION}${C.reset}\n\n`);
 
@@ -802,8 +853,42 @@ async function selfHostUpdate(flags: GlobalFlags): Promise<number> {
   // API without the Kortix Capture store wiring (every device gets 503) until
   // its container is recreated. Without `--force-recreate`, compose recreates
   // it only when its rendered configuration differs: a no-op on every later run.
-  const converge = compose(flags.instance, ['up', '-d', '--no-deps', 'kortix-api']);
+  // Behind Caddy the API runs 2 replicas, and `up` would recreate both at once:
+  // a new version that adds an API environment key took the API down for 24 s
+  // (2026-11-04, a self-host update to v0.14.19). A drifted API rolls start-first
+  // through the updater instead, like `env set` does.
+  const apiDrifted = Boolean(env.KORTIX_DOMAIN?.trim()) && serviceConfigDrifted(flags.instance, 'kortix-api');
+  const converge = apiDrifted
+    ? compose(flags.instance, ['run', '--rm', '--no-deps', 'kortix-updater', 'roll', 'kortix-api'])
+    : compose(flags.instance, ['up', '-d', '--no-deps', 'kortix-api']);
   if (converge !== 0) return converge;
+  if (apiDrifted) process.stdout.write(`${C.dim}  rolled: kortix-api (configuration changed)${C.reset}\n`);
+
+  // The auth service runs one replica and reads its configuration only at
+  // start, so a version that changes it (such as the before-user-created
+  // sign-up hook) applies only after a recreate: a few seconds without sign-in.
+  // It runs after the migrations and the API roll, so the hook's function and
+  // the policy it reads exist before GoTrue first calls it.
+  if (serviceConfigDrifted(flags.instance, 'supabase-auth')) {
+    const auth = compose(flags.instance, ['up', '-d', '--no-deps', 'supabase-auth']);
+    if (auth !== 0) return auth;
+    process.stdout.write(`${C.dim}  restarted: supabase-auth (configuration changed)${C.reset}\n`);
+  }
+
+  // A version that changes the Caddyfile (a new route, such as Capture's
+  // `@capture` or the project snapshots' `@snapshots`) reaches the running
+  // Caddy only through a reload. Compose never recreates a container for a
+  // changed bind-mounted file, so the old routes stay live and the new prefix
+  // answers the API's 404 (learnings entry 2026-10-20T071256Z). Caddy keeps
+  // serving through a reload, and refuses a config that does not load.
+  if (caddyfileChanged && Boolean(env.KORTIX_DOMAIN?.trim())) {
+    const reload = compose(flags.instance, ['exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']);
+    if (reload !== 0) {
+      process.stderr.write(`${status.err('Caddy did not load the new Caddyfile. It keeps serving the previous routes.')}\n`);
+      return reload;
+    }
+    process.stdout.write(`${C.dim}  reloaded: caddy${C.reset}\n`);
+  }
 
   // The rollout recreates only the app services whose image moved. A flag this
   // run changed reaches its readers through the same restart `env set` does:
@@ -1032,15 +1117,18 @@ function openSignUpCheck(env: Record<string, string | undefined>): { ok: boolean
   if (reachabilityMode(env) === 'local') return null;
   const signupOpen = (env.DISABLE_SIGNUP ?? 'false').trim() !== 'true';
   const autoconfirm = (env.ENABLE_EMAIL_AUTOCONFIRM ?? 'true').trim() === 'true';
+  const mode = signupModeOf(env);
   return {
-    ok: !(signupOpen && autoconfirm),
+    ok: !(signupOpen && autoconfirm && mode === 'open'),
     detail: !signupOpen
-      ? 'self sign-up is off (DISABLE_SIGNUP=true)'
-      : !autoconfirm
-        ? 'new accounts must confirm their email'
-        : 'anyone who reaches this instance can create a confirmed account for any email address, including an admin address. '
-          + 'Configure email so new accounts must confirm it: kortix self-host env set EMAIL_URL=smtp://user:password@smtp.example.com:587 '
-          + '— or, once your team has signed up: kortix self-host env set DISABLE_SIGNUP=true',
+      ? 'self sign-up is off (DISABLE_SIGNUP=true); SSO sign-ins of new users are refused too'
+      : mode !== 'open'
+        ? `sign-up is ${mode === 'invite' ? 'by invitation only' : 'closed'} (KORTIX_SIGNUP_MODE=${mode}); SSO sign-ins pass, operator addresses are reserved for kortix self-host admin add`
+        : !autoconfirm
+          ? 'new accounts must confirm their email; operator addresses are reserved for kortix self-host admin add'
+          : 'anyone who reaches this instance can create a confirmed account for any email address. '
+            + 'Allow invited addresses only: kortix self-host env set KORTIX_SIGNUP_MODE=invite '
+            + '— or configure email so new accounts must confirm it: kortix self-host env set EMAIL_URL=smtp://user:password@smtp.example.com:587',
   };
 }
 
@@ -1097,7 +1185,7 @@ async function promptFeatureFlags(env: SelfHostEnv, flags: GlobalFlags): Promise
   // Default Yes: signups/teams/SSO all keep working either way — this only
   // gates who can spin up a brand-new organization (POST /v1/accounts).
   const restrictAccountCreation = await confirm(
-    'Restrict account creation to the admin? (new organizations can only be created by platform admins; users join by invite or SSO)',
+    'Restrict workspace creation to the admin? (new workspaces can only be created by platform admins; users join by invite or SSO)',
     env.KORTIX_RESTRICT_ACCOUNT_CREATION !== 'false',
   );
   env.KORTIX_RESTRICT_ACCOUNT_CREATION = restrictAccountCreation ? 'true' : 'false';
@@ -1497,6 +1585,7 @@ function restartServicesForKeys(instance: string, env: SelfHostEnv, keys: readon
   const services = servicesForKeys(keys).filter((service) => {
     if (service === 'caddy') return domainConfigured;
     if (service === 'cloudflared') return tunnelActive;
+    if (service === 'acme-dns') return domainConfigured && wildcardTlsConfigured(env);
     return true;
   });
   if (services.length === 0) {
@@ -1507,11 +1596,36 @@ function restartServicesForKeys(instance: string, env: SelfHostEnv, keys: readon
     process.stdout.write(`${C.dim}  stack isn't running — this takes effect on the next ${C.reset}${C.cyan}kortix self-host start${C.reset}\n\n`);
     return 0;
   }
-  const code = compose(instance, ['up', '-d', '--force-recreate', '--no-deps', ...services]);
-  if (code !== 0) return code;
-  process.stdout.write(`${C.dim}  restarted: ${C.reset}${services.join(', ')}\n\n`);
+  // Behind Caddy the app tier runs 2 replicas, so a config change rolls them
+  // start-first through the updater (new replicas healthy before the old ones
+  // stop) instead of recreating every replica at once. A key that changes only
+  // the rendered Caddyfile reloads Caddy in place; Caddy keeps serving through
+  // a reload. Both happen in that order, so Caddy routes a new host only once
+  // the app tier accepts it.
+  const rolling = domainConfigured ? services.filter((s) => (ROLLING_APP_SERVICES as readonly string[]).includes(s)) : [];
+  const caddyReload = services.includes('caddy') && keys.every((key) => !caddyEnvironmentKeys().has(key));
+  const recreate = services.filter((s) => !rolling.includes(s) && !(s === 'caddy' && caddyReload));
+  if (rolling.length > 0) {
+    const code = compose(instance, ['run', '--rm', '--no-deps', 'kortix-updater', 'roll', ...rolling]);
+    if (code !== 0) return code;
+  }
+  if (recreate.length > 0) {
+    const code = compose(instance, ['up', '-d', '--force-recreate', '--no-deps', ...recreate]);
+    if (code !== 0) return code;
+  }
+  if (caddyReload) {
+    const code = compose(instance, ['exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']);
+    if (code !== 0) return code;
+  }
+  const done = [
+    rolling.length > 0 ? `rolled: ${rolling.join(', ')}` : '',
+    recreate.length > 0 ? `restarted: ${recreate.join(', ')}` : '',
+    caddyReload ? 'reloaded: caddy' : '',
+  ].filter(Boolean);
+  process.stdout.write(`${C.dim}  ${done.join('; ')}${C.reset}\n\n`);
   return 0;
 }
+
 
 async function selfHostEnvSet(args: string[], flags: GlobalFlags): Promise<number> {
   const env = loadEnvWithDefaults(flags);
@@ -1592,6 +1706,42 @@ async function selfHostEnvSet(args: string[], flags: GlobalFlags): Promise<numbe
   return restartServicesForKeys(flags.instance, env, changedKeys);
 }
 
+/**
+ * A NEW instance on a public domain serves Apps and sandbox previews on their
+ * own origins from the start: `apps.<domain>` and `p.<domain>`. The path proxy
+ * (`/v1/p/...`) breaks root-absolute links in a browser preview, and an App
+ * needs its own origin. An existing instance keeps its configuration: turning
+ * these on in an update would hand browsers host names whose DNS records the
+ * operator never added.
+ */
+function applyDomainHostingDefaults(env: SelfHostEnv): void {
+  if (reachabilityMode(env) !== 'domain') return;
+  const domain = normalizeHostname(env.KORTIX_DOMAIN);
+  if (!domain) return;
+  if (!env.KORTIX_APPS_BASE_DOMAIN?.trim()) {
+    env.KORTIX_APPS_BASE_DOMAIN = `apps.${domain}`;
+    env.KORTIX_APPS_ALLOW_DIRECT_EDGE = 'true';
+  }
+  if (!env.KORTIX_PREVIEW_BASE_DOMAIN?.trim()) {
+    env.KORTIX_PREVIEW_BASE_DOMAIN = `p.${domain}`;
+    env.KORTIX_PREVIEW_ALLOW_DIRECT_EDGE = 'true';
+  }
+}
+
+/** The A records a domain-mode instance needs, printed by `init` and `configure`. */
+function printDomainDnsRecords(env: SelfHostEnv): void {
+  if (reachabilityMode(env) !== 'domain') return;
+  const names = [
+    env.KORTIX_DOMAIN,
+    env.KORTIX_API_DOMAIN || `api.${env.KORTIX_DOMAIN}`,
+    env.KORTIX_APPS_BASE_DOMAIN?.trim() ? `*.${env.KORTIX_APPS_BASE_DOMAIN}` : '',
+    env.KORTIX_PREVIEW_BASE_DOMAIN?.trim() ? `*.${env.KORTIX_PREVIEW_BASE_DOMAIN}` : '',
+  ].filter(Boolean);
+  process.stdout.write(`  ${C.dim}DNS        ${C.reset}A records to this server's public IP, "DNS only" (no proxy):\n`);
+  for (const name of names) process.stdout.write(`               ${name}\n`);
+  process.stdout.write(`  ${C.dim}           Then run ${C.reset}${C.cyan}kortix self-host tls wildcard${C.reset}${C.dim} so Apps and previews share one wildcard certificate.${C.reset}\n`);
+}
+
 /** The public hosts an instance answers on, with a probe name for each wildcard. */
 function publicDomainHosts(env: SelfHostEnv): string[] {
   const hosts = [env.KORTIX_DOMAIN, env.KORTIX_API_DOMAIN || `api.${env.KORTIX_DOMAIN}`];
@@ -1655,10 +1805,368 @@ function printDomains(env: SelfHostEnv): number {
 
 /** Run `caddy validate` on the rendered Caddyfile with the container's own env. */
 function validateCaddyfile(instance: string): number {
-  return compose(instance, [
-    'run', '--rm', '--no-deps', '--entrypoint', 'caddy', 'caddy',
-    'validate', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile',
-  ]);
+  // Caddy logs a dozen JSON lines on a valid config; show them only when it fails.
+  const result = spawnSync(
+    'docker',
+    [
+      'compose', '--project-name', composeProject(instance), '--env-file', envPath(instance), '-f', composePath(instance),
+      'run', '--rm', '--no-deps', '--quiet-pull', '--entrypoint', 'caddy', 'caddy',
+      'validate', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile',
+    ],
+    { cwd: instanceDir(instance), encoding: 'utf8' },
+  );
+  const code = result.error ? 1 : (result.status ?? 1);
+  if (code !== 0) process.stderr.write(`${result.stdout ?? ''}${result.stderr ?? ''}${result.error ? `${result.error.message}\n` : ''}`);
+  return code;
+}
+
+/** The acme-dns config and the per-base credentials directory Caddy mounts. */
+function acmeDnsDir(instance: string): string {
+  return join(instanceDir(instance), 'acme-dns');
+}
+
+function writeAcmeDnsAssets(instance: string, env: SelfHostEnv): void {
+  const dir = acmeDnsDir(instance);
+  mkdirSync(join(dir, 'accounts'), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(dir, 'config.cfg'),
+    renderAcmeDnsConfig({ zone: env.KORTIX_ACME_DNS_ZONE!, publicIp: env.KORTIX_ACME_DNS_PUBLIC_IP!, adminEmail: env.KORTIX_ACME_EMAIL }),
+    { encoding: 'utf8', mode: 0o644 },
+  );
+}
+
+/**
+ * The acme-dns account of each base that has a valid credentials file for
+ * `zone`. A missing, damaged or foreign file (another zone, a hand-edited
+ * value) is left out, and `tls wildcard` registers a new account for that base.
+ */
+function readAcmeDnsAccounts(instance: string, bases: readonly string[], zone: string): Record<string, AcmeDnsAccount> {
+  const out: Record<string, AcmeDnsAccount> = {};
+  for (const base of bases) {
+    const path = join(acmeDnsDir(instance), 'accounts', accountFileName(base));
+    if (!existsSync(path)) continue;
+    let account: AcmeDnsAccount | null = null;
+    try {
+      account = parseAcmeDnsAccount(JSON.parse(readFileSync(path, 'utf8')), zone);
+    } catch {
+      // Not JSON: registered again below.
+    }
+    if (account) out[base] = account;
+  }
+  return out;
+}
+
+/**
+ * Saves the credentials Caddy uses to answer DNS-01 for `base`. The path is
+ * `<instance>/acme-dns/accounts/<base>.json`: `base` is a wildcard base from the
+ * instance's own env, never a value from acme-dns. The file is 0600 in a 0700
+ * directory, and the write goes through a temp file and a rename, so Caddy
+ * never reads half a file. `account` passed parseAcmeDnsAccount.
+ *
+ * CodeQL js/http-to-file-access flags this write because the data came from an
+ * HTTP response. That response is the box's own acme-dns on loopback, and
+ * saving it is the purpose. Dismissed as a false positive with this reason;
+ * see "Certificates and security filters" in apps/web/content/docs/developers.mdx.
+ */
+function writeAcmeDnsAccount(instance: string, base: string, account: AcmeDnsAccount): void {
+  const dir = join(acmeDnsDir(instance), 'accounts');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, accountFileName(base));
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(account, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, path);
+}
+
+/**
+ * Writes `txt` as the challenge value of `account` in acme-dns, so the DNS
+ * check can read it back through public DNS. Returns null on success, else
+ * what went wrong.
+ *
+ * CodeQL js/file-access-to-http flags this request because the credentials
+ * come from the file writeAcmeDnsAccount saved. They go back to the acme-dns
+ * that issued them, at the fixed loopback URL; no file data reaches another
+ * host. Dismissed as a false positive with this reason.
+ */
+async function writeAcmeDnsProbe(account: AcmeDnsAccount, txt: string): Promise<string | null> {
+  try {
+    const res = await fetch('http://127.0.0.1:13750/update', {
+      method: 'POST',
+      headers: { 'X-Api-User': account.username, 'X-Api-Key': account.password, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subdomain: account.subdomain, txt }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok ? null : `acme-dns refused the probe value: HTTP ${res.status}`;
+  } catch (error) {
+    return `acme-dns did not answer: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+async function waitForAcmeDns(timeoutMs = 30_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('http://127.0.0.1:13750/health', { signal: AbortSignal.timeout(2000) });
+      if (res.ok) return true;
+    } catch {
+      // Not up yet.
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
+/** The box's own IPv4 address on its default route: what acme-dns binds port 53 to. */
+function defaultRouteIPv4(): string | null {
+  const result = spawnSync('ip', ['-4', 'route', 'get', '1.1.1.1'], { encoding: 'utf8' });
+  const match = /\bsrc\s+(\d+\.\d+\.\d+\.\d+)/.exec(result.stdout ?? '');
+  return match?.[1] ?? null;
+}
+
+async function publicIPv4Of(host: string | undefined): Promise<string | null> {
+  if (!host) return null;
+  try {
+    const { Resolver } = await import('node:dns/promises');
+    const resolver = new Resolver({ timeout: 4000, tries: 2 });
+    resolver.setServers(['1.1.1.1']);
+    return (await resolver.resolve4(host))[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A 43-character TXT value, the length acme-dns accepts (an ACME key authorization digest). */
+function delegationProbeValue(): string {
+  return randomBytes(32).toString('base64url').slice(0, 43);
+}
+
+function printDelegationRecords(records: ReturnType<typeof delegationRecords>, statusByName: Map<string, string>): void {
+  process.stdout.write(`\n  ${C.bold}DNS records${C.reset} ${C.dim}(add once, in the DNS of each domain; "DNS only", no proxy)${C.reset}\n`);
+  const nameWidth = Math.max(...records.map((r) => r.name.length)) + 2;
+  const valueWidth = Math.max(...records.map((r) => r.value.length)) + 2;
+  for (const record of records) {
+    const state = statusByName.get(record.name) ?? '';
+    process.stdout.write(`    ${pad(record.name, nameWidth)}${pad(record.type, 7)}${pad(record.value, valueWidth)}${state}\n`);
+  }
+  process.stdout.write(`  ${C.dim}This box must accept UDP and TCP port 53 from anywhere (a cloud firewall or security group rule).${C.reset}\n\n`);
+}
+
+/**
+ * `kortix self-host tls [show]` and `kortix self-host tls wildcard`.
+ *
+ * `wildcard` moves the Apps and preview hosts from one public certificate per
+ * host to one wildcard certificate per base (wildcard-tls.ts explains why).
+ * It is safe to run any number of times: each run starts acme-dns, registers
+ * missing accounts, prints the DNS records, checks them through two public
+ * resolvers, and switches only the bases whose delegation works. A base whose
+ * records are missing keeps per-host certificates, so nothing ever stops
+ * serving.
+ */
+/**
+ * The account of a platform admin, created by the operator. Self sign-up can
+ * never claim an address in KORTIX_PLATFORM_ADMIN_EMAILS (the auth service's
+ * before-user-created hook refuses it, see self-host/signup-policy.ts), so this
+ * is how an operator account comes to exist. The account is created inside the
+ * kortix-api container through the auth admin API with the service key, which
+ * skips the hook: the key never leaves the box, and the one-time password goes
+ * over stdin, never on a command line. The address is added to
+ * KORTIX_PLATFORM_ADMIN_EMAILS when it is missing (the API rolls start-first).
+ */
+async function selfHostAdmin(args: string[], flags: GlobalFlags): Promise<number> {
+  const [action, rawEmail] = args;
+  const email = rawEmail?.trim().toLowerCase() ?? '';
+  if (action !== 'add' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    process.stderr.write(`${status.err('Usage: kortix self-host admin add <email>')}\n`);
+    return 2;
+  }
+  const env = loadEnv(flags.instance);
+  if (!env) {
+    process.stderr.write(`${status.err('No instance here. Run: kortix self-host init')}\n`);
+    return 1;
+  }
+  if (!composeHasRunningServices(flags.instance)) {
+    process.stderr.write(`${status.err('The stack is not running. Run: kortix self-host start')}\n`);
+    return 1;
+  }
+
+  const password = randomBytes(18).toString('base64url');
+  const result = spawnSync(
+    'docker',
+    ['compose', '--project-name', composeProject(flags.instance), '--env-file', envPath(flags.instance), '-f', composePath(flags.instance), 'exec', '-T', 'kortix-api', 'bun', '-e', createAdminScript],
+    { cwd: instanceDir(flags.instance), encoding: 'utf8', input: JSON.stringify({ email, password }), timeout: 60_000 },
+  );
+  let answer: { status?: number; code?: string; message?: string } = {};
+  try {
+    answer = JSON.parse((result.stdout ?? '').trim().split('\n').pop() ?? '{}');
+  } catch {
+    // Reported below.
+  }
+  const created = answer.status === 200 || answer.status === 201;
+  const exists = answer.status === 422 && /exist|registered/i.test(`${answer.code} ${answer.message}`);
+  if (!created && !exists) {
+    process.stderr.write(`${status.err(`The account was not created: ${answer.message || (result.stderr ?? '').trim() || `exit ${result.status}`}`)}\n`);
+    return 1;
+  }
+
+  const listed = (env.KORTIX_PLATFORM_ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).includes(email);
+  if (!listed) {
+    env.KORTIX_PLATFORM_ADMIN_EMAILS = [env.KORTIX_PLATFORM_ADMIN_EMAILS?.trim(), email].filter(Boolean).join(',');
+    writeEnv(flags.instance, env);
+    writeCompose(flags.instance, env);
+    const code = restartServicesForKeys(flags.instance, env, ['KORTIX_PLATFORM_ADMIN_EMAILS']);
+    if (code !== 0) return code;
+  }
+
+  const signIn = `${(env.PUBLIC_URL ?? '').replace(/\/$/, '')}/auth`;
+  if (created) {
+    process.stdout.write(
+      `\n${status.ok(`Platform admin account created: ${email}`)}\n`
+        + `  ${C.dim}Sign in  ${C.reset}${signIn}\n`
+        + `  ${C.dim}Password ${C.reset}${password}  ${C.dim}(shown once; change it after the first sign-in)${C.reset}\n\n`,
+    );
+  } else {
+    process.stdout.write(`\n${status.ok(`${email} already has an account${listed ? ' and is a platform admin' : '; it is a platform admin now'}.`)}\n\n`);
+  }
+  return 0;
+}
+
+async function selfHostTls(args: string[], flags: GlobalFlags): Promise<number> {
+  const action = args.shift() ?? 'show';
+  const env = loadEnvWithDefaults(flags);
+  if (!env) {
+    process.stderr.write(`${status.err('Self-host is not initialized. Run `kortix self-host init` first.')}\n`);
+    return 1;
+  }
+  if (!env.KORTIX_DOMAIN?.trim()) {
+    process.stderr.write(`${status.err('TLS certificates need a public domain: kortix self-host init --domain <domain>.')}\n`);
+    return 2;
+  }
+  const bases = wildcardBases(env);
+  if (action === 'show' || action === 'status') {
+    const enabled = enabledWildcardBases(env);
+    process.stdout.write(`\n  ${C.bold}TLS certificates${C.reset}\n`);
+    process.stdout.write(`    ${pad(env.KORTIX_DOMAIN!, 44)}one certificate per host name\n`);
+    process.stdout.write(`    ${pad(env.KORTIX_API_DOMAIN || `api.${env.KORTIX_DOMAIN}`, 44)}one certificate per host name\n`);
+    for (const base of bases) {
+      process.stdout.write(
+        `    ${pad(`*.${base}`, 44)}${enabled.includes(base) ? `${C.green}one wildcard certificate${C.reset}` : `${C.yellow}one public certificate per App or preview${C.reset}`}\n`,
+      );
+    }
+    if (bases.some((b) => !enabled.includes(b))) {
+      process.stdout.write(`\n  ${C.dim}Run ${C.reset}${C.cyan}kortix self-host tls wildcard${C.reset}${C.dim} to keep App and preview host names out of the public certificate logs.${C.reset}\n`);
+    }
+    process.stdout.write('\n');
+    return 0;
+  }
+  if (action !== 'wildcard') {
+    process.stderr.write(`${status.err(`unknown tls subcommand "${action}"`)} Use ${C.cyan}tls show${C.reset} or ${C.cyan}tls wildcard${C.reset}.\n`);
+    return 2;
+  }
+  if (bases.length === 0) {
+    process.stderr.write(`${status.err('No Apps or preview base domain is configured; there is nothing to put on a wildcard certificate.')}\n`);
+    return 2;
+  }
+
+  const zone = normalizeHostname(takeFlagValue(args, ['--zone']) ?? env.KORTIX_ACME_DNS_ZONE ?? defaultAcmeDnsZone(env));
+  if (!zone) {
+    process.stderr.write(`${status.err('Pass the delegated zone: --zone acme.<your domain>')}\n`);
+    return 2;
+  }
+  const publicIp = takeFlagValue(args, ['--public-ip']) ?? env.KORTIX_ACME_DNS_PUBLIC_IP ?? (await publicIPv4Of(env.KORTIX_API_DOMAIN || env.KORTIX_DOMAIN));
+  if (!isIPv4(publicIp ?? undefined)) {
+    process.stderr.write(`${status.err('Could not tell the public IPv4 address of this box. Pass --public-ip <address>.')}\n`);
+    return 2;
+  }
+  const listenIp = takeFlagValue(args, ['--listen-ip']) ?? env.KORTIX_ACME_DNS_LISTEN_IP ?? defaultRouteIPv4();
+  if (!isIPv4(listenIp ?? undefined)) {
+    process.stderr.write(`${status.err('Could not tell the address port 53 should listen on. Pass --listen-ip <address of this box>.')}\n`);
+    return 2;
+  }
+  const configChanged =
+    env.KORTIX_ACME_DNS_ZONE !== zone || env.KORTIX_ACME_DNS_PUBLIC_IP !== publicIp || env.KORTIX_ACME_DNS_LISTEN_IP !== listenIp;
+  env.KORTIX_ACME_DNS_ZONE = zone;
+  env.KORTIX_ACME_DNS_PUBLIC_IP = publicIp!;
+  env.KORTIX_ACME_DNS_LISTEN_IP = listenIp!;
+  writeEnv(flags.instance, env);
+  writeCompose(flags.instance, env);
+
+  const up = compose(flags.instance, ['up', '-d', '--no-deps', '--quiet-pull', ...(configChanged ? ['--force-recreate'] : []), 'acme-dns']);
+  if (up !== 0 || !(await waitForAcmeDns())) {
+    process.stderr.write(`${status.err('acme-dns did not start. See: kortix self-host logs acme-dns')}\n`);
+    return 1;
+  }
+
+  const accounts = readAcmeDnsAccounts(flags.instance, bases, zone);
+  for (const base of bases) {
+    if (accounts[base]) continue;
+    const res = await fetch('http://127.0.0.1:13750/register', { method: 'POST', signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) {
+      process.stderr.write(`${status.err(`acme-dns registration for ${base} failed: HTTP ${res.status}`)}\n`);
+      return 1;
+    }
+    const account = parseAcmeDnsAccount(await res.json().catch(() => null), zone);
+    if (!account) {
+      process.stderr.write(`${status.err(`acme-dns answered the registration for ${base} with an account for another zone or in an unknown format. See: kortix self-host logs acme-dns`)}\n`);
+      return 1;
+    }
+    writeAcmeDnsAccount(flags.instance, base, account);
+    accounts[base] = account;
+  }
+
+  const records = delegationRecords({ zone, publicIp: publicIp!, accounts, bases });
+  const results: Awaited<ReturnType<typeof checkDelegation>>[] = [];
+  for (const base of bases) {
+    const account = accounts[base]!;
+    const probe = delegationProbeValue();
+    const problem = await writeAcmeDnsProbe(account, probe);
+    results.push(problem ? { base, ok: false, detail: problem } : await checkDelegation(base, account, probe));
+  }
+  const statusByName = new Map<string, string>();
+  for (const result of results) {
+    statusByName.set(`_acme-challenge.${result.base}`, result.ok ? `${C.green}ok${C.reset}` : `${C.yellow}missing${C.reset}`);
+  }
+  printDelegationRecords(records, statusByName);
+  for (const result of results.filter((r) => !r.ok)) process.stdout.write(`  ${C.dim}${result.detail}${C.reset}\n`);
+
+  const before = enabledWildcardBases(env);
+  const ready = results.filter((r) => r.ok).map((r) => r.base);
+  const next = [...new Set([...before, ...ready])];
+  if (next.length === before.length) {
+    process.stdout.write(
+      ready.length === bases.length
+        ? `${status.ok('Every App and preview base already uses a wildcard certificate.')}\n\n`
+        : `${status.info('Add the records above, then run this command again. Until then, Apps and previews keep their per-host certificates.')}\n\n`,
+    );
+    return 0;
+  }
+
+  const previousEnv = readFileSync(envPath(flags.instance), 'utf8');
+  const previousCaddyfile = readFileSync(join(instanceDir(flags.instance), 'Caddyfile'), 'utf8');
+  env.KORTIX_WILDCARD_TLS_BASES = next.join(',');
+  writeEnv(flags.instance, env);
+  writeCompose(flags.instance, env);
+  // A failed pull is not final: an image already on this box (an air-gapped
+  // install, a local build) still validates. A missing image fails validation.
+  compose(flags.instance, ['pull', '--quiet', '--ignore-pull-failures', 'caddy']);
+  if (validateCaddyfile(flags.instance) !== 0) {
+    writeFileSync(envPath(flags.instance), previousEnv, { mode: 0o600 });
+    writeCompose(flags.instance, loadEnvWithDefaults(flags)!);
+    writeFileSync(join(instanceDir(flags.instance), 'Caddyfile'), previousCaddyfile);
+    process.stderr.write(`${status.err('The new Caddy configuration did not validate. The previous configuration is restored.')}\n`);
+    return 1;
+  }
+  // The first switch moves Caddy to the image with the acmedns module: one
+  // recreate (a few seconds). Later switches only reload the Caddyfile.
+  const caddyImage = spawnSync('docker', ['compose', '--project-name', composeProject(flags.instance), '-f', composePath(flags.instance), '--env-file', envPath(flags.instance), 'images', '--format', 'json', 'caddy'], { encoding: 'utf8' });
+  const onWildcardImage = (caddyImage.stdout ?? '').includes('kortix/caddy');
+  const applied = onWildcardImage
+    ? compose(flags.instance, ['exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile'])
+    : compose(flags.instance, ['up', '-d', '--no-deps', '--quiet-pull', 'caddy']);
+  if (applied !== 0) return applied;
+  for (const base of ready.filter((b) => !before.includes(b))) {
+    process.stdout.write(`${status.ok(`*.${base}: wildcard certificate requested`)}\n`);
+  }
+  process.stdout.write(`  ${C.dim}Check with: kortix self-host tls show; Caddy logs "certificate obtained successfully" for each *.<base>.${C.reset}\n\n`);
+  return 0;
 }
 
 /**
@@ -2017,7 +2525,7 @@ async function selfHostConfigure(flags: GlobalFlags): Promise<number> {
 async function selfHostConnectGithub(_args: string[], _flags: GlobalFlags): Promise<number> {
   process.stdout.write(
     `\n  ${C.yellow}kortix self-host connect-github is deprecated.${C.reset}\n` +
-      `  ${C.dim}GitHub (projects) is configured in the dashboard: Settings → Git.${C.reset}\n\n`,
+      `  ${C.dim}GitHub (workspaces) is configured in the dashboard: Settings → Git.${C.reset}\n\n`,
   );
   return 0;
 }
@@ -2444,7 +2952,7 @@ function renderConnectionSummary(env: SelfHostEnv): void {
  */
 function renderAfterStartNote(): void {
   process.stdout.write(
-    `  ${C.dim}After start ${C.reset}Sign in → Settings → Git to connect GitHub (projects) · connect your model key in the app (BYOK) · optional: connectors · email with ${C.reset}env set EMAIL_URL=smtp://user:pass@host:587${C.dim}.${C.reset}\n\n`,
+    `  ${C.dim}After start ${C.reset}Sign in → Settings → Git to connect GitHub (workspaces) · connect your model key in the app (BYOK) · optional: connectors · email with ${C.reset}env set EMAIL_URL=smtp://user:pass@host:587${C.dim}.${C.reset}\n\n`,
   );
 }
 
@@ -2482,6 +2990,33 @@ async function ensurePort(
     env[urlKey] = url.toString().replace(/\/$/, '');
   }
   changes.push(`${portKey} ${current}->${next}`);
+}
+
+/**
+ * Whether a running container of `service` was created from another rendered
+ * configuration than the compose file has now. Compose labels each container
+ * with `com.docker.compose.config-hash`, and `compose config --hash` prints the
+ * hash the current file renders. No running container, or a hash Docker does
+ * not report, counts as no drift: `up` then creates what is missing.
+ */
+function serviceConfigDrifted(instance: string, service: string): boolean {
+  const options = { cwd: instanceDir(instance), encoding: 'utf8' as const, timeout: 30_000 };
+  const rendered = spawnSync(
+    'docker',
+    ['compose', '--project-name', composeProject(instance), '--env-file', envPath(instance), '-f', composePath(instance), 'config', '--hash', service],
+    options,
+  );
+  const want = rendered.stdout?.trim().split(/\s+/)[1];
+  const ids = (
+    spawnSync(
+      'docker',
+      ['ps', '--quiet', '--filter', `label=com.docker.compose.project=${composeProject(instance)}`, '--filter', `label=com.docker.compose.service=${service}`],
+      options,
+    ).stdout ?? ''
+  ).split('\n').map((id) => id.trim()).filter(Boolean);
+  if (!want || ids.length === 0) return false;
+  const running = spawnSync('docker', ['inspect', '--format', '{{index .Config.Labels "com.docker.compose.config-hash"}}', ...ids], options);
+  return (running.stdout ?? '').split('\n').map((hash) => hash.trim()).filter(Boolean).some((hash) => hash !== want);
 }
 
 function composeHasRunningServices(instance: string): boolean {
@@ -2746,7 +3281,14 @@ function writeCompose(instance: string, env: SelfHostEnv): void {
     previewHostingConfigured: Boolean(env.KORTIX_PREVIEW_BASE_DOMAIN?.trim()),
     captureStoreExternal,
     domainAliases: deriveDomainAliasHosts(env),
+    wildcardTls: {
+      bases: enabledWildcardBases(env),
+      appsBaseDomain: normalizeHostname(env.KORTIX_APPS_BASE_DOMAIN) ?? undefined,
+      previewBaseDomain: normalizeHostname(env.KORTIX_PREVIEW_BASE_DOMAIN) ?? undefined,
+    },
   });
+  const wildcardTls = wildcardTlsConfigured(env) && Boolean(env.KORTIX_DOMAIN?.trim());
+  if (wildcardTls) writeAcmeDnsAssets(instance, env);
   writeFileSync(
     composePath(instance),
     renderFullDockerCompose(composeProject(instance), {
@@ -2754,6 +3296,8 @@ function writeCompose(instance: string, env: SelfHostEnv): void {
       tunnelConfigured: reachabilityMode(env) === 'tunnel',
       namedTunnelConfigured: namedTunnelConfigured(env),
       captureStoreExternal,
+      wildcardTlsConfigured: wildcardTls,
+      signupMode: signupModeOf(env),
     }),
     { encoding: 'utf8', mode: 0o600 },
   );

@@ -35,6 +35,7 @@ const read = (file: string) => readFileSync(join(SRC, file), 'utf8');
 
 /** Worker name → the file whose tick is wrapped in `runWorkerTick('<name>'`. */
 const WORKERS: Record<string, string> = {
+  'sales-outbox': 'worker/jobs/sales-outbox.ts',
   'active-turn-renewal': 'worker/jobs/active-turn-renewal.ts',
   'project-maintenance': 'worker/jobs/project-maintenance.ts',
   'trigger-scheduler': 'worker/jobs/trigger-scheduler.ts',
@@ -53,9 +54,13 @@ const WORKERS: Record<string, string> = {
   'approval-expiry': 'worker/jobs/approval-expiry.ts',
   'oauth-sweep': 'worker/jobs/oauth-sweep.ts',
   'session-model-fallback': 'worker/jobs/session-model-fallback.ts',
+  'space-watcher': 'worker/jobs/space-watcher.ts',
+  'goal-reconciler': 'worker/jobs/goal-reconciler.ts',
   'session-lifecycle': 'projects/session-lifecycle/drain.ts',
   'tunnel-cleanup': 'worker/jobs/tunnel-cleanup.ts',
   'tunnel-forward-expiry': 'worker/jobs/tunnel-forward-expiry.ts',
+  'workspace-split': 'worker/jobs/workspace-split.ts',
+  'workspace-id-fill': 'worker/jobs/workspace-id-fill.ts',
   'tunnel-rpc-forwarder': 'tunnel/core/cluster-forwarder.ts',
   'billing-trial-expiry': 'worker/jobs/billing-rotation.ts',
   'billing-yearly-rotation': 'worker/jobs/billing-rotation.ts',
@@ -78,6 +83,7 @@ const WORKERS: Record<string, string> = {
   'drive-index': 'worker/jobs/drive.ts',
   'notification-digest': 'worker/jobs/notification.ts',
   'session-log-purge': 'worker/jobs/session-log-purge.ts',
+  'retention-erasure': 'worker/jobs/retention-erasure.ts',
   'gateway-spend-backfill': 'worker/jobs/gateway-spend-backfill.ts',
   'residential-proxy-billing': 'worker/jobs/residential-proxy-billing.ts',
   'storage-billing': 'worker/jobs/storage-billing.ts',
@@ -117,7 +123,6 @@ const NOT_WORKERS: Record<string, string> = {
   'replica/teams-bot-token-refresh.ts': 'refreshes the in-memory Teams bot token',
   'replica/tmp-reaper.ts': 'deletes stale local tmp directories; no database writes',
   'replica/tunnel.ts': "clears this process's in-memory tunnel rate-limit buckets",
-  'worker/jobs/app-deployment.ts': 'timer that calls triggerAppDeploymentWorker, which wraps itself',
   'worker/runtime/heartbeat.ts': 'reports the in-memory tick times as one stdout line; no database writes',
 };
 

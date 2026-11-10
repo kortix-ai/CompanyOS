@@ -2,7 +2,7 @@
 
 import { useTranslations } from '../../i18n';
 /**
- * Triggers — the single capability page at `/projects/<id>/triggers`,
+ * Triggers — the single capability page at `/workspaces/<id>/triggers`,
  * mounted by `packages/ui/src/customize/triggers/triggers-page.tsx`.
  *
  * A trigger is one resource with two ways to start it: on a schedule, or from
@@ -62,7 +62,6 @@ import {
   newConfigPrompt,
   useConfigureThread,
 } from '../use-configure-thread';
-import { useProjectFeatureFlags } from '../../internal/lib/use-project-feature-flags';
 import { hasOpenFloatingLayer } from '../../lib/z-stack';
 import {
   type ProjectTrigger,
@@ -78,6 +77,7 @@ import {
   useProjectApps,
   useUnifiedTriggers,
   useProjectTriggerEventApps,
+  useFeatureFlags,
   useTriggerRuns,
 } from '@kortix/sdk/react';
 import {
@@ -324,7 +324,7 @@ export function TriggerActivationMenu({
 function triggerChatPrompt(agentName: string | null): string {
   if (!agentName) return newConfigPrompt('trigger');
   return (
-    `I want to set up a trigger that starts the "${agentName}" agent in this project. ` +
+    `I want to set up a trigger that starts the "${agentName}" agent in this workspace. ` +
     'Ask me what it should do and on what schedule or event, then create it with the ' +
     'Kortix CLI and show me the result.'
   );
@@ -390,7 +390,7 @@ export function ScheduleView({
   const sheet = readTriggerSheet(searchParams);
   // App events are a beta feature behind the project flag `event_triggers`. Fail
   // closed: until the flag resolves on, nothing that lists, browses or requests events renders.
-  const featureFlags = useProjectFeatureFlags(projectId);
+  const featureFlags = useFeatureFlags(projectId);
   const eventsOn = featureFlags.flags.event_triggers === true;
   // The App events tab shows once the project has an App that sends events, or an App event trigger.
   const hasKortixApps = eventSendingApps(useProjectApps(projectId).data).length > 0;

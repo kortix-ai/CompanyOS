@@ -7,13 +7,13 @@
 # .github/workflows/tests.yml). tests/unit/image-bun.test.ts fails when the
 # two differ: a Web API the image's Bun lacks passes every test and answers 500
 # on dev (CompressionStream on Bun 1.2, 2026-08-26 and 2026-10-13).
-ARG BUN_VERSION=1.4.3
+ARG BUN_VERSION=1.4.4
 # Bun 1.2 silently accepts `Bun.spawn({ terminal: ... })` but closes the child
 # shell's stdin immediately in the compiled sandbox agent. The REST create then
 # returns a pid while the shell exits 0 before its WebSocket can attach, surfacing
 # as `pty not found`. Keep this exact pin synchronized with the agent package's
 # `engines.bun`; that package metadata is also part of the snapshot fingerprint.
-ARG SANDBOX_AGENT_BUN_VERSION=1.4.3
+ARG SANDBOX_AGENT_BUN_VERSION=1.4.4
 FROM oven/bun:${BUN_VERSION}-slim AS base
 
 # ---- Kortix Apps Runtime Stage ----
@@ -58,9 +58,10 @@ RUN bun install --frozen-lockfile
 
 COPY packages/api-contract /repo/packages/api-contract
 COPY packages/shared/src/peer-message-prompt.ts /repo/packages/shared/src/peer-message-prompt.ts
-COPY packages/shared/src/room-prompt.ts /repo/packages/shared/src/room-prompt.ts
 COPY packages/shared/src/ssrf-guard.ts /repo/packages/shared/src/ssrf-guard.ts
 COPY packages/sdk/src/core/session/wire-message-id.ts /repo/packages/sdk/src/core/session/wire-message-id.ts
+COPY packages/sdk/src/core/wire-values.ts /repo/packages/sdk/src/core/wire-values.ts
+COPY packages/voice/src /repo/packages/voice/src
 COPY apps/kortix-sandbox-agent-server/ ./
 RUN BUN_COMPILE_TARGET=${KORTIX_AGENT_BUN_TARGET} bash scripts/build.sh
 
@@ -262,9 +263,10 @@ COPY --from=deps /app/packages/db/migrations ./packages/db/migrations
 COPY --from=deps /app/packages/db/scripts/migrate.ts ./packages/db/scripts/migrate.ts
 COPY --from=deps /app/packages/db/scripts/early-applied-migration-repair.ts ./packages/db/scripts/early-applied-migration-repair.ts
 COPY --from=deps /app/packages/db/scripts/local-audit-v2-ledger-repair.ts ./packages/db/scripts/local-audit-v2-ledger-repair.ts
+COPY --from=deps /app/packages/db/scripts/ledger-repair.ts ./packages/db/scripts/ledger-repair.ts
 COPY --from=deps /app/packages/db/scripts/local-invalid-index-repair.ts ./packages/db/scripts/local-invalid-index-repair.ts
-COPY --from=deps /app/packages/db/scripts/local-warm-session-index-repair.ts ./packages/db/scripts/local-warm-session-index-repair.ts
 COPY --from=deps /app/packages/db/scripts/migration-target.ts ./packages/db/scripts/migration-target.ts
+COPY --from=deps /app/packages/db/scripts/migration-files.ts ./packages/db/scripts/migration-files.ts
 COPY --from=deps /app/packages/db/scripts/migration-ledger-repair.ts ./packages/db/scripts/migration-ledger-repair.ts
 COPY --from=deps /app/packages/db/scripts/migration-retry.ts ./packages/db/scripts/migration-retry.ts
 COPY --from=deps /app/packages/db/scripts/migration-runtime-overrides.ts ./packages/db/scripts/migration-runtime-overrides.ts
@@ -295,6 +297,10 @@ COPY --from=deps /app/packages/manifest-schema/node_modules ./packages/manifest-
 COPY --from=deps /app/packages/api-contract/src ./packages/api-contract/src
 COPY --from=deps /app/packages/api-contract/package.json ./packages/api-contract/package.json
 COPY --from=deps /app/packages/api-contract/tsconfig.json ./packages/api-contract/tsconfig.json
+# Its node_modules holds the @kortix/sdk link: api-contract's wire-values file
+# re-exports `@kortix/sdk/wire-values`, and only this link resolves it from the
+# package's own root (the root node_modules hoists no @kortix package).
+COPY --from=deps /app/packages/api-contract/node_modules ./packages/api-contract/node_modules
 COPY --from=deps /app/packages/registry/src ./packages/registry/src
 COPY --from=deps /app/packages/registry/package.json ./packages/registry/package.json
 COPY --from=deps /app/packages/registry/tsconfig.json ./packages/registry/tsconfig.json
@@ -330,7 +336,11 @@ COPY --from=deps /app/packages/sdk ./packages/sdk
 # trees + package.json must be present in the image. Without them the Sandbox
 # panel throws "Failed to list sandbox templates: ENOENT … package.json".
 COPY apps/kortix-sandbox-agent-server/package.json ./apps/kortix-sandbox-agent-server/package.json
+COPY apps/kortix-sandbox-agent-server/scripts/build.sh ./apps/kortix-sandbox-agent-server/scripts/build.sh
 COPY apps/kortix-sandbox-agent-server/src ./apps/kortix-sandbox-agent-server/src
+# kortixd bundles the voice runtime (KORTIXD_SHARED_SOURCES), so the fingerprint
+# hashes it here too. Without it every session start failed with ENOENT (dev, 2026-11-03).
+COPY packages/voice/src ./packages/voice/src
 COPY apps/cli/package.json ./apps/cli/package.json
 COPY apps/cli/src ./apps/cli/src
 
@@ -366,7 +376,7 @@ RUN mkdir -p /app/${SERVICE}/.kortix-data && \
 
 LABEL org.opencontainers.image.title="kortix-api" \
       org.opencontainers.image.description="Kortix API server" \
-      org.opencontainers.image.source="https://github.com/kortix-ai/suna" \
+      org.opencontainers.image.source="https://github.com/kortix-ai/CompanyOS" \
       org.opencontainers.image.licenses="Elastic-2.0" \
       org.opencontainers.image.vendor="Kortix"
 

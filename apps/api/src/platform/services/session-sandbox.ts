@@ -69,11 +69,11 @@ import { startComputeSession } from '../../billing/services/compute-metering';
 import { resolveAgentGrant } from '../../projects/agents';
 import { resolveLlmGatewayBaseUrl } from '../../llm-gateway/sandbox-base-url';
 import { RuntimeIdentityConflictError } from '../../projects/runtime-identity-error';
-import { grantWarmPoolLifetime } from '../../projects/sandbox-deadline';
 import { instanceStampMetadata } from '../../projects/instance-scope';
 import { withTimeout, configuredTimeoutMs } from '../../shared/with-timeout';
 import { classifySandboxProvisioningFailure } from './sandbox-provisioning-error';
-import { myKortixAgentGrant } from '../../projects/lib/my-kortix-agent';
+import { myKortixSessionGrant } from '../../projects/surface';
+import { devTunnelStamp } from '../dev-tunnel-stamp';
 import { resolveSessionOnBehalfOf } from '../../projects/lib/on-behalf-of';
 import { agentPrincipalModeFor } from '../../iam/agent-principal';
 import { resolveSessionNetworkBoundary } from '../../projects/lib/network-secret-boundary';
@@ -85,18 +85,6 @@ import { resolveSessionPlacement } from './sandbox-region';
 import { resolveSessionResidentialProxy } from './residential-proxy';
 import type { WorkspaceVolume } from './workspace-volume';
 import { logger } from '../../lib/logger';
-
-/**
- * Bound for the pre-active hook. Generous, because the hook is a data restore and
- * cutting it short mid-write is worse than waiting — but finite, because it sits
- * between "VM exists" and "row is active", i.e. directly on time-to-usable. See
- * the call site for the measured cost of it being unbounded.
- */
-const BEFORE_ACTIVE_HOOK_TIMEOUT_MS = configuredTimeoutMs(
-  'KORTIX_BEFORE_ACTIVE_HOOK_TIMEOUT_MS',
-  20_000,
-  1_000,
-);
 
 // Fallback spec for sandboxes that don't declare `sandbox:` in kortix.yaml.
 // Mirrors the platform default sandbox size (2 vCPU / 4 GB / 20 GB).
@@ -214,8 +202,9 @@ export async function mintSessionToken(opts: {
   // The reserved coordinator uses a platform-owned full project grant. It acts
   // as the launching user and never resolves through a project-declared agent
   // or standing service account.
+  // A My Kortix colleague also holds the connectors and secrets a person allowed it.
   const [agentGrant, serviceAccountId] = platformMetaAgent
-    ? [myKortixAgentGrant(), null]
+    ? [await myKortixSessionGrant(opts.sandboxId), null]
     : await Promise.all([
         // Resolve the per-session grant AND the agent's standing-identity
         // service account in parallel. Grant resolution must throw on failure.
@@ -431,6 +420,10 @@ interface SessionProvisionContext {
   // Drive sync (operator switch): a session off Platinum gets its drives
   // copied in and synced by the box's daemon instead of failing to boot.
   drivesSyncAllowed: boolean;
+  // A My Kortix box mounts no Files, except in a space thread with `chat` on:
+  // there it mounts them on Platinum like any session (its thread files,
+  // memory/thread-files.ts). Off Platinum it boots without them, as before.
+  myKortixSpaceDrives?: boolean;
 }
 
 /** Insert the `provisioning` row, or claim an authorized recovery placeholder. */
@@ -544,14 +537,6 @@ export async function provisionSessionSandbox(opts: {
    * `[[sandbox.templates]]` entries. Empty/undefined → platform default.
    */
   sandboxSlug?: string;
-  /**
-   * Runs after the provider sandbox is created but BEFORE the row is flipped to
-   * `active`. Used by legacy migration to restore the original opencode store
-   * into the sandbox before the frontend's `ensure-opencode` pin runs (which
-   * would otherwise re-pin to a fresh session). Best-effort: a throw is logged
-   * and provisioning still completes to `active`.
-   */
-  beforeActive?: (externalId: string) => Promise<void>;
 }): Promise<ProvisionSessionSandboxResult> {
   const { sandboxId, accountId, projectId, userId, serverType } = opts;
   // An explicit caller location wins; otherwise where the project's Files
@@ -608,6 +593,11 @@ export async function provisionSessionSandbox(opts: {
       .catch(() => false));
   const drivesSyncAllowed =
     drivesRequirePlatinum && (await import('../../drives/sync').then((m) => m.driveSyncEnabled()).catch(() => false));
+  const myKortixSpaceDrives =
+    isMyKortixSandboxSlug(slug) &&
+    (await import('../../drives/service')
+      .then((m) => m.sessionDriveMountEnabled() && m.sessionMountsSpaceFiles(projectId, sandboxId))
+      .catch(() => false));
   const resolveImage = (
     gitProject: GitBackedProject,
     targetProvider: string,
@@ -697,21 +687,14 @@ export async function provisionSessionSandbox(opts: {
   const sessionToken = tokenResult.value;
   const [sandbox] = sandboxRows;
   if (!sandbox) throw new RuntimeIdentityConflictError(sandboxId);
-  // A WARM-POOL box is the one box the control plane can never observe again
-  // until somebody claims it: no turns, no LLM calls, no human preview traffic.
-  // Under the bare 20-minute boot floor every warm box was therefore reaped
-  // before it could be handed out, which defeats the whole feature. Grant its
-  // (bounded) lifetime here, at the one moment we know it is warm. No-op for
-  // every other box, and fire-and-forget: the row already carries the floor.
-  void grantWarmPoolLifetime(sandboxId, sandbox.metadata);
   tl.mark('row+tokens');
 
   const kortixOrigin = config.KORTIX_URL.replace(/\/+$/, '');
   const llmBaseUrl = resolveLlmGatewayBaseUrl(kortixOrigin);
 
-  // The sandbox's OpenCode `kortix` provider only mounts when KORTIX_LLM_* is
-  // injected (otherwise OpenCode falls back to showing only its built-in Zen
-  // catalog). It authenticates the gateway with the per-session connector PAT,
+  // The runtime's `kortix` provider needs KORTIX_LLM_* (pi refuses to start
+  // without KORTIX_LLM_BASE_URL and KORTIX_TOKEN). It authenticates the
+  // gateway with the per-session connector PAT,
   // which the gateway resolves via validateAccountToken and meters.
   //
   // YOLO is gone — we no longer mint/inject a per-member kyolo_ token here. That
@@ -741,9 +724,8 @@ export async function provisionSessionSandbox(opts: {
     serverType,
     location: placement.location,
     // A box that mounts the project's Files never leaves their region: the
-    // home region could not mount them. Nor does a warm (speculative) box:
-    // the warm marker of projects/sandbox-deadline-policy.ts isWarmPoolBox.
-    locationRequired: placement.required || sandbox.metadata?.warm === true,
+    // home region could not mount them.
+    locationRequired: placement.required,
     envVars: {
       ...extraEnvVars,
       // One sandbox, one session-scoped Kortix credential. Provider, connector,
@@ -780,6 +762,7 @@ export async function provisionSessionSandbox(opts: {
       slug,
       drivesRequirePlatinum,
       drivesSyncAllowed,
+      myKortixSpaceDrives,
     },
     state,
   );
@@ -828,7 +811,7 @@ async function resolveAttemptImage(
 
 /** The session's drives this attempt's box mounts (on Platinum) or syncs (elsewhere). */
 async function prepareAttemptVolumes(ctx: SessionProvisionContext, state: SessionProvisionState): Promise<void> {
-  const { opts, sandbox, providerCreateInput, slug, drivesRequirePlatinum, drivesSyncAllowed } = ctx;
+  const { opts, sandbox, providerCreateInput, slug, drivesRequirePlatinum, drivesSyncAllowed, myKortixSpaceDrives } = ctx;
   const { accountId, projectId, userId } = opts;
   const { providerName } = state;
   // Drive sync: on any other provider the session's drives are copied
@@ -841,7 +824,7 @@ async function prepareAttemptVolumes(ctx: SessionProvisionContext, state: Sessio
   }
   // The entrypoint starts its drive-owner helper only for a session with
   // drives; a box without them boots as it did before drives.
-  if (drivesRequirePlatinum && providerCreateInput.envVars?.KORTIX_DRIVES !== '1') {
+  if ((drivesRequirePlatinum || (myKortixSpaceDrives && providerName === 'platinum')) && providerCreateInput.envVars?.KORTIX_DRIVES !== '1') {
     providerCreateInput.envVars = { ...(providerCreateInput.envVars ?? {}), KORTIX_DRIVES: '1' };
   }
   const planDrives = () =>
@@ -885,7 +868,7 @@ async function prepareAttemptVolumes(ctx: SessionProvisionContext, state: Sessio
     // A box anywhere else would boot without the session's files.
     throw new Error('[workspace] This session’s files are on a Platinum volume, and this box would not mount it, so the session did not start.');
   }
-  if (providerName !== 'platinum' || isMyKortixSandboxSlug(slug)) {
+  if (providerName !== 'platinum' || (isMyKortixSandboxSlug(slug) && !myKortixSpaceDrives)) {
     providerCreateInput.volumes = undefined;
     return;
   }
@@ -1222,36 +1205,6 @@ async function activateProvisionedSandbox(
   const { accountId, userId } = opts;
   const { providerName, provider } = state;
   const { result, attempts, timeline, firstStage, branch, boot } = created;
-  // Pre-active hook (legacy migration chat restore). Runs while the row is
-  // still 'provisioning' so the frontend hasn't started ensure-opencode yet.
-  //
-  // The comment here used to say "never block the session opening on it" while
-  // the code awaited it UNBOUNDED — and the telemetry shows what that cost
-  // when the hook was live: `before-active-hook` p50 12 267ms, p90 33 762ms,
-  // max 62 490ms across 162 provisions, every millisecond of it added to
-  // time-to-usable because the row cannot flip to 'active' until this returns
-  // (last live occurrence 2026-07-12; no caller passes `beforeActive` today,
-  // so this is currently unreachable).
-  //
-  // Left in place as the documented extension point it is, but now bounded so
-  // re-enabling it cannot silently reintroduce a 12-60s stall. On timeout the
-  // hook keeps running detached — it is a data-restore, so abandoning the WAIT
-  // is right while abandoning the WORK is not — and the session proceeds to
-  // 'active' as the original comment always promised.
-  if (opts.beforeActive) {
-    try {
-      await withTimeout(
-        opts.beforeActive(result.externalId),
-        BEFORE_ACTIVE_HOOK_TIMEOUT_MS,
-        `beforeActive(${sandbox.sandboxId})`,
-      );
-      tl.mark('before-active-hook');
-    } catch (err) {
-      console.warn(`[session-sandbox] beforeActive hook failed or timed out for ${sandbox.sandboxId}:`, err);
-      tl.mark('before-active-hook-abandoned');
-    }
-  }
-
   // Async providers leave the row at 'provisioning' so the dashboard
   // poller can flip it to 'active' once port 8000 is reachable. Sync
   // providers (none today) would be ready immediately on create.
@@ -1300,7 +1253,8 @@ async function activateProvisionedSandbox(
     columns: {
       externalId: result.externalId,
       baseUrl: result.baseUrl || null,
-      config: { serviceKey: sessionToken },
+      // On a quick-tunnel dev stack, the tunnel this box calls back to (platform/dev-tunnel-stamp.ts).
+      config: { serviceKey: sessionToken, ...devTunnelStamp() },
       lastUsedAt: new Date(),
     },
     metadata: sandboxInitMetadataPatch(snapshot, finishMetadata),
@@ -1456,8 +1410,13 @@ async function healMissingSnapshot(
   // and retry once. Capped at one heal per session start.
   if (isSnapshotMissingOnProvider(bgErr) && state.imageInfo && !state.healedStaleSnapshot) {
     state.healedStaleSnapshot = true;
+    // Delete the EXACT snapshot name the session booted — never re-derive it
+    // from the slug (a project template named `default-warm` that disappears
+    // mid-provision would re-resolve to the shared platform default and make
+    // this heal delete the image every tenant's next session boots from;
+    // KRTX-4465, Strix CWE-367).
     await deleteSandboxImage(opts.gitProject, {
-      slug: state.imageInfo.slug,
+      snapshotName: state.imageInfo.snapshotName,
       provider: state.providerName,
     }).catch((err: unknown) =>
       console.warn(

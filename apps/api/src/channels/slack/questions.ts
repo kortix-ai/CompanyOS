@@ -1,8 +1,8 @@
 import { questionButtonData } from '../core/question-token';
 import { postBlocks, postMessage } from '../slack-api';
 import { slackAgentPersona } from './persona';
-import { deleteTurn, finalizeTurn, loadTurn } from './turn';
 import { escapeMrkdwn } from './util';
+import { prepareWaitingTurn } from './waiting-turn';
 import type { QuestionInfo } from './types';
 
 export type { QuestionInfo } from './types';
@@ -15,7 +15,7 @@ export type { QuestionInfo } from './types';
 // in-thread reply that @mentions the bot works too (for "Other"). Either way the answer arrives as a
 // normal follow-up turn with full context. The sentinel is returned as the
 // question tool's "answer" so the agent resumes and ends its turn. Kept here
-// (not just in the sandbox) so an OLD sandbox image — which resumes opencode
+// (not just in the sandbox) so an OLD sandbox image — which resumes OpenCode
 // from THIS response's `answers` — stays unblocked during the window between an
 // API deploy and the sandbox template rebuild.
 const QUESTION_SENTINEL =
@@ -26,7 +26,7 @@ const QUESTION_SENTINEL =
 
 // Renders the agent's question(s) into the live Slack thread. The sandbox owns
 // the "is this Slack / auto-answer the tool" decision (via its env = the session
-// metadata) and resumes opencode itself, so this is purely the thread-render side
+// metadata) and resumes the runtime itself, so this is purely the thread-render side
 // effect: it needs a live turn (for the channel/token) and is a best-effort no-op
 // when there isn't one (e.g. a second question after the first finalized).
 export async function postQuestion(
@@ -35,19 +35,12 @@ export async function postQuestion(
   /** The stored question its buttons answer (`buildQuestionBlocks`). */
   pendingId?: string,
 ): Promise<{ ok: boolean; answers?: string[][]; error?: string }> {
-  const handle = await loadTurn(sessionId);
+  // Close out the in-flight plan, then post the question(s) below it — the shell
+  // lives in waiting-turn.ts (teams/waiting-turn.ts is the Teams twin).
+  const handle = await prepareWaitingTurn(sessionId, 'Waiting for your answer');
   if (!handle) {
     return { ok: false, error: 'No active Slack turn for this session.' };
   }
-
-  // Close out the in-flight plan, then post the question(s) below it.
-  //
-  // NOT "Task complete", which is what the default title said for as long as
-  // this has existed: the agent did not finish, it asked. The step in flight
-  // gets the neutral glyph for the same reason. Teams had the identical bug;
-  // both are fixed together because it is one mistake in two copies.
-  await finalizeTurn(handle, { title: 'Waiting for your answer', unfinished: true });
-  await deleteTurn(sessionId);
 
   const blocks = buildQuestionBlocks(questions, pendingId);
   const fallback = questions[0]?.question?.slice(0, 200) ?? 'A question for you';

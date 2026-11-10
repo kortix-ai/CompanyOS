@@ -4,7 +4,7 @@
  * transient failures a freshly woken runtime throws.
  */
 
-import { projectSessions } from '@kortix/db';
+import { projectSessions, sessionSandboxes } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { ProvisionTimeline } from '../../platform/services/provision-timeline';
@@ -21,12 +21,14 @@ import { db } from '../../shared/db';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
 import { resolveProjectAutomationActor } from './actor';
+import { sessionIsTombstoned } from '../lib/session-visibility';
 import { awakeDeliveryTarget, deliverAfterWake, undoDeliveryWake, type SendOutcome } from './deliver';
-import { sandboxOpencodeEndpoint } from '../opencode-mapping';
+import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { sessionTransitionLeaves, transitionSession } from './status-transitions';
 import { promptAgent } from './agent-availability';
 import { effortVariantForPrompt } from '../lib/effort-default';
 import type { ContinueSessionCommand, SessionDeliveryOutcome } from './types';
+import { onDevTunnel, staleDevTunnelReason } from '../../platform/dev-tunnel-stamp';
 import { PromptNeverLandedError, postPrompt, readRuntimeMessage } from './runtime-client';
 
 export async function continueSession(
@@ -44,18 +46,9 @@ export async function continueSession(
   // rely on for dedupe.
   commandId?: string,
   tl?: ProvisionTimeline,
-  beforeSend?: () => Promise<void | Pick<ContinueSessionCommand, 'text' | 'parts'>>,
+  beforeSend?: () => Promise<void>,
 ): Promise<SessionDeliveryOutcome> {
-  const { sessionId } = command;
-  let text = command.text;
-  const revalidateBeforeSend = beforeSend ? async () => {
-    const refreshed = await beforeSend();
-    if (refreshed) {
-      text = refreshed.text;
-      command.text = refreshed.text;
-      command.parts = refreshed.parts;
-    }
-  } : undefined;
+  const { sessionId, text } = command;
   const idempotencyKey = commandId ?? randomUUID();
   // The fast-path target is one JOINED read of the session and its sandbox, and
   // it does not depend on the session read below — so it goes out with it
@@ -94,12 +87,21 @@ export async function continueSession(
   // follow-up (Slack reply, scheduled trigger, etc.) would revive a session
   // the user explicitly deleted.
   const sessionMeta = (session.metadata ?? {}) as Record<string, unknown>;
-  if (typeof sessionMeta.deletedAt === 'string') return 'no-session';
+  if (sessionIsTombstoned(session)) return 'no-session';
   if (command.projectId && command.projectId !== session.projectId) {
     console.warn('[session-lifecycle] command project does not own the session; refusing delivery', {
       sessionId,
       commandProjectId: command.projectId,
     });
+    return 'no-session';
+  }
+  // A box an earlier dev stack created calls a dead quick tunnel: it would take
+  // the prompt and never answer, and no start gives it the new URL. To this
+  // stack the session is gone: a channel starts its conversation over in a new
+  // session, which answers. A stable API URL (deployed envs) never reads the box.
+  const stale = await staleDevTunnelBox(sessionId);
+  if (stale) {
+    logger.warn('[session-lifecycle] refusing delivery to a box of an earlier dev tunnel', { sessionId, reason: stale });
     return 'no-session';
   }
   const userId = command.userId ?? (await resolveProjectAutomationActor(session.accountId));
@@ -144,19 +146,23 @@ export async function continueSession(
   const projectEffortVariant = effortVariantForPrompt({
     stored: session.projectDefaultEffort,
     modelOverride: command.overrides?.model ?? undefined,
-    sessionModelRef: sessionMeta.opencode_model,
+    sessionModelRef: sessionMeta.model,
   });
+  // The agent this turn runs: the prompt body carries it to the proxy, whose
+  // pre-prompt env sync resolves that agent's grant. The delivery's env
+  // prefetch must name the SAME string, or the sync cannot take it.
+  const turnAgent = promptAgent(command.overrides?.agent, session.agentName);
   const sendPrompt = async (
     externalId: string,
-    opencodeSessionId: string,
+    runtimeSessionId: string,
     sandboxRecord?: SandboxRecord,
   ): Promise<SendOutcome> => {
-    await revalidateBeforeSend?.();
+    await beforeSend?.();
     await turnIdentity;
     let bodyBytes = 0;
     const delivery = await postPrompt(
       externalId,
-      opencodeSessionId,
+      runtimeSessionId,
       text,
       userId,
       sessionId,
@@ -168,7 +174,7 @@ export async function continueSession(
           ...(projectEffortVariant && !command.overrides?.variant
             ? { variant: projectEffortVariant }
             : {}),
-          agent: promptAgent(command.overrides?.agent, session.agentName),
+          agent: turnAgent,
         },
         wireMessageId: command.wireMessageId,
         materializationKey: command.materializationKey,
@@ -200,9 +206,9 @@ export async function continueSession(
       const landing = await confirmPromptLanded({
         messageId: command.wireMessageId,
         readMessage: async (messageId) => {
-          const endpoint = await sandboxOpencodeEndpoint(externalId, userId);
+          const endpoint = await sandboxRuntimeEndpoint(externalId, userId);
           if (!endpoint) throw new Error('no runtime endpoint');
-          return readRuntimeMessage({ endpoint, opencodeSessionId, externalId }, messageId);
+          return readRuntimeMessage({ endpoint, runtimeSessionId, externalId }, messageId);
         },
       });
       if (landing === 'unknown') {
@@ -260,7 +266,7 @@ export async function continueSession(
         error: err instanceof Error ? err.message : String(err),
       }),
     );
-  const outcome = await deliverAfterWake({ command, session, sessionId, userId, awakeEarly, sendPrompt, beforeSend: revalidateBeforeSend, identityBound: turnIdentity, tl })
+  const outcome = await deliverAfterWake({ command, session, sessionId, userId, turnAgent, awakeEarly, sendPrompt, beforeSend, tl })
     .catch(async (err) => {
       if (wokeFrom) await undoWake();
       throw err;
@@ -269,4 +275,15 @@ export async function continueSession(
     await undoWake();
   }
   return outcome;
+}
+
+/** Why the session's box cannot answer: an earlier dev tunnel made it. No read unless this stack runs on a quick tunnel. */
+async function staleDevTunnelBox(sessionId: string): Promise<string | null> {
+  if (!onDevTunnel()) return null;
+  const [box] = await db
+    .select({ config: sessionSandboxes.config })
+    .from(sessionSandboxes)
+    .where(eq(sessionSandboxes.sessionId, sessionId))
+    .limit(1);
+  return box ? staleDevTunnelReason(box.config) : null;
 }

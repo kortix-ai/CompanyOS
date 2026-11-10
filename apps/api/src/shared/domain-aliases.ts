@@ -110,3 +110,39 @@ export function aliasCorsOrigins(): string[] {
   const apiHost = hostOf(config.KORTIX_URL);
   return [...aliasFrontendOrigins(), ...aliasFormsOf(apiHost).map((host) => `https://${host}`)];
 }
+
+/** The configured CORS origins beyond the built-in list: `CORS_ALLOWED_ORIGINS` and the alias domains. */
+export function configuredCorsOrigins(): string[] {
+  return [
+    ...(config.CORS_ALLOWED_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+    // Self-host alias domains serve the same web app.
+    ...aliasCorsOrigins(),
+  ];
+}
+
+/**
+ * A stored absolute URL on an API host this instance serves (the primary API
+ * host or one of its alias forms), moved onto the API host of the current
+ * request's domain. A session row keeps the API host it was created under
+ * (`sandbox_url`, a sandbox row's `base_url`): after a domain move, or for a
+ * visitor on an alias, the browser must call the API on the domain it is
+ * using, never on one its network may block. Any other URL, and a URL outside
+ * a request, is returned unchanged.
+ */
+export function forRequestApiUrl(url: string | null): string | null {
+  if (!url) return url;
+  const apiHost = hostOf(config.KORTIX_URL);
+  if (!apiHost) return url;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host !== apiHost && !aliasFormsOf(apiHost).includes(host)) return url;
+  const target = forRequestDomain(apiHost);
+  if (host === target) return url;
+  parsed.hostname = target;
+  return parsed.toString();
+}

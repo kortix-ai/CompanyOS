@@ -41,7 +41,7 @@ For an assistant a team shares, that design holds together. It leaves one gap a 
 
 ## One repo that is the system
 
-Kortix runs a company's agents out of that repository, on the same branches your engineers already use. The manifest, the agent prompts, the skills, the memory files, the connector grants and the triggers all live there. [Kortix on GitHub](https://github.com/kortix-ai/suna) is where the platform itself lives. One isolated sandbox per session. Each session has its own isolated machine and branch.
+Kortix runs a company's agents out of that repository, on the same branches your engineers already use. The manifest, the agent prompts, the skills, the memory files, the connector grants and the triggers all live there. [Kortix on GitHub](https://github.com/kortix-ai/CompanyOS) is where the platform itself lives. One isolated sandbox per session. Each session has its own isolated machine and branch.
 
 Picture two engineers on a Friday. One widens a connector grant so an agent can file invoices. The other rewrites that agent's instructions for the same job. Both open change requests, and a reviewer reads them together, sees that the permission change is unrelated to the rewrite, and asks for it to be argued on its own. What matters is what sits in the diff: the company's operating rules as well as the code an agent touched.
 
@@ -49,7 +49,7 @@ Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Free to sta
 
 ## Merge is a grant, not a habit
 
-Session work reaches `main` through a change request. Merge is default-deny for agents. A person with `project.gitops.merge` reads the change request and merges it. A session can merge a change request it opened only when its agent's grant in `kortix.yaml` includes `project.gitops.merge`, and the starter agent ships with every permission, so the first job on a new project is to take the merge away from the agents that should not have it.
+Session work reaches `main` through a change request. Merge is default-deny for agents. A person with `project.gitops.merge` reads the change request and merges it. A session can merge a change request it opened only when its agent's grant in `kortix.yaml` includes `project.gitops.merge`, and the starter agent ships with every permission, so the first job on a new workspace is to take the merge away from the agents that should not have it.
 
 ```yaml
 kortix_version: 2

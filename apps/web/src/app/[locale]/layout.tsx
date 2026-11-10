@@ -18,9 +18,11 @@ import { AuthProvider } from '@/features/providers/auth-provider';
 import { locales, type Locale } from '@/i18n/config';
 import { CHUNK_BOOT_RECOVERY_SCRIPT } from '@/lib/chunk-boot-recovery';
 import { DESKTOP_INIT_SCRIPT } from '@kortix/ui/internal/lib/desktop';
+import { DESKTOP_LEGACY_PATH_SCRIPT } from '@/lib/workspace-redirects';
 import { INTERFACE_THEME_INIT_SCRIPT } from '@/lib/interface-themes';
 import { RouterBridge } from '@/lib/navigation/router-bridge-mount';
 import '@/lib/polyfills';
+import { readInstanceBranding } from '@/lib/instance-branding-server';
 import { getServerPublicEnv } from '@/lib/public-env-server';
 import { runtimeConfigIsBakedAtBuild } from '@/lib/runtime-config-mode';
 import { safeJsonForHtml } from '@/lib/security/safe-json';
@@ -170,7 +172,7 @@ const SITE_JSON_LD = {
       description: siteMetadata.description,
       foundingDate: '2024',
       sameAs: [
-        'https://github.com/kortix-ai/suna',
+        'https://github.com/kortix-ai/CompanyOS',
         'https://x.com/kortix',
         'https://linkedin.com/company/kortix',
       ],
@@ -212,7 +214,7 @@ const SITE_JSON_LD = {
       '@type': 'SoftwareSourceCode',
       '@id': `${siteMetadata.url}/#source`,
       name: 'Kortix CompanyOS',
-      codeRepository: 'https://github.com/kortix-ai/suna',
+      codeRepository: 'https://github.com/kortix-ai/CompanyOS',
       programmingLanguage: 'TypeScript',
       isPartOf: { '@id': `${siteMetadata.url}/#software` },
     },
@@ -243,6 +245,9 @@ export default async function RootLayout({
     requestHost = (await headers()).get('host');
   }
   const runtimeEnv = getServerPublicEnv(requestHost);
+  // A self-host instance's own logo and name, for signed-out pages and for an
+  // account without branding. Always null on Vercel (the Kortix cloud).
+  const instanceBranding = await readInstanceBranding();
 
   return (
     <html
@@ -265,8 +270,11 @@ export default async function RootLayout({
 
         {/* Desktop runtime detection — runs before hydration so CSS reacts on first paint. */}
         <script dangerouslySetInnerHTML={{ __html: DESKTOP_INIT_SCRIPT }} />
+        {/* An installed desktop shell opens /projects… (served in place): show
+            the /workspaces URL before the App Router hydrates. */}
+        <script dangerouslySetInnerHTML={{ __html: DESKTOP_LEGACY_PATH_SCRIPT }} />
 
-        {/* Interface theme palettes on /new, /projects/** and /settings — set
+        {/* Interface theme palettes on /new, /workspaces/** and /settings — set
             before first paint so the stored palette never flashes the default. */}
         <script dangerouslySetInnerHTML={{ __html: INTERFACE_THEME_INIT_SCRIPT }} />
 
@@ -311,7 +319,7 @@ export default async function RootLayout({
                   context = { master_group: 'General', content_group: 'Other', page_type: 'home', language: lang };
                 } else if (pathname.indexOf('/auth') === 0) {
                   context = { master_group: 'General', content_group: 'User', page_type: 'auth', language: lang };
-                } else if (pathname.indexOf('/workspace') === 0 || pathname.indexOf('/projects') === 0 || pathname.indexOf('/thread') === 0) {
+                } else if (pathname.indexOf('/workspace') === 0 || pathname.indexOf('/workspaces') === 0 || pathname.indexOf('/thread') === 0) {
                   context = { master_group: 'Platform', content_group: 'Projects', page_type: 'thread', language: lang };
                 } else if (pathname.indexOf('/settings') === 0) {
                   context = { master_group: 'Platform', content_group: 'User', page_type: 'settings', language: lang };
@@ -380,8 +388,10 @@ export default async function RootLayout({
                       account's own logo / icon / favicon / product name.
                       Reads the shared account-list query, so it sits inside
                       ReactQueryProvider and above everything that renders a
-                      KortixLogo. */}
-                      <BrandingProvider>
+                      KortixLogo. `instanceBranding` is the self-host
+                      instance's own, for signed-out pages and accounts
+                      without branding. */}
+                      <BrandingProvider instanceBranding={instanceBranding}>
                         <RequestDemoProvider>
                           {/* Account-wide MFA: catches the SDK's kortix:mfa-required
                           event (coded 403) and walks the user through a TOTP

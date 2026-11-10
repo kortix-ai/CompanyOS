@@ -83,7 +83,7 @@ import {
   sandboxWorkloadType,
 } from './contract';
 import { providerAutoStopBackstopMinutes } from './contract';
-import { classifyPtyWebSocketPath } from './pty-ingress';
+import { isPtyWebSocketPath } from './pty-ingress';
 import { sandboxOwnershipMarker } from '../sandbox-ownership';
 import { RESIDENTIAL_PROXY_NOT_OFFERED_MESSAGE } from '../services/sandbox-provisioning-error';
 
@@ -360,7 +360,7 @@ function droppedOptionalVolumes(opts: CreateSandboxOpts, error: unknown): Droppe
   if (typeof status !== 'number' || !((status >= 400 && status < 500) || status === 503)) return [];
   // A full fleet is capacity, not a mount: it is retried with every mount.
   if (/no capacity/i.test(body ?? '')) return [];
-  // A box that must run in its region (a warm box) fails fast, so a box
+  // A box that must run in its region fails fast, so a box
   // placed where the files live is booted instead of one without them.
   if (opts.locationRequired && code === 'volume_in_other_region') return [];
   let reason = body ?? '';
@@ -776,7 +776,7 @@ export class PlatinumProvider implements SandboxProvider {
         // A box must run where its drives live. With no region the create goes
         // to the home control plane, which holds the drive (or routes the
         // create to the region that does). A drive missing everywhere still
-        // fails loudly there. A warm box keeps its region and fails below.
+        // fails loudly there. A box that must run in its region fails below.
         const fallback = {
           requested: opts.location!,
           state: 'volume_in_other_region',
@@ -860,8 +860,7 @@ export class PlatinumProvider implements SandboxProvider {
         // No copy is running, so waiting cannot help. `us_region` chooses
         // compute placement only: boot this session in the home region now.
         // The next regional create after Platinum's cooldown retries the copy.
-        // A speculative (warm) box must match its project's region, so it
-        // fails fast instead (warm-sessions.ts warmSessionPlacement).
+        // A box that must run in its region fails fast instead.
         // The recursion sends no region, so it cannot come back here.
         // ponytail: an ambiguous home create that fails, followed by a later
         // regional create that succeeds, leaves the home box orphaned for the
@@ -1024,9 +1023,9 @@ export class PlatinumProvider implements SandboxProvider {
     const _exposeMs = Date.now() - _tExpose0;
 
     // Return as soon as the VM is running and the agent port is exposed — do NOT
-    // block on the in-guest runtime (repo clone + opencode). That readiness is
-    // polled by the frontend (useOpenCodeRuntimeReady + the react-query
-    // "opencode not ready" retry) EXACTLY as it is for Daytona, whose create()
+    // block on the in-guest runtime (repo clone + runtime start). That readiness
+    // is polled by the frontend (the SDK's `useRuntimeReady` gate) EXACTLY as it
+    // is for Daytona, whose create()
     // also returns a not-yet-usable box and defers readiness to the FE.
     //
     // Why this matters: the old code polled /kortix/health for runtimeReady up
@@ -1059,7 +1058,7 @@ export class PlatinumProvider implements SandboxProvider {
         ...(sandbox.region ? { platinumRegion: sandbox.region } : {}),
         ...(sandbox.api_url ? { platinumApiUrl: sandbox.api_url } : {}),
         // Always written, so a rebuilt box never keeps its predecessor's value
-        // (the row's metadata is merged). The warm pool matches on it.
+        // (the row's metadata is merged).
         residentialProxy: Boolean(opts.residentialProxy),
         // Optional folders Platinum holds (pending or failed) instead of
         // refusing the create: the session records them like the folders a
@@ -1550,7 +1549,7 @@ export class PlatinumProvider implements SandboxProvider {
 
   routeIngress(request: SandboxIngressRequest) {
     const ptyWebsocket =
-      request.transport === 'websocket' && classifyPtyWebSocketPath(request.path) !== null;
+      request.transport === 'websocket' && isPtyWebSocketPath(request.path);
     return {
       // Either half of the opencode pair rewrites to the agent bridge —
       // Platinum cannot expose opencode's port directly. After a verified

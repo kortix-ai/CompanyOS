@@ -38,6 +38,11 @@ interface ModelStore {
   user: UserEntry[];
   recent: ModelKey[];
   variant: Record<string, string | undefined>;
+  /**
+   * Models the user starred in the picker, newest last. Separate from `user`
+   * (the show/hide pins): a favorite never changes what the default view shows.
+   */
+  favorites?: ModelKey[];
   /** Persisted per-agent model selection so it survives refresh/new tabs */
   selectedModel?: Record<string, ModelKey | undefined>;
   /** Per-session agent name — keyed by sessionId so each session remembers its own agent */
@@ -64,7 +69,9 @@ interface ModelStore {
 // LocalStorage persistence
 // ============================================================================
 
-const STORE_KEY = 'opencode-model-store-v1';
+const STORE_KEY = 'kortix-model-store-v1';
+/** The key before 2026-11-06. `loadStore` moves a value saved under it to `STORE_KEY` once. */
+const LEGACY_STORE_KEY = 'opencode-model-store-v1';
 
 /**
  * Cap the per-session maps (`sessionModel`, `sessionAgentName`). They're keyed
@@ -84,7 +91,7 @@ function capSessionMap<V>(map: Record<string, V> | undefined): Record<string, V>
 
 /**
  * Guarantee the persisted store's shape no matter what localStorage holds.
- * Proven live (SampleCo 2026-08-26): a malformed `opencode-model-store-v1`
+ * Proven live (2026-08-26): a malformed persisted model store
  * value crashed every route with "a.user is not iterable" because consumers
  * iterate `store.user` and `loadStore` returned `JSON.parse(raw)` unvalidated.
  * Corrupt or legacy data degrades to defaults — it never throws downstream.
@@ -100,6 +107,7 @@ export function sanitizeModelStore(raw: unknown): ModelStore {
     recent: objArray<ModelKey>(raw.recent),
     variant: isObj(raw.variant) ? (raw.variant as ModelStore['variant']) : {},
   };
+  if (Array.isArray(raw.favorites)) out.favorites = objArray<ModelKey>(raw.favorites);
   if (isObj(raw.selectedModel)) out.selectedModel = raw.selectedModel as ModelStore['selectedModel'];
   if (isObj(raw.sessionAgentName)) out.sessionAgentName = raw.sessionAgentName as ModelStore['sessionAgentName'];
   if (typeof raw.lastAgentName === 'string') out.lastAgentName = raw.lastAgentName;
@@ -116,6 +124,13 @@ function loadStore(): ModelStore {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return sanitizeModelStore(JSON.parse(raw));
+    const legacy = localStorage.getItem(LEGACY_STORE_KEY);
+    if (legacy) {
+      localStorage.removeItem(LEGACY_STORE_KEY);
+      const store = sanitizeModelStore(JSON.parse(legacy));
+      safeSetItem(STORE_KEY, JSON.stringify(store));
+      return store;
+    }
   } catch {
     // ignore
   }
@@ -148,7 +163,10 @@ function setStore(next: ModelStore) {
 registerIdentityReset(() => {
   _store = { user: [], recent: [], variant: {} };
   try {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(STORE_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORE_KEY);
+      localStorage.removeItem(LEGACY_STORE_KEY);
+    }
   } catch {
     // Storage-blocked context: the in-memory reset above is what matters.
   }
@@ -158,6 +176,29 @@ registerIdentityReset(() => {
 function subscribe(fn: () => void) {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+/** Copy-map / set-or-delete: the one body of every per-session map setter. */
+function mapEntry<V>(map: Record<string, V> | undefined, key: string, value: V | undefined): Record<string, V> {
+  const next = { ...(map ?? {}) };
+  if (value !== undefined) next[key] = value;
+  else delete next[key];
+  return next;
+}
+
+/** The one body of the explicit "make this my default everywhere" write; both entry points call it. */
+function clearPerSessionSelections(model: ModelKey | undefined): ModelStore {
+  // When setting a new global default, clear ALL per-agent and per-session
+  // selections so the global default takes effect everywhere immediately.
+  // Without this, stale per-agent/per-session data from previous interactions
+  // would override the user's explicit setup choice.
+  return {
+    ...getStore(),
+    globalDefault: model,
+    selectedModel: {},
+    sessionModel: {},
+    sessionModelFallbackAt: {},
+  };
 }
 
 /**
@@ -185,13 +226,7 @@ export function seedGlobalDefaultFromServer(model: ModelKey | undefined): void {
  * Clears per-agent/per-session selections so the new default takes effect everywhere.
  */
 export function setGlobalDefaultModel(model: ModelKey | undefined): void {
-  const s = getStore();
-  setStore({
-    ...s,
-    globalDefault: model,
-    selectedModel: {},
-    sessionModel: {},
-  });
+  setStore(clearPerSessionSelections(model));
 }
 
 // The default-visibility rule is framework-free (`createModelVisibility`), so
@@ -277,6 +312,28 @@ export function useModelStore(
     setStore({ ...s, user: [] });
   }, []);
 
+  // Favorites: the picker's starred models, per browser like the rest of this store.
+  const favoriteKeys = useMemo(
+    () => new Set((store.favorites ?? []).map((m) => `${m.providerID}:${m.modelID}`)),
+    [store.favorites],
+  );
+
+  const isFavorite = useCallback(
+    (model: ModelKey): boolean => favoriteKeys.has(`${model.providerID}:${model.modelID}`),
+    [favoriteKeys],
+  );
+
+  const setFavorite = useCallback((model: ModelKey, on: boolean) => {
+    const s = getStore();
+    const same = (m: ModelKey) => m.providerID === model.providerID && m.modelID === model.modelID;
+    const current = s.favorites ?? [];
+    if (current.some(same) === on) return;
+    const next = on
+      ? [...current, { providerID: model.providerID, modelID: model.modelID }]
+      : current.filter((m) => !same(m));
+    setStore({ ...s, favorites: next });
+  }, []);
+
   // Recent models
   const recentModels = useMemo(() => store.recent, [store.recent]);
 
@@ -312,13 +369,7 @@ export function useModelStore(
 
   const setSelectedModel = useCallback((agentName: string, model: ModelKey | undefined) => {
     const s = getStore();
-    const next = { ...s.selectedModel };
-    if (model) {
-      next[agentName] = model;
-    } else {
-      delete next[agentName];
-    }
-    setStore({ ...s, selectedModel: next });
+    setStore({ ...s, selectedModel: mapEntry(s.selectedModel, agentName, model) });
   }, []);
 
   // Per-session agent name selection
@@ -338,13 +389,8 @@ export function useModelStore(
     // 351da943…). See `shouldSetSessionAgentName` for the rationale.
     const current = s.sessionAgentName?.[sessionId];
     if (!shouldSetSessionAgentName(current, name)) return;
-    const next = { ...s.sessionAgentName };
-    if (name) {
-      next[sessionId] = name;
-    } else {
-      delete next[sessionId];
-    }
-    setStore({ ...s, sessionAgentName: next });
+    // `''` and `undefined` are the same clear intent (see the guard above).
+    setStore({ ...s, sessionAgentName: mapEntry(s.sessionAgentName, sessionId, name ? name : undefined) });
   }, []);
 
   // Globally last-used agent — fallback for dashboard (no sessionId) and a seed
@@ -372,31 +418,15 @@ export function useModelStore(
   /** `fallbackAtMs`: the `atMs` of the fallback switch the composer showed when this pick was made, if any. */
   const setSessionModel = useCallback((sessionId: string, model: ModelKey | undefined, fallbackAtMs?: number) => {
     const s = getStore();
-    const next = { ...s.sessionModel };
-    const over = { ...s.sessionModelFallbackAt };
-    if (model) next[sessionId] = model;
-    else delete next[sessionId];
-    if (model && fallbackAtMs !== undefined) over[sessionId] = fallbackAtMs;
-    else delete over[sessionId];
-    setStore({ ...s, sessionModel: next, sessionModelFallbackAt: over });
+    const stamp = model && fallbackAtMs !== undefined ? fallbackAtMs : undefined;
+    setStore({ ...s, sessionModel: mapEntry(s.sessionModel, sessionId, model), sessionModelFallbackAt: mapEntry(s.sessionModelFallbackAt, sessionId, stamp) });
   }, []);
 
   // Global default model (set during onboarding setup wizard)
   const globalDefault = useMemo(() => store.globalDefault, [store.globalDefault]);
 
   const setGlobalDefault = useCallback((model: ModelKey | undefined) => {
-    const s = getStore();
-    // When setting a new global default, clear ALL per-agent and per-session
-    // selections so the global default takes effect everywhere immediately.
-    // Without this, stale per-agent/per-session data from previous interactions
-    // would override the user's explicit setup choice.
-    setStore({
-      ...s,
-      globalDefault: model,
-      selectedModel: {},
-      sessionModel: {},
-      sessionModelFallbackAt: {},
-    });
+    setStore(clearPerSessionSelections(model));
   }, []);
 
   return {
@@ -406,6 +436,8 @@ export function useModelStore(
     resetVisibility,
     recent: recentModels,
     pushRecent,
+    isFavorite,
+    setFavorite,
     getVariant,
     setVariant,
     getSelectedModel,

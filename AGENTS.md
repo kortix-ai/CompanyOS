@@ -184,8 +184,9 @@ encrypted in `apps/api/.env` as `BLOCKED_COMMIT_TERMS`, comma-separated.
 - Add a customer the day they sign: `dotenvx set BLOCKED_COMMIT_TERMS
   "<existing>,<new>" -f apps/api/.env`. Read the current value first with
   `dotenvx get BLOCKED_COMMIT_TERMS -f apps/api/.env`.
-- In a worktree the guard decrypts with the primary checkout's
-  `apps/api/.env.keys`. Without a key it warns and allows.
+- The guard decrypts through the Armor login (`dotenvx armor login`, dotenvx
+  2.7.1+) or a checkout's `apps/api/.env.keys` (in a worktree, the primary's).
+  Without a key it warns and allows.
 - Deleting a line that contains a term is always allowed.
 - Never bypass the guard with `--no-verify`. If it fires, remove the term.
 - The hooks do not see PR titles, PR bodies, or comments. Those stay your
@@ -379,7 +380,7 @@ turns red on your change, you fix forward on `dev` the same day.
    again on dev after the merge (rule 8). Green tests are not the bar. Someone
    used it.
 7. After the merge, deploy dev yourself: `gh workflow run deploy-dev.yml
-   --repo kortix-ai/suna -f surface=changed` (`all` or `frontend` force a
+   --repo kortix-ai/CompanyOS -f surface=changed` (`all` or `frontend` force a
    rebuild). Deploys queue, they never cancel. Wait for the run to finish.
    `/health` on every changed surface must serve the merge SHA: a successful
    `/health` response alone is not deployment proof. The run comments "Live on

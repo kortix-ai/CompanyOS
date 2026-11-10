@@ -17,7 +17,9 @@ import { actorForToken } from '../../iam/actor';
 import { loadProjectConfig, listRepoFiles } from '../git';
 import { canonicalTreePath, refreshMirror } from '../git/mirror';
 import { withProjectGitAuth } from './git';
+import { savedProjectConfig } from '../config-summary/service';
 import { ttlMemo } from '../../shared/ttl-memo';
+import { errorMessage } from '../../shared/error-message';
 
 /**
  * Load a project's config WITH its repo file list: a registered skill's
@@ -28,6 +30,12 @@ export async function loadConfigWithFiles(
   row: Parameters<typeof withProjectGitAuth>[0] & { defaultBranch: string },
   opts: { forceRefresh?: boolean } = {},
 ): Promise<ProjectConfigSummary> {
+  // The saved config summary first: no credential, no git. It is served only
+  // at the proven tip, so a forced refresh skips it and reads the branch.
+  if (!opts.forceRefresh) {
+    const saved = await savedProjectConfig(row);
+    if (saved) return saved.config;
+  }
   const gitProject = await withProjectGitAuth(row);
   // The mirror refreshes on a timer, so a resource committed seconds ago can
   // be missing from it. A caller about to answer "not found" asks for a fresh
@@ -274,7 +282,7 @@ export async function resourceDenierForRequest(ctx: ResourceAccessContext & {
   } catch (err) {
     console.warn('[resource-denier] config load failed; skipping file-path scoping', {
       projectId: ctx.projectId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     return null;
   }

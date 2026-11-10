@@ -51,13 +51,11 @@ export function quickEntryProjectId(
 /**
  * The sessions the picker offers: the person's most recent in the project,
  * newest activity first, with the sidebar's title, status and last activity.
- * An unused warm session is left out: it is not a conversation anyone started.
  */
 export function quickEntryRecentSessions(
   sessions: readonly ProjectSession[],
 ): { id: string; title: string; status: SessionDisplayStatus; lastActiveAt: string }[] {
   return sessions
-    .filter((session) => (session.metadata as Record<string, unknown> | null)?.warm !== true)
     .slice(0, QUICK_ENTRY_RECENT_SESSIONS)
     .map((session) => ({
       id: session.session_id,
@@ -150,7 +148,7 @@ export function DesktopQuickEntry() {
     const snapshot = composerRef.current?.projectId === projectId ? composerRef.current : null;
     const composer = snapshot ? { agents: snapshot.agents, agent: snapshot.agent } : null;
     void setDesktopQuickEntryTarget(projectId ? { projectId, name, sessions: recent, composer } : null);
-    if (projectId) router.prefetch(`/projects/${projectId}`);
+    if (projectId) router.prefetch(`/workspaces/${projectId}`);
   }, [desktop, userId, projectId, name, recent, composerKey, router]);
 
   // An agent picked in the bar, applied by the composer's own setter.
@@ -187,7 +185,7 @@ export function DesktopQuickEntry() {
           .setPrefill(prompt.sessionId, prompt.text, files.length ? files : undefined, 'replace', { submit: true });
         // nav-contract: prefetch-only — the session was picked in the native bar
         router.push(
-          `/projects/${encodeURIComponent(prompt.projectId)}/sessions/${encodeURIComponent(prompt.sessionId)}`,
+          `/workspaces/${encodeURIComponent(prompt.projectId)}/sessions/${encodeURIComponent(prompt.sessionId)}`,
         );
         return;
       }
@@ -196,7 +194,7 @@ export function DesktopQuickEntry() {
         // No project known: the door opens one, and the prompt only fills its
         // composer. `?q=` never sends, so the person presses Enter there.
         // nav-contract: prefetch-only — the destination exists only once a prompt arrives
-        router.push(`/projects/start?q=${encodeURIComponent(prompt.text)}`);
+        router.push(`/workspaces/start?q=${encodeURIComponent(prompt.text)}`);
         return;
       }
       // Project home consumes this and submits it (project-home.tsx) with the
@@ -209,7 +207,7 @@ export function DesktopQuickEntry() {
         ...(composer ? { options: composer.overrides } : {}),
       });
       // nav-contract: prefetch-only — the effect above prefetches this route
-      router.push(`/projects/${target}`);
+      router.push(`/workspaces/${target}`);
     };
     // A prompt sent while this window was loading or signed out was never poked.
     void take();

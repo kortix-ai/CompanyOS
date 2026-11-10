@@ -69,7 +69,7 @@ result on the commit. Fix it forward on `dev`, or revert the culprit after 1 hou
 ### Step 2 — check the nightly run and cost migrations
 
 ```bash
-gh run list --repo kortix-ai/suna --workflow tests.yml --branch dev --event schedule \
+gh run list --repo kortix-ai/CompanyOS --workflow tests.yml --branch dev --event schedule \
   --limit 1 --json conclusion,headSha --jq '.[0]'
 ```
 
@@ -81,7 +81,7 @@ before you dispatch: Promote applies it to the staging database within minutes.
 Write the title and notes (Step 7 shows how), then:
 
 ```bash
-gh workflow run promote.yml --repo kortix-ai/suna --ref dev \
+gh workflow run promote.yml --repo kortix-ai/CompanyOS --ref dev \
   -f ref=dev -f title="<title>" -f notes="$(cat <<'EOF'
 <markdown notes>
 EOF
@@ -105,6 +105,15 @@ Promote then:
 `-f dry_run=true` prints every decision (SHA, conflict, PR, version) and
 changes nothing. `-f ref=staging` skips the dev leg: the hotfix path for a
 commit already on `staging`.
+
+**A failed promote resumes.** When the run fails after the staging merge
+(build, deploy or the `/health` proof), fix the cause and re-run the run (or
+dispatch again with the same `ref`). The plan step finds the merged
+`promote/dev-<sha10>` PR; while its merge is still the staging tip it skips the
+merge, skips the build when the three staging manifests already passed, and
+always repeats the 8-read `/health` proof. When staging moved on after that
+merge, use `-f ref=staging`. A re-promote cancels the gate run of the release
+PR's older head itself.
 
 ### Step 4 — the release suite is the gate; fix forward
 
@@ -206,7 +215,7 @@ Only that pull request run's `full suite + quality gates` counts for the `prod`
 ruleset. A dispatched run on the same SHA does not (v0.13.57: green dispatched
 gate, PR still `BLOCKED`), so never dispatch a second gate. If the Promote
 summary warns that approval failed, approve it yourself:
-`gh api -X POST repos/kortix-ai/suna/actions/runs/<run id>/approve`.
+`gh api -X POST repos/kortix-ai/CompanyOS/actions/runs/<run id>/approve`.
 
 ### Step 8 — release gate triage
 
@@ -238,7 +247,7 @@ approval comment by a second person within 2 business days (compliance rule
 CM-3).
 
 ```bash
-gh pr merge <release-pr> --repo kortix-ai/suna --merge
+gh pr merge <release-pr> --repo kortix-ai/CompanyOS --merge
 ```
 
 Never add `--admin` to merge over a red or missing gate unless the owner
@@ -256,17 +265,28 @@ curl -fsS https://kortix.com/api/health | jq '{version,commit}'
 npm view @kortix/sdk version
 npm view @kortix/agent-tunnel version
 npm view @kortix/llm-catalog version
-gh release view "vX.Y.Z" --repo kortix-ai/suna --json name,body,assets --jq '{name,assetCount:(.assets|length)}'   # 24 assets
+gh release view "vX.Y.Z" --repo kortix-ai/CompanyOS --json name,body,assets --jq '{name,assetCount:(.assets|length)}'   # 24 assets
 ```
 
 Then check Better Stack for an API error, 5xx, or frontend-exception spike in
 the minutes after the rollout.
 
+`Deploy Prod` starts two mobile workflows on the deployed commit. `Mobile OTA`
+publishes the JS bundle. `Mobile Store` builds and submits a new app version
+when `apps/mobile/app.json` carries one: Android to the Play production track,
+iOS to App Review with release after approval. Both must end green. A
+`Mobile Store` warning asks for a version bump or a person in App Store
+Connect (runbook: `apps/mobile/BUILD_GUIDE.md`).
+
 ### Step 10 — self-host `:stable`
 
 `:stable` moves **only** on the user's explicit, per-release consent — never
 implied by "we released" or "prod is healthy." Run `promote-self-host-stable.yml`
-by hand when that consent is given.
+by hand when that consent is given. It refuses a version with no published GitHub
+Release `vX.Y.Z`: deploy-prod creates the Release only after prod served that
+version, so `:stable` never names a version whose prod roll failed. `:latest`
+and `:prod` move in deploy-prod's `promote-prod-channel` job, after
+`verify-live-version`; `:X.Y.Z` exists from the retag on, because ECS rolls it.
 
 ### Step 11 — rollback
 
@@ -288,7 +308,12 @@ written, evidence-backed justification, never silently.
 ## 4. Gotchas (hard-won)
 
 - **deploy-prod concurrency = `cancel-in-progress: false`.** A slow desktop build or a
-  zombie queued run blocks the next deploy — cancel it first.
+  zombie queued run blocks the next deploy — cancel it first. `rollback-prod.yml` uses
+  the same group, so a rollback waits for a running deploy, and a waiting run of
+  either one replaces the other's waiting run.
+- **Any deploy-prod run undoes a rollback.** It re-rolls every ECS service to
+  `prod:VERSION`. Do not dispatch it (for example with `rebuild_desktop`) while prod is
+  rolled back, unless you mean to roll forward.
 - **A release rebuilds the desktop app only when the desktop changed.** `desktop-plan`
   compares the desktop fingerprint with the latest release's `DESKTOP-FINGERPRINT`; when
   it is equal, `attach-desktop` copies that release's installers and `latest*.yml`, and
@@ -298,7 +323,7 @@ written, evidence-backed justification, never silently.
   desktop changed").
 - **deploy-prod retags; it does not rebuild.** The staging build for the exact
   promoted commit must already be green:
-  `gh run list --repo kortix-ai/suna --workflow build-staging.yml --branch staging --limit 3 --json status,conclusion,headSha`.
+  `gh run list --repo kortix-ai/CompanyOS --workflow build-staging.yml --branch staging --limit 3 --json status,conclusion,headSha`.
 - **`/changelog` and `/changelog/releases` show every published `vX.Y.Z` release** and read
   GitHub Release bodies — so a thin/auto-generated body shows up as a thin entry. The weekly
   page reads only the bullets under `### New`, `### Improved` and `### Fixed`; a body without
@@ -322,7 +347,7 @@ real Release), remove it cleanly. `dev` is protected from force-push, so revert 
 git push origin :refs/tags/vX.Y.Z                       # delete the tag
 git push -f origin <prev-release-sha>:refs/heads/prod    # reset prod to the prior release
 git revert --no-edit <version-bump-commit>               # put dev VERSION back; then push
-gh release delete vX.Y.Z --repo kortix-ai/suna           # only if a Release was actually cut
+gh release delete vX.Y.Z --repo kortix-ai/CompanyOS           # only if a Release was actually cut
 # cancel any deploy-prod the prod reset triggered
 ```
 Verify: tag gone, `prod` VERSION = prior, `dev` VERSION = prior, api-prod unchanged,
@@ -348,7 +373,7 @@ no `vX.Y.Z` Release.
    owner's explicit OK).
 7. `Deploy Prod` confirmed for the merge SHA; api/gateway/frontend `/health`,
    the three npm packages, the GitHub Release (24 assets), and Better Stack all
-   verified on the new version.
+   verified on the new version; `Mobile OTA` and `Mobile Store` green.
 8. `:stable` moved only if the user explicitly asked for it this release.
 9. **One-time per env: the `/internal/*` edge key** (#9272, and the pentest
    2026-10-13 fix that made the API enforce it too). Done on dev; staging and

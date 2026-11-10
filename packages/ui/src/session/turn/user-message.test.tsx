@@ -16,7 +16,7 @@ import {
   sentAttachmentsOf,
   uploadedFileRefXml,
 } from '../composer/uploaded-file-refs';
-import { channelPromptText, promptFileReferenceXml, roomPromptText, serializePromptWithPastes } from '@kortix/shared';
+import { channelPromptText, promptFileReferenceXml, serializePromptWithPastes } from '@kortix/shared';
 import {
   MessageAttachments,
   UserMessage,
@@ -1351,10 +1351,17 @@ describe('UserMessage member author', () => {
     expect(renderWith(MEMBER, false)).not.toContain('rounded-tr-[calc(var(--radius)-6px)]');
   });
 
-  test('an author that is not shown, or no author: the message is unchanged', () => {
+  test('an author that is not shown: the message is unchanged', () => {
     expect(renderWith(MEMBER, false)).not.toContain('Sent by');
     expect(renderWith(MEMBER, false)).not.toContain('data-slot="avatar"');
-    expect(renderWith(undefined, true)).toBe(renderWith(undefined, false));
+  });
+
+  test('shown but not loaded yet: an empty avatar-sized slot holds the bubble in place', () => {
+    const reserved = renderWith(undefined, true);
+    expect(reserved).not.toContain('data-slot="avatar"');
+    expect(reserved).toContain('<span aria-hidden="true" class="size-6 shrink-0"></span>');
+    expect(reserved).toContain('rounded-tr-[calc(var(--radius)-6px)]');
+    expect(renderWith(undefined, false)).not.toContain('size-6 shrink-0');
   });
 });
 
@@ -1386,34 +1393,10 @@ describe('UserMessage platform prompts', () => {
     expect(markup).not.toContain('[REMINDER');
   });
 
-  test('a room message is a source pill over its text, without the header or the reply footer', () => {
-    const markup = renderText(
-      roomPromptText({
-        room: 'dev',
-        seq: 42,
-        senderKind: 'session',
-        sender: '3f2a1b9c (builder)',
-        replyTo: 41,
-        text: 'The build is green.\nShip it?',
-      }),
-    );
-    expect(markup).toContain('data-testid="room-turn"');
-    expect(markup).toContain('data-room-seq="42"');
-    expect(markup).toContain('>dev</span>');
-    expect(markup).toContain('>Agent 3f2a1b9c (builder)</span>');
-    expect(markup).toContain('The build is green.\nShip it?');
-    expect(markup).not.toContain('[room dev');
-    expect(markup).not.toContain('kortix rooms send');
-  });
-
-  test('a person sender is named as is', () => {
-    const markup = renderText(
-      roomPromptText({ room: 'dev', seq: 3, senderKind: 'member', sender: 'Ada', replyTo: null, text: 'Can you check the logs?' }),
-    );
-    expect(markup).toContain('data-testid="room-turn"');
-    expect(markup).toContain('>Ada</span>');
-    expect(markup).toContain('Can you check the logs?');
-    expect(markup).not.toContain('[room dev');
+  test('a room message in an old transcript (Rooms were removed, 2026-11) renders as plain text', () => {
+    const markup = renderText('[room dev · #42 · from Ada]\nThe build is green.');
+    expect(markup).not.toContain('data-testid="room-turn"');
+    expect(markup).toContain('The build is green.');
   });
 
   test('a trigger fire names the trigger in the pill and the prompt in the bubble', () => {

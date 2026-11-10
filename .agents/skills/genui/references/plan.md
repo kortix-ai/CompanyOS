@@ -19,7 +19,7 @@
 | `plan.md` (this file) | Architecture, constraints, review focus, spec deltas, file map, contracts, order, delivery | — |
 | `plan-1-sdk.md` | `@kortix/sdk/genui` + `@kortix/sdk/genui/react` + default components (9 tasks) | PR 1 |
 | `plan-2-eval.md` | Phase 0 model evaluation script and go/no-go (2 tasks) | PR 1 |
-| `plan-3-runtime.md` | `genui` project flag, kill switch, prompt injection on OpenCode and pi, channel guards (5 tasks) | PR 1 |
+| `plan-3-runtime.md` | `genui` project flag, kill switch, channel guards (3 tasks; the prompt-injection tasks are removed) | PR 1 |
 | `plan-4-web.md` | Web renderer, components, map, settings toggle, copy/export, telemetry, desktop parity (8 tasks) | PR 2 |
 | `plan-5-mobile.md` | Mobile renderer, components, map WebView, settings toggle, copy (7 tasks) | PR 3 |
 
@@ -79,7 +79,7 @@ Research and prototyping found facts the spec did not have. Each delta is reflec
 ## Architecture
 
 ```
-Agent (OpenCode or pi)                                         ┌─ apps/web ───────────────────────────────┐
+Agent (pi)                                                     ┌─ apps/web ───────────────────────────────┐
   system prompt += buildGenuiPrompt()   (flag on only)          │ markdown-code.tsx                        │
   reply text: prose + ```openui … ```                           │   genuiVersionFromClassName → GenuiBlock │
         │                                                        │   components = webGenuiComponents        │
@@ -103,7 +103,7 @@ Modify: `packages/sdk/package.json`, `src/index.isomorphic.test.ts`, `src/root-c
 
 **plan-2 (eval)** — create `.agents/skills/genui/scripts/eval.ts`, `.agents/skills/genui/scripts/eval-prompts.json`, `.agents/skills/genui/references/eval-results.md`.
 
-**plan-3 (runtime)** — modify `apps/api/src/feature-flags/registry.ts`, `packages/api-contract/src/index.ts`, `packages/api-contract/src/__tests__/schemas.test.ts`, `packages/sdk/src/core/rest/projects-client/projects.ts`, `packages/sdk/src/core/rest/projects-client/projects.test.ts`, `packages/ui/src/internal/lib/use-project-feature-flags.ts`, `apps/web/translations/*.json` (9 locales), `apps/api/src/config.ts`, `apps/api/src/projects/lib/session-sandbox-env-build.ts`, `apps/kortix-sandbox-agent-server/package.json`, `apps/kortix-sandbox-agent-server/src/harness/open-code/lifecycle.ts`, `apps/kortix-sandbox-agent-server/src/harness/pi/runtime.ts`, `apps/kortix-sandbox-agent-server/src/__tests__/runtime-env-allowlist-completeness.test.ts`, `apps/api/src/projects/routes/turn-stream-handlers.ts`, `apps/cli/src/commands/sessions-chat.ts`; create `apps/kortix-sandbox-agent-server/src/services/sandbox-env/genui-instruction.ts` + test, `apps/api/src/projects/lib/genui-env.ts` + test.
+**plan-3 (runtime)** — modify `apps/api/src/feature-flags/registry.ts`, `packages/api-contract/src/index.ts`, `packages/api-contract/src/__tests__/schemas.test.ts`, `packages/sdk/src/core/rest/projects-client/projects.ts`, `packages/sdk/src/core/rest/projects-client/projects.test.ts`, `packages/sdk/src/react/use-feature-flag.ts` (`SERVED_FLAG_MAP_KEYS`, moved by KRTX-4414), `apps/web/translations/*.json` (9 locales), `apps/api/src/config.ts`, `apps/api/src/projects/lib/session-sandbox-env-build.ts`, `apps/kortix-sandbox-agent-server/package.json`, `apps/kortix-sandbox-agent-server/src/harness/open-code/lifecycle.ts`, `apps/kortix-sandbox-agent-server/src/harness/pi/runtime.ts`, `apps/kortix-sandbox-agent-server/src/__tests__/runtime-env-allowlist-completeness.test.ts`, `apps/api/src/projects/routes/turn-stream-handlers.ts`, `apps/cli/src/commands/sessions-chat.ts`; create `apps/kortix-sandbox-agent-server/src/services/sandbox-env/genui-instruction.ts` + test, `apps/api/src/projects/lib/genui-env.ts` + test.
 
 **plan-4 (web)** — create `apps/web/src/features/genui/` (`genui-message-block.tsx`, `genui-web-context.ts`, `use-genui-enabled.ts`, `components/layout.tsx`, `components/data.tsx`, `components/charts.tsx`, `components/map.tsx`, `components/inline.tsx`, `components/pending.tsx`, `components/index.ts`, tests), `packages/ui/src/primitives/map.tsx` (mapcn); modify `markdown-code.tsx`, `unified-markdown.tsx`, `packages/ui/src/internal/stores/user-preferences-store.ts`, `appearance-tab.tsx`, `transcript.tsx`, `export-transcript-modal.tsx`, `lib/track.ts`, `translations/*.json`, `package.json`, `tests/e2e/specs/` (one journey).
 
@@ -174,7 +174,7 @@ plan-3, plan-4, and plan-5 are independent of each other after plan-2 and can ru
 3. **PR 3** (plan-5): mobile OTA. The flag needs no change.
 4. Before each PR: the narrowest tests named in each task, then T0 (`tsc` and lint) for the touched packages; the full suite runs on the staging pull request. Start the worktree stack (`pnpm worktree start genui`, background) and drive the behavior: PR 1 — create a project, turn on `genui`, start a session, assert `/tmp/kortix/genui.md` exists in the sandbox and the reply carries an ```` ```openui ```` block for a comparison prompt and none for "hi"; PR 2 — agent-browser journey with recording; PR 3 — Expo dev build on the iOS simulator is out (standing rule: no simulator), so Jay checks on device; the executor runs `bun test` and attaches the OTA update ID.
 5. Self-merge each verified PR to `dev` (`gh pr merge <n> --squash`), then `git merge origin/dev` into `genui` before continuing (squash merges break ancestry; compare content, not ancestry).
-6. Deploy dev: `gh workflow run deploy-dev.yml --repo kortix-ai/suna -f surface=changed`; wait; `/health` on api and web must serve the merge SHA. Repeat the PR's user-visible check against `https://dev.kortix.com` / `https://dev-api.kortix.com`.
+6. Deploy dev: `gh workflow run deploy-dev.yml --repo kortix-ai/CompanyOS -f surface=changed`; wait; `/health` on api and web must serve the merge SHA. Repeat the PR's user-visible check against `https://dev.kortix.com` / `https://dev-api.kortix.com`.
 7. **Rollout** (Phase 3, spec §11): turn the flag on for internal projects; watch `genui_block` in PostHog for 3 days (parse_error ≤ 1%, overuse 10–25% of turns); then 1% → 10% → 50% → 100% of projects by `platformDefault` change PRs, 3 days per step. Kill switch: set `GENUI_ENABLED=false` in the API environment (plan-3 Task 2) and redeploy; verify a new session has no `/tmp/kortix/genui.md`. A warm session (`projects/lib/warm-sessions.ts`) provisioned before the switch keeps the old value when the user adopts it, and an unused one keeps it until it idles out: verify on a freshly provisioned session, not an adopted warm one. Release to staging/prod follows the **kortix-release** skill and needs Jay's approval.
 8. **Learnings:** any incident during rollout gets a ledger entry (`.agents/skills/learnings/scripts/new-entry.sh`).
 9. **Docs and discovery:** `apps/web/content/docs/sdk/genui.mdx` (plan-1 Task 9), settings rows on web and mobile (plan-4 Task 5, plan-5 Task 5), changelog entry at GA.

@@ -13,7 +13,7 @@ import {
   CommandPopoverContent,
   CommandPopoverTrigger,
 } from '../../../primitives/command';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import Loading from '../../../primitives/loading';
 import { Modal, ModalBody, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '../../../primitives/modal';
@@ -90,8 +90,8 @@ const GIT_VIEW_ACTIONS = [
   PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
 ] as const;
 
-const DOCS_CLI = '/docs/cli';
-const DOCS_MANIFEST = '/docs/project/manifest';
+const DOCS_CLI = '/docs/developers#cli';
+const DOCS_MANIFEST = '/docs/developers#kortixyaml-reference';
 
 type ProjectWithOrigin = KortixProject & { git_origin_url?: string };
 
@@ -541,9 +541,9 @@ function RepositoryGroup({
       {repositoryDisconnectOf(connection) ? (
         <RepositoryDisconnectedBanner projectId={project.project_id} disconnect={repositoryDisconnectOf(connection)} />
       ) : connection?.last_error_message ? (
-        <InfoBanner tone="warning" icon={WarningIcon} title={tI18nComplete.raw('textcb25ff313d81')}>
+        <BannerAlert variant="warning" ><BannerAlertMedia><WarningIcon /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('textcb25ff313d81')}</BannerAlertTitle><BannerAlertDescription>
           {connection.last_error_message}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       ) : null}
 
       <SettingsRowGroup>
@@ -715,7 +715,7 @@ function LocalSetup({ projectId }: { projectId: string }) {
         </Step>
         <Step index={2} title={tI18nComplete.raw('text7114f5d2fafa')} hint={tGit('cloneHint')}>
           <CommandLine
-            value={`kortix projects clone ${projectId}`}
+            value={`kortix workspaces clone ${projectId}`}
             label={tI18nComplete.raw('text6264f3bfdd91')}
           />
         </Step>

@@ -1,7 +1,7 @@
 /**
  * Project spaces: channels (product word "Channel") and a member's DMs with one
  * agent, one table `kortix.project_spaces`. A thread is a `project_sessions` row
- * whose `space_id` points here. Behind the `project_channels` flag; the routes
+ * whose `space_id` points here. Behind the `chat` flag; the routes
  * live in `routes/project-spaces.ts`.
  *
  * Only `ensureDefaultSpace` ever sets `is_default`. Channel slugs are unique per
@@ -14,20 +14,23 @@
  * takes the caller's `SpaceAccess`, and a channel the caller may not see reads
  * as not found. A taken slug's 409 never names a hidden channel.
  */
-import type { PrivateChannelSummary, Space, SpaceCreateInput, SpaceUpdateInput } from '@kortix/api-contract';
+import { SPACE_TAB_KINDS, type PrivateChannelSummary, type Space, type SpaceCreateInput, type SpaceTab, type SpaceUpdateInput } from '@kortix/api-contract';
 import { projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces } from '@kortix/db';
 import { spaceSlug } from '@kortix/shared';
 import { type SQL, and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { probeLinkEmbeddable } from '../../apps/external';
+import { config } from '../../config';
 import { logger } from '../../lib/logger';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { db } from '../../shared/db';
 import { recordAuditEvent } from '../../shared/audit';
 import { loadProjectRosterIds } from './project-access-view';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
-import { insertSpaceMembers, memberDisplayName, nonProjectMembers } from './project-space-members';
+import { insertSpaceMembers, isSpaceMember, memberDisplayName, nonProjectMembers } from './project-space-members';
 import { resolveUserIdentities } from './user-identity';
 import { bustSpaceAccess, canSeeSpace, type SpaceAccess } from '../../shared/space-access';
 import { normalizeString } from './serializers';
+import { errorMessage } from '../../shared/error-message';
 
 // Lazy: the drives service stays off the static import graph of every session
 // create, trigger and member offboard that reaches this module.
@@ -82,7 +85,22 @@ export function serializeSpace(row: SpaceRow, viewer: SpaceViewer, isMember: boo
     agents: row.agents,
     is_member: row.kind === 'dm' || row.isDefault || isMember,
     visibility: row.visibility,
+    tabs: serializeTabs(row.tabs),
   };
+}
+
+/**
+ * The stored tabs as the contract shapes them. A row of a kind that no longer
+ * exists (`threads`, `memory`, before 2026-11-04) or without a ref is dropped
+ * here, on read: no migration rewrites the stored jsonb, and the next write
+ * stores the list without it.
+ */
+function serializeTabs(tabs: SpaceRow['tabs'] | null | undefined): SpaceTab[] {
+  return (tabs ?? []).flatMap((tab): SpaceTab[] => {
+    if (!(SPACE_TAB_KINDS as readonly string[]).includes(tab.kind) || !tab.ref) return [];
+    const kind = tab.kind as SpaceTab['kind'];
+    return [{ id: tab.id, title: tab.title, kind, ref: tab.ref, ...(kind === 'link' ? { embeddable: tab.embeddable === true } : {}) }];
+  });
 }
 
 async function findDefaultSpace(projectId: string): Promise<SpaceRow | null> {
@@ -113,7 +131,7 @@ async function ensureDefaultSpaceCreated(projectId: string, accountId: string): 
  * The project's `#general`, created on first call. Idempotent under
  * concurrency. The call that creates it also files every session that is in
  * no space into it, so every path that needs `#general` (the toggle effect, a
- * channel list, a session create, a warm claim) converges a project whose
+ * channel list, a session create) converges a project whose
  * toggle effect failed before `#general` existed. No later call checks again.
  * It also makes `#general`'s Files folder, best effort and off the
  * caller's path (the Files tab makes it on open when this fails).
@@ -128,7 +146,7 @@ export async function ensureDefaultSpace(projectId: string, accountId: string): 
 }
 
 /**
- * The turn-on step of `project_channels`: `#general` (made if missing) and every
+ * The turn-on step of `chat`: `#general` (made if missing) and every
  * session in no space filed into it. `generalCreatedAt` tells a first turn-on
  * from a turn-on again (the caller compares it with the flag write's time).
  */
@@ -137,29 +155,6 @@ export async function turnOnChannels(projectId: string, accountId: string): Prom
   if (general.created) void spaceFolders().then((m) => m.makeChannelFolders(accountId, projectId, DEFAULT_SLUG));
   const filed = await assignUnassignedSessions(projectId, general.space.spaceId);
   return { generalCreatedAt: general.space.createdAt, filed };
-}
-
-/**
- * A warm session claimed while `project_channels` is on is a new `#general`
- * thread, as a create without `space_id` is (a warm session is created outside
- * any space). Returns the `#general` id (null while the flag is off), the
- * columns the claim sets (a space the row already has wins) and the metadata
- * that carries the first prompt.
- */
-export async function warmClaimFiling(
-  project: { projectId: string; accountId: string; metadata: unknown },
-  promptText: unknown,
-): Promise<{ defaultSpaceId: string | null; columns: { spaceId?: SQL }; metadata: { first_prompt?: string } }> {
-  if (!resolveFeatureFlag(project.metadata, 'project_channels')) {
-    return { defaultSpaceId: null, columns: {}, metadata: {} };
-  }
-  const { spaceId } = await ensureDefaultSpace(project.projectId, project.accountId);
-  const firstPrompt = normalizeString(promptText);
-  return {
-    defaultSpaceId: spaceId,
-    columns: { spaceId: sql`coalesce(${projectSessions.spaceId}, ${spaceId}::uuid)` },
-    metadata: firstPrompt ? { first_prompt: firstPrompt.slice(0, FIRST_PROMPT_MAX_CHARS) } : {},
-  };
 }
 
 /** Live channels the caller may see (default first, then oldest first), then the caller's DMs. */
@@ -227,7 +222,7 @@ export async function createChannel(
     return {
       error: {
         status: 400,
-        body: { error: 'Only members of the project can be added to a channel.', code: 'not_project_member' },
+        body: { error: 'Only members of the workspace can be added to a channel.', code: 'not_project_member' },
       },
     };
   }
@@ -474,7 +469,7 @@ export async function updateChannel(
   }
   if (!canEditSpace(row, viewer)) {
     return {
-      error: { status: 403, body: { error: 'Only the channel’s creator or a project manager can edit it.', code: 'forbidden' } },
+      error: { status: 403, body: { error: 'Only the channel’s creator or a workspace manager can edit it.', code: 'forbidden' } },
     };
   }
   if (input.archived === true && row.isDefault) {
@@ -510,7 +505,7 @@ export async function updateChannel(
       folderMoved = await (await spaceFolders()).moveChannelFolderVisibility(projectId, { spaceId, slug: row.slug }, 'private');
     } catch (error) {
       logger.warn(`[spaces] the folder of channel ${spaceId} did not move for its conversion to private`, {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
       return {
         error: {
@@ -524,7 +519,7 @@ export async function updateChannel(
     if (!folderMoved) return;
     await (await spaceFolders()).moveChannelFolderVisibility(projectId, { spaceId, slug: row.slug! }, 'public').catch((error) =>
       logger.error(`[spaces] the folder of channel ${spaceId} is in /Channels but the channel stayed public`, {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       }),
     );
   };
@@ -545,6 +540,12 @@ export async function updateChannel(
       return next;
     });
     const space = updated ?? row;
+    // A watched channel's feed (`spaces_proactive`): the agents added. Off the request's path.
+    if (patch.agents) {
+      void import('./space-watch/act')
+        .then(({ recordAgentsJoined }) => recordAgentsJoined(spaceId, row.agents ?? [], patch.agents ?? []))
+        .catch(() => undefined);
+    }
     if (converting) {
       bustSpaceAccess(projectId);
       // The conversion is committed: a failed audit write is logged, never a 500.
@@ -557,7 +558,7 @@ export async function updateChannel(
         resourceId: spaceId,
         metadata: { from: row.visibility, to: 'private' },
       }).catch((error: unknown) => {
-        logger.warn('[spaces] conversion audit write failed', { spaceId, error: error instanceof Error ? error.message : String(error) });
+        logger.warn('[spaces] conversion audit write failed', { spaceId, error: errorMessage(error) });
       });
     }
     const changes = converting ? { converted: true as const } : {};
@@ -587,6 +588,72 @@ function convertMembersSql(spaceId: string, actorId: string, roster: readonly st
      where people.user_id::text in (${inRoster})
     union select ${spaceId}::uuid, ${actorId}::uuid, ${actorId}::uuid
     on conflict do nothing`;
+}
+
+/**
+ * A live space of the project (a channel or any member's DM) by id; null when
+ * unknown or archived. The caller checks who may see and edit it.
+ */
+export async function findLiveSpace(projectId: string, spaceId: string): Promise<SpaceRow | null> {
+  const [row] = await db
+    .select()
+    .from(projectSpaces)
+    .where(and(eq(projectSpaces.projectId, projectId), eq(projectSpaces.spaceId, spaceId), isNull(projectSpaces.archivedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Who may replace a space's tabs. A person: a DM's owner, or a channel's
+ * editor (`canEditSpace`). A session-bound token (Kortix in a thread): a
+ * session filed in this space, or one working for a person in it (the DM's
+ * owner, or a member of the channel). `person`: the bound session's person,
+ * null for a session of no person. The caller already checked `canSeeSpace`.
+ */
+export async function mayEditSpaceTabs(
+  row: SpaceRow,
+  viewer: SpaceViewer,
+  person: string | null,
+): Promise<boolean> {
+  if (viewer.access.bound === null) return row.kind === 'dm' ? row.dmUserId === viewer.userId : canEditSpace(row, viewer);
+  if (viewer.access.boundSpaceId === row.spaceId) return true;
+  if (!person) return false;
+  if (row.kind === 'dm') return row.dmUserId === person;
+  return isSpaceMember(row, person);
+}
+
+/**
+ * Replace a space's tabs (the whole ordered list). A link tab's `embeddable`
+ * is the server's: kept from the stored tab with the same URL, else probed
+ * once (`probeLinkEmbeddable`, all new URLs at once, 5 s each). A value in
+ * the request is ignored. Returns the updated row, null when it is gone.
+ */
+export async function setSpaceTabs(
+  projectId: string,
+  space: Pick<SpaceRow, 'spaceId' | 'tabs'>,
+  tabs: readonly SpaceTab[],
+  probe: (url: string) => Promise<boolean> = (url) => probeLinkEmbeddable(url, config.FRONTEND_URL),
+): Promise<SpaceRow | null> {
+  const known = new Map(
+    (space.tabs ?? []).filter((tab) => tab.kind === 'link' && typeof tab.embeddable === 'boolean').map((tab) => [tab.ref, tab.embeddable === true]),
+  );
+  const fresh = [...new Set(tabs.filter((tab) => tab.kind === 'link' && !known.has(tab.ref)).map((tab) => tab.ref))];
+  const probed = await Promise.all(fresh.map(async (url) => [url, await probe(url)] as const));
+  for (const [url, embeddable] of probed) known.set(url, embeddable);
+  const stored = tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    kind: tab.kind,
+    ref: tab.ref,
+    ...(tab.kind === 'link' ? { embeddable: known.get(tab.ref) === true } : {}),
+  }));
+  const spaceId = space.spaceId;
+  const [row] = await db
+    .update(projectSpaces)
+    .set({ tabs: stored, updatedAt: new Date() })
+    .where(and(eq(projectSpaces.projectId, projectId), eq(projectSpaces.spaceId, spaceId), isNull(projectSpaces.archivedAt)))
+    .returning();
+  return row ?? null;
 }
 
 /**

@@ -6,6 +6,7 @@
  * lib/secret-write-input.ts.
  */
 import { randomUUID } from 'node:crypto';
+import { isMyKortixAgentName } from '@kortix/shared';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayUseEnv, getAgentGrant, isBorrowedSessionPrincipal, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { auth, errors, json, lenientBody } from '../../openapi';
@@ -41,6 +42,7 @@ import {
 } from '../lib/access';
 import { SecretSchema, projectsApp } from '../lib/app';
 import { withProjectGitAuth } from '../lib/git';
+import { savedProjectConfig } from '../config-summary/service';
 import {
   CODEX_AUTH_JSON_SECRET_NAME,
   isSystemProjectSecretName,
@@ -71,6 +73,8 @@ import {
 import { registerSecretRateLimitRoutes } from './secret-rate-limit';
 import { registerSecretPersonalRoutes } from './secret-personal';
 import { registerSecretSyncRoutes } from './secret-sync';
+import { capturePersonEvent } from './product-events';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const SecretSharePrincipalSchema = z.object({
   /** `agent`: the id is the agent's service account (`/iam/agent-identities`). */
@@ -113,12 +117,12 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/secrets',
+      path: '/{workspaceId}/secrets',
       tags: ['secrets'],
       summary: 'List project secrets (names only, no values)',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(
@@ -143,7 +147,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const started = performance.now();
     const stages: Record<string, number> = {};
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -177,9 +181,14 @@ export function registerSecretsRoutes(): void {
     // the manifest from the warm git mirror and refresh it behind the response.
     allowStaleMirrorReads();
     try {
-      const gitRow = await withProjectGitAuth(loaded.row);
-      stages.git_auth = Math.round(performance.now() - started);
-      const projectConfig = await loadProjectConfig(gitRow, []);
+      // The saved config summary first: no credential, no git (config-summary/service.ts).
+      const saved = await savedProjectConfig(loaded.row);
+      const projectConfig = saved
+        ? saved.config
+        : await withProjectGitAuth(loaded.row).then((gitRow) => {
+            stages.git_auth = Math.round(performance.now() - started);
+            return loadProjectConfig(gitRow, []);
+          });
       required = projectConfig?.env?.required ?? [];
       optional = projectConfig?.env?.optional ?? [];
       manifestStatus = projectConfig?.manifest_raw ? 'loaded' : 'missing';
@@ -216,7 +225,9 @@ export function registerSecretsRoutes(): void {
       agentGrants,
     }))
       .filter((item) => !item.system)
-      .filter((item) => agentMayUseEnv(agentGrant, item.identifier));
+      // My Kortix holds no secret but hands them to colleagues, a person approving each list
+      // (lib/colleague-access.ts): it reads the names. This route never returns a value.
+      .filter((item) => agentMayUseEnv(agentGrant, item.identifier) || isMyKortixAgentName(agentGrant?.agent ?? ''));
 
     // Audience of each shared value, for the person and agent this read acts
     // for. A value
@@ -283,14 +294,14 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/secrets',
+      path: '/{workspaceId}/secrets',
       tags: ['secrets'],
       summary: 'Set a project secret',
       description:
         'Create or update a project secret by `name` (upper-cased; A-Z, 0-9, _; max 64; KORTIX_* is reserved). The value is write-only: responses never echo it.',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: {
             content: {
               'application/json': {
@@ -323,7 +334,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -530,6 +541,22 @@ export function registerSecretsRoutes(): void {
       });
     }
 
+    // New secrets only, and only their kind: never the name or the value.
+    if (value !== null && !existing) {
+      const providerKey = isGatewayManagedEnv(name);
+      capturePersonEvent(c, loaded, projectId, 'secret_created', {
+        name_kind: providerKey ? 'provider' : 'other',
+        strategy: explicitStrategy ?? 'runtime',
+      });
+      if (providerKey) {
+        // A gateway-managed env var is one of our provider keys (ANTHROPIC_API_KEY → anthropic).
+        capturePersonEvent(c, loaded, projectId, 'provider_configured', {
+          provider: name.replace(/_(API_KEY|KEY|TOKEN)$/, '').toLowerCase(),
+          method: 'api_key',
+        });
+      }
+    }
+
     const views = await loadSecretViewsForUser({
       projectId,
       userId: loaded.userId,
@@ -550,12 +577,12 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/secrets/{name}',
+      path: '/{workspaceId}/secrets/{name}',
       tags: ['secrets'],
       summary: 'Delete a project secret',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), name: z.string() }),
+          params: z.object({ workspaceId: z.string(), name: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -563,7 +590,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const identifier = c.req.param('name')?.trim();
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);

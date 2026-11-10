@@ -39,7 +39,7 @@ Approvals are the other half. A tool call can pause for a person, which is the r
 
 ## The manifest is the control plane
 
-A Kortix project keeps the governance in a file. This is the starter's `kortix.yaml`:
+A Kortix workspace keeps the governance in a file. This is the starter's `kortix.yaml`:
 
 ```yaml
 agents:
@@ -50,9 +50,9 @@ agents:
     kortix_permissions: all
 ```
 
-That block is the whole grant. A reviewer reading a change request sees the file and the agent it points at. Every connector, secret and permission the agent may touch is in that block. The starter's own comment is explicit: v2 is deny-by-default, an omitted connectors/secrets/kortix_permissions/skills grant resolves to none, and "so a scoped specialist starts locked down" ([kortix.yaml](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/kortix.yaml)).
+That block is the whole grant. A reviewer reading a change request sees the file and the agent it points at. Every connector, secret and permission the agent may touch is in that block. The starter's own comment is explicit: v2 is deny-by-default, an omitted connectors/secrets/kortix_permissions/skills grant resolves to none, and "so a scoped specialist starts locked down" ([kortix.yaml](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/kortix.yaml)).
 
-The behaviour sits beside it in Markdown. The starter agent file describes its session as "an ephemeral branch of this repo, your own `/workspace`" where "Only what you commit + push survives" ([agents/kortix.md](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/agents/kortix.md)).
+The behaviour sits beside it in Markdown. The starter agent file describes its session as "an ephemeral branch of this repo, your own `/workspace`" where "Only what you commit + push survives" ([agents/kortix.md](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/agents/kortix.md)).
 
 Model choice is independent of the repo. Any model provider with your own keys. Or the ChatGPT plan you already pay for ([Kortix models](https://kortix.com/docs/project/models)).
 
@@ -78,7 +78,7 @@ On Gumloop the exit is a rebuild. You can export an agent's configuration as JSO
 
 Pick Gumloop if the workflow is the asset and the runtime is not. A five-person operations team that wants a churn report every Monday, built by the person who owns renewals, gets there faster on a canvas than on a repo. The vendor runs the service, the model menu is wide, and the approval cards cover the risky steps.
 
-Pick Kortix if the agents are becoming infrastructure. The definition has to be reviewable before it ships, and the same config has to run in a laptop sandbox and in your VPC. The company has to be able to leave with its agents intact. The price shape fits that reading too. The free plan costs $0 and includes 500 credits / month and 1 project. The Credits plan starts from $50 a month, and members share one pool ([Kortix pricing](https://kortix.com/pricing)).
+Pick Kortix if the agents are becoming infrastructure. The definition has to be reviewable before it ships, and the same config has to run in a laptop sandbox and in your VPC. The company has to be able to leave with its agents intact. The price shape fits that reading too. The free plan costs $0 and includes 500 credits / month on your first workspace. The Credits plan starts from $50 a month, and members share one pool ([Kortix pricing](https://kortix.com/pricing)).
 
 Next reads: [Kortix vs Claude Cowork](/blog/kortix-vs-claude-cowork) and [what an open-source AI platform is](/blog/open-source-ai-agent-platform).
 

@@ -53,6 +53,10 @@ mock.module('../../secrets/account-resource', () => ({
   resolveProjectSharedProviderSecrets,
   encryptAccountSecret: (_accountId: string, value: string) => value,
   decryptAccountSecret: (_accountId: string, value: string) => value,
+  // Imported by modules this suite loads (subscription usage, #11816); never called here.
+  readAccountSecret: () => null,
+  resolveDefaultProviderAccountSecret: async () => null,
+  listUsableGatewaySecrets: async () => [],
 }));
 const getProjectSecretValueForConsumer = mock(async (input: { name: string }) => {
   const name = input.name;
@@ -138,8 +142,9 @@ mock.module('../routing', () => ({
   resolveGatewayRoute: async () => ({ primaryModel: 'anthropic/claude-sonnet-4.6' }),
 }));
 
-let runtimeManagedModel: { id: string } | undefined;
+let runtimeManagedModel: { id: string; private?: true } | undefined;
 let knownManagedModelId: string | null = null;
+let managedAudioModelId: string | null = null;
 const managedModels = await import('../models/managed-models');
 mock.module('../models/managed-models', () => ({
   ...managedModels,
@@ -148,6 +153,7 @@ mock.module('../models/managed-models', () => ({
     runtimeManagedModel?.id === id ? runtimeManagedModel : undefined,
   isRuntimeManagedModelId: (id: string) => runtimeManagedModel?.id === id,
   isKnownManagedModelId: (id: string) => id === knownManagedModelId,
+  isManagedAudioModelId: (id: string) => id === managedAudioModelId,
 }));
 
 let capabilities = { reasoning: false, temperature: true };
@@ -188,6 +194,7 @@ beforeEach(() => {
   catalogUpstream = null;
   runtimeManagedModel = undefined;
   knownManagedModelId = null;
+  managedAudioModelId = null;
   capabilities = { reasoning: false, temperature: true };
   livePricingCalls = [];
   getAccountTier.mockClear();
@@ -655,6 +662,18 @@ describe('resolveCandidates — managed model tier gating', () => {
     expect(candidates[0]).toMatchObject({ provider: 'kortix-managed' });
   });
 
+  test('a private chat model and a managed audio model resolve to the managed upstream behind the same plan gate', async () => {
+    runtimeManagedModel = { id: 'small-private', private: true };
+    managedAudioModelId = 'stt-private';
+    const p = principal();
+    expect((await resolveCandidates(p, 'small-private'))[0]).toMatchObject({ provider: 'kortix-managed', resolvedModel: 'small-private' });
+    expect((await resolveCandidates(p, 'stt-private'))[0]).toMatchObject({ provider: 'kortix-managed', resolvedModel: 'stt-private' });
+    await expect(resolveCandidates(principal({ freeModelsOnly: true }), 'stt-private'))
+      .rejects.toMatchObject({ code: 'plan_upgrade_required' });
+    modelAccess = { disabledProviders: ['kortix'], disabledModels: [] };
+    await expect(resolveCandidates(p, 'stt-private')).rejects.toMatchObject({ code: 'provider_disabled' });
+  });
+
   test('a known managed model with the provider disabled throws model_disabled_on_deployment', async () => {
     config.KORTIX_MANAGED_PROVIDER_ENABLED = false;
     runtimeManagedModel = { id: 'glm-5.3-flash' };
@@ -988,6 +1007,8 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
     expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith({
       accountId: actor.accountId, projectId: 'p1', userId: 'u1', grantUserId: null,
       providerId: 'codex', name: 'CODEX_AUTH_JSON',
+      // The session's call: its pinned shared account serves first (account-routing.ts).
+      sessionId: 'trigger-session', probe: undefined,
     });
     expect(resolveDefaultCodexAccountSecret).not.toHaveBeenCalled();
     expect(resolveCodexCredential).not.toHaveBeenCalled();
@@ -1160,4 +1181,21 @@ describe('Free plan recovery guidance', () => {
         suggestion: 'Your plan includes no Kortix-managed models. Upgrade to Credits, or connect your own provider key or ChatGPT account. List connected models with /v1/llm/v1/models?scope=picker in your project.',
       });
   });
+});
+
+describe('Claude subscription models require session execution', () => {
+  for (const model of ['opus', 'sonnet', 'haiku', 'fable']) {
+    for (const sessionId of [undefined, 'synthetic-session']) {
+      test(`${model}, session ${sessionId ?? 'absent'}: gateway reports the execution boundary`, async () => {
+        const ref = `claude-agent/${model}`;
+        const result = resolveCandidates(principal({ sessionId }), ref);
+        await expect(result).rejects.toBeInstanceOf(GatewayResolutionError);
+        await expect(result).rejects.toMatchObject({
+          code: 'model_not_found',
+          message: `"${ref}" runs through Claude Code inside sessions only. Test it by starting a session with this model; the gateway playground and chat completions cannot execute it.`,
+          suggestion: 'Start a session with this model, or choose a gateway-compatible model for this request.',
+        });
+      });
+    }
+  }
 });

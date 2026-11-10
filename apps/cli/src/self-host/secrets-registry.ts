@@ -291,6 +291,7 @@ export const KEY_SERVICE_MAP: Record<string, readonly string[]> = {
   // The API also reads ENABLE_EMAIL_AUTOCONFIRM: while it is on, a password
   // email proves nothing (KRTX-1715). Both must restart on one value.
   DISABLE_SIGNUP: ['supabase-auth'],
+  KORTIX_SIGNUP_MODE: ['kortix-api'],
   ENABLE_EMAIL_SIGNUP: ['supabase-auth'],
   ENABLE_EMAIL_AUTOCONFIRM: ['supabase-auth', 'kortix-api'],
   ENABLE_ANONYMOUS_USERS: ['supabase-auth'],
@@ -355,6 +356,12 @@ export const KEY_SERVICE_MAP: Record<string, readonly string[]> = {
   KORTIX_ACME_EMAIL: ['caddy'],
   // Alias hosts: Caddy serves them, the frontend and API build URLs on them.
   KORTIX_DOMAIN_ALIASES: ['kortix-api', 'frontend', 'caddy'],
+  // Wildcard TLS (wildcard-tls.ts). `kortix self-host tls wildcard` writes
+  // these; the base list changes only the rendered Caddyfile (a reload).
+  KORTIX_WILDCARD_TLS_BASES: ['caddy'],
+  KORTIX_ACME_DNS_ZONE: ['acme-dns', 'caddy'],
+  KORTIX_ACME_DNS_PUBLIC_IP: ['acme-dns'],
+  KORTIX_ACME_DNS_LISTEN_IP: ['acme-dns'],
   KORTIX_PREVIEW_ALLOW_DIRECT_EDGE: ['kortix-api'],
   KORTIX_APPS_ALLOW_DIRECT_EDGE: ['kortix-api'],
   KORTIX_FRONTEND_MEMORY_LIMIT: ['frontend'],

@@ -1,3 +1,4 @@
+import { asLegacyWorkspaceRoute } from '@kortix/shared/workspace-routes';
 import { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { validateSecretKey } from '../repositories/api-keys';
@@ -17,7 +18,10 @@ import { auditLoginFail, auditLoginSuccess } from './auth-audit';
 // shared/dead-credential-log.ts so the session gate can throw it without
 // pulling this module's whole import graph; re-exported here so every
 // existing importer keeps working.
-import { deadCredential401 } from '../shared/dead-credential-log';
+import {
+  INVALID_OR_EXPIRED_TOKEN_MESSAGE,
+  deadCredential401,
+} from '../shared/dead-credential-log';
 export { deadCredential401 } from '../shared/dead-credential-log';
 import { requestClientKey } from './client-ip';
 import { isOAuthAccessToken } from '../oauth/access-token';
@@ -173,7 +177,7 @@ async function resolveSupabaseAuth(c: Context, next: Next) {
     await applyOAuthAccessTokenPrincipal(c, token);
     return next();
   }
-  if (isKortixToken(token) && sandboxTokenPathAllowed(c.req.path)) return resolveSandboxToken(c, next, token);
+  if (isKortixToken(token) && sandboxTokenPathAllowed(asLegacyWorkspaceRoute(c.req.path))) return resolveSandboxToken(c, next, token);
   return resolveJwt(c, next, token);
 }
 
@@ -229,7 +233,7 @@ function sandboxTokenPathAllowed(path: string) {
   return (
     path.endsWith('/turn-stream') ||
     path.endsWith('/turn-question') ||
-    // The daemon relays OpenCode `permission.asked` so apps/api can push the
+    // The daemon relays the runtime's `permission.asked` so apps/api can push the
     // session creator. The handler re-checks sandbox, project, and session.
     /^\/v1\/projects\/[^/]+\/turn-permission$/.test(path) ||
     // The seed daemon fetches the org model catalog at PARK with its sandbox
@@ -242,11 +246,11 @@ function sandboxTokenPathAllowed(path: string) {
     // telemetry about the caller's OWN boot, and the handler re-checks that the
     // token's sandboxId matches the session it claims to be reporting for.
     path.endsWith('/boot-timeline') ||
-    // The runtime relay sends redacted OpenCode lifecycle events for its own
+    // The runtime relay sends redacted runtime lifecycle events for its own
     // session. The handler re-checks sandbox, account, project, and session.
     path.endsWith('/audit/events') ||
     // The daemon pushes its OWN session's runtime projection (the
-    // `/kortix/opencode/state` document) so the control plane can serve it
+    // `/kortix/runtime/state` document) so the control plane can serve it
     // without a sandbox hop. Write-only, about the caller's own session, and
     // the handler re-checks the token's sandbox against `session_sandboxes`
     // (sandbox id -> session -> account) before it stores anything.
@@ -296,7 +300,7 @@ async function resolveJwt(c: Context, next: Next, token: string) {
   if (!isInconclusiveVerifyFailure(local.reason)) {
     // Token is definitively invalid (bad signature, expired, malformed)
     auditLoginFail({ c, reason: `jwt_${local.reason}`, authType: 'jwt' });
-    throw new HTTPException(401, { message: 'Invalid or expired token' });
+    throw new HTTPException(401, { message: INVALID_OR_EXPIRED_TOKEN_MESSAGE });
   }
 
   try {
@@ -312,7 +316,7 @@ async function resolveJwt(c: Context, next: Next, token: string) {
         reason: error?.message ?? 'jwt_network_invalid',
         authType: 'jwt',
       });
-      throw new HTTPException(401, { message: 'Invalid or expired token' });
+      throw new HTTPException(401, { message: INVALID_OR_EXPIRED_TOKEN_MESSAGE });
     }
 
     const payload = decodeSupabaseJwtPayload(token);

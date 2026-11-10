@@ -21,7 +21,7 @@
  * cannot reach) gives no env value, and the box asks the route as before.
  */
 
-import { configReleaseHeads, projects } from '@kortix/db';
+import { configReleaseHeads } from '@kortix/db';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { logger } from '../lib/logger';
@@ -40,6 +40,7 @@ import {
   getConfigArchiveStore,
   type ConfigArchiveStore,
 } from './store';
+import { projectsView } from '../workspaces/rows';
 
 /**
  * A row older than this is published again, and session create gives no env
@@ -157,6 +158,11 @@ const running = new Map<string, { again: string | null | undefined }>();
  * while a publish of the same ref runs makes it run once more afterwards.
  */
 export function schedulePublish(projectId: string, ref: string, commit: string | null = null): void {
+  // Every trigger of a release moves the saved config summary too (/detail
+  // reads it). Imported lazily: this module loads without the projects surface.
+  void import('../projects/surface')
+    .then(({ scheduleConfigSummary }) => scheduleConfigSummary(projectId, ref, commit))
+    .catch(() => {});
   const key = `${projectId}\0${ref}`;
   const busy = running.get(key);
   if (busy) {
@@ -186,14 +192,14 @@ export function schedulePublish(projectId: string, ref: string, commit: string |
 async function loadPublishProject(projectId: string): Promise<GitBackedProject | null> {
   const [row] = await db
     .select({
-      projectId: projects.projectId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
-      status: projects.status,
+      projectId: projectsView.projectId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
+      status: projectsView.status,
     })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!row || row.status === 'archived' || !row.repoUrl) return null;
   return {

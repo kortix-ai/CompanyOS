@@ -18,10 +18,15 @@
 //   - SERVING is entitlement-checked: `effectiveBranding` (used by
 //     `GET /accounts` and `GET /accounts/:id`) returns `null` the moment the
 //     entitlement lapses, so members fall back to Kortix without any write.
+//   - the Kortix cloud (`KORTIX_BILLING_INTERNAL_ENABLED`) does not offer
+//     branding at all: no account is entitled there, nothing stored is served,
+//     and the writes answer `403 branding_unavailable`. Branding is a
+//     self-host feature (the enterprise license grants it there).
 
 import { createHash } from 'node:crypto';
+import type { Context } from 'hono';
 import { createRoute, z } from '@hono/zod-openapi';
-import { type AccountBrandingRecord, accounts } from '@kortix/db';
+import { type AccountBrandingRecord } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { accountHasEntitlement } from '../billing/services/entitlements';
 import { ACCOUNT_ACTIONS, assertAuthorized } from '../iam';
@@ -34,6 +39,8 @@ import { getSupabase } from '../shared/supabase';
 import { AccountIdParam, accountsRouter, getMembership } from './core/app';
 import { readJsonObject } from '../shared/http-body';
 import { auditIam, requireEntitlement } from './iam/http-helpers';
+import { accountIdParam } from '../shared/route-params';
+import { accountsView, updateAccountRowsReturning } from '../workspaces/rows';
 
 export const BRANDING_BUCKET = 'branding';
 /** Same ceiling the bucket enforces (`storage.buckets.file_size_limit`). */
@@ -87,7 +94,7 @@ const AccountBrandingStateSchema = z
   .openapi('AccountBrandingState');
 
 const AssetKindParam = z.object({
-  accountId: z.string(),
+  workspaceId: z.string(),
   kind: z.enum(BRANDING_ASSET_KINDS),
 });
 
@@ -109,6 +116,24 @@ export function isBrandingEmpty(branding: AccountBranding): boolean {
   return Object.values(branding).every((v) => v === null);
 }
 
+/** False on the Kortix cloud: branding is a self-host feature. */
+export function brandingOffered(): boolean {
+  return !config.KORTIX_BILLING_INTERNAL_ENABLED;
+}
+
+/** The `branding` entitlement, always false where branding is not offered. */
+export async function brandingEntitled(accountId: string): Promise<boolean> {
+  return brandingOffered() && (await accountHasEntitlement(accountId, 'branding'));
+}
+
+/** The 403 the write routes answer where branding is not offered. */
+function brandingUnavailable(c: Context): Response {
+  return c.json(
+    { error: 'Branding is not available on Kortix Cloud.', code: 'branding_unavailable' },
+    403,
+  );
+}
+
 /**
  * The branding members should SEE: the stored record when the account is
  * entitled, `null` when nothing is set or the entitlement has lapsed. The
@@ -118,8 +143,7 @@ export function isBrandingEmpty(branding: AccountBranding): boolean {
 export async function effectiveBranding(
   accountId: string,
   record: AccountBrandingRecord | null | undefined,
-  hasEntitlement: (accountId: string) => Promise<boolean> = (id) =>
-    accountHasEntitlement(id, 'branding'),
+  hasEntitlement: (accountId: string) => Promise<boolean> = brandingEntitled,
 ): Promise<AccountBranding | null> {
   const branding = normalizeBranding(record);
   if (isBrandingEmpty(branding)) return null;
@@ -284,9 +308,9 @@ async function removeObjects(paths: Array<string | null>): Promise<void> {
 
 async function loadBrandingRow(accountId: string) {
   const [row] = await db
-    .select({ branding: accounts.branding })
-    .from(accounts)
-    .where(eq(accounts.accountId, accountId))
+    .select({ branding: accountsView.branding })
+    .from(accountsView)
+    .where(eq(accountsView.accountId, accountId))
     .limit(1);
   return row ?? null;
 }
@@ -298,11 +322,10 @@ async function writeBranding(accountId: string, next: AccountBrandingRecord): Pr
   for (const [key, value] of Object.entries(next) as Array<[keyof AccountBrandingRecord, unknown]>) {
     if (typeof value === 'string' && value.length > 0) compact[key] = value;
   }
-  const [row] = await db
-    .update(accounts)
-    .set({ branding: compact, updatedAt: new Date() })
-    .where(eq(accounts.accountId, accountId))
-    .returning({ branding: accounts.branding });
+  const [row] = await updateAccountRowsReturning(eq(accountsView.accountId, accountId), {
+    branding: compact,
+    updatedAt: new Date(),
+  });
   return normalizeBranding(row?.branding);
 }
 
@@ -332,7 +355,7 @@ export function registerBrandingRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/{accountId}/branding',
+      path: '/{workspaceId}/branding',
       tags: ['accounts'],
       summary: 'Get organization branding',
       ...auth,
@@ -344,7 +367,7 @@ export function registerBrandingRoutes(): void {
     }),
     async (c: any) => {
       const userId = c.get('userId') as string;
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_READ);
 
@@ -352,7 +375,7 @@ export function registerBrandingRoutes(): void {
       if (!row) return c.json({ error: 'Not found' }, 404);
       return c.json({
         branding: normalizeBranding(row.branding),
-        entitled: await accountHasEntitlement(accountId, 'branding'),
+        entitled: await brandingEntitled(accountId),
       });
     },
   );
@@ -362,7 +385,7 @@ export function registerBrandingRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'put',
-      path: '/{accountId}/branding',
+      path: '/{workspaceId}/branding',
       tags: ['accounts'],
       summary: 'Update organization branding (product name)',
       ...auth,
@@ -385,9 +408,10 @@ export function registerBrandingRoutes(): void {
     }),
     async (c: any) => {
       const userId = c.get('userId') as string;
-      const accountId = c.req.param('accountId');
+      const accountId = accountIdParam(c);
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
+      if (!brandingOffered()) return brandingUnavailable(c);
       const denied = await requireEntitlement(c, accountId, 'branding');
       if (denied) return denied;
 
@@ -419,7 +443,7 @@ export function registerBrandingRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/{accountId}/branding/assets/{kind}',
+      path: '/{workspaceId}/branding/assets/{kind}',
       tags: ['accounts'],
       summary: 'Upload a branding asset (logo, icon, or favicon)',
       ...auth,
@@ -442,10 +466,11 @@ export function registerBrandingRoutes(): void {
     }),
     async (c: any) => {
       const userId = c.get('userId') as string;
-      const accountId = c.req.param('accountId') as string;
+      const accountId = accountIdParam(c) as string;
       const kind = c.req.param('kind') as BrandingAssetKind;
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
+      if (!brandingOffered()) return brandingUnavailable(c);
       const denied = await requireEntitlement(c, accountId, 'branding');
       if (denied) return denied;
 
@@ -511,7 +536,7 @@ export function registerBrandingRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'delete',
-      path: '/{accountId}/branding/assets/{kind}',
+      path: '/{workspaceId}/branding/assets/{kind}',
       tags: ['accounts'],
       summary: 'Remove a branding asset',
       ...auth,
@@ -523,7 +548,7 @@ export function registerBrandingRoutes(): void {
     }),
     async (c: any) => {
       const userId = c.get('userId') as string;
-      const accountId = c.req.param('accountId') as string;
+      const accountId = accountIdParam(c) as string;
       const kind = c.req.param('kind') as BrandingAssetKind;
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
@@ -545,7 +570,7 @@ export function registerBrandingRoutes(): void {
           after: { kind, url: null },
         });
       }
-      return c.json({ branding: after, entitled: await accountHasEntitlement(accountId, 'branding') });
+      return c.json({ branding: after, entitled: await brandingEntitled(accountId) });
     },
   );
 
@@ -553,7 +578,7 @@ export function registerBrandingRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'delete',
-      path: '/{accountId}/branding',
+      path: '/{workspaceId}/branding',
       tags: ['accounts'],
       summary: 'Reset organization branding to defaults',
       ...auth,
@@ -565,7 +590,7 @@ export function registerBrandingRoutes(): void {
     }),
     async (c: any) => {
       const userId = c.get('userId') as string;
-      const accountId = c.req.param('accountId') as string;
+      const accountId = accountIdParam(c) as string;
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
 
@@ -587,7 +612,7 @@ export function registerBrandingRoutes(): void {
           after: { ...after },
         });
       }
-      return c.json({ branding: after, entitled: await accountHasEntitlement(accountId, 'branding') });
+      return c.json({ branding: after, entitled: await brandingEntitled(accountId) });
     },
   );
 }

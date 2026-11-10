@@ -47,8 +47,6 @@ import {
   TriggerListSchema,
   TriggerSchema,
   UpdateConnectionCredentialInputSchema,
-  WarmProjectSessionResultSchema,
-  ClaimWarmProjectSessionInputSchema,
 } from '../index';
 
 const NOW = '2026-07-01T12:00:00.000Z';
@@ -148,12 +146,12 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       pooled_provider_secrets: false,
       us_region: false,
       event_triggers: false,
-      notification_center: false,
+      notification_center: true,
       volumes: false,
       drives: false,
       session_log_restore: false,
-      project_channels: false,
-      agent_rooms: false,
+      chat: false,
+      shared_drives: false,
       goals: false,
       workspace_volume: false,
       artifacts: false,
@@ -162,6 +160,10 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       session_groups: false,
       chrome: false,
       agent_teams: false,
+      voice_call: false,
+      chat_input: false,
+      chat_front: false,
+      spaces_proactive: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -182,7 +184,6 @@ function sessionFixture(overrides: Record<string, unknown> = {}) {
     sandbox_id: null,
     sandbox_url: null,
     runtime_session_id: 'ses_abc',
-    opencode_session_id: 'ses_abc',
     name: 'Fix the login bug',
     custom_name: null,
     labels: [],
@@ -191,7 +192,6 @@ function sessionFixture(overrides: Record<string, unknown> = {}) {
     error: null,
     metadata: { name: 'Fix the login bug' },
     runtime_sessions: [],
-    opencode_sessions: [],
     created_by: '99999999-8888-4777-8666-555555555555',
     owner_email: null,
     visibility: 'private',
@@ -502,38 +502,6 @@ describe('session group contracts', () => {
   });
 });
 
-describe('warm project session schemas', () => {
-  test('accepts the ensure response with workspace refresh state', () => {
-    expect(
-      WarmProjectSessionResultSchema.parse({
-        session: sessionFixture(),
-        reused: true,
-        workspace_refresh: {
-          status: 'updated',
-          before_sha: 'abc123',
-          after_sha: 'def456',
-        },
-      }),
-    ).toMatchObject({
-      reused: true,
-      workspace_refresh: { status: 'updated' },
-    });
-  });
-
-  test('requires an RFC 4122 v4 session_id for claims', () => {
-    expect(
-      ClaimWarmProjectSessionInputSchema.safeParse({
-        session_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-        agent_name: 'default',
-        sandbox_slug: 'default',
-      }).success,
-    ).toBe(true);
-    expect(ClaimWarmProjectSessionInputSchema.safeParse({ session_id: 'not-a-uuid' }).success).toBe(
-      false,
-    );
-  });
-});
-
 describe('SessionStartResultSchema', () => {
   test('accepts the provisioning payload without sandbox or runtime_url', () => {
     const parsed = SessionStartResultSchema.strict().parse({
@@ -541,7 +509,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: true,
       sandbox: null,
-      opencode_session_id: null,
+      runtime_session_id: null,
     });
     expect(parsed.runtime_url).toBeUndefined();
   });
@@ -552,7 +520,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: false,
       sandbox: sandboxFixture(),
-      opencode_session_id: 'ses_abc',
+      runtime_session_id: 'ses_abc',
       runtime_url: '/p/sbx-123/8000',
       reason: 'pinned',
     });
@@ -565,7 +533,7 @@ describe('SessionStartResultSchema', () => {
       agent_name: 'default',
       retriable: false,
       sandbox: sandboxFixture({ status: 'error' }),
-      opencode_session_id: null,
+      runtime_session_id: null,
       failure: {
         category: 'provider-capacity',
         message: 'The sandbox provider is at capacity right now. Try again in a minute.',
@@ -582,14 +550,14 @@ describe('SessionStartResultSchema', () => {
         agent_name: 'default',
         retriable: true,
         sandbox: null,
-        opencode_session_id: null,
+        runtime_session_id: null,
       }),
     ).toThrow();
   });
 });
 
 describe('pending session prompt contract', () => {
-  test('accepts a durable prompt draft on normal create and warm claim', () => {
+  test('accepts a durable prompt draft on create', () => {
     const pendingPrompt = {
       text: 'Map the flood risk for this parcel.',
       agent: 'kortix',
@@ -600,12 +568,6 @@ describe('pending session prompt contract', () => {
 
     expect(
       SessionCreateInputSchema.strict().parse({ pending_prompt: pendingPrompt }).pending_prompt,
-    ).toEqual(pendingPrompt);
-    expect(
-      ClaimWarmProjectSessionInputSchema.strict().parse({
-        session_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-        pending_prompt: pendingPrompt,
-      }).pending_prompt,
     ).toEqual(pendingPrompt);
   });
 
@@ -622,6 +584,27 @@ describe('pending session prompt contract', () => {
     expect(() =>
       SessionCreateInputSchema.strict().parse({ pending_prompt: { text: '' } }),
     ).toThrow();
+  });
+});
+
+describe('session create from an old CLI', () => {
+  // `kortix sessions new --model` in CLI v0.13.0–v0.14.19 sends the pin twice:
+  // `body.model = body.opencode_model = <id>`. #11848 removed `opencode_model`
+  // from this strict schema, so every such create answered 400
+  // `unrecognized_keys` from v0.15.0 on, although `model` was right beside it.
+  test('accepts the body a v0.14 CLI sends with --model', () => {
+    const parsed = SessionCreateInputSchema.parse({
+      initial_prompt: 'Reply with OK.',
+      title_source: 'Reply with OK.',
+      model: 'kortix/glm-5.3-flash',
+      opencode_model: 'kortix/glm-5.3-flash',
+    });
+    expect(parsed.model).toBe('kortix/glm-5.3-flash');
+    expect(parsed.opencode_model).toBe('kortix/glm-5.3-flash');
+  });
+
+  test('still refuses a key no client ever sent', () => {
+    expect(() => SessionCreateInputSchema.parse({ model: 'kortix/glm-5.3-flash', zz_probe: 1 })).toThrow();
   });
 });
 
@@ -899,23 +882,22 @@ describe('envelopes', () => {
     expect(FEATURE_FLAG_KEYS as readonly string[]).toEqual([
       'marketplace',
       'reminders',
-      'warm_sessions',
       'secrets_egress',
       'pooled_provider_secrets',
       'us_region',
       'event_triggers',
-      'notification_center',
-      'session_log_restore',
-      'project_channels',
-      'agent_rooms',
+      'chat',
+      'shared_drives',
       'goals',
       'workspace_volume',
-      'artifacts',
-      'artifact_comments',
       'email_channel',
       'session_groups',
       'chrome',
       'agent_teams',
+      'voice_call',
+      'chat_input',
+      'chat_front',
+      'spaces_proactive',
     ]);
   });
 
@@ -1038,7 +1020,6 @@ describe('SessionCreateInputSchema runtime_context', () => {
         agentName: 'veyris',
         sandboxSlug: 'default',
         initialPrompt: 'hello',
-        opencodeModel: 'kortix/glm-5.3-flash',
         sessionId: '11111111-1111-4111-a111-111111111111',
         branchAlreadyCreated: true,
       }).success,
@@ -1290,7 +1271,7 @@ describe('session scope contracts', () => {
       connector_bindings_inherit_unbound: true,
       applied_live: true,
       detail:
-        'Applied to the running sandbox now — the OpenCode process and new shells see the new scope.',
+        'Applied to the running sandbox now — the agent runtime and new shells see the new scope.',
     };
     expect(SessionScopeSchema.parse(value)).toEqual(value);
   });

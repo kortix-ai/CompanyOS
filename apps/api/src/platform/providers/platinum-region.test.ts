@@ -66,7 +66,11 @@ function normalizeHeaders(h: RequestInit['headers']): Record<string, string> {
   return { ...(h as Record<string, string>) };
 }
 
-mock.module('../../shared/platinum', () => ({
+// The stub spreads the real module: the workspace-volume import in this test's
+// graph links platinumRateLimitWaitMs (release suite 42696873451), so the stub
+// must carry every export the graph resolves, with the test's overrides on top.
+const realPlatinum = await import('../../shared/platinum');
+mock.module('../../shared/platinum', () => ({ ...realPlatinum,
   isPlatinumConfigured: () => true,
   platinumJsonResponse: async () => {
     throw new Error('unexpected Platinum materialization request');
@@ -347,7 +351,7 @@ describe('us_region: a template not yet copied to the region', () => {
     });
   }
 
-  test('a warm (speculative) box never leaves its region: failed fails fast, with no home-region create', async () => {
+  test('a box that must run in its region never leaves it: failed fails fast, with no home-region create', async () => {
     createSequence = [{ error: notResident('failed') }];
     const p = new PlatinumProvider();
     const err = await p
@@ -433,7 +437,7 @@ describe('us_region: a drive that lives in another region', () => {
     expect((err as Error).message).toContain('[drives]');
   });
 
-  test('a warm (speculative) box keeps its region and fails with the drives error', async () => {
+  test('a box that must run in its region keeps it and fails with the drives error', async () => {
     createSequence = [{ error: refusals.volume_in_other_region }];
     const p = new PlatinumProvider();
     const err = await p

@@ -1,4 +1,4 @@
-import type { AgentGrant } from '@kortix/db';
+import type { AgentGrant, StoredKeyScopes } from '@kortix/db';
 import type { BillingState } from './billing/services/billing-state';
 
 // === Billing Types (Router billing service) ===
@@ -36,6 +36,8 @@ export interface AuthVariables {
   oauthClientId?: string;
   /** Sign in with Kortix: scopes granted to the token (`profile`, `email`, `kortix`). */
   oauthScopes?: string[];
+  /** Sign in with Kortix: the `oauth_access_tokens` row id of the token. */
+  oauthTokenId?: string;
   keyId?: string;
   sandboxId?: string;
   /** Set for project-scoped CLI PATs — enforced against the URL :projectId. */
@@ -44,6 +46,12 @@ export interface AuthVariables {
   sessionId?: string;
   /** PAT token identity for the IAM engine (token-as-principal evaluation). */
   iamTokenId?: string;
+  /** The token's IAM binding, set by `middleware/auth-principal.ts` when the validated
+   *  PAT names its `service_account_id`. Read directly for the `token_context`
+   *  probe and by `middleware/actor.ts` instead of re-reading the token row. */
+  iamTokenBinding?: TokenBinding & { tokenId: string };
+  /** The Supabase session's MFA assurance level (`aal1`/`aal2`), from `auth-principal`. */
+  mfaAal?: string;
   /** Per-agent authorization grant — non-null only for agent-session tokens.
    *  Read by assertAgentScope() to gate Kortix CLI/API actions on top of the
    *  user's own role (net = userRole ∩ agentGrant). Null = full access. */
@@ -60,6 +68,36 @@ export interface AuthVariables {
   impersonatorUserId?: string;
   /** Platform role, set by requireAdmin on /v1/admin routes. */
   platformRole?: string;
+  /** The account key the path id of an account-key route resolves to
+   *  (middleware/workspace-account.ts). Read it through `accountIdParam(c)`. */
+  workspaceAccountId?: string;
+  /** The workspace id (`project_id`) when the path of an account-key route named one. */
+  pathWorkspaceId?: string;
+  /** True when that workspace's account still holds other active projects (`split_pending`). */
+  pathWorkspaceSplitPending?: boolean;
+}
+
+/**
+ * The IAM binding of the token behind a request (`iam/actor.ts` reads it from
+ * the `account_tokens` row; `middleware/auth-principal.ts` seeds the context
+ * with it). Its fields are package types only, so this shared types module can
+ * declare them and `iam/actor.ts` re-exports the name.
+ */
+export interface TokenBinding {
+  projectId: string | null;
+  agentGrant: AgentGrant | null;
+  serviceAccountId: string | null;
+  /** The session the token belongs to. A session token that names no service
+   *  account (My Kortix, or a failed agent service-account ensure) still is an
+   *  agent session: `isAgentSessionToken` reads this. */
+  sessionId?: string | null;
+  /** Only on the binding the auth middleware read this request. The memo never
+   *  carries it: every turn rewrites it (`bindSessionTurnIdentity`), and a
+   *  15 s copy on another replica would name the previous prompter. */
+  onBehalfOfUserId?: string | null;
+  /** A workspace key's scope inside its creator's role (`iam/key-scope.ts`).
+   *  Null = full. Immutable after mint, so the memo may carry it. */
+  scopes?: StoredKeyScopes | null;
 }
 
 // Hono environment type — Variables match exactly what the auth middleware sets.
@@ -176,11 +214,21 @@ export interface AccountStateResponse {
     total: number;
     daily: number;
     monthly: number;
-    /** Next scheduled reset of the expiring credit bucket. */
+    /** Next scheduled reset of the expiring credit bucket. Null on a
+     *  workspace that gets no free credits: no reset is scheduled. */
     expires_at?: string | null;
     extra: number;
     /** Wallet admission only. Project model availability is resolved by /model-picker. */
     can_run: boolean;
+    /**
+     * The Free plan's monthly credits go to a person's first workspace only
+     * (Workspaces, design.md §3.2 C6). `eligible` is false on a further
+     * workspace: Free with 0 credits, `tier.monthly_credits` 0 and no reset.
+     * `claimed_workspace_id` is the workspace that holds the caller's free
+     * credits. It is set only on a workspace that is not eligible, and only
+     * when the caller is a member of the workspace that holds them.
+     */
+    free_grant?: { eligible: boolean; claimed_workspace_id: string | null };
     /** Lifetime rollups derived from credit_ledger (see the
      *  apply_credit_ledger_lifetime_rollup trigger). Reporting figures only —
      *  no gate reads them. */
@@ -312,6 +360,13 @@ export interface AccountStateResponse {
     period_start: string | null;
     period_end: string | null;
   } | null;
+  /**
+   * The plan is comped, with no Stripe subscription, until `until`: a
+   * workspace split off a paid account keeps that account's plan to the end of
+   * its period (design.md §3.2 C6). Then it moves to Free with free credits.
+   * Null when there is no comp.
+   */
+  plan_comp?: { until: string; source: 'workspace_split' } | null;
 }
 
 export interface ScheduledChange {

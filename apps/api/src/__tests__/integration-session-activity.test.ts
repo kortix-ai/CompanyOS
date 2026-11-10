@@ -3,7 +3,7 @@
  *
  * `metadata.last_activity_at` is what the sidebar dates a session by. It is
  * written from the prompt path, which is the same window in which the title CAS
- * and the opencode_sessions snapshot write their OWN keys of the same jsonb
+ * and the runtime_sessions snapshot write their OWN keys of the same jsonb
  * column — so the one thing that must never happen is this stamp clobbering
  * either of them. These tests pin the merge and the timestamp together.
  */
@@ -72,7 +72,7 @@ describe('recordSessionActivity', () => {
     const sessionId = await seed({
       name: 'Generated Title',
       custom_name: 'My Own Name',
-      opencode_sessions: [{ id: 'oc-1', updated_at: 1 }],
+      runtime_sessions: [{ id: 'oc-1', updated_at: 1 }],
     });
 
     await recordSessionActivity({ sessionId, projectId: PROJECT });
@@ -80,7 +80,7 @@ describe('recordSessionActivity', () => {
     const { metadata } = await rowOf(sessionId);
     expect(metadata.name).toBe('Generated Title');
     expect(metadata.custom_name).toBe('My Own Name');
-    expect(metadata.opencode_sessions).toEqual([{ id: 'oc-1', updated_at: 1 }]);
+    expect(metadata.runtime_sessions).toEqual([{ id: 'oc-1', updated_at: 1 }]);
     expect(typeof metadata.last_activity_at).toBe('string');
   });
 
@@ -107,21 +107,5 @@ describe('recordSessionActivity', () => {
     await recordSessionActivity({ sessionId, projectId: crypto.randomUUID() });
 
     expect((await rowOf(sessionId)).metadata.last_activity_at).toBeUndefined();
-  });
-
-  // A server-side follow-up delivered straight to an old session skips /start,
-  // so the turn path must drop the warm marker itself, in the same statement.
-  test('drops a warm marker and stamps activity together', async () => {
-    const sessionId = await seed({ warm: true });
-
-    await recordSessionActivity({
-      sessionId,
-      projectId: PROJECT,
-      at: Date.parse('2026-08-11T09:00:00.000Z'),
-    });
-
-    const { metadata } = await rowOf(sessionId);
-    expect(metadata.warm).toBeUndefined();
-    expect(metadata.last_activity_at).toBe('2026-08-11T09:00:00.000Z');
   });
 });

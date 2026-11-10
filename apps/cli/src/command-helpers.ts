@@ -889,7 +889,8 @@ export function takeFlagValue(argv: string[], requested: string[]): string | und
     for (const n of names) {
       if (a === n) {
         const v = argv[i + 1];
-        if (!v || v.startsWith('-')) throw new Error(`${n} requires a value`);
+        // A lone `-` is a value: stdin, by Unix convention (`--github-token -`).
+        if (!v || (v.startsWith('-') && v !== '-')) throw new Error(`${n} requires a value`);
         argv.splice(i, 2);
         return v;
       }

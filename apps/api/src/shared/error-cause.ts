@@ -22,22 +22,25 @@
  * `isAuditContentionError` walked acyclic chains with no cutoff at all, so it
  * passes `Infinity` and leans on the revisit guard to terminate).
  *
+ * Lazy: a node's `cause` is read only when the consumer pulls the NEXT node,
+ * so a classifier that returns at a match — the trunk's `errorSqlstate`,
+ * `isUniqueViolation`, `uniqueViolationConstraint` and `isAuditContentionError`
+ * all stopped there — never reads past it, and a throwing `cause` getter below
+ * a matched code cannot break the match. A consumer that needs the whole chain
+ * materializes it (`Array.from`), reading every link up to the bound.
+ *
  * The one walk every classifier reads (`errorSqlstate`'s first code,
  * `innermostMessage`'s deepest message, the transient sets over every node,
  * the driver-node find), so "what does this chain say" has one answer.
  */
-export function errorChain(error: unknown, maxDepth = 16): Record<string, unknown>[] {
-  const chain: Record<string, unknown>[] = [];
+export function* errorChain(error: unknown, maxDepth = 16): Generator<Record<string, unknown>> {
   const seen = new Set<unknown>();
-  for (
-    let node = error;
-    chain.length < maxDepth && node != null && typeof node === 'object' && !seen.has(node);
-    node = (node as { cause?: unknown }).cause
-  ) {
+  let node = error;
+  for (let depth = 0; depth < maxDepth && node != null && typeof node === 'object' && !seen.has(node); depth++) {
     seen.add(node);
-    chain.push(node as Record<string, unknown>);
+    yield node as Record<string, unknown>;
+    node = (node as { cause?: unknown }).cause;
   }
-  return chain;
 }
 
 /**
@@ -201,8 +204,9 @@ export const TRANSIENT_DATABASE_CODES: ReadonlySet<string> = new Set([
  * shared walk's revisit guard (not a depth bound) terminates a cause cycle.
  */
 export function isAuditContentionError(error: unknown): boolean {
-  return errorChain(error, Infinity).some((node) => {
+  for (const node of errorChain(error, Infinity)) {
     const code = node.code;
-    return typeof code === 'string' && (AUDIT_CONTENTION_SQLSTATES.has(code) || AUDIT_TRANSIENT_DRIVER_CODES.has(code));
-  });
+    if (typeof code === 'string' && (AUDIT_CONTENTION_SQLSTATES.has(code) || AUDIT_TRANSIENT_DRIVER_CODES.has(code))) return true;
+  }
+  return false;
 }

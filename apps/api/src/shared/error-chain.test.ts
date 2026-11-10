@@ -6,7 +6,7 @@ import {
   errorSqlstate,
 } from './error-cause';
 import { isUniqueViolation, uniqueViolationConstraint } from './postgres-errors';
-import { inspectDatabaseError, isTransientDatabaseError } from './database-errors';
+import { inspectDatabaseError, isDatabaseError, isTransientDatabaseError } from './database-errors';
 
 // Characterization: the cause-chain contracts every classifier shares. These
 // pin the behavior the shared walk must keep — how deep a wrapped SQLSTATE is
@@ -241,5 +241,41 @@ describe('isAuditContentionError', () => {
   test('a defect code on every node stays false', () => {
     expect(isAuditContentionError(driverError('23505'))).toBe(false);
     expect(isAuditContentionError(new Error('plain'))).toBe(false);
+  });
+});
+
+describe('the walk never reads cause past a matched code', () => {
+  // The trunk's errorSqlstate / isUniqueViolation / uniqueViolationConstraint /
+  // isAuditContentionError returned at the first match WITHOUT reading that
+  // node's cause — so a throwing cause getter below a matched code could not
+  // break the match. The lazy walk keeps that: the getter is read only when
+  // the consumer pulls the next node.
+  const throwingCause = (outer: Record<string, unknown>) => {
+    Object.defineProperty(outer, 'cause', {
+      get() {
+        throw new Error('cause getter threw');
+      },
+    });
+    return outer;
+  };
+
+  test('errorSqlstate returns the matched outer code', () => {
+    expect(errorSqlstate(throwingCause({ code: '57014' }))).toBe('57014');
+  });
+
+  test('isUniqueViolation and uniqueViolationConstraint return the matched outer code', () => {
+    expect(isUniqueViolation(throwingCause({ code: '23505' }))).toBe(true);
+    expect(uniqueViolationConstraint(throwingCause({ code: '23505', constraint_name: 'users_email' }))).toBe('users_email');
+  });
+
+  test('isAuditContentionError returns the matched outer code', () => {
+    expect(isAuditContentionError(throwingCause({ code: '57014' }))).toBe(true);
+  });
+
+  test('the database walk stays eager: it reads every link even past a match, as the trunk walk did', () => {
+    // database-errors built its whole 8-link array before checking; a throwing
+    // cause getter throws there — kept by materializing the chain eagerly.
+    expect(() => isDatabaseError(throwingCause({ name: 'PostgresError' }))).toThrow('cause getter threw');
+    expect(() => isTransientDatabaseError(throwingCause({ code: '40001' }))).toThrow('cause getter threw');
   });
 });

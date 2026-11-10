@@ -523,11 +523,13 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       userId: USER_ID,
       projectId: PROJECT_ID,
       sessionId: SANDBOX_ID,
+      // AGENT = HUMAN (#12240): the meta coordinator acts for its person with
+      // exactly their rights — every permission, every connector, every secret.
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

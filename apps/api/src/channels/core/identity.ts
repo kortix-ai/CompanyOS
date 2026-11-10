@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { chatEventDedup, chatInstalls, chatUserIdentities, projectAccessRequests } from '@kortix/db';
 import { db } from '../../shared/db';
-import { userAccountMemberRow } from '../../iam/membership-read';
+import { accountMemberRow } from '../../iam/membership-read';
 import { authorize } from '../../iam';
 import { mfaGateBlocks } from '../../iam/authorize';
 import { actorForUser } from '../../iam/actor';
@@ -189,7 +189,7 @@ export async function lookupChatUserForKortixUser(
 }
 
 export async function isAccountMember(userId: string, accountId: string): Promise<boolean> {
-  const [row] = await userAccountMemberRow(userId, accountId);
+  const [row] = await accountMemberRow(accountId, userId);
   return !!row;
 }
 

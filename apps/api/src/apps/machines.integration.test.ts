@@ -35,6 +35,8 @@ mock.module('./hosting', () => ({
     }
     async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
     async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
+    // Production's error paths roll a runtime back through hosting.remove (machines.ts:230, :568).
+    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');
@@ -231,6 +233,22 @@ withDb('machines and volumes — real PostgreSQL', () => {
     expect(restored!.status).toBe('running');
     const [after] = await db.select().from(appVolumes).where(eq(appVolumes.volumeId, volume!.volumeId));
     expect(after!.attachedRuntimeId).toBe(restored!.runtimeId);
+  });
+
+  test('a failed runtime insert surfaces as itself and removes the box it just created', async () => {
+    await seedApp();
+    const v1 = await deploy(stateless, 1);
+    const [live] = await liveInstances(v1.deploymentId);
+    const app = await appRow();
+    calls.length = 0;
+    // A second live row for the same machine violates app_runtimes_one_live_per_machine:
+    // the rollback removes the box and rethrows the real error, never a masking TypeError.
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment: v1, config: stateless,
+      env: await machines.releaseEnvironment(app, v1),
+      group: 'app', machineId: live!.machineId!,
+    })).rejects.toThrow(/insert into "kortix"\."app_runtimes"/);
+    expect(calls).toContain('remove box-2');
   });
 
   test('scale reconcile: up creates machines (a mounted group gets one new volume each), down destroys the newest and keeps their volumes', async () => {

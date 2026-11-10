@@ -139,12 +139,13 @@ function agentFixLine(agent: string, pending: RecordedDenial, granted?: string[]
   switch (pending.code) {
     case 'agent_ceiling_insufficient':
       return `${actionText} is outside agent ${C.bold}${agent}${C.reset}'s role — ask an admin to raise agent ${agent}'s role`;
+    case 'project_role_insufficient':
+    case 'account_role_insufficient':
+      // The person this session acts for lacks it: kortix.yaml cannot fix it.
+      return `the person this session acts for lacks ${actionText} in their role — a workspace owner or admin grants it (Settings → People); no kortix.yaml change fixes this`;
     case 'agent_human_only_action':
-      return `${actionText} is reserved for people — a human must do this`;
-    case 'agent_session_forbidden':
-      // A route that refuses every agent session outright (e.g. granting a
-      // secret to an agent). No kortix_permissions entry unlocks it.
-      return 'agent sessions cannot do this — a person with workspace access must do this';
+      // Minting a credential or moving money: a hand-off, not a missing grant.
+      return `${actionText} mints a credential or moves money — hand the person the link to do it themselves (Settings → API keys, or Billing)`;
     case undefined:
     case 'agent_scope_insufficient':
       return (

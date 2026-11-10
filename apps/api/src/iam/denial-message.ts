@@ -45,7 +45,7 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
       // cannot fix this.
       return `This agent's role does not allow "${action}". Ask a workspace admin to raise the role bound to this agent.`;
     case 'agent_human_only_action':
-      return `"${action}" is reserved for people (minting credentials or moving money). No agent can perform it, whatever its kortix_permissions or role.`;
+      return `"${action}" mints a credential or moves money, so the person does it themselves: API keys in Settings → API keys, payments in Billing. Hand them that link; no kortix_permissions entry or role changes this.`;
     case 'service_account_scope_insufficient':
       // The session authorizes AS the agent's service account (an admin gave it
       // a standing role), so the launching user's role is irrelevant here.
@@ -79,6 +79,9 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
  * its step-up dialog on it (the SDK's ApiError already lifts `code` from error
  * bodies).
  */
+/** Denials where the person's role (not an agent grant) lacks the action. */
+const ROLE_REASONS: ReadonlySet<string> = new Set(['project_role_insufficient', 'account_role_insufficient']);
+
 export function buildDenialError(
   action: string,
   reason?: string,
@@ -92,7 +95,14 @@ export function buildDenialError(
       res: jsonResponse({ error: MFA_DENIAL_MESSAGE, code: 'account_mfa_required', action, workspace_action: workspaceAction }),
     });
   }
-  const base = messageOverride ?? denialReasonMessage(action, reason) ?? humanizePermissionDenial(action);
+  const base =
+    messageOverride ??
+    denialReasonMessage(action, reason) ??
+    // The person's role is the side that lacks it, whether they call directly
+    // or through an agent session that acts for them: say who grants it.
+    (ROLE_REASONS.has(reason ?? '')
+      ? `${humanizePermissionDenial(action).replace(/\.$/, '')}. A workspace owner or admin grants "${workspaceAction}" in Settings → People.`
+      : humanizePermissionDenial(action));
   // A caller who belongs to the workspace already knows its name; the route
   // passes it only then, never on a no-access denial (no existence probe).
   const message = opts.workspaceName ? `${base.replace(/\.$/, '')} in "${opts.workspaceName}".` : base;

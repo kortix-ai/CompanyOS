@@ -3633,7 +3633,7 @@ flow(
           (await agent.put(shareRoute, undefined, { params: turn }))
             .status(403)
             .body()
-            .has('$.error', 'An agent cannot share a response publicly');
+            .has('$.error', "Publishing a response to the public web is the person's decision: the session owner or a project manager publishes it with Share on the response.");
         } finally {
           await db.query('DELETE FROM kortix.session_sandboxes WHERE session_id = $1 AND external_id IS NULL', [sessionId]);
         }

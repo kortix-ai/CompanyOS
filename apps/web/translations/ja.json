@@ -801,14 +801,8 @@
         "noResults": "テーマが見つかりません"
       },
       "densities": {
-        "normal": {
-          "label": "標準",
-          "description": "Kortix の作業中に手順と思考をリアルタイムで表示します。"
-        },
-        "minimal": {
-          "label": "最小",
-          "description": "展開するまで 1 行のステータスだけを表示します。"
-        }
+        "normal": "標準",
+        "minimal": "最小"
       },
       "wallpapers": {
         "dither": "ディザー",

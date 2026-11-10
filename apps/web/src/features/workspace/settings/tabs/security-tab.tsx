@@ -126,7 +126,7 @@ export function formatSecret(secret: string): string {
  *  One real input sits over six drawn cells, so paste, autofill
  *  (`one-time-code`) and screen readers all see a single field. The
  *  container verifies as soon as the sixth digit lands. */
-export function EnrollDialog({
+function EnrollDialog({
   enrolling,
   code,
   onCodeChange,
@@ -244,7 +244,7 @@ export function EnrollDialog({
   );
 }
 
-export interface SecurityTabViewProps {
+interface SecurityTabViewProps {
   // Two-factor authentication
   factors?: FactorInfo[];
   factorsLoading?: boolean;
@@ -299,7 +299,7 @@ export interface DeviceRow {
   current?: boolean;
 }
 
-export interface SecurityTabCopy {
+interface SecurityTabCopy {
   twoFactorTitle: string;
   twoFactorDescription: string;
   authenticatorApp: string;

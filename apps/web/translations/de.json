@@ -801,14 +801,8 @@
         "noResults": "Keine Designs gefunden"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Schritte und Überlegungen werden live angezeigt, während Kortix arbeitet."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "Eine Statuszeile, bis Sie sie erweitern."
-        }
+        "normal": "Normal",
+        "minimal": "Minimal"
       },
       "wallpapers": {
         "dither": "Raster",

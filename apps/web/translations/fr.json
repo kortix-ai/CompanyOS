@@ -801,14 +801,8 @@
         "noResults": "Aucun thème trouvé"
       },
       "densities": {
-        "normal": {
-          "label": "Normale",
-          "description": "Les étapes et le raisonnement s'affichent en direct pendant que Kortix travaille."
-        },
-        "minimal": {
-          "label": "Minimale",
-          "description": "Une seule ligne d'état jusqu'à ce que vous la développiez."
-        }
+        "normal": "Normale",
+        "minimal": "Minimale"
       },
       "wallpapers": {
         "dither": "Tramage",

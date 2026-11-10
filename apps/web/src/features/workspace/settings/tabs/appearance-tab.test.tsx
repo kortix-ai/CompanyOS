@@ -54,10 +54,7 @@ describe('AppearanceTabView', () => {
             darkThemes: 'Тамне теме',
           },
           themeSearch: { placeholder: 'Претражи теме…', empty: 'Нема пронађених тема' },
-          densities: {
-            normal: { label: 'Нормално', description: 'Пуни приказ' },
-            minimal: { label: 'Минимално', description: 'Сажети приказ' },
-          },
+          densities: { normal: 'Нормално', minimal: 'Минимално' },
           wallpapers: {
             dither: 'Дитеринг',
             brandmark: 'Знак бренда',

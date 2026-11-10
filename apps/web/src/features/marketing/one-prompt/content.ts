@@ -28,50 +28,26 @@ export interface HomeTemplate {
 export const TEMPLATES: HomeTemplate[] = [
   {
     id: 'software-factory',
-    line: 'Issues in. Pull requests out.',
+    line: 'Signals in. Verified pull requests out.',
     phrase: 'a software factory',
     name: 'Software Factory',
     summary:
-      'Agents that build labeled issues into pull requests, review every pull request, fix production errors and run your end-to-end tests every night.',
-    triggers: ['Issue labeled kortix', 'Pull request opened', 'Error tracker webhook', 'Every night 03:00'],
+      'One agent that turns GitHub issues, failing tests, errors, logs, Slack reports and security findings into tickets, then builds each into a reviewed pull request with a demo.',
+    triggers: ['Issue labeled kortix', 'Every night 03:00', 'Every 5 minutes', 'Review on a pull request'],
     agents: [
-      { name: 'builder', role: 'Builds the issue into a tested pull request.' },
-      { name: 'reviewer', role: 'Runs the pull request and reviews what breaks.' },
-      { name: 'fixer', role: 'Reproduces a production error and fixes its cause.' },
-      { name: 'tester', role: 'Runs the end-to-end tests and files new failures.' },
+      { name: 'sources', role: 'File one ticket per signal into your tracker.' },
+      { name: 'intake', role: 'Starts one worker per ticket, up to the cap.' },
+      { name: 'worker', role: 'Verifies the change and opens a pull request with a demo.' },
+      { name: 'merge gate', role: 'Runs every gate. A person merges until you allow it.' },
     ],
     file: '.kortix/software-factory/factory.yaml',
     excerpt: [
-      '  - slug: factory-issues',
+      '  - slug: source-github-issues',
       '    on:',
       '      webhook: { secret: FACTORY_GITHUB_WEBHOOK_SECRET }',
       '    filter:',
       '      headers.github_event: issues',
       '      body.label.name: kortix',
-    ],
-  },
-  {
-    id: 'security-loop',
-    line: 'A red team attacks your app every night.',
-    phrase: 'a 24/7 security red team',
-    name: 'Auto-Security Loop',
-    summary:
-      'Agents that pentest your app around the clock: a nightly red team attacks a fresh dev sandbox, scans every pull request, patches confirmed findings and audits dependencies weekly.',
-    triggers: ['Every night 02:00', 'Pull request opened', 'Finding labeled security-fix', 'Mondays 04:00'],
-    agents: [
-      { name: 'red-team', role: 'Attacks the app in its own sandbox. Proves every finding.' },
-      { name: 'pr-scan', role: 'Reviews each pull request for security holes.' },
-      { name: 'patcher', role: 'Turns a confirmed finding into a fix with a test.' },
-      { name: 'dependency-watch', role: 'Audits the lockfiles for known vulnerabilities.' },
-    ],
-    file: '.kortix/security-loop/security.yaml',
-    excerpt: [
-      '  - slug: security-nightly',
-      '    on:',
-      '      cron: "0 0 2 * * *"',
-      '    run:',
-      '      agent: red-team',
-      '      session: fresh',
     ],
   },
   {
@@ -136,11 +112,11 @@ export const FILE_TREE = [
   '└── .kortix/',
   '    ├── software-factory/',
   '    │   ├── factory.yaml',
-  '    │   └── prompts/',
-  '    │       ├── builder.md',
-  '    │       ├── reviewer.md',
-  '    │       ├── fixer.md',
-  '    │       └── tester.md',
+  '    │   ├── factory.json',
+  '    │   ├── agents/factory.md',
+  '    │   └── skills/software-factory/',
+  '    │       ├── SKILL.md',
+  '    │       └── references/',
   '    ├── skills/dev-environment/SKILL.md',
   '    └── sandbox/Dockerfile',
 ];
@@ -151,14 +127,14 @@ export const promptFor = (template: HomeTemplate) => templatePrompt(template);
 
 /**
  * One real Software Factory run on a demo repository
- * (github.com/markokraemer/kortix-factory-demo): the nightly tester filed the
- * issue, the builder opened the pull request, the reviewer ran it.
+ * (github.com/markokraemer/kortix-factory-demo): the nightly test source filed
+ * the issue, a worker opened the pull request, a reviewer ran it.
  */
 export const FACTORY_RUN = {
   repo: 'kortix-factory-demo',
   events: [
-    { who: 'tester', what: 'opened issue #1', title: 'POST /todos with malformed JSON crashes the whole server', at: '15:16 UTC' },
-    { who: 'builder', what: 'opened pull request #6', title: 'fix: return 400 on malformed JSON instead of crashing the server', at: '15:18 UTC' },
+    { who: 'source-tests', what: 'opened issue #1', title: 'POST /todos with malformed JSON crashes the whole server', at: '15:16 UTC' },
+    { who: 'worker', what: 'opened pull request #6', title: 'fix: return 400 on malformed JSON instead of crashing the server', at: '15:18 UTC' },
     { who: 'reviewer', what: 'reviewed #6', title: 'npm test — 7/7 pass, 3 consecutive runs, no flakes.', at: '15:21 UTC' },
   ],
 };

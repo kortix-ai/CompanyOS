@@ -31,11 +31,11 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
-test('ls --json lists the four hand-approved templates', () => {
+test('ls --json lists the three hand-approved templates', () => {
   const r = kortix(['templates', 'ls', '--json']);
   expect(r.code).toBe(0);
   const ids = (JSON.parse(r.stdout) as { templates: Array<{ id: string }> }).templates.map((t) => t.id);
-  expect(ids).toEqual(['software-factory', 'security-loop', 'aeo-loop', 'changelog']);
+  expect(ids).toEqual(['software-factory', 'aeo-loop', 'changelog']);
 });
 
 test('add into a repository with kortix.yaml: files written, import appended, comments kept, placeholders resolved', () => {
@@ -45,14 +45,14 @@ test('add into a repository with kortix.yaml: files written, import appended, co
   expect(r.code).toBe(0);
   const out = JSON.parse(r.stdout);
   expect(out).toMatchObject({ template: 'software-factory', repository: 'acme/shop', default_branch: 'main', manifest_created: false, import: 'added' });
-  expect(out.next.github_webhooks.map((h: { trigger: string }) => h.trigger)).toEqual(['factory-issues', 'factory-pull-requests']);
+  expect(out.next.github_webhooks.map((h: { trigger: string }) => h.trigger)).toEqual(['source-github-issues', 'factory-feedback-github']);
   const manifest = readFileSync(join(repo, 'kortix.yaml'), 'utf8');
   expect(manifest).toContain('# mine');
   expect(manifest).toContain('# keep');
   expect(manifest).toMatch(/imports:\n\s+- \.kortix\/software-factory\//);
-  const builder = readFileSync(join(repo, '.kortix/software-factory/prompts/builder.md'), 'utf8');
-  expect(builder).toContain('acme/shop');
-  expect(builder).not.toContain('{{');
+  const prompt = readFileSync(join(repo, '.kortix/software-factory/agents/factory.md'), 'utf8');
+  expect(prompt).toContain('acme/shop');
+  expect(prompt).not.toContain('{{');
 
   const again = kortix(['templates', 'add', 'software-factory', '--json']);
   expect(again.code).toBe(0);
@@ -87,7 +87,7 @@ test('no kortix.yaml: one is created with My Kortix and the import; no GitHub re
 test('an unknown template is refused with the list', () => {
   const r = kortix(['templates', 'add', 'nope']);
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain('software-factory, security-loop, aeo-loop, changelog');
+  expect(r.stderr).toContain('software-factory, aeo-loop, changelog');
 });
 
 test('sameGitHubRepository: https, ssh and scp forms of one repository match; another repository or a proxy URL does not', async () => {

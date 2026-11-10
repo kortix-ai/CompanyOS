@@ -1,15 +1,21 @@
 {
   "id": "software-factory",
   "name": "Software Factory",
-  "summary": "Agents that build labeled issues into pull requests, review every pull request, fix production errors and run your end-to-end tests every night.",
+  "summary": "One agent that turns GitHub issues, failing tests, errors, logs, Slack reports and security findings into tickets, then builds each into a reviewed pull request with a demo.",
   "secrets": [
-    { "name": "GH_TOKEN", "required": true, "delivery": "sandbox", "why": "Clone the repository, push branches and open pull requests with gh." },
-    { "name": "FACTORY_GITHUB_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the GitHub webhooks for issues and pull requests.", "generate": true },
-    { "name": "FACTORY_ERRORS_WEBHOOK_SECRET", "required": false, "delivery": "connector", "why": "Authenticates your error tracker's webhook (Authorization: Bearer).", "generate": true }
+    { "name": "GH_TOKEN", "required": true, "delivery": "sandbox", "why": "Clone the repository, read and write issues, push kortix/ branches and open pull requests with gh." },
+    { "name": "FACTORY_GITHUB_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the GitHub webhooks for labeled issues and pull request reviews.", "generate": true },
+    { "name": "FACTORY_ERRORS_WEBHOOK_SECRET", "required": false, "delivery": "connector", "why": "source-errors: your error tracker's webhook (Authorization: Bearer).", "generate": true },
+    { "name": "LINEAR_API_KEY", "required": false, "delivery": "sandbox", "why": "Ticket store Linear, when the workspace has no Linear connector." },
+    { "name": "JIRA_API_TOKEN", "required": false, "delivery": "sandbox", "why": "Ticket store Jira, with JIRA_BASE_URL and JIRA_EMAIL, when the workspace has no Jira connector." },
+    { "name": "ASANA_ACCESS_TOKEN", "required": false, "delivery": "sandbox", "why": "Ticket store Asana, when the workspace has no Asana connector." },
+    { "name": "SENTRY_AUTH_TOKEN", "required": false, "delivery": "sandbox", "why": "source-errors with Sentry: read issues and events (with SENTRY_ORG). Read-only scopes." },
+    { "name": "BETTERSTACK_API_TOKEN", "required": false, "delivery": "sandbox", "why": "source-errors with Better Stack: read error patterns and incidents. Read-only." },
+    { "name": "FACTORY_DB_READONLY_URL", "required": false, "delivery": "sandbox", "why": "source-logs-anomaly: a read-only database role for query statistics. Never a write role." }
   ],
   "github_webhooks": [
-    { "trigger": "factory-issues", "events": ["issues"] },
-    { "trigger": "factory-pull-requests", "events": ["pull_request"] }
+    { "trigger": "source-github-issues", "events": ["issues"] },
+    { "trigger": "factory-feedback-github", "events": ["pull_request_review", "pull_request_review_comment", "issue_comment"] }
   ],
   "label": "kortix",
   "needs_dev_sandbox": true

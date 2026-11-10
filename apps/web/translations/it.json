@@ -23445,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Risoluzione",
       "resolutionHint": "Gli schermi più grandi vengono ridotti a questa altezza. Il 4K conserva i dettagli fini, come i disegni CAD.",
+      "textRecognition": "Riconoscimento del testo",
+      "textRecognitionHint": "Legge il testo sullo schermo per renderlo ricercabile. Disattivato usa meno CPU: la ricerca trova allora app, titoli delle finestre e URL.",
+      "textRecognitionOption": {
+        "accurate": "Accurato",
+        "fast": "Veloce",
+        "off": "Disattivato"
+      },
       "framesHint": "Senza valore, ogni computer usa il proprio (un'immagine ogni 2 s a 1440p). Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate a qualsiasi intervallo.",
       "computerDecides": "Decide ogni computer",
       "included": {

@@ -23445,6 +23445,13 @@
       "intervalOption": "{seconds, number} 秒",
       "resolution": "分辨率",
       "resolutionHint": "更大的屏幕会缩小到此高度。4K 可保留 CAD 图纸等细节。",
+      "textRecognition": "文字识别",
+      "textRecognitionHint": "读取屏幕上的文字以便搜索。关闭时 CPU 占用最少：搜索只能找到应用、窗口标题和 URL。",
+      "textRecognitionOption": {
+        "accurate": "精确",
+        "fast": "快速",
+        "off": "关闭"
+      },
       "framesHint": "未设置时，每台电脑使用自己的设置（1440p，每 2 秒一帧）。设置后，所有电脑都使用该值，用户无法更改。无论间隔多长，点击、输入和滚动都会连同各自的截图一起记录。",
       "computerDecides": "由每台电脑决定",
       "included": {

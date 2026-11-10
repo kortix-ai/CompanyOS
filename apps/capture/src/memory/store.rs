@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS frame (
     capture_reason TEXT,
     dhash TEXT,                                 -- perceptual hash
     image_hash TEXT,                            -- sha256 of the staged still
-    ocr_status INTEGER NOT NULL DEFAULT 0       -- 0 pending, 1 done, 2 copied, 3 failed
+    ocr_status INTEGER NOT NULL DEFAULT 0       -- 0 pending, 1 done, 2 copied, 3 failed, 4 off (no text read)
 );
 CREATE INDEX IF NOT EXISTS idx_frame_timestamp ON frame(timestamp);
 CREATE INDEX IF NOT EXISTS idx_frame_segment ON frame(segment);

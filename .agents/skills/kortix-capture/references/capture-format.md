@@ -263,7 +263,7 @@ exclusions or pause. A device never widens what the policy allows.
 ```json
 {"schema": 2, "layers": {"screen": true, "actions": true, "audio": false},
  "privacy": {"redact_pii": false}, "retention": {"local_hours": 0, "remote_days": 0},
- "recording": {"paused": false, "paused_until_ms": null, "interval_ms": 1000, "max_height": 1440},
+ "recording": {"paused": false, "paused_until_ms": null, "interval_ms": 1000, "max_height": 1440, "text_recognition": null},
  "notice": "Text the device shows the person being recorded", "updated_at_ms": 0}
 ```
 
@@ -282,6 +282,9 @@ exclusions or pause. A device never widens what the policy allows.
   screen capture rate and size on every device, higher or lower than the
   device's own value. Absent or null keeps the device's own setting.
   `status.json` `capture` reports the values in force.
+- `recording.text_recognition` (`accurate`, `fast` or `off`) sets screen text
+  recognition on every device. `off` reads no screen text, the least CPU per
+  frame. Absent or null keeps the device's own setting.
 - `notice` is shown in the tray menu and the settings window. The person on the
   device always sees that recording is on and which layers run.
 - The policy applies while the device syncs to the bucket. Without a reachable

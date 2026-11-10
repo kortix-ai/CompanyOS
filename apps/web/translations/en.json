@@ -23445,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Resolution",
       "resolutionHint": "Larger screens are scaled down to this height. 4K keeps fine detail, such as CAD drawings.",
+      "textRecognition": "Text recognition",
+      "textRecognitionHint": "Reads the text on screen so it can be searched. Off uses the least CPU: search then finds apps, window titles and URLs.",
+      "textRecognitionOption": {
+        "accurate": "Accurate",
+        "fast": "Fast",
+        "off": "Off"
+      },
       "framesHint": "Unset, each computer uses its own (one frame every 2 s at 1440p). Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots at any interval.",
       "computerDecides": "Each computer decides",
       "included": {

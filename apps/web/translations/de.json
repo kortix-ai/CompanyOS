@@ -23445,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Auflösung",
       "resolutionHint": "Größere Bildschirme werden auf diese Höhe verkleinert. 4K erhält feine Details, etwa in CAD-Zeichnungen.",
+      "textRecognition": "Texterkennung",
+      "textRecognitionHint": "Liest den Text auf dem Bildschirm, damit er durchsuchbar ist. Aus braucht am wenigsten CPU: Die Suche findet dann Apps, Fenstertitel und URLs.",
+      "textRecognitionOption": {
+        "accurate": "Genau",
+        "fast": "Schnell",
+        "off": "Aus"
+      },
       "framesHint": "Ohne Vorgabe nutzt jeder Computer seine eigene Einstellung (alle 2 s ein Bild in 1440p). Mit Vorgabe gilt sie für jeden Computer und lässt sich dort nicht ändern. Klicks, Tippen und Scrollen werden bei jedem Abstand mit eigenen Screenshots aufgezeichnet.",
       "computerDecides": "Jeder Computer entscheidet",
       "included": {

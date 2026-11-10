@@ -80,6 +80,12 @@ export interface CapturePolicy {
     interval_ms?: number | null;
     /** The frame height in pixels, at most. Null or absent: `CAPTURE_DEVICE_DEFAULTS.maxHeight`. */
     max_height?: CaptureMaxHeight | null;
+    /**
+     * Screen text recognition on every device. `off` reads no screen text (search finds
+     * apps, window titles and URLs only) and costs the least CPU. Null or absent: each
+     * device's own setting (`accurate` by default).
+     */
+    text_recognition?: 'accurate' | 'fast' | 'off' | null;
   };
   /** Text the device shows the person being recorded. */
   notice: string;

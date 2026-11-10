@@ -206,7 +206,17 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    frames or when more than 45% changed. Text inside the focused window goes
    to `foreground`, the rest to `background`; box offsets index into
    `foreground || background`.
-4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted.
+   OCR stays out of the person's way: a still within 2 dhash bits of its
+   display's last read copies that text for up to 20 s; while the person works
+   (input in the last 5 s) a display is read at most every 30 s; after each
+   read OCR rests 4x as long as the read took (at most 20% of one core).
+   `ocr_level` `off` (or the policy's `recording.text_recognition`) reads no
+   screen text at all: frames finish with `ocr_status` 4 and search finds apps,
+   window titles, URLs and accessibility text only.
+4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted. While
+   the person works, encoding waits for a pause, at most 5 min. A capture that
+   takes longer than half its interval stretches the interval (at most half the
+   recorder's time capturing).
 
 5. **Retain**: every 10 min, `storage_cap` mode deletes (or downscales) the
    oldest chunks until the library is 5% under `limit_gb`; `retention` mode

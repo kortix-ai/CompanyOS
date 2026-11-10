@@ -187,7 +187,10 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    changes (see "Change-driven capture"). The engine returns the frontmost
    app, focused window, browser URL (AX `AXWebArea`/`AXURL`), the window
    stack, an optional AX tree of the focused window, and a JPEG still of the
-   display that holds the focused window. Excluded apps' windows are removed
+   display that holds the focused window. The AX tree (`ax_enabled`) is read on
+   the first capture, on a capture a focus change pulled forward, and at least
+   every 30 s; other frames carry none. Each read stops after 250 ms (partial
+   tree), because the focused app answers it on its own UI thread. Excluded apps' windows are removed
    from the image (ScreenCaptureKit filter).
 2. **Skip** instead of capture when: screen locked, no input for
    `inactivity_seconds`, excluded app or domain in front, private browsing
@@ -1219,10 +1222,11 @@ Fail-safe rules:
   not in front.
 | | Windows | Linux (X11) |
 |---|---|---|
-| Screen | GDI `BitBlt` of the monitor with the focused window (per-monitor DPI aware) | X11 `GetImage` of the RandR monitor with the focused window |
+| Screen | DXGI Desktop Duplication of each monitor, GDI `BitBlt` as the fallback (per-monitor DPI aware). A monitor with no new desktop image since the last read and the same window layout is not read again (`reused: true`) | X11 `GetImage` of the RandR monitor with the focused window |
 | Excluded apps | Frame skipped when one is focused. Other excluded windows are painted black from the z-ordered window list (rectangular approximation, no rounded corners or transparency) | Same |
-| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others | None (needs AT-SPI) |
-| AX tree | UI Automation control view | None |
+| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; reused for 3 s while the window and title stay the same | None (needs AT-SPI) |
+| AX tree | UI Automation control view, one cached call per node, 250 ms budget | None |
+| Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | Default priority |
 | Private windows | Title markers (InPrivate, Incognito, Private Browsing) | Same |
 | Idle / lock | `GetLastInputInfo`; lock = input desktop not openable | XScreenSaver idle; lock = screensaver active |
 | OCR | `Windows.Media.Ocr`. Needs an OCR language pack. No confidence (reports 1.0). Words are grouped into line boxes split at column gaps | `tesseract` CLI (`apt install tesseract-ocr`) |
@@ -1257,8 +1261,11 @@ Kortix Capture merges two recorders that share no capture code:
 
 Screen APIs of the action recorder (`screenshots` 0.8.10): macOS
 `CGWindowListCreateImage` (legacy; macOS 15+ re-asks for screen recording
-consent), Windows GDI `StretchBlt` (CPU scaling), Linux X11 `GetImage` and the
-Wayland portal.
+consent), Linux X11 `GetImage` and the Wayland portal. Windows reads only the
+display under the pointer, through the engine's DXGI Desktop Duplication
+(`capture_engine::grab_monitor`), so GPU-drawn content such as a CAD canvas is
+in the frame; a display with no new desktop image reuses the last read. The
+other displays keep their layout and no image.
 
 ### Stages
 

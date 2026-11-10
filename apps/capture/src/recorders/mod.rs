@@ -627,13 +627,15 @@ fn screenshot_capture_dhash(capture: &CapturedDesktop, scale_factor: f64) -> u64
     hash
 }
 
+/// A 64-bit difference hash. An area-averaged 9x8 thumbnail of the image:
+/// one pass over the pixels, no full-size resize. A display that was not read
+/// (empty image) hashes to 0.
 #[cfg(feature = "native-recorders")]
-fn screenshot_dhash(image: &RgbaImage, scale_factor: f64) -> u64 {
-    let target_width = scaled_dimension(image.width(), scale_factor);
-    let target_height = scaled_dimension(image.height(), scale_factor);
-    let resized = image::imageops::resize(image, target_width, target_height, FilterType::Triangle);
-    let gray = DynamicImage::ImageRgba8(resized).to_luma8();
-    let hash_image = image::imageops::resize(&gray, 9, 8, FilterType::Triangle);
+fn screenshot_dhash(image: &RgbaImage, _scale_factor: f64) -> u64 {
+    if image.width() == 0 || image.height() == 0 {
+        return 0;
+    }
+    let hash_image = DynamicImage::ImageRgba8(image::imageops::thumbnail(image, 9, 8)).to_luma8();
     let mut hash = 0u64;
     for y in 0..8 {
         for x in 0..8 {
@@ -756,6 +758,10 @@ struct CapturedDesktop {
     image: RgbaImage,
     bounds: ScreenBounds,
     displays: Vec<CapturedDisplay>,
+    /// The display under the pointer when the capture was taken, when the
+    /// capture read only that display (Windows). Encoding then keeps exactly
+    /// the display that was read. None: encoding asks for the pointer itself.
+    pointer: Option<u32>,
 }
 
 #[cfg(feature = "native-recorders")]
@@ -1017,7 +1023,9 @@ fn encode_captured_screenshot_with(
     scale_factor: f64,
     quality: u8,
 ) -> Result<EncodedScreenshot> {
-    let pointer_display_id = current_pointer_display_id(&capture.displays);
+    let pointer_display_id = capture
+        .pointer
+        .or_else(|| current_pointer_display_id(&capture.displays));
     let focused_display_id = current_focus_display_id(&capture.displays);
     let active_display_id = active_display_id(focused_display_id, pointer_display_id);
     match capture.mode {
@@ -1109,7 +1117,7 @@ fn encode_screenshot_image(
 ) -> Result<EncodedScreenshot> {
     let target_width = scaled_dimension(image.width(), scale_factor);
     let target_height = scaled_dimension(image.height(), scale_factor);
-    let resized = image::imageops::resize(image, target_width, target_height, FilterType::Triangle);
+    let resized = downscale(image, target_width, target_height);
     let rgb = DynamicImage::ImageRgba8(resized).to_rgb8();
 
     let mut encoded = Vec::new();
@@ -1254,8 +1262,88 @@ fn display_id_for_point(displays: &[CapturedDisplay], x: f64, y: f64) -> Option<
         .map(|display| display.id)
 }
 
-#[cfg(feature = "native-recorders")]
+/// Windows: read only the display under the pointer, through the capture
+/// engine's Desktop Duplication (GPU-drawn content such as a CAD canvas is in
+/// the frame; GDI paints it black). The other displays keep their layout and
+/// an empty image: encoding drops their pixels anyway. A display that shows
+/// the same desktop image as at the last read reuses that read.
+#[cfg(all(feature = "native-recorders", target_os = "windows"))]
 fn capture_desktop_capture(mode: ScreenshotCaptureMode) -> Result<CapturedDesktop> {
+    if mode == ScreenshotCaptureMode::Stitched {
+        return capture_every_display(mode);
+    }
+    let screens = screenshots::Screen::all().context("failed to enumerate screens")?;
+    if screens.is_empty() {
+        bail!("no screens available for screenshot capture");
+    }
+    let bounds = ScreenBounds::from_screens(&screens)
+        .context("failed to calculate virtual screen bounds")?;
+    let mut displays: Vec<CapturedDisplay> = screens
+        .iter()
+        .map(|screen| CapturedDisplay {
+            id: screen.display_info.id,
+            is_primary: screen.display_info.is_primary,
+            x: screen.display_info.x as f64,
+            y: screen.display_info.y as f64,
+            width: screen.display_info.width as f64,
+            height: screen.display_info.height as f64,
+            image: RgbaImage::new(0, 0),
+        })
+        .collect();
+    let Some(pointer) = current_pointer_display_id(&displays) else {
+        return capture_every_display(mode);
+    };
+    let screen = screens
+        .iter()
+        .find(|s| s.display_info.id == pointer)
+        .context("pointer display vanished")?;
+    let image = LAST_READ
+        .with(|cell| -> Result<RgbaImage> {
+            let mut last = cell.borrow_mut();
+            let unless = last
+                .as_ref()
+                .filter(|(id, _, _)| *id == pointer)
+                .and_then(|(_, g, _)| *g);
+            let monitor = screen.display_info.raw_handle.0 as isize;
+            match crate::capture_engine::grab_monitor(monitor, unless)? {
+                Some((rgb, generation)) => {
+                    let rgba = DynamicImage::ImageRgb8(rgb).to_rgba8();
+                    *last = Some((pointer, generation, rgba.clone()));
+                    Ok(rgba)
+                }
+                None => last
+                    .as_ref()
+                    .map(|(_, _, image)| image.clone())
+                    .context("no earlier read to reuse"),
+            }
+        })
+        .with_context(|| format!("failed to capture screen {pointer}"))?;
+    if let Some(display) = displays.iter_mut().find(|d| d.id == pointer) {
+        display.image = image;
+    }
+    Ok(CapturedDesktop {
+        mode,
+        image: RgbaImage::new(0, 0),
+        bounds,
+        displays,
+        pointer: Some(pointer),
+    })
+}
+
+#[cfg(all(feature = "native-recorders", target_os = "windows"))]
+thread_local! {
+    /// The last display read: (display id, desktop-image generation, image).
+    static LAST_READ: std::cell::RefCell<Option<(u32, Option<u64>, RgbaImage)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(all(feature = "native-recorders", not(target_os = "windows")))]
+fn capture_desktop_capture(mode: ScreenshotCaptureMode) -> Result<CapturedDesktop> {
+    capture_every_display(mode)
+}
+
+#[cfg(feature = "native-recorders")]
+fn capture_every_display(mode: ScreenshotCaptureMode) -> Result<CapturedDesktop> {
     let screens = screenshots::Screen::all().context("failed to enumerate screens")?;
     if screens.is_empty() {
         bail!("no screens available for screenshot capture");
@@ -1295,6 +1383,7 @@ fn capture_desktop_capture(mode: ScreenshotCaptureMode) -> Result<CapturedDeskto
         image,
         bounds,
         displays,
+        pointer: None,
     })
 }
 
@@ -1325,6 +1414,52 @@ fn stitch_logical_desktop(
     }
 
     Ok(desktop)
+}
+
+/// Scale `image` to `width` x `height`. Halves with a 2x2 box average while
+/// the image is at least twice the target, then resizes the rest. The default
+/// 0.5 scale is one halving: one pass over the pixels instead of a Triangle
+/// filter over a 4K frame.
+#[cfg(feature = "native-recorders")]
+fn downscale(image: &RgbaImage, width: u32, height: u32) -> RgbaImage {
+    let mut halved: Option<RgbaImage> = None;
+    loop {
+        let src = halved.as_ref().unwrap_or(image);
+        if src.width() < width * 2 || src.height() < height * 2 {
+            break;
+        }
+        halved = Some(halve(src));
+    }
+    let src = halved.as_ref().unwrap_or(image);
+    if src.dimensions() == (width, height) {
+        return halved.unwrap_or_else(|| image.clone());
+    }
+    image::imageops::resize(src, width, height, FilterType::Triangle)
+}
+
+/// Half the width and height, each pixel the average of a 2x2 block (an odd
+/// last row or column is dropped).
+#[cfg(feature = "native-recorders")]
+fn halve(image: &RgbaImage) -> RgbaImage {
+    let (w, h) = (image.width() / 2, image.height() / 2);
+    let stride = image.width() as usize * 4;
+    let src = image.as_raw();
+    let mut out = vec![0u8; w as usize * h as usize * 4];
+    for (y, dst) in out.chunks_exact_mut(w as usize * 4).enumerate() {
+        let top = &src[2 * y * stride..][..stride];
+        let bottom = &src[(2 * y + 1) * stride..][..stride];
+        for (x, px) in dst.chunks_exact_mut(4).enumerate() {
+            let i = x * 8;
+            for c in 0..4 {
+                let sum = u16::from(top[i + c])
+                    + u16::from(top[i + 4 + c])
+                    + u16::from(bottom[i + c])
+                    + u16::from(bottom[i + 4 + c]);
+                px[c] = ((sum + 2) / 4) as u8;
+            }
+        }
+    }
+    RgbaImage::from_raw(w, h, out).expect("halved buffer size")
 }
 
 #[cfg(feature = "native-recorders")]
@@ -1620,6 +1755,18 @@ fn run_windows_input_hook_listener(
     };
 
     unsafe {
+        // Every keyboard and mouse event on the computer waits for this thread
+        // to return from the hook. The process runs below normal priority so the
+        // foreground app wins the CPU; this one thread must not, or a busy CAD
+        // app makes the pointer lag system-wide. Its callbacks only queue.
+        {
+            use windows::Win32::System::Threading::{
+                GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
+            };
+            if SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL).is_err() {
+                tracing::warn!("input hook thread priority not raised");
+            }
+        }
         let keyboard_hook = SetWindowsHookExA(
             WH_KEYBOARD_LL,
             Some(windows_keyboard_hook_callback),
@@ -2888,6 +3035,7 @@ mod screenshot_capture_tests {
                     displays: Vec::new(),
                 },
                 displays: Vec::new(),
+                pointer: None,
             },
             enqueued_at: Instant::now(),
             raw_queue_depth: 0,
@@ -3155,6 +3303,34 @@ mod screenshot_capture_tests {
         assert_eq!(display_id_for_point(&displays, -1.0, -1.0), None);
     }
 
+    #[test]
+    fn halving_averages_each_2x2_block() {
+        let image = RgbaImage::from_fn(4, 2, |x, _| {
+            let v = if x < 2 { 10 } else { 200 };
+            image::Rgba([v, v + 1, v + 2, 255])
+        });
+        let half = halve(&image);
+        assert_eq!(half.dimensions(), (2, 1));
+        assert_eq!(half.get_pixel(0, 0).0, [10, 11, 12, 255]);
+        assert_eq!(half.get_pixel(1, 0).0, [200, 201, 202, 255]);
+    }
+
+    #[test]
+    fn downscale_lands_on_the_target_size() {
+        let image = RgbaImage::new(3840, 2160);
+        assert_eq!(downscale(&image, 1920, 1080).dimensions(), (1920, 1080));
+        assert_eq!(downscale(&image, 960, 540).dimensions(), (960, 540));
+        assert_eq!(downscale(&image, 1280, 720).dimensions(), (1280, 720));
+        let odd = RgbaImage::new(2561, 1441);
+        assert_eq!(downscale(&odd, 1281, 721).dimensions(), (1281, 721));
+        assert_eq!(downscale(&odd, 2561, 1441).dimensions(), (2561, 1441));
+    }
+
+    #[test]
+    fn a_display_that_was_not_read_hashes_to_zero() {
+        assert_eq!(screenshot_dhash(&RgbaImage::new(0, 0), 0.5), 0);
+    }
+
     fn solid_capture(luma: u8) -> CapturedDesktop {
         let mut image = RgbaImage::new(16, 16);
         for pixel in image.pixels_mut() {
@@ -3171,6 +3347,7 @@ mod screenshot_capture_tests {
                 displays: Vec::new(),
             },
             displays: Vec::new(),
+            pointer: None,
         }
     }
 

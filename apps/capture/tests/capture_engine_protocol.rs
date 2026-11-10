@@ -268,3 +268,38 @@ fn windows_captures_every_display_through_desktop_duplication() {
         "the engine fell back to GDI: {stderr}"
     );
 }
+
+/// A display whose desktop image did not change since the last read is not
+/// read again: fed back its own content hash, the engine answers `unchanged`
+/// and `reused` without reading the pixels. A runner desktop can change (a
+/// clock), so one of several ticks must reuse.
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_skips_reading_a_display_that_did_not_change() {
+    let dir = std::env::temp_dir().join(format!("kce-reuse-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut e = Engine::start();
+    let mut unchanged = json!({});
+    let mut reused = 0;
+    for tick in 0..6 {
+        let out = dir.join(format!("tick{tick}.jpg"));
+        let res = e.call(
+            json!({"cmd": "capture", "all_displays": true, "record_unknown": true,
+            "out": out.to_str().unwrap(), "unchanged": unchanged}),
+        );
+        assert_eq!(res["ok"], json!(true), "{res}");
+        let mut next = json!({});
+        for d in res["displays"].as_array().expect("displays") {
+            if d["reused"] == json!(true) {
+                assert_eq!(d["unchanged"], json!(true), "{d}");
+                reused += 1;
+            }
+            if let Some(h) = d["content_hash"].as_str() {
+                next[d["display"]["id"].to_string()] = json!(h);
+            }
+        }
+        unchanged = next;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+    assert!(reused > 0, "no tick reused an unchanged display");
+}

@@ -74,7 +74,8 @@ type Stamp = (Option<(SystemTime, u64)>, Option<(SystemTime, u64)>);
 struct Effective {
     checked: Instant,
     stamp: Stamp,
-    settings: Settings,
+    /// Shared, not cloned: the gate reads it for every input event.
+    settings: Arc<Settings>,
 }
 
 struct Counter {
@@ -111,7 +112,7 @@ impl ActionExclusions {
             effective: Mutex::new(Effective {
                 checked: Instant::now(),
                 stamp: stamp(paths),
-                settings: Settings::effective(paths),
+                settings: Arc::new(Settings::effective(paths)),
             }),
             counter: Mutex::new(Counter {
                 count: read_count(paths),
@@ -122,14 +123,14 @@ impl ActionExclusions {
     }
 
     /// The effective settings, re-read when settings.json or the policy changed.
-    fn settings(&self) -> Settings {
+    fn settings(&self) -> Arc<Settings> {
         let mut e = self.effective.lock();
         if e.checked.elapsed() >= SETTINGS_CHECK {
             e.checked = Instant::now();
             let now = stamp(&self.paths);
             if now != e.stamp {
                 e.stamp = now;
-                e.settings = Settings::effective(&self.paths);
+                e.settings = Arc::new(Settings::effective(&self.paths));
             }
         }
         e.settings.clone()
@@ -196,7 +197,7 @@ impl ActionExclusions {
 
     #[cfg(test)]
     fn settings_for_test(&self) -> Settings {
-        self.settings()
+        (*self.settings()).clone()
     }
 }
 

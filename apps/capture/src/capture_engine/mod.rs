@@ -45,6 +45,9 @@ use linux as os;
 mod win;
 #[cfg(target_os = "windows")]
 use win as os;
+/// The engine's monitor grab, for the action recorder in `kortix-backend`.
+#[cfg(target_os = "windows")]
+pub use win::grab_monitor;
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 mod unsupported;
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
@@ -101,7 +104,7 @@ pub fn process_aliases(exe: &str, cgroup: &str, environ: &[u8]) -> Vec<String> {
     out
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rect {
     pub x: i32,
     pub y: i32,
@@ -285,6 +288,12 @@ pub fn plan_displays<'a>(
     }
 }
 
+thread_local! {
+    /// Per display: (desktop-image generation, layout, content hash) of the last read.
+    static LAST_READ: std::cell::RefCell<HashMap<i64, (u64, u64, String)>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
 /// FNV-1a over a 256-pixel-wide grayscale, area-averaged copy: an equal hash
 /// means the display did not change.
 pub fn content_hash(img: &RgbImage) -> String {
@@ -332,6 +341,8 @@ pub fn run() -> Result<()> {
         std::process::exit(audio::run(&args[2..]));
     }
     os::init();
+    // Capture, OCR and video encoding are background work (audio returned above).
+    crate::os_proc::efficiency_mode();
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -733,6 +744,17 @@ fn capture_all(req: &Value) -> Result<Value> {
         .filter(|w| !plan.hidden.contains(&w.id))
         .collect();
     res["windows"] = windows_json(&visible.iter().map(|w| (*w).clone()).collect::<Vec<_>>());
+    // Everything besides the pixels that shapes a display's image: the size
+    // limit and the windows redaction paints out or keeps (with their z-order).
+    let layout = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (max_width, max_height).hash(&mut h);
+        for w in &windows {
+            (w.id, w.rect, w.overlay, plan.hidden.contains(&w.id)).hash(&mut h);
+        }
+        h.finish()
+    };
     let stem = out.strip_suffix(".jpg").unwrap_or(out);
     let mut entries = Vec::new();
     let mut timings = Vec::new();
@@ -742,8 +764,24 @@ fn capture_all(req: &Value) -> Result<Value> {
             "id": d.id, "name": d.name, "x": d.rect.x, "y": d.rect.y, "w": d.rect.w, "h": d.rect.h,
             "scale": d.scale, "main": d.main, "focused": d.id == focused_id,
         }});
+        let generation = os::frame_generation(d);
+        let reused = generation.and_then(|g| {
+            let sent = unchanged.get(d.id.to_string()).and_then(Value::as_str)?;
+            LAST_READ.with(|c| {
+                c.borrow()
+                    .get(&d.id)
+                    .is_some_and(|(lg, ll, lh)| *lg == g && *ll == layout && lh == sent)
+                    .then(|| sent.to_string())
+            })
+        });
         if plan.covered.contains(&d.id) {
             entry["skipped"] = json!("excluded");
+        } else if let Some(hash) = reused {
+            // The monitor has no new desktop image and nothing on it was redacted
+            // differently: the image would hash the same. Skip the read entirely.
+            entry["content_hash"] = json!(hash);
+            entry["unchanged"] = json!(true);
+            entry["reused"] = json!(true);
         } else {
             let mut image =
                 os::screenshot_display(d).map_err(|e| anyhow!("capture_failed: {e:#}"))?;
@@ -752,6 +790,9 @@ fn capture_all(req: &Value) -> Result<Value> {
             });
             let image = fit(image, max_width, max_height);
             let hash = content_hash(&image);
+            if let Some(g) = generation {
+                LAST_READ.with(|c| c.borrow_mut().insert(d.id, (g, layout, hash.clone())));
+            }
             entry["content_hash"] = json!(hash);
             if unchanged.get(d.id.to_string()).and_then(Value::as_str) == Some(hash.as_str()) {
                 entry["unchanged"] = json!(true);

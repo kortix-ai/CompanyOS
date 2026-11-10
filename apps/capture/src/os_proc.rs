@@ -32,6 +32,43 @@ pub fn below_normal_priority() {
     }
 }
 
+/// Ask Windows to run this process in efficiency mode (EcoQoS): its threads
+/// get low clock speeds and efficiency cores, so background capture, OCR and
+/// encoding draw less power and leave the fast cores to the person's apps.
+/// It does not starve the process the way a lower priority can. Not for a
+/// process that hosts the input hooks. No-op elsewhere and before Windows 11.
+pub fn efficiency_mode() {
+    #[cfg(windows)]
+    unsafe {
+        const PROCESS_POWER_THROTTLING: i32 = 4; // PROCESS_INFORMATION_CLASS
+        const EXECUTION_SPEED: u32 = 0x1;
+        let state = win::PowerThrottlingState {
+            version: 1,
+            control_mask: EXECUTION_SPEED,
+            state_mask: EXECUTION_SPEED,
+        };
+        // Older Windows rejects the class; the process then runs as before.
+        let _ = win::SetProcessInformation(
+            win::GetCurrentProcess(),
+            PROCESS_POWER_THROTTLING,
+            (&state as *const win::PowerThrottlingState).cast(),
+            std::mem::size_of::<win::PowerThrottlingState>() as u32,
+        );
+    }
+}
+
+/// Move `log` to `<stem>.1.<ext>` (replacing an older one) when it is larger
+/// than `max_bytes`, so an append-only log keeps at most two files. Call it
+/// before opening the log for append.
+pub fn rotate_log(log: &Path, max_bytes: u64) {
+    if std::fs::metadata(log).is_ok_and(|m| m.len() > max_bytes) {
+        let _ = std::fs::rename(log, log.with_extension("1.log"));
+    }
+}
+
+/// The size at which `rotate_log` moves a service log aside.
+pub const LOG_MAX_BYTES: u64 = 20 * 1024 * 1024;
+
 /// Tie every process this one starts from now on to this process's life: on
 /// Windows, put it in a job object that kills the whole job when its last
 /// handle closes. The handle is never closed, so it closes when this process
@@ -199,12 +236,18 @@ pub fn pid_alive(_pid: u32) -> bool {
 #[cfg(windows)]
 #[allow(non_snake_case)]
 mod win {
-    pub use super::job_layout::JobExtendedLimits;
+    pub use super::job_layout::{JobExtendedLimits, PowerThrottlingState};
     use std::ffi::c_void;
     #[link(name = "kernel32")]
     extern "system" {
         pub fn GetCurrentProcess() -> *mut c_void;
         pub fn SetPriorityClass(h: *mut c_void, class: u32) -> i32;
+        pub fn SetProcessInformation(
+            h: *mut c_void,
+            class: i32,
+            info: *const c_void,
+            len: u32,
+        ) -> i32;
         pub fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
         pub fn GetExitCodeProcess(h: *mut c_void, code: *mut u32) -> i32;
         pub fn CloseHandle(h: *mut c_void) -> i32;
@@ -228,6 +271,14 @@ mod win {
 
 #[cfg(windows)]
 mod job_layout {
+    /// PROCESS_POWER_THROTTLING_STATE.
+    #[repr(C)]
+    pub struct PowerThrottlingState {
+        pub version: u32,
+        pub control_mask: u32,
+        pub state_mask: u32,
+    }
+
     /// JOBOBJECT_BASIC_LIMIT_INFORMATION.
     #[repr(C)]
     pub struct JobBasicLimits {

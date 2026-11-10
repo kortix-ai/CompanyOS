@@ -512,6 +512,8 @@ fn capture_loop(paths: &MemoryPaths, stop: &AtomicBool) -> Result<()> {
     // Focus at the last capture decision, and why the next capture is early.
     let mut baseline: Option<Focus> = None;
     let mut next_reason: Option<&'static str> = None;
+    // When the last accessibility tree was read. See `AX_REFRESH`.
+    let mut ax_read_at: Option<Instant> = None;
 
     while !stop.load(Ordering::SeqCst) {
         let tick = Instant::now();
@@ -590,12 +592,17 @@ fn capture_loop(paths: &MemoryPaths, stop: &AtomicBool) -> Result<()> {
         let staged = paths.frames_dir().join(format!("unfinalized_{ts}.jpg"));
         // A capture a focus change pulled forward records the active display only.
         let only_focused = !first && next_reason.is_some();
-        let req = capture_request(
+        let mut req = capture_request(
             &s,
             &staged,
             &unchanged_request(&last_hash, ts),
             only_focused,
         );
+        let want_ax = s.ax_enabled && wants_ax_tree(first, next_reason, ax_read_at);
+        req["ax"] = json!(want_ax);
+        if want_ax {
+            ax_read_at = Some(Instant::now());
+        }
         // Private capture also completes OCR before returning. A stalled engine
         // is killed at the deadline, with no unfiltered fallback.
         match engine.request(
@@ -806,6 +813,18 @@ pub(crate) fn capture_request(
     })
 }
 
+/// The longest a frame goes without a fresh accessibility tree while focus
+/// stays on one window. Each read runs inside the focused app (UI Automation
+/// on Windows), so it is taken on a focus change and otherwise this often,
+/// not on every 2 s tick.
+const AX_REFRESH: Duration = Duration::from_secs(30);
+
+/// Read the accessibility tree on the first capture, on a capture a focus
+/// change pulled forward, and at least every `AX_REFRESH`.
+fn wants_ax_tree(first: bool, focus_change: Option<&str>, last: Option<Instant>) -> bool {
+    first || focus_change.is_some() || last.is_none_or(|at| at.elapsed() >= AX_REFRESH)
+}
+
 /// What the user is looking at: frontmost app, focused window title, browser URL.
 #[derive(Debug, Clone, PartialEq, Default)]
 struct Focus {
@@ -933,7 +952,9 @@ fn supervise(
         let wait = delay(failures);
         match outcome {
             Ok(Ok(())) => tracing::warn!("{name} returned; restart {failures} in {wait:?}"),
-            Ok(Err(err)) => tracing::error!("{name} stopped: {err:#}; restart {failures} in {wait:?}"),
+            Ok(Err(err)) => {
+                tracing::error!("{name} stopped: {err:#}; restart {failures} in {wait:?}")
+            }
             Err(_) => tracing::error!("{name} panicked; restart {failures} in {wait:?}"),
         }
         sleep(wait, stop);
@@ -2847,6 +2868,16 @@ mod tests {
         run_once_tasks(&conn, &paths).unwrap();
         assert!(!Settings::load(&paths).pause_on_inactivity);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_accessibility_tree_is_read_on_focus_changes_and_every_30_s() {
+        let now = Instant::now();
+        assert!(wants_ax_tree(true, None, Some(now)));
+        assert!(wants_ax_tree(false, Some("app_switch"), Some(now)));
+        assert!(wants_ax_tree(false, None, None));
+        assert!(!wants_ax_tree(false, None, Some(now)));
+        assert!(wants_ax_tree(false, None, now.checked_sub(AX_REFRESH)));
     }
 
     #[test]

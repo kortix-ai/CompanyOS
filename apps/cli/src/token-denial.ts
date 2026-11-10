@@ -54,8 +54,9 @@ export const CREDENTIAL_FENCE_REFUSED = 'credential_fence_refused';
 /** The fence's message tag, on servers before the typed code. */
 const FENCE_CHECK_TAG = '[check=token-project-scope:';
 
-/** The session's workspace runs without the project repository. A workspace
- *  policy, not a token scope: no kortix_permissions entry changes it. */
+/** The session was started without repository access: its agent's grant lacks
+ *  `project.gitops.read`, or the person who started it cannot read the files.
+ *  Decided at session start, so a new session is the fix, not a new token. */
 export const SESSION_REPOSITORY_ACCESS_DENIED = 'session_repository_access_denied';
 const REPOSITORY_DENIAL_MESSAGE = 'session workspace does not allow repository access';
 
@@ -139,12 +140,13 @@ function agentFixLine(agent: string, pending: RecordedDenial, granted?: string[]
   switch (pending.code) {
     case 'agent_ceiling_insufficient':
       return `${actionText} is outside agent ${C.bold}${agent}${C.reset}'s role — ask an admin to raise agent ${agent}'s role`;
+    case 'project_role_insufficient':
+    case 'account_role_insufficient':
+      // The person this session acts for lacks it: kortix.yaml cannot fix it.
+      return `the person this session acts for lacks ${actionText} in their role — a workspace owner or admin grants it (Settings → People); no kortix.yaml change fixes this`;
     case 'agent_human_only_action':
-      return `${actionText} is reserved for people — a human must do this`;
-    case 'agent_session_forbidden':
-      // A route that refuses every agent session outright (e.g. granting a
-      // secret to an agent). No kortix_permissions entry unlocks it.
-      return 'agent sessions cannot do this — a person with workspace access must do this';
+      // Minting a credential or moving money: a hand-off, not a missing grant.
+      return `${actionText} mints a credential or moves money — hand the person the link to do it themselves (Settings → API keys, or Billing)`;
     case undefined:
     case 'agent_scope_insufficient':
       return (
@@ -252,8 +254,8 @@ export async function printPermissionDenialIdentity(): Promise<void> {
   if (pending.code === SESSION_REPOSITORY_ACCESS_DENIED) {
     // Two layers: the token's scopes allowed the call; the workspace policy refused it.
     if (identity.agent) lines.push(`  ${C.dim}token     ${C.reset}scopes ${formatGrantList(identity.permissions)} (not the cause)`);
-    lines.push(`  ${C.dim}workspace ${C.reset}repository access denied: this session runs without the workspace repository`);
-    lines.push(`  ${C.dim}fix       ${C.reset}start a session with repository access, or ask a person with workspace access to do this`);
+    lines.push(`  ${C.dim}workspace ${C.reset}repository access denied: this session started without repository access`);
+    lines.push(`  ${C.dim}fix       ${C.reset}give the agent project.gitops.read in kortix_permissions, then start a new session as a person who can read the files`);
   } else if (identity.agent) {
     lines.push(`  ${C.dim}granted   ${C.reset}${formatGrantList(identity.permissions)}`);
     lines.push(`  ${C.dim}fix       ${C.reset}${agentFixLine(identity.agent, pending, identity.permissions)}`);

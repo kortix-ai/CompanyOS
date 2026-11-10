@@ -567,6 +567,8 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
   /** Every profile's slug and the way in it is (`connectorIdentity`): install
    *  answers an existing profile and the catalogue marks `installed`. */
   listConnectorIdentities?(projectId: string): Promise<Array<{ slug: string; identity: string | null }>>;
+  /** The catalogue publishes this MCP server URL (a registry record or a Kortix app). */
+  catalogPublishesMcpUrl?(url: string): Promise<boolean>;
   /** The web page where a person reviews and adds a custom server an agent asked for. */
   customConnectorSetupUrl?(projectId: string, draft: Record<string, unknown>): string;
   /** The tools one way to connect offers, before install (`catalog-tools.ts`). */

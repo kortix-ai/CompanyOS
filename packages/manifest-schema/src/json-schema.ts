@@ -4,7 +4,7 @@
  *
  * This is DATA generated from the same constants/enums the imperative
  * validator (`./index.ts`) uses (`GRANTABLE_KORTIX_PERMISSIONS`,
- * `CONNECTOR_PROVIDERS`, `AGENT_MODES_V2`, `WORKSPACE_MODES_V2`, …) so the
+ * `CONNECTOR_PROVIDERS`, `AGENT_MODES_V2`, …) so the
  * two can never silently drift apart — see the conformance test
  * (`__tests__/json-schema.conformance.test.ts`), which runs a shared fixture
  * corpus through both `validateManifest` and this schema (via ajv) and
@@ -84,7 +84,6 @@ import {
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
   V2_RUNTIME_VALUES,
-  WORKSPACE_MODES_V2,
 } from './constants';
 import {
   CONNECTOR_HEADER_NAME_MAX_LENGTH,
@@ -997,34 +996,12 @@ function agentBlockV2Schema(): JsonSchemaFragment {
       },
       kortix_permissions: kortixPermissionsGrantSetSchema(),
       kortix_cli: deprecatedKortixCliGrantSetSchema(),
-      repository_access: { type: 'boolean', deprecated: true, description: 'Use workspace.project_repository.' },
-      workspace: {
-        description: 'What new sessions of this agent get in /workspace.',
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              project_repository: {
-                type: 'boolean',
-                default: true,
-                description: 'Check out the project repository and allow repository access. Defaults to true.',
-              },
-            },
-            additionalProperties: false,
-          },
-          { type: 'string', enum: [...WORKSPACE_MODES_V2], deprecated: true },
-        ],
-      },
+      repository_access: { type: 'boolean', deprecated: true, description: 'Ignored: a session never checks out the project repository at boot.' },
+      workspace: { deprecated: true, description: 'Ignored: a session never checks out the project repository at boot.' },
       // This agent's pi packages, on top of the top-level list; `exclude` drops top-level ones.
       harnesses: harnessesSchema('agent'),
     },
     additionalProperties: false,
-    allOf: [
-      { if: { required: ['workspace'], properties: { workspace: { const: 'branch' } } }, then: { properties: { repository_access: { const: true } } } },
-      { if: { required: ['workspace'], properties: { workspace: { enum: ['runtime', 'read'] } } }, then: { properties: { repository_access: { const: false } } } },
-      { if: { required: ['workspace'], properties: { workspace: { type: 'object', required: ['project_repository'], properties: { project_repository: { const: true } } } } }, then: { properties: { repository_access: { const: true } } } },
-      { if: { required: ['workspace'], properties: { workspace: { type: 'object', required: ['project_repository'], properties: { project_repository: { const: false } } } } }, then: { properties: { repository_access: { const: false } } } },
-    ],
   };
 }
 
@@ -1321,22 +1298,6 @@ function agentBlockV3Schema(): JsonSchemaFragment {
         'Project permissions (`project.*`) the agent holds, whoever starts the session. `kortix validate --scopes` prints them. An account permission is an error.',
         v2.properties.kortix_permissions,
       ),
-      workspace: {
-        description: 'What new sessions of this agent get in /workspace. Any other key under `workspace` is an error.',
-        anyOf: [
-          { type: 'string', enum: ['branch', 'runtime', 'read'], deprecated: true, description: 'Deprecated: `branch` is `{ project_repository: true }`, `runtime` is `{ project_repository: false }`.' },
-          { type: 'object' },
-        ],
-        properties: {
-          project_repository: {
-            type: 'boolean',
-            default: false,
-            description:
-              '`true`: new sessions check out the project repository in `/workspace`, on their own session branch. `false`: no checkout, and repository calls answer `403` `session_repository_access_denied`. Project tools still load.',
-          },
-        },
-        additionalProperties: false,
-      },
       sandbox: { ...v2.properties.sandbox, description: 'A template slug, or `default` for the platform image. Default: `sandbox.default`.' },
       space: {
         type: 'string',
@@ -1352,7 +1313,8 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       env: { ...v2.properties.secrets, deprecated: true, description: 'Deprecated: use `secrets` (same value).' },
       kortix_cli: { ...deprecatedKortixCliGrantSetSchema(), description: 'Deprecated: use `kortix_permissions` (same value).' },
       connectors_personal: { ...v2.properties.connectors_personal, deprecated: true, description: 'Deprecated: use `connectors_required` (same value).' },
-      repository_access: { type: 'boolean', deprecated: true, description: 'Deprecated: use `workspace: { project_repository: <bool> }`.' },
+      repository_access: { type: 'boolean', deprecated: true, description: 'Deprecated and ignored: a session never checks out the project repository at boot. Delete the key.' },
+      workspace: { deprecated: true, description: 'Deprecated and ignored: a session never checks out the project repository at boot. Delete the key; an agent that needs the files runs `kortix workspaces clone`.' },
     },
     additionalProperties: false,
     not: { required: ['prompt', 'prompt_file'] },

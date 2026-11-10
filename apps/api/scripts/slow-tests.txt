@@ -34,7 +34,6 @@ src/__tests__/unit-iam-gate-codemod-pin.test.ts
 src/projects/git/loaded-files.test.ts
 src/shared/platinum.test.ts
 src/config-releases/serve-archive.test.ts
-src/projects/git/fast-boot-bundle.test.ts
 src/projects/git/branches-commit-race.test.ts
 src/snapshots/providers/platinum-prepare.test.ts
 src/runtime-assets/__tests__/manifest.test.ts

@@ -708,6 +708,8 @@ const envSchema = z.object({
   // a rollout. Credentials: the explicit pair below, else the AWS SDK default
   // chain (env, shared config, ECS/EKS task role). Endpoint + path style are
   // the MinIO/S3-compatible overrides; leave them unset on AWS.
+  // Ignored since 2026-11-08: a session never checks out the repository, so no
+  // session acquires its workspace from an archive. Kept so deploys that still set it parse.
   KORTIX_PROJECT_SNAPSHOT_MODE: z
     .enum(['git', 'prefer-s3', 'require-s3'])
     .optional()
@@ -754,7 +756,7 @@ const envSchema = z.object({
   KORTIX_PROJECT_SNAPSHOT_MAX_ARCHIVE_BYTES: optInt(512 * 1024 * 1024),
 
   // ── Audit archive (optional) ────────────────────────────────────────────
-  // Weeks of kortix.audit_events older than 90 days are exported to this S3 bucket (Object Lock,
+  // Weeks of kortix.audit_events older than HOT_DAYS (14, shared/audit-archive/format.ts) are exported to this S3 bucket (Object Lock,
   // retained until the week's end + 365 days) and their PostgreSQL partition is dropped. Off
   // unless AUDIT_ARCHIVE_ENABLED is true AND the bucket is set AND the bucket has Object Lock.
   // Credentials: the AWS SDK default chain (the ECS task role). Endpoint + path style: MinIO.
@@ -765,7 +767,7 @@ const envSchema = z.object({
   AUDIT_ARCHIVE_FORCE_PATH_STYLE: optBoolFalse,
   AUDIT_ARCHIVE_ACCESS_KEY_ID: optStr,
   AUDIT_ARCHIVE_SECRET_ACCESS_KEY: optStr,
-  /** Export read rate cap (rows per second): the job must not compete with ingest for IO. */
+  /** Read rate cap (rows per second) for the export and the legacy-table tally: the job must not compete with ingest for IO. */
   AUDIT_ARCHIVE_ROWS_PER_SECOND: optInt(5_000),
 
   // ── Config releases (optional) ──────────────────────────────────────────

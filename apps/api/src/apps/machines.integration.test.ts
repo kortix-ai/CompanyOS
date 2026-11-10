@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { accounts, appArtifacts, appDeployments, appLinks, appRuntimes, appVolumes, apps, projects } from '@kortix/db';
 import { resolveAppReleaseConfig, type AppReleaseConfig } from '@kortix/shared/app-config';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import type { AppdStatus, AppRuntimeHandle, StartAppRuntimeInput } from './hosting';
 
 process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 
@@ -23,27 +24,25 @@ let meterFailures = 0;
 const realHosting = await import('./hosting');
 mock.module('./hosting', () => ({
   ...realHosting,
-  AppHostingProvider: class {
-    async createRuntime(input: { runtimeId: string; volumes?: Record<string, { volume: string }> }) {
+  // Extends the real class: machines.ts's destroy and create-failure paths roll a
+  // runtime back through hosting.remove (machines.ts:230, :568), and a hand-rolled
+  // stub without it masked the real pg error with `hosting.remove is not a function`.
+  // The inherited methods resolve providers through the mocked getProvider below.
+  AppHostingProvider: class extends realHosting.AppHostingProvider {
+    override async createRuntime(input: StartAppRuntimeInput): Promise<AppRuntimeHandle> {
       createdBoxes += 1;
       const externalId = `box-${createdBoxes}`;
       const mounts = Object.entries(input.volumes ?? {}).map(([path, spec]) => `${path}=${spec.volume}`);
       calls.push(`create ${externalId}${mounts.length ? ` mount ${mounts.join(',')}` : ''}`);
-      return { externalId, controlTokenHash: `hash-${input.runtimeId}`, metadata: {} };
+      return { externalId, baseUrl: '', metadata: {}, provider: input.provider, runtimeId: input.runtimeId, controlTokenHash: `hash-${input.runtimeId}` };
     }
-    async waitUntilReady(_provider: string, externalId: string) {
+    override async waitUntilReady(_provider: string, externalId: string): Promise<AppdStatus> {
       calls.push(`ready? ${externalId}`);
       if (failReadyFor.has(externalId)) throw new Error('kortix-appd failed: exit 1');
+      return { status: 'running', ready: true };
     }
-    // The create/insert-failure paths (machines.ts createInstance and
-    // runReleaseCommand catch handlers) call hosting.remove to clean up the
-    // box. Missing here, the TypeError escaped the .catch(() => {}) that was
-    // meant to swallow it — property access throws before .catch attaches —
-    // and the broken cleanup left the interleaved locks that deadlocked
-    // the suite (release run 42716922285).
-    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
-    async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
-    async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
+    override async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
+    override async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');
@@ -102,6 +101,10 @@ const USER_ID = '00000000-0000-4000-a000-00000000f105';
 const PROVIDER = 'platinum';
 
 async function cleanup(): Promise<void> {
+  // A setAppScale leaves a background reconcile running (fire-and-forget by
+  // design). Settle it before the cascade below, or the reconcile's in-flight
+  // app_runtimes insert deadlocks against this delete (40P01, release gate).
+  await machines.settleAppReconciles(APP_ID);
   await db.update(apps).set({ activeDeploymentId: null }).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(apps).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(appArtifacts).where(eq(appArtifacts.projectId, PROJECT_ID));
@@ -246,6 +249,22 @@ withDb('machines and volumes — real PostgreSQL', () => {
     expect(restored!.status).toBe('running');
     const [after] = await db.select().from(appVolumes).where(eq(appVolumes.volumeId, volume!.volumeId));
     expect(after!.attachedRuntimeId).toBe(restored!.runtimeId);
+  });
+
+  test('a failed runtime insert surfaces as itself and removes the box it just created', async () => {
+    await seedApp();
+    const v1 = await deploy(stateless, 1);
+    const [live] = await liveInstances(v1.deploymentId);
+    const app = await appRow();
+    calls.length = 0;
+    // A second live row for the same machine violates app_runtimes_one_live_per_machine:
+    // the rollback removes the box and rethrows the real error, never a masking TypeError.
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment: v1, config: stateless,
+      env: await machines.releaseEnvironment(app, v1),
+      group: 'app', machineId: live!.machineId!,
+    })).rejects.toThrow(/insert into "kortix"\."app_runtimes"/);
+    expect(calls).toContain('remove box-2');
   });
 
   test('scale reconcile: up creates machines (a mounted group gets one new volume each), down destroys the newest and keeps their volumes', async () => {

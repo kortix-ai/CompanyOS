@@ -558,6 +558,37 @@ async function reconcileAppMachinesOnce(
 }
 
 /**
+ * The background reconciles still running per app. A same-app write that
+ * cascades (today only the machines test's cleanup) settles them first, so its
+ * FK cascade never deadlocks against an in-flight reconcile's insert; the same
+ * settle is the first building block for an App's delete later.
+ *
+ * replica-local: the map only remembers reconciles THIS replica dispatched
+ * (the setAppScale call site). Settling is always safe and only ever waits; a
+ * delete that lands on another replica sees none of these and keeps today's
+ * behavior, so a replica-local copy is correct rather than merely tolerated.
+ */
+const backgroundReconciles = new Map<string, Set<Promise<unknown>>>();
+
+/** Register a fire-and-forget reconcile so `settleAppReconciles` can await it. */
+export function trackBackgroundReconcile(appId: string, run: Promise<unknown>): void {
+  const set = backgroundReconciles.get(appId) ?? new Set<Promise<unknown>>();
+  backgroundReconciles.set(appId, set);
+  set.add(run);
+  const clean = (): void => {
+    set.delete(run);
+    // Prune the (empty) set and its key; only ours, never a newer one.
+    if (set.size === 0 && backgroundReconciles.get(appId) === set) backgroundReconciles.delete(appId);
+  };
+  void run.then(clean, clean);
+}
+
+/** Resolve when every background reconcile of the app has settled (ok or failed). */
+export async function settleAppReconciles(appId: string): Promise<void> {
+  await Promise.allSettled([...(backgroundReconciles.get(appId) ?? [])]);
+}
+
+/**
  * The release command (`deploy.release_command`): once per release, before
  * any machine changes, in a temporary machine from the new image with the
  * release's env and secrets and no volume. The box is always

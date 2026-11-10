@@ -177,7 +177,8 @@ kortix connectors add acme --provider mcp --url https://mcp.acme.com/mcp --trans
 kortix connectors add acme --provider openapi --spec https://acme.com/openapi.json --apply
 ```
 
-Without `--apply`, `add` edits only this session branch's `kortix.yaml`. A
+Without `--apply`, `add` edits the `kortix.yaml` of the clone you are in
+(`kortix workspaces clone`; `/workspace` has none at boot), landed through a change request. A
 server URL that neither the catalog publishes nor the workspace already has
 needs a one-time approval of that exact URL: the answer is
 `custom_connector_needs_human` with a `setup_url`. Hand the human the link;

@@ -3465,7 +3465,7 @@ describe('config releases on pi', () => {
     expect(first).toContain('RELEASED-RULES')
     expect(first).not.toContain('WORKSPACE-RULES')
     // The session notice tells the agent its working-copy edit waits for the base branch.
-    expect(first).toContain('`/workspace/skills` or `/workspace/AGENTS.md` does NOT change the config')
+    expect(first).toContain('`skills` or `AGENTS.md` does NOT change the config')
     expect(await agentsMdOf(r)).toEqual({
       source: 'release',
       path: join(dir, 'store', one.descriptor.release_id!, 'AGENTS.md'),

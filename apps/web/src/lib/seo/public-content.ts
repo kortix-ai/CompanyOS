@@ -51,8 +51,9 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
     slug: 'index',
-    title: siteMetadata.title,
-    description: siteMetadata.description,
+    title: 'Kortix: one prompt puts agents on your repo, 24/7',
+    description:
+      'Paste one prompt into Claude Code or Codex. It sets up cloud agents on your repository that ship pull requests, posts and drafts 24/7, on the plan you already pay for.',
     htmlPath: '/',
     markdownPath: '/markdown/index.md',
   },

@@ -79,32 +79,3 @@ export function Mark({ name }: { name: 'Claude' | 'Codex' | 'Claude Code' }) {
 export function Eyebrow({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">{children}</span>;
 }
-
-
-export function Window({ title, children, className }: { title: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('border-border bg-background overflow-hidden rounded-lg border shadow-2xl shadow-black/40', className)}>
-      <div className="border-border text-muted-foreground flex items-center gap-3 border-b px-4 py-2.5 text-xs">
-        <span aria-hidden className="flex gap-1.5">
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-        </span>
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-export function Chips({ items, accent }: { items: string[]; accent?: boolean }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <span key={item} className={cn('rounded-full border px-2.5 py-1 text-xs', accent ? 'border-kortix-base/30 text-kortix-base' : 'border-border text-muted-foreground')}>
-          {item}
-        </span>
-      ))}
-    </div>
-  );
-}

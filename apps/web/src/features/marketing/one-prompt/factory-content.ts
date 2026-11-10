@@ -36,26 +36,16 @@ export const RUNS = [
   { issue: 3, pr: 5, bug: 'POST /todos accepts a missing, empty or non-string title', fix: 'fix: reject missing, empty or non-string todo titles' },
 ];
 
-/** The factory's sources as factory.json ships them. */
-export const SOURCES = [
-  { name: 'GitHub issues', on: true },
-  { name: 'Nightly tests', on: true },
-  { name: 'Sentry · Better Stack', on: false },
-  { name: 'Logs and database anomalies', on: false },
-  { name: 'Slack threads', on: false },
-  { name: 'Security findings', on: false },
-];
-
 /** Names only: the brand kit allows no third-party logos. */
 export const TOOLS = ['GitHub', 'Linear', 'Jira', 'Asana', 'Slack', 'Sentry', 'Better Stack', 'Claude Code', 'Codex'];
 
 export const FAQ = [
-  { q: 'What is Kortix?', a: 'An automation engine defined by one kortix.yaml in your repository. Each loop is a set of agents, the sources they watch, the skills they use and what they may do: Engineering, Marketing, Sales, Recruiting, Support.' },
-  { q: 'What is a loop?', a: 'Sources that watch for work (Slack, production errors, your database, signups, applicants, feedback), an agent with its own identity and permissions, and the skills it uses to ship: pull requests, posts, videos, drafts.' },
-  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the loop\'s guide with you and asks before every decision.' },
+  { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },
+  { q: 'What is a factory?', a: 'One agent with its triggers and skills for one team\'s work. Each template is a public repository; your coding agent reads it and adapts it to yours.' },
+  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the setup guide with you and asks before every decision.' },
   { q: 'Which models do the agents use?', a: 'The plan you already have: your Claude or ChatGPT subscription, or any API key you add. It is shared with your workspace, so scheduled runs use it too.' },
   { q: 'Does it work with my existing repository?', a: 'Yes. It reads how the repository builds and tests, and writes a dev environment the agents use. Your code stays in your GitHub repository.' },
-  { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, one per ticket, on your dev environment. They never point at your staging or production systems.' },
-  { q: 'Who merges the pull requests?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
+  { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, on a copy of your dev environment. They never point at your staging or production systems.' },
+  { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
   { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
 ];

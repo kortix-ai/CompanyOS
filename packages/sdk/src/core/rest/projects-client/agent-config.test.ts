@@ -212,3 +212,19 @@ describe('repository access is obsolete', () => {
     }
   });
 });
+
+describe('the current workspace map', () => {
+  const workspace = { sandbox: 'node', repos: [{ path: '/workspace', sparse: ['apps/web'] }], setup: ['pnpm install'] };
+  test('a read keeps it', async () => {
+    nextBody = { agent: 'dev', schema_version: 3, block: { workspace, connectors: 'all' } };
+    const response = await getAgentConfig('project-1', 'dev');
+    expect(response.block).toEqual({ workspace, connectors: 'all' });
+  });
+  test('a write sends it; the legacy shapes still do not travel', async () => {
+    await updateAgentConfig('project-1', 'dev', { workspace, connectors: 'all' });
+    expect(calls[0]?.body).toEqual({ workspace, connectors: 'all' });
+    calls = [];
+    await updateAgentConfig('project-1', 'dev', { workspace: { project_repository: true } as never, connectors: 'all' });
+    expect(calls[0]?.body).toEqual({ connectors: 'all' });
+  });
+});

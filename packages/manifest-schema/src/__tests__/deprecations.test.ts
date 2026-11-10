@@ -150,3 +150,17 @@ describe('agent-workspace keeps what project_repository: true meant: the agent m
     expect(kortixPermissions('    workspace: runtime\n    kortix_permissions: [workspace.read]\n')).toEqual(['workspace.read']);
   });
 });
+
+describe('agent-workspace leaves the current workspace map alone', () => {
+  const agent = (text: string) => (parseManifestText(text).agents as Record<string, Record<string, unknown>>).a;
+  test('a map with project_repository loses only that key, and true still grants the clone', () => {
+    const a = agent('agents:\n  a:\n    prompt: x\n    workspace:\n      project_repository: true\n      setup: [pnpm install]\n');
+    expect(a.workspace).toEqual({ setup: ['pnpm install'] });
+    expect(a.kortix_permissions).toEqual(['workspace.gitops.read']);
+  });
+  test('a current map is not a deprecation', () => {
+    const text = 'agents:\n  a:\n    prompt: x\n    workspace:\n      repos: [{ path: /workspace }]\n';
+    expect(agent(text).workspace).toEqual({ repos: [{ path: '/workspace' }] });
+    expect(validateManifest(text).issues.filter((issue) => issue.fix === 'agent-workspace')).toEqual([]);
+  });
+});

@@ -509,6 +509,7 @@ export async function moveProjectRows(
   count('account_model_preferences', await moveProjectDefaultModel(tx, input));
   await moveAppHostingRows(tx, projectId, fromAccountId, toAccountId);
   await moveOpenComputeSessions(tx, projectId, fromAccountId, toAccountId);
+  count('api_keys', await moveSandboxKeys(tx, projectId, fromAccountId, toAccountId));
   return changed;
 }
 
@@ -542,6 +543,8 @@ async function moveProjectDefaultModel(tx: TransferTx, input: { projectId: strin
 export const PROJECT_TRANSFER_COMPUTE_TABLES: Readonly<Record<string, string>> = {
   sandbox_compute_sessions:
     'OPEN rows of the moved boxes (session sandboxes, App runtimes, monitor boxes) re-pointed; closed rows stay with the account that paid them',
+  api_keys:
+    'the legacy `kortix_sb_` keys of the moved session boxes: the git proxy, previews and the gateway read the box\'s account from the key',
 };
 
 /**
@@ -558,6 +561,21 @@ async function moveOpenComputeSessions(tx: TransferTx, projectId: string, fromAc
         JOIN kortix.app_deployments d ON d.deployment_id = r.deployment_id
         JOIN kortix.apps a ON a.app_id = d.app_id WHERE a.project_id = ${projectId}
       UNION SELECT box_id FROM kortix.project_monitor_boxes WHERE project_id = ${projectId})`);
+}
+
+/**
+ * A session box from before 2026-08-24 still authenticates with a legacy
+ * sandbox key (`kortix.api_keys`, type `sandbox`, keyed by account and box).
+ * The git proxy accepts it only when the box's `session_sandboxes` row has
+ * the key's account, and previews and the gateway take the account from the
+ * key: left behind, a moved session's git calls get 403 and its usage bills
+ * the source. Every key of the project's boxes follows, whatever its status,
+ * so a reverse brings back exactly the same set.
+ */
+async function moveSandboxKeys(tx: TransferTx, projectId: string, fromAccountId: string, toAccountId: string): Promise<unknown> {
+  return tx.execute(sql`UPDATE kortix.api_keys SET account_id = ${toAccountId}
+    WHERE account_id = ${fromAccountId} AND type = 'sandbox' AND sandbox_id IN (
+      SELECT sandbox_id FROM kortix.session_sandboxes WHERE project_id = ${projectId} AND sandbox_id IS NOT NULL)`);
 }
 
 /** App hosting rows follow the project by `app_id` ({@link PROJECT_TRANSFER_APP_TABLES}). */

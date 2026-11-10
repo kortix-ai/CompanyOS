@@ -70,6 +70,12 @@ pub fn audio_supported() -> bool {
     false
 }
 
+/// Asked before each action screenshot: false when the window in front would
+/// be dropped anyway (an excluded app, or not an included one). The screen
+/// recorder then takes no screenshot instead of capturing, encoding and
+/// discarding it.
+pub type CaptureGate = Arc<dyn Fn() -> bool + Send + Sync>;
+
 impl RecorderBundle {
     pub fn new(
         callback: EventCallback,
@@ -77,6 +83,7 @@ impl RecorderBundle {
         enable_audio: bool,
         audio_path: Option<PathBuf>,
         a11y_hash_history: Option<A11yHashHistory>,
+        capture_gate: Option<CaptureGate>,
     ) -> Self {
         let mut recorders: Vec<Box<dyn Recorder>> = Vec::new();
         let activity = ActivityTracker::new();
@@ -111,6 +118,7 @@ impl RecorderBundle {
             activity,
             #[cfg(feature = "native-recorders")]
             screenshot_capture_mode,
+            capture_gate,
         )));
 
         #[cfg(all(
@@ -356,6 +364,7 @@ struct NativeScreenRecorder {
     frame_queue_capacity: usize,
     activity: ActivityTracker,
     capture_mode: ScreenshotCaptureMode,
+    capture_gate: Option<CaptureGate>,
     running: Arc<AtomicBool>,
     frame_queue: Option<Arc<ScreenshotFrameQueue>>,
     capture_thread: Option<JoinHandle<()>>,
@@ -379,6 +388,7 @@ impl NativeScreenRecorder {
         frame_queue_capacity: usize,
         activity: ActivityTracker,
         capture_mode: ScreenshotCaptureMode,
+        capture_gate: Option<CaptureGate>,
     ) -> Self {
         Self {
             callback,
@@ -394,6 +404,7 @@ impl NativeScreenRecorder {
             frame_queue_capacity: sanitize_screen_frame_queue_capacity(frame_queue_capacity),
             activity,
             capture_mode,
+            capture_gate,
             running: Arc::new(AtomicBool::new(false)),
             frame_queue: None,
             capture_thread: None,
@@ -428,6 +439,7 @@ impl Recorder for NativeScreenRecorder {
         let scale_factor = sanitize_scale_factor(self.scale_factor);
         let quality = self.quality.clamp(1, 100) as u8;
         let capture_mode = self.capture_mode;
+        let capture_gate = self.capture_gate.clone();
         let frame_queue = Arc::new(ScreenshotFrameQueue::new(self.frame_queue_capacity));
         let encode_queue = frame_queue.clone();
         let callback = self.callback.clone();
@@ -456,6 +468,7 @@ impl Recorder for NativeScreenRecorder {
                     burst_after,
                     idle_after,
                     scale_factor,
+                    capture_gate,
                 );
             }) {
             Ok(thread) => thread,
@@ -519,6 +532,7 @@ impl ScreenRecorderPlaceholder {
         quality: u32,
         frame_queue_capacity: usize,
         activity: ActivityTracker,
+        _capture_gate: Option<CaptureGate>,
     ) -> Self {
         Self {
             callback,
@@ -790,6 +804,7 @@ fn capture_screenshot_frames(
     burst_after: Duration,
     idle_after: Duration,
     scale_factor: f64,
+    capture_gate: Option<CaptureGate>,
 ) {
     let start = Instant::now();
     let active_interval = Duration::from_secs_f64(1.0 / fps as f64);
@@ -811,6 +826,21 @@ fn capture_screenshot_frames(
             idle_interval,
         );
 
+        if capture_gate.as_ref().is_some_and(|admits| !admits()) {
+            // The front window's frames would be dropped: look again soon.
+            last_emitted_hash = None;
+            sleep_until_next_frame(
+                &running,
+                &activity,
+                burst_after,
+                idle_after,
+                burst_interval,
+                frame_started,
+                GATED_RECHECK,
+                GATED_RECHECK,
+            );
+            continue;
+        }
         match capture_desktop_capture(capture_mode) {
             Ok(capture) => {
                 let capture_duration = frame_started.elapsed();
@@ -875,6 +905,10 @@ fn capture_screenshot_frames(
 
     queue.close();
 }
+
+/// How often a gated recorder asks the gate again.
+#[cfg(feature = "native-recorders")]
+const GATED_RECHECK: Duration = Duration::from_millis(200);
 
 // Decides whether an idle-state screenshot should be emitted. The first idle
 // frame (no prior emission) and heartbeat frames always emit; otherwise the

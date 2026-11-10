@@ -747,6 +747,10 @@ fn capture_loop(paths: &MemoryPaths, stop: &AtomicBool) -> Result<()> {
             sleep_until(tick + PERMISSION_RECHECK, stop);
             continue;
         }
+        // A slow computer spends longer per capture: pace the next one so
+        // capturing never takes more than half of the recorder's time.
+        let spent = tick.elapsed();
+        let interval = paced(interval, spent);
         if s.capture_on_change {
             let mut probe = || probe_focus(&mut engine);
             next_reason = wait_for_change(
@@ -755,7 +759,7 @@ fn capture_loop(paths: &MemoryPaths, stop: &AtomicBool) -> Result<()> {
                 tick + interval,
                 tick,
                 CHANGE_POLL,
-                CHANGE_MIN_GAP,
+                CHANGE_MIN_GAP.max(spent * 2),
                 stop,
             );
         } else {
@@ -771,6 +775,12 @@ const PERMISSION_RECHECK: Duration = Duration::from_secs(30);
 /// The engine skipped the capture because Screen Recording is not granted.
 fn is_permission_skip(resp: &Value) -> bool {
     resp.get("skipped").and_then(Value::as_str) == Some("permission_missing")
+}
+
+/// The time from one capture's start to the next: `interval`, or twice what the
+/// capture took when that is longer (at most half the time capturing).
+fn paced(interval: Duration, spent: Duration) -> Duration {
+    interval.max(spent * 2)
 }
 
 /// Poll the focus this often between fixed ticks.
@@ -1363,6 +1373,9 @@ fn ocr_plan(conn: &Connection, f: &PendingFrame) -> Result<OcrPlan> {
     Ok(OcrPlan::Read)
 }
 
+/// OCR rests this many times as long as each read took (at most 20% of one core).
+const OCR_REST_FACTOR: u32 = 4;
+
 /// macOS VM pressure: 1 normal, 2 warning, 4 critical. Other OSes report normal.
 pub fn memory_pressure_level() -> u32 {
     #[cfg(target_os = "macos")]
@@ -1402,9 +1415,18 @@ fn ocr_loop(paths: MemoryPaths, stop: Arc<AtomicBool>) -> Result<()> {
             std::thread::sleep(Duration::from_millis(500));
             continue;
         };
+        let started = Instant::now();
         if let Err(err) = ocr_one(&conn, &paths, &mut engine, settings.refresh(), &frame) {
             tracing::warn!("ocr frame {} failed: {err:#}", frame.id);
             conn.execute("UPDATE frame SET ocr_status = 3 WHERE id = ?1", [frame.id])?;
+        }
+        // Text recognition is the costliest step on a slow computer. Rest
+        // OCR_REST_FACTOR times as long as a read took (a copy takes no time),
+        // so OCR uses at most 1 / (1 + OCR_REST_FACTOR) of one core. Frames
+        // wait with ocr_status 0; the plan copies text across the gap.
+        let took = started.elapsed();
+        if took > Duration::from_millis(50) {
+            sleep_until(Instant::now() + took * OCR_REST_FACTOR, &stop);
         }
     }
     Ok(())
@@ -2914,6 +2936,13 @@ mod tests {
         run_once_tasks(&conn, &paths).unwrap();
         assert!(!Settings::load(&paths).pause_on_inactivity);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_slow_capture_stretches_the_interval_to_half_duty() {
+        let two = Duration::from_secs(2);
+        assert_eq!(paced(two, Duration::from_millis(300)), two);
+        assert_eq!(paced(two, Duration::from_millis(1500)), Duration::from_secs(3));
     }
 
     #[test]

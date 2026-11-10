@@ -136,6 +136,18 @@ impl ActionExclusions {
         e.settings.clone()
     }
 
+    /// Whether an event taken now would be kept, judged by the window in front
+    /// alone (no count, no wait). The screen recorder asks this before each
+    /// screenshot so a frame `admit` would drop is never captured.
+    pub fn front_admitted(&self) -> bool {
+        let s = self.settings();
+        match self.source.latest() {
+            Some(front) => excluded_reason(&s, &front).is_none(),
+            // Record only included fails closed, as in `admit`.
+            None => !s.record_only_included,
+        }
+    }
+
     /// Keep `event` (true) or drop it unwritten (false).
     pub fn admit(&self, event: &Value) -> bool {
         let s = self.settings();
@@ -418,6 +430,25 @@ pub(crate) mod tests {
         gate.flush();
         assert_eq!(status(&paths)["excluded_events"], json!(4));
         assert_eq!(status(&paths)["last_reason"], json!("private_browsing"));
+        let _ = std::fs::remove_dir_all(&paths.root);
+    }
+
+    /// The screen recorder's gate agrees with `admit` and counts nothing.
+    #[test]
+    fn the_capture_gate_follows_the_front_window_without_counting() {
+        let mut s = Settings::default();
+        s.record_only_included = true;
+        s.included_bundle_ids = vec!["acad.exe".into()];
+        let paths = library(&s);
+        let fake = Arc::new(FakeFront::default());
+        let gate = ActionExclusions::new(&paths, fake.clone());
+        assert!(!gate.front_admitted(), "an unknown front window is not included");
+        *fake.now.lock() = Some(front("acad.exe", None, "Drawing1.dwg"));
+        assert!(gate.front_admitted());
+        *fake.now.lock() = Some(front("outlook.exe", None, "Inbox"));
+        assert!(!gate.front_admitted());
+        gate.flush();
+        assert_eq!(status(&paths)["excluded_events"], json!(0));
         let _ = std::fs::remove_dir_all(&paths.root);
     }
 

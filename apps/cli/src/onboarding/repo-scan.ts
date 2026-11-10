@@ -511,9 +511,29 @@ export interface DevEnvProposal {
   container_runtime: boolean;
   services: string[];
   commands: { install: string | null; dev: string | null; test: string | null; e2e: string | null; typecheck: string | null; lint: string | null };
+  /** The sandbox size for sandbox.templates (cpu, memory GiB, disk GiB), with the reason for each addition. */
+  resources: { cpu: number; memory: number; disk: number; reasons: string[] };
 }
 
-export function proposeDevEnv(stack: StackReport, env: EnvReport): DevEnvProposal {
+/**
+ * Size the sandbox from what runs in it. A trackstage run had ~1.5 GB free with
+ * Vite, Convex and workerd up, and its worker crashed running the e2e suite.
+ */
+export function proposeResources(input: { browserTests: boolean; containerRuntime: boolean; services: number; workerd: boolean; monorepo: boolean }): DevEnvProposal['resources'] {
+  const reasons = ['4 GB base: the agent, the dev server, the tests'];
+  let memory = 4;
+  if (input.browserTests) { memory += 2; reasons.push('+2 GB: browser tests'); }
+  if (input.containerRuntime) { memory += 2; reasons.push('+2 GB: Docker in the sandbox'); }
+  if (input.services > 0) { memory += input.services; reasons.push(`+${input.services} GB: ${input.services} local service${input.services === 1 ? '' : 's'}`); }
+  if (input.workerd) { memory += 1; reasons.push('+1 GB: a Cloudflare worker runtime (workerd)'); }
+  if (input.monorepo) { memory += 2; reasons.push('+2 GB: a monorepo'); }
+  memory = Math.min(memory, 16);
+  const cpu = memory >= 12 ? 8 : memory >= 8 ? 4 : 2;
+  const disk = 20 + (input.browserTests ? 5 : 0) + (input.containerRuntime ? 10 : 0);
+  return { cpu, memory, disk, reasons };
+}
+
+export function proposeDevEnv(stack: StackReport, env: EnvReport, detected: { workerd?: boolean } = {}): DevEnvProposal {
   const runtimes = stack.languages.map((l) => (l.version ? `${l.name} ${l.version}` : l.name));
   const pm = stack.package_managers[0]?.name ?? null;
   const run = (name: string) => {
@@ -538,5 +558,12 @@ export function proposeDevEnv(stack: StackReport, env: EnvReport): DevEnvProposa
     container_runtime: compose.length > 0 || stack.services.some((s) => s.kind.startsWith('supabase')),
     services,
     commands: { install, dev: run('dev') ?? run('start'), test: run('test'), e2e: run('e2e') ?? run('test:e2e'), typecheck: run('typecheck'), lint: run('lint') },
+    resources: proposeResources({
+      browserTests: stack.browser_tests.length > 0,
+      containerRuntime: compose.length > 0 || stack.services.some((s) => s.kind.startsWith('supabase')),
+      services: services.length,
+      workerd: detected.workerd === true || stack.commands.some((c) => /wrangler|workerd/.test(c.command)),
+      monorepo: (stack as { monorepo?: { workspaces?: unknown[] } }).monorepo?.workspaces?.length ? true : false,
+    }),
   };
 }

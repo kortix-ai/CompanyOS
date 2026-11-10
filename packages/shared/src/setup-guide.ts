@@ -173,7 +173,9 @@ Adapt the reference into this repository (or the config repository): write
 \`kortix.yaml\` with \`env.required\` and \`env.optional\` listing every secret the
 loops use, the \`.kortix/<factory>/\` folder, the sandbox \`Dockerfile\` (a
 Debian-family base, the repository's runtimes at their pinned versions, git and
-gh, no \`COPY\` from the repository) and the \`dev-environment\` skill. Then:
+gh, no \`COPY\` from the repository), the template's \`cpu\`, \`memory\` and \`disk\`
+from the plan's \`dev_environment.resources\` (a sandbox too small for the dev
+stack crashes the tests), and the \`dev-environment\` skill. Then:
 
 \`\`\`bash
 kortix validate

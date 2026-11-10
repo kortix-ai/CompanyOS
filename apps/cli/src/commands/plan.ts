@@ -52,8 +52,8 @@ export async function buildPlan(dir: string) {
     integrations,
     kortix,
     recommendation: {
-      references: REFERENCE_REPOS.map((ref) => ({ ...ref, status: 'planned' as const })),
-      dev_environment: proposeDevEnv(stack, env),
+      references: REFERENCE_REPOS.map((ref) => ({ ...ref, status: 'published' as const })),
+      dev_environment: proposeDevEnv(stack, env, { workerd: integrations.some((i) => i.name === 'Cloudflare') }),
       env_to_push: env.files
         .filter((file) => !file.example && !file.dotenvx_keys)
         .flatMap((file) => file.keys.filter((k) => k.class === 'local' && !k.empty && !k.encrypted).map((k) => ({ file: file.file, name: k.name }))),

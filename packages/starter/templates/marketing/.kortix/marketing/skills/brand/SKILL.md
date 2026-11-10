@@ -1,6 +1,6 @@
 ---
 name: brand
-description: The brand of this product, in files: the voice (how it writes), the visual system (logos, colors, fonts, image direction) and the claims it may make with their proof. Load it FIRST before any text or visual a reader outside the team sees: a blog post, a social post, a video, an image, an answer page. Onboarding fills it from the live site with the person; references/extraction.md is that procedure.
+description: "The brand of this product, in files: the voice (how it writes), the visual system (logos, colors, fonts, image direction) and the claims it may make with their proof. Load it FIRST before any text or visual a reader outside the team sees: a blog post, a social post, a video, an image, an answer page. Onboarding fills it from the live site with the person; references/extraction.md is that procedure."
 ---
 
 # Brand

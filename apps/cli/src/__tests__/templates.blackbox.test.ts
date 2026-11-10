@@ -31,11 +31,11 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
-test('ls --json lists the two hand-approved templates', () => {
+test('ls --json lists the five hand-approved templates', () => {
   const r = kortix(['templates', 'ls', '--json']);
   expect(r.code).toBe(0);
   const ids = (JSON.parse(r.stdout) as { templates: Array<{ id: string }> }).templates.map((t) => t.id);
-  expect(ids).toEqual(['software-factory', 'marketing']);
+  expect(ids).toEqual(['software-factory', 'marketing', 'sales', 'recruiting', 'support']);
 });
 
 test('add into a repository with kortix.yaml: files written, import appended, comments kept, placeholders resolved', () => {
@@ -84,10 +84,25 @@ test('no kortix.yaml: one is created with My Kortix and the import; no GitHub re
   expect(manifest).toContain('- .kortix/marketing/');
 });
 
+test('a business loop adds without a dev sandbox or GitHub webhooks, and names its generated webhook secret', () => {
+  for (const id of ['sales', 'recruiting', 'support']) {
+    const r = kortix(['templates', 'add', id, '--repo', 'acme/shop', '--branch', 'main', '--json']);
+    expect(r.code).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.next).toMatchObject({ github_webhooks: [], needs_dev_sandbox: false });
+    const webhook = out.next.secrets.find((s: { name: string }) => s.name === `${id.toUpperCase()}_WEBHOOK_SECRET`);
+    expect(webhook).toMatchObject({ required: true, delivery: 'connector', generate: true });
+    expect(readFileSync(join(repo, `.kortix/${id}/agents/${id}.md`), 'utf8')).toContain('acme/shop');
+    expect(existsSync(join(repo, `.kortix/${id}/${id}.json`))).toBe(true);
+  }
+  const manifest = readFileSync(join(repo, 'kortix.yaml'), 'utf8');
+  for (const id of ['sales', 'recruiting', 'support']) expect(manifest).toContain(`- .kortix/${id}/`);
+});
+
 test('an unknown template is refused with the list', () => {
   const r = kortix(['templates', 'add', 'nope']);
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain('software-factory, marketing');
+  expect(r.stderr).toContain('software-factory, marketing, sales, recruiting, support');
 });
 
 test('sameGitHubRepository: https, ssh and scp forms of one repository match; another repository or a proxy URL does not', async () => {

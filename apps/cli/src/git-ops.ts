@@ -224,7 +224,7 @@ function reconcileWithFetchedRemote(branch: string): boolean {
     return run(['merge', '--ff-only', 'FETCH_HEAD']).ok;
   }
   const merged = run([
-    'merge', '--allow-unrelated-histories', '-X', 'ours', '--no-edit',
+    'merge', '--allow-unrelated-histories', '-X', 'ours',
     '-m', `Merge remote ${branch} history (kortix ship)`, 'FETCH_HEAD',
   ]);
   if (!merged.ok) {

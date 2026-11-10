@@ -941,12 +941,11 @@ async function seedProvisionedRepo(
       };
       // Persist ONLY the keys this step owns: `git` merges NESTED, in-SQL — a
       // shallow top-level patch of the whole `git` object wiped `managed`,
-      // `url` and `auth` from the row the insert wrote microseconds earlier,
-      // so every seeded workspace served `metadata.git` without `managed` and
-      // the CLI's managed-repo guard (and any server-side managed check)
-      // read the project as unmanaged. `default_agent` is a disjoint
-      // top-level key, safe behind the same shallow merge. `row.metadata`
-      // above stays the in-memory copy the creation response serializes.
+      // `url` and `auth` from the row the insert wrote microseconds earlier, so
+      // every seeded workspace served `metadata.git` without `managed` and the
+      // CLI read the managed repo as unmanaged. `default_agent` is a disjoint
+      // top-level key, safe behind the same shallow merge. `row.metadata` above
+      // stays the in-memory copy the creation response serializes.
       await updateProjectRows(eq(projectsView.projectId, row.projectId), {
         metadata: sql`${metadataMergeSubtree('git', { seed: verifiedSeedState })} || ${JSON.stringify(
           seededDefaultAgent ? { default_agent: seededDefaultAgent } : {},

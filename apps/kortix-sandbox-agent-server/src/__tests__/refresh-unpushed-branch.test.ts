@@ -96,7 +96,7 @@ describe('refreshRepo with an unpushed session branch', () => {
     const empty = join(root, 'no-checkout')
     mkdirSync(empty)
 
-    const result = await refreshRepo({ ...cfg(), projectTarget: empty } as Config)
+    const result = await refreshRepo({ ...cfg(), projectTarget: empty })
 
     expect(result.before).toBeNull()
     expect(result.after).toBeNull()

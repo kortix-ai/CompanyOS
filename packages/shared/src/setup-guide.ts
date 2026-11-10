@@ -53,15 +53,23 @@ Rules for the whole guide:
 2. Run \`kortix templates ls --json\`. If the command is unknown, run
    \`kortix update\` (or install again) and repeat.
 
-## 2. The repository
+## 2. Where the config lives
 
-1. Run \`git rev-parse --show-toplevel\` and \`git remote get-url origin\`. Kortix
-   needs a GitHub repository.
-2. **Ask** where the Kortix config lives. In a monorepo, recommend its root. With
-   several repositories, recommend the one that holds the product and its
-   website, and name the others the agents may also clone.
-3. \`cd\` to that root. Make sure the working tree is clean or that the person
-   agrees to commit the setup on top of their changes.
+1. Run \`git rev-parse --show-toplevel\` and \`git remote get-url origin\`. The code
+   must be on GitHub: the agents clone it and open pull requests there.
+2. **Ask** where the Kortix config lives. Offer two choices:
+   - **In this repository** (recommended for a monorepo): one \`kortix.yaml\` and
+     one \`.kortix/\` folder at its root. Nothing else changes.
+   - **Its own repository**: a new private \`<owner>/kortix\` holds every Kortix
+     file, and the code repository gets no file at all. Choose it when the person
+     wants nothing added to their code, or the agents work on several repositories.
+3. In this repository: \`cd\` to its root. Make sure the working tree is clean or
+   that the person agrees to commit the setup on top of their changes.
+4. Its own repository: run \`gh repo create <owner>/kortix --private --clone\` next
+   to the code checkout and \`cd\` into it. From now on, pass the code repository to
+   every \`kortix templates add\` as \`--repo <owner>/<code-repo> --branch <default>\`,
+   and read the code (step 5) from the original checkout. The GitHub webhooks
+   (step 10) still go on the code repository.
 
 ## 3. Sign in
 
@@ -113,10 +121,17 @@ repository's tools. Skip this step when no chosen template has
        - slug: dev
          dockerfile: .kortix/sandbox/Dockerfile
    \`\`\`
-5. Write \`.kortix/dev.md\`, the page every agent reads before it works: how to
-   install, how to start each service and the app, how to run the type check,
-   the linter, the tests and the end-to-end tests, the URLs and ports. Exact
-   commands only.
+5. Write the \`dev-environment\` skill, the page every agent loads before it
+   works: \`.kortix/skills/dev-environment/SKILL.md\`, with a frontmatter
+   \`name: dev-environment\` and a one-line \`description\`, then exact commands
+   only: install, start each service and the app, the type check, the linter,
+   the tests, the end-to-end tests, the URLs and ports. Register it in
+   \`kortix.yaml\`:
+
+   \`\`\`yaml
+   skills:
+     dev-environment: .kortix/skills/dev-environment
+   \`\`\`
 6. Build the image once to prove it: \`kortix sandboxes build --local dev\` when
    Docker runs here. Otherwise \`kortix ship\` builds it in the cloud in step 8.
 
@@ -155,7 +170,8 @@ Then run \`kortix models ls\` and confirm that a model of that plan is listed.
 ## 8. Validate and push
 
 1. Run \`kortix validate\`. Fix every error and warning in the files you wrote.
-2. Commit only the Kortix files: \`kortix.yaml\` and \`.kortix/\`. Message:
+2. Commit only the Kortix files: \`kortix.yaml\` and \`.kortix/\` (in its own
+   repository: everything). Message:
    \`chore: add Kortix agents (<template names>)\`.
 3. Run \`kortix ship\`. It creates the workspace on the first run, links the
    GitHub repository and pushes. Give the person the workspace link it prints.

@@ -74,3 +74,34 @@ export function treeLevels(items: readonly TreeFile[]): string[][] {
   }
   return levels.map((level) => [...level]);
 }
+
+/**
+ * Make the folders of an uploading tree on demand: `ensure(rel)` resolves once
+ * `rel` and every parent above it exist. Each folder is asked for once, so a
+ * file waits only on its own folder and the upload starts with the first one
+ * made, not after the whole tree. A folder already there (409) counts as
+ * made. A failure is not kept: the next ask (a Retry) tries again.
+ * `''` is the folder the tree lands in, which already exists.
+ */
+export function folderMaker(mkdir: (rel: string) => Promise<unknown>): (rel: string) => Promise<void> {
+  const made = new Map<string, Promise<void>>();
+  const ensure = (rel: string): Promise<void> => {
+    if (!rel) return Promise.resolve();
+    const known = made.get(rel);
+    if (known) return known;
+    const parent = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+    const run = ensure(parent)
+      .then(() => mkdir(rel))
+      .then(
+        () => undefined,
+        (err: unknown) => {
+          if ((err as { status?: number } | null)?.status === 409) return;
+          made.delete(rel);
+          throw err;
+        },
+      );
+    made.set(rel, run);
+    return run;
+  };
+  return ensure;
+}

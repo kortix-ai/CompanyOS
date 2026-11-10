@@ -20,6 +20,11 @@ import { createHash } from 'node:crypto';
  * another's failed execution gets the 503 envelope; the entry is forgotten,
  * so its own next retry executes fresh.
  *
+ * A replay is still a request: every hit re-runs the host's credential +
+ * budget check (`reauthorize`) before the cached answer is served, so a
+ * revoked credential, a suspension or an over-budget account is never served
+ * from the cache (CWE-863; KRTX-4612 review).
+ *
  * ponytail: replica-local replay, same ceiling as route-memory — a retry that
  * lands on another gateway replica re-executes and re-meters (today's
  * behavior). Move the key to a shared store if cross-replica double-metering
@@ -38,6 +43,20 @@ export interface ReplayedResponse {
 export interface ReplayRequest {
   authorization: string | undefined;
   rawBody: string;
+}
+
+export interface ReplayOptions {
+  /**
+   * Re-validate the credential before serving a cached answer: a replay is
+   * still a request, so revocation, suspension and budget must apply to it
+   * too (CWE-863; KRTX-4612 review). The host wires this to the same
+   * credential + budget composition a fresh request's admission runs.
+   * `false` drops the entry and the request executes through the pipeline,
+   * which serves the proper 401/402. A throw means the control plane could
+   * not answer: the entry stays, the pipeline answers (503 when its own
+   * admission fails the same way).
+   */
+  reauthorize?: (request: ReplayRequest) => Promise<boolean>;
 }
 
 /** Longer than any realistic client retry window (OpenAI holds keys for 24 h). */
@@ -61,7 +80,7 @@ function replayedResponse(answer: ReplayedResponse): Response {
   });
 }
 
-export function createIdempotencyReplay(now: () => number = Date.now) {
+export function createIdempotencyReplay(now: () => number = Date.now, options: ReplayOptions = {}) {
   const entries = new Map<string, ReplayEntry>();
   let cachedBytes = 0;
 
@@ -107,7 +126,19 @@ export function createIdempotencyReplay(now: () => number = Date.now) {
       .update(request.rawBody)
       .digest('hex');
     const hit = entries.get(key);
-    if (hit && hit.expiresAt > now()) return replayedResponse(await hit.result);
+    if (hit && hit.expiresAt > now()) {
+      const verdict = options.reauthorize
+        ? await options.reauthorize(request).catch(() => 'undecided' as const)
+        : true;
+      if (verdict === true) return replayedResponse(await hit.result);
+      if (verdict === 'undecided') {
+        // The control plane could not answer the check: run the pipeline for
+        // its own admission verdict and keep the entry — a transient outage
+        // must not destroy a valid cache (or serve one, unchecked).
+        return call(request);
+      }
+      forget(key); // the credential behind this entry is no longer admitted
+    }
     forget(key);
 
     const result = (async (): Promise<ReplayedResponse> => {

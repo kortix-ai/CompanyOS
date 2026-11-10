@@ -25,10 +25,17 @@ describe('inference Idempotency-Key replay', () => {
   /** Boots the real server with the control plane and provider stubbed, and exact call counts. */
   async function serve(opts: { providerStatus?: number } = {}) {
     const counts = { provider: 0, usage: 0 };
+    // The credential gate the replay's reauthorize and the pipeline both hit.
+    const gates = { admitted: true, up: true };
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/internal/gateway/admit')) {
+        if (!gates.admitted) {
+          return Response.json({
+            admission: { ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' },
+          });
+        }
         return Response.json({
           admission: { ok: true, principal: { userId: 'u', accountId: 'a' } },
           route: { policyId: 'direct', primaryModel: 'test-model' },
@@ -37,6 +44,12 @@ describe('inference Idempotency-Key replay', () => {
           ],
         });
       }
+      if (url.endsWith('/internal/gateway/authorize')) {
+        if (!gates.up) throw new Error('control plane down');
+        if (!gates.admitted) return Response.json({ ok: false, status: 401, errorCode: 'invalid_token', message: 'Invalid token' });
+        return Response.json({ ok: true, principal: { userId: 'u', accountId: 'a' } });
+      }
+      if (url.endsWith('/internal/gateway/budget-check')) return Response.json({ exceeded: false });
       if (url.endsWith('/internal/gateway/usage')) {
         counts.usage += 1;
         return Response.json({ ok: true });
@@ -76,7 +89,7 @@ describe('inference Idempotency-Key replay', () => {
         },
         body,
       });
-    return { counts, post, appPost, stop: () => (globalThis.fetch = originalFetch) };
+    return { counts, post, appPost, gates, stop: () => (globalThis.fetch = originalFetch) };
   }
 
   test('a retry with the same Idempotency-Key is served the first answer — one provider call, one usage record', async () => {
@@ -177,6 +190,54 @@ describe('inference Idempotency-Key replay', () => {
       expect(messagesBody.type).toBe('message');
       expect(gateway.counts.provider).toBe(2);
       expect(gateway.counts.usage).toBe(2);
+    } finally {
+      gateway.stop();
+    }
+  });
+
+  test('a cache hit is not served after the credential stops being admitted — the retry surfaces the pipeline denial', async () => {
+    const gateway = await serve();
+    try {
+      expect((await gateway.post(CHAT_BODY, 'retry-1')).status).toBe(200);
+      expect((await gateway.post(CHAT_BODY, 'retry-1')).status).toBe(200);
+      expect(gateway.counts.provider).toBe(1);
+      // The credential is revoked (or suspended / over budget) after the
+      // first execution: every gate now denies the request.
+      gateway.gates.admitted = false;
+      const denied = await gateway.post(CHAT_BODY, 'retry-1');
+      expect(denied.status).toBe(401);
+      const deniedBody = (await denied.json()) as Record<string, unknown>;
+      expect(deniedBody.code).toBe('invalid_token');
+      // The cached answer was neither served nor kept: no second execution,
+      // no second usage record, and the entry is gone.
+      expect(gateway.counts.provider).toBe(1);
+      expect(gateway.counts.usage).toBe(1);
+      const again = await gateway.post(CHAT_BODY, 'retry-1');
+      expect(again.status).toBe(401);
+      expect(gateway.counts.provider).toBe(1);
+    } finally {
+      gateway.stop();
+    }
+  });
+
+  test('a control-plane failure during the hit check falls through to the pipeline and keeps the entry', async () => {
+    const gateway = await serve();
+    try {
+      const first = await gateway.post(CHAT_BODY, 'retry-1');
+      const firstBody = await first.json();
+      expect(gateway.counts.provider).toBe(1);
+      // The credential check cannot be answered (a transient control-plane
+      // outage): the entry must not be served, and must not be dropped either.
+      gateway.gates.up = false;
+      const fallen = await gateway.post(CHAT_BODY, 'retry-1');
+      expect(fallen.status).toBe(200); // the pipeline's own admission still allows this stub
+      expect(gateway.counts.provider).toBe(2);
+      gateway.gates.up = true;
+      const recovered = await gateway.post(CHAT_BODY, 'retry-1');
+      expect(recovered.status).toBe(200);
+      // The kept entry still serves the first answer, not the fall-through's.
+      expect(await recovered.json()).toEqual(firstBody);
+      expect(gateway.counts.provider).toBe(2);
     } finally {
       gateway.stop();
     }

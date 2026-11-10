@@ -3,7 +3,7 @@ import {
   gatewayErrorResponse, gatewayOverloadedResponse, readAdmittedBody, readAdmittedBytes,
   releaseWhenResponseEnds, requestTooLargeResponse, type InflightBudget,
 } from '@kortix/llm-gateway';
-import { createIdempotencyReplay } from './idempotency';
+import { createIdempotencyReplay, type ReplayRequest } from './idempotency';
 import type { AudioRequest, ClaudeCodeRequest, RequestOrigin, VoicesRequest } from '@kortix/llm-gateway';
 import type { Hono } from 'hono';
 import { type GatewayApp, cloudflareSafe, messagesAuthorization, perRequestCapBytes } from './server';
@@ -193,6 +193,7 @@ export function registerRoutes(
   inflight: InflightBudget,
   recordOutcome: (status: number) => void,
   rateLimit: (request: Request, headers?: Headers, source?: string | null) => Response | null,
+  reauthorize?: (request: ReplayRequest) => Promise<boolean>,
 ) {
   // Every model route checks the per-credential limit first (token-rate-limit.ts).
   const limited = <C extends { req: { raw: Request }; env?: { clientIp?: string | null } }>(
@@ -205,8 +206,9 @@ export function registerRoutes(
       return response;
     };
   // One replay cache per server: the entries are per credential + key + body,
-  // so tests get an isolated cache per buildServer().
-  const replay = createIdempotencyReplay();
+  // so tests get an isolated cache per buildServer(). Every hit re-validates
+  // the credential through the host's reauthorize (a replay is a request).
+  const replay = createIdempotencyReplay(undefined, reauthorize ? { reauthorize } : undefined);
   const chat = limited(inference(inflight, recordOutcome, 'chat', replay, gateway.chatCompletions));
   const messages = limited(inference(inflight, recordOutcome, 'messages', replay, gateway.messages));
   const responses = limited(inference(inflight, recordOutcome, 'responses', replay, gateway.responses));

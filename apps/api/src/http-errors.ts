@@ -27,7 +27,6 @@ import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
-  deadCredentialLogDecision,
   deadCredentialLogKey,
   isAccountMfaDenial,
   isAgentGrantDenial,
@@ -35,6 +34,7 @@ import {
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
+import { logWindowDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -388,7 +388,7 @@ function handleHttpException(
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = deadCredentialLogDecision(
+    const { log, suppressed } = logWindowDecision(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );

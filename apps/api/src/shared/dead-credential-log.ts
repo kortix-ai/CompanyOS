@@ -1,17 +1,12 @@
 /**
- * Rate-limit marked dead-credential refusals and agent-grant denials by
- * method, normalized route, status and reason, and ship the throttled line at
- * a severity that follows the window's volume. Responses and emitted message
- * text stay unchanged. A ten-minute window permits six lines per route/reason
- * per process per hour. Suppression counts are best-effort: they appear only
- * on the next warning. A final quiet burst, eviction or process restart can
- * lose pending counts; use request-completion logs or auth audits for exact
- * refusal accounting.
+ * Mark the refusals the global error handler rate-limits and ships at a
+ * severity that follows the window's volume: dead credentials, agent-grant
+ * denials, MFA step-up denials, keyed by method, normalized route, status and
+ * reason. The window limiter itself is shared/log-window.ts (a ten-minute
+ * window, six lines per key per process per hour; suppression counts are
+ * best-effort). Responses and emitted message text stay unchanged.
  */
 import { HTTPException } from 'hono/http-exception';
-
-const WINDOW_MS = 10 * 60_000;
-const MAX_TRACKED_MESSAGES = 10_000;
 
 /**
  * The suppressed count at which a throttled refusal line ships at `warn`
@@ -46,10 +41,6 @@ const deadCredentials = new WeakSet<HTTPException>();
 
 // Same throttle, second mark: the agent-grant denial family (below).
 const agentGrantDenials = new WeakSet<HTTPException>();
-
-type Window = { loggedAt: number; suppressed: number };
-// replica-local: a log-noise limiter; each replica rate-limits its own lines.
-const windows = new Map<string, Window>();
 
 /** Mark an exception as a dead-credential refusal. Called by
  *  `deadCredential401`, the one constructor every gate that refuses a
@@ -182,25 +173,4 @@ export const INVALID_OR_EXPIRED_TOKEN_MESSAGE = 'Invalid or expired token';
  */
 export function isInvalidExpiredTokenRefusal(status: number, reason: string): boolean {
   return status === 401 && reason === INVALID_OR_EXPIRED_TOKEN_MESSAGE;
-}
-
-/** First warning logs immediately; the next window reports pending suppression. */
-export function deadCredentialLogDecision(key: string, now: number): { log: boolean; suppressed: number } {
-  const window = windows.get(key);
-  if (window && now - window.loggedAt < WINDOW_MS) {
-    window.suppressed += 1;
-    return { log: false, suppressed: 0 };
-  }
-  const suppressed = window?.suppressed ?? 0;
-  if (!window && windows.size >= MAX_TRACKED_MESSAGES) {
-    const oldest = windows.keys().next().value;
-    if (oldest !== undefined) windows.delete(oldest);
-  }
-  windows.set(key, { loggedAt: now, suppressed: 0 });
-  return { log: true, suppressed };
-}
-
-/** Test seam. */
-export function resetDeadCredentialLogForTests(): void {
-  windows.clear();
 }

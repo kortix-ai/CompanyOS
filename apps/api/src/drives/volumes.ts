@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { db } from '../shared/db';
 import { isPlatinumConfigured, platinumFetch, platinumRegionControlPlane } from '../shared/platinum';
+import { logWindowDecision } from '../shared/log-window';
 import { ttlMemo } from '../shared/ttl-memo';
 import { DEFAULT_SANDBOX_MOUNT_LIMIT } from './access';
 import { parseVolumeWriteCommit, type VolumeWriteCommit } from './volume-commit';
@@ -229,6 +230,17 @@ function volumeOrigin(volume: DriveVolume): string | undefined {
 }
 
 /**
+ * The log-throttle bucket of one call: the path with every id-sized segment
+ * collapsed (volume, sandbox, upload and commit ids, cursors) and the query
+ * dropped, so a Platinum outage logs one line per route shape per window
+ * instead of one per volume. The printed line keeps the real path.
+ */
+function callLogKey(method: string, path: string): string {
+  const [route] = path.split('?');
+  return `${method} ${route.split('/').map((s) => (s.length >= 16 ? ':id' : s)).join('/')}`;
+}
+
+/**
  * One Platinum call. `volume` names the drive volume the call is about (its
  * region's control plane gets it); null is a call about a sandbox or the
  * account, which shared/platinum.ts routes by sandbox id.
@@ -271,7 +283,13 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
     // own commit): bust the listings conservatively. A failed GET cannot
     // have changed anything.
     if (volume && method !== 'GET') bustVolumeListCache(volume.name);
-    logger.warn(`[drives] ${init.method ?? 'GET'} ${path} failed:`, { error: err instanceof Error ? err.message : String(err) });
+    // A Platinum outage fails every call at its budget; one warn line per call
+    // put ~800 lines across dozens of route shapes into the 2026-11-10 log in
+    // four hours (KRTX-4672). Throttle the line like the global error handler
+    // throttles dead-credential refusals: the first failure of a route shape
+    // per window logs, the rest count toward its next line's `suppressed`.
+    const { log, suppressed } = logWindowDecision(callLogKey(init.method ?? 'GET', path), Date.now());
+    if (log) logger.warn(`[drives] ${init.method ?? 'GET'} ${path} failed:`, { error: err instanceof Error ? err.message : String(err), suppressed });
     throw new DriveStorageError(503, 'Drive storage is unavailable, try again shortly', 'drive_storage_unavailable');
   }
   // A mutation may have changed the folder tree (even a refusal can have
@@ -705,7 +723,11 @@ export async function platinumVolumeLimits(): Promise<PlatinumMountLimits> {
       return value;
     })
     .catch((err: unknown) => {
-      logger.warn('[drives] reading the Platinum volume limits failed:', { error: err instanceof Error ? err.message : String(err) });
+      // Same throttle as call()'s failure line, its own bucket: the degraded
+      // limits read is the designed outage signal, one line per window, not
+      // one per retry.
+      const { log, suppressed } = logWindowDecision('platinum volume limits', Date.now());
+      if (log) logger.warn('[drives] reading the Platinum volume limits failed:', { error: err instanceof Error ? err.message : String(err), suppressed });
       platinumLimitsCache = { value: {}, at: Date.now() + PLATINUM_LIMITS_RETRY_MS };
       return {} as PlatinumMountLimits;
     })

@@ -1446,11 +1446,6 @@
       "count": 1
     }
   },
-  "src/platform/services/boot-timeline-store.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/platform/services/github-app-identity.ts": {
     "no-console": {
       "count": 1

@@ -44,19 +44,17 @@ Your session runs on its own microVM: a whole Linux computer, root through
 - "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on
   your screen, which the user watches in the **Desktop** panel, or on their own
   computer. The `kortix-computer` skill decides which (`<which-desktop>`).
-Keep big files out of Git: every clone downloads the whole repository.
-`kortix validate` warns at 10 MiB per file and at 512 MiB in total; above
-512 MiB compressed, running sessions stop picking up config changes. Put
-media and datasets in object storage; add build output to `.gitignore`.
+Keep big files out of Git: every clone downloads the whole repository, and a
+repository over 512 MiB compressed stops picking up config changes in running
+sessions (`kortix validate` warns at 10 MiB per file). Use object storage; `.gitignore` build output.
 </machine>
 <change-requests>
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
 0. Work in a clone: `/workspace` has none at boot unless your agent's
-   `workspace.repos` declares one (your prompt then names it and its setup
-   progress). Otherwise `kortix workspaces clone` puts the repository on your
-   session branch; `cd` into it. Run every step below there.
+   `workspace.repos` declares one (your prompt names it and its setup
+   progress); otherwise `kortix workspaces clone` and `cd` in. Run every step below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`

@@ -1,9 +1,8 @@
 # Scheduling playbook
 
 Read this when you decide whether and how to schedule work, every time you
-start something whose result comes later, and before a long job. The decision tables are in
-`SKILL.md` → `<scheduling>`; trigger fields are in `kortix/kortix-yaml.md`
-→ triggers.
+start something whose result comes later, and before a long job. The decision
+tables are in `SKILL.md` → `<scheduling>`; trigger fields in `kortix/kortix-yaml.md` → triggers.
 
 ## Follow-through
 

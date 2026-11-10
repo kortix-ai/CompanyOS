@@ -115,6 +115,8 @@ describe('one profile per way: the identity an install matches on', () => {
       transport: 'http',
       create_only: true,
     });
+    // A URL for an app whose ways all have one is ignored: the recommended way installs.
+    expect(catalogInstallDraft(detail, { url: 'https://elsewhere.example.test/mcp' }).draft).toMatchObject({ url: 'https://mcp.stripe.com' });
   });
 });
 

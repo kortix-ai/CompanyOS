@@ -56,9 +56,10 @@ function catalogWay(detail: ConnectorCatalogDetail, requestedWay?: string, url?:
     ? detail.variants.find((variant) => variant.id === way)
     : recommended?.kind === 'kortix'
       ? recommended
-      : url
-        ? detail.variants.find(urlLessMcp)
-        : (installable.find((variant) => variant.recommended) ?? installable[0] ?? detail.variants.find(urlLessMcp));
+      : ((url ? detail.variants.find(urlLessMcp) : undefined) ??
+        installable.find((variant) => variant.recommended) ??
+        installable[0] ??
+        detail.variants.find(urlLessMcp));
   if (!picked) {
     throw new CatalogInstallError(
       way

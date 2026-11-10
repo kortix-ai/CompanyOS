@@ -3868,32 +3868,6 @@
             ],
             "default": "none"
           },
-          "workspace": {
-            "description": "What new sessions of this agent get in /workspace. Any other key under `workspace` is an error.",
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "branch",
-                  "runtime",
-                  "read"
-                ],
-                "deprecated": true,
-                "description": "Deprecated: `branch` is `{ project_repository: true }`, `runtime` is `{ project_repository: false }`."
-              },
-              {
-                "type": "object"
-              }
-            ],
-            "properties": {
-              "project_repository": {
-                "type": "boolean",
-                "default": false,
-                "description": "`true`: new sessions check out the project repository in `/workspace`, on their own session branch. `false`: no checkout, and repository calls answer `403` `session_repository_access_denied`. Project tools still load."
-              }
-            },
-            "additionalProperties": false
-          },
           "sandbox": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$",
@@ -4185,7 +4159,11 @@
           "repository_access": {
             "type": "boolean",
             "deprecated": true,
-            "description": "Deprecated: use `workspace: { project_repository: <bool> }`."
+            "description": "Deprecated and ignored: a session never checks out the project repository at boot. Delete the key."
+          },
+          "workspace": {
+            "deprecated": true,
+            "description": "Deprecated and ignored: a session never checks out the project repository at boot. Delete the key; an agent that needs the files runs `kortix workspaces clone`."
           }
         },
         "additionalProperties": false,

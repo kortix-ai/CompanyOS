@@ -147,10 +147,9 @@ const MANIFEST = [
   '    description: main agent',
   '    mode: primary',
   '    prompt_file: agents/kortix.md',
-  // An agent boots without a checkout unless it opts in. The box flows run a
-  // repository-backed session, whose release carries an archive.
-  '    workspace:',
-  '      project_repository: true',
+  // The box flows run a repository-backed session (its agent may read the
+  // repository), whose release carries an archive.
+  '    kortix_permissions: [workspace.gitops.read]',
   '    skills: all',
   '    tools: all',
   '  reviewer:',

@@ -12,8 +12,7 @@ mock.module('../../billing/services/entitlements', () => ({ accountMayUseManaged
 mock.module('../../shared/audit', () => ({ recordAuditEvent: async () => {} }));
 mock.module('../agents', () => ({
   loadProjectAgents: async () => ({ defaultAgent: 'default', builtinAgents: { my_kortix: false } }),
-  repositoryAccessFromLoadedAgents: () => false,
-  legacyReadWorkspaceFromLoadedAgents: () => false,
+  agentGrantAllowsRepository: () => false,
   sandboxFromLoadedAgents: () => null,
 }));
 mock.module('./session-connector-bindings', () => ({
@@ -33,10 +32,6 @@ mock.module('../../shared/db', () => ({
 }));
 mock.module('../../platform/services/session-sandbox', () => ({ provisionSessionSandbox: async () => {} }));
 mock.module('./git', () => ({ withProjectGitAuth: async (project: unknown) => project }));
-mock.module('../../git-proxy/project-snapshot', () => ({
-  resolveProjectSnapshotMode: () => 'git',
-  resolveProjectSnapshotPinForSession: async () => ({ pin: null, descriptor: null }),
-}));
 mock.module('./session-runtime-context', () => ({
   parseSessionRuntimeContext: () => ({ ok: true }),
   mergeSessionSandboxEnv: (env: unknown) => env,

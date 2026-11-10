@@ -7,6 +7,7 @@ export * as schema from './schema';
 export {
   // Schema namespace
   kortixSchema,
+  contactForms,
   salesEventOutbox,
   usedRefreshTokens,
   cliDeviceGrants,

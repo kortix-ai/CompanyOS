@@ -1036,7 +1036,8 @@ const RUN10_PRIVATE = 'RUN10-PRIVATE-c41f9e';
  * A manifest with one extra agent, `no-edit`, whose `permission` denies every
  * way to write a file: the file tools (`edit`) and the shell (`bash`, which
  * also covers the `pty_*` tools, W5 E9). It starts no subagent (`subagents`
- * omitted). It has the checkout, so `private/notes.txt` exists to be refused.
+ * omitted). The flow uploads `private/notes.txt` into `/workspace` (a session has
+ * no checkout), so the file exists to be refused.
  */
 const NO_EDIT_FILES = {
   'kortix.yaml': [
@@ -1052,8 +1053,6 @@ const NO_EDIT_FILES = {
     '    prompt: You answer questions about this repository. Follow the user instructions exactly.',
     '    kortix_permissions: all',
     '    tools: all',
-    '    workspace:',
-    '      project_repository: true',
     '    permission:',
     '      edit: deny',
     '      bash: deny',
@@ -1062,7 +1061,6 @@ const NO_EDIT_FILES = {
     "        'private/*': deny",
     '',
   ].join('\n'),
-  'private/notes.txt': `${RUN10_PRIVATE}\n`,
 };
 
 harnessFlow(
@@ -1092,19 +1090,29 @@ harnessFlow(
       const done = `RUN10_DONE_${Date.now()}`;
       // The boot prompt runs on the session's agent on every harness; a later
       // /prompts delivery may name no agent.
-      const session = await bootSession(ctx, harness, {
-        project,
-        agentName: 'no-edit',
-        prompt:
+      const session = await bootSession(ctx, harness, { project, agentName: 'no-edit' });
+      let before: string | undefined;
+      await ctx.step('the flow puts private/notes.txt in /workspace: a session has no checkout of the repository', async () => {
+        const form = new FormData();
+        form.append('path', 'private');
+        form.append('file', new File([`${RUN10_PRIVATE}\n`], 'notes.txt', { type: 'text/plain' }));
+        (await ctx.client.as(ctx.P.OWNER).request('POST', runtimePath(session.sandboxId, '/file/upload'), { body: form })).status(200);
+        before = (await waitForTurn(ctx, session.projectId, session.sessionId, (t) => t.turns.length === 0, 'an idle session'))
+          .last_ended?.turn_token;
+        await sendPrompt(
+          ctx,
+          session.projectId,
+          session.sessionId,
           `Call your file-writing tool (write) once to create the file ${path} containing the single line OK. ` +
-          // `./` is the spelling pi once matched raw, past a `private/*` deny.
-          'Then call your read tool once with exactly the path ./private/notes.txt. ' +
-          `Use no other tool. Whatever the tool returns, then reply with exactly: ${done}`,
+            // `./` is the spelling pi once matched raw, past a `private/*` deny.
+            'Then call your read tool once with exactly the path ./private/notes.txt. ' +
+            `Use no other tool. Whatever the tool returns, then reply with exactly: ${done}`,
+        );
       });
       await ctx.step('no file or pty tool ran; on pi the write was attempted and refused', async () => {
         // The tool calls are the proof, not the closing marker: a model that was
         // offered no file tool sometimes declines to send it (staging, 2026-10-11).
-        await waitForTurn(ctx, session.projectId, session.sessionId, endedAfter(undefined), 'the boot turn to end');
+        await waitForTurn(ctx, session.projectId, session.sessionId, endedAfter(before), 'the prompt turn to end');
         const { messages } = await readTranscript(ctx, session.projectId, session.sessionId);
         if (!messages.some((m) => m.role === 'assistant')) throw new Error('the boot turn ended with no assistant message');
         // `bash: deny` and `edit: deny` also cover the shell and file-writing
@@ -1204,8 +1212,6 @@ const RUN20_MANIFEST = [
   '    skills: all',
   '    tools: all',
   '    codemode: only',
-  '    workspace:',
-  '      project_repository: true',
   '',
 ].join('\n');
 
@@ -1290,24 +1296,19 @@ const PROJECT_TOOL_FILES = {
     '    kortix_permissions: all',
     '    skills: all',
     '    tools: all',
-    '    workspace:',
-    '      project_repository: true',
     '  limited:',
     '    description: Reads this repository with the read tool only.',
     '    mode: primary',
     '    prompt: You answer questions about this repository. Follow the user instructions exactly.',
     '    kortix_permissions: all',
     '    tools: [read]',
-    '    workspace:',
-    '      project_repository: true',
     // No checkout and no file tools: the box receives only the tool's modules.
     '  locked:',
     '    description: Records markers with the ke2e_marker tool only.',
     '    mode: primary',
     '    prompt: You record markers. Follow the user instructions exactly.',
-    '    kortix_permissions: all',
-    '    workspace:',
-    '      project_repository: false',
+    // No project.gitops.read: its session gets no repository bytes, only the tool's modules.
+    '    kortix_permissions: none',
     '    tools: [ke2e_marker]',
     '',
   ].join('\n'),
@@ -1406,8 +1407,6 @@ const RUN19_MANIFEST = [
   '    skills: all',
   '    tools:',
   '      exclude: [show]',
-  '    workspace:',
-  '      project_repository: true',
   '',
 ].join('\n');
 const EJECTED_EXECUTE = '  async execute(args: Record<string, any>, { env, signal }: ToolContext): Promise<string> {\n';
@@ -1677,8 +1676,6 @@ function agentPickFiles(token: string): Record<string, string> {
       '    kortix_permissions: all',
       '    skills: all',
       '    tools: all',
-      '    workspace:',
-      '      project_repository: true',
       '  marker:',
       '    description: Knows its own name.',
       '    mode: primary',

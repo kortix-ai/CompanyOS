@@ -53,7 +53,6 @@ defaults keep today's behavior, so a valid file stays valid.
 alias, so `tools: *` does not parse and `kortix validate` prints the quoted
 line. `all` is the accepted alias, and a list that holds `"*"` is every name
 too.
-| `workspace` | `{ project_repository: true }` checks out the repository in `/workspace`. Default `false`. |
 | `sandbox` | A template slug, or `default`. |
 | `space` | Work in progress: the space the agent works in. Grouping only, never a grant. |
 | `network_egress` | Only `{ version: 1, default: deny, rules: [] }`. Declared, not enforced. |

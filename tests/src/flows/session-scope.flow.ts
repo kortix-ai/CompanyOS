@@ -649,7 +649,7 @@ flow(
         (await session.post('/v1/workspaces/:projectId/gateway/keys', { name: 'from-session' }, { params: { projectId: project.id } }))
           .status(403)
           .body()
-          .has('$.error', 'Agent-session tokens cannot manage gateway keys');
+          .has('$.code', 'agent_human_only_action');
         const made = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: 'scope-5' }, { params: { projectId: project.id } });
         made.status(200).body().exists('$.secret_key');
         const keyId = made.json<{ key_id: string }>().key_id;

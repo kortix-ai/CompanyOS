@@ -62,7 +62,6 @@ import {
   partitionUploadBatch,
   resolveUploadTarget,
   UPLOAD_CONCURRENCY,
-  withTransientRetry,
 } from '../upload-batch';
 import {
   droppedEntries,
@@ -619,13 +618,15 @@ export function DriveExplorer({
       let ok = false;
       try {
         await before?.();
-        await withTransientRetry(() =>
-          uploadAsync({
-            file: upload.file,
-            targetPath: upload.targetPath,
-            onProgress: (sent) => patch({ sent }),
-          }),
-        );
+        await uploadAsync({
+          file: upload.file,
+          targetPath: upload.targetPath,
+          // The SDK resends a busy-server failure from byte 0: the bar holds its high mark.
+          onProgress: (sent) => {
+            const prev = useDriveUploads.getState().uploads.find((u) => u.id === upload.id)?.sent ?? 0;
+            if (sent > prev) patch({ sent });
+          },
+        });
         ok = true;
         patch({ status: 'done', sent: upload.file.size });
       } catch (err) {
@@ -662,12 +663,20 @@ export function DriveExplorer({
    */
   const startBatch = useCallback(
     async (
-      items: { file: File; targetPath?: string; shownIn: string | null; before?: () => Promise<void> }[],
+      items: {
+        file: File;
+        targetPath?: string;
+        shownIn: string | null;
+        before?: () => Promise<void>;
+        /** Run before a Retry: lets a folder that failed be made again. */
+        reset?: () => void;
+      }[],
       landedIn: string,
     ) => {
-      const batch = items.map(({ file, targetPath, shownIn, before }) => {
+      const batch = items.map(({ file, targetPath, shownIn, before, reset }) => {
         const upload: DriveUpload = { id: crypto.randomUUID(), file, targetPath, status: 'queued' };
         upload.retry = () => {
+          reset?.();
           previewUpload?.(file, targetPath);
           void runUpload(upload, null, before);
         };
@@ -758,7 +767,7 @@ export function DriveExplorer({
           if (unsettled.delete(rel)) settlePending(dir, rel, true);
         };
         try {
-          await withTransientRetry(() => mkdirMutation.mutateAsync({ dirPath: at(rel) }));
+          await mkdirMutation.mutateAsync({ dirPath: at(rel) });
           settle();
         } catch (err) {
           // Already there (an earlier upload of the same folder): reuse it.
@@ -774,12 +783,14 @@ export function DriveExplorer({
             // Loose files dropped beside the folders land in the view.
             shownIn: inView && !rel ? currentPath : null,
             before: rel ? () => ensure(rel) : undefined,
+            reset: rel ? () => ensure.forget(rel) : undefined,
           })),
           tops.length === 1 ? at(tops[0]!) : root || '/',
         );
       } finally {
         // A top folder that never got made drops its pending row.
         for (const top of unsettled) settlePending(dir, top, false);
+        unsettled.clear();
       }
     },
     [currentPath, normalizedCurrentPath, pendingNode, settlePending, mkdirMutation, startBatch, uploadLimit, describeRejection],

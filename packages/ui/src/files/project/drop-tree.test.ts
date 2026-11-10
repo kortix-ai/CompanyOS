@@ -72,14 +72,17 @@ describe('dropped folders', () => {
     await expect(ensure('eng/docs')).resolves.toBeUndefined();
   });
 
-  test('a failed folder is tried again on the next ask', async () => {
+  test('a failed folder fails its other files at once, and is tried again only after forget', async () => {
     let calls = 0;
-    const ensure = folderMaker(async () => {
+    const ensure = folderMaker(async (rel) => {
       calls++;
-      if (calls === 1) throw Object.assign(new Error('busy'), { status: 503 });
+      if (calls === 1) throw Object.assign(new Error(`busy ${rel}`), { status: 503 });
     });
-    await expect(ensure('eng')).rejects.toThrow('busy');
-    await expect(ensure('eng')).resolves.toBeUndefined();
-    expect(calls).toBe(2);
+    await expect(ensure('eng/docs')).rejects.toThrow('busy eng');
+    await expect(ensure('eng/docs')).rejects.toThrow('busy eng');
+    expect(calls).toBe(1);
+    ensure.forget('eng/docs');
+    await expect(ensure('eng/docs')).resolves.toBeUndefined();
+    expect(calls).toBe(3);
   });
 });

@@ -538,13 +538,15 @@ export async function uploadDriveFile(
   if ((body instanceof Blob ? body.size : body.byteLength) > SINGLE_UPLOAD_MAX_BYTES) {
     return uploadInBlocks(driveId, path, body instanceof Blob ? body : new Blob([body]), headers, options);
   }
+  // A write past the API's deadline (503) or into a busy volume (429) is sent
+  // again: a PUT overwrites, so a resend of one that landed is harmless.
   const Xhr = (globalThis as { XMLHttpRequest?: new () => ProgressRequest }).XMLHttpRequest;
   if (onProgress && Xhr) {
     const blob = body instanceof Blob ? body : new Blob([body]);
-    return uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal);
+    return retryTransient(() => uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal));
   }
-  const result = unwrap(
-    await backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers }),
+  const result = await withRetries(
+    () => backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers }),
     'Failed to upload file',
   );
   const size = body instanceof Blob ? body.size : body.byteLength;
@@ -570,14 +572,21 @@ function isTransient(error: Error | undefined): boolean {
   return e.status === undefined ? e.code !== 'NO_SESSION' : TRANSIENT_STATUSES.has(e.status);
 }
 
-async function withRetries<T>(send: () => Promise<ApiResult<T>>, fallbackMessage: string): Promise<T> {
+/** `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails transiently. */
+async function retryTransient<T>(send: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    const result = await send();
-    if (result.success) return result.data as T;
-    const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
-    if (delay === undefined || !isTransient(result.error)) throw result.error ?? new Error(fallbackMessage);
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      return await send();
+    } catch (error) {
+      const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !isTransient(error as Error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
+}
+
+function withRetries<T>(send: () => Promise<ApiResult<T>>, fallbackMessage: string): Promise<T> {
+  return retryTransient(async () => unwrap(await send(), fallbackMessage));
 }
 
 const toHex = (digest: ArrayBuffer) => Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -702,9 +711,10 @@ async function uploadWithProgress(
  * Folder writes (mkdir, move, delete) raise no app-wide error: every caller
  * shows its own outcome, and the app-wide toast would say it a second time.
  */
+/** Make a folder. A transient failure is sent again; one that exists answers 409. */
 export async function makeDriveFolder(driveId: string, path: string): Promise<{ path: string }> {
-  return unwrap(
-    await backendApi.post<{ path: string }>(`${drivePath(driveId)}/files/mkdir`, { path }, { showErrors: false }),
+  return withRetries(
+    () => backendApi.post<{ path: string }>(`${drivePath(driveId)}/files/mkdir`, { path }, { showErrors: false }),
     'Failed to create folder',
   );
 }

@@ -91,46 +91,18 @@ export function uploadedFraction(
   return sent / total;
 }
 
-const TRAY_RANK = { uploading: 0, queued: 1, error: 2, done: 3 } as const;
+const TRAY_RANK = { uploading: 0, error: 1, queued: 2, done: 3 } as const;
 
 /**
- * Tray rows in reading order: files going up now, then files waiting, then
- * failures with their Retry, then finished files. Stable inside each group,
- * so a second batch queues under the first.
+ * Tray rows in reading order: files going up now, then failures with their
+ * Retry (in view, not under a long queue), then files waiting, then finished
+ * files. Stable inside each group, so a second batch queues under the first.
  */
 export function trayOrder<T extends { status: keyof typeof TRAY_RANK }>(uploads: readonly T[]): T[] {
   return uploads
     .map((u, i) => ({ u, i }))
     .sort((a, b) => TRAY_RANK[a.u.status] - TRAY_RANK[b.u.status] || a.i - b.i)
     .map(({ u }) => u);
-}
-
-const TRANSIENT_STATUS = new Set([429, 502, 503, 504]);
-
-/**
- * Run `fn`, and run it again when the server was only busy: a 429, a 502-504
- * (a drive write past the API's 25 s deadline answers 503), or a dropped
- * connection (`TypeError`). Waits 1 s, 2 s, then 4 s; 4 tries in all. A
- * refusal (403, 409, 413, …) fails at once. Safe for drive writes: a file PUT
- * overwrites, and a folder that is already there answers 409.
- */
-export async function withTransientRetry<T>(
-  fn: () => Promise<T>,
-  { attempts = 4, sleep = (ms: number) => new Promise<void>((ok) => setTimeout(ok, ms)) }: {
-    attempts?: number;
-    sleep?: (ms: number) => Promise<void>;
-  } = {},
-): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      const { status, name } = (err ?? {}) as { status?: number; name?: string };
-      const transient = (status !== undefined && TRANSIENT_STATUS.has(status)) || name === 'TypeError';
-      if (!transient || attempt >= attempts) throw err;
-      await sleep(1000 * 2 ** (attempt - 1));
-    }
-  }
 }
 
 /** Files sent at once. Enough to fill the pipe, few enough not to starve the listing. */

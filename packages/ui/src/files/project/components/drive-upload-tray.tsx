@@ -196,7 +196,12 @@ function UploadStatus({ upload, onRetry }: { upload: DriveUpload; onRetry: () =>
       // A row spins while it is in flight: a small file sends its bytes in one
       // event and then waits on the server, so a byte gauge sat empty or full.
       // The header gauge carries the byte share of the whole run.
-      return <Loading className="size-4 shrink-0" />;
+      return (
+        <span className="flex shrink-0">
+          <Loading className="size-4 shrink-0" />
+          <span className="sr-only">{t('uploadingFile', { name: upload.file.name })}</span>
+        </span>
+      );
     case 'done':
       return <SolidCheckIcon className="text-kortix-green" />;
     case 'error':

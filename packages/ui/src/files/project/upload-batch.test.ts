@@ -8,7 +8,6 @@ import {
   resolveUploadTarget,
   rowDragIntent,
   trayOrder,
-  withTransientRetry,
   uploadRejectionReason,
 } from './upload-batch';
 
@@ -175,7 +174,7 @@ describe('size guard — a source with its own limit', () => {
 });
 
 describe('tray order', () => {
-  test('files still going up come first, finished ones sink to the bottom', () => {
+  test('files going up come first, then failures, then the queue; finished ones sink to the bottom', () => {
     const row = (id: string, status: 'queued' | 'uploading' | 'done' | 'error') => ({ id, status });
     const ordered = trayOrder([
       row('a', 'done'),
@@ -186,51 +185,6 @@ describe('tray order', () => {
       row('f', 'uploading'),
       row('g', 'queued'),
     ]);
-    expect(ordered.map((u) => u.id)).toEqual(['c', 'f', 'b', 'g', 'd', 'a', 'e']);
-  });
-});
-
-describe('transient retry', () => {
-  const err = (status?: number, name = 'ApiError') => Object.assign(new Error(`e${status}`), { status, name });
-
-  test('a busy or timed-out server (503, 429, network) is tried again, with growing waits', async () => {
-    const waits: number[] = [];
-    let calls = 0;
-    const result = await withTransientRetry(
-      async () => {
-        calls++;
-        if (calls === 1) throw err(503);
-        if (calls === 2) throw err(429);
-        if (calls === 3) throw err(undefined, 'TypeError');
-        return 'ok';
-      },
-      { sleep: async (ms) => void waits.push(ms) },
-    );
-    expect(result).toBe('ok');
-    expect(waits).toEqual([1000, 2000, 4000]);
-  });
-
-  test('a refusal (403, 409, 413) fails at once', async () => {
-    for (const status of [403, 409, 413]) {
-      let calls = 0;
-      await expect(
-        withTransientRetry(async () => {
-          calls++;
-          throw err(status);
-        }, { sleep: async () => {} }),
-      ).rejects.toThrow(`e${status}`);
-      expect(calls).toBe(1);
-    }
-  });
-
-  test('it gives up after 4 tries with the last error', async () => {
-    let calls = 0;
-    await expect(
-      withTransientRetry(async () => {
-        calls++;
-        throw err(503);
-      }, { sleep: async () => {} }),
-    ).rejects.toThrow('e503');
-    expect(calls).toBe(4);
+    expect(ordered.map((u) => u.id)).toEqual(['c', 'f', 'd', 'b', 'g', 'a', 'e']);
   });
 });

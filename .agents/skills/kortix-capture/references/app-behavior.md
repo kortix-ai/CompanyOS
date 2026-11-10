@@ -210,7 +210,7 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    display's last read copies that text for up to 20 s; while the person works
    (input in the last 5 s) a display is read at most every 30 s; after each
    read OCR rests 4x as long as the read took (at most 20% of one core).
-   `ocr_level` `off` (or the policy's `recording.text_recognition`) reads no
+   The policy's `recording.text_recognition` `off` reads no
    screen text at all: frames finish with `ocr_status` 4 and search finds apps,
    window titles, URLs and accessibility text only.
 4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted. While
@@ -1081,19 +1081,34 @@ opens the microphone or asks for a permission.
 The recorder hot-reloads `settings.json`. The timeline settings API
 (`GET`/`POST /api/settings`) exposes the same keys.
 
+**Kortix Capture manages what recording costs the computer.** No person sets
+these, and nothing a person, the CLI or an older version wrote to
+`settings.json` applies: `Settings::self_manage` replaces them on every load
+(the recorder's hot reload included), and the next save writes the managed
+value back. `settings <key> <value>` and `POST /api/settings` answer "managed
+by Kortix Capture" (exit 1, `400`). Only the organization's policy
+(`recording.interval_ms`, `recording.max_height`, `recording.text_recognition`)
+changes them. Development and test scripts set `KORTIX_CAPTURE_TUNING=1` to keep
+the file's values.
+
+| Managed key | Value | Meaning |
+|---|---|---|
+| `interval_ms` | 2000 | Capture tick (stretched on a slow computer, see Pipeline) |
+| `capture_on_change` | true | Extra capture on app, window title or URL change (max 1 per second) |
+| `max_width`, `max_height` (`resolution`) | 2560, 1440 | Still size box; a still is scaled to fit and never enlarged |
+| `staging_quality`, `video_quality`, `chunk_max_frames` | 0.8, 0.5, 30 | Still JPEG, video quality, frames per chunk |
+| `inactivity_seconds` | 5 | Frames this long after the last input are marked inactive |
+| `ocr_level` | `accurate` | Text recognition; the policy can set `fast` or `off` |
+| `ax_enabled` | true | Accessibility tree on focus change and every 30 s |
+
 | Key | Default | Meaning |
 |---|---|---|
-| `interval_ms` | 2000 | Fixed capture tick |
-| `capture_on_change` | true | Extra capture on app, window title or URL change (max 1 per second) |
-| `resolution` (preset) | `1440p` | `720p` 1280x720, `1080p` 1920x1080, `1440p` 2560x1440, `4k` 3840x2160. Sets `max_width` and `max_height`; reads `custom` when they match no preset |
-| `max_width`, `max_height` | 2560, 1440 | Still size box; a still is scaled to fit and never enlarged. Custom values keep working |
 | `storage.archived_scale` | 0.75 | Scale for downscaled archived video (was 0.5). A library that saved the old default moves to 0.75 once |
 | `storage.reserve_mb` | 500 | Disk reserve size, 0 = off |
 | `storage.min_free_gb` | 5 | Recording stops below this much free disk |
 
-The settings API takes `{"resolution": "1080p"}` in `POST /api/settings`; an
-explicit `max_width`/`max_height` in the same request wins. `GET` returns
-`resolution` and `resolution_presets`.
+`GET /api/settings` returns `resolution` (the managed preset name) and
+`resolution_presets`.
 
 ### Settings window
 

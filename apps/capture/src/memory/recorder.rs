@@ -151,7 +151,9 @@ impl SettingsWatch {
         if self.mtime.is_none() || self.mtime.map(|m| m.0) != Some(settings_mtime) {
             match std::fs::read(self.paths.settings()) {
                 Ok(bytes) => match serde_json::from_slice::<Settings>(&bytes) {
-                    Ok(settings) => {
+                    Ok(mut settings) => {
+                        // The running recorder obeys the managed capture knobs too.
+                        settings.self_manage();
                         self.raw = settings;
                         self.loaded_valid_file = true;
                     }
@@ -3004,6 +3006,19 @@ mod tests {
         run_once_tasks(&conn, &paths).unwrap();
         assert!(!Settings::load(&paths).pause_on_inactivity);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_running_recorder_ignores_capture_knobs_in_settings_json() {
+        let paths = MemoryPaths::at(
+            std::env::temp_dir().join(format!("kmem-watch-{}", uuid::Uuid::new_v4().simple())),
+        );
+        paths.ensure().unwrap();
+        std::fs::write(paths.settings(), r#"{"interval_ms": 500000, "ocr_level": "off"}"#).unwrap();
+        let mut watch = SettingsWatch::new(&paths);
+        let s = watch.refresh();
+        assert_eq!((s.interval_ms, s.ocr_level.as_str()), (2000, "accurate"));
+        let _ = std::fs::remove_dir_all(&paths.root);
     }
 
     #[test]

@@ -66,7 +66,17 @@ describe('inference Idempotency-Key replay', () => {
         },
         body,
       });
-    return { counts, post, stop: () => (globalThis.fetch = originalFetch) };
+    const appPost = (path: string, body: string, idempotencyKey?: string) =>
+      app.request(path, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer token',
+          'content-type': 'application/json',
+          ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+        },
+        body,
+      });
+    return { counts, post, appPost, stop: () => (globalThis.fetch = originalFetch) };
   }
 
   test('a retry with the same Idempotency-Key is served the first answer — one provider call, one usage record', async () => {
@@ -148,6 +158,30 @@ describe('inference Idempotency-Key replay', () => {
     }
   });
 
+  test('the same key and body bytes on a second wire protocol execute again — no cross-protocol replay', async () => {
+    const gateway = await serve();
+    try {
+      // Byte-identical body valid on both ingresses: only the protocol scopes
+      // the entries apart, so the messages route must execute its own answer
+      // in the Anthropic message shape, never replay the chat answer.
+      const shared = JSON.stringify({
+        model: 'stub-model',
+        max_tokens: 8,
+        messages: [{ role: 'user', content: 'hi' }],
+      });
+      const chat = await gateway.appPost('/v1/chat/completions', shared, 'retry-1');
+      const messages = await gateway.appPost('/v1/messages', shared, 'retry-1');
+      expect(chat.status).toBe(200);
+      expect(messages.status).toBe(200);
+      const messagesBody = (await messages.json()) as Record<string, unknown>;
+      expect(messagesBody.type).toBe('message');
+      expect(gateway.counts.provider).toBe(2);
+      expect(gateway.counts.usage).toBe(2);
+    } finally {
+      gateway.stop();
+    }
+  });
+
   test('a provider failure is not replayed — the retry re-executes', async () => {
     const gateway = await serve({ providerStatus: 500 });
     try {
@@ -212,11 +246,11 @@ describe('idempotency replay cache', () => {
       return new Response(JSON.stringify({ n: calls }), { status: 200 });
     };
     const request = { authorization: 'Bearer token' as string | undefined, rawBody: '{}' };
-    await replay('key-1', request, call);
-    await replay('key-1', request, call);
+    await replay('chat', 'key-1', request, call);
+    await replay('chat', 'key-1', request, call);
     expect(calls).toBe(1);
     clock += 60 * 60 * 1000 + 1; // past the TTL
-    await replay('key-1', request, call);
+    await replay('chat', 'key-1', request, call);
     expect(calls).toBe(2);
   });
 });

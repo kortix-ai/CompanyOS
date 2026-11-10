@@ -77,7 +77,7 @@ function inference(
         const res = await cloudflareSafe(
           // A retried request that carries a client `Idempotency-Key` is served
           // the first 2xx answer instead of executing and metering again.
-          await replay(c.req.header('idempotency-key'), request, call),
+          await replay(protocol, c.req.header('idempotency-key'), request, call),
         );
         recordOutcome(res.status);
         return releaseWhenResponseEnds(res, body.release);

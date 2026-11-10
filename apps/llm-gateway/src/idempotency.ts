@@ -84,6 +84,7 @@ export function createIdempotencyReplay(now: () => number = Date.now) {
   };
 
   return async <Req extends ReplayRequest>(
+    protocol: string,
     idempotencyKey: string | undefined,
     request: Req,
     call: (request: Req) => Promise<Response>,
@@ -98,8 +99,11 @@ export function createIdempotencyReplay(now: () => number = Date.now) {
     }
     if (streaming) return call(request);
 
+    // Scoped to the wire protocol too: one cache serves chat/messages/
+    // responses/images, and the same key + body bytes on a second endpoint
+    // must not replay the first endpoint's answer shape.
     const key = createHash('sha256')
-      .update(`${request.authorization ?? ''}\u0000${idempotencyKey}\u0000`)
+      .update(`${protocol}\u0000${request.authorization ?? ''}\u0000${idempotencyKey}\u0000`)
       .update(request.rawBody)
       .digest('hex');
     const hit = entries.get(key);

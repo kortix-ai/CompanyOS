@@ -29,7 +29,7 @@ async function settleDelivery(row: SessionLifecycleCommandRow, delivery: Exclude
     const parked = await parkPromptForUnreachableRuntime(row, DELIVERY_FAILURE_COPY[delivery], { sessionId: row.sessionId });
     if (parked.parked) return 'queued';
     await markCommandFailed(row, `${DELIVERY_FAILURE_COPY.unreachable} after ${MAX_RUNTIME_UNREACHABLE_RETRIES} attempts`,
-      { retryable: false, attempts: row.attempts, sessionId: row.sessionId });
+      { retryable: false, attempts: row.attempts, sessionId: row.sessionId, runtimeUnreachable: true });
     return 'failed';
   }
   if (delivery === 'not-landed') {

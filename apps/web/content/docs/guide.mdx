@@ -537,6 +537,10 @@ An app that is not in the catalog can still connect. Select **New** → **MCP se
 
 When an agent needs an app that nobody has connected yet, the session shows a **Connect** button. It opens the same sign-in and creates a private account by default.
 
+An agent acts with your rights, no more and no less. If you may share an account with the workspace, your agent may start that sign-in for you (`kortix connectors connect <slug> --owner workspace`). You still sign in. A refusal names the missing permission and who holds it.
+
+The catalog lists apps; it does not decide what may connect. When an agent adds a server that the catalog does not publish and the workspace does not use yet, a person who manages connectors approves that exact address once. The agent gives you a link. It opens **MCP server** with the address filled in, and adding it is the approval.
+
 ### Allow, Ask, Block
 
 Every action follows one of three rules:
@@ -1373,7 +1377,7 @@ When you connect an app such as Gmail or Linear, Kortix stores the login, and it
 
 The audit log records who did what in the workspace, when, how they signed in, and whether it was allowed. Recording is always on, and refused requests are recorded too. When an agent acts, the log also names the person it acted for. The log never stores a key.
 
-Owners and admins read the log under **Workspace settings** → **Audit log**. Events stay readable there for 90 days. Events from 90 to 365 days old stay in a locked archive that nobody can shorten or delete, and you can export them. You can also stream every new event to your own security tools.
+Owners and admins read the log under **Workspace settings** → **Audit log**. The log there shows the last 14 days. Events from 14 to 365 days old stay in a locked archive that nobody can shorten or delete, and the export (CSV or JSONL) reads them back. You can also stream every new event to your own security tools.
 
 Reading, exporting and streaming the log are Enterprise features.
 

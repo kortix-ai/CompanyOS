@@ -670,8 +670,8 @@ export function isImplicitManager(accountRoleKey: string | null): boolean {
 
 /**
  * The one object an unscoped `closed` type still opens to every project member:
- * My Kortix, the built-in agent. It holds no connector or secret of its own and
- * acts with exactly the person's role, so an agent grant would add nothing; a
+ * My Kortix, the built-in agent. It acts with exactly the person's role and
+ * reach (every connector and secret they can use), so an agent grant would add nothing; a
  * hand-off it makes is a new session, authorized against that agent's grants.
  * Grant rows on it still decide, as on any object.
  */

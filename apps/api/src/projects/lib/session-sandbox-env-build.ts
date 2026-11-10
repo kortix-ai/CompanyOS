@@ -66,7 +66,7 @@ import { buildFeatureFlagSandboxEnv } from './feature-flag-env';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { buildSessionRuntimeEnv } from './session-runtime-env';
 import { buildMyKortixConfig } from './my-kortix-agent';
-import { readColleagueAccess } from './colleague-access';
+import { myKortixSessionGrant } from './colleague-access';
 
 import { resolveSessionPersonalOwner } from './personal-resources';
 import { projectsView } from '../../workspaces/rows';
@@ -391,10 +391,12 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
   );
   const secretsRead = started(
     Promise.all([agentConfigRead, policyRead]).then(async ([{ agentGrantEnv }, { sessionPolicyRow, secretsPrincipalUserId }]) => {
-      // My Kortix holds no secret; a colleague holds the ones a person allowed it (colleague-access.ts).
-      const grantEnvForSession = input.platformMetaAgent
-        ? ((await readColleagueAccess(input.sessionId))?.secrets ?? [])
-        : intersectSecretGrants(agentGrantEnv, sessionPolicyRow?.secretsAllowlist ?? null);
+      // My Kortix holds every secret its person can use (`myKortixAgentGrant`);
+      // the person's reach filters the values in `loadSessionRuntimeSecrets`.
+      const grantEnvForSession = intersectSecretGrants(
+        input.platformMetaAgent ? (await myKortixSessionGrant(input.sessionId)).env : agentGrantEnv,
+        sessionPolicyRow?.secretsAllowlist ?? null,
+      );
       return tl.span('secrets', () =>
         loadSessionRuntimeSecrets(input, secretsPrincipalUserId, grantEnvForSession, agentGrantEnv),
       );

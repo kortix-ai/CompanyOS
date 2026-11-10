@@ -341,15 +341,21 @@ describe('POST /v1/projects/:projectId/secrets/:identifier/grant', () => {
     expect(await response.json()).toMatchObject({ code: 'manifest_read' });
   });
 
-  test('an agent session cannot widen its own grant', async () => {
+  test('an agent session acting for its person gets the person\'s answer (AGENT = HUMAN)', async () => {
+    const person = await grant('BROKER_KEY', 'support');
+    const personBody = await person.json();
+    const personCommits = commits.splice(0);
+    manifest = governedManifest();
     authType = 'pat';
     sessionId = '55555555-5555-4555-8555-555555555555';
 
     const response = await grant('BROKER_KEY', 'support');
 
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: 'agent_session_forbidden' });
-    expect(commits).toHaveLength(0);
+    expect({ status: response.status, body: await response.json(), commits: commits.map((c) => c.raw) }).toEqual({
+      body: personBody,
+      status: person.status,
+      commits: personCommits.map((c) => c.raw),
+    });
   });
 
   test('rejects a malformed identifier and a blank agent before any read', async () => {

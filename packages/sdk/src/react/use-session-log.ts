@@ -349,7 +349,8 @@ export function useSessionLogSync(
     let liveLoader: unknown = null;
     let liveFailures = 0;
     let liveSkipUntil = 0;
-    const loadLive = async (): Promise<boolean> => {
+    let liveRead: Promise<boolean> | null = null;
+    const readLive = async (): Promise<boolean> => {
       const live = livePageRef.current;
       if (!live) return false;
       if (live !== liveLoader) {
@@ -368,6 +369,17 @@ export function useSessionLogSync(
       liveSkipUntil = 0;
       store().applySessionLogPage(sessionId, page);
       return true;
+    };
+    // One box read on the wire at a time: a reconnect, a resync, a tab-visible signal
+    // and a turn end can fire inside the same 50 s a wedged box holds the read for,
+    // and overlapping reads would stack the proxy's full retry budget per trigger.
+    const loadLive = (): Promise<boolean> => {
+      if (!liveRead) {
+        liveRead = readLive().finally(() => {
+          liveRead = null;
+        });
+      }
+      return liveRead;
     };
     // A re-read: the box's page while the box serves one, else the API's.
     const reload = async (): Promise<void> => {

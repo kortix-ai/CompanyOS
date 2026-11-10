@@ -31,6 +31,7 @@ import {
   summarizeDeliverySync,
 } from '../lib/secret-writes';
 import { workspaceIdParam } from '../../shared/route-params';
+import { SECRET_DELIVERY_NEEDS_PERSON } from '../lib/secret-write-input';
 
 export function registerSecretDeliveryRoutes(): void {
   projectsApp.openapi(
@@ -70,7 +71,7 @@ export function registerSecretDeliveryRoutes(): void {
         PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
       );
       if (isBorrowedSessionPrincipal(c)) {
-        return c.json({ error: 'Agent sessions cannot change secret delivery policy' }, 403);
+        return c.json({ error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' }, 403);
       }
       if (isSystemProjectSecretName(identifier)) {
         return c.json({ error: `${identifier} is managed by Kortix` }, 403);

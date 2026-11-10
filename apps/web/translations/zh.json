@@ -2505,7 +2505,23 @@
         "askOwnerBody": "只有工作区所有者和管理员可以管理账单。请让其中一位为工作区选择积分档位。",
         "planTitle": "套餐和积分",
         "planDescription": "更改每月套餐，或为本月添加积分。",
-        "topupSecondary": "本月需要更多？添加积分"
+        "paymentFailedHint": "更新银行卡后，Stripe 会重新尝试扣款。",
+        "updatePaymentMethod": "更新付款方式",
+        "topUpInstead": "改为添加积分",
+        "memberBody": "只有所有者和管理员可以添加积分。可以直接在这里请求，或把此工作区的账单链接发给其中一位。",
+        "memberCopyLink": "复制账单链接",
+        "memberLinkCopied": "链接已复制",
+        "memberLinkCopyFailed": "无法复制链接",
+        "roleOwner": "所有者",
+        "roleAdmin": "管理员",
+        "newBalance": "新余额",
+        "continue": "继续",
+        "balanceRetry": "重试",
+        "addLine": "添加积分，让你的智能体继续运行。",
+        "raiseLine": "升级你的套餐，让你的智能体继续运行。",
+        "subscribeLine": "订阅即可让你的智能体继续运行。",
+        "switchToMonthly": "更想要每月积分？切换套餐",
+        "autoTopupRetired": "此套餐不再适用自动充值。"
       },
       "admin": {
         "plan": "套餐",
@@ -2528,7 +2544,9 @@
           "growing": "成长型团队",
           "scale": "规模版",
           "large": "大型组织"
-        }
+        },
+        "once": "一次性",
+        "onceLabel": "一次性积分金额"
       }
     },
     "popular": "热门",
@@ -13577,7 +13595,7 @@
       "text5ebe32e1b916": "连接器凭据永不进入沙箱",
       "text5ec6ae29f4b6": "同时安装：",
       "text5ec9729027c3": "把用户的表达转化为实际交付。",
-      "text5ecbbab0d8d8": "您的钱包为空，会话无法启动。请充值以继续运行计算资源和最新 AI 模型——{value0} 不受影响。",
+      "text5ecbbab0d8d8": "您的钱包为空，会话无法启动。请添加积分以继续运行计算资源和最新 AI 模型——{value0} 不受影响。",
       "text5ecf97e61ad9": "复制此代码，然后打开授权页面并输入它，以连接 ChatGPT。",
       "text5ed9bd98de1b": "无法更新工作区默认设置",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17447,7 +17465,7 @@
       "textcdd7efcb7e2c": "策略已解析",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "按角色提供的 Kortix 解决方案",
-      "textce0c20c05842": "上次付款未成功。请在“管理账单”中更新付款方式，或先充值以继续运行。",
+      "textce0c20c05842": "上次付款未成功。请更新付款方式，以便你的套餐继续运行。",
       "textce0faee27592": "账单 支付 信用卡 订阅 管理 钱包 等级 方案 限制 概览 支出",
       "textce18e358bf01": "尝试使用不同的术语。",
       "textce1e609b7bf5": "仅限沙盒端口",
@@ -20405,7 +20423,7 @@
       "text2b2c3ec032a6": "已转移工作区",
       "text44f9fff8bdae": "更改了积分套餐",
       "text3fa17bba73e1": "此工作区还没有套餐。请选择每月积分金额以运行会话。所有成员共用一个积分池。",
-      "text6821e42be2c1": "你的钱包已空，会话无法运行。请充值以继续使用算力和最新的 AI 模型——你的套餐不受影响。",
+      "text6821e42be2c1": "你的钱包已空，会话无法运行。请添加积分以继续使用算力和最新的 AI 模型——你的套餐不受影响。",
       "text146aaf3c71fa": "为已签约、同时通过付费套餐计费的企业版工作区保持 SSO、SCIM、RBAC 和审计权限，避免 Stripe 对账将其移除。",
       "text517105fd13ce": "积分用于支付沙盒算力——即使是 BYOK 试用，运行会话也需要钱包余额。免费欢迎额度为 2 美元。",
       "text2f1d17f50af8": "企业版为此工作区开通 SAML SSO、SCIM 目录同步、RBAC 和审计访问。计费套餐保持不变。",
@@ -21523,11 +21541,6 @@
   "personalWelcome": {
     "dismiss": "关闭",
     "emailCopied": "已复制电子邮件地址"
-  },
-  "repositoryAccess": {
-    "label": "工作区仓库访问权限",
-    "enabled": "新会话会获得工作区仓库。Git 权限仍然适用。现有会话保留原有的访问设置。",
-    "disabled": "新会话在没有工作区仓库的情况下运行。仍可创建文件并使用已授权的工具。现有会话保留原有的访问设置。"
   },
   "customProvider": {
     "intro": "目录中没有的端点。",
@@ -26065,7 +26078,6 @@
   "agentMounts": {
     "lead": "此智能体的会话从“文件”中挂载的文件夹。更改立即生效，并适用于所有新会话。",
     "mount": "Mount folder",
-    "repository": "工作区仓库",
     "viaAgent": "与此智能体共享",
     "viaProject": "与此工作区中的所有人共享",
     "from": "{path} · {who}",

@@ -361,7 +361,7 @@ export async function attachComputerConnection(
         ...(hasDefault ? {} : { isDefault: true }),
       },
       tx,
-      'person',
+      'reconnect',
     );
     return { connection: updated!, created: false };
   };

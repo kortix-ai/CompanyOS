@@ -36,6 +36,7 @@ import { SessionPendingApprovalsIndicator } from './session-pending-approvals-in
 import { SessionGoalIndicator } from './session-goal-indicator';
 import { SessionRemindersIndicator } from './session-reminders-indicator';
 import { SessionTitleInput } from './session-title-input';
+import { SessionEmbedMenuItem } from './session-embed-menu-item';
 import { subagentTitle } from '../agents/agent-model';
 import { SubagentHoverCard } from './subagent-hover-card';
 import { Copy } from '../../icons/copy';
@@ -137,7 +138,7 @@ export function SessionSiteHeader({
   const tPinArchive = useTranslations('sidebar.pinArchive');
   const localizedDevTools = useLocalizedUiCatalog(DEV_TOOLS);
   // A host that cannot reach the pty WebSocket turns the terminal off (`config.terminalEnabled`).
-  const { terminalEnabled } = useUiHostConfig();
+  const { terminalEnabled, publicSharesEnabled } = useUiHostConfig();
   // A template on a base other than Ubuntu 24.04, or an old image, has no desktop.
   const hasDesktop = useHasSessionDesktop() === true;
   const devTools = useMemo(
@@ -351,6 +352,13 @@ export function SessionSiteHeader({
     else errorToast(tPalette('copyFailed'));
   };
 
+  // The embed snippet left the Session access dialog (KRTX-4639): a developer
+  // affordance does not belong in a permissions dialog. Its one entry point is
+  // the Embed submenu in the session menu below, gated like the dialog's
+  // section was: the same `can_manage_sharing` server verdict, and the host
+  // serves public shares at all.
+  const canEmbed = isProjectSession && canManageSharing && publicSharesEnabled;
+
   const sessionActionItems = (
     <>
       {isProjectSession && (
@@ -426,6 +434,9 @@ export function SessionSiteHeader({
             <LinkSimpleIcon />
             {tPalette('copyAction', { label: tPalette('copySessionLink') })}
           </DropdownMenuItem>
+          {canEmbed && projectId && projectSessionId && (
+            <SessionEmbedMenuItem projectId={projectId} sessionId={projectSessionId} />
+          )}
           {watching !== undefined && (
             <DropdownMenuItem className="cursor-pointer" onClick={toggleWatch}>
               {watching ? <BellSlashIcon /> : <BellIcon />}
@@ -747,9 +758,10 @@ export function SessionSiteHeader({
             </DropdownMenu>
 
             {/* The one Share entry point (it left the session menu). Shown to
-                everyone in the session: the owner changes access and copies
-                the embed snippet or a public link here, everyone else reads
-                who has it. `xs` is h-7, the row's 28px control size. Below
+                everyone in the session: the owner changes access here,
+                everyone else reads who has it. The embed snippet lives in the
+                session menu (KRTX-4639), not in the access dialog. `xs` is h-7,
+                the row's 28px control size. Below
                 `md` (the same 768px as `isMobileViewport`) the label hides,
                 the button goes square like its size-7 siblings, and only then
                 the Hint names it. */}

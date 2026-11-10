@@ -193,136 +193,28 @@ describe('buildSessionRuntimeEnv — KORTIX_COMPILED_AGENT_CONFIG', () => {
   });
 });
 
-describe('buildSessionRuntimeEnv — workspace mode', () => {
-  test('runtime mode removes every project Git coordinate', () => {
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      repositoryAccess: false,
-    });
-
-    expect(env.KORTIX_REPOSITORY_ACCESS).toBe('0');
+describe('buildSessionRuntimeEnv — no checkout at boot', () => {
+  test('every session gets the repository coordinates and auto-clone off, and no clone-only key', () => {
+    const env = buildSessionRuntimeEnv(BASE_INPUT);
+    // Where the agent clones from and the one branch the Git proxy lets it push.
+    expect(env.KORTIX_REPO_URL).toBe(BASE_INPUT.repoUrl);
+    expect(env.KORTIX_DEFAULT_BRANCH).toBe(BASE_INPUT.baseRef);
+    expect(env.KORTIX_BASE_REF).toBe(BASE_INPUT.baseRef);
+    expect(env.KORTIX_BRANCH_NAME).toBe(BASE_INPUT.sessionId);
+    // A daemon from before 2026-11-08 clones only on '1'.
     expect(env.KORTIX_PROJECT_AUTO_CLONE).toBe('0');
-    expect(env).not.toHaveProperty('KORTIX_REPO_URL');
-    expect(env).not.toHaveProperty('KORTIX_DEFAULT_BRANCH');
-    expect(env).not.toHaveProperty('KORTIX_BASE_REF');
-    expect(env).not.toHaveProperty('KORTIX_BRANCH_NAME');
-  });
-
-  test('read mode cannot clone before exact-path artifacts are implemented', () => {
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      repositoryAccess: false,
-    });
-
-    expect(env.KORTIX_REPOSITORY_ACCESS).toBe('0');
-    expect(env.KORTIX_PROJECT_AUTO_CLONE).toBe('0');
-    expect(env).not.toHaveProperty('KORTIX_REPO_URL');
-    expect(env).not.toHaveProperty('KORTIX_DEFAULT_BRANCH');
-    expect(env).not.toHaveProperty('KORTIX_BASE_REF');
-    expect(env).not.toHaveProperty('KORTIX_BRANCH_NAME');
-  });
-
-  test('legacy and branch sessions keep the project clone and Git coordinates', () => {
-    for (const env of [
-      buildSessionRuntimeEnv(BASE_INPUT),
-      buildSessionRuntimeEnv({ ...BASE_INPUT, repositoryAccess: true }),
+    for (const key of [
+      'KORTIX_REPOSITORY_ACCESS',
+      'KORTIX_SESSION_FRESH',
+      'KORTIX_SESSION_BRANCH_RESTORE',
+      'KORTIX_BASE_SHA',
+      'KORTIX_GIT_DELTA_BUNDLE_BASE64',
+      'KORTIX_GIT_DELTA_BUNDLE_REMOTE',
+      'KORTIX_PROJECT_SNAPSHOT_MODE',
+      'KORTIX_PROJECT_SNAPSHOT_PIN',
+      'KORTIX_PROJECT_SNAPSHOT_DESCRIPTOR',
     ]) {
-      expect(env.KORTIX_PROJECT_AUTO_CLONE).toBe('1');
-      expect(env.KORTIX_REPO_URL).toBe(BASE_INPUT.repoUrl);
-      expect(env.KORTIX_DEFAULT_BRANCH).toBe(BASE_INPUT.baseRef);
-      expect(env.KORTIX_BASE_REF).toBe(BASE_INPUT.baseRef);
-      expect(env.KORTIX_BRANCH_NAME).toBe(BASE_INPUT.sessionId);
-    }
-  });
-});
-
-describe('buildSessionRuntimeEnv — fast Git boot hints', () => {
-  test('marks replacement runtimes for remote session-branch restoration', () => {
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      restoreSessionBranch: true,
-    });
-
-    expect(env.KORTIX_SESSION_BRANCH_RESTORE).toBe('1');
-    expect(env).not.toHaveProperty('KORTIX_SESSION_FRESH');
-  });
-
-  test('does not emit branch-restore authority for repository-free workspaces', () => {
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      repositoryAccess: false,
-      restoreSessionBranch: true,
-    });
-
-    expect(env).not.toHaveProperty('KORTIX_SESSION_BRANCH_RESTORE');
-  });
-
-  test('sends fresh-session and base-tip hints for a fresh session', () => {
-    // 2026-08-27: the fresh-session fast path is the default boot (decided at
-    // create).
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      freshSession: true,
-      baseSha: 'a'.repeat(40),
-      gitDeltaBundleBase64: 'R0lUIEJVTkRMRQ==',
-      gitDeltaParentSha: 'b'.repeat(40),
-      gitDeltaParentCommitBase64: 'dHJlZSBkZWFkYmVlZgo=',
-    });
-
-    expect(env.KORTIX_SESSION_FRESH).toBe('1');
-    expect(env.KORTIX_BASE_SHA).toBe('a'.repeat(40));
-    expect(env.KORTIX_GIT_DELTA_BUNDLE_BASE64).toBe('R0lUIEJVTkRMRQ==');
-    expect(env.KORTIX_GIT_DELTA_PARENT_SHA).toBe('b'.repeat(40));
-    expect(env.KORTIX_GIT_DELTA_PARENT_COMMIT_BASE64).toBe('dHJlZSBkZWFkYmVlZgo=');
-  });
-
-  test('marks a remote delta for fresh sessions only; no config-dir hint (nothing reads it)', () => {
-    const fresh = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      freshSession: true,
-      baseSha: 'a'.repeat(40),
-      gitDeltaBundleRemote: true,
-      gitDeltaParentSha: 'b'.repeat(40),
-      gitDeltaParentCommitBase64: 'dHJlZSBkZWFkYmVlZgo=',
-    });
-    expect(fresh.KORTIX_GIT_DELTA_BUNDLE_REMOTE).toBe('1');
-    expect(fresh).not.toHaveProperty('KORTIX_GIT_DELTA_BUNDLE_BASE64');
-    expect(fresh).not.toHaveProperty('KORTIX_OPENCODE_CONFIG_DIR_HINT');
-
-    for (const env of [
-      buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: true, baseSha: 'a'.repeat(40) }),
-      buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: false, gitDeltaBundleRemote: true }),
-      buildSessionRuntimeEnv({ ...BASE_INPUT, repositoryAccess: false, freshSession: true }),
-    ]) {
-      expect(env).not.toHaveProperty('KORTIX_GIT_DELTA_BUNDLE_REMOTE');
-    }
-  });
-
-  test('omits both hints for resumed and non-repository sessions', () => {
-    for (const env of [
-      buildSessionRuntimeEnv({
-        ...BASE_INPUT,
-        freshSession: false,
-        baseSha: 'a'.repeat(40),
-        gitDeltaBundleBase64: 'R0lUIEJVTkRMRQ==',
-        gitDeltaParentSha: 'b'.repeat(40),
-        gitDeltaParentCommitBase64: 'dHJlZSBkZWFkYmVlZgo=',
-      }),
-      buildSessionRuntimeEnv({
-        ...BASE_INPUT,
-        repositoryAccess: false,
-        freshSession: true,
-        baseSha: 'a'.repeat(40),
-        gitDeltaBundleBase64: 'R0lUIEJVTkRMRQ==',
-        gitDeltaParentSha: 'b'.repeat(40),
-        gitDeltaParentCommitBase64: 'dHJlZSBkZWFkYmVlZgo=',
-      }),
-    ]) {
-      expect(env).not.toHaveProperty('KORTIX_SESSION_FRESH');
-      expect(env).not.toHaveProperty('KORTIX_BASE_SHA');
-      expect(env).not.toHaveProperty('KORTIX_GIT_DELTA_BUNDLE_BASE64');
-      expect(env).not.toHaveProperty('KORTIX_GIT_DELTA_PARENT_SHA');
-      expect(env).not.toHaveProperty('KORTIX_GIT_DELTA_PARENT_COMMIT_BASE64');
+      expect(env).not.toHaveProperty(key);
     }
   });
 });
@@ -349,75 +241,5 @@ describe('audit relay emission knobs', () => {
       KORTIX_AUDIT_RELAY_DROP_TYPES: '',
       KORTIX_AUDIT_RELAY_COALESCE: '0',
     });
-  });
-});
-
-describe('buildSessionRuntimeEnv — S3 project snapshot pin', () => {
-  const PIN = `${'a'.repeat(40)}:${'b'.repeat(64)}:3177064`;
-
-  test('git mode (the default) emits neither the mode nor the pin', () => {
-    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: true, projectSnapshotMode: 'git', projectSnapshotPin: PIN });
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_MODE');
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_PIN');
-  });
-
-  test('a fresh full-repository session carries the mode and the identity-only pin', () => {
-    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: true, projectSnapshotMode: 'prefer-s3', projectSnapshotPin: PIN });
-    expect(env.KORTIX_PROJECT_SNAPSHOT_MODE).toBe('prefer-s3');
-    expect(env.KORTIX_PROJECT_SNAPSHOT_PIN).toBe(PIN);
-    // The pin is identity only: never a URL, never a credential.
-    expect(env.KORTIX_PROJECT_SNAPSHOT_PIN).not.toMatch(/https?:|X-Amz-/);
-  });
-
-  test('a presigned descriptor rides along with the pin, and never without it', () => {
-    const descriptor = Buffer.from(JSON.stringify({ format: 'project-snapshot-v2', tree: { url: 'https://s3/x?X-Amz-Signature=1' } })).toString('base64');
-    const env = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      freshSession: true,
-      projectSnapshotMode: 'prefer-s3',
-      projectSnapshotPin: PIN,
-      projectSnapshotDescriptor: descriptor,
-    });
-    expect(env.KORTIX_PROJECT_SNAPSHOT_PIN).toBe(PIN);
-    expect(env.KORTIX_PROJECT_SNAPSHOT_DESCRIPTOR).toBe(descriptor);
-    // A descriptor without a pin is meaningless (the daemon checks the pin first).
-    const noPin = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      freshSession: true,
-      projectSnapshotMode: 'prefer-s3',
-      projectSnapshotPin: null,
-      projectSnapshotDescriptor: descriptor,
-    });
-    expect(noPin).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_DESCRIPTOR');
-    // And a resumed session receives neither.
-    const resumed = buildSessionRuntimeEnv({
-      ...BASE_INPUT,
-      freshSession: false,
-      restoreSessionBranch: true,
-      projectSnapshotMode: 'prefer-s3',
-      projectSnapshotPin: PIN,
-      projectSnapshotDescriptor: descriptor,
-    });
-    expect(resumed).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_DESCRIPTOR');
-  });
-
-  test('a cache miss carries the mode without a pin (the daemon records the miss and boots from Git)', () => {
-    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: true, projectSnapshotMode: 'prefer-s3', projectSnapshotPin: null });
-    expect(env.KORTIX_PROJECT_SNAPSHOT_MODE).toBe('prefer-s3');
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_PIN');
-  });
-
-  test('a resumed (not fresh) session never receives the S3 keys', () => {
-    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: false, restoreSessionBranch: true, projectSnapshotMode: 'require-s3', projectSnapshotPin: PIN });
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_MODE');
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_PIN');
-    expect(env.KORTIX_SESSION_BRANCH_RESTORE).toBe('1');
-  });
-
-  test('a restricted workspace mode receives no repository and therefore no archive', () => {
-    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, freshSession: true, repositoryAccess: false, projectSnapshotMode: 'prefer-s3', projectSnapshotPin: PIN });
-    expect(env.KORTIX_PROJECT_AUTO_CLONE).toBe('0');
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_MODE');
-    expect(env).not.toHaveProperty('KORTIX_PROJECT_SNAPSHOT_PIN');
   });
 });

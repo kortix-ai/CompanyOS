@@ -823,11 +823,7 @@ function EditableAgentPage({
       registryOptions={registryOptions}
       apps={null}
       drives={
-        <AgentDrivesSection
-          projectId={projectId}
-          agentName={agent.name}
-          repositoryAccess={draft.repository_access !== false}
-        />
+        <AgentDrivesSection projectId={projectId} agentName={agent.name} />
       }
       sectionStyle="tab"
     />
@@ -933,7 +929,7 @@ function EditableAgentPage({
         if (view === 'drives')
           return (
             <Embedded agentName={agent.name} column={RAIL_COLUMN}>
-              <AgentDrivesSection projectId={projectId} agentName={agent.name} repositoryAccess={draft.repository_access !== false} />
+              <AgentDrivesSection projectId={projectId} agentName={agent.name} />
             </Embedded>
           );
         // Model is this agent's model only. The project-wide gateway screens

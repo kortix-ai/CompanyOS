@@ -193,6 +193,20 @@ export function metadataMergeSubtree(topKey: string, subPatch: Record<string, un
 }
 
 /**
+ * The provision post-seed write in ONE statement: the verified seed state
+ * merges into the NESTED `git` object (in-SQL, so the siblings the insert
+ * wrote — `managed`, `url`, `auth` — survive), while `topLevel` patches
+ * disjoint top-level keys (`default_agent`). `topLevel` must never name `git`
+ * itself: the shallow `||` replaces the whole object and would wipe the
+ * siblings the subtree merge just preserved. `seedProvisionedRepo` writes
+ * through this helper so the shipped expression and its regression test
+ * (metadata-merge.integration.test.ts) cannot drift apart.
+ */
+export function metadataMergeGitSeed(seed: object, topLevel: Record<string, unknown> = {}): SQL {
+  return sql`${metadataMergeSubtree('git', { seed })} || ${JSON.stringify(topLevel)}::jsonb`;
+}
+
+/**
  * Atomic clear of ONE sub-key from a nested object, dropping the whole top-level
  * object when it becomes empty (mirrors the JS helpers' "remove `experimental`
  * when the last override is cleared" behavior). Re-reads the CURRENT sub-object

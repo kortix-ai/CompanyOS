@@ -1,0 +1,91 @@
+# Software Factory: four agents that work on {{repoFullName}} around the clock.
+# Remove the template: delete this folder and its line under `imports:` in kortix.yaml.
+
+agents:
+  builder:
+    description: "Builds a GitHub issue labeled `kortix` into a pull request, tested in the dev sandbox."
+    mode: primary
+    prompt_file: .kortix/software-factory/prompts/builder.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+  reviewer:
+    description: "Reviews every pull request: runs it, reads it, comments with findings."
+    mode: primary
+    prompt_file: .kortix/software-factory/prompts/reviewer.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+  fixer:
+    description: "Turns a production error into a reproduced, tested fix in a pull request."
+    mode: primary
+    prompt_file: .kortix/software-factory/prompts/fixer.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+  tester:
+    description: "Runs the end-to-end tests every night and files an issue for each new failure."
+    mode: primary
+    prompt_file: .kortix/software-factory/prompts/tester.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+
+triggers:
+  - slug: factory-issues
+    name: Build labeled issues
+    on:
+      webhook: { secret: FACTORY_GITHUB_WEBHOOK_SECRET }
+    filter:
+      headers.github_event: issues
+      body.action: labeled
+      body.label.name: kortix
+    max_runs_per_hour: 10
+    run:
+      agent: builder
+      session: keyed
+      session_key: "issue-{{ body.issue.number }}"
+      prompt: |
+        Build issue #{{ body.issue.number }} in {{ body.repository.full_name }}: {{ body.issue.title }}
+        {{ body.issue.html_url }}
+
+        {{ body.issue.body }}
+
+  - slug: factory-pull-requests
+    name: Review pull requests
+    on:
+      webhook: { secret: FACTORY_GITHUB_WEBHOOK_SECRET }
+    filter:
+      headers.github_event: pull_request
+      body.action: { in: [opened, ready_for_review, reopened] }
+      body.pull_request.draft: "false"
+    max_runs_per_hour: 20
+    run:
+      agent: reviewer
+      session: keyed
+      session_key: "pr-{{ body.pull_request.number }}"
+      prompt: |
+        Review pull request #{{ body.pull_request.number }} in {{ body.repository.full_name }}: {{ body.pull_request.title }}
+        {{ body.pull_request.html_url }}
+        Base {{ body.pull_request.base.ref }}, head {{ body.pull_request.head.ref }}.
+
+  - slug: factory-prod-errors
+    name: Fix production errors
+    on:
+      webhook: { secret: FACTORY_ERRORS_WEBHOOK_SECRET }
+    max_runs_per_hour: 6
+    max_runs_per_day: 20
+    run:
+      agent: fixer
+      prompt: |
+        A production error arrived for {{repoFullName}}. The error tracker's payload:
+
+        {{ body }}
+
+  - slug: factory-nightly-e2e
+    name: Nightly end-to-end tests
+    on:
+      cron: "0 0 3 * * *"
+    run:
+      agent: tester
+      prompt: Run the end-to-end tests of {{repoFullName}} on {{defaultBranch}} and report new failures as issues.

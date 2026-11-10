@@ -1,0 +1,63 @@
+# Automated Changelog: two agents that keep the changelog of {{repoFullName}} current and turn it into content.
+# Remove the template: delete this folder and its line under `imports:` in kortix.yaml.
+
+agents:
+  changelog-writer:
+    description: "Turns new commits on the default branch into a changelog pull request, in the repository's own format."
+    mode: primary
+    prompt_file: .kortix/changelog/prompts/changelog-writer.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+  content-studio:
+    description: "Drafts the weekly blog post, social posts and a captioned product video from the week's changelog."
+    mode: primary
+    prompt_file: .kortix/changelog/prompts/content-studio.md
+    secrets: "*"
+    tools: "*"
+    skills: "*"
+
+triggers:
+  - slug: changelog-push
+    name: Changelog on push
+    on:
+      webhook: { secret: CHANGELOG_GITHUB_WEBHOOK_SECRET }
+    filter:
+      headers.github_event: push
+      body.ref: refs/heads/{{defaultBranch}}
+      body.head_commit.message: { not_prefix: "docs(changelog)" }
+    max_runs_per_hour: 4
+    max_runs_per_day: 24
+    run:
+      agent: changelog-writer
+      prompt: |
+        New commits landed on {{defaultBranch}} of {{ body.repository.full_name }}.
+        Range: {{ body.before }}..{{ body.after }}
+        {{ body.compare }}
+
+        Update the open changelog pull request, or open one.
+
+  - slug: changelog-daily
+    name: Daily changelog batch
+    on:
+      cron: "0 0 6 * * *"
+    max_runs_per_day: 1
+    run:
+      agent: changelog-writer
+      session: keyed
+      session_key: "changelog-{{ cron.scheduled_date }}"
+      prompt: |
+        Daily batch for {{repoFullName}}: collect every commit on {{defaultBranch}} since the last changelog entry, including any the push trigger missed.
+        Update the open changelog pull request, or open one.
+
+  - slug: content-weekly
+    name: Weekly content
+    on:
+      cron: "0 0 9 * * 1"
+    max_runs_per_day: 1
+    run:
+      agent: content-studio
+      session: keyed
+      session_key: "content-{{ cron.scheduled_date }}"
+      prompt: |
+        Draft this week's content for {{repoFullName}} from the changelog entries of the last 7 days on {{defaultBranch}}: blog post, social posts and a 30 to 60 second product video.

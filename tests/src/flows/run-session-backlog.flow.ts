@@ -404,7 +404,8 @@ harnessFlow(
     domain: 'agent-run',
     tags: ['deployed'],
     requires: ['funded', 'sandbox'],
-    timeoutMs: 780_000,
+    // Boot (≤540s) + the write turn (≤240s) + the materialize exec (≤150s).
+    timeoutMs: 960_000,
     routes: [
       'POST /v1/workspaces/:projectId/sessions',
       'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
@@ -436,6 +437,34 @@ harnessFlow(
         .as(ctx.P.OWNER)
         .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(path)}`));
       file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
+    });
+    // #12136 removed the boot checkout: /workspace starts empty, so the daemon
+    // answers commit-push with a 409 until the repository exists. Materialize
+    // it the documented way (kortix.yaml setup prompt / `git clone
+    // "$KORTIX_REPO_URL"`): init in place, fetch over the box's credential
+    // helper, and check out the session branch — falling back to the base
+    // branch while the session has never pushed. The agent's untracked file
+    // survives both paths, so commit-push still stages and pushes it.
+    await ctx.step('the box materializes the repository onto the session branch', async () => {
+      // The env-rpc exec runs as the session: $KORTIX_REPO_URL / $KORTIX_BRANCH_NAME
+      // name the proxy remote and the session branch, and the daemon's boot-time
+      // credential helper authenticates the fetch. A session that has never
+      // pushed has no remote branch yet, so the fetch and checkout fall back to
+      // the base branch and create the session branch locally from it.
+      const materialize = [
+        'set -eu',
+        'cd "${KORTIX_PROJECT_TARGET:-/workspace}"',
+        '[ -d .git ] || git init -q',
+        'git remote add origin "$KORTIX_REPO_URL" 2>/dev/null || git remote set-url origin "$KORTIX_REPO_URL"',
+        'git fetch -q origin "+refs/heads/$KORTIX_BRANCH_NAME:refs/remotes/origin/$KORTIX_BRANCH_NAME" || git fetch -q origin "+refs/heads/${KORTIX_DEFAULT_BRANCH:-main}:refs/remotes/origin/${KORTIX_DEFAULT_BRANCH:-main}"',
+        'git checkout -q -B "$KORTIX_BRANCH_NAME" "refs/remotes/origin/$KORTIX_BRANCH_NAME" 2>/dev/null || git checkout -q -B "$KORTIX_BRANCH_NAME" "refs/remotes/origin/${KORTIX_DEFAULT_BRANCH:-main}"',
+      ].join(' && ');
+      const r = await ctx.client.as(ctx.P.OWNER).post(
+        runtimePath(session.sandboxId, '/kortix/env-rpc'),
+        { op: 'exec', args: { command: materialize, timeout: 120_000 } },
+        { timeoutMs: 150_000 },
+      );
+      r.status(200).body().has('$.ok', true).has('$.value.exitCode', 0);
     });
     await ctx.step('POST .../commit-push → 200 pushed', async () => {
       const r = await ctx.client

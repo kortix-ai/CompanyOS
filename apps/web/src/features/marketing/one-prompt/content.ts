@@ -14,6 +14,8 @@ export interface HomeTemplate {
   name: string;
   /** Completes the headline "…to run ___". */
   phrase: string;
+  /** The whole pitch of the template in one short line. */
+  line: string;
   summary: string;
   /** What starts the agents, in the reader's words. */
   triggers: string[];
@@ -26,6 +28,7 @@ export interface HomeTemplate {
 export const TEMPLATES: HomeTemplate[] = [
   {
     id: 'software-factory',
+    line: 'Issues in. Pull requests out.',
     phrase: 'a software factory',
     name: 'Software Factory',
     summary:
@@ -49,6 +52,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'security-loop',
+    line: 'A red team attacks your app every night.',
     phrase: 'a 24/7 security red team',
     name: 'Auto-Security Loop',
     summary:
@@ -72,6 +76,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'aeo-loop',
+    line: 'Get cited by AI answers and search.',
     phrase: 'your AEO and SEO loop',
     name: 'AEO Loop',
     summary:
@@ -94,6 +99,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'changelog',
+    line: 'Every merge becomes a changelog, a post and a video.',
     phrase: 'your changelog and launch content',
     name: 'Automated Changelog',
     summary:

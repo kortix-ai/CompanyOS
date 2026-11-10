@@ -210,6 +210,28 @@ describe('vcsDiff', () => {
     }
   })
 
+  test('a repo diff.orderFile cannot mislabel the untracked patches', async () => {
+    const root = await makeRepo()
+    try {
+      // A reversed order file reorders the batch's patch output; the chunks
+      // must still land on their own files.
+      const order = join(root, 'order-file')
+      await writeFile(order, 'z.txt\na.txt\n')
+      await realRunGit(['config', 'diff.orderFile', order], { cwd: root })
+      await writeFile(join(root, 'a.txt'), 'aaa\n')
+      await writeFile(join(root, 'z.txt'), 'zzz\n')
+      const files = await vcsDiff(root, 'branch', 'main')
+      const a = files.find((f) => f.file === 'a.txt')
+      expect(a?.patch).toContain('+aaa')
+      expect(a?.patch).not.toContain('+zzz')
+      const z = files.find((f) => f.file === 'z.txt')
+      expect(z?.patch).toContain('+zzz')
+      expect(z?.patch).not.toContain('+aaa')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a directory that is not a git repo has no changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-vcs-diff-plain-'))
     try {

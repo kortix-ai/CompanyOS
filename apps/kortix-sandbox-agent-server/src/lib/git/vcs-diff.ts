@@ -104,7 +104,9 @@ async function untrackedPatchText(cwd: string, files: string[]): Promise<string 
     if (exec.length > 0) {
       await git(cwd, ['update-index', '--chmod=+x', '-z', '--stdin'], { env, input: exec.join('\0') + '\0' })
     }
-    const patch = await git(cwd, ['diff', '--cached', '--no-ext-diff', EMPTY_TREE, '--', '.'], { env })
+    // `-O/dev/null` overrides a repo's `diff.orderFile`: the chunk order must
+    // stay the canonical sorted order the staged list was built in.
+    const patch = await git(cwd, ['diff', '--cached', '--no-ext-diff', '-O/dev/null', EMPTY_TREE, '--', '.'], { env })
     return patch.code === 0 && patch.stdout ? patch.stdout : undefined
   } finally {
     await rm(index, { force: true }).catch(() => {})

@@ -25,11 +25,9 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   permission rules, and the things it may use.
 - Every session starts from the default branch. A change reaches other
   sessions only when its change request merges.
-- `/workspace` starts empty. Kortix never checks out the repository there.
-- To work on the workspace's files, run `kortix workspaces clone`. It clones
-  the repository onto your session branch. Send the change with `kortix cr`.
-- Only your session branch accepts your push. The push needs
-  `workspace.gitops.read` in your agent's `kortix_permissions`.
+- `/workspace` starts empty. `kortix workspaces clone` puts the repository on
+  your session branch (needs `workspace.gitops.read`); only that branch
+  accepts your push. Send the change with `kortix cr`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
 </overview>
 <machine>
@@ -54,24 +52,21 @@ media and datasets in object storage; add build output to `.gitignore`.
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
 0. Work in a clone: `/workspace` has none at boot unless your agent's
-   `workspace.repos` declares one (your prompt then names it and its setup
-   progress). Otherwise `kortix workspaces clone` puts the repository on your
-   session branch; `cd` into it. Run every step below there.
+   `workspace.repos` declares one. Otherwise `kortix workspaces clone` puts
+   the repository on your session branch; `cd` into it. Run every step below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
    change. Keep big files out of Git (`<machine>`).
-3. Push: `git push origin HEAD`. Rejected because the remote branch moved?
-   `git fetch origin && git push --force-with-lease origin HEAD`. Force only
-   your own session branch.
+3. Push: `git push origin HEAD`; rejected as moved? `git fetch origin && git
+   push --force-with-lease origin HEAD`. Force only your own session branch.
 4. Open: `kortix cr open --title "<imperative summary>" --description "<what,
    why, how you tested, risks>"`. It takes `$KORTIX_BRANCH_NAME` as the head.
    `422 CR_HEAD_NOT_AHEAD` means the push did not land: push, then retry.
 5. Check: `kortix cr diff <n>` shows your diff. Empty: push again and check
    the same CR. Never open a second CR for the same work.
-6. Tell the user the CR number and title. The web app shows a **Review**
-   button under your reply. Name `kortix cr merge <n>` only to a CLI or
-   channel user.
+6. Tell the user the CR number and title. The web app shows a **Review** button
+   under your reply. Name `kortix cr merge <n>` only to a CLI or channel user.
 7. Wait. Merge your own CR only when the user asks. The API refuses a
    self-merge (`403 CR_SELF_MERGE_REFUSED`) unless your agent holds
    `workspace.gitops.merge`.

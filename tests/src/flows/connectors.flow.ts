@@ -4431,7 +4431,15 @@ flow(
           'connectors', 'connections', 'share', theirs, '--everyone', '--project', project.id,
         ]);
         throwIfCliInfraFailure(r, 'kortix connectors connections share');
-        if (r.exitCode === 0 || !/manage the workspace's connections/.test(r.all)) {
+        // The refusal's copy follows the product: PR #12240 changed the
+        // deny-message to name the workspace action and the granting remedy
+        // (apps/api/src/iam/denial-message.ts:123). Either the pre-#12240
+        // connector-route wording or the new action-named wording proves the
+        // refusal, so the older copy never blocks a correct deny again.
+        if (
+          r.exitCode === 0 ||
+          !/manage the workspace's connections|workspace\.connector\.connections\.manage/.test(r.all)
+        ) {
           throw new Error(`plain member share: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
         }
       });

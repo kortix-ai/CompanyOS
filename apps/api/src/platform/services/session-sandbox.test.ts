@@ -523,11 +523,14 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       userId: USER_ID,
       projectId: PROJECT_ID,
       sessionId: SANDBOX_ID,
+      // The platform grant is person-capped 'all' since #12240 (AGENT =
+      // HUMAN): the meta session holds what its person holds, with no
+      // service-account ceiling — the test's own point.
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

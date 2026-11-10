@@ -4431,7 +4431,9 @@ flow(
           'connectors', 'connections', 'share', theirs, '--everyone', '--project', project.id,
         ]);
         throwIfCliInfraFailure(r, 'kortix connectors connections share');
-        if (r.exitCode === 0 || !/manage the workspace's connections/.test(r.all)) {
+        // #12240 renamed the denial copy: it now names the permission key and
+        // who grants it. The reason is still named, never a bare exit code.
+        if (r.exitCode === 0 || !/workspace\.connector\.connections\.manage/.test(r.all)) {
           throw new Error(`plain member share: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
         }
       });

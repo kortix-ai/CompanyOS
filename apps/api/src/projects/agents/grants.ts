@@ -175,7 +175,13 @@ export function grantFromLoadedAgents(agentName: string, loaded: LoadedAgents): 
   // A project that does not run My Kortix (no `builtin_agents.my_kortix: true`)
   // strips an existing `mykortix` session of every project action on its next prompt.
   if (isMyKortixAgentName(agentName)) {
-    return loaded.builtinAgents?.my_kortix === true ? myKortixAgentGrant() : disabledMyKortixAgentGrant();
+    const platform = loaded.builtinAgents?.my_kortix === true ? myKortixAgentGrant() : disabledMyKortixAgentGrant();
+    // Repair mode (an unparseable manifest): My Kortix still runs so the file
+    // can be fixed, but the project cannot prove what any agent may use — so
+    // it receives no project secret, the same fail-closed rule every other
+    // agent answers on an error (secret-grant.ts). Permissions and connectors
+    // stay person-capped; fixing kortix.yaml needs a write, never a secret.
+    return loaded.manifestSyntaxError ? { ...platform, env: [] } : platform;
   }
 
   // No `agents` parsed and no errors → project hasn't adopted

@@ -126,6 +126,12 @@ Options:
   --workspace <id>    Operate on this workspace id (default: linked).
   --host <name>       Operate against a non-default Kortix host.
   --token-stdin       (claude) Read a token made with \`claude setup-token\` from stdin.
+  --share <who>       (claude) private (default) or workspace: every session of
+                      the workspace uses the plan, triggered ones included.
+  --start             (claude) Print the sign-in link and exit. For a shell with
+                      no terminal, such as a coding agent's. --json.
+  --flow <id> --code <code>
+                      (claude) Finish the sign-in --start began.
   -h, --help          Show this help without starting OAuth.
 
 Example:
@@ -199,13 +205,22 @@ export async function runProviders(argv: string[]): Promise<number> {
   let search: string | undefined;
   let custom: CustomFlags = { models: [], keyStdin: false };
   let tokenStdin = false;
+  let claude: ClaudeFlags = { start: false };
   try {
     projectFlag = takeFlagValue(rest, ['--project', '--workspace']);
     hostFlag = takeFlagValue(rest, ['--host']);
     regionFlag = takeFlagValue(rest, ['--region']);
     accountFlag = takeFlagValue(rest, ['--account']);
     json = takeFlagBool(rest, ['--json']);
-    if (sub === 'login' || sub === 'oauth') tokenStdin = takeFlagBool(rest, ['--token-stdin']);
+    if (sub === 'login' || sub === 'oauth') {
+      tokenStdin = takeFlagBool(rest, ['--token-stdin']);
+      claude = {
+        start: takeFlagBool(rest, ['--start']),
+        flow: takeFlagValue(rest, ['--flow']),
+        code: takeFlagValue(rest, ['--code']),
+        share: takeFlagValue(rest, ['--share']),
+      };
+    }
     if (sub === 'ls' || sub === 'list') {
       catalog = takeFlagBool(rest, ['--catalog']);
       search = takeFlagValue(rest, ['--search']);
@@ -240,8 +255,10 @@ export async function runProviders(argv: string[]): Promise<number> {
       return catalog ? providersCatalog(search, json) : providersLs(ctxOpts, json);
     case 'login':
     case 'oauth':
-      if (rest[0] === CLAUDE_CLI_PROVIDER) return claudeLogin(ctxOpts, tokenStdin);
-      if (tokenStdin) return fail('--token-stdin works with `kortix providers login claude` only');
+      if (rest[0] === CLAUDE_CLI_PROVIDER) return claudeLogin(ctxOpts, tokenStdin, claude, json);
+      if (tokenStdin || claude.start || claude.flow || claude.code || claude.share) {
+        return fail('--token-stdin, --start, --flow, --code and --share work with `kortix providers login claude` only');
+      }
       return providersLogin(rest[0], ctxOpts);
     case 'set':
       return providersSet(rest[0], rest[1], regionFlag, ctxOpts);
@@ -492,7 +509,21 @@ const CLAUDE_CLI_PROVIDER = 'claude';
 interface ClaudeLoginStartResponse { flow_id: string; authorize_url: string; expires_at: string }
 interface ClaudeConnectedResponse { connected: boolean; secret_id?: string }
 
-async function claudeLogin(opts: CtxOpts, tokenStdin: boolean): Promise<number> {
+/**
+ * Agent-friendly steps for a shell with no terminal: `--start` prints the
+ * sign-in link and exits, `--flow <id> --code <code>` finishes. `--share
+ * workspace` lets every session of the workspace use the plan, triggered
+ * ones included; the default stays private to you.
+ */
+interface ClaudeFlags { start: boolean; flow?: string; code?: string; share?: string }
+
+async function claudeLogin(opts: CtxOpts, tokenStdin: boolean, flags: ClaudeFlags, json: boolean): Promise<number> {
+  if (flags.share !== undefined && flags.share !== 'private' && flags.share !== 'workspace') {
+    return fail('--share is private or workspace');
+  }
+  if (Boolean(flags.flow) !== Boolean(flags.code)) return fail('--flow and --code go together');
+  if (flags.start && (flags.flow || tokenStdin)) return fail('--start begins a sign-in: run --flow <id> --code <code> after it');
+  const sharing = { mode: flags.share === 'workspace' ? 'project' : 'private' };
   const ctx = await resolveProjectContext(opts);
   if (!ctx) return 1;
   const done = (result: ClaudeConnectedResponse) => {
@@ -500,9 +531,15 @@ async function claudeLogin(opts: CtxOpts, tokenStdin: boolean): Promise<number> 
       process.stderr.write(`${status.err('Kortix did not store the Claude login. Run the command again.')}\n`);
       return 1;
     }
+    if (json) {
+      process.stdout.write(`${JSON.stringify({ connected: true, sharing: sharing.mode === 'project' ? 'workspace' : 'private' })}\n`);
+      return 0;
+    }
+    const who = sharing.mode === 'project' ? 'shared with the workspace' : 'private to you';
+    const where = sharing.mode === 'project' ? 'every session of the workspace, triggered ones included' : 'your sessions';
     process.stdout.write(
       `\n${status.ok('Connected your Claude subscription')}\n` +
-        `  ${C.dim}Added a Claude account, private to you. Claude models (claude-agent/opus, fable, sonnet, haiku) now run on your plan in your sessions.${C.reset}\n\n`,
+        `  ${C.dim}Added a Claude account, ${who}. Claude models (claude-agent/opus, fable, sonnet, haiku) now run on your plan in ${where}.${C.reset}\n\n`,
     );
     return 0;
   };
@@ -510,16 +547,28 @@ async function claudeLogin(opts: CtxOpts, tokenStdin: boolean): Promise<number> 
     const token = (await Bun.stdin.text()).trim();
     if (!token) return fail('stdin is empty: pipe the token `claude setup-token` printed');
     try {
-      return done(await ctx.client.put<ClaudeConnectedResponse>(`/workspaces/${ctx.projectId}/claude-subscription/token`, { token, sharing: { mode: 'private' } }));
+      return done(await ctx.client.put<ClaudeConnectedResponse>(`/workspaces/${ctx.projectId}/claude-subscription/token`, { token, sharing }));
+    } catch (err) {
+      return surfaceApiError(err);
+    }
+  }
+  if (flags.flow && flags.code) {
+    try {
+      return done(await ctx.client.post<ClaudeConnectedResponse>(`/workspaces/${ctx.projectId}/claude-subscription/login/complete`, { flow_id: flags.flow, code: flags.code.trim() }));
     } catch (err) {
       return surfaceApiError(err);
     }
   }
   let flow: ClaudeLoginStartResponse;
   try {
-    flow = await ctx.client.post<ClaudeLoginStartResponse>(`/workspaces/${ctx.projectId}/claude-subscription/login/start`, { sharing: { mode: 'private' } });
+    flow = await ctx.client.post<ClaudeLoginStartResponse>(`/workspaces/${ctx.projectId}/claude-subscription/login/start`, { sharing });
   } catch (err) {
     return surfaceApiError(err);
+  }
+  if (flags.start) {
+    if (json) process.stdout.write(`${JSON.stringify(flow)}\n`);
+    else process.stdout.write(`${flow.authorize_url}\n\nThen: kortix providers login claude --flow ${flow.flow_id} --code <code from claude.com>\n`);
+    return 0;
   }
   process.stdout.write(
     `\n  ${C.bold}Connect your Claude subscription${C.reset}\n` +

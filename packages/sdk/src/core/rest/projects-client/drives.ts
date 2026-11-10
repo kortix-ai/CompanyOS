@@ -6,6 +6,7 @@
 import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
 import { platformConfig } from '../../http/config';
+import { isExpectedApiError } from '../../http/response-error';
 import { platformRequestHeaders } from '../../http/transport';
 import { unwrap } from './shared';
 import { stripTrailingSlashes } from '../../../platform/strings';
@@ -545,10 +546,17 @@ export async function uploadDriveFile(
     const blob = body instanceof Blob ? body : new Blob([body]);
     return retryTransient(() => uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal));
   }
-  const result = await withRetries(
-    () => backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers }),
-    'Failed to upload file',
-  );
+  let result: DriveUploadResult;
+  try {
+    // Each attempt is quiet: only the final outcome reaches the app-wide handler.
+    result = await withRetries(
+      () => backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers, showErrors: false }),
+      'Failed to upload file',
+    );
+  } catch (error) {
+    if (error instanceof ApiError && !isAbort(error) && !isExpectedApiError(error)) platformConfig().onError?.(error);
+    throw error;
+  }
   const size = body instanceof Blob ? body.size : body.byteLength;
   onProgress?.(size, size);
   return result;
@@ -573,6 +581,9 @@ function isTransient(error: Error | undefined): boolean {
 }
 
 /** `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails transiently. */
+/** An abort is the caller's own doing: never reported. */
+const isAbort = (e: ApiError) => e.code === 'ABORTED' || e.name === 'AbortError';
+
 async function retryTransient<T>(send: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {

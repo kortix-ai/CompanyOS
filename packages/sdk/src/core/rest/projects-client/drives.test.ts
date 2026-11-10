@@ -282,6 +282,28 @@ test('an upload over fetch the server answers 429 is sent again', async () => {
   expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2);
 });
 
+test('a resent upload reports only its final outcome to the app-wide error handler', async () => {
+  const reported: unknown[] = [];
+  configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok', onError: (e) => void reported.push(e) });
+  try {
+    let n = 0;
+    globalThis.fetch = mock(async () =>
+      n++ === 0
+        ? new Response(JSON.stringify({ message: 'busy', code: 'transfer_limit_exceeded' }), { status: 429, headers: { 'content-type': 'application/json' } })
+        : new Response(JSON.stringify({ path: '/a/x', size: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    ) as unknown as typeof fetch;
+    await uploadDriveFile(D, '/a/x', new Blob(['a']));
+    expect(reported).toEqual([]);
+
+    respondAlways(403, { message: 'You cannot write here' });
+    const error = await uploadDriveFile(D, '/a/x', new Blob(['a'])).catch((e: unknown) => e);
+    expect((error as ApiError).status).toBe(403);
+    expect(reported).toEqual([error]);
+  } finally {
+    configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok', onError: undefined });
+  }
+});
+
 test('a folder the server answers 503 for is asked for again; one that exists (409) is not', async () => {
   let n = 0;
   globalThis.fetch = mock(async (input: unknown, init: RequestInit = {}) => {

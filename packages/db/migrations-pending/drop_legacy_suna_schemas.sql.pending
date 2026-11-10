@@ -30,20 +30,18 @@
 --      scratch database matched the row counts of public.messages,
 --      public.documents and basejump.account_user. Record the object keys
 --      and sizes in the PR that moves this file.
---   2. Paying Suna-era accounts. Prod, 2026-11-10 (re-measured): 147
---      kortix.credit_accounts rows with an active Stripe subscription have NO
---      kortix.accounts row. 145 of them are personal basejump accounts; their
---      145 owners have no kortix membership at all; the live billing still
---      writes their monthly tier_grant into kortix.credit_ledger (yearly-plan
---      monthly credits and monthly renewals, 145 accounts in 35 days). Only
---      basejump.accounts / basejump.account_user say who they are, and
---      emailBillingManagers (owner-alerts.ts, legacyOwners) reaches them only
---      through basejump. (Accounts that exist in kortix without an owner or
---      admin: 9, of which 2 have a basejump owner and 0 pay.) Before the
---      drop, the user decides per account set: bring them into kortix
---      (kortix.accounts row with the same id, membership, owner role), or
---      end the subscriptions. Then delete legacyOwners. Learning 2026-11-04:
---      count what the new store must hold before you drop the old one.
+--   2. Suna-era Stripe subscriptions. DONE: decided 2026-11-10, no action.
+--      Prod has 147 kortix.credit_accounts rows with an active Stripe
+--      subscription and no kortix.accounts row. Their owners have no kortix
+--      membership and last signed in 2026-04-13. No usage in 90 days. These
+--      billing rows live in kortix and do not need basejump. Stripe keeps
+--      closing a monthly invoice for each. The ledger cannot show the amount
+--      charged: invoice.paid also fires for $0 and discounted invoices. The
+--      drop removes the only record of their owners (basejump.account_user,
+--      kept in the backup). After it, emailBillingManagers finds no recipient
+--      for them, so delete legacyOwners in the same PR. (Accounts that exist
+--      in kortix without an owner or admin: 9, of which 2 have a basejump
+--      owner and 0 pay.)
 --   3. Wallet wrappers. The preconditions of
 --      drop_public_wallet_wrappers.sql.pending hold (this file drops those
 --      wrappers too); delete that file in the same PR.
@@ -60,7 +58,7 @@
 --     packages/db/src/index.test.ts. Not earlier: without the table in the
 --     database, the next drizzle-kit generate puts a DROP into an unrelated
 --     migration;
---   - delete `legacyOwners` from owner-alerts.ts (precondition 2);
+--   - delete `legacyOwners` and its fallback from owner-alerts.ts (precondition 2);
 --   - in apps/api/src/billing/services/account-deletion.ts, drop the
 --     kortix.legacy_write opt-in and the legacy branches; in
 --     integration-account-deletion.test.ts, the legacy block and its

@@ -529,19 +529,23 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
       const tab = entry.indexOf('\t')
       const path = entry.slice(tab + 1)
       if (entry.slice(0, 6) === '160000') continue // gitlink: a submodule checkout, not ours
-      const disk = await lstat(join(target, path)).catch(() => null)
-      if (disk) {
-        if (disk.isDirectory()) {
-          throw new Error(`git materialize conflict: the repository tracks "${path}" but the workspace has a directory there`)
-        }
-        continue
-      }
+      // Ancestors first, regardless of the leaf: lstat follows symlinks in
+      // parent components, so a leaf that resolves through a symlinked
+      // ancestor must never skip this walk — the repo's subtree under that
+      // link is exactly what staging would silently replace.
       const parts = path.split('/')
       for (let i = 1; i < parts.length; i++) {
         const anc = await lstat(join(target, ...parts.slice(0, i))).catch(() => null)
         if (anc && !anc.isDirectory()) {
           throw new Error(`git materialize conflict: the workspace has a file at "${parts.slice(0, i).join('/')}" where the repository tracks "${path}"`)
         }
+      }
+      const disk = await lstat(join(target, path)).catch(() => null)
+      if (disk) {
+        if (disk.isDirectory()) {
+          throw new Error(`git materialize conflict: the repository tracks "${path}" but the workspace has a directory there`)
+        }
+        continue
       }
       missing.push(path)
     }

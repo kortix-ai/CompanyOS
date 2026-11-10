@@ -8,7 +8,7 @@
  * local bare remote.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
@@ -268,6 +268,35 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
       ),
     ).rejects.toThrow('git materialize conflict')
     expect(readFileSync(join(target, 'foo', 'bar.md'), 'utf8')).toBe('agent bytes\n')
+    expect(existsSync(join(target, '.git'))).toBe(false)
+  })
+
+  it('a symlink ancestor occupying a repo directory refuses instead of replacing the subtree', async () => {
+    const { remote, target, root } = makeRepo()
+    // The repo tracks a/b; the workspace has `a` as a symlink to an outside
+    // directory. lstat resolves the leaf THROUGH the link, so only the
+    // ancestor walk sees the collision — staging would replace the repo's
+    // whole a/ subtree with the agent's symlink.
+    const seed = join(root, 'link-seed')
+    mkdirSync(seed)
+    git(['clone', '-q', remote, seed])
+    mkdirSync(join(seed, 'a'))
+    writeFileSync(join(seed, 'a', 'b'), 'repo\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'tree'], seed)
+    git(['push', '-q', 'origin', 'main'], seed)
+
+    const outside = join(root, 'outside')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'b'), 'elsewhere\n')
+    symlinkSync(outside, join(target, 'a'))
+    await expect(
+      commitAndPushWorkingTree(
+        testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+        { message: 'agent change' },
+      ),
+    ).rejects.toThrow('git materialize conflict')
+    expect(readFileSync(join(target, 'a', 'b'), 'utf8')).toBe('elsewhere\n')
     expect(existsSync(join(target, '.git'))).toBe(false)
   })
 

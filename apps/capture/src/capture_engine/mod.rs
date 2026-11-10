@@ -959,8 +959,75 @@ pub fn fit(img: RgbImage, max_width: u32, max_height: u32) -> RgbImage {
     }
     let w = ((img.width() as f64 * scale).round() as u32).max(2);
     let h = ((img.height() as f64 * scale).round() as u32).max(2);
-    image::imageops::resize(&img, w, h, FilterType::Triangle)
+    area_resize(&img, w, h)
 }
+
+/// Per output index: the first input index and the fixed-point weights
+/// (sum 1 << 14) of the input pixels its area covers.
+fn area_taps(src: u32, dst: u32) -> Vec<(usize, Vec<u32>)> {
+    let scale = src as f64 / dst as f64;
+    (0..dst)
+        .map(|o| {
+            let (a, b) = (o as f64 * scale, ((o + 1) as f64 * scale).min(src as f64));
+            let first = a.floor() as usize;
+            let last = (b.ceil() as usize).max(first + 1).min(src as usize);
+            let mut w: Vec<f64> = (first..last)
+                .map(|i| (b.min(i as f64 + 1.0) - a.max(i as f64)).max(0.0))
+                .collect();
+            let total: f64 = w.iter().sum();
+            w.iter_mut().for_each(|v| *v /= total);
+            let mut fixed: Vec<u32> = w.iter().map(|v| (v * 16384.0).round() as u32).collect();
+            // Exact sum: put the rounding error on the largest weight.
+            let sum: i64 = fixed.iter().map(|&v| v as i64).sum();
+            let (imax, _) = fixed.iter().enumerate().max_by_key(|(_, v)| **v).unwrap();
+            fixed[imax] = (fixed[imax] as i64 + 16384 - sum) as u32;
+            (first, fixed)
+        })
+        .collect()
+}
+
+/// Shrink `img` to `w` x `h` by area averaging (each output pixel is the
+/// mean of the input area it covers): two separable passes in fixed point.
+pub fn area_resize(img: &RgbImage, w: u32, h: u32) -> RgbImage {
+    let (sw, sh) = img.dimensions();
+    let xt = area_taps(sw, w);
+    let yt = area_taps(sh, h);
+    let src = img.as_raw();
+    // Horizontal pass: sh rows of w pixels, kept as u16 (value << 6) for precision.
+    let mut mid = vec![0u16; sh as usize * w as usize * 3];
+    for (row, out) in src.chunks_exact(sw as usize * 3).zip(mid.chunks_exact_mut(w as usize * 3)) {
+        for ((first, weights), px) in xt.iter().zip(out.chunks_exact_mut(3)) {
+            let mut acc = [0u32; 3];
+            for (k, &wt) in weights.iter().enumerate() {
+                let i = (first + k) * 3;
+                acc[0] += row[i] as u32 * wt;
+                acc[1] += row[i + 1] as u32 * wt;
+                acc[2] += row[i + 2] as u32 * wt;
+            }
+            for c in 0..3 {
+                px[c] = ((acc[c] + (1 << 7)) >> 8) as u16; // value << 6
+            }
+        }
+    }
+    // Vertical pass.
+    let stride = w as usize * 3;
+    let mut out = vec![0u8; h as usize * stride];
+    let mut acc = vec![0u32; stride];
+    for ((first, weights), dst) in yt.iter().zip(out.chunks_exact_mut(stride)) {
+        acc.iter_mut().for_each(|a| *a = 0);
+        for (k, &wt) in weights.iter().enumerate() {
+            let row = &mid[(first + k) * stride..][..stride];
+            for (a, &v) in acc.iter_mut().zip(row) {
+                *a += v as u32 * wt;
+            }
+        }
+        for (d, &a) in dst.iter_mut().zip(acc.iter()) {
+            *d = ((a + (1 << 19)) >> 20).min(255) as u8;
+        }
+    }
+    RgbImage::from_raw(w, h, out).expect("area buffer size")
+}
+
 
 pub fn write_jpeg(img: &DynamicImage, path: &str, quality: f64) -> Result<()> {
     let q = (quality * 100.0).round().clamp(1.0, 100.0) as u8;
@@ -1277,6 +1344,8 @@ pub fn load_rgb_fit(path: &str, w: u32, h: u32) -> Result<RgbImage> {
         .to_rgb8();
     if img.width() == w && img.height() == h {
         Ok(img)
+    } else if w <= img.width() && h <= img.height() {
+        Ok(area_resize(&img, w, h))
     } else {
         Ok(image::imageops::resize(&img, w, h, FilterType::Triangle))
     }
@@ -1582,6 +1651,22 @@ mod tests {
         assert!(looks_private("New Incognito tab - Google Chrome"));
         assert!(looks_private("Bing - InPrivate - Microsoft Edge"));
         assert!(!looks_private("Quarterly report - Word"));
+    }
+
+    #[test]
+    fn area_resize_keeps_flat_colors_and_averages_blocks() {
+        let flat = RgbImage::from_pixel(3840, 2160, image::Rgb([200, 100, 7]));
+        let small = area_resize(&flat, 2560, 1440);
+        assert_eq!(small.dimensions(), (2560, 1440));
+        assert!(small.pixels().all(|p| p.0 == [200, 100, 7]));
+        // Halving: each output pixel is the mean of its 2x2 block.
+        let checker = RgbImage::from_fn(4, 2, |x, _| {
+            image::Rgb(if x % 2 == 0 { [0, 0, 0] } else { [200, 200, 200] })
+        });
+        let half = area_resize(&checker, 2, 1);
+        assert!(half.pixels().all(|p| p.0 == [100, 100, 100]), "{:?}", half);
+        // Odd ratios land on the asked size.
+        assert_eq!(area_resize(&flat, 1281, 721).dimensions(), (1281, 721));
     }
 
     #[test]

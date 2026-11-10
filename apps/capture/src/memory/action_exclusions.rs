@@ -267,8 +267,13 @@ fn front_of(resp: &Value) -> Option<Front> {
     })
 }
 
+/// The probe engine between sessions. An action session lasts one 60 s
+/// segment; the next session takes this engine instead of starting a new
+/// process (about 1,440 process starts a day, each scanned by antivirus).
+static IDLE_ENGINE: Mutex<Option<super::engine::Engine>> = Mutex::new(None);
+
 fn probe_loop(reading: &(Mutex<Reading>, Condvar), stop: &AtomicBool) {
-    let mut engine: Option<super::engine::Engine> = None;
+    let mut engine: Option<super::engine::Engine> = IDLE_ENGINE.lock().take();
     while !stop.load(Ordering::SeqCst) {
         let started = Instant::now();
         if engine.is_none() {
@@ -297,6 +302,9 @@ fn probe_loop(reading: &(Mutex<Reading>, Condvar), stop: &AtomicBool) {
             Duration::from_secs(5)
         };
         std::thread::sleep(wait.saturating_sub(started.elapsed()));
+    }
+    if let Some(engine) = engine {
+        *IDLE_ENGINE.lock() = Some(engine);
     }
 }
 

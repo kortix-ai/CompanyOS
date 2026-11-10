@@ -991,6 +991,13 @@ fn file_sha256(path: &Path) -> Option<String> {
 }
 
 /// Make sure an application row has an icon; fetched once per bundle id.
+/// How long an app whose icon lookup failed waits before the next try.
+const ICON_RETRY: Duration = Duration::from_secs(3600);
+
+/// Apps whose icon lookup failed, and when.
+static ICON_FAILED: std::sync::LazyLock<std::sync::Mutex<HashMap<String, Instant>>> =
+    std::sync::LazyLock::new(Default::default);
+
 fn ensure_icon(
     conn: &Connection,
     paths: &MemoryPaths,
@@ -1014,8 +1021,27 @@ fn ensure_icon(
     let out = paths
         .icons_dir()
         .join(format!("{}.png", sanitize(bundle_id)));
+    // An app whose icon failed is asked again after ICON_RETRY, not on every
+    // frame: a slow lookup (an exe on a network share) times out and the
+    // timeout kills the engine that also captures.
+    let failed_recently = ICON_FAILED
+        .lock()
+        .ok()
+        .and_then(|m| m.get(bundle_id).map(|at| at.elapsed() < ICON_RETRY))
+        .unwrap_or(false);
+    if failed_recently {
+        return;
+    }
     let req = json!({"cmd": "icon", "bundle_id": bundle_id, "out": out.to_string_lossy()});
-    if let Ok(resp) = engine.request(req, Duration::from_secs(5)) {
+    let resp = engine.request(req, Duration::from_secs(5));
+    if let Ok(mut m) = ICON_FAILED.lock() {
+        if resp.is_err() {
+            m.insert(bundle_id.to_string(), Instant::now());
+        } else {
+            m.remove(bundle_id);
+        }
+    }
+    if let Ok(resp) = resp {
         let rel = paths.rel(&out);
         let color = resp.get("dominant_color").and_then(Value::as_i64);
         let _ = conn.execute(
@@ -1222,7 +1248,7 @@ fn insert_frame(
 /// The next frame to OCR: a staged still first, the focused display's frames
 /// before another display's, oldest first.
 const OCR_NEXT_SQL: &str = "SELECT id, image_path, image_hash, width, height, capture_display_x, capture_display_y,
-        capture_display_width, capture_display_height, display_id, display_focused, timestamp
+        capture_display_width, capture_display_height, display_id, display_focused, timestamp, dhash
  FROM frame WHERE ocr_status = 0 ORDER BY image_path IS NULL, COALESCE(display_focused, 1) = 0, id LIMIT 1";
 
 struct PendingFrame {
@@ -1236,6 +1262,8 @@ struct PendingFrame {
     /// The display held the focused window (frames before multi-display count as focused).
     focused: bool,
     ts: i64,
+    /// The engine's 64-bit difference hash of the still, hex.
+    dhash: Option<String>,
 }
 
 fn pending_frame(r: &rusqlite::Row) -> rusqlite::Result<PendingFrame> {
@@ -1254,6 +1282,7 @@ fn pending_frame(r: &rusqlite::Row) -> rusqlite::Result<PendingFrame> {
         display_id: r.get(9)?,
         focused: r.get::<_, Option<i64>>(10)?.is_none_or(|v| v != 0),
         ts: r.get(11)?,
+        dhash: r.get::<_, Option<String>>(12).ok().flatten(),
     })
 }
 
@@ -1270,6 +1299,18 @@ enum OcrPlan {
     /// Copy the text of this earlier frame of the same display.
     Copy(i64),
     Read,
+}
+
+/// Two stills whose difference hashes differ in at most this many of 64 bits
+/// look the same (a moved cursor, a CAD crosshair, a blinking caret).
+const NEAR_SAME_DHASH_BITS: u32 = 2;
+/// A still that looks the same as its display's last read copies that text
+/// while the read is younger than this; small edits are read by then.
+const NEAR_SAME_OCR_EVERY_MS: i64 = 20_000;
+
+fn dhash_distance(a: Option<&str>, b: Option<&str>) -> Option<u32> {
+    let p = |h: Option<&str>| u64::from_str_radix(h?, 16).ok();
+    Some((p(a)? ^ p(b)?).count_ones())
 }
 
 /// How a frame gets its text: copied from the previous frame of its display
@@ -1294,17 +1335,21 @@ fn ocr_plan(conn: &Connection, f: &PendingFrame) -> Result<OcrPlan> {
         return Ok(OcrPlan::Copy(prev_id));
     }
     if f.display_id.is_some() {
-        let last_read: Option<(i64, Option<f64>)> = conn
+        let last_read: Option<(i64, Option<f64>, Option<String>)> = conn
             .query_row(
-                "SELECT timestamp, ocr_changed FROM frame WHERE id < ?1 AND ocr_status = 1 AND display_id IS ?2
+                "SELECT timestamp, ocr_changed, dhash FROM frame WHERE id < ?1 AND ocr_status = 1 AND display_id IS ?2
                  ORDER BY id DESC LIMIT 1",
                 params![f.id, f.display_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
-        if let Some((t, changed)) = last_read {
+        if let Some((t, changed, read_dhash)) = last_read {
+            let near_same = dhash_distance(f.dhash.as_deref(), read_dhash.as_deref())
+                .is_some_and(|d| d <= NEAR_SAME_DHASH_BITS);
             let every = if !f.focused {
                 NON_ACTIVE_OCR_EVERY_MS
+            } else if near_same {
+                NEAR_SAME_OCR_EVERY_MS
             } else if changed.is_some_and(|c| c >= CHURN_FRACTION) {
                 CHURN_OCR_EVERY_MS
             } else {
@@ -2438,6 +2483,7 @@ mod tests {
             display_id: None,
             focused: true,
             ts: 3,
+            dhash: None,
         };
         ocr_one(
             &conn,
@@ -3416,6 +3462,39 @@ mod tests {
             ocr_plan(&conn, &pending(&conn, g)).unwrap(),
             OcrPlan::Read,
             "another display's still is not this one's"
+        );
+        let _ = std::fs::remove_dir_all(&paths.root);
+    }
+
+    #[test]
+    fn a_still_that_looks_the_same_copies_text_for_twenty_seconds() {
+        let (paths, conn) = ocr_lib();
+        let dh = |id: i64, h: &str| {
+            conn.execute("UPDATE frame SET dhash = ?1 WHERE id = ?2", params![h, id])
+                .unwrap();
+        };
+        let read = ocr_frame(&conn, 1, true, 10_000, "v1", 1);
+        dh(read, "00ff00ff00ff00ff");
+        // Two bits apart (a moved crosshair): copied.
+        let near = ocr_frame(&conn, 1, true, 12_000, "v2", 0);
+        dh(near, "00ff00ff00ff00fc");
+        assert_eq!(
+            ocr_plan(&conn, &pending(&conn, near)).unwrap(),
+            OcrPlan::Copy(read)
+        );
+        // Three bits apart: read.
+        let moved = ocr_frame(&conn, 1, true, 12_500, "v3", 0);
+        dh(moved, "00ff00ff00ff00f8");
+        assert_eq!(
+            ocr_plan(&conn, &pending(&conn, moved)).unwrap(),
+            OcrPlan::Read
+        );
+        // Looks the same, but the last read is 20 s old: read.
+        let late = ocr_frame(&conn, 1, true, 10_000 + NEAR_SAME_OCR_EVERY_MS, "v4", 0);
+        dh(late, "00ff00ff00ff00ff");
+        assert_eq!(
+            ocr_plan(&conn, &pending(&conn, late)).unwrap(),
+            OcrPlan::Read
         );
         let _ = std::fs::remove_dir_all(&paths.root);
     }

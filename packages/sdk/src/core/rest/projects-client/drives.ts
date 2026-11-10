@@ -5,6 +5,7 @@
 
 import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
+import { abortableDelay } from '../../http/abort';
 import { platformConfig } from '../../http/config';
 import { isExpectedApiError } from '../../http/response-error';
 import { platformRequestHeaders } from '../../http/transport';
@@ -611,17 +612,8 @@ async function retryTransient<T>(
       const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
       const retry = onlyRefused ? (error as ApiError).status === 429 : isTransient(error as Error);
       if (delay === undefined || !retry) throw error;
-      await new Promise<void>((resolve, reject) => {
-        const stop = () => {
-          clearTimeout(timer);
-          reject(new ApiError('Request aborted', { name: 'AbortError', code: 'ABORTED' }));
-        };
-        const timer = setTimeout(() => {
-          signal?.removeEventListener('abort', stop);
-          resolve();
-        }, delay);
-        if (signal?.aborted) stop();
-        else signal?.addEventListener('abort', stop, { once: true });
+      await abortableDelay(delay, signal).catch(() => {
+        throw new ApiError('Request aborted', { name: 'AbortError', code: 'ABORTED' });
       });
     }
   }

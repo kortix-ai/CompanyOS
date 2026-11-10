@@ -34,6 +34,7 @@ import { promptSecret } from '../prompts.ts';
 import { C, help, status } from '../style.ts';
 import { projectWebUrl } from '../web-url.ts';
 import { ensureConnectorsConnected, reconcileShippedManifest } from './ship-connectors.ts';
+import { declaredTemplateSlugs, reconcileTemplates, writeReconcileLines } from './sandboxes-build.ts';
 
 const HELP = help`Usage: kortix ship [options]
 
@@ -46,7 +47,9 @@ Every run:
   2. git add -A + commit                      (skipped if nothing changed)
   3. offer to set any env secret not yet set (prompts you; skip with --no-env)
   4. push the branch you're on → the same-named branch on the workspace's repo
-  5. connect any declared connector that still needs auth   (skip with --no-connect)
+  5. start the cloud build of every sandbox template in kortix.yaml
+     (\`sandbox.templates\`) whose image is missing, and name each one
+  6. connect any declared connector that still needs auth   (skip with --no-connect)
 
 First ship vs. after:
   * First ship   uses the saved host default workspace when this folder is unlinked.
@@ -78,7 +81,12 @@ Where it backs the workspace (origin is inferred, never asked):
 Workspaces:
   A managed first ship creates a new workspace. A GitHub origin, or
   --account, adds the workspace to an account you belong to: with more than
-  one, you're asked which (skip with --account or -y). No snapshot builds.
+  one, you're asked which (skip with --account or -y).
+
+Sandbox templates:
+  A template in \`sandbox.templates\` builds on the server after the push. Ship
+  starts the build and returns; \`kortix sandboxes build <slug> --wait\` waits
+  until the image is ready. Sessions boot the platform default until then.
 
 Options:
   --name <workspace>   Display name for a new workspace (default: folder name).
@@ -574,10 +582,45 @@ async function finishShip(
   if (!pushed) return 1;
 
   await reconcileShippedManifest(client, projectId);
+  await buildShippedTemplates(client, projectId);
   await ensureConnectorsConnected(client, projectId, flags);
 
   reportShipped(auth, project, target.repoUrl);
   return 0;
+}
+
+/**
+ * Start the cloud build of each sandbox template kortix.yaml declares. A push
+ * straight to a linked GitHub repository reaches no other build trigger, so
+ * without this a new template stayed unbuilt and sessions booted the platform
+ * default image. A failure here never fails the completed push.
+ */
+async function buildShippedTemplates(client: ApiClient, projectId: string): Promise<void> {
+  let declared: string[] = [];
+  try {
+    declared = declaredTemplateSlugs(loadLocalManifest()?.data);
+  } catch {
+    // An unparseable manifest was already reported (or waived with --no-verify).
+  }
+  if (declared.length === 0) return;
+  try {
+    const templates = await reconcileTemplates(client, `/workspaces/${projectId}`);
+    if (templates === null) {
+      process.stdout.write(
+        `  ${status.warn(`this Kortix host does not build sandbox templates on ship`)} ${C.dim}— run ${C.reset}${C.cyan}kortix sandboxes build ${declared[0]} --wait${C.reset}\n`,
+      );
+      return;
+    }
+    writeReconcileLines(templates.filter((t) => declared.includes(t.slug)));
+    for (const slug of declared.filter((slug) => !templates.some((t) => t.slug === slug))) {
+      process.stdout.write(`  ${status.warn(`sandbox ${slug} is not in the pushed kortix.yaml yet; run kortix sandboxes build ${slug} --wait`)}\n`);
+    }
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : (err as Error).message;
+    process.stdout.write(
+      `  ${status.warn(`sandbox build not started: ${msg}`)} ${C.dim}— run ${C.reset}${C.cyan}kortix sandboxes build ${declared[0]} --wait${C.reset}\n`,
+    );
+  }
 }
 
 /** Write `.kortix/link.json` so this folder is bound to the cloud project.

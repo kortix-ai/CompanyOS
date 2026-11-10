@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1753,
-  "aliases": 675,
+  "count": 1755,
+  "aliases": 676,
   "routes": [
     {
       "method": "GET",
@@ -4024,6 +4024,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/sandboxes",
       "aliasOf": "/v1/workspaces/:workspaceId/sandboxes"
@@ -6949,6 +6954,10 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     },
     {
       "method": "GET",

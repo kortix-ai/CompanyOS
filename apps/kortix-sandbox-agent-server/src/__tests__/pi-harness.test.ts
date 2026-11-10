@@ -2441,9 +2441,10 @@ describe('pi subagents extension', () => {
     }
   })
 
-  test('subagent_type and an inline agent spec are mutually exclusive: the call is refused before any child, and the corrected call spawns the child', async () => {
-    // The empty inline spec is the exact shape a router over the wire sent beside its subagent_type:
-    // the inline spec silently displaced the named agent and the child ran as an unnamed inline agent.
+  test('an empty inline spec beside subagent_type is absent and the named agent runs; a filled one is refused', async () => {
+    // The empty inline spec is the exact shape a strict-schema model sends beside its subagent_type
+    // (every optional field filled). It once displaced the named agent; then it was refused, and a
+    // strict-schema model retried the identical call 160 times (prod, 2026-11-10). It names nothing.
     const creates: Array<Record<string, unknown>> = []
     const server = Bun.serve({
       port: 0,
@@ -2469,7 +2470,7 @@ describe('pi subagents extension', () => {
         env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1` },
       })
       await promptAndSettle(r, 'delegate with a named type, then the corrected call')
-      expect(creates).toHaveLength(1)
+      expect(creates).toHaveLength(2)
       // A built-in `general` maps to no project agent (cloud-subagent.ts), so the create
       // carries no `agent_name`; the named project-agent path is asserted by the
       // 'separate sessions (the default, no `session` arg)' test above (agent_name reviewer/build).
@@ -2477,11 +2478,10 @@ describe('pi subagents extension', () => {
       const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
       const parts = toolParts(page, 'task')
       expect(parts).toHaveLength(3)
-      for (const part of parts.slice(0, 2)) {
-        expect(part.state.status, 'a refused call carries its error').toBe('error')
-        expect(part.state.error).toContain('cannot combine')
-        expect(part.state.error).toContain('"general"')
-      }
+      expect(parts[0]!.state.status, 'an empty spec is absent: the named agent starts').toBe('completed')
+      expect(parts[1]!.state.status, 'a filled spec beside a name is refused').toBe('error')
+      expect(parts[1]!.state.error).toContain('cannot combine')
+      expect(parts[1]!.state.error).toContain('"general"')
       expect(parts[2]!.state.status).toBe('completed')
       expect(parts[2]!.state.output).toContain('<task_started>')
     } finally {

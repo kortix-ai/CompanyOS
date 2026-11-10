@@ -24,21 +24,25 @@
 --      POST /v1/system/demo-request is live everywhere: prod
 --      public.contact_forms has no row newer than that release.
 --   1. Backup. `packages/db/scripts/backup-legacy-schemas.sh` wrote one full
---      pg_dump of `public` + `basejump` (no expiry: the bucket has no
+--      pg_dump of `public` + `basejump` + `kortix_yolo` + `drizzle` (no expiry: the bucket has no
 --      lifecycle rule) for EACH environment that still has data, its
 --      `pg_restore --list` shows every table, and a restore test into a
 --      scratch database matched the row counts of public.messages,
 --      public.documents and basejump.account_user. Record the object keys
 --      and sizes in the PR that moves this file.
---   2. Billing owners. prod has 175 accounts on a paid tier
---      (kortix.credit_accounts.tier not free/none, active Stripe
---      subscription) whose only owner is in basejump.account_user: no owner
---      or admin in kortix.role_assignments. emailBillingManagers
---      (apps/api/src/billing/services/owner-alerts.ts, legacyOwners) reaches
---      them only through basejump: auto top-up, wallet-zero, trial/contract
---      and subprocessor (DPA) notices. Before the drop, either give each of
---      them an owner in kortix (the decision is the user's), or record that
---      they get no alert. Then delete legacyOwners. Learning 2026-11-04:
+--   2. Paying Suna-era accounts. Prod, 2026-11-10 (re-measured): 147
+--      kortix.credit_accounts rows with an active Stripe subscription have NO
+--      kortix.accounts row. 145 of them are personal basejump accounts; their
+--      145 owners have no kortix membership at all; the live billing still
+--      writes their monthly tier_grant into kortix.credit_ledger (yearly-plan
+--      monthly credits and monthly renewals, 145 accounts in 35 days). Only
+--      basejump.accounts / basejump.account_user say who they are, and
+--      emailBillingManagers (owner-alerts.ts, legacyOwners) reaches them only
+--      through basejump. (Accounts that exist in kortix without an owner or
+--      admin: 9, of which 2 have a basejump owner and 0 pay.) Before the
+--      drop, the user decides per account set: bring them into kortix
+--      (kortix.accounts row with the same id, membership, owner role), or
+--      end the subscriptions. Then delete legacyOwners. Learning 2026-11-04:
 --      count what the new store must hold before you drop the old one.
 --   3. Wallet wrappers. The preconditions of
 --      drop_public_wallet_wrappers.sql.pending hold (this file drops those
@@ -64,8 +68,19 @@
 --   - drop the basejump stub note from packages/db/MIGRATIONS.md
 --     ("Prerequisites") and the basejump entry of BRANCH_SCHEMAS in
 --     scripts/worktree/lib/branch-db.ts;
+--   - delete tests/migration/kortix-yolo-profiles-unused-indexes.test.ts
+--     (it asserts kortix_yolo.profiles_role_idx survives the chain);
 --   - run `pnpm test -- --db-only tests/migration` and the account-deletion
 --     suite: clearLegacyAuthUserReferences already skips a missing table.
+--
+-- Also dropped here (user decision 2026-11-10): `kortix_yolo` (12 tables,
+-- ~1.4 MB) belongs to the retired YOLO gateway (the kortix-go repo, last push
+-- 2026-04-30). Its endpoint answers 410 Gone
+-- (tests/unit/retired-yolo-endpoint-env.test.ts). Its last write on prod was
+-- 2026-10-13 12:57Z, no code in this repo reads it (kortix.yolo_member_tokens
+-- is a different table), and no session queried it on 2026-11-10. `drizzle`
+-- holds one dead drizzle-kit migration ledger row (MIGRATIONS.md: legacy
+-- trackers). The backup script dumps both schemas as part `extra`.
 --
 -- Lock and time: DROP TABLE takes ACCESS EXCLUSIVE on each legacy table only;
 -- nothing live reads them. The guard below makes the migration refuse to run
@@ -126,8 +141,8 @@ BEGIN
   SELECT string_agg(DISTINCT format('%s -> %s', pg_describe_object(classid, objid, objsubid), referenced), '; ')
     INTO blockers
     FROM dep
-   WHERE referenced_schema IN ('public', 'basejump')
-     AND coalesce(dependent_schema, '') NOT IN ('public', 'basejump', '')
+   WHERE referenced_schema IN ('public', 'basejump', 'kortix_yolo', 'drizzle')
+     AND coalesce(dependent_schema, '') NOT IN ('public', 'basejump', 'kortix_yolo', 'drizzle', '')
      -- Extensions installed in public (vector, pg_trgm on prod) stay, with every object they own.
      AND NOT EXISTS (SELECT 1 FROM pg_depend e WHERE e.classid = dep.refclassid AND e.objid = dep.refobjid AND e.deptype = 'e');
   IF blockers IS NOT NULL THEN
@@ -209,6 +224,8 @@ BEGIN
 END $$;
 
 DROP SCHEMA IF EXISTS basejump CASCADE;
+DROP SCHEMA IF EXISTS kortix_yolo CASCADE;
+DROP SCHEMA IF EXISTS drizzle CASCADE;
 
 -- The freeze has nothing left to guard.
 DROP FUNCTION IF EXISTS kortix.freeze_legacy_tables();

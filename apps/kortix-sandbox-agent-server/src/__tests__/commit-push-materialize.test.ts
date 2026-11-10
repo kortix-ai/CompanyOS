@@ -359,6 +359,40 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     expect(branches).not.toContain('session-idle')
   })
 
+  it('a session branch that gained a config-release commit remotely rebases and pushes (GOLD-1)', async () => {
+    const { remote, target, root } = makeRepo()
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    const first = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'first push' },
+    )
+    expect(first.pushed).toBe(true)
+
+    // The API's config-release commit lands on the session branch after the
+    // box last fetched (GOLD-1, run 42868914454: the next host push came
+    // back non-fast-forward).
+    const api = join(root, 'api-release')
+    mkdirSync(api)
+    git(['clone', '-q', remote, api])
+    git(['checkout', '-q', 'session-abc'], api)
+    writeFileSync(join(api, 'kortix.yaml'), 'config release\n')
+    git(['add', '-A'], api)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'config release'], api)
+    git(['push', '-q', 'origin', 'session-abc'], api)
+
+    // The box's next push integrates the remote tip instead of failing.
+    writeFileSync(join(target, 'second-file.md'), 'more agent work\n')
+    const second = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'second push' },
+    )
+    expect(second.pushed).toBe(true)
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(
+      ['README.md', 'agent-file.md', 'apps/x.ts', 'kortix.yaml', 'second-file.md'],
+    )
+  })
+
   it('no connected repository still refuses with the standing error', async () => {
     const { target } = makeRepo()
     expect(

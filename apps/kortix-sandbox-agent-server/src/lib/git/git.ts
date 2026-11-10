@@ -659,6 +659,41 @@ export async function commitAndPushWorkingTree(
   // 2. Push HEAD to the session branch on origin.
   const cloneCredential = await resolveCloneCredential(cfg)
   const authRepoUrl = cfg.repoUrl ?? before.remoteUrl ?? undefined
+
+  // 2. Integrate the session branch's remote tip before pushing. Another
+  // writer can land a commit on the branch while this session works — the
+  // API's config-release commit lands on the session branch at create, after
+  // the box last fetched (GOLD-1, run 42868914454: the host push came back
+  // non-fast-forward, "a pushed branch tip is behind its remote
+  // counterpart"). Rebase the local commit on top; a missing remote branch
+  // is the first push. A rebase conflict is a real collision the caller
+  // sees — nothing is dropped.
+  const fetched = await gitWithAuth(cloneCredential, authRepoUrl, [
+    '-C', target, 'fetch', '--quiet', 'origin', branch,
+  ])
+  const missingRemoteBranch =
+    fetched.code !== 0 && /couldn't find remote ref|referenced refspec|does not (appear to|match)/i.test(fetched.stderr)
+  if (fetched.code !== 0 && !missingRemoteBranch) {
+    throw new Error(`git fetch failed: ${fetched.stderr || fetched.stdout}`)
+  }
+  if (fetched.code === 0) {
+    const remoteTip = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'FETCH_HEAD'])
+    if (remoteTip.code === 0) {
+      // --autostash: the tree can hold unstaged residue the rebase may not
+      // run with — a materialized tree's worktree deletions of the gitlinks
+      // restoreBaseGitlinks keeps in the index. The stash keeps them out of
+      // the rebase and restores them after.
+      const rebase = await execGit(['-C', target, 'rebase', '--autostash', remoteTip.stdout.trim()], {
+        env: buildGitIdentityEnv(cfg),
+      })
+      if (rebase.code !== 0) {
+        await execGit(['-C', target, 'rebase', '--abort'])
+        throw new Error(`git rebase onto the session branch failed: ${rebase.stderr || rebase.stdout}`)
+      }
+    }
+  }
+
+  // 3. Push HEAD to the session branch on origin.
   const push = await gitWithAuth(cloneCredential, authRepoUrl, [
     '-C',
     target,

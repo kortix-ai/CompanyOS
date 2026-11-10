@@ -364,7 +364,7 @@ const parameters = Type.Object({
         'A `provider/model` ref for this hand-off, such as kortix/glm-5.3: it overrides the model of the named subagent_type, the inline agent and a fork. The agent\'s own model (else this session\'s) when absent. A follow-up (task_id) keeps its model.',
     }),
   ),
-  subagent_type: Type.Optional(Type.String({ description: 'The named agent to use for this task. Omitted: the general-purpose agent `general`, which runs with your own access. Mutually exclusive with an inline `agent` spec: a call carrying both is refused.' })),
+  subagent_type: Type.Optional(Type.String({ description: 'The named agent to use for this task. Omitted: the general-purpose agent `general`, which runs with your own access; My Kortix must always name it. Mutually exclusive with an inline `agent` spec: a call carrying both is refused.' })),
   agent: Type.Optional(inlineAgent),
   task_id: Type.Optional(Type.String({ description: 'Set only to resume a previous task: the task_id a previous task output returned. The task resumes in the session it was created in.' })),
   session: Type.Optional(
@@ -708,11 +708,17 @@ function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessio
     // A follow-up to an existing child (`task_id`) keeps that child's own agent: a
     // separate child ignores the spec, and the runtime refuses an in-process one without it.
     if (params.task_id) return { title: params.description, agent: '', systemPrompt: '' }
+    // The platform coordinator (My Kortix) names who works, every time. A silent default once ran
+    // a hand-off it meant for the `kortix` agent as `general` with My Kortix's own access
+    // (2026-11-10): `general` stays one explicit choice among the rest.
+    if (anyProjectAgent) {
+      throw new Error(
+        'Name who works: set subagent_type to a workspace agent (kortix_agents list shows them; "general" runs with your own access), or pass an inline `agent: { instructions }` spec. Nothing was started.',
+      )
+    }
     // No type named: the general-purpose agent, where this session may start it.
     if (types.has('general')) return resolveSpec({ ...params, subagent_type: 'general' }, host)
-    // The platform coordinator without built-ins: its child is a colleague with the coordinator's own access.
-    if (anyProjectAgent && params.session !== 'same') return { title: `${params.description} (inline agent)`, agent: INLINE_AGENT, systemPrompt: SUBAGENT_PROMPT }
-    throw new Error(anyProjectAgent ? "Set subagent_type to a project agent's name (kortix_agents list shows them), or pass an inline `agent` spec." : SUBAGENT_SPEC_REQUIRED)
+    throw new Error(SUBAGENT_SPEC_REQUIRED)
   }
   // The title is the task alone: the child carries its agent as `agent_name`, and every list shows it from there.
   const type = types.get(params.subagent_type)

@@ -83,7 +83,6 @@ async function bootstrap(known: { projectId?: string; accountId?: string; driveI
       updateAgentConfig(projectId, NONE_AGENT, {
         enabled: true,
         kortix_permissions: "none",
-        repository_access: false,
         behavior: { mode: "primary", description: "Lumen's default: no folders, no repository.", prompt: "This workspace has no documents. Say so and stop.", permission: { edit: "deny", bash: "deny", webfetch: "deny" } },
       }),
     );
@@ -97,7 +96,7 @@ async function bootstrap(known: { projectId?: string; accountId?: string; driveI
       if (a.name.startsWith("lumen-") || a.platform || locked) continue;
       await withRetry(() =>
         updateAgentConfig(projectId, a.name, {
-          enabled: false, kortix_permissions: "none", connectors: "none", secrets: "none", skills: "none", repository_access: false,
+          enabled: false, kortix_permissions: "none", connectors: "none", secrets: "none", skills: "none",
         }),
       );
     }
@@ -151,7 +150,6 @@ async function writeFirmAgent(projectId: string, agent: string, model: string | 
     updateAgentConfig(projectId, agent, {
       enabled: true,
       kortix_permissions: "none",
-      repository_access: false,
       behavior: {
         mode: "primary",
         description: "Answers questions about the matter's documents, with citations.",

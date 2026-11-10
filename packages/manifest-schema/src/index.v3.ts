@@ -60,13 +60,11 @@ import {
   validateTriggers,
 } from './index';
 import {
-  type AgentWorkspaceV2,
   type GrantSetV2,
   type PermissionConfigV2,
   type PiPackageEntryV2,
   isEveryGrant,
   resolveGrantSet,
-  resolveProjectRepository,
   TOOLS_SHAPE_ERROR,
   TOOLS_UNSET_WARNING,
   validateAgentMdFrontmatter,
@@ -161,7 +159,6 @@ export interface AgentBlockV3 {
   secrets?: GrantSetV2;
   apps?: GrantSetV2;
   kortix_permissions?: GrantSetV2;
-  workspace?: AgentWorkspaceV2;
   sandbox?: string;
   /** The space the agent works in: a key of the top-level `spaces` map, or a bare slug. Grouping only, never a grant. */
   space?: string;
@@ -318,7 +315,6 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'secrets',
   'apps',
   'kortix_permissions',
-  'workspace',
   'sandbox',
   'space',
   'network_egress',
@@ -334,7 +330,6 @@ const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
   env: 'use `secrets`.',
   kortix_cli: 'use `kortix_permissions`.',
   connectors_personal: 'use `connectors_required`.',
-  repository_access: 'use `workspace.project_repository`.',
 };
 
 const COMMAND_KEYS_V3 = ['description', 'prompt', 'prompt_file'];
@@ -742,10 +737,6 @@ function validateAgentBlockV3(
   validateGrantList(entry.secrets, `${where}.secrets`, 'secrets', issues, false);
   validateAppGrantList(entry.apps, `${where}.apps`, issues);
   validateKortixPermissionFields(entry, where, issues);
-  if (entry.workspace !== undefined) {
-    const repository = resolveProjectRepository({ workspace: entry.workspace });
-    if (!repository.ok) issues.push({ path: `${where}.${repository.path}`, message: repository.message, severity: 'error' });
-  }
 }
 
 /**

@@ -516,43 +516,22 @@ flow(
       },
     );
 
-    for (const access of [false, true]) {
-      await ctx.step(`set repository_access=${access} and read back the saved policy`, async () => {
+    // `repository_access` and `workspace` are obsolete: a session never checks out the
+    // repository, and access comes from grants. A client that still sends either key
+    // gets 200, and neither key reaches kortix.yaml or the read-back block.
+    for (const body of [{ repository_access: false }, { repository_access: true }, { workspace: 'runtime' }, { repository_access: true, workspace: 'runtime' }]) {
+      await ctx.step(`a PUT with the obsolete ${JSON.stringify(body)} → 200; kortix.yaml and the read-back carry neither key`, async () => {
         const params = { projectId: project.id, agentName: 'worker' };
-        const saved = await ctx.client.as(ctx.P.OWNER).put(
-          '/v1/workspaces/:projectId/agents/:agentName/config',
-          { repository_access: access }, { params },
-        );
-        saved.status(200).body().has('$.block.repository_access', access);
-        const read = await ctx.client.as(ctx.P.OWNER).get(
-          '/v1/workspaces/:projectId/agents/:agentName/config', { params },
-        );
-        read.status(200).body().has('$.block.repository_access', access);
-        if ('workspace' in read.json<any>().block) throw new Error('response exposes legacy workspace');
+        const saved = await ctx.client.as(ctx.P.OWNER).put('/v1/workspaces/:projectId/agents/:agentName/config', body, { params });
+        saved.status(200);
+        const read = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId/agents/:agentName/config', { params });
+        read.status(200);
+        const readBlock = read.json<any>().block;
+        if ('repository_access' in readBlock || 'workspace' in readBlock) throw new Error(`the read-back exposes an obsolete key: ${JSON.stringify(readBlock)}`);
         const block = await workerBlock();
-        if (!block.includes(`workspace:\n      project_repository: ${access}`) || block.includes('repository_access')) {
-          throw new Error(`kortix.yaml must store workspace.project_repository: ${access}, got:\n${block}`);
+        if (/^\s*(workspace|repository_access):/m.test(block)) {
+          throw new Error(`kortix.yaml must carry neither workspace nor repository_access, got:\n${block}`);
         }
-      });
-    }
-    await ctx.step('legacy runtime saves a disabled repository policy', async () => {
-      const saved = await ctx.client.as(ctx.P.OWNER).put(
-        '/v1/workspaces/:projectId/agents/:agentName/config', { workspace: 'runtime' },
-        { params: { projectId: project.id, agentName: 'worker' } },
-      );
-      saved.status(200).body().has('$.block.repository_access', false);
-    });
-    for (const body of [{ repository_access: 'false' }, { repository_access: true, workspace: 'runtime' }, { workspace: { project_repository: false } }]) {
-      await ctx.step('invalid or conflicting repository policy is rejected without widening access', async () => {
-        const params = { projectId: project.id, agentName: 'worker' };
-        const rejected = await ctx.client.as(ctx.P.OWNER).put(
-          '/v1/workspaces/:projectId/agents/:agentName/config', body, { params },
-        );
-        rejected.status(400);
-        const read = await ctx.client.as(ctx.P.OWNER).get(
-          '/v1/workspaces/:projectId/agents/:agentName/config', { params },
-        );
-        read.status(200).body().has('$.block.repository_access', false);
       });
     }
 

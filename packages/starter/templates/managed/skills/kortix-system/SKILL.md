@@ -25,9 +25,11 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   permission rules, and the things it may use.
 - Every session starts from the default branch. A change reaches other
   sessions only when its change request merges.
-- With `workspace: { project_repository: true }` on your agent, `/workspace`
-  is the repository on your session branch. Without it, the session has no
-  checkout and cannot push.
+- `/workspace` starts empty. Kortix never checks out the repository there.
+- To work on the workspace's files, run `kortix workspaces clone`. It clones
+  the repository onto your session branch. Send the change with `kortix cr`.
+- Only your session branch accepts your push. The push needs
+  `workspace.gitops.read` in your agent's `kortix_permissions`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
 </overview>
 <machine>
@@ -42,7 +44,7 @@ Your session runs on its own microVM: a whole Linux computer, root through
 - "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on
   your screen, which the user watches in the **Desktop** panel, or on their own
   computer. The `kortix-computer` skill decides which (`<which-desktop>`).
-Keep big files out of Git: every session downloads the whole repository.
+Keep big files out of Git: every clone downloads the whole repository.
 `kortix validate` warns at 10 MiB per file and at 512 MiB in total; above
 512 MiB compressed, running sessions stop picking up config changes. Put
 media and datasets in object storage; add build output to `.gitignore`.
@@ -51,6 +53,9 @@ media and datasets in object storage; add build output to `.gitignore`.
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
+0. Work in a clone: `/workspace` has none at boot. `kortix workspaces clone`
+   puts the repository on your session branch; `cd` into it. Run every step
+   below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
@@ -227,7 +232,6 @@ agents:
     mode: primary                         # primary | subagent | all
     prompt_file: agents/kortix.md         # or prompt: "…"
     permission: { bash: { "git push --force *": ask, "*": allow } }
-    workspace: { project_repository: true }
     tools: "*"                            # "*" is every name; `all` is the same
     skills: "*"                           # omitted = none, Kortix skills too
     subagents: [researcher]
@@ -235,7 +239,7 @@ agents:
     extensions: [audit]
     connectors: "*"
     secrets: [ORDERS_API_KEY]
-    kortix_permissions: [workspace.read, workspace.gitops.push]
+    kortix_permissions: [workspace.read, workspace.gitops.read, workspace.gitops.push]
   researcher:
     mode: subagent
     prompt: Research the question. Cite every source.

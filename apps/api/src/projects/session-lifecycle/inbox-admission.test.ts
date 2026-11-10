@@ -98,19 +98,55 @@ describe('admitInboxPrompt', () => {
     expect(curve(1e9)).toBe(2_000);
   });
 
-  test('the refusal counter is what makes a waiting row back off further', async () => {
+  test('the refusal counter is what makes a waiting head back off further', async () => {
+    // The head waits only for a delivery already on the wire (a promoted row).
     const admission = await admitInboxPrompt(
       row({ result: { admission_reason: 'older_prompt_pending', admission_refusals: 20 } }),
       {
         readSandbox: async () => null,
-        hasInFlightPrompt: async () => false,
-        hasOlderPendingPrompt: async () => true,
+        hasInFlightPrompt: async () => true,
+        hasOlderPendingPrompt: async () => false,
       },
     );
     expect(admission).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
       retryAfterMs: INBOX_ORDER_MAX_BACKOFF_MS,
+    });
+  });
+
+  test('a row behind an older prompt waits a minute from its first refusal, on any box', async () => {
+    // Prod 2026-11-09: 374 prompts behind one parked head were claimed and put
+    // back at least once a minute each, and each cycle wrote two audit rows and a
+    // new payload copy. Only the head can go next, and every exit of the head
+    // wakes the next row (`promoteNextInboxRow`), so a row behind it never
+    // needs the short clock.
+    for (const box of [null, { status: 'stopped', metadata: {} }, { status: 'active', metadata: {} }]) {
+      for (const inFlight of [false, true]) {
+        const admission = await admitInboxPrompt(row({ result: {} }), {
+          readSandbox: async () => box,
+          hasInFlightPrompt: async () => inFlight,
+          hasOlderPendingPrompt: async () => true,
+        });
+        expect(admission).toEqual({
+          admit: false,
+          reason: 'older_prompt_pending',
+          retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
+        });
+      }
+    }
+  });
+
+  test('a promoted row keeps the short clock behind a delivery on the wire: it goes next', async () => {
+    const admission = await admitInboxPrompt(row({ result: { promoted: true } }), {
+      readSandbox: async () => ({ status: 'active', metadata: {} }),
+      hasInFlightPrompt: async () => true,
+      hasOlderPendingPrompt: async () => true,
+    });
+    expect(admission).toEqual({
+      admit: false,
+      reason: 'older_prompt_pending',
+      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
     });
   });
 
@@ -167,16 +203,16 @@ describe('admitInboxPrompt', () => {
     });
   });
 
-  test('a long wait on a RUNNING box keeps the 2s cap, whatever reason the refusals had', async () => {
-    // `admission_refusals` counts every reason. A row that waited 64 refusals
+  test('a long wait on a RUNNING box keeps the 2s cap for the head, whatever reason the refusals had', async () => {
+    // `admission_refusals` counts every reason. A head that waited 64 refusals
     // behind a live turn must not get the minute at its first
-    // `older_prompt_pending` while the head is still moving.
+    // `older_prompt_pending` while a delivery is on the wire.
     const crossing = await admitInboxPrompt(
       row({ result: { admission_reason: 'turn_active', admission_refusals: INBOX_STALE_ORDER_REFUSALS } }),
       {
         readSandbox: async () => ({ status: 'active', metadata: {} }),
         hasInFlightPrompt: async () => true,
-        hasOlderPendingPrompt: async () => true,
+        hasOlderPendingPrompt: async () => false,
       },
     );
     expect(crossing).toEqual({

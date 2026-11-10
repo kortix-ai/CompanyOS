@@ -537,6 +537,10 @@ An app that is not in the catalog can still connect. Select **New** → **MCP se
 
 When an agent needs an app that nobody has connected yet, the session shows a **Connect** button. It opens the same sign-in and creates a private account by default.
 
+An agent acts with your rights, no more and no less. If you may share an account with the workspace, your agent may start that sign-in for you (`kortix connectors connect <slug> --owner workspace`). You still sign in. A refusal names the missing permission and who holds it.
+
+The catalog lists apps; it does not decide what may connect. When an agent adds a server that the catalog does not publish and the workspace does not use yet, a person who manages connectors approves that exact address once. The agent gives you a link. It opens **MCP server** with the address filled in, and adding it is the approval.
+
 ### Allow, Ask, Block
 
 Every action follows one of three rules:

@@ -295,6 +295,8 @@ function auditCandidatesSql(accountId: string, newer: (...columns: string[]) => 
                encode(extensions.digest(convert_to(COALESCE(l.result::text, l.last_error), 'UTF8'), 'sha256'), 'hex') END,
              NULL::integer, COALESCE(l.updated_at, l.created_at)
         FROM kortix.session_lifecycle_commands l WHERE l.account_id = ${accountId}::uuid
+         -- A claim is queue churn: the trigger records no 'running' phase.
+         AND l.status <> 'running'
          ${newer('l.created_at', 'l.updated_at')}
       UNION ALL
       SELECT p.account_id, ps.project_id, p.session_id, NULL::text, NULL::uuid, 'system',

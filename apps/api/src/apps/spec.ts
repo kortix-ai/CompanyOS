@@ -169,12 +169,10 @@ export function rewriteMovedFromImages(dockerfile: string): string {
 /**
  * The runtime block both container sources share: the command, the port (0 =
  * a worker-only release; the supervisor runs the process and serves nothing),
- * the readiness path and the restart limit. `dockerfile` adds its workdir on
- * top.
+ * the readiness path and the restart limit.
  */
 function containerRuntimeSpec(
-  source: { port?: number; readinessPath?: string; restartLimit?: number },
-  appCommand: string[],
+  source: { port?: number; readinessPath?: string; restartLimit?: number }, appCommand: string[],
 ): Record<string, unknown> {
   return {
     command: appCommand,

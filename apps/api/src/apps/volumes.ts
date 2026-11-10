@@ -88,9 +88,9 @@ function volumeName(name: string): string {
 }
 
 /**
- * The size a volume may be created with (1 to the provider ceiling) or
- * confirmed at (the ceiling only: Platinum allots the fixed size at create,
- * so a confirm has no floor). Answers the documented rule of its caller.
+ * The size a volume may be created with (`min` 1) or confirmed at (`min`
+ * null: Platinum allots the fixed size at create, so a confirm has no
+ * floor) — each caller's documented rule and message.
  */
 function volumeSizeGb(sizeGb: number, min: number | null): number {
   if (!Number.isInteger(sizeGb) || sizeGb > MAX_VOLUME_GB || (min !== null && sizeGb < min)) {

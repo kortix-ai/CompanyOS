@@ -120,10 +120,9 @@ export async function assertAppAccountFunded(accountId: string): Promise<void> {
 
 /**
  * The App cap an account answers to: the tier's `appLimit`, lifted entirely
- * when billing is off (local / self-hosted), and an operator override wins
- * over the tier. The one difference between the two caps lives here as a
- * named argument: the App count is uncapped for Enterprise, the runtime cap
- * answers the Enterprise tier like any other.
+ * when billing is off (local / self-hosted), an operator override winning
+ * over the tier. The one difference between the two caps is a named argument:
+ * the App count is uncapped for Enterprise, the runtime cap is not.
  */
 async function appCapForAccount(
   accountId: string,
@@ -138,11 +137,7 @@ async function appCapForAccount(
   return getTier(tier).appLimit;
 }
 
-/**
- * The shared cap assertion: an uncapped account (`Number.MAX_SAFE_INTEGER`)
- * is never counted; otherwise `count()` runs and an at-or-over-the-cap
- * account gets `failure`.
- */
+/** An uncapped account (`Number.MAX_SAFE_INTEGER`) is never counted; an at-or-over-the-cap account gets `failure`. */
 async function assertUnderCap(
   limit: number,
   count: () => Promise<number>,
@@ -175,12 +170,7 @@ export async function countAccountApps(accountId: string): Promise<number> {
 
 export async function assertAppQuotaAvailable(accountId: string): Promise<void> {
   await assertUnderCap(await maxAppsForAccount(accountId), () => countAccountApps(accountId), (limit, current) =>
-    new AppLimitError(
-      'app_quota_exceeded',
-      `This account has reached its App limit (${limit}). Delete an App or upgrade the plan.`,
-      402,
-      { limit, current },
-    ));
+    new AppLimitError('app_quota_exceeded', `This account has reached its App limit (${limit}). Delete an App or upgrade the plan.`, 402, { limit, current }));
 }
 
 /* ─── The gate ───────────────────────────────────────────────────────────── */
@@ -238,10 +228,5 @@ export async function assertAppConcurrencyAvailable(
   excludeRuntimeId?: string,
 ): Promise<void> {
   await assertUnderCap(await maxConcurrentAppRuntimes(accountId), () => countLiveAppRuntimes(accountId, excludeRuntimeId), (limit, running) =>
-    new AppLimitError(
-      'app_concurrency_limit',
-      `This account already runs its maximum number of Apps (${limit}). Stop an App or upgrade the plan.`,
-      429,
-      { limit, running },
-    ));
+    new AppLimitError('app_concurrency_limit', `This account already runs its maximum number of Apps (${limit}). Stop an App or upgrade the plan.`, 429, { limit, running }));
 }

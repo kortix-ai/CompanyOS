@@ -54,8 +54,6 @@ const AppParams = z.object({ workspaceId: z.string().uuid(), appId: z.string().u
 const MachineParams = AppParams.extend({ machineId: z.string().uuid() });
 const VolumeParams = AppParams.extend({ volumeId: z.string().uuid() });
 const Open = z.object({}).passthrough();
-/** A handler's context, for the shared helpers below (each route keeps its own typed context). */
-type RouteContext = Context<AppEnv, string, any>;
 
 function volumeJson(volume: AppVolumeRow, live: AppVolumeInfo | null = null) {
   return {
@@ -74,35 +72,39 @@ function volumeJson(volume: AppVolumeRow, live: AppVolumeInfo | null = null) {
   };
 }
 
+/** The App row a fleet route acts on. */
+type AppRow = NonNullable<Awaited<ReturnType<typeof visibleApp>>>;
+
+/**
+ * The gate and refusal mapping every fleet route shares: project membership
+ * and the permission, then the App's visibility (404 — a member must not
+ * learn that a teammate's private App exists), then the body with the
+ * visible App; a documented refusal the body throws becomes the answer.
+ */
+async function handle<T>(c: Context<AppEnv>, permission: AppPermission, body: (app: AppRow) => Promise<T>): Promise<T> {
+  const projectId = workspaceIdParam(c);
+  const appId = c.req.param('appId') as string;
+  const loaded = await authorizedProject(c, projectId, permission);
+  if (loaded instanceof Response) return loaded as T;
+  const app = await visibleApp(projectId, appId, loaded.userId);
+  if (!app) return c.json({ error: 'Not found' }, 404) as T;
+  try {
+    return await body(app);
+  } catch (error) {
+    const refused = refusal(c, error);
+    if (refused) return refused as T;
+    throw error;
+  }
+}
+
 /** The documented answer of a fleet or volume refusal, or null. */
-function refusal(c: RouteContext, error: unknown): Response | null {
+function refusal(c: Context<AppEnv>, error: unknown): Response | null {
   if (error instanceof AppFleetError || error instanceof AppVolumeError) {
     return c.json({ error: error.message, code: error.code }, error.status);
   }
   if (error instanceof AppLimitError) return c.json({ error: error.message, code: error.code, ...error.detail }, error.status);
   if (error instanceof AppAccountUnfundedError) return c.json({ error: error.message, code: error.reason, ...error.detail }, 402);
   return null;
-}
-
-async function gate(c: RouteContext, permission: AppPermission) {
-  const projectId = workspaceIdParam(c);
-  const appId = c.req.param('appId') as string;
-  const loaded = await authorizedProject(c, projectId, permission);
-  if (loaded instanceof Response) return loaded;
-  const app = await visibleApp(projectId, appId, loaded.userId);
-  if (!app) return c.json({ error: 'Not found' }, 404);
-  return { loaded, app };
-}
-
-/** Run a route body; a documented refusal becomes its answer. */
-async function answer(c: RouteContext, body: () => Promise<Response>): Promise<never> {
-  try {
-    return (await body()) as never;
-  } catch (error) {
-    const refused = refusal(c, error);
-    if (refused) return refused as never;
-    throw error;
-  }
 }
 
 export function registerAppFleetRoutes(): void {
@@ -113,11 +115,7 @@ export function registerAppFleetRoutes(): void {
       request: { params: AppParams },
       responses: { 200: json(Open, 'Machines'), ...errors(403, 404) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      return c.json({ machines: await listAppMachines(gated.app) }, 200) as never;
-    },
+    async (c) => handle(c, 'deploy', async (app) => c.json({ machines: await listAppMachines(app) }, 200)),
   );
 
   for (const action of ['start', 'stop', 'restart'] as const) {
@@ -128,17 +126,13 @@ export function registerAppFleetRoutes(): void {
         request: { params: MachineParams },
         responses: { 200: json(Open, 'Machines'), ...errors(402, 403, 404, 409, 429) },
       }),
-      async (c) => {
-        const gated = await gate(c, 'deploy');
-        if (gated instanceof Response) return gated as never;
+      async (c) => handle(c, 'deploy', async (app) => {
         const { machineId } = c.req.valid('param');
-        return answer(c, async () => {
-          if (action === 'start') await startMachine(gated.app, machineId);
-          else if (action === 'stop') await stopMachine(gated.app, machineId);
-          else await restartMachine(gated.app, machineId);
-          return c.json({ machines: await listAppMachines(gated.app) }, 200);
-        });
-      },
+        if (action === 'start') await startMachine(app, machineId);
+        else if (action === 'stop') await stopMachine(app, machineId);
+        else await restartMachine(app, machineId);
+        return c.json({ machines: await listAppMachines(app) }, 200);
+      }),
     );
   }
 
@@ -149,14 +143,10 @@ export function registerAppFleetRoutes(): void {
       request: { params: MachineParams },
       responses: { 200: json(Open, 'Machines'), ...errors(403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      return answer(c, async () => {
-        await destroyMachine(gated.app, c.req.valid('param').machineId);
-        return c.json({ machines: await listAppMachines(gated.app) }, 200);
-      });
-    },
+    async (c) => handle(c, 'deploy', async (app) => {
+      await destroyMachine(app, c.req.valid('param').machineId);
+      return c.json({ machines: await listAppMachines(app) }, 200);
+    }),
   );
 
   projectsApp.openapi(
@@ -173,15 +163,11 @@ export function registerAppFleetRoutes(): void {
       }) } } } },
       responses: { 202: json(Open, 'Scale'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      return answer(c, async () => {
-        const body = c.req.valid('json');
-        const scale = await setAppScale(gated.app, body.count, { newVolumes: body.new_volumes });
-        return c.json({ scale, machines: await listAppMachines(gated.app) }, 202);
-      });
-    },
+    async (c) => handle(c, 'deploy', async (app) => {
+      const body = c.req.valid('json');
+      const scale = await setAppScale(app, body.count, { newVolumes: body.new_volumes });
+      return c.json({ scale, machines: await listAppMachines(app) }, 202);
+    }),
   );
 
   projectsApp.openapi(
@@ -201,16 +187,14 @@ export function registerAppFleetRoutes(): void {
       },
       responses: { 200: json(Open, 'Result'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'admin');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'admin', async (app) => {
       const body = c.req.valid('json');
-      return answer(c, async () => c.json(await execInMachine(gated.app, {
+      return c.json(await execInMachine(app, {
         command: body.command,
         machineId: body.machine_id,
         timeoutS: body.timeout_s,
-      }), 200));
-    },
+      }), 200);
+    }),
   );
 
   projectsApp.openapi(
@@ -219,13 +203,11 @@ export function registerAppFleetRoutes(): void {
       request: { params: AppParams },
       responses: { 200: json(Open, 'Volumes'), ...errors(403, 404) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      const volumes = await listAppVolumes(gated.app.appId);
+    async (c) => handle(c, 'deploy', async (app) => {
+      const volumes = await listAppVolumes(app.appId);
       const live = await Promise.all(volumes.map(volumeInfo));
-      return c.json({ volumes: volumes.map((volume, index) => volumeJson(volume, live[index])) }, 200) as never;
-    },
+      return c.json({ volumes: volumes.map((volume, index) => volumeJson(volume, live[index])) }, 200);
+    }),
   );
 
   projectsApp.openapi(
@@ -243,19 +225,17 @@ export function registerAppFleetRoutes(): void {
       },
       responses: { 201: json(Open, 'Volume'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
-      return answer(c, async () => c.json(volumeJson(await createAppVolume({
-        appId: gated.app.appId,
-        accountId: gated.app.accountId,
+      return c.json(volumeJson(await createAppVolume({
+        appId: app.appId,
+        accountId: app.accountId,
         name: body.name,
         sizeGb: body.size_gb,
         group: body.process_group,
         retentionDays: body.snapshot_retention_days,
-      })), 201));
-    },
+      })), 201);
+    }),
   );
 
   projectsApp.openapi(
@@ -273,15 +253,13 @@ export function registerAppFleetRoutes(): void {
       },
       responses: { 200: json(Open, 'Volume'), ...errors(400, 403, 404) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
-      return answer(c, async () => c.json(volumeJson(await updateAppVolume(gated.app.appId, c.req.valid('param').volumeId, {
+      return c.json(volumeJson(await updateAppVolume(app.appId, c.req.valid('param').volumeId, {
         sizeGb: body.size_gb,
         retentionDays: body.snapshot_retention_days,
-      })), 200));
-    },
+      })), 200);
+    }),
   );
 
   projectsApp.openapi(
@@ -293,19 +271,15 @@ export function registerAppFleetRoutes(): void {
       request: { params: VolumeParams, query: z.object({ confirm: z.string().optional() }) },
       responses: { 200: json(Open, 'Destroyed'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'admin');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'admin', async (app) => {
       const { volumeId } = c.req.valid('param');
-      return answer(c, async () => {
-        const volume = await getAppVolume(gated.app.appId, volumeId);
-        if (c.req.valid('query').confirm !== volume.name) {
-          return c.json({ error: `Destroying a volume deletes its data: pass confirm=${volume.name}.`, code: 'confirmation_required' }, 400);
-        }
-        await destroyVolume(gated.app.appId, volumeId);
-        return c.json({ volume_id: volumeId, status: 'destroying', purge_after_days: 7 }, 200);
-      });
-    },
+      const volume = await getAppVolume(app.appId, volumeId);
+      if (c.req.valid('query').confirm !== volume.name) {
+        return c.json({ error: `Destroying a volume deletes its data: pass confirm=${volume.name}.`, code: 'confirmation_required' }, 400);
+      }
+      await destroyVolume(app.appId, volumeId);
+      return c.json({ volume_id: volumeId, status: 'destroying', purge_after_days: 7 }, 200);
+    }),
   );
 
   projectsApp.openapi(
@@ -315,11 +289,7 @@ export function registerAppFleetRoutes(): void {
       request: { params: VolumeParams },
       responses: { 200: json(Open, 'Snapshots'), ...errors(403, 404) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      return answer(c, async () => c.json({ snapshots: await listVolumeSnapshots(gated.app.appId, c.req.valid('param').volumeId) }, 200));
-    },
+    async (c) => handle(c, 'deploy', async (app) => c.json({ snapshots: await listVolumeSnapshots(app.appId, c.req.valid('param').volumeId) }, 200)),
   );
 
   projectsApp.openapi(
@@ -328,11 +298,7 @@ export function registerAppFleetRoutes(): void {
       request: { params: VolumeParams },
       responses: { 201: json(Open, 'Snapshot'), ...errors(403, 404) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
-      return answer(c, async () => c.json(await createVolumeSnapshot(gated.app.appId, c.req.valid('param').volumeId), 201));
-    },
+    async (c) => handle(c, 'deploy', async (app) => c.json(await createVolumeSnapshot(app.appId, c.req.valid('param').volumeId), 201)),
   );
 
   projectsApp.openapi(
@@ -344,15 +310,11 @@ export function registerAppFleetRoutes(): void {
       request: { params: VolumeParams, body: { content: { 'application/json': { schema: z.object({ snapshot_id: z.string().max(64) }) } } } },
       responses: { 202: json(Open, 'Restoring'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'admin');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'admin', async (app) => {
       const { volumeId } = c.req.valid('param');
-      return answer(c, async () => {
-        await restoreAppVolume(gated.app, volumeId, c.req.valid('json').snapshot_id);
-        return c.json(volumeJson(await getAppVolume(gated.app.appId, volumeId)), 202);
-      });
-    },
+      await restoreAppVolume(app, volumeId, c.req.valid('json').snapshot_id);
+      return c.json(volumeJson(await getAppVolume(app.appId, volumeId)), 202);
+    }),
   );
 
   projectsApp.openapi(
@@ -362,14 +324,12 @@ export function registerAppFleetRoutes(): void {
       request: { params: VolumeParams, body: { content: { 'application/json': { schema: z.object({ name: z.string().max(30), snapshot_id: z.string().max(64).optional() }) } } } },
       responses: { 201: json(Open, 'Volume'), ...errors(400, 403, 404, 409) },
     }),
-    async (c) => {
-      const gated = await gate(c, 'deploy');
-      if (gated instanceof Response) return gated as never;
+    async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
-      return answer(c, async () => c.json(volumeJson(await forkVolume(gated.app.appId, c.req.valid('param').volumeId, {
+      return c.json(volumeJson(await forkVolume(app.appId, c.req.valid('param').volumeId, {
         name: body.name,
         snapshotId: body.snapshot_id,
-      })), 201));
-    },
+      })), 201);
+    }),
   );
 }

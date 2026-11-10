@@ -36,12 +36,6 @@ const RunRequest = z.object({
 });
 const MAX_RUN_AHEAD_MS = 366 * 86_400_000;
 
-/** The App behind the token, or the response to answer. */
-async function tokenApp(authorization: string | undefined, projectId: string, appId: string): Promise<{ slug: string } | 401 | 404> {
-  const token = bearerToken(authorization);
-  if (!token || !appEventTokenMatches(appId, token)) return 401;
-  return (await scopedApp(projectId, appId)) ?? 404;
-}
 const TOKEN_ERROR = { error: 'Send the App token: Authorization: Bearer $KORTIX_APP_TOKEN', code: 'app_token_invalid' } as const;
 const rateLimitBody = (retryAfterSeconds: number) => ({
   error: 'This App sent too many requests this minute. Send events in batches ({ "events": [...] }, at most 50) and retry shortly.',
@@ -50,17 +44,17 @@ const rateLimitBody = (retryAfterSeconds: number) => ({
 });
 
 /**
- * The gate every App-token route runs, and the refusal mapping for the body:
- * the App's own token (401), its per-App rate limit (429), then the App's
- * existence (404) — in that order. The body gets the App's slug and its
- * answer becomes the route's.
+ * The App behind the request, or the response to answer: the App's own token
+ * (401), its per-App rate limit (429), then its existence (404), in that
+ * order. The body gets the App's slug and its answer becomes the route's.
  */
 async function authorizeEventApp<T>(c: Context, projectId: string, appId: string, body: (app: { slug: string }) => Promise<T>): Promise<T> {
-  const app = await tokenApp(c.req.header('authorization'), projectId, appId);
-  if (app === 401) return c.json(TOKEN_ERROR, 401) as T;
+  const token = bearerToken(c.req.header('authorization'));
+  if (!token || !appEventTokenMatches(appId, token)) return c.json(TOKEN_ERROR, 401) as T;
+  const app = await scopedApp(projectId, appId);
   const limited = appEventRateLimited(c, projectId, appId);
   if (limited) return c.json(rateLimitBody(limited.retryAfterSeconds), 429) as T;
-  if (app === 404) return c.json({ error: 'Not found' }, 404) as T;
+  if (!app) return c.json({ error: 'Not found' }, 404) as T;
   return body(app);
 }
 

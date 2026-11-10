@@ -103,6 +103,7 @@ import {
   withConnectorSearch,
 } from './connector-routes';
 import type { McpServerApp } from './install/mcp-first';
+import { mcpSetupLinkDraft } from './add-mcp/setup-link-params';
 import { useInstall } from './install/use-install';
 
 import { InstallDialog } from './install/install-dialog';
@@ -321,10 +322,29 @@ export function ConnectorsPage({
   // browser Back must bring the same results back (KRTX-3018).
   const [query, setQuery] = useState(() => connectorSearchFromParams(search));
   useSearchInUrl(query, search, pathname);
-  const [panel, setPanel] = useState<Panel | null>(null);
+  // An agent's `setup_url` hand-off (`custom=1&provider=mcp&url=…`): a person
+  // confirms the custom server here, so the Add-MCP dialog opens pre-filled
+  // and the link's params leave the URL (KRTX-4640). A manual "New → MCP
+  // server" clears it and opens empty. Every NEW link applies, not just the
+  // first one this page mounts with.
+  const [mcpInitial, setMcpInitial] = useState(() => mcpSetupLinkDraft(search));
+  const [panel, setPanel] = useState<Panel | null>(() => (mcpInitial ? 'mcp' : null));
   // The catalogue app whose own MCP server the MCP dialog connects. Null for
   // a server the user pastes (New → MCP server).
   const [mcpApp, setMcpApp] = useState<McpServerApp | null>(null);
+  const setupLinkKey = search?.get('custom') === '1' ? search.toString() : null;
+  useEffect(() => {
+    if (!setupLinkKey) return;
+    const draft = mcpSetupLinkDraft(search);
+    if (draft) {
+      setMcpApp(null);
+      setMcpInitial(draft);
+      setPanel('mcp');
+    }
+    replaceParams((params) => {
+      for (const key of ['custom', 'tab', 'provider', 'url', 'transport', 'name'] as const) params.delete(key);
+    });
+  }, [setupLinkKey, replaceParams, search]);
   // The catalogue opens on the apps that connect in one click.
   const [oneClick, setOneClick] = useState(true);
   const [kindFilter, setKindFilter] = useState<CatalogKindFilter>('all');
@@ -344,6 +364,7 @@ export function ConnectorsPage({
   const { installEntry, pendingKey, request: installRequest, setRequest: setInstallRequest, confirm: confirmInstall } = useInstall(projectId, {
     onMcpServer: (server) => {
       setMcpApp(server);
+      setMcpInitial(null);
       setPanel('mcp');
     },
   });
@@ -667,6 +688,7 @@ export function ConnectorsPage({
           description: tPages('addMcpMenuHint'),
           onSelect: () => {
             setMcpApp(null);
+            setMcpInitial(null);
             setPanel('mcp');
           },
         }}
@@ -769,11 +791,17 @@ export function ConnectorsPage({
           )}
 
           <AddMcpServerDialog
-            key={mcpApp?.url ?? 'paste'}
+            key={mcpApp?.url ?? (mcpInitial ? `${mcpInitial.url}|${mcpInitial.name ?? ''}` : 'paste')}
             projectId={projectId}
             app={mcpApp}
+            initial={mcpInitial}
             open={panel === 'mcp'}
-            onOpenChange={(open) => setPanel(open ? 'mcp' : null)}
+            onOpenChange={(open) => {
+              setPanel(open ? 'mcp' : null);
+              // Dropping the draft on close makes every later arrival of the
+              // same link remount the dialog with it (the key frees up).
+              if (!open) setMcpInitial(null);
+            }}
             takenSlugs={connectors.map((connector) => connector.slug)}
             onAdded={invalidate}
           />

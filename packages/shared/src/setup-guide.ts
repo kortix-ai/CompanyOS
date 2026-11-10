@@ -173,8 +173,14 @@ Then run \`kortix models ls\` and confirm that a model of that plan is listed.
 2. Commit only the Kortix files: \`kortix.yaml\` and \`.kortix/\` (in its own
    repository: everything). Message:
    \`chore: add Kortix agents (<template names>)\`.
-3. Run \`kortix ship\`. It creates the workspace on the first run, links the
-   GitHub repository and pushes. Give the person the workspace link it prints.
+3. **Ask** how the setup reaches the default branch, which Kortix reads:
+   - **Push it** (recommended for the config's own repository): \`kortix ship\`.
+   - **A pull request** (recommended when other people work on the code): push a
+     branch \`kortix/setup\`, open the pull request with \`gh pr create\`, wait until
+     the person merges it, then pull the default branch and run \`kortix ship\`.
+4. \`kortix ship\` stages every change before it commits: run it only on a clean
+   tree. It creates the workspace on the first run, links the GitHub repository
+   and pushes. Give the person the workspace link it prints.
 
 ## 9. Template secrets
 

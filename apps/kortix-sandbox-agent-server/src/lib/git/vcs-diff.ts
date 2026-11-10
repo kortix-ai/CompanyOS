@@ -81,8 +81,8 @@ const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
  * workspace: seconds of CPU the diff route (and every daemon route behind it)
  * pays on each UI refetch (KRTX-4601). The ref never enters it, so a path the
  * comparison base already knows (`git rm --cached`) still shows as an addition.
- * Undefined when git could not build the index; callers then list the files
- * without patches, the same degraded row a per-file failure produced.
+ * Undefined when git cannot build the batch (a failed required clean filter, a
+ * vanished file); the caller then falls back to the per-file diffs.
  */
 async function untrackedPatchText(cwd: string, files: string[]): Promise<string | undefined> {
   if (files.length === 0) return undefined
@@ -138,15 +138,34 @@ export async function vcsDiff(cwd: string, mode: string, defaultBranch: string):
   // batch. The old per-file diff degraded just that row; filtering keeps the
   // other files' patches with it.
   const staged = newFiles.slice(0, MAX_UNTRACKED_PATCHES).filter((f) => !f.endsWith('/'))
-  const untrackedChunks = (await untrackedPatchText(cwd, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
+  const batchChunks = (await untrackedPatchText(cwd, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
   // `git diff --cached` writes the patch in the same sorted order as the staged
   // list: one `diff --git` chunk per staged file, keyed by path so a filtered
-  // directory entry cannot shift a patch onto the wrong row.
-  const chunkByFile = untrackedChunks.length === staged.length ? zipPairs(staged, untrackedChunks) : undefined
+  // directory entry cannot shift a patch onto the wrong row. A batch that git
+  // refused whole falls back to the per-file diffs, which isolate the bad file
+  // again the way the pre-batch loop did.
+  const chunkByFile = batchChunks.length === staged.length
+    ? zipPairs(staged, batchChunks)
+    : await perFilePatchTexts(cwd, staged)
   for (const [i, file] of newFiles.entries()) {
-    rows.push(finish(file, 'added', i < MAX_UNTRACKED_PATCHES ? chunkByFile?.get(file) : undefined))
+    rows.push(finish(file, 'added', i < MAX_UNTRACKED_PATCHES ? chunkByFile.get(file) : undefined))
   }
   return rows.sort((a, b) => a.file.localeCompare(b.file))
+}
+
+/**
+ * The batch's fallback: one `git diff --no-index /dev/null <file>` per file —
+ * the pre-batch cost, paid only when git refused the whole batch (a failing
+ * required clean filter aborts `update-index` for every file; the old loop
+ * degraded just the bad one). Exit 1 means "files differ", the normal answer.
+ */
+async function perFilePatchTexts(cwd: string, files: string[]): Promise<Map<string, string>> {
+  const patches = new Map<string, string>()
+  for (const file of files) {
+    const r = await git(cwd, ['diff', '--no-ext-diff', '--no-index', '--', '/dev/null', file])
+    if (r.code <= 1 && r.stdout) patches.set(file, r.stdout)
+  }
+  return patches
 }
 
 /** position → path/value pairs, when both lists are the same length. */

@@ -161,6 +161,31 @@ describe('vcsDiff', () => {
     }
   })
 
+  test('a failing required clean filter costs the other files nothing', async () => {
+    const root = await makeRepo()
+    try {
+      // git-lfs is the real case: a required clean filter with no filter
+      // binary fails every diff that converts the file's content — the batch
+      // and the per-file diff alike. The per-file fallback keeps that failure
+      // on the bad file's row alone, the old loop's isolation.
+      await writeFile(join(root, '.gitattributes'), 'bad.txt filter=bad\n')
+      await realRunGit(['config', 'filter.bad.clean', 'false'], { cwd: root })
+      await realRunGit(['config', 'filter.bad.required', 'true'], { cwd: root })
+      await writeFile(join(root, 'bad.txt'), 'bad\n')
+      await writeFile(join(root, 'good.txt'), 'good\n')
+      const files = await vcsDiff(root, 'branch', 'main')
+      const good = files.find((f) => f.file === 'good.txt')
+      expect(good?.additions).toBe(1)
+      expect(good?.patch).toContain('+good')
+      const bad = files.find((f) => f.file === 'bad.txt')
+      expect(bad?.status).toBe('added')
+      expect(bad?.additions).toBe(0)
+      expect(bad?.patch).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a directory that is not a git repo has no changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-vcs-diff-plain-'))
     try {

@@ -239,7 +239,7 @@ async function collectVersionEntries(
 function changelogFeeds(channel: string): FeedSelection {
   if (channel === 'stable') return { github: true, dockerHub: false };
   if (channel === 'dev') return { github: false, dockerHub: true };
-  return { github: true, dockerHub: true };
+  return { github: channel === 'all', dockerHub: channel === 'all' };
 }
 
 async function getAllVersions(): Promise<VersionEntry[]> {

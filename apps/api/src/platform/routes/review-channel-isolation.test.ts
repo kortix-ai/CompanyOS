@@ -68,3 +68,12 @@ test('a dev changelog fetches only the Docker Hub feed', async () => {
   ] });
   expect(upstreamCalls).toEqual(['dockerhub']);
 });
+
+test('an unknown channel fetches no feed and answers an empty changelog', async () => {
+  advancePastTtl();
+  upstreamCalls = [];
+  const res = await versionRouter.request('/changelog?channel=nonsense');
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ changelog: [] });
+  expect(upstreamCalls).toEqual([]);
+});

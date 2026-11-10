@@ -56,11 +56,9 @@ describe('requestDeadline exemptions', () => {
     expect(isExempt(ctx(path))).toBe(true);
   });
 
-  // The exemption must stay method+path anchored: a `path.includes()` fragment
-  // `/config-release` also sweeps up every route that merely CONTAINS the
-  // substring — here the agent-config read of an agent literally named
-  // `config-release` (`GET …/agents/config-release/config`), a GET on the
-  // descriptor path itself, and any deeper child path.
+  // The exemption is method+path anchored, not a `path.includes()` fragment:
+  // a fragment would also sweep up the agent-config read of an agent named
+  // `config-release`, a GET on the descriptor path, and deeper child paths.
   test('still bounds the config etag read, which the fragment must not sweep up', () => {
     expect(
       isExempt(ctx('/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config', 'GET')),

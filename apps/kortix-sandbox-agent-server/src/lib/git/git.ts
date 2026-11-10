@@ -51,13 +51,13 @@ export function execGit(
  */
 export function runGit(
   args: string[],
-  opts: { cwd?: string; input?: string; timeoutMs?: number } = {},
+  opts: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
 ): Promise<ExecResult> {
   const timeoutMs = opts.timeoutMs ?? 10_000
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       cwd: opts.cwd,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, ...opts.env, GIT_TERMINAL_PROMPT: '0' },
       stdio: [opts.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     })
     let stdout = ''

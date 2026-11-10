@@ -53,6 +53,24 @@ export interface RuntimeAgentConfig {
  *  @kortix/manifest-schema PLUS the merged `behavior` half (a wire-only
  *  convenience; kortix.yaml itself never nests it — see the module doc
  *  above). */
+/** One repository a session clones into its workspace when it starts. */
+export interface AgentWorkspaceRepo {
+  /** `/workspace` or a folder under it. Default `/workspace`. */
+  path?: string;
+  /** Monorepo subset: the folders a cone sparse-checkout keeps. */
+  sparse?: string[];
+}
+
+/** `agents.<name>.workspace` in kortix.yaml. Nothing is cloned and nothing runs unless it says so. */
+export interface AgentWorkspaceConfig {
+  /** A `sandbox.templates` slug: the machine. Same as `AgentConfigBlock.sandbox`. */
+  sandbox?: string;
+  /** Explicit clones, on the session branch. Needs `workspace.gitops.read`. */
+  repos?: AgentWorkspaceRepo[];
+  /** Shell commands run in order after the clones. */
+  setup?: string[];
+}
+
 export interface AgentConfigBlock {
   /** Repo-relative path of the agent's `.md` (e.g. `agents/support.md`). The
    *  server owns it: it records the path it read or wrote. Send back the value
@@ -104,8 +122,12 @@ export interface AgentConfigBlock {
    * returns it. An agent that needs the files runs `kortix workspaces clone`.
    */
   repository_access?: boolean;
-  /** @deprecated Ignored since 2026-11-08, like `repository_access`. */
-  workspace?: 'runtime' | 'read' | 'branch';
+  /**
+   * What this agent's sessions get to work in: the machine (`sandbox`), explicit clones of
+   * the workspace repository (`repos`) and `setup` commands. Both run in the background
+   * after the session starts. The string forms are deprecated and ignored.
+   */
+  workspace?: AgentWorkspaceConfig | 'runtime' | 'read' | 'branch';
   /** The agent's behavior half: its `.md` frontmatter, plus the body as `prompt`. */
   behavior?: RuntimeAgentConfig;
   /**
@@ -173,11 +195,14 @@ export async function updateAgentConfig(
 }
 
 function canonicalizeAgentBlock(block: AgentConfigBlock, _writing = false): AgentConfigBlock {
-  // `repository_access` and `workspace` are obsolete: a session never checks out
-  // the project repository at boot. An older API may still answer them, and an
-  // older caller may still send them; neither reaches the other side.
-  const { repository_access: _access, workspace: _workspace, ...next } = canonicalizeRequiredConnectors(block);
-  return next;
+  // `repository_access` and the legacy `workspace` shapes are obsolete: a session never
+  // checks out the project repository at boot. An older API may still answer them, and an
+  // older caller may still send them; neither reaches the other side. The current
+  // `workspace` map travels both ways.
+  const { repository_access: _access, workspace, ...next } = canonicalizeRequiredConnectors(block);
+  const kept: AgentConfigBlock = next;
+  if (typeof workspace === 'object' && workspace !== null && !('project_repository' in workspace)) kept.workspace = workspace;
+  return kept;
 }
 
 export interface GrantSecretToAgentResponse {

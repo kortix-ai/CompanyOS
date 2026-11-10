@@ -226,17 +226,23 @@ export function readAgentBlockV2(manifest: ParsedManifest, agentName: string): R
 }
 
 /**
- * `workspace` and its wire alias `repository_access` are obsolete (deprecation
- * `agent-workspace`): a session never checks out the project repository at
- * boot. A read drops them from the block; a write from an older client that
- * still sends them is accepted and drops them too.
+ * `repository_access` and the legacy `workspace` shapes (`branch`/`runtime`/`read`, a map
+ * with `project_repository`) are obsolete (deprecation `agent-workspace`): a read drops them,
+ * and a write from an older client that still sends them drops them too. The current
+ * `workspace: { sandbox, repos, setup }` map is kept on both paths, so a round trip
+ * through the editor never loses it.
  */
 function normalizeRepositoryAccess(
   block: Record<string, unknown>,
   _reading = false,
 ): NormalizeRequiredConnectorsResult {
-  const { repository_access: _access, workspace: _workspace, ...next } = block;
+  const { repository_access: _access, workspace, ...next } = block;
+  if (isCurrentWorkspace(workspace)) next.workspace = workspace;
   return { ok: true, block: next };
+}
+
+function isCurrentWorkspace(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !('project_repository' in value);
 }
 
 export type ApplyAgentBlockResult =

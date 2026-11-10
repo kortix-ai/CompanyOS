@@ -89,6 +89,13 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
+    slug: 'companyos',
+    title: 'Kortix CompanyOS',
+    description: siteMetadata.description,
+    htmlPath: '/companyos',
+  },
+  {
+    kind: 'marketing',
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:

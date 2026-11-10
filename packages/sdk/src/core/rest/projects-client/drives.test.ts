@@ -282,6 +282,38 @@ test('an upload over fetch the server answers 429 is sent again', async () => {
   expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2);
 });
 
+// A save with If-Match that timed out may have landed: a resend would answer
+// 409 file_changed for the user's own write. Only a 429 (never ran) is resent.
+test('a conditional save (ifMatch) is not resent after a 503, only after a 429', async () => {
+  respondAlways(503, { message: 'deadline' });
+  const error = await uploadDriveFile(D, '/a/x', new Blob(['a']), { ifMatch: 'v1' }).catch((e: unknown) => e);
+  expect((error as ApiError).status).toBe(503);
+  expect(calls).toHaveLength(1);
+
+  calls = [];
+  let n = 0;
+  globalThis.fetch = mock(async (input: unknown, init: RequestInit = {}) => {
+    calls.push({ url: String(input), method: init.method ?? 'GET', headers: {}, body: init.body });
+    return n++ === 0
+      ? new Response(JSON.stringify({ message: 'busy' }), { status: 429, headers: { 'content-type': 'application/json' } })
+      : new Response(JSON.stringify({ path: '/a/x', size: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  expect(await uploadDriveFile(D, '/a/x', new Blob(['a']), { ifMatch: 'v1' })).toEqual({ path: '/a/x', size: 1 });
+  expect(calls).toHaveLength(2);
+});
+
+test('an abort during the wait before a resend stops at once', async () => {
+  respondAlways(503, { message: 'deadline' });
+  const controller = new AbortController();
+  const started = Date.now();
+  const pending = uploadDriveFile(D, '/a/x', new Blob(['a']), { signal: controller.signal }).catch((e: unknown) => e);
+  setTimeout(() => controller.abort(), 50);
+  const error = await pending;
+  expect((error as ApiError).code).toBe('ABORTED');
+  expect(Date.now() - started).toBeLessThan(400);
+  expect(calls).toHaveLength(1);
+});
+
 test('a resent upload reports only its final outcome to the app-wide error handler', async () => {
   const reported: unknown[] = [];
   configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok', onError: (e) => void reported.push(e) });

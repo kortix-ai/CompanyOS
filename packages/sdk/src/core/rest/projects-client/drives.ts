@@ -518,7 +518,14 @@ interface ProgressRequest {
  * a time (a browser `File` or a Bun file never sits in memory whole). It
  * needs `crypto.subtle` to hash the blocks.
  *
- * `onProgress(sentBytes, totalBytes)` reports the body going up. `fetch` has
+ * A one-request body that fails transiently (408, 429, 5xx, a timeout or a
+ * dropped connection; never an abort) is sent again after 0.5, 1, 2, 4 and
+ * 8 s: at most 6 tries, 15.5 s of waits. With `ifMatch` only a 429 is sent
+ * again: a timed-out conditional write may have landed. Only the final
+ * failure reaches the app-wide `onError`. A caller adds no retry of its own.
+ *
+ * `onProgress(sentBytes, totalBytes)` reports the body going up. A resend
+ * reports from 0 again. `fetch` has
  * no upload progress, so with it a one-request body goes over
  * `XMLHttpRequest` (same auth and headers); a host without one uses `fetch`
  * and reports completion. The block upload reports each block.
@@ -539,12 +546,14 @@ export async function uploadDriveFile(
   if ((body instanceof Blob ? body.size : body.byteLength) > SINGLE_UPLOAD_MAX_BYTES) {
     return uploadInBlocks(driveId, path, body instanceof Blob ? body : new Blob([body]), headers, options);
   }
-  // A write past the API's deadline (503) or into a busy volume (429) is sent
-  // again: a PUT overwrites, so a resend of one that landed is harmless.
+  // A transient failure is sent again: a plain PUT overwrites, so a resend of
+  // one that landed is harmless. A conditional one (If-Match) that may have
+  // landed would refuse its own resend, so only its 429 (never ran) is resent.
+  const retry = { signal: options?.signal, onlyRefused: !!options?.ifMatch };
   const Xhr = (globalThis as { XMLHttpRequest?: new () => ProgressRequest }).XMLHttpRequest;
   if (onProgress && Xhr) {
     const blob = body instanceof Blob ? body : new Blob([body]);
-    return retryTransient(() => uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal));
+    return retryTransient(() => uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal), retry);
   }
   let result: DriveUploadResult;
   try {
@@ -552,6 +561,7 @@ export async function uploadDriveFile(
     result = await withRetries(
       () => backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers, showErrors: false }),
       'Failed to upload file',
+      retry,
     );
   } catch (error) {
     if (error instanceof ApiError && !isAbort(error) && !isExpectedApiError(error)) platformConfig().onError?.(error);
@@ -580,24 +590,49 @@ function isTransient(error: Error | undefined): boolean {
   return e.status === undefined ? e.code !== 'NO_SESSION' : TRANSIENT_STATUSES.has(e.status);
 }
 
-/** `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails transiently. */
 /** An abort is the caller's own doing: never reported. */
 const isAbort = (e: ApiError) => e.code === 'ABORTED' || e.name === 'AbortError';
 
-async function retryTransient<T>(send: () => Promise<T>): Promise<T> {
+/**
+ * `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails
+ * transiently. `onlyRefused`: resend only a 429, which never ran (a
+ * conditional write that timed out may have landed). An abort during a wait
+ * stops at once.
+ */
+async function retryTransient<T>(
+  send: () => Promise<T>,
+  options: { signal?: AbortSignal; onlyRefused?: boolean } = {},
+): Promise<T> {
+  const { signal, onlyRefused } = options;
   for (let attempt = 0; ; attempt++) {
     try {
       return await send();
     } catch (error) {
       const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
-      if (delay === undefined || !isTransient(error as Error)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      const retry = onlyRefused ? (error as ApiError).status === 429 : isTransient(error as Error);
+      if (delay === undefined || !retry) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const stop = () => {
+          clearTimeout(timer);
+          reject(new ApiError('Request aborted', { name: 'AbortError', code: 'ABORTED' }));
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', stop);
+          resolve();
+        }, delay);
+        if (signal?.aborted) stop();
+        else signal?.addEventListener('abort', stop, { once: true });
+      });
     }
   }
 }
 
-function withRetries<T>(send: () => Promise<ApiResult<T>>, fallbackMessage: string): Promise<T> {
-  return retryTransient(async () => unwrap(await send(), fallbackMessage));
+function withRetries<T>(
+  send: () => Promise<ApiResult<T>>,
+  fallbackMessage: string,
+  options?: { signal?: AbortSignal; onlyRefused?: boolean },
+): Promise<T> {
+  return retryTransient(async () => unwrap(await send(), fallbackMessage), options);
 }
 
 const toHex = (digest: ArrayBuffer) => Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -718,11 +753,12 @@ async function uploadWithProgress(
   });
 }
 
-/*
- * Folder writes (mkdir, move, delete) raise no app-wide error: every caller
- * shows its own outcome, and the app-wide toast would say it a second time.
+/**
+ * Make a folder. A transient failure is sent again, as `uploadDriveFile`
+ * does (at most 6 tries); a folder that exists answers 409. Folder writes
+ * (mkdir, move, delete) raise no app-wide error: every caller shows its own
+ * outcome, and the app-wide toast would say it a second time.
  */
-/** Make a folder. A transient failure is sent again; one that exists answers 409. */
 export async function makeDriveFolder(driveId: string, path: string): Promise<{ path: string }> {
   return withRetries(
     () => backendApi.post<{ path: string }>(`${drivePath(driveId)}/files/mkdir`, { path }, { showErrors: false }),

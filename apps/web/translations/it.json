@@ -21542,11 +21542,6 @@
     "dismiss": "Chiudi",
     "emailCopied": "Indirizzo email copiato"
   },
-  "repositoryAccess": {
-    "label": "Accesso al repository del workspace",
-    "enabled": "Le nuove sessioni ricevono il repository del workspace. Restano validi i permessi Git. Le sessioni esistenti mantengono la propria impostazione di accesso.",
-    "disabled": "Le nuove sessioni vengono eseguite senza il repository del workspace. Possono creare file e usare gli strumenti autorizzati. Le sessioni esistenti mantengono la propria impostazione di accesso."
-  },
   "customProvider": {
     "intro": "Endpoint che il catalogo non include.",
     "add": "Aggiungi provider personalizzato",
@@ -26083,7 +26078,6 @@
   "agentMounts": {
     "lead": "Cartelle di File montate dalle sessioni di questo agente. Le modifiche si applicano subito a ogni nuova sessione.",
     "mount": "Mount folder",
-    "repository": "Repository del workspace",
     "viaAgent": "condiviso con questo agente",
     "viaProject": "condiviso con tutti nel workspace",
     "from": "{path} · {who}",

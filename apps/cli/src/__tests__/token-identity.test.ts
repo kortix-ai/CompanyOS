@@ -263,14 +263,14 @@ describe('permission-denial identity footer', () => {
     const out = await footerFor({ code: 'session_repository_access_denied' });
     expect(out).toContain('workspace repository access denied');
     expect(out).toContain('(not the cause)');
-    expect(out).toMatch(/start a session with repository access/);
-    expect(out).not.toContain('kortix_permissions');
+    // Decided at session start from the agent grant and the starting person.
+    expect(out).toMatch(/project\.gitops\.read in kortix_permissions, then start a new session/);
   });
 
   test('an older server\'s bare workspace message gets the same remedy', async () => {
     const out = await footerFor(denialDetailFromBody({ error: true, message: 'session workspace does not allow repository access', status: 403 }));
     expect(out).toContain('workspace repository access denied');
-    expect(out).not.toContain('kortix_permissions');
+    expect(out).toMatch(/start a new session/);
   });
 
   test('any other code names the code and never sends the agent to kortix.yaml', async () => {

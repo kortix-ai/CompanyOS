@@ -4431,7 +4431,11 @@ flow(
           'connectors', 'connections', 'share', theirs, '--everyone', '--project', project.id,
         ]);
         throwIfCliInfraFailure(r, 'kortix connectors connections share');
-        if (r.exitCode === 0 || !/manage the workspace's connections/.test(r.all)) {
+        // The route-level authorize gate (#11857, Workspaces R1) refuses a plain
+        // member BEFORE the handler's own "manage the workspace's connections"
+        // check can run; the product's denial names the permission and the grant
+        // path instead (iam/denial-message.ts).
+        if (r.exitCode === 0 || !/workspace\.connector\.connections\.manage/.test(r.all)) {
           throw new Error(`plain member share: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
         }
       });

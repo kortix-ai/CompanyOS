@@ -10,6 +10,33 @@
  */
 
 /**
+ * The cause chain as nodes: `error` itself first, then each `.cause` link.
+ * Every field a classifier reads is an optional `unknown`, because a thrown
+ * value can be anything.
+ *
+ * Bounded and cycle-safe. These run on an error path, where a hang is the worst
+ * possible outcome — worse than a missing detail — so the walk refuses to
+ * revisit a node and gives up after 16 links.
+ *
+ * The one walk every classifier reads (`errorSqlstate`'s first code,
+ * `innermostMessage`'s deepest message, the transient sets over every node,
+ * the driver-node find), so "what does this chain say" has one answer.
+ */
+export function errorChain(error: unknown): Record<string, unknown>[] {
+  const chain: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+  for (
+    let node = error;
+    chain.length < 16 && node != null && typeof node === 'object' && !seen.has(node);
+    node = (node as { cause?: unknown }).cause
+  ) {
+    seen.add(node);
+    chain.push(node as Record<string, unknown>);
+  }
+  return chain;
+}
+
+/**
  * The first `code` found walking down the cause chain.
  *
  * FIRST, not deepest, and deliberately so: this is the behaviour
@@ -20,14 +47,11 @@
  * code is the one the thrower meant us to act on.
  */
 export function errorSqlstate(error: unknown): string | null {
-  return walk(
-    error,
-    (node) => {
-      const code = (node as { code?: unknown }).code;
-      return typeof code === 'string' && code.length > 0 ? code : null;
-    },
-    'first',
-  );
+  for (const node of errorChain(error)) {
+    const code = node.code;
+    if (typeof code === 'string' && code.length > 0) return code;
+  }
+  return null;
 }
 
 /**
@@ -52,43 +76,10 @@ export async function retryOnDeadlock<T>(run: () => Promise<T>): Promise<T> {
  * the fault.
  */
 export function innermostMessage(error: unknown): string | null {
-  return walk(
-    error,
-    (node) => {
-      const message = (node as { message?: unknown }).message;
-      return typeof message === 'string' && message.length > 0 ? message : null;
-    },
-    'last',
-  );
-}
-
-/**
- * Walk `.cause`, returning either the first or the last non-null `pick`.
- *
- * Bounded and cycle-safe. These run on an error path, where a hang is the worst
- * possible outcome — worse than a missing detail — so the walk refuses to
- * revisit a node and gives up after 16 links.
- */
-function walk(
-  error: unknown,
-  pick: (node: object) => string | null,
-  take: 'first' | 'last',
-): string | null {
-  let current = error;
   let found: string | null = null;
-  const seen = new Set<unknown>();
-  for (let depth = 0; depth < 16 && current != null; depth++) {
-    if (typeof current !== 'object') break;
-    if (seen.has(current)) break;
-    seen.add(current);
-    const value = pick(current);
-    if (value !== null) {
-      if (take === 'first') return value;
-      found = value;
-    }
-    const cause = (current as { cause?: unknown }).cause;
-    if (cause == null) break;
-    current = cause;
+  for (const node of errorChain(error)) {
+    const message = node.message;
+    if (typeof message === 'string' && message.length > 0) found = message;
   }
   return found;
 }
@@ -113,8 +104,12 @@ function walk(
  * database-free (its own tests mock `@kortix/db` without a live pool), so the
  * classifier — like `errorSqlstate` above — lives in this leaf and is
  * re-exported from `audit-db.ts` for its existing callers.
+ *
+ * The transient set `database-errors.ts` held until 2026-11 merges here: its
+ * SQLSTATEs were a subset of this one, and "is this retryable" must have one
+ * answer.
  */
-const AUDIT_CONTENTION_SQLSTATES = new Set([
+export const TRANSIENT_SQLSTATES: ReadonlySet<string> = new Set([
   '57014', // query_canceled — statement_timeout fired while queued on a lock
   '55P03', // lock_not_available — lock_timeout fired
   '40001', // serialization_failure
@@ -150,33 +145,34 @@ const AUDIT_CONTENTION_SQLSTATES = new Set([
  * `ECONNREFUSED` / `ECONNRESET` as `code` values that are not SQLSTATEs at all,
  * and prod carries all of them (`connect ECONNREFUSED <db_ip>:5432`, `write
  * CONNECTION_CLOSED db.…supabase.co:5432`). They mean the same thing as 08006
- * and must be retryable for the same reason.
+ * and must be retryable for the same reason. `database-errors.ts`'s transient
+ * set merges here too: `CONNECT_TIMEOUT` (the connection never established, so
+ * the statement never reached the server — a plain Error, driver's own code,
+ * not a SQLSTATE) and `EMAXCONNSESSION` (the session-mode pool's max clients).
  */
-const AUDIT_TRANSIENT_DRIVER_CODES = new Set([
+export const TRANSIENT_DRIVER_CODES: ReadonlySet<string> = new Set([
   'CONNECTION_CLOSED',
   'CONNECTION_ENDED',
   'CONNECTION_DESTROYED',
   'CONNECTION_CONNECT_TIMEOUT',
+  'CONNECT_TIMEOUT',
   'ECONNREFUSED',
   'ECONNRESET',
   'EPIPE',
   'ETIMEDOUT',
+  'EMAXCONNSESSION',
 ]);
 
 /**
  * True when a failed audit write is backpressure (retry it) rather than a
- * defect (dead-letter it). Mirrors `errorSqlstate`'s cause-walk but checks
- * EVERY node's own code against the contention sets, not only the first code
- * found on the chain — a synthetic wrapper code that itself isn't in either
- * set must not shadow a genuinely contended cause underneath it.
+ * defect (dead-letter it). Checks EVERY node's own code against the
+ * contention sets, not only the first code found on the chain — a synthetic
+ * wrapper code that itself isn't in either set must not shadow a genuinely
+ * contended cause underneath it.
  */
 export function isAuditContentionError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === 'string') {
-    if (AUDIT_CONTENTION_SQLSTATES.has(code)) return true;
-    if (AUDIT_TRANSIENT_DRIVER_CODES.has(code)) return true;
-  }
-  const cause = (error as { cause?: unknown }).cause;
-  return cause != null && cause !== error ? isAuditContentionError(cause) : false;
+  return errorChain(error).some((node) => {
+    const code = node.code;
+    return typeof code === 'string' && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_DRIVER_CODES.has(code));
+  });
 }

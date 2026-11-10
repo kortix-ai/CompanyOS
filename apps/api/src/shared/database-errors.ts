@@ -1,4 +1,5 @@
 import { DrizzleQueryError } from 'drizzle-orm/errors';
+import { errorChain, TRANSIENT_DRIVER_CODES, TRANSIENT_SQLSTATES } from './error-cause';
 
 export interface DatabaseErrorDetails {
   isDatabaseError: true;
@@ -14,52 +15,8 @@ export interface DatabaseErrorDetails {
   hint: string | null;
 }
 
-interface ErrorRecord {
-  name?: unknown;
-  message?: unknown;
-  code?: unknown;
-  severity?: unknown;
-  table?: unknown;
-  schema?: unknown;
-  schema_name?: unknown;
-  detail?: unknown;
-  hint?: unknown;
-  cause?: unknown;
-}
-
-const TRANSIENT_DATABASE_CODES = new Set([
-  '40001',
-  '40P01',
-  '53300',
-  '57P01',
-  '57P02',
-  '57P03',
-  // postgres.js connection-phase failure: the connection never established,
-  // so the statement never reached the server (plain Error, driver's own
-  // code — not a SQLSTATE). Reads may be retried.
-  'CONNECT_TIMEOUT',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'EMAXCONNSESSION',
-]);
-
 function stringField(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function errorChain(error: unknown): ErrorRecord[] {
-  const chain: ErrorRecord[] = [];
-  const seen = new Set<unknown>();
-  let current = error;
-
-  while (current && typeof current === 'object' && !seen.has(current) && chain.length < 8) {
-    seen.add(current);
-    const record = current as ErrorRecord;
-    chain.push(record);
-    current = record.cause;
-  }
-
-  return chain;
 }
 
 function isPostgresCode(code: string | null): boolean {
@@ -137,15 +94,14 @@ export function databaseErrorSummary(error: unknown): string | null {
 }
 
 export function isTransientDatabaseError(error: unknown): boolean {
-  const chain = errorChain(error);
-  for (const node of chain) {
+  for (const node of errorChain(error)) {
     const code = stringField(node.code);
-    if (code?.startsWith('08') || (code && TRANSIENT_DATABASE_CODES.has(code))) {
+    if (code?.startsWith('08') || (code && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_DRIVER_CODES.has(code)))) {
       return true;
     }
   }
 
-  const text = chain
+  const text = errorChain(error)
     .flatMap((node) => [stringField(node.name), stringField(node.message)])
     .filter((value): value is string => value !== null)
     .join(' ')

@@ -67,8 +67,11 @@ export interface AgentWorkspaceConfig {
   sandbox?: string;
   /** Explicit clones, on the session branch. Needs `workspace.gitops.read`. */
   repos?: AgentWorkspaceRepo[];
-  /** Shell commands run in order after the clones. */
-  setup?: string[];
+  /**
+   * Steps run in order after the clones, each in its own shell, in the first clone's folder.
+   * A string is a command; `{ run, cwd }` runs in `cwd` (relative, or under `/workspace`).
+   */
+  setup?: Array<string | { run: string; cwd?: string }>;
 }
 
 export interface AgentConfigBlock {

@@ -21,8 +21,9 @@ let workspace: string
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', ['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', ...args], { cwd, encoding: 'utf8' }).trim()
 
-function spec(over: Partial<WorkspaceSetupSpec>): WorkspaceSetupSpec {
-  return { version: 1, repos: [], setup: [], ...over }
+function spec(over: Omit<Partial<WorkspaceSetupSpec>, 'setup'> & { setup?: Array<string | { run: string; cwd?: string }> }): WorkspaceSetupSpec {
+  const { setup = [], ...rest } = over
+  return { version: 1, repos: [], ...rest, setup: setup.map((step) => (typeof step === 'string' ? { run: step } : step)) }
 }
 
 function options() {
@@ -127,6 +128,38 @@ describe('runWorkspaceSetup', () => {
     expect(existsSync(outside)).toBe(false)
   })
 
+  test('a step runs in its cwd: relative to the first clone, or absolute under /workspace', async () => {
+    const status = await runWorkspaceSetup(
+      spec({
+        repos: [{ path: workspace }],
+        setup: [{ run: 'pwd > here.txt', cwd: 'apps/web' }, { run: 'pwd > here.txt', cwd: join(workspace, 'apps', 'api') }, 'pwd > root.txt'],
+      }),
+      options(),
+    )
+    expect(status.state).toBe('done')
+    expect(status.steps.map((step) => step.cwd ?? null)).toEqual([null, 'apps/web', join(workspace, 'apps', 'api'), null])
+    expect(readFileSync(join(workspace, 'apps', 'web', 'here.txt'), 'utf8').trim()).toBe(join(workspace, 'apps', 'web'))
+    expect(readFileSync(join(workspace, 'apps', 'api', 'here.txt'), 'utf8').trim()).toBe(join(workspace, 'apps', 'api'))
+    expect(readFileSync(join(workspace, 'root.txt'), 'utf8').trim()).toBe(workspace)
+  })
+
+  test('each step is its own shell: a cd does not carry to the next step', async () => {
+    mkdirSync(join(workspace, 'sub'))
+    await runWorkspaceSetup(spec({ setup: ['cd sub && pwd > in-sub.txt', 'pwd > after.txt'] }), options())
+    expect(readFileSync(join(workspace, 'sub', 'in-sub.txt'), 'utf8').trim()).toBe(join(workspace, 'sub'))
+    expect(readFileSync(join(workspace, 'after.txt'), 'utf8').trim()).toBe(workspace)
+  })
+
+  test('a cwd outside the workspace, or one that does not exist, fails that step without running it', async () => {
+    const outside = await runWorkspaceSetup(spec({ setup: [{ run: 'touch escaped.txt', cwd: '../..' }] }), options())
+    expect(outside.state).toBe('failed')
+    expect(outside.steps[0]!.error).toContain('outside')
+    expect(existsSync(join(root, 'escaped.txt'))).toBe(false)
+
+    const missing = await runWorkspaceSetup(spec({ setup: [{ run: 'true', cwd: 'nope' }] }), options())
+    expect(missing.steps[0]!.error).toContain('does not exist')
+  })
+
   test('it is a background task: the call returns at once with the setup running', async () => {
     const pending = runWorkspaceSetup(spec({ setup: ['sleep 1'] }), options())
     expect(workspaceSetupStatus()?.state).toBe('running')
@@ -138,10 +171,10 @@ describe('the spec and the prompt note', () => {
   const encode = (body: unknown) => Buffer.from(JSON.stringify(body)).toString('base64')
 
   test('parses version 1, drops what is not a string, and ignores anything else', () => {
-    expect(parseWorkspaceSetup(encode({ version: 1, repos: [{ path: '/workspace', sparse: ['apps/web', 7] }, { path: 1 }], setup: ['pnpm install', null] }))).toEqual({
+    expect(parseWorkspaceSetup(encode({ version: 1, repos: [{ path: '/workspace', sparse: ['apps/web', 7] }, { path: 1 }], setup: ['pnpm install', null, { run: 'pnpm build', cwd: 'apps/web' }, { cwd: 'x' }] }))).toEqual({
       version: 1,
       repos: [{ path: '/workspace', sparse: ['apps/web'] }],
-      setup: ['pnpm install'],
+      setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }],
     })
     expect(parseWorkspaceSetup(encode({ version: 2, setup: ['x'] }))).toBeNull()
     expect(parseWorkspaceSetup('not base64 json')).toBeNull()
@@ -149,9 +182,10 @@ describe('the spec and the prompt note', () => {
   })
 
   test('the note lists each step, the reason a clone was withheld, and where progress is', () => {
-    const note = renderWorkspaceSetupNote(spec({ repos: [{ path: '/workspace', sparse: ['apps/web'] }], setup: ['pnpm install'], repos_skipped: 'no grant' }), '/s.json', '/s.log')
+    const note = renderWorkspaceSetupNote(spec({ repos: [{ path: '/workspace', sparse: ['apps/web'] }], setup: ['pnpm install', { run: 'pnpm build', cwd: 'apps/web' }], repos_skipped: 'no grant' }), '/s.json', '/s.log')
     expect(note).toContain('clone the workspace repository into `/workspace` on your session branch (only `apps/web`)')
     expect(note).toContain('run `pnpm install`')
+    expect(note).toContain('run `pnpm build` in `apps/web`')
     expect(note).toContain('no clone: no grant')
     expect(note).toContain('`cat /s.json`')
   })

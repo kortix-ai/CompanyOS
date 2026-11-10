@@ -1334,7 +1334,24 @@ function agentBlockV3Schema(): JsonSchemaFragment {
                   additionalProperties: false,
                 },
               },
-              setup: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Shell commands run in order after the clones, with the agent\'s secrets. A failure stops the rest; the session keeps running.' },
+              setup: {
+                type: 'array',
+                description: 'Steps run in order after the clones, each in its own login shell with the agent\'s secrets, in the first clone\'s folder (or `/workspace`). A `cd` does not carry to the next step. A failure stops the rest; the session keeps running.',
+                items: {
+                  anyOf: [
+                    { type: 'string', minLength: 1 },
+                    {
+                      type: 'object',
+                      required: ['run'],
+                      properties: {
+                        run: { type: 'string', minLength: 1, description: 'The shell command.' },
+                        cwd: { type: 'string', minLength: 1, description: 'Where it runs: relative to the first clone\'s folder, or absolute under `/workspace`.' },
+                      },
+                      additionalProperties: false,
+                    },
+                  ],
+                },
+              },
               project_repository: { type: 'boolean', deprecated: true, description: 'Deprecated: `true` becomes `workspace.gitops.read` in `kortix_permissions`.' },
             },
             additionalProperties: false,

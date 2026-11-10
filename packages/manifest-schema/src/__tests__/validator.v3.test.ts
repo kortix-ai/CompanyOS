@@ -270,6 +270,11 @@ describe('agents.<name>.workspace: { sandbox, repos, setup }', () => {
       setup: ['pnpm install', 'pnpm build'],
     });
   });
+  test('a setup step is a command or { run, cwd } (relative, or absolute under /workspace)', () => {
+    const result = validateManifest(yaml('      setup:\n        - pnpm install\n        - { run: pnpm build, cwd: apps/web }\n        - { run: make, cwd: /workspace/other }\n'));
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect((result.parsed?.agents as any).dev.workspace.setup).toEqual(['pnpm install', { run: 'pnpm build', cwd: 'apps/web' }, { run: 'make', cwd: '/workspace/other' }]);
+  });
   test('each wrong value names its path', () => {
     const paths = (workspace: string, extra = '') => validateManifest(yaml(workspace, extra)).issues.filter((i) => i.severity === 'error').map((i) => i.path);
     expect(paths('      repos:\n        - path: /etc\n')).toEqual(['agents.dev.workspace.repos[0].path']);
@@ -277,6 +282,11 @@ describe('agents.<name>.workspace: { sandbox, repos, setup }', () => {
     expect(paths('      repos:\n        - path: /workspace\n        - {}\n')).toEqual(['agents.dev.workspace.repos[1].path']);
     expect(paths('      repos:\n        - sparse: [/abs]\n')).toEqual(['agents.dev.workspace.repos[0].sparse']);
     expect(paths('      setup: pnpm install\n')).toEqual(['agents.dev.workspace.setup']);
+    expect(paths('      setup:\n        - { cwd: apps/web }\n')).toEqual(['agents.dev.workspace.setup[0].run']);
+    expect(paths('      setup:\n        - { run: x, cwd: ../etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, cwd: /etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, shell: zsh }\n')).toEqual(['agents.dev.workspace.setup[0].shell']);
+    expect(paths('      setup:\n        - ""\n')).toEqual(['agents.dev.workspace.setup[0]']);
     expect(paths('      clone: true\n')).toEqual(['agents.dev.workspace.clone']);
     expect(paths('      sandbox: node\n', '    sandbox: other\n')).toEqual(['agents.dev.workspace.sandbox']);
   });

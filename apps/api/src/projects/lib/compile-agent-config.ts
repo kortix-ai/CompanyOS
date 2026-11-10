@@ -467,7 +467,8 @@ export function manifestPiCodemode(raw: unknown, agentName?: string | null): 'of
 /** What an agent's `workspace` asks the box to prepare after it starts: explicit clones and setup commands. */
 export interface SessionWorkspaceSetup {
   repos: Array<{ path: string; sparse?: string[] }>;
-  setup: string[];
+  /** Every step as `{ run, cwd? }`; a plain string step becomes `{ run }`. */
+  setup: Array<{ run: string; cwd?: string }>;
 }
 
 /**
@@ -488,7 +489,13 @@ export function manifestWorkspaceSetup(raw: unknown, agentName?: string | null):
     const dirs = Array.isArray(sparse) ? sparse.filter((dir): dir is string => typeof dir === 'string' && dir.trim() !== '') : [];
     return [{ path: at, ...(dirs.length ? { sparse: dirs } : {}) }];
   });
-  const commands = (Array.isArray(setup) ? setup : []).filter((command): command is string => typeof command === 'string' && command.trim() !== '');
+  const commands = (Array.isArray(setup) ? setup : []).flatMap((step): Array<{ run: string; cwd?: string }> => {
+    if (typeof step === 'string') return step.trim() ? [{ run: step }] : [];
+    if (!step || typeof step !== 'object') return [];
+    const { run, cwd } = step as { run?: unknown; cwd?: unknown };
+    if (typeof run !== 'string' || !run.trim()) return [];
+    return [{ run, ...(typeof cwd === 'string' && cwd.trim() ? { cwd: cwd.trim() } : {}) }];
+  });
   return normalizedRepos.length || commands.length ? { repos: normalizedRepos, setup: commands } : null;
 }
 

@@ -185,8 +185,15 @@ export interface AgentWorkspaceRepoV3 {
 export interface AgentWorkspaceV3 {
   sandbox?: string;
   repos?: AgentWorkspaceRepoV3[];
-  setup?: string[];
+  setup?: AgentWorkspaceStepV3[];
 }
+
+/**
+ * One setup step: a shell command, run in the first clone's folder (or `/workspace`), or
+ * `{ run, cwd }` with `cwd` relative to that folder or absolute under `/workspace`.
+ * Each step is its own shell: a `cd` in one does not carry to the next.
+ */
+export type AgentWorkspaceStepV3 = string | { run: string; cwd?: string };
 
 export const AGENT_WORKSPACE_KEYS_V3 = ['sandbox', 'repos', 'setup'] as const;
 const WORKSPACE_REPO_KEYS_V3 = ['path', 'sparse'];
@@ -199,6 +206,16 @@ export function workspaceRepoPathProblem(path: unknown): string | null {
   const value = path.trim().replace(/\/+$/, '') || '/';
   if (value !== WORKSPACE_ROOT && !value.startsWith(`${WORKSPACE_ROOT}/`)) return 'must be `/workspace` or a folder under it.';
   if (value.split('/').some((part) => part === '..' || part === '.')) return 'must not contain `.` or `..`.';
+  return null;
+}
+
+/** A setup step's `cwd`: relative (no `..`), or absolute under `/workspace`. */
+export function workspaceStepCwdProblem(cwd: unknown): string | null {
+  if (cwd === undefined) return null;
+  if (typeof cwd !== 'string' || !cwd.trim()) return 'must be a folder.';
+  const value = cwd.trim();
+  if (value.startsWith('/')) return workspaceRepoPathProblem(value);
+  if (value.split('/').some((part) => part === '..')) return 'must not contain `..`.';
   return null;
 }
 
@@ -238,8 +255,22 @@ function validateAgentWorkspaceV3(entry: Record<string, unknown>, where: string,
     }
   }
   const setup = workspace.setup;
-  if (setup !== undefined && !(Array.isArray(setup) && setup.every((command) => typeof command === 'string' && command.trim()))) {
-    error(`${at}.setup`, 'must be a list of shell commands.');
+  if (setup !== undefined) {
+    if (!Array.isArray(setup)) error(`${at}.setup`, 'must be a list of shell commands or { run, cwd } steps.');
+    else {
+      setup.forEach((step, index) => {
+        const here = `${at}.setup[${index}]`;
+        if (typeof step === 'string') {
+          if (!step.trim()) error(here, 'must be a shell command.');
+          return;
+        }
+        if (!isTable(step)) return error(here, 'must be a shell command or { run, cwd }.');
+        for (const key of Object.keys(step)) if (key !== 'run' && key !== 'cwd') error(`${here}.${key}`, 'is not a setup step key (allowed: run, cwd).');
+        if (typeof step.run !== 'string' || !step.run.trim()) error(`${here}.run`, 'must be a shell command.');
+        const problem = workspaceStepCwdProblem(step.cwd);
+        if (problem) error(`${here}.cwd`, problem);
+      });
+    }
   }
 }
 

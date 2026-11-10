@@ -659,7 +659,7 @@ describe('manifestWorkspaceSetup', () => {
     '        - {}',
     '        - path: /workspace/web/',
     '          sparse: [apps/web]',
-    '      setup: [pnpm install]',
+    '      setup: [pnpm install, { run: pnpm build, cwd: apps/web }]',
     '  plain:',
     '    prompt: hi',
     '  machine-only:',
@@ -670,7 +670,7 @@ describe('manifestWorkspaceSetup', () => {
   test('normalizes the declared clones and setup; a repo path defaults to /workspace', () => {
     expect(manifestWorkspaceSetup(raw, 'dev')).toEqual({
       repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
-      setup: ['pnpm install'],
+      setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }],
     });
     // `default` is "no agent chosen": the manifest's default_agent answers.
     expect(manifestWorkspaceSetup(raw, 'default')).toEqual(manifestWorkspaceSetup(raw, 'dev'));

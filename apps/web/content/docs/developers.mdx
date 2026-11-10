@@ -489,12 +489,13 @@ agents:
         - path: /workspace         # or a folder under it
           sparse: [apps/web]       # optional: only these folders of a monorepo
       setup:
-        - pnpm install
+        - pnpm install                         # in the first clone's folder
+        - { run: pnpm build, cwd: apps/web }   # in a folder of it
 ```
 
 - The session starts and takes its first turn at once. The clones and `setup` run in the background after it starts.
 - Each clone lands on the session branch. A session branch that already holds pushed work is checked out as it is.
-- `setup` commands run in order in the first clone, in a login shell with the agent's secrets. The first failure stops the rest. The session keeps running.
+- `setup` steps run in order, each in its own login shell with the agent's secrets. A step runs in the first clone's folder (or `/workspace`), or in its `cwd`: relative to that folder, or absolute under `/workspace`. A `cd` in one step does not carry to the next. The first failure stops the rest. The session keeps running.
 - Progress is `/tmp/kortix/workspace-setup.json` in the sandbox and `workspace_setup` in `GET /p/<sandbox>/8000/kortix/health`. Output is `/tmp/kortix/workspace-setup.log`. The agent's prompt names both.
 - `repos` needs repository access (below). Without it, the session still runs `setup`, and the status says why nothing was cloned.
 - A session that resumes on its volume does not run the same setup again.
@@ -1157,7 +1158,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `workspace` | map or string | — | What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. `repos` and `setup` run in the background after the session starts: they never hold its first turn. |
 | `workspace.sandbox` | string | — | A `sandbox.templates` slug, or `default`: the machine. Same as the agent's `sandbox` key. |
 | `workspace.repos` | list | — | Explicit clones of the workspace repository, on the session branch. Needs `workspace.gitops.read` in `kortix_permissions`. None by default. |
-| `workspace.setup` | list | — | Shell commands run in order after the clones, with the agent's secrets. A failure stops the rest; the session keeps running. |
+| `workspace.setup` | list | — | Steps run in order after the clones, each in its own login shell with the agent's secrets, in the first clone's folder (or `/workspace`). A `cd` does not carry to the next step. A failure stops the rest; the session keeps running. |
 
 ### Registry entries
 

@@ -25,10 +25,16 @@ export const WORKSPACE_SETUP_NOTE_PATH = process.env.KORTIX_WORKSPACE_SETUP_NOTE
 const DONE_MARKER = '.kortix/workspace-setup.done.json'
 const STEP_TIMEOUT_MS = Number(process.env.KORTIX_WORKSPACE_SETUP_STEP_TIMEOUT_MS) || 30 * 60_000
 
+export interface WorkspaceSetupStepSpec {
+  run: string
+  /** Relative to the first clone's folder (or the workspace), or absolute under the workspace. */
+  cwd?: string
+}
+
 export interface WorkspaceSetupSpec {
   version: 1
   repos: Array<{ path: string; sparse?: string[] }>
-  setup: string[]
+  setup: WorkspaceSetupStepSpec[]
   /** Why the API withheld the clones (no repository access). */
   repos_skipped?: string
 }
@@ -38,6 +44,8 @@ export type WorkspaceSetupStepState = 'pending' | 'running' | 'done' | 'failed' 
 export interface WorkspaceSetupStep {
   kind: 'clone' | 'run'
   label: string
+  /** A `run` step's folder, as declared. */
+  cwd?: string
   state: WorkspaceSetupStepState
   exit_code: number | null
   started_at: string | null
@@ -93,7 +101,13 @@ export function parseWorkspaceSetup(raw: string | undefined): WorkspaceSetupSpec
         ? [{ path: repo.path.trim(), ...(Array.isArray(repo.sparse) && repo.sparse.length ? { sparse: repo.sparse.filter((dir) => typeof dir === 'string' && dir.trim()) } : {}) }]
         : [],
     )
-    const setup = (Array.isArray(body.setup) ? body.setup : []).filter((command): command is string => typeof command === 'string' && command.trim() !== '')
+    const setup = (Array.isArray(body.setup) ? (body.setup as unknown[]) : []).flatMap((step): WorkspaceSetupStepSpec[] => {
+      if (typeof step === 'string') return step.trim() ? [{ run: step }] : []
+      if (!step || typeof step !== 'object') return []
+      const { run, cwd } = step as { run?: unknown; cwd?: unknown }
+      if (typeof run !== 'string' || !run.trim()) return []
+      return [{ run, ...(typeof cwd === 'string' && cwd.trim() ? { cwd: cwd.trim() } : {}) }]
+    })
     if (!repos.length && !setup.length && !body.repos_skipped) return null
     return { version: 1, repos, setup, ...(typeof body.repos_skipped === 'string' ? { repos_skipped: body.repos_skipped } : {}) }
   } catch {
@@ -105,7 +119,7 @@ export function parseWorkspaceSetup(raw: string | undefined): WorkspaceSetupSpec
 export function renderWorkspaceSetupNote(spec: WorkspaceSetupSpec, statusPath = WORKSPACE_SETUP_STATUS_PATH, logPath = WORKSPACE_SETUP_LOG_PATH): string {
   const lines = ['## Workspace setup', '', 'This workspace is prepared in the background; it does not wait for you, and you need not wait for it:']
   for (const repo of spec.repos) lines.push(`- clone the workspace repository into \`${repo.path}\` on your session branch${repo.sparse?.length ? ` (only ${repo.sparse.map((dir) => `\`${dir}\``).join(', ')})` : ''}`)
-  for (const command of spec.setup) lines.push(`- run \`${command}\``)
+  for (const step of spec.setup) lines.push(`- run \`${step.run}\`${step.cwd ? ` in \`${step.cwd}\`` : ''}`)
   if (spec.repos_skipped) lines.push(`- no clone: ${spec.repos_skipped}`)
   lines.push('', `Progress: \`cat ${statusPath}\` (\`state\`: running, done or failed). Output: \`${logPath}\`.`)
   lines.push('Files it creates may be missing until it is done. If it failed, read the log and run the step yourself.')
@@ -114,6 +128,12 @@ export function renderWorkspaceSetupNote(spec: WorkspaceSetupSpec, statusPath = 
 
 export function workspaceSetupHash(spec: WorkspaceSetupSpec): string {
   return createHash('sha256').update(JSON.stringify({ repos: spec.repos, setup: spec.setup })).digest('hex')
+}
+
+/** A step's folder: `cwd` relative to `base`, or absolute; null when it leaves the workspace. */
+function stepDir(workspace: string, base: string, cwd: string | undefined): string | null {
+  if (!cwd) return base
+  return cloneTarget(workspace, cwd.startsWith('/') ? cwd : resolve(base, cwd))
 }
 
 /** The clone target inside the workspace, or null when the path leaves it. */
@@ -165,7 +185,7 @@ export async function runWorkspaceSetup(spec: WorkspaceSetupSpec, options: Works
     log: logPath,
     steps: [
       ...spec.repos.map((repo): WorkspaceSetupStep => ({ kind: 'clone', label: repo.path, state: 'pending', exit_code: null, started_at: null, ended_at: null })),
-      ...spec.setup.map((command): WorkspaceSetupStep => ({ kind: 'run', label: command, state: 'pending', exit_code: null, started_at: null, ended_at: null })),
+      ...spec.setup.map((step): WorkspaceSetupStep => ({ kind: 'run', label: step.run, ...(step.cwd ? { cwd: step.cwd } : {}), state: 'pending', exit_code: null, started_at: null, ended_at: null })),
     ],
     ...(spec.repos_skipped ? { repos_skipped: spec.repos_skipped } : {}),
   }
@@ -225,9 +245,18 @@ export async function runWorkspaceSetup(spec: WorkspaceSetupSpec, options: Works
         header(`clone into ${repo.path}`)
         ;({ code, error } = await cloneRepo(repo, options, { run, logFd }))
       } else {
-        header(`run ${step.label}`)
-        code = await run(['bash', '-lc', step.label], { cwd: runDir, logFd, timeoutMs: STEP_TIMEOUT_MS })
-        if (code === 124) error = `timed out after ${Math.round(STEP_TIMEOUT_MS / 60_000)} min`
+        const dir = stepDir(options.workspace, runDir, step.cwd)
+        header(`run ${step.label}${step.cwd ? ` in ${step.cwd}` : ''}`)
+        if (!dir) {
+          code = 2
+          error = `cwd ${step.cwd} is outside ${options.workspace}`
+        } else if (!existsSync(dir)) {
+          code = 2
+          error = `cwd ${step.cwd} does not exist`
+        } else {
+          code = await run(['bash', '-lc', step.label], { cwd: dir, logFd, timeoutMs: STEP_TIMEOUT_MS })
+          if (code === 124) error = `timed out after ${Math.round(STEP_TIMEOUT_MS / 60_000)} min`
+        }
       }
       Object.assign(step, { state: code === 0 ? 'done' : 'failed', exit_code: code, ended_at: now(), ...(code !== 0 ? { error: error ?? `exit ${code}` } : {}) })
       if (code !== 0) {

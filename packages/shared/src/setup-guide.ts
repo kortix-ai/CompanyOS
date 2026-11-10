@@ -202,7 +202,10 @@ For each secret in each template's \`next.secrets\`:
   \`https://github.com/settings/personal-access-tokens/new?name=Kortix%20agents&description=Kortix%20cloud%20agents&target_name=<owner>&expires_in=366&contents=write&pull_requests=write&issues=write&metadata=read&workflows=write\`,
   with \`<owner>\` the repository's owner. They select the repository and create it. Then run
   \`kortix secrets request GH_TOKEN --scope runtime\` and give them the link: they
-  paste the token there, so it never passes through you.
+  paste the token there, so it never passes through you. A token of the person
+  makes the agents' reviews plain comments: GitHub refuses an approval of a
+  pull request the same account opened. For approving reviews, recommend a
+  token of a machine user that has write access.
 - Any other secret: \`kortix secrets request <NAME> --scope runtime\` and give the
   person the link.
 

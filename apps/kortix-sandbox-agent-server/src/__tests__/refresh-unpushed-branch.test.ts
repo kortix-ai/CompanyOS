@@ -22,7 +22,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -99,8 +99,8 @@ describe('refreshRepo with an unpushed session branch', () => {
 
     const result = await refreshRepo(cfg())
 
-    expect(result.before.commit).toBe(head)
-    expect(result.after.commit).toBe(head)
+    expect(result.before?.commit).toBe(head)
+    expect(result.after?.commit).toBe(head)
     expect(gitOut(['rev-parse', 'HEAD'], work)).toBe(head)
     expect(gitOut(['rev-parse', '--abbrev-ref', 'HEAD'], work)).toBe(SESSION_ID)
   })
@@ -121,7 +121,7 @@ describe('refreshRepo with an unpushed session branch', () => {
     const result = await refreshRepo(cfg())
 
     expect(gitOut(['rev-parse', 'HEAD'], work)).toBe(expected)
-    expect(result.after.commit).toBe(expected)
+    expect(result.after?.commit).toBe(expected)
   })
 
   test('a genuine fetch failure is still fatal', async () => {
@@ -129,5 +129,19 @@ describe('refreshRepo with an unpushed session branch', () => {
     // outage behind a refresh that reports success.
     const broken = { ...cfg(), repoUrl: join(root, 'no-such-repo.git') } as Config
     await expect(refreshRepo(broken)).rejects.toThrow(/git fetch refresh failed/)
+  })
+
+  test('a workspace with no checkout refreshes as a no-op, not a 409', async () => {
+    // #12136: a session boots with an empty /workspace. There is nothing to
+    // fetch or pull, so the refresh reports the absence instead of failing —
+    // an env push or the Reload-config call must not answer 409 for the
+    // session that never cloned (the release gate's RUN-7, 2026-11-10).
+    const empty = join(root, 'empty-workspace')
+    mkdirSync(empty)
+    const result = await refreshRepo({ ...cfg(), projectTarget: empty } as Config)
+    expect(result.before).toBeNull()
+    expect(result.after).toBeNull()
+    // The empty workspace is untouched.
+    expect(readdirSync(empty)).toEqual([])
   })
 })

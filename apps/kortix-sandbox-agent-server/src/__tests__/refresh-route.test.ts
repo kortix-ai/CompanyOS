@@ -152,13 +152,16 @@ describe('auth', () => {
 
   it('keeps an ordinary refresh open to a proxied caller', async () => {
     // Only the destructive flag needs the direct call: a user pulling their own
-    // workspace keeps working without it. No repo here, so the repo work
-    // answers 409; the gate did not refuse it.
+    // workspace keeps working without it. No checkout here (the default since
+    // #12136): the repo work is a no-op that answers 200 — the gate's subject
+    // is that the proxied caller was NOT refused, and it sees the route's real
+    // answer, not a 401.
     const res = await app({ projectTarget: emptyTarget() }).request('/kortix/refresh', {
       method: 'POST',
       headers: { Authorization: `Bearer ${TEST_SANDBOX_TOKEN}` },
     })
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, repo: { before: null, after: null } })
   })
 
 })

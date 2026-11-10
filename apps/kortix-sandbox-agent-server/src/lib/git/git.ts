@@ -453,8 +453,17 @@ export async function commitAndPushWorkingTree(
   opts: { message?: string } = {},
 ): Promise<CommitPushResult> {
   const target = cfg.projectTarget
-  const before = await readRepoInfo(target)
-  if (!before) throw new Error('project repo is not materialized')
+  let before = await readRepoInfo(target)
+  if (!before) {
+    // #12136 leaves a fresh session's workspace empty: there is no checkout to
+    // commit from. "Save changes" still has to land the agent's work on the
+    // session branch, so materialize the branch into the existing workspace
+    // first — untracked agent files stay in place and become the commit; a
+    // file that collides with repository content is git's own refusal.
+    await materializeSessionBranch(cfg, target)
+    before = await readRepoInfo(target)
+    if (!before) throw new Error('project repo did not materialize')
+  }
 
   const branch = cfg.branchName || before.branch
   if (!branch) throw new Error('no branch checked out to push')
@@ -501,15 +510,75 @@ export async function commitAndPushWorkingTree(
     pushed: !remoteUpToDate,
     nothingToDo: !committed && remoteUpToDate,
     branch,
-    headSha: after?.commit ?? before.commit,
+    headSha: after?.commit ?? before?.commit ?? null,
   }
 }
 
-export async function refreshRepo(cfg: Config): Promise<{ before: RepoInfo; after: RepoInfo }> {
+/**
+ * Materialize the session branch into a workspace that holds no checkout
+ * (the default since #12136), without touching the agent's untracked files:
+ * `git init`, fetch the branch — the session branch of a session that never
+ * pushed has no remote ref yet, so fall back to the default branch — and
+ * check the tree out. A workspace file the tree also carries is git's own
+ * refusal, never a silent overwrite.
+ */
+async function materializeSessionBranch(cfg: Config, target: string): Promise<void> {
+  if (!cfg.repoUrl) {
+    // No repository connected: there is nothing to materialize from. The
+    // historical error, still the honest one.
+    throw new Error('project repo is not materialized')
+  }
+  const branch = cfg.branchName || cfg.defaultBranch
+  if (!branch) throw new Error('no branch to materialize')
+
+  const cloneCredential = await resolveCloneCredential(cfg)
+  const run = async (args: string[], what: string): Promise<void> => {
+    const r = await gitWithAuth(cloneCredential, cfg.repoUrl, ['-C', target, ...args])
+    if (r.code !== 0) throw new Error(`git ${what} failed: ${r.stderr || r.stdout}`)
+  }
+
+  const init = await execGit(['-C', target, 'init'])
+  if (init.code !== 0) throw new Error(`git init failed: ${init.stderr || init.stdout}`)
+  const remote = await execGit(['-C', target, 'remote', 'add', 'origin', cfg.repoUrl])
+  if (remote.code !== 0 && !/already exists/i.test(remote.stderr)) {
+    throw new Error(`git remote add failed: ${remote.stderr || remote.stdout}`)
+  }
+
+  // A never-pushed session branch (the ordinary first save) has no remote
+  // ref: fetch the default branch's tree instead and put the session branch
+  // on top of it. Any other fetch failure surfaces from the default-branch
+  // fetch with its own error.
+  let base = `refs/remotes/origin/${branch}`
+  const fetched = await gitWithAuth(cloneCredential, cfg.repoUrl, [
+    '-C', target, 'fetch', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+  ])
+  if (fetched.code !== 0) {
+    if (!cfg.defaultBranch) throw new Error(`git fetch failed: ${fetched.stderr || fetched.stdout}`)
+    await run(
+      ['fetch', 'origin', `+refs/heads/${cfg.defaultBranch}:refs/remotes/origin/${cfg.defaultBranch}`],
+      'fetch',
+    )
+    base = `refs/remotes/origin/${cfg.defaultBranch}`
+  }
+
+  // `-B` puts the session branch on the fetched tree. Without `-f` git
+  // refuses an untracked workspace file the tree also carries — the agent's
+  // file at a tracked path needs a real decision, not a silent overwrite.
+  await run(['checkout', '-B', branch, base], 'checkout')
+}
+
+export async function refreshRepo(cfg: Config): Promise<{
+  before: RepoInfo | null
+  after: RepoInfo | null
+}> {
   const target = cfg.projectTarget
   const before = await readRepoInfo(target)
   if (!before) {
-    throw new Error('project repo is not materialized')
+    // A session with no checkout (the default since #12136) has nothing to
+    // fetch or pull. Report the absence instead of failing: a config reload
+    // or an env push must not turn into a 409 because the workspace never
+    // held a clone. An agent that cloned keeps the pull path below.
+    return { before: null, after: null }
   }
 
   const cloneCredential = await resolveCloneCredential(cfg)

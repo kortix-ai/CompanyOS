@@ -42,7 +42,9 @@ export interface HarnessRefreshInput {
 
 interface HarnessRefreshResult {
   ok: true
-  repo: { before: RepoInfo; after: RepoInfo }
+  /** Both null when the workspace holds no checkout (the default since
+   * #12136): there is nothing to fetch, pull or report. */
+  repo: { before: RepoInfo | null; after: RepoInfo | null }
   runtime: string
   runtime_pid: number | null
 }

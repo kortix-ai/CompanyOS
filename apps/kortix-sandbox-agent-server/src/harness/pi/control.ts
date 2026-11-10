@@ -187,9 +187,11 @@ export function createPiControlService(
   }
 }
 
-/** `repo=0`: report the checkout as it is; nothing is fetched or pulled. */
+/** `repo=0`: report the checkout as it is; nothing is fetched or pulled. A
+ * workspace with no checkout (the default since #12136) has nothing to
+ * report: a no-op, not an error — an env push or a resume must not fail
+ * because the session never cloned. */
 async function unchangedRepo(projectTarget: string) {
   const info = await readRepoInfo(projectTarget)
-  if (!info) throw new Error('project repo is not materialized')
   return { before: info, after: info }
 }

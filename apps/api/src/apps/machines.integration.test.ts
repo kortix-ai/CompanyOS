@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { accounts, appArtifacts, appDeployments, appLinks, appRuntimes, appVolumes, apps, projects } from '@kortix/db';
 import { resolveAppReleaseConfig, type AppReleaseConfig } from '@kortix/shared/app-config';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import type { AppdStatus, AppRuntimeHandle, StartAppRuntimeInput } from './hosting';
 
 process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 
@@ -21,22 +22,25 @@ let failReadyFor = new Set<string>();
 const realHosting = await import('./hosting');
 mock.module('./hosting', () => ({
   ...realHosting,
-  AppHostingProvider: class {
-    async createRuntime(input: { runtimeId: string; volumes?: Record<string, { volume: string }> }) {
+  // Extends the real class: machines.ts's destroy and create-failure paths roll a
+  // runtime back through hosting.remove (machines.ts:230, :568), and a hand-rolled
+  // stub without it masked the real pg error with `hosting.remove is not a function`.
+  // The inherited methods resolve providers through the mocked getProvider below.
+  AppHostingProvider: class extends realHosting.AppHostingProvider {
+    override async createRuntime(input: StartAppRuntimeInput): Promise<AppRuntimeHandle> {
       createdBoxes += 1;
       const externalId = `box-${createdBoxes}`;
       const mounts = Object.entries(input.volumes ?? {}).map(([path, spec]) => `${path}=${spec.volume}`);
       calls.push(`create ${externalId}${mounts.length ? ` mount ${mounts.join(',')}` : ''}`);
-      return { externalId, controlTokenHash: `hash-${input.runtimeId}`, metadata: {} };
+      return { externalId, baseUrl: '', metadata: {}, provider: input.provider, runtimeId: input.runtimeId, controlTokenHash: `hash-${input.runtimeId}` };
     }
-    async waitUntilReady(_provider: string, externalId: string) {
+    override async waitUntilReady(_provider: string, externalId: string): Promise<AppdStatus> {
       calls.push(`ready? ${externalId}`);
       if (failReadyFor.has(externalId)) throw new Error('kortix-appd failed: exit 1');
+      return { status: 'running', ready: true };
     }
-    async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
-    async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
-    // Production's error paths roll a runtime back through hosting.remove (machines.ts:230, :568).
-    async remove(_provider: string, externalId: string) { calls.push(`remove ${externalId}`); }
+    override async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
+    override async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');
@@ -90,6 +94,10 @@ const USER_ID = '00000000-0000-4000-a000-00000000f105';
 const PROVIDER = 'platinum';
 
 async function cleanup(): Promise<void> {
+  // A setAppScale leaves a background reconcile running (fire-and-forget by
+  // design). Settle it before the cascade below, or the reconcile's in-flight
+  // app_runtimes insert deadlocks against this delete (40P01, release gate).
+  await machines.settleAppReconciles(APP_ID);
   await db.update(apps).set({ activeDeploymentId: null }).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(apps).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(appArtifacts).where(eq(appArtifacts.projectId, PROJECT_ID));

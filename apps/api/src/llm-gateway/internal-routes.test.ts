@@ -552,6 +552,51 @@ describe('POST /admit — authorize, route, resolve and billing in one call', ()
   });
 });
 
+describe('POST /internal/gateway/resolve-upstream — the failure warn is logged once per model and code', () => {
+  // KRTX-4665: a box's voice pipeline resolves its TTS model through this route
+  // on every spoken line. When the deployment cannot serve the model (the
+  // managed lineup lists no audio models), the per-occurrence warn logged
+  // 41 lines in 2 h from one session against a 0.13/h baseline. The typed
+  // error keeps flowing to the gateway in the 200 body every time; the log
+  // keeps only the first occurrence per (model, code).
+  test('repeated failures for one model warn once, the typed error still answers every call', async () => {
+    resolveCandidatesMock.mockReset();
+    resolveCandidatesMock.mockRejectedValue(
+      new GatewayResolutionError('model_not_found', '"inworld-tts-2" is not a recognized model.', 'Check the model id, or choose a different model.'),
+    );
+    loggerWarn.mockClear();
+    try {
+      const a = app();
+      for (let i = 0; i < 5; i++) {
+        const res = await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
+        expect(res.status).toBe(200);
+        const json = (await res.json()) as { candidates: unknown[]; resolutionError: { code: string } };
+        expect(json.candidates).toEqual([]);
+        expect(json.resolutionError.code).toBe('model_not_found');
+      }
+      expect(loggerWarn).toHaveBeenCalledTimes(1);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
+
+  test('a different model logs its own first failure', async () => {
+    resolveCandidatesMock.mockReset();
+    resolveCandidatesMock.mockRejectedValue(
+      new GatewayResolutionError('model_not_found', '"other-model" is not a recognized model.', 'Check the model id.'),
+    );
+    loggerWarn.mockClear();
+    try {
+      const a = app();
+      await a.request(authedRequest({ principal: { userId: 'u' }, model: 'other-model' }));
+      await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
+      expect(loggerWarn).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
+});
+
 test('full discovery labels managed plan access separately from external credentials', async () => {
   const res = await app().request('/models', authedRequest({
     principal: { userId: 'u', accountId: 'a', projectId: 'p', freeModelsOnly: true },

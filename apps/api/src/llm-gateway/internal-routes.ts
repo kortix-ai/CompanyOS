@@ -17,6 +17,7 @@ import {
   recordGatewayUsage,
 } from './hooks';
 import { matchesInternalToken, weakInternalTokenWarnings } from './internal-auth';
+import { createFirstInWindow } from '../shared/audit-dedupe';
 import { gatewayModelCatalog } from './models/catalog-models';
 import { unavailableCatalog } from './models/picker-catalog';
 import { servableProjectCatalog } from './models/servable-catalog';
@@ -39,6 +40,16 @@ const INTERNAL_EDGE_HEADER = 'x-kortix-internal-edge-key';
 export function createInternalGatewayRoutes() {
   const app = new Hono();
   const { GATEWAY_INTERNAL_TOKEN: internalToken, KORTIX_INTERNAL_EDGE_KEY: edgeKey } = process.env;
+
+  // A resolution failure here is usually a PERSISTENT state (a model this
+  // deployment cannot serve), not a transient one — and a caller repeats it
+  // per request: a box's voice pipeline resolves its TTS model on every
+  // spoken line, so one session against a deployment whose managed lineup
+  // lists no audio models logged 41 warns in 2 h against a 0.13/h baseline
+  // (KRTX-4665). Log the first occurrence per (model, code) per day; the
+  // typed error in the 200 body is unchanged, so the gateway still refuses
+  // every time.
+  const logFirstResolutionFailure = createFirstInWindow({ windowMs: 24 * 60 * 60 * 1000 });
 
   for (const warning of weakInternalTokenWarnings(internalToken)) {
     logger.error(`[gateway-internal-auth] ${warning}`);
@@ -102,7 +113,9 @@ export function createInternalGatewayRoutes() {
       // return the typed error in a 200 body so the api-client can re-throw it
       // as a GatewayResolutionError and the in-process hook contract holds.
       if (err instanceof GatewayResolutionError) {
-        logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
+        if (logFirstResolutionFailure(`${model}:${err.code}`)) {
+          logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
+        }
         return c.json({
           candidates: [],
           resolutionError: resolutionErrorBody(err),

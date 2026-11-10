@@ -34,14 +34,13 @@ mock.module('../lib/logger', () => ({
 
 const {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
-  deadCredentialLogDecision,
   deadCredentialLogKey,
   isDeadCredential,
   isAgentGrantDenial,
   markDeadCredential,
   markAgentGrantDenial,
-  resetDeadCredentialLogForTests,
 } = await import('./dead-credential-log');
+const { logWindowDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
 const { buildDenialError } = await import('../iam/denial-message');
 
@@ -66,62 +65,6 @@ function deadCredential401Like(message = 'PAT not found or revoked'): HTTPExcept
   return err;
 }
 
-describe('dead-credential log decision', () => {
-  test('the first refusal of a message logs, repeats inside the window are suppressed with the count kept', () => {
-    resetDeadCredentialLogForTests();
-    let now = 1_000_000;
-    expect(deadCredentialLogDecision('POST /p -> 401 [HTTPException] PAT not found or revoked', now)).toEqual({
-      log: true,
-      suppressed: 0,
-    });
-    for (let i = 1; i <= 4; i += 1) {
-      now += 5_000;
-      expect(deadCredentialLogDecision('POST /p -> 401 [HTTPException] PAT not found or revoked', now)).toEqual({
-        log: false,
-        suppressed: 0,
-      });
-    }
-  });
-
-  test('the next logged line after the window carries the volume suppressed since the previous one', () => {
-    resetDeadCredentialLogForTests();
-    let now = 2_000_000;
-    const key = 'POST /p -> 401 [HTTPException] PAT not found or revoked';
-    expect(deadCredentialLogDecision(key, now).log).toBe(true);
-    for (let i = 0; i < 3; i += 1) {
-      now += 1_000;
-      deadCredentialLogDecision(key, now);
-    }
-    now += 601_000;
-    const next = deadCredentialLogDecision(key, now);
-    expect(next.log).toBe(true);
-    expect(next.suppressed).toBe(3);
-    // The count resets with the window: a refusal long after the burst does
-    // not inherit the stale volume.
-    now += 601_000;
-    const later = deadCredentialLogDecision(key, now);
-    expect(later.log).toBe(true);
-    expect(later.suppressed).toBe(0);
-  });
-
-  test('a different message logs independently of another one inside its window', () => {
-    resetDeadCredentialLogForTests();
-    const now = 3_000_000;
-    expect(deadCredentialLogDecision('POST /p/turn-stream -> 401 [HTTPException] PAT not found or revoked', now).log).toBe(true);
-    expect(deadCredentialLogDecision('POST /p/audit/events -> 401 [HTTPException] PAT not found or revoked', now).log).toBe(true);
-    expect(deadCredentialLogDecision('POST /p/turn-stream -> 401 [HTTPException] PAT not found or revoked', now + 1_000).log).toBe(false);
-  });
-
-  test('the tracked-window map is bounded: the oldest key is evicted past the cap', () => {
-    resetDeadCredentialLogForTests();
-    const now = 4_000_000;
-    // Past the cap, the first key must have been evicted, so it logs again
-    // immediately instead of being suppressed forever.
-    expect(deadCredentialLogDecision('key-a', now).log).toBe(true);
-    for (let i = 0; i < 20_000; i += 1) deadCredentialLogDecision(`key-${i}`, now);
-    expect(deadCredentialLogDecision('key-a', now + 1_000).log).toBe(true);
-  });
-});
 
 describe('dead-credential exceptions are marked and throttled at the error handler', () => {
   // The route throws what resolvePat throws for a dead credential. Five
@@ -182,15 +125,15 @@ describe('dead-credential exceptions are marked and throttled at the error handl
   });
 
   test('a window whose suppressed count left the churn band ships the next line at warn (KRTX-4454)', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const path = '/v1/projects/p/turn-stream';
     const key = deadCredentialLogKey('POST', path, 401, 'PAT not found or revoked');
     // A burst in a window that already expired: one decision opens it, the
     // rest are suppressed and left pending.
     const past = Date.now() - 601_000;
-    expect(deadCredentialLogDecision(key, past).log).toBe(true);
+    expect(logWindowDecision(key, past).log).toBe(true);
     for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
-      expect(deadCredentialLogDecision(key, past + 1_000).log).toBe(false);
+      expect(logWindowDecision(key, past + 1_000).log).toBe(false);
     }
     // The handler opens the next window and must ship the pending volume at
     // warn — a caller ignoring the typed stop code is not the designed churn.
@@ -205,7 +148,7 @@ describe('dead-credential exceptions are marked and throttled at the error handl
   });
 
   test('fifteen project paths share one refusal window', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = appWithDeadCredentialThrow();
     const before = logged.length;
     for (let i = 0; i < 15; i += 1) {
@@ -222,7 +165,7 @@ describe('dead-credential exceptions are marked and throttled at the error handl
     // The named refusal carries the dead row's id in the message. The throttle
     // key must normalize it out — otherwise every revoked token shards its own
     // bucket and the KRTX-1039 burst protection stops bounding the warn lines.
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = new OpenAPIHono();
     installHttpErrors(app);
     app.post('/v1/projects/:projectId/turn-stream', () => {
@@ -253,7 +196,7 @@ describe('invalid or expired token warn is throttled at the error handler (KRTX-
   }
 
   test('the first refusal logs one info line; repeats inside the window are suppressed and the body is untouched', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = appWithExpiredTokenThrow();
     const before = logged.length;
     let lastBody = '';
@@ -276,7 +219,7 @@ describe('invalid or expired token warn is throttled at the error handler (KRTX-
   });
 
   test('a 401 with a different reason still logs one warn per refusal', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = new OpenAPIHono();
     installHttpErrors(app);
     app.get('/v1/auth/user', () => {
@@ -327,7 +270,7 @@ describe('agent-grant denial warns are throttled at the error handler (KRTX-4635
   }
 
   test('five identical denials log one info line; the typed 403 body ships every time', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = appWithAgentGrantDenial();
     const before = logged.length;
     let lastBody = '';
@@ -347,16 +290,16 @@ describe('agent-grant denial warns are throttled at the error handler (KRTX-4635
   });
 
   test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const path = '/v1/workspaces/w/gateway/sources';
     const reason = agentScopeDenialLike().message ?? '';
     const key = deadCredentialLogKey('GET', path, 403, reason);
     // A burst in a window that already expired: one decision opens it, the
     // rest are suppressed and left pending.
     const past = Date.now() - 601_000;
-    expect(deadCredentialLogDecision(key, past).log).toBe(true);
+    expect(logWindowDecision(key, past).log).toBe(true);
     for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
-      expect(deadCredentialLogDecision(key, past + 1_000).log).toBe(false);
+      expect(logWindowDecision(key, past + 1_000).log).toBe(false);
     }
     // The handler opens the next window and must ship the pending volume at
     // warn — an agent loop grinding on a denial it never acts on is not the
@@ -372,7 +315,7 @@ describe('agent-grant denial warns are throttled at the error handler (KRTX-4635
   });
 
   test('a denial outside the agent-grant family keeps its per-request line', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = appWithAgentGrantDenial();
     const before = logged.length;
     for (let i = 0; i < 3; i += 1) await app.request('/v1/workspaces/w/audit');
@@ -408,7 +351,7 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   }
 
   test('five identical denials log one info line; the typed 403 body ships every time', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = appWithMfaDenial();
     const before = logged.length;
     let lastBody = '';
@@ -431,16 +374,16 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   });
 
   test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const path = '/v1/projects/p/sessions';
     const reason = buildDenialError('project.session.read', 'account_mfa_required').message ?? '';
     const key = deadCredentialLogKey('GET', path, 403, reason);
     // A burst in a window that already expired: one decision opens it, the
     // rest are suppressed and left pending.
     const past = Date.now() - 601_000;
-    expect(deadCredentialLogDecision(key, past).log).toBe(true);
+    expect(logWindowDecision(key, past).log).toBe(true);
     for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
-      expect(deadCredentialLogDecision(key, past + 1_000).log).toBe(false);
+      expect(logWindowDecision(key, past + 1_000).log).toBe(false);
     }
     // The handler opens the next window and must ship the pending volume at
     // warn — a fleet of locked-out sessions grinding their polls is not the
@@ -456,7 +399,7 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   });
 
   test('fifteen workspace paths share one refusal window', async () => {
-    resetDeadCredentialLogForTests();
+    resetLogWindowsForTests();
     const app = new OpenAPIHono();
     installHttpErrors(app);
     app.get('/v1/projects/:workspaceId/sessions', (c) => {

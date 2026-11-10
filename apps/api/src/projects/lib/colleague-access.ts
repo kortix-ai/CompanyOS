@@ -34,6 +34,8 @@ import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { agentMayUseConnector, agentMayUseEnv } from '../../iam/agent-scope';
 import { canonicalConnectorAlias } from '../../shared/connector-alias';
 import { db } from '../../shared/db';
+import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
+import { loadProjectAgents } from '../agents';
 import { grantFromLoadedAgents } from '../agents/grants';
 import type { LoadedAgents } from '../agents/types';
 import { listResolvedProjectSecrets, secretKeyCollisionInAllowlist } from '../secrets';
@@ -289,10 +291,60 @@ export async function askColleagueAccess(input: {
   return row;
 }
 
-/** A My Kortix session's grant: My Kortix's own, plus the list a person allowed when it is a colleague. */
-export async function myKortixSessionGrant(sessionId: string): Promise<AgentGrant> {
-  return withColleagueAccess(myKortixAgentGrant(), await readColleagueAccess(sessionId));
+/**
+ * A My Kortix session's grant: My Kortix's own, plus the list a person allowed
+ * when it is a colleague.
+ *
+ * With the session's project git context, the base grant resolves through
+ * `grantFromLoadedAgents` — the SAME rule the per-prompt re-mint and the boot
+ * secret resolver use — so repair mode (an unparseable kortix.yaml) closes the
+ * secret leg here too. Without it, a My Kortix session BOOTED holding every
+ * project secret its person can use: the mint and the boot env read this
+ * function, and neither consulted the manifest, so only the first prompt's
+ * re-mint narrowed them, after the values were already in the box
+ * (secret-grant.ts's header: the residue is irreversible).
+ *
+ * Only `env` narrows; permissions and connectors stay person-capped 'all' so
+ * the broken file can still be repaired through the project's own tooling. A
+ * file that could not be READ is not repair mode: `loadProjectAgents` swallows
+ * that git failure and the platform-owned grant stands.
+ */
+export async function myKortixSessionGrant(
+  sessionId: string,
+  project?: MyKortixProjectGitContext,
+): Promise<AgentGrant> {
+  // Without the git context nothing can be read, so the manifest cannot be
+  // broken and the platform-owned grant stands.
+  const loaded = project?.defaultBranch
+    ? await loadProjectAgents(
+        {
+          projectId: project.projectId,
+          repoUrl: project.repoUrl,
+          defaultBranch: project.defaultBranch,
+          manifestPath: project.manifestPath ?? 'kortix.yaml',
+          gitAuthToken: null,
+        },
+        { forceRefresh: 'tip-proof' },
+      )
+    : null;
+  // Only a manifest that was READ and is broken narrows the grant. An unreadable
+  // one (a git failure) is not repair mode, and taking `grantFromLoadedAgents`'s
+  // deny-all there would strip a session that nothing is wrong with.
+  if (!loaded) return withColleagueAccess(myKortixAgentGrant(), await readColleagueAccess(sessionId));
+  const base = loaded.manifestSyntaxError
+    ? (grantFromLoadedAgents(MY_KORTIX_AGENT_NAME, loaded) ?? myKortixAgentGrant())
+    : myKortixAgentGrant();
+  return withColleagueAccess(base, await readColleagueAccess(sessionId));
 }
+
+/** The git context a My Kortix grant needs to consult the manifest. */
+export type MyKortixProjectGitContext = {
+  projectId: string;
+  repoUrl: string;
+  /** Absent/empty: no manifest can be read, so nothing can be in repair mode. */
+  defaultBranch: string | null | undefined;
+  manifestPath: string | null | undefined;
+};
 
 /** The list a person allowed for this colleague session. Null: none (any other session). */
 export async function readColleagueAccess(sessionId: string): Promise<ColleagueAccess | null> {

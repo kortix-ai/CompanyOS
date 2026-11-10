@@ -182,18 +182,18 @@ function parseRaw(payload: string): string | null {
 
 /** A channel's subscriber slot: the single handler the `on*` setter registered
  * (`set(null)` clears it) or a fan-out — every registration gets the value,
- * each isolated (a throw never stops the next), the fan-out iterating the
- * snapshot at dispatch start (an unsubscribe during delivery is honored on
- * the next). Registration keeps each channel's trunk store: the base-move
- * transport's array delivered every registration (`repeated` — the same
- * handler registered twice runs twice), the trunk Sets kept one. Kept across
- * stop/start; `clear` drops the transport's subscribers. */
+ * each isolated (a throw never stops the next). The fan-out keeps each
+ * channel's trunk delivery loop: the base-move transport's array was iterated
+ * live (`repeated` — the same handler registered twice runs twice, and a
+ * handler registered during delivery joins that pass), the trunk Sets iterated
+ * the snapshot at dispatch start (an unsubscribe during delivery is honored on
+ * the next). Kept across stop/start; `clear` drops the transport's
+ * subscribers. */
 function slot<TArg>(repeated = false) {
-  const handlers: ((value: TArg) => void)[] = [];
+  let handlers: ((value: TArg) => void)[] = [];
   return {
     set(next: ((value: TArg) => void) | null) {
-      handlers.length = 0;
-      if (next) handlers.push(next);
+      handlers = next ? [next] : [];
     },
     subscribe(handler: (value: TArg) => void) {
       if (repeated || !handlers.includes(handler)) handlers.push(handler);
@@ -203,10 +203,12 @@ function slot<TArg>(repeated = false) {
       };
     },
     clear() {
-      handlers.length = 0;
+      // A new array, like the trunk's `handlers = []`: a live delivery already
+      // iterating the old one runs to its end instead of stopping short.
+      handlers = [];
     },
     dispatch(value: TArg) {
-      for (const handler of [...handlers]) invokeSubscriber(handler, value);
+      for (const handler of repeated ? handlers : [...handlers]) invokeSubscriber(handler, value);
     },
   };
 }

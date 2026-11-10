@@ -165,6 +165,13 @@ describe('AGENT = HUMAN on connector accounts — migrated PostgreSQL', () => {
     }
   });
 
+  test('every session reads its own workspace record (GET /v1/workspaces/:id), the route `kortix workspaces clone` probes', async () => {
+    for (const who of ['person', ...AGENTS] as const) {
+      const response = await request('GET', `/v1/workspaces/${project.project_id}`, tokens[who]);
+      expect({ who, status: response.status }).toEqual({ who, status: 200 });
+    }
+  });
+
   test('an agent whose grant lacks connections.manage is refused by permission, naming it', async () => {
     const narrow = (
       await createAccountToken({

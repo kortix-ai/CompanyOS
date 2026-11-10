@@ -329,7 +329,12 @@ export async function myKortixSessionGrant(
     : null;
   // Only a manifest that was READ and is broken narrows the grant. An unreadable
   // one (a git failure) is not repair mode, and taking `grantFromLoadedAgents`'s
-  // deny-all there would strip a session that nothing is wrong with.
+  // deny-all there would strip a session that nothing is wrong with. The repair
+  // branch is taken ONLY here (`manifestSyntaxError`) and NOT for every load: an
+  // unconditional `grantFromLoadedAgents` would also answer
+  // `disabledMyKortixAgentGrant` for a project with `my_kortix` off, while this
+  // mint has always given My Kortix its platform-owned grant. The repair answer
+  // is the same rule the resolver uses, unchanged.
   if (!loaded) return withColleagueAccess(myKortixAgentGrant(), await readColleagueAccess(sessionId));
   const base = loaded.manifestSyntaxError
     ? (grantFromLoadedAgents(MY_KORTIX_AGENT_NAME, loaded) ?? myKortixAgentGrant())

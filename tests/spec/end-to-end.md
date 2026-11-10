@@ -1699,6 +1699,7 @@ These contracts use product IDs. They replace the old route-coverage bucket IDs.
 `PROJ-45` `PUT /projects/:id/default-reasoning-effort {effort}` sets the project default effort (Settings → General). `null` and `''` clear it; a value must be an effort label the model catalog publishes, else 400 `unknown_effort`. Returns the serialized project with the field re-validated on read, and the value persists on a later `GET /projects/:id`. Non-members and archived projects are rejected like every project-settings write.
 `SBX-5` A project member reads the project sandbox inventory. Non-members are rejected.
 `SBX-6` Platinum and legacy Daytona webhooks reject unsigned provider payloads.
+`SBX-7` `POST /projects/:id/sandbox-templates/reconcile` (called by `kortix ship` after its push) fetches the base branch, reads `sandbox.templates` there, starts a build of each project template whose image is missing or failed, and answers 200 `{ templates: [{ slug, snapshot_name, state, error, providers }], started }`; with no template provider enabled it answers 503. Non-members get 403/404, ANON 401.
 `SCIM-5` SCIM resource-type, schema, and user-replacement routes preserve tenant and bearer-token boundaries.
 `SCIM-6` Entra deactivation accepts string `"False"`, case-insensitive `Active`, and RFC pathless attribute objects. Each returns `active:false`, removes access, and preserves an inactive user on read-back. The last owner remains protected with `409`; pending invitations also deactivate.
 

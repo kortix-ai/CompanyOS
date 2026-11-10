@@ -1184,6 +1184,8 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sandbox.templates[].residential_proxy` | boolean or map | — | `true`, or `{ country: us }`: the sandbox's web traffic leaves through a residential IP address, billed per GB from credits. Kortix hosts and package registries connect directly. Sessions start only where the deployment offers it. Not part of the image. |
 | `sandbox.default` | string | `default` | A slug from `sandbox.templates`, or `default` for the platform image. |
 
+Kortix builds a template's image when the workspace is created, when a change request merges, and after every `kortix ship`. Ship prints one line per template; `kortix sandboxes build <slug> --wait` waits until the image is ready. A session that starts before then boots the platform image.
+
 #### triggers keys
 
 | Key | Type | Default | Description |

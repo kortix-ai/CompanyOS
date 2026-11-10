@@ -143,7 +143,7 @@ repository's tools. Skip this step when no chosen template has
      dev-environment: .kortix/skills/dev-environment
    \`\`\`
 6. Build the image once to prove it: \`kortix sandboxes build --local dev\` when
-   Docker runs here. Otherwise \`kortix ship\` builds it in the cloud in step 8.
+   Docker runs here. Otherwise \`kortix ship\` starts its cloud build in step 8.
 
 ## 6. Secrets
 
@@ -197,6 +197,11 @@ Then run \`kortix models ls\` and confirm that a model of that plan is listed.
    whether you may link with their GitHub login instead:
    \`gh auth token | kortix ship -y --github-token -\` (the token never sits in a
    command line).
+6. When kortix.yaml declares a sandbox template, \`ship\` starts its cloud build
+   after the push and prints one line per template. Run
+   \`kortix sandboxes build <slug> --wait\` before step 11: a session that starts
+   before the image is ready boots the platform default image. On a failed
+   build, read the error it prints, fix the Dockerfile, \`kortix ship\` again.
 
 ## 9. Template secrets
 

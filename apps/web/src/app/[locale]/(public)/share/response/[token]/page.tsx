@@ -58,9 +58,7 @@ export default async function PublicResponsePage({ params }: PublicResponseRoute
       <ShareUnavailable
         title={revoked ? t('goneTitle') : t('busyTitle')}
         description={revoked ? t('goneHint') : t('busyHint')}
-        cta={
-          <Link href="/">{t('tryKortix')}</Link>
-        }
+        cta={<Link href="/">{t('tryKortix')}</Link>}
       />
     );
   }
@@ -91,9 +89,7 @@ export default async function PublicResponsePage({ params }: PublicResponseRoute
       sheetClassName="bg-background border-border relative min-h-0 flex-1 overflow-y-auto rounded-t-md border-x border-t"
     >
       <article className="mx-auto w-full max-w-3xl px-6 py-10">
-        {respondedOn ? (
-          <p className="text-muted-foreground mb-6 text-xs">{respondedOn}</p>
-        ) : null}
+        {respondedOn ? <p className="text-muted-foreground mb-6 text-xs">{respondedOn}</p> : null}
         {response.prompt ? (
           <div className="mb-6">
             <SharedPrompt text={response.prompt} />

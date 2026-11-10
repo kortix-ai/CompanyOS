@@ -1,17 +1,11 @@
 import Link from '@/components/site-link';
-import { MarketingButton } from '@/features/marketing/kit/marketing-button';
-import { Band, Heading } from '@/features/marketing/kit/page-frame';
 import { PillarsBand } from '@/features/marketing/component/pillars-band';
+import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { FaqSection } from '@/features/marketing/landing-sections/faq-section';
 
 import { useTranslations } from '@/i18n/use-translations';
 
-import {
-  CodeIcon,
-  CpuIcon,
-  GitBranchIcon,
-  HardDrivesIcon,
-} from '@phosphor-icons/react/dist/ssr';
+import { CodeIcon, CpuIcon, GitBranchIcon, HardDrivesIcon } from '@phosphor-icons/react/dist/ssr';
 import type { ComponentType, ReactNode } from 'react';
 
 import { localizeMarketingContent as localizeContent } from './content';

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { Window } from 'happy-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // Under bun test there is no react-server bundler condition; neutralize the
 // guard package. The rendered markup below stays the real thing.
@@ -97,7 +97,11 @@ describe('full marketing pages render in the landing frame', () => {
     // The section headings stay two-tone h2s with a muted second line, and
     // every band keeps the padded inner measure the kit Band paints.
     expect(document.querySelectorAll('h2').length).toBeGreaterThanOrEqual(4);
-    for (const band of [...document.querySelectorAll('#plans .kx-rail-fade, #agent-hours .kx-rail-fade, #models .kx-rail-fade, #compare .kx-rail-fade')]) {
+    for (const band of [
+      ...document.querySelectorAll(
+        '#plans .kx-rail-fade, #agent-hours .kx-rail-fade, #models .kx-rail-fade, #compare .kx-rail-fade',
+      ),
+    ]) {
       const classes = tokens(band).split(' ');
       expect(classes).toContain('px-4');
       expect(classes).toContain('lg:px-17');

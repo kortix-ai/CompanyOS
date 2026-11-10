@@ -11,20 +11,20 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Button } from '@kortix/ui/button';
-import { ButtonGroup } from '@kortix/ui/button-group';
-import Hint from '@kortix/ui/hint';
-import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
-import Loading from '@kortix/ui/loading';
-import { framePolicy } from '@kortix/ui/file-viewer';
-import { Download } from '@kortix/ui/internal/icons/download';
 import { getAuthToken } from '@/lib/auth-token';
 import { getEnv } from '@/lib/env-config';
 import { getPublicShareByToken, startSessionWithToken } from '@kortix/sdk';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription } from '@kortix/ui/alert';
+import { Button } from '@kortix/ui/button';
+import { ButtonGroup } from '@kortix/ui/button-group';
+import { framePolicy } from '@kortix/ui/file-viewer';
+import Hint from '@kortix/ui/hint';
+import { Download } from '@kortix/ui/internal/icons/download';
+import Loading from '@kortix/ui/loading';
+import { ShareChrome, ShareHeader, ShareUnavailable } from '../../share-chrome';
 import { PublicFileShareView } from './public-file-share-view';
 import { downloadFileFromUrl, fileNameFromPath } from './share-file';
 import { SHARE_PREVIEW_IFRAME_CLASS } from './share-layout';
-import { ShareChrome, ShareHeader, ShareUnavailable } from '../../share-chrome';
 
 interface PublicShareMeta {
   share: {
@@ -197,9 +197,7 @@ export default function PublicSessionSharePage() {
       <ShareUnavailable
         title={tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextShareLink6d642641')}
         description={error ?? tI18nHardcoded.raw('i18nComplete.text489314dd2a13')}
-        cta={
-          <Link href="/">{tI18nHardcoded.raw('i18nComplete.text5fae82827f98')}</Link>
-        }
+        cta={<Link href="/">{tI18nHardcoded.raw('i18nComplete.text5fae82827f98')}</Link>}
       />
     );
   }
@@ -251,117 +249,113 @@ export default function PublicSessionSharePage() {
               // One group, one weight: every action is secondary, so the bar reads
               // as a toolbar beside the shared content, never louder than it.
               <ButtonGroup className="shrink-0">
-            {iframeSrc && !offline && !isFileShare && (
-              <Hint label={openAppLabel} side="bottom">
-                <Button
-                  variant="secondary"
-                  size="icon-base"
-                  aria-label={openAppLabel}
-                  onClick={() => window.open(iframeSrc, '_blank', 'noopener,noreferrer')}
-                >
-                  <ExternalLink />
-                </Button>
-              </Hint>
-            )}
-            {/* Full screen exists for an iframe that needs the whole viewport.
+                {iframeSrc && !offline && !isFileShare && (
+                  <Hint label={openAppLabel} side="bottom">
+                    <Button
+                      variant="secondary"
+                      size="icon-base"
+                      aria-label={openAppLabel}
+                      onClick={() => window.open(iframeSrc, '_blank', 'noopener,noreferrer')}
+                    >
+                      <ExternalLink />
+                    </Button>
+                  </Hint>
+                )}
+                {/* Full screen exists for an iframe that needs the whole viewport.
                 An offline share has nothing to fill the screen with. */}
-            {!offline && (
-              <Hint label={tI18nHardcoded.raw('i18nComplete.text674fe2acd0d5')} side="bottom">
-                <Button
-                  variant="secondary"
-                  size="icon-base"
-                  aria-label={tI18nHardcoded.raw('i18nComplete.text674fe2acd0d5')}
-                  onClick={() => setFullscreen(true)}
-                >
-                  <ArrowsOutSimple />
-                </Button>
-              </Hint>
-            )}
-            {isFileShare && !offline && fileSrc && (
-              <Button variant="secondary" size="sm" onClick={handleDownload}>
-                <Download />
-                {tI18nHardcoded.raw('i18nComplete.textd6eafe823591')}
-              </Button>
-            )}
-            {/* One CTA in both auth states. A signed-out visitor still wants
+                {!offline && (
+                  <Hint label={tI18nHardcoded.raw('i18nComplete.text674fe2acd0d5')} side="bottom">
+                    <Button
+                      variant="secondary"
+                      size="icon-base"
+                      aria-label={tI18nHardcoded.raw('i18nComplete.text674fe2acd0d5')}
+                      onClick={() => setFullscreen(true)}
+                    >
+                      <ArrowsOutSimple />
+                    </Button>
+                  </Hint>
+                )}
+                {isFileShare && !offline && fileSrc && (
+                  <Button variant="secondary" size="sm" onClick={handleDownload}>
+                    <Download />
+                    {tI18nHardcoded.raw('i18nComplete.textd6eafe823591')}
+                  </Button>
+                )}
+                {/* One CTA in both auth states. A signed-out visitor still wants
                 "Open in Kortix"; sign-in is a step on the way there, not a
                 different destination. Offline and signed out, the pane's
                 Sign in is the only way on, so the bar shows no second copy. */}
-            {offline && !hasAuth ? null : (
-              <Button size="sm" variant="secondary" asChild>
-                <Link href={hasAuth ? sessionHref : authHref} prefetch>
-                  {tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextOpenIn2fdbf464')}
-                </Link>
-              </Button>
-            )}
-          </ButtonGroup>
+                {offline && !hasAuth ? null : (
+                  <Button size="sm" variant="secondary" asChild>
+                    <Link href={hasAuth ? sessionHref : authHref} prefetch>
+                      {tI18nHardcoded.raw(
+                        'autoAppPublicShareSessionTokenPageJsxTextOpenIn2fdbf464',
+                      )}
+                    </Link>
+                  </Button>
+                )}
+              </ButtonGroup>
             }
           />
         )
       }
       sheetClassName="bg-background border-border relative h-dvh min-h-0 flex-1 overflow-clip rounded-t-md border-x border-t"
     >
-        {offline ? (
-          hasAuth ? (
-            <div className="flex h-full items-center justify-center px-6">
-              <div className="flex max-w-sm flex-col items-center gap-6 text-center">
-                <div className="space-y-2">
-                  <h2 className="text-xl font-medium tracking-tight">{offlineTitle}</h2>
-                  <p className="text-muted-foreground text-sm text-pretty">{offlineDescription}</p>
-                </div>
-                {startError && (
-                  <BannerAlert variant="destructive" className="w-full" role="alert"><BannerAlertDescription>
-                    {startError}
-                  </BannerAlertDescription></BannerAlert>
-                )}
-                <Button
-                  onClick={startSession}
-                  disabled={starting}
-                  aria-busy={starting || undefined}
-                >
-                  {starting ? <Loading /> : <Play weight="fill" />}
-                  {startError
-                    ? tCommon.raw('retry')
-                    : tI18nHardcoded.raw(
-                        'autoAppPublicShareSessionTokenPageJsxTextStartSessiond4216ec8',
-                      )}
-                </Button>
+      {offline ? (
+        hasAuth ? (
+          <div className="flex h-full items-center justify-center px-6">
+            <div className="flex max-w-sm flex-col items-center gap-6 text-center">
+              <div className="space-y-2">
+                <h2 className="text-xl font-medium tracking-tight">{offlineTitle}</h2>
+                <p className="text-muted-foreground text-sm text-pretty">{offlineDescription}</p>
               </div>
+              {startError && (
+                <BannerAlert variant="destructive" className="w-full" role="alert">
+                  <BannerAlertDescription>{startError}</BannerAlertDescription>
+                </BannerAlert>
+              )}
+              <Button onClick={startSession} disabled={starting} aria-busy={starting || undefined}>
+                {starting ? <Loading /> : <Play weight="fill" />}
+                {startError
+                  ? tCommon.raw('retry')
+                  : tI18nHardcoded.raw(
+                      'autoAppPublicShareSessionTokenPageJsxTextStartSessiond4216ec8',
+                    )}
+              </Button>
             </div>
-          ) : (
-            // Signed out: the /auth column, so sign-in reads as the next step.
-            <div className="flex h-full items-center justify-center px-6">
-              <div className="w-full max-w-[380px]">
-                <div className="mb-10 space-y-2">
-                  <h2 className="text-2xl font-medium tracking-tight text-balance">
-                    {offlineTitle}
-                  </h2>
-                  <p className="text-muted-foreground text-sm text-pretty">{offlineDescription}</p>
-                </div>
-                <Button size="lg" className="w-full" asChild>
-                  <Link href={authHref} prefetch>
-                    {tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextSignInb66c3487')}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          )
-        ) : isFileShare ? (
-          <PublicFileShareView token={token} share={meta.share} fileUrl={fileSrc} />
+          </div>
         ) : (
-          <iframe
-            title={title}
-            src={iframeSrc}
-            className={SHARE_PREVIEW_IFRAME_CLASS}
-            // A sandbox attribute is a token list the browser parses, not copy.
-            // Sent through i18n it was translated — Spanish shipped
-            // "permitir-mismo-origen", German comma-separated — and an
-            // unrecognized token list means MAXIMALLY restrictive: no scripts,
-            // no same-origin. Every shared preview was a dead blank frame in
-            // seven of eight locales.
-            sandbox={framePolicy('app', iframeSrc).sandbox}
-          />
-        )}
+          // Signed out: the /auth column, so sign-in reads as the next step.
+          <div className="flex h-full items-center justify-center px-6">
+            <div className="w-full max-w-[380px]">
+              <div className="mb-10 space-y-2">
+                <h2 className="text-2xl font-medium tracking-tight text-balance">{offlineTitle}</h2>
+                <p className="text-muted-foreground text-sm text-pretty">{offlineDescription}</p>
+              </div>
+              <Button size="lg" className="w-full" asChild>
+                <Link href={authHref} prefetch>
+                  {tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextSignInb66c3487')}
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )
+      ) : isFileShare ? (
+        <PublicFileShareView token={token} share={meta.share} fileUrl={fileSrc} />
+      ) : (
+        <iframe
+          title={title}
+          src={iframeSrc}
+          className={SHARE_PREVIEW_IFRAME_CLASS}
+          // A sandbox attribute is a token list the browser parses, not copy.
+          // Sent through i18n it was translated — Spanish shipped
+          // "permitir-mismo-origen", German comma-separated — and an
+          // unrecognized token list means MAXIMALLY restrictive: no scripts,
+          // no same-origin. Every shared preview was a dead blank frame in
+          // seven of eight locales.
+          sandbox={framePolicy('app', iframeSrc).sandbox}
+        />
+      )}
     </ShareChrome>
   );
 }

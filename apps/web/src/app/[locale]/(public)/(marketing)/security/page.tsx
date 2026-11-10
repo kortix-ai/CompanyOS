@@ -1,7 +1,7 @@
 import Link from '@/components/site-link';
+import { PillarsBand } from '@/features/marketing/component/pillars-band';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Band, Heading, PageFrame } from '@/features/marketing/kit/page-frame';
-import { PillarsBand } from '@/features/marketing/component/pillars-band';
 import { Seal } from '@/features/marketing/kit/seal';
 import { FaqSection } from '@/features/marketing/landing-sections/faq-section';
 import { LayerTabs } from '@/features/marketing/security-page/layer-tabs';

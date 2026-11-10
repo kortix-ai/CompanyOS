@@ -1,11 +1,11 @@
+import { getLocale, getTranslations } from '@/i18n/get-translations';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { getLocale, getTranslations } from '@/i18n/get-translations';
 
 import { defaultLocale, locales, type Locale } from '@/i18n/config';
-import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { PUBLIC_METADATA_TRANSLATION_KEYS } from '@/i18n/public-metadata-translation-keys.generated';
 import { getMarketingRecord } from '@/lib/seo/public-content';
+import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { CANONICAL_ORIGIN, siteMetadata } from '@kortix/ui/internal/lib/site-metadata';
 
 export const DEFAULT_OG_IMAGE = {
@@ -107,7 +107,9 @@ const OPEN_GRAPH_LOCALE: Record<Locale, string> = {
 export function openGraphLocales(locale: Locale): { locale: string; alternateLocale: string[] } {
   return {
     locale: OPEN_GRAPH_LOCALE[locale],
-    alternateLocale: locales.filter((other) => other !== locale).map((other) => OPEN_GRAPH_LOCALE[other]),
+    alternateLocale: locales
+      .filter((other) => other !== locale)
+      .map((other) => OPEN_GRAPH_LOCALE[other]),
   };
 }
 

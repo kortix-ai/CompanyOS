@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { Window } from 'happy-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // Characterization for the public share chrome: the h-12 bar (logo, title,
 // actions), the rounded sheet under it, and the quiet AuthFrame unavailable

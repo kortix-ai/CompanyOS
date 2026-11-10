@@ -48,7 +48,8 @@ describe('public marketing layouts resolve their route metadata', () => {
       expect(metadata).toMatchSnapshot();
       const canonical = (metadata.alternates as { canonical?: unknown } | undefined)?.canonical;
       expect(String(canonical)).toMatch(/^https:\/\/kortix\.com(\/[a-z-]+)?/);
-      const title = (metadata.title as { absolute?: string } | undefined)?.absolute ?? metadata.title;
+      const title =
+        (metadata.title as { absolute?: string } | undefined)?.absolute ?? metadata.title;
       expect(title).toBeTruthy();
     });
   }

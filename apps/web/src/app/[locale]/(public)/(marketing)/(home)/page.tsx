@@ -1,13 +1,13 @@
-import { FrameworkBand } from '@/features/marketing/landing-sections/framework-band';
 import { CaseStudies } from '@/features/marketing/case-studies/case-studies';
+import { PageFrame } from '@/features/marketing/kit/page-frame';
+import { SandBandHero } from '@/features/marketing/landing-hero/sand-band-hero';
+import { LandingFaqSection } from '@/features/marketing/landing-sections/faq-section';
+import { FrameworkBand } from '@/features/marketing/landing-sections/framework-band';
 import { HowItWorksTabs } from '@/features/marketing/landing-sections/how-it-works-tabs';
+import { PillarsBand } from '@/features/marketing/landing-sections/pillars-band';
 import { TrustBand } from '@/features/marketing/landing-sections/trust-band';
 import { UseCasesBand } from '@/features/marketing/landing-sections/use-cases-band';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
-import { LandingFaqSection } from '@/features/marketing/landing-sections/faq-section';
-import { PillarsBand } from '@/features/marketing/landing-sections/pillars-band';
-import { SandBandHero } from '@/features/marketing/landing-hero/sand-band-hero';
-import { PageFrame } from '@/features/marketing/kit/page-frame';
 import { marketingMetadataLayout } from '@/lib/seo/metadata';
 
 const { generateMetadata } = marketingMetadataLayout('/');

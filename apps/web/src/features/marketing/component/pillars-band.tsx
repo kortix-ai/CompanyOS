@@ -1,4 +1,14 @@
-import { BrainIcon, CheckIcon, CodeIcon, CpuIcon, FolderSimpleIcon, HardDrivesIcon, IdentificationBadgeIcon, KeyIcon, ListChecksIcon } from '@phosphor-icons/react/dist/ssr';
+import {
+  BrainIcon,
+  CheckIcon,
+  CodeIcon,
+  CpuIcon,
+  FolderSimpleIcon,
+  HardDrivesIcon,
+  IdentificationBadgeIcon,
+  KeyIcon,
+  ListChecksIcon,
+} from '@phosphor-icons/react/dist/ssr';
 import type { ComponentType } from 'react';
 
 import { Band, Heading } from '../kit/page-frame';

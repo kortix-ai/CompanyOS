@@ -2,11 +2,11 @@ import { Button } from '@kortix/ui/button';
 import type { Metadata } from 'next';
 
 import Link from '@/components/site-link';
-import { ARTIFACT_FRAME_ALLOW, ARTIFACT_IFRAME_SANDBOX } from '@kortix/ui/artifacts';
 import { getTranslations } from '@/i18n/get-translations';
+import { ARTIFACT_FRAME_ALLOW, ARTIFACT_IFRAME_SANDBOX } from '@kortix/ui/artifacts';
 
-import { ShareChrome, ShareHeader, ShareUnavailable } from '../../share-chrome';
 import { SHARE_FILE_IFRAME_CLASS } from '../../session/[token]/share-layout';
+import { ShareChrome, ShareHeader, ShareUnavailable } from '../../share-chrome';
 
 import { loadPublicArtifact } from './public-artifact';
 
@@ -46,9 +46,7 @@ export default async function PublicArtifactPage({ params }: PublicArtifactRoute
       <ShareUnavailable
         title={result.kind === 'busy' ? t('busyTitle') : t('notFoundTitle')}
         description={result.kind === 'busy' ? t('busyHint') : t('notFoundHint')}
-        cta={
-          <Link href="/">{t('tryKortix')}</Link>
-        }
+        cta={<Link href="/">{t('tryKortix')}</Link>}
       />
     );
   }

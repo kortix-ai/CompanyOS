@@ -147,6 +147,22 @@ Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md)
 10. Creates the GitHub webhooks with your own `gh`.
 11. Fires one trigger and shows you the session.
 
+#### Plan, one go, onboard
+
+Three commands carry the mechanics, so the agent and you only agree the plan:
+
+```sh
+kortix plan --json                         # read-only: the repository, stack, env names and classes, integrations, Kortix state
+kortix onboard --yes --json \
+  --env-file .env.local --only DATABASE_URL,API_KEY \
+  --channels eng,bugs                       # make kortix.yaml real, in phases
+kortix doctor --loops --fix --json         # one green/red list; --fix repairs what it can
+```
+
+- `kortix plan` classifies each key of every `.env*` file as `local`, `remote` (a URL on another host, or a staging file) or `prod` (a production file, a `PROD`/`LIVE` name, a live-mode key). It reads each value in its own process and prints none. It also proposes the dev environment (runtimes, services, commands) and lists the public reference repositories an agent can adapt.
+- `kortix onboard --yes` runs, in order: `validate`, `ship`, `secrets` (pushes the approved names, generates every unset webhook secret, one intake link for the rest), `webhooks` (a GitHub webhook and label for each webhook trigger that filters on `headers.github_event`, through your `gh`), `slack` (connect link, then the bot joins `--channels`; a private channel needs `/invite`), `connectors` (a sign-in link per declared connector), `sandbox` (builds each image and waits), then the doctor. Each phase skips what is done: run it again after you finish a `user_actions` item. Exit `0`: done and green. `4`: something waits on you. `1`: a phase failed.
+- `kortix channels join eng bugs` joins the Slack bot to public channels on its own.
+
 A workspace that already reads a repository with no `kortix.yaml` shows **Copy setup prompt** on its home page: the same prompt, with the repository and the branch to push to. Until the push, the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab.
 
 #### Templates

@@ -178,9 +178,15 @@ Then run \`kortix models ls\` and confirm that a model of that plan is listed.
    - **A pull request** (recommended when other people work on the code): push a
      branch \`kortix/setup\`, open the pull request with \`gh pr create\`, wait until
      the person merges it, then pull the default branch and run \`kortix ship\`.
-4. \`kortix ship\` stages every change before it commits: run it only on a clean
-   tree. It creates the workspace on the first run, links the GitHub repository
-   and pushes. Give the person the workspace link it prints.
+4. \`kortix ship -y\` stages every change before it commits: run it only on a
+   clean tree. It creates the workspace on the first run, links the GitHub
+   repository and pushes. Give the person the workspace link it prints.
+5. When \`ship\` stops with "Kortix GitHub App not installed", give the person the
+   install link it printed: one click on GitHub. Wait until they say it is done,
+   then run \`kortix ship -y\` again. Where the App cannot be installed, **Ask**
+   whether you may link with their GitHub login instead:
+   \`gh auth token | kortix ship -y --github-token -\` (the token never sits in a
+   command line).
 
 ## 9. Template secrets
 

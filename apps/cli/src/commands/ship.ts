@@ -86,6 +86,7 @@ Options:
                          <github-url> link + push to this GitHub repo
   --github-token <pat> Link a GitHub origin with this token instead of the
                        GitHub App (App-free import; needs repo Contents R/W).
+                       \`-\` reads it from stdin: gh auth token | kortix ship --github-token -
   -m, --message <msg>  Commit message for the sync (default: "kortix: ship").
   --no-commit          Don't commit. Fail if the working tree is dirty.
   --no-verify          Skip the kortix validate checks.
@@ -423,7 +424,8 @@ async function shipFirstTime(
       repoUrl: byoUrl,
       name,
       accountId: accountId!,
-      githubToken: flags.githubToken,
+      // `-` reads the token from stdin, so it never sits in the process list.
+      githubToken: flags.githubToken === '-' ? (await Bun.stdin.text()).trim() || undefined : flags.githubToken,
       yes: flags.yes,
     }).catch(explainCreationRefusal);
     await bindShippedFolder(client, project, hostName, auth);

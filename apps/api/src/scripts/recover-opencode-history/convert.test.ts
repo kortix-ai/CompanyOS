@@ -127,6 +127,15 @@ describe('the recovered log', () => {
     expect(log.threads.map((t) => t.title)).toEqual(['Fixture session', 'list files (@general subagent)']);
   });
 
+  test('a todo whose status is outside the session-log enum is left out; an unknown priority is dropped from its todo', () => {
+    const odd = structuredClone(store);
+    const [first, second] = odd.todos;
+    odd.todos = [{ ...first!, status: 'done' }, { ...second!, priority: 'urgent' }];
+    const { log } = recoverSessionLog({ sessionId: SESSION, rootId: ROOT, store: odd });
+    expect(log.todos).toEqual([{ content: 'Check the image', status: 'pending' }]);
+    expect(SessionLogSchema.safeParse(log).success).toBe(true);
+  });
+
   test('the task child is a thread spawned by the task call', () => {
     const { log } = recoverSessionLog({ sessionId: SESSION, rootId: ROOT, store });
     const [root, child] = log.threads;

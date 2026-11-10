@@ -65,11 +65,10 @@ function firstTrigger(id: (typeof TEMPLATE_IDS)[number]): { file: string; excerp
 export function loopViews(): LoopView[] {
   return [...TEMPLATE_IDS]
     .sort((a, b) => (a === 'software-factory' ? -1 : b === 'software-factory' ? 1 : 0))
-    .map((id) => {
+    .flatMap((id): LoopView[] => {
       const words = PRESENTATION[id];
-      if (!words) return null; // A loop shows only once it has its one short line.
+      if (!words) return []; // A loop shows only once it has its one short line.
       const template = getTemplate(id);
-      return { id, name: template.name, summary: template.summary, ...words, ...firstTrigger(id) };
-    })
-    .filter((loop): loop is LoopView => loop !== null);
+      return [{ id, name: template.name, summary: template.summary, ...words, ...firstTrigger(id) }];
+    });
 }

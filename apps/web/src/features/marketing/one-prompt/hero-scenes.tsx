@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@kortix/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { DEMO } from './factory-content';
 
@@ -88,6 +88,14 @@ const SCENES: Scene[] = [
   },
 ];
 
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+const prefersReducedMotion = () => window.matchMedia(REDUCED_MOTION).matches;
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
 /**
  * The hero: one short clip per loop. The signal arrives, the agent's steps
  * appear one by one, the result lands. Auto-advances every 8 s; a tab click
@@ -97,11 +105,7 @@ export function HeroScenes() {
   const [index, setIndex] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [still, setStill] = useState(false);
-
-  useEffect(() => {
-    setStill(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  }, []);
+  const still = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   useEffect(() => {
     if (paused || still) return;

@@ -11,6 +11,13 @@
 
 export const SETUP_GUIDE_URL = 'https://kortix.com/setup.md';
 
+export const FACTORY_GUIDE_URL = 'https://kortix.com/factory.md';
+
+/** The one prompt of the Software Factory: a URL, nothing to install first. */
+export const FACTORY_PROMPT = `Add a Kortix software factory to this repository with me.
+Follow ${FACTORY_GUIDE_URL} (curl -fsSL ${FACTORY_GUIDE_URL}) step by step.
+Ask me before each decision it names. Never print a secret value.`;
+
 /** What a person copies. Short on purpose: the guide it points to is versioned and served. */
 export const SETUP_PROMPT = `Set up Kortix cloud agents on this repository with me.
 Read ${SETUP_GUIDE_URL} (curl -fsSL ${SETUP_GUIDE_URL}) and follow it step by step.

@@ -1062,6 +1062,9 @@ importers:
       '@kortix/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@kortix/starter':
+        specifier: workspace:*
+        version: link:../../packages/starter
       '@kortix/ui':
         specifier: workspace:*
         version: link:../../packages/ui

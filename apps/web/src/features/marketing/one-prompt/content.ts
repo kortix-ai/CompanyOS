@@ -133,8 +133,8 @@ export const promptFor = (template: HomeTemplate) => templatePrompt(template);
 export const FACTORY_RUN = {
   repo: 'kortix-factory-demo',
   events: [
-    { who: 'source-tests', what: 'opened issue #1', title: 'POST /todos with malformed JSON crashes the whole server', at: '15:16 UTC' },
-    { who: 'worker', what: 'opened pull request #6', title: 'fix: return 400 on malformed JSON instead of crashing the server', at: '15:18 UTC' },
+    { who: 'tester', what: 'opened issue #1', title: 'POST /todos with malformed JSON crashes the whole server', at: '15:16 UTC' },
+    { who: 'builder', what: 'opened pull request #6', title: 'fix: return 400 on malformed JSON instead of crashing the server', at: '15:18 UTC' },
     { who: 'reviewer', what: 'reviewed #6', title: 'npm test — 7/7 pass, 3 consecutive runs, no flakes.', at: '15:21 UTC' },
   ],
 };

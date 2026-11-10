@@ -40,7 +40,9 @@ export interface TemplateVars {
   defaultBranch: string;
 }
 
-const TEMPLATES_DIR = join(import.meta.dir, '..', 'templates');
+// `import.meta.dir` is Bun's. Under Node (the web app) it is undefined, and the
+// compiled-in snapshot serves the files.
+const TEMPLATES_DIR: string | null = typeof import.meta.dir === 'string' ? join(import.meta.dir, '..', 'templates') : null;
 const EMBEDDED = embeddedStarter as Record<string, { files: Array<{ path: string; content: string }> }>;
 
 export function isTemplateId(value: unknown): value is TemplateId {
@@ -60,8 +62,8 @@ function walk(root: string): string[] {
 
 /** Raw files (placeholders intact): from disk in a checkout, else the compiled-in snapshot. */
 function rawTemplateFiles(id: TemplateId): Array<{ path: string; content: string }> {
-  const dir = join(TEMPLATES_DIR, id);
-  if (existsSync(dir)) {
+  const dir = TEMPLATES_DIR ? join(TEMPLATES_DIR, id) : null;
+  if (dir && existsSync(dir)) {
     return walk(dir)
       .map((abs) => ({ path: relative(dir, abs).split(sep).join('/'), content: readFileSync(abs, 'utf8') }))
       .sort((a, b) => a.path.localeCompare(b.path));
@@ -96,4 +98,25 @@ export function getTemplateFiles(id: TemplateId, vars: TemplateVars): Array<{ pa
       path: file.path,
       content: file.content.replace(/\{\{(repoFullName|defaultBranch)\}\}/g, (_m, key: string) => values[key]!),
     }));
+}
+
+/**
+ * The full onboarding of one template: its own steps, then the generic setup
+ * guide with the template chosen. `kortix templates onboard <id>` prints it and
+ * the web serves it (`/factory.md` for the Software Factory), so both say the same.
+ */
+export function composeTemplateOnboarding(id: TemplateId, setupGuide: string): string {
+  const template = getTemplate(id);
+  const own = getTemplateOnboarding(id);
+  return [
+    `# Set up the Kortix ${template.name}`,
+    '',
+    template.summary,
+    '',
+    `The template is chosen: \`${template.id}\`. In step 4 of the guide below, add only this one`,
+    `(\`kortix templates add ${template.id} --json\`) and skip the question which templates to add.`,
+    '',
+    ...(own ? [own.trim(), ''] : []),
+    setupGuide,
+  ].join('\n');
 }

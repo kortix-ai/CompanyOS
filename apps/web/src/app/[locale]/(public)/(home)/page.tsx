@@ -1,10 +1,10 @@
-import { AgentsHome } from '@/features/marketing/one-prompt/agents-home';
+import { FactoryHome } from '@/features/marketing/one-prompt/factory-home';
 
 /**
- * kortix.com: one prompt to your coding agent adds cloud agents to your
- * repository. Its own page from top to bottom (no marketing shell); the
- * CompanyOS page that stood here is at /companyos.
+ * kortix.com: one product. One prompt adds a software factory to your repo.
+ * Its own page from top to bottom (no marketing shell); the CompanyOS page
+ * that stood here is at /companyos.
  */
 export default function Home() {
-  return <AgentsHome />;
+  return <FactoryHome />;
 }

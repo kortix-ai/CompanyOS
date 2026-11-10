@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { manifestCandidatePaths } from '@kortix/manifest-schema';
 import { SETUP_GUIDE } from '@kortix/shared/setup-guide';
-import { getTemplate, getTemplateFiles, getTemplateOnboarding, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
+import { composeTemplateOnboarding, getTemplate, getTemplateFiles, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { runGit } from '../git-run.ts';
 import { addManifestImport } from '../manifest-edit.ts';
@@ -198,21 +198,7 @@ function runAdd(argv: string[], json: boolean): number {
 
 function runOnboard(id: string | undefined): number {
   if (!isTemplateId(id)) return fail(`Name a template: ${TEMPLATE_IDS.join(', ')}`);
-  const template = getTemplate(id);
-  const own = getTemplateOnboarding(id);
-  process.stdout.write(
-    [
-      `# Set up the Kortix ${template.name}`,
-      '',
-      `${template.summary}`,
-      '',
-      `The template is chosen: \`${template.id}\`. In step 4 of the guide below, add only this one`,
-      `(\`kortix templates add ${template.id} --json\`) and skip the question which templates to add.`,
-      '',
-      ...(own ? [own.trim(), ''] : []),
-      SETUP_GUIDE,
-    ].join('\n'),
-  );
+  process.stdout.write(composeTemplateOnboarding(id, SETUP_GUIDE));
   return 0;
 }
 

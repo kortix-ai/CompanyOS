@@ -42,6 +42,8 @@ pnpm worktree create --name auth-config --full-supabase --yes
 | `pnpm worktree status [n]` | Live health (🟢/⚪) of web/api/Supabase per worktree. |
 | `pnpm worktree doctor [--yes]` | Check (or `--yes` install) the toolchain + flag worktree/registry drift. |
 | `pnpm worktree sweep [--idle 60m] [--yes]` | Delete build output (`.next`, `.turbo`, `dist`, `target`, test reports) in every idle git worktree. Skips checkouts with a process or a write within `--idle`, and dirs with tracked files. Dry run without `--yes`. |
+| `pnpm worktree autoclean [--dry-run] [--yes]` | Automatic housekeeping; `create` and `start` run it first. Sweeps build output in registered worktrees idle ≥ 24h and removes worktrees idle ≥ 48h that are not running, not busy, have no real changes (generated noise such as `apps/web/src/lib/seo/content-timestamps.json` does not count), and have every commit on a remote. Never touches the primary or unregistered checkouts. Dry run without `--yes`. Env: `KORTIX_WORKTREE_AUTOCLEAN=0` (off on create/start), `KORTIX_WORKTREE_SWEEP_IDLE`, `KORTIX_WORKTREE_REMOVE_IDLE`. |
+| `pnpm worktree autoclean --install-cron \| --uninstall-cron` | Opt in to (or out of) an hourly user crontab line that runs `autoclean --yes` from the primary checkout. Idempotent, marked `# kortix-worktree-autoclean`, logs to `$KORTIX_HOME/worktrees/autoclean.log`. |
 
 `--yes` on `create`/`doctor` auto-installs anything missing for the selected
 mode (`bun`, Node 22, `pnpm`, and when needed Supabase CLI, Docker, `psql`, or
@@ -157,6 +159,24 @@ registry drift in both directions; `pnpm worktree stop --all` clears the lot.
   `KORTIX_API_PROXY_TARGET` (unset → `localhost:8008`). Without this, every
   worktree's browser would proxy to the **primary** API.
 - `apps/web/package.json` — `next dev … --port ${WEB_PORT:-3000}`.
+
+## Disk: what fills it and what reclaims it
+
+Measured 2026-11-10 on a 98 GB `/work` volume that reached 100% (46 MB free)
+three times in a week:
+
+- A worktree holds ~1.3 GB of unshared files. Its 5.6 GB `node_modules` is
+  mostly hardlinks into the pnpm store.
+- `apps/web/.next` grows without bound under `next dev`: 3.4 GB and 7.0 GB in
+  two checkouts.
+- Removing 30 idle worktrees moved the volume from 100% to 59% (41 GB free).
+
+`autoclean` reclaims both on every `create` and `start`. Activity is the newest
+of `createdAt`, `lastUsedAt` (written by `create`, `start`, `web`, `stop <n>`),
+the HEAD commit time and the mtime of each changed file. Reads do not count.
+The disk guard on `create`/`start` warns below 10 GB free
+(`KORTIX_WORKTREE_DISK_WARN_GB`) and `create` refuses with exit 2 below 4 GB
+(`KORTIX_WORKTREE_DISK_REFUSE_GB`).
 
 ## Notes
 

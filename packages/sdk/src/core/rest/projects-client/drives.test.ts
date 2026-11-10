@@ -303,15 +303,22 @@ test('a conditional save (ifMatch) is not resent after a 503, only after a 429',
 });
 
 test('an abort during the wait before a resend stops at once', async () => {
-  respondAlways(503, { message: 'deadline' });
   const controller = new AbortController();
-  const started = Date.now();
-  const pending = uploadDriveFile(D, '/a/x', new Blob(['a']), { signal: controller.signal }).catch((e: unknown) => e);
-  setTimeout(() => controller.abort(), 50);
-  const error = await pending;
-  expect((error as ApiError).code).toBe('ABORTED');
-  expect(Date.now() - started).toBeLessThan(400);
+  globalThis.fetch = mock(async (input: unknown, init: RequestInit = {}) => {
+    calls.push({ url: String(input), method: init.method ?? 'GET', headers: {}, body: init.body });
+    // Abort once the SDK is in its 500 ms wait before the resend.
+    setTimeout(() => controller.abort(), 0);
+    return new Response(JSON.stringify({ message: 'deadline' }), { status: 503, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  let settled: unknown;
+  const pending = uploadDriveFile(D, '/a/x', new Blob(['a']), { signal: controller.signal }).catch((e: unknown) => (settled = e));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // Two event-loop turns, not the 500 ms wait: no wall clock, so load cannot flake it.
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  expect((settled as ApiError | undefined)?.code).toBe('ABORTED');
   expect(calls).toHaveLength(1);
+  await pending;
 });
 
 test('a resent upload reports only its final outcome to the app-wide error handler', async () => {

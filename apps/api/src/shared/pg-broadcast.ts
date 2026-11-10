@@ -181,25 +181,29 @@ function parseRaw(payload: string): string | null {
 }
 
 /** A channel's subscriber slot: the single handler the `on*` setter registered
- * (`set(null)` clears it) or a fan-out Set — every subscriber gets the value,
+ * (`set(null)` clears it) or a fan-out — every registration gets the value,
  * each isolated (a throw never stops the next), the fan-out iterating the
- * snapshot at dispatch start (an unsubscribe during delivery is honored on the
- * next). Kept across stop/start; `clear` drops the transport's subscribers. */
-function slot<TArg>() {
-  const handlers = new Set<(value: TArg) => void>();
+ * snapshot at dispatch start (an unsubscribe during delivery is honored on
+ * the next). Registration keeps each channel's trunk store: the base-move
+ * transport's array delivered every registration (`repeated` — the same
+ * handler registered twice runs twice), the trunk Sets kept one. Kept across
+ * stop/start; `clear` drops the transport's subscribers. */
+function slot<TArg>(repeated = false) {
+  const handlers: ((value: TArg) => void)[] = [];
   return {
     set(next: ((value: TArg) => void) | null) {
-      handlers.clear();
-      if (next) handlers.add(next);
+      handlers.length = 0;
+      if (next) handlers.push(next);
     },
     subscribe(handler: (value: TArg) => void) {
-      handlers.add(handler);
+      if (repeated || !handlers.includes(handler)) handlers.push(handler);
       return () => {
-        handlers.delete(handler);
+        const at = handlers.indexOf(handler);
+        if (at !== -1) handlers.splice(at, 1);
       };
     },
     clear() {
-      handlers.clear();
+      handlers.length = 0;
     },
     dispatch(value: TArg) {
       for (const handler of [...handlers]) invokeSubscriber(handler, value);
@@ -233,7 +237,8 @@ function notify(channel: string, payload: string): void {
  * startConfigBaseMoveBroadcast wires every entry with the same `wired` body,
  * in this order. */
 const CHANNELS = {
-  baseMove: { channel: BASE_MOVE_CHANNEL, parse: parseUuid, ...slot<string>() },
+  // The trunk's registry was an array here: every registration is delivered.
+  baseMove: { channel: BASE_MOVE_CHANNEL, parse: parseUuid, ...slot<string>(true) },
   // The payload is one id and nothing else, passed through unvalidated.
   tunnelForward: { channel: TUNNEL_FORWARD_CHANNEL, parse: parseRaw, ...slot<string>() },
   // The payload is one command id and nothing else.

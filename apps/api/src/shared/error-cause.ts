@@ -16,18 +16,20 @@
  *
  * Bounded and cycle-safe. These run on an error path, where a hang is the worst
  * possible outcome — worse than a missing detail — so the walk refuses to
- * revisit a node and gives up after 16 links.
+ * revisit a node and gives up after `maxDepth` links (16 by default; a
+ * classifier whose own walk was shorter before the consolidation passes its
+ * bound — `postgres-errors.ts` walks 4 links, `database-errors.ts` 8).
  *
  * The one walk every classifier reads (`errorSqlstate`'s first code,
  * `innermostMessage`'s deepest message, the transient sets over every node,
  * the driver-node find), so "what does this chain say" has one answer.
  */
-export function errorChain(error: unknown): Record<string, unknown>[] {
+export function errorChain(error: unknown, maxDepth = 16): Record<string, unknown>[] {
   const chain: Record<string, unknown>[] = [];
   const seen = new Set<unknown>();
   for (
     let node = error;
-    chain.length < 16 && node != null && typeof node === 'object' && !seen.has(node);
+    chain.length < maxDepth && node != null && typeof node === 'object' && !seen.has(node);
     node = (node as { cause?: unknown }).cause
   ) {
     seen.add(node);
@@ -105,11 +107,11 @@ export function innermostMessage(error: unknown): string | null {
  * classifier — like `errorSqlstate` above — lives in this leaf and is
  * re-exported from `audit-db.ts` for its existing callers.
  *
- * The transient set `database-errors.ts` held until 2026-11 merges here: its
- * SQLSTATEs were a subset of this one, and "is this retryable" must have one
- * answer.
+ * This table is the audit classifier's membership alone. The database read
+ * retry (`isTransientDatabaseError`) keeps its own table below: a code added
+ * for one retry policy must never silently widen the other.
  */
-export const TRANSIENT_SQLSTATES: ReadonlySet<string> = new Set([
+const AUDIT_CONTENTION_SQLSTATES = new Set([
   '57014', // query_canceled — statement_timeout fired while queued on a lock
   '55P03', // lock_not_available — lock_timeout fired
   '40001', // serialization_failure
@@ -145,20 +147,40 @@ export const TRANSIENT_SQLSTATES: ReadonlySet<string> = new Set([
  * `ECONNREFUSED` / `ECONNRESET` as `code` values that are not SQLSTATEs at all,
  * and prod carries all of them (`connect ECONNREFUSED <db_ip>:5432`, `write
  * CONNECTION_CLOSED db.…supabase.co:5432`). They mean the same thing as 08006
- * and must be retryable for the same reason. `database-errors.ts`'s transient
- * set merges here too: `CONNECT_TIMEOUT` (the connection never established, so
- * the statement never reached the server — a plain Error, driver's own code,
- * not a SQLSTATE) and `EMAXCONNSESSION` (the session-mode pool's max clients).
+ * and must be retryable for the same reason.
  */
-export const TRANSIENT_DRIVER_CODES: ReadonlySet<string> = new Set([
+const AUDIT_TRANSIENT_DRIVER_CODES = new Set([
   'CONNECTION_CLOSED',
   'CONNECTION_ENDED',
   'CONNECTION_DESTROYED',
   'CONNECTION_CONNECT_TIMEOUT',
-  'CONNECT_TIMEOUT',
   'ECONNREFUSED',
   'ECONNRESET',
   'EPIPE',
+  'ETIMEDOUT',
+]);
+
+/**
+ * The database read retry's own transient set: the codes
+ * `isTransientDatabaseError` (database-errors.ts) retried before 2026-11,
+ * kept as its own table rather than merged into the audit pair above — a
+ * code added for one retry policy must never silently widen the other. The
+ * `08…` connection SQLSTATEs need no entry (that classifier's
+ * `startsWith('08')` rule covers them); `EMAXCONNSESSION` is the
+ * session-mode pool's max clients.
+ */
+export const TRANSIENT_DATABASE_CODES: ReadonlySet<string> = new Set([
+  '40001',
+  '40P01',
+  '53300',
+  '57P01',
+  '57P02',
+  '57P03',
+  // postgres.js connection-phase failure: the connection never established,
+  // so the statement never reached the server (plain Error, driver's own
+  // code — not a SQLSTATE). Reads may be retried.
+  'CONNECT_TIMEOUT',
+  'ECONNRESET',
   'ETIMEDOUT',
   'EMAXCONNSESSION',
 ]);
@@ -173,6 +195,6 @@ export const TRANSIENT_DRIVER_CODES: ReadonlySet<string> = new Set([
 export function isAuditContentionError(error: unknown): boolean {
   return errorChain(error).some((node) => {
     const code = node.code;
-    return typeof code === 'string' && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_DRIVER_CODES.has(code));
+    return typeof code === 'string' && (AUDIT_CONTENTION_SQLSTATES.has(code) || AUDIT_TRANSIENT_DRIVER_CODES.has(code));
   });
 }

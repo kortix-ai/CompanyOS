@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { isAuditContentionError } from './error-cause';
 import { isUniqueViolation, uniqueViolationConstraint } from './postgres-errors';
-import { isTransientDatabaseError } from './database-errors';
+import { inspectDatabaseError, isTransientDatabaseError } from './database-errors';
 
 // Characterization: the cause-chain contracts every classifier shares. These
 // pin the behavior the shared walk must keep — how deep a wrapped SQLSTATE is
@@ -57,6 +57,129 @@ describe('a 57P03 inside a real DrizzleQueryError classifies as transient', () =
     const b: { cause?: unknown } = { cause: a };
     a.cause = b;
     expect(isTransientDatabaseError(a)).toBe(false);
+  });
+});
+
+// Wrap `error` in `times` anonymous cause links, so the driver error sits at
+// cause-chain position `times`.
+function wrapped(error: unknown, times: number): unknown {
+  let current = error;
+  for (let i = 0; i < times; i += 1) current = { cause: current };
+  return current;
+}
+
+describe('each classifier keeps its own code membership', () => {
+  // Membership is per classifier by design: the audit pool's retry policy and
+  // the database read retry's are different answers to "is this retryable",
+  // so neither set may gain the other's codes. A cancelled statement (57014)
+  // or an unavailable lock (55P03) is audit-pool contention, never a database
+  // READ retry; the read retry's connection-phase codes (CONNECT_TIMEOUT,
+  // EMAXCONNSESSION) are never audit contention.
+
+  test('a cancelled statement is never a transient database read', () => {
+    expect(
+      isTransientDatabaseError(Object.assign(new Error('probe'), { code: '57014' })),
+    ).toBe(false);
+    expect(
+      isTransientDatabaseError(Object.assign(new Error('probe'), { code: '55P03' })),
+    ).toBe(false);
+  });
+
+  test('a driver connect-timeout is never audit contention', () => {
+    expect(
+      isAuditContentionError(Object.assign(new Error('probe'), { code: 'CONNECT_TIMEOUT' })),
+    ).toBe(false);
+    expect(
+      isAuditContentionError(Object.assign(new Error('probe'), { code: 'EMAXCONNSESSION' })),
+    ).toBe(false);
+  });
+
+  test('the audit pair never leaks into the read retry', () => {
+    for (const code of [
+      'CONNECTION_CLOSED',
+      'CONNECTION_ENDED',
+      'CONNECTION_DESTROYED',
+      'CONNECTION_CONNECT_TIMEOUT',
+      'ECONNREFUSED',
+      'EPIPE',
+    ]) {
+      expect(isTransientDatabaseError(Object.assign(new Error('probe'), { code }))).toBe(false);
+    }
+  });
+
+  test('each classifier still retries exactly its own codes', () => {
+    for (const code of [
+      '40001',
+      '40P01',
+      '53300',
+      '57P01',
+      '57P02',
+      '57P03',
+      'CONNECT_TIMEOUT',
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'EMAXCONNSESSION',
+    ]) {
+      expect(isTransientDatabaseError(Object.assign(new Error('probe'), { code }))).toBe(true);
+    }
+    for (const code of [
+      '57014',
+      '55P03',
+      '40001',
+      '40P01',
+      '57P01',
+      '57P02',
+      '57P03',
+      '08000',
+      '08003',
+      '08006',
+      '53300',
+      'CONNECTION_CLOSED',
+      'CONNECTION_ENDED',
+      'CONNECTION_DESTROYED',
+      'CONNECTION_CONNECT_TIMEOUT',
+      'ECONNREFUSED',
+      'ECONNRESET',
+      'EPIPE',
+      'ETIMEDOUT',
+    ]) {
+      expect(isAuditContentionError(Object.assign(new Error('probe'), { code }))).toBe(true);
+    }
+  });
+
+  test('an 08-prefixed connection SQLSTATE stays a database-read transient via the prefix rule', () => {
+    expect(
+      isTransientDatabaseError(Object.assign(new Error('probe'), { code: '08006' })),
+    ).toBe(true);
+  });
+});
+
+describe('each classifier keeps its own walk depth', () => {
+  // The shared walk gives up after 16 links, but a classifier that walked a
+  // shorter chain before the consolidation still does: a code hidden deeper
+  // than the caller's own bound must not newly classify.
+
+  test('a 23505 past the fourth node is not a unique violation', () => {
+    expect(isUniqueViolation(wrapped(driverError('23505'), 3))).toBe(true);
+    expect(isUniqueViolation(wrapped(driverError('23505'), 4))).toBe(false);
+    expect(uniqueViolationConstraint(wrapped(driverError('23505', 'projects_slug_key'), 3))).toBe(
+      'projects_slug_key',
+    );
+    expect(uniqueViolationConstraint(wrapped(driverError('23505', 'projects_slug_key'), 4))).toBeNull();
+  });
+
+  test('a transient code past the eighth node is not a database-read transient', () => {
+    expect(
+      isTransientDatabaseError(wrapped(Object.assign(new Error('probe'), { code: '57P03' }), 7)),
+    ).toBe(true);
+    expect(
+      isTransientDatabaseError(wrapped(Object.assign(new Error('probe'), { code: '57P03' }), 8)),
+    ).toBe(false);
+  });
+
+  test('inspectDatabaseError keeps its own eighth-link reach', () => {
+    expect(inspectDatabaseError(wrapped(driverError('57P03'), 7))).not.toBeNull();
+    expect(inspectDatabaseError(wrapped(driverError('57P03'), 8))).toBeNull();
   });
 });
 

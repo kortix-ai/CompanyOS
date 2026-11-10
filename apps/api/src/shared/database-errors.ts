@@ -1,5 +1,5 @@
 import { DrizzleQueryError } from 'drizzle-orm/errors';
-import { errorChain, TRANSIENT_DRIVER_CODES, TRANSIENT_SQLSTATES } from './error-cause';
+import { errorChain, TRANSIENT_DATABASE_CODES } from './error-cause';
 
 export interface DatabaseErrorDetails {
   isDatabaseError: true;
@@ -24,7 +24,7 @@ function isPostgresCode(code: string | null): boolean {
 }
 
 export function inspectDatabaseError(error: unknown): DatabaseErrorDetails | null {
-  const chain = errorChain(error);
+  const chain = errorChain(error, 8);
   if (chain.length === 0) return null;
 
   const postgresNode = chain.find((node) => {
@@ -72,7 +72,7 @@ export function rethrowDatabaseError(error: unknown): void {
 
 /** True when `error`, or an error in its cause chain, came from the database driver. */
 export function isDatabaseError(error: unknown): boolean {
-  return errorChain(error).some(
+  return errorChain(error, 8).some(
     (node) => node instanceof DrizzleQueryError || stringField(node.name) === 'PostgresError',
   );
 }
@@ -84,7 +84,7 @@ export function isDatabaseError(error: unknown): boolean {
  */
 export function databaseErrorSummary(error: unknown): string | null {
   if (!isDatabaseError(error)) return null;
-  const chain = errorChain(error);
+  const chain = errorChain(error, 8);
   const sqlstate = chain.map((node) => stringField(node.code)).find((code) => code !== null);
   const driverMessage = chain
     .map((node) => stringField(node.message))
@@ -94,14 +94,14 @@ export function databaseErrorSummary(error: unknown): string | null {
 }
 
 export function isTransientDatabaseError(error: unknown): boolean {
-  for (const node of errorChain(error)) {
+  for (const node of errorChain(error, 8)) {
     const code = stringField(node.code);
-    if (code?.startsWith('08') || (code && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_DRIVER_CODES.has(code)))) {
+    if (code?.startsWith('08') || (code && TRANSIENT_DATABASE_CODES.has(code))) {
       return true;
     }
   }
 
-  const text = errorChain(error)
+  const text = errorChain(error, 8)
     .flatMap((node) => [stringField(node.name), stringField(node.message)])
     .filter((value): value is string => value !== null)
     .join(' ')

@@ -6,9 +6,28 @@
 
 import { HTTPException } from 'hono/http-exception';
 import { toWorkspaceAction } from '@kortix/shared/workspace-actions';
+import { markAgentGrantDenial } from '../shared/dead-credential-log';
 
 const MFA_DENIAL_MESSAGE =
   'This workspace requires multi-factor authentication. Verify your second factor and retry.';
+
+/**
+ * The agent-principal refusal family: every reason whose constraint is a
+ * STABLE property of the caller (its kortix_permissions grant, its ceiling,
+ * its service-account role) and whose remedy the typed body already names.
+ * Their warn lines share the log throttle — see shared/dead-credential-log.ts
+ * (KRTX-4635). Deliberately outside: `account_mfa_required` (the caller fixes
+ * it in the step-up dialog) and `sso_required` (one redirect fixes it), whose
+ * constraints clear in-session, and the generic fallbacks, whose cause is
+ * unknown here.
+ */
+const AGENT_GRANT_DENIAL_REASONS = new Set([
+  'agent_scope_insufficient',
+  'agent_ceiling_insufficient',
+  'agent_grant_escalation',
+  'agent_human_only_action',
+  'service_account_scope_insufficient',
+]);
 
 /**
  * The message for a denial whose REASON — not the action — names what the
@@ -111,7 +130,7 @@ export function buildDenialError(
   // keeps the global error handler's `{error, message, status}` shape and adds
   // the two fields, so a client that reads `message` is unchanged. The CLI
   // picks its remedy hint from `code` (apps/cli/src/token-denial.ts).
-  return new HTTPException(403, {
+  const err = new HTTPException(403, {
     message,
     res: jsonResponse({
       error: true,
@@ -123,6 +142,11 @@ export function buildDenialError(
       workspace_action: workspaceAction,
     }),
   });
+  // A stable agent-principal denial is the one 4xx a caller can receive
+  // forever, so its LINE joins the log throttle (KRTX-4635). The response is
+  // untouched — the body keeps carrying code, action and the remedy.
+  if (reason && AGENT_GRANT_DENIAL_REASONS.has(reason)) markAgentGrantDenial(err);
+  return err;
 }
 
 function jsonResponse(body: Record<string, unknown>): Response {

@@ -9,6 +9,7 @@ import {
   shouldDemoteReturnUrl,
 } from '@/lib/auth/return-url';
 import { clearAuthBounceCookie } from '@/lib/auth/sign-out-actions';
+import { resolveEmailLinkOrigin } from '@/lib/auth/email-link-origin';
 import {
   AUTH_EMAIL_COOLDOWN_SECONDS,
   type EmailFlowMode,
@@ -75,13 +76,13 @@ function normalizeTrustedOrigin(value?: string | null): string | null {
 function trustedWebOrigin(origin?: string | null): string {
   const configured =
     getServerPublicEnv().APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
-  // Prefer the configured app URL, but if it is missing or malformed fall back
-  // to the real browser origin the request came from before localhost. Supabase's
-  // redirect-URL allowlist is the authority on where the link may actually land,
-  // so trusting the request origin here cannot widen the redirect surface.
-  return (
-    normalizeTrustedOrigin(configured) || normalizeTrustedOrigin(origin) || 'http://localhost:3000'
-  );
+  // resolveEmailLinkOrigin: the emailed link returns to the browsing origin
+  // when it is the same site as the configured one (the PKCE verifier's jar
+  // is host-scoped — KRTX-4628); otherwise the configured app URL stands.
+  // Supabase's redirect-URL allowlist is the authority on where the link may
+  // actually land, so trusting the request origin here cannot widen the
+  // redirect surface.
+  return resolveEmailLinkOrigin(normalizeTrustedOrigin(origin), normalizeTrustedOrigin(configured));
 }
 
 function mobileCallbackState(formData: FormData): string | null {

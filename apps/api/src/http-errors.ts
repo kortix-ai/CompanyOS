@@ -29,6 +29,7 @@ import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogDecision,
   deadCredentialLogKey,
+  isAccountMfaDenial,
   isAgentGrantDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
@@ -377,7 +378,13 @@ function handleHttpException(
   // warn lines in two hours on one prod route, 8.8k in eight days across ~10
   // routes, all one reason (`agent_scope_insufficient`). Same line, same
   // grouping; only the rate and the severity band change.
-  if (isDeadCredential(err) || isAgentGrantDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
+  // The account-MFA step-up denial joins the same treatment (KRTX-4674): the
+  // typed body already tells the client to verify its second factor, and a
+  // caller that polls through it — the web app's workspace list panels —
+  // put 700+ warn lines in one hour across three routes, 0 in the 24 h
+  // before, until its people complete the step-up. Same line, same
+  // grouping; only the rate and the severity band change.
+  if (isDeadCredential(err) || isAgentGrantDenial(err) || isAccountMfaDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.

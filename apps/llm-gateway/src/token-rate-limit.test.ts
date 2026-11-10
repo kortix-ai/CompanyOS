@@ -189,23 +189,42 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
 
   test('a credential its own allowance refuses never spends its source\'s shared slots (KRTX-4608 review)', () => {
     const limit = createTokenRateLimit(600, 10_000);
-    // Ten first contacts exhaust the credential's own allowance; every repeat
-    // is refused at that check, before the source is read.
+    // Twenty first contacts exhaust the credential's own allowance; every
+    // repeat inside the window is refused at that check, before the source is
+    // read (the allowance refills at its own 20/min rate afterwards — the cap
+    // is a rate, and the hammer's repeats never exceed it).
     const hammer = request('/v1/models', { authorization: 'Bearer kortix_hammer' });
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 20; i++) {
       setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
       expect(limit(hammer, new Headers(), '10.0.0.1')).toBeNull();
     }
-    for (let i = 0; i < 90; i++) {
-      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (10 + i) * 50));
+    for (let i = 0; i < 10; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (20 + i) * 50));
       expect(limit(hammer, new Headers(), '10.0.0.1')?.status).toBe(429);
     }
-    // The 90 refused repeats spent nothing of the source's share: the other
-    // callers behind the same edge keep the capacity the hammer never owned.
-    for (let i = 0; i < 90; i++) {
+    // The refused repeats spent nothing of the source's share: the other
+    // callers behind the same edge keep the capacity the hammer never owned —
+    // the share holds its remainder (100 minus the hammer's 20), so fifty
+    // newcomers fit. Had every refused repeat charged the source, the fourth
+    // would already be refused.
+    for (let i = 0; i < 50; i++) {
       setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (200 + i) * 50));
       expect(
         limit(request('/v1/models', { authorization: `Bearer kortix_legit_${i}` }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+    }
+  });
+
+  test('eleven concurrent first contacts of one cold credential all admit (KRTX-4608 review)', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // A legitimate cold credential's own burst arrives together and every
+    // request is still waiting on its validation callback: none of the eleven
+    // may be refused before the API has vouched for any of them (the review's
+    // cold-burst probe — base admitted all eleven, the 10/min cap did not).
+    for (let i = 0; i < 11; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      expect(
+        limit(request('/v1/models', { authorization: 'Bearer kortix_cold_burst' }), new Headers(), '10.0.0.1'),
       ).toBeNull();
     }
   });
@@ -305,7 +324,7 @@ describe('the unvalidated surface advertises the allowance that enforces it (KRT
         limit(request('/v1/models', { authorization: 'Bearer kortix_unproven' }), headers, '10.0.0.1'),
       ).toBeNull();
       remaining.push(Number(headers.get('RateLimit-Remaining')));
-      if (i === 0) expect(headers.get('RateLimit-Limit')).toBe('10');
+      if (i === 0) expect(headers.get('RateLimit-Limit')).toBe('20');
     }
     for (let i = 1; i < remaining.length; i++)
       expect(remaining[i]).toBeLessThan(remaining[i - 1]);

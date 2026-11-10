@@ -248,8 +248,17 @@ const UNVALIDATED = 'distinct_credentials';
 const MAX_CHARGED_SHARED = 50_000;
 
 /** The pre-validation allowance one credential spends alone (KRTX-4608),
- *  capped at the credential's own validated budget. */
-const UNVALIDATED_CREDENTIAL_LIMIT = 10;
+ *  capped at the credential's own validated budget.
+ *
+ *  20/min (KRTX-4608 review round 3): a cold credential's concurrent
+ *  first-use burst — the review's eleven simultaneous requests, all still
+ *  waiting on their validation callbacks — must admit in full, so the
+ *  allowance is twice that burst. It still drains visibly at any pace under
+ *  20 sends and exhausts into a 429 at send 21: a bounded probe's reach, and
+ *  a 30th of the 600/min budget the credential graduates to once the API
+ *  vouches for it. A made-up bearer's push is bounded by this allowance; a
+ *  flood of rotating bearers by the per-source share and the shared pool. */
+const UNVALIDATED_CREDENTIAL_LIMIT = 20;
 
 /** The distinct sources one credential may hold charge bookkeeping for. */
 const MAX_SOURCE_KEYS_PER_CREDENTIAL = 8;

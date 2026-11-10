@@ -28,6 +28,7 @@ import { waitFor } from '../core/poll';
 import type { FlowContext } from '../core/types';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
 import { CliSandbox } from '../fixtures/cli';
+import { CLONE_INTO_WORKSPACE } from '../fixtures/clone-into-workspace';
 import { subscribe } from '../fixtures/billing';
 import {
   abortTurn,
@@ -52,19 +53,6 @@ import {
 function echo(marker: string): string {
   return `Reply with exactly this single token and nothing else: ${marker}`;
 }
-
-/**
- * A session has no checkout at boot (#12136): `/workspace` starts empty, and
- * the host `commit-push` answers 409 "project repo is not materialized" until
- * a Git repository is there. An agent with `project.gitops.read` clones the
- * workspace repository itself. This command does it into `/workspace`, where
- * `commit-push` looks, and works when `/workspace` already holds files.
- * RUN-7 and GOLD-1 prepend it to the write prompt.
- */
-const CLONE_INTO_WORKSPACE =
-  'First run this exact shell command with your shell tool: ' +
-  '`d=$(mktemp -d) && git clone -q "$KORTIX_REPO_URL" "$d/repo" && cp -a "$d/repo/." /workspace/ && git -C /workspace rev-parse HEAD`. ' +
-  'It must exit 0. ';
 
 harnessFlow(
   'SESS-10',

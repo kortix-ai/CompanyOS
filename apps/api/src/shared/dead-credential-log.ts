@@ -1,11 +1,12 @@
 /**
- * Rate-limit marked dead-credential refusals by method, normalized route,
- * status and reason, and ship the throttled line at a severity that follows
- * the window's volume. Responses and emitted message text stay unchanged.
- * A ten-minute window permits six lines per route/reason per process per hour.
- * Suppression counts are best-effort: they appear only on the next warning.
- * A final quiet burst, eviction or process restart can lose pending counts;
- * use request-completion logs or auth audits for exact refusal accounting.
+ * Rate-limit marked dead-credential refusals and agent-grant denials by
+ * method, normalized route, status and reason, and ship the throttled line at
+ * a severity that follows the window's volume. Responses and emitted message
+ * text stay unchanged. A ten-minute window permits six lines per route/reason
+ * per process per hour. Suppression counts are best-effort: they appear only
+ * on the next warning. A final quiet burst, eviction or process restart can
+ * lose pending counts; use request-completion logs or auth audits for exact
+ * refusal accounting.
  */
 import { HTTPException } from 'hono/http-exception';
 
@@ -42,6 +43,9 @@ export function deadCredentialLogKey(method: string, path: string, status: numbe
 }
 
 const deadCredentials = new WeakSet<HTTPException>();
+
+// Same throttle, second mark: the agent-grant denial family (below).
+const agentGrantDenials = new WeakSet<HTTPException>();
 
 type Window = { loggedAt: number; suppressed: number };
 // replica-local: a log-noise limiter; each replica rate-limits its own lines.
@@ -104,6 +108,28 @@ export function deadCredential401(message: string): HTTPException {
 /** True for an exception `markDeadCredential` marked. */
 export function isDeadCredential(err: HTTPException): boolean {
   return deadCredentials.has(err);
+}
+
+/**
+ * Mark an exception as an agent-grant denial: a stable, caller-actionable
+ * refusal of the agent principal itself (the kortix_permissions grant, the
+ * agent ceiling, an agent-only action, a service-account role). The response
+ * already names the remedy in its typed body (`buildDenialError`), so a
+ * caller that cannot or will not act on it — an in-sandbox agent looping a
+ * denied command — receives the SAME refusal forever, and per-request logging
+ * turns its loop into a warn storm (KRTX-4635: one prod lane, 590 lines in
+ * two hours on one route, 8.8k in eight days across ~10 routes). The mark
+ * routes the LINE through the shared window throttle without touching the
+ * response, exactly as `deadCredential401` does for a dead credential.
+ * Called by `buildDenialError`, the one constructor every such refusal throws.
+ */
+export function markAgentGrantDenial(err: HTTPException): void {
+  agentGrantDenials.add(err);
+}
+
+/** True for an exception `markAgentGrantDenial` marked. */
+export function isAgentGrantDenial(err: HTTPException): boolean {
+  return agentGrantDenials.has(err);
 }
 
 /**

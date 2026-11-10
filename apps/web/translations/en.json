@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Only workspace owners and admins can manage billing. Ask one of them to pick a credits tier for the workspace.",
         "planTitle": "Plan and credits",
         "planDescription": "Change your monthly plan, or add credits for this month.",
-        "tabOneTime": "One-time",
-        "tabMonthly": "Monthly",
         "paymentFailedHint": "Update the card and Stripe retries the charge.",
         "updatePaymentMethod": "Update payment method",
         "topUpInstead": "Add credits instead",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Admin",
         "newBalance": "New balance",
         "continue": "Continue",
-        "balanceRetry": "Retry"
+        "balanceRetry": "Retry",
+        "addLine": "Add credits to keep your agents running.",
+        "raiseLine": "Raise your plan to keep your agents running.",
+        "subscribeLine": "Subscribe to keep your agents running.",
+        "switchToMonthly": "Prefer monthly credits? Switch plan",
+        "autoTopupRetired": "Auto top-up no longer applies on this plan."
       },
       "admin": {
         "plan": "Plan",
@@ -2541,7 +2544,9 @@
           "growing": "Growing teams",
           "scale": "Scale",
           "large": "Large organizations"
-        }
+        },
+        "once": "once",
+        "onceLabel": "One-time credit amount"
       }
     },
     "popular": "Popular",

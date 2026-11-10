@@ -61,7 +61,7 @@ export function TopupControls({
   const inset = hero ? 'px-6' : 'px-4';
   return (
     <div className={hero ? undefined : 'bg-popover rounded-md border'}>
-      <section className={hero ? 'px-6 pt-2 pb-6' : 'space-y-3 px-4 py-4'}>
+      <section className={hero ? 'px-6 pb-6' : 'space-y-3 px-4 py-4'}>
         {heading ? <h3 className="text-foreground text-sm font-medium">{heading}</h3> : null}
         <CreditTopupSection variant={hero ? 'hero' : 'row'} />
       </section>

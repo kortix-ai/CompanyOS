@@ -13,6 +13,7 @@ import { useBillingAccountId } from '@kortix/ui/internal/stores/billing-account-
 import { purchaseCredits } from '@kortix/sdk';
 import { dollarsToCredits, formatCredits } from '@kortix/shared';
 import { m } from 'motion/react';
+import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 /**
@@ -139,7 +140,7 @@ interface CreditTopupSectionProps {
   /**
    * `row` (default): the segmented amount control with the action beside it,
    * for the Billing tab and `/accounts/[id]`.
-   * `hero`: one large editable amount, preset chips under it and a full-width
+   * `hero`: the /pricing slider over the one-off presets and a full-width
    * action, for the out-of-credits modal where buying is the only question.
    */
   variant?: 'row' | 'hero';
@@ -223,97 +224,47 @@ function useTopupCopy(): TopupCopy {
 /** The hero layout's starting amount: the first preset on the bonus ladder. */
 const HERO_DEFAULT_USD = 100;
 
+/** The steps of the hero slider, in dollars: the presets, widened to the
+ *  amounts an Enterprise or granted account buys. Any other amount goes
+ *  through the Billing tab's Custom field. */
+const LADDER_PRESETS: readonly number[] = [25, 50, 100, 250, 500, 1000, 2500, 5000];
+
 /**
- * One large editable amount. The number IS the input: type any amount, or
- * pick a preset chip under it. The action is full width and names the charge.
+ * The /pricing slider over the one-off presets, then one full-width action
+ * that names the charge (Paper "Out of credits — v3", M4 and M5). The line
+ * under the action carries the credits and the bonus, or why the amount
+ * cannot be bought.
  */
 function HeroTopup({ successUrl, cancelUrl, className }: Omit<CreditTopupSectionProps, 'variant'>) {
-  const t = useTranslations('billing.topup');
-  const locale = useLocale();
+  const tTiers = useTranslations('billing.credits.tiers');
   const copy = useTopupCopy();
-  const { isPurchasing, purchaseError, setPurchaseError, purchase } = useCreditPurchase({
-    successUrl,
-    cancelUrl,
-  });
-  const [value, setValue] = useState(String(HERO_DEFAULT_USD));
-  const parsed = Number.parseFloat(value);
-  const amount = Number.isFinite(parsed) ? parsed : null;
+  const { isPurchasing, purchaseError, purchase } = useCreditPurchase({ successUrl, cancelUrl });
+  const [amount, setAmount] = useState(HERO_DEFAULT_USD);
   const { canBuy, hint, actionLabel } = describeTopup(amount, isPurchasing, copy);
-  const inputId = useId();
 
   return (
-    <div className={cn('flex flex-col items-center gap-4', className)}>
-      <label htmlFor={inputId} className="sr-only">
-        {t('customAmount')}
-      </label>
-      {/* Off the app-chrome ladder (text-2xl) on purpose: the amount is the one
-          decision in this modal and Jay picked the large-number design
-          (Paper "Out of credits" variant 02). */}
-      <div className="text-foreground focus-within:ring-kortix-base flex items-baseline justify-center rounded-md px-2 text-5xl font-medium tracking-tight tabular-nums focus-within:ring-[0.6px]">
-        <span aria-hidden>$</span>
-        <input
-          id={inputId}
-          type="number"
-          inputMode="numeric"
-          min={CUSTOM_MIN_USD}
-          max={CUSTOM_MAX_USD}
-          step={1}
-          value={value}
-          disabled={isPurchasing}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setPurchaseError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && canBuy && amount !== null) void purchase(amount);
-          }}
-          // The field is as wide as its digits, so the number stays centred.
-          // Capped at 7ch: a pasted long number scrolls inside the field
-          // instead of pushing past the modal (validation still rejects it).
-          style={{ width: `${Math.min(Math.max(value.length, 1), 7)}ch` }}
-          className="placeholder:text-muted-foreground caret-kortix-base [appearance:textfield] bg-transparent text-left outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
+    <div className={cn('space-y-6', className)} data-testid="topup-ladder">
+      <CreditLadder
+        value={amount}
+        onChange={setAmount}
+        steps={LADDER_PRESETS}
+        suffix={tTiers('once')}
+        label={tTiers('onceLabel')}
+        disabled={isPurchasing}
+        stackBelowXl={false}
+      />
+      <div className="space-y-3">
+        <Button
+          onClick={() => canBuy && void purchase(amount)}
+          disabled={!canBuy}
+          size="lg"
+          className="w-full gap-1.5 motion-safe:active:scale-[0.96]"
+        >
+          {isPurchasing ? <Loading className="size-3.5 shrink-0" /> : null}
+          {actionLabel}
+        </Button>
+        <p className="text-muted-foreground text-center text-xs tabular-nums">{hint}</p>
       </div>
-
-      {/* Shortcuts that fill the amount, not a choice group: toggle buttons. */}
-      <div role="group" aria-label={t('amountGroup')} className="flex flex-wrap justify-center gap-1.5">
-        {CREDIT_PRESETS.map((price) => {
-          const selected = amount === price;
-          return (
-            <button
-              key={price}
-              type="button"
-              aria-pressed={selected}
-              disabled={isPurchasing}
-              onClick={() => {
-                setValue(String(price));
-                setPurchaseError(null);
-              }}
-              className={cn(
-                'h-7 cursor-pointer rounded-md border px-3 text-xs font-medium tabular-nums',
-                'duration-fast transition-colors motion-safe:active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50',
-                'focus-visible:ring-kortix-base focus-visible:ring-[0.6px] focus-visible:outline-none',
-                selected ? 'bg-active text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-hover',
-              )}
-            >
-              {formatWholeUsd(price, locale)}
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="text-muted-foreground text-center text-xs tabular-nums">{hint}</p>
-
-      <Button
-        onClick={() => canBuy && amount !== null && void purchase(amount)}
-        disabled={!canBuy}
-        size="lg"
-        className="w-full gap-1.5 motion-safe:active:scale-[0.96]"
-      >
-        {isPurchasing ? <Loading className="size-3.5 shrink-0" /> : null}
-        {actionLabel}
-      </Button>
-
       {purchaseError && (
         <BannerAlert variant="destructive" className="w-full">
           <BannerAlertDescription>{purchaseError}</BannerAlertDescription>

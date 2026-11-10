@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Seuls les propriétaires et les administrateurs de l'espace de travail peuvent gérer la facturation. Demandez à l'un d'eux de choisir un palier de crédits pour l'espace de travail.",
         "planTitle": "Forfait et crédits",
         "planDescription": "Modifiez votre forfait mensuel ou ajoutez des crédits pour ce mois.",
-        "tabOneTime": "Ponctuel",
-        "tabMonthly": "Mensuel",
         "paymentFailedHint": "Mettez à jour la carte et Stripe relancera le prélèvement.",
         "updatePaymentMethod": "Mettre à jour le moyen de paiement",
         "topUpInstead": "Ajouter des crédits à la place",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Admin",
         "newBalance": "Nouveau solde",
         "continue": "Continuer",
-        "balanceRetry": "Réessayer"
+        "balanceRetry": "Réessayer",
+        "addLine": "Ajoutez des crédits pour que vos agents continuent de tourner.",
+        "raiseLine": "Augmentez votre forfait pour que vos agents continuent de tourner.",
+        "subscribeLine": "Abonnez-vous pour que vos agents continuent de tourner.",
+        "switchToMonthly": "Vous préférez des crédits mensuels ? Changer de forfait",
+        "autoTopupRetired": "La recharge automatique ne s’applique plus à ce forfait."
       },
       "admin": {
         "plan": "Forfait",
@@ -2541,7 +2544,9 @@
           "growing": "Équipes en croissance",
           "scale": "Scale",
           "large": "Grandes organisations"
-        }
+        },
+        "once": "une fois",
+        "onceLabel": "Montant unique de crédits"
       }
     },
     "popular": "Populaire",

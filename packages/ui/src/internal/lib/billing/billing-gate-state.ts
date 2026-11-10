@@ -108,20 +108,19 @@ export function billingStateNeedsTopUp(state: BillingState | null): boolean {
 export const RUN_FLOOR_USD = 0.01;
 
 /**
- * Whether the billing modal leads with the top-up. True when adding credits
- * unblocks the account: out of credits, a failed payment, or a Free account
- * that may buy credits and sits below the run floor. The last case is a
- * further workspace that gets no free credits, or a Free account that spent
- * them: a top-up is the cheapest way to run, so the modal never offers only
- * "Continue on Free" there (review finding 10).
+ * Whether the billing modal opens on the compact out-of-credits view. True
+ * when the account cannot run: out of credits, a failed payment, or a Free
+ * account below the run floor. The last case is a further workspace that gets
+ * no free credits, or a Free account that spent them: the modal offers the
+ * subscription there, never only "Continue on Free" (review finding 10).
  */
 export function billingModalNeedsTopUp(
   accountState: AccountStateLike | null | undefined,
   state: BillingState | null,
 ): boolean {
   if (billingStateNeedsTopUp(state)) return true;
-  if (state !== 'no_subscription' || !accountState?.tier?.can_purchase_credits) return false;
-  const balance = accountState.credits?.total;
+  if (state !== 'no_subscription') return false;
+  const balance = accountState?.credits?.total;
   return typeof balance === 'number' && balance < RUN_FLOOR_USD;
 }
 

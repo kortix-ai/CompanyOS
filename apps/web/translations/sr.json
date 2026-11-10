@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Само власници и администратори радног простора могу да управљају обрачуном. Затражите од једног од њих да изабере ниво кредита за радни простор.",
         "planTitle": "План и кредити",
         "planDescription": "Промените месечни план или додајте кредите за овај месец.",
-        "tabOneTime": "Jednokratno",
-        "tabMonthly": "Mesečno",
         "paymentFailedHint": "Ažuriraj karticu i Stripe će ponovo pokušati naplatu.",
         "updatePaymentMethod": "Ažuriraj način plaćanja",
         "topUpInstead": "Umesto toga dodaj kredite",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Administrator",
         "newBalance": "Novo stanje",
         "continue": "Nastavi",
-        "balanceRetry": "Pokušaj ponovo"
+        "balanceRetry": "Pokušaj ponovo",
+        "addLine": "Dodaj kredite da bi tvoji agenti nastavili da rade.",
+        "raiseLine": "Povećaj plan da bi tvoji agenti nastavili da rade.",
+        "subscribeLine": "Pretplati se da bi tvoji agenti nastavili da rade.",
+        "switchToMonthly": "Više voliš mesečne kredite? Promeni plan",
+        "autoTopupRetired": "Automatska dopuna više ne važi za ovaj plan."
       },
       "admin": {
         "plan": "План",
@@ -2541,7 +2544,9 @@
           "growing": "Тимови у расту",
           "scale": "Scale",
           "large": "Велике организације"
-        }
+        },
+        "once": "jednom",
+        "onceLabel": "Jednokratni iznos kredita"
       }
     },
     "popular": "Популарно",

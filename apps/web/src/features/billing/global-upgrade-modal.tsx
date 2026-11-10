@@ -12,9 +12,13 @@ import { useUpgradeModalHost } from '@/features/billing/use-upgrade-modal-host';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
-import { type AccountState, type BillingState, canManageBilling, canOfferTopup } from '@kortix/sdk';
-import { formatUsdAsCredits } from '@kortix/shared';
-import { cn } from '@kortix/ui';
+import {
+  type AccountState,
+  type BillingState,
+  canManageBilling,
+  canOfferTopup,
+  resolvedPlan,
+} from '@kortix/sdk';
 import { Button } from '@kortix/ui/button';
 import Hint from '@kortix/ui/hint';
 import { Copy } from '@kortix/ui/icons';
@@ -53,7 +57,6 @@ import {
 } from '@kortix/ui/modal';
 import { AskOwnerForCreditsButton } from '@kortix/ui/session/models/ask-owner-for-credits-button';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast } from '@kortix/ui/toast';
 import { UserAvatar } from '@kortix/ui/user-avatar';
 import {
@@ -85,24 +88,22 @@ export interface UpgradePlansModalProps {
 /**
  * Which view the billing modal opens on:
  *
- * - `plans`: Free against Credits, for an account with no subscription. One-off
- *   top-ups are off below Enterprise (Marko, 2026-11-09), so a Free workspace
- *   that runs out is shown the subscription, not a top-up;
- * - `topup-first`: a subscriber (or an account granted top-ups) that is out of
- *   credits or whose payment failed. The fix leads;
- * - `plan-first`: a subscriber that is not blocked. The monthly plan leads.
+ * - `topup-first`: any account that is out of credits or whose payment failed.
+ *   The compact modal: one slider, one action (Paper "Out of credits — v3");
+ * - `plan-first`: a subscriber that is not blocked. The monthly plan leads;
+ * - `plans`: Free against Credits, for a voluntary visit without a
+ *   subscription.
  *
- * Inside the credit view, the One-time tab exists only when the account may
- * buy one-off credits (`canOfferTopup`); otherwise the monthly plan is the
- * whole view.
+ * Inside the compact modal the slider sells the monthly plan. Only an account
+ * that may buy one-off credits (`canOfferTopup`: Enterprise, or the per-account
+ * grant) gets the one-off slider instead (Marko, 2026-11-09).
  */
 export function billingModalLayout(opts: {
   needsTopUp: boolean;
   hasSubscription: boolean;
-  canPurchaseCredits: boolean;
 }): 'plans' | 'topup-first' | 'plan-first' {
-  if (opts.hasSubscription) return opts.needsTopUp ? 'topup-first' : 'plan-first';
-  return opts.canPurchaseCredits && opts.needsTopUp ? 'topup-first' : 'plans';
+  if (opts.needsTopUp) return 'topup-first';
+  return opts.hasSubscription ? 'plan-first' : 'plans';
 }
 
 export function UpgradePlansModal({
@@ -112,7 +113,6 @@ export function UpgradePlansModal({
   reason,
   hasSubscription,
   billingState,
-  balance,
   accountLoading,
 }: UpgradePlansModalProps) {
   const tI18nHardcoded = useTranslations('hardcodedUi');
@@ -124,13 +124,11 @@ export function UpgradePlansModal({
   // `billingState` (from the 402 or the gate that opened this) wins because
   // accountState can still be loading; otherwise derive it from live state.
   const hasSub = hasSubscription ?? accountHasLiveSubscription(accountState);
-  const canPurchaseCredits = accountState?.tier?.can_purchase_credits ?? hasSub;
   const resolvedState = billingState ?? resolveBillingState(accountState);
   const layout = billingModalLayout({
     needsTopUp:
       billingModalNeedsTopUp(accountState, resolvedState) || reason === 'insufficient_credits',
     hasSubscription: hasSub,
-    canPurchaseCredits,
   });
 
   if (layout !== 'plans') {
@@ -139,7 +137,6 @@ export function UpgradePlansModal({
         open={open}
         onOpenChange={onOpenChange}
         accountState={accountState}
-        balance={balance}
         billingState={resolvedState}
         accountLoading={accountLoading}
         leadWithTopUp={layout === 'topup-first'}
@@ -316,32 +313,29 @@ interface CreditTopUpModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountState?: AccountState;
-  balance?: number;
   billingState?: BillingState | null;
   accountLoading?: boolean;
-  /** Out of credits or payment failed: the top-up leads, with the balance. */
+  /** Out of credits or payment failed: the fix leads. */
   leadWithTopUp: boolean;
 }
 
-type CreditTab = 'one-time' | 'monthly';
-
 /**
- * The plan and top-up view, for an account that can buy credits.
- *
- * One frame, three views, picked from who is looking and why:
+ * The compact billing modal (Paper "Out of credits — v3"): a title, one line,
+ * one slider, one action. Picked from who is looking and why:
  *
  * - a member, who may not change billing: who can fix it, and a link to send
  *   them. No purchase control renders for a member (KRTX-1720);
- * - payment failed: the card is the fix, so updating it leads, and a top-up is
- *   the other way out;
- * - otherwise: One-time | Monthly tabs. Only one primary action exists at a
- *   time. Out of credits opens on One-time, a voluntary visit on Monthly.
+ * - payment failed: the card is the fix, so updating it leads;
+ * - an account that may buy one-off credits (Enterprise, or the per-account
+ *   grant): the /pricing slider over the one-off amounts, with the monthly plan
+ *   one link away below Enterprise;
+ * - everyone else: the /pricing slider over the monthly tiers. Subscribing, or
+ *   raising the plan, is the way to more credits.
  */
 function CreditTopUpModal({
   open,
   onOpenChange,
   accountState,
-  balance,
   billingState,
   accountLoading,
   leadWithTopUp,
@@ -349,7 +343,7 @@ function CreditTopUpModal({
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('billing.credits.modal');
   const createPortal = useCreatePortalSession();
-  const [tab, setTab] = useState<CreditTab>(leadWithTopUp ? 'one-time' : 'monthly');
+  const [showPlan, setShowPlan] = useState(false);
   const [topUpInstead, setTopUpInstead] = useState(false);
   // Out-of-credits copy is DERIVED from the billing state, never written here:
   // a hardcoded "Out of credits" title once announced an emergency to every
@@ -364,47 +358,51 @@ function CreditTopUpModal({
     : { title: t('planTitle'), description: t('planDescription') };
 
   // A fresh open starts on the view its reason asks for. Reset during render,
-  // not in an effect, so the first painted frame is already the right tab.
+  // not in an effect, so the first painted frame is already the right view.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setTab(leadWithTopUp ? 'one-time' : 'monthly');
+      setShowPlan(false);
       setTopUpInstead(false);
     }
   }
 
   const isMember = !!accountState && !canManageBilling(accountState);
-  // One-off top-ups exist only for Enterprise and accounts granted them. For
-  // everyone else the monthly plan is the whole view: no tabs.
+  // One-off top-ups exist only for Enterprise and accounts granted them.
   const canTopUp = canOfferTopup(accountState);
+  const isEnterprise = resolvedPlan(accountState).family === 'enterprise';
+  const showTopUp = canTopUp && !showPlan;
   const paymentFailed = leadWithTopUp && billingState === 'payment_failed' && !topUpInstead;
   const openPortal = () => createPortal.mutate({ return_url: window.location.href });
+  // One line under the title, naming the one way forward.
+  const line = isMember
+    ? t('memberBody')
+    : paymentFailed || !leadWithTopUp
+      ? copy.description
+      : showTopUp
+        ? t('addLine')
+        : accountHasLiveSubscription(accountState)
+          ? t('raiseLine')
+          : t('subscribeLine');
+  // An auto top-up saved before one-off top-ups left this plan never charges
+  // again (auto-topup.ts). Say so once, where the user would expect it to run.
+  const autoTopupRetired = !canTopUp && !!accountState?.auto_topup?.enabled;
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent className="gap-0 space-y-0 p-0 sm:max-w-md">
-        <ModalHeader className="gap-1.5 px-6 pt-6 pb-5">
-          <div className="flex items-baseline justify-between gap-3 pr-8">
-            <ModalTitle className="text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
-            {leadWithTopUp ? (
-              <WalletBalance
-                accountState={accountState}
-                balance={balance}
-                accountLoading={accountLoading}
-              />
-            ) : null}
-          </div>
-          <ModalDescription className="text-sm text-pretty">
-            {isMember ? t('memberBody') : copy.description}
-          </ModalDescription>
+        <ModalHeader className="gap-1.5 px-6 pt-6 pb-6">
+          <ModalTitle className="pr-8 text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
+          <ModalDescription className="text-sm text-pretty">{line}</ModalDescription>
         </ModalHeader>
 
         {!accountState && accountLoading ? (
-          // Who is looking decides the view (member, payment failed, tabs).
-          // Hold one neutral block until the account state says.
-          <div className="px-6 pb-6">
-            <Skeleton className="h-56 w-full rounded-md" />
+          // Who is looking decides the view (member, payment failed, slider).
+          // Hold one neutral block at the slider's height until the state says.
+          <div className="space-y-6 px-6 pb-6" aria-hidden>
+            <Skeleton className="h-28 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md" />
           </div>
         ) : isMember ? (
           <MemberBlockedView />
@@ -412,66 +410,38 @@ function CreditTopUpModal({
           <PaymentFailedView
             portalPending={createPortal.isPending}
             onUpdateCard={openPortal}
-            onTopUpInstead={
-              canTopUp
-                ? () => {
-                    setTopUpInstead(true);
-                    setTab('one-time');
-                  }
-                : undefined
-            }
+            onTopUpInstead={canTopUp ? () => setTopUpInstead(true) : undefined}
           />
-        ) : !canTopUp ? (
-          <div className="px-6 pb-6">
-            {accountState ? (
-              <PlanChanger state={accountState} className="bg-popover rounded-md border" />
-            ) : (
-              <Skeleton className="h-48 w-full rounded-md" />
-            )}
+        ) : showTopUp ? (
+          <div className="pb-2">
+            <TopupControls state={accountState} variant="hero" />
+            {!isEnterprise ? (
+              <div className="flex justify-center border-t px-6 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPlan(true)}
+                  className="text-foreground text-xs underline-offset-4 hover:underline"
+                >
+                  {t('switchToMonthly')}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : (
-          <Tabs value={tab} onValueChange={(value) => setTab(value as CreditTab)} className="gap-0">
-            <div className="px-6 pb-4">
-              <TabsList variant="segmented" className="w-full">
-                <TabsTrigger value="one-time" className="flex-1">
-                  {t('tabOneTime')}
-                </TabsTrigger>
-                <TabsTrigger value="monthly" className="flex-1">
-                  {t('tabMonthly')}
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <TabsContent value="one-time" className="mt-0">
-              <TopupControls state={accountState} variant="hero" />
-            </TabsContent>
-            <TabsContent value="monthly" className="mt-0 px-6 pb-6">
-              {accountState ? (
-                <PlanChanger state={accountState} className="bg-popover rounded-md border" />
-              ) : (
-                <Skeleton className="h-48 w-full rounded-md" />
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
-
-        {!isMember && !paymentFailed ? (
-          <div className="border-t">
-            <FreeGrantNotice state={accountState} className="px-6 pt-3" />
-            <div className="flex items-center px-3 py-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground gap-1.5"
-                disabled={createPortal.isPending}
-                onClick={openPortal}
-              >
-                {createPortal.isPending ? <Loading className="size-4 shrink-0" /> : null}
-                {tI18nComplete.raw('text7ea27c63aff1')}
-              </Button>
-            </div>
+          <div className="space-y-3 px-6 pb-6">
+            {accountState ? (
+              <PlanChanger state={accountState} variant="ladder" />
+            ) : (
+              <Skeleton className="h-40 w-full rounded-md" />
+            )}
+            {autoTopupRetired ? (
+              <p className="text-muted-foreground text-center text-xs text-balance">
+                {t('autoTopupRetired')}
+              </p>
+            ) : null}
+            <FreeGrantNotice state={accountState} className="text-center" />
           </div>
-        ) : null}
+        )}
       </ModalContent>
     </Modal>
   );
@@ -606,47 +576,6 @@ function MemberBlockedView() {
         </Button>
       </div>
     </div>
-  );
-}
-
-/**
- * The available balance, in credits: the concrete "why" behind an
- * out-of-credits block, set beside the title.
- *
- * The LIVE account state is the source of truth (the field the Plan page
- * reads); the 402's `balance` is only a pre-load hint. A real 0 shows as 0,
- * and an unloaded value shows a skeleton, never a misleading 0. A negative
- * balance keeps its minus and turns red: the account owes those credits.
- */
-function WalletBalance({
-  accountState,
-  balance,
-  accountLoading,
-}: {
-  accountState?: AccountState;
-  balance?: number;
-  accountLoading?: boolean;
-}) {
-  const tCredits = useTranslations('settings.credits');
-  const locale = useLocale();
-  const liveBalance = accountState?.credits?.total;
-  const hasLiveBalance = typeof liveBalance === 'number';
-  const walletUsd = hasLiveBalance ? liveBalance : (balance ?? 0);
-  const isNegative = walletUsd < 0;
-
-  if (!hasLiveBalance && accountLoading)
-    return <Skeleton className="h-4 w-16 shrink-0 rounded-sm" />;
-  return (
-    <span
-      className={cn(
-        'shrink-0 text-xs tabular-nums',
-        isNegative ? 'text-kortix-red' : 'text-muted-foreground',
-      )}
-      data-testid="wallet-balance"
-    >
-      {formatUsdAsCredits(walletUsd, { locale })}{' '}
-      {tCredits('unit', { count: Math.abs(walletUsd) * 100 })}
-    </span>
   );
 }
 

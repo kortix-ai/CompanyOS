@@ -2505,8 +2505,6 @@
         "askOwnerBody": "請求を管理できるのはワークスペースのオーナーと管理者だけです。どちらかにワークスペースのクレジットのティアを選んでもらってください。",
         "planTitle": "プランとクレジット",
         "planDescription": "月額プランを変更するか、今月分のクレジットを追加します。",
-        "tabOneTime": "1回のみ",
-        "tabMonthly": "月額",
         "paymentFailedHint": "カードを更新すると、Stripe が請求を再試行します。",
         "updatePaymentMethod": "支払い方法を更新",
         "topUpInstead": "代わりにクレジットを追加",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "管理者",
         "newBalance": "新しい残高",
         "continue": "続ける",
-        "balanceRetry": "再試行"
+        "balanceRetry": "再試行",
+        "addLine": "クレジットを追加して、エージェントの実行を続けましょう。",
+        "raiseLine": "プランを上げて、エージェントの実行を続けましょう。",
+        "subscribeLine": "サブスクライブして、エージェントの実行を続けましょう。",
+        "switchToMonthly": "月額クレジットをご希望ですか？プランを変更",
+        "autoTopupRetired": "このプランでは自動チャージは適用されなくなりました。"
       },
       "admin": {
         "plan": "プラン",
@@ -2541,7 +2544,9 @@
           "growing": "成長中のチーム",
           "scale": "スケール",
           "large": "大規模組織"
-        }
+        },
+        "once": "1回",
+        "onceLabel": "1回分のクレジット額"
       }
     },
     "popular": "人気",

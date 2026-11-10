@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Solo los propietarios y administradores del espacio de trabajo pueden gestionar la facturación. Pide a uno de ellos que elija un nivel de créditos para el espacio de trabajo.",
         "planTitle": "Plan y créditos",
         "planDescription": "Cambia tu plan mensual o añade créditos para este mes.",
-        "tabOneTime": "Único",
-        "tabMonthly": "Mensual",
         "paymentFailedHint": "Actualiza la tarjeta y Stripe reintentará el cobro.",
         "updatePaymentMethod": "Actualizar método de pago",
         "topUpInstead": "Añadir créditos en su lugar",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Administrador",
         "newBalance": "Nuevo saldo",
         "continue": "Continuar",
-        "balanceRetry": "Reintentar"
+        "balanceRetry": "Reintentar",
+        "addLine": "Añade créditos para que tus agentes sigan funcionando.",
+        "raiseLine": "Sube tu plan para que tus agentes sigan funcionando.",
+        "subscribeLine": "Suscríbete para que tus agentes sigan funcionando.",
+        "switchToMonthly": "¿Prefieres créditos mensuales? Cambiar plan",
+        "autoTopupRetired": "La recarga automática ya no aplica en este plan."
       },
       "admin": {
         "plan": "Plan",
@@ -2541,7 +2544,9 @@
           "growing": "Equipos en crecimiento",
           "scale": "Scale",
           "large": "Grandes organizaciones"
-        }
+        },
+        "once": "una vez",
+        "onceLabel": "Importe único de créditos"
       }
     },
     "popular": "Popular",

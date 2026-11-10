@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Nur Inhaber und Administratoren des Workspace können die Abrechnung verwalten. Bitte einen von ihnen, eine Credit-Stufe für den Workspace zu wählen.",
         "planTitle": "Tarif und Credits",
         "planDescription": "Ändere deinen Monatstarif oder füge Credits für diesen Monat hinzu.",
-        "tabOneTime": "Einmalig",
-        "tabMonthly": "Monatlich",
         "paymentFailedHint": "Aktualisiere die Karte, dann versucht Stripe die Abbuchung erneut.",
         "updatePaymentMethod": "Zahlungsmethode aktualisieren",
         "topUpInstead": "Stattdessen Credits hinzufügen",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Admin",
         "newBalance": "Neues Guthaben",
         "continue": "Weiter",
-        "balanceRetry": "Erneut versuchen"
+        "balanceRetry": "Erneut versuchen",
+        "addLine": "Füge Credits hinzu, damit deine Agents weiterlaufen.",
+        "raiseLine": "Erhöhe deinen Plan, damit deine Agents weiterlaufen.",
+        "subscribeLine": "Abonniere, damit deine Agents weiterlaufen.",
+        "switchToMonthly": "Lieber monatliche Credits? Plan wechseln",
+        "autoTopupRetired": "Automatisches Aufladen gilt für diesen Plan nicht mehr."
       },
       "admin": {
         "plan": "Plan",
@@ -2541,7 +2544,9 @@
           "growing": "Wachsende Teams",
           "scale": "Scale",
           "large": "Große Organisationen"
-        }
+        },
+        "once": "einmalig",
+        "onceLabel": "Einmaliger Credit-Betrag"
       }
     },
     "popular": "Beliebt",

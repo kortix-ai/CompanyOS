@@ -2505,8 +2505,6 @@
         "askOwnerBody": "Solo i proprietari e gli amministratori del workspace possono gestire la fatturazione. Chiedi a uno di loro di scegliere un livello di crediti per il workspace.",
         "planTitle": "Piano e crediti",
         "planDescription": "Cambia il piano mensile o aggiungi crediti per questo mese.",
-        "tabOneTime": "Una tantum",
-        "tabMonthly": "Mensile",
         "paymentFailedHint": "Aggiorna la carta e Stripe riproverà l’addebito.",
         "updatePaymentMethod": "Aggiorna metodo di pagamento",
         "topUpInstead": "Aggiungi crediti invece",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "Admin",
         "newBalance": "Nuovo saldo",
         "continue": "Continua",
-        "balanceRetry": "Riprova"
+        "balanceRetry": "Riprova",
+        "addLine": "Aggiungi crediti per far continuare i tuoi agenti.",
+        "raiseLine": "Aumenta il piano per far continuare i tuoi agenti.",
+        "subscribeLine": "Abbonati per far continuare i tuoi agenti.",
+        "switchToMonthly": "Preferisci crediti mensili? Cambia piano",
+        "autoTopupRetired": "La ricarica automatica non vale più per questo piano."
       },
       "admin": {
         "plan": "Piano",
@@ -2541,7 +2544,9 @@
           "growing": "Team in crescita",
           "scale": "Scale",
           "large": "Grandi organizzazioni"
-        }
+        },
+        "once": "una tantum",
+        "onceLabel": "Importo una tantum di crediti"
       }
     },
     "popular": "Popolare",

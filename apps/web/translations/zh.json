@@ -2505,8 +2505,6 @@
         "askOwnerBody": "只有工作区所有者和管理员可以管理账单。请让其中一位为工作区选择积分档位。",
         "planTitle": "套餐和积分",
         "planDescription": "更改每月套餐，或为本月添加积分。",
-        "tabOneTime": "一次性",
-        "tabMonthly": "按月",
         "paymentFailedHint": "更新银行卡后，Stripe 会重新尝试扣款。",
         "updatePaymentMethod": "更新付款方式",
         "topUpInstead": "改为添加积分",
@@ -2518,7 +2516,12 @@
         "roleAdmin": "管理员",
         "newBalance": "新余额",
         "continue": "继续",
-        "balanceRetry": "重试"
+        "balanceRetry": "重试",
+        "addLine": "添加积分，让你的智能体继续运行。",
+        "raiseLine": "升级你的套餐，让你的智能体继续运行。",
+        "subscribeLine": "订阅即可让你的智能体继续运行。",
+        "switchToMonthly": "更想要每月积分？切换套餐",
+        "autoTopupRetired": "此套餐不再适用自动充值。"
       },
       "admin": {
         "plan": "套餐",
@@ -2541,7 +2544,9 @@
           "growing": "成长型团队",
           "scale": "规模版",
           "large": "大型组织"
-        }
+        },
+        "once": "一次性",
+        "onceLabel": "一次性积分金额"
       }
     },
     "popular": "热门",

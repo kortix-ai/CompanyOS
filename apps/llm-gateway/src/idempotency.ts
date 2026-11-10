@@ -23,7 +23,9 @@ import { createHash } from 'node:crypto';
  * A replay is still a request: every hit re-runs the host's credential +
  * budget check (`reauthorize`) before the cached answer is served, so a
  * revoked credential, a suspension or an over-budget account is never served
- * from the cache (CWE-863; KRTX-4612 review).
+ * from the cache (CWE-863; KRTX-4612 review). Billing-active is not
+ * re-checked on a hit: the cached answer was already settled, and the
+ * credential + budget gates cover the revocation cases that matter here.
  *
  * ponytail: replica-local replay, same ceiling as route-memory — a retry that
  * lands on another gateway replica re-executes and re-meters (today's

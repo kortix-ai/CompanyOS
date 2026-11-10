@@ -31,12 +31,14 @@ export type TokenRateLimit = {
  * The limit runs before `authenticate()`, so it cannot tell a real credential
  * from a fabricated one. A credential the API has answered with a principal is
  * real and keeps its own bucket, keyed on the credential's SHA-256 so no raw
- * secret stays in memory. Every other credential is charged to ONE shared
- * bucket, given by `unvalidatedPerMinute` (order of magnitude above one
- * credential's own budget), whatever its value: a caller that sends a fresh
- * made-up bearer per request cannot buy a private bucket each time, so the
- * shared allowance bounds how many requests reach the API unverified (CWE-770)
- * and the bucket map cannot grow one entry per request. One source can spend
+ * secret stays in memory. Every other credential spends first its own small
+ * pre-validation allowance — at most 10/min, the one boundary a single caller
+ * governs — and is charged to ONE shared bucket, given by `unvalidatedPerMinute`
+ * (order of magnitude above one credential's own budget), whatever its value:
+ * the shared allowance bounds how many requests reach the API unverified
+ * (CWE-770) even though a fresh made-up bearer also buys a fresh
+ * pre-validation bucket, because that private allowance never buys more than
+ * the shared and per-source checks still gate. One source can spend
  * only a small fraction of that allowance (its own bucket, keyed on the
  * address the Cloudflare edge overwrites), so a single caller cannot pin the
  * shared bucket and deny every not-yet-validated credential its first
@@ -55,10 +57,12 @@ export type TokenRateLimit = {
  * bounded, unauthenticated allowance.
  *
  * The `RateLimit-*` headers advertise the allowance that governs the caller
- * (KRTX-4608): an unvalidated credential reads the per-source share — small
- * enough to watch drain and exhaust — and a validated one its own budget. The
- * shared pool refills faster than any honest client spends, so advertising it
- * froze the advertised counter at limit-1 and hid the enforcement.
+ * (KRTX-4608): an unvalidated credential reads its own pre-validation
+ * allowance — small enough to watch drain and exhaust at an honest pace — and
+ * a validated one its own budget. The shared pool refills faster than any
+ * honest client spends, so advertising it froze the advertised counter at
+ * limit-1 and hid the enforcement; the per-source share is admission capacity
+ * behind the shared edge, not a boundary one caller governs.
  *
  * Each gateway task counts alone, so the fleet allows limit × tasks. This
  * stops a runaway loop or a flood on one credential. It is not a quota.
@@ -76,6 +80,12 @@ export function createTokenRateLimit(
   // the shared bucket and every validated credential's bucket out from under
   // them — resetting the very allowances this limit promises (KRTX-4528).
   const sourceLimiter = new TokenBucketRateLimiter('gateway_source');
+  // Pre-validation buckets live in their OWN limiter too (credential-shaped
+  // keys, like source keys): a flood of fakes fills this map, never the map
+  // that holds the shared bucket and every validated credential's budget
+  // (KRTX-4528). An eviction here only resets one caller's own allowance to
+  // full, never anyone else's.
+  const preValidationLimiter = new TokenBucketRateLimiter('gateway_prevalidation');
   // The credentials the API has answered with a principal. Only a real
   // credential gets in, so the set is bounded by the credential store, never by
   // what a caller sends.
@@ -101,6 +111,16 @@ export function createTokenRateLimit(
   const chargedSource = new Map<string, Map<string, number>>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
   const sharedPolicy = { limit: Math.max(1, unvalidatedPerMinute), windowMs: 60_000 };
+  // One credential's own pre-validation allowance (KRTX-4608): 10/min — a
+  // token every 6s, small enough that a client watches its own counter drain
+  // and exhaust at an honest pace — capped at the budget the credential
+  // graduates to at validation, so an unvalidated caller is never promised
+  // more than it will have once the API vouches for it. It bounds only the
+  // caller whose key holds it.
+  const preValidationPolicy = {
+    limit: Math.min(UNVALIDATED_CREDENTIAL_LIMIT, Math.max(1, limitPerMinute)),
+    windowMs: 60_000,
+  };
   // One source may spend only a small fraction of the shared allowance: a
   // request refused here never reaches the API, so a credential it refuses can
   // never validate and stays refused while a flood runs — one shared bucket
@@ -112,14 +132,14 @@ export function createTokenRateLimit(
   // edge sets it off: an untrusted header would let one caller rotate
   // addresses and buy a fresh source allowance each time.
   //
-  // Capped at 10 (KRTX-4608): a token bucket refills `limit` tokens per
-  // minute, so a counter above the sender's pace refills faster than it drains
-  // and never visibly moves — at 100/min every network-paced client read a
-  // frozen advertised count while no 429 ever came. 10/min is small enough to
-  // watch drain and exhaust, and a credential the API validates refunds its
-  // slot, so real first contacts are not the ones spending it.
+  // No cap on this share (KRTX-4608 review): behind the shipped edge the
+  // source is the ALB socket peer — many unrelated callers share it — so the
+  // share is admission capacity, sized to admit a boot burst of legitimate
+  // first contacts together (the counter-inert probe's eleven). The counter a
+  // caller watches drain is its own pre-validation allowance above, not this
+  // share.
   const sourcePolicy = {
-    limit: Math.min(Math.max(1, Math.floor(unvalidatedPerMinute / 100)), UNVALIDATED_SOURCE_CAP),
+    limit: Math.max(1, Math.floor(unvalidatedPerMinute / 100)),
     windowMs: 60_000,
   };
   const limit = (
@@ -131,16 +151,25 @@ export function createTokenRateLimit(
     if (!credential) return null;
     const key = hashOf(credential);
     const validated = validatedKeys.has(key);
+    // The caller's own pre-validation allowance, checked first: a credential
+    // its own bucket refuses never spends its source's shared slots (KRTX-4608
+    // review — refusals must not consume the capacity other callers share).
+    const preValidation = !validated
+      ? preValidationLimiter.check(key, preValidationPolicy)
+      : null;
     // A validated credential keeps its own budget; anything else shares one
     // bucket, so a rotating fake bearer spends the shared allowance, never its
-    // own private one — after its source has spent its own small share.
+    // own private one — after its own pre-validation allowance and its
+    // source's small share.
     const sourceKey =
       !validated && source && (options.trustEdgeClientIp ?? true) ? source : null;
     const fromSource = sourceKey ? sourceLimiter.check(sourceKey, sourcePolicy) : null;
     const result =
-      fromSource && !fromSource.allowed
-        ? fromSource
-        : limiter.check(validated ? key : UNVALIDATED, validated ? policy : sharedPolicy);
+      preValidation && !preValidation.allowed
+        ? preValidation
+        : fromSource && !fromSource.allowed
+          ? fromSource
+          : limiter.check(validated ? key : UNVALIDATED, validated ? policy : sharedPolicy);
     if (!validated && result.allowed) {
       if (chargedShared.size >= MAX_CHARGED_SHARED) {
         const oldest = chargedShared.values().next().value;
@@ -165,12 +194,12 @@ export function createTokenRateLimit(
       }
     }
     // Advertise the allowance that governs this caller (KRTX-4608): for an
-    // unvalidated credential that is the per-source share, whose counter a
-    // client can watch move and exhaust. The shared pool refills faster than
-    // any honest client spends; advertising it froze the advertised count at
-    // limit-1 and hid the enforcement. A refusal advertises the result that
-    // refused it.
-    const advertised = result.allowed && fromSource && !validated ? fromSource : result;
+    // unvalidated credential that is its own pre-validation allowance, whose
+    // counter a client can watch move and exhaust. The shared pool refills
+    // faster than any honest client spends; advertising it froze the advertised
+    // count at limit-1 and hid the enforcement. A refusal advertises the
+    // result that refused it.
+    const advertised = result.allowed && preValidation ? preValidation : result;
     headers.set('RateLimit-Limit', String(advertised.limit));
     headers.set('RateLimit-Remaining', String(advertised.remaining));
     headers.set('RateLimit-Reset', String(Math.ceil(advertised.resetMs / 1000)));
@@ -212,8 +241,9 @@ const UNVALIDATED = 'distinct_credentials';
 /** The cap on the charged-shared set, as MAX_BUCKETS caps the bucket map. */
 const MAX_CHARGED_SHARED = 50_000;
 
-/** The cap on the per-source share of the unvalidated allowance (KRTX-4608). */
-const UNVALIDATED_SOURCE_CAP = 10;
+/** The pre-validation allowance one credential spends alone (KRTX-4608),
+ *  capped at the credential's own validated budget. */
+const UNVALIDATED_CREDENTIAL_LIMIT = 10;
 
 /** The distinct sources one credential may hold charge bookkeeping for. */
 const MAX_SOURCE_KEYS_PER_CREDENTIAL = 8;

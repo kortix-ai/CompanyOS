@@ -173,8 +173,24 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     expect(admitted).toBe(10);
   });
 
-  test('every pre-validation charge of one credential refunds its source slot at validation (KRTX-4608 review)', () => {
+  test('eleven concurrent first contacts of distinct credentials all admit (KRTX-4608 review)', () => {
     const limit = createTokenRateLimit(600, 10_000);
+    // A boot burst arrives together: eleven distinct credentials, one caller
+    // each, before any validation callback. The source is the edge's socket
+    // peer — many unrelated callers share it — so the share is admission
+    // capacity and must admit the burst the base admitted, not cap it at ten.
+    for (let i = 0; i < 11; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      expect(
+        limit(request('/v1/models', { authorization: `Bearer kortix_boot_${i}` }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+    }
+  });
+
+  test('every pre-validation charge of one credential refunds its source slot at validation (KRTX-4608 review)', () => {
+    // unvalidated 1 000/min puts the per-source share at its 1% fraction
+    // (10/min), small enough for one credential's charges to exhaust it.
+    const limit = createTokenRateLimit(600, 1_000);
     // A booting credential's first contacts arrive together: each spends a
     // source slot before the API has validated anything.
     for (let i = 0; i < 10; i++) {
@@ -198,7 +214,7 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
   });
 
   test('charges from distinct sources each refund their own source (KRTX-4608 review)', () => {
-    const limit = createTokenRateLimit(600, 10_000);
+    const limit = createTokenRateLimit(600, 1_000);
     // The same credential's first contacts arrive through different edge hops:
     // three charges at each of two sources.
     for (let i = 0; i < 3; i++) {
@@ -226,7 +242,7 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
   });
 
   test('a never-validated credential that proves real refunds its source slot too', () => {
-    const limit = createTokenRateLimit(600, 10_000);
+    const limit = createTokenRateLimit(600, 1_000);
     // Spend the per-source share with never-validated credentials, at network
     // pace (the clock moves 50ms per request — a real client's round trip).
     let lastAdmitted = '';
@@ -266,9 +282,32 @@ describe('the unvalidated surface advertises the allowance that enforces it (KRT
         limit(request('/v1/models', { authorization: 'Bearer kortix_unproven' }), headers, '10.0.0.1'),
       ).toBeNull();
       remaining.push(Number(headers.get('RateLimit-Remaining')));
+      if (i === 0) expect(headers.get('RateLimit-Limit')).toBe('10');
     }
     for (let i = 1; i < remaining.length; i++)
       expect(remaining[i]).toBeLessThan(remaining[i - 1]);
+  });
+
+  test('a credential its own allowance refused fits again at validation (KRTX-4608)', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // The credential's own allowance drains and refuses it — the counter the
+    // client watches govern this caller and no one else.
+    let refused: Response | null = null;
+    for (let sent = 0; sent < 25 && !refused; sent++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + sent * 50));
+      refused = limit(
+        request('/v1/models', { authorization: 'Bearer kortix_unproven' }),
+        new Headers(),
+        '10.0.0.1',
+      );
+    }
+    expect(refused?.status).toBe(429);
+    // The API vouches for the credential: it moves onto its own budget, and
+    // nothing of the spent pre-validation allowance follows it there.
+    limit.validated('kortix_unproven');
+    expect(
+      limit(request('/v1/models', { authorization: 'Bearer kortix_unproven' }), new Headers(), '10.0.0.1'),
+    ).toBeNull();
   });
 
   test('a bounded burst exhausts the advertised allowance into a 429', () => {

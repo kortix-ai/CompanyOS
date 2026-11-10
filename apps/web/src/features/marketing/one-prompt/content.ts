@@ -54,9 +54,9 @@ export const TEMPLATES: HomeTemplate[] = [
     id: 'marketing',
     line: 'What ships becomes a changelog, a post, a video.',
     phrase: 'your marketing loop',
-    name: 'Marketing Loop',
+    name: 'Marketing Factory',
     summary:
-      'One marketing agent with a skill library turns merged pull requests into changelog entries, blog posts, social drafts, on-brand videos and images, AEO and SEO fixes. A person publishes.',
+      'One marketing agent with a skill library runs content (changelog, posts, videos, images), AEO, SEO and GEO, and performance marketing. Drafts and proposals only; a person publishes.',
     triggers: ['Pull request merged', 'Weekdays 10:00', 'Tuesdays 09:00', 'Mondays 06:00'],
     agents: [
       { name: 'changelog', role: 'Writes each merged change into your changelog.' },

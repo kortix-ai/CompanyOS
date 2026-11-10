@@ -17,16 +17,16 @@ export interface LoopView {
 /** The words only the page adds: a department label, one line, what it watches and what it ships. */
 const PRESENTATION: Record<string, Pick<LoopView, 'label' | 'line' | 'observes' | 'ships'>> = {
   'software-factory': {
-    label: 'Engineering',
+    label: 'Software Factory',
     line: 'Signals in. Verified pull requests out.',
     observes: ['GitHub issues', 'Failing tests', 'Production errors', 'Database anomalies', 'Slack threads', 'Customer feedback'],
     ships: ['Pull requests with tests', 'A demo video', 'Ticket updates'],
   },
   marketing: {
-    label: 'Marketing',
-    line: 'Every merge becomes a story.',
-    observes: ['Merged pull requests', 'Search and AI answers', 'Competitors'],
-    ships: ['Changelog entries', 'Blog posts', 'On-brand videos', 'Social drafts'],
+    label: 'Marketing Factory',
+    line: 'Content, search and paid, on autopilot.',
+    observes: ['Merged pull requests', 'Search and AI answers', 'Ad platforms', 'Competitors'],
+    ships: ['Changelog, posts, videos', 'AEO, SEO and GEO fixes', 'Ad performance reports'],
   },
   sales: {
     label: 'Sales',

@@ -1,4 +1,4 @@
-## Marketing Loop: the steps of this template
+## Marketing Factory: the steps of this template
 
 Run the guide below as written. This template adds six steps at the points
 named here. The loop is one agent, `marketing`, with a skill library under
@@ -82,6 +82,21 @@ they say it is their brand. Setup is not done while
    `marketing:blog`, `marketing:video`, `marketing:aeo-audit`,
    `marketing:aeo-answer`, `marketing:seo-fix`, `marketing:competitor-intel`
    (`gh label create <name> --force`).
+
+### D.5 Performance marketing (optional)
+
+1. **Ask** which paid channels run (Google Ads, Meta, LinkedIn) and where
+   conversions are counted (PostHog, GA4, the product database). Write them to
+   `marketing.json` → `performance`.
+2. Connect each channel read-only: a Kortix connector when one exists
+   (`kortix connectors connect <app> --owner project` gives the person a sign-in
+   link), else a read-only token through `kortix secrets request <NAME> --scope
+   runtime` (names in `skills/performance/references/platforms.md`). Never a
+   token that can edit campaigns.
+3. Enable `marketing-performance-weekly` and `marketing-performance-watch` in
+   `marketing.yaml`, ship, and fire the weekly one once:
+   `kortix triggers fire marketing-performance-weekly --wait 300s`. Show the
+   person the issue it opens.
 
 ### E. Instead of guide step 11: prove one changelog pull request
 

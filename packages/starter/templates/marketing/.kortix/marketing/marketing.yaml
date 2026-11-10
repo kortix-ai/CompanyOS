@@ -7,10 +7,10 @@
 
 agents:
   marketing:
-    description: "The Marketing Loop: changelog, blog posts, social drafts, videos, on-brand images, AEO and SEO, competitor digests. Drafts only; a person publishes."
+    description: "The Marketing Factory: content (changelog, blog posts, social drafts, videos, on-brand images), AEO, SEO and GEO, performance marketing, competitor digests. Drafts and proposals only; a person publishes and changes spend."
     mode: primary
     prompt_file: .kortix/marketing/agents/marketing.md
-    skills: [brand, changelog, blog-post, social, video, design, aeo-seo, competitor-intel, kortix-cli, kortix-connectors]
+    skills: [brand, changelog, blog-post, social, video, design, aeo-seo, competitor-intel, performance, kortix-cli, kortix-connectors]
     secrets: "*"
     connectors: "*"
     tools: "*"
@@ -29,6 +29,7 @@ skills:
   design: .kortix/marketing/skills/design
   aeo-seo: .kortix/marketing/skills/aeo-seo
   competitor-intel: .kortix/marketing/skills/competitor-intel
+  performance: .kortix/marketing/skills/performance
 
 triggers:
   # ── Changelog: every merged pull request, and a daily sweep for direct pushes ──
@@ -211,3 +212,27 @@ triggers:
         [marketing] role=competitor-intel
         Load the `competitor-intel` skill and write this week's digest.
         Today is {{ cron.scheduled_date }}. End with the `competitor-intel:` run line.
+
+  # ── Performance: paid channels, read-only ──────────────────────────────────
+
+  - slug: marketing-performance-weekly
+    name: Weekly performance report
+    enabled: false
+    on:
+      cron: "0 0 7 * * 1"
+    max_runs_per_day: 1
+    run:
+      agent: marketing
+      session: fresh
+      prompt: "[marketing] role=performance · the weekly performance report for {{repoFullName}}."
+
+  - slug: marketing-performance-watch
+    name: Daily performance watch
+    enabled: false
+    on:
+      cron: "0 30 7 * * *"
+    max_runs_per_day: 1
+    run:
+      agent: marketing
+      session: fresh
+      prompt: "[marketing] role=performance-watch · compare yesterday with the 14-day baseline for {{repoFullName}}."

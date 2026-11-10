@@ -22,7 +22,7 @@ interface Scene {
 const SCENES: Scene[] = [
   {
     id: 'engineering',
-    label: 'Engineering',
+    label: 'Software Factory',
     kind: 'real',
     source: `GitHub Issues · ${DEMO.repo}`,
     signal: { title: DEMO.tickets[0]!.title, meta: `issue #${DEMO.tickets[0]!.number} · filed by the nightly tests` },
@@ -31,7 +31,7 @@ const SCENES: Scene[] = [
   },
   {
     id: 'marketing',
-    label: 'Marketing',
+    label: 'Marketing Factory',
     kind: 'example',
     source: 'GitHub · merged pull requests',
     signal: { title: 'Merged: return 400 on malformed JSON', meta: 'push to main' },
@@ -128,7 +128,7 @@ export function HeroScenes() {
         </div>
 
         <div className="border-border flex flex-col gap-3 border-b p-5 lg:border-r lg:border-b-0">
-          <span className="text-muted-foreground text-xs">Agent · {scene.label.toLowerCase()} loop</span>
+          <span className="text-muted-foreground text-xs">Agent · {scene.label}</span>
           <ol className="flex flex-col gap-2.5 font-mono text-xs leading-5">
             {scene.steps.map((step, i) => (
               <li

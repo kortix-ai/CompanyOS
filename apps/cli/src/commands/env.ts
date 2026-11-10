@@ -178,7 +178,8 @@ async function envPush(fromArg: string | undefined, opts: CtxOpts, push: PushOpt
     return 1;
   }
 
-  const parsed = parseDotenv(raw);
+  // --names lists a template file (.env.example) too: its names have no values.
+  const parsed = parseDotenv(raw, push.names);
   if (parsed.length === 0) {
     process.stderr.write(`${status.err(`No NAME=VALUE pairs found in ${srcPath}.`)}\n`);
     return 1;
@@ -187,11 +188,11 @@ async function envPush(fromArg: string | undefined, opts: CtxOpts, push: PushOpt
   const encrypted = parsed.filter((p) => p.value.startsWith('encrypted:')).map((p) => p.name);
 
   if (push.names) {
-    const listed = parsed.map((p) => ({ name: p.name, encrypted: encrypted.includes(p.name), remote: pointsAtRemote(p.value) }));
+    const listed = parsed.map((p) => ({ name: p.name, empty: p.value === '', encrypted: encrypted.includes(p.name), remote: pointsAtRemote(p.value) }));
     if (push.json) process.stdout.write(`${JSON.stringify({ file: srcPath, names: listed }, null, 2)}\n`);
     else {
       for (const entry of listed) {
-        const tags = [entry.encrypted && 'encrypted', entry.remote && 'points at a remote host'].filter(Boolean).join(', ');
+        const tags = [entry.empty && 'empty', entry.encrypted && 'encrypted', entry.remote && 'points at a remote host'].filter(Boolean).join(', ');
         process.stdout.write(`${entry.name}${tags ? `  ${C.dim}(${tags})${C.reset}` : ''}\n`);
       }
     }
@@ -239,7 +240,7 @@ async function envPush(fromArg: string | undefined, opts: CtxOpts, push: PushOpt
 /** Minimal dotenv parser. Supports `NAME=VALUE` and `export NAME=VALUE`,
  *  optional matching single/double quotes around the value, `#` line
  *  comments, blank lines. Skips entries with empty values. */
-function parseDotenv(text: string): { name: string; value: string }[] {
+function parseDotenv(text: string, keepEmpty = false): { name: string; value: string }[] {
   const out: { name: string; value: string }[] = [];
   for (const lineRaw of text.split(/\r?\n/)) {
     const line = lineRaw.trim();
@@ -249,7 +250,7 @@ function parseDotenv(text: string): { name: string; value: string }[] {
     if (eq <= 0) continue;
     const name = stripped.slice(0, eq).trim();
     let value = stripped.slice(eq + 1).trim();
-    if (!value) continue;
+    if (!value && !keepEmpty) continue;
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))

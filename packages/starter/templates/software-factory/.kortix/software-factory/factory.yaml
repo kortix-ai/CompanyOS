@@ -18,6 +18,7 @@ agents:
       - workspace.read
       - workspace.session.read
       - workspace.session.start
+      - workspace.agent.read
       - workspace.session.stop
       - workspace.trigger.read
       - workspace.trigger.fire

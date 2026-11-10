@@ -30,11 +30,12 @@ test('--names lists every name with a value and never prints a value', () => {
   const r = kortix(['env', 'push', '--from', '.env', '--names', '--json']);
   expect(r.code).toBe(0);
   expect(JSON.parse(r.stdout).names).toEqual([
-    { name: 'DATABASE_URL', encrypted: false, remote: true },
-    { name: 'STRIPE_KEY', encrypted: false, remote: false },
-    { name: 'SEALED', encrypted: true, remote: false },
-    { name: 'LOCAL_API', encrypted: false, remote: false },
-    { name: 'VITE_BACKEND_URL', encrypted: false, remote: true },
+    { name: 'DATABASE_URL', empty: false, encrypted: false, remote: true },
+    { name: 'STRIPE_KEY', empty: false, encrypted: false, remote: false },
+    { name: 'SEALED', empty: false, encrypted: true, remote: false },
+    { name: 'EMPTY', empty: true, encrypted: false, remote: false },
+    { name: 'LOCAL_API', empty: false, encrypted: false, remote: false },
+    { name: 'VITE_BACKEND_URL', empty: false, encrypted: false, remote: true },
   ]);
   expect(r.stdout + r.stderr).not.toContain('synthetic');
 });

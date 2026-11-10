@@ -46,9 +46,32 @@ export function templateTriggerSlugs(root: string, template: TemplateInfo): stri
   return slugs;
 }
 
+/** All text of the installed template folder: what this repository really runs. */
+export function installedText(root: string, template: TemplateInfo): string {
+  const dir = join(root, template.import_path);
+  if (!existsSync(dir)) return '';
+  let text = '';
+  const walk = (path: string) => {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const full = join(path, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else text += readFileSync(full, 'utf8');
+    }
+  };
+  walk(dir);
+  return text;
+}
+
 /** The pure verdict for one check list: exit 1 when any line is red. */
 export function doctorExitCode(checks: Check[]): number {
   return checks.some((check) => check.state === 'fail') ? 1 : 0;
+}
+
+/** The build history is the truth for readiness; a template row can lag for some providers. */
+async function latestBuildReady(client: { get<T>(path: string): Promise<T> }, base: string, slug: string): Promise<boolean> {
+  const resp = await client.get<{ builds?: Array<{ template_slug?: string; slug?: string; status?: string }> }>(`${base}/snapshots`).catch(() => null);
+  const latest = (resp?.builds ?? []).find((build) => (build.template_slug ?? build.slug) === slug);
+  return latest?.status === 'ready';
 }
 
 function gh(args: string[]): { ok: boolean; out: string } {
@@ -78,8 +101,12 @@ async function collect(template: TemplateInfo, root: string, repo: string | null
   const secrets = await ctx.client.get<{ items?: SecretRow[] }>(`${base}/secrets`).catch(() => null);
   const rows = secrets?.items ?? [];
   const set = new Set(rows.filter((row) => row.configured).map((row) => row.name));
-  const missing = template.secrets.filter((secret) => secret.required && !set.has(secret.name)).map((secret) => secret.name);
-  const optional = template.secrets.filter((secret) => !secret.required && !set.has(secret.name)).map((secret) => secret.name);
+  // A repository set up with an older version of the template is asked only for
+  // the secrets its own files use, not for a name a newer version introduced.
+  const installed = installedText(root, template);
+  const used = template.secrets.filter((secret) => installed.includes(secret.name));
+  const missing = used.filter((secret) => secret.required && !set.has(secret.name)).map((secret) => secret.name);
+  const optional = used.filter((secret) => !secret.required && !set.has(secret.name)).map((secret) => secret.name);
   checks.push(
     missing.length === 0
       ? { name: 'secrets', state: optional.length ? 'warn' : 'ok', detail: optional.length ? `optional not set: ${optional.join(', ')}` : 'every secret is set' }
@@ -88,13 +115,14 @@ async function collect(template: TemplateInfo, root: string, repo: string | null
 
   const triggers = await ctx.client.get<{ triggers: TriggerRow[]; triggers_paused?: boolean }>(`${base}/triggers`).catch(() => null);
   const live = new Set((triggers?.triggers ?? []).map((row) => row.slug));
+  const enabled = (triggers?.triggers ?? []).filter((row) => row.enabled && declared.includes(row.slug)).length;
   const absent = declared.filter((slug) => !live.has(slug));
   if (absent.length > 0) {
     checks.push({ name: 'triggers', state: 'fail', detail: `not on the workspace yet: ${absent.join(', ')}`, fix: 'kortix ship' });
   } else if (triggers?.triggers_paused) {
     checks.push({ name: 'triggers', state: 'warn', detail: 'live, but paused for the workspace', fix: 'kortix triggers resume' });
   } else {
-    checks.push({ name: 'triggers', state: 'ok', detail: `${declared.length} live` });
+    checks.push({ name: 'triggers', state: 'ok', detail: `${enabled} on, ${declared.length - enabled} off` });
   }
 
   if (template.needs_dev_sandbox) {
@@ -102,7 +130,7 @@ async function collect(template: TemplateInfo, root: string, repo: string | null
     const chosen = sandboxes?.items.find((row) => row.slug === sandboxes.default_slug);
     if (!chosen || chosen.source === 'platform') {
       checks.push({ name: 'dev image', state: 'fail', detail: 'no dev sandbox template is the default', fix: 'add sandbox.templates + sandbox.default to kortix.yaml (setup guide step 5)' });
-    } else if (!chosen.ready) {
+    } else if (!chosen.ready && !(await latestBuildReady(ctx.client, base, chosen.slug))) {
       const state = !chosen.daytona_state || chosen.daytona_state === 'unknown' ? 'not built yet' : chosen.daytona_state;
       checks.push({ name: 'dev image', state: 'fail', detail: `${chosen.slug} is ${state}`, fix: `kortix sandboxes build ${chosen.slug}` });
     } else {

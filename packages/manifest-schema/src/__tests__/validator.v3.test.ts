@@ -259,6 +259,39 @@ describe('agents.<name>.workspace is obsolete', () => {
   });
 });
 
+describe('agents.<name>.workspace: { sandbox, repos, setup }', () => {
+  const yaml = (workspace: string, extra = '') => `sandbox:\n  templates:\n    - slug: node\n      image: node:22\nagents:\n  dev:\n    prompt: hi\n${extra}    workspace:\n${workspace}`;
+  test('the full shape validates and is read as written', () => {
+    const result = validateManifest(yaml('      sandbox: node\n      repos:\n        - path: /workspace\n        - path: /workspace/web\n          sparse: [apps/web]\n      setup: [pnpm install, pnpm build]\n'));
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect((result.parsed?.agents as any).dev.workspace).toEqual({
+      sandbox: 'node',
+      repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
+      setup: ['pnpm install', 'pnpm build'],
+    });
+  });
+  test('a setup step is a command or { run, cwd } (relative, or absolute under /workspace)', () => {
+    const result = validateManifest(yaml('      setup:\n        - pnpm install\n        - { run: pnpm build, cwd: apps/web }\n        - { run: make, cwd: /workspace/other }\n'));
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect((result.parsed?.agents as any).dev.workspace.setup).toEqual(['pnpm install', { run: 'pnpm build', cwd: 'apps/web' }, { run: 'make', cwd: '/workspace/other' }]);
+  });
+  test('each wrong value names its path', () => {
+    const paths = (workspace: string, extra = '') => validateManifest(yaml(workspace, extra)).issues.filter((i) => i.severity === 'error').map((i) => i.path);
+    expect(paths('      repos:\n        - path: /etc\n')).toEqual(['agents.dev.workspace.repos[0].path']);
+    expect(paths('      repos:\n        - path: /workspace/../etc\n')).toEqual(['agents.dev.workspace.repos[0].path']);
+    expect(paths('      repos:\n        - path: /workspace\n        - {}\n')).toEqual(['agents.dev.workspace.repos[1].path']);
+    expect(paths('      repos:\n        - sparse: [/abs]\n')).toEqual(['agents.dev.workspace.repos[0].sparse']);
+    expect(paths('      setup: pnpm install\n')).toEqual(['agents.dev.workspace.setup']);
+    expect(paths('      setup:\n        - { cwd: apps/web }\n')).toEqual(['agents.dev.workspace.setup[0].run']);
+    expect(paths('      setup:\n        - { run: x, cwd: ../etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, cwd: /etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, shell: zsh }\n')).toEqual(['agents.dev.workspace.setup[0].shell']);
+    expect(paths('      setup:\n        - ""\n')).toEqual(['agents.dev.workspace.setup[0]']);
+    expect(paths('      clone: true\n')).toEqual(['agents.dev.workspace.clone']);
+    expect(paths('      sandbox: node\n', '    sandbox: other\n')).toEqual(['agents.dev.workspace.sandbox']);
+  });
+});
+
 describe('spaces (a channel with configurable tabs)', () => {
   test('golden has no space and stays valid', () => {
     expect(check(GOLDEN).errors).toEqual([]);

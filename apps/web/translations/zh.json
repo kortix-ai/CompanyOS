@@ -1393,7 +1393,15 @@
       "history": "历史记录",
       "historyDescription": "每个会话的费用，以及添加或使用的每一笔积分。",
       "openLedger": "打开账本",
-      "unit": "{count, plural, other {积分}}"
+      "unit": "{count, plural, other {积分}}",
+      "dailySpend": "每日支出",
+      "heatLess": "少",
+      "heatMore": "多",
+      "busiestDay": "{name}：{day} 支出 {amount}，为支出最高的一天",
+      "noSpendInRange": "{name}：此期间无支出",
+      "idleWorkspaces": "{count} 个工作区在此期间无支出",
+      "showIdle": "显示",
+      "hideIdle": "隐藏"
     },
     "tokens": {
       "keyRevoked": "API 密钥已撤销",
@@ -23009,7 +23017,11 @@
     "folderTree": "文件夹",
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
-    "treeCollapse": "收起 {name}"
+    "treeCollapse": "收起 {name}",
+    "emptyWorkspaces": "{count} 个工作区没有文件",
+    "storageMoreWorkspaces": "另外 {count} 个工作区",
+    "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
+    "storageShowFewer": "收起"
   },
   "genui": {
     "showData": "显示数据",

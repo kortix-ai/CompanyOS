@@ -318,3 +318,16 @@ describe('the shipped v3 starter compiles', () => {
     expect(Object.keys(compiled.skills ?? {})).toContain('pdf');
   });
 });
+
+describe('the current workspace map survives the editor', () => {
+  test('a read serves it and a write keeps it; only the legacy shapes are dropped', () => {
+    const workspace = { repos: [{ path: '/workspace' }], setup: ['pnpm install'] };
+    const applied = applyAgentConfigV3(manifest(), 'researcher', { governance: { workspace, skills: 'all' } } as never);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(block(applied.raw, 'researcher').workspace).toEqual(workspace);
+    expect(agentConfigViewV3(block(applied.raw, 'researcher'), null).governance.workspace).toEqual(workspace);
+    const legacy = applyAgentConfigV3(manifest(), 'researcher', { governance: { workspace: { project_repository: true } } } as never);
+    expect(legacy.ok && block(legacy.raw, 'researcher')).not.toHaveProperty('workspace');
+  });
+});

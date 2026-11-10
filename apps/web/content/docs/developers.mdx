@@ -477,6 +477,29 @@ Each session works on its own branch. The branch name is the `session_id`, with 
 
 Kortix never checks out the repository at session start. `/workspace` starts empty. To work on the repository, the agent runs `kortix workspaces clone` (or `git clone "$KORTIX_REPO_URL"`) in its sandbox.
 
+To have every session of an agent start with the code and a ready dev environment, declare it on the agent:
+
+```yaml
+agents:
+  dev:
+    kortix_permissions: [workspace.gitops.read]
+    workspace:
+      sandbox: node                # the machine: a sandbox.templates slug
+      repos:
+        - path: /workspace         # or a folder under it
+          sparse: [apps/web]       # optional: only these folders of a monorepo
+      setup:
+        - pnpm install                         # in the first clone's folder
+        - { run: pnpm build, cwd: apps/web }   # in a folder of it
+```
+
+- The session starts and takes its first turn at once. The clones and `setup` run in the background after it starts.
+- Each clone lands on the session branch. A session branch that already holds pushed work is checked out as it is.
+- `setup` steps run in order, each in its own login shell with the agent's secrets. A step runs in the first clone's folder (or `/workspace`), or in its `cwd`: relative to that folder, or absolute under `/workspace`. A `cd` in one step does not carry to the next. The first failure stops the rest. The session keeps running.
+- Progress is `/tmp/kortix/workspace-setup.json` in the sandbox and `workspace_setup` in `GET /p/<sandbox>/8000/kortix/health`. Output is `/tmp/kortix/workspace-setup.log`. The agent's prompt names both.
+- `repos` needs repository access (below). Without it, the session still runs `setup`, and the status says why nothing was cloned.
+- A session that resumes on its volume does not run the same setup again.
+
 A session may read the repository only when two grants hold:
 
 - the session's agent has `project.gitops.read` in `kortix_permissions` (for example `kortix_permissions: "*"`);
@@ -888,7 +911,7 @@ Kortix reads the file and the files it points at as the format on this page: eac
 
 ### Deprecated keys
 
-Each row still validates. `kortix validate --fix` writes the replacement with the same meaning. A session never checks out the repository, so the keys of `agent-workspace`, `agent-repository-access` and `agent-workspace-mode` are replaced by a grant: an agent that had the checkout gets `workspace.gitops.read` in `kortix_permissions`, so it can still run `kortix workspaces clone`. `--fix` and every Kortix write delete the keys.
+Each row still validates. `kortix validate --fix` writes the replacement with the same meaning. A session never checks out the repository at boot, so the old shapes of `agent-workspace`, `agent-repository-access` and `agent-workspace-mode` are replaced by a grant: an agent that had the checkout gets `workspace.gitops.read` in `kortix_permissions`, so it can still run `kortix workspaces clone`. `--fix` and every Kortix write delete the old keys. The current `workspace: { sandbox, repos, setup }` map is not a deprecation.
 
 | Fix id | Deprecated | Write instead |
 | --- | --- | --- |
@@ -901,7 +924,7 @@ Each row still validates. `kortix validate --fix` writes the replacement with th
 | `agent-connectors-personal` | `connectors_personal` | `connectors_required` |
 | `agent-repository-access` | `repository_access: true` | `kortix_permissions` gains `workspace.gitops.read`; the key goes (deprecation `agent-workspace`). |
 | `agent-workspace-mode` | `workspace: branch` or `workspace: runtime` | `branch` adds `workspace.gitops.read`; `runtime` adds nothing; the key goes (deprecation `agent-workspace`). |
-| `agent-workspace` | An agent's `workspace: …` (any shape) or `repository_access: …` | `project_repository: true` adds `workspace.gitops.read` to `kortix_permissions` (`"*"` already holds it); any other value adds nothing. The key goes. A session never checks out the repository: the agent runs `kortix workspaces clone`. |
+| `agent-workspace` | An agent's `workspace: branch \| runtime \| read`, `workspace: { project_repository }` or `repository_access: …` | `project_repository: true` adds `workspace.gitops.read` to `kortix_permissions` (`"*"` already holds it); any other value adds nothing. The old key goes; a `workspace` map keeps its other keys. To clone at start, use `workspace: { repos: [...] }`. |
 | `sandbox-templates` | The top-level `sandboxes` list | `sandbox.templates` |
 | `sandbox-singular` | Image keys (`image`, `dockerfile`, `context`, …) set on `sandbox` itself | One `sandbox.templates` entry, named as `sandbox.default` |
 | `acp-runtimes` | `runtimes`, and an agent's `runtime` and `agent` | Nothing: delete them. Every session runs pi. |
@@ -1132,6 +1155,10 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sandbox` | string | `sandbox.default` | A template slug, or `default` for the platform image. |
 | `space` | string | — | The space the agent works in (a key of the top-level `spaces` map, or a bare slug). Grouping only. |
 | `network_egress` | map | — | Only `{ version: 1, default: deny, rules: [] }`. It validates with a warning: Kortix does not enforce it. |
+| `workspace` | map or string | — | What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. `repos` and `setup` run in the background after the session starts: they never hold its first turn. |
+| `workspace.sandbox` | string | — | A `sandbox.templates` slug, or `default`: the machine. Same as the agent's `sandbox` key. |
+| `workspace.repos` | list | — | Explicit clones of the workspace repository, on the session branch. Needs `workspace.gitops.read` in `kortix_permissions`. None by default. |
+| `workspace.setup` | list | — | Steps run in order after the clones, each in its own login shell with the agent's secrets, in the first clone's folder (or `/workspace`). A `cd` does not carry to the next step. A failure stops the rest; the session keeps running. |
 
 ### Registry entries
 

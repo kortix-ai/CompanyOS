@@ -1393,7 +1393,15 @@
       "history": "Cronologia",
       "historyDescription": "Il costo di ogni sessione e tutti i crediti aggiunti o spesi.",
       "openLedger": "Apri registro",
-      "unit": "{count, plural, one {credito} other {crediti}}"
+      "unit": "{count, plural, one {credito} other {crediti}}",
+      "dailySpend": "Spesa giornaliera",
+      "heatLess": "Meno",
+      "heatMore": "Più",
+      "busiestDay": "{name}: {amount} il {day}, il giorno di spesa più alta",
+      "noSpendInRange": "{name}: nessuna spesa in questo periodo",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspace}} senza spesa in questo periodo",
+      "showIdle": "Mostra",
+      "hideIdle": "Nascondi"
     },
     "tokens": {
       "keyRevoked": "Chiave API revocata",
@@ -23009,7 +23017,11 @@
     "folderTree": "Cartelle",
     "treeYou": "{name} (tu)",
     "treeExpand": "Espandi {name}",
-    "treeCollapse": "Comprimi {name}"
+    "treeCollapse": "Comprimi {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace non contiene} other {# workspace non contengono}} file",
+    "storageMoreWorkspaces": "{count, plural, one {Altro # workspace} other {Altri # workspace}}",
+    "storageWorkspaceLimit": "Ogni workspace può contenere fino a {limit}",
+    "storageShowFewer": "Mostra meno"
   },
   "genui": {
     "showData": "Mostra dati",

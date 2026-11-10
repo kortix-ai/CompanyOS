@@ -1393,7 +1393,15 @@
       "history": "履歴",
       "historyDescription": "各セッションの費用と、追加または使用されたすべてのクレジット。",
       "openLedger": "台帳を開く",
-      "unit": "{count, plural, other {クレジット}}"
+      "unit": "{count, plural, other {クレジット}}",
+      "dailySpend": "日別の利用額",
+      "heatLess": "少",
+      "heatMore": "多",
+      "busiestDay": "{name}: {day} に {amount}（最も多い日）",
+      "noSpendInRange": "{name}: この期間の利用はありません",
+      "idleWorkspaces": "この期間に利用のないワークスペース {count} 件",
+      "showIdle": "表示",
+      "hideIdle": "非表示"
     },
     "tokens": {
       "keyRevoked": "API キーを取り消しました",
@@ -23009,7 +23017,11 @@
     "folderTree": "フォルダー",
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
-    "treeCollapse": "{name} を閉じる"
+    "treeCollapse": "{name} を閉じる",
+    "emptyWorkspaces": "ファイルのないワークスペース {count} 件",
+    "storageMoreWorkspaces": "他 {count} 件のワークスペース",
+    "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
+    "storageShowFewer": "表示を減らす"
   },
   "genui": {
     "showData": "データを表示",

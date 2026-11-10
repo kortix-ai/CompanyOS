@@ -1,5 +1,5 @@
 import { encodeCompiledAgentConfigEnv } from '@kortix/api-contract/compiled-agent-config-env';
-import { agentConfigEtag } from './compile-agent-config';
+import { agentConfigEtag, type SessionWorkspaceSetup } from './compile-agent-config';
 
 export interface SessionRuntimeEnvInput {
   projectId: string;
@@ -21,6 +21,10 @@ export interface SessionRuntimeEnvInput {
   piContext?: 'record' | 'summary' | null;
   /** The pi packages of the extensions the session agent enables; sent as `KORTIX_PI_PACKAGES` to a pi session only. */
   piPackages?: unknown[];
+  /** The session agent's `workspace: { repos, setup }` (`manifestWorkspaceSetup`); null declares nothing. */
+  workspaceSetup?: SessionWorkspaceSetup | null;
+  /** The session row's `repository_access`: `repos` reach the box only with it. */
+  repositoryAccess?: boolean;
   /** The prebuilt bundle of those packages (apps/api/src/pi-packages/bundle.ts); null when not built. */
   piPackagesBundle?: { digest: string; url: string; fallbackUrl: string } | null;
 }
@@ -56,6 +60,24 @@ export function auditRelayEnvPassthrough(
   return forwarded;
 }
 
+/**
+ * `KORTIX_WORKSPACE_SETUP`: what kortixd prepares in the background after the session
+ * starts (apps/kortix-sandbox-agent-server/src/harness/shared/workspace-setup.ts). Base64
+ * JSON, version 1. A session without repository access gets no clone; the box says why.
+ */
+function workspaceSetupEnv(input: SessionRuntimeEnvInput): Record<string, string> {
+  const spec = input.workspaceSetup;
+  if (!spec) return {};
+  const access = input.repositoryAccess ?? true;
+  const body = {
+    version: 1,
+    repos: access ? spec.repos : [],
+    ...(!access && spec.repos.length ? { repos_skipped: 'the agent has no project.gitops.read, or the person who started the session cannot read the files' } : {}),
+    setup: spec.setup,
+  };
+  return { KORTIX_WORKSPACE_SETUP: Buffer.from(JSON.stringify(body), 'utf8').toString('base64') };
+}
+
 export function buildSessionRuntimeEnv(input: SessionRuntimeEnvInput): Record<string, string> {
   // A session never checks out the project repository at boot: /workspace
   // starts empty. The box still learns where the repository is and which branch
@@ -81,6 +103,7 @@ export function buildSessionRuntimeEnv(input: SessionRuntimeEnvInput): Record<st
     // explicit until the runtime floor (session-open/runtime-floor-policy.ts)
     // excludes those daemons.
     KORTIX_PROJECT_AUTO_CLONE: '0',
+    ...workspaceSetupEnv(input),
     // Which harness kortixd boots: always pi (OpenCode is deleted). Never leave it
     // out: an unset KORTIX_HARNESS marks a box OpenCode booted before the sunset,
     // and kortixd restores the session log into pi on it.

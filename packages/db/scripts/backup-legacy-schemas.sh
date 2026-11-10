@@ -19,7 +19,11 @@
 # the longest snapshot to the time public.messages takes (~45 min at 40 MB/s on prod).
 #
 # Needs: pg_dump/pg_restore of the server's major version or newer, pv, zstd, aws (CLI v2).
-# Runs anywhere that reaches the database and S3; nothing is written to local disk.
+# Nothing is written to local disk. Run it inside AWS eu-west-2, next to the database and the
+# bucket: on 2026-11-10 a run from a laptop (6-8 MB/s to S3 London) read public.messages at
+# ~2 MB/s, which is 10-30 h for prod and keeps the messages snapshot open as long.
+# The URL is split into libpq variables (PGHOST, PGPASSWORD, ...) so the password never appears
+# in a process list.
 # Restore: rest.dump first (every table definition, the types, and all other data), then the
 # data of the two big tables:
 #   aws s3 cp s3://<bucket>/<day>/rest.dump.zst - | zstd -dc | pg_restore --no-owner -d <url>
@@ -66,18 +70,31 @@ case "$cmd" in
   dump)
     rate="${4:-40m}"
     [ -n "${DATABASE_URL:-}" ] || die "set DATABASE_URL"
+    # libpq reads these; pg_dump/psql get no URL argument, so `ps` never shows the password.
+    eval "$(python3 - <<'PY'
+import os, shlex, urllib.parse as u
+p = u.urlsplit(os.environ['DATABASE_URL'])
+q = dict(u.parse_qsl(p.query))
+env = {'PGHOST': p.hostname or '', 'PGPORT': str(p.port or 5432), 'PGUSER': u.unquote(p.username or ''),
+       'PGPASSWORD': u.unquote(p.password or ''), 'PGDATABASE': u.unquote(p.path.lstrip('/')) or 'postgres',
+       'PGSSLMODE': q.get('sslmode', 'require')}
+print('\n'.join(f'export {k}={shlex.quote(v)}' for k, v in env.items()))
+PY
+)"
+    unset DATABASE_URL
     need pg_dump; need pg_restore; need pv; need zstd; need psql
     day="$(date -u +%Y%m%d)"
     # pg_dump keeps a transaction open; the postgres role ends idle transactions after 20 s on prod.
     export PGOPTIONS="-c statement_timeout=0 -c idle_in_transaction_session_timeout=0 -c lock_timeout=30s"
-    tables_in() { psql "$DATABASE_URL" -Atc "select count(*) from pg_class c where c.relkind in ('r','p') and not c.relispartition and c.relnamespace in ('public'::regnamespace, 'basejump'::regnamespace) $1"; }
+    # tables_in "<schemas>" "<extra filter>": tables whose data a part must list.
+    tables_in() { psql -Atc "select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r','p') and not c.relispartition and n.nspname in ($1) $2"; }
 
     dump_part() {
       local part="$1" expected="$2"; shift 2
       local key="s3://$bucket/$day/$part.dump.zst"
       echo "[$part] dumping to $key at $rate"
       # -Z0: pg_dump does not compress, so pv limits the bytes the server reads; zstd compresses after.
-      pg_dump --format=custom --compress=0 --no-owner --no-privileges --lock-wait-timeout=30s "$@" "$DATABASE_URL" \
+      pg_dump --format=custom --compress=0 --no-owner --no-privileges --lock-wait-timeout=30s "$@" \
         | pv -L "$rate" -i 30 -f \
         | zstd -q -T0 -10 \
         | aws s3 cp - "$key" --region "$region" --expected-size 500000000000 --sse aws:kms
@@ -91,9 +108,12 @@ case "$cmd" in
 
     dump_part messages 1 --table=public.messages
     dump_part documents 1 --table=public.documents
-    rest="$(tables_in "and c.oid not in ('public.messages'::regclass, 'public.documents'::regclass)")"
+    rest="$(tables_in "'public', 'basejump'" "and c.oid not in ('public.messages'::regclass, 'public.documents'::regclass)")"
     dump_part rest "$rest" --schema=public --schema=basejump --exclude-table-data=public.messages --exclude-table-data=public.documents
-    echo "done: s3://$bucket/$day/{messages,documents,rest}.dump.zst"
+    # The retired YOLO gateway's schema and the dead drizzle-kit ledger, dropped by the same migration.
+    extra="$(tables_in "'kortix_yolo', 'drizzle'" "")"
+    if [ "$extra" -gt 0 ]; then dump_part extra "$extra" --schema=kortix_yolo --schema=drizzle; fi
+    echo "done: s3://$bucket/$day/{messages,documents,rest,extra}.dump.zst"
     ;;
 
   *) die "unknown command $cmd (bucket|dump)" ;;

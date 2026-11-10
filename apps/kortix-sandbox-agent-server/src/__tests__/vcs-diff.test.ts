@@ -186,6 +186,24 @@ describe('vcsDiff', () => {
     }
   })
 
+  test('an executable untracked file keeps its mode with core.filemode off', async () => {
+    const root = await makeRepo()
+    try {
+      // The default on several filesystems: git ignores the exec bit. The
+      // per-file diff it replaces reported the real mode; the batch must too.
+      await realRunGit(['config', 'core.filemode', 'false'], { cwd: root })
+      await writeFile(join(root, 'tool.sh'), '#!/bin/sh\necho hi\n')
+      const { chmod } = await import('node:fs/promises')
+      await chmod(join(root, 'tool.sh'), 0o755)
+      const files = await vcsDiff(root, 'branch', 'main')
+      const tool = files.find((f) => f.file === 'tool.sh')
+      expect(tool?.patch).toContain('new file mode 100755')
+      expect(tool?.patch).toContain('echo hi')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a directory that is not a git repo has no changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-vcs-diff-plain-'))
     try {

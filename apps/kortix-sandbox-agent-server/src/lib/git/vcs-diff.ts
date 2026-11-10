@@ -11,11 +11,13 @@
  *   project's default branch, so committed work stays listed.
  */
 import { randomUUID } from 'node:crypto'
-import { rm } from 'node:fs/promises'
+import { lstat as lstatCb, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { runGit } from './git'
+
+const lstat = (path: string) => lstatCb(path).catch(() => null)
 
 export interface VcsFileDiff {
   file: string
@@ -92,6 +94,15 @@ async function untrackedPatchText(cwd: string, files: string[]): Promise<string 
     if ((await git(cwd, ['read-tree', '--empty'], { env })).code !== 0) return undefined
     const staged = await git(cwd, ['update-index', '--add', '-z', '--stdin'], { env, input: files.join('\0') + '\0' })
     if (staged.code !== 0) return undefined
+    // `core.filemode=false` (the default on several filesystems) drops the
+    // executable bit at staging, but the per-file diff it replaces reported
+    // the real mode. Re-set it on the executable regular files; a no-op where
+    // filemode is already tracked.
+    const modes = await Promise.all(files.map(async (f) => [f, await lstat(join(cwd, f))] as const))
+    const exec = modes.filter(([, st]) => st?.isFile() && (st.mode & 0o111) !== 0).map(([f]) => f)
+    if (exec.length > 0) {
+      await git(cwd, ['update-index', '--chmod=+x', '-z', '--stdin'], { env, input: exec.join('\0') + '\0' })
+    }
     const patch = await git(cwd, ['diff', '--cached', '--no-ext-diff', EMPTY_TREE, '--', '.'], { env })
     return patch.code === 0 && patch.stdout ? patch.stdout : undefined
   } finally {

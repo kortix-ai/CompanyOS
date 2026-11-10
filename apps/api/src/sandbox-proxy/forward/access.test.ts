@@ -13,7 +13,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
-import { resetDeadCredentialLogForTests } from '../../shared/dead-credential-log';
+import { resetLogWindowsForTests } from '../../shared/log-window';
 
 const realOwnership = await import('../../shared/preview-ownership');
 mock.module('../../shared/preview-ownership', () => ({
@@ -96,7 +96,7 @@ function shippedRefusalLines(): ShippedLine[] {
 let spies: Array<{ mockRestore: () => void }> = [];
 
 beforeEach(() => {
-  resetDeadCredentialLogForTests();
+  resetLogWindowsForTests();
   shipped = [];
   spies = [
     spyOn(logger, 'info').mockImplementation((...args: unknown[]) => {

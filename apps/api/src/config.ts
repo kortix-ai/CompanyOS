@@ -708,6 +708,8 @@ const envSchema = z.object({
   // a rollout. Credentials: the explicit pair below, else the AWS SDK default
   // chain (env, shared config, ECS/EKS task role). Endpoint + path style are
   // the MinIO/S3-compatible overrides; leave them unset on AWS.
+  // Ignored since 2026-11-08: a session never checks out the repository, so no
+  // session acquires its workspace from an archive. Kept so deploys that still set it parse.
   KORTIX_PROJECT_SNAPSHOT_MODE: z
     .enum(['git', 'prefer-s3', 'require-s3'])
     .optional()

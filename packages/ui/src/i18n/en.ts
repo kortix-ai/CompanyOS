@@ -6388,11 +6388,6 @@ const catalog = {
     "recentThreads": "Recent threads",
     "searchChannels": "Search spaces, threads, commands..."
   },
-  "repositoryAccess": {
-    "label": "Workspace repository access",
-    "enabled": "New sessions receive the workspace repository. Git permissions still apply. Existing sessions keep their access setting.",
-    "disabled": "New sessions run without the workspace repository. They can still create files and use granted tools. Existing sessions keep their access setting."
-  },
   "customProvider": {
     "intro": "Endpoints the catalogue does not carry.",
     "add": "Add custom provider",
@@ -9432,7 +9427,6 @@ const catalog = {
   "agentMounts": {
     "lead": "Folders from Files this agent's sessions mount. A change applies at once and reaches every new session.",
     "mount": "Mount folder",
-    "repository": "Workspace repository",
     "viaAgent": "shared with this agent",
     "viaProject": "shared with everyone in this workspace",
     "from": "{path} · {who}",

@@ -191,35 +191,59 @@ function tagMetadata(tag: DockerHubTag): Pick<VersionEntry, 'version' | 'channel
 }
 
 /**
- * One walk over both upstream feeds, mapped and sorted once; `/all` and
- * `/changelog` project it. A prerelease GitHub release lists in `/all` as
+ * The upstream feeds a collection reads. A caller selects what it needs, so a
+ * channel-filtered `/changelog` never awaits the feed its channel does not
+ * come from: an unrelated feed outage cannot delay the response, and a
+ * dev-only request does not spend the GitHub budget.
+ */
+interface FeedSelection {
+  github: boolean;
+  dockerHub: boolean;
+}
+
+/**
+ * One walk over the selected upstream feeds, mapped and sorted once; `/all`
+ * and `/changelog` project it. A prerelease GitHub release lists in `/all` as
  * channel dev; the changelog skips it.
  */
-async function collectVersionEntries(): Promise<Array<VersionEntry & { prerelease: boolean }>> {
+async function collectVersionEntries(
+  feeds: FeedSelection,
+): Promise<Array<VersionEntry & { prerelease: boolean }>> {
   const runningVersion = getRunningVersion();
   const entries: Array<VersionEntry & { prerelease: boolean }> = [];
 
-  for (const release of await githubReleases()) {
-    const metadata = releaseMetadata(release);
-    entries.push({
-      ...metadata,
-      channel: release.prerelease ? 'dev' : 'stable',
-      body: release.body || undefined,
-      prerelease: release.prerelease,
-      current: metadata.version === runningVersion,
-    });
+  if (feeds.github) {
+    for (const release of await githubReleases()) {
+      const metadata = releaseMetadata(release);
+      entries.push({
+        ...metadata,
+        channel: release.prerelease ? 'dev' : 'stable',
+        body: release.body || undefined,
+        prerelease: release.prerelease,
+        current: metadata.version === runningVersion,
+      });
+    }
   }
 
-  for (const tag of (await dockerHubDevTags()).slice(0, 20)) {
-    entries.push({ ...tagMetadata(tag), prerelease: false, current: tag.name === runningVersion });
+  if (feeds.dockerHub) {
+    for (const tag of (await dockerHubDevTags()).slice(0, 20)) {
+      entries.push({ ...tagMetadata(tag), prerelease: false, current: tag.name === runningVersion });
+    }
   }
 
   entries.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
   return entries;
 }
 
+/** A channel-filtered changelog reads only the feed its channel comes from. */
+function changelogFeeds(channel: string): FeedSelection {
+  if (channel === 'stable') return { github: true, dockerHub: false };
+  if (channel === 'dev') return { github: false, dockerHub: true };
+  return { github: true, dockerHub: true };
+}
+
 async function getAllVersions(): Promise<VersionEntry[]> {
-  return (await collectVersionEntries()).map(({ prerelease: _prerelease, ...entry }) => entry);
+  return (await collectVersionEntries({ github: true, dockerHub: true })).map(({ prerelease: _prerelease, ...entry }) => entry);
 }
 
 const ChannelSchema = z.enum(['stable', 'dev']);
@@ -350,7 +374,7 @@ versionRouter.openapi(
     const channel = c.req.query('channel') || 'all';
     const entries: Array<Record<string, unknown>> = [];
 
-    for (const entry of await collectVersionEntries()) {
+    for (const entry of await collectVersionEntries(changelogFeeds(channel))) {
       const stable = entry.channel === 'stable' && (channel === 'stable' || channel === 'all');
       const dev = entry.channel === 'dev' && !entry.prerelease && (channel === 'dev' || channel === 'all');
       if (!stable && !dev) continue;

@@ -9,7 +9,7 @@
  * (app.ts).
  */
 import { createRoute, z } from '@hono/zod-openapi';
-import type { Context } from 'hono';
+import type { Context, TypedResponse } from 'hono';
 import { auth, errors, json, makeOpenApiApp } from '../openapi';
 import { cancelAppRun, ingestAppEvents, insertAppRun, parseAppEventsBody } from '../projects/surface';
 import { scheduleDelaySeconds } from './events';
@@ -44,17 +44,32 @@ const rateLimitBody = (retryAfterSeconds: number) => ({
 });
 
 /**
+ * The refusals the App-token gate answers itself, typed exactly what `c.json`
+ * returns (the routes declare these codes' envelopes with `errors(…)`, and
+ * `{ error: string }` fits the all-optional `ErrorEnvelope`): the missing App
+ * token (401), the per-App rate limit (429) and the App's existence (404). A
+ * route whose declared responses lack one of these statuses fails the API
+ * compiler.
+ */
+type EventGateRefusal = Response &
+  (
+    | TypedResponse<typeof TOKEN_ERROR, 401, 'json'>
+    | TypedResponse<ReturnType<typeof rateLimitBody>, 429, 'json'>
+    | TypedResponse<{ error: string }, 404, 'json'>
+  );
+
+/**
  * The App behind the request, or the response to answer: the App's own token
  * (401), its per-App rate limit (429), then its existence (404), in that
  * order. The body gets the App's slug and its answer becomes the route's.
  */
-async function authorizeEventApp<T>(c: Context, projectId: string, appId: string, body: (app: { slug: string }) => Promise<T>): Promise<T> {
+async function authorizeEventApp<T>(c: Context, projectId: string, appId: string, body: (app: { slug: string }) => Promise<T>): Promise<T | EventGateRefusal> {
   const token = bearerToken(c.req.header('authorization'));
-  if (!token || !appEventTokenMatches(appId, token)) return c.json(TOKEN_ERROR, 401) as T;
+  if (!token || !appEventTokenMatches(appId, token)) return c.json(TOKEN_ERROR, 401);
   const app = await scopedApp(projectId, appId);
   const limited = appEventRateLimited(c, projectId, appId);
-  if (limited) return c.json(rateLimitBody(limited.retryAfterSeconds), 429) as T;
-  if (!app) return c.json({ error: 'Not found' }, 404) as T;
+  if (limited) return c.json(rateLimitBody(limited.retryAfterSeconds), 429);
+  if (!app) return c.json({ error: 'Not found' }, 404);
   return body(app);
 }
 

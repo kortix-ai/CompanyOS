@@ -76,29 +76,41 @@ function volumeJson(volume: AppVolumeRow, live: AppVolumeInfo | null = null) {
 type AppRow = NonNullable<Awaited<ReturnType<typeof visibleApp>>>;
 
 /**
+ * The refusals the shared gate answers itself, typed exactly what `c.json`
+ * returns (the routes declare these codes' envelopes with `errors(…)`, and
+ * `{ error: string }` fits the all-optional `ErrorEnvelope`): the 404 for a
+ * project or App the caller cannot see, plus every mapping of `refusal()`.
+ * A route whose declared responses lack one of these statuses fails the
+ * API compiler.
+ */
+type GateRefusal =
+  | Extract<Awaited<ReturnType<typeof authorizedProject>>, Response>
+  | Exclude<ReturnType<typeof refusal>, null>;
+
+/**
  * The gate and refusal mapping every fleet route shares: project membership
  * and the permission, then the App's visibility (404 — a member must not
  * learn that a teammate's private App exists), then the body with the
  * visible App; a documented refusal the body throws becomes the answer.
  */
-async function handle<T>(c: Context<AppEnv>, permission: AppPermission, body: (app: AppRow) => Promise<T>): Promise<T> {
+async function handle<T>(c: Context<AppEnv>, permission: AppPermission, body: (app: AppRow) => Promise<T>): Promise<T | GateRefusal> {
   const projectId = workspaceIdParam(c);
   const appId = c.req.param('appId') as string;
   const loaded = await authorizedProject(c, projectId, permission);
-  if (loaded instanceof Response) return loaded as T;
+  if (loaded instanceof Response) return loaded;
   const app = await visibleApp(projectId, appId, loaded.userId);
-  if (!app) return c.json({ error: 'Not found' }, 404) as T;
+  if (!app) return c.json({ error: 'Not found' }, 404);
   try {
     return await body(app);
   } catch (error) {
     const refused = refusal(c, error);
-    if (refused) return refused as T;
+    if (refused) return refused;
     throw error;
   }
 }
 
 /** The documented answer of a fleet or volume refusal, or null. */
-function refusal(c: Context<AppEnv>, error: unknown): Response | null {
+function refusal(c: Context<AppEnv>, error: unknown) {
   if (error instanceof AppFleetError || error instanceof AppVolumeError) {
     return c.json({ error: error.message, code: error.code }, error.status);
   }
@@ -113,7 +125,7 @@ export function registerAppFleetRoutes(): void {
       method: 'get', path: '/{workspaceId}/apps/{appId}/machines', tags: ['apps'], summary: 'List an App\'s machines', ...auth,
       description: 'Every machine of the App: its process group, state (started, starting, stopped, stopping), release, VM and volume.',
       request: { params: AppParams },
-      responses: { 200: json(Open, 'Machines'), ...errors(403, 404) },
+      responses: { 200: json(Open, 'Machines'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => c.json({ machines: await listAppMachines(app) }, 200)),
   );
@@ -124,7 +136,7 @@ export function registerAppFleetRoutes(): void {
         method: 'post', path: `/{workspaceId}/apps/{appId}/machines/{machineId}/${action}`, tags: ['apps'],
         summary: `${action[0]!.toUpperCase()}${action.slice(1)} an App machine`, ...auth,
         request: { params: MachineParams },
-        responses: { 200: json(Open, 'Machines'), ...errors(402, 403, 404, 409, 429) },
+        responses: { 200: json(Open, 'Machines'), ...errors(400, 402, 403, 404, 409, 429, 503) },
       }),
       async (c) => handle(c, 'deploy', async (app) => {
         const { machineId } = c.req.valid('param');
@@ -141,7 +153,7 @@ export function registerAppFleetRoutes(): void {
       method: 'delete', path: '/{workspaceId}/apps/{appId}/machines/{machineId}', tags: ['apps'], summary: 'Destroy an App machine', ...auth,
       description: 'Destroys the machine. Its volume stays (a later machine of the group takes it), and its group runs one machine fewer.',
       request: { params: MachineParams },
-      responses: { 200: json(Open, 'Machines'), ...errors(403, 404, 409) },
+      responses: { 200: json(Open, 'Machines'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       await destroyMachine(app, c.req.valid('param').machineId);
@@ -161,7 +173,7 @@ export function registerAppFleetRoutes(): void {
         count: z.record(z.string().max(32), z.number().int()),
         new_volumes: z.boolean().optional(),
       }) } } } },
-      responses: { 202: json(Open, 'Scale'), ...errors(400, 403, 404, 409) },
+      responses: { 202: json(Open, 'Scale'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
@@ -185,7 +197,7 @@ export function registerAppFleetRoutes(): void {
           timeout_s: z.number().int().min(1).max(300).optional(),
         }) } } },
       },
-      responses: { 200: json(Open, 'Result'), ...errors(400, 403, 404, 409) },
+      responses: { 200: json(Open, 'Result'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'admin', async (app) => {
       const body = c.req.valid('json');
@@ -201,7 +213,7 @@ export function registerAppFleetRoutes(): void {
     createRoute({
       method: 'get', path: '/{workspaceId}/apps/{appId}/volumes', tags: ['apps'], summary: 'List an App\'s volumes', ...auth,
       request: { params: AppParams },
-      responses: { 200: json(Open, 'Volumes'), ...errors(403, 404) },
+      responses: { 200: json(Open, 'Volumes'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       const volumes = await listAppVolumes(app.appId);
@@ -223,7 +235,7 @@ export function registerAppFleetRoutes(): void {
           snapshot_retention_days: z.number().int().optional(),
         }) } } },
       },
-      responses: { 201: json(Open, 'Volume'), ...errors(400, 403, 404, 409) },
+      responses: { 201: json(Open, 'Volume'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
@@ -251,7 +263,7 @@ export function registerAppFleetRoutes(): void {
           snapshot_retention_days: z.number().int().optional(),
         }) } } },
       },
-      responses: { 200: json(Open, 'Volume'), ...errors(400, 403, 404) },
+      responses: { 200: json(Open, 'Volume'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');
@@ -269,7 +281,7 @@ export function registerAppFleetRoutes(): void {
         'Needs `?confirm=<volume name>`. Refused with 409 `volume_attached` while a machine mounts it. A final ' +
         'snapshot is taken; the data is purged after 7 days. Project admins only.',
       request: { params: VolumeParams, query: z.object({ confirm: z.string().optional() }) },
-      responses: { 200: json(Open, 'Destroyed'), ...errors(400, 403, 404, 409) },
+      responses: { 200: json(Open, 'Destroyed'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'admin', async (app) => {
       const { volumeId } = c.req.valid('param');
@@ -287,7 +299,7 @@ export function registerAppFleetRoutes(): void {
       method: 'get', path: '/{workspaceId}/apps/{appId}/volumes/{volumeId}/snapshots', tags: ['apps'], summary: 'List a volume\'s snapshots', ...auth,
       description: 'Daily automatic snapshots (kept `snapshot_retention_days`), manual ones, and the final one of a destroyed volume.',
       request: { params: VolumeParams },
-      responses: { 200: json(Open, 'Snapshots'), ...errors(403, 404) },
+      responses: { 200: json(Open, 'Snapshots'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => c.json({ snapshots: await listVolumeSnapshots(app.appId, c.req.valid('param').volumeId) }, 200)),
   );
@@ -296,7 +308,7 @@ export function registerAppFleetRoutes(): void {
     createRoute({
       method: 'post', path: '/{workspaceId}/apps/{appId}/volumes/{volumeId}/snapshots', tags: ['apps'], summary: 'Snapshot a volume', ...auth,
       request: { params: VolumeParams },
-      responses: { 201: json(Open, 'Snapshot'), ...errors(403, 404) },
+      responses: { 201: json(Open, 'Snapshot'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => c.json(await createVolumeSnapshot(app.appId, c.req.valid('param').volumeId), 201)),
   );
@@ -308,7 +320,7 @@ export function registerAppFleetRoutes(): void {
         'Makes a snapshot the volume\'s contents again (nothing is lost: it is a new version). The machine that mounts ' +
         'the volume is stopped first and comes back on it in the background (202). Project admins only.',
       request: { params: VolumeParams, body: { content: { 'application/json': { schema: z.object({ snapshot_id: z.string().max(64) }) } } } },
-      responses: { 202: json(Open, 'Restoring'), ...errors(400, 403, 404, 409) },
+      responses: { 202: json(Open, 'Restoring'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'admin', async (app) => {
       const { volumeId } = c.req.valid('param');
@@ -322,7 +334,7 @@ export function registerAppFleetRoutes(): void {
       method: 'post', path: '/{workspaceId}/apps/{appId}/volumes/{volumeId}/fork', tags: ['apps'], summary: 'Fork a volume', ...auth,
       description: 'A new, unattached volume of the App from a snapshot (or the current contents): instant, whatever the size.',
       request: { params: VolumeParams, body: { content: { 'application/json': { schema: z.object({ name: z.string().max(30), snapshot_id: z.string().max(64).optional() }) } } } },
-      responses: { 201: json(Open, 'Volume'), ...errors(400, 403, 404, 409) },
+      responses: { 201: json(Open, 'Volume'), ...errors(400, 402, 403, 404, 409, 429, 503) },
     }),
     async (c) => handle(c, 'deploy', async (app) => {
       const body = c.req.valid('json');

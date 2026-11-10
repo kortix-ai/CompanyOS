@@ -398,6 +398,35 @@ harnessFlow(
 );
 
 // ─── RUN-7: an agent change lands on branch <sessionId> ───────────────────────
+/**
+ * A governed workspace whose `worker` agent declares its repository clone
+ * (#12262): a session gets repository bytes only when its agent declares them,
+ * and the starter pins none — so a flow that proves the agent-change path
+ * (edit in /workspace → host commit-push → the file on branch <sessionId>)
+ * declares the clone in its own project's manifest.
+ */
+function workerCloneManifest(name: string): string {
+  return `project:
+  name: ${name}
+builtin_agents:
+  my_kortix: true
+default_agent: mykortix
+agents:
+  worker:
+    description: "General-purpose worker: coding, research, writing, ops and data work, done end to end in its own sandbox."
+    mode: primary
+    permission: allow
+    tools: "*"
+    skills: "*"
+    connectors: "*"
+    secrets: "*"
+    kortix_permissions: "*"
+    workspace:
+      repos:
+        - path: /workspace
+`;
+}
+
 harnessFlow(
   'RUN-7',
   {
@@ -415,8 +444,18 @@ harnessFlow(
     ],
   },
   async (ctx, harness) => {
-    // Git flows need the seeded repository agent, not the default My Kortix workspace.
-    const session = await bootSession(ctx, harness, { agentName: 'worker' });
+    // Git flows need the repository agent on a workspace that declares its
+    // clone: the shared seeded project pins none (the starter must not), so
+    // this flow owns one whose manifest hands the worker /workspace.
+    const project = await ctx.fixtures.project({ seed: true });
+    const world = await AgentPrincipalsWorld.open(ctx, {
+      accountId: project.accountId ?? ctx.P.OWNER.accountId!,
+      projectId: project.id,
+    });
+    await ctx.step('the manifest declares the worker its repository clone', async () => {
+      await world.writeManifest(workerCloneManifest(project.name), 'ke2e RUN-7: the worker clones the workspace repository');
+    });
+    const session = await bootSession(ctx, harness, { project, agentName: 'worker' });
     const { projectId, sessionId } = session;
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
@@ -835,6 +874,16 @@ flow(
       );
     });
 
+    // The commit-push step below needs the repository on the box: the worker
+    // declares its clone in the project's manifest (#12262), so the host
+    // commit-push finds /workspace materialized.
+    const world = await AgentPrincipalsWorld.open(ctx, {
+      accountId: project.accountId ?? ctx.P.OWNER.accountId!,
+      projectId: project.id,
+    });
+    await ctx.step('the manifest declares the worker its repository clone', async () => {
+      await world.writeManifest(workerCloneManifest(project.name), 'ke2e GOLD-1: the worker clones the workspace repository');
+    });
     const session = await ctx.fixtures.session(project, {
       agentName: 'worker',
       prompt: 'add a README.md describing this project',

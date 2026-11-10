@@ -67,8 +67,39 @@ export function loopViews(): LoopView[] {
     .sort((a, b) => (a === 'software-factory' ? -1 : b === 'software-factory' ? 1 : 0))
     .flatMap((id): LoopView[] => {
       const words = PRESENTATION[id];
-      if (!words) return []; // A loop shows only once it has its one short line.
+      // Featured loops only (founder call 2026-11-10: Engineering and Marketing first).
+      if (!words || !FEATURED.has(id)) return [];
       const template = getTemplate(id);
       return [{ id, name: template.name, summary: template.summary, ...words, ...firstTrigger(id) }];
     });
 }
+
+/** Every common function, as the home lists it. `template`: the id that ships it, when one does. */
+const CATALOG: Array<{ name: string; line: string; template?: string }> = [
+  { name: 'Engineering', line: 'Ticket triage, fixes, reviews, tests.', template: 'software-factory' },
+  { name: 'Marketing', line: 'Changelog, posts, videos, SEO.', template: 'marketing' },
+  { name: 'Support', line: 'Triage, first replies, routing.', template: 'support' },
+  { name: 'Sales', line: 'Lead research, CRM updates, follow-ups.', template: 'sales' },
+  { name: 'Recruiting', line: 'Sourcing, screening, scheduling.', template: 'recruiting' },
+  { name: 'Research', line: 'Briefs, market and competitor tracking.' },
+  { name: 'Reporting', line: 'Weekly numbers, board-pack drafts.' },
+  { name: 'Operations', line: 'Handoffs, status updates, data entry.' },
+  { name: 'Finance', line: 'Invoice matching, reconciliation.' },
+  { name: 'Legal ops', line: 'Contract intake, first-pass review.' },
+  { name: 'Procurement', line: 'Vendor intake, quote comparison.' },
+  { name: 'Back office', line: 'Documents, records, checklists.' },
+];
+
+/** The catalog with its real status: a function is available only when this build ships its template. */
+export function catalogViews(): Array<{ name: string; line: string; available: boolean; id?: string }> {
+  const built = new Set<string>(TEMPLATE_IDS);
+  return CATALOG.map((entry) => ({
+    name: entry.name,
+    line: entry.line,
+    available: entry.template !== undefined && built.has(entry.template),
+    id: entry.template && built.has(entry.template) ? entry.template : undefined,
+  }));
+}
+
+/** The loops the home features: Engineering and Marketing, when built. */
+export const FEATURED = new Set(['software-factory', 'marketing']);

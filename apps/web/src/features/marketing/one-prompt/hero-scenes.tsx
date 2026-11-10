@@ -44,48 +44,6 @@ const SCENES: Scene[] = [
     ],
     ship: { kind: 'pull request', title: 'docs(changelog): malformed JSON now returns 400', lines: ['changelog entry', 'blog post draft', 'video · captioned, on brand', 'social drafts'], status: 'Waiting for a person to publish.' },
   },
-  {
-    id: 'sales',
-    label: 'Sales',
-    kind: 'example',
-    source: 'Product · new signups',
-    signal: { title: 'New signup from a company email', meta: 'webhook · signup' },
-    steps: [
-      { text: 'research the company from public sources' },
-      { text: 'score the fit against your ideal customer' },
-      { text: 'prepare the meeting brief' },
-      { text: 'draft the first email', done: true },
-    ],
-    ship: { kind: 'CRM record', title: 'Lead brief and outreach draft', lines: ['company research', 'fit score with reasons', 'first email draft'], status: 'Waiting for a person to send.' },
-  },
-  {
-    id: 'recruiting',
-    label: 'Recruiting',
-    kind: 'example',
-    source: 'ATS · new applicants',
-    signal: { title: 'New applicant for a backend role', meta: 'webhook · application' },
-    steps: [
-      { text: 'read the CV and the linked work' },
-      { text: 'score each criterion of the role rubric' },
-      { text: 'leave out protected attributes' },
-      { text: 'prepare the interview kit', done: true },
-    ],
-    ship: { kind: 'scorecard', title: 'Structured scorecard and interview kit', lines: ['score per criterion, with evidence', 'questions for the gaps', 'update draft for the candidate'], status: 'A person decides.' },
-  },
-  {
-    id: 'support',
-    label: 'Support',
-    kind: 'example',
-    source: 'Support inbox',
-    signal: { title: '“Export to CSV times out”', meta: 'email · customer' },
-    steps: [
-      { text: 'search the docs and the codebase' },
-      { text: 'reproduce it in the dev environment' },
-      { text: 'draft the answer' },
-      { text: 'file the bug for the engineering loop', done: true },
-    ],
-    ship: { kind: 'answer draft', title: 'Answer and a bug ticket for engineering', lines: ['answer draft with the workaround', 'bug ticket with the repro steps'], status: 'Waiting for a person to send.' },
-  },
 ];
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
@@ -136,7 +94,7 @@ export function HeroScenes() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div role="tablist" aria-label="Loops" className="border-border grid grid-cols-5 border-b">
+      <div role="tablist" aria-label="Loops" className="border-border grid grid-cols-2 border-b">
         {SCENES.map((s, i) => (
           <button
             key={s.id}

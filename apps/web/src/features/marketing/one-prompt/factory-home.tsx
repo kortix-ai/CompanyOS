@@ -11,6 +11,8 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 
 import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
 import type { LoopView } from './loops-content';
+
+type CatalogEntry = { name: string; line: string; available: boolean; id?: string };
 import { HeroScenes } from './hero-scenes';
 import { YamlLine } from '@/features/marketing/code-panel';
 
@@ -190,7 +192,7 @@ const LIFECYCLE = [
  * after wonder.design; the look, words and every panel are Kortix's own: the
  * brand blue, the dither field, and data from a real factory run.
  */
-export function FactoryHome({ loops }: { loops: LoopView[] }) {
+export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: CatalogEntry[] }) {
   const { copied, copy } = useCopy(SETUP_PROMPT);
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
@@ -270,6 +272,23 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           {loops.map((loop, index) => (
             <LoopShowcase key={loop.id} loop={loop} index={index} />
           ))}
+        </section>
+
+        <section id="catalog" className="border-border scroll-mt-16 border-t">
+          <h2 className="text-foreground px-8 pt-24 pb-12 text-3xl font-medium tracking-tight md:px-10 lg:text-[40px] lg:leading-tight">Every team. One loop at a time.</h2>
+          <ul className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-4">
+            {catalog.map((entry) => (
+              <li key={entry.name} className="border-border flex flex-col gap-2 border-r border-b p-6">
+                <span className="flex items-center justify-between gap-2">
+                  <span className={cn('text-base font-medium', entry.available ? 'text-foreground' : 'text-muted-foreground')}>{entry.name}</span>
+                  <span className={cn('rounded-full px-2 py-0.5 font-mono text-[11px]', entry.available ? 'bg-kortix-base/15 text-kortix-base' : 'bg-accent text-muted-foreground')}>
+                    {entry.available ? 'available' : 'next'}
+                  </span>
+                </span>
+                <span className="text-muted-foreground text-sm">{entry.line}</span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section id="lifecycle" className="border-border scroll-mt-16 border-t">

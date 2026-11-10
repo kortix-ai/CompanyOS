@@ -1,12 +1,12 @@
 import { FactoryHome } from '@/features/marketing/one-prompt/factory-home';
-import { loopViews } from '@/features/marketing/one-prompt/loops-content';
+import { catalogViews, loopViews } from '@/features/marketing/one-prompt/loops-content';
 
 /**
- * kortix.com: one prompt adds loops to your repo (Engineering, Marketing,
- * Sales, ...). The loops are read from the template files at build time, so
- * the page always shows what each loop really runs. Its own page from top to
- * bottom; the CompanyOS page that stood here is at /companyos.
+ * kortix.com: one prompt adds loops to your repo. The featured loops and the
+ * catalog's status are read from the template files at build time, so the
+ * page shows what this build really ships. Its own page from top to bottom;
+ * the CompanyOS page that stood here is at /companyos.
  */
 export default function Home() {
-  return <FactoryHome loops={loopViews()} />;
+  return <FactoryHome loops={loopViews()} catalog={catalogViews()} />;
 }

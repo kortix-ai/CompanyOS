@@ -18,6 +18,8 @@ process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 const calls: string[] = [];
 let createdBoxes = 0;
 let failReadyFor = new Set<string>();
+/** One-shot 40P01 victims the metering fake throws (a deadlock after the row insert committed). */
+let meterFailures = 0;
 
 const realHosting = await import('./hosting');
 mock.module('./hosting', () => ({
@@ -69,7 +71,12 @@ mock.module('../projects/secrets', () => ({ ...realSecrets, listResolvedProjectS
 const realMetering = await import('../billing/services/compute-metering');
 mock.module('../billing/services/compute-metering', () => ({
   ...realMetering,
-  startComputeSession: async () => {},
+  startComputeSession: async () => {
+    if (meterFailures > 0) {
+      meterFailures -= 1;
+      throw Object.assign(new Error('deadlock detected'), { name: 'PostgresError', code: '40P01' });
+    }
+  },
   pauseComputeSession: async () => {},
 }));
 
@@ -159,6 +166,7 @@ withDb('machines and volumes — real PostgreSQL', () => {
     calls.length = 0;
     createdBoxes = 0;
     failReadyFor = new Set();
+    meterFailures = 0;
     await cleanup();
   });
   afterEach(cleanup);
@@ -273,6 +281,18 @@ withDb('machines and volumes — real PostgreSQL', () => {
     const kept = await db.select().from(appVolumes).where(eq(appVolumes.appId, APP_ID));
     expect(kept).toHaveLength(3);
     expect(kept.filter((row) => row.attachedRuntimeId)).toHaveLength(1);
+  });
+
+  test('scale reconcile: a 40P01 victim after the row insert — the retry meters and readies the committed starting machine', async () => {
+    await seedApp({ app: 1 });
+    const v1 = await deploy(stateless, 1);
+    await db.update(apps).set({ scale: { app: 2 } }).where(eq(apps.appId, APP_ID));
+    // The victim hits the metering call AFTER createInstance's insert committed:
+    // the retry re-reads, sees the 'starting' row count toward target, and must
+    // finish its meter and readiness — not skip it and strand it in starting.
+    meterFailures = 1;
+    expect(await machines.reconcileAppMachines(APP_ID, { hosting: new AppHostingProvider() })).toEqual({ created: 1, destroyed: 0 });
+    expect((await liveInstances(v1.deploymentId)).map((instance) => instance.status)).toEqual(['running', 'running']);
   });
 
   test('a machine gets KORTIX_USES_URL_<SLUG> for every live App its App uses (a server reaches a backend without the browser binding)', async () => {

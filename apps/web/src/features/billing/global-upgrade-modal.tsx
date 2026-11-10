@@ -372,7 +372,9 @@ function CreditTopUpModal({
   // One-off top-ups exist only for Enterprise and accounts granted them.
   const canTopUp = canOfferTopup(accountState);
   const isEnterprise = resolvedPlan(accountState).family === 'enterprise';
-  const showTopUp = canTopUp && !showPlan;
+  // The one-off slider answers "out of credits" only. A voluntary visit opens
+  // on the plan, as before.
+  const showTopUp = canTopUp && leadWithTopUp && !showPlan;
   const paymentFailed = leadWithTopUp && billingState === 'payment_failed' && !topUpInstead;
   const openPortal = () => createPortal.mutate({ return_url: window.location.href });
   // One line under the title, naming the one way forward.
@@ -430,7 +432,11 @@ function CreditTopUpModal({
         ) : (
           <div className="space-y-3 px-6 pb-6">
             {accountState ? (
-              <PlanChanger state={accountState} variant="ladder" />
+              <PlanChanger
+                state={accountState}
+                variant={leadWithTopUp ? 'ladder' : 'card'}
+                className={leadWithTopUp ? undefined : 'bg-popover rounded-md border'}
+              />
             ) : (
               <Skeleton className="h-40 w-full rounded-md" />
             )}
@@ -442,6 +448,24 @@ function CreditTopUpModal({
             <FreeGrantNotice state={accountState} className="text-center" />
           </div>
         )}
+
+        {/* A voluntary visit keeps the way to invoices, the card and
+            cancelling. The out-of-credits view stays one action. */}
+        {!leadWithTopUp && !isMember ? (
+          <div className="flex items-center border-t px-3 py-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+              disabled={createPortal.isPending}
+              onClick={openPortal}
+            >
+              {createPortal.isPending ? <Loading className="size-4 shrink-0" /> : null}
+              {tI18nComplete.raw('text7ea27c63aff1')}
+            </Button>
+          </div>
+        ) : null}
       </ModalContent>
     </Modal>
   );

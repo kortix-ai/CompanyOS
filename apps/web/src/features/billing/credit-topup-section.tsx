@@ -238,7 +238,10 @@ const LADDER_PRESETS: readonly number[] = [25, 50, 100, 250, 500, 1000, 2500, 50
 function HeroTopup({ successUrl, cancelUrl, className }: Omit<CreditTopupSectionProps, 'variant'>) {
   const tTiers = useTranslations('billing.credits.tiers');
   const copy = useTopupCopy();
-  const { isPurchasing, purchaseError, purchase } = useCreditPurchase({ successUrl, cancelUrl });
+  const { isPurchasing, purchaseError, setPurchaseError, purchase } = useCreditPurchase({
+    successUrl,
+    cancelUrl,
+  });
   const [amount, setAmount] = useState(HERO_DEFAULT_USD);
   const { canBuy, hint, actionLabel } = describeTopup(amount, isPurchasing, copy);
 
@@ -246,7 +249,10 @@ function HeroTopup({ successUrl, cancelUrl, className }: Omit<CreditTopupSection
     <div className={cn('space-y-6', className)} data-testid="topup-ladder">
       <CreditLadder
         value={amount}
-        onChange={setAmount}
+        onChange={(next) => {
+          setAmount(next);
+          setPurchaseError(null);
+        }}
         steps={LADDER_PRESETS}
         suffix={tTiers('once')}
         label={tTiers('onceLabel')}

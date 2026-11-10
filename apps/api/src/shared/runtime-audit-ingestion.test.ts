@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { RUNTIME_AUDIT_SUMMARY_KEYS } from '@kortix/api-contract/runtime-relay';
 import { parseRuntimeAuditBatch } from './runtime-audit-ingestion';
 
 const scope = {
@@ -342,6 +343,44 @@ describe('parseRuntimeAuditBatch', () => {
       outcome: 'pending',
       toolCallId: 'call_test',
     });
+  });
+});
+
+describe('parseRuntimeAuditBatch: the summary allowlist (KRTX-4621 characterization)', () => {
+  // Every key of the contract union at its own value: scalars on the plain
+  // keys, and recursively allowlisted object fixtures on the six structural
+  // wrapper keys, so the guard's recursion runs on every level. Ingestion
+  // must keep the fixture exactly — rejecting or dropping any key or value
+  // fails the parity assert below.
+  function fullUnionSummary(): Record<string, unknown> {
+    const summary = Object.fromEntries(
+      [...RUNTIME_AUDIT_SUMMARY_KEYS].map((key) => [key, `v ${key}`]),
+    );
+    Object.assign(summary, {
+      session: { sessionID: 'ses_fixture', state: { status: 'ok' } },
+      message: { id: 'msg_fixture', role: 'agent', delivery: 'push' },
+      part: { partID: 'part_fixture', type: 'text', time: { start: 1, end: 2 } },
+      info: { providerID: 'prov_fixture', modelID: 'model_fixture', mode: 'default' },
+      error: { message: { id: 'err_fixture' } },
+      state: { status: 'completed', count: 2 },
+    });
+    return summary;
+  }
+
+  test('ingests a summary carrying every allowlist key the contract defines', () => {
+    const summary = fullUnionSummary();
+    const parsed = parseRuntimeAuditBatch({ events: [event({ input_summary: summary })] }, scope);
+    expect(parsed.accepted).toBe(1);
+    // Full union parity: every allowlisted key and value is kept.
+    expect(parsed.values[0]?.inputSummary).toEqual(summary);
+  });
+
+  test('the relay-admitted custom key is ingested (the one declared reconciliation, KRTX-4621)', () => {
+    const parsed = parseRuntimeAuditBatch(
+      { events: [event({ input_summary: { custom: 'note' } })] },
+      scope,
+    );
+    expect(parsed.values[0]?.inputSummary).toEqual({ custom: 'note' });
   });
 });
 

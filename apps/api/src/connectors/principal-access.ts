@@ -1,7 +1,7 @@
 /**
  * The ONE connector access predicate for a connector principal.
  *
- * Two inputs decide whether a principal may reach a connector:
+ * Three inputs decide whether a principal may reach a connector:
  *
  *   1. The agent grant on its session token (`agentMayUseConnector`) — the
  *      per-agent `connectors:` list from `kortix.yaml`.
@@ -11,10 +11,18 @@
  *      connectors are gone. It is therefore reachable regardless of the grant.
  *      INC-2026-09-08-CONNECTOR-GATEWAY: a grant that collapsed to `[]` took
  *      the Slack connector down with everything else and left the agent mute.
+ *   3. The SPAWN LINE. A session spawned by another session (a subagent: a
+ *      built-in, a fork, an inline colleague, a named agent) exists to do its
+ *      parent's work with the tools the parent handed it, so it inherits what
+ *      the line above it could reach (KRTX-4643): the ancestors' stored agent
+ *      grants, nearest parent first (`inheritedGrants`). A delegate never
+ *      reaches more than its parent — every entry is a grant the parent's own
+ *      calls run under.
  *
  * The channel allowance is deliberately narrow: only the channel connector(s)
- * for the platform that created THIS session, resolved server-side from
- * `project_sessions.metadata.source` — never from the request.
+ * for the platform that created THIS session or an ancestor, resolved
+ * server-side from `project_sessions.metadata.source` — never from the
+ * request.
  */
 import type { AgentGrant } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
@@ -26,6 +34,9 @@ export interface ConnectorAccessPrincipal {
   agentGrant?: AgentGrant | null;
   /** Canonical slugs of the channel connector(s) that created this session. */
   channelConnectorSlugs?: readonly string[];
+  /** The stored agent grant of every ancestor on this session's spawn line,
+   *  nearest parent first (see `sessionConnectorLineage`). */
+  inheritedGrants?: readonly (AgentGrant | null)[];
 }
 
 /** `slug` MUST be canonical (`canonicalConnectorAlias`). */
@@ -34,25 +45,38 @@ export function principalMayUseConnector(
   slug: string,
 ): boolean {
   if (agentMayUseConnector(principal.agentGrant ?? null, slug)) return true;
-  return principal.channelConnectorSlugs?.includes(slug) ?? false;
+  if (principal.channelConnectorSlugs?.includes(slug)) return true;
+  // An ancestor entry that could not be read (its token was revoked or its
+  // session deleted) is no grant, not "no restriction": it hands nothing
+  // down. Only the caller's OWN null grant means an ungoverned project.
+  return (principal.inheritedGrants ?? []).some((grant) => grant != null && agentMayUseConnector(grant, slug));
 }
 
 /**
- * The policy set the caller's agent grant assigns on this connector. The grant
- * is the reconciled session grant on the principal (session token, or a user
- * token with a session header), so a subagent child session that shares the
- * root session's token runs under the ROOT agent's set. A caller without a
- * grant (PAT, dashboard, trigger poll) gets the base rules. The request body
- * never selects a set. The `/call` route and the held-call run both use it.
+ * The policy set the caller runs under on this connector. The reconciled
+ * session grant on the principal decides: the caller's own grant when it
+ * reaches the connector (its set, else the base rules), else the nearest
+ * inherited grant that reaches it — an inherited call answers to the same set
+ * its parent's own calls answer to. A caller without a grant (PAT, dashboard,
+ * trigger poll) gets the base rules. The request body never selects a set.
+ * The `/call` route and the held-call run both use it.
  */
 export function callPolicySetOf(
-  p: Pick<ConnectorAccessPrincipal, 'agentGrant'>,
+  p: Pick<ConnectorAccessPrincipal, 'agentGrant' | 'inheritedGrants'>,
   connectorSlug: string,
 ): CallPolicySet | null {
+  const slug = canonicalConnectorAlias(connectorSlug);
   const grant = p.agentGrant ?? null;
-  const name = agentPolicySet(grant, canonicalConnectorAlias(connectorSlug));
-  if (name === null || !grant) return null;
-  return { name, agent: grant.agent, manifestCommit: grant.manifestCommit ?? null };
+  if (grant && agentMayUseConnector(grant, slug)) {
+    const name = agentPolicySet(grant, slug);
+    return name === null ? null : { name, agent: grant.agent, manifestCommit: grant.manifestCommit ?? null };
+  }
+  for (const inherited of p.inheritedGrants ?? []) {
+    if (!inherited || !agentMayUseConnector(inherited, slug)) continue;
+    const name = agentPolicySet(inherited, slug);
+    return name === null ? null : { name, agent: inherited.agent, manifestCommit: inherited.manifestCommit ?? null };
+  }
+  return null;
 }
 
 export type ConnectorDenialReason =
@@ -119,8 +143,8 @@ export function connectorDenialBody(
           ? `Connector "${input.connector}" is not assigned to this principal.`
           : isMyKortixAgentName(grant.agent)
             // A session minted before My Kortix held every connector: its next prompt re-mints the grant.
-            ? `This session's grant predates My Kortix holding every connector. Send another message so the session re-reads its grant, then call "${input.connector}" again.`
-            : `Agent "${grant.agent}" is not granted connector "${input.connector}". Add it to agents.${grant.agent}.connectors in kortix.yaml (or set connectors: "*"), then send another message so the session re-reads the manifest.`,
+            ? `This session's grant predates My Kortix holding every connector. Send another message so the session re-reads its grant, then call "${input.connector}" again. Do not start another agent for this call.`
+            : `Agent "${grant.agent}" is not granted connector "${input.connector}". Add it to agents.${grant.agent}.connectors in kortix.yaml (or set connectors: "*"), then send another message so the session re-reads the manifest. Do not start another agent for this call: a spawned session inherits the spawning session's connectors, so every delegate is denied the same way. Do the work in a session that holds the connector, or tell the human.`,
       };
     case 'connector_not_connected': {
       // Three different situations behind one reason, and naming the wrong one

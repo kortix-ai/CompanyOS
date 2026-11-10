@@ -5,7 +5,7 @@ import { DitherField } from '@/features/marketing/kit/dither-field';
 import { setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 import { YamlLine } from '@/features/marketing/code-panel';
 
@@ -23,12 +23,29 @@ const light = (at: string, strength = 30): CSSProperties => ({
   backgroundImage: `radial-gradient(55% 90% at ${at}, color-mix(in oklch, var(--kortix-base) ${strength}%, transparent), transparent 70%)`,
 });
 
-/** The whole product in three moves. */
+/** What the one prompt does, in order: the onboarding is the product. */
 const STEPS = [
-  { title: 'Copy the prompt.', body: 'Paste it into Claude Code or Codex, in your repo.' },
-  { title: 'Approve one plan.', body: 'Your agent signs you in, writes kortix.yaml, moves your secrets and builds the dev environment.' },
-  { title: 'It runs 24/7.', body: 'Issues, merges, signups and schedules start the agents. You approve what ships.' },
+  { title: 'Scans your codebase.', body: 'Your stack, your env names, every tool you already use. Names only, never a secret value.' },
+  { title: 'Asks what is missing.', body: 'Which factories, which channels, which tracker. Then one plan and one yes.' },
+  { title: 'Connects everything.', body: 'Secrets, integrations, Slack and a dev environment built from your repo.' },
+  { title: 'Writes it as code.', body: 'One kortix.yaml in your repo. Every change after that is a pull request.' },
+  { title: 'Proves it runs.', body: 'It loops until every check is green and one real run has finished.' },
 ];
+
+/** The second line of the headline: one factory after another. */
+function RotatingFactory({ names }: { names: string[] }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % names.length), 2400);
+    return () => clearInterval(id);
+  }, [names.length]);
+  return (
+    <span key={index} className="text-kortix-base animate-in fade-in slide-in-from-bottom-2 inline-block duration-500">
+      {names[index]}.
+    </span>
+  );
+}
 
 /** The prompt itself, as the thing to click: the page's one action. */
 function PromptBox({ className }: { className?: string }) {
@@ -89,19 +106,36 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
             <DitherField className="text-kortix-base" />
           </div>
           <div className="relative flex flex-col items-center gap-8 px-8 pt-20 pb-24 text-center md:px-10 lg:pt-24 lg:pb-28">
-            <span className="border-border bg-card text-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
-              Runs on your <Mark name="Claude" /> or <Mark name="Codex" /> plan
+            <span className="border-border bg-card text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-sm">
+              The multiplayer cloud harness for AI agents
             </span>
-            <h1 className="text-foreground text-[44px] leading-[1.04] font-medium tracking-tight text-balance sm:text-6xl lg:text-[72px]">
-              One prompt.
+            <h1 className="text-foreground text-[40px] leading-[1.04] font-medium tracking-tight sm:text-6xl lg:text-[72px]">
+              One prompt. Your
               <br />
-              Loop everything.
+              <RotatingFactory names={loops.map((loop) => loop.name)} />
             </h1>
-            <p className="text-foreground/70 max-w-lg text-lg text-pretty">
-              Paste it into your coding agent. It puts agents on your repo that work 24/7 in the cloud.
+            <p className="text-foreground/70 max-w-xl text-lg text-pretty">
+              Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />. It scans your codebase, connects your tools and secrets, and puts agents
+              to work 24/7.
             </p>
             <PromptBox className="mt-2" />
           </div>
+        </section>
+
+        <section id="how" className="border-border scroll-mt-16 border-t">
+          <div className="flex flex-col gap-3 px-8 pt-20 pb-12 md:px-10">
+            <Eyebrow>What the one prompt does</Eyebrow>
+            <h2 className={H2}>It onboards your whole company. In code.</h2>
+          </div>
+          <ol className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-5">
+            {STEPS.map((step, index) => (
+              <li key={step.title} className="border-border flex flex-col gap-3 border-b p-6 md:p-8 lg:border-r lg:border-b-0 lg:last:border-r-0">
+                <span className="text-kortix-base font-mono text-xs">{String(index + 1).padStart(2, '0')}</span>
+                <span className="text-foreground text-lg font-medium tracking-tight">{step.title}</span>
+                <span className="text-muted-foreground text-sm text-pretty">{step.body}</span>
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section id="factories" className="border-border scroll-mt-16 border-t">
@@ -110,18 +144,6 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
             <h2 className={H2}>A factory for every team.</h2>
           </div>
           <FactoryStack loops={loops} more={catalog} />
-        </section>
-
-        <section id="how" className="border-border scroll-mt-16 border-t">
-          <ol className="grid md:grid-cols-3">
-            {STEPS.map((step, index) => (
-              <li key={step.title} className="border-border flex flex-col gap-3 border-b p-8 md:border-r md:border-b-0 md:p-10 md:last:border-r-0">
-                <span className="text-kortix-base font-mono text-xs">{String(index + 1).padStart(2, '0')}</span>
-                <span className="text-foreground text-2xl font-medium tracking-tight">{step.title}</span>
-                <span className="text-muted-foreground text-sm text-pretty">{step.body}</span>
-              </li>
-            ))}
-          </ol>
         </section>
 
         <section className="border-border relative overflow-hidden border-t">
@@ -203,7 +225,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
             <h2 className="text-foreground text-4xl font-medium tracking-tight text-balance lg:text-6xl">
               One prompt.
               <br />
-              Loop everything.
+              Your whole company, looped.
             </h2>
             <PromptBox />
           </div>

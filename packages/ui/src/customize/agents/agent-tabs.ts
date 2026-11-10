@@ -156,6 +156,7 @@ export const YAML_KEY_ROW = {
   kortix_permissions: 'actions',
   sandbox: 'workspace',
   network_egress: 'workspace',
+  workspace: 'workspace',
 } as const satisfies Record<(typeof AGENT_BLOCK_KEYS_V3)[number], AgentRailKey>;
 
 /** The editor draft's wire names for a kortix.yaml key (v2 aliases included). */

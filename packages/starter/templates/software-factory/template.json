@@ -1,0 +1,16 @@
+{
+  "id": "software-factory",
+  "name": "Software Factory",
+  "summary": "Agents that build labeled issues into pull requests, review every pull request, fix production errors and run your end-to-end tests every night.",
+  "secrets": [
+    { "name": "GH_TOKEN", "required": true, "delivery": "sandbox", "why": "Clone the repository, push branches and open pull requests with gh." },
+    { "name": "FACTORY_GITHUB_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the GitHub webhooks for issues and pull requests.", "generate": true },
+    { "name": "FACTORY_ERRORS_WEBHOOK_SECRET", "required": false, "delivery": "connector", "why": "Authenticates your error tracker's webhook (Authorization: Bearer).", "generate": true }
+  ],
+  "github_webhooks": [
+    { "trigger": "factory-issues", "events": ["issues"] },
+    { "trigger": "factory-pull-requests", "events": ["pull_request"] }
+  ],
+  "label": "kortix",
+  "needs_dev_sandbox": true
+}

@@ -1,0 +1,16 @@
+{
+  "id": "security-loop",
+  "name": "Auto-Security Loop",
+  "summary": "Agents that pentest your app around the clock: a nightly red team attacks a fresh dev sandbox, scans every pull request, patches confirmed findings and audits dependencies weekly.",
+  "secrets": [
+    { "name": "GH_TOKEN", "required": true, "delivery": "sandbox", "why": "Clone the repository, open security issues or advisories and push fix branches with gh." },
+    { "name": "SECURITY_GITHUB_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the GitHub webhooks for pull requests and issues.", "generate": true },
+    { "name": "SECURITY_TARGET_URLS", "required": false, "delivery": "sandbox", "why": "Comma-separated URLs you own that the red team may also attack. Empty means sandbox localhost only." }
+  ],
+  "github_webhooks": [
+    { "trigger": "security-pr-scan", "events": ["pull_request"] },
+    { "trigger": "security-patch", "events": ["issues"] }
+  ],
+  "label": "kortix",
+  "needs_dev_sandbox": true
+}

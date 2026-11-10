@@ -168,6 +168,27 @@ export async function releaseInstances(deploymentId: string): Promise<InstanceRo
     .orderBy(asc(appRuntimes.createdAt));
 }
 
+/** Open (or reuse) a box's compute meter. Idempotent: an open meter for the runtime is reused. */
+async function meterInstance(
+  app: AppRow,
+  deployment: DeploymentRow,
+  config: AppReleaseConfig,
+  group: string,
+  instance: Pick<InstanceRow, 'runtimeId' | 'accountId' | 'provider' | 'machineId'>,
+): Promise<void> {
+  const provider = instance.provider as SandboxProviderName;
+  await startComputeSession({
+    sandboxId: instance.runtimeId,
+    accountId: instance.accountId,
+    actorUserId: deployment.createdBy,
+    provider,
+    spec: { ...machineSize(app, config, group, provider), gpuCount: 0 },
+    workloadType: 'app',
+    appRuntimeId: instance.runtimeId,
+    metadata: { deploymentId: deployment.deploymentId, appId: app.appId, machineId: instance.machineId, processGroup: group },
+  });
+}
+
 /** Create one instance of a release for a machine: its volume (locked first), its box, its row and its meter. */
 export async function createInstance(input: {
   hosting: AppHostingProvider;
@@ -232,16 +253,7 @@ export async function createInstance(input: {
     if (volume) await releaseVolume(volume.volumeId, runtimeId);
     throw error;
   });
-  await startComputeSession({
-    sandboxId: runtimeId,
-    accountId: app.accountId,
-    actorUserId: deployment.createdBy,
-    provider,
-    spec: { ...machine, gpuCount: 0 },
-    workloadType: 'app',
-    appRuntimeId: runtimeId,
-    metadata: { deploymentId: deployment.deploymentId, appId: app.appId, machineId, processGroup: group },
-  });
+  await meterInstance(app, deployment, config, group, { runtimeId, accountId: app.accountId, provider, machineId });
   await event(deployment.deploymentId, 'runtime_created', `Machine ${machineId.slice(0, 8)} (${group}) created`, {
     provider, externalId: handle.externalId, machineId, processGroup: group, volumeId: volume?.volumeId ?? null,
   }, runtimeId);
@@ -476,9 +488,11 @@ export async function reconcileAppMachines(
 ): Promise<{ created: number; destroyed: number; skipped?: string }> {
   // The reconcile is idempotent: it re-reads state, the provider calls it
   // re-runs are remove-safe (the create's insert-catch cleans a rolled-back
-  // box), and the per-write transactions commit separately. A 40P01 deadlock
-  // victim (two reconcile passes deleting the same release's app_runtimes —
-  // release run 42716922285, the db-suites lane) therefore just re-runs.
+  // box), the per-write transactions commit separately, and a pass that died
+  // mid-instance leaves its committed 'starting' row to the next pass's
+  // resume below. A 40P01 deadlock victim (two reconcile passes deleting the
+  // same release's app_runtimes — release run 42716922285, the db-suites
+  // lane) therefore just re-runs.
   return retryOnDeadlock(() => reconcileAppMachinesOnce(appId, options));
 }
 
@@ -513,6 +527,18 @@ async function reconcileAppMachinesOnce(
     const own = instances.filter((instance) => instance.processGroup === group);
     const target = groupScale(app.scale, group);
     for (const extra of own.slice(target).reverse()) await destroy(extra);
+    // A pass that died mid-instance (a 40P01 victim after the insert, a
+    // crash) left committed 'starting' rows: the box exists and counts toward
+    // target, but its meter and readiness never ran. Finish them — resuming
+    // the meter is idempotent — or the retry's own skip below strands the box
+    // in 'starting' forever. A row under a wake lease belongs to a wake in
+    // flight; its wakeReady finishes it.
+    for (const instance of own.slice(0, target)) {
+      if (instance.status !== 'starting' || instance.wakeLeaseOwner) continue;
+      await meterInstance(app, deployment, config, group, instance);
+      await waitInstanceReady(hosting, instance);
+      created += 1;
+    }
     if (own.length >= target || app.desiredState !== 'running') continue;
     env ??= await releaseEnvironment(app, deployment);
     const reuse = appMountFor(config, group) ? await orphanedMachineIds(appId, group) : [];

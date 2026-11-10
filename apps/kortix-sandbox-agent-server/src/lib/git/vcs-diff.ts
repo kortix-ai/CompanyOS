@@ -142,11 +142,19 @@ export async function vcsDiff(cwd: string, mode: string, defaultBranch: string):
   // `git diff --cached` writes the patch in the same sorted order as the staged
   // list: one `diff --git` chunk per staged file, keyed by path so a filtered
   // directory entry cannot shift a patch onto the wrong row.
-  const chunkByFile = untrackedChunks.length === staged.length
-    ? new Map(staged.map((file, i) => [file, untrackedChunks[i]!]))
-    : undefined
+  const chunkByFile = untrackedChunks.length === staged.length ? zipPairs(staged, untrackedChunks) : undefined
   for (const [i, file] of newFiles.entries()) {
     rows.push(finish(file, 'added', i < MAX_UNTRACKED_PATCHES ? chunkByFile?.get(file) : undefined))
   }
   return rows.sort((a, b) => a.file.localeCompare(b.file))
+}
+
+/** position → path/value pairs, when both lists are the same length. */
+function zipPairs(paths: string[], chunks: string[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const [i, chunk] of chunks.entries()) {
+    const path = paths[i]
+    if (path !== undefined) map.set(path, chunk)
+  }
+  return map
 }

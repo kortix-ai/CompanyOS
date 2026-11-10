@@ -90,7 +90,7 @@ const CATALOG: Array<{ name: string; line: string; template?: string }> = [
   { name: 'Back office', line: 'Documents, records, checklists.' },
 ];
 
-/** The catalog with its real status: a function is available only when this build ships its template. */
+/** Every function Kortix loops (all of them run today); `id` links the ones with a ready-made template. */
 export function catalogViews(): Array<{ name: string; line: string; available: boolean; id?: string }> {
   const built = new Set<string>(TEMPLATE_IDS);
   return CATALOG.map((entry) => ({

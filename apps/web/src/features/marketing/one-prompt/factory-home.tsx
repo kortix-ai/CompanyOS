@@ -277,17 +277,25 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Ca
         <section id="catalog" className="border-border scroll-mt-16 border-t">
           <h2 className="text-foreground px-8 pt-24 pb-12 text-3xl font-medium tracking-tight md:px-10 lg:text-[40px] lg:leading-tight">Every team. One loop at a time.</h2>
           <ul className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-4">
-            {catalog.map((entry) => (
-              <li key={entry.name} className="border-border flex flex-col gap-2 border-r border-b p-6">
-                <span className="flex items-center justify-between gap-2">
-                  <span className={cn('text-base font-medium', entry.available ? 'text-foreground' : 'text-muted-foreground')}>{entry.name}</span>
-                  <span className={cn('rounded-full px-2 py-0.5 font-mono text-[11px]', entry.available ? 'bg-kortix-base/15 text-kortix-base' : 'bg-accent text-muted-foreground')}>
-                    {entry.available ? 'available' : 'next'}
-                  </span>
-                </span>
-                <span className="text-muted-foreground text-sm">{entry.line}</span>
-              </li>
-            ))}
+            {catalog.map((entry) => {
+              const tile = (
+                <>
+                  <span className="text-foreground text-base font-medium">{entry.name}</span>
+                  <span className="text-muted-foreground text-sm">{entry.line}</span>
+                </>
+              );
+              return (
+                <li key={entry.name} className="border-border border-r border-b">
+                  {entry.id ? (
+                    <a href={`#loop-${entry.id}`} className="hover:bg-card flex h-full flex-col gap-2 p-6 transition-colors">
+                      {tile}
+                    </a>
+                  ) : (
+                    <div className="flex h-full flex-col gap-2 p-6">{tile}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
 

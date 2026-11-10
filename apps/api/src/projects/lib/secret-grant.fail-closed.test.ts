@@ -55,11 +55,14 @@ describe('resolveSessionSecretGrant fails closed through the real manifest loade
       path: 'kortix.yaml',
       content: 'agents:\n  - [unbalanced\n',
     });
-    // Repair mode: only My Kortix runs, so the file can be fixed. No agent,
-    // the `default` sentinel included, receives a project secret.
-    for (const sessionAgent of ['default', 'kortix', 'mykortix']) {
-      await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent })).resolves.toEqual([]);
-    }
+    // Repair mode: only My Kortix runs, so the file can be fixed. No declared
+    // agent, the `default` sentinel included, receives a project secret.
+    // #12240: the platform-owned My Kortix coordinator keeps its full grant
+    // on an unparseable manifest (its grant no longer reads the manifest);
+    // the failing user agent is still denied.
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'default' })).resolves.toEqual([]);
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'kortix' })).resolves.toEqual([]);
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix' })).resolves.toBe('all');
   });
 
   test('a genuinely absent manifest is still the unrestricted back-compat path', async () => {

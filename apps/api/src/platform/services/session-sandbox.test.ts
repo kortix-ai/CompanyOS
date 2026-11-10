@@ -518,16 +518,19 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
     });
 
     expect(accountTokenCreateCalls).toHaveLength(1);
+    // #12240: My Kortix acts with its person's rights — connectors and env are 'all'.
     expect(accountTokenCreateCalls[0]).toMatchObject({
       accountId: ACCOUNT_ID,
       userId: USER_ID,
       projectId: PROJECT_ID,
       sessionId: SANDBOX_ID,
+      name: `Session ${SANDBOX_ID.slice(0, 8)}`,
+      onBehalfOfUserId: null,
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

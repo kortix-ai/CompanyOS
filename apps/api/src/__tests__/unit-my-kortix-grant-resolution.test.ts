@@ -76,8 +76,17 @@ describe('grantFromLoadedAgents — the reserved meta coordinator', () => {
     expect(grantFromLoadedAgents('meta', { ...UNGOVERNED, builtinAgents: { my_kortix: false } })).toEqual(disabledMyKortixAgentGrant());
   });
 
-  test('carries no connectors and no secrets, on every manifest shape', () => {
-    for (const loaded of [UNGOVERNED, GOVERNED, UNREADABLE]) {
+  test("carries the reserved coordinator's grant until My Kortix is off, on every manifest shape", () => {
+    // Was the deny-all `{ permissions: [], connectors: [], env: [] }`, which the
+    // per-prompt re-mint wrote onto the token. #12240 made My Kortix act with
+    // its person's rights: ON (or the launch project) and it holds the full
+    // grant; OFF (or unreadable, a repair-mode world) it is the no-action grant.
+    for (const loaded of [UNGOVERNED, GOVERNED]) {
+      const grant = grantFromLoadedAgents('meta', loaded);
+      expect(grant?.connectors).toEqual(myKortixAgentGrant().connectors);
+      expect(grant?.env).toEqual(myKortixAgentGrant().env);
+    }
+    for (const loaded of [UNREADABLE, { ...GOVERNED, builtinAgents: undefined }]) {
       const grant = grantFromLoadedAgents('meta', loaded);
       expect(grant?.connectors).toEqual([]);
       expect(grant?.env).toEqual([]);

@@ -10,9 +10,9 @@ a skill's `SKILL.md` with `read` before you work on its topic. Paths inside a
 skill are relative to its folder.
 The Kortix skills (`kortix-*`) come from the deployed platform, not from the
 repository, and update in a running session. Never edit or commit a copy.
-For one your list lacks, or outside a session:
-- `kortix system-skills` lists them; `kortix system-skills get <name>` prints
-  one `SKILL.md` and its reference paths; `… file <name> <path>` one reference.
+One your list lacks, or outside a session: `kortix system-skills` lists them,
+and `kortix system-skills get <name>` prints one `SKILL.md` and its reference
+paths; `… file <name> <path>` one reference.
 A flag-gated skill exists only while its flag is on. Optional skills: `kortix marketplace search <query>` (`kortix-marketplace`).
 </live-skills>
 <overview>
@@ -23,11 +23,9 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   `$KORTIX_BRANCH_NAME`. Sessions run in parallel and share no sandbox.
 - An **agent** is one block under `agents:` in `kortix.yaml`: prompt, model,
   permission rules, and the things it may use.
-- Every session starts from the default branch. A change reaches other
-  sessions only when its change request merges.
-- `/workspace` starts empty. Kortix never checks out the repository there.
-- To work on the workspace's files, run `kortix workspaces clone`. It clones
-  the repository onto your session branch. Send the change with `kortix cr`.
+- A change reaches other sessions only when its change request merges.
+- `/workspace` starts empty. `kortix workspaces clone` clones the repository
+  onto your session branch. Send the change with `kortix cr`.
 - Only your session branch accepts your push. The push needs
   `workspace.gitops.read` in your agent's `kortix_permissions`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
@@ -53,9 +51,8 @@ media and datasets in object storage; add build output to `.gitignore`.
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
-0. Work in a clone: `/workspace` has none at boot. `kortix workspaces clone`
-   puts the repository on your session branch; `cd` into it. Run every step
-   below there.
+0. Work in a clone: `kortix workspaces clone` puts the repository on your
+   session branch; `cd` into it. Run every step below there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
@@ -87,7 +84,7 @@ change request (CR) is the only way to the default branch. Do every step:
 ## The `kortix` CLI in the sandbox
 `kortix` is on `$PATH` and signed in: `$KORTIX_TOKEN` is this session's
 workspace-scoped token, `$KORTIX_API_URL` its API. Use it for Kortix cloud
-state. Use `git` and the file tools for files and commits.
+state; use `git` and the file tools for files and commits.
 - Read commands take `--json`: parse it, never scrape tables. Diagnostics go
   to stderr. Mutations take flags and never prompt.
 - `kortix <group> --help` lists every subcommand and flag. Read it before

@@ -776,6 +776,8 @@ struct CapturedDesktop {
     /// capture read only that display (Windows). Encoding then keeps exactly
     /// the display that was read. None: encoding asks for the pointer itself.
     pointer: Option<u32>,
+    /// The focused window's display at capture time, when the capture knew it.
+    focused: Option<u32>,
 }
 
 #[cfg(feature = "native-recorders")]
@@ -1060,7 +1062,9 @@ fn encode_captured_screenshot_with(
     let pointer_display_id = capture
         .pointer
         .or_else(|| current_pointer_display_id(&capture.displays));
-    let focused_display_id = current_focus_display_id(&capture.displays);
+    let focused_display_id = capture
+        .focused
+        .or_else(|| current_focus_display_id(&capture.displays));
     let active_display_id = active_display_id(focused_display_id, pointer_display_id);
     match capture.mode {
         ScreenshotCaptureMode::Stitched => {
@@ -1083,7 +1087,11 @@ fn encode_captured_screenshot_with(
             let mut fallback: Option<(u8, EncodedScreenshot)> = None;
 
             for (index, display) in capture.displays.into_iter().enumerate() {
-                if !keeps_display_image(display.id, pointer_display_id, focused_display_id) {
+                // A display the capture did not read (empty image) keeps its layout
+                // only, also when the pointer moved to it since.
+                if display.image.width() == 0
+                    || !keeps_display_image(display.id, pointer_display_id, focused_display_id)
+                {
                     // The screen recorder's video already holds this display; an
                     // action needs only the display the person works on.
                     let mut value = display_screenshot_payload(
@@ -1297,7 +1305,7 @@ fn display_id_for_point(displays: &[CapturedDisplay], x: f64, y: f64) -> Option<
 }
 
 /// Windows: read only the display under the pointer, through the capture
-/// engine's Desktop Duplication (GPU-drawn content such as a CAD canvas is in
+/// engine's Desktop Duplication (GPU-drawn content such as a 3D canvas or video is in
 /// the frame; GDI paints it black). The other displays keep their layout and
 /// an empty image: encoding drops their pixels anyway. A display that shows
 /// the same desktop image as at the last read reuses that read.
@@ -1361,6 +1369,7 @@ fn capture_desktop_capture(mode: ScreenshotCaptureMode) -> Result<CapturedDeskto
         bounds,
         displays,
         pointer: Some(pointer),
+        focused: None,
     })
 }
 
@@ -1385,30 +1394,39 @@ fn capture_every_display(mode: ScreenshotCaptureMode) -> Result<CapturedDesktop>
 
     let bounds = ScreenBounds::from_screens(&screens)
         .context("failed to calculate virtual screen bounds")?;
-    let mut displays = Vec::with_capacity(screens.len());
-
-    for screen in &screens {
-        let image = screen
-            .capture()
-            .with_context(|| format!("failed to capture screen {}", screen.display_info.id))?;
-        displays.push(CapturedDisplay {
+    let mut displays: Vec<CapturedDisplay> = screens
+        .iter()
+        .map(|screen| CapturedDisplay {
             id: screen.display_info.id,
             is_primary: screen.display_info.is_primary,
             x: screen.display_info.x as f64,
             y: screen.display_info.y as f64,
             width: screen.display_info.width as f64,
             height: screen.display_info.height as f64,
-            image,
-        });
+            image: RgbaImage::new(0, 0),
+        })
+        .collect();
+    // An action keeps the image of the pointer's display and the focused
+    // window's display only (`keeps_display_image`): read just those. With
+    // neither known, or for a stitched desktop, read every display.
+    let (pointer, focused) = match mode {
+        ScreenshotCaptureMode::AllDisplays => (
+            current_pointer_display_id(&displays),
+            current_focus_display_id(&displays),
+        ),
+        ScreenshotCaptureMode::Stitched => (None, None),
+    };
+    for (screen, display) in screens.iter().zip(displays.iter_mut()) {
+        if keeps_display_image(display.id, pointer, focused) {
+            display.image = screen
+                .capture()
+                .with_context(|| format!("failed to capture screen {}", screen.display_info.id))?;
+        }
     }
 
     let image = match mode {
-        ScreenshotCaptureMode::AllDisplays => displays
-            .iter()
-            .find(|display| display.is_primary)
-            .or_else(|| displays.first())
-            .map(|display| display.image.clone())
-            .context("no display screenshots were captured")?,
+        // The idle hash reads the displays; this image is not encoded.
+        ScreenshotCaptureMode::AllDisplays => RgbaImage::new(0, 0),
         ScreenshotCaptureMode::Stitched => stitch_logical_desktop(&bounds, &displays)?,
     };
 
@@ -1417,7 +1435,8 @@ fn capture_every_display(mode: ScreenshotCaptureMode) -> Result<CapturedDesktop>
         image,
         bounds,
         displays,
-        pointer: None,
+        pointer,
+        focused,
     })
 }
 
@@ -1791,7 +1810,7 @@ fn run_windows_input_hook_listener(
     unsafe {
         // Every keyboard and mouse event on the computer waits for this thread
         // to return from the hook. The process runs below normal priority so the
-        // foreground app wins the CPU; this one thread must not, or a busy CAD
+        // foreground app wins the CPU; this one thread must not, or a busy
         // app makes the pointer lag system-wide. Its callbacks only queue.
         {
             use windows::Win32::System::Threading::{
@@ -3070,6 +3089,7 @@ mod screenshot_capture_tests {
                 },
                 displays: Vec::new(),
                 pointer: None,
+                focused: None,
             },
             enqueued_at: Instant::now(),
             raw_queue_depth: 0,
@@ -3365,6 +3385,42 @@ mod screenshot_capture_tests {
         assert_eq!(screenshot_dhash(&RgbaImage::new(0, 0), 0.5), 0);
     }
 
+    /// Two displays, only the pointer's read: the frame's image is that
+    /// display's, and the other keeps its layout with no image.
+    #[test]
+    fn an_unread_display_keeps_its_layout_and_no_image() {
+        let display = |id: u32, x: f64, image: RgbaImage| CapturedDisplay {
+            id,
+            is_primary: id == 1,
+            x,
+            y: 0.0,
+            width: 16.0,
+            height: 16.0,
+            image,
+        };
+        let read = RgbaImage::from_pixel(16, 16, image::Rgba([90, 90, 90, 255]));
+        let capture = CapturedDesktop {
+            mode: ScreenshotCaptureMode::AllDisplays,
+            image: RgbaImage::new(0, 0),
+            bounds: ScreenBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 32.0,
+                height: 16.0,
+                displays: Vec::new(),
+            },
+            displays: vec![display(1, 0.0, RgbaImage::new(0, 0)), display(2, 16.0, read)],
+            pointer: Some(2),
+            focused: None,
+        };
+        let encoded = encode_captured_screenshot(capture, 0.5, 60).expect("encoded");
+        assert_eq!((encoded.width, encoded.height), (8, 8));
+        let displays = encoded.data["displays"].as_array().expect("displays");
+        let by_id = |id: u32| displays.iter().find(|d| d["display_id"] == json!(id)).unwrap();
+        assert!(by_id(1)["image"].is_null(), "{}", by_id(1));
+        assert!(by_id(2)["image"].as_str().is_some_and(|s| !s.is_empty()));
+    }
+
     fn solid_capture(luma: u8) -> CapturedDesktop {
         let mut image = RgbaImage::new(16, 16);
         for pixel in image.pixels_mut() {
@@ -3382,6 +3438,7 @@ mod screenshot_capture_tests {
             },
             displays: Vec::new(),
             pointer: None,
+            focused: None,
         }
     }
 

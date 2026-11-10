@@ -19,9 +19,11 @@ pub fn no_window(cmd: &mut std::process::Command) -> &mut std::process::Command 
     cmd
 }
 
-/// Run this process (and the children it starts afterwards, which inherit the
-/// class) below normal priority on Windows, so the foreground app (a CAD
-/// tool, a build) always wins the CPU. No-op elsewhere.
+/// Run this process (and the children it starts afterwards, which inherit it)
+/// below normal priority, so the foreground app (a CAD tool, a build) always
+/// wins the CPU. Windows: `BELOW_NORMAL_PRIORITY_CLASS`. macOS and Linux:
+/// nice 10. Their input recording is passive (a listen-only event tap, X11
+/// XRecord), so no person's keyboard or mouse waits on a lower priority.
 pub fn below_normal_priority() {
     #[cfg(windows)]
     unsafe {
@@ -29,6 +31,35 @@ pub fn below_normal_priority() {
         if win::SetPriorityClass(win::GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS) == 0 {
             tracing::warn!("SetPriorityClass(BELOW_NORMAL) failed");
         }
+    }
+    #[cfg(unix)]
+    {
+        const NICE: libc::c_int = 10;
+        // SAFETY: plain libc calls on this process. Raising nice needs no privilege;
+        // a process already at NICE or above keeps its value.
+        unsafe {
+            *libc_errno() = 0;
+            let now = libc::getpriority(libc::PRIO_PROCESS, 0);
+            if *libc_errno() == 0
+                && now < NICE
+                && libc::setpriority(libc::PRIO_PROCESS, 0, NICE) != 0
+            {
+                tracing::warn!("setpriority(nice {NICE}) failed");
+            }
+        }
+    }
+}
+
+/// This thread's `errno` (getpriority returns -1 for both an error and nice -1).
+#[cfg(unix)]
+unsafe fn libc_errno() -> *mut libc::c_int {
+    #[cfg(target_os = "linux")]
+    {
+        libc::__errno_location()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        libc::__error()
     }
 }
 
@@ -314,6 +345,15 @@ mod job_layout {
 
 #[cfg(test)]
 mod tests {
+    /// The recorder runs at nice 10 or lower priority on macOS and Linux.
+    #[cfg(unix)]
+    #[test]
+    fn below_normal_priority_lowers_this_process() {
+        super::below_normal_priority();
+        let nice = unsafe { libc::getpriority(libc::PRIO_PROCESS, 0) };
+        assert!(nice >= 10, "nice {nice}");
+    }
+
     // A child started through `die_with_parent` dies when its parent is killed.
     #[cfg(target_os = "linux")]
     #[test]

@@ -1128,8 +1128,8 @@ fn role_name(id: UIA_CONTROLTYPE_ID) -> &'static str {
 }
 
 /// The longest one tree walk may take. Every UI Automation call is answered
-/// on the target app's UI thread, so a long walk stalls that app (an AutoCAD
-/// ribbon, an ArcGIS Pro pane). A walk that hits the budget returns what it
+/// on the target app's UI thread, so a long walk stalls that app (a large
+/// ribbon, a docked pane, a dialog with many fields). A walk that hits the budget returns what it
 /// has, marked partial.
 const AX_BUDGET: Duration = Duration::from_millis(250);
 

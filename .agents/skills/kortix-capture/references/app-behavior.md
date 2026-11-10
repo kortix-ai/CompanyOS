@@ -1234,7 +1234,7 @@ Fail-safe rules:
 | Excluded apps | Frame skipped when one is focused. Other excluded windows are painted black from the z-ordered window list (rectangular approximation, no rounded corners or transparency) | Same |
 | URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; reused for 3 s while the window and title stay the same | None (needs AT-SPI) |
 | AX tree | UI Automation control view, one cached call per node, 250 ms budget | None |
-| Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | Default priority |
+| Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | nice 10 for every Capture process (macOS too); input recording is passive (XRecord, a listen-only event tap) |
 | Private windows | Title markers (InPrivate, Incognito, Private Browsing) | Same |
 | Idle / lock | `GetLastInputInfo`; lock = input desktop not openable | XScreenSaver idle; lock = screensaver active |
 | OCR | `Windows.Media.Ocr`. Needs an OCR language pack. No confidence (reports 1.0). Words are grouped into line boxes split at column gaps | `tesseract` CLI (`apt install tesseract-ocr`) |
@@ -1269,11 +1269,14 @@ Kortix Capture merges two recorders that share no capture code:
 
 Screen APIs of the action recorder (`screenshots` 0.8.10): macOS
 `CGWindowListCreateImage` (legacy; macOS 15+ re-asks for screen recording
-consent), Linux X11 `GetImage` and the Wayland portal. Windows reads only the
-display under the pointer, through the engine's DXGI Desktop Duplication
-(`capture_engine::grab_monitor`), so GPU-drawn content such as a CAD canvas is
-in the frame; a display with no new desktop image reuses the last read. The
-other displays keep their layout and no image.
+consent), Linux X11 `GetImage` and the Wayland portal. On every OS an action
+screenshot reads only the displays it keeps (the pointer's, and on macOS the
+focused window's); the other displays keep their layout and no image. No
+screenshot is taken while the window in front would be dropped (an excluded
+app, or one that is not included). Windows reads the display through the
+engine's DXGI Desktop Duplication (`capture_engine::grab_monitor`), so GPU-drawn
+content (a 3D canvas, video) is in the frame, and a display with no new desktop
+image reuses the last read.
 
 ### Stages
 

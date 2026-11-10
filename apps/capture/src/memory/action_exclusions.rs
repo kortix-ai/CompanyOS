@@ -438,14 +438,14 @@ pub(crate) mod tests {
     fn the_capture_gate_follows_the_front_window_without_counting() {
         let mut s = Settings::default();
         s.record_only_included = true;
-        s.included_bundle_ids = vec!["acad.exe".into()];
+        s.included_bundle_ids = vec!["editor.exe".into()];
         let paths = library(&s);
         let fake = Arc::new(FakeFront::default());
         let gate = ActionExclusions::new(&paths, fake.clone());
         assert!(!gate.front_admitted(), "an unknown front window is not included");
-        *fake.now.lock() = Some(front("acad.exe", None, "Drawing1.dwg"));
+        *fake.now.lock() = Some(front("editor.exe", None, "Document1"));
         assert!(gate.front_admitted());
-        *fake.now.lock() = Some(front("outlook.exe", None, "Inbox"));
+        *fake.now.lock() = Some(front("mail.exe", None, "Inbox"));
         assert!(!gate.front_admitted());
         gate.flush();
         assert_eq!(status(&paths)["excluded_events"], json!(0));

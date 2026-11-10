@@ -1312,7 +1312,7 @@ enum OcrPlan {
 }
 
 /// Two stills whose difference hashes differ in at most this many of 64 bits
-/// look the same (a moved cursor, a CAD crosshair, a blinking caret).
+/// look the same (a moved cursor or crosshair, a blinking caret).
 const NEAR_SAME_DHASH_BITS: u32 = 2;
 /// A still that looks the same as its display's last read copies that text
 /// while the read is younger than this; small edits are read by then.
@@ -3516,7 +3516,7 @@ mod tests {
         };
         let read = ocr_frame(&conn, 1, true, 10_000, "v1", 1);
         dh(read, "00ff00ff00ff00ff");
-        // Two bits apart (a moved crosshair): copied.
+        // Two bits apart (a moved cursor): copied.
         let near = ocr_frame(&conn, 1, true, 12_000, "v2", 0);
         dh(near, "00ff00ff00ff00fc");
         assert_eq!(

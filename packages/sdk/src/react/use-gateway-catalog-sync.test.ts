@@ -22,11 +22,11 @@ import { act, create } from 'react-test-renderer';
 import { useSandboxConnectionStore } from '../browser/stores/sandbox-connection-store';
 import { configureKortix } from '../core/http/config';
 
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // TanStack schedules `refetchInterval` timers only off-server, and bun tests
 // run without a window — same guard as `contract-error-self-heal.test.ts`.
-(globalThis as unknown as { window?: object }).window ??= {};
+(globalThis as { window?: object }).window ??= {};
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { useGatewayCatalogSync } = await import('./use-gateway-catalog-sync');
@@ -44,8 +44,11 @@ function installFetch() {
   counts.secrets = 0;
   counts.other = 0;
   secretsStatus = 403;
-  globalThis.fetch = (async (url: unknown) => {
-    const path = String(url);
+  // One checked cast: Bun's `typeof fetch` carries a required `preconnect`
+  // (bun.d.ts: "pass `session.fetch as typeof fetch`"), so the stub asserts the
+  // signature it implements instead of bridging through `unknown`.
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const path = String(input);
     if (path.includes('/secrets')) {
       counts.secrets += 1;
       if (secretsStatus === 403) {
@@ -64,7 +67,7 @@ function installFetch() {
     }
     counts.other += 1;
     return Response.json({});
-  }) as unknown as typeof fetch;
+  }) as typeof fetch;
 }
 
 /** Flush every pending microtask chain a fetch cycle leaves behind. */

@@ -2335,6 +2335,39 @@ describe('pi subagents extension', () => {
     }
   })
 
+  test('My Kortix names who works: a hand-off with no subagent_type and no inline spec starts nothing and says so', async () => {
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        if (req.method === 'POST' && new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+        }
+        return Response.json([])
+      },
+    })
+    try {
+      const r = await boot({
+        // The 2026-11-10 shape: a name and a prompt, the intended agent only in the model's reasoning.
+        script: [TASK({ description: 'Cheapest car', subagent_type: undefined, name: 'rental-scout' }), { text: 'parent done' }],
+        env: {
+          KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { mykortix: { mode: 'primary', prompt: 'You are My Kortix.' } } }),
+          KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`,
+          KORTIX_AGENT_NAME: 'mykortix',
+          KORTIX_META_AGENT: '1',
+        },
+      })
+      await promptAndSettle(r, 'find the cheapest car')
+      expect(creates).toEqual([])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const [part] = toolParts(page, 'task')
+      expect(part!.state.status).toBe('error')
+      expect(part!.state.error).toContain('Name who works: set subagent_type')
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('only the coordinator hands an inline agent connectors or secrets', async () => {
     const creates: Array<Record<string, any>> = []
     const server = Bun.serve({

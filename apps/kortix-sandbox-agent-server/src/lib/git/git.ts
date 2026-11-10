@@ -571,6 +571,38 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
   }
 }
 
+/**
+ * Put the base gitlinks `add -A` staged as deleted back into the index. A
+ * submodule checkout never exists in this sandbox (materializing one means
+ * fetching another repository), so the working tree never has the path and
+ * every plain staging would push the repository's submodule pointer away.
+ * HEAD carries the pointers — the base tip on the first call, the last
+ * pushed commit after — so re-add each gitlink that the index no longer
+ * holds. An entry that survived (the agent replaced the pointer with a file,
+ * or put an empty directory there) is left alone.
+ */
+async function restoreBaseGitlinks(target: string): Promise<void> {
+  const tree = await execGit(['-C', target, 'ls-tree', '-r', '-z', 'HEAD'])
+  if (tree.code !== 0) throw new Error(`git ls-tree failed: ${tree.stderr || tree.stdout}`)
+  const links = tree.stdout.split('\0').filter((entry) => entry.startsWith('160000 '))
+  if (links.length === 0) return
+  const idx = await execGit(['-C', target, 'ls-files', '--stage', '-z'])
+  if (idx.code !== 0) throw new Error(`git ls-files failed: ${idx.stderr || idx.stdout}`)
+  const staged = new Set(
+    idx.stdout.split('\0').filter(Boolean).map((entry) => entry.slice(entry.indexOf('\t') + 1)),
+  )
+  for (const entry of links) {
+    const tab = entry.indexOf('\t')
+    const path = entry.slice(tab + 1)
+    if (staged.has(path)) continue
+    const sha = entry.slice(entry.indexOf(' ', 7) + 1, tab)
+    const upd = await execGit([
+      '-C', target, 'update-index', '--add', '--cacheinfo', `160000,${sha},${path}`,
+    ])
+    if (upd.code !== 0) throw new Error(`git update-index failed: ${upd.stderr || upd.stdout}`)
+  }
+}
+
 export async function commitAndPushWorkingTree(
   cfg: Config,
   opts: { message?: string } = {},
@@ -598,17 +630,26 @@ export async function commitAndPushWorkingTree(
   if (status.stdout.trim().length > 0) {
     const added = await execGit(['-C', target, 'add', '-A'])
     if (added.code !== 0) throw new Error(`git add failed: ${added.stderr || added.stdout}`)
+    await restoreBaseGitlinks(target)
 
-    const message = (opts.message?.trim() || 'Update from session').slice(0, 500)
-    const commit = await execGit(['-C', target, 'commit', '-m', message], {
-      env: buildGitIdentityEnv(cfg),
-    })
-    if (commit.code === 0) {
-      committed = true
-    } else if (!/nothing to commit|no changes added/i.test(`${commit.stdout} ${commit.stderr}`)) {
-      throw new Error(`git commit failed: ${commit.stderr || commit.stdout}`)
+    // The gitlink restore can be the whole diff (an empty workspace on a repo
+    // with submodules): decide the commit by the staged diff — status lists
+    // worktree deletions that survive the restore.
+    const staged = await execGit(['-C', target, 'diff', '--cached', '--name-only'])
+    if (staged.code !== 0) throw new Error(`git diff failed: ${staged.stderr || staged.stdout}`)
+    if (staged.stdout.trim().length > 0) {
+      const message = (opts.message?.trim() || 'Update from session').slice(0, 500)
+      const commit = await execGit(['-C', target, 'commit', '-m', message], {
+        env: buildGitIdentityEnv(cfg),
+      })
+      if (commit.code === 0) {
+        committed = true
+      } else if (!/nothing to commit|no changes added/i.test(`${commit.stdout} ${commit.stderr}`)) {
+        throw new Error(`git commit failed: ${commit.stderr || commit.stdout}`)
+      }
     }
-  } else if (materializedHere) {
+  }
+  if (materializedHere && !committed) {
     // Freshly materialized and the agent wrote nothing beyond the repository:
     // the tree matches the base tip, so no commit and no push — pushing would
     // only create the session branch as a duplicate of the base.

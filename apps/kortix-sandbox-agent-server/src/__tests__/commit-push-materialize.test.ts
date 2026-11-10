@@ -49,6 +49,20 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
+/** The base repo carries a submodule pointer (a gitlink); the submodule's own
+ * checkout never exists in this sandbox — exactly the stateless session. */
+function makeRepoWithSubmodule(): { root: string; remote: string; target: string; linkSha: string } {
+  const base = makeRepo()
+  const seed = join(base.root, 'sub-seed')
+  mkdirSync(seed)
+  git(['clone', '-q', base.remote, seed])
+  const linkSha = git(['rev-parse', 'HEAD'], seed)
+  git(['update-index', '--add', '--cacheinfo', `160000,${linkSha},vendor/sub`], seed)
+  git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'submodule pointer'], seed)
+  git(['push', '-q', 'origin', 'main'], seed)
+  return { ...base, linkSha }
+}
+
 describe('commitAndPushWorkingTree on a stateless session', () => {
   it('materializes the repo under the agent’s files and pushes the union, agent wins', async () => {
     const { remote, target } = makeRepo()
@@ -298,6 +312,51 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     ).rejects.toThrow('git materialize conflict')
     expect(readFileSync(join(target, 'a', 'b'), 'utf8')).toBe('elsewhere\n')
     expect(existsSync(join(target, '.git'))).toBe(false)
+  })
+
+  it('a repo with a submodule keeps its gitlink in the pushed tree, on every push', async () => {
+    const { remote, target, linkSha } = makeRepoWithSubmodule()
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    const first = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'first push' },
+    )
+    expect(first.pushed).toBe(true)
+
+    // The pushed tree still carries the repository's submodule pointer — the
+    // materialize cannot check out a submodule, and staging must not read
+    // that absence as a deletion.
+    const firstTree = git(['ls-tree', '-r', 'refs/heads/session-abc'], remote)
+    const firstLink = firstTree.split('\n').find((line) => line.endsWith('\tvendor/sub'))
+    expect(firstLink).toMatch(/^160000 commit [0-9a-f]{40}\tvendor\/sub$/)
+    expect(firstLink).toContain(linkSha)
+
+    // The second call faces the same absent path (the worktree never has the
+    // submodule): the restore must run on every push, not just the first.
+    writeFileSync(join(target, 'second-file.md'), 'more agent work\n')
+    const second = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'second push' },
+    )
+    expect(second.pushed).toBe(true)
+    const secondTree = git(['ls-tree', '-r', 'refs/heads/session-abc'], remote)
+    const secondLink = secondTree.split('\n').find((line) => line.endsWith('\tvendor/sub'))
+    expect(secondLink).toMatch(/^160000 commit [0-9a-f]{40}\tvendor\/sub$/)
+  })
+
+  it('an empty workspace on a repo with a submodule pushes nothing and creates no branch', async () => {
+    // The gitlink's worktree deletion is the only dirty state: the agent
+    // wrote nothing. That must be a no-op, not a spurious session branch
+    // duplicating the base tip.
+    const { remote, target } = makeRepoWithSubmodule()
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-idle' }),
+      { message: 'nothing' },
+    )
+    expect(result.nothingToDo).toBe(true)
+    expect(result.pushed).toBe(false)
+    const branches = git(['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], remote)
+    expect(branches).not.toContain('session-idle')
   })
 
   it('no connected repository still refuses with the standing error', async () => {

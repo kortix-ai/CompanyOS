@@ -1112,6 +1112,10 @@ function scanFile(file) {
       const coveredLocalizedLeafCatalog =
         (file === path.join(srcDir, 'features/billing/billing-return.tsx') &&
           catalogRoot === 'RETURNS') ||
+        // Ledger badge labels, localized through
+        // localizeUiCatalog(TRANSACTION_BADGES, …, APP_REGISTRY_TRANSLATION_KEYS).
+        (file === path.join(srcDir, 'features/billing/transactions-table.tsx') &&
+          catalogRoot === 'TRANSACTION_BADGES') ||
         // Message keys of spaces.view.tabEdit, read through t(copy.title) and friends.
         (file === path.join(uiSrcDir, 'workspace/spaces/space-tabs.tsx') &&
           catalogRoot === 'TARGET_COPY') ||

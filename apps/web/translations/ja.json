@@ -21320,7 +21320,12 @@
       "text4b892277843c": "ワークスペースを作成",
       "text41018e566b60": "新規 ワークスペース 作成 追加 チーム",
       "texta99ac8f9050b": "ワークスペース · アクセス",
-      "textfd8b8dae4421": "危険な操作"
+      "textfd8b8dae4421": "危険な操作",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM保留返金",
+      "texta68ee4167406": "プロキシ",
+      "texta69c4dece144": "ストレージ",
+      "textab3aff8f7642": "トップアップボーナス"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",

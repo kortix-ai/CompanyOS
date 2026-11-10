@@ -21320,7 +21320,12 @@
       "text4b892277843c": "Criar espaço de trabalho",
       "text41018e566b60": "novo espaço de trabalho criar adicionar equipe",
       "texta99ac8f9050b": "Espaço de trabalho · Acesso",
-      "textfd8b8dae4421": "Zona de perigo"
+      "textfd8b8dae4421": "Zona de perigo",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Reembolso de reserva de LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Armazenamento",
+      "textab3aff8f7642": "Bônus de recarga"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",

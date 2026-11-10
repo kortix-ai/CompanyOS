@@ -31,11 +31,11 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
-test('ls --json lists the three hand-approved templates', () => {
+test('ls --json lists the two hand-approved templates', () => {
   const r = kortix(['templates', 'ls', '--json']);
   expect(r.code).toBe(0);
   const ids = (JSON.parse(r.stdout) as { templates: Array<{ id: string }> }).templates.map((t) => t.id);
-  expect(ids).toEqual(['software-factory', 'aeo-loop', 'changelog']);
+  expect(ids).toEqual(['software-factory', 'marketing']);
 });
 
 test('add into a repository with kortix.yaml: files written, import appended, comments kept, placeholders resolved', () => {
@@ -60,34 +60,34 @@ test('add into a repository with kortix.yaml: files written, import appended, co
 });
 
 test('a changed template file is refused without --force and replaced with it', () => {
-  expect(kortix(['templates', 'add', 'changelog', '--repo', 'acme/shop']).code).toBe(0);
-  const file = join(repo, '.kortix/changelog/changelog.yaml');
+  expect(kortix(['templates', 'add', 'marketing', '--repo', 'acme/shop']).code).toBe(0);
+  const file = join(repo, '.kortix/marketing/marketing.yaml');
   writeFileSync(file, `${readFileSync(file, 'utf8')}# local edit\n`);
-  const refused = kortix(['templates', 'add', 'changelog', '--repo', 'acme/shop']);
+  const refused = kortix(['templates', 'add', 'marketing', '--repo', 'acme/shop']);
   expect(refused.code).toBe(1);
-  expect(refused.stderr).toContain('.kortix/changelog/changelog.yaml');
-  expect(kortix(['templates', 'add', 'changelog', '--repo', 'acme/shop', '--force']).code).toBe(0);
+  expect(refused.stderr).toContain('.kortix/marketing/marketing.yaml');
+  expect(kortix(['templates', 'add', 'marketing', '--repo', 'acme/shop', '--force']).code).toBe(0);
   expect(readFileSync(file, 'utf8')).not.toContain('# local edit');
 });
 
 test('no kortix.yaml: one is created with My Kortix and the import; no GitHub remote and no --repo is refused', () => {
-  const refused = kortix(['templates', 'add', 'aeo-loop']);
+  const refused = kortix(['templates', 'add', 'marketing']);
   expect(refused.code).toBe(1);
   expect(refused.stderr).toContain('--repo <owner/repo>');
   expect(existsSync(join(repo, 'kortix.yaml'))).toBe(false);
 
-  const r = kortix(['templates', 'add', 'aeo-loop', '--repo', 'acme/site', '--branch', 'trunk', '--json']);
+  const r = kortix(['templates', 'add', 'marketing', '--repo', 'acme/site', '--branch', 'trunk', '--json']);
   expect(r.code).toBe(0);
   expect(JSON.parse(r.stdout)).toMatchObject({ manifest_created: true, default_branch: 'trunk' });
   const manifest = readFileSync(join(repo, 'kortix.yaml'), 'utf8');
   expect(manifest).toContain('my_kortix: true');
-  expect(manifest).toContain('- .kortix/aeo-loop/');
+  expect(manifest).toContain('- .kortix/marketing/');
 });
 
 test('an unknown template is refused with the list', () => {
   const r = kortix(['templates', 'add', 'nope']);
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain('software-factory, aeo-loop, changelog');
+  expect(r.stderr).toContain('software-factory, marketing');
 });
 
 test('sameGitHubRepository: https, ssh and scp forms of one repository match; another repository or a proxy URL does not', async () => {

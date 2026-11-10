@@ -1,3 +1,8 @@
+import {
+  RUNTIME_AUDIT_SECRET_VALUE_RE,
+  RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS,
+  RUNTIME_AUDIT_SUMMARY_KEYS,
+} from '@kortix/api-contract/runtime-relay';
 import type { RuntimeAuditBatch, RuntimeAuditEvent } from '@kortix/api-contract/runtime-relay';
 import type { auditEvents } from '@kortix/db';
 
@@ -24,70 +29,6 @@ const INITIATOR_TYPES = new Set(['human', 'agent', 'service_account', 'system'])
  *  of the boundary cannot drift apart. */
 export const MAX_BATCH_SIZE = 200;
 const MAX_SUMMARY_BYTES = 16_384;
-const SECRET_VALUE_RE =
-  /(?:bearer\s+[a-z0-9._~+/=-]+|sk-[a-z0-9_-]{12,}|gh[opusr]_[a-z0-9_]{12,}|kortix_(?:pat|sbx)_[a-z0-9_-]+|(?:token|secret|password|api[_-]?key)=\S+)/i;
-
-const SUMMARY_KEYS = new Set([
-  'id',
-  'sessionID',
-  'sessionId',
-  'session_id',
-  'parentID',
-  'parentId',
-  'messageID',
-  'messageId',
-  'partID',
-  'partId',
-  'callID',
-  'callId',
-  'toolCallID',
-  'toolCallId',
-  'executionID',
-  'executionId',
-  'tool',
-  'name',
-  'status',
-  'role',
-  'type',
-  'path',
-  'filename',
-  'mime',
-  'size',
-  'bytes',
-  'duration',
-  'durationMs',
-  'agent',
-  'agentID',
-  'agentId',
-  'agentName',
-  'depth',
-  'multiple',
-  'session',
-  'message',
-  'part',
-  'error',
-  'info',
-  'count',
-  'state',
-  'time',
-  'start',
-  'end',
-  'created',
-  'completed',
-  'updated',
-  'compacting',
-  'archived',
-  'providerID',
-  'modelID',
-  'mode',
-  'delivery',
-]);
-
-// These keys are structural wrappers in the runtime event contract. A
-// compromised sandbox can otherwise put a prompt or provider response in a
-// primitive `message`, `error`, or `part` value and pass the general string
-// allowlist. Keep only their recursively allowlisted object shape.
-const STRUCTURAL_WRAPPER_KEYS = new Set(['session', 'message', 'part', 'info', 'error', 'state']);
 
 type AuditInsert = typeof auditEvents.$inferInsert;
 
@@ -170,7 +111,7 @@ function sanitizeSummary(
       if (candidate.length > 512) fail(index, `has an oversized ${field}`);
       const origin = originOnlyUrl(candidate);
       if (origin) return origin;
-      if (SECRET_VALUE_RE.test(candidate)) {
+      if (RUNTIME_AUDIT_SECRET_VALUE_RE.test(candidate)) {
         fail(index, `has a credential-shaped ${field} value`);
       }
       return candidate;
@@ -179,8 +120,8 @@ function sanitizeSummary(
     if (typeof candidate !== 'object') fail(index, `has an invalid ${field}`);
     const result: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(candidate as Record<string, unknown>)) {
-      if (!SUMMARY_KEYS.has(key)) fail(index, `has a disallowed ${field} key: ${key}`);
-      if (STRUCTURAL_WRAPPER_KEYS.has(key)) {
+      if (!RUNTIME_AUDIT_SUMMARY_KEYS.has(key)) fail(index, `has a disallowed ${field} key: ${key}`);
+      if (RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS.has(key)) {
         if (child && typeof child === 'object' && !Array.isArray(child)) {
           result[key] = visit(child, depth + 1);
         }

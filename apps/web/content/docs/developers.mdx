@@ -14,7 +14,7 @@ Pick the path that matches what you have:
 | You have | Start here |
 | --- | --- |
 | Nothing yet | [Create a workspace](#create-or-get-a-workspace) with `kortix init` |
-| A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml` |
+| A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml`, a [template](#templates) and its agents |
 | A workspace a teammate made | [Clone it](#create-or-get-a-workspace) with `kortix projects clone` |
 
 Each path ends at a merged change request. Each step is a git operation on your workspace's repository. The workspace id is the `project_id`. The project names keep working permanently: `kortix projects` (a workspace), `--project`, `project_id` and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
@@ -125,61 +125,50 @@ my-agent/
 
 ### Set up an existing repository
 
-Kortix reads agents from `kortix.yaml` at the root of the branch the workspace uses. A repository you link keeps its own files: Kortix never writes to it. You add the file once, from your own clone, with the coding agent you already use.
+One prompt adds Kortix agents to a repository you already work in. Paste it into the coding agent on your computer (Claude Code, Codex, Cursor) in your clone:
 
-1. **Link the repository.** In the web app, open **Create a workspace** (`/new`) and choose **Import an existing repository**. Pick the branch Kortix reads. From a terminal, you link it in step 3 instead.
-2. **Copy the setup prompt.** The workspace page of a repository with no `kortix.yaml` shows **Copy setup prompt**, filled in with the repository and the branch. Or copy it from below.
-3. **Paste it into Claude Code, Codex or Cursor** in your clone. The agent writes `kortix.yaml`, runs `kortix validate` and pushes the file. With no workspace linked yet, run `kortix ship` after it: it links the GitHub `origin` and pushes.
-
-Until then the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab, and opens the chat within about a minute of the push.
-
-The prompt:
-
-````text
-Set up this repository for Kortix. Kortix reads `kortix.yaml` from the branch the workspace uses. The reference is https://kortix.com/docs/developers#set-up-an-existing-repository.
-
-1. If the `kortix` command is missing, install it: `curl -fsSL https://kortix.com/install | bash`.
-2. Create `kortix.yaml` at the repository root with this content:
-
-```yaml
-# yaml-language-server: $schema=https://kortix.com/schema/kortix.schema.json
-project:
-  name: "<the repository name>"
-builtin_agents:
-  my_kortix: true
-default_agent: mykortix
-skills: {}
-agents:
-  worker:
-    description: "General-purpose worker: coding, research, writing, ops and data work."
-    mode: primary
-    permission: allow
-    prompt: "You work in this repository. Read AGENTS.md or CLAUDE.md first when it exists."
-    tools: "*"
-    skills: "*"
-    connectors: "*"
-    secrets: "*"
-    kortix_permissions: "*"
-    workspace: { project_repository: true }
+```text
+Set up Kortix cloud agents on this repository with me.
+Read https://kortix.com/setup.md (curl -fsSL https://kortix.com/setup.md) and follow it step by step.
+Ask me before each decision it names. Never print a secret value.
 ```
 
-3. Keep the agent setup this repository already has. Do not move, copy or edit those files.
-   - For each `.claude/agents/<name>.md`, add an agent `<name>` with `prompt_file: .claude/agents/<name>.md`, the `description` from its frontmatter, `mode: primary`, `tools: "*"` and `workspace: { project_repository: true }`.
-   - For each folder that holds a `SKILL.md` (`.agents/skills/<name>`, `.claude/skills/<name>`, `skills/<name>`), add `<name>: <folder>` under `skills:`. Skip a name that starts with `kortix-`.
-4. Run `kortix validate`. Fix every error it prints and run it again until it exits 0.
-5. Commit only `kortix.yaml` with the message "chore: add kortix.yaml" and push it to the branch the workspace uses.
-6. Reply with the agents and skills you declared.
-````
+Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md) and does each step with you:
 
-What the prompt keeps from your repository:
+1. Installs the `kortix` CLI and signs you in (one click in your browser).
+2. Asks where the config lives. In a monorepo, the root.
+3. Asks which [templates](#templates) to add and runs `kortix templates add <id>`.
+4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
+5. Writes the dev environment: `.kortix/sandbox/Dockerfile` (a sandbox template) and `.kortix/dev.md` (the install, start and test commands every agent reads).
+6. Shows you the names in your `.env` files, never a value, and uploads only the ones you approve (`kortix env push --names`, `--only`).
+7. Connects the plan your agents run on: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
+8. Runs `kortix validate`, commits `kortix.yaml` and `.kortix/`, and runs `kortix ship`, which creates the workspace and links the GitHub repository.
+9. Stores each template secret: a random webhook secret it generates, and your GitHub token through a link where you paste it, so the value never passes through the agent.
+10. Creates the GitHub webhooks with your own `gh`.
+11. Fires one trigger and shows you the session.
 
-| In your repository | In `kortix.yaml` |
-| --- | --- |
-| `.claude/agents/<name>.md` | An agent `<name>` whose `prompt_file` is that file. Kortix drops the file's frontmatter and uses the body as the prompt, so Claude Code and Kortix read one file. |
-| A folder with a `SKILL.md` | A project skill under `skills:`, granted to `worker` by `skills: "*"`. |
-| `AGENTS.md`, `CLAUDE.md` | Read by `worker` at the start of each session, as its prompt says. |
+A workspace that already reads a repository with no `kortix.yaml` shows **Copy setup prompt** on its home page: the same prompt, with the repository and the branch to push to. Until the push, the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab.
 
-`builtin_agents.my_kortix: true` turns on My Kortix, and `default_agent: mykortix` makes it run when a session names no agent. My Kortix hands project work to `worker` and to your agents. Each grant of `"*"` means every name: narrow them in the [kortix.yaml reference](#kortixyaml-reference).
+#### Templates
+
+A template is a hand-approved set of agents and triggers. `kortix templates add <id>` writes its folder, `.kortix/<id>/`, and adds that folder under `imports:` in `kortix.yaml`. Remove a template by deleting both.
+
+| Template | `id` | What runs |
+| --- | --- | --- |
+| Software Factory | `software-factory` | Builds each GitHub issue labeled `kortix` into a pull request, reviews every pull request, fixes production errors from your error tracker's webhook, runs the end-to-end tests every night. |
+| Auto-Security Loop | `security-loop` | A nightly red team attacks the app in its own sandbox, every pull request gets a security review, confirmed findings become fix pull requests, dependencies are audited weekly. |
+| AEO Loop | `aeo-loop` | Measures every week whether search and AI answers cite your site for the questions in `.kortix/aeo-loop/queries.md`, writes the missing answers into your website as pull requests, fixes technical SEO. |
+| Automated Changelog | `changelog` | Turns every push to the default branch into a changelog entry, then drafts the weekly blog post, social posts and a captioned product video from it. |
+
+```sh
+kortix templates ls                       # the templates
+kortix templates show software-factory    # its agents, secrets and webhooks
+kortix templates add software-factory     # into the repository you stand in
+```
+
+`add` reads the GitHub repository from `origin` and the default branch from `origin/HEAD`; `--repo <owner/repo>` and `--branch <name>` set them. It refuses to overwrite a template file you changed unless you pass `--force`. `--json` prints the secrets and GitHub webhooks the template needs.
+
+A template's agents use your GitHub token (`GH_TOKEN`) with `gh`: they clone the repository, push `kortix/<slug>` branches and open pull requests. They never push to the default branch. A GitHub repository webhook fires a trigger as GitHub sends it: its URL is the trigger's `webhook_url`, its secret is the trigger's webhook secret.
 
 If the composer says **No agents available to you**, the workspace has no agent you may run. With no `kortix.yaml` on the branch, set it up as above. With a `kortix.yaml`, a person who manages the workspace grants you an agent: see [Teams](/docs/guide#teams).
 

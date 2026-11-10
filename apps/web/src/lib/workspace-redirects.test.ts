@@ -8,8 +8,6 @@ import { locales } from '@/i18n/catalog.mjs';
 import {
   DESKTOP_LEGACY_PATH_SCRIPT,
   desktopShellPath,
-  workspaceDesktopRewrites,
-  workspacePathOfDesktopLegacy,
   workspaceRedirects,
 } from './workspace-redirects';
 
@@ -122,13 +120,9 @@ function redirectFor(url: string, ua: string): string | null {
 
 describe('an installed desktop shell keeps every app page in its window', () => {
   test.each(['/projects', '/projects/start', '/projects/p1', '/projects/p1/sessions/s1', '/new'])(
-    '%s: no server redirect for the shell; the page is served from /workspaces',
+    '%s: no server redirect for the shell (the middleware serves it from /workspaces)',
     (path) => {
       expect(redirectFor(path, DESKTOP_UA)).toBeNull();
-      const rewrite = workspaceDesktopRewrites().find((r) => match(r.source, { decode: decodeURIComponent })(path));
-      expect(rewrite?.has?.every((c) => headerMatches(c, DESKTOP_UA))).toBe(true);
-      const params = (match(rewrite!.source, { decode: decodeURIComponent })(path) as { params: object }).params;
-      expect(compile(rewrite!.destination)(params)).toBe(workspacePathOfDesktopLegacy(path)!);
     },
   );
 

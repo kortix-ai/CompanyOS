@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sessionEmbedSnippet } from './session-embed-section';
+import { sessionEmbedSnippet } from './session-embed-snippet';
 
 describe('sessionEmbedSnippet', () => {
   test('the snippet embeds the actual session page (KRTX-2358 direction)', () => {

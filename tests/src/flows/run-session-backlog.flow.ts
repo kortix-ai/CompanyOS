@@ -427,7 +427,10 @@ harnessFlow(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        // #12136: /workspace starts empty and holds no checkout. The agent
+        // materializes the repository itself (the product's documented flow),
+        // so the file lands inside the clone and commit-push has a repo to push.
+        `The workspace folder starts empty and holds no repository checkout. First materialize it: run exactly \`git clone "$KORTIX_REPO_URL" .\` from /workspace. Then create the file ${path} at the repo root, containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).

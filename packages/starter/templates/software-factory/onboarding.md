@@ -30,6 +30,16 @@ merge policy you set up.
    `errors` source has two triggers: enable `source-errors-poll` for
    `delivery: poll`, `source-errors` for `push`.
 
+### A.5 Repository rules that conflict with the factory
+
+Read the code repository's `AGENTS.md`, `CLAUDE.md` and `CONTRIBUTING.md`. A rule
+that conflicts with the factory contract (for example "push to main") is shown to
+the person with the factory's rule beside it. **Ask** which one wins; the factory's
+contract wins without an answer. Write the decision into the `dev-environment`
+skill. When the config lives in its own repository, the code repository's skills
+(`.agents/skills`, `.claude/skills`) cannot be registered from it: the worker reads
+them from its clone, and the `dev-environment` skill names where they are.
+
 ### B. After guide step 5: grant the dev environment
 
 Add `dev-environment` to `agents.factory.skills` in
@@ -151,6 +161,12 @@ and read its run line in `kortix triggers runs <slug>`: `errors=none`, and
 
 ### F. Instead of guide step 11: prove one ticket end to end
 
+0. **First wait for the dev image**: `kortix sandboxes build <slug> --wait`, then
+   `kortix templates doctor software-factory --json` until `ready: true`. A worker
+   started on an unbuilt image runs on the platform default and cannot boot the app.
+   The reviewer should run on the strongest connected model: when `models.reviewer`
+   and `models.worker_hard` are null and a stronger model than the workspace
+   default is connected (`kortix models ls`), **Ask** to set them in `factory.json`.
 1. **Ask** for one tiny, real change (a typo, a missing test, a small bug) or
    propose one you found in the analysis.
 2. File it in the store as a person would: on GitHub Issues,

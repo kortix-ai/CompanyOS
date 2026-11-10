@@ -1399,7 +1399,7 @@
       "heatMore": "多",
       "busiestDay": "{name}：{day} 支出 {amount}，为支出最高的一天",
       "noSpendInRange": "{name}：此期间无支出",
-      "idleWorkspaces": "{count} 个工作区在此期间无支出",
+      "idleWorkspaces": "{count, plural, other {# 个工作区}}在此期间无支出",
       "showIdle": "显示",
       "hideIdle": "隐藏"
     },
@@ -23018,8 +23018,8 @@
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
     "treeCollapse": "收起 {name}",
-    "emptyWorkspaces": "{count} 个工作区没有文件",
-    "storageMoreWorkspaces": "另外 {count} 个工作区",
+    "emptyWorkspaces": "{count, plural, other {# 个工作区}}没有文件",
+    "storageMoreWorkspaces": "另外 {count, plural, other {# 个工作区}}",
     "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
     "storageShowFewer": "收起"
   },

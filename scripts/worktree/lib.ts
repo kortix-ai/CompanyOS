@@ -32,6 +32,8 @@ export * from './lib/launch-env';
 export * from './lib/prune';
 export * from './lib/sweep';
 export * from './lib/autoclean';
+export * from './lib/autoclean-git';
+export * from './lib/autoclean-schedule';
 export * from './lib/services';
 export * from './lib/deps';
 export * from './lib/supabase-cli';

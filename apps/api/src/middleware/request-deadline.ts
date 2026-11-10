@@ -98,11 +98,6 @@ const EXEMPT_FRAGMENTS = [
   '/oauth/', // provider OAuth device flow — `start` runs
   // the provider's device grant + waits for the device challenge, which
   // can exceed the deadline on a cold replica
-  '/config-release', // the daemon's descriptor tick (60 s poll): a git-bound
-  // cold build, every op self-bounded (git 30 s, gzip 60 s, db statement
-  // timeout), whose client aborts at 20 s and retries the tick — the 503 only
-  // paged work that finished and cached anyway (prod: ~100–230 503s/day).
-  // The `/v1/workspaces` alias exempts identically (`asLegacyWorkspaceRoute`).
 ];
 
 // Long synchronous creates that can't be matched by fragment without
@@ -139,6 +134,16 @@ const EXEMPT_METHOD_PATH_PATTERNS: Array<{ method: string; path: RegExp }> = [
   // up to CONSENT_TIMEOUT_MS (chrome/logic.ts, 90 s, under Cloudflare's 100 s
   // proxy timeout). It bounds itself, and answers 408 on timeout.
   { method: 'POST', path: /^\/v1\/chrome\/attach$/ },
+  // The daemon's config-release descriptor tick (60 s poll): a git-bound
+  // cold build, every op self-bounded (git 30 s, gzip 60 s, db statement
+  // timeout), whose client aborts at 20 s and retries the tick — the 503 only
+  // paged work that finished and cached anyway (prod: ~100–230 503s/day).
+  // Anchored POST + path, NOT an `EXEMPT_FRAGMENTS` entry: `path.includes()`
+  // on `/config-release` would also un-bound `GET …/agents/config-release/config`
+  // (an agent named `config-release`) and every path merely containing the
+  // substring. The `/v1/workspaces` alias exempts identically
+  // (`asLegacyWorkspaceRoute`).
+  { method: 'POST', path: /\/sessions\/[^/]+\/config-release$/ },
   // The ws UPGRADE needs no entry — `isExempt` returns true for any request
   // carrying `Upgrade: websocket` before it reaches these lists.
 ];

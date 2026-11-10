@@ -56,10 +56,29 @@ describe('requestDeadline exemptions', () => {
     expect(isExempt(ctx(path))).toBe(true);
   });
 
+  // The exemption must stay method+path anchored: a `path.includes()` fragment
+  // `/config-release` also sweeps up every route that merely CONTAINS the
+  // substring — here the agent-config read of an agent literally named
+  // `config-release` (`GET …/agents/config-release/config`), a GET on the
+  // descriptor path itself, and any deeper child path.
   test('still bounds the config etag read, which the fragment must not sweep up', () => {
     expect(
       isExempt(ctx('/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config', 'GET')),
     ).toBe(false);
+  });
+
+  test('still bounds an agent named config-release and every non-tick config-release path', () => {
+    for (const [path, method] of [
+      // The agent-config route shape (agent-config.ts): agentName=config-release.
+      ['/v1/projects/00000000-0000-4000-a000-000000000001/agents/config-release/config', 'GET'],
+      // Only the daemon's POST tick is exempt, never a GET on the same path.
+      ['/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config-release', 'GET'],
+      // A deeper child path keeps the deadline too (the pattern anchors at $).
+      ['/v1/projects/00000000-0000-4000-a000-000000000001/sessions/00000000-0000-4000-a000-000000000002/config-release/config', 'POST'],
+    ] as const) {
+      expect(isExempt(ctx(path, method))).toBe(false);
+      expect(requestDeadlineMs(ctx(path, method))).not.toBeNull();
+    }
   });
 });
 

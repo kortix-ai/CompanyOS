@@ -33,7 +33,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { oauthAccessTokens, oauthClients } from '@kortix/db';
 import { db } from '../shared/db';
 import { groupIdsOfUser, groupsForMemberRows } from '../iam/group-read';
-import { accountMemberRoleRow } from '../iam/membership-read';
+import { accountMemberRow } from '../iam/membership-read';
 import { hashSecretKey, randomAlphanumeric } from '../shared/crypto';
 import { validateOAuthAccessToken } from '../oauth/access-token';
 /*
@@ -227,7 +227,7 @@ export async function resolveAppViewerIdentity(userId: string, accountId?: strin
     (accountId ? groupsForMemberRows(accountId, userId) : groupIdsOfUser(userId)).catch(
       () => [] as Array<{ groupId: string; name?: string }>,
     ),
-    accountId ? accountMemberRoleRow(accountId, userId).catch(() => []) : Promise.resolve([]),
+    accountId ? accountMemberRow(accountId, userId).catch(() => []) : Promise.resolve([]),
   ]);
   const value: ViewerIdentity = {
     email: emails.get(userId) ?? null,

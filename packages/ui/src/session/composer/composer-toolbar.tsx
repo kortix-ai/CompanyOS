@@ -11,6 +11,7 @@ import Loading from '../../primitives/loading';
 import type { ModelDefaultControls } from '../models/model-selector';
 import { ModelSelector } from '../models/model-selector';
 import { ReasoningEffortSelector } from './reasoning-effort-selector';
+import type { ComposerCall } from '../voice/composer-call';
 import { SendStopControl } from './send-stop-control';
 
 /**
@@ -123,6 +124,8 @@ export interface ComposerToolbarProps {
   attachmentFailed?: boolean;
   /** Why the selected model cannot take the attachments, or null. See `SendStopControl`. */
   attachmentUnsupported?: string | null;
+  /** The host's voice call, offered in Send's place on an empty composer. See `SendStopControl`. */
+  call?: ComposerCall;
   onSubmit: () => void;
 }
 
@@ -164,6 +167,7 @@ export function ComposerToolbar({
   agentUnavailable = false,
   attachmentFailed = false,
   attachmentUnsupported = null,
+  call,
   onSubmit,
 }: ComposerToolbarProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
@@ -265,6 +269,7 @@ export function ComposerToolbar({
           agentUnavailable={agentUnavailable}
           attachmentFailed={attachmentFailed}
           attachmentUnsupported={attachmentUnsupported}
+          call={call}
           onSubmit={onSubmit}
         />
       </div>

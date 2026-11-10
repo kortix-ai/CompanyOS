@@ -1,7 +1,50 @@
 'use client';
 
+import { FreeGrantNotice } from '@/features/billing/free-grant-notice';
+import { PlanChanger } from '@/features/billing/plan-card';
+import { PricingPlanCard } from '@/features/billing/pricing-plan-card';
+import type { PricingPlan } from '@/features/billing/pricing-plans';
+import { TopupControls } from '@/features/billing/topup-controls';
+import { useChangeCreditPlan } from '@/features/billing/use-change-credit-plan';
+import { useTalkToSales } from '@/features/billing/use-enterprise-sales';
+import { useUpgradePlans } from '@/features/billing/use-pricing-plans';
+import { useUpgradeModalHost } from '@/features/billing/use-upgrade-modal-host';
+import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
+import { useLocale, useTranslations } from '@/i18n/use-translations';
+import {
+  type AccountState,
+  type BillingState,
+  canManageBilling,
+  canOfferTopup,
+  resolvedPlan,
+} from '@kortix/sdk';
 import { Button } from '@kortix/ui/button';
 import Hint from '@kortix/ui/hint';
+import { Copy } from '@kortix/ui/icons';
+import { useAccountMembers } from '@kortix/ui/internal/account-hub/use-account-members';
+import {
+  DEFAULT_TIER_USD,
+  formatWholeUsd,
+  tierForMonthlyUsd,
+} from '@kortix/ui/internal/billing/compute-pricing';
+import {
+  invalidateAccountState,
+  useAccountState,
+  useCreatePortalSession,
+} from '@kortix/ui/internal/billing/index';
+import {
+  accountHasLiveSubscription,
+  billingModalCopy,
+  billingModalNeedsTopUp,
+  resolveBillingState,
+} from '@kortix/ui/internal/lib/billing/billing-gate-state';
+import { accountPanelUrl, hubTarget } from '@kortix/ui/internal/stores/account-panel-store';
+import {
+  BillingAccountProvider,
+  useBillingAccountId,
+} from '@kortix/ui/internal/stores/billing-account-context';
+import { useUpgradeDialogStore } from '@kortix/ui/internal/stores/upgrade-dialog-store';
 import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@kortix/ui/item';
 import Loading from '@kortix/ui/loading';
 import {
@@ -9,39 +52,20 @@ import {
   ModalBody,
   ModalContent,
   ModalDescription,
-  ModalFooter,
   ModalHeader,
   ModalTitle,
 } from '@kortix/ui/modal';
+import { AskOwnerForCreditsButton } from '@kortix/ui/session/models/ask-owner-for-credits-button';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { DEFAULT_TIER_USD, formatWholeUsd, tierForMonthlyUsd } from '@kortix/ui/internal/billing/compute-pricing';
-import { FreeGrantNotice } from '@/features/billing/free-grant-notice';
-import { PlanChanger } from '@/features/billing/plan-card';
-import { PricingPlanCard } from '@/features/billing/pricing-plan-card';
-import type { PricingPlan } from '@/features/billing/pricing-plans';
-import { TopupControls } from '@/features/billing/topup-controls';
-import { useChangeCreditPlan } from '@/features/billing/use-change-credit-plan';
-import { useUpgradePlans } from '@/features/billing/use-pricing-plans';
-import { useUpgradeModalHost } from '@/features/billing/use-upgrade-modal-host';
-import { MarketingButton } from '@/features/marketing/kit/marketing-button';
-import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
-import { useTalkToSales } from '@/features/billing/use-enterprise-sales';
-import { invalidateAccountState, useAccountState, useCreatePortalSession } from '@kortix/ui/internal/billing/index';
-import { useLocale, useTranslations } from '@/i18n/use-translations';
+import { errorToast } from '@kortix/ui/toast';
+import { UserAvatar } from '@kortix/ui/user-avatar';
 import {
-  accountHasLiveSubscription,
-  billingModalCopy,
-  billingModalNeedsTopUp,
-  resolveBillingState,
-} from '@kortix/ui/internal/lib/billing/billing-gate-state';
-import { cn } from '@kortix/ui';
-import { BillingAccountProvider, useBillingAccountId } from '@kortix/ui/internal/stores/billing-account-context';
-import { useUpgradeDialogStore } from '@kortix/ui/internal/stores/upgrade-dialog-store';
-import { type AccountState, type BillingState, canManageBilling } from '@kortix/sdk';
-import { formatUsdAsCredits } from '@kortix/shared';
-import { ArrowRightIcon as ArrowRight, UserPlusIcon as UserPlus } from '@phosphor-icons/react';
+  ArrowRightIcon as ArrowRight,
+  CheckIcon,
+  UserPlusIcon as UserPlus,
+} from '@phosphor-icons/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface UpgradePlansModalProps {
   open: boolean;
@@ -64,18 +88,22 @@ export interface UpgradePlansModalProps {
 /**
  * Which view the billing modal opens on:
  *
- * - `plans`: Free against Credits, for an account that cannot buy credits yet;
- * - `topup-first`: out of credits or payment failed, so the top-up is the question;
- * - `plan-first`: an account that can buy credits and is not blocked. The
- *   monthly plan leads; the top-up is the secondary section.
+ * - `topup-first`: any account that is out of credits or whose payment failed.
+ *   The compact modal: one slider, one action (Paper "Out of credits — v3");
+ * - `plan-first`: a subscriber that is not blocked. The monthly plan leads;
+ * - `plans`: Free against Credits, for a voluntary visit without a
+ *   subscription.
+ *
+ * Inside the compact modal the slider sells the monthly plan. Only an account
+ * that may buy one-off credits (`canOfferTopup`: Enterprise, or the per-account
+ * grant) gets the one-off slider instead (Marko, 2026-11-09).
  */
 export function billingModalLayout(opts: {
   needsTopUp: boolean;
   hasSubscription: boolean;
-  canPurchaseCredits: boolean;
 }): 'plans' | 'topup-first' | 'plan-first' {
-  if (!opts.canPurchaseCredits || !(opts.needsTopUp || opts.hasSubscription)) return 'plans';
-  return opts.needsTopUp ? 'topup-first' : 'plan-first';
+  if (opts.needsTopUp) return 'topup-first';
+  return opts.hasSubscription ? 'plan-first' : 'plans';
 }
 
 export function UpgradePlansModal({
@@ -85,7 +113,6 @@ export function UpgradePlansModal({
   reason,
   hasSubscription,
   billingState,
-  balance,
   accountLoading,
 }: UpgradePlansModalProps) {
   const tI18nHardcoded = useTranslations('hardcodedUi');
@@ -97,12 +124,11 @@ export function UpgradePlansModal({
   // `billingState` (from the 402 or the gate that opened this) wins because
   // accountState can still be loading; otherwise derive it from live state.
   const hasSub = hasSubscription ?? accountHasLiveSubscription(accountState);
-  const canPurchaseCredits = accountState?.tier?.can_purchase_credits ?? hasSub;
   const resolvedState = billingState ?? resolveBillingState(accountState);
   const layout = billingModalLayout({
-    needsTopUp: billingModalNeedsTopUp(accountState, resolvedState) || reason === 'insufficient_credits',
+    needsTopUp:
+      billingModalNeedsTopUp(accountState, resolvedState) || reason === 'insufficient_credits',
     hasSubscription: hasSub,
-    canPurchaseCredits,
   });
 
   if (layout !== 'plans') {
@@ -111,7 +137,6 @@ export function UpgradePlansModal({
         open={open}
         onOpenChange={onOpenChange}
         accountState={accountState}
-        balance={balance}
         billingState={resolvedState}
         accountLoading={accountLoading}
         leadWithTopUp={layout === 'topup-first'}
@@ -129,8 +154,12 @@ export function UpgradePlansModal({
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent variant="base" className="gap-0 space-y-0 p-0 lg:max-w-4xl">
         <ModalHeader className="space-y-2 px-6 pt-7 pb-6 md:px-8">
-          <ModalTitle className="text-2xl font-medium tracking-tight text-balance">{t('title')}</ModalTitle>
-          <ModalDescription className="max-w-xl text-sm text-pretty">{t('description')}</ModalDescription>
+          <ModalTitle className="text-2xl font-medium tracking-tight text-balance">
+            {t('title')}
+          </ModalTitle>
+          <ModalDescription className="max-w-xl text-sm text-pretty">
+            {t('description')}
+          </ModalDescription>
         </ModalHeader>
 
         {/* The /pricing plans band: hairlines top and bottom, one between the columns. */}
@@ -284,168 +313,292 @@ interface CreditTopUpModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountState?: AccountState;
-  balance?: number;
   billingState?: BillingState | null;
   accountLoading?: boolean;
-  /** Out of credits or payment failed: the top-up leads, with the balance. */
+  /** Out of credits or payment failed: the fix leads. */
   leadWithTopUp: boolean;
 }
 
 /**
- * The plan and top-up view, for an account that can buy credits. Two orders:
+ * The compact billing modal (Paper "Out of credits — v3"): a title, one line,
+ * one slider, one action. Picked from who is looking and why:
  *
- * - out of credits (`leadWithTopUp`): why the account is blocked, the balance,
- *   the one-time top-up, then the monthly plan as the other way out;
- * - otherwise: the monthly plan first, and the top-up below as a quieter
- *   "need more this month" section.
- *
- * Auto top-up stays folded inside `TopupControls` in both.
+ * - a member, who may not change billing: who can fix it, and a link to send
+ *   them. No purchase control renders for a member (KRTX-1720);
+ * - payment failed: the card is the fix, so updating it leads;
+ * - an account that may buy one-off credits (Enterprise, or the per-account
+ *   grant): the /pricing slider over the one-off amounts, with the monthly plan
+ *   one link away below Enterprise;
+ * - everyone else: the /pricing slider over the monthly tiers. Subscribing, or
+ *   raising the plan, is the way to more credits.
  */
 function CreditTopUpModal({
   open,
   onOpenChange,
   accountState,
-  balance,
   billingState,
   accountLoading,
   leadWithTopUp,
 }: CreditTopUpModalProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const tBanner = useTranslations('hardcodedUi.componentsSessionSessionErrorBanner');
   const t = useTranslations('billing.credits.modal');
   const createPortal = useCreatePortalSession();
+  const [showPlan, setShowPlan] = useState(false);
+  const [topUpInstead, setTopUpInstead] = useState(false);
   // Out-of-credits copy is DERIVED from the billing state, never written here:
   // a hardcoded "Out of credits" title once announced an emergency to every
   // account that opened this modal.
   // A Free workspace that leads with the top-up is out of credits, whatever
   // `no_subscription` says: it has a plan (Free), its wallet is empty.
   const copy = leadWithTopUp
-    ? billingModalCopy(billingState === 'no_subscription' ? 'out_of_credits' : (billingState ?? null), tI18nComplete)
+    ? billingModalCopy(
+        billingState === 'no_subscription' ? 'out_of_credits' : (billingState ?? null),
+        tI18nComplete,
+      )
     : { title: t('planTitle'), description: t('planDescription') };
 
-  const topup = (
-    <TopupControls
-      state={accountState}
-      heading={
-        leadWithTopUp ? (
-          tI18nComplete.raw('textd22feb61298b')
-        ) : (
-          <span className="text-muted-foreground font-normal">{t('topupSecondary')}</span>
-        )
-      }
-      // KRTX-1720: buying credits needs `billing.write`; the API answers a
-      // member 403. A member is told who can act. Nothing renders a purchase
-      // control before the account state says who this is.
-      fallback={
-        accountState ? (
-          canManageBilling(accountState) ? null : (
-            <p className="text-muted-foreground text-sm" data-testid="topup-ask-owner">
-              {tBanner.raw('askOwnerToAddCredits')}
-            </p>
-          )
-        ) : accountLoading ? (
-          <Skeleton className="h-40 w-full rounded-md" />
-        ) : null
-      }
-    />
-  );
-  const plan = accountState ? (
-    <PlanChanger state={accountState} className="bg-popover rounded-md border" />
-  ) : null;
+  // A fresh open starts on the view its reason asks for. Reset during render,
+  // not in an effect, so the first painted frame is already the right view.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setShowPlan(false);
+      setTopUpInstead(false);
+    }
+  }
+
+  const isMember = !!accountState && !canManageBilling(accountState);
+  // One-off top-ups exist only for Enterprise and accounts granted them.
+  const canTopUp = canOfferTopup(accountState);
+  const isEnterprise = resolvedPlan(accountState).family === 'enterprise';
+  // The one-off slider answers "out of credits" only. A voluntary visit opens
+  // on the plan, as before.
+  const showTopUp = canTopUp && leadWithTopUp && !showPlan;
+  const paymentFailed = leadWithTopUp && billingState === 'payment_failed' && !topUpInstead;
+  const openPortal = () => createPortal.mutate({ return_url: window.location.href });
+  // One line under the title, naming the one way forward.
+  const line = isMember
+    ? t('memberBody')
+    : paymentFailed || !leadWithTopUp
+      ? copy.description
+      : showTopUp
+        ? t('addLine')
+        : accountHasLiveSubscription(accountState)
+          ? t('raiseLine')
+          : t('subscribeLine');
+  // An auto top-up saved before one-off top-ups left this plan never charges
+  // again (auto-topup.ts). Say so once, where the user would expect it to run.
+  const autoTopupRetired = !canTopUp && !!accountState?.auto_topup?.enabled;
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent className="lg:max-w-lg">
-        <ModalHeader className="gap-1">
-          <ModalTitle className="text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
-          <ModalDescription className="text-sm text-balance">{copy.description}</ModalDescription>
+      <ModalContent className="gap-0 space-y-0 p-0 sm:max-w-md">
+        <ModalHeader className="gap-1.5 px-6 pt-6 pb-6">
+          <ModalTitle className="pr-8 text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
+          <ModalDescription className="text-sm text-pretty">{line}</ModalDescription>
         </ModalHeader>
 
-        <ModalBody className="space-y-4 pt-4">
-          {leadWithTopUp ? (
-            <>
-              <WalletBalance
-                accountState={accountState}
-                balance={balance}
-                accountLoading={accountLoading}
+        {!accountState && accountLoading ? (
+          // Who is looking decides the view (member, payment failed, slider).
+          // Hold one neutral block at the slider's height until the state says.
+          <div className="space-y-6 px-6 pb-6" aria-hidden>
+            <Skeleton className="h-28 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md" />
+          </div>
+        ) : isMember ? (
+          <MemberBlockedView />
+        ) : paymentFailed ? (
+          <PaymentFailedView
+            portalPending={createPortal.isPending}
+            onUpdateCard={openPortal}
+            onTopUpInstead={canTopUp ? () => setTopUpInstead(true) : undefined}
+          />
+        ) : showTopUp ? (
+          <div className="pb-2">
+            <TopupControls state={accountState} variant="hero" />
+            {!isEnterprise ? (
+              <div className="flex justify-center border-t px-6 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPlan(true)}
+                  className="text-foreground text-xs underline-offset-4 hover:underline"
+                >
+                  {t('switchToMonthly')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-3 px-6 pb-6">
+            {accountState ? (
+              <PlanChanger
+                state={accountState}
+                variant={leadWithTopUp ? 'ladder' : 'card'}
+                className={leadWithTopUp ? undefined : 'bg-popover rounded-md border'}
               />
-              <FreeGrantNotice state={accountState} />
-              {topup}
-              {plan}
-            </>
-          ) : (
-            <>
-              <FreeGrantNotice state={accountState} />
-              {plan}
-              {topup}
-            </>
-          )}
-        </ModalBody>
+            ) : (
+              <Skeleton className="h-40 w-full rounded-md" />
+            )}
+            {autoTopupRetired ? (
+              <p className="text-muted-foreground text-center text-xs text-balance">
+                {t('autoTopupRetired')}
+              </p>
+            ) : null}
+            <FreeGrantNotice state={accountState} className="text-center" />
+          </div>
+        )}
 
-        <ModalFooter className="pt-4 pb-5 sm:justify-start">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground gap-1.5"
-            disabled={createPortal.isPending}
-            onClick={() => createPortal.mutate({ return_url: window.location.href })}
-          >
-            {createPortal.isPending ? <Loading className="size-4 shrink-0" /> : null}
-            {tI18nComplete.raw('text7ea27c63aff1')}
-          </Button>
-        </ModalFooter>
+        {/* A voluntary visit keeps the way to invoices, the card and
+            cancelling. The out-of-credits view stays one action. */}
+        {!leadWithTopUp && !isMember ? (
+          <div className="flex items-center border-t px-3 py-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+              disabled={createPortal.isPending}
+              onClick={openPortal}
+            >
+              {createPortal.isPending ? <Loading className="size-4 shrink-0" /> : null}
+              {tI18nComplete.raw('text7ea27c63aff1')}
+            </Button>
+          </div>
+        ) : null}
       </ModalContent>
     </Modal>
   );
 }
 
 /**
- * The available balance, in credits: the concrete "why" behind an
- * out-of-credits block.
- *
- * The LIVE account state is the source of truth (the field the Plan page
- * reads); the 402's `balance` is only a pre-load hint. A real 0 shows as 0,
- * and an unloaded value shows a skeleton, never a misleading 0. A negative
- * balance keeps its minus and turns red: the account owes those credits.
+ * The last charge failed. The card is the fix: updating it in the Stripe
+ * portal retries the charge. A one-time top-up with another card is the
+ * other way out. Red marks the state once, on the dot.
  */
-function WalletBalance({
-  accountState,
-  balance,
-  accountLoading,
+function PaymentFailedView({
+  portalPending,
+  onUpdateCard,
+  onTopUpInstead,
 }: {
-  accountState?: AccountState;
-  balance?: number;
-  accountLoading?: boolean;
+  portalPending: boolean;
+  onUpdateCard: () => void;
+  /** Absent when the account may not buy one-off credits. */
+  onTopUpInstead?: () => void;
 }) {
-  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const tCredits = useTranslations('settings.credits');
-  const locale = useLocale();
-  const liveBalance = accountState?.credits?.total;
-  const hasLiveBalance = typeof liveBalance === 'number';
-  const walletUsd = hasLiveBalance ? liveBalance : (balance ?? 0);
-  const isNegative = walletUsd < 0;
+  const t = useTranslations('billing.credits.modal');
+  return (
+    <div className="space-y-4 px-6 pb-6" data-testid="billing-payment-failed">
+      <div className="bg-popover flex items-start gap-3 rounded-md border px-4 py-3">
+        <span aria-hidden className="bg-kortix-red mt-2 size-1.5 shrink-0 rounded-full" />
+        <p className="text-foreground text-sm">{t('paymentFailedHint')}</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Button
+          type="button"
+          size="lg"
+          className="w-full gap-1.5 motion-safe:active:scale-[0.96]"
+          disabled={portalPending}
+          aria-busy={portalPending}
+          onClick={onUpdateCard}
+        >
+          {portalPending ? <Loading className="size-4 shrink-0" /> : null}
+          {t('updatePaymentMethod')}
+        </Button>
+        {onTopUpInstead ? (
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="w-full motion-safe:active:scale-[0.96]"
+            onClick={onTopUpInstead}
+          >
+            {t('topUpInstead')}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A member may not buy credits: the purchase routes answer 403 (KRTX-1720).
+ * Name who can, and hand over a link that opens this workspace's billing for
+ * them. The directory read answers only the caller for a member without
+ * `member.read`; then the list hides and the sentence stands alone.
+ */
+function MemberBlockedView() {
+  const t = useTranslations('billing.credits.modal');
+  const accountId = useBillingAccountId();
+  const members = useAccountMembers(accountId ?? undefined);
+  const owners = (members.data ?? []).filter((member) => {
+    const role = member.role ?? member.account_role;
+    return (role === 'owner' || role === 'admin') && !!member.email;
+  });
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+
+  const copyLink = async () => {
+    if (!accountId) return;
+    // Open billing over the workspace home, not over the member's own page
+    // (often a session): keep the locale and `/workspaces/<id>`, drop the rest.
+    const base =
+      window.location.pathname.match(/^(?:\/[a-z]{2})?\/workspaces\/[^/]+/)?.[0] ?? '/workspaces';
+    const path = accountPanelUrl(base, hubTarget(accountId, { tab: 'billing' }));
+    try {
+      await navigator.clipboard.writeText(new URL(path, window.location.origin).toString());
+      // The label says "Link copied", so no toast repeats it. Back to idle in 2 s.
+      setCopied(true);
+      clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      errorToast(t('memberLinkCopyFailed'));
+    }
+  };
 
   return (
-    <div className="bg-popover flex items-center justify-between gap-3 rounded-md border px-4 py-3">
-      <span className="text-muted-foreground text-sm">{tI18nComplete.raw('text3ab7dd8428d1')}</span>
-      {!hasLiveBalance && accountLoading ? (
-        <Skeleton className="h-6 w-24 rounded-md" />
-      ) : (
-        <span className="flex items-baseline gap-1.5">
-          <span
-            className={cn(
-              'text-lg font-medium tabular-nums',
-              isNegative ? 'text-kortix-red' : 'text-foreground',
-            )}
-          >
-            {formatUsdAsCredits(walletUsd, { locale })}
-          </span>
-          <span className="text-muted-foreground text-xs">
-            {tCredits('unit', { count: Math.abs(walletUsd) * 100 })}
-          </span>
-        </span>
-      )}
+    <div className="space-y-4 px-6 pb-6" data-testid="topup-ask-owner">
+      {members.isPending && accountId ? (
+        <div className="space-y-1.5" aria-hidden>
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+      ) : owners.length > 0 ? (
+        <ul className="bg-popover divide-y rounded-md border">
+          {owners.slice(0, 3).map((owner) => (
+            <li key={owner.user_id} className="flex items-center gap-2.5 px-3 py-2">
+              <UserAvatar email={owner.email!} size="sm" colorKey={owner.user_id} />
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm">{owner.email}</span>
+              <span className="text-muted-foreground text-xs">
+                {(owner.role ?? owner.account_role) === 'owner' ? t('roleOwner') : t('roleAdmin')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        {/* Emails every owner (TOPUP-1, POST /accounts/:id/top-up-requests),
+            once per member a day; the button carries its own 429 state. */}
+        {accountId ? (
+          <AskOwnerForCreditsButton
+            accountId={accountId}
+            variant="default"
+            size="lg"
+            className="w-full gap-1.5"
+          />
+        ) : null}
+        <Button
+          type="button"
+          size="lg"
+          variant="secondary"
+          className="w-full gap-1.5 motion-safe:active:scale-[0.96]"
+          disabled={!accountId}
+          onClick={() => void copyLink()}
+        >
+          {copied ? <CheckIcon aria-hidden className="size-4" /> : <Copy className="size-4" />}
+          {copied ? t('memberLinkCopied') : t('memberCopyLink')}
+        </Button>
+      </div>
     </div>
   );
 }

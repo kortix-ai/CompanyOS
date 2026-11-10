@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Appels vocaux",
-          "description": "Appelle un agent depuis sa page (Personnaliser → Agents) et parle-lui. Un appel est une session à part de cet agent : il t'entend, répond à voix haute et voit l'écran que tu partages, et la conversation est le chat de cette session."
+          "description": "Appelle un agent depuis un champ de message vide, où le bouton d'envoi devient un bouton d'appel, ou depuis sa page (Personnaliser → Agents), et parle-lui. Dans une session, l'appel va à l'agent de cette session ; depuis l'accueil de l'espace de travail, il démarre une nouvelle session. L'agent t'entend, répond à voix haute et voit l'écran que tu partages, et la conversation est le chat de la session."
         },
         "shared_drives": {
           "name": "Drives partagés",
@@ -1393,7 +1393,15 @@
       "history": "Historique",
       "historyDescription": "Le coût de chaque session et tous les crédits ajoutés ou dépensés.",
       "openLedger": "Ouvrir le registre",
-      "unit": "{count, plural, one {crédit} other {crédits}}"
+      "unit": "{count, plural, one {crédit} other {crédits}}",
+      "dailySpend": "Dépenses quotidiennes",
+      "heatLess": "Moins",
+      "heatMore": "Plus",
+      "busiestDay": "{name} : {amount} le {day}, le jour le plus dépensier",
+      "noSpendInRange": "{name} : aucune dépense sur cette période",
+      "idleWorkspaces": "{count, plural, one {# espace de travail} other {# espaces de travail}} sans dépense sur cette période",
+      "showIdle": "Afficher",
+      "hideIdle": "Masquer"
     },
     "tokens": {
       "keyRevoked": "Clé API révoquée",
@@ -2505,7 +2513,23 @@
         "askOwnerBody": "Seuls les propriétaires et les administrateurs de l'espace de travail peuvent gérer la facturation. Demandez à l'un d'eux de choisir un palier de crédits pour l'espace de travail.",
         "planTitle": "Forfait et crédits",
         "planDescription": "Modifiez votre forfait mensuel ou ajoutez des crédits pour ce mois.",
-        "topupSecondary": "Besoin de plus ce mois-ci ? Ajoutez des crédits"
+        "paymentFailedHint": "Mettez à jour la carte et Stripe relancera le prélèvement.",
+        "updatePaymentMethod": "Mettre à jour le moyen de paiement",
+        "topUpInstead": "Ajouter des crédits à la place",
+        "memberBody": "Seuls les propriétaires et les admins peuvent ajouter des crédits. Demandez-leur d’ici, ou envoyez à l’un d’eux le lien de facturation de cet espace de travail.",
+        "memberCopyLink": "Copier le lien de facturation",
+        "memberLinkCopied": "Lien copié",
+        "memberLinkCopyFailed": "Impossible de copier le lien",
+        "roleOwner": "Propriétaire",
+        "roleAdmin": "Admin",
+        "newBalance": "Nouveau solde",
+        "continue": "Continuer",
+        "balanceRetry": "Réessayer",
+        "addLine": "Ajoutez des crédits pour que vos agents continuent de tourner.",
+        "raiseLine": "Augmentez votre forfait pour que vos agents continuent de tourner.",
+        "subscribeLine": "Abonnez-vous pour que vos agents continuent de tourner.",
+        "switchToMonthly": "Vous préférez des crédits mensuels ? Changer de forfait",
+        "autoTopupRetired": "La recharge automatique ne s’applique plus à ce forfait."
       },
       "admin": {
         "plan": "Forfait",
@@ -2528,7 +2552,9 @@
           "growing": "Équipes en croissance",
           "scale": "Scale",
           "large": "Grandes organisations"
-        }
+        },
+        "once": "une fois",
+        "onceLabel": "Montant unique de crédits"
       }
     },
     "popular": "Populaire",
@@ -17447,7 +17473,7 @@
       "textcdd7efcb7e2c": "politique résolue",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Solutions Kortix par rôle",
-      "textce0c20c05842": "Votre dernier paiement a échoué. Mettez à jour votre mode de paiement dans Gérer la facturation, ou ajoutez des crédits pour continuer entre-temps.",
+      "textce0c20c05842": "Votre dernier paiement a échoué. Mettez à jour votre mode de paiement pour que votre forfait continue.",
       "textce0faee27592": "facturation paiement carte bancaire abonnement gérer portefeuille formule plan limites aperçu dépenses",
       "textce18e358bf01": "Essayez un terme différent.",
       "textce1e609b7bf5": "Ports du bac à sable uniquement",
@@ -20405,7 +20431,7 @@
       "text2b2c3ec032a6": "Espace de travail transféré",
       "text44f9fff8bdae": "Plan de crédits modifié",
       "text3fa17bba73e1": "Cet espace de travail n'a pas encore de forfait. Choisissez un montant mensuel de crédits pour lancer des sessions. Tous les membres partagent un seul pool.",
-      "text6821e42be2c1": "Votre portefeuille est vide, les sessions ne peuvent donc pas s'exécuter. Rechargez pour maintenir le calcul et les derniers modèles d'IA — votre forfait n'est pas affecté.",
+      "text6821e42be2c1": "Votre portefeuille est vide, les sessions ne peuvent donc pas s'exécuter. Ajoutez des crédits pour maintenir le calcul et les derniers modèles d'IA — votre forfait n'est pas affecté.",
       "text146aaf3c71fa": "Maintient SSO, SCIM, RBAC et audit activés pour un espace de travail Enterprise signé également facturé via un forfait payant, afin que le rapprochement Stripe ne les retire pas.",
       "text517105fd13ce": "Les crédits financent le calcul en sandbox : même un essai BYOK nécessite un solde de portefeuille pour exécuter des sessions. Le crédit de bienvenue gratuit est de 2 $.",
       "text2f1d17f50af8": "Enterprise débloque SAML SSO, la synchronisation d'annuaire SCIM, RBAC et l'accès à l'audit pour cet espace de travail. Le forfait facturé ne change pas.",
@@ -21523,11 +21549,6 @@
   "personalWelcome": {
     "dismiss": "Fermer",
     "emailCopied": "Adresse e-mail copiée"
-  },
-  "repositoryAccess": {
-    "label": "Accès au dépôt de l’espace de travail",
-    "enabled": "Les nouvelles sessions reçoivent le dépôt de l’espace de travail. Les permissions Git restent applicables. Les sessions existantes conservent leur accès.",
-    "disabled": "Les nouvelles sessions fonctionnent sans le dépôt de l’espace de travail. Elles peuvent créer des fichiers et utiliser les outils autorisés. Les sessions existantes conservent leur accès."
   },
   "customProvider": {
     "intro": "Des endpoints absents du catalogue.",
@@ -22996,7 +23017,11 @@
     "folderTree": "Dossiers",
     "treeYou": "{name} (vous)",
     "treeExpand": "Déplier {name}",
-    "treeCollapse": "Replier {name}"
+    "treeCollapse": "Replier {name}",
+    "emptyWorkspaces": "{count, plural, one {# espace de travail ne contient} other {# espaces de travail ne contiennent}} aucun fichier",
+    "storageMoreWorkspaces": "{count, plural, one {# autre espace de travail} other {# autres espaces de travail}}",
+    "storageWorkspaceLimit": "Chaque espace de travail peut contenir jusqu’à {limit}",
+    "storageShowFewer": "Afficher moins"
   },
   "genui": {
     "showData": "Afficher les données",
@@ -26042,6 +26067,7 @@
     "call": "Appeler",
     "calling": "Appel en cours…",
     "start": "Démarrer un appel vocal",
+    "inCall": "Vous êtes en appel",
     "end": "Terminer l’appel",
     "connecting": "Connexion…",
     "listening": "À l’écoute",
@@ -26065,7 +26091,6 @@
   "agentMounts": {
     "lead": "Dossiers de Fichiers montés par les sessions de cet agent. Une modification s’applique aussitôt à chaque nouvelle session.",
     "mount": "Mount folder",
-    "repository": "Dépôt de l’espace de travail",
     "viaAgent": "partagé avec cet agent",
     "viaProject": "partagé avec tout l’espace de travail",
     "from": "{path} · {who}",

@@ -1137,7 +1137,7 @@
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -1215,7 +1215,15 @@
       "history": "History",
       "historyDescription": "What every session cost, and every credit added or spent.",
       "openLedger": "Open ledger",
-      "unit": "{count, plural, one {credit} other {credits}}"
+      "unit": "{count, plural, one {credit} other {credits}}",
+      "dailySpend": "Daily spend",
+      "heatLess": "Less",
+      "heatMore": "More",
+      "busiestDay": "{name}: {amount} on {day}, the busiest day",
+      "noSpendInRange": "{name}: no spend in this range",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspaces}} with no spend in this range",
+      "showIdle": "Show",
+      "hideIdle": "Hide"
     },
     "tokens": {
       "keyRevoked": "API key revoked",
@@ -2505,7 +2513,23 @@
         "askOwnerBody": "Only workspace owners and admins can manage billing. Ask one of them to pick a credits tier for the workspace.",
         "planTitle": "Plan and credits",
         "planDescription": "Change your monthly plan, or add credits for this month.",
-        "topupSecondary": "Need more this month? Add credits"
+        "paymentFailedHint": "Update the card and Stripe retries the charge.",
+        "updatePaymentMethod": "Update payment method",
+        "topUpInstead": "Add credits instead",
+        "memberBody": "Only owners and admins can add credits. Ask them from here, or send one of them this workspace’s billing link.",
+        "memberCopyLink": "Copy billing link",
+        "memberLinkCopied": "Link copied",
+        "memberLinkCopyFailed": "Couldn’t copy the link",
+        "roleOwner": "Owner",
+        "roleAdmin": "Admin",
+        "newBalance": "New balance",
+        "continue": "Continue",
+        "balanceRetry": "Retry",
+        "addLine": "Add credits to keep your agents running.",
+        "raiseLine": "Raise your plan to keep your agents running.",
+        "subscribeLine": "Subscribe to keep your agents running.",
+        "switchToMonthly": "Prefer monthly credits? Switch plan",
+        "autoTopupRetired": "Auto top-up no longer applies on this plan."
       },
       "admin": {
         "plan": "Plan",
@@ -2528,7 +2552,9 @@
           "growing": "Growing teams",
           "scale": "Scale",
           "large": "Large organizations"
-        }
+        },
+        "once": "once",
+        "onceLabel": "One-time credit amount"
       }
     },
     "popular": "Popular",
@@ -13622,7 +13648,7 @@
       "text5ebe32e1b916": "Connector credentials never enter a sandbox",
       "text5ec6ae29f4b6": "Also installs:",
       "text5ec9729027c3": "Turns what users say into what ships.",
-      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Top up to keep compute and the latest AI models running — {value0} unaffected.",
+      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Add credits to keep compute and the latest AI models running — {value0} unaffected.",
       "text5ecf97e61ad9": "Copy this code. Then open the auth page and enter it to connect ChatGPT.",
       "text5ed9bd98de1b": "Could not update the workspace default",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17492,7 +17518,7 @@
       "textcdd7efcb7e2c": "policy resolved",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Kortix Solutions by role",
-      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method under Manage billing, or top up to keep running in the meantime.",
+      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method so your plan keeps running.",
       "textce0faee27592": "billing payment credit card subscription manage wallet tier plan limits overview spend",
       "textce18e358bf01": "Try a different term.",
       "textce1e609b7bf5": "Sandbox ports only",
@@ -20450,7 +20476,7 @@
       "text2b2c3ec032a6": "Transferred workspace",
       "text44f9fff8bdae": "Changed the credits plan",
       "text3fa17bba73e1": "This workspace has no plan yet. Pick a monthly amount of credits to run sessions. Every member shares one pool.",
-      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Top up to keep compute and the latest AI models going — your plan is unaffected.",
+      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Add credits to keep compute and the latest AI models going — your plan is unaffected.",
       "text146aaf3c71fa": "Keeps SSO, SCIM, RBAC, and audit entitled for a signed Enterprise workspace that is also billed through a paid plan, so the Stripe reconciliation cannot strip them.",
       "text517105fd13ce": "Credits fund sandbox compute — even a BYOK trial needs wallet balance to run sessions. The free welcome grant is $2.",
       "text2f1d17f50af8": "Enterprise unlocks SAML SSO, SCIM directory sync, RBAC and audit access for this workspace. The billed plan is unchanged.",
@@ -21568,11 +21594,6 @@
   "personalWelcome": {
     "dismiss": "Dismiss",
     "emailCopied": "Email address copied"
-  },
-  "repositoryAccess": {
-    "label": "Workspace repository access",
-    "enabled": "New sessions receive the workspace repository. Git permissions still apply. Existing sessions keep their access setting.",
-    "disabled": "New sessions run without the workspace repository. They can still create files and use granted tools. Existing sessions keep their access setting."
   },
   "customProvider": {
     "intro": "Endpoints the catalogue does not carry.",
@@ -22996,7 +23017,11 @@
     "folderTree": "Folders",
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
-    "treeCollapse": "Close {name}"
+    "treeCollapse": "Close {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",
@@ -25997,6 +26022,7 @@
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",
@@ -26065,7 +26091,6 @@
   "agentMounts": {
     "lead": "Folders from Files this agent's sessions mount. A change applies at once and reaches every new session.",
     "mount": "Mount folder",
-    "repository": "Workspace repository",
     "viaAgent": "shared with this agent",
     "viaProject": "shared with everyone in this workspace",
     "from": "{path} · {who}",

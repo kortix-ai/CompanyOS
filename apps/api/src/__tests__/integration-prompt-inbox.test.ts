@@ -248,7 +248,7 @@ describe('the inbox row', () => {
     expect(await admitInboxPrompt(second)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
 
     await db.execute(sql`
@@ -585,7 +585,7 @@ describe('admitInboxPrompt against real rows', () => {
     expect(await admitInboxPrompt(younger)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
   });
 
@@ -1510,7 +1510,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
     expect(await admitInboxPrompt(claimedNewer)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
     const refreshed = await readRow(stopped.commandId);
     expect(refreshed.status).toBe('queued');

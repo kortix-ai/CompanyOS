@@ -42,7 +42,8 @@ export interface HarnessRefreshInput {
 
 interface HarnessRefreshResult {
   ok: true
-  repo: { before: RepoInfo; after: RepoInfo }
+  /** `null` twice: the session has no checkout (a fresh boot), so the refresh was a no-op. */
+  repo: { before: RepoInfo | null; after: RepoInfo | null }
   runtime: string
   runtime_pid: number | null
 }

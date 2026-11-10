@@ -45,6 +45,38 @@ import { newestWireIdTime } from '../wire-message-id';
 export const DAEMON_PORT = 8000;
 
 /**
+ * An UNEXPECTED read failure (a provider-credential outage, a database error)
+ * repeats on every delivery attempt: the admission/redelivery ladder retries
+ * every few seconds, so one stuck session turned this optional read's warn
+ * into a log-pattern spike — 13 warns in 14 min for one session during the
+ * 2026-11-10 Daytona credential outage (KRTX-2349), against a 0 baseline.
+ * Every attempt is already reported elsewhere (`redelivery waits` per retry,
+ * the dead-letter's own error log), so per the rate-limit-the-retry-warning
+ * rule (learnings, KRTX-614): the FIRST occurrence per session warns, a
+ * repeat of the SAME error inside the interval stays quiet, and a DIFFERENT
+ * error warns immediately.
+ */
+const INBOX_READ_WARN_INTERVAL_MS = 300_000;
+let inboxReadWarnIntervalMs = INBOX_READ_WARN_INTERVAL_MS;
+// replica-local: one entry per session whose read failed unexpectedly — an
+// error string and a timestamp, bounded by the distinct failing sessions.
+const lastInboxReadWarnBySession = new Map<string, { error: string; at: number }>();
+
+function inboxReadWarnFirstPerInterval(sessionKey: string, error: string): boolean {
+  if (lastInboxReadWarnBySession.size > 1_000) lastInboxReadWarnBySession.clear();
+  const last = lastInboxReadWarnBySession.get(sessionKey);
+  const now = Date.now();
+  if (last && last.error === error && now - last.at < inboxReadWarnIntervalMs) return false;
+  lastInboxReadWarnBySession.set(sessionKey, { error, at: now });
+  return true;
+}
+
+export function __resetInboxReadWarnThrottleForTests(intervalMs = INBOX_READ_WARN_INTERVAL_MS): void {
+  lastInboxReadWarnBySession.clear();
+  inboxReadWarnIntervalMs = intervalMs;
+}
+
+/**
  * The signed proxy endpoint + runtime root id (`runtime_session_id`) for one session — the same
  * resolution every drain-side transcript read uses. Exported for the turn-end
  * reconciliation (`forwarded-strand-reconcile.ts`), which has a session, not a
@@ -358,7 +390,7 @@ export async function readInboxTranscriptState(
       // optional and fails open — see above — so that degrade is info, not
       // a warning. Only an unexpected failure warns.
       logger.info('[session-lifecycle] inbox transcript read deferred — proceeding without it', context);
-    } else {
+    } else if (inboxReadWarnFirstPerInterval(row.sessionId ?? row.commandId, error)) {
       console.warn('[session-lifecycle] inbox transcript read failed — proceeding without it', context);
     }
     return empty;

@@ -9,7 +9,7 @@ import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
 import { locales } from './src/i18n/catalog.mjs';
-import { workspaceDesktopRewrites, workspaceRedirects } from './src/lib/workspace-redirects';
+import { workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
@@ -296,6 +296,10 @@ const nextConfig = (): NextConfig => ({
   // file. Disable standalone on Vercel, where the platform does not use it.
   // See https://github.com/vercel/next.js/issues/96646.
   output: IS_PREVIEW_BUILD || process.env.VERCEL ? undefined : 'standalone',
+  // Skew Protection on Vercel. The deploy builds on a GitHub runner
+  // (infra/scripts/vercel-deploy-prebuilt.sh), where Vercel does not supply a
+  // deployment ID, so the script sets a unique one. Unset everywhere else.
+  deploymentId: process.env.KORTIX_VERCEL_DEPLOYMENT_ID || undefined,
   // Inline the resolved version so NEXT_PUBLIC_KORTIX_VERSION is available in
   // both the server (runtime-config) and client bundles, even on Vercel.
   env: {
@@ -1017,9 +1021,6 @@ const nextConfig = (): NextConfig => ({
       { type: 'header' as const, key: 'accept', value: '(?:.*,)?\\s*text/markdown.*' },
     ];
     const beforeFiles = [
-      // An installed desktop shell keeps /projects and /new, served in place
-      // (src/lib/workspace-redirects.ts).
-      ...workspaceDesktopRewrites(),
       {
         source: '/docs',
         has: acceptsMarkdown,

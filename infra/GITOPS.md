@@ -88,7 +88,8 @@ for every project that has made no choice. Each new Platinum session keeps
 `/workspace` on its own volume, and a box stopped for
 `KORTIX_SANDBOX_IDLE_DELETE_MINUTES` (default 60) is deleted. `off` gives no
 new session a volume. Unset leaves it to each project's operator override.
-Only dev sets `on` (`deploy-dev.yml`). Self-host leaves it unset. A session
+Dev and prod set `on` (`deploy-dev.yml`, `deploy-prod.yml`). Staging and
+self-host leave it unset. A session
 that already has a volume keeps it whatever the value is later.
 
 A project's Files (its drive) are a Platinum volume, and a box mounts only

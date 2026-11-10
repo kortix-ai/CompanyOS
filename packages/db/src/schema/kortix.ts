@@ -38,6 +38,20 @@ export const salesEventOutbox = kortixSchema.table('sales_event_outbox', {
 }, (table) => [index('sales_event_outbox_due_idx').on(table.availableAt)
   .where(sql`${table.deliveredAt} IS NULL AND ${table.deadLetterAt} IS NULL`)]);
 
+/**
+ * Lead and application submissions from the web forms (POST /v1/system/demo-request, called by
+ * apps/web /api/demo-request). Moved here from the Suna-era `public.contact_forms` (2026-11);
+ * `data` keeps the submission verbatim. The AFTER INSERT trigger `sales_demo_requested`
+ * (kortix.enqueue_demo_requested) writes the Sales outbox row in the same transaction.
+ */
+export const contactForms = kortixSchema
+  .table('contact_forms', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
+  })
+  .enableRLS();
+
 export const usedRefreshTokens = kortixSchema.table('used_refresh_tokens', {
   tokenHash: text('token_hash').primaryKey(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

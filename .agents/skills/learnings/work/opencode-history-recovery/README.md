@@ -1,8 +1,8 @@
 ---
 title: Recover OpenCode-era conversations that never reached the session log
-status: prod plan + dry run 2026-11-06 found big stores over Platinum's 256 MiB download cap; the fix (parts, big-store pass) is verified on dev; the prod run waits for the release that ships it
+status: prod Platinum done 2026-11-10 (6,258 of 6,425 written); 10 left for the todo-status fix and an 8 GB cap; Daytona written off (key revoked, owner decision)
 owner: platform
-updated: 2026-11-06
+updated: 2026-11-10
 ---
 
 # Recover OpenCode-era conversations that never reached the session log
@@ -74,6 +74,12 @@ cycle, for example a dry run a minute before) spends no attempt and does not
 count for the stop rules. A part download retries a network error or a 5xx
 twice.
 
+`invalid` is a log that failed `SessionLogSchema`. On prod all 9 were a todo whose
+status OpenCode had stored as free text outside the session-log enum. The
+converter now leaves such a todo out (and drops an unknown priority), and the
+candidate filter takes those `invalid` rows (detail `todos.…`) again, up to 3
+attempts.
+
 ## Runbook
 
 Run it as a one-off ECS task of the environment (the worker task definition: its
@@ -107,7 +113,8 @@ runbig '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--app
 ```
 
 `--max-store-mb` above 128 needs `--concurrency 1`. It takes the fresh candidates
-and every `too_large` set aside for its size under the new cap.
+and every `too_large` set aside for its size under the new cap. The cap goes up
+to 8192: at about 2.4 × the store, 16 GB holds a store up to ~6 GB.
 
 The output goes to the worker log group (`/ecs/kortix-<env>…`, stream prefix
 `worker`): one `[recover]` line per session, a `done` line with the outcome counts.
@@ -167,5 +174,25 @@ are stamped and skipped.
   a Daytona `--apply`, both exit 0 and 0 candidates. Dev totals: 868 `written`,
   47 `empty_store`, 3 `no_store`, 2 `box_gone`, 1 `retry` (a box stuck in Daytona
   `archiving`).
-- Open: the prod run after the release; pi sessions with no log (146 Platinum
-  since 08-19, `ses_pi…` roots) need a pi reader and are not covered.
+- 2026-11-07/08, prod on v0.15.1 (worker td `:11`): plan 6,425 Platinum
+  candidates. Dry run of 5, then `--limit 5 --apply`: 2 `written` (40 and 54
+  messages, read back from `session_log_messages`), 2 `too_large`, 1 `no_store`,
+  boxes archived. Full pass, concurrency 3: 6,420 sessions in 663.9 min, exit 0,
+  peak RSS 279 MB, ~560 sessions/h. Big pass at 2 vCPU / 16 GB (85 sessions,
+  35.2 min): 73 `written`. A Platinum stop can take over 10 s on a box with a big
+  disk: `release` then fails, a `written` session stays `written`, any other
+  outcome becomes `retry`.
+- 2026-11-10, final retry pass (td `:13`): 2 more `written`. Prod Platinum total:
+  6,258 `written`, 148 `empty_store`, 1 `no_store`. Not recovered: 9 `invalid`
+  (todo status, fixed above), 1 `too_large` of 4,213 MB (over the old 4096 cap),
+  and 8 `retry` with 3 attempts spent: disk input/output errors or a crash in the
+  box (4), a box that cannot start on its host (1), an attachment over 50 MiB
+  (1), a box still settling (1), a provider timeout (1).
+- 2026-11-10, Daytona: written off. Daytona answers `401 Invalid credentials`
+  to the key in `.env.prod` and `.env.dev` (unchanged in git; it worked on dev
+  on 11-05). The prod plan counted 8,453 Daytona candidates; the owner decided
+  not to recover them.
+- Open: the rerun of the 10 after the release that ships the todo fix:
+  `runbig` with `--apply --max-store-mb 8192 --concurrency 1`. pi sessions with
+  no log (146 Platinum since 08-19, `ses_pi…` roots) need a pi reader and are not
+  covered.

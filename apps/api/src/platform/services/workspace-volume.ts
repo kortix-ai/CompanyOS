@@ -3,10 +3,9 @@
  * storage half of stateless sandboxes.
  *
  * One volume per session, `kws-<session_id>`, mounted at /workspace when the box
- * is created, so the mount exists before kortixd starts. kortixd fills the empty
- * volume on the first boot with its usual Git or S3 transports and adopts the
- * checkout on every later boot (KORTIX_WORKSPACE_VOLUME=1,
- * services/workspace-provider). The box is disposable: one stopped for
+ * is created, so the mount exists before kortixd starts. kortixd never fills it
+ * from the repository: it holds what the agent writes, including a checkout the
+ * agent made with `kortix workspaces clone` (KORTIX_WORKSPACE_VOLUME=1). The box is disposable: one stopped for
  * KORTIX_SANDBOX_IDLE_DELETE_MINUTES is removed (reaping/idle-volume-retire.ts)
  * and the next open boots a fresh box on the same volume. The conversation
  * comes back from the session log (projects/lib/session-sandbox-env-build.ts).

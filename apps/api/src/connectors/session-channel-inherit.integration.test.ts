@@ -25,6 +25,7 @@ const GRANDCHILD = crypto.randomUUID();
 const NAMED = crypto.randomUUID();
 const BELOW_NAMED = crypto.randomUUID();
 const UNLINKED = crypto.randomUUID();
+const UNLINKED_CHILD = crypto.randomUUID();
 const FORGED = crypto.randomUUID();
 const FORGED_MISMATCH = crypto.randomUUID();
 const CHILD_OF_FORGED = crypto.randomUUID();
@@ -80,6 +81,9 @@ beforeAll(async () => {
     session(NAMED, 'compliance-officer', ROOT, 'agent'),
     session(BELOW_NAMED, 'compliance-officer', NAMED, 'agent'),
     session(UNLINKED, 'mykortix', null, 'agent'),
+    // A real spawn of the tokenless-line session below: its walk READS the
+    // revoked token (hop > 0) and must inherit nothing from it.
+    session(UNLINKED_CHILD, 'mykortix', UNLINKED, 'agent'),
     // The parent COLUMN is client-settable (`POST /sessions` body
     // `parent_session_id`); the spawn link is not. Two forgeries: no spawn
     // link at all, and one that names a different session than the column.
@@ -114,7 +118,11 @@ beforeAll(async () => {
     status: 'active',
     agentGrant: GRANT('compliance-officer', []),
   });
-  // A revoked token grants nothing: a dead credential stays dead.
+  // A revoked token grants nothing: a dead credential stays dead. The two
+  // columns are not tied by any constraint — the production incident shape is
+  // `revoked_at` set with `status` still reading active (the release-gate
+  // sweep's direct UPDATE left rows like that) — so the fixture revokes by
+  // time only, and the `revoked_at IS NULL` filter is what this pins.
   await db.insert(accountTokens).values({
     accountId: ACCOUNT,
     userId: USER,
@@ -123,7 +131,7 @@ beforeAll(async () => {
     secretKeyHash: 'sr'.repeat(64),
     projectId: PROJECT,
     sessionId: UNLINKED,
-    status: 'revoked',
+    status: 'active',
     revokedAt: new Date('2026-01-01T00:00:00.000Z'),
     agentGrant: GRANT('mykortix', ['stripe']),
   });
@@ -160,6 +168,10 @@ describe('the connector reach a session inherits down its spawn line', () => {
 
   test('a session no channel created reaches none, and a revoked token grants nothing', async () => {
     expect(await sessionConnectorLineage(PROJECT, UNLINKED)).toEqual({ channelSlugs: [], ancestorGrants: [] });
+    // The revoked-token state is READ on a real spawn line: UNLINKED's child
+    // walks up to it, and its revoked stripe grant hands nothing down. A
+    // dropped revoked_at/status filter turns this grant back on.
+    expect(await sessionConnectorLineage(PROJECT, UNLINKED_CHILD)).toEqual({ channelSlugs: [], ancestorGrants: [] });
     expect(await sessionConnectorLineage(PROJECT, crypto.randomUUID())).toEqual({ channelSlugs: [], ancestorGrants: [] });
     // The session belongs to this project only.
     expect(await sessionConnectorLineage(crypto.randomUUID(), ROOT)).toEqual({ channelSlugs: [], ancestorGrants: [] });

@@ -12,6 +12,8 @@
  */
 
 import { Badge } from '@kortix/ui/badge';
+import { APP_REGISTRY_TRANSLATION_KEYS } from '@kortix/ui/i18n/ui-catalog/app-registry-translation-keys.generated';
+import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { formatUsdAsCredits } from '@kortix/shared';
 
 /** One `credit_ledger` row, normalized across the two endpoints. */
@@ -54,6 +56,13 @@ export const TRANSACTION_BADGES: Record<string, { label: string; variant: BadgeV
   adjustment: { label: 'Adjustment', variant: 'outline' },
   expired: { label: 'Expired', variant: 'destructive' },
 };
+
+/** The badges in the active locale. `t` is `useTranslations('hardcodedUi.i18nComplete')`. */
+export function localizedTransactionBadges(
+  t: Parameters<typeof localizeUiCatalog>[1],
+): typeof TRANSACTION_BADGES {
+  return localizeUiCatalog(TRANSACTION_BADGES, t, APP_REGISTRY_TRANSLATION_KEYS);
+}
 
 /**
  * Label and badge variant for a ledger type. An unknown type renders as its own

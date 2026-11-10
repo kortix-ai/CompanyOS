@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Chiamate vocali",
-          "description": "Chiama un agente dalla sua pagina (Personalizza → Agenti) e parlagli. Una chiamata è una sessione a sé di quell'agente: ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat di quella sessione."
+          "description": "Chiama un agente da una casella di messaggio vuota, dove il pulsante di invio diventa un pulsante di chiamata, o dalla sua pagina (Personalizza → Agenti), e parlagli. In una sessione la chiamata va all'agente di quella sessione; dalla home dello spazio di lavoro avvia una nuova sessione. L'agente ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat della sessione."
         },
         "shared_drives": {
           "name": "Drive condivisi",
@@ -23314,6 +23314,16 @@
         "booted": "Avviato",
         "timezone": "Fuso orario",
         "locale": "Impostazioni locali",
+        "usage": "Risorse usate da Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} in media · {peak} di picco",
+        "usageCpuHint": "Di un core, {minutes, plural, one {ultimo minuto} other {ultimi # minuti}}",
+        "usageMemory": "Memoria",
+        "usageMemoryPeak": "{now} · {peak} di picco",
+        "usageProcesses": "Processi",
+        "usageProcessCount": "{count, plural, one {# processo} other {# processi}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Non segnalato: una versione precedente dell'app, oppure l'app è partita da meno di un minuto",
         "recordingSync": "Registrazione e sincronizzazione",
         "status": "Stato",
         "lastFrame": "Ultimo fotogramma",
@@ -23435,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Risoluzione",
       "resolutionHint": "Gli schermi più grandi vengono ridotti a questa altezza. Il 4K conserva i dettagli fini, come i disegni CAD.",
+      "textRecognition": "Riconoscimento del testo",
+      "textRecognitionHint": "Legge il testo sullo schermo per renderlo ricercabile. Disattivato usa meno CPU: la ricerca trova allora app, titoli delle finestre e URL.",
+      "textRecognitionOption": {
+        "accurate": "Accurato",
+        "fast": "Veloce",
+        "off": "Disattivato"
+      },
       "framesHint": "Senza valore, ogni computer usa il proprio (un'immagine ogni 2 s a 1440p). Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate a qualsiasi intervallo.",
       "computerDecides": "Decide ogni computer",
       "included": {
@@ -26067,6 +26084,7 @@
     "call": "Chiama",
     "calling": "Chiamata in corso…",
     "start": "Avvia una chiamata vocale",
+    "inCall": "Sei in una chiamata",
     "end": "Termina chiamata",
     "connecting": "Connessione…",
     "listening": "In ascolto",

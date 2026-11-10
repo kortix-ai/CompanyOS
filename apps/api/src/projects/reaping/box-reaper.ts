@@ -78,7 +78,7 @@ import {
   selectReapCandidates,
 } from './box-queries';
 import { finalizeHuskTurn } from './husk-finalizer';
-import { decideReconcile } from './policy';
+import { decideReconcile, isPlatinumTransportTimeout } from './policy';
 import {
   applyStoppedState,
   clearPendingStopObservation,
@@ -1130,15 +1130,18 @@ async function reconcileNotRunningSandbox(
 /** Count one row's failure. An expected, transient provider failure is counted and never logged. */
 function countReapFailure(result: ReapResult, row: ReapCandidate, err: unknown): void {
   // An expected, transient provider failure — a Daytona org-wide 429
-  // (`ThrottlerException`) or a gateway blip — is the provider working as
-  // designed. Every other call site classifies it (`shared/daytona-rate-limit.ts`,
-  // `shared/daytona-transient.ts`) so it never pages; the reaper must too,
-  // or one org throttle across a live fleet emits an error line per box.
+  // (`ThrottlerException`), a gateway blip, or a Platinum transport timeout — is
+  // the provider working as designed. Every other call site classifies it
+  // (`shared/daytona-rate-limit.ts`, `shared/daytona-transient.ts`,
+  // `classifyPlatinumPollError`) so it never pages; the reaper must too,
+  // or one org throttle — or one Platinum slowdown, which times out every
+  // box's 20s default-budget call (KRTX-4687) — emits an error line per box.
   // Counting it separately and logging NOTHING here keeps this page quiet
   // while the next pass still retries the renewal.
   if (
     isDaytonaRateLimitError(err) ||
     isDaytonaTransientProviderError(err) ||
+    isPlatinumTransportTimeout(err) ||
     (row.provider === 'platinum' &&
       err instanceof Error &&
       /^platinum POST \/v1\/sandboxes\/[^/]+\/exec -> 429\b/.test(err.message) &&

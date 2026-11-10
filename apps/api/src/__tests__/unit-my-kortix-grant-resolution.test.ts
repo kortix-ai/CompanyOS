@@ -76,12 +76,15 @@ describe('grantFromLoadedAgents — the reserved meta coordinator', () => {
     expect(grantFromLoadedAgents('meta', { ...UNGOVERNED, builtinAgents: { my_kortix: false } })).toEqual(disabledMyKortixAgentGrant());
   });
 
-  test('carries no connectors and no secrets, on every manifest shape', () => {
-    for (const loaded of [UNGOVERNED, GOVERNED, UNREADABLE]) {
-      const grant = grantFromLoadedAgents('meta', loaded);
-      expect(grant?.connectors).toEqual([]);
-      expect(grant?.env).toEqual([]);
-    }
+  test('carries the platform-owned grant, never the default-deny, on every manifest shape', () => {
+    // My Kortix holds what its person holds (#12240, AGENT = HUMAN): the
+    // platform grant (every permission, connector and secret, capped per call
+    // by the person's reach) — never the unlisted-agent default-deny. Where
+    // the manifest does not turn My Kortix on (UNREADABLE carries no
+    // `builtinAgents`), the platform no-action grant instead.
+    expect(grantFromLoadedAgents('meta', UNGOVERNED)).toEqual(myKortixAgentGrant());
+    expect(grantFromLoadedAgents('meta', GOVERNED)).toEqual(myKortixAgentGrant());
+    expect(grantFromLoadedAgents('meta', UNREADABLE)).toEqual(disabledMyKortixAgentGrant());
   });
 
   test('the per-prompt re-mint is now a no-op for a meta session', () => {

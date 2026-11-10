@@ -50,16 +50,23 @@ describe('resolveSessionSecretGrant fails closed through the real manifest loade
     ).rejects.toThrow(SecretGrantResolutionError);
   });
 
-  test('an unparseable manifest (repair mode) grants no secret, never unrestricted', async () => {
+  test('an unparseable manifest (repair mode) grants manifest agents no secret, never unrestricted', async () => {
     readManifestFromRepoImpl = async () => ({
       path: 'kortix.yaml',
       content: 'agents:\n  - [unbalanced\n',
     });
-    // Repair mode: only My Kortix runs, so the file can be fixed. No agent,
-    // the `default` sentinel included, receives a project secret.
-    for (const sessionAgent of ['default', 'kortix', 'mykortix']) {
+    // Repair mode: only My Kortix runs, so the file can be fixed. No manifest
+    // agent — the `default` sentinel included — receives a project secret:
+    // the file proves nothing, so both resolve deny-all. My Kortix's env is
+    // its person's rights (#12240, AGENT = HUMAN), capped per call by the
+    // person's reach — not a manifest-derived grant, so an unparseable file
+    // cannot widen or narrow it.
+    for (const sessionAgent of ['default', 'kortix'] as const) {
       await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent })).resolves.toEqual([]);
     }
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix' })).resolves.toBe(
+      'all',
+    );
   });
 
   test('a genuinely absent manifest is still the unrestricted back-compat path', async () => {

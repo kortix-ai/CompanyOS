@@ -16,7 +16,7 @@ function fakeSessionRow(sessionId: string): ProjectSessionRow {
   const now = new Date('2026-01-01T00:00:00Z');
   return {
     sessionId,
-    accountId: 'acc-1',
+    accountId: account,
     projectId: 'proj-1',
     branchName: 'session/test',
     baseRef: 'main',
@@ -218,9 +218,14 @@ const { inboundMessageKey } = await import('../channels/slack/dedup');
 const { resetSlackSessionLifecycleForTest, setSlackSessionLifecycleForTest } = await import('../channels/slack/session');
 const originalRequireIdentity = config.SLACK_REQUIRE_USER_IDENTITY;
 
+// The account id reaching the member probe comes from a session or project
+// row: a uuid in prod. The reader carries the uuid guard, so a non-uuid id
+// answers no row without a DB read — well-formed synthetic ones here.
+const account = 'aaaaaaaa-1111-4111-8111-111111111111';
+const secondAccount = 'bbbbbbbb-2222-4222-8222-222222222222';
 const envelope = { team_id: 'T1', event: undefined } as any;
 const event = { type: 'app_mention', channel: 'C1', ts: '100.1', user: 'U1', thread_ts: '90.0', text: 'hi' } as any;
-const project = { projectId: 'proj-1', accountId: 'acc-1', defaultBranch: 'main', repoUrl: 'r', name: 'P', manifestPath: 'kortix.yaml' };
+const project = { projectId: 'proj-1', accountId: account, defaultBranch: 'main', repoUrl: 'r', name: 'P', manifestPath: 'kortix.yaml' };
 
 afterAll(() => {
   config.SLACK_REQUIRE_USER_IDENTITY = originalRequireIdentity;
@@ -798,7 +803,7 @@ describe('dispatchSlackEvent — a mention addressed to another workspace bot', 
  * re-binds a channel, its older threads still belong to the original project).
  */
 describe('spawnAgentTurn — a thread owned by another project', () => {
-  const project2 = { ...project, projectId: 'proj-2', accountId: 'acc-2' };
+  const project2 = { ...project, projectId: 'proj-2', accountId: secondAccount };
   const foreignThread = { sessionId: 'sess-p1', projectId: 'proj-1', createdBy: 'user-1', metadata: {} };
 
   test('the sender is re-authorized against the thread project; without access there, nothing is delivered', async () => {

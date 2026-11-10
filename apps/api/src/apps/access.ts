@@ -9,7 +9,7 @@ import { actorForToken } from '../iam/actor';
 import { agentMayOpenApp } from '../iam/agent-scope';
 import { db } from '../shared/db';
 import { accountMembersAmong } from '../iam/membership-read';
-import { accountGroupsAmong } from '../iam/group-read';
+import { groupRows } from '../iam/group-read';
 
 export type AppAccessMode = 'private' | 'project' | 'restricted' | 'public' | 'password';
 export type AppAccessTokenKind = 'kortix' | 'password';
@@ -304,16 +304,16 @@ export async function validateAppAccessPrincipals(
 ): Promise<AppAccessPrincipalValidation> {
   const memberIds = [...new Set(input.memberIds)];
   const groupIds = [...new Set(input.groupIds)];
-  const [memberRows, groupRows] = await Promise.all([
+  const [memberRows, groupRowList] = await Promise.all([
     memberIds.length > 0 ? accountMembersAmong(accountId, memberIds) : [],
-    groupIds.length > 0 ? accountGroupsAmong(accountId, groupIds) : [],
+    groupIds.length > 0 ? groupRows({ accountId, groupIds }) : [],
   ]);
   const existingMemberIds = new Set(memberRows.map((row) => row.userId));
   const missingMemberId = memberIds.find((id) => !existingMemberIds.has(id));
   if (missingMemberId) {
     return { ok: false, principalType: 'member', principalId: missingMemberId };
   }
-  const existingGroupIds = new Set(groupRows.map((row) => row.groupId));
+  const existingGroupIds = new Set(groupRowList.map((row) => row.groupId));
   const missingGroupId = groupIds.find((id) => !existingGroupIds.has(id));
   if (missingGroupId) {
     return { ok: false, principalType: 'group', principalId: missingGroupId };

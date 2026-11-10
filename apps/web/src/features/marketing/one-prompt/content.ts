@@ -32,7 +32,7 @@ export const TEMPLATES: HomeTemplate[] = [
     phrase: 'a software factory',
     name: 'Software Factory',
     summary:
-      'One agent that turns GitHub issues, failing tests, errors, logs, Slack reports and security findings into tickets, then builds each into a reviewed pull request with a demo.',
+      'One agent with its own GitHub identity turns issues, failing tests, errors, logs, database anomalies, Slack and customer feedback into tickets, then into reviewed pull requests.',
     triggers: ['Issue labeled kortix', 'Every night 03:00', 'Every 5 minutes', 'Review on a pull request'],
     agents: [
       { name: 'sources', role: 'File one ticket per signal into your tracker.' },

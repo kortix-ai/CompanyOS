@@ -111,6 +111,53 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     expect(tree.split('\n')).toContain('README.md')
   })
 
+  it('a second commit-push on the same workspace keeps the repo files it never staged as deletions', async () => {
+    const { remote, target } = makeRepo()
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    const first = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'first push' },
+    )
+    expect(first.pushed).toBe(true)
+
+    // The first materialize left the repo's files on disk (it populated them),
+    // so the second call is an ordinary commit-push: the new agent file is
+    // added and nothing else disappears.
+    writeFileSync(join(target, 'second-file.md'), 'more agent work\n')
+    const second = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'second push' },
+    )
+    expect(second.pushed).toBe(true)
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(
+      ['README.md', 'agent-file.md', 'apps/x.ts', 'second-file.md'],
+    )
+  })
+
+  it('a fresh session bases on the remote default branch, not the first branch fetch saw', async () => {
+    const { remote, target, root } = makeRepo()
+    // `aaa` sorts before `main`, so FETCH_HEAD's first entry is aaa — the
+    // session must still base on the remote's default branch (HEAD -> main).
+    const other = join(root, 'other')
+    mkdirSync(other)
+    git(['clone', '-q', remote, other])
+    git(['checkout', '-q', '-b', 'aaa'], other)
+    writeFileSync(join(other, 'wrong-branch.md'), 'aaa only\n')
+    git(['add', '-A'], other)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'aaa'], other)
+    git(['push', '-q', 'origin', 'aaa'], other)
+    expect(git(['symbolic-ref', 'HEAD'], remote)).toBe('refs/heads/main')
+
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-def' }),
+      { message: 'agent change' },
+    )
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-def', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(['README.md', 'agent-file.md', 'apps/x.ts'])
+  })
+
   it('no connected repository still refuses with the standing error', async () => {
     const { target } = makeRepo()
     expect(

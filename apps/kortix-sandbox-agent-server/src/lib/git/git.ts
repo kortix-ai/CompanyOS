@@ -452,16 +452,19 @@ type CommitPushResult = {
  * Materialize the connected repository under a stateless session's working
  * tree so a host-driven commit-push can run. `#12136` stopped checking the
  * repository out at boot: `/workspace` starts empty and only holds the
- * agent's own files. Adopting the repo here must never clobber or stage
- * beyond them, so the sequence is `init → fetch → reset --mixed <base> →
- * checkout -b <branch>` and the caller stages with `--ignore-removal`: the
- * next commit is the union of the repository and the agent's files, the
- * agent winning on a shared path, and repo paths the agent never touched
- * stay untouched.
+ * agent's own files. Adopting the repo here must never clobber them, so the
+ * sequence is `init → fetch → reset --mixed <base> → checkout -b <branch>`
+ * and then the base paths the agent does not have are restored — only those
+ * (`ls-files --deleted`), so the agent's bytes are never overwritten. The
+ * working tree becomes the union of the repository and the agent's files,
+ * the agent winning on a shared path; on this and every later commit-push
+ * plain staging sees real files, so untouched repo paths are never staged
+ * as deletions and an agent deletion of a visible file is still pushed.
  *
  * The base is the session branch's tip when one exists (a restarted session
  * keeps its pushed work and pushes a fast-forward), else the remote default
- * branch's tip (FETCH_HEAD).
+ * branch's tip. The default is resolved with `remote set-head --auto` —
+ * FETCH_HEAD's first entry is fetch order, not the default branch.
  */
 async function materializeRepoForCommit(cfg: Config, target: string): Promise<RepoInfo> {
   const repoUrl = cfg.repoUrl
@@ -485,8 +488,13 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
     if (r.code === 0) base = r.stdout.trim()
   }
   if (!base) {
-    const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'FETCH_HEAD'])
-    if (r.code !== 0) throw new Error('git fetch produced no FETCH_HEAD')
+    const setHead = await gitWithAuth(
+      credential, repoUrl, ['-C', target, 'remote', 'set-head', 'origin', '--auto'],
+      { timeoutMs: 120_000 },
+    )
+    if (setHead.code !== 0) throw new Error(`git remote set-head failed: ${setHead.stderr || setHead.stdout}`)
+    const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'origin/HEAD'])
+    if (r.code !== 0) throw new Error('git fetch produced no default branch')
     base = r.stdout.trim()
   }
 
@@ -494,6 +502,14 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
   if (reset.code !== 0) throw new Error(`git reset failed: ${reset.stderr || reset.stdout}`)
   if (cfg.branchName) {
     const co = await execGit(['-C', target, 'checkout', '--quiet', '-b', cfg.branchName])
+    if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
+  }
+
+  const deleted = await execGit(['-C', target, 'ls-files', '--deleted', '-z'])
+  if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
+  const missing = deleted.stdout.split('\0').filter(Boolean)
+  for (let i = 0; i < missing.length; i += 500) {
+    const co = await execGit(['-C', target, 'checkout', '--quiet', '--', ...missing.slice(i, i + 500)])
     if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
   }
 
@@ -527,24 +543,8 @@ export async function commitAndPushWorkingTree(
   }
   let committed = false
   if (status.stdout.trim().length > 0) {
-    // A tree materialized this call shows every repo path the agent did not
-    // write as deleted; staging those would push an emptying commit. Staging
-    // only what exists on disk keeps the union (repo ∪ agent files). A real
-    // checkout stages deletions too: there, a missing file is the agent's
-    // deletion.
-    const added = await execGit(
-      ['-C', target, 'add', ...(materializedHere ? ['--ignore-removal'] : ['-A']), '.'],
-    )
+    const added = await execGit(['-C', target, 'add', '-A'])
     if (added.code !== 0) throw new Error(`git add failed: ${added.stderr || added.stdout}`)
-
-    if (materializedHere) {
-      const staged = await execGit(['-C', target, 'diff', '--cached', '--quiet'])
-      if (staged.code === 0) {
-        // The agent wrote nothing the repository lacks: no commit, no push,
-        // no session branch — there is no work to land.
-        return { committed: false, pushed: false, nothingToDo: true, branch, headSha: before.commit }
-      }
-    }
 
     const message = (opts.message?.trim() || 'Update from session').slice(0, 500)
     const commit = await execGit(['-C', target, 'commit', '-m', message], {
@@ -555,6 +555,11 @@ export async function commitAndPushWorkingTree(
     } else if (!/nothing to commit|no changes added/i.test(`${commit.stdout} ${commit.stderr}`)) {
       throw new Error(`git commit failed: ${commit.stderr || commit.stdout}`)
     }
+  } else if (materializedHere) {
+    // Freshly materialized and the agent wrote nothing beyond the repository:
+    // the tree matches the base tip, so no commit and no push — pushing would
+    // only create the session branch as a duplicate of the base.
+    return { committed: false, pushed: false, nothingToDo: true, branch, headSha: before.commit }
   }
 
   // 2. Push HEAD to the session branch on origin.

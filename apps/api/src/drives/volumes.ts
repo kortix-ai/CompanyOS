@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { db } from '../shared/db';
 import { isPlatinumConfigured, platinumFetch, platinumRegionControlPlane } from '../shared/platinum';
+import { ttlMemo } from '../shared/ttl-memo';
 import { DEFAULT_SANDBOX_MOUNT_LIMIT } from './access';
 import { parseVolumeWriteCommit, type VolumeWriteCommit } from './volume-commit';
 
@@ -266,9 +267,16 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
       res = await platinumFetch(path, init, origin);
     }
   } catch (err) {
+    // A failed call may still have landed (a timeout past the server's own
+    // commit): bust the listings conservatively.
+    if (volume) bustVolumeListCache(volume.name);
     logger.warn(`[drives] ${init.method ?? 'GET'} ${path} failed:`, { error: err instanceof Error ? err.message : String(err) });
     throw new DriveStorageError(503, 'Drive storage is unavailable, try again shortly', 'drive_storage_unavailable');
   }
+  // A mutation may have changed the folder tree (even a refusal can have
+  // landed past a network error): no cached listing of this volume may
+  // outlive it. Every write through the volumes API funnels here.
+  if (volume && method !== 'GET') bustVolumeListCache(volume.name);
   if (res.ok || (allowRangeRefusal && res.status === 416)) return res;
   const text = await res.text().catch(() => '');
   let refusal: PlatinumRefusal = {};
@@ -401,6 +409,41 @@ export interface VolumeEntry {
   mtime: number;
 }
 
+/**
+ * The folder listing the web UI re-reads on a 10 s poll per open view (one
+ * view every ~3.5 s in the KRTX-4671 window), where Platinum's files-list
+ * costs O(volume) per call regardless of folder size (measured 2026-11-10: a
+ * one-entry folder on a 2,000-file volume listed in seconds). Memoize the RAW
+ * listing per (volume, folder): concurrent callers share the in-flight call;
+ * a settled entry answers at once while a fresh one loads behind it
+ * (`staleWhileRevalidate`), so the route's p95 tracks the cached read, not
+ * the storage round trip. Every write the API sees busts it (call()'s
+ * non-GET branch); a write it never sees (a mounted session's) goes stale at
+ * most one interval — the staleness the poll itself has. Only the file
+ * tree's shape is cached: non-recursive, live, no per-caller signal.
+ *
+ * ponytail: a list resolving after a write's bust can cache the pre-write
+ * listing for up to one interval (no write fencing); the next poll heals it.
+ * Fence the memo by volume head if a 10 s tree staleness ever matters.
+ */
+const volumeListMemo = ttlMemo({
+  ttlMs: 10_000,
+  keyFn: (volume: DriveVolume, path: string) => `${volume.name}|${volume.region ?? ''}|${path}`,
+  loader: async (volume: DriveVolume, path: string): Promise<VolumeEntry[]> => {
+    const q = new URLSearchParams({ path, recursive: 'false', limit: '10000' });
+    const r = await callJson<{ entries: VolumeEntry[] }>(volume, `${v(volume)}/files?${q}`);
+    return r.entries ?? [];
+  },
+  staleWhileRevalidate: true,
+  maxEntries: 64,
+  enableInTests: true,
+});
+
+/** Drop every cached listing of one volume. The API's write paths call this. */
+export function bustVolumeListCache(volumeName: string): void {
+  volumeListMemo.invalidateByPrefix(`${volumeName}|`);
+}
+
 export async function listVolumeFiles(
   volume: DriveVolume,
   path: string,
@@ -408,6 +451,7 @@ export async function listVolumeFiles(
   signal?: AbortSignal,
   at?: string,
 ): Promise<VolumeEntry[]> {
+  if (!recursive && !at && !signal) return volumeListMemo(volume, path);
   const q = new URLSearchParams({ path, recursive: String(recursive), limit: '10000', ...(at ? { at } : {}) });
   const r = await callJson<{ entries: VolumeEntry[] }>(volume, `${v(volume)}/files?${q}`, signal ? { signal } : {});
   return r.entries ?? [];

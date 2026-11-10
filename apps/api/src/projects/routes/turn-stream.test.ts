@@ -1052,7 +1052,7 @@ describe('POST /v1/projects/:projectId/turn-stream — the session list at turn 
     releaseProjection = null;
   });
 
-  test('the turn end forces a projection refresh as the session creator, and is answered only after it', async () => {
+  test('the turn end forces a projection refresh as the session creator, and answers before it lands', async () => {
     let answered = false;
     releaseProjection = () => {};
     const pending = Promise.resolve(post({ session_id: SESSION_ID, kind: 'end' })).then((response) => {
@@ -1064,10 +1064,12 @@ describe('POST /v1/projects/:projectId/turn-stream — the session list at turn 
       { target: { sessionId: SESSION_ID, projectId: PROJECT_ID, accountId: ACCOUNT_ID, userId: USER_ID }, options: { force: true } },
     ]);
     await Bun.sleep(20);
-    // The daemon re-sends an unanswered turn end: no answer while the refresh runs.
-    expect(answered).toBe(false);
-    releaseProjection!();
+    // The ack must not wait on the box read: a slow daemon held every turn end
+    // until the 25 s request deadline 503'd it (KRTX-4682).
+    expect(answered).toBe(true);
     expect((await pending).status).toBe(200);
+    releaseProjection!();
+    await Bun.sleep(5);
   });
 
   test('a session with no creator to sign the read refreshes nothing, and the turn end is still answered', async () => {

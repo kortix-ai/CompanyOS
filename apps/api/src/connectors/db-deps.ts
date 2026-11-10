@@ -91,6 +91,7 @@ import {
   composioConnectionMetadata,
   composioStableUserId,
   connectLinkEligibility,
+  connectLinkNeedsManagedProvider,
   loadComposioAdapter,
   loadComposioConnector,
   loadMcpConnector,
@@ -405,7 +406,15 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
     // means no link exists to hand over. The denial still names the connector.
     if (!eligibility.ok) return null;
     const composio = await loadComposioAdapter();
-    if (!(composio?.composioConfigured?.() ?? false) && !pipedreamConfigured()) return null;
+    // An `mcp` connector's hosted page is Kortix's own OAuth sign-in: it needs
+    // no managed provider, so a self-host with no Composio/Pipedream keys still
+    // mints its link (KRTX-4640; the /connect-requests route applies the same
+    // exception). Composio/Pipedream links stay gated on their provider.
+    if (
+      connectLinkNeedsManagedProvider(eligibility.providerType) &&
+      !(composio?.composioConfigured?.() ?? false) &&
+      !pipedreamConfigured()
+    ) return null;
     // The denial's remedy is always "authorize YOURSELF": the human reading it
     // is the one who can, and a shared account is a deliberate admin choice made
     // from settings. A link with no member behind it would resolve to nobody.

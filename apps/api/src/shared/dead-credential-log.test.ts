@@ -387,3 +387,88 @@ describe('agent-grant denial warns are throttled at the error handler (KRTX-4635
     expect(isAgentGrantDenial(plain)).toBe(false);
   });
 });
+
+describe('account-MFA step-up denials are throttled at the error handler (KRTX-4674)', () => {
+  // The route throws what denyProjectAccess throws when an account's
+  // "Require MFA" policy denies an aal1 browser session: buildDenialError's
+  // typed 403. A caller that polls through it — the web app's workspace
+  // panels refetch the sessions/triggers lists every few seconds — receives
+  // the same refusal until its person completes the step-up, and per-request
+  // logging turned that loop into a warn storm (KRTX-4674: 700+ lines in one
+  // hour across three list routes, 0 in the 24 h before). The mark routes
+  // the LINE through the shared window throttle; the typed 403 response,
+  // which the web app's step-up dialog keys on, ships untouched every time.
+  function appWithMfaDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/projects/:workspaceId/sessions', () => {
+      throw buildDenialError('project.session.read', 'account_mfa_required');
+    });
+    return app;
+  }
+
+  test('five identical denials log one info line; the typed 403 body ships every time', async () => {
+    resetDeadCredentialLogForTests();
+    const app = appWithMfaDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/projects/p/sessions');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toMatchObject({
+      error: 'This workspace requires multi-factor authentication. Verify your second factor and retry.',
+      code: 'account_mfa_required',
+    });
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first denial line');
+    expect(first.message).toContain('-> 403 [HTTPException] This workspace requires multi-factor authentication');
+    expect(first.context?.suppressed).toBe(0);
+  });
+
+  test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
+    resetDeadCredentialLogForTests();
+    const path = '/v1/projects/p/sessions';
+    const reason = buildDenialError('project.session.read', 'account_mfa_required').message ?? '';
+    const key = deadCredentialLogKey('GET', path, 403, reason);
+    // A burst in a window that already expired: one decision opens it, the
+    // rest are suppressed and left pending.
+    const past = Date.now() - 601_000;
+    expect(deadCredentialLogDecision(key, past).log).toBe(true);
+    for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
+      expect(deadCredentialLogDecision(key, past + 1_000).log).toBe(false);
+    }
+    // The handler opens the next window and must ship the pending volume at
+    // warn — a fleet of locked-out sessions grinding their polls is not the
+    // designed churn (KRTX-4454's severity follows the volume).
+    const app = appWithMfaDenial();
+    const before = logged.length;
+    const res = await app.request(path);
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(0);
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(1);
+    expect(warns[0]?.context?.suppressed).toBe(DEAD_CREDENTIAL_BURST_SUPPRESSED);
+  });
+
+  test('fifteen workspace paths share one refusal window', async () => {
+    resetDeadCredentialLogForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/projects/:workspaceId/sessions', (c) => {
+      throw buildDenialError('project.session.read', 'account_mfa_required');
+    });
+    const before = logged.length;
+    for (let i = 0; i < 15; i += 1) {
+      const workspaceId = `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+      const res = await app.request(`/v1/projects/${workspaceId}/sessions`);
+      expect(res.status).toBe(403);
+    }
+    expect(logged.slice(before).filter((entry) => entry.level === 'info')).toHaveLength(1);
+    expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(0);
+  });
+});

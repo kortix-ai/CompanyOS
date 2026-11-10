@@ -100,3 +100,6 @@ export function expiryDate(iso: string, locale: string): string {
     timeZone: 'UTC',
   });
 }
+
+export const errorText = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;

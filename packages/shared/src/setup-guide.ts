@@ -76,7 +76,10 @@ Rules for the whole guide:
 3. In this repository: \`cd\` to its root. Make sure the working tree is clean or
    that the person agrees to commit the setup on top of their changes.
 4. Its own repository: run \`gh repo create <owner>/kortix --private --clone\` next
-   to the code checkout and \`cd\` into it. From now on, pass the code repository to
+   to the code checkout and \`cd\` into it. When \`<owner>/kortix\` exists and
+   holds no \`kortix.yaml\`, never write into it: **Ask** for another name
+   (recommend \`<code-repo>-kortix\`). Then run \`git branch -M main\`, so the first
+   push creates \`main\`. From now on, pass the code repository to
    every \`kortix templates add\` as \`--repo <owner>/<code-repo> --branch <default>\`,
    and read the code (step 5) from the original checkout. The GitHub webhooks
    (step 10) still go on the code repository.

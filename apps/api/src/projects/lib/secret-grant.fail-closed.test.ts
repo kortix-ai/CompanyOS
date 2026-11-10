@@ -50,16 +50,19 @@ describe('resolveSessionSecretGrant fails closed through the real manifest loade
     ).rejects.toThrow(SecretGrantResolutionError);
   });
 
-  test('an unparseable manifest (repair mode) grants no secret, never unrestricted', async () => {
+  test('an unparseable manifest (repair mode) grants no secret to ordinary agents, never unrestricted', async () => {
     readManifestFromRepoImpl = async () => ({
       path: 'kortix.yaml',
       content: 'agents:\n  - [unbalanced\n',
     });
-    // Repair mode: only My Kortix runs, so the file can be fixed. No agent,
-    // the `default` sentinel included, receives a project secret.
-    for (const sessionAgent of ['default', 'kortix', 'mykortix']) {
+    // Repair mode: only My Kortix runs, so the file can be fixed. No ordinary
+    // agent, the `default` sentinel included, receives a project secret.
+    for (const sessionAgent of ['default', 'kortix']) {
       await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent })).resolves.toEqual([]);
     }
+    // The reserved coordinator's grant is platform-owned, not manifest-owned
+    // (#12240): it acts with its person's rights, still capped by them at mint.
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix' })).resolves.toBe('all');
   });
 
   test('a genuinely absent manifest is still the unrestricted back-compat path', async () => {

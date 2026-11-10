@@ -523,11 +523,12 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       userId: USER_ID,
       projectId: PROJECT_ID,
       sessionId: SANDBOX_ID,
+      // The person-capped platform grant (#12240): full reach, no service account.
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

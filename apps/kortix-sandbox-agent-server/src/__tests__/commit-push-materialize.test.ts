@@ -1,0 +1,120 @@
+/**
+ * Host-driven commit-push on a STATELESS session (#12136): `/workspace` starts
+ * empty, so `commitAndPushWorkingTree` materializes the connected repository
+ * under the agent's files first. The rows guard the union semantics (repo ∪
+ * agent files, the agent winning on a shared path, untouched repo paths never
+ * staged as deletions), the no-work no-op, and the restart case (a session
+ * branch that exists fast-forwards, never loses pushed work). Real `git`, a
+ * local bare remote.
+ */
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'bun:test'
+
+import { commitAndPushWorkingTree } from '@/lib/git/git'
+import { testConfig } from './helpers/daemon-test-app'
+
+function git(args: string[], cwd?: string): string {
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  }).trim()
+}
+
+const tempDirs: string[] = []
+function makeRepo(): { root: string; remote: string; target: string } {
+  const root = mkdtempSync(join(tmpdir(), 'commit-push-materialize-'))
+  tempDirs.push(root)
+  const remote = join(root, 'remote.git')
+  const seed = join(root, 'seed')
+  const target = join(root, 'workspace')
+  git(['init', '--bare', '-b', 'main', remote])
+  mkdirSync(seed)
+  git(['init', '-b', 'main'], seed)
+  writeFileSync(join(seed, 'README.md'), 'base\n')
+  mkdirSync(join(seed, 'apps'))
+  writeFileSync(join(seed, 'apps', 'x.ts'), 'repo version\n')
+  git(['add', '-A'], seed)
+  git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'base'], seed)
+  git(['remote', 'add', 'origin', remote], seed)
+  git(['push', '-q', 'origin', 'main'], seed)
+  mkdirSync(target, { recursive: true })
+  return { root, remote, target }
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+describe('commitAndPushWorkingTree on a stateless session', () => {
+  it('materializes the repo under the agent’s files and pushes the union, agent wins', async () => {
+    const { remote, target } = makeRepo()
+    // The agent's work in an empty /workspace: a new file and an edit of a
+    // tracked path (the agent never saw the repo version).
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    mkdirSync(join(target, 'apps'))
+    writeFileSync(join(target, 'apps', 'x.ts'), 'agent version\n')
+
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'agent change' },
+    )
+    expect(result.committed).toBe(true)
+    expect(result.pushed).toBe(true)
+    expect(result.branch).toBe('session-abc')
+
+    // The pushed tree: the repo's files are NOT deleted, the agent's file is
+    // there, and the shared path carries the agent's version.
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(['README.md', 'agent-file.md', 'apps/x.ts'])
+    const shared = git(['show', 'refs/heads/session-abc:apps/x.ts'], remote)
+    expect(shared).toBe('agent version')
+  })
+
+  it('an empty working tree pushes nothing and creates no branch', async () => {
+    const { remote, target } = makeRepo()
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-idle' }),
+      { message: 'nothing' },
+    )
+    expect(result.nothingToDo).toBe(true)
+    expect(result.pushed).toBe(false)
+    const branches = git(['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], remote)
+    expect(branches).not.toContain('session-idle')
+  })
+
+  it('a restarted session fast-forwards its existing session branch', async () => {
+    const { remote, target, root } = makeRepo()
+    // Pushed work from the session's previous boot stays on the branch.
+    const seed = join(root, 'prior')
+    mkdirSync(seed)
+    git(['clone', '-q', remote, seed])
+    git(['checkout', '-q', '-b', 'session-abc'], seed)
+    writeFileSync(join(seed, 'prior-work.md'), 'pushed last boot\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'prior'], seed)
+    git(['push', '-q', '-u', 'origin', 'session-abc'], seed)
+
+    writeFileSync(join(target, 'new-work.md'), 'this boot\n')
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'this boot' },
+    )
+    expect(result.pushed).toBe(true)
+    expect(result.branch).toBe('session-abc')
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n')).toContain('prior-work.md')
+    expect(tree.split('\n')).toContain('new-work.md')
+    expect(tree.split('\n')).toContain('README.md')
+  })
+
+  it('no connected repository still refuses with the standing error', async () => {
+    const { target } = makeRepo()
+    expect(
+      commitAndPushWorkingTree(testConfig({ projectTarget: target })),
+    ).rejects.toThrow('project repo is not materialized')
+  })
+})

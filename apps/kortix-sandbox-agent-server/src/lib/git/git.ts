@@ -448,12 +448,73 @@ type CommitPushResult = {
  * clone token for push credentials and the configured git identity for the
  * commit author/committer.
  */
+/**
+ * Materialize the connected repository under a stateless session's working
+ * tree so a host-driven commit-push can run. `#12136` stopped checking the
+ * repository out at boot: `/workspace` starts empty and only holds the
+ * agent's own files. Adopting the repo here must never clobber or stage
+ * beyond them, so the sequence is `init → fetch → reset --mixed <base> →
+ * checkout -b <branch>` and the caller stages with `--ignore-removal`: the
+ * next commit is the union of the repository and the agent's files, the
+ * agent winning on a shared path, and repo paths the agent never touched
+ * stay untouched.
+ *
+ * The base is the session branch's tip when one exists (a restarted session
+ * keeps its pushed work and pushes a fast-forward), else the remote default
+ * branch's tip (FETCH_HEAD).
+ */
+async function materializeRepoForCommit(cfg: Config, target: string): Promise<RepoInfo> {
+  const repoUrl = cfg.repoUrl
+  if (!repoUrl) throw new Error('project repo is not materialized')
+  const credential = await resolveCloneCredential(cfg)
+
+  const init = await execGit(['init', '--quiet'], { cwd: target })
+  if (init.code !== 0) throw new Error(`git init failed: ${init.stderr || init.stdout}`)
+  const remote = await execGit(['remote', 'add', 'origin', repoUrl], { cwd: target })
+  if (remote.code !== 0) throw new Error(`git remote add failed: ${remote.stderr || remote.stdout}`)
+  const fetch = await gitWithAuth(credential, repoUrl, ['-C', target, 'fetch', '--quiet', 'origin'], {
+    timeoutMs: 120_000,
+  })
+  if (fetch.code !== 0) throw new Error(`git fetch failed: ${fetch.stderr || fetch.stdout}`)
+
+  let base: string | null = null
+  if (cfg.branchName) {
+    const r = await execGit([
+      '-C', target, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${cfg.branchName}`,
+    ])
+    if (r.code === 0) base = r.stdout.trim()
+  }
+  if (!base) {
+    const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'FETCH_HEAD'])
+    if (r.code !== 0) throw new Error('git fetch produced no FETCH_HEAD')
+    base = r.stdout.trim()
+  }
+
+  const reset = await execGit(['-C', target, 'reset', '--mixed', '--quiet', base])
+  if (reset.code !== 0) throw new Error(`git reset failed: ${reset.stderr || reset.stdout}`)
+  if (cfg.branchName) {
+    const co = await execGit(['-C', target, 'checkout', '--quiet', '-b', cfg.branchName])
+    if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
+  }
+
+  const info = await readRepoInfo(target)
+  if (!info) throw new Error('project repo did not materialize')
+  return info
+}
+
 export async function commitAndPushWorkingTree(
   cfg: Config,
   opts: { message?: string } = {},
 ): Promise<CommitPushResult> {
   const target = cfg.projectTarget
-  const before = await readRepoInfo(target)
+  let before = await readRepoInfo(target)
+  let materializedHere = false
+  if (!before && cfg.repoUrl && cfg.branchName) {
+    // Stateless session (#12136): no checkout at boot. The connected repo is
+    // materialized under the agent's files, never the other way around.
+    before = await materializeRepoForCommit(cfg, target)
+    materializedHere = true
+  }
   if (!before) throw new Error('project repo is not materialized')
 
   const branch = cfg.branchName || before.branch
@@ -466,8 +527,24 @@ export async function commitAndPushWorkingTree(
   }
   let committed = false
   if (status.stdout.trim().length > 0) {
-    const added = await execGit(['-C', target, 'add', '-A'])
+    // A tree materialized this call shows every repo path the agent did not
+    // write as deleted; staging those would push an emptying commit. Staging
+    // only what exists on disk keeps the union (repo ∪ agent files). A real
+    // checkout stages deletions too: there, a missing file is the agent's
+    // deletion.
+    const added = await execGit(
+      ['-C', target, 'add', ...(materializedHere ? ['--ignore-removal'] : ['-A']), '.'],
+    )
     if (added.code !== 0) throw new Error(`git add failed: ${added.stderr || added.stdout}`)
+
+    if (materializedHere) {
+      const staged = await execGit(['-C', target, 'diff', '--cached', '--quiet'])
+      if (staged.code === 0) {
+        // The agent wrote nothing the repository lacks: no commit, no push,
+        // no session branch — there is no work to land.
+        return { committed: false, pushed: false, nothingToDo: true, branch, headSha: before.commit }
+      }
+    }
 
     const message = (opts.message?.trim() || 'Update from session').slice(0, 500)
     const commit = await execGit(['-C', target, 'commit', '-m', message], {

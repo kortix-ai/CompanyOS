@@ -37,10 +37,19 @@ const {
   deadCredentialLogDecision,
   deadCredentialLogKey,
   isDeadCredential,
+  isAgentGrantDenial,
   markDeadCredential,
+  markAgentGrantDenial,
   resetDeadCredentialLogForTests,
 } = await import('./dead-credential-log');
 const { installHttpErrors } = await import('../http-errors');
+const { buildDenialError } = await import('../iam/denial-message');
+
+// What authorizeV2 / assertAgentGrantAllows throw for an agent session whose
+// kortix_permissions lack the action: buildDenialError's typed 403, marked.
+function agentScopeDenialLike(action = 'workspace.gateway.spend.read'): HTTPException {
+  return buildDenialError(action, 'agent_scope_insufficient');
+}
 
 // What resolvePat throws for a dead credential: the typed deadCredential401
 // body, marked. middleware/auth.test.ts pins that deadCredential401 itself
@@ -293,4 +302,88 @@ test('marking is what routes the line through the throttle', () => {
   markDeadCredential(marked);
   expect(isDeadCredential(marked)).toBe(true);
   expect(isDeadCredential(plain)).toBe(false);
+});
+
+describe('agent-grant denial warns are throttled at the error handler (KRTX-4635)', () => {
+  // The route throws what authorizeV2 / assertAgentGrantAllows throw when the
+  // requesting agent session's kortix_permissions lack the action. A caller
+  // that never reads the typed body — an in-sandbox agent looping a denied
+  // command — turns every refusal into a warn line: one prod lane put 590
+  // lines in two hours on one route (KRTX-4635). The mark routes the LINE
+  // through the same per-route window throttle without touching the typed
+  // 403 response, exactly as KRTX-1039 did for dead credentials.
+  function appWithAgentGrantDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/workspaces/:workspaceId/gateway/sources', () => {
+      throw agentScopeDenialLike();
+    });
+    app.get('/v1/workspaces/:workspaceId/audit', () => {
+      // A 403 outside the agent-grant family: its constraint is not a stable
+      // principal property, so its line stays per-request.
+      throw buildDenialError('workspace.audit.read', 'sso_required');
+    });
+    return app;
+  }
+
+  test('five identical denials log one info line; the typed 403 body ships every time', async () => {
+    resetDeadCredentialLogForTests();
+    const app = appWithAgentGrantDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/workspaces/w/gateway/sources');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toMatchObject({ error: true, status: 403, code: 'agent_scope_insufficient' });
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first denial line');
+    expect(first.message).toContain('-> 403 [HTTPException] This agent session is not granted');
+    expect(first.context?.suppressed).toBe(0);
+  });
+
+  test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
+    resetDeadCredentialLogForTests();
+    const path = '/v1/workspaces/w/gateway/sources';
+    const reason = agentScopeDenialLike().message ?? '';
+    const key = deadCredentialLogKey('GET', path, 403, reason);
+    // A burst in a window that already expired: one decision opens it, the
+    // rest are suppressed and left pending.
+    const past = Date.now() - 601_000;
+    expect(deadCredentialLogDecision(key, past).log).toBe(true);
+    for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
+      expect(deadCredentialLogDecision(key, past + 1_000).log).toBe(false);
+    }
+    // The handler opens the next window and must ship the pending volume at
+    // warn — an agent loop grinding on a denial it never acts on is not the
+    // designed churn (KRTX-4454's severity follows the volume).
+    const app = appWithAgentGrantDenial();
+    const before = logged.length;
+    const res = await app.request(path);
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(0);
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(1);
+    expect(warns[0]?.context?.suppressed).toBe(DEAD_CREDENTIAL_BURST_SUPPRESSED);
+  });
+
+  test('a denial outside the agent-grant family keeps its per-request line', async () => {
+    resetDeadCredentialLogForTests();
+    const app = appWithAgentGrantDenial();
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) await app.request('/v1/workspaces/w/audit');
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(3);
+  });
+
+  test('marking an agent-grant denial routes it and leaves a plain 403 unthrottled', () => {
+    const plain = new HTTPException(403, { message: 'no access' });
+    const marked = agentScopeDenialLike();
+    markAgentGrantDenial(marked);
+    expect(isAgentGrantDenial(marked)).toBe(true);
+    expect(isAgentGrantDenial(plain)).toBe(false);
+  });
 });

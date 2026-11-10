@@ -303,3 +303,19 @@ fn windows_skips_reading_a_display_that_did_not_change() {
     }
     assert!(reused > 0, "no tick reused an unchanged display");
 }
+
+/// `status.json` `resources` sees a running Kortix Capture process with its
+/// CPU time and memory: the real engine binary, read by the OS process reader.
+#[test]
+fn the_resource_reader_sees_a_running_engine() {
+    let mut e = Engine::start();
+    assert_eq!(e.call(json!({"cmd": "ping"}))["ok"], json!(true));
+    let pid = e.child.id();
+    let procs = kortix_backend::self_usage::processes().expect("a process reader on this OS");
+    let engine = procs
+        .iter()
+        .find(|p| p.pid == pid)
+        .unwrap_or_else(|| panic!("engine pid {pid} not in {procs:?}"));
+    assert_eq!(engine.name, "kortix-capture-engine");
+    assert!(engine.memory_bytes > 1_000_000, "{engine:?}");
+}

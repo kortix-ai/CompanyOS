@@ -595,6 +595,49 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
       resolveCandidatesMock.mockReset();
     }
   });
+
+  test('the same model failing with two different codes logs twice (the code pins the key)', async () => {
+    resolveCandidatesMock.mockReset();
+    loggerWarn.mockClear();
+    try {
+      const a = app();
+      resolveCandidatesMock.mockRejectedValueOnce(
+        new GatewayResolutionError('model_not_found', '"inworld-tts-2" is not a recognized model.', 'Check the model id.'),
+      );
+      const first = await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
+      expect(first.status).toBe(200);
+      resolveCandidatesMock.mockRejectedValueOnce(
+        new GatewayResolutionError('model_disabled_on_deployment', '"inworld-tts-2" is disabled on this deployment.', 'Choose a served model.'),
+      );
+      const second = await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
+      expect(second.status).toBe(200);
+      expect(loggerWarn).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
+
+  test('a non-string model body still answers the typed 200 refusal (never a 500)', async () => {
+    // The route reads `model` straight out of the JSON body without a schema,
+    // so a null reaches the catch block too. The dedupe key must not call
+    // string methods on it: the route's contract is the typed 200 refusal
+    // (the test above it names it), not a 500.
+    resolveCandidatesMock.mockReset();
+    resolveCandidatesMock.mockRejectedValue(
+      new GatewayResolutionError('model_not_found', '"" is not a recognized model.', 'Check the model id, or choose a different model.'),
+    );
+    loggerWarn.mockClear();
+    try {
+      const res = await app().request(authedRequest({ principal: { userId: 'u' }, model: null }));
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { candidates: unknown[]; resolutionError: { code: string } };
+      expect(json.candidates).toEqual([]);
+      expect(json.resolutionError.code).toBe('model_not_found');
+      expect(loggerWarn).toHaveBeenCalledTimes(1);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
 });
 
 test('full discovery labels managed plan access separately from external credentials', async () => {

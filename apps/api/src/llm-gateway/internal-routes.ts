@@ -114,10 +114,14 @@ export function createInternalGatewayRoutes() {
       // as a GatewayResolutionError and the in-process hook contract holds.
       if (err instanceof GatewayResolutionError) {
         // The model string is client-controlled (the box names its model) and
-        // unbounded on this route; cap the retained key at the same 200 the
-        // sibling /models route caps the field at, so a huge id cannot pin
-        // its bytes in the process (Strix review of this PR).
-        if (logFirstResolutionFailure(`${model.slice(0, 200)}:${err.code}`)) {
+        // neither validated nor bounded on this route; cap the retained key
+        // at the same 200 the sibling /claude-credentials route caps its
+        // model field at, so a huge id cannot pin its bytes in the process.
+        // A non-string body value joins the '' key instead of crashing the
+        // catch block: the typed refusal below stays a 200, never a 500
+        // (Strix review of this PR).
+        const keyModel = typeof model === 'string' ? model.slice(0, 200) : '';
+        if (logFirstResolutionFailure(`${keyModel}:${err.code}`)) {
           logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
         }
         return c.json({

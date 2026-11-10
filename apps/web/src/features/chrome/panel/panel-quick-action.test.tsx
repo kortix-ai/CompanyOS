@@ -93,7 +93,9 @@ test('a quick action hands the read page text to the project composer as a when-
   expect(prefill1?.submit).toBe('when-ready');
   expect(prefill1?.files).toHaveLength(1);
   const attached = prefill1?.files?.[0];
-  if (typeof attached?.file.text !== 'function') throw new Error('the attachment is not a readable File');
+  if (!attached || !('file' in attached) || typeof attached.file.text !== 'function') {
+    throw new Error('the attachment is not a readable File');
+  }
   expect(await attached.file.text()).toContain('The page body.');
   expect(pushed.mock.calls).toEqual([['/workspaces/p1']]);
 });

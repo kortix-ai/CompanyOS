@@ -12,7 +12,7 @@ label `kortix`). One run per labeled issue. Enabled by default.
 | Signal value | `signal: reactions=<n> comments=<n>` |
 | Priority | `priority:<n>` label when present, else 2 for a bug, 3 otherwise |
 | Kind | the issue's `bug` / `enhancement` label, else read the text: `bug` or `feature` or `task` |
-| Credentials | `GH_TOKEN` (read the issue); the store's credentials |
+| Credentials | `FACTORY_GITHUB_TOKEN` (read the issue); the store's credentials |
 | Cap | never capped: a person asked (contract hard rule 5) |
 
 ## Run

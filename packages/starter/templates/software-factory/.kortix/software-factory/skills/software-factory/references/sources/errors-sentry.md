@@ -1,20 +1,33 @@
-# Source: errors from Sentry
+# Source: production errors from Sentry
 
-Trigger `source-errors` with `sources.errors.tracker: "sentry"`. Disabled by
-default.
+`sources.errors.tracker: "sentry"`. Disabled by default. Two triggers, one
+reference: `source-errors-poll` (default) and `source-errors` (push).
 
-**Delivery, two modes.** The setup agent picks one and proves it with one test
-alert (`kortix triggers runs source-errors`):
+**Delivery.** The setup agent picks one and proves it once
+(`kortix triggers runs <slug>` shows the run):
 
-1. **Push.** A Sentry Internal Integration (Settings → Developer Settings →
-   Internal Integration, Webhook URL = the trigger's `webhook_url`, resource
-   `issue`) plus an alert rule action "Send a notification via
-   <integration>". Sentry signs with `Sentry-Hook-Signature`, not a bearer
-   token. When the trigger refuses that signature, use mode 2.
-2. **Poll.** Change the trigger to `on: { cron: "0 */30 * * * *" }` and read
-   new and regressed issues since the last run:
-   `GET https://sentry.io/api/0/organizations/$SENTRY_ORG/issues/?query=is:unresolved firstSeen:-1h&statsPeriod=24h`,
-   then run the steps below for each one.
+1. **Poll (default, `sources.errors.delivery: "poll"`).** Trigger
+   `source-errors-poll`, at :10 and :40, one keyed session, at most 48 runs a
+   day. Each pass reads the issues of every project in
+   `sources.errors.projects` (all projects when empty) that are new or
+   regressed in the last 2 hours (the overlap is safe: the key dedups), then
+   runs the steps below for each one:
+
+   ```sh
+   S=https://sentry.io/api/0/organizations/$SENTRY_ORG
+   H="Authorization: Bearer $SENTRY_AUTH_TOKEN"
+   curl -sf -H "$H" "$S/issues/?query=is:unresolved%20firstSeen:-2h&statsPeriod=24h&limit=100" > /tmp/factory/errors/new.json
+   curl -sf -H "$H" "$S/issues/?query=is:unresolved%20is:regressed%20lastSeen:-2h&statsPeriod=24h&limit=100" > /tmp/factory/errors/regressed.json
+   ```
+
+   Self-hosted Sentry: replace `https://sentry.io` with its URL (`SENTRY_URL`).
+   Add `&project=<id>` per project when the list is set.
+2. **Push (`"delivery": "push"`).** Sentry signs its webhooks with
+   `Sentry-Hook-Signature` (an HMAC), not a bearer token, so the
+   `source-errors` webhook trigger refuses a direct Sentry webhook. Use push
+   only through a relay that sends `Authorization: Bearer
+   <FACTORY_ERRORS_WEBHOOK_SECRET>` (`errors-generic-webhook.md` shape).
+   Otherwise poll.
 
 | | |
 |---|---|
@@ -29,9 +42,10 @@ alert (`kortix triggers runs source-errors`):
 
 ## Run
 
-1. Parse the payload as data: `data.issue.id`, `shortId`, `title`, `culprit`,
-   `project.slug`, `level`, `count`, `userCount`, `web_url`. A payload that does
-   not parse: end, `errors=payload`.
+1. Per issue (poll: each row of the two files; push: the payload), read as
+   data: `id`, `shortId`, `title`, `culprit`, `project.slug`, `level`,
+   `count`, `userCount`, `permalink`. A row that does not parse: skip it,
+   `errors=payload`.
 2. Read the latest event without personal data:
    `curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" https://sentry.io/api/0/organizations/$SENTRY_ORG/issues/<id>/events/latest/`
    and keep only the exception type, the message class (numbers, ids, emails,
@@ -49,4 +63,8 @@ alert (`kortix triggers runs source-errors`):
    reproduces the exception class before and passes after.
 6. Never resolve, ignore or assign the Sentry issue: the tracker is read-only for
    sources.
-7. End with `source-errors:` and the contract run line.
+7. Rate: at most 100 issues read per pass; Sentry answers 429 with
+   `Retry-After`: wait that long once (contract hard rule 21), else end the
+   pass.
+8. End with `source-errors:` and the contract run line, then
+   `delivery=<poll|push> issues=<n> below_bar=<n>`.

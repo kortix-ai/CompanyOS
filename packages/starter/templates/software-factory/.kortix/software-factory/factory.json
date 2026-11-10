@@ -6,6 +6,13 @@
     "trunk": "{{defaultBranch}}",
     "branch_prefix": "kortix/"
   },
+  "identity": {
+    "kind": "machine-user",
+    "github_login": null,
+    "name": null,
+    "email": null,
+    "co_author_requester": true
+  },
   "store": {
     "kind": "github-issues",
     "target": "{{repoFullName}}",
@@ -22,13 +29,14 @@
   "sources": {
     "github-issues": { "enabled": true, "accept": "label" },
     "tests": { "enabled": true, "command": null, "flaky_reruns": 1 },
-    "slack": { "enabled": false, "channel": null },
-    "errors": { "enabled": false, "tracker": null, "projects": [] },
+    "slack": { "enabled": false, "channels": [], "accept_words": ["build it"] },
+    "errors": { "enabled": false, "tracker": null, "delivery": "poll", "projects": [] },
     "logs-anomaly": { "enabled": false, "backends": [], "baseline_days": 7 },
+    "db-observer": { "enabled": false, "backend": null, "baseline_days": 7 },
+    "customer-feedback": { "enabled": false, "channels": [] },
     "codebase-analysis": { "enabled": false, "units": [] },
     "dependencies": { "enabled": false },
-    "security": { "enabled": false, "targets": ["localhost"] },
-    "support-inbox": { "enabled": false, "connector": null }
+    "security": { "enabled": false, "targets": ["localhost"] }
   },
   "caps": {
     "workers": 3,

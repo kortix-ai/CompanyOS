@@ -11,7 +11,7 @@ Trigger `source-tests` (cron, 03:00 UTC). Enabled by default.
 | Signal value | `signal: failing_runs=<n> since=<first failing date>` |
 | Priority | 2 when the test covers sign-in, payment or data writes; else 3 |
 | Kind | `bug` (or `test` when the test itself is wrong, proven by reading it) |
-| Credentials | `GH_TOKEN`; the secrets the `dev-environment` skill names; never production credentials |
+| Credentials | `FACTORY_GITHUB_TOKEN`; the secrets the `dev-environment` skill names; never production credentials |
 
 ## Run
 

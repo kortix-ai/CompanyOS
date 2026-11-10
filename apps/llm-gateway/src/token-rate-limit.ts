@@ -32,7 +32,7 @@ export type TokenRateLimit = {
  * from a fabricated one. A credential the API has answered with a principal is
  * real and keeps its own bucket, keyed on the credential's SHA-256 so no raw
  * secret stays in memory. Every other credential spends first its own small
- * pre-validation allowance — at most 10/min, the one boundary a single caller
+ * pre-validation allowance — at most 20/min, the one boundary a single caller
  * governs — and is charged to ONE shared bucket, given by `unvalidatedPerMinute`
  * (order of magnitude above one credential's own budget), whatever its value:
  * the shared allowance bounds how many requests reach the API unverified
@@ -111,8 +111,8 @@ export function createTokenRateLimit(
   const chargedSource = new Map<string, Map<string, number>>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
   const sharedPolicy = { limit: Math.max(1, unvalidatedPerMinute), windowMs: 60_000 };
-  // One credential's own pre-validation allowance (KRTX-4608): 10/min — a
-  // token every 6s, small enough that a client watches its own counter drain
+  // One credential's own pre-validation allowance (KRTX-4608): 20/min — a
+  // token every 3s, small enough that a client watches its own counter drain
   // and exhaust at an honest pace — capped at the budget the credential
   // graduates to at validation, so an unvalidated caller is never promised
   // more than it will have once the API vouches for it. It bounds only the

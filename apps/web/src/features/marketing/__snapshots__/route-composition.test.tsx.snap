@@ -171,3 +171,509 @@ exports[`shipped marketing route composition home retains its rendered sections,
 }
 `;
 
+exports[`shipped solution hero composition compliance keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full flex-col items-center gap-8 lg:gap-10",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "One workspace for the whole company. Owners and admins set it up in Account settings.",
+  "cta": [
+    [
+      "a",
+      "Compare plans",
+      "/pricing",
+    ],
+    [
+      "button",
+      "Talk to sales",
+      null,
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Compliance and control.Your sign-in, your roles, your audit trail.",
+  "ids": [
+    [
+      "compliance-walk-sso",
+      "tab",
+      null,
+    ],
+    [
+      "compliance-walk-directory",
+      "tab",
+      null,
+    ],
+    [
+      "compliance-walk-access",
+      "tab",
+      null,
+    ],
+    [
+      "compliance-walk-approvals",
+      "tab",
+      null,
+    ],
+    [
+      "compliance-walk-audit",
+      "tab",
+      null,
+    ],
+    [
+      "compliance-walk-panel",
+      "tabpanel",
+      "compliance-walk-sso",
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "What IT and compliance reviewers ask about: how people sign in, who may run which agent, which actions wait for a person, and what gets recorded.",
+  "terminals": [],
+  "windows": [
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "Arcadia · Identity",
+    },
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "Identity → Group mappings",
+    },
+  ],
+}
+`;
+
+exports[`shipped solution hero composition enterprise keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full flex-col items-center gap-8 lg:gap-10",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "One workspace for every team. Members are unlimited.",
+  "cta": [
+    [
+      "a",
+      "Compare plans",
+      "/pricing",
+    ],
+    [
+      "button",
+      "Talk to sales",
+      null,
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "One CompanyOS for every team.Every team’s agents and memory, in one place you own.",
+  "ids": [
+    [
+      "enterprise-walk-one",
+      "tab",
+      null,
+    ],
+    [
+      "enterprise-walk-many",
+      "tab",
+      null,
+    ],
+    [
+      "enterprise-walk-always",
+      "tab",
+      null,
+    ],
+    [
+      "enterprise-walk-governed",
+      "tab",
+      null,
+    ],
+    [
+      "enterprise-walk-panel",
+      "tabpanel",
+      "enterprise-walk-one",
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "Roll Kortix out team by team. Agents run around the clock on schedules and webhooks, on Kortix Cloud or your own infrastructure, with any model.",
+  "terminals": [],
+  "windows": [
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "Arcadia · Agents",
+    },
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "Arcadia · Drive",
+    },
+  ],
+}
+`;
+
+exports[`shipped solution hero composition framework keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full max-w-6xl flex-col gap-8 lg:gap-10",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "One file in one repo. Kortix runs what it declares.",
+  "cta": [
+    [
+      "a",
+      "View on GitHub",
+      "https://github.com/kortix-ai/CompanyOS",
+    ],
+    [
+      "a",
+      "Read the kortix.yaml reference",
+      "/docs/developers#kortixyaml-reference",
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Company as code.A backend framework and server for agents.",
+  "ids": [
+    [
+      "framework-walk-agents",
+      "tab",
+      null,
+    ],
+    [
+      "framework-walk-connectors",
+      "tab",
+      null,
+    ],
+    [
+      "framework-walk-triggers",
+      "tab",
+      null,
+    ],
+    [
+      "framework-walk-ship",
+      "tab",
+      null,
+    ],
+    [
+      "framework-walk-panel",
+      "tabpanel",
+      "framework-walk-agents",
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "A workspace is backed by a git repo. Every agent in it is a custom pi agent: a minimal open-source harness you extend with pi extensions. kortix.yaml declares the agents, connectors, triggers and rules. Kortix deploys them to the cloud and runs every session on its own computer. Build your own experience with @kortix/sdk and @kortix/ui.",
+  "terminals": [
+    {
+      "class": "text-foreground overflow-x-auto px-5 py-4 font-mono text-xs leading-6",
+      "cmdLineClass": null,
+      "commentLineClass": null,
+      "okLineClass": null,
+    },
+    {
+      "class": "text-foreground overflow-x-auto px-5 py-4 font-mono text-xs leading-6",
+      "cmdLineClass": null,
+      "commentLineClass": null,
+      "okLineClass": null,
+    },
+  ],
+  "windows": [],
+}
+`;
+
+exports[`shipped solution hero composition multiplayer keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full flex-col items-center gap-8",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "One session, many people. Everyone with access reads it and continues it.",
+  "cta": [
+    [
+      "a",
+      "Read the Teams guide",
+      "/docs/guide#teams",
+    ],
+    [
+      "a",
+      "Start for free",
+      "/auth",
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Multiplayer AI.One AI for the whole team.",
+  "ids": [
+    [
+      "multiplayer-walk-panel",
+      "tabpanel",
+      "multiplayer-walk-start",
+    ],
+    [
+      "multiplayer-walk-start",
+      "tab",
+      null,
+    ],
+    [
+      "multiplayer-walk-share",
+      "tab",
+      null,
+    ],
+    [
+      "multiplayer-walk-together",
+      "tab",
+      null,
+    ],
+    [
+      "multiplayer-walk-approve",
+      "tab",
+      null,
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "Everyone works with the same agents, skills, memory and connectors. Share a session, write in it together, and approve what the agent does.",
+  "terminals": [],
+  "windows": [
+    {
+      "barClass": "relative flex min-w-0 items-center gap-2.5 text-sm",
+      "title": "board-pack",
+    },
+    {
+      "barClass": "relative flex min-w-0 items-center gap-2.5 text-sm",
+      "title": "Company/Memory/finance.md",
+    },
+    {
+      "barClass": "relative flex min-w-0 items-center gap-2.5 text-sm",
+      "title": "q3-board-pack.pptx",
+    },
+  ],
+}
+`;
+
+exports[`shipped solution hero composition self-hosted keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full flex-col items-center gap-8 lg:gap-10",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "Four commands on a Linux server with Docker. Then sign in at your own domain.",
+  "cta": [
+    [
+      "a",
+      "Why self-host",
+      "/sovereign",
+    ],
+    [
+      "a",
+      "Read the self-hosting guide",
+      "/docs/developers#self-hosting",
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Self-host Kortix.One CLI, one server, the whole platform.",
+  "ids": [
+    [
+      "selfhost-walk-install",
+      "tab",
+      null,
+    ],
+    [
+      "selfhost-walk-init",
+      "tab",
+      null,
+    ],
+    [
+      "selfhost-walk-start",
+      "tab",
+      null,
+    ],
+    [
+      "selfhost-walk-doctor",
+      "tab",
+      null,
+    ],
+    [
+      "selfhost-walk-panel",
+      "tabpanel",
+      "selfhost-walk-install",
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "The kortix CLI installs the web app, the API, the LLM gateway and the database on your server as one Docker Compose stack. Then it keeps the stack up to date.",
+  "terminals": [
+    {
+      "class": "font-mono text-xs leading-6 whitespace-pre-wrap sm:text-sm sm:leading-7 px-4 py-4 sm:px-6",
+      "cmdLineClass": "text-foreground pl-4 -indent-4 wrap-break-word",
+      "commentLineClass": null,
+      "okLineClass": "text-foreground pl-4 -indent-4 wrap-break-word",
+    },
+  ],
+  "windows": [
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "Terminal: your server",
+    },
+  ],
+}
+`;
+
+exports[`shipped solution hero composition sovereign keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "flex w-full flex-col items-center gap-8 lg:gap-10",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "Kortix Cloud or your own server. The same images either way.",
+  "cta": [
+    [
+      "a",
+      "View on GitHub",
+      "https://github.com/kortix-ai/CompanyOS",
+    ],
+    [
+      "a",
+      "Self-host Kortix",
+      "/self-hosted",
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Sovereign and open.Open source, on your infrastructure, with any model.",
+  "ids": [
+    [
+      "sovereign-walk-code",
+      "tab",
+      null,
+    ],
+    [
+      "sovereign-walk-server",
+      "tab",
+      null,
+    ],
+    [
+      "sovereign-walk-models",
+      "tab",
+      null,
+    ],
+    [
+      "sovereign-walk-files",
+      "tab",
+      null,
+    ],
+    [
+      "sovereign-walk-panel",
+      "tabpanel",
+      "sovereign-walk-code",
+    ],
+  ],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "Read every line of Kortix. Run it on Kortix Cloud, in your VPC or on your own on-prem network. Bring any model with your own keys, and keep your company in a git repository you own.",
+  "terminals": [],
+  "windows": [
+    {
+      "barClass": "flex items-center gap-3 border-b px-4 py-3",
+      "title": "github.com/kortix-ai/CompanyOS",
+    },
+  ],
+}
+`;
+
+exports[`shipped solution hero composition desktop keeps its hero shell, band, links and walkthrough wiring 1`] = `
+{
+  "bandClass": "kx-rail-fade relative border-y px-4 lg:px-17",
+  "bandInnerChildren": [
+    {
+      "class": "w-full max-w-6xl",
+      "tag": "div",
+    },
+    {
+      "class": "text-foreground px-4 text-center text-base font-medium text-balance",
+      "tag": "p",
+    },
+  ],
+  "captionClass": "text-foreground px-4 text-center text-base font-medium text-balance",
+  "captionText": "A real session in the desktop app. The agent fixed the bug, proved it with tests and opened a change request.",
+  "cta": [
+    [
+      "a",
+      "Download for macOS",
+      "/download/macos",
+    ],
+    [
+      "a",
+      "Windows",
+      "/download/windows",
+    ],
+    [
+      "a",
+      "Linux",
+      "/download/linux",
+    ],
+  ],
+  "h1Class": "max-w-261 text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-[44px] lg:leading-13",
+  "h1Text": "Kortix on your desktop.For macOS, Windows and Linux.",
+  "ids": [],
+  "subClass": "text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl",
+  "subText": "The Kortix app in its own window. Hand an agent a task from any app with one shortcut, and see at a glance when its work is done.",
+  "terminals": [],
+  "windows": [],
+}
+`;
+
+exports[`shipped solution hero composition the topic-panel terminals keep their line rendering 1`] = `
+{
+  "selfHosted": [
+    {
+      "class": "font-mono text-xs leading-6 whitespace-pre-wrap sm:text-sm sm:leading-7 p-4",
+      "cmdLineClass": "text-foreground pl-4 -indent-4 wrap-break-word",
+      "commentLineClass": "text-muted-foreground",
+      "okLineClass": null,
+    },
+  ],
+  "sovereign": [
+    {
+      "class": "font-mono text-xs leading-6 whitespace-pre-wrap sm:text-sm sm:leading-7 p-4",
+      "cmdLineClass": "text-foreground pl-4 -indent-4 wrap-break-word",
+      "commentLineClass": "text-muted-foreground",
+      "okLineClass": null,
+    },
+  ],
+}
+`;

@@ -13,6 +13,15 @@ mock.module('@/lib/use-cases-source', () => ({
   },
 }));
 
+import DesktopPage from '@/app/[locale]/(public)/(marketing)/desktop/page';
+import CompliancePage from '@/app/[locale]/(public)/(marketing)/compliance/page';
+import EnterprisePage from '@/app/[locale]/(public)/(marketing)/enterprise/page';
+import FrameworkPage from '@/app/[locale]/(public)/(marketing)/framework/page';
+import MultiplayerPage from '@/app/[locale]/(public)/(marketing)/multiplayer/page';
+import SelfHostedPage from '@/app/[locale]/(public)/(marketing)/self-hosted/page';
+import SovereignPage from '@/app/[locale]/(public)/(marketing)/sovereign/page';
+import { TOPIC_PANELS as SelfHostedPanels } from '@/features/marketing/self-hosted/topic-panels';
+import { TOPIC_PANELS as SovereignPanels } from '@/features/marketing/sovereign/topic-panels';
 import Home from '@/app/[locale]/(public)/(marketing)/(home)/page';
 import SecurityPage from '@/app/[locale]/(public)/(marketing)/security/page';
 
@@ -37,4 +46,85 @@ describe('shipped marketing route composition', () => {
       }).toMatchSnapshot();
     });
   }
+});
+
+// The seven solution pages and the desktop surface page pin the hero shell
+// the kit owns (PageHero and the rail band): the section id, the h1, the
+// sub, the CTA row, the band, the caption, and the walkthrough's ids and
+// aria wiring. Projections, not raw HTML: the shell's wrapper divs are
+// internals a dedupe may re-nest; everything a reader depends on is pinned.
+const SOLUTION_HERO_PAGES = [
+  ['compliance', CompliancePage],
+  ['enterprise', EnterprisePage],
+  ['framework', FrameworkPage],
+  ['multiplayer', MultiplayerPage],
+  ['self-hosted', SelfHostedPage],
+  ['sovereign', SovereignPage],
+  ['desktop', DesktopPage],
+] as const;
+
+function projectHero(html: string) {
+  const document = new Window().document;
+  document.body.innerHTML = html;
+  const hero = document.querySelector('section#hero');
+  if (!hero) throw new Error('the page renders no section#hero');
+  const band = hero.querySelector('.kx-rail-fade');
+  const h1 = hero.querySelector('h1');
+  if (!band || !h1) throw new Error('the hero renders no canonical shell');
+  const inner = band.firstElementChild;
+  const caption = inner?.lastElementChild;
+  return {
+    h1Class: h1.className,
+    h1Text: h1.textContent,
+    subClass: h1.nextElementSibling?.className ?? null,
+    subText: h1.nextElementSibling?.textContent ?? null,
+    cta: [...hero.querySelectorAll('a, button')]
+      .filter((node) => !band.contains(node))
+      .map((node) => [node.tagName.toLowerCase(), node.textContent, node.getAttribute('href')]),
+    bandClass: band.className,
+    bandInnerChildren: inner
+      ? [...inner.children].map((child) => ({ tag: child.tagName.toLowerCase(), class: child.className }))
+      : [],
+    captionClass: caption?.tagName === 'P' ? caption.className : null,
+    captionText: caption?.textContent ?? null,
+    ids: [...hero.querySelectorAll('[id]')].map((node) => [
+      node.id,
+      node.getAttribute('role'),
+      node.getAttribute('aria-labelledby'),
+    ]),
+    windows: [...document.querySelectorAll('span.font-mono.truncate')].map((title) => ({
+      title: title.textContent,
+      barClass: title.parentElement?.className ?? null,
+    })),
+    terminals: projectTerminals(html),
+  };
+}
+
+function projectTerminals(html: string) {
+  const document = new Window().document;
+  document.body.innerHTML = html;
+  const line = (pre: Element, pick: (s: Element) => boolean) =>
+    [...pre.querySelectorAll('span')].find(pick)?.className ?? null;
+  return [...document.querySelectorAll('pre')].map((pre) => ({
+    class: pre.className,
+    okLineClass:
+      line(pre, (s) => s.firstElementChild?.classList.contains('text-kortix-green') === true) ?? null,
+    cmdLineClass: line(pre, (s) => s.firstElementChild?.textContent === '$ '),
+    commentLineClass: line(pre, (s) => !s.firstElementChild && (s.textContent?.startsWith('#') ?? false)),
+  }));
+}
+
+describe('shipped solution hero composition', () => {
+  for (const [name, Page] of SOLUTION_HERO_PAGES) {
+    test(`${name} keeps its hero shell, band, links and walkthrough wiring`, () => {
+      expect(projectHero(renderToStaticMarkup(<Page />))).toMatchSnapshot();
+    });
+  }
+
+  test('the topic-panel terminals keep their line rendering', () => {
+    expect({
+      selfHosted: projectTerminals(renderToStaticMarkup(<SelfHostedPanels.updates />)),
+      sovereign: projectTerminals(renderToStaticMarkup(<SovereignPanels.install />)),
+    }).toMatchSnapshot();
+  });
 });

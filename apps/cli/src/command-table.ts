@@ -144,7 +144,7 @@ export const TIERS: readonly CommandTier[] = [
       {
         title: 'Author & ship',
         commands: [
-          { name: 'templates', args: '<ls|show|add|onboard>', blurb: 'Add a hand-approved set of agents and triggers to this repository' },
+          { name: 'templates', args: '<ls|show|add|onboard|doctor>', blurb: 'Add a hand-approved set of agents and triggers to this repository' },
           { name: 'ship', blurb: 'Create the cloud workspace (first run) + push your code' },
           { name: 'validate', blurb: "Statically validate this workspace's kortix.yaml" },
           {

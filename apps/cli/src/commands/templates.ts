@@ -12,6 +12,7 @@ import { getTemplate, getTemplateFiles, getTemplateOnboarding, isTemplateId, lis
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { runGit } from '../git-run.ts';
 import { addManifestImport } from '../manifest-edit.ts';
+import { runTemplatesDoctor } from './templates-doctor.ts';
 import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix templates <command> [options]
@@ -22,6 +23,8 @@ adds it under imports: in kortix.yaml. Nothing reaches Kortix until you push.
 Commands:
   ls                     List the templates.
   show <id>              The template's agents, triggers, secrets and webhooks.
+  doctor <id>            One green/red list: is the template ready to run?
+                         Exit 1 while any line is red. --repo, --json.
   onboard <id>           Print the steps a coding agent follows to set the
                          template up with you: its own onboarding, then the
                          setup guide with the template chosen.
@@ -213,7 +216,7 @@ function runOnboard(id: string | undefined): number {
   return 0;
 }
 
-export function runTemplates(argv: string[]): number {
+export async function runTemplates(argv: string[]): Promise<number> {
   const args = [...argv];
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     process.stdout.write(HELP);
@@ -225,5 +228,12 @@ export function runTemplates(argv: string[]): number {
   if (command === 'show') return runShow(rest[0], json);
   if (command === 'add') return runAdd(rest, json);
   if (command === 'onboard') return runOnboard(rest[0]);
+  if (command === 'doctor') {
+    const repoFlag = takeFlagValue(rest, ['--repo']);
+    if (!isTemplateId(rest[0])) return fail(`Name a template: ${TEMPLATE_IDS.join(', ')}`);
+    const top = runGit(undefined, ['rev-parse', '--show-toplevel']);
+    const repo = repoFlag ?? inferRepo(top.ok ? top.stdout.trim() : process.cwd());
+    return runTemplatesDoctor(getTemplate(rest[0]), { repo, json });
+  }
   return fail(`Unknown command: templates ${command}. Run kortix templates --help.`);
 }

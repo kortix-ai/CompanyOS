@@ -254,7 +254,15 @@ For each entry in each template's \`next.github_webhooks\`:
 3. When it passes, give the person the session link and one line on what the
    agent did.
 
-## 12. Done
+## 12. Doctor: every line green
+
+Run \`kortix templates doctor <id> --json\` for each template you added (from the
+config checkout; pass \`--repo <owner>/<code-repo>\` when the config lives in
+its own repository). It checks the template, the workspace, the secrets, the
+triggers, the dev image, the model and the GitHub webhooks. Fix every \`fail\`
+line with its \`fix\` and run it again. Setup is not done while one line is red.
+
+## 13. Done
 
 Tell the person, in a short list:
 

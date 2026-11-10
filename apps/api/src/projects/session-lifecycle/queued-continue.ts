@@ -57,7 +57,7 @@ async function admitQueuedContinue(row: SessionLifecycleCommandRow, tl: Provisio
     const parked = await parkPromptForUnreachableRuntime(row, DELIVERY_FAILURE_COPY.unreachable, { sessionId: row.sessionId });
     if (parked.parked) return 'queued';
     await markCommandFailed(row, `${DELIVERY_FAILURE_COPY.unreachable} after ${MAX_RUNTIME_UNREACHABLE_RETRIES} attempts`,
-      { retryable: false, attempts: row.attempts, sessionId: row.sessionId });
+      { retryable: false, attempts: row.attempts, sessionId: row.sessionId, runtimeUnreachable: true });
     return 'failed';
   }
   // THE BOUNDARY FALLBACK. The interrupt above is a handshake the API cannot

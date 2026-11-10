@@ -1393,7 +1393,15 @@
       "history": "Histórico",
       "historyDescription": "O custo de cada sessão e todos os créditos adicionados ou gastos.",
       "openLedger": "Abrir extrato",
-      "unit": "{count, plural, one {crédito} other {créditos}}"
+      "unit": "{count, plural, one {crédito} other {créditos}}",
+      "dailySpend": "Gasto diário",
+      "heatLess": "Menos",
+      "heatMore": "Mais",
+      "busiestDay": "{name}: {amount} em {day}, o dia de maior gasto",
+      "noSpendInRange": "{name}: sem gastos neste período",
+      "idleWorkspaces": "{count, plural, one {# espaço de trabalho} other {# espaços de trabalho}} sem gastos neste período",
+      "showIdle": "Mostrar",
+      "hideIdle": "Ocultar"
     },
     "tokens": {
       "keyRevoked": "Chave de API revogada",
@@ -2505,7 +2513,23 @@
         "askOwnerBody": "Somente os proprietários e administradores do espaço de trabalho podem gerenciar o faturamento. Peça a um deles que escolha um nível de créditos para o espaço de trabalho.",
         "planTitle": "Plano e créditos",
         "planDescription": "Altere seu plano mensal ou adicione créditos para este mês.",
-        "topupSecondary": "Precisa de mais este mês? Adicione créditos"
+        "paymentFailedHint": "Atualize o cartão e a Stripe tentará a cobrança novamente.",
+        "updatePaymentMethod": "Atualizar forma de pagamento",
+        "topUpInstead": "Adicionar créditos em vez disso",
+        "memberBody": "Somente proprietários e administradores podem adicionar créditos. Peça a eles por aqui ou envie a um deles o link de cobrança deste workspace.",
+        "memberCopyLink": "Copiar link de cobrança",
+        "memberLinkCopied": "Link copiado",
+        "memberLinkCopyFailed": "Não foi possível copiar o link",
+        "roleOwner": "Proprietário",
+        "roleAdmin": "Administrador",
+        "newBalance": "Novo saldo",
+        "continue": "Continuar",
+        "balanceRetry": "Tentar novamente",
+        "addLine": "Adicione créditos para manter seus agentes funcionando.",
+        "raiseLine": "Aumente seu plano para manter seus agentes funcionando.",
+        "subscribeLine": "Assine para manter seus agentes funcionando.",
+        "switchToMonthly": "Prefere créditos mensais? Trocar de plano",
+        "autoTopupRetired": "A recarga automática não se aplica mais a este plano."
       },
       "admin": {
         "plan": "Plano",
@@ -2528,7 +2552,9 @@
           "growing": "Equipes em crescimento",
           "scale": "Scale",
           "large": "Grandes organizações"
-        }
+        },
+        "once": "uma vez",
+        "onceLabel": "Valor único de créditos"
       }
     },
     "popular": "Popular",
@@ -17447,7 +17473,7 @@
       "textcdd7efcb7e2c": "política resolvida",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Soluções Kortix por função",
-      "textce0c20c05842": "Seu último pagamento não foi processado. Atualize sua forma de pagamento em Gerenciar cobrança ou adicione créditos para continuar enquanto isso.",
+      "textce0c20c05842": "Seu último pagamento não foi processado. Atualize sua forma de pagamento para manter seu plano ativo.",
       "textce0faee27592": "faturamento pagamento cartão de crédito assinatura gerenciar carteira nível plano limites visão geral gastos",
       "textce18e358bf01": "Experimente um termo diferente.",
       "textce1e609b7bf5": "Somente portas do sandbox",
@@ -20405,7 +20431,7 @@
       "text2b2c3ec032a6": "Espaço de trabalho transferido",
       "text44f9fff8bdae": "Alterou o plano de créditos",
       "text3fa17bba73e1": "Este espaço de trabalho ainda não tem um plano. Escolha um valor mensal de créditos para executar sessões. Todos os membros compartilham um único pool.",
-      "text6821e42be2c1": "Sua carteira está vazia, então as sessões não podem ser executadas. Recarregue para manter a computação e os modelos de IA mais recentes funcionando — seu plano não é afetado.",
+      "text6821e42be2c1": "Sua carteira está vazia, então as sessões não podem ser executadas. Adicione créditos para manter a computação e os modelos de IA mais recentes funcionando — seu plano não é afetado.",
       "text146aaf3c71fa": "Mantém SSO, SCIM, RBAC e auditoria habilitados para um espaço de trabalho Enterprise contratado que também é cobrado por um plano pago, para que a reconciliação do Stripe não os remova.",
       "text517105fd13ce": "Os créditos financiam a computação em sandbox — até um teste BYOK precisa de saldo na carteira para executar sessões. O crédito de boas-vindas gratuito é de US$ 2.",
       "text2f1d17f50af8": "O Enterprise libera SAML SSO, sincronização de diretório SCIM, RBAC e acesso à auditoria para este espaço de trabalho. O plano cobrado não muda.",
@@ -21523,11 +21549,6 @@
   "personalWelcome": {
     "dismiss": "Fechar",
     "emailCopied": "Endereço de e-mail copiado"
-  },
-  "repositoryAccess": {
-    "label": "Acesso ao repositório do espaço de trabalho",
-    "enabled": "As novas sessões recebem o repositório do espaço de trabalho. As permissões do Git continuam em vigor. As sessões existentes mantêm a sua configuração de acesso.",
-    "disabled": "As novas sessões são executadas sem o repositório do espaço de trabalho. Podem criar arquivos e usar ferramentas autorizadas. As sessões existentes mantêm a sua configuração de acesso."
   },
   "customProvider": {
     "intro": "Endpoints que o catálogo não inclui.",
@@ -22996,7 +23017,11 @@
     "folderTree": "Pastas",
     "treeYou": "{name} (você)",
     "treeExpand": "Expandir {name}",
-    "treeCollapse": "Recolher {name}"
+    "treeCollapse": "Recolher {name}",
+    "emptyWorkspaces": "{count, plural, one {# espaço de trabalho não tem} other {# espaços de trabalho não têm}} arquivos",
+    "storageMoreWorkspaces": "{count, plural, one {Mais # espaço de trabalho} other {Mais # espaços de trabalho}}",
+    "storageWorkspaceLimit": "Cada espaço de trabalho comporta até {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar dados",
@@ -26065,7 +26090,6 @@
   "agentMounts": {
     "lead": "Pastas de Arquivos montadas pelas sessões deste agente. Uma mudança vale de imediato para cada nova sessão.",
     "mount": "Mount folder",
-    "repository": "Repositório do espaço de trabalho",
     "viaAgent": "compartilhado com este agente",
     "viaProject": "compartilhado com todos neste espaço de trabalho",
     "from": "{path} · {who}",

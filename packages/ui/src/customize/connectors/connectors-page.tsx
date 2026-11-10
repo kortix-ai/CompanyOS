@@ -103,7 +103,6 @@ import {
   withConnectorSearch,
 } from './connector-routes';
 import type { McpServerApp } from './install/mcp-first';
-import { mcpSetupLinkDraft } from './add-mcp/setup-link-params';
 import { useInstall } from './install/use-install';
 
 import { InstallDialog } from './install/install-dialog';
@@ -322,29 +321,27 @@ export function ConnectorsPage({
   // browser Back must bring the same results back (KRTX-3018).
   const [query, setQuery] = useState(() => connectorSearchFromParams(search));
   useSearchInUrl(query, search, pathname);
-  // An agent's `setup_url` hand-off (`custom=1&provider=mcp&url=…`): a person
-  // confirms the custom server here, so the Add-MCP dialog opens pre-filled
-  // and the link's params leave the URL (KRTX-4640). A manual "New → MCP
-  // server" clears it and opens empty. Every NEW link applies, not just the
-  // first one this page mounts with.
-  const [mcpInitial, setMcpInitial] = useState(() => mcpSetupLinkDraft(search));
-  const [panel, setPanel] = useState<Panel | null>(() => (mcpInitial ? 'mcp' : null));
+  const [panel, setPanel] = useState<Panel | null>(null);
   // The catalogue app whose own MCP server the MCP dialog connects. Null for
   // a server the user pastes (New → MCP server).
   const [mcpApp, setMcpApp] = useState<McpServerApp | null>(null);
-  const setupLinkKey = search?.get('custom') === '1' ? search.toString() : null;
+  // An agent's `setup_url` (`?custom=1&provider=mcp&url=…&name=…`): the one
+  // approval of an exact server. The MCP dialog opens prefilled; adding it is
+  // the approval. Read once, then dropped from the URL so closing the dialog
+  // does not reopen it.
+  const [setupLink, setSetupLink] = useState<{ url: string; name?: string } | null>(null);
   useEffect(() => {
-    if (!setupLinkKey) return;
-    const draft = mcpSetupLinkDraft(search);
-    if (draft) {
+    const link = setupLinkFromParams(search);
+    if (!link) return;
+    if (link.provider === 'mcp') {
       setMcpApp(null);
-      setMcpInitial(draft);
+      setSetupLink({ url: link.url ?? '', ...(link.name ? { name: link.name } : {}) });
       setPanel('mcp');
-    }
+    } else setPanel('custom');
     replaceParams((params) => {
-      for (const key of ['custom', 'tab', 'provider', 'url', 'transport', 'name'] as const) params.delete(key);
+      for (const key of SETUP_LINK_PARAMS) params.delete(key);
     });
-  }, [setupLinkKey, replaceParams, search]);
+  }, [search, replaceParams]);
   // The catalogue opens on the apps that connect in one click.
   const [oneClick, setOneClick] = useState(true);
   const [kindFilter, setKindFilter] = useState<CatalogKindFilter>('all');
@@ -364,7 +361,6 @@ export function ConnectorsPage({
   const { installEntry, pendingKey, request: installRequest, setRequest: setInstallRequest, confirm: confirmInstall } = useInstall(projectId, {
     onMcpServer: (server) => {
       setMcpApp(server);
-      setMcpInitial(null);
       setPanel('mcp');
     },
   });
@@ -688,7 +684,6 @@ export function ConnectorsPage({
           description: tPages('addMcpMenuHint'),
           onSelect: () => {
             setMcpApp(null);
-            setMcpInitial(null);
             setPanel('mcp');
           },
         }}
@@ -791,16 +786,14 @@ export function ConnectorsPage({
           )}
 
           <AddMcpServerDialog
-            key={mcpApp?.url ?? (mcpInitial ? `${mcpInitial.url}|${mcpInitial.name ?? ''}` : 'paste')}
+            key={mcpApp?.url ?? setupLink?.url ?? 'paste'}
             projectId={projectId}
             app={mcpApp}
-            initial={mcpInitial}
+            initial={mcpApp ? null : setupLink}
             open={panel === 'mcp'}
             onOpenChange={(open) => {
               setPanel(open ? 'mcp' : null);
-              // Dropping the draft on close makes every later arrival of the
-              // same link remount the dialog with it (the key frees up).
-              if (!open) setMcpInitial(null);
+              if (!open) setSetupLink(null);
             }}
             takenSlugs={connectors.map((connector) => connector.slug)}
             onAdded={invalidate}
@@ -874,6 +867,17 @@ function useSearchInUrl(
     const suffix = params.toString();
     shallowNavigate(suffix ? `${pathname}?${suffix}` : pathname, { replace: true });
   }, [debouncedValue, search, pathname, shallowNavigate]);
+}
+
+/** The query keys of an agent's `setup_url` (`customConnectorSetupUrl` in the API). */
+const SETUP_LINK_PARAMS = ['custom', 'provider', 'url', 'transport', 'endpoint', 'spec', 'base_url', 'name'] as const;
+
+/** The server an agent's `setup_url` asks a person to approve, or null. */
+export function setupLinkFromParams(
+  search: { get(key: string): string | null } | null | undefined,
+): { provider: string; url: string | null; name: string | null } | null {
+  if (search?.get('custom') !== '1') return null;
+  return { provider: search.get('provider') ?? 'mcp', url: search.get('url'), name: search.get('name') };
 }
 
 function useConnectorNavigation(projectId: string) {

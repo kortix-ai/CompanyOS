@@ -1,6 +1,7 @@
 'use client';
 
-import { AccountStorageSection } from './account-storage';
+import { AccountStorageCard } from './account-storage';
+import { COST_TYPE_COLOR } from './cost-explorer/cost-type-color';
 import type { UiTranslator } from '@/i18n/translator';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 /**
@@ -79,10 +80,16 @@ export function AccountOverviewTab({ accountId }: AccountOverviewTabProps = {}) 
     return <p className="text-muted-foreground text-sm">{tI18nComplete.raw('text68b8f8d47a7a')}</p>;
   }
 
+  // Two cards side by side from `lg`: what you have, and what your files hold.
+  // `items-start`: each card is as tall as its content. Stretched to the taller
+  // storage card, the balance card had a hole in the middle on real data.
   return (
-    <div className="space-y-8">
-      <AccountOverviewView state={state} />
-      <AccountStorageSection accountId={accountId} />
+    <div className="space-y-6">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <AccountOverviewView state={state} />
+        <AccountStorageCard accountId={accountId} />
+      </div>
+      <AccountLimits state={state} />
     </div>
   );
 }
@@ -102,111 +109,137 @@ export function AccountOverviewView({ state }: { state: AccountState }) {
   const wallet = state.credits?.total ?? 0;
   const isNegative = wallet < 0;
   const usage = state.usage_this_period;
-  const limits = buildLimitRows(state.limits, tI18nComplete);
 
   return (
-    <div className="space-y-4">
-      {/* Balance + plan, then this period's spend under one hairline.
-          `items-center`, not `items-start`: the left block is three lines tall
-          and the right one is two, so top-aligning them pinned the plan to the
-          ceiling with the balance hanging below it — a diagonal, not a row.
-          Centred, the plan sits opposite the number it qualifies. */}
-      <div className="bg-popover rounded-md border">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
-          <div className="min-w-0">
-            <p className="text-muted-foreground text-xs">{tI18nComplete.raw('text3ab7dd8428d1')}</p>
-            {/* `tabular-nums`, deliberately NOT `font-mono`. Tabular figures
-                give the equal-width digits a balance wants; a monospace face
-                gives the ',' the same advance as a '0' too, which opens
-                visible gaps mid-number. Credits are THE number; the unit sits
-                beside it, smaller and muted, and the dollar equivalent is
-                the quiet line under it. */}
-            <p
+    <section className="bg-popover flex min-w-0 flex-col gap-4 rounded-md border px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h3 className="text-foreground text-sm font-medium">
+            {tI18nComplete.raw('text3ab7dd8428d1')}
+          </h3>
+          {/* `tabular-nums`, deliberately NOT `font-mono`. Tabular figures
+              give the equal-width digits a balance wants; a monospace face
+              gives the ',' the same advance as a '0' too, which opens visible
+              gaps mid-number. */}
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-2">
+            <span
               className={cn(
-                'mt-1.5 truncate text-2xl leading-none font-semibold tracking-tight tabular-nums',
+                'truncate text-2xl leading-none font-semibold tracking-tight tabular-nums',
                 isNegative ? 'text-kortix-red' : 'text-foreground',
               )}
             >
               {formatUsdAsCredits(wallet, { locale })}
-              <span className="text-muted-foreground ml-1.5 text-sm font-normal tracking-normal">
-                {tCredits('unit', { count: Math.abs(wallet) * 100 })}
-              </span>
-            </p>
-            <p className="text-muted-foreground mt-1.5 text-xs tabular-nums">
-              ≈ {formatUsd(Math.abs(wallet), locale)}
+            </span>
+            <span className="text-muted-foreground text-sm">
+              {tCredits('unit', { count: Math.abs(wallet) * 100 })} · ≈{' '}
+              {formatUsd(Math.abs(wallet), locale)}
               {isNegative ? ` ${tI18nComplete.raw('text4fef65587333')}` : ''}
-            </p>
-            {state.credits.monthly > 0 && <CreditExpiry expiresAt={state.credits.expires_at} />}
-            <FreeGrantNotice state={state} className="mt-1.5 max-w-md" />
-          </div>
-          <PlanSummary state={state} />
+            </span>
+          </p>
+          {state.credits.monthly > 0 && <CreditExpiry expiresAt={state.credits.expires_at} />}
+          <FreeGrantNotice state={state} className="mt-1.5 max-w-md" />
         </div>
-
-        {usage ? (
-          <div className="divide-border grid grid-cols-4 divide-x border-t">
-            <SpendStat
-              label={tI18nComplete.raw('textcedc516df056')}
-              value={usage.compute_usd}
-              locale={locale}
-            />
-            <SpendStat label={tCredits('storage')} value={usage.storage_usd ?? 0} locale={locale} />
-            <SpendStat label="LLM" value={usage.llm_usd} locale={locale} />
-            <SpendStat
-              label={tI18nComplete.raw('text97c8335e2880')}
-              value={usage.total_usd}
-              locale={locale}
-              strong
-            />
-          </div>
-        ) : null}
+        <PlanSummary state={state} />
       </div>
 
-      {limits.length > 0 ? (
-        <section className="space-y-2">
-          <h3 className="text-foreground text-sm font-medium">
-            {tI18nComplete.raw('textdffb64dc7001')}
-          </h3>
-          <div className="bg-popover divide-border divide-y rounded-md border">
-            {limits.map((row) => {
-              const atCap = row.limit > 0 && row.active >= row.limit;
-              return (
-                <div
-                  key={row.id}
-                  className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm"
-                >
-                  <span className="text-foreground min-w-0 truncate">{row.label}</span>
-                  <span
-                    className={cn(
-                      'shrink-0 font-medium tabular-nums',
-                      atCap ? 'text-kortix-red' : 'text-muted-foreground',
-                    )}
-                  >
-                    {row.active} / {row.limit}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {usage ? <PeriodSpend usage={usage} locale={locale} /> : null}
+    </section>
+  );
+}
+
+/**
+ * This period's spend: the total, then its parts with the swatch each one has
+ * on the Session costs chart, and one bar of the split. The bar is in
+ * proportion to the parts, not to the total: the total also holds charges the
+ * account state does not break down, so a bar against it would leave a gap the
+ * reader cannot name.
+ */
+function PeriodSpend({
+  usage,
+  locale,
+}: {
+  usage: NonNullable<AccountState['usage_this_period']>;
+  locale: string;
+}) {
+  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tCredits = useTranslations('settings.credits');
+  const parts = [
+    { key: 'compute_cost', label: tI18nComplete.raw('textcedc516df056'), value: usage.compute_usd },
+    { key: 'llm_cost', label: 'LLM', value: usage.llm_usd },
+    { key: 'storage_cost', label: tCredits('storage'), value: usage.storage_usd ?? 0 },
+  ] as const;
+  const partsTotal = parts.reduce((sum, part) => sum + Math.max(0, part.value), 0);
+
+  return (
+    <div className="border-border space-y-3 border-t pt-4">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+        <SpendStat
+          label={tI18nComplete.raw('text97c8335e2880')}
+          value={usage.total_usd}
+          locale={locale}
+          strong
+        />
+        {parts.map((part) => (
+          <SpendStat
+            key={part.key}
+            label={part.label}
+            value={part.value}
+            locale={locale}
+            color={COST_TYPE_COLOR[part.key]}
+          />
+        ))}
+      </dl>
+      {partsTotal > 0 ? (
+        <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full" aria-hidden="true">
+          {parts.map((part) =>
+            part.value > 0 ? (
+              <span
+                key={part.key}
+                className="h-full min-w-[2px]"
+                style={{
+                  width: `${(part.value / partsTotal) * 100}%`,
+                  backgroundColor: COST_TYPE_COLOR[part.key],
+                }}
+              />
+            ) : null,
+          )}
+        </div>
       ) : null}
     </div>
   );
 }
 
-/**
- * Where a plan stands, as strings — the name, its qualifier, the one line that
- * says what happens next, and whether that state is live.
- *
- * Extracted from `PlanSummary` (2026-09-03) so the Plan tab's own plan card
- * (`plan-card.tsx`) reads the SAME answer this balance card does. Two copies
- * of "is it renewing, cancelling, or past due" would drift on the first Stripe
- * status nobody thought about, and they would drift silently — both render a
- * plausible sentence either way.
- *
- * Pure and exported so both call sites are testable against a fixed
- * `AccountState`: the states worth pinning (cancel-at-period-end, `past_due`,
- * no subscription) cannot be produced locally without Stripe.
- */
+/** Concurrency and count limits, at or near their cap. Below the two cards,
+ *  because a limit is about what you can run, not what you have spent. */
+function AccountLimits({ state }: { state: AccountState }) {
+  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const limits = buildLimitRows(state.limits, tI18nComplete);
+  if (limits.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h3 className="text-foreground text-sm font-medium">{tI18nComplete.raw('textdffb64dc7001')}</h3>
+      <div className="bg-popover divide-border divide-y rounded-md border">
+        {limits.map((row) => {
+          const atCap = row.limit > 0 && row.active >= row.limit;
+          return (
+            <div key={row.id} className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+              <span className="text-foreground min-w-0 truncate">{row.label}</span>
+              <span
+                className={cn(
+                  'shrink-0 font-medium tabular-nums',
+                  atCap ? 'text-kortix-red' : 'text-muted-foreground',
+                )}
+              >
+                {row.active} / {row.limit}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export interface PlanStatus {
   /** Plan name as the product names it: Free or Credits. */
   name: string;
@@ -389,30 +422,39 @@ function SpendStat({
   value,
   locale,
   strong,
+  color,
 }: {
   label: string;
   value: number;
   locale: string;
   strong?: boolean;
+  /** The cost type's swatch, matching its bars on the Session costs chart. */
+  color?: string;
 }) {
   const tCredits = useTranslations('settings.credits');
   return (
-    <div className="min-w-0 px-4 py-3">
-      <p className="text-muted-foreground truncate text-xs">{label}</p>
-      {/* Same call as the balance above: tabular figures, not `font-mono`.
-          Mixing a monospace strip under a proportional balance would make one
-          card read in two typefaces. See the note on the balance. */}
-      <p
+    <div className="min-w-0">
+      <dt className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+        {color ? (
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        ) : null}
+        <span className="min-w-0 truncate">{label}</span>
+      </dt>
+      <dd
         className={cn(
-          'mt-0.5 text-sm tabular-nums',
-          strong ? 'text-foreground font-semibold' : 'text-foreground font-medium',
+          'text-foreground mt-1 text-sm tabular-nums',
+          strong ? 'font-semibold' : 'font-medium',
         )}
       >
         {formatUsdAsCredits(value, { locale })}
         <span className="text-muted-foreground ml-1 text-xs font-normal">
           {tCredits('unit', { count: Math.abs(value) * 100 })}
         </span>
-      </p>
+      </dd>
     </div>
   );
 }

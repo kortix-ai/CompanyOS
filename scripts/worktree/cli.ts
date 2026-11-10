@@ -47,7 +47,7 @@ import {
   type Registry, type SlotEntry, type Ports, type Tunnel, type StripeListen,
   type DbMode, type KillResult, type PrimaryDb, type SlotCreds,
 } from './lib';
-import { existsSync, rmSync, statSync, openSync, closeSync, writeFileSync, readFileSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, rmSync, statSync, fstatSync, linkSync, openSync, closeSync, writeFileSync, readFileSync, mkdirSync, renameSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join as joinPath } from 'node:path';
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
@@ -1143,15 +1143,44 @@ function primaryRoot(): string {
 }
 
 const AUTOCLEAN_LOCK = joinPath(WT_HOME, 'autoclean.lock');
+const AUTOCLEAN_LOCK_STALE_MS = 15 * 60_000;
 /** One autoclean at a time on the box. A second caller skips instead of waiting. */
 function tryAutocleanLock(): (() => void) | null {
-  try {
-    if (existsSync(AUTOCLEAN_LOCK) && Date.now() - statSync(AUTOCLEAN_LOCK).mtimeMs > 15 * 60_000) rmSync(AUTOCLEAN_LOCK, { force: true });
+  const acquire = () => {
     const fd = openSync(AUTOCLEAN_LOCK, 'wx');
     writeFileSync(fd, String(process.pid));
     closeSync(fd);
     return () => { try { rmSync(AUTOCLEAN_LOCK, { force: true }); } catch {} };
+  };
+  try { return acquire(); } catch { /* held, or stale: break a stale lock below */ }
+  try {
+    breakStaleAutocleanLock();
+    return acquire();
   } catch { return null; }
+}
+/**
+ * Removes the autoclean lock only when it is older than 15 min. Never
+ * stat-then-delete by path: another caller can break and re-take the lock in
+ * between, and the delete would remove its fresh lock. The age is read from an
+ * open descriptor, the lock is moved aside with one atomic rename, and the moved
+ * file is deleted only when it is the same inode that was found stale. A fresh
+ * lock moved by mistake is linked back.
+ */
+function breakStaleAutocleanLock(): void {
+  const fd = openSync(AUTOCLEAN_LOCK, 'r');
+  let ino: number;
+  try {
+    const st = fstatSync(fd);
+    if (Date.now() - st.mtimeMs <= AUTOCLEAN_LOCK_STALE_MS) return;
+    ino = st.ino;
+  } finally { closeSync(fd); }
+  const moved = `${AUTOCLEAN_LOCK}.stale-${process.pid}`;
+  renameSync(AUTOCLEAN_LOCK, moved);
+  const movedFd = openSync(moved, 'r');
+  try {
+    if (fstatSync(movedFd).ino !== ino) { try { linkSync(moved, AUTOCLEAN_LOCK); } catch {} }
+  } finally { closeSync(movedFd); }
+  rmSync(moved, { force: true });
 }
 
 /** A checkout autoclean may touch: a registry slot, or a Claude Code isolation worktree. */

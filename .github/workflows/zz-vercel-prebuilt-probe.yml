@@ -35,6 +35,8 @@ jobs:
         env:
           npm_config_engine_strict: "false"
           SOURCE_SHA: ${{ github.sha }}
+          # Probe 2: the flag Vercel's own builders set for stable /_next/static/immutable/ paths.
+          VERCEL_IMMUTABLE_STATIC_FILES_ENABLED: "1"
         run: |
           set -euo pipefail
           export VERCEL_ORG_ID="$VERCEL_TEAM_ID"

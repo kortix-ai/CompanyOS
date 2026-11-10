@@ -152,8 +152,15 @@ repository's tools. Skip this step when no chosen template has
 2. For each file run \`kortix env push --from <file> --names --json\`. It prints
    names only.
 3. **Ask**: show the names, grouped by file. Recommend the ones the dev
-   environment needs. Flag every name that looks like production (\`PROD\`,
-   \`LIVE\`, \`sk_live\`, a production database) and recommend leaving it out.
+   environment needs. Never upload a name marked \`remote\`: its value points
+   at a shared backend (a staging or production database, a hosted API), and
+   agents that test against it change real data. The dev environment runs
+   locally and throwaway in the sandbox: point those names at local services
+   in the \`dev-environment\` skill instead (for example a local database the
+   skill starts). Flag every name that looks like production (\`PROD\`,
+   \`LIVE\`, \`sk_live\`) and recommend leaving it out. Files named for a
+   shared environment (\`.env.staging\`, \`.env.production\`) are never a
+   source.
 4. After the person approves, the workspace must exist: run step 8's
    \`kortix ship\` first if it has not run. Then
    \`kortix env push --from <file> --only <A,B,C>\`. Names it marks

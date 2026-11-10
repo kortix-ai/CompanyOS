@@ -26,7 +26,9 @@ Subcommands:
   push --from <path>               Upload every NAME=VALUE in the file
                                    as a workspace secret.
     --names                        Print the names in the file, never a
-                                   value, and upload nothing. --json.
+                                   value, and upload nothing. --json. A
+                                   name whose value is a URL on another
+                                   host is marked "remote".
     --only <A,B>                   Upload only these names.
     --exclude <A,B>                Upload every name but these.
                                    A dotenvx "encrypted:" value is never
@@ -146,6 +148,18 @@ async function envPull(outArg: string | undefined, force: boolean, opts: CtxOpts
   return 0;
 }
 
+/**
+ * Whether a value points at a shared remote: a URL or connection string whose
+ * host is not this machine. Uploading one would point the agents' dev
+ * environment at a real backend (a staging database, a hosted API).
+ */
+export function pointsAtRemote(value: string): boolean {
+  const match = value.trim().match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/\s]*@)?([^:/?#\s]+)/i);
+  if (!match) return false;
+  const host = match[1]!.toLowerCase();
+  return !['localhost', '127.0.0.1', '0.0.0.0', '::1', 'host.docker.internal'].includes(host) && !host.endsWith('.localhost');
+}
+
 /** `--only A,B --only C` → [A, B, C]. */
 function nameList(values: string[]): string[] {
   return values.flatMap((value) => value.split(',')).map((name) => name.trim()).filter(Boolean);
@@ -173,9 +187,14 @@ async function envPush(fromArg: string | undefined, opts: CtxOpts, push: PushOpt
   const encrypted = parsed.filter((p) => p.value.startsWith('encrypted:')).map((p) => p.name);
 
   if (push.names) {
-    const listed = parsed.map((p) => ({ name: p.name, encrypted: encrypted.includes(p.name) }));
+    const listed = parsed.map((p) => ({ name: p.name, encrypted: encrypted.includes(p.name), remote: pointsAtRemote(p.value) }));
     if (push.json) process.stdout.write(`${JSON.stringify({ file: srcPath, names: listed }, null, 2)}\n`);
-    else for (const entry of listed) process.stdout.write(`${entry.name}${entry.encrypted ? `  ${C.dim}(encrypted)${C.reset}` : ''}\n`);
+    else {
+      for (const entry of listed) {
+        const tags = [entry.encrypted && 'encrypted', entry.remote && 'points at a remote host'].filter(Boolean).join(', ');
+        process.stdout.write(`${entry.name}${tags ? `  ${C.dim}(${tags})${C.reset}` : ''}\n`);
+      }
+    }
     return 0;
   }
 

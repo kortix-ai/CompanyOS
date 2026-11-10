@@ -1132,6 +1132,10 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sandbox` | string | `sandbox.default` | A template slug, or `default` for the platform image. |
 | `space` | string | — | The space the agent works in (a key of the top-level `spaces` map, or a bare slug). Grouping only. |
 | `network_egress` | map | — | Only `{ version: 1, default: deny, rules: [] }`. It validates with a warning: Kortix does not enforce it. |
+| `workspace` | map or string | — | What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. `repos` and `setup` run in the background after the session starts: they never hold its first turn. |
+| `workspace.sandbox` | string | — | A `sandbox.templates` slug, or `default`: the machine. Same as the agent's `sandbox` key. |
+| `workspace.repos` | list | — | Explicit clones of the workspace repository, on the session branch. Needs `workspace.gitops.read` in `kortix_permissions`. None by default. |
+| `workspace.setup` | list | — | Shell commands run in order after the clones, with the agent's secrets. A failure stops the rest; the session keeps running. |
 
 ### Registry entries
 

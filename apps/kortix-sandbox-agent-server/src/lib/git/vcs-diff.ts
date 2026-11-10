@@ -74,10 +74,10 @@ function countPatch(patch: string): { additions: number; deletions: number } {
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 /**
- * The untracked files' patch text, generated in ONE git process: a throwaway
- * index (GIT_INDEX_FILE), EMPTY, with the untracked files staged into it from
- * the working tree, then `git diff --cached` against the empty tree. Every
- * selected path comes out as a new-file patch — the exact text one
+ * The untracked files' patch text, generated as ONE batched git diff: a
+ * throwaway index (GIT_INDEX_FILE), EMPTY, with the untracked files staged
+ * into it from the working tree, then `git diff --cached` against the empty
+ * tree. Every selected path comes out as a new-file patch — the exact text one
  * `git diff --no-index /dev/null <file>` per file produced, which cost one
  * spawn per file, up to 200 sequential spawns per poll on an agent-written
  * workspace: seconds of CPU the diff route (and every daemon route behind it)

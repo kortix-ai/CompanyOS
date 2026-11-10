@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Chamadas de voz",
-          "description": "Ligue para um agente a partir da página dele (Personalizar → Agentes) e converse com ele. Uma chamada é uma sessão própria desse agente: ele ouve você, responde por voz e vê a tela que você compartilha, e a conversa é o chat dessa sessão."
+          "description": "Ligue para um agente a partir de uma caixa de mensagem vazia, onde o botão de enviar vira um botão de chamada, ou da página dele (Personalizar → Agentes), e converse com ele. Em uma sessão, a chamada vai para o agente dessa sessão; no início do espaço de trabalho, ela inicia uma nova sessão. O agente ouve você, responde por voz e vê a tela que você compartilha, e a conversa é o chat da sessão."
         },
         "shared_drives": {
           "name": "Drives compartilhados",
@@ -1393,7 +1393,15 @@
       "history": "Histórico",
       "historyDescription": "O custo de cada sessão e todos os créditos adicionados ou gastos.",
       "openLedger": "Abrir extrato",
-      "unit": "{count, plural, one {crédito} other {créditos}}"
+      "unit": "{count, plural, one {crédito} other {créditos}}",
+      "dailySpend": "Gasto diário",
+      "heatLess": "Menos",
+      "heatMore": "Mais",
+      "busiestDay": "{name}: {amount} em {day}, o dia de maior gasto",
+      "noSpendInRange": "{name}: sem gastos neste período",
+      "idleWorkspaces": "{count, plural, one {# espaço de trabalho} other {# espaços de trabalho}} sem gastos neste período",
+      "showIdle": "Mostrar",
+      "hideIdle": "Ocultar"
     },
     "tokens": {
       "keyRevoked": "Chave de API revogada",
@@ -21542,11 +21550,6 @@
     "dismiss": "Fechar",
     "emailCopied": "Endereço de e-mail copiado"
   },
-  "repositoryAccess": {
-    "label": "Acesso ao repositório do espaço de trabalho",
-    "enabled": "As novas sessões recebem o repositório do espaço de trabalho. As permissões do Git continuam em vigor. As sessões existentes mantêm a sua configuração de acesso.",
-    "disabled": "As novas sessões são executadas sem o repositório do espaço de trabalho. Podem criar arquivos e usar ferramentas autorizadas. As sessões existentes mantêm a sua configuração de acesso."
-  },
   "customProvider": {
     "intro": "Endpoints que o catálogo não inclui.",
     "add": "Adicionar provedor personalizado",
@@ -23014,7 +23017,11 @@
     "folderTree": "Pastas",
     "treeYou": "{name} (você)",
     "treeExpand": "Expandir {name}",
-    "treeCollapse": "Recolher {name}"
+    "treeCollapse": "Recolher {name}",
+    "emptyWorkspaces": "{count, plural, one {# espaço de trabalho não tem} other {# espaços de trabalho não têm}} arquivos",
+    "storageMoreWorkspaces": "{count, plural, one {Mais # espaço de trabalho} other {Mais # espaços de trabalho}}",
+    "storageWorkspaceLimit": "Cada espaço de trabalho comporta até {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar dados",
@@ -23307,6 +23314,16 @@
         "booted": "Iniciado",
         "timezone": "Fuso horário",
         "locale": "Localidade",
+        "usage": "Uso de recursos do Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} em média · {peak} no pico",
+        "usageCpuHint": "De um núcleo, {minutes, plural, one {último minuto} other {últimos # minutos}}",
+        "usageMemory": "Memória",
+        "usageMemoryPeak": "{now} · {peak} no pico",
+        "usageProcesses": "Processos",
+        "usageProcessCount": "{count, plural, one {# processo} other {# processos}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Não informado: uma versão anterior do app, ou o app iniciou há menos de um minuto",
         "recordingSync": "Gravação e sincronização",
         "status": "Status",
         "lastFrame": "Último quadro",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Resolução",
       "resolutionHint": "Telas maiores são reduzidas a esta altura. 4K mantém detalhes finos, como desenhos CAD.",
+      "textRecognition": "Reconhecimento de texto",
+      "textRecognitionHint": "Lê o texto da tela para que possa ser pesquisado. Desativado usa menos CPU: a pesquisa encontra então apps, títulos de janela e URLs.",
+      "textRecognitionOption": {
+        "accurate": "Preciso",
+        "fast": "Rápido",
+        "off": "Desativado"
+      },
       "framesHint": "Sem valor, cada computador usa o seu (uma imagem a cada 2 s em 1440p). Com valor, todos os computadores o usam e ninguém pode alterá-lo. Cliques, digitação e rolagem são gravados com capturas próprias em qualquer intervalo.",
       "computerDecides": "Cada computador decide",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "Ligar",
     "calling": "Chamando…",
     "start": "Iniciar uma chamada de voz",
+    "inCall": "Você está em uma chamada",
     "end": "Encerrar chamada",
     "connecting": "Conectando…",
     "listening": "Ouvindo",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "Pastas de Arquivos montadas pelas sessões deste agente. Uma mudança vale de imediato para cada nova sessão.",
     "mount": "Mount folder",
-    "repository": "Repositório do espaço de trabalho",
     "viaAgent": "compartilhado com este agente",
     "viaProject": "compartilhado com todos neste espaço de trabalho",
     "from": "{path} · {who}",

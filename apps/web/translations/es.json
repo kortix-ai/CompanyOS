@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Llamadas de voz",
-          "description": "Llama a un agente desde su página (Personalizar → Agentes) y habla con él. Una llamada es una sesión propia de ese agente: te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de esa sesión."
+          "description": "Llama a un agente desde un cuadro de mensaje vacío, donde el botón de enviar se convierte en un botón de llamada, o desde su página (Personalizar → Agentes), y habla con él. En una sesión, la llamada va al agente de esa sesión; en el inicio del espacio de trabajo, inicia una sesión nueva. El agente te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de la sesión."
         },
         "shared_drives": {
           "name": "Unidades compartidas",
@@ -1393,7 +1393,15 @@
       "history": "Historial",
       "historyDescription": "El coste de cada sesión y todos los créditos añadidos o gastados.",
       "openLedger": "Abrir libro mayor",
-      "unit": "{count, plural, one {crédito} other {créditos}}"
+      "unit": "{count, plural, one {crédito} other {créditos}}",
+      "dailySpend": "Gasto diario",
+      "heatLess": "Menos",
+      "heatMore": "Más",
+      "busiestDay": "{name}: {amount} el {day}, el día de mayor gasto",
+      "noSpendInRange": "{name}: sin gasto en este período",
+      "idleWorkspaces": "{count, plural, one {# espacio de trabajo} other {# espacios de trabajo}} sin gasto en este período",
+      "showIdle": "Mostrar",
+      "hideIdle": "Ocultar"
     },
     "tokens": {
       "keyRevoked": "Clave de API revocada",
@@ -21542,11 +21550,6 @@
     "dismiss": "Cerrar",
     "emailCopied": "Dirección de correo copiada"
   },
-  "repositoryAccess": {
-    "label": "Acceso al repositorio del espacio de trabajo",
-    "enabled": "Las sesiones nuevas reciben el repositorio del espacio de trabajo. Se siguen aplicando los permisos de Git. Las sesiones existentes conservan su configuración de acceso.",
-    "disabled": "Las sesiones nuevas se ejecutan sin el repositorio del espacio de trabajo. Pueden crear archivos y usar herramientas autorizadas. Las sesiones existentes conservan su configuración de acceso."
-  },
   "customProvider": {
     "intro": "Endpoints que el catálogo no incluye.",
     "add": "Añadir proveedor personalizado",
@@ -23014,7 +23017,11 @@
     "folderTree": "Carpetas",
     "treeYou": "{name} (tú)",
     "treeExpand": "Expandir {name}",
-    "treeCollapse": "Contraer {name}"
+    "treeCollapse": "Contraer {name}",
+    "emptyWorkspaces": "{count, plural, one {# espacio de trabajo no tiene} other {# espacios de trabajo no tienen}} archivos",
+    "storageMoreWorkspaces": "{count, plural, one {# espacio de trabajo más} other {# espacios de trabajo más}}",
+    "storageWorkspaceLimit": "Cada espacio de trabajo admite hasta {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar datos",
@@ -23307,6 +23314,16 @@
         "booted": "Iniciado",
         "timezone": "Zona horaria",
         "locale": "Configuración regional",
+        "usage": "Uso de recursos de Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} de media · {peak} de pico",
+        "usageCpuHint": "De un núcleo, últimos {minutes, plural, one {# minuto} other {# minutos}}",
+        "usageMemory": "Memoria",
+        "usageMemoryPeak": "{now} · {peak} de pico",
+        "usageProcesses": "Procesos",
+        "usageProcessCount": "{count, plural, one {# proceso} other {# procesos}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "No informado: una versión anterior de la app, o la app se inició hace menos de un minuto",
         "recordingSync": "Grabación y sincronización",
         "status": "Estado",
         "lastFrame": "Último fotograma",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Resolución",
       "resolutionHint": "Las pantallas más grandes se reducen a esta altura. 4K conserva los detalles finos, como los planos CAD.",
+      "textRecognition": "Reconocimiento de texto",
+      "textRecognitionHint": "Lee el texto de la pantalla para poder buscarlo. Desactivado usa la menor CPU: la búsqueda encuentra entonces apps, títulos de ventana y URL.",
+      "textRecognitionOption": {
+        "accurate": "Preciso",
+        "fast": "Rápido",
+        "off": "Desactivado"
+      },
       "framesHint": "Sin valor, cada ordenador usa el suyo (una imagen cada 2 s a 1440p). Con valor, todos los ordenadores lo usan y nadie puede cambiarlo. Los clics, la escritura y el desplazamiento se graban con sus propias capturas con cualquier intervalo.",
       "computerDecides": "Cada ordenador decide",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "Llamar",
     "calling": "Llamando…",
     "start": "Iniciar una llamada de voz",
+    "inCall": "Estás en una llamada",
     "end": "Finalizar llamada",
     "connecting": "Conectando…",
     "listening": "Escuchando",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "Carpetas de Archivos que montan las sesiones de este agente. Los cambios se aplican de inmediato a cada nueva sesión.",
     "mount": "Mount folder",
-    "repository": "Repositorio del espacio de trabajo",
     "viaAgent": "compartido con este agente",
     "viaProject": "compartido con todos en este espacio de trabajo",
     "from": "{path} · {who}",

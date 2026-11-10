@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Sprachanrufe",
-          "description": "Ruf einen Agenten von seiner Seite aus an (Anpassen → Agenten) und sprich mit ihm. Ein Anruf ist eine eigene Session dieses Agenten: Er hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat dieser Session."
+          "description": "Ruf einen Agenten aus einem leeren Nachrichtenfeld an, in dem der Senden-Button zum Anruf-Button wird, oder von seiner Seite aus (Anpassen → Agenten), und sprich mit ihm. In einer Session geht der Anruf an den Agenten dieser Session; auf der Startseite des Workspace startet er eine neue Session. Der Agent hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat der Session."
         },
         "shared_drives": {
           "name": "Geteilte Drives",
@@ -1393,7 +1393,15 @@
       "history": "Verlauf",
       "historyDescription": "Kosten jeder Sitzung sowie alle hinzugefügten oder verbrauchten Credits.",
       "openLedger": "Kontobuch öffnen",
-      "unit": "{count, plural, one {Credit} other {Credits}}"
+      "unit": "{count, plural, one {Credit} other {Credits}}",
+      "dailySpend": "Tägliche Ausgaben",
+      "heatLess": "Weniger",
+      "heatMore": "Mehr",
+      "busiestDay": "{name}: {amount} am {day}, dem Tag mit den höchsten Ausgaben",
+      "noSpendInRange": "{name}: keine Ausgaben in diesem Zeitraum",
+      "idleWorkspaces": "{count, plural, one {# Workspace} other {# Workspaces}} ohne Ausgaben in diesem Zeitraum",
+      "showIdle": "Anzeigen",
+      "hideIdle": "Ausblenden"
     },
     "tokens": {
       "keyRevoked": "API-Schlüssel widerrufen",
@@ -21542,11 +21550,6 @@
     "dismiss": "Schließen",
     "emailCopied": "E-Mail-Adresse kopiert"
   },
-  "repositoryAccess": {
-    "label": "Zugriff auf das Workspace-Repository",
-    "enabled": "Neue Sitzungen erhalten das Workspace-Repository. Git-Berechtigungen gelten weiterhin. Bestehende Sitzungen behalten ihre Zugriffseinstellung.",
-    "disabled": "Neue Sitzungen laufen ohne Workspace-Repository. Sie können weiterhin Dateien erstellen und freigegebene Werkzeuge nutzen. Bestehende Sitzungen behalten ihre Zugriffseinstellung."
-  },
   "customProvider": {
     "intro": "Endpunkte, die der Katalog nicht enthält.",
     "add": "Eigenen Anbieter hinzufügen",
@@ -23014,7 +23017,11 @@
     "folderTree": "Ordner",
     "treeYou": "{name} (Du)",
     "treeExpand": "{name} aufklappen",
-    "treeCollapse": "{name} zuklappen"
+    "treeCollapse": "{name} zuklappen",
+    "emptyWorkspaces": "{count, plural, one {# Workspace enthält} other {# Workspaces enthalten}} keine Dateien",
+    "storageMoreWorkspaces": "{count, plural, one {# weiterer Workspace} other {# weitere Workspaces}}",
+    "storageWorkspaceLimit": "Jeder Workspace fasst bis zu {limit}",
+    "storageShowFewer": "Weniger anzeigen"
   },
   "genui": {
     "showData": "Daten anzeigen",
@@ -23307,6 +23314,16 @@
         "booted": "Gestartet",
         "timezone": "Zeitzone",
         "locale": "Gebietsschema",
+        "usage": "Ressourcenverbrauch von Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} im Mittel · {peak} Spitze",
+        "usageCpuHint": "Eines Kerns, letzte {minutes, plural, one {# Minute} other {# Minuten}}",
+        "usageMemory": "Arbeitsspeicher",
+        "usageMemoryPeak": "{now} · {peak} Spitze",
+        "usageProcesses": "Prozesse",
+        "usageProcessCount": "{count, plural, one {# Prozess} other {# Prozesse}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Nicht gemeldet: eine ältere App-Version, oder die App läuft seit weniger als einer Minute",
         "recordingSync": "Aufnahme und Synchronisierung",
         "status": "Status",
         "lastFrame": "Letztes Bild",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Auflösung",
       "resolutionHint": "Größere Bildschirme werden auf diese Höhe verkleinert. 4K erhält feine Details, etwa in CAD-Zeichnungen.",
+      "textRecognition": "Texterkennung",
+      "textRecognitionHint": "Liest den Text auf dem Bildschirm, damit er durchsuchbar ist. Aus braucht am wenigsten CPU: Die Suche findet dann Apps, Fenstertitel und URLs.",
+      "textRecognitionOption": {
+        "accurate": "Genau",
+        "fast": "Schnell",
+        "off": "Aus"
+      },
       "framesHint": "Ohne Vorgabe nutzt jeder Computer seine eigene Einstellung (alle 2 s ein Bild in 1440p). Mit Vorgabe gilt sie für jeden Computer und lässt sich dort nicht ändern. Klicks, Tippen und Scrollen werden bei jedem Abstand mit eigenen Screenshots aufgezeichnet.",
       "computerDecides": "Jeder Computer entscheidet",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "Anrufen",
     "calling": "Ruft an…",
     "start": "Sprachanruf starten",
+    "inCall": "Du bist in einem Anruf",
     "end": "Anruf beenden",
     "connecting": "Verbinden…",
     "listening": "Hört zu",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "Ordner aus Dateien, die Sitzungen dieses Agenten einbinden. Änderungen gelten sofort für jede neue Sitzung.",
     "mount": "Mount folder",
-    "repository": "Workspace-Repository",
     "viaAgent": "mit diesem Agenten geteilt",
     "viaProject": "mit allen in diesem Workspace geteilt",
     "from": "{path} · {who}",

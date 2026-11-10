@@ -31,6 +31,7 @@ import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-
 import { logger } from '@/lib/log/logger'
 import { resolveKortixRuntimeStateDirectory } from '@/lib/config/runtime-state-dir'
 import { SECRET_CAPABILITIES_INSTRUCTION_PATH } from '@/services/sandbox-env/secret-capabilities'
+import { WORKSPACE_SETUP_NOTE_PATH } from '../shared/workspace-setup'
 import { withheldManagedSkills } from '@/services/skills/managed-skills'
 import { loadTools } from '@/services/tools/host'
 import { compiledAgentConfigFromEnv } from '@/services/config-provider/compiled-agent-config'
@@ -132,7 +133,7 @@ export class CommandNotEnabled extends Error {
 }
 
 export const DEFAULT_SYSTEM_PROMPT = [
-  'You are a coding agent working inside a Kortix sandbox. The project repository is checked out at the working directory.',
+  'You are a coding agent working inside a Kortix sandbox. The working directory starts empty: the project repository is not checked out. Run `kortix workspaces clone` to work on its files.',
   'Use the tools to read, search and change files and to run commands. Prefer small, verifiable steps. Report what you did and what remains.',
 ].join('\n')
 
@@ -2657,6 +2658,8 @@ export class PiRuntime {
     if (capabilities) parts.push(capabilities)
     const releaseNotice = this.releases?.notice()
     if (releaseNotice) parts.push(releaseNotice)
+    const workspaceSetup = this.readInstruction(WORKSPACE_SETUP_NOTE_PATH)
+    if (workspaceSetup) parts.push(workspaceSetup)
     if (this.cfg.workspaceVolume) parts.push(this.newComputer ? `${TEMPORARY_COMPUTER}\n${NEW_COMPUTER_NOTE}` : TEMPORARY_COMPUTER)
     const ids = sessionIdsSection({
       sessionId: this.env.KORTIX_SESSION_ID,

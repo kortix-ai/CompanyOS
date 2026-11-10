@@ -52,8 +52,8 @@ describe('My Kortix agent', () => {
       // Platform-owned: hosts render it read-only and never open the editor.
       platform: true,
       scope: {
-        env: [],
-        connectors: [],
+        env: 'all',
+        connectors: 'all',
         kortix_permissions: 'all',
       },
     });
@@ -129,12 +129,12 @@ describe('My Kortix agent', () => {
     expect(() => resolveMyKortixSandbox('node22')).toThrow('META_SANDBOX_LOCKED');
   });
 
-  test('grants the coordinator every project action without secrets or connectors', () => {
+  test('acts with its person\'s rights: every action, connector and secret, each capped by the person', () => {
     expect(myKortixAgentGrant()).toEqual({
       agent: 'mykortix',
       permissions: 'all',
-      connectors: [],
-      env: [],
+      connectors: 'all',
+      env: 'all',
     });
   });
 

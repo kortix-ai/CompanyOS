@@ -59,7 +59,7 @@ import {
   connectorSecretBindings,
   summarizeDeliverySync,
 } from '../lib/secret-writes';
-import { resolveSecretWriteInput } from '../lib/secret-write-input';
+import { SECRET_DELIVERY_NEEDS_PERSON, resolveSecretWriteInput } from '../lib/secret-write-input';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { loadConnectionSharing } from '../lib/connection-sharing';
 import {
@@ -225,8 +225,7 @@ export function registerSecretsRoutes(): void {
       agentGrants,
     }))
       .filter((item) => !item.system)
-      // My Kortix holds no secret but hands them to colleagues, a person approving each list
-      // (lib/colleague-access.ts): it reads the names. This route never returns a value.
+      // My Kortix holds every secret its person can use. This route never returns a value.
       .filter((item) => agentMayUseEnv(agentGrant, item.identifier) || isMyKortixAgentName(agentGrant?.agent ?? ''));
 
     // Audience of each shared value, for the person and agent this read acts
@@ -346,12 +345,6 @@ export function registerSecretsRoutes(): void {
       resolved.input;
     const sharedWith = parseSecretSharedWith(body.shared_with);
     if (!sharedWith.ok) return c.json({ error: sharedWith.error }, 400);
-    if (sharedWith.value && isBorrowedSessionPrincipal(c)) {
-      return c.json(
-        { error: 'An agent cannot change who can use a secret. A person changes it in Customize → Secrets.' },
-        403,
-      );
-    }
 
     // The one ladder check that needs the database: a policy that parses and
     // passes the boundary rules can still claim a (host, header) destination
@@ -635,7 +628,7 @@ export function registerSecretsRoutes(): void {
       // plain runtime secret. Otherwise an agent could delete a tightly-scoped
       // egress row and re-create it (defeated separately by the POST guard).
       if (isBorrowedSessionPrincipal(c) && existing.strategy && existing.strategy !== 'runtime') {
-        return c.json({ error: 'Agent sessions cannot change secret delivery policy' }, 403);
+        return c.json({ error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' }, 403);
       }
       const connectors = await connectorSecretBindings(projectId, identifier);
       if (connectors.length > 0) {

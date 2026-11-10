@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "语音通话",
-          "description": "在智能体的页面（自定义 → 智能体）呼叫它并与它交谈。每次通话都是该智能体的一个独立会话：它能听到你的声音、用语音回答并看到你共享的屏幕，对话就是该会话的聊天。"
+          "description": "在空白消息框中呼叫智能体（发送按钮会变成通话按钮），或在智能体的页面（自定义 → 智能体）呼叫它并与它交谈。在会话中，通话会接通该会话的智能体；在工作区主页，它会开启一个新会话。智能体能听到你的声音、用语音回答并看到你共享的屏幕，对话就是该会话的聊天。"
         },
         "shared_drives": {
           "name": "共享云盘",
@@ -1393,7 +1393,15 @@
       "history": "历史记录",
       "historyDescription": "每个会话的费用，以及添加或使用的每一笔积分。",
       "openLedger": "打开账本",
-      "unit": "{count, plural, other {积分}}"
+      "unit": "{count, plural, other {积分}}",
+      "dailySpend": "每日支出",
+      "heatLess": "少",
+      "heatMore": "多",
+      "busiestDay": "{name}：{day} 支出 {amount}，为支出最高的一天",
+      "noSpendInRange": "{name}：此期间无支出",
+      "idleWorkspaces": "{count, plural, other {# 个工作区}}在此期间无支出",
+      "showIdle": "显示",
+      "hideIdle": "隐藏"
     },
     "tokens": {
       "keyRevoked": "API 密钥已撤销",
@@ -21542,11 +21550,6 @@
     "dismiss": "关闭",
     "emailCopied": "已复制电子邮件地址"
   },
-  "repositoryAccess": {
-    "label": "工作区仓库访问权限",
-    "enabled": "新会话会获得工作区仓库。Git 权限仍然适用。现有会话保留原有的访问设置。",
-    "disabled": "新会话在没有工作区仓库的情况下运行。仍可创建文件并使用已授权的工具。现有会话保留原有的访问设置。"
-  },
   "customProvider": {
     "intro": "目录中没有的端点。",
     "add": "添加自定义提供商",
@@ -23014,7 +23017,11 @@
     "folderTree": "文件夹",
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
-    "treeCollapse": "收起 {name}"
+    "treeCollapse": "收起 {name}",
+    "emptyWorkspaces": "{count, plural, other {# 个工作区}}没有文件",
+    "storageMoreWorkspaces": "另外 {count, plural, other {# 个工作区}}",
+    "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
+    "storageShowFewer": "收起"
   },
   "genui": {
     "showData": "显示数据",
@@ -23307,6 +23314,16 @@
         "booted": "启动时间",
         "timezone": "时区",
         "locale": "区域设置",
+        "usage": "Kortix Capture 资源占用",
+        "usageCpu": "CPU",
+        "usageCpuValue": "平均 {avg} · 峰值 {peak}",
+        "usageCpuHint": "按单个核心计，最近 {minutes, plural, other {# 分钟}}",
+        "usageMemory": "内存",
+        "usageMemoryPeak": "{now} · 峰值 {peak}",
+        "usageProcesses": "进程",
+        "usageProcessCount": "{count, plural, other {# 个进程}}",
+        "usageProcessValue": "CPU {cpu} · {memory}",
+        "usageNotReported": "未上报：应用版本较旧，或应用启动不到一分钟",
         "recordingSync": "录制与同步",
         "status": "状态",
         "lastFrame": "上一帧",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} 秒",
       "resolution": "分辨率",
       "resolutionHint": "更大的屏幕会缩小到此高度。4K 可保留 CAD 图纸等细节。",
+      "textRecognition": "文字识别",
+      "textRecognitionHint": "读取屏幕上的文字以便搜索。关闭时 CPU 占用最少：搜索只能找到应用、窗口标题和 URL。",
+      "textRecognitionOption": {
+        "accurate": "精确",
+        "fast": "快速",
+        "off": "关闭"
+      },
       "framesHint": "未设置时，每台电脑使用自己的设置（1440p，每 2 秒一帧）。设置后，所有电脑都使用该值，用户无法更改。无论间隔多长，点击、输入和滚动都会连同各自的截图一起记录。",
       "computerDecides": "由每台电脑决定",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "通话",
     "calling": "正在呼叫…",
     "start": "开始语音通话",
+    "inCall": "正在通话中",
     "end": "结束通话",
     "connecting": "正在连接…",
     "listening": "正在聆听",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "此智能体的会话从“文件”中挂载的文件夹。更改立即生效，并适用于所有新会话。",
     "mount": "Mount folder",
-    "repository": "工作区仓库",
     "viaAgent": "与此智能体共享",
     "viaProject": "与此工作区中的所有人共享",
     "from": "{path} · {who}",

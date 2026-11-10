@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "音声通話",
-          "description": "エージェントのページ（カスタマイズ → エージェント）から電話して話せます。通話はそのエージェントの独立したセッションで、あなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
+          "description": "空のメッセージ欄（送信ボタンが通話ボタンに変わります）またはエージェントのページ（カスタマイズ → エージェント）から電話して話せます。セッション内ではそのセッションのエージェントに、ワークスペースのホームからは新しいセッションでつながります。エージェントはあなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
         },
         "shared_drives": {
           "name": "共有ドライブ",
@@ -1393,7 +1393,15 @@
       "history": "履歴",
       "historyDescription": "各セッションの費用と、追加または使用されたすべてのクレジット。",
       "openLedger": "台帳を開く",
-      "unit": "{count, plural, other {クレジット}}"
+      "unit": "{count, plural, other {クレジット}}",
+      "dailySpend": "日別の利用額",
+      "heatLess": "少",
+      "heatMore": "多",
+      "busiestDay": "{name}: {day} に {amount}（最も多い日）",
+      "noSpendInRange": "{name}: この期間の利用はありません",
+      "idleWorkspaces": "この期間に利用のないワークスペース {count, plural, other {# 件}}",
+      "showIdle": "表示",
+      "hideIdle": "非表示"
     },
     "tokens": {
       "keyRevoked": "API キーを取り消しました",
@@ -21542,11 +21550,6 @@
     "dismiss": "閉じる",
     "emailCopied": "メールアドレスをコピーしました"
   },
-  "repositoryAccess": {
-    "label": "ワークスペースリポジトリへのアクセス",
-    "enabled": "新しいセッションにワークスペースリポジトリを提供します。Git の権限は引き続き適用されます。既存のセッションのアクセス設定は変わりません。",
-    "disabled": "新しいセッションはワークスペースリポジトリなしで実行されます。ファイルの作成と許可されたツールの使用は可能です。既存のセッションのアクセス設定は変わりません。"
-  },
   "customProvider": {
     "intro": "カタログにないエンドポイント。",
     "add": "カスタムプロバイダーを追加",
@@ -23014,7 +23017,11 @@
     "folderTree": "フォルダー",
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
-    "treeCollapse": "{name} を閉じる"
+    "treeCollapse": "{name} を閉じる",
+    "emptyWorkspaces": "ファイルのないワークスペース {count, plural, other {# 件}}",
+    "storageMoreWorkspaces": "他 {count, plural, other {# 件のワークスペース}}",
+    "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
+    "storageShowFewer": "表示を減らす"
   },
   "genui": {
     "showData": "データを表示",
@@ -23307,6 +23314,16 @@
         "booted": "起動",
         "timezone": "タイムゾーン",
         "locale": "ロケール",
+        "usage": "Kortix Capture のリソース使用量",
+        "usageCpu": "CPU",
+        "usageCpuValue": "平均 {avg} · ピーク {peak}",
+        "usageCpuHint": "1 コアあたり、直近 {minutes, plural, other {# 分}}",
+        "usageMemory": "メモリ",
+        "usageMemoryPeak": "{now} · ピーク {peak}",
+        "usageProcesses": "プロセス",
+        "usageProcessCount": "{count, plural, other {# 個のプロセス}}",
+        "usageProcessValue": "CPU {cpu} · {memory}",
+        "usageNotReported": "未報告: 古いアプリのバージョンか、アプリの起動から 1 分未満です",
         "recordingSync": "記録と同期",
         "status": "状態",
         "lastFrame": "最後のフレーム",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} 秒",
       "resolution": "解像度",
       "resolutionHint": "大きな画面はこの高さに縮小されます。4KはCAD図面などの細部を保ちます。",
+      "textRecognition": "テキスト認識",
+      "textRecognitionHint": "画面上のテキストを読み取り、検索できるようにします。オフにすると CPU 使用量が最も少なくなり、検索ではアプリ、ウィンドウタイトル、URL が見つかります。",
+      "textRecognitionOption": {
+        "accurate": "高精度",
+        "fast": "高速",
+        "off": "オフ"
+      },
       "framesHint": "未設定の場合、各コンピューターが独自の設定を使います（1440p で 2 秒ごとに 1 枚）。設定すると、すべてのコンピューターがその値を使い、ユーザーは変更できません。クリック、入力、スクロールは間隔に関係なく専用のスクリーンショット付きで記録されます。",
       "computerDecides": "各コンピューターに任せる",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "通話",
     "calling": "呼び出し中…",
     "start": "音声通話を開始",
+    "inCall": "通話中です",
     "end": "通話を終了",
     "connecting": "接続中…",
     "listening": "聞いています",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "このエージェントのセッションが「ファイル」からマウントするフォルダーです。変更は直ちに適用され、すべての新しいセッションに反映されます。",
     "mount": "Mount folder",
-    "repository": "ワークスペースのリポジトリ",
     "viaAgent": "このエージェントと共有",
     "viaProject": "このワークスペース全員と共有",
     "from": "{path} · {who}",

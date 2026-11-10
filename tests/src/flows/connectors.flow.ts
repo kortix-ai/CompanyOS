@@ -4431,7 +4431,7 @@ flow(
           'connectors', 'connections', 'share', theirs, '--everyone', '--project', project.id,
         ]);
         throwIfCliInfraFailure(r, 'kortix connectors connections share');
-        if (r.exitCode === 0 || !/manage the workspace's connections/.test(r.all)) {
+        if (r.exitCode === 0 || !/connector\.connections\.manage/.test(r.all)) {
           throw new Error(`plain member share: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
         }
       });
@@ -5204,7 +5204,8 @@ flow(
         if (req.url === '/graphql') {
           return json(200, { data: { issue: null }, errors: [{ message: 'Entity not found: issue' }] });
         }
-        if (req.url.startsWith('/api/intents/')) return json(200, { id: req.url.slice('/api/intents/'.length) });
+        const url = req.url ?? '';
+        if (url.startsWith('/api/intents/')) return json(200, { id: url.slice('/api/intents/'.length) });
         json(404, { message: 'no route' });
       });
     });
@@ -6482,7 +6483,7 @@ flow(
         if (slugs.filter((s) => s === 'wiki' || s === 'deepwiki').length !== 2) throw new Error(`profiles: ${slugs.join(',')}`);
       });
 
-      await ctx.step('an agent session cannot add a server nobody chose → 403 custom_connector_needs_human with a setup link', async () => {
+      await ctx.step('an agent session adding a server nobody approved yet gets the one-time approval → 403 custom_connector_needs_human with a setup link', async () => {
         const minted = await owner.post('/v1/accounts/tokens', { name: `CONN-41 ${sessionId.slice(0, 8)}` });
         minted.status(201);
         const credential = minted.json<{ token_id: string; secret_key: string }>();

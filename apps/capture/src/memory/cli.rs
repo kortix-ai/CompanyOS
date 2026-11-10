@@ -1308,6 +1308,7 @@ fn record(paths: MemoryPaths, a: RecordArgs) -> Result<()> {
     }
     eprintln!("kortix-capture: recording into {}", paths.root.display());
     crate::os_proc::below_normal_priority();
+    crate::os_proc::efficiency_mode();
     recorder::run(paths, stop)
 }
 

@@ -115,6 +115,7 @@ import {
   Composer as SessionChatInput,
 } from '../composer/composer';
 import { ComposerDropZone } from '../composer/composer-drop-zone';
+import { useSessionComposerCall } from '../voice/composer-call';
 import { AgentsLine } from '../agents/agent-strip';
 import { HeldMessages } from '../agents/held-messages';
 import { SessionPromptContext } from '../agents/session-prompt';
@@ -981,6 +982,15 @@ export function SessionChat({
   });
   const composerAgentName = composerAgent.selected;
   const noAccessibleAgents = composerAgent.disabled;
+  // Nothing typed: the Send button calls this session instead (flag
+  // `voice_call`, `voice/composer-call.ts`). Its agent answers here, so the
+  // call's turns fill this chat. Not a sub-session: its box binds no relay.
+  const composerCall = useSessionComposerCall({
+    projectId,
+    sessionId: projectSessionId,
+    agent: projectSessionRow?.agent_name ?? composerAgentName,
+    topLevel: !!projectSessionRow && !projectSessionRow.parent_session_id,
+  });
   // The slash menu lists only the commands the composer's agent may run. The
   // transcript keeps the full list: a past turn may have run any of them.
   const { data: agentCommands } = useRuntimeCommands({ agent: composerAgentName ?? undefined });
@@ -5258,6 +5268,7 @@ export function SessionChat({
                 // beside it sits `pb-4` off the window's bottom edge: the same
                 // margins, so the two boxes line up.
                 parentClassName={transcriptRows ? 'max-w-none px-5 pb-4' : undefined}
+                call={composerCall}
                 onNoticeRetry={
                   composerReadiness.notice && composerReadiness.retryable
                     ? requestRuntimeReconnect

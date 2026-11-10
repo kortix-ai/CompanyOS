@@ -838,7 +838,7 @@ const catalog = {
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -911,7 +911,15 @@ const catalog = {
       "history": "History",
       "historyDescription": "What every session cost, and every credit added or spent.",
       "openLedger": "Open ledger",
-      "unit": "{count, plural, one {credit} other {credits}}"
+      "unit": "{count, plural, one {credit} other {credits}}",
+      "dailySpend": "Daily spend",
+      "heatLess": "Less",
+      "heatMore": "More",
+      "busiestDay": "{name}: {amount} on {day}, the busiest day",
+      "noSpendInRange": "{name}: no spend in this range",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspaces}} with no spend in this range",
+      "showIdle": "Show",
+      "hideIdle": "Hide"
     },
     "tokens": {
       "keyRevoked": "API key revoked",
@@ -6388,11 +6396,6 @@ const catalog = {
     "recentThreads": "Recent threads",
     "searchChannels": "Search spaces, threads, commands..."
   },
-  "repositoryAccess": {
-    "label": "Workspace repository access",
-    "enabled": "New sessions receive the workspace repository. Git permissions still apply. Existing sessions keep their access setting.",
-    "disabled": "New sessions run without the workspace repository. They can still create files and use granted tools. Existing sessions keep their access setting."
-  },
   "customProvider": {
     "intro": "Endpoints the catalogue does not carry.",
     "add": "Add custom provider",
@@ -6811,6 +6814,9 @@ const catalog = {
     "addMcpUrlNamed": "Adds the connector {name}.",
     "addMcpUrlInvalid": "Enter a URL that starts with https://",
     "addMcpConnect": "Connect",
+    "addMcpStageConnector": "Reaching the server and loading its tools…",
+    "addMcpStageAccount": "Preparing the account…",
+    "addMcpStageSignIn": "Starting the sign-in…",
     "addMcpConnected": "{name} is connected. Agents can use its tools.",
     "addMcpSignInFailed": "Could not start the {name} sign-in: {reason}",
     "addMcpFailed": "Could not add the MCP server",
@@ -7756,7 +7762,11 @@ const catalog = {
     "folderTree": "Folders",
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
-    "treeCollapse": "Close {name}"
+    "treeCollapse": "Close {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",
@@ -9364,6 +9374,7 @@ const catalog = {
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",
@@ -9432,7 +9443,6 @@ const catalog = {
   "agentMounts": {
     "lead": "Folders from Files this agent's sessions mount. A change applies at once and reaches every new session.",
     "mount": "Mount folder",
-    "repository": "Workspace repository",
     "viaAgent": "shared with this agent",
     "viaProject": "shared with everyone in this workspace",
     "from": "{path} · {who}",

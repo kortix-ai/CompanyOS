@@ -257,7 +257,7 @@ async function boot(input: {
   const env = rigEnv(workspace, input.env)
   const cfg = requirePiConfig(loadConfig(env))
   const service = createPiHarnessService(cfg, undefined, { env, hooks: input.hooks, releases: input.releases })
-  const bootState: PiBootState = { repoMaterializationError: null, timeline: [], initialRuntimeSessionRequired: false }
+  const bootState: PiBootState = { timeline: [], initialRuntimeSessionRequired: false }
   if (input.start !== false) await service.lifecycle.start()
   const app = buildDaemonApp(cfg, service, Date.now(), bootState)
   const ctx = signTestUserContext({ userId: 'u1', sandboxId: 's1', sandboxRole: 'owner' }, TOKEN)
@@ -2335,6 +2335,39 @@ describe('pi subagents extension', () => {
     }
   })
 
+  test('My Kortix names who works: a hand-off with no subagent_type and no inline spec starts nothing and says so', async () => {
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        if (req.method === 'POST' && new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+        }
+        return Response.json([])
+      },
+    })
+    try {
+      const r = await boot({
+        // The 2026-11-10 shape: a name and a prompt, the intended agent only in the model's reasoning.
+        script: [TASK({ description: 'Cheapest car', subagent_type: undefined, name: 'rental-scout' }), { text: 'parent done' }],
+        env: {
+          KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { mykortix: { mode: 'primary', prompt: 'You are My Kortix.' } } }),
+          KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`,
+          KORTIX_AGENT_NAME: 'mykortix',
+          KORTIX_META_AGENT: '1',
+        },
+      })
+      await promptAndSettle(r, 'find the cheapest car')
+      expect(creates).toEqual([])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const [part] = toolParts(page, 'task')
+      expect(part!.state.status).toBe('error')
+      expect(part!.state.error).toContain('Name who works: set subagent_type')
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('only the coordinator hands an inline agent connectors or secrets', async () => {
     const creates: Array<Record<string, any>> = []
     const server = Bun.serve({
@@ -2408,9 +2441,10 @@ describe('pi subagents extension', () => {
     }
   })
 
-  test('subagent_type and an inline agent spec are mutually exclusive: the call is refused before any child, and the corrected call spawns the child', async () => {
-    // The empty inline spec is the exact shape a router over the wire sent beside its subagent_type:
-    // the inline spec silently displaced the named agent and the child ran as an unnamed inline agent.
+  test('an empty inline spec beside subagent_type is absent and the named agent runs; a filled one is refused', async () => {
+    // The empty inline spec is the exact shape a strict-schema model sends beside its subagent_type
+    // (every optional field filled). It once displaced the named agent; then it was refused, and a
+    // strict-schema model retried the identical call 160 times (prod, 2026-11-10). It names nothing.
     const creates: Array<Record<string, unknown>> = []
     const server = Bun.serve({
       port: 0,
@@ -2436,7 +2470,7 @@ describe('pi subagents extension', () => {
         env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1` },
       })
       await promptAndSettle(r, 'delegate with a named type, then the corrected call')
-      expect(creates).toHaveLength(1)
+      expect(creates).toHaveLength(2)
       // A built-in `general` maps to no project agent (cloud-subagent.ts), so the create
       // carries no `agent_name`; the named project-agent path is asserted by the
       // 'separate sessions (the default, no `session` arg)' test above (agent_name reviewer/build).
@@ -2444,11 +2478,10 @@ describe('pi subagents extension', () => {
       const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
       const parts = toolParts(page, 'task')
       expect(parts).toHaveLength(3)
-      for (const part of parts.slice(0, 2)) {
-        expect(part.state.status, 'a refused call carries its error').toBe('error')
-        expect(part.state.error).toContain('cannot combine')
-        expect(part.state.error).toContain('"general"')
-      }
+      expect(parts[0]!.state.status, 'an empty spec is absent: the named agent starts').toBe('completed')
+      expect(parts[1]!.state.status, 'a filled spec beside a name is refused').toBe('error')
+      expect(parts[1]!.state.error).toContain('cannot combine')
+      expect(parts[1]!.state.error).toContain('"general"')
       expect(parts[2]!.state.status).toBe('completed')
       expect(parts[2]!.state.output).toContain('<task_started>')
     } finally {
@@ -3432,7 +3465,7 @@ describe('config releases on pi', () => {
     expect(first).toContain('RELEASED-RULES')
     expect(first).not.toContain('WORKSPACE-RULES')
     // The session notice tells the agent its working-copy edit waits for the base branch.
-    expect(first).toContain('`/workspace/skills` or `/workspace/AGENTS.md` does NOT change the config')
+    expect(first).toContain('`skills` or `AGENTS.md` does NOT change the config')
     expect(await agentsMdOf(r)).toEqual({
       source: 'release',
       path: join(dir, 'store', one.descriptor.release_id!, 'AGENTS.md'),

@@ -916,7 +916,28 @@ async function projectsClone(
   }
 
   process.stdout.write(`${status.ok(`Cloned ${project.name}`)}\n`);
+  const sessionBranch = checkoutSessionBranch(repoRoot, project.project_id);
+  if (sessionBranch) process.stdout.write(`${status.ok(`On session branch ${sessionBranch}: \`git push\` sends it, \`kortix cr open\` proposes it`)}\n`);
   return 0;
+}
+
+/**
+ * Inside a session sandbox (`KORTIX_BRANCH_NAME`), a clone of the session's own
+ * workspace lands on the session branch: the Git proxy lets a session push that
+ * branch and no other. A branch that already holds pushed work is checked out
+ * as it is, never reset. Returns the branch, or null when nothing was done.
+ */
+function checkoutSessionBranch(repoRoot: string, projectId: string): string | null {
+  const branch = process.env.KORTIX_BRANCH_NAME?.trim();
+  if (!branch || process.env.KORTIX_PROJECT_ID?.trim() !== projectId) return null;
+  const remote = runGit(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`]);
+  const checkout = runGit(repoRoot, remote.ok ? ['checkout', '-q', branch] : ['checkout', '-q', '-b', branch]);
+  if (!checkout.ok) {
+    process.stderr.write(`${status.err(`Could not check out the session branch ${branch}; run \`git checkout -b ${branch}\` before you push.`)}\n`);
+    return null;
+  }
+  runGit(repoRoot, ['config', 'push.default', 'current']);
+  return branch;
 }
 
 function requireAuth() {

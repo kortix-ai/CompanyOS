@@ -30,9 +30,9 @@ export async function startComposioConnect(projectId: string, connectionId: stri
     projectId, slug: connection.connectorAlias, app, connectionId, stableUserId,
     redirects: parseRedirects(body),
   });
-  // Starting an authorization is not a reconnect: an agent session may start
-  // its own (`owner: "me"`), so leaving `revoked` stays a person's call. The
-  // default `agent` authority keeps it (`connectors/connection-status.ts`).
+  // Starting an authorization is not a reconnect: the default `start`
+  // authority leaves a revoked account revoked until the sign-in completes
+  // (`connectors/connection-status.ts`).
   await connectConnection(connectionId, {
     metadata: composioConnectionMetadata({
       toolkit: app, stableUserId, sessionId: result.sessionId,

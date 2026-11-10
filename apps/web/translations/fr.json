@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Appels vocaux",
-          "description": "Appelle un agent depuis sa page (Personnaliser → Agents) et parle-lui. Un appel est une session à part de cet agent : il t'entend, répond à voix haute et voit l'écran que tu partages, et la conversation est le chat de cette session."
+          "description": "Appelle un agent depuis un champ de message vide, où le bouton d'envoi devient un bouton d'appel, ou depuis sa page (Personnaliser → Agents), et parle-lui. Dans une session, l'appel va à l'agent de cette session ; depuis l'accueil de l'espace de travail, il démarre une nouvelle session. L'agent t'entend, répond à voix haute et voit l'écran que tu partages, et la conversation est le chat de la session."
         },
         "shared_drives": {
           "name": "Drives partagés",
@@ -1393,7 +1393,15 @@
       "history": "Historique",
       "historyDescription": "Le coût de chaque session et tous les crédits ajoutés ou dépensés.",
       "openLedger": "Ouvrir le registre",
-      "unit": "{count, plural, one {crédit} other {crédits}}"
+      "unit": "{count, plural, one {crédit} other {crédits}}",
+      "dailySpend": "Dépenses quotidiennes",
+      "heatLess": "Moins",
+      "heatMore": "Plus",
+      "busiestDay": "{name} : {amount} le {day}, le jour le plus dépensier",
+      "noSpendInRange": "{name} : aucune dépense sur cette période",
+      "idleWorkspaces": "{count, plural, one {# espace de travail} other {# espaces de travail}} sans dépense sur cette période",
+      "showIdle": "Afficher",
+      "hideIdle": "Masquer"
     },
     "tokens": {
       "keyRevoked": "Clé API révoquée",
@@ -21542,11 +21550,6 @@
     "dismiss": "Fermer",
     "emailCopied": "Adresse e-mail copiée"
   },
-  "repositoryAccess": {
-    "label": "Accès au dépôt de l’espace de travail",
-    "enabled": "Les nouvelles sessions reçoivent le dépôt de l’espace de travail. Les permissions Git restent applicables. Les sessions existantes conservent leur accès.",
-    "disabled": "Les nouvelles sessions fonctionnent sans le dépôt de l’espace de travail. Elles peuvent créer des fichiers et utiliser les outils autorisés. Les sessions existantes conservent leur accès."
-  },
   "customProvider": {
     "intro": "Des endpoints absents du catalogue.",
     "add": "Ajouter un fournisseur personnalisé",
@@ -23014,7 +23017,11 @@
     "folderTree": "Dossiers",
     "treeYou": "{name} (vous)",
     "treeExpand": "Déplier {name}",
-    "treeCollapse": "Replier {name}"
+    "treeCollapse": "Replier {name}",
+    "emptyWorkspaces": "{count, plural, one {# espace de travail ne contient} other {# espaces de travail ne contiennent}} aucun fichier",
+    "storageMoreWorkspaces": "{count, plural, one {# autre espace de travail} other {# autres espaces de travail}}",
+    "storageWorkspaceLimit": "Chaque espace de travail peut contenir jusqu’à {limit}",
+    "storageShowFewer": "Afficher moins"
   },
   "genui": {
     "showData": "Afficher les données",
@@ -23307,6 +23314,16 @@
         "booted": "Démarré",
         "timezone": "Fuseau horaire",
         "locale": "Paramètres régionaux",
+        "usage": "Ressources utilisées par Kortix Capture",
+        "usageCpu": "Processeur",
+        "usageCpuValue": "{avg} en moyenne · {peak} au pic",
+        "usageCpuHint": "D'un cœur, {minutes, plural, one {dernière minute} other {# dernières minutes}}",
+        "usageMemory": "Mémoire",
+        "usageMemoryPeak": "{now} · {peak} au pic",
+        "usageProcesses": "Processus",
+        "usageProcessCount": "{count, plural, one {# processus} other {# processus}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Non signalé : une ancienne version de l'app, ou l'app a démarré il y a moins d'une minute",
         "recordingSync": "Enregistrement et synchronisation",
         "status": "État",
         "lastFrame": "Dernière image",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Résolution",
       "resolutionHint": "Les écrans plus grands sont réduits à cette hauteur. La 4K garde les détails fins, comme les dessins CAO.",
+      "textRecognition": "Reconnaissance de texte",
+      "textRecognitionHint": "Lit le texte à l'écran pour qu'il soit consultable. Désactivée, elle utilise le moins de CPU : la recherche trouve alors les apps, les titres de fenêtre et les URL.",
+      "textRecognitionOption": {
+        "accurate": "Précise",
+        "fast": "Rapide",
+        "off": "Désactivée"
+      },
       "framesHint": "Sans valeur, chaque ordinateur utilise la sienne (une image toutes les 2 s en 1440p). Avec une valeur, tous les ordinateurs l'utilisent et personne ne peut la modifier. Les clics, la saisie et le défilement sont enregistrés avec leurs propres captures, quel que soit l'intervalle.",
       "computerDecides": "Chaque ordinateur décide",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "Appeler",
     "calling": "Appel en cours…",
     "start": "Démarrer un appel vocal",
+    "inCall": "Vous êtes en appel",
     "end": "Terminer l’appel",
     "connecting": "Connexion…",
     "listening": "À l’écoute",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "Dossiers de Fichiers montés par les sessions de cet agent. Une modification s’applique aussitôt à chaque nouvelle session.",
     "mount": "Mount folder",
-    "repository": "Dépôt de l’espace de travail",
     "viaAgent": "partagé avec cet agent",
     "viaProject": "partagé avec tout l’espace de travail",
     "from": "{path} · {who}",

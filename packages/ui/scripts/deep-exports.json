@@ -250,6 +250,7 @@
     "./session/composer/menus/slash-actions",
     "./session/composer/queue-projection",
     "./session/composer/session-chat-input",
+    "./session/models/ask-owner-for-credits-button",
     "./session/models/model-grouping",
     "./session/models/model-search-empty",
     "./session/models/model-selector",

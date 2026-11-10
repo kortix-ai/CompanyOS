@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Гласовни позиви",
-          "description": "Позови агента са његове странице (Прилагоди → Агенти) и разговарај с њим. Позив је засебна сесија тог агента: чује те, одговара гласом и види екран који делиш, а разговор је чет те сесије."
+          "description": "Позови агента из празног поља за поруку, где дугме за слање постаје дугме за позив, или са његове странице (Прилагоди → Агенти), и разговарај с њим. У сесији позив иде агенту те сесије; са почетне странице радног простора покреће нову сесију. Агент те чује, одговара гласом и види екран који делиш, а разговор је чет сесије."
         },
         "shared_drives": {
           "name": "Deljeni drajvovi",
@@ -1393,7 +1393,15 @@
       "history": "Историја",
       "historyDescription": "Цена сваке сесије и сви додати или потрошени кредити.",
       "openLedger": "Отвори књигу",
-      "unit": "{count, plural, one {кредит} few {кредита} other {кредита}}"
+      "unit": "{count, plural, one {кредит} few {кредита} other {кредита}}",
+      "dailySpend": "Дневна потрошња",
+      "heatLess": "Мање",
+      "heatMore": "Више",
+      "busiestDay": "{name}: {amount} дана {day}, дан највеће потрошње",
+      "noSpendInRange": "{name}: нема потрошње у овом периоду",
+      "idleWorkspaces": "{count, plural, one {# радни простор} few {# радна простора} other {# радних простора}} без потрошње у овом периоду",
+      "showIdle": "Прикажи",
+      "hideIdle": "Сакриј"
     },
     "tokens": {
       "keyRevoked": "API кључ је опозван",
@@ -21542,11 +21550,6 @@
     "dismiss": "Затвори",
     "emailCopied": "Адреса е-поште је копирана"
   },
-  "repositoryAccess": {
-    "label": "Приступ репозиторијуму радног простора",
-    "enabled": "Нове сесије добијају репозиторијум радног простора. Git дозволе и даље важе. Постојеће сесије задржавају своје подешавање приступа.",
-    "disabled": "Нове сесије раде без репозиторијума радног простора. И даље могу да праве датотеке и користе одобрене алате. Постојеће сесије задржавају своје подешавање приступа."
-  },
   "customProvider": {
     "intro": "Крајње тачке којих нема у каталогу.",
     "add": "Додај прилагођеног провајдера",
@@ -23014,7 +23017,11 @@
     "folderTree": "Фасцикле",
     "treeYou": "{name} (ти)",
     "treeExpand": "Отвори {name}",
-    "treeCollapse": "Затвори {name}"
+    "treeCollapse": "Затвори {name}",
+    "emptyWorkspaces": "{count, plural, one {# радни простор нема} few {# радна простора немају} other {# радних простора нема}} датотеке",
+    "storageMoreWorkspaces": "{count, plural, one {Још # радни простор} few {Још # радна простора} other {Још # радних простора}}",
+    "storageWorkspaceLimit": "Сваки радни простор има до {limit}",
+    "storageShowFewer": "Прикажи мање"
   },
   "genui": {
     "showData": "Прикажи податке",
@@ -23307,6 +23314,16 @@
         "booted": "Покренут",
         "timezone": "Временска зона",
         "locale": "Локалитет",
+        "usage": "Potrošnja resursa za Kortix Capture",
+        "usageCpu": "Procesor",
+        "usageCpuValue": "{avg} prosečno · {peak} vrhunac",
+        "usageCpuHint": "Jednog jezgra, {minutes, plural, one {poslednji # minut} few {poslednja # minuta} other {poslednjih # minuta}}",
+        "usageMemory": "Memorija",
+        "usageMemoryPeak": "{now} · {peak} vrhunac",
+        "usageProcesses": "Procesi",
+        "usageProcessCount": "{count, plural, one {# proces} few {# procesa} other {# procesa}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Nije prijavljeno: starija verzija aplikacije, ili je aplikacija pokrenuta pre manje od jednog minuta",
         "recordingSync": "Снимање и синхронизација",
         "status": "Статус",
         "lastFrame": "Последњи кадар",
@@ -23428,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Rezolucija",
       "resolutionHint": "Veći ekrani se smanjuju na ovu visinu. 4K čuva fine detalje, na primer CAD crteže.",
+      "textRecognition": "Prepoznavanje teksta",
+      "textRecognitionHint": "Čita tekst na ekranu da bi mogao da se pretražuje. Isključeno troši najmanje CPU-a: pretraga tada nalazi aplikacije, naslove prozora i URL-ove.",
+      "textRecognitionOption": {
+        "accurate": "Precizno",
+        "fast": "Brzo",
+        "off": "Isključeno"
+      },
       "framesHint": "Bez vrednosti, svaki računar koristi svoju (jedan snimak na svake 2 s u 1440p). Sa vrednošću, svi računari je koriste i niko ne može da je promeni. Klikovi, kucanje i skrolovanje snimaju se sa sopstvenim snimcima ekrana pri bilo kom intervalu.",
       "computerDecides": "Svaki računar odlučuje",
       "included": {
@@ -26060,6 +26084,7 @@
     "call": "Позови",
     "calling": "Позивање…",
     "start": "Започни гласовни позив",
+    "inCall": "Већ сте у позиву",
     "end": "Заврши позив",
     "connecting": "Повезивање…",
     "listening": "Слуша",
@@ -26083,7 +26108,6 @@
   "agentMounts": {
     "lead": "Фасцикле из Датотека које сесије овог агента монтирају. Измене важе одмах за сваку нову сесију.",
     "mount": "Mount folder",
-    "repository": "Репозиторијум радног простора",
     "viaAgent": "подељено са овим агентом",
     "viaProject": "подељено са свима у радном простору",
     "from": "{path} · {who}",

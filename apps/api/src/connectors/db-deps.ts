@@ -69,7 +69,7 @@ import {
   connectorCatalogDirectIds,
   connectorCatalogDirectMcpUrls,
 } from './connector-catalog';
-import { catalogDegraded, kortixMcpCatalog, mcpAppForUrl } from './mcp-apps';
+import { catalogDegraded, catalogPublishesMcpUrl, kortixMcpCatalog, mcpAppForUrl } from './mcp-apps';
 import { connectorIdentity } from './catalog-install';
 import { catalogTools } from './catalog-tools';
 import { oauth2ConnectionStatus, startConnectionSignIn } from './oauth2-store';
@@ -91,6 +91,7 @@ import {
   composioConnectionMetadata,
   composioStableUserId,
   connectLinkEligibility,
+  connectLinkNeedsManagedProvider,
   loadComposioAdapter,
   loadComposioConnector,
   loadMcpConnector,
@@ -405,7 +406,15 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
     // means no link exists to hand over. The denial still names the connector.
     if (!eligibility.ok) return null;
     const composio = await loadComposioAdapter();
-    if (!(composio?.composioConfigured?.() ?? false) && !pipedreamConfigured()) return null;
+    // An `mcp` connector's hosted page is Kortix's own OAuth sign-in: it needs
+    // no managed provider, so a self-host with no Composio/Pipedream keys still
+    // mints its link (KRTX-4640; the /connect-requests route applies the same
+    // exception). Composio/Pipedream links stay gated on their provider.
+    if (
+      connectLinkNeedsManagedProvider(eligibility.providerType) &&
+      !(composio?.composioConfigured?.() ?? false) &&
+      !pipedreamConfigured()
+    ) return null;
     // The denial's remedy is always "authorize YOURSELF": the human reading it
     // is the one who can, and a shared account is a deliberate admin choice made
     // from settings. A link with no member behind it would resolve to nobody.
@@ -457,8 +466,8 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
         .where(eq(connectorConnections.connectionId, connectionId))
         .limit(1);
       const previous = (previousRow?.metadata ?? {}) as Record<string, unknown>;
-      // Starting an authorization is not a reconnect: an agent session reaches
-      // this with owner "me", and only a person leaves `revoked`
+      // Starting an authorization is not a reconnect: the `start` authority
+      // leaves a revoked account revoked until the sign-in completes
       // (connectors/connection-status.ts `ConnectAuthority`).
       // INVARIANT (2026-09-16, account_required rule): never set is_default
       // here — an auto-authorized account is not a deliberately pinned one.
@@ -757,6 +766,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
   catalogDirectMcpUrls: () => connectorCatalogDirectMcpUrls(),
   listDiscoverSections: async (input) => ({ ...(await kortixMcpCatalog.sections(input)), degraded: catalogDegraded() }),
   isAgentCaller: (c) => isProjectSessionPrincipal(c),
+  catalogPublishesMcpUrl: (url) => catalogPublishesMcpUrl(url).catch(() => false),
   customConnectorSetupUrl: (projectId, draft) => {
     const query = new URLSearchParams({ tab: 'browse', custom: '1' });
     for (const key of ['provider', 'url', 'transport', 'endpoint', 'spec', 'baseUrl', 'name'] as const) {

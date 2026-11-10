@@ -1,19 +1,24 @@
 'use client';
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
-import { YamlLine } from '@/features/marketing/code-panel';
 import { DitherField } from '@/features/marketing/kit/dither-field';
 import { FACTORY_PROMPT } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { FACTORY_RUN, TEMPLATES } from './content';
+import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
 
 const COPIED_MS = 2000;
-/** The page's one accent: the brand blue (`kortix-base`, color.accents.kortix-base). */
+/** The page's one accent: the brand blue (`kortix-base`). */
 const ACCENT = 'text-kortix-base';
-const FACTORY = TEMPLATES.find((template) => template.id === 'software-factory')!;
+/** The column every section sits in, between the two hairline rails. */
+const COLUMN = 'mx-auto w-full max-w-[1192px]';
+
+/** A low light in the brand blue, rising from one point. Art only. */
+const light = (at: string, strength = 30): CSSProperties => ({
+  backgroundImage: `radial-gradient(55% 90% at ${at}, color-mix(in oklch, var(--kortix-base) ${strength}%, transparent), transparent 70%)`,
+});
 
 function useCopy(text: string) {
   const [copied, setCopied] = useState(false);
@@ -34,7 +39,6 @@ function useCopy(text: string) {
   return { copied, copy };
 }
 
-/** The primary action, in the accent. Hover is its own fill at 90% (motion.md). */
 function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
   const { copied, copy } = useCopy(FACTORY_PROMPT);
   return (
@@ -42,8 +46,8 @@ function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
       type="button"
       onClick={copy}
       className={cn(
-        'text-background bg-kortix-base hover:bg-kortix-base/90 rounded-md font-medium transition-colors',
-        size === 'md' ? 'h-10 px-5 text-sm' : 'h-8 px-3.5 text-sm',
+        'bg-kortix-base hover:bg-kortix-base/90 rounded-md font-medium text-white transition-colors',
+        size === 'md' ? 'h-9 px-4 text-sm' : 'h-8 px-3 text-sm',
       )}
     >
       <span aria-live="polite">{copied ? 'Copied' : 'Copy the prompt'}</span>
@@ -51,11 +55,31 @@ function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
   );
 }
 
-/** The brand's dither field in the accent, rising from the bottom edge. */
-function Field({ className }: { className?: string }) {
+function GhostButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <div aria-hidden className={cn('pointer-events-none absolute inset-x-0 bottom-0 [mask-image:linear-gradient(to_bottom,transparent,#000_85%)]', className)}>
-      <DitherField className="text-kortix-base" />
+    <Link href={href} className="border-border bg-card text-foreground hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium transition-colors">
+      {children}
+    </Link>
+  );
+}
+
+/** The pixel ruler along the top and left edges of the page. Art only. */
+function Rulers() {
+  const ticks = 'repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px 10px)';
+  const ticksY = 'repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px 10px)';
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="border-border bg-background absolute inset-x-0 top-0 hidden h-6 border-b md:block">
+        <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ backgroundImage: ticks }} />
+        {Array.from({ length: 19 }, (_, i) => (i + 1) * 100).map((x) => (
+          <span key={x} className="text-muted-foreground/60 absolute top-1 font-mono text-[10px]" style={{ left: x - 10 }}>
+            {x}
+          </span>
+        ))}
+      </div>
+      <div className="border-border bg-background absolute top-0 bottom-0 left-0 hidden w-6 border-r md:block">
+        <div className="absolute inset-y-0 right-0 w-1.5" style={{ backgroundImage: ticksY }} />
+      </div>
     </div>
   );
 }
@@ -64,177 +88,374 @@ function Eyebrow({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">{children}</span>;
 }
 
-function PromptCard() {
-  const { copied, copy } = useCopy(FACTORY_PROMPT);
+/** A caption that opens in the foreground and continues muted. */
+function Caption({ lead, rest }: { lead: string; rest: string }) {
   return (
-    <button
-      type="button"
-      onClick={copy}
-      aria-label="Copy the prompt"
-      className="border-border bg-background group w-full rounded-lg border text-left transition-colors hover:border-kortix-base/50"
-    >
-      <div className="border-border text-muted-foreground flex items-center justify-between border-b px-5 py-3 font-mono text-xs">
-        <span>Claude Code · Codex · Cursor</span>
-        <span aria-live="polite" className={copied ? ACCENT : 'group-hover:text-foreground'}>
-          {copied ? 'copied' : 'click to copy'}
-        </span>
-      </div>
-      <pre className="text-foreground px-5 py-5 font-mono text-sm leading-7 whitespace-pre-wrap">
-        <span className={cn('select-none', ACCENT)}>&gt; </span>
-        {FACTORY_PROMPT}
-      </pre>
-    </button>
+    <p className="max-w-sm text-base leading-6">
+      <span className="text-foreground font-medium">{lead}</span> <span className="text-muted-foreground">{rest}</span>
+    </p>
   );
 }
 
-const PIPELINE: Array<{ step: string; title: string; items: string[] }> = [
-  { step: 'Signals', title: 'Anything that should become work', items: ['GitHub issues', 'Failing tests', 'Sentry · Better Stack', 'Logs and database anomalies', 'Slack threads', 'Security findings'] },
-  { step: 'Tickets', title: 'In the tracker you already use', items: ['GitHub Issues', 'Linear', 'Jira', 'Asana', 'Every comment lands there'] },
-  { step: 'Agents', title: 'One per ticket, in its own sandbox', items: ['Your dev environment', 'Your tests', 'Your Claude or Codex plan'] },
-  { step: 'Pull requests', title: 'Verified, with a demo', items: ['Tests run and shown', 'A video for visible changes', 'Reviewed by a second agent', 'You merge'] },
-];
+function Window({ title, children, className }: { title: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('border-border bg-background overflow-hidden rounded-lg border shadow-2xl shadow-black/40', className)}>
+      <div className="border-border text-muted-foreground flex items-center gap-3 border-b px-4 py-2.5 text-xs">
+        <span aria-hidden className="flex gap-1.5">
+          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
+          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
+          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
+        </span>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
 
-const CONTROL = [
-  { title: 'Your tracker is the truth.', body: 'Tickets, comments and status live where your team already works.' },
-  { title: 'You merge.', body: 'Every pull request waits for a person until you allow auto-merge.' },
-  { title: 'One folder.', body: 'The whole factory is .kortix/ in your repo. Delete it and it stops.' },
-];
+const STATE_DOT: Record<string, string> = {
+  'in review': 'bg-kortix-base',
+  'in progress': 'bg-kortix-yellow',
+  ready: 'bg-muted-foreground',
+};
+
+/** The factory as it ran on the demo repository: tickets, a worker, the pull request. */
+function ProductWindow() {
+  return (
+    <Window title={<span className="font-mono">kortix · {DEMO.repo} · Software Factory</span>}>
+      <div className="grid min-h-[420px] lg:grid-cols-[260px_1fr_340px]">
+        <aside className="border-border hidden flex-col gap-1 border-r p-3 lg:flex">
+          <span className="text-muted-foreground px-2 pt-1 pb-2 text-xs">Tickets · GitHub Issues</span>
+          {DEMO.tickets.map((ticket, index) => (
+            <div key={ticket.number} className={cn('flex gap-2.5 rounded-md px-2 py-2', index === 0 && 'bg-accent')}>
+              <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', STATE_DOT[ticket.state])} />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-foreground truncate text-sm">{ticket.title}</span>
+                <span className="text-muted-foreground text-xs">
+                  #{ticket.number} · {ticket.state}
+                </span>
+              </span>
+            </div>
+          ))}
+        </aside>
+        <div className="border-border flex flex-col border-r">
+          <div className="border-border text-muted-foreground border-b px-5 py-3 text-xs">worker · #{DEMO.tickets[0]!.number}</div>
+          <div className="flex flex-1 flex-col gap-4 p-5 font-mono text-xs leading-6">
+            {DEMO.worker.map((line) => (
+              <div key={line.text} className={line.kind === 'cmd' ? 'text-foreground' : line.kind === 'ok' ? ACCENT : 'text-muted-foreground'}>
+                {line.kind === 'cmd' ? <span className="text-muted-foreground select-none">$ </span> : null}
+                {line.text}
+              </div>
+            ))}
+          </div>
+          <div className="border-border m-3 rounded-md border px-4 py-3 text-sm">
+            <span className="text-muted-foreground">Add a Kortix software factory to this repository with me.</span>
+          </div>
+        </div>
+        <div className="hidden flex-col lg:flex">
+          <div className="border-border text-muted-foreground border-b px-5 py-3 text-xs">pull request #{DEMO.pr.number}</div>
+          <div className="flex flex-col gap-4 p-5">
+            <span className="text-foreground text-sm font-medium">{DEMO.pr.title}</span>
+            <span className="text-muted-foreground text-xs">
+              +{DEMO.pr.additions} −{DEMO.pr.deletions} · {DEMO.pr.branch}
+            </span>
+            <div className="border-border flex flex-col gap-2 rounded-md border p-4">
+              <span className="text-foreground text-xs font-medium">What I ran</span>
+              {DEMO.pr.checks.map((check) => (
+                <span key={check} className="text-muted-foreground font-mono text-xs">
+                  {check}
+                </span>
+              ))}
+            </div>
+            <span className="text-muted-foreground text-xs">Waiting for a person to merge.</span>
+          </div>
+        </div>
+      </div>
+    </Window>
+  );
+}
+
+function Bento({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('border-border grid border-t md:grid-cols-2', className)}>{children}</div>;
+}
+
+function Cell({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('border-border flex flex-col justify-between gap-10 border-b p-8 md:border-r md:p-10 md:even:border-r-0', className)}>{children}</div>;
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="text-foreground px-8 pt-24 pb-16 text-3xl font-medium tracking-tight text-balance md:px-10 lg:text-[40px] lg:leading-tight">
+      {children}
+    </h2>
+  );
+}
 
 /**
  * kortix.com: one product. One prompt adds a software factory to your repo.
- * Black page, one brand-blue accent, the brand's dither field as the only art.
+ * The page frame (rulers, one railed column, hairline bento grids, glow bands)
+ * after wonder.design; the look, words and every panel are Kortix's own: the
+ * brand blue, the dither field, and data from a real factory run.
  */
 export function FactoryHome() {
+  const { copied, copy } = useCopy(FACTORY_PROMPT);
   return (
-    <div className="dark bg-background text-foreground min-h-screen">
-      <header className="border-border bg-background sticky top-0 z-30 border-b">
-        <div className="mx-auto flex h-14 max-w-[1120px] items-center justify-between px-6">
+    <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip md:pt-6 md:pl-6">
+      <Rulers />
+
+      <div className={cn(COLUMN, 'border-border relative border-x')}>
+        <header className="border-border bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-8 backdrop-blur md:px-10">
           <Link href="/" aria-label="Kortix" className="text-foreground">
-            <KortixLogo size={15} variant="logomark" />
+            <KortixLogo size={16} variant="logomark" />
           </Link>
-          <nav className="text-muted-foreground flex items-center gap-6 text-sm">
-            <Link href="#how" className="hover:text-foreground hidden sm:block">How it works</Link>
-            <Link href="/factory.md" className="hover:text-foreground hidden sm:block">The guide</Link>
-            <a href="https://github.com/kortix-ai/suna" className="hover:text-foreground hidden sm:block">GitHub</a>
-            <Link href="/auth" className="hover:text-foreground">Sign in</Link>
-            <CopyButton size="sm" />
-          </nav>
-        </div>
-      </header>
-
-      <section className="relative overflow-hidden">
-        <Field className="h-[45%]" />
-        <div className="relative mx-auto grid max-w-[1120px] gap-14 px-6 pt-24 pb-28 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:pt-32 lg:pb-36">
-          <div className="flex flex-col items-start gap-7">
-            <Eyebrow>Software Factory</Eyebrow>
-            <h1 className="text-foreground text-[40px] leading-[1.05] font-medium tracking-tight text-balance sm:text-6xl lg:text-[64px]">
-              One prompt adds a software factory to your repo.
-            </h1>
-            <p className="text-muted-foreground max-w-md text-lg text-pretty">
-              Issues, failing tests and errors become tickets. Agents turn each one into a verified pull
-              request, 24/7, on your Claude or Codex plan.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <CopyButton />
-              <Link href="#run" className="border-border text-foreground hover:bg-card inline-flex h-10 items-center rounded-md border px-5 text-sm font-medium transition-colors">
-                See a real run
-              </Link>
-            </div>
-          </div>
-          <PromptCard />
-        </div>
-      </section>
-
-      <section id="how" className="border-border scroll-mt-14 border-t">
-        <div className="mx-auto max-w-[1120px] px-6 py-24 lg:py-32">
-          <ol className="bg-border border-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
-            {PIPELINE.map((column, index) => (
-              <li key={column.step} className="bg-background flex flex-col gap-5 p-7">
-                <span className={cn('font-mono text-xs', ACCENT)}>
-                  {String(index + 1).padStart(2, '0')} · {column.step}
-                </span>
-                <span className="text-foreground text-xl font-medium tracking-tight text-balance">{column.title}</span>
-                <ul className="text-muted-foreground flex flex-col gap-2 text-sm">
-                  {column.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      <section id="run" className="border-border scroll-mt-14 border-t">
-        <div className="mx-auto grid max-w-[1120px] gap-12 px-6 py-24 lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-32">
-          <div className="flex flex-col gap-5">
-            <Eyebrow>A real run</Eyebrow>
-            <h2 className="text-foreground text-4xl font-medium tracking-tight text-balance lg:text-5xl">
-              Bug found at 15:16. Fix reviewed at 15:21.
-            </h2>
-            <p className="text-muted-foreground max-w-md text-base">No person in between. The fix waited for a person to merge it.</p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <div className="border-border overflow-hidden rounded-lg border">
-              <div className="border-border text-muted-foreground border-b px-5 py-3 font-mono text-xs">github.com · {FACTORY_RUN.repo}</div>
-              <ol>
-                {FACTORY_RUN.events.map((event) => (
-                  <li key={event.what} className="border-border flex gap-4 border-b px-5 py-4 last:border-b-0">
-                    <span className={cn('w-24 shrink-0 pt-0.5 font-mono text-xs', ACCENT)}>{event.who}</span>
-                    <span className="flex min-w-0 flex-col gap-1">
-                      <span className="text-foreground text-sm">{event.title}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {event.what} · {event.at}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <pre className="border-border overflow-x-auto rounded-lg border px-5 py-4 font-mono text-xs leading-6">
-              {FACTORY.excerpt.map((line) => (
-                <span key={line} className="block whitespace-pre">
-                  <YamlLine line={line} />
-                </span>
-              ))}
-            </pre>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-border border-t">
-        <ul className="mx-auto grid max-w-[1120px] gap-12 px-6 py-24 sm:grid-cols-3 lg:py-32">
-          {CONTROL.map((point) => (
-            <li key={point.title} className="flex flex-col gap-3">
-              <span className="text-foreground text-2xl font-medium tracking-tight">{point.title}</span>
-              <span className="text-muted-foreground text-base">{point.body}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="border-border relative overflow-hidden border-t">
-        <Field className="h-full" />
-        <div className="relative mx-auto flex max-w-[1120px] flex-col items-start gap-8 px-6 py-32 lg:py-44">
-          <h2 className="text-foreground max-w-2xl text-5xl font-medium tracking-tight text-balance lg:text-7xl">
-            Your repo. One prompt.
-          </h2>
-          <CopyButton />
-        </div>
-      </section>
-
-      <footer className="border-border border-t">
-        <div className="text-muted-foreground mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm">
-          <span>Kortix. Open source.</span>
-          <nav className="flex flex-wrap gap-6">
+          <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
+            <Link href="#how" className="hover:text-foreground">How it works</Link>
+            <Link href="#runs" className="hover:text-foreground">Real runs</Link>
             <Link href="/factory.md" className="hover:text-foreground">The guide</Link>
-            <Link href="/companyos" className="hover:text-foreground">CompanyOS</Link>
-            <Link href="/docs" className="hover:text-foreground">Docs</Link>
-            <a href="https://github.com/kortix-ai/suna" className="hover:text-foreground">GitHub</a>
-            <Link href="/legal/terms" className="hover:text-foreground">Terms</Link>
+            <Link href="/docs/developers#templates" className="hover:text-foreground">Docs</Link>
           </nav>
-        </div>
-      </footer>
+          <div className="flex items-center gap-2">
+            <GhostButton href="/auth">Sign in</GhostButton>
+            <CopyButton size="sm" />
+          </div>
+        </header>
+
+        <section className="relative overflow-hidden">
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[38%] bottom-0 [mask-image:linear-gradient(to_bottom,transparent,#000_30%)]">
+            <DitherField className="text-kortix-base" />
+          </div>
+          <div className="relative grid gap-10 px-8 pt-24 pb-16 md:px-10 lg:grid-cols-[1.2fr_1fr] lg:items-end lg:gap-20 lg:pt-28">
+            <div className="flex flex-col items-start gap-7">
+              <span className="border-border bg-card text-foreground inline-flex items-center gap-2 rounded-full border py-1 pr-3 pl-1.5 text-sm">
+                <span className="bg-kortix-base/15 text-kortix-base rounded-full px-2 py-0.5 font-mono text-xs">new</span>
+                Runs on your Claude or Codex plan
+              </span>
+              <h1 className="text-foreground text-[40px] leading-[1.06] font-medium tracking-tight text-balance sm:text-5xl lg:text-[56px]">
+                One prompt adds a software factory to your repo.
+              </h1>
+            </div>
+            <div className="flex flex-col gap-6 lg:pb-2">
+              <p className="text-muted-foreground text-lg text-pretty">
+                Issues, failing tests and errors become tickets in your tracker. Agents turn each one into a
+                verified pull request, 24/7, while you sleep.
+              </p>
+              <div className="flex flex-wrap gap-2.5">
+                <CopyButton />
+                <GhostButton href="#runs">See a real run</GhostButton>
+              </div>
+            </div>
+          </div>
+          <div className="relative px-4 pb-24 md:px-8 lg:pb-32">
+            <ProductWindow />
+          </div>
+        </section>
+
+        <section className="border-border border-t">
+          <div className="flex flex-col items-center gap-8 px-8 py-14">
+            <Eyebrow>Works with the tools you already use</Eyebrow>
+            <ul className="text-muted-foreground flex flex-wrap justify-center gap-x-12 gap-y-4 text-xl font-medium tracking-tight">
+              {TOOLS.map((tool) => (
+                <li key={tool}>{tool}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="border-border relative overflow-hidden border-t">
+          <div aria-hidden className="pointer-events-none absolute inset-0" style={light('15% 120%', 34)} />
+          <div aria-hidden className="pointer-events-none absolute inset-0" style={light('90% 130%', 18)} />
+          <div className="relative flex flex-col items-center gap-10 px-8 py-28 text-center">
+            <button
+              type="button"
+              onClick={copy}
+              className="border-border bg-card/80 hover:border-kortix-base/50 w-full max-w-lg rounded-xl border p-4 text-left backdrop-blur transition-colors"
+            >
+              <span className="text-foreground block text-sm">{FACTORY_PROMPT.split('\n')[0]}</span>
+              <span className="text-muted-foreground mt-4 flex items-center justify-between text-xs">
+                <span className="font-mono">claude · codex · cursor</span>
+                <span aria-live="polite" className={copied ? ACCENT : undefined}>{copied ? 'copied' : 'click to copy'}</span>
+              </span>
+            </button>
+            <div className="flex flex-col items-center gap-3">
+              <h2 className="text-foreground max-w-md text-3xl font-medium tracking-tight text-balance">Bring the plan you already pay for.</h2>
+              <p className="text-muted-foreground max-w-md text-base">
+                Your Claude or ChatGPT subscription, or any API key. Shared with your workspace, so a 3 a.m. run uses it too.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="how" className="border-border scroll-mt-16 border-t">
+          <SectionTitle>
+            From a signal to a pull request.
+            <br />
+            And back to your tracker.
+          </SectionTitle>
+          <Bento>
+            <Cell>
+              <div className="border-border bg-card flex size-20 items-center justify-center self-center rounded-full border">
+                <KortixLogo size={22} variant="symbol" className="text-foreground" />
+              </div>
+              <Caption lead="Connect your repository." rest="Your agent adds one folder, .kortix/, or keeps it in a repository of its own." />
+            </Cell>
+            <Cell>
+              <div className="border-border flex flex-col rounded-md border">
+                {DEMO.tickets.map((ticket) => (
+                  <div key={ticket.number} className="border-border flex items-center gap-3 border-b px-4 py-3 last:border-b-0">
+                    <span className={cn('size-1.5 rounded-full', STATE_DOT[ticket.state])} />
+                    <span className="text-foreground min-w-0 flex-1 truncate text-sm">{ticket.title}</span>
+                    <span className="text-muted-foreground font-mono text-xs">#{ticket.number}</span>
+                  </div>
+                ))}
+              </div>
+              <Caption lead="Every signal becomes a ticket." rest="In GitHub Issues, Linear, Jira or Asana. Every comment and status lands there." />
+            </Cell>
+            <Cell>
+              <div className="border-border bg-card rounded-md border p-5 font-mono text-xs leading-6">
+                {DEMO.worker.map((line) => (
+                  <div key={line.text} className={line.kind === 'ok' ? ACCENT : line.kind === 'cmd' ? 'text-foreground' : 'text-muted-foreground'}>
+                    {line.kind === 'cmd' ? '$ ' : ''}
+                    {line.text}
+                  </div>
+                ))}
+              </div>
+              <Caption lead="An agent proves the fix." rest="In its own sandbox, on your dev environment and your tests. A video when the change is visible." />
+            </Cell>
+            <Cell>
+              <div className="border-border flex flex-col gap-4 rounded-md border p-5">
+                <span className="text-foreground text-sm font-medium">{DEMO.pr.title}</span>
+                <span className="text-muted-foreground text-xs">Reviewed by a second agent · {DEMO.pr.checks[1]}</span>
+                <span className="bg-kortix-base self-start rounded-md px-3 py-1.5 text-xs font-medium text-white">Merge</span>
+              </div>
+              <Caption lead="You merge." rest="Every pull request waits for a person until you allow auto-merge." />
+            </Cell>
+          </Bento>
+        </section>
+
+        <section className="border-border border-t">
+          <SectionTitle>
+            Start with one source.
+            <br />
+            Add the rest when you trust it.
+          </SectionTitle>
+          <Bento>
+            <Cell>
+              <div className="border-border flex flex-col rounded-md border">
+                {SOURCES.map((source) => (
+                  <div key={source.name} className="border-border flex items-center justify-between border-b px-4 py-3 last:border-b-0">
+                    <span className="text-foreground text-sm">{source.name}</span>
+                    <span className={cn('rounded-full px-2 py-0.5 font-mono text-xs', source.on ? 'bg-kortix-base/15 text-kortix-base' : 'bg-accent text-muted-foreground')}>
+                      {source.on ? 'on' : 'off'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Caption lead="Sources are switches." rest="GitHub issues and nightly tests are on. Errors, logs, Slack and security wait for you." />
+            </Cell>
+            <Cell>
+              <div className="border-border bg-card flex flex-col gap-3 rounded-md border p-5">
+                <span className="text-muted-foreground font-mono text-xs">factory.json</span>
+                <pre className="text-foreground font-mono text-xs leading-6">{`"merge": { "policy": "hold" },
+"caps": { "workers": 3,
+  "new_tickets_per_source_per_day": 5 }`}</pre>
+              </div>
+              <Caption lead="It never outruns you." rest="Three workers, five new tickets per source a day, and a person merges. One file sets it." />
+            </Cell>
+          </Bento>
+        </section>
+
+        <section className="border-border relative overflow-hidden border-t">
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-90 [mask-image:linear-gradient(to_bottom,transparent,#000_60%)]">
+            <DitherField className="text-kortix-base" />
+          </div>
+          <div className="relative flex flex-col items-center gap-6 px-8 py-32 text-center">
+            <ul aria-hidden className="text-muted-foreground flex gap-10 font-mono text-sm">
+              <li className="-rotate-6">issues</li>
+              <li className="translate-y-2 rotate-3">tests</li>
+              <li className="-rotate-3">errors</li>
+            </ul>
+            <h2 className="text-foreground max-w-lg text-3xl font-medium tracking-tight text-balance lg:text-4xl">
+              Bug found at 15:16.
+              <br />
+              Fix reviewed at 15:21.
+            </h2>
+            <GhostButton href="#runs">See the runs</GhostButton>
+          </div>
+        </section>
+
+        <section id="runs" className="border-border scroll-mt-16 border-t">
+          <div className="flex items-end justify-between px-8 pt-24 pb-16 md:px-10">
+            <h2 className="text-foreground text-3xl font-medium tracking-tight lg:text-[40px] lg:leading-tight">
+              Real runs
+            </h2>
+            <a href={`https://github.com/markokraemer/${DEMO.repo}/pulls?q=is%3Apr`} className="border-border bg-card text-foreground hover:bg-accent rounded-md border px-3 py-1.5 text-sm">
+              All pull requests
+            </a>
+          </div>
+          <div className="border-border grid border-t md:grid-cols-3">
+            {RUNS.map((run) => (
+              <a key={run.pr} href={`https://github.com/markokraemer/${DEMO.repo}/pull/${run.pr}`} className="border-border hover:bg-card flex flex-col gap-4 border-b p-8 transition-colors md:border-r md:last:border-r-0 md:p-10">
+                <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
+                  Issue #{run.issue} → PR #{run.pr} · Nov 10, 2026
+                </span>
+                <span className="text-foreground text-base font-medium">{run.fix}</span>
+                <span className="text-muted-foreground text-sm">{run.bug}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-border grid border-t md:grid-cols-2">
+          <div className="border-border flex flex-col gap-4 border-b p-8 md:border-r md:border-b-0 md:p-10">
+            <h2 className="text-foreground text-3xl font-medium tracking-tight">Frequently asked questions.</h2>
+            <p className="text-muted-foreground text-sm">
+              Something else on your mind? <Link href="/contact" className="text-foreground underline underline-offset-4">Talk to the team</Link>.
+            </p>
+          </div>
+          <div>
+            {FAQ.map((item) => (
+              <details key={item.q} className="border-border group border-b last:border-b-0">
+                <summary className="text-foreground flex cursor-pointer list-none items-center justify-between px-6 py-4 text-sm font-medium">
+                  {item.q}
+                  <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                </summary>
+                <p className="text-muted-foreground px-6 pb-5 text-sm">{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-border flex flex-col gap-8 border-t px-8 py-24 md:flex-row md:items-end md:justify-between md:px-10 lg:py-32">
+          <h2 className="text-foreground max-w-md text-4xl font-medium tracking-tight text-balance lg:text-5xl">
+            One prompt.
+            <br />
+            A software factory.
+          </h2>
+          <div className="flex gap-2.5">
+            <CopyButton />
+            <GhostButton href="/factory.md">Read the guide</GhostButton>
+          </div>
+        </section>
+
+        <footer className="border-border grid gap-10 border-t px-8 py-14 sm:grid-cols-4 md:px-10">
+          {[
+            { title: 'Product', links: [['How it works', '#how'], ['Real runs', '#runs'], ['The guide', '/factory.md']] },
+            { title: 'Developers', links: [['Docs', '/docs/developers#templates'], ['GitHub', 'https://github.com/kortix-ai/suna']] },
+            { title: 'Company', links: [['CompanyOS', '/companyos'], ['Careers', '/careers']] },
+            { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },
+          ].map((group) => (
+            <div key={group.title} className="flex flex-col gap-3 text-sm">
+              <span className="text-muted-foreground">{group.title}</span>
+              {group.links.map(([label, href]) => (
+                <Link key={label} href={href!} className="text-foreground hover:text-muted-foreground">
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </footer>
+        <div className="border-border text-muted-foreground border-t px-8 py-6 text-center text-xs md:px-10">Kortix. Open source.</div>
+      </div>
     </div>
   );
 }

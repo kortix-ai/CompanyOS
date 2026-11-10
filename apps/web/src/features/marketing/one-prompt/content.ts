@@ -5,13 +5,15 @@
  * template's own YAML (`{{defaultBranch}}` shown as `main`). `content.test.ts`
  * fails when a name, summary or excerpt line drifts from those files.
  */
-import { SETUP_PROMPT } from '@kortix/shared/setup-guide';
+import { SETUP_PROMPT, templatePrompt } from '@kortix/shared/setup-guide';
 
 export const PROMPT = SETUP_PROMPT;
 
 export interface HomeTemplate {
   id: string;
   name: string;
+  /** Completes the headline "…to run ___". */
+  phrase: string;
   summary: string;
   /** What starts the agents, in the reader's words. */
   triggers: string[];
@@ -24,6 +26,7 @@ export interface HomeTemplate {
 export const TEMPLATES: HomeTemplate[] = [
   {
     id: 'software-factory',
+    phrase: 'a software factory',
     name: 'Software Factory',
     summary:
       'Agents that build labeled issues into pull requests, review every pull request, fix production errors and run your end-to-end tests every night.',
@@ -46,6 +49,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'security-loop',
+    phrase: 'a 24/7 security red team',
     name: 'Auto-Security Loop',
     summary:
       'Agents that pentest your app around the clock: a nightly red team attacks a fresh dev sandbox, scans every pull request, patches confirmed findings and audits dependencies weekly.',
@@ -68,6 +72,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'aeo-loop',
+    phrase: 'your AEO and SEO loop',
     name: 'AEO Loop',
     summary:
       'Agents that measure every week whether AI assistants and search cite your site, write the missing answers into your website as pull requests, and fix technical SEO.',
@@ -89,6 +94,7 @@ export const TEMPLATES: HomeTemplate[] = [
   },
   {
     id: 'changelog',
+    phrase: 'your changelog and launch content',
     name: 'Automated Changelog',
     summary:
       'Agents that turn every merged change into a changelog entry, then draft the weekly blog post, social posts and a captioned product video from it.',
@@ -134,3 +140,19 @@ export const FILE_TREE = [
 ];
 
 export const PLANS = ['Claude Pro or Max', 'ChatGPT Plus or Pro', 'Any API key'];
+
+export const promptFor = (template: HomeTemplate) => templatePrompt(template);
+
+/**
+ * One real Software Factory run on a demo repository
+ * (github.com/markokraemer/kortix-factory-demo): the nightly tester filed the
+ * issue, the builder opened the pull request, the reviewer ran it.
+ */
+export const FACTORY_RUN = {
+  repo: 'kortix-factory-demo',
+  events: [
+    { who: 'tester', what: 'opened issue #1', title: 'POST /todos with malformed JSON crashes the whole server', at: '15:16 UTC' },
+    { who: 'builder', what: 'opened pull request #6', title: 'fix: return 400 on malformed JSON instead of crashing the server', at: '15:18 UTC' },
+    { who: 'reviewer', what: 'reviewed #6', title: 'npm test — 7/7 pass, 3 consecutive runs, no flakes.', at: '15:21 UTC' },
+  ],
+};

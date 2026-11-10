@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`shipped marketing route composition home retains its rendered sections, links and visuals 1`] = `
+exports[`shipped marketing route composition companyos retains its rendered sections, links and visuals 1`] = `
 {
   "glyphs": [
     "--brand:var(--foreground);mask-image:url(/media/landing/logos/notion.svg);mask-size:contain;mask-repeat:no-repeat;mask-position:center",
@@ -170,4 +170,3 @@ exports[`shipped marketing route composition home retains its rendered sections,
   ],
 }
 `;
-

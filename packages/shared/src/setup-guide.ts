@@ -17,6 +17,16 @@ Read ${SETUP_GUIDE_URL} (curl -fsSL ${SETUP_GUIDE_URL}) and follow it step by st
 Ask me before each decision it names. Never print a secret value.`;
 
 /**
+ * The prompt for one template. The CLI carries the template's onboarding
+ * (`kortix templates onboard <id>`), so it always matches the installed version.
+ */
+export function templatePrompt(template: { id: string; name: string }): string {
+  return `Set up the Kortix ${template.name} on this repository with me.
+Install the Kortix CLI if it is missing (curl -fsSL https://kortix.com/install | bash), then run \`kortix templates onboard ${template.id}\` and follow what it prints, step by step.
+Ask me before each decision it names. Never print a secret value.`;
+}
+
+/**
  * The prompt for a workspace that exists already and reads `kortix.yaml`
  * from `repository` on `branch`: the setup must push there.
  */

@@ -13,17 +13,17 @@ mock.module('@/lib/use-cases-source', () => ({
   },
 }));
 
-import Home from '@/app/[locale]/(public)/(marketing)/(home)/page';
+import CompanyOsPage from '@/app/[locale]/(public)/(marketing)/companyos/page';
 import SecurityPage from '@/app/[locale]/(public)/(marketing)/security/page';
 
 describe('shipped marketing route composition', () => {
-  for (const [name, Page] of [['home', Home], ['security', SecurityPage]] as const) {
+  for (const [name, Page] of [['companyos', CompanyOsPage], ['security', SecurityPage]] as const) {
     test(`${name} retains its rendered sections, links and visuals`, () => {
       const html = renderToStaticMarkup(<Page />);
       expect(html).toContain('<section');
       expect(html).toContain('href=');
       // The security page's text changes with its copy: it is checked for
-      // structure only. The home page keeps its full composition snapshot.
+      // structure only. The CompanyOS page (the previous home) keeps its full composition snapshot.
       if (name === 'security') return;
       const document = new Window().document;
       document.body.innerHTML = html;

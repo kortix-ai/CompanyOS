@@ -13,25 +13,27 @@ const nextIntlServer = await import('next-intl/server');
 mock.module('next-intl/server', () => ({ ...nextIntlServer, getLocale: async () => 'en' }));
 
 // bun hoists static imports above the mocks, so every layout module loads
-// dynamically, after the mocks registered.
+// dynamically, after the mocks registered. Ten routes host their metadata in
+// the page itself (their pass-through layout was deleted); the rest re-export
+// from a layout.
 const modules: Record<string, { generateMetadata: () => Promise<Record<string, unknown>> }> = {};
 for (const [name, path] of Object.entries({
-  home: '@/app/[locale]/(public)/(marketing)/(home)/layout',
+  home: '@/app/[locale]/(public)/(marketing)/(home)/page',
   'case-studies': '@/app/[locale]/(public)/(marketing)/case-studies/layout',
-  compliance: '@/app/[locale]/(public)/(marketing)/compliance/layout',
+  compliance: '@/app/[locale]/(public)/(marketing)/compliance/page',
   contact: '@/app/[locale]/(public)/(marketing)/contact/layout',
-  developers: '@/app/[locale]/(public)/(marketing)/developers/layout',
-  enterprise: '@/app/[locale]/(public)/(marketing)/enterprise/layout',
-  framework: '@/app/[locale]/(public)/(marketing)/framework/layout',
+  developers: '@/app/[locale]/(public)/(marketing)/developers/page',
+  enterprise: '@/app/[locale]/(public)/(marketing)/enterprise/page',
+  framework: '@/app/[locale]/(public)/(marketing)/framework/page',
   mobile: '@/app/[locale]/(public)/(marketing)/mobile/page',
-  multiplayer: '@/app/[locale]/(public)/(marketing)/multiplayer/layout',
+  multiplayer: '@/app/[locale]/(public)/(marketing)/multiplayer/page',
   pricing: '@/app/[locale]/(public)/(marketing)/pricing/layout',
-  security: '@/app/[locale]/(public)/(marketing)/security/layout',
-  'self-hosted': '@/app/[locale]/(public)/(marketing)/self-hosted/layout',
+  security: '@/app/[locale]/(public)/(marketing)/security/page',
+  'self-hosted': '@/app/[locale]/(public)/(marketing)/self-hosted/page',
   slack: '@/app/[locale]/(public)/(marketing)/slack/page',
-  sovereign: '@/app/[locale]/(public)/(marketing)/sovereign/layout',
+  sovereign: '@/app/[locale]/(public)/(marketing)/sovereign/page',
   teams: '@/app/[locale]/(public)/(marketing)/teams/page',
-  'white-label': '@/app/[locale]/(public)/(marketing)/white-label/layout',
+  'white-label': '@/app/[locale]/(public)/(marketing)/white-label/page',
   services: '@/app/[locale]/(public)/(sales)/services/layout',
   legal: '@/app/[locale]/(public)/(seo)/legal/layout',
   download: '@/app/[locale]/(public)/download/page',

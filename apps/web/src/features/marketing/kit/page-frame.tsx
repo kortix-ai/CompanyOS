@@ -1,3 +1,4 @@
+import { cn } from '@kortix/ui';
 import type { ReactNode } from 'react';
 
 /*
@@ -13,6 +14,7 @@ import type { ReactNode } from 'react';
 export function PageFrame({ children }: { children: ReactNode }) {
   return (
     <main className="bg-background relative mx-auto w-full max-w-[1440px]">
+      {/* Rails: 62px in from each edge on the board. z-10 keeps them above the band fill. */}
       <div
         aria-hidden
         className="bg-border pointer-events-none absolute inset-y-0 left-4 z-10 w-px lg:left-17"
@@ -118,7 +120,7 @@ export function SpecGrid({
 
 /** A band whose hairlines cross the page, its content between the rails. */
 export function Band({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={`kx-rail-fade border-y px-4 lg:px-17 ${className ?? ''}`}>{children}</div>;
+  return <div className={cn('kx-rail-fade border-y px-4 lg:px-17', className)}>{children}</div>;
 }
 
 /** Cells split by hairlines: the band's grid over the border colour. */

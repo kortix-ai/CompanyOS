@@ -11,15 +11,11 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { Button } from '@kortix/ui/button';
 import { ButtonGroup } from '@kortix/ui/button-group';
 import Hint from '@kortix/ui/hint';
 import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
-import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
-import { OutcomeTitle } from '@kortix/ui/internal/auth/auth-consent';
-import { Rise, StepHeader } from '@kortix/ui/internal/auth/auth-primitives';
 import { framePolicy } from '@kortix/ui/file-viewer';
 import { Download } from '@kortix/ui/internal/icons/download';
 import { getAuthToken } from '@/lib/auth-token';
@@ -27,7 +23,8 @@ import { getEnv } from '@/lib/env-config';
 import { getPublicShareByToken, startSessionWithToken } from '@kortix/sdk';
 import { PublicFileShareView } from './public-file-share-view';
 import { downloadFileFromUrl, fileNameFromPath } from './share-file';
-import { SHARE_PAGE_ROOT_CLASS, SHARE_PREVIEW_IFRAME_CLASS } from './share-layout';
+import { SHARE_PREVIEW_IFRAME_CLASS } from './share-layout';
+import { ShareChrome, ShareHeader, ShareUnavailable } from '../../share-chrome';
 
 interface PublicShareMeta {
   share: {
@@ -196,25 +193,14 @@ export default function PublicSessionSharePage() {
   }
 
   if (error || !meta) {
-    // The quiet auth frame, like every other link a recipient can land on.
     return (
-      <AuthFrame footerVariant="none">
-        <Rise>
-          <StepHeader
-            title={
-              <OutcomeTitle tone="muted">
-                {tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextShareLink6d642641')}
-              </OutcomeTitle>
-            }
-            description={error ?? tI18nHardcoded.raw('i18nComplete.text489314dd2a13')}
-          />
-        </Rise>
-        <Rise delay={0.06}>
-          <Button size="lg" variant="secondary" className="w-full" asChild>
-            <Link href="/">{tI18nHardcoded.raw('i18nComplete.text5fae82827f98')}</Link>
-          </Button>
-        </Rise>
-      </AuthFrame>
+      <ShareUnavailable
+        title={tI18nHardcoded.raw('autoAppPublicShareSessionTokenPageJsxTextShareLink6d642641')}
+        description={error ?? tI18nHardcoded.raw('i18nComplete.text489314dd2a13')}
+        cta={
+          <Link href="/">{tI18nHardcoded.raw('i18nComplete.text5fae82827f98')}</Link>
+        }
+      />
     );
   }
 
@@ -236,20 +222,35 @@ export default function PublicSessionSharePage() {
     'autoAppPublicShareSessionTokenPageJsxTextOpenAppa9aa1bb9',
   );
 
+  // `overflow-clip` is what makes `rounded-t-md` visible: without it the
+  // iframe paints its square background over the corners. `clip` rather
+  // than `hidden` so this never becomes a scrollable box — the scrolling
+  // belongs to the child.
   return (
-    <main className={SHARE_PAGE_ROOT_CLASS}>
-      {/* Bar shape copied from the file viewer toolbar (file-preview-modal.tsx):
-          h-12, gap-2, px-3, name left, actions right. No border-b — the pane
-          below draws the seam with its own top border. */}
-      {!fullscreen && (
-        <header className="flex h-12 shrink-0 items-center gap-3 pr-3 pl-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <KortixLogo variant="symbol" size={16} className="shrink-0" />
-            <h1 className="truncate text-sm font-medium">{title}</h1>
-          </div>
-          {/* One group, one weight: every action is secondary, so the bar reads
-              as a toolbar beside the shared content, never louder than it. */}
-          <ButtonGroup className="shrink-0">
+    <ShareChrome
+      header={
+        fullscreen ? (
+          // Escape also exits, but focus inside the iframe never reaches the
+          // parent document — so the way out has to be visible. `secondary` is
+          // opaque: this floats over content whose colours we do not control.
+          <Hint label={tI18nHardcoded.raw('i18nComplete.textdc5229faa653')} side="left">
+            <Button
+              variant="secondary"
+              size="icon-base"
+              aria-label={tI18nHardcoded.raw('i18nComplete.text897e0cf78b80')}
+              className="fixed top-2 right-3 z-50 shadow-md"
+              onClick={() => setFullscreen(false)}
+            >
+              <ArrowsInSimple />
+            </Button>
+          </Hint>
+        ) : (
+          <ShareHeader
+            title={title}
+            actions={
+              // One group, one weight: every action is secondary, so the bar reads
+              // as a toolbar beside the shared content, never louder than it.
+              <ButtonGroup className="shrink-0">
             {iframeSrc && !offline && !isFileShare && (
               <Hint label={openAppLabel} side="bottom">
                 <Button
@@ -294,29 +295,12 @@ export default function PublicSessionSharePage() {
               </Button>
             )}
           </ButtonGroup>
-        </header>
-      )}
-      {/* Escape also exits, but focus inside the iframe never reaches the
-          parent document — so the way out has to be visible. `secondary` is
-          opaque: this floats over content whose colours we do not control. */}
-      {fullscreen && (
-        <Hint label={tI18nHardcoded.raw('i18nComplete.textdc5229faa653')} side="left">
-          <Button
-            variant="secondary"
-            size="icon-base"
-            aria-label={tI18nHardcoded.raw('i18nComplete.text897e0cf78b80')}
-            className="fixed top-2 right-3 z-50 shadow-md"
-            onClick={() => setFullscreen(false)}
-          >
-            <ArrowsInSimple />
-          </Button>
-        </Hint>
-      )}
-      {/* `overflow-clip` is what makes `rounded-t-md` visible: without it the
-          iframe paints its square background over the corners. `clip` rather
-          than `hidden` so this never becomes a scrollable box — the scrolling
-          belongs to the child. */}
-      <section className="bg-background border-border relative h-dvh min-h-0 flex-1 overflow-clip rounded-t-md border-x border-t">
+            }
+          />
+        )
+      }
+      sheetClassName="bg-background border-border relative h-dvh min-h-0 flex-1 overflow-clip rounded-t-md border-x border-t"
+    >
         {offline ? (
           hasAuth ? (
             <div className="flex h-full items-center justify-center px-6">
@@ -378,7 +362,6 @@ export default function PublicSessionSharePage() {
             sandbox={framePolicy('app', iframeSrc).sandbox}
           />
         )}
-      </section>
-    </main>
+    </ShareChrome>
   );
 }

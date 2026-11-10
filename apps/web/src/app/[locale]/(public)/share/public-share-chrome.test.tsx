@@ -30,8 +30,6 @@ mock.module('./response/[token]/public-response', () => ({
 const ArtifactPage = (await import('./artifact/[id]/page')).default;
 const ResponsePage = (await import('./response/[token]/page')).default;
 
-type RouteProps = { params: Promise<{ locale: string; id?: string; token?: string }> };
-
 const SHARED_ARTIFACT = {
   kind: 'shared',
   artifact: {
@@ -56,7 +54,7 @@ afterEach(() => {
 });
 
 /** Render the async server page component and hand its markup to happy-dom. */
-async function renderPage(Page: (props: RouteProps) => Promise<unknown>, props: RouteProps) {
+async function renderPage<P>(Page: (props: P) => unknown, props: P) {
   const html = renderToStaticMarkup((await Page(props)) as never);
   lastHtml = html;
   const document = new Window().document;

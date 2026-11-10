@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { getLocale, getTranslations } from '@/i18n/get-translations';
 
 import { defaultLocale, locales, type Locale } from '@/i18n/config';
@@ -141,5 +142,16 @@ export async function localizedMarketingMetadata(pathname: string): Promise<Meta
     ...(pathname === '/' ? { title: { absolute: record?.title ?? siteMetadata.title } } : {}),
     alternates: { canonical, languages: languageAlternates(pathname) },
     openGraph: { ...base.openGraph, url: canonical, ...openGraphLocales(locale) },
+  };
+}
+
+/** The pass-through layout every locale-routed marketing page shares: the
+ *  route's localized metadata plus a layout that renders its children alone.
+ *  Each `layout.tsx` re-exports both, so the route keeps its own segment and
+ *  its own route config. */
+export function marketingMetadataLayout(pathname: string) {
+  return {
+    generateMetadata: () => localizedMarketingMetadata(pathname),
+    Layout: ({ children }: { children: ReactNode }) => children,
   };
 }

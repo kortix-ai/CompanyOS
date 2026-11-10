@@ -40,10 +40,11 @@ const dom = (html: string) => {
 };
 
 /** Class tokens of an element, whitespace-normalized and ordered. */
-const tokens = (node: Element) => node.className.replace(/\s+/g, ' ').trim().split(' ').sort().join(' ');
+const tokens = (node: { className: string }) =>
+  node.className.replace(/\s+/g, ' ').trim().split(' ').sort().join(' ');
 
 /** The two hairline rails every full marketing page draws, 62px in on desktop. */
-const railTokens = (document: Document) =>
+const railTokens = (document: ReturnType<typeof dom>) =>
   [...document.querySelectorAll('main > div[aria-hidden]')].map(tokens);
 
 const RAIL_LEFT = 'absolute bg-border inset-y-0 left-4 lg:left-17 pointer-events-none w-px z-10';

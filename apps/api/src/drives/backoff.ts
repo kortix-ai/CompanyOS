@@ -14,9 +14,8 @@ import { DriveStorageError } from './volumes';
  * Per-drive retry backoff for one drive sweep: `fail` records a failure — the
  * drive is skipped until the returned `waitMs` elapses, and `firstFailure` is
  * false while the drive was already failing (the state persisted, so the
- * caller stays quiet). `waiting(now)` lists the drives still waiting and
- * drops their elapsed entries; `ok` clears a drive, so its next failure
- * warns again.
+ * caller stays quiet). `waiting(now)` lists the drives still waiting at
+ * `now`; `ok` clears a drive, so its next failure warns again.
  */
 export function createDriveBackoff(maxMs: number) {
   const map = new Map<string, { attempts: number; until: number }>();
@@ -30,8 +29,10 @@ export function createDriveBackoff(maxMs: number) {
       return { waitMs, firstFailure: prev === undefined };
     },
     waiting(now = Date.now()) {
+      // Read-only: an elapsed entry stays until its drive succeeds (ok), so
+      // the attempts count and the first-failure state survive the wait.
       const waiting = new Set<string>();
-      for (const [id, b] of map) if (b.until > now) waiting.add(id); else map.delete(id);
+      for (const [id, b] of map) if (b.until > now) waiting.add(id);
       return waiting;
     },
     ok(driveId: string) {

@@ -145,8 +145,9 @@ export async function runConflictScan(): Promise<void> {
   try {
     const ids = await activeDriveIds();
     if (!ids.length) return;
+    const waiting = scanBackoff.waiting();
     const rows = (await db.select().from(drives).where(inArray(drives.driveId, ids))).filter(
-      (d) => !scanBackoff.waiting().has(d.driveId),
+      (d) => !waiting.has(d.driveId),
     );
     const changed: string[] = [];
     let i = 0;

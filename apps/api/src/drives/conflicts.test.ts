@@ -118,8 +118,9 @@ test('a failed drive waits 30 s doubling to the cap, and only until the wait ela
   expect(b.fail('d1', down)).toEqual({ waitMs: 30_000, firstFailure: true });
   expect(b.fail('d1', down)).toEqual({ waitMs: 45_000, firstFailure: false }); // 60 s capped at 45 s
   expect(b.waiting().has('d1')).toBe(true);
-  expect(b.waiting(Date.now() + 46_000).has('d1')).toBe(false); // elapsed
-  expect(b.waiting().has('d1')).toBe(false); // an elapsed entry is dropped
+  expect(b.waiting(Date.now() + 46_000).has('d1')).toBe(false); // elapsed: skipped, not forgotten
+  // A sustained outage: the attempt after the wait keeps doubling and stays quiet.
+  expect(b.fail('d1', down)).toEqual({ waitMs: 45_000, firstFailure: false });
 });
 
 test('storage\'s Retry-After wins when it asks longer than the doubling', () => {

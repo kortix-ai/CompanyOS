@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "音声通話",
-          "description": "エージェントのページ（カスタマイズ → エージェント）から電話して話せます。通話はそのエージェントの独立したセッションで、あなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
+          "description": "空のメッセージ欄（送信ボタンが通話ボタンに変わります）またはエージェントのページ（カスタマイズ → エージェント）から電話して話せます。セッション内ではそのセッションのエージェントに、ワークスペースのホームからは新しいセッションでつながります。エージェントはあなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
         },
         "shared_drives": {
           "name": "共有ドライブ",
@@ -1399,7 +1399,7 @@
       "heatMore": "多",
       "busiestDay": "{name}: {day} に {amount}（最も多い日）",
       "noSpendInRange": "{name}: この期間の利用はありません",
-      "idleWorkspaces": "この期間に利用のないワークスペース {count} 件",
+      "idleWorkspaces": "この期間に利用のないワークスペース {count, plural, other {# 件}}",
       "showIdle": "表示",
       "hideIdle": "非表示"
     },
@@ -23018,8 +23018,8 @@
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
     "treeCollapse": "{name} を閉じる",
-    "emptyWorkspaces": "ファイルのないワークスペース {count} 件",
-    "storageMoreWorkspaces": "他 {count} 件のワークスペース",
+    "emptyWorkspaces": "ファイルのないワークスペース {count, plural, other {# 件}}",
+    "storageMoreWorkspaces": "他 {count, plural, other {# 件のワークスペース}}",
     "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
     "storageShowFewer": "表示を減らす"
   },
@@ -26067,6 +26067,7 @@
     "call": "通話",
     "calling": "呼び出し中…",
     "start": "音声通話を開始",
+    "inCall": "通話中です",
     "end": "通話を終了",
     "connecting": "接続中…",
     "listening": "聞いています",

@@ -8,7 +8,7 @@
  * local bare remote.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
@@ -156,6 +156,46 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     )
     const tree = git(['ls-tree', '-r', 'refs/heads/session-def', '--name-only'], remote)
     expect(tree.split('\n').sort()).toEqual(['README.md', 'agent-file.md', 'apps/x.ts'])
+  })
+
+  it('a failed materialization retries on the next call instead of keeping the partial repo', async () => {
+    const { root, target } = makeRepo()
+    // The remote does not exist yet: the first materialization must fail and
+    // leave no .git behind — a partial repo would read as materialized and
+    // the next call would commit without the repository's tree.
+    const remote = join(root, 'remote-later.git')
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    await expect(
+      commitAndPushWorkingTree(
+        testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+        { message: 'too early' },
+      ),
+    ).rejects.toThrow('git fetch failed')
+    expect(existsSync(join(target, '.git'))).toBe(false)
+
+    // The remote comes back: the retry materializes and pushes the union.
+    const seed = join(root, 'seed-later')
+    mkdirSync(seed)
+    git(['init', '--bare', '-b', 'main', remote])
+    git(['init', '-b', 'main'], seed)
+    writeFileSync(join(seed, 'README.md'), 'base\n')
+    mkdirSync(join(seed, 'apps'))
+    writeFileSync(join(seed, 'apps', 'x.ts'), 'repo version\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'base'], seed)
+    git(['remote', 'add', 'origin', remote], seed)
+    git(['push', '-q', 'origin', 'main'], seed)
+
+    writeFileSync(join(target, 'second-file.md'), 'more agent work\n')
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'after recovery' },
+    )
+    expect(result.pushed).toBe(true)
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(
+      ['README.md', 'agent-file.md', 'apps/x.ts', 'second-file.md'],
+    )
   })
 
   it('no connected repository still refuses with the standing error', async () => {

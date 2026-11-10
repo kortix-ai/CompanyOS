@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { Config } from '../config/config'
@@ -465,57 +465,69 @@ type CommitPushResult = {
  * keeps its pushed work and pushes a fast-forward), else the remote default
  * branch's tip. The default is resolved with `remote set-head --auto` —
  * FETCH_HEAD's first entry is fetch order, not the default branch.
+ *
+ * Any failure removes the `.git` this call created (the working tree was
+ * never written), so the next call retries the whole materialization
+ * instead of reading the partial repository as already materialized.
  */
 async function materializeRepoForCommit(cfg: Config, target: string): Promise<RepoInfo> {
   const repoUrl = cfg.repoUrl
   if (!repoUrl) throw new Error('project repo is not materialized')
   const credential = await resolveCloneCredential(cfg)
 
-  const init = await execGit(['init', '--quiet'], { cwd: target })
-  if (init.code !== 0) throw new Error(`git init failed: ${init.stderr || init.stdout}`)
-  const remote = await execGit(['remote', 'add', 'origin', repoUrl], { cwd: target })
-  if (remote.code !== 0) throw new Error(`git remote add failed: ${remote.stderr || remote.stdout}`)
-  const fetch = await gitWithAuth(credential, repoUrl, ['-C', target, 'fetch', '--quiet', 'origin'], {
-    timeoutMs: 120_000,
-  })
-  if (fetch.code !== 0) throw new Error(`git fetch failed: ${fetch.stderr || fetch.stdout}`)
+  try {
+    const init = await execGit(['init', '--quiet'], { cwd: target })
+    if (init.code !== 0) throw new Error(`git init failed: ${init.stderr || init.stdout}`)
+    const remote = await execGit(['remote', 'add', 'origin', repoUrl], { cwd: target })
+    if (remote.code !== 0) throw new Error(`git remote add failed: ${remote.stderr || remote.stdout}`)
+    const fetch = await gitWithAuth(credential, repoUrl, ['-C', target, 'fetch', '--quiet', 'origin'], {
+      timeoutMs: 120_000,
+    })
+    if (fetch.code !== 0) throw new Error(`git fetch failed: ${fetch.stderr || fetch.stdout}`)
 
-  let base: string | null = null
-  if (cfg.branchName) {
-    const r = await execGit([
-      '-C', target, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${cfg.branchName}`,
-    ])
-    if (r.code === 0) base = r.stdout.trim()
-  }
-  if (!base) {
-    const setHead = await gitWithAuth(
-      credential, repoUrl, ['-C', target, 'remote', 'set-head', 'origin', '--auto'],
-      { timeoutMs: 120_000 },
-    )
-    if (setHead.code !== 0) throw new Error(`git remote set-head failed: ${setHead.stderr || setHead.stdout}`)
-    const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'origin/HEAD'])
-    if (r.code !== 0) throw new Error('git fetch produced no default branch')
-    base = r.stdout.trim()
-  }
+    let base: string | null = null
+    if (cfg.branchName) {
+      const r = await execGit([
+        '-C', target, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${cfg.branchName}`,
+      ])
+      if (r.code === 0) base = r.stdout.trim()
+    }
+    if (!base) {
+      const setHead = await gitWithAuth(
+        credential, repoUrl, ['-C', target, 'remote', 'set-head', 'origin', '--auto'],
+        { timeoutMs: 120_000 },
+      )
+      if (setHead.code !== 0) throw new Error(`git remote set-head failed: ${setHead.stderr || setHead.stdout}`)
+      const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'origin/HEAD'])
+      if (r.code !== 0) throw new Error('git fetch produced no default branch')
+      base = r.stdout.trim()
+    }
 
-  const reset = await execGit(['-C', target, 'reset', '--mixed', '--quiet', base])
-  if (reset.code !== 0) throw new Error(`git reset failed: ${reset.stderr || reset.stdout}`)
-  if (cfg.branchName) {
-    const co = await execGit(['-C', target, 'checkout', '--quiet', '-b', cfg.branchName])
-    if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
-  }
+    const reset = await execGit(['-C', target, 'reset', '--mixed', '--quiet', base])
+    if (reset.code !== 0) throw new Error(`git reset failed: ${reset.stderr || reset.stdout}`)
+    if (cfg.branchName) {
+      const co = await execGit(['-C', target, 'checkout', '--quiet', '-b', cfg.branchName])
+      if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
+    }
 
-  const deleted = await execGit(['-C', target, 'ls-files', '--deleted', '-z'])
-  if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
-  const missing = deleted.stdout.split('\0').filter(Boolean)
-  for (let i = 0; i < missing.length; i += 500) {
-    const co = await execGit(['-C', target, 'checkout', '--quiet', '--', ...missing.slice(i, i + 500)])
-    if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
-  }
+    const deleted = await execGit(['-C', target, 'ls-files', '--deleted', '-z'])
+    if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
+    const missing = deleted.stdout.split('\0').filter(Boolean)
+    for (let i = 0; i < missing.length; i += 500) {
+      const co = await execGit(['-C', target, 'checkout', '--quiet', '--', ...missing.slice(i, i + 500)])
+      if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
+    }
 
-  const info = await readRepoInfo(target)
-  if (!info) throw new Error('project repo did not materialize')
-  return info
+    const info = await readRepoInfo(target)
+    if (!info) throw new Error('project repo did not materialize')
+    return info
+  } catch (e) {
+    // A partial `.git` (initialized, never fetched) reads as "materialized" on
+    // the next call and would skip the fetch forever — and a commit made in it
+    // has none of the repository's tree. Remove it so the next call retries.
+    await rm(join(target, '.git'), { recursive: true, force: true }).catch(() => {})
+    throw e
+  }
 }
 
 export async function commitAndPushWorkingTree(

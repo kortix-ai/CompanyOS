@@ -523,11 +523,13 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       userId: USER_ID,
       projectId: PROJECT_ID,
       sessionId: SANDBOX_ID,
+      // AGENT = HUMAN (#12240): the mint writes the platform grant — every
+      // connector and secret env, capped per call by the person's reach.
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

@@ -3,8 +3,11 @@ import { app } from '../index';
 
 describe('published OpenAPI authentication', () => {
   test.each([
+    // #12136 removed the fast-boot-bundle route (no checkout at boot), so the
+    // published /v1/git/ surface is four operations. The floor pins that the
+    // smart-HTTP git surface stays published, nothing more.
     ['/scim/v2/', 17],
-    ['/v1/git/', 5],
+    ['/v1/git/', 4],
   ])('%s operations require a defined bearer scheme', async (prefix, minimum) => {
     const response = await app.request('/v1/openapi.json');
     expect(response.status).toBe(200);

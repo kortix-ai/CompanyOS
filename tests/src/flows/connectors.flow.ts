@@ -5138,10 +5138,11 @@ flow(
 // ── CONN-CALL-1 — the call contract: binding, output, upstream status ───────
 // Beside `data`, a call names its `binding`, the `upstream_status` and the
 // unwrapped `output`. An upstream 429 or 503 keeps its status with Retry-After;
-// an MCP `isError` result and GraphQL `errors` without data stay HTTP 200 and
-// name the failure in `upstream_error`; a hung upstream answers 500
-// `upstream_timeout` at the gateway deadline. The upstream is runner-local, so
-// every step runs on the local target only.
+// the upstream's other 4xx pass through and its 5xx answers 503 (never 502/504:
+// Cloudflare replaces their bodies); an MCP `isError` result and GraphQL
+// `errors` without data stay HTTP 200 and name the failure in `upstream_error`;
+// a hung upstream answers 500 `upstream_timeout` at the gateway deadline. The
+// upstream is runner-local, so every step runs on the local target only.
 flow(
   'CONN-CALL-1',
   {
@@ -5174,6 +5175,8 @@ flow(
       if (req.url === '/api/ok') return json(200, { items: [1, 2] });
       if (req.url === '/api/limited') return json(429, { message: 'slow down' }, { 'retry-after': '2' });
       if (req.url === '/api/unavailable') return json(503, { message: 'maintenance' }, { 'retry-after': '30' });
+      if (req.url === '/api/rejected') return json(400, { message: 'the upstream refused the args' });
+      if (req.url === '/api/downstream-down') return json(502, { message: 'the provider itself failed' });
       if (req.url === '/api/slow') {
         // Answers only after 70 s; the gateway deadline (60 s, or the local
         // profile's KORTIX_CONNECTOR_CALL_TIMEOUT_MS) closes the socket first.
@@ -5255,7 +5258,7 @@ flow(
         };
         const route = (path: string) => ({ path, binding: { kind: 'openapi', method: 'GET', path: `/api/${path}`, server: base } });
         const intentRoute = { path: 'intent_fetch', binding: { kind: 'openapi', method: 'GET', path: '/api/intents/{intentId}', server: base } };
-        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('slow'), intentRoute]);
+        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('rejected'), route('downstream-down'), route('slow'), intentRoute]);
         await seed(slug.mcp, 'mcp', { url: `${base}/mcp` }, [{ path: 'get_issue', binding: { kind: 'mcp', tool: 'get_issue' } }]);
         await seed(slug.gql, 'graphql', { endpoint: `${base}/graphql` }, [
           { path: 'issue', binding: { kind: 'graphql', operation: 'query', field: 'issue' } },
@@ -5312,6 +5315,29 @@ flow(
         const r = await call(slug.api, 'unavailable');
         r.status(503).body().has('$.upstream_status', 503).has('$.retry_after_seconds', 30);
         if (r.header('retry-after') !== '30') throw new Error(`Retry-After: ${r.header('retry-after')}`);
+      });
+
+      await ctx.step('upstream 400 (the caller\'s args) → HTTP 400 with the upstream reason, not a 5xx', async () => {
+        // KRTX-4614: a caller error used to read as a server fault — a 5xx
+        // invites a retry of args that can never succeed, and the route's 5xx
+        // metric counts it.
+        const r = await call(slug.api, 'rejected');
+        r.status(400)
+          .body()
+          .has('$.status', 'error')
+          .has('$.reason', 'upstream_400: {"message":"the upstream refused the args"}')
+          .has('$.upstream_status', 400)
+          .has('$.binding', 'openapi');
+      });
+
+      await ctx.step('upstream 502 → HTTP 503, the body intact (Cloudflare replaces a 502 body)', async () => {
+        const r = await call(slug.api, 'downstream-down');
+        r.status(503)
+          .body()
+          .has('$.status', 'error')
+          .has('$.reason', 'upstream_502: {"message":"the provider itself failed"}')
+          .has('$.upstream_status', 502)
+          .has('$.binding', 'openapi');
       });
 
       await ctx.step('an MCP isError result → 200 with ok false, status tool_error and the tool text', async () => {

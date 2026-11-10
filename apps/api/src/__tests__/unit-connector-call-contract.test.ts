@@ -4,7 +4,11 @@
  *   - an ok body carries `output`, the payload without the binding's envelope,
  *     and `upstream_error` when the upstream reported a failure inside a 2xx
  *     (MCP `isError` / JSON-RPC error, GraphQL `errors` with no data);
- *   - an upstream 429 or 503 keeps its status, with `Retry-After`;
+ *   - a channel `{ok:false}` envelope on a 2xx answer is the tool's own result:
+ *     HTTP 200 `tool_error`, not a server 5xx;
+ *   - an upstream 429 or 503 keeps its status, with `Retry-After`; the upstream's
+ *     other 4xx pass through (never 401: the caller's Kortix token is fine) and
+ *     the upstream's 5xx answer as 503 (never 502/504: Cloudflare eats their bodies);
  *   - the upstream deadline answers `upstream_timeout` before any client gives up.
  * Fake deps, no database.
  */
@@ -208,13 +212,30 @@ describe('handleCall() upstream status and deadline', () => {
 });
 
 describe('connectorErrorHttpStatus()', () => {
-  test('upstream 429 and 503 keep their status; computer states still win; the rest is 500', () => {
+  test('upstream 429 and 503 keep their status; computer states still win', () => {
     expect(connectorErrorHttpStatus('upstream_429', 429)).toBe(429);
     expect(connectorErrorHttpStatus('credential_rejected: stripe rejected the credential', 401)).toBe(424);
     expect(connectorErrorHttpStatus('upstream_503', 503)).toBe(503);
-    expect(connectorErrorHttpStatus('upstream_502', 502)).toBe(500);
-    expect(connectorErrorHttpStatus('upstream_timeout: x')).toBe(500);
     expect(connectorErrorHttpStatus('computer_offline: x', 429)).toBe(409);
+  });
+  test('the upstream refused the request as sent: its 4xx passes through, 401 never does', () => {
+    // A caller error (Composio classifies one as 400) must not read as a
+    // Kortix server fault: 5xx invites a retry of args that can never succeed.
+    expect(connectorErrorHttpStatus('upstream_400: {"error":"missing field"}', 400)).toBe(400);
+    expect(connectorErrorHttpStatus('upstream_403: forbidden', 403)).toBe(403);
+    // A 401 here is the CONNECTOR's credential, never the caller's token; the
+    // SDK replays a 401 with a fresh token and invalidates the host's.
+    expect(connectorErrorHttpStatus('upstream_401: invalid_auth', 401)).toBe(500);
+  });
+  test('the upstream itself failed: 503 (never 502/504 — Cloudflare replaces their bodies)', () => {
+    expect(connectorErrorHttpStatus('upstream_500: boom', 500)).toBe(503);
+    expect(connectorErrorHttpStatus('upstream_502: {"error":"bad gateway"}', 502)).toBe(503);
+    expect(connectorErrorHttpStatus('upstream_522: <!doctype html>', 522)).toBe(503);
+    expect(connectorErrorHttpStatus('composio_upstream_unavailable: Composio answered 403 with an HTML error page', 502)).toBe(503);
+  });
+  test('no upstream answer (a thrown or timed-out call) stays a server 500', () => {
+    expect(connectorErrorHttpStatus('upstream_timeout: x')).toBe(500);
+    expect(connectorErrorHttpStatus('runner not wired')).toBe(500);
   });
 });
 
@@ -425,6 +446,76 @@ describe('POST /call wire contract', () => {
     });
   });
 
+  test('upstream 400 (the caller\'s args) → HTTP 400 with the upstream reason, not a 5xx', async () => {
+    const res = await post(router(async () => ({ status: 400, body: '{"error":"bad args"}' })));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      ok: false,
+      status: 'error',
+      reason: 'upstream_400: {"error":"bad args"}',
+      binding: 'openapi',
+      upstream_status: 400,
+    });
+  });
+
+  test('upstream 502 → HTTP 503, the body intact (Cloudflare eats a 502 body)', async () => {
+    const res = await post(router(async () => ({ status: 502, body: 'edge block page' })));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      ok: false,
+      status: 'error',
+      reason: 'edge block page',
+      binding: 'openapi',
+      upstream_status: 502,
+    });
+  });
+
+  test('a channel {ok:false} envelope on a 2xx answer → HTTP 200 tool_error, not a server 5xx', async () => {
+    // Slack answers 200 `{ok:false,error}` when the thread/channel does not
+    // exist or the app cannot see it: the tool ran and reported a domain
+    // result. A 5xx pages it as a server fault and invites retries of a state
+    // that will not change (KRTX-4614: 6 of 8 5xx in the route's first hour).
+    const channel = createConnectorRouter({
+      resolvePrincipal: async () => ({}) as ConnectorPrincipal,
+      resolveProjectPrincipal: async () =>
+        ({ userId: 'user-1', accountId: 'acct-1', projectId: 'proj-1', sessionId: null, subject: { userId: 'user-1', groupIds: [] } }) as ConnectorPrincipal,
+      makeGatewayDeps: () =>
+        gatewayDeps(async () => ({ status: 200, body: '{"ok":false,"error":"thread_not_found"}' }), {
+          loadConnectorBySlug: async () => ({
+            connectorId: 'conn-slack-channel',
+            slug: 'slack_channel',
+            provider: 'channel',
+            platform: 'slack',
+            baseUrl: 'https://slack.com/api',
+            auth: { type: 'bearer', in: 'header', name: null, prefix: null },
+            hasAuth: true,
+            credentialMode: 'shared',
+            enabled: true,
+          }),
+          loadAction: async () =>
+            action({ kind: 'http', method: 'POST', path: '/chat.postMessage' }),
+          resolveCredential: async () => 'xoxb-install-token',
+        }),
+    } as unknown as ConnectorRouterDeps);
+    const app = channel;
+    const res = await app.fetch(
+      new Request('http://x/projects/proj-1/call', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ connector: 'slack_channel', action: 'send_message', args: { channel: 'C123', text: 'hi' } }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: false,
+      status: 'tool_error',
+      error: 'upstream_200: {"ok":false,"error":"thread_not_found"}',
+      binding: 'http',
+      upstream_status: 200,
+      upstream_error: 'upstream_200: {"ok":false,"error":"thread_not_found"}',
+    });
+  });
+
   test('a credential failure before any upstream call → HTTP 500 with binding and upstream_status null', async () => {
     // Native OAuth2 client credentials mint a token per call. A failed mint
     // never reaches the upstream, so the body names no binding and no status.
@@ -458,9 +549,9 @@ describe('POST /call wire contract', () => {
     expect(upstreamCalls).toBe(0);
   });
 
-  test('upstream 500 → HTTP 500 with upstream_status 500 and no Retry-After', async () => {
+  test('upstream 500 → HTTP 503 (the upstream failed, not Kortix), reason unchanged', async () => {
     const res = await post(router(async () => ({ status: 500, body: 'boom' })));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
     expect(res.headers.get('retry-after')).toBeNull();
     expect(await res.json()).toEqual({
       ok: false,

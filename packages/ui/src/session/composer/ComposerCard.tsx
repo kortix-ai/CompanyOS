@@ -212,6 +212,7 @@ export function ComposerCard({
   agentPickerCompact = false,
   slashMenuPlacement = 'above',
   cardClassName,
+  call,
 }: ComposerCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
@@ -520,6 +521,7 @@ export function ComposerCard({
             disabled={disabled}
             modelUnavailable={modelUnavailable}
             agentUnavailable={agentUnavailable}
+            call={call}
             onSubmit={() => handleSubmit()}
           />
         </div>

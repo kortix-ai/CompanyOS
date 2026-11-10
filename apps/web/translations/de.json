@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Sprachanrufe",
-          "description": "Ruf einen Agenten von seiner Seite aus an (Anpassen → Agenten) und sprich mit ihm. Ein Anruf ist eine eigene Session dieses Agenten: Er hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat dieser Session."
+          "description": "Ruf einen Agenten aus einem leeren Nachrichtenfeld an, in dem der Senden-Button zum Anruf-Button wird, oder von seiner Seite aus (Anpassen → Agenten), und sprich mit ihm. In einer Session geht der Anruf an den Agenten dieser Session; auf der Startseite des Workspace startet er eine neue Session. Der Agent hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat der Session."
         },
         "shared_drives": {
           "name": "Geteilte Drives",
@@ -26067,6 +26067,7 @@
     "call": "Anrufen",
     "calling": "Ruft an…",
     "start": "Sprachanruf starten",
+    "inCall": "Du bist in einem Anruf",
     "end": "Anruf beenden",
     "connecting": "Verbinden…",
     "listening": "Hört zu",

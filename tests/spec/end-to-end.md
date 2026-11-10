@@ -524,6 +524,20 @@ in the composer. The sent message shows its tiles from the first frame, with no
 progress ring and no busy state. Drafts never store File bytes, blob URLs, data
 URLs, signed download URLs, or upload handles.
 
+Composer voice call (flag `voice_call`; no browser journey; proof:
+`packages/ui/src/session/composer/send-stop-control.test.tsx`): with the flag
+on, outside the desktop shell, an empty composer (no text, file, quote or paste)
+shows "Start a voice call" in the Send button's place, and the first typed
+character turns it back into Send. A running turn shows Stop; a question lock,
+a disabled composer, no accessible agent or no usable model keep Send with its
+refusal. While a call runs, the button stays and is disabled. On the project
+home a click creates a session through the same create as a send (agent,
+sandbox, scope; billing and connector gates; one create per click), with no
+first prompt, places the call and opens the session. In a top-level session, on
+the boot shell and on the chat, a click calls that session and creates nothing.
+A sub-session, the first chat and a host with its own `onSend` offer no call.
+With the flag off, the composer is unchanged.
+
 ### 7a. Channels and DMs (`/projects/:id/spaces`, behind `chat`)
 
 DB `project_spaces` (`kind channel|dm`). A thread is a `project_sessions` row with `space_id`. Channel slugs are unique per project including archived channels. Only the API's `ensureDefaultSpace` sets `is_default` (`#general`). Phase 1 has no membership: every member with `session` project access sees every channel; a DM is visible to its owner only.

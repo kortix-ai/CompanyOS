@@ -25,9 +25,10 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   permission rules, and the things it may use.
 - Every session starts from the default branch. A change reaches other
   sessions only when its change request merges.
-- `/workspace` starts empty. Kortix never checks out the repository there.
-- To work on the workspace's files, run `kortix workspaces clone`. It clones
-  the repository onto your session branch. Send the change with `kortix cr`.
+- `/workspace` starts empty: Kortix checks out the repository there only when
+  your agent's `workspace.repos` declares a clone (your prompt then names it
+  and its setup progress). Otherwise `kortix workspaces clone` clones the
+  repository onto your session branch. Send the change with `kortix cr`.
 - Only your session branch accepts your push. The push needs
   `workspace.gitops.read` in your agent's `kortix_permissions`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
@@ -53,9 +54,7 @@ media and datasets in object storage; add build output to `.gitignore`.
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
-0. Work in a clone: `/workspace` has none at boot. `kortix workspaces clone`
-   puts the repository on your session branch; `cd` into it. Run every step
-   below there.
+0. Work in your clone (`<overview>`): `cd` into it and run every step there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
@@ -176,7 +175,8 @@ watch), set up this session's wake-up before you end the turn. Nobody asks.
 
 - A loop or a session trigger lives in the database: no CR. Every fire is a
   model turn. `403 feature_disabled`: Loops are off. Tell the user
-  (`kortix workspaces features enable reminders`); use an `at` trigger meanwhile.
+  (`kortix workspaces features enable reminders`). Meanwhile, an `at` trigger
+  starts a fresh session at the time: put the full context in its prompt.
 - `kortix triggers add|rm|enable|disable` edit `kortix.yaml`: a trigger fires
   after its CR merges, or at once with `--apply` (through the API, gated by
   your `kortix_permissions`). Then `kortix triggers fire <slug>` once.

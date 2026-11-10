@@ -23023,7 +23023,10 @@
     "treeYou": "{name} (tú)",
     "treeExpand": "Expandir {name}",
     "treeCollapse": "Contraer {name}",
-    "emptyWorkspaces": "{count, plural, one {# espacio de trabajo no tiene} other {# espacios de trabajo no tienen}} archivos"
+    "emptyWorkspaces": "{count, plural, one {# espacio de trabajo no tiene} other {# espacios de trabajo no tienen}} archivos",
+    "storageMoreWorkspaces": "{count, plural, one {# espacio de trabajo más} other {# espacios de trabajo más}}",
+    "storageWorkspaceLimit": "Cada espacio de trabajo admite hasta {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar datos",

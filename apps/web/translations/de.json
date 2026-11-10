@@ -23023,7 +23023,10 @@
     "treeYou": "{name} (Du)",
     "treeExpand": "{name} aufklappen",
     "treeCollapse": "{name} zuklappen",
-    "emptyWorkspaces": "{count, plural, one {# Workspace enthält} other {# Workspaces enthalten}} keine Dateien"
+    "emptyWorkspaces": "{count, plural, one {# Workspace enthält} other {# Workspaces enthalten}} keine Dateien",
+    "storageMoreWorkspaces": "{count, plural, one {# weiterer Workspace} other {# weitere Workspaces}}",
+    "storageWorkspaceLimit": "Jeder Workspace fasst bis zu {limit}",
+    "storageShowFewer": "Weniger anzeigen"
   },
   "genui": {
     "showData": "Daten anzeigen",

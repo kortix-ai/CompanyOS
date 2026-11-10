@@ -7765,7 +7765,10 @@ const catalog = {
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
     "treeCollapse": "Close {name}",
-    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files"
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",

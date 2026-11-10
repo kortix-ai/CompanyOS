@@ -23023,7 +23023,10 @@
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
     "treeCollapse": "{name} を閉じる",
-    "emptyWorkspaces": "ファイルのないワークスペース {count} 件"
+    "emptyWorkspaces": "ファイルのないワークスペース {count} 件",
+    "storageMoreWorkspaces": "他 {count} 件のワークスペース",
+    "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
+    "storageShowFewer": "表示を減らす"
   },
   "genui": {
     "showData": "データを表示",

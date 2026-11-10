@@ -1,5 +1,9 @@
 'use client';
 
+import { useState } from 'react';
+
+import { cn } from '@kortix/ui';
+import { Button } from '@kortix/ui/button';
 import { Label } from '@kortix/ui/label';
 import { Skeleton } from '@kortix/ui/skeleton';
 import { StorageMeter, StorageNotice, formatStorageBytes, storageTone } from '@kortix/ui/files';
@@ -68,88 +72,42 @@ export function AccountStorageSection({ accountId }: { accountId: string | undef
   );
 }
 
-/** Ring fill by how full a folder is: the Storage purple the rest of the
- *  Usage page gives storage while there is room, orange near the limit, red at
- *  it. The same three states `storageTone` reports. */
-const RING_TONE_COLOR = {
-  ok: 'var(--kortix-purple)',
-  near: 'var(--kortix-orange)',
-  full: 'var(--kortix-red)',
+/** Bar fill by how full a workspace is against its own limit: the Storage
+ *  purple the rest of the Usage page gives storage while there is room,
+ *  orange near the limit, red at it. The same three states `storageTone`
+ *  reports. */
+const BAR_TONE_CLASS = {
+  ok: 'bg-kortix-purple',
+  near: 'bg-kortix-orange',
+  full: 'bg-kortix-red',
 } as const;
 
-const RING_RADIUS = 27;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+/** Rows shown before the list folds: an account can hold dozens of
+ *  workspaces, and the card sits beside the balance card. */
+export const STORAGE_ROWS_FOLDED = 5;
 
-/** A share of a limit as a whole percent, `<1%` for a real but tiny share. */
-export function formatStorageShare(usedBytes: number, limitBytes: number | null): string | null {
-  if (!limitBytes || limitBytes <= 0) return null;
-  if (usedBytes <= 0) return '0%';
-  const share = (usedBytes / limitBytes) * 100;
-  if (share < 1) return '<1%';
-  return `${Math.min(100, Math.round(share))}%`;
-}
-
-function StorageRing({
-  label,
-  usedBytes,
-  limitBytes,
-  locale,
-}: {
-  label: string;
-  usedBytes: number;
-  limitBytes: number | null;
-  locale: string;
-}) {
-  const t = useTranslations('drives');
-  const tone = storageTone(usedBytes, limitBytes);
-  const share = limitBytes ? Math.min(1, usedBytes / limitBytes) : 0;
-  // A real but tiny folder still shows a sliver, so it never reads as empty.
-  const arc = usedBytes > 0 ? Math.max(share * RING_CIRCUMFERENCE, 1.5) : 0;
-  const used = formatStorageBytes(usedBytes, locale);
-  const caption = limitBytes
-    ? t('storageOfLimit', { used, limit: formatStorageBytes(limitBytes, locale) })
-    : t('storageUsed', { used });
-
-  return (
-    <li className="flex min-w-0 flex-col items-center gap-2 text-center">
-      <span className="relative inline-flex size-16 items-center justify-center">
-        <svg viewBox="0 0 64 64" className="absolute inset-0 size-16 -rotate-90" aria-hidden="true">
-          <circle cx="32" cy="32" r={RING_RADIUS} fill="none" strokeWidth="7" className="stroke-muted" />
-          {arc > 0 ? (
-            <circle
-              cx="32"
-              cy="32"
-              r={RING_RADIUS}
-              fill="none"
-              strokeWidth="7"
-              strokeLinecap="round"
-              stroke={RING_TONE_COLOR[tone]}
-              strokeDasharray={`${arc} ${RING_CIRCUMFERENCE}`}
-            />
-          ) : null}
-        </svg>
-        <span className="text-foreground text-xs tabular-nums">
-          {formatStorageShare(usedBytes, limitBytes) ?? used}
-        </span>
-      </span>
-      <span className="text-foreground w-full truncate text-xs font-medium" title={label}>
-        {label}
-      </span>
-      <span className="text-muted-foreground w-full truncate text-xs tabular-nums">{caption}</span>
-    </li>
-  );
+/**
+ * Each bar's length against the largest workspace, not against the limit: the
+ * limit is 50 GB and a typical workspace holds megabytes, so against the limit
+ * every bar is an empty track. The figure on the right stays the real size.
+ * A real but tiny workspace keeps a 2% sliver, so it never reads as empty.
+ */
+export function storageBarPercent(usedBytes: number, largestBytes: number): number {
+  if (!(usedBytes > 0) || !(largestBytes > 0)) return 0;
+  return Math.max(2, Math.min(100, (usedBytes / largestBytes) * 100));
 }
 
 /**
  * Files storage as one card: the account total against its limit in the
- * header, then a ring per workspace against the per-workspace limit. Built for
- * the Usage page, where it sits beside the balance card: four full-width bars
- * for a few megabytes took more of the page than the balance did.
+ * header, then one row per workspace that holds files, largest first. Each
+ * row is the name, a bar and the size, so 3 workspaces and 40 read the same
+ * way. The first five show; the rest fold behind one toggle.
  */
 export function AccountStorageCard({ accountId }: { accountId: string | undefined }) {
   const t = useTranslations('drives');
   const locale = useLocale();
   const usage = useAccountStorageUsage(accountId);
+  const [expanded, setExpanded] = useState(false);
 
   if (usage.isLoading) {
     return <Skeleton className="h-full min-h-40 w-full rounded-md" />;
@@ -160,10 +118,17 @@ export function AccountStorageCard({ accountId }: { accountId: string | undefine
   const accountBytes = data.limits?.accountBytes ?? null;
   const tone = storageTone(data.usedBytes, accountBytes);
   const used = formatStorageBytes(data.usedBytes, locale);
-  // A ring per workspace that holds files; the empty ones fold into one line,
-  // so a 25-workspace account does not draw 20 rings that all read 0 bytes.
-  const holding = data.projects.filter((p) => (p.usedBytes ?? 0) > 0);
+  const holding = data.projects
+    .filter((p) => (p.usedBytes ?? 0) > 0)
+    .sort((a, b) => (b.usedBytes ?? 0) - (a.usedBytes ?? 0));
   const emptyCount = data.projects.length - holding.length;
+  const largest = holding[0]?.usedBytes ?? 0;
+  const hiddenCount = Math.max(0, holding.length - STORAGE_ROWS_FOLDED);
+  const shown = expanded ? holding : holding.slice(0, STORAGE_ROWS_FOLDED);
+  const footer = [
+    projectBytes ? t('storageWorkspaceLimit', { limit: formatStorageBytes(projectBytes, locale) }) : null,
+    emptyCount > 0 && holding.length > 0 ? t('emptyWorkspaces', { count: emptyCount }) : null,
+  ].filter(Boolean);
 
   return (
     <section
@@ -182,26 +147,58 @@ export function AccountStorageCard({ accountId }: { accountId: string | undefine
       {holding.length === 0 ? (
         <p className="text-muted-foreground text-xs">{t('accountStorageEmpty')}</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
-          {holding.map((p) => (
-            <StorageRing
-              key={p.driveId}
-              label={p.name || p.projectId}
-              usedBytes={p.usedBytes ?? 0}
-              limitBytes={projectBytes}
-              locale={locale}
-            />
-          ))}
+        <ul className="flex flex-col gap-3">
+          {shown.map((p) => {
+            const bytes = p.usedBytes ?? 0;
+            const rowTone = storageTone(bytes, projectBytes);
+            const label = p.name || p.projectId;
+            const size = formatStorageBytes(bytes, locale);
+            return (
+              <li key={p.driveId} className="flex min-w-0 items-center gap-3 text-xs">
+                <span className="text-foreground w-28 shrink-0 truncate" title={label}>
+                  {label}
+                </span>
+                <span aria-hidden="true" className="bg-muted h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+                  <span
+                    className={cn('block h-full rounded-full', BAR_TONE_CLASS[rowTone])}
+                    style={{ width: `${storageBarPercent(bytes, largest)}%` }}
+                  />
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-right tabular-nums',
+                    rowTone === 'ok' ? 'text-muted-foreground w-16' : 'text-foreground',
+                  )}
+                >
+                  {rowTone !== 'ok' && projectBytes
+                    ? t('storageOfLimit', { used: size, limit: formatStorageBytes(projectBytes, locale) })
+                    : size}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
-      {holding.length > 0 && emptyCount > 0 ? (
-        <p className="text-muted-foreground text-xs">{t('emptyWorkspaces', { count: emptyCount })}</p>
+      {hiddenCount > 0 ? (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((open) => !open)}
+          >
+            {expanded ? t('storageShowFewer') : t('storageMoreWorkspaces', { count: hiddenCount })}
+          </Button>
+        </div>
       ) : null}
       {tone !== 'ok' ? (
         <StorageNotice>{tone === 'full' ? t('storageFull') : t('storageNearFull')}</StorageNotice>
       ) : null}
-      {!data.complete ? (
-        <p className="text-muted-foreground text-xs">{t('accountStorageIncomplete')}</p>
+      {footer.length > 0 || !data.complete ? (
+        <p className="text-muted-foreground mt-auto text-xs">
+          {[...footer, data.complete ? null : t('accountStorageIncomplete')].filter(Boolean).join(' · ')}
+        </p>
       ) : null}
     </section>
   );

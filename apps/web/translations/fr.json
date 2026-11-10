@@ -23023,7 +23023,10 @@
     "treeYou": "{name} (vous)",
     "treeExpand": "Déplier {name}",
     "treeCollapse": "Replier {name}",
-    "emptyWorkspaces": "{count, plural, one {# espace de travail ne contient} other {# espaces de travail ne contiennent}} aucun fichier"
+    "emptyWorkspaces": "{count, plural, one {# espace de travail ne contient} other {# espaces de travail ne contiennent}} aucun fichier",
+    "storageMoreWorkspaces": "{count, plural, one {# autre espace de travail} other {# autres espaces de travail}}",
+    "storageWorkspaceLimit": "Chaque espace de travail peut contenir jusqu’à {limit}",
+    "storageShowFewer": "Afficher moins"
   },
   "genui": {
     "showData": "Afficher les données",

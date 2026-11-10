@@ -23023,7 +23023,10 @@
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
     "treeCollapse": "收起 {name}",
-    "emptyWorkspaces": "{count} 个工作区没有文件"
+    "emptyWorkspaces": "{count} 个工作区没有文件",
+    "storageMoreWorkspaces": "另外 {count} 个工作区",
+    "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
+    "storageShowFewer": "收起"
   },
   "genui": {
     "showData": "显示数据",

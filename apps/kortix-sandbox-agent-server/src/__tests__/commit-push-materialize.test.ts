@@ -393,6 +393,25 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     )
   })
 
+  it('an unborn partial .git from a killed materialize re-materializes instead of a root commit', async () => {
+    const { remote, target } = makeRepo()
+    // A kill mid-materialize can leave .git initialized with no commit —
+    // readRepoInfo answers non-null with branch/commit null. A commit in it
+    // would be a root commit holding only the agent files; the push would
+    // delete every base file from the session branch.
+    writeFileSync(join(target, 'agent-file.md'), 'agent work\n')
+    git(['init', '-q'], target)
+    git(['remote', 'add', 'origin', remote], target)
+
+    const result = await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'agent change' },
+    )
+    expect(result.pushed).toBe(true)
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual(['README.md', 'agent-file.md', 'apps/x.ts'])
+  })
+
   it('no connected repository still refuses with the standing error', async () => {
     const { target } = makeRepo()
     expect(

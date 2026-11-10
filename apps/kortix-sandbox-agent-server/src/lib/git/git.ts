@@ -609,6 +609,15 @@ export async function commitAndPushWorkingTree(
 ): Promise<CommitPushResult> {
   const target = cfg.projectTarget
   let before = await readRepoInfo(target)
+  // A FAILED earlier materialize that no rollback caught (a kill mid-run)
+  // leaves .git with an UNBORN head: readRepoInfo answers non-null with
+  // branch/commit null, and a commit in it would be a root commit holding
+  // only the agent files — a push from it deletes every base file. Remove
+  // the partial repo so the materialization below starts clean.
+  if (before && !before.commit && !before.branch) {
+    await rm(join(target, '.git'), { recursive: true, force: true }).catch(() => {})
+    before = null
+  }
   let materializedHere = false
   if (!before && cfg.repoUrl && cfg.branchName) {
     // Stateless session (#12136): no checkout at boot. The connected repo is
@@ -716,12 +725,16 @@ export async function commitAndPushWorkingTree(
   }
 }
 
-export async function refreshRepo(cfg: Config): Promise<{ before: RepoInfo; after: RepoInfo }> {
+export async function refreshRepo(
+  cfg: Config,
+): Promise<{ before: RepoInfo | null; after: RepoInfo | null }> {
   const target = cfg.projectTarget
   const before = await readRepoInfo(target)
-  if (!before) {
-    throw new Error('project repo is not materialized')
-  }
+  // A fresh session boots with no checkout at all (/workspace is empty since
+  // #12136): there is nothing to fetch or pull, so the whole refresh is a
+  // no-op. Throwing here made `POST /kortix/refresh` answer 409 for exactly
+  // those sessions, and the Reload-config action silently did nothing.
+  if (!before) return { before: null, after: null }
 
   const cloneCredential = await resolveCloneCredential(cfg)
   if (cfg.repoUrl) {

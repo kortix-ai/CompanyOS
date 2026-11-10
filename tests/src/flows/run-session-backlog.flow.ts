@@ -421,6 +421,34 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
+    await ctx.step('the session materializes the repository checkout at /workspace: boot ships no clone', async () => {
+      // #12136: a session no longer checks the repository out at boot. The box
+      // still holds KORTIX_REPO_URL, KORTIX_BRANCH_NAME and the per-boot git
+      // credential helper, so the flow materializes the checkout the way
+      // `kortix workspaces clone` would: clone through the git proxy, move the
+      // .git into the (empty at boot) /workspace, and land on the session
+      // branch. The host-driven commit-push below then has a tree to commit.
+      const script = [
+        'set -e',
+        'test -n "$KORTIX_REPO_URL" && test -n "$KORTIX_BRANCH_NAME"',
+        'if [ -d /workspace/.git ]; then',
+        '  echo "already materialized"',
+        'else',
+        '  test -z "$(ls -A /workspace)"',
+        '  git clone -q "$KORTIX_REPO_URL" /tmp/run7-materialize',
+        '  mv /tmp/run7-materialize/.git /workspace/.git',
+        '  rm -rf /tmp/run7-materialize',
+        '  git -C /workspace checkout -q -f -B "$KORTIX_BRANCH_NAME" origin/HEAD',
+        'fi',
+        'git -C /workspace rev-parse --verify HEAD',
+      ].join('\n');
+      const execution = await ctx.client.as(ctx.P.OWNER).post(
+        runtimePath(session.sandboxId, '/kortix/env-rpc'),
+        { op: 'exec', args: { command: script, timeout: 60_000 } },
+        { timeoutMs: 90_000 },
+      );
+      execution.status(200).body().has('$.ok', true).has('$.value.exitCode', 0);
+    });
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
       await sendPrompt(

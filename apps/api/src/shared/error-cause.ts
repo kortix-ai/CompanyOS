@@ -17,8 +17,10 @@
  * Bounded and cycle-safe. These run on an error path, where a hang is the worst
  * possible outcome — worse than a missing detail — so the walk refuses to
  * revisit a node and gives up after `maxDepth` links (16 by default; a
- * classifier whose own walk was shorter before the consolidation passes its
- * bound — `postgres-errors.ts` walks 4 links, `database-errors.ts` 8).
+ * classifier whose own walk differed before the consolidation passes its
+ * bound — `postgres-errors.ts` walks 4 links, `database-errors.ts` 8, and
+ * `isAuditContentionError` walked acyclic chains with no cutoff at all, so it
+ * passes `Infinity` and leans on the revisit guard to terminate).
  *
  * The one walk every classifier reads (`errorSqlstate`'s first code,
  * `innermostMessage`'s deepest message, the transient sets over every node,
@@ -191,9 +193,15 @@ export const TRANSIENT_DATABASE_CODES: ReadonlySet<string> = new Set([
  * contention sets, not only the first code found on the chain — a synthetic
  * wrapper code that itself isn't in either set must not shadow a genuinely
  * contended cause underneath it.
+ *
+ * Walks the chain with no depth cutoff (`Infinity`): the pre-consolidation
+ * classifier recursed down `.cause` until the chain ran out, so a deeply
+ * wrapped contention code must still classify — a truncated walk would make
+ * `AuditQueue.flush` dead-letter backpressure instead of requeueing it. The
+ * shared walk's revisit guard (not a depth bound) terminates a cause cycle.
  */
 export function isAuditContentionError(error: unknown): boolean {
-  return errorChain(error).some((node) => {
+  return errorChain(error, Infinity).some((node) => {
     const code = node.code;
     return typeof code === 'string' && (AUDIT_CONTENTION_SQLSTATES.has(code) || AUDIT_TRANSIENT_DRIVER_CODES.has(code));
   });

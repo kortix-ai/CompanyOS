@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { DrizzleQueryError } from 'drizzle-orm/errors';
-import { isAuditContentionError } from './error-cause';
+import {
+  innermostMessage,
+  isAuditContentionError,
+  errorSqlstate,
+} from './error-cause';
 import { isUniqueViolation, uniqueViolationConstraint } from './postgres-errors';
 import { inspectDatabaseError, isTransientDatabaseError } from './database-errors';
 
@@ -180,6 +184,46 @@ describe('each classifier keeps its own walk depth', () => {
   test('inspectDatabaseError keeps its own eighth-link reach', () => {
     expect(inspectDatabaseError(wrapped(driverError('57P03'), 7))).not.toBeNull();
     expect(inspectDatabaseError(wrapped(driverError('57P03'), 8))).toBeNull();
+  });
+
+  test('errorSqlstate and innermostMessage keep the leaf 16-link walk', () => {
+    expect(errorSqlstate(wrapped(driverError('55P03'), 15))).toBe('55P03');
+    expect(errorSqlstate(wrapped(driverError('55P03'), 16))).toBeNull();
+    expect(
+      innermostMessage(wrapped(Object.assign(new Error('timeout fired'), { cause: null }), 15)),
+    ).toBe('timeout fired');
+  });
+});
+
+describe('isAuditContentionError keeps its unbounded reach', () => {
+  // The audit classifier's pre-consolidation walk had no depth cutoff — it
+  // recursed down .cause until the chain ran out — so AuditQueue.flush sees
+  // backpressure instead of a dead letter no matter how many wrappers the
+  // driver error collected. It passes Infinity to the shared walk; the walk's
+  // revisit guard (not a depth bound) is what terminates it.
+
+  test('sixteen wrappers around 55P03 still classify', () => {
+    expect(isAuditContentionError(wrapped(driverError('55P03'), 16))).toBe(true);
+  });
+
+  test('forty wrappers around 57014 still classify — no depth cutoff', () => {
+    expect(isAuditContentionError(wrapped(driverError('57014'), 40))).toBe(true);
+  });
+
+  test('a contention-free chain stays false at any depth', () => {
+    expect(isAuditContentionError(wrapped(driverError('23505'), 20))).toBe(false);
+  });
+
+  test('a cause cycle terminates: contention inside the cycle still classifies', () => {
+    // At this head the shared walk's revisit guard is what terminates the
+    // walk (a broken guard would hang here). The pre-consolidation recursion
+    // had no revisit guard at all: this input returned early at the
+    // contention code, while a contention-free cycle hung it.
+    const a: { cause?: unknown; code?: string } = { code: '42P01' };
+    const b: { cause?: unknown; code?: string } = { code: '55P03' };
+    a.cause = b;
+    b.cause = a;
+    expect(isAuditContentionError(a)).toBe(true);
   });
 });
 

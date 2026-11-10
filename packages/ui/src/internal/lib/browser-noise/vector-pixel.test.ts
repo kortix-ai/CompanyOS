@@ -107,3 +107,18 @@ test('the predicate itself: exact message, throw-site pixel frame, negative guar
   // No frames → unattributable → keep reporting.
   expect(isTrackingPixelResponseJsonNoise({ message: MESSAGE, frames: [] })).toBe(false);
 });
+
+test('the pixel-script frame check keeps the regex shape and runs in linear time', () => {
+  const pixel = (filename: string) => isTrackingPixelResponseJsonNoise({ message: MESSAGE, frames: [{ filename }] });
+  expect(pixel('https://cdn.vector.co/pixel.js#frag')).toBe(true);
+  expect(pixel('https://cdn.vector.co/pixel.jsx')).toBe(false);
+  expect(pixel('https://cdn.vector.co/pixel.js/next.js')).toBe(false);
+  expect(pixel('https://cdn.vector.co/pixel.js?v=2\nmore')).toBe(false);
+  // CodeQL js/polynomial-redos input: many `pixel.js#` repetitions that end in
+  // a line break and a non-match. The old regex backtracked quadratically here.
+  const adversarial = `https://x/${'pixel.js#'.repeat(50_000)}\n!`;
+  const started = performance.now();
+  expect(pixel(adversarial)).toBe(false);
+  expect(performance.now() - started).toBeLessThan(200);
+  expect(pixel(`https://x/${'pixel.js#'.repeat(50_000)}`)).toBe(true);
+});

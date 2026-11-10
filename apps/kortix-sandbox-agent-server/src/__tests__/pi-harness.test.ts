@@ -257,7 +257,7 @@ async function boot(input: {
   const env = rigEnv(workspace, input.env)
   const cfg = requirePiConfig(loadConfig(env))
   const service = createPiHarnessService(cfg, undefined, { env, hooks: input.hooks, releases: input.releases })
-  const bootState: PiBootState = { repoMaterializationError: null, timeline: [], initialRuntimeSessionRequired: false }
+  const bootState: PiBootState = { timeline: [], initialRuntimeSessionRequired: false }
   if (input.start !== false) await service.lifecycle.start()
   const app = buildDaemonApp(cfg, service, Date.now(), bootState)
   const ctx = signTestUserContext({ userId: 'u1', sandboxId: 's1', sandboxRole: 'owner' }, TOKEN)
@@ -2330,6 +2330,39 @@ describe('pi subagents extension', () => {
       expect(parts[1]!.state.output).toContain('task_id: colleague-1')
       expect(parts[2]!.state.status).toBe('error')
       expect(parts[2]!.state.error).toContain('runs in its own session')
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test('My Kortix names who works: a hand-off with no subagent_type and no inline spec starts nothing and says so', async () => {
+    const creates: Array<Record<string, any>> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        if (req.method === 'POST' && new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/sessions') {
+          creates.push((await req.json()) as Record<string, any>)
+        }
+        return Response.json([])
+      },
+    })
+    try {
+      const r = await boot({
+        // The 2026-11-10 shape: a name and a prompt, the intended agent only in the model's reasoning.
+        script: [TASK({ description: 'Cheapest car', subagent_type: undefined, name: 'rental-scout' }), { text: 'parent done' }],
+        env: {
+          KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { mykortix: { mode: 'primary', prompt: 'You are My Kortix.' } } }),
+          KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`,
+          KORTIX_AGENT_NAME: 'mykortix',
+          KORTIX_META_AGENT: '1',
+        },
+      })
+      await promptAndSettle(r, 'find the cheapest car')
+      expect(creates).toEqual([])
+      const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+      const [part] = toolParts(page, 'task')
+      expect(part!.state.status).toBe('error')
+      expect(part!.state.error).toContain('Name who works: set subagent_type')
     } finally {
       server.stop(true)
     }

@@ -54,8 +54,9 @@ export const CREDENTIAL_FENCE_REFUSED = 'credential_fence_refused';
 /** The fence's message tag, on servers before the typed code. */
 const FENCE_CHECK_TAG = '[check=token-project-scope:';
 
-/** The session's workspace runs without the project repository. A workspace
- *  policy, not a token scope: no kortix_permissions entry changes it. */
+/** The session was started without repository access: its agent's grant lacks
+ *  `project.gitops.read`, or the person who started it cannot read the files.
+ *  Decided at session start, so a new session is the fix, not a new token. */
 export const SESSION_REPOSITORY_ACCESS_DENIED = 'session_repository_access_denied';
 const REPOSITORY_DENIAL_MESSAGE = 'session workspace does not allow repository access';
 
@@ -253,8 +254,8 @@ export async function printPermissionDenialIdentity(): Promise<void> {
   if (pending.code === SESSION_REPOSITORY_ACCESS_DENIED) {
     // Two layers: the token's scopes allowed the call; the workspace policy refused it.
     if (identity.agent) lines.push(`  ${C.dim}token     ${C.reset}scopes ${formatGrantList(identity.permissions)} (not the cause)`);
-    lines.push(`  ${C.dim}workspace ${C.reset}repository access denied: this session runs without the workspace repository`);
-    lines.push(`  ${C.dim}fix       ${C.reset}start a session with repository access, or ask a person with workspace access to do this`);
+    lines.push(`  ${C.dim}workspace ${C.reset}repository access denied: this session started without repository access`);
+    lines.push(`  ${C.dim}fix       ${C.reset}give the agent project.gitops.read in kortix_permissions, then start a new session as a person who can read the files`);
   } else if (identity.agent) {
     lines.push(`  ${C.dim}granted   ${C.reset}${formatGrantList(identity.permissions)}`);
     lines.push(`  ${C.dim}fix       ${C.reset}${agentFixLine(identity.agent, pending, identity.permissions)}`);

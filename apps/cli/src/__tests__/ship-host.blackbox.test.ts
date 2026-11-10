@@ -338,6 +338,39 @@ test('projects clone keeps a shipped link and README clean', async () => {
   }
 });
 
+test('inside its session, workspaces clone checks out the session branch: the only branch the Git proxy lets it push', async () => {
+  useLocalRepo = true;
+  const git = (dir: string, ...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    expect(result.exitCode).toBe(0);
+    return result.stdout.toString().trim();
+  };
+  writeFileSync(join(cwd, 'README.md'), 'Synthetic\n');
+  git(cwd, 'add', 'kortix.yaml', 'README.md');
+  git(cwd, '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '-m', 'fixture');
+  git(cwd, 'clone', '--bare', '.', bareRepo);
+  const session = { KORTIX_PROJECT_ID: 'workspace_project', KORTIX_BRANCH_NAME: 'ses-synthetic-1' };
+
+  const fresh = await cli(['workspaces', 'clone', 'workspace_project', 'fresh', '--host', 'workspace'], session);
+  expect(fresh.code).toBe(0);
+  expect(fresh.stdout).toContain('ses-synthetic-1');
+  expect(git(join(cwd, 'fresh'), 'branch', '--show-current')).toBe('ses-synthetic-1');
+  expect(git(join(cwd, 'fresh'), 'config', 'push.default')).toBe('current');
+
+  // A session branch that already holds pushed work is checked out as it is, never reset.
+  git(join(cwd, 'fresh'), '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '--allow-empty', '-m', 'session work');
+  const tip = git(join(cwd, 'fresh'), 'rev-parse', 'HEAD');
+  git(join(cwd, 'fresh'), 'push', '-q', 'origin', 'ses-synthetic-1');
+  const again = await cli(['workspaces', 'clone', 'workspace_project', 'again', '--host', 'workspace'], session);
+  expect(again.code).toBe(0);
+  expect(git(join(cwd, 'again'), 'rev-parse', 'HEAD')).toBe(tip);
+
+  // Another workspace's clone, or a clone outside a session, keeps its default branch.
+  const other = await cli(['workspaces', 'clone', 'workspace_project', 'outside', '--host', 'workspace'], { KORTIX_BRANCH_NAME: '' });
+  expect(other.code).toBe(0);
+  expect(git(join(cwd, 'outside'), 'branch', '--show-current')).not.toBe('ses-synthetic-1');
+});
+
 // A product-created workspace is seeded with scaffold commits before the first
 // `kortix ship`, while `kortix init` starts from its own unrelated commit. Ship
 // must reconcile that seeded remote instead of surfacing a non-fast-forward

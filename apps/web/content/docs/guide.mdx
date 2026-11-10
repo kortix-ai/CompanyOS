@@ -267,7 +267,7 @@ A change to an agent takes effect when it lands in the workspace. New sessions s
 | **Skills** | The procedures the agent may load. |
 | **Apps** | The workspace's Apps whose access is restricted or private. |
 | **Kortix permissions** | Actions in Kortix itself, such as starting sessions or merging changes. |
-| **Workspace repository access** | A copy of the workspace's repository in `/workspace` on the session's computer, on the session's own branch. `worker` has it. In `kortix.yaml` this is `workspace.project_repository: true`. |
+| **Workspace repository access** | The right to clone the workspace's repository into the session's computer with `kortix workspaces clone`, on the session's own branch. `/workspace` starts empty. In `kortix.yaml` this is `workspace.gitops.read` in `kortix_permissions`; `worker` has it. |
 | **Tools** | Built-in abilities such as web search, image search, image generation, reading web pages and workspace memory. See [Kortix tools](/docs/developers#kortix-tools). |
 
 **An agent acts as itself, not as you.** Kortix gives each agent its own identity in each workspace, so the agent does the same thing whoever runs it. Your role does not lend it extra power.

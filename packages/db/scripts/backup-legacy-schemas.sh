@@ -20,8 +20,11 @@
 #
 # Needs: pg_dump/pg_restore of the server's major version or newer, pv, zstd, aws (CLI v2).
 # Runs anywhere that reaches the database and S3; nothing is written to local disk.
-# Restore: `aws s3 cp s3://<bucket>/<day>/<part>.dump.zst - | zstd -dc | pg_restore -d <url>`,
-# rest.dump first (it holds the schemas and types), then messages and documents.
+# Restore: rest.dump first (every table definition, the types, and all other data), then the
+# data of the two big tables:
+#   aws s3 cp s3://<bucket>/<day>/rest.dump.zst - | zstd -dc | pg_restore --no-owner -d <url>
+#   aws s3 cp s3://<bucket>/<day>/messages.dump.zst - | zstd -dc | pg_restore --no-owner --data-only -d <url>
+#   aws s3 cp s3://<bucket>/<day>/documents.dump.zst - | zstd -dc | pg_restore --no-owner --data-only -d <url>
 set -euo pipefail
 
 die() { echo "backup-legacy-schemas: $*" >&2; exit 1; }

@@ -1938,11 +1938,13 @@ flow(
     const project = await ctx.fixtures.project({ managedGit: true, seed: true });
     const owner = ctx.client.as(ctx.P.OWNER);
     let restrictedSessionId = '';
+    // Repository access is decided by grants at session create: the agent's
+    // project.gitops.read (and the starting person's file read). No session
+    // ever gets a checkout: /workspace starts empty either way.
     for (const access of [false, true]) {
-      await ctx.step(`create repository_access=${access} session and prove checkout plus session-token authorization`, async () => {
+      await ctx.step(`an agent ${access ? 'with' : 'without'} project.gitops.read starts a session with repository_access=${access}, no checkout, and repository calls answering ${access ? 200 : 403}`, async () => {
         const config = await owner.put('/v1/workspaces/:projectId/agents/:agentName/config', {
-          repository_access: access,
-          kortix_permissions: ['project.file.read', 'project.gitops.read'],
+          kortix_permissions: access ? ['project.file.read', 'project.gitops.read'] : ['project.file.read'],
         }, { params: { projectId: project.id, agentName: 'kortix' } });
         config.status(200);
         const created = await owner.post('/v1/workspaces/:projectId/sessions', {
@@ -1954,6 +1956,7 @@ flow(
         ctx.track('session', sessionId, { projectId: project.id });
         if (!access) restrictedSessionId = sessionId;
         const params = { projectId: project.id, sessionId };
+        // The caller's metadata cannot pick the policy: the server writes it from grants.
         const read = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId', { params });
         read.status(200).body().has('$.metadata.repository_access', access)
           .has('$.metadata.workspace_mode', access ? 'branch' : 'runtime');
@@ -1975,7 +1978,7 @@ flow(
         const script = `const fs = require("node:fs");
 const expected = ${access};
 const checkout = fs.existsSync("/workspace/.git");
-if (checkout !== expected) throw new Error("unexpected checkout: " + checkout);
+if (checkout) throw new Error("a session got a checkout at boot");
 const base = process.env.KORTIX_API_URL.replace(/\\/$/, "");
 const headers = { Authorization: "Bearer " + process.env.KORTIX_TOKEN };
 const files = await fetch(base + "/projects/${project.id}/files", { headers });
@@ -1984,18 +1987,18 @@ await files.body?.cancel();
 const git = await fetch(base + "/git/${project.id}.git/info/refs?service=git-upload-pack", { headers });
 if (git.status !== (expected ? 200 : 403)) throw new Error("git status: " + git.status);
 await git.body?.cancel();
-console.log(JSON.stringify({ checkout, files: files.status, git: git.status }));`;
+console.log(JSON.stringify({ checkout, files: files.status, git: git.status, branch: process.env.KORTIX_BRANCH_NAME ?? null }));`;
         const command = `bun -e '${script.replace(/'/g, "'\\''")}'`;
         const execution = await owner.post(`/v1/p/${externalId}/8000/kortix/env-rpc`,
           { op: 'exec', args: { command, timeout: 30_000 } }, { timeoutMs: 40_000 });
         execution.status(200).body().has('$.ok', true).has('$.value.exitCode', 0);
         const proof = JSON.parse(execution.json<any>().value.stdout.trim());
-        if (proof.checkout !== access || proof.files !== (access ? 200 : 403) || proof.git !== (access ? 200 : 403)) {
+        if (proof.checkout !== false || proof.files !== (access ? 200 : 403) || proof.git !== (access ? 200 : 403) || proof.branch !== sessionId) {
           throw new Error(`unexpected repository proof: ${JSON.stringify(proof)}`);
         }
       });
     }
-    await ctx.step('changing the agent to enabled leaves its existing restricted session restricted', async () => {
+    await ctx.step('widening the agent grant leaves its existing restricted session restricted', async () => {
       const read = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId', {
         params: { projectId: project.id, sessionId: restrictedSessionId },
       });

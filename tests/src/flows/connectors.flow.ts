@@ -5204,7 +5204,8 @@ flow(
         if (req.url === '/graphql') {
           return json(200, { data: { issue: null }, errors: [{ message: 'Entity not found: issue' }] });
         }
-        if (req.url.startsWith('/api/intents/')) return json(200, { id: req.url.slice('/api/intents/'.length) });
+        const url = req.url ?? '';
+        if (url.startsWith('/api/intents/')) return json(200, { id: url.slice('/api/intents/'.length) });
         json(404, { message: 'no route' });
       });
     });

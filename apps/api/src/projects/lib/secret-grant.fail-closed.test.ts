@@ -56,10 +56,13 @@ describe('resolveSessionSecretGrant fails closed through the real manifest loade
       content: 'agents:\n  - [unbalanced\n',
     });
     // Repair mode: only My Kortix runs, so the file can be fixed. No agent,
-    // the `default` sentinel included, receives a project secret.
-    for (const sessionAgent of ['default', 'kortix', 'mykortix']) {
-      await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent })).resolves.toEqual([]);
-    }
+    // the `default` sentinel included, receives a project secret — but My
+    // Kortix acts for its person with their own reach (#12240, AGENT =
+    // HUMAN): its env scope stays the person's, and the values delivered are
+    // still capped by the person's own access.
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'default' })).resolves.toEqual([]);
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'kortix' })).resolves.toEqual([]);
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix' })).resolves.toBe('all');
   });
 
   test('a genuinely absent manifest is still the unrestricted back-compat path', async () => {

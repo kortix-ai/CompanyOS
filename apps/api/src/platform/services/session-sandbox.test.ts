@@ -526,8 +526,10 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        // #12240 (AGENT = HUMAN): the coordinator acts for its person with
+        // their full reach — every leg is the person-capped 'all'.
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

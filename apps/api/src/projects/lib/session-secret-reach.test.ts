@@ -121,7 +121,9 @@ describe('withheldSecretsFix', () => {
     expect(text).toContain('API_KEY is not in agent "analyst"\'s secrets grant');
     expect(text).toContain('Customize → Agents → analyst → Secrets');
     expect(text).toContain('kortix secrets grant API_KEY --agent analyst');
-    expect(text).toContain('cannot widen its own grant');
+    // #12240 reworded the widening rule: an agent session cannot widen its own
+    // grant, and the message now names the permissions widening needs.
+    expect(text).toContain('Widening the grant needs project.agent.write and project.secret.read');
     expect(text).toContain('pushes the change to this session when it is saved');
     expect(text).toContain('run `kortix secrets sync` to pull it right away');
     expect(text).not.toContain('cannot run');

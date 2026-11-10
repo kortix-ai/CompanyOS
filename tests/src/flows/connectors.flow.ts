@@ -4431,7 +4431,11 @@ flow(
           'connectors', 'connections', 'share', theirs, '--everyone', '--project', project.id,
         ]);
         throwIfCliInfraFailure(r, 'kortix connectors connections share');
-        if (r.exitCode === 0 || !/manage the workspace's connections/.test(r.all)) {
+        // The denial names the action that lacks a grant (#12240 reworked the
+        // wording: "You don't have permission to perform this action
+        // (workspace.connector.connections.manage) ..."). Match the stable
+        // permission name, not the prose around it.
+        if (r.exitCode === 0 || !/workspace\.connector\.connections\.manage/.test(r.all)) {
           throw new Error(`plain member share: exit ${r.exitCode}: ${r.all.slice(0, 600)}`);
         }
       });

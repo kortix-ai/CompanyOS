@@ -1,5 +1,6 @@
 import { HTTPException } from 'hono/http-exception';
-import { DEAD_CREDENTIAL_BURST_SUPPRESSED, deadCredentialLogDecision } from '../../shared/dead-credential-log';
+import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
+import { logWindowDecision } from '../../shared/log-window';
 import { PROJECT_ACTIONS, authorize } from '../../iam';
 import { actorForUser } from '../../iam/actor';
 import { logger } from '../../lib/logger';
@@ -60,7 +61,7 @@ export function principalUserId(access: PreviewProxyAccess): string {
  */
 export function reportSessionAccessRefusal(payload: Record<string, unknown>, now = Date.now()): void {
   const message = '[preview] session access refused';
-  const { log, suppressed } = deadCredentialLogDecision(message, now);
+  const { log, suppressed } = logWindowDecision(message, now);
   if (!log) return;
   const fields = { ...payload, suppressed };
   if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED) logger.warn(message, fields);

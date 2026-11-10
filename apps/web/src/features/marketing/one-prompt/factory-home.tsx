@@ -2,7 +2,7 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { FACTORY_PROMPT } from '@kortix/shared/setup-guide';
+import { SETUP_PROMPT, loopPrompt } from '@kortix/shared/setup-guide';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
+import type { LoopView } from './loops-content';
+import { YamlLine } from '@/features/marketing/code-panel';
 
 const COPIED_MS = 2000;
 /** The page's one accent: the brand blue (`kortix-base`). */
@@ -41,8 +43,8 @@ function useCopy(text: string) {
   return { copied, copy };
 }
 
-function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
-  const { copied, copy } = useCopy(FACTORY_PROMPT);
+function CopyButton({ size = 'md', text = SETUP_PROMPT, label = 'Copy the prompt' }: { size?: 'sm' | 'md'; text?: string; label?: string }) {
+  const { copied, copy } = useCopy(text);
   return (
     <button
       type="button"
@@ -52,7 +54,7 @@ function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
         size === 'md' ? 'h-9 px-4 text-sm' : 'h-8 px-3 text-sm',
       )}
     >
-      <span aria-live="polite">{copied ? 'Copied' : 'Copy the prompt'}</span>
+      <span aria-live="polite">{copied ? 'Copied' : label}</span>
     </button>
   );
 }
@@ -183,14 +185,60 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
+function Chips({ items, accent }: { items: string[]; accent?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span key={item} className={cn('rounded-full border px-2.5 py-1 text-xs', accent ? 'border-kortix-base/30 text-kortix-base' : 'border-border text-muted-foreground')}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** One loop: what it watches, what it ships, its prompt, and its real trigger YAML. */
+function LoopShowcase({ loop, index }: { loop: LoopView; index: number }) {
+  return (
+    <div id={`loop-${loop.id}`} className="border-border grid scroll-mt-16 border-t lg:grid-cols-2">
+      <div className={cn('border-border flex flex-col gap-6 p-8 md:p-10 lg:border-r', index % 2 === 1 && 'lg:order-2 lg:border-r-0 lg:border-l')}>
+        <Eyebrow>
+          {String(index + 1).padStart(2, '0')} · {loop.label}
+        </Eyebrow>
+        <h3 className="text-foreground text-3xl font-medium tracking-tight text-balance lg:text-4xl">{loop.line}</h3>
+        <div className="flex flex-col gap-3">
+          <span className="text-muted-foreground text-xs">Watches</span>
+          <Chips items={loop.observes} />
+          <span className="text-muted-foreground pt-1 text-xs">Ships</span>
+          <Chips items={loop.ships} accent />
+        </div>
+        <div className="pt-2">
+          <CopyButton text={loopPrompt(loop)} label={`Copy the ${loop.label} prompt`} />
+        </div>
+      </div>
+      <div className="flex items-center p-8 md:p-10">
+        <Window title={<span className="font-mono">{loop.file}</span>} className="w-full">
+          <pre className="overflow-x-auto px-5 py-5 font-mono text-xs leading-6">
+            {loop.excerpt.map((line, i) => (
+              <span key={`${loop.id}-${i}`} className="block whitespace-pre">
+                <YamlLine line={line} />
+              </span>
+            ))}
+          </pre>
+        </Window>
+      </div>
+    </div>
+  );
+}
+
 /**
- * kortix.com: one product. One prompt adds a software factory to your repo.
+ * kortix.com: one prompt adds loops to your repo (Engineering, Marketing, Sales, ...).
  * The page frame (one railed column, hairline bento grids, glow bands)
  * after wonder.design; the look, words and every panel are Kortix's own: the
  * brand blue, the dither field, and data from a real factory run.
  */
-export function FactoryHome() {
-  const { copied, copy } = useCopy(FACTORY_PROMPT);
+export function FactoryHome({ loops }: { loops: LoopView[] }) {
+  const { copied, copy } = useCopy(SETUP_PROMPT);
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
       <div className={cn(COLUMN, 'border-border relative border-x')}>
@@ -221,17 +269,19 @@ export function FactoryHome() {
                 Runs on your <Mark name="Claude" /> or <Mark name="Codex" /> plan
               </span>
               <h1 className="text-foreground text-[40px] leading-[1.06] font-medium tracking-tight text-balance sm:text-5xl lg:text-[56px]">
-                One prompt adds a software factory to your repo.
+                One prompt.
+                <br />
+                Loop everything.
               </h1>
             </div>
             <div className="flex flex-col gap-6 lg:pb-2">
               <p className="text-muted-foreground text-lg text-pretty">
-                Issues, failing tests and errors become tickets in your tracker. Agents turn each one into a
-                verified pull request, 24/7, while you sleep.
+                One kortix.yaml in your repo. Agents watch Slack, production, your database, signups and
+                feedback, then ship the work 24/7: pull requests, posts, videos and drafts.
               </p>
               <div className="flex flex-wrap gap-2.5">
                 <CopyButton />
-                <GhostButton href="#runs">See a real run</GhostButton>
+                <GhostButton href="#loops">See the loops</GhostButton>
               </div>
             </div>
           </div>
@@ -251,6 +301,24 @@ export function FactoryHome() {
           </div>
         </section>
 
+        <section id="loops" className="border-border scroll-mt-16 border-t">
+          <div className="flex flex-col gap-6 px-8 pt-24 pb-16 md:px-10">
+            <h2 className="text-foreground text-3xl font-medium tracking-tight text-balance lg:text-[40px] lg:leading-tight">
+              One engine. A loop for every team.
+            </h2>
+            <nav className="flex flex-wrap gap-2">
+              {loops.map((loop) => (
+                <a key={loop.id} href={`#loop-${loop.id}`} className="border-border bg-card text-foreground hover:bg-accent rounded-full border px-4 py-1.5 text-sm transition-colors">
+                  {loop.label}
+                </a>
+              ))}
+            </nav>
+          </div>
+          {loops.map((loop, index) => (
+            <LoopShowcase key={loop.id} loop={loop} index={index} />
+          ))}
+        </section>
+
         <section className="border-border relative overflow-hidden border-t">
           <div aria-hidden className="pointer-events-none absolute inset-0" style={light('15% 120%', 34)} />
           <div aria-hidden className="pointer-events-none absolute inset-0" style={light('90% 130%', 18)} />
@@ -260,7 +328,7 @@ export function FactoryHome() {
               onClick={copy}
               className="border-border bg-card/80 hover:border-kortix-base/50 w-full max-w-lg rounded-xl border p-4 text-left backdrop-blur transition-colors"
             >
-              <span className="text-foreground block text-sm">{FACTORY_PROMPT.split('\n')[0]}</span>
+              <span className="text-foreground block text-sm">{SETUP_PROMPT.split('\n')[0]}</span>
               <span className="text-muted-foreground mt-4 flex items-center justify-between text-xs">
                 <span className="text-foreground flex items-center gap-3"><Mark name="Claude Code" /><Mark name="Codex" /></span>
                 <span aria-live="polite" className={copied ? ACCENT : undefined}>{copied ? 'copied' : 'click to copy'}</span>
@@ -277,9 +345,9 @@ export function FactoryHome() {
 
         <section id="how" className="border-border scroll-mt-16 border-t">
           <SectionTitle>
-            From a signal to a pull request.
+            Engineering, up close: from a signal
             <br />
-            And back to your tracker.
+            to a pull request.
           </SectionTitle>
           <Bento>
             <Cell>
@@ -419,7 +487,7 @@ export function FactoryHome() {
           <h2 className="text-foreground max-w-md text-4xl font-medium tracking-tight text-balance lg:text-5xl">
             One prompt.
             <br />
-            A software factory.
+            Loop everything.
           </h2>
           <div className="flex gap-2.5">
             <CopyButton />

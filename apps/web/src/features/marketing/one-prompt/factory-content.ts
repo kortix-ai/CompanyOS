@@ -50,11 +50,12 @@ export const SOURCES = [
 export const TOOLS = ['GitHub', 'Linear', 'Jira', 'Asana', 'Slack', 'Sentry', 'Better Stack', 'Claude Code', 'Codex'];
 
 export const FAQ = [
-  { q: 'What is the Software Factory?', a: 'Agents on your repository that turn issues, failing tests and errors into tickets, then each ticket into a verified pull request. It is one folder, .kortix/, in your repository or in a repository of its own.' },
-  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows kortix.com/factory.md with you and asks before every decision.' },
+  { q: 'What is Kortix?', a: 'An automation engine defined by one kortix.yaml in your repository. Each loop is a set of agents, the sources they watch, the skills they use and what they may do: Engineering, Marketing, Sales, Recruiting, Support.' },
+  { q: 'What is a loop?', a: 'Sources that watch for work (Slack, production errors, your database, signups, applicants, feedback), an agent with its own identity and permissions, and the skills it uses to ship: pull requests, posts, videos, drafts.' },
+  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the loop\'s guide with you and asks before every decision.' },
   { q: 'Which models do the agents use?', a: 'The plan you already have: your Claude or ChatGPT subscription, or any API key you add. It is shared with your workspace, so scheduled runs use it too.' },
   { q: 'Does it work with my existing repository?', a: 'Yes. It reads how the repository builds and tests, and writes a dev environment the agents use. Your code stays in your GitHub repository.' },
   { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, one per ticket, on your dev environment. They never point at your staging or production systems.' },
-  { q: 'Who merges the pull requests?', a: 'You. Every pull request waits for a person until you allow auto-merge. Security fixes always wait.' },
-  { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete the .kortix/ folder.' },
+  { q: 'Who merges the pull requests?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
+  { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
 ];

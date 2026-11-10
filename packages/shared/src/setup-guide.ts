@@ -18,6 +18,17 @@ export const FACTORY_PROMPT = `Add a Kortix software factory to this repository 
 Follow ${FACTORY_GUIDE_URL} (curl -fsSL ${FACTORY_GUIDE_URL}) step by step.
 Ask me before each decision it names. Never print a secret value.`;
 
+/** The guide of one loop (template), served at kortix.com/loops/<id>.md. */
+export const loopGuideUrl = (id: string) => `https://kortix.com/loops/${id}.md`;
+
+/** The one prompt of one loop: a URL, nothing to install first. */
+export function loopPrompt(loop: { id: string; name: string }): string {
+  const url = loopGuideUrl(loop.id);
+  return `Add the Kortix ${loop.name} to this repository with me.
+Follow ${url} (curl -fsSL ${url}) step by step.
+Ask me before each decision it names. Never print a secret value.`;
+}
+
 /** What a person copies. Short on purpose: the guide it points to is versioned and served. */
 export const SETUP_PROMPT = `Set up Kortix cloud agents on this repository with me.
 Read ${SETUP_GUIDE_URL} (curl -fsSL ${SETUP_GUIDE_URL}) and follow it step by step.

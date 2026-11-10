@@ -220,12 +220,6 @@ export function normalizeEmail(value: unknown): string | null {
   return lower;
 }
 
-export function parseRole(value: unknown, allowed: AccountRole[]): AccountRole | null {
-  if (typeof value !== 'string') return null;
-  const v = value.trim().toLowerCase();
-  return (allowed as string[]).includes(v) ? (v as AccountRole) : null;
-}
-
 export async function getMembership(userId: string, accountId: string) {
   // A malformed account id (a slug, a stray literal segment) is never a
   // membership, and letting it reach the uuid-typed casts in the read model

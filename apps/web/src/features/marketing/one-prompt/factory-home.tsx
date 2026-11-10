@@ -7,7 +7,9 @@ import { cn } from '@kortix/ui';
 import Link from 'next/link';
 import { type CSSProperties } from 'react';
 
-import { DEMO, FAQ, RUNS, TOOLS } from './factory-content';
+import { YamlLine } from '@/features/marketing/code-panel';
+
+import { ENGINE, FAQ, MANIFEST, TOOLS } from './factory-content';
 import { FactoryStack } from './factory-stack';
 import type { LoopView } from './loops-content';
 import { CopyButton, Eyebrow, GhostButton, Mark, useCopy, useSetupTarget } from './parts';
@@ -58,7 +60,7 @@ function PromptBox({ className }: { className?: string }) {
 /**
  * kortix.com. One job: get a developer to copy the prompt. The hero is the
  * prompt; the stack shows what each factory does, one clip per team; three
- * steps, real pull requests and the FAQ answer what is left. The frame (one
+ * steps, the kortix.yaml section and the FAQ answer what is left. The frame (one
  * railed column, hairlines) is after wonder.design; the blue, the dither field
  * and every word are Kortix's own.
  */
@@ -73,7 +75,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
             <Link href="#factories" className="hover:text-foreground">Factories</Link>
             <Link href="#how" className="hover:text-foreground">How it works</Link>
-            <Link href="#runs" className="hover:text-foreground">Real runs</Link>
+            <Link href="#engine" className="hover:text-foreground">kortix.yaml</Link>
             <Link href="/docs/developers" className="hover:text-foreground">Docs</Link>
           </nav>
           <div className="flex items-center gap-2">
@@ -138,31 +140,38 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           </div>
         </section>
 
-        <section id="runs" className="border-border scroll-mt-16 border-t">
-          <div className="flex flex-wrap items-end justify-between gap-6 px-8 pt-20 pb-12 md:px-10">
-            <div className="flex flex-col gap-3">
-              <Eyebrow>Real runs · Software Factory</Eyebrow>
-              <h2 className={H2}>
-                Bug found at 15:16.
-                <br />
-                Fix reviewed at 15:21.
-              </h2>
-            </div>
-            <GhostButton href={`https://github.com/markokraemer/${DEMO.repo}/pulls?q=is%3Apr`}>All pull requests</GhostButton>
+        <section id="engine" className="border-border scroll-mt-16 border-t">
+          <div className="flex flex-col gap-3 px-8 pt-20 pb-12 md:px-10">
+            <Eyebrow>Under the hood</Eyebrow>
+            <h2 className={H2}>One file in your repo runs all of it.</h2>
+            <p className="text-muted-foreground max-w-xl text-base text-pretty">
+              You connect your repo. The setup adds kortix.yaml. It defines every agent, what starts it and what it may touch. You review it like code.
+            </p>
           </div>
-          <div className="border-border grid border-t md:grid-cols-3">
-            {RUNS.map((run) => (
-              <a
-                key={run.pr}
-                href={`https://github.com/markokraemer/${DEMO.repo}/pull/${run.pr}`}
-                className="border-border hover:bg-card flex flex-col gap-3 border-b p-8 transition-colors md:border-r md:border-b-0 md:last:border-r-0"
-              >
-                <span className="text-muted-foreground font-mono text-xs">
-                  Issue #{run.issue} → PR #{run.pr}
-                </span>
-                <span className="text-foreground text-base font-medium">{run.fix}</span>
-              </a>
-            ))}
+          <div className="border-border grid border-t lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+            <div className="border-border border-b p-6 md:p-8 lg:border-r lg:border-b-0">
+              <div className="border-border bg-card overflow-hidden rounded-lg border">
+                <div className="border-border text-muted-foreground border-b px-4 py-2.5 font-mono text-xs">kortix.yaml</div>
+                <pre className="overflow-x-auto px-5 py-5 font-mono text-xs leading-6">
+                  {MANIFEST.map((line, i) => (
+                    <span key={i} className="block whitespace-pre">
+                      {line === '' ? ' ' : <YamlLine line={line} />}
+                    </span>
+                  ))}
+                </pre>
+              </div>
+            </div>
+            <dl className="grid content-start sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {ENGINE.map((part) => (
+                <div key={part.term} className="border-border flex flex-col gap-2 border-b p-6 md:p-8 sm:odd:border-r lg:odd:border-r-0 xl:odd:border-r">
+                  <dt className="text-foreground flex items-baseline gap-3 text-base font-medium">
+                    {part.term}
+                    <span className="text-kortix-base font-mono text-xs font-normal">{part.key}</span>
+                  </dt>
+                  <dd className="text-muted-foreground text-sm text-pretty">{part.body}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 
@@ -202,7 +211,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
 
         <footer className="border-border grid gap-10 border-t px-8 py-14 sm:grid-cols-4 md:px-10">
           {[
-            { title: 'Product', links: [['Factories', '#factories'], ['How it works', '#how'], ['Real runs', '#runs']] },
+            { title: 'Product', links: [['Factories', '#factories'], ['How it works', '#how'], ['kortix.yaml', '#engine']] },
             { title: 'Developers', links: [['Docs', '/docs/developers'], ['The setup guide', '/setup.md'], ['GitHub', 'https://github.com/kortix-ai/CompanyOS']] },
             { title: 'Company', links: [['CompanyOS', '/companyos'], ['Careers', '/careers']] },
             { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },

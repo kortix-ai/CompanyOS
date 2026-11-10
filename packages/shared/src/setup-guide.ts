@@ -61,7 +61,7 @@ function installBlock(target: SetupTarget): string {
     '```bash',
     `command -v kortix || curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash`,
     'kortix --version',
-    `kortix hosts rm ${host} 2>/dev/null; kortix hosts add ${host} --url ${target.apiBase}`,
+    `kortix hosts info ${host} >/dev/null 2>&1 || kortix hosts add ${host} --url ${target.apiBase}`,
     `kortix hosts use ${host}`,
     'kortix hosts current   # must print ' + host,
     '```',

@@ -1,7 +1,6 @@
 /**
  * The data on the Software Factory home. Every ticket, command and result is
- * from one real run on a demo repository (github.com/markokraemer/kortix-factory-demo,
- * 2026-11-10): the nightly tester filed issues #1–#3, the builder opened pull
+ * from one real run on a private demo repository (2026-11-10): the nightly tester filed issues #1–#3, the builder opened pull
  * requests #4–#6, a reviewer agent ran each one. Nothing here is invented.
  */
 export const DEMO = {
@@ -30,10 +29,46 @@ export const DEMO = {
   },
 };
 
-export const RUNS = [
-  { issue: 1, pr: 6, bug: 'POST /todos with malformed JSON crashes the whole server', fix: 'fix: return 400 on malformed JSON instead of crashing the server' },
-  { issue: 2, pr: 4, bug: 'POST /todos/:id/done returns 200 for a nonexistent todo', fix: 'fix: return 404 when completing a nonexistent todo' },
-  { issue: 3, pr: 5, bug: 'POST /todos accepts a missing, empty or non-string title', fix: 'fix: reject missing, empty or non-string todo titles' },
+/** A small, valid kortix.yaml: one agent, what starts it, and the registries it draws on. */
+export const MANIFEST = [
+  'agents:',
+  '  factory:',
+  '    prompt_file: agents/factory.md',
+  '    skills: [software-factory]',
+  '    tools: [lookup_order]',
+  '    extensions: [review-gate]',
+  '    connectors: [helpdesk]',
+  '',
+  'triggers:',
+  '  - slug: nightly-tests',
+  '    on: { cron: "0 0 2 * * *" }',
+  '    run: { agent: factory, prompt: "Run the tests. File what fails." }',
+  '',
+  'skills:',
+  '  software-factory: skills/software-factory',
+  'tools:',
+  '  lookup_order: tools/lookup_order.ts',
+  'extensions:',
+  '  review-gate: { pi: extensions/review-gate.ts }',
+  '',
+  'connectors:',
+  '  - { slug: helpdesk, provider: http, base_url: https://helpdesk.example.com/api }',
+  '',
+  'sandbox:',
+  '  templates:',
+  '    - { slug: dev, dockerfile: .kortix/Dockerfile }',
+];
+
+/** What kortix.yaml defines, one line each. `key` is the YAML key. */
+export const ENGINE = [
+  { term: 'Agents', key: 'agents', body: 'Every agent is a pi coding agent you define: its prompt, model, skills and what it may use. Nothing is granted by default.' },
+  { term: 'Triggers', key: 'triggers', body: 'What starts an agent: a schedule, a webhook, a Slack message, an app event.' },
+  { term: 'Skills', key: 'skills', body: 'Folders of instructions in your repo. An agent loads one when the work calls for it.' },
+  { term: 'Tools', key: 'tools', body: 'Your own tools: a TypeScript file in your repo, registered by name, enabled per agent.' },
+  { term: 'Extensions', key: 'extensions', body: 'pi extensions change the agent itself: hooks on its lifecycle, new commands, new behavior. A file in your repo or a pinned npm package.' },
+  { term: 'Connectors', key: 'connectors', body: '3,000+ apps in a click, plus MCP, OpenAPI and raw HTTP. Rules decide which calls run and which wait for you.' },
+  { term: 'Dev environment', key: 'sandbox', body: 'A Dockerfile for the sandbox each session runs in: your toolchain, your services, your tests.' },
+  { term: 'Secrets', key: 'env', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
 
 /** Names only: the brand kit allows no third-party logos. */

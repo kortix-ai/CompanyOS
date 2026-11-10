@@ -99,7 +99,7 @@ everywhere.
 | Release | What | Gate to start | Downtime |
 |---|---|---|---|
 | **R1** (this PR, #11857) | Everything user-visible at once: workspace on every surface (API, SDK, CLI, TUI, kortixd, web, desktop, mobile, docs, skills, copy), one Settings panel, workspace-based pricing, one IAM scope and one credential fence, the workspace lifecycle, the legacy split (shipped in `dry_run`). Plus the EXPAND migrations for R2: the `kortix.workspaces` table kept in sync by triggers, `workspace_id` on the account-only tables with dual-write triggers and a batched backfill, shadow reads that log mismatches. | — | none |
-| **R2** (two deploys, R2a and R2b) | `kortix.workspaces` becomes the source of truth. Writers move to it. `accounts` and `projects` become read-only compatibility views. Twin foreign keys into `workspaces` are added and validated online. | Prod, read-only aggregates: 0 `split_pending` rows; 0 shadow mismatches for 7 consecutive days; invariants I1–I12 exit 0; 0 NULL `workspace_id` on the expand tables; 0 lint suppressions for direct `accounts`/`projects` imports. Marko approves. | none |
+| **R2** (two deploys, R2a and R2b) | `kortix.workspaces` becomes the source of truth. Writers move to it. `accounts` and `projects` become read-only compatibility views. Twin foreign keys into `workspaces` are added and validated online. | Prod, read-only aggregates: 0 `split_pending` rows; 0 shadow mismatches for 7 consecutive days; invariants I1–I12 exit 0; 0 NULL `workspace_id` on the expand tables where the account has a live workspace (rows of deleted accounts keep NULL: on 2026-11-10 they were ~29% of the NULL `credit_ledger` rows, and `workspace_id_of_account` is NULL for them); 0 lint suppressions for direct `accounts`/`projects` imports. Release owner approves (Dimitrije since 2026-11-10). | none |
 | **R3** (planned cutover) | Rename `project_id → workspace_id` in 132 relations, drop the redundant `account_id`, rename the ledgers' `account_id` to `legacy_account_id`, drop the old foreign keys and the two legacy stores. Catalog-only DDL. | R2b live 7 days; counts equal (every account and project row is in `workspaces`); the cutover rehearsed on a restored snapshot (needs Marko's approval). Marko approves the window. | ~2 min, announced |
 
 Switching the split from `dry_run` to `apply` on prod is a separate step after R1 ships.
@@ -845,13 +845,15 @@ project".
 (`held_reason: account_has_identity_provider`) whatever the keeper: the split
 copies members, not the IdP, so SSO enforcement and SCIM deprovisioning would
 stop at the keeper. Confirming the keeper does not release it; the split
-carrying identity is a follow-up. The move transaction re-checks both holds
+carrying identity is a follow-up. The move transaction re-checks the hold
 under the run lock. Every split-off grant is keyed by run AND target account
 (`split_off_grant:<run>:<account>`), so a reopened run never replays the
 dormant account's grant. The owner email waits until every done run has
 `plan.billing`.
 
-**Paying holds, D3 (Billing + split stage, 2026-11-06):** a source that pays only through
+**Paying holds, D3 (Billing + split stage, 2026-11-06; superseded by D12, 2026-11-10: a
+paying account is no longer held, the keeper rule picks the project that keeps the billing,
+and the split-off billing below is unchanged):** a source that pays only through
 top-ups (a Free account with purchased credits or a completed purchase) or only through an
 active enterprise contract on Free is `held` (`account_has_billing`) like a paid plan: no
 auto split, its owner confirms the keeper (`confirm-keeper`). After the confirmation its
@@ -951,8 +953,8 @@ file asks the orchestrator):
    the columns and triggers.
 6. **Legacy `DELETE /v1/projects/:id` on a 1:1 workspace now closes the account** (K2).
    Old clients get the same 200 shape.
-7. **Open: an owner-confirmation deadline for held split accounts** (item 43, pending
-   Marko). A `held` account (paying, enterprise or ambiguous) waits for
+7. **Closed by D12 (2026-11-10): no hold for a paying account, so no deadline.** Was:
+   an owner-confirmation deadline for held split accounts (item 43). A `held` account (paying, enterprise or ambiguous) waits for
    `confirm-keeper` with no deadline. The proposal: a 14-day window, a reminder in the
    notice and the owner email, then the worker applies the default keeper (the most
    active project). Not built; the split runbook keeps held accounts for a person.
@@ -1170,7 +1172,7 @@ These parts of the earlier design stay valid and are built or kept as written th
   keeps calling the old paths.
 - The split engine (`project-transfer.ts` + `workspace-split-copy.ts`), its lease ledger
   (`workspace_split_runs`), its mode switch (`WORKSPACE_SPLIT_MODE` or the
-  `workspace_split` row of `kortix.platform_settings`), holds for paying accounts, reverse
+  `workspace_split` row of `kortix.platform_settings`), the identity-provider hold, reverse
   and reopen: `split-runbook.md`.
 - The codemods are committed, re-runnable scripts (`scripts/codemods/`); after a dev merge,
   re-run them instead of resolving their conflicts by hand.

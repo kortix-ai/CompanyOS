@@ -199,26 +199,42 @@ export const DEPRECATIONS: readonly Deprecation[] = [
     id: 'agent-workspace',
     since: '2026-11-08',
     summary:
-      "`workspace` is obsolete: a session never checks out the project repository at boot. An agent clones it with `kortix workspaces clone`, which needs `workspace.gitops.read` in `kortix_permissions`; `project_repository: true` becomes that grant.",
+      "`workspace: { project_repository }`, `workspace: branch | runtime | read` and `repository_access` are obsolete: a session never checks out the repository at boot. `project_repository: true` becomes `workspace.gitops.read` in `kortix_permissions`; clone explicitly with `workspace: { repos: [...] }` or `kortix workspaces clone`.",
     apply: (doc) => {
       // A kortix_version 1 or 2 file is the converter's (./legacy.ts): v2 cloned the
       // repository when the key was omitted, so only the converter reads it right.
       const version = doc.get('kortix_version');
       if (version === 1 || version === 2) return [];
       return agentBlocks(doc).flatMap(([name, block]) => {
-        const keys = ['workspace', 'repository_access'].filter((key) => block.has(key));
-        if (keys.length === 0) return [];
-        // `project_repository: true` gave the agent the repository. Its meaning now is the
-        // grant that lets the agent clone it; false, `read` and an omitted value grant nothing.
         const workspace = block.toJSON().workspace as unknown;
         const access = block.toJSON().repository_access as unknown;
+        const legacyString = typeof workspace === 'string';
+        const legacyMap = typeof workspace === 'object' && workspace !== null && !Array.isArray(workspace) && 'project_repository' in workspace;
+        const hasAccess = block.has('repository_access');
+        if (!legacyString && !legacyMap && !hasAccess) return [];
+        // `project_repository: true` gave the agent the repository. Its meaning now is the
+        // grant that lets the agent clone it; false, `read` and an omitted value grant nothing.
         const repository =
           workspace === 'branch' ||
-          (typeof workspace === 'object' && workspace !== null && (workspace as { project_repository?: unknown }).project_repository === true) ||
-          (workspace === undefined && access === true);
+          (legacyMap && (workspace as { project_repository?: unknown }).project_repository === true) ||
+          (!legacyString && !legacyMap && access === true);
         if (repository) grantRepositoryRead(doc, block);
-        for (const key of keys) deleteKeepingComments(block, key);
-        return keys.map((key) => `agents.${name}.${key}`);
+        const paths: string[] = [];
+        if (hasAccess) {
+          deleteKeepingComments(block, 'repository_access');
+          paths.push(`agents.${name}.repository_access`);
+        }
+        if (legacyString) {
+          deleteKeepingComments(block, 'workspace');
+          paths.push(`agents.${name}.workspace`);
+        } else if (legacyMap) {
+          // The current `workspace` map ({ sandbox, repos, setup }) stays; only the old key goes.
+          const map = block.get('workspace', true);
+          if (isMap(map)) map.delete('project_repository');
+          if (!isMap(map) || map.items.length === 0) deleteKeepingComments(block, 'workspace');
+          paths.push(`agents.${name}.workspace`);
+        }
+        return paths;
       });
     },
   },

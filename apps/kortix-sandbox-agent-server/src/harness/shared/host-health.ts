@@ -4,6 +4,7 @@ import type { HarnessDiagnosticsContext } from '../contract/diagnostics'
 import { readRepoInfo } from '@/lib/git/git'
 import { runtimeConvergenceReport } from '@/services/runtime-assets/runtime-assets'
 import { runtimeTruthReport } from '@/services/runtime-assets/runtime-truth'
+import { workspaceSetupStatus } from './workspace-setup'
 
 /**
  * The `/kortix/health` fields the host owns. Every harness reports them with
@@ -42,6 +43,9 @@ export async function readHostHealth(context: HarnessDiagnosticsContext) {
     // the two; this is only the box's own answer. A pure read — never
     // triggers a reconcile attempt, so polling health cannot itself cause work.
     runtime_truth: await runtimeTruthReport(),
+    // The agent's `workspace: { repos, setup }`, prepared in the background after start:
+    // null when it declares none. Never part of readiness.
+    workspace_setup: workspaceSetupStatus(),
     // In-container boot timeline (ms since process start): the daemon, the
     // config release the runtime boots from (`config-release-*`), and the
     // runtime.

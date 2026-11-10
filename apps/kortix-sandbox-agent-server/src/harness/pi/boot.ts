@@ -36,6 +36,7 @@ import { kortixEventBus } from '@/services/event-bus/kortix-event-bus'
 import { startLlmProxy } from '@/services/llm-proxy/llm-proxy'
 import { logger } from '@/lib/log/logger'
 import { runSandboxOnBoot } from '../shared/on-boot'
+import { parseWorkspaceSetup, runWorkspaceSetup } from '../shared/workspace-setup'
 import { createProjectEnvStore } from '@/services/sandbox-env/project-env'
 import { configureRuntimeConvergence, scheduleRuntimeAssetsReconcile } from '@/services/runtime-assets/runtime-assets'
 import { configureRuntimeTruth, startRuntimeTruthTicker } from '@/services/runtime-assets/runtime-truth'
@@ -254,6 +255,16 @@ export async function runPi(context: HarnessBootContext & { cfg: PiConfig; bootS
 
   // Everything below runs in the project: hooks, the first turn.
   runSandboxOnBoot(cfg, undefined, harness.releases.projectRoot())
+  // The agent's `workspace: { repos, setup }`: detached, so it never holds readiness or the first turn.
+  const workspaceSetup = parseWorkspaceSetup(process.env.KORTIX_WORKSPACE_SETUP)
+  if (workspaceSetup) {
+    void runWorkspaceSetup(workspaceSetup, {
+      workspace: cfg.projectTarget || cfg.workspace,
+      repoUrl: cfg.repoUrl,
+      branch: cfg.branchName,
+      baseRef: cfg.defaultBranch,
+    })
+  }
 
   if (!sessionId) {
     // A builder boot with no session (image warm-up): nothing to claim or pin.

@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   autocleanConfig, parsePorcelain, meaningfulChanges, NOISE_PATHS, lastActivity, decideAutoclean,
-  diskLevel, diskThresholds, parseDfFreeBytes, cronLine, hasCronLine, withCronLine, withoutCronLine, CRON_MARK,
+  diskLevel, diskThresholds, parseDfFreeBytes, 
   type AutocleanCandidate, type AutocleanConfig,
 } from '../lib';
 
 const H = 3_600_000;
 const NOW = Date.parse('2026-11-10T12:00:00Z');
-const CFG: AutocleanConfig = { enabled: true, sweepIdleMs: 24 * H, removeIdleMs: 48 * H };
+const GB = 1024 ** 3;
+const CFG: AutocleanConfig = { enabled: true, sweepIdleMs: 24 * H, removeIdleMs: 48 * H, mergedRemoveIdleMs: 24 * H, pressureRemoveIdleMs: 12 * H, capBytes: 3 * GB, pressureFreeBytes: 15 * GB };
 const cand = (o: Partial<AutocleanCandidate> = {}): AutocleanCandidate => ({
   name: 'wt', primary: false, live: false, busy: false, missing: false,
   meaningfulChanges: 0, unpushed: 0, lastActivity: NOW - 72 * H, ...o,
@@ -18,7 +19,7 @@ const act = (o: Partial<AutocleanCandidate>) => {
 };
 
 describe('autocleanConfig', () => {
-  test('defaults: on, 24h sweep, 48h remove', () => {
+  test('defaults: on, 24h sweep, 48h remove, 24h merged, 12h pressure, 3 GB cap, 15 GB pressure', () => {
     expect(autocleanConfig({})).toEqual({ config: CFG, warnings: [] });
   });
   test('env overrides the thresholds', () => {
@@ -98,7 +99,7 @@ describe('decideAutoclean', () => {
     expect(act({ missing: true, lastActivity: NOW - 49 * H })).toBe('remove');
   });
   test('thresholds come from the config', () => {
-    const v = decideAutoclean(cand({ lastActivity: NOW - 3 * H }), { enabled: true, sweepIdleMs: 1 * H, removeIdleMs: 2 * H }, NOW);
+    const v = decideAutoclean(cand({ lastActivity: NOW - 3 * H }), { sweepIdleMs: 1 * H, removeIdleMs: 2 * H }, NOW);
     expect(v.remove).toBe(true);
   });
   test('every verdict carries a reason', () => {
@@ -107,7 +108,6 @@ describe('decideAutoclean', () => {
 });
 
 describe('disk guard', () => {
-  const GB = 1024 ** 3;
   test('levels: ≥ 10 GB ok, < 10 GB warn, < 4 GB refuse', () => {
     expect(diskLevel(41 * GB)).toBe('ok');
     expect(diskLevel(10 * GB)).toBe('ok');
@@ -129,26 +129,3 @@ describe('disk guard', () => {
   });
 });
 
-describe('crontab line', () => {
-  const line = cronLine({ primary: '/w/suna', bun: '/u/bin/bun', path: '/u/bin:/usr/bin', kortixHome: '/w/.kortix', log: '/w/.kortix/worktrees/autoclean.log' });
-  test('hourly, from the primary checkout, marked, with no cron-special %', () => {
-    expect(line.startsWith('17 * * * * ')).toBe(true);
-    expect(line).toContain("cd '/w/suna'");
-    expect(line).toContain('autoclean --yes');
-    expect(line.endsWith(CRON_MARK)).toBe(true);
-    expect(line.includes('%')).toBe(false);
-  });
-  test('install is idempotent and keeps other lines; uninstall removes only ours', () => {
-    const base = 'MAILTO=""\n0 3 * * * backup\n';
-    const once = withCronLine(base, line);
-    expect(withCronLine(once, line)).toBe(once);
-    expect(once.split('\n').filter((l) => l.endsWith(CRON_MARK))).toHaveLength(1);
-    expect(hasCronLine(once)).toBe(true);
-    expect(hasCronLine(base)).toBe(false);
-    expect(withoutCronLine(once)).toBe(base);
-    expect(withoutCronLine(withCronLine('', line))).toBe('');
-  });
-  test('a % in a path is refused', () => {
-    expect(() => cronLine({ primary: '/w/100%', bun: 'b', path: 'p', kortixHome: 'k', log: 'l' })).toThrow();
-  });
-});

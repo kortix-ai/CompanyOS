@@ -1,6 +1,7 @@
 /**
  * The workspace split against real PostgreSQL: dry-run, apply, resume after a
- * crash mid-move, reverse, the billing hold and split-off billing, the reach
+ * crash mid-move, reverse, the identity-provider hold, a paying account and
+ * split-off billing, the reach
  * rule, rotating logins, the model defaults, the repair pass, the notice, the
  * owner email, and the invariants I1–I12 on a seeded legacy multi-project
  * account. Every value is synthetic.
@@ -123,24 +124,17 @@ function memoryStorage(): SiteStorage & { objects: Map<string, string> } {
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
 
 async function seed(storage: ReturnType<typeof memoryStorage>): Promise<void> {
-  await db.insert(accounts).values([
-    { accountId: LEGACY, name: 'Synthetic legacy', mfaRequired: true },
-    { accountId: PAYING, name: 'Synthetic paying' },
-  ]);
+  await db.insert(accounts).values({ accountId: LEGACY, name: 'Synthetic legacy', mfaRequired: true });
   await db.insert(projects).values([
     { projectId: KEEPER, accountId: LEGACY, name: 'Keeper', repoUrl: 'https://example.invalid/k.git', splitPending: true, lastOpenedAt: minutesAgo(1) },
     { projectId: MOVED, accountId: LEGACY, name: 'Moved', repoUrl: 'https://example.invalid/m.git', splitPending: true, lastOpenedAt: minutesAgo(60) },
     { projectId: OLDEST, accountId: LEGACY, name: 'Oldest', repoUrl: 'https://example.invalid/o.git', splitPending: true },
-    { projectId: PAYING_A, accountId: PAYING, name: 'Paying A', repoUrl: 'https://example.invalid/a.git', splitPending: true, lastOpenedAt: minutesAgo(5) },
-    { projectId: PAYING_B, accountId: PAYING, name: 'Paying B', repoUrl: 'https://example.invalid/b.git', splitPending: true, lastOpenedAt: minutesAgo(50) },
   ]);
-  await db.insert(creditPurchases).values({ accountId: PAYING, amountDollars: '10.00', status: 'completed' });
   const people = [OWNER, ADMIN, MEMBER, GROUP_USER, CUSTOM_USER, BARE_USER, KEEPER_USER, MEMBER_GROUP_USER];
   await db.execute(sql`INSERT INTO auth.users (id, email, instance_id, aud, role) VALUES ${sql.join(
     people.map((id) => sql`(${id}::uuid, ${`split-${id.slice(-4)}@example.test`}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated')`),
     sql`, `)} ON CONFLICT (id) DO NOTHING`);
   await db.insert(accountMemberships).values(people.map((userId) => ({ userId, accountId: LEGACY })));
-  await db.insert(accountMemberships).values({ userId: OWNER, accountId: PAYING });
   await db.insert(accountGroups).values([
     { groupId: GROUP, accountId: LEGACY, name: 'Synthetic group' },
     { groupId: MEMBER_GROUP, accountId: LEGACY, name: 'Synthetic member group' },
@@ -163,7 +157,6 @@ async function seed(storage: ReturnType<typeof memoryStorage>): Promise<void> {
     { accountId: LEGACY, principalType: 'group', principalId: GROUP, roleId: projectMember, scopeType: 'project', scopeId: MOVED },
     { accountId: LEGACY, principalType: 'user', principalId: CUSTOM_USER, roleId: CUSTOM_ROLE, scopeType: 'project', scopeId: MOVED },
     { accountId: LEGACY, principalType: 'pending', principalId: pendingPrincipalId(INVITEE), roleId: projectMember, scopeType: 'project', scopeId: MOVED },
-    { accountId: PAYING, principalType: 'user', principalId: OWNER, roleId: owner, scopeType: 'account' },
   ]);
   await db.insert(accountInvitations).values({
     accountId: LEGACY, email: INVITEE, invitedBy: OWNER,
@@ -229,6 +222,23 @@ async function seed(storage: ReturnType<typeof memoryStorage>): Promise<void> {
     tokenHash: `h_${crypto.randomUUID()}`, clientId: client!.clientId, userId: OWNER, accountId: LEGACY,
     expiresAt: new Date(Date.now() + 3_600_000),
   });
+}
+
+/**
+ * A second legacy account that paid: a completed credit purchase, OWNER owns
+ * it. PAYING_A (opened 5 min ago) outranks PAYING_B (50 min ago). Only the
+ * tests about a paying account seed it, so a full tick elsewhere splits and
+ * mails LEGACY alone.
+ */
+async function seedPaying(): Promise<void> {
+  await db.insert(accounts).values({ accountId: PAYING, name: 'Synthetic paying' });
+  await db.insert(projects).values([
+    { projectId: PAYING_A, accountId: PAYING, name: 'Paying A', repoUrl: 'https://example.invalid/a.git', splitPending: true, lastOpenedAt: minutesAgo(5) },
+    { projectId: PAYING_B, accountId: PAYING, name: 'Paying B', repoUrl: 'https://example.invalid/b.git', splitPending: true, lastOpenedAt: minutesAgo(50) },
+  ]);
+  await db.insert(creditPurchases).values({ accountId: PAYING, amountDollars: '10.00', status: 'completed' });
+  await db.insert(accountMemberships).values({ userId: OWNER, accountId: PAYING });
+  await db.insert(roleAssignments).values({ accountId: PAYING, principalType: 'user', principalId: OWNER, roleId: await systemRole('owner', 'account'), scopeType: 'account' });
 }
 
 async function cleanup(): Promise<void> {
@@ -298,23 +308,25 @@ withDb('workspace split', () => {
   });
   afterEach(cleanup);
 
-  test('dry-run plans every non-keeper project, holds the paying account, and moves nothing', async () => {
+  test('dry-run plans every non-keeper project, a paying account\'s too, and moves nothing', async () => {
+    await seedPaying();
     const result = await processWorkspaceSplits({ mode: 'dry_run' });
     expect(result.planned).toBe(true);
     const runs = await db.select().from(workspaceSplitRuns).orderBy(workspaceSplitRuns.projectId);
     expect(runs.map((run) => [run.projectId, run.phase, run.mode])).toEqual([
       [MOVED, 'planned', 'dry_run'],
       [OLDEST, 'planned', 'dry_run'],
-      [PAYING_B, 'held', 'dry_run'],
+      [PAYING_B, 'planned', 'dry_run'],
     ]);
     expect(runs[0]!.plan.keeper_project_id).toBe(KEEPER);
     expect(runs[2]!.plan.keeper_project_id).toBe(PAYING_A);
+    expect(runs[2]!.plan.held_reason).toBeNull();
     expect((runs[0]!.plan.account as Record<string, number>).members).toBe(8);
     // Aggregates only: the rotating logins one side keeps, and what each split-off gets.
     expect((runs[0]!.plan.account as Record<string, number>).rotating_logins).toBe(2);
     expect((runs[0]!.plan.account as Record<string, unknown>).split_off_billing).toMatchObject({ kind: 'free', comped_until: null });
     const report = await workspaceSplitReport();
-    expect(report).toMatchObject({ accounts: 2, projects_to_move: 3, projects_held: 1, accounts_held: 1, rotating_logins: 2, split_offs_comped: 0 });
+    expect(report).toMatchObject({ accounts: 2, projects_to_move: 3, projects_held: 0, accounts_held: 0, rotating_logins: 2, split_offs_comped: 0 });
     expect(report.free_grant_credits_total).toBeGreaterThan(0);
     expect(JSON.stringify(report)).not.toContain(LEGACY);
     expect((runs[0]!.plan.project as Record<string, number>).invites_to_split).toBe(1);
@@ -332,6 +344,7 @@ withDb('workspace split', () => {
   test('the keeper is the most active project: most sessions created in the last 30 days, then most recently opened', async () => {
     // OLDEST was never opened but holds the most recent sessions; MOVED's
     // extra sessions are older than 30 days and do not count.
+    await seedPaying();
     const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
     await db.insert(projectSessions).values([
       { sessionId: 'split-test-active-1', accountId: LEGACY, projectId: OLDEST, branchName: 'active-1', createdBy: OWNER, createdAt: daysAgo(2) },
@@ -453,10 +466,6 @@ withDb('workspace split', () => {
         FROM kortix.credit_accounts c WHERE c.account_id = ${target}`);
     expect(wallet).toEqual({ tier: 'free', free_credits_eligible: true, grants: 1, comp: null });
     expect(run.plan.billing).toMatchObject({ kind: 'free' });
-
-    // Money stays: the paying account is held, nothing of it moved.
-    expect((await runFor(PAYING_B))?.phase).toBe('held');
-    expect((await accountOfProject(PAYING_B))?.accountId).toBe(PAYING);
 
     const report = await checkWorkspaceInvariants();
     expect(Object.fromEntries(Object.entries(report).map(([id, r]) => [id, r.violations]))).toEqual({ I1: 0, I2: 0, I3: 0, I4: 0, I5: 0, I6: 0, I7: 0, I8: 0, I9: 0, I10: 0, I11: 0, I12: 0 });
@@ -587,68 +596,47 @@ withDb('workspace split', () => {
     expect(Object.entries(report).filter(([, r]) => !r.ok).map(([id]) => id)).toEqual([]);
   });
 
-  test('an account that pays outside Stripe (RevenueCat, a paid plan set by hand) is held too', async () => {
-    // LEGACY has no Stripe purchase; each paid source alone must hold it.
-    const sources = [
-      { tier: 'credits', provider: 'revenuecat', revenuecatSubscriptionId: 'synthetic-rc-sub', revenuecatCustomerId: 'synthetic-rc-customer' },
-      { tier: 'credits', provider: 'manual' },
+  test('an account that pays (a plan set by hand, RevenueCat) is not held: the most active project keeps the billing (D12)', async () => {
+    // LEGACY has no purchase; each source alone makes it pay (C6,
+    // kortix.account_is_paying). A stale Stripe id on Free pays nothing.
+    const sources: { name: string; credit: Partial<typeof creditAccounts.$inferInsert> }[] = [
+      { name: 'a paid plan set by hand', credit: { tier: 'credits', provider: 'manual' } },
+      { name: 'RevenueCat', credit: { tier: 'credits', provider: 'revenuecat', revenuecatSubscriptionId: 'synthetic-rc-sub', revenuecatCustomerId: 'synthetic-rc-customer' } },
+      { name: 'a stale Stripe id on Free', credit: { tier: 'free', stripeSubscriptionId: 'sub_synthetic_stale', stripeSubscriptionStatus: 'canceled' } },
     ];
     for (const source of sources) {
       await db.delete(workspaceSplitRuns);
       await db.delete(creditAccounts).where(eq(creditAccounts.accountId, LEGACY));
-      await db.insert(creditAccounts).values({ accountId: LEGACY, ...source });
+      await db.insert(creditAccounts).values({ accountId: LEGACY, ...source.credit });
       await planWorkspaceSplits({ accountIds: [LEGACY] });
-      expect([source.provider, (await runFor(MOVED))?.phase]).toEqual([source.provider, 'held']);
-      expect((await runFor(MOVED))?.plan.held_reason).toBe('account_has_billing');
-    }
-    // A free account with a credit row is not held, and neither is one that
-    // only carries a stale Stripe subscription id on Free (C6: it pays nothing).
-    for (const free of [{ tier: 'free' }, { tier: 'free', stripeSubscriptionId: 'sub_synthetic_stale', stripeSubscriptionStatus: 'canceled' }]) {
-      await db.delete(workspaceSplitRuns);
-      await db.delete(creditAccounts).where(eq(creditAccounts.accountId, LEGACY));
-      await db.insert(creditAccounts).values({ accountId: LEGACY, ...free });
-      await planWorkspaceSplits({ accountIds: [LEGACY] });
-      expect([free, (await runFor(MOVED))?.phase]).toEqual([free, 'planned']);
+      const run = (await runFor(MOVED))!;
+      expect([source.name, run.phase, run.plan.held_reason, run.plan.keeper_project_id]).toEqual([source.name, 'planned', null, KEEPER]);
     }
   });
 
-  test('a Free account that only bought credits, or holds an enterprise contract, is held until an owner confirms; its split-offs get Free, never a comp (D3)', async () => {
-    const sources: { name: string; setup: () => Promise<void> }[] = [
-      { name: 'top-up only', setup: async () => {
-        await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'free', lifetimePurchased: '25', balance: '25' });
-      } },
-      { name: 'enterprise contract on Free', setup: async () => {
-        await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'free' });
-        await db.execute(sql`INSERT INTO kortix.enterprise_contracts (account_id, status, license_usd, credits_usd, collection)
-          VALUES (${LEGACY}, 'active', 1000, 500, 'manual')`);
-      } },
-    ];
-    for (const source of sources) {
-      await db.delete(workspaceSplitRuns);
-      await db.execute(sql`DELETE FROM kortix.enterprise_contracts WHERE account_id = ${LEGACY}`);
-      await db.delete(creditAccounts).where(eq(creditAccounts.accountId, LEGACY));
-      await source.setup();
-      // No auto split: the whole account waits for its owner.
-      await planWorkspaceSplits({ accountIds: [LEGACY] });
-      expect([source.name, (await runFor(MOVED))?.phase, (await runFor(OLDEST))?.phase]).toEqual([source.name, 'held', 'held']);
-      expect((await runFor(MOVED))?.plan.held_reason).toBe('account_has_billing');
-      const tick = await processWorkspaceSplits({ mode: 'apply', deps: { siteStorage: storage, sendEmail: mailStub().sendEmail } });
-      expect([source.name, (await accountOfProject(MOVED))?.accountId]).toEqual([source.name, LEGACY]);
-      expect(tick.outcomes.done).toBe(0);
-      // The dry-run report counts what each split-off gets: Free.
-      expect((await runFor(MOVED))?.plan.account).toMatchObject({ split_off_billing: { kind: 'free', comped_until: null } });
-    }
-    // The owner confirms: the account splits, the keeper keeps the purchased
-    // credits and the contract, and each split-off gets Free with its free credits.
-    await confirmWorkspaceSplitKeeper(LEGACY, KEEPER);
-    expect((await processWorkspaceSplits({ mode: 'apply', deps: { siteStorage: storage, sendEmail: mailStub().sendEmail } })).outcomes.done).toBe(2);
+  test.each([
+    ['bought credits only', async () => {
+      await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'free', lifetimePurchased: '25', balance: '25' });
+    }],
+    ['an enterprise contract on Free', async () => {
+      await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'free' });
+      await db.execute(sql`INSERT INTO kortix.enterprise_contracts (account_id, status, license_usd, credits_usd, collection)
+        VALUES (${LEGACY}, 'active', 1000, 500, 'manual')`);
+    }],
+  ] as const)('a Free account that pays through %s splits with no hold: the keeper keeps the money, the split-offs get Free, never a comp (D3)', async (_source, setup) => {
+    await setup();
+    const tick = await processWorkspaceSplits({ mode: 'apply', deps: { siteStorage: storage, sendEmail: mailStub().sendEmail } });
+    expect(tick.outcomes.done).toBe(2);
     for (const projectId of [MOVED, OLDEST]) {
       const run = (await runFor(projectId))!;
-      expect([run.phase, (run.plan.billing as { kind: string }).kind]).toEqual(['done', 'free']);
+      expect([run.phase, run.plan.held_reason, (run.plan.billing as { kind: string }).kind]).toEqual(['done', null, 'free']);
       const [wallet] = await db.select().from(creditAccounts).where(eq(creditAccounts.accountId, run.toAccountId!));
       expect([wallet?.tier, wallet?.compPlanUntil ?? null, wallet?.freeCreditsEligible]).toEqual(['free', null, true]);
     }
-    await db.execute(sql`DELETE FROM kortix.enterprise_contracts WHERE account_id = ${LEGACY}`);
+    // The purchased credits or the contract stay with the keeper's account.
+    expect((await accountOfProject(KEEPER))?.accountId).toBe(LEGACY);
+    const [keeper] = await db.execute<{ paying: boolean }>(sql`SELECT kortix.account_is_paying(${LEGACY}) AS paying`);
+    expect(keeper?.paying).toBe(true);
   });
 
   test('an account with an identity provider (SSO or a SCIM token) is held, keeper confirmed or not', async () => {
@@ -675,36 +663,42 @@ withDb('workspace split', () => {
     await db.execute(sql`DELETE FROM kortix.scim_tokens WHERE account_id = ${LEGACY}`);
   });
 
-  test('apply re-checks the hold: an account that starts paying or adds an IdP after the plan pass is held, nothing moves', async () => {
+  test('apply re-checks the hold: an account that adds an IdP after the plan pass is held and nothing moves; starting to pay holds nothing', async () => {
     await planWorkspaceSplits({ accountIds: [LEGACY] });
     const planned = (await runFor(MOVED))!;
     expect(planned.phase).toBe('planned');
-    await db.delete(creditAccounts).where(eq(creditAccounts.accountId, LEGACY));
-    await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'credits', planMonthlyUsd: '20' });
+    await db.execute(sql`INSERT INTO kortix.account_sso_providers (account_id, supabase_sso_provider_id, name, primary_domain)
+      VALUES (${LEGACY}, ${crypto.randomUUID()}, 'Synthetic IdP', 'example.test')`);
     expect(await applyWorkspaceSplitRun(planned.runId, { siteStorage: storage })).toBe('skipped');
     expect((await runFor(MOVED))?.phase).toBe('held');
-    expect((await runFor(MOVED))?.plan.held_reason).toBe('account_has_billing');
+    expect((await runFor(MOVED))?.plan.held_reason).toBe('account_has_identity_provider');
     expect((await accountOfProject(MOVED))?.accountId).toBe(LEGACY);
+    // The IdP leaves and the account starts paying: the next plan pass
+    // releases the run, and the move lands (D12).
+    await db.execute(sql`DELETE FROM kortix.account_sso_providers WHERE account_id = ${LEGACY}`);
+    await db.insert(creditAccounts).values({ accountId: LEGACY, tier: 'credits', planMonthlyUsd: '20', billingCycleAnchor: new Date().toISOString() });
+    await planWorkspaceSplits({ accountIds: [LEGACY] });
+    expect([(await runFor(MOVED))?.phase, (await runFor(MOVED))?.plan.held_reason]).toEqual(['planned', null]);
+    expect(await applyWorkspaceSplitRun(planned.runId, { siteStorage: storage, sendEmail: mailStub().sendEmail })).toBe('done');
+    expect((await accountOfProject(MOVED))?.accountId).not.toBe(LEGACY);
   });
 
-  test('an owner confirming the keeper releases a held account', async () => {
-    await planWorkspaceSplits();
-    expect((await runFor(PAYING_B))?.phase).toBe('held');
-    expect((await processWorkspaceSplits({ mode: 'apply', deps: { siteStorage: storage } })).outcomes.done).toBe(2);
-    expect((await accountOfProject(PAYING_B))?.accountId).toBe(PAYING);
-    // The owner keeps billing on the older project instead.
+  test('a paying account splits like any other: the most active project keeps the account, its plan and purchases; the split-off gets the plan comped (D12, C6)', async () => {
+    await seedPaying();
     await db.insert(creditAccounts).values({ accountId: PAYING, tier: 'credits', planMonthlyUsd: '300', billingCycleAnchor: new Date().toISOString() });
-    await confirmWorkspaceSplitKeeper(PAYING, PAYING_B);
-    expect((await runFor(PAYING_B))?.phase).toBe('skipped');
-    const released = (await runFor(PAYING_A))!;
-    expect(released.phase).toBe('planned');
-    expect(released.plan.keeper_project_id).toBe(PAYING_B);
-    expect(await applyWorkspaceSplitRun(released.runId, { siteStorage: storage })).toBe('done');
-    expect((await accountOfProject(PAYING_B))).toEqual({ accountId: PAYING, splitPending: false });
-    expect((await accountOfProject(PAYING_A))?.accountId).not.toBe(PAYING);
-    // A split-off of a paying account gets the keeper's plan comped until the
-    // keeper's period ends (at most 31 days), with no Stripe subscription.
-    const done = (await runFor(PAYING_A))!;
+    await planWorkspaceSplits({ accountIds: [PAYING] });
+    const run = (await runFor(PAYING_B))!;
+    expect([run.phase, run.plan.held_reason, run.plan.keeper_project_id]).toEqual(['planned', null, PAYING_A]);
+    expect(await applyWorkspaceSplitRun(run.runId, { siteStorage: storage, sendEmail: mailStub().sendEmail })).toBe('done');
+    const done = (await runFor(PAYING_B))!;
+    expect(await accountOfProject(PAYING_A)).toEqual({ accountId: PAYING, splitPending: false });
+    expect(await accountOfProject(PAYING_B)).toEqual({ accountId: done.toAccountId!, splitPending: false });
+    // The keeper keeps its plan and its purchase.
+    const [keeperWallet] = await db.select().from(creditAccounts).where(eq(creditAccounts.accountId, PAYING));
+    expect(keeperWallet?.tier).toBe('credits');
+    expect(await db.select({ accountId: creditPurchases.accountId }).from(creditPurchases).where(eq(creditPurchases.accountId, PAYING))).toEqual([{ accountId: PAYING }]);
+    // The split-off gets the keeper's plan comped until the keeper's period
+    // ends (at most 31 days), with no Stripe subscription.
     expect(done.plan.billing).toMatchObject({ kind: 'comped', tier: 'credits' });
     const [comped] = await db.select().from(creditAccounts).where(eq(creditAccounts.accountId, done.toAccountId!));
     expect([comped?.tier, comped?.stripeSubscriptionId ?? null, comped?.compPlanUntil !== null]).toEqual(['credits', null, true]);
@@ -713,6 +707,22 @@ withDb('workspace split', () => {
     expect(notice?.comped_until).toBe((done.plan.billing as { compedUntil: string }).compedUntil);
     const report = await checkWorkspaceInvariants();
     expect(report.I5.violations).toBe(0);
+  });
+
+  test('an operator gives the billing to another project before the account\'s first move; the plan keeps that keeper', async () => {
+    await seedPaying();
+    await planWorkspaceSplits({ accountIds: [PAYING] });
+    expect((await runFor(PAYING_B))?.plan.keeper_project_id).toBe(PAYING_A);
+    await confirmWorkspaceSplitKeeper(PAYING, PAYING_B);
+    expect((await runFor(PAYING_B))?.phase).toBe('skipped');
+    const released = (await runFor(PAYING_A))!;
+    expect([released.phase, released.plan.keeper_project_id, released.plan.keeper_confirmed]).toEqual(['planned', PAYING_B, true]);
+    // A plan pass keeps the confirmed keeper whatever the activity says.
+    await planWorkspaceSplits({ accountIds: [PAYING] });
+    expect((await runFor(PAYING_A))?.plan.keeper_project_id).toBe(PAYING_B);
+    expect(await applyWorkspaceSplitRun(released.runId, { siteStorage: storage, sendEmail: mailStub().sendEmail })).toBe('done');
+    expect(await accountOfProject(PAYING_B)).toEqual({ accountId: PAYING, splitPending: false });
+    expect((await accountOfProject(PAYING_A))?.accountId).not.toBe(PAYING);
   });
 
   test('I8 reports a member the split added who no longer reaches the moved workspace; an account member grant alone does not count', async () => {
@@ -993,6 +1003,7 @@ withDb('workspace split', () => {
   });
 
   test('split_notice: the moved workspace and the keeper each say where they came from, for 30 days', async () => {
+    await seedPaying();
     await planWorkspaceSplits();
     await applyWorkspaceSplitRun((await runFor(MOVED))!.runId, { siteStorage: storage, sendEmail: mailStub().sendEmail });
     const moved = (await runFor(MOVED))!;

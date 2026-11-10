@@ -41,7 +41,7 @@ import { resolveSessionSecretGrant } from './secret-grant';
 import { AmbiguousSecretGrantError, intersectSecretGrants, listProjectSecretsSnapshotForUser } from '../secrets';
 import { SECRET_CAPABILITIES_ENV_NAME } from '../secret-capabilities';
 import { piPackageBundleForSession } from '../../pi-packages/bundle';
-import { manifestPiCodemode, manifestPiContext, manifestPiPackages, resolveCompiledAgentConfigForSession, resolveSelectedAgentConfigForSession } from './compile-agent-config';
+import { manifestPiCodemode, manifestPiContext, manifestPiPackages, resolveCompiledAgentConfigForSession, resolveSelectedAgentConfigForSession, manifestWorkspaceSetup, type SessionWorkspaceSetup } from './compile-agent-config';
 
 
 
@@ -142,6 +142,7 @@ async function resolveSessionAgentConfig(input: SessionSandboxEnvInput): Promise
   manifestPackages: unknown[];
   manifestCodemode: 'off' | 'on' | 'only' | null;
   manifestContext: 'record' | 'summary' | null;
+  workspaceSetup: SessionWorkspaceSetup | null;
 }> {
   let agentGrantEnv: string[] | 'all' | undefined;
 
@@ -158,6 +159,7 @@ async function resolveSessionAgentConfig(input: SessionSandboxEnvInput): Promise
   let manifestPackages: unknown[] = [];
   let manifestCodemode: 'off' | 'on' | 'only' | null = null;
   let manifestContext: 'record' | 'summary' | null = null;
+  let workspaceSetup: SessionWorkspaceSetup | null = null;
   if (input.defaultBranch && !input.platformMetaAgent) {
     const gitProject = {
       projectId: input.projectId,
@@ -170,6 +172,7 @@ async function resolveSessionAgentConfig(input: SessionSandboxEnvInput): Promise
       manifestPackages = manifestPiPackages(raw, input.agentName);
       manifestCodemode = manifestPiCodemode(raw, input.agentName);
       manifestContext = manifestPiContext(raw, input.agentName);
+      workspaceSetup = manifestWorkspaceSetup(raw, input.agentName);
     };
     // `'tip-proof'`: the base ref was at the remote's tip within the refresh
     // interval, proven by this process or adopted from another
@@ -214,7 +217,7 @@ async function resolveSessionAgentConfig(input: SessionSandboxEnvInput): Promise
       }),
     ]);
   }
-  return { agentGrantEnv, compiledAgentConfig, manifestPackages, manifestCodemode, manifestContext };
+  return { agentGrantEnv, compiledAgentConfig, manifestPackages, manifestCodemode, manifestContext, workspaceSetup };
 }
 
 /** Read the session's runtime secrets and drop the ones the sandbox must never hold. */
@@ -441,7 +444,7 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
     ),
   );
 
-  const { compiledAgentConfig, manifestPackages, manifestCodemode, manifestContext } = await agentConfigRead;
+  const { compiledAgentConfig, manifestPackages, manifestCodemode, manifestContext, workspaceSetup } = await agentConfigRead;
   const piPackagesBundle = await piPackagesRead;
   await policyRead;
   const sessionModel = await modelRead;
@@ -486,6 +489,8 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
       piPackages: manifestPackages,
       piCodemode: manifestCodemode,
       piContext: manifestContext,
+      workspaceSetup,
+      repositoryAccess: input.repositoryAccess ?? true,
       piPackagesBundle,
     }),
     // The platform coordinator uses API-level delegation.

@@ -85,7 +85,7 @@ export function Group({
 }
 
 /** A choice from a short list, or none (each computer decides), right-aligned like a switch. */
-export function SelectRow<T extends number | string>({
+function SelectRow<T extends number | string>({
   title,
   description,
   value,
@@ -132,7 +132,7 @@ export function SelectRow<T extends number | string>({
 }
 
 /** A whole number with its unit, right-aligned like a switch. */
-export function NumberRow({
+function NumberRow({
   id,
   title,
   description,

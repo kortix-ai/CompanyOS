@@ -62,7 +62,7 @@ function gatewayDeps(respond: Respond, overrides: Partial<GatewayDeps> = {}): Ga
       return { status: r.status, ok: r.status >= 200 && r.status < 300, text: async () => r.body, headers };
     },
     ...overrides,
-  } as GatewayDeps;
+  };
 }
 
 const INPUT = {
@@ -356,20 +356,31 @@ describe('handleCall() path arguments', () => {
 });
 
 describe('POST /call wire contract', () => {
-  function router(respond: Respond, overrides: Partial<GatewayDeps> = {}) {
-    const principal = {
+  // A complete typed `ConnectorRouterDeps`: every required authorizer and
+  // service present, no assertion to hide a missing one. The /call tests drive
+  // `resolveProjectPrincipal` + `makeGatewayDeps`; the admin authorizers answer
+  // null and the catalog/flag services answer empty, so a stray request on the
+  // other routes fails closed instead of passing on an undefined dep.
+  function routerDeps(respond: Respond, gatewayOverrides: Partial<GatewayDeps> = {}): ConnectorRouterDeps {
+    const principal: ConnectorPrincipal = {
       userId: 'user-1',
       accountId: 'acct-1',
       projectId: 'proj-1',
       sessionId: null,
       subject: { userId: 'user-1', groupIds: [] },
-    } as ConnectorPrincipal;
-    return createConnectorRouter({
+    };
+    return {
       resolvePrincipal: async () => principal,
       resolveProjectPrincipal: async () => principal,
-      makeGatewayDeps: () => gatewayDeps(respond, overrides),
-    } as unknown as ConnectorRouterDeps);
+      resolveAdmin: async () => null,
+      makeGatewayDeps: () => gatewayDeps(respond, gatewayOverrides),
+      listCatalog: async () => [],
+      featureFlagEnabled: async () => false,
+      listConnectors: async () => [],
+      syncConnectors: async () => ({ synced: 0, errors: [] }),
+    };
   }
+  const router = (respond: Respond, overrides: Partial<GatewayDeps> = {}) => createConnectorRouter(routerDeps(respond, overrides));
   const post = (app: ReturnType<typeof router>) =>
     app.fetch(
       new Request('http://x/projects/proj-1/call', {
@@ -394,16 +405,11 @@ describe('POST /call wire contract', () => {
 
   test('a tool that reports an error inside a 2xx → HTTP 200, ok: false, status tool_error, error = its text', async () => {
     // The call reached the tool, so the status stays 200; ok: false says the tool did not do its job.
-    const graphql = createConnectorRouter({
-      resolvePrincipal: async () => ({}) as ConnectorPrincipal,
-      resolveProjectPrincipal: async () =>
-        ({ userId: 'user-1', accountId: 'acct-1', projectId: 'proj-1', sessionId: null, subject: { userId: 'user-1', groupIds: [] } }) as ConnectorPrincipal,
-      makeGatewayDeps: () =>
-        gatewayDeps(async () => ({ status: 200, body: '{"errors":[{"message":"Entity not found"}]}' }), {
-          loadAction: async () => action({ kind: 'graphql', operation: 'query', field: 'issue' }),
-        }),
-    } as unknown as ConnectorRouterDeps);
-    const res = await post(graphql);
+    const res = await post(
+      router(async () => ({ status: 200, body: '{"errors":[{"message":"Entity not found"}]}' }), {
+        loadAction: async () => action({ kind: 'graphql', operation: 'query', field: 'issue' }),
+      }),
+    );
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       ok: false,
@@ -416,16 +422,12 @@ describe('POST /call wire contract', () => {
   });
 
   test('200 from a GraphQL binding carries the unwrapped output', async () => {
-    const graphql = createConnectorRouter({
-      resolvePrincipal: async () => ({}) as ConnectorPrincipal,
-      resolveProjectPrincipal: async () =>
-        ({ userId: 'user-1', accountId: 'acct-1', projectId: 'proj-1', sessionId: null, subject: { userId: 'user-1', groupIds: [] } }) as ConnectorPrincipal,
-      makeGatewayDeps: () =>
-        gatewayDeps(async () => ({ status: 200, body: '{"data":{"issue":{"id":"i1"}}}' }), {
-          loadAction: async () => action({ kind: 'graphql', operation: 'query', field: 'issue' }),
-        }),
-    } as unknown as ConnectorRouterDeps);
-    const body = (await (await post(graphql)).json()) as Record<string, unknown>;
+    const res = await post(
+      router(async () => ({ status: 200, body: '{"data":{"issue":{"id":"i1"}}}' }), {
+        loadAction: async () => action({ kind: 'graphql', operation: 'query', field: 'issue' }),
+      }),
+    );
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.data).toEqual({ data: { issue: { id: 'i1' } } });
     expect(body.output).toEqual({ issue: { id: 'i1' } });
   });
@@ -475,29 +477,22 @@ describe('POST /call wire contract', () => {
     // exist or the app cannot see it: the tool ran and reported a domain
     // result. A 5xx pages it as a server fault and invites retries of a state
     // that will not change (KRTX-4614: 6 of 8 5xx in the route's first hour).
-    const channel = createConnectorRouter({
-      resolvePrincipal: async () => ({}) as ConnectorPrincipal,
-      resolveProjectPrincipal: async () =>
-        ({ userId: 'user-1', accountId: 'acct-1', projectId: 'proj-1', sessionId: null, subject: { userId: 'user-1', groupIds: [] } }) as ConnectorPrincipal,
-      makeGatewayDeps: () =>
-        gatewayDeps(async () => ({ status: 200, body: '{"ok":false,"error":"thread_not_found"}' }), {
-          loadConnectorBySlug: async () => ({
-            connectorId: 'conn-slack-channel',
-            slug: 'slack_channel',
-            provider: 'channel',
-            platform: 'slack',
-            baseUrl: 'https://slack.com/api',
-            auth: { type: 'bearer', in: 'header', name: null, prefix: null },
-            hasAuth: true,
-            credentialMode: 'shared',
-            enabled: true,
-          }),
-          loadAction: async () =>
-            action({ kind: 'http', method: 'POST', path: '/chat.postMessage' }),
-          resolveCredential: async () => 'xoxb-install-token',
-        }),
-    } as unknown as ConnectorRouterDeps);
-    const app = channel;
+    const app = router(async () => ({ status: 200, body: '{"ok":false,"error":"thread_not_found"}' }), {
+      loadConnectorBySlug: async () => ({
+        connectorId: 'conn-slack-channel',
+        slug: 'slack_channel',
+        provider: 'channel',
+        platform: 'slack',
+        baseUrl: 'https://slack.com/api',
+        auth: { type: 'bearer', in: 'header', name: null, prefix: null },
+        hasAuth: true,
+        credentialMode: 'shared',
+        enabled: true,
+      }),
+      loadAction: async () =>
+        action({ kind: 'http', method: 'POST', path: '/chat.postMessage' }),
+      resolveCredential: async () => 'xoxb-install-token',
+    });
     const res = await app.fetch(
       new Request('http://x/projects/proj-1/call', {
         method: 'POST',

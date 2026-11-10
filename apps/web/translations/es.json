@@ -21536,11 +21536,6 @@
     "dismiss": "Cerrar",
     "emailCopied": "Dirección de correo copiada"
   },
-  "repositoryAccess": {
-    "label": "Acceso al repositorio del espacio de trabajo",
-    "enabled": "Las sesiones nuevas reciben el repositorio del espacio de trabajo. Se siguen aplicando los permisos de Git. Las sesiones existentes conservan su configuración de acceso.",
-    "disabled": "Las sesiones nuevas se ejecutan sin el repositorio del espacio de trabajo. Pueden crear archivos y usar herramientas autorizadas. Las sesiones existentes conservan su configuración de acceso."
-  },
   "customProvider": {
     "intro": "Endpoints que el catálogo no incluye.",
     "add": "Añadir proveedor personalizado",
@@ -26077,7 +26072,6 @@
   "agentMounts": {
     "lead": "Carpetas de Archivos que montan las sesiones de este agente. Los cambios se aplican de inmediato a cada nueva sesión.",
     "mount": "Mount folder",
-    "repository": "Repositorio del espacio de trabajo",
     "viaAgent": "compartido con este agente",
     "viaProject": "compartido con todos en este espacio de trabajo",
     "from": "{path} · {who}",

@@ -21536,11 +21536,6 @@
     "dismiss": "Fermer",
     "emailCopied": "Adresse e-mail copiée"
   },
-  "repositoryAccess": {
-    "label": "Accès au dépôt de l’espace de travail",
-    "enabled": "Les nouvelles sessions reçoivent le dépôt de l’espace de travail. Les permissions Git restent applicables. Les sessions existantes conservent leur accès.",
-    "disabled": "Les nouvelles sessions fonctionnent sans le dépôt de l’espace de travail. Elles peuvent créer des fichiers et utiliser les outils autorisés. Les sessions existantes conservent leur accès."
-  },
   "customProvider": {
     "intro": "Des endpoints absents du catalogue.",
     "add": "Ajouter un fournisseur personnalisé",
@@ -26077,7 +26072,6 @@
   "agentMounts": {
     "lead": "Dossiers de Fichiers montés par les sessions de cet agent. Une modification s’applique aussitôt à chaque nouvelle session.",
     "mount": "Mount folder",
-    "repository": "Dépôt de l’espace de travail",
     "viaAgent": "partagé avec cet agent",
     "viaProject": "partagé avec tout l’espace de travail",
     "from": "{path} · {who}",

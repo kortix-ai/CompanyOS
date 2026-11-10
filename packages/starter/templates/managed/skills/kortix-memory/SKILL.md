@@ -23,9 +23,10 @@ prompt — the **memory protocol** is: at the start of a task, `read`
 (`overview.md`, `connections.md`, etc.) the index points at when
 they're relevant. Record anything durable as you go — your context
 window may reset at any time, so what isn't written to `memory/` is lost.
-Memory edits land only from an agent with
-`workspace: { project_repository: true }`: without it the session has no
-checkout to commit or push.
+`/workspace` starts empty. To read or edit memory, run
+`kortix workspaces clone` first: it clones the repository onto your
+session branch. Edit `memory/` in the clone, commit, push, and open a
+change request (`kortix cr open`).
 
 Memory is **continuously CRUD'd**:
 

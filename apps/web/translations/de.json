@@ -21536,11 +21536,6 @@
     "dismiss": "Schließen",
     "emailCopied": "E-Mail-Adresse kopiert"
   },
-  "repositoryAccess": {
-    "label": "Zugriff auf das Workspace-Repository",
-    "enabled": "Neue Sitzungen erhalten das Workspace-Repository. Git-Berechtigungen gelten weiterhin. Bestehende Sitzungen behalten ihre Zugriffseinstellung.",
-    "disabled": "Neue Sitzungen laufen ohne Workspace-Repository. Sie können weiterhin Dateien erstellen und freigegebene Werkzeuge nutzen. Bestehende Sitzungen behalten ihre Zugriffseinstellung."
-  },
   "customProvider": {
     "intro": "Endpunkte, die der Katalog nicht enthält.",
     "add": "Eigenen Anbieter hinzufügen",
@@ -26077,7 +26072,6 @@
   "agentMounts": {
     "lead": "Ordner aus Dateien, die Sitzungen dieses Agenten einbinden. Änderungen gelten sofort für jede neue Sitzung.",
     "mount": "Mount folder",
-    "repository": "Workspace-Repository",
     "viaAgent": "mit diesem Agenten geteilt",
     "viaProject": "mit allen in diesem Workspace geteilt",
     "from": "{path} · {who}",

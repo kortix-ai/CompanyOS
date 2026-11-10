@@ -43,7 +43,6 @@ interface HarnessDiagnosticReport {
     daemon_log_file: string | null
   }
   boot: {
-    repo_materialization_error: string | null
     initial_session_error: string | null
     timeline: SandboxBootState['timeline']
   }

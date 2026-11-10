@@ -5,6 +5,7 @@ import {
 } from '@kortix/api-contract/runtime-relay';
 import type { RuntimeAuditBatch, RuntimeAuditEvent } from '@kortix/api-contract/runtime-relay';
 import type { auditEvents } from '@kortix/db';
+import { LATE_ROW_MAX_AGE_DAYS } from './audit-archive/format';
 
 /**
  * A batch and its events as received: each contract field may be absent or
@@ -34,14 +35,15 @@ const MAX_SUMMARY_BYTES = 16_384;
 type AuditInsert = typeof auditEvents.$inferInsert;
 
 /**
- * `kortix.audit_events` is partitioned by week and keeps 90 days hot. An instant outside
- * [now - 80 days, now + 1 day] (a sandbox offline for months, a skewed clock) has no weekly
- * partition and would land in the default partition, where retention never reaches it.
- * It is stored as the start of today (UTC) instead; the instant the sandbox reported stays in
- * `metadata.original_occurred_at`. The value is the same for every re-send within the UTC
- * day, so the unique dedupe key (source tuple + occurred_at) still matches a retry.
+ * `kortix.audit_events` is partitioned by week and keeps HOT_DAYS in PostgreSQL. An instant
+ * outside [now - LATE_ROW_MAX_AGE_DAYS, now + 1 day] (a sandbox offline for days, a skewed
+ * clock) would land in a week the archive already exported, or in the default partition, where
+ * retention never reaches it. It is stored as the start of today (UTC) instead; the instant the
+ * sandbox reported stays in `metadata.original_occurred_at`. The value is the same for every
+ * re-send within the UTC day, so the unique dedupe key (source tuple + occurred_at) still
+ * matches a retry.
  */
-const MAX_EVENT_AGE_MS = 80 * 86_400_000;
+const MAX_EVENT_AGE_MS = LATE_ROW_MAX_AGE_DAYS * 86_400_000;
 const MAX_EVENT_SKEW_MS = 86_400_000;
 
 export interface RuntimeAuditScope {

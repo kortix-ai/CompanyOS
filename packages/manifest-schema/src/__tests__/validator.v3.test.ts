@@ -246,12 +246,16 @@ describe('builtin_agents (My Kortix switch)', () => {
   });
 });
 
-describe('agents.<name>.workspace.project_repository default', () => {
-  test('defaults to false; an explicit value wins', async () => {
-    const { resolveProjectRepository } = await import('../index.ts');
-    expect(resolveProjectRepository({})).toEqual({ ok: true, value: false, legacyRead: false });
-    expect(resolveProjectRepository({ workspace: {} })).toEqual({ ok: true, value: false, legacyRead: false });
-    expect(resolveProjectRepository({ workspace: { project_repository: true } })).toEqual({ ok: true, value: true, legacyRead: false });
+describe('agents.<name>.workspace is obsolete', () => {
+  test('every old shape validates with one fix-able warning and leaves the parsed agent without it', () => {
+    for (const shape of ['workspace: { project_repository: true }', 'workspace: runtime', 'repository_access: false']) {
+      const result = validateManifest(`agents:\n  worker:\n    prompt: hi\n    ${shape}\n`);
+      expect(result.valid).toBe(true);
+      expect(result.issues.some((issue) => issue.fix === 'agent-workspace')).toBe(true);
+      const worker = (result.parsed?.agents as Record<string, Record<string, unknown>>).worker;
+      expect(worker.workspace).toBeUndefined();
+      expect(worker.repository_access).toBeUndefined();
+    }
   });
 });
 

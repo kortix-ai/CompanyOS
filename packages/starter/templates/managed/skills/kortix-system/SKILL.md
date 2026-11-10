@@ -23,13 +23,12 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   `$KORTIX_BRANCH_NAME`. Sessions run in parallel and share no sandbox.
 - An **agent** is one block under `agents:` in `kortix.yaml`: prompt, model,
   permission rules, and the things it may use.
-- Every session starts from the default branch. A change reaches other
-  sessions only when its change request merges.
-- `/workspace` starts empty. Kortix never checks out the repository there.
-- To work on the workspace's files, run `kortix workspaces clone`. It clones
-  the repository onto your session branch. Send the change with `kortix cr`.
-- Only your session branch accepts your push. The push needs
+- A change reaches other sessions only when its change request merges;
+  only your session branch accepts your push, and it needs
   `workspace.gitops.read` in your agent's `kortix_permissions`.
+- `/workspace` starts empty: `kortix workspaces clone` puts the repository
+  on your session branch when you work on its files, and `kortix cr` sends
+  the change back.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
 </overview>
 <machine>
@@ -38,12 +37,8 @@ Your session runs on its own microVM: a whole Linux computer, root through
 `sudo`. `/MACHINE.md` lists its tools and explains its desktop.
 - `/workspace`: this session's files, kept for the life of the session.
 - `/drives` (Drive): your files and the company's, kept until deleted. Save what the user keeps in `/drives/me` (`kortix-drives`). No `/drives`: Drive is off.
-- Anything else (home, `/tmp`, installed packages) can be gone when the session reopens.
-  To keep a package for every session, add it to a sandbox template
-  (`references/kortix/kortix-yaml.md` → sandbox) and install it now too.
-- "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on
-  your screen, which the user watches in the **Desktop** panel, or on their own
-  computer. The `kortix-computer` skill decides which (`<which-desktop>`).
+- Anything else (home, `/tmp`, installed packages) can be gone when the session reopens. To keep a package for every session, add it to a sandbox template (`references/kortix/kortix-yaml.md` → sandbox) and install it now too.
+- "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on your screen, which the user watches in the **Desktop** panel, or on their own computer. The `kortix-computer` skill decides which (`<which-desktop>`).
 Keep big files out of Git: every clone downloads the whole repository.
 `kortix validate` warns at 10 MiB per file and at 512 MiB in total; above
 512 MiB compressed, running sessions stop picking up config changes. Put
@@ -52,12 +47,11 @@ media and datasets in object storage; add build output to `.gitignore`.
 <change-requests>
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
-change request (CR) is the only way to the default branch. Do every step:
-0. Work in a clone: `/workspace` has none at boot unless your agent's
-   `workspace.repos` declares one (your prompt then names it and its setup
-   progress). Otherwise `kortix workspaces clone` puts the repository on your
-   session branch; `cd` into it. Run every step below there.
-1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
+change request (CR) is the only way to the default branch. Do every
+step in the clone `kortix workspaces clone` puts on your session branch
+(`/workspace` has none at boot unless your agent's `workspace.repos`
+declares one, and your prompt then names it and its setup progress):
+0. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
    change. Keep big files out of Git (`<machine>`).

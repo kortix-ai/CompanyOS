@@ -1242,7 +1242,7 @@ Fail-safe rules:
 |---|---|---|
 | Screen | DXGI Desktop Duplication of each monitor, GDI `BitBlt` as the fallback (per-monitor DPI aware). A monitor with no new desktop image since the last read and the same window layout is not read again (`reused: true`) | X11 `GetImage` of the RandR monitor with the focused window |
 | Excluded apps | Frame skipped when one is focused. Other excluded windows are painted black from the z-ordered window list (rectangular approximation, no rounded corners or transparency) | Same |
-| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; reused for 3 s while the window and title stay the same | None (needs AT-SPI) |
+| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; read fresh on every probe from the address-bar element found once per window (a full search only when that element is gone) | None (needs AT-SPI) |
 | AX tree | UI Automation control view, one cached call per node, 250 ms budget | None |
 | Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | nice 10 for every Capture process (macOS too); input recording is passive (XRecord, a listen-only event tap) |
 | Private windows | Title markers (InPrivate, Incognito, Private Browsing) | Same |

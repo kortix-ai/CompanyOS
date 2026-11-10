@@ -1293,40 +1293,60 @@ fn looks_like_url(v: &str) -> bool {
     !v.contains(' ') && (v.contains("://") || v.contains('.') || v.starts_with("localhost"))
 }
 
-/// How long a window's address-bar URL is reused while its title stays the
-/// same. Probes run several times a second; each search walks up to 900
-/// elements of the browser and keeps it in full accessibility mode.
-const URL_TTL: Duration = Duration::from_secs(3);
-
 thread_local! {
-    /// (window, title) -> (read at, URL).
-    static URL_CACHE: RefCell<Option<(String, String, Instant, Option<String>)>> =
-        const { RefCell::new(None) };
+    /// The address-bar element of the last browser window searched: (window, element).
+    static ADDRESS_BAR: RefCell<Option<(u64, IUIAutomationElement)>> = const { RefCell::new(None) };
+}
+
+/// The URL in a value read from an address bar, or None when it is not one.
+fn as_url(v: &str) -> Option<String> {
+    if !looks_like_url(v) {
+        return None;
+    }
+    let v = v.trim().to_string();
+    Some(if v.contains("://") { v } else { format!("https://{v}") })
 }
 
 /// Address-bar text of a browser window: first Edit control (breadth first,
 /// so the toolbar wins over page content) whose value looks like a URL.
+///
+/// Read fresh on every call: this text alone decides whether the page in front
+/// is on an excluded site, and whether record only included records it. What
+/// is kept between calls is the address-bar element, not its text, so a
+/// steady probe costs one or two calls into the browser instead of a walk of
+/// up to 900 elements. A stale element, or one that no longer holds a URL,
+/// starts a full search.
 pub fn browser_url(fg: &Foreground) -> Option<String> {
     if !BROWSERS.contains(&fg.bundle_id.to_lowercase().as_str()) {
         return None;
     }
-    let id = fg.id.to_string();
-    let hit = URL_CACHE.with(|c| {
-        c.borrow().as_ref().and_then(|(w, t, at, url)| {
-            (*w == id && *t == fg.title && at.elapsed() < URL_TTL).then(|| url.clone())
-        })
+    let cached = ADDRESS_BAR.with(|c| {
+        c.borrow()
+            .as_ref()
+            .filter(|(w, _)| *w == fg.id)
+            .map(|(_, el)| el.clone())
     });
-    if let Some(url) = hit {
-        return url;
+    if let Some(url) = cached.and_then(|el| current_value(&el)).and_then(|v| as_url(&v)) {
+        return Some(url);
     }
-    let url = find_browser_url(fg);
-    URL_CACHE.with(|c| {
-        *c.borrow_mut() = Some((id, fg.title.clone(), Instant::now(), url.clone()));
+    let found = find_address_bar(fg);
+    ADDRESS_BAR.with(|c| {
+        *c.borrow_mut() = found.as_ref().map(|(_, el)| (fg.id, el.clone()));
     });
-    url
+    found.map(|(url, _)| url)
 }
 
-fn find_browser_url(fg: &Foreground) -> Option<String> {
+fn current_value(el: &IUIAutomationElement) -> Option<String> {
+    let pattern =
+        unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()?;
+    let v = unsafe { pattern.CurrentValue() }.ok()?.to_string();
+    (!v.is_empty()).then_some(v)
+}
+
+/// The whole search: breadth first over up to 900 elements, one cached call per
+/// element. No time budget: a search cut short would report no URL, and no URL
+/// must not let an excluded site through.
+fn find_address_bar(fg: &Foreground) -> Option<(String, IUIAutomationElement)> {
     let auto = automation()?;
     let cache = unsafe {
         let req = auto.CreateCacheRequest().ok()?;
@@ -1337,27 +1357,19 @@ fn find_browser_url(fg: &Foreground) -> Option<String> {
     };
     let root = unsafe { auto.ElementFromHandleBuildCache(hwnd_from(fg.id), &cache) }.ok()?;
     let walker = unsafe { auto.ControlViewWalker() }.ok()?;
-    let deadline = Instant::now() + AX_BUDGET;
     let mut queue = std::collections::VecDeque::from([root]);
     let mut visited = 0;
     while let Some(el) = queue.pop_front() {
         visited += 1;
-        if visited > 900 || Instant::now() >= deadline {
+        if visited > 900 {
             break;
         }
         if unsafe { el.CachedControlType() }
             .map(|c| c == UIA_EditControlTypeId)
             .unwrap_or(false)
         {
-            if let Some(v) = cached_value(&el) {
-                if looks_like_url(&v) {
-                    let v = v.trim().to_string();
-                    return Some(if v.contains("://") {
-                        v
-                    } else {
-                        format!("https://{v}")
-                    });
-                }
+            if let Some(url) = cached_value(&el).and_then(|v| as_url(&v)) {
+                return Some((url, el));
             }
         }
         let mut child = unsafe { walker.GetFirstChildElementBuildCache(&el, &cache) }.ok();

@@ -520,8 +520,9 @@ export async function reconcileAppMachines(
 
 /**
  * The background reconciles still running per app. A same-app write that
- * cascades (an App's delete, a test's cleanup) settles them first, so its FK
- * cascade never deadlocks against an in-flight reconcile's insert.
+ * cascades (today only the machines test's cleanup) settles them first, so its
+ * FK cascade never deadlocks against an in-flight reconcile's insert; the same
+ * settle is the first building block for an App's delete later.
  *
  * replica-local: the map only remembers reconciles THIS replica dispatched
  * (the setAppScale call site). Settling is always safe and only ever waits; a
@@ -535,10 +536,12 @@ export function trackBackgroundReconcile(appId: string, run: Promise<unknown>): 
   const set = backgroundReconciles.get(appId) ?? new Set<Promise<unknown>>();
   backgroundReconciles.set(appId, set);
   set.add(run);
-  void run.then(
-    () => { set.delete(run); },
-    () => { set.delete(run); },
-  );
+  const clean = (): void => {
+    set.delete(run);
+    // Prune the (empty) set and its key; only ours, never a newer one.
+    if (set.size === 0 && backgroundReconciles.get(appId) === set) backgroundReconciles.delete(appId);
+  };
+  void run.then(clean, clean);
 }
 
 /** Resolve when every background reconcile of the app has settled (ok or failed). */

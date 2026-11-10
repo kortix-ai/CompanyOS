@@ -102,9 +102,9 @@ async function bootstrap(known: { projectId?: string; accountId?: string; driveI
     }
     // The kit: once per version, read-only for every firm agent. A running session keeps the version it started with.
     for (const f of KIT.files) {
-      await withRetry(() => uploadDriveFile(driveId, `${KIT_ROOT}/${KIT.version}/${f.path}`, enc(f.content)));
+      await uploadDriveFile(driveId, `${KIT_ROOT}/${KIT.version}/${f.path}`, enc(f.content));
     }
-    await withRetry(() => uploadDriveFile(driveId, KIT_CURRENT, enc(`${KIT.version}\n`)));
+    await uploadDriveFile(driveId, KIT_CURRENT, enc(`${KIT.version}\n`));
     return { projectId, accountId, driveId };
   });
 }

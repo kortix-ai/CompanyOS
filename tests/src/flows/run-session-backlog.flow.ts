@@ -57,13 +57,17 @@ function echo(marker: string): string {
  * A session has no checkout at boot (#12136): `/workspace` starts empty, and
  * the host `commit-push` answers 409 "project repo is not materialized" until
  * a Git repository is there. An agent with `project.gitops.read` clones the
- * workspace repository itself. This command does it into `/workspace`, where
- * `commit-push` looks, and works when `/workspace` already holds files.
+ * workspace repository itself. `kortix workspaces clone` checks out the
+ * session branch (its pushed tip, when it has one), so the host push is a
+ * fast-forward; a plain `git clone` of the default branch was rejected as
+ * non-fast-forward on staging (release run 42868914454). This command does it
+ * into `/workspace`, where `commit-push` looks, and works when `/workspace`
+ * already holds files.
  * RUN-7 and GOLD-1 prepend it to the write prompt.
  */
 const CLONE_INTO_WORKSPACE =
   'First run this exact shell command with your shell tool: ' +
-  '`d=$(mktemp -d) && git clone -q "$KORTIX_REPO_URL" "$d/repo" && cp -a "$d/repo/." /workspace/ && git -C /workspace rev-parse HEAD`. ' +
+  '`d=$(mktemp -d) && kortix workspaces clone "$KORTIX_PROJECT_ID" "$d/repo" && cp -a "$d/repo/." /workspace/ && git -C /workspace rev-parse HEAD`. ' +
   'It must exit 0. ';
 
 harnessFlow(

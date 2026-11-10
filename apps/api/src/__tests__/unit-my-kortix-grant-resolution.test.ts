@@ -76,11 +76,16 @@ describe('grantFromLoadedAgents — the reserved meta coordinator', () => {
     expect(grantFromLoadedAgents('meta', { ...UNGOVERNED, builtinAgents: { my_kortix: false } })).toEqual(disabledMyKortixAgentGrant());
   });
 
-  test('carries no connectors and no secrets, on every manifest shape', () => {
-    for (const loaded of [UNGOVERNED, GOVERNED, UNREADABLE]) {
-      const grant = grantFromLoadedAgents('meta', loaded);
-      expect(grant?.connectors).toEqual([]);
-      expect(grant?.env).toEqual([]);
+  test('the manifest neither widens nor narrows the platform grant, on every shape', () => {
+    // #12240: My Kortix holds what its person holds — the platform grant
+    // (connectors/env 'all', capped per call by the person's reach), never an
+    // answer derived from the manifest. A project that does not run My Kortix
+    // still strips it to no action.
+    for (const loaded of [UNGOVERNED, GOVERNED]) {
+      expect(grantFromLoadedAgents('meta', loaded)).toEqual(myKortixAgentGrant());
+    }
+    for (const loaded of [UNREADABLE, { ...UNGOVERNED, builtinAgents: { my_kortix: false as const } }]) {
+      expect(grantFromLoadedAgents('meta', loaded)).toEqual(disabledMyKortixAgentGrant());
     }
   });
 

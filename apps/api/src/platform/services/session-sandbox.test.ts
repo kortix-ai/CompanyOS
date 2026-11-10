@@ -525,9 +525,11 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       sessionId: SANDBOX_ID,
       agentGrant: {
         agent: 'mykortix',
+        // #12240: the platform grant — My Kortix holds what its person holds,
+        // capped per call. The token is still minted with no service account.
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

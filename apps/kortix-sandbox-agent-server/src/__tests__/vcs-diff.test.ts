@@ -191,14 +191,20 @@ describe('vcsDiff', () => {
     try {
       // The default on several filesystems: git ignores the exec bit. The
       // per-file diff it replaces reported the real mode; the batch must too.
+      // Git's own exec test is the OWNER bit: 0654 (group/other exec only) is
+      // a plain 100644 file.
       await realRunGit(['config', 'core.filemode', 'false'], { cwd: root })
       await writeFile(join(root, 'tool.sh'), '#!/bin/sh\necho hi\n')
+      await writeFile(join(root, 'shared.sh'), '#!/bin/sh\necho shared\n')
       const { chmod } = await import('node:fs/promises')
       await chmod(join(root, 'tool.sh'), 0o755)
+      await chmod(join(root, 'shared.sh'), 0o654)
       const files = await vcsDiff(root, 'branch', 'main')
       const tool = files.find((f) => f.file === 'tool.sh')
       expect(tool?.patch).toContain('new file mode 100755')
       expect(tool?.patch).toContain('echo hi')
+      const shared = files.find((f) => f.file === 'shared.sh')
+      expect(shared?.patch).toContain('new file mode 100644')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

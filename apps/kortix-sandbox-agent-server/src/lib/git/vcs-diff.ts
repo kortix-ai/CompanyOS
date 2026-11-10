@@ -96,10 +96,11 @@ async function untrackedPatchText(cwd: string, files: string[]): Promise<string 
     if (staged.code !== 0) return undefined
     // `core.filemode=false` (the default on several filesystems) drops the
     // executable bit at staging, but the per-file diff it replaces reported
-    // the real mode. Re-set it on the executable regular files; a no-op where
-    // filemode is already tracked.
+    // the real mode. Re-set it on the executable regular files (git's own test:
+    // the OWNER exec bit — a group/other-only 0654 file is a plain 100644); a
+    // no-op where filemode is already tracked.
     const modes = await Promise.all(files.map(async (f) => [f, await lstat(join(cwd, f))] as const))
-    const exec = modes.filter(([, st]) => st?.isFile() && (st.mode & 0o111) !== 0).map(([f]) => f)
+    const exec = modes.filter(([, st]) => st?.isFile() && (st.mode & 0o100) !== 0).map(([f]) => f)
     if (exec.length > 0) {
       await git(cwd, ['update-index', '--chmod=+x', '-z', '--stdin'], { env, input: exec.join('\0') + '\0' })
     }

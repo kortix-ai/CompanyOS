@@ -3,6 +3,7 @@ import {
   gatewayErrorResponse, gatewayOverloadedResponse, readAdmittedBody, readAdmittedBytes,
   releaseWhenResponseEnds, requestTooLargeResponse, type InflightBudget,
 } from '@kortix/llm-gateway';
+import { createIdempotencyReplay } from './idempotency';
 import type { AudioRequest, ClaudeCodeRequest, RequestOrigin, VoicesRequest } from '@kortix/llm-gateway';
 import type { Hono } from 'hono';
 import { type GatewayApp, cloudflareSafe, messagesAuthorization, perRequestCapBytes } from './server';
@@ -36,6 +37,7 @@ function inference(
   inflight: InflightBudget,
   recordOutcome: (status: number) => void,
   protocol: Protocol,
+  replay: ReturnType<typeof createIdempotencyReplay>,
   call: (request: InferenceRequest) => Promise<Response>,
 ) {
   return async (c: { req: { raw: Request; header: (name: string) => string | undefined } }) => {
@@ -72,7 +74,11 @@ function inference(
           origin: readRequestOrigin((name) => c.req.header(name)),
         };
         body.body = '';
-        const res = await cloudflareSafe(await call(request));
+        const res = await cloudflareSafe(
+          // A retried request that carries a client `Idempotency-Key` is served
+          // the first 2xx answer instead of executing and metering again.
+          await replay(c.req.header('idempotency-key'), request, call),
+        );
         recordOutcome(res.status);
         return releaseWhenResponseEnds(res, body.release);
       } catch (error) {
@@ -198,13 +204,16 @@ export function registerRoutes(
       headers.forEach((value, name) => response.headers.set(name, value));
       return response;
     };
-  const chat = limited(inference(inflight, recordOutcome, 'chat', gateway.chatCompletions));
-  const messages = limited(inference(inflight, recordOutcome, 'messages', gateway.messages));
-  const responses = limited(inference(inflight, recordOutcome, 'responses', gateway.responses));
+  // One replay cache per server: the entries are per credential + key + body,
+  // so tests get an isolated cache per buildServer().
+  const replay = createIdempotencyReplay();
+  const chat = limited(inference(inflight, recordOutcome, 'chat', replay, gateway.chatCompletions));
+  const messages = limited(inference(inflight, recordOutcome, 'messages', replay, gateway.messages));
+  const responses = limited(inference(inflight, recordOutcome, 'responses', replay, gateway.responses));
   // The project's ChatGPT login generates and edits images (pipeline/images.ts).
   // A thrown error gets the Responses-style 503 envelope.
   const images = (operation: 'generations' | 'edits') =>
-    limited(inference(inflight, recordOutcome, 'images', (request) => gateway.images({ ...request, operation })));
+    limited(inference(inflight, recordOutcome, 'images', replay, (request) => gateway.images({ ...request, operation })));
   const generations = images('generations');
   const edits = images('edits');
   const transcriptions = limited(audio(gateway, inflight, recordOutcome, 'transcriptions'));

@@ -79,10 +79,11 @@ export interface SessionConnectorLineage {
   /** Canonical slugs of the channel connector(s) that created the session or
    *  the nearest ancestor on its spawn line. */
   channelSlugs: string[];
-  /** The stored agent grant of every ancestor, nearest parent first. The
-   *  session's own grant is not here — the caller's principal already carries
-   *  it. Null entries: the ancestor had no readable stored grant. */
-  ancestorGrants: (AgentGrant | null)[];
+  /** The stored agent grant of every ancestor WITH an active token, nearest
+   *  parent first. The session's own grant is not here — the caller's
+   *  principal already carries it. An ancestor whose token is gone (revoked,
+   *  deleted session) is absent: no grant, never "no restriction". */
+  ancestorGrants: AgentGrant[];
 }
 
 /**
@@ -91,6 +92,14 @@ export interface SessionConnectorLineage {
  * every other ancestor contributes its stored grant. A child that runs as a
  * different agent no longer ends the line — the delegate inherits the parent's
  * reach under `principalMayUseConnector` (KRTX-4643).
+ *
+ * A parent edge is followed only when the row's server-managed
+ * `spawned_by_session` equals its `parent_session_id` — the rule
+ * `subagent-notice.ts` `noticeParentOf` already applies. The parent COLUMN is
+ * client-settable (`POST /sessions` body `parent_session_id`); the spawn link
+ * is written only by the server from the caller's session-bound token
+ * (`SERVER_MANAGED_SESSION_METADATA_KEYS`). Without this, a member could point
+ * a row at any project-visible session and inherit its reach.
  */
 export async function sessionConnectorLineage(
   projectId: string,
@@ -99,7 +108,7 @@ export async function sessionConnectorLineage(
   if (!sessionId) return { channelSlugs: [], ancestorGrants: [] };
   try {
     let channelPlatformName: string | null = null;
-    const ancestorGrants: (AgentGrant | null)[] = [];
+    const ancestorGrants: AgentGrant[] = [];
     let id: string | null = sessionId;
     for (let hop = 0; id && hop <= CHANNEL_INHERIT_MAX_HOPS; hop += 1) {
       const [row] = await db
@@ -111,12 +120,20 @@ export async function sessionConnectorLineage(
         .where(and(eq(projectSessions.sessionId, id), eq(projectSessions.projectId, projectId)))
         .limit(1);
       if (!row) break;
-      if (hop > 0) ancestorGrants.push(await storedSessionGrant(id));
+      if (hop > 0) {
+        const grant = await storedSessionGrant(id);
+        // No active token row means the ancestor's reach is unknown, not
+        // unlimited: a null entry would widen the delegate to every connector.
+        if (grant) ancestorGrants.push(grant);
+      }
       const source = (row.metadata as { source?: unknown } | null)?.source;
       if (typeof source === 'string' && CHANNEL_SOURCES.has(source)) {
         channelPlatformName = source;
         break;
       }
+      // Follow only an edge the server wrote (see the interface doc).
+      const spawnedBy = (row.metadata as { spawned_by_session?: unknown } | null)?.spawned_by_session;
+      if (!row.parentSessionId || spawnedBy !== row.parentSessionId) break;
       id = row.parentSessionId;
     }
     if (!channelPlatformName) return { channelSlugs: [], ancestorGrants };

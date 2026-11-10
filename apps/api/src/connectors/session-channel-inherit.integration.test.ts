@@ -25,6 +25,9 @@ const GRANDCHILD = crypto.randomUUID();
 const NAMED = crypto.randomUUID();
 const BELOW_NAMED = crypto.randomUUID();
 const UNLINKED = crypto.randomUUID();
+const FORGED = crypto.randomUUID();
+const FORGED_MISMATCH = crypto.randomUUID();
+const CHILD_OF_FORGED = crypto.randomUUID();
 
 const session = (sessionId: string, agentName: string, parentSessionId: string | null, source: string) => ({
   sessionId,
@@ -35,7 +38,13 @@ const session = (sessionId: string, agentName: string, parentSessionId: string |
   visibility: 'project' as const,
   agentName,
   parentSessionId,
-  metadata: { source },
+  metadata: {
+    source,
+    // What the server writes for a real spawn (`session-create.ts`): the
+    // caller's session id from its session-bound token. A row whose parent
+    // column names a session no server write spawned is the FORGED edge.
+    ...(parentSessionId ? { spawned_by_session: parentSessionId } : {}),
+  },
 });
 
 const GRANT = (agent: string, connectors: string[]) => ({
@@ -71,6 +80,13 @@ beforeAll(async () => {
     session(NAMED, 'compliance-officer', ROOT, 'agent'),
     session(BELOW_NAMED, 'compliance-officer', NAMED, 'agent'),
     session(UNLINKED, 'mykortix', null, 'agent'),
+    // The parent COLUMN is client-settable (`POST /sessions` body
+    // `parent_session_id`); the spawn link is not. Two forgeries: no spawn
+    // link at all, and one that names a different session than the column.
+    { ...session(FORGED, 'mykortix', ROOT, 'agent'), metadata: { source: 'agent' } },
+    { ...session(FORGED_MISMATCH, 'mykortix', ROOT, 'agent'), metadata: { source: 'agent', spawned_by_session: COLLEAGUE } },
+    // A real spawn whose FARTHER edge is forged: the walk stops above FORGED.
+    session(CHILD_OF_FORGED, 'mykortix', FORGED, 'agent'),
   ]);
   // The Slack-created root holds a stored grant that covers only GitHub: a
   // spawned child inherits that reach beside the channel.
@@ -128,8 +144,8 @@ describe('the connector reach a session inherits down its spawn line', () => {
 
   test('a child that runs as its parent\'s agent reaches it, and so does its own same-agent child', async () => {
     expect(await sessionConnectorLineage(PROJECT, COLLEAGUE)).toEqual({ channelSlugs: ['kortix_slack'], ancestorGrants: [GRANT('mykortix', ['github'])] });
-    // COLLEAGUE holds no token of its own: it contributes a null entry, and the walk carries on.
-    expect(await sessionConnectorLineage(PROJECT, GRANDCHILD)).toEqual({ channelSlugs: ['kortix_slack'], ancestorGrants: [null, GRANT('mykortix', ['github'])] });
+    // COLLEAGUE holds no token of its own: it contributes nothing, and the walk carries on.
+    expect(await sessionConnectorLineage(PROJECT, GRANDCHILD)).toEqual({ channelSlugs: ['kortix_slack'], ancestorGrants: [GRANT('mykortix', ['github'])] });
   });
 
   test('a child of another agent inherits the channel and the parent line\'s stored grants (KRTX-4643)', async () => {
@@ -147,5 +163,19 @@ describe('the connector reach a session inherits down its spawn line', () => {
     expect(await sessionConnectorLineage(PROJECT, crypto.randomUUID())).toEqual({ channelSlugs: [], ancestorGrants: [] });
     // The session belongs to this project only.
     expect(await sessionConnectorLineage(crypto.randomUUID(), ROOT)).toEqual({ channelSlugs: [], ancestorGrants: [] });
+  });
+
+  test('a forged parent edge (no server spawn link) inherits nothing', async () => {
+    // A member named another member\'s session as the parent; the column is
+    // set, the server\'s spawn link is not (or names another session). The
+    // walk treats the line as absent: no channel, no grants.
+    expect(await sessionConnectorLineage(PROJECT, FORGED)).toEqual({ channelSlugs: [], ancestorGrants: [] });
+    expect(await sessionConnectorLineage(PROJECT, FORGED_MISMATCH)).toEqual({ channelSlugs: [], ancestorGrants: [] });
+  });
+
+  test('the walk stops at the first forged edge: nothing above it flows', async () => {
+    // CHILD_OF_FORGED was really spawned by FORGED (server link), but FORGED\'s
+    // own parent edge is a forgery — ROOT\'s channel and github grant stay out of reach.
+    expect(await sessionConnectorLineage(PROJECT, CHILD_OF_FORGED)).toEqual({ channelSlugs: [], ancestorGrants: [] });
   });
 });

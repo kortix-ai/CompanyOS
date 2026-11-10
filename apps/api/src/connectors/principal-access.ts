@@ -46,7 +46,10 @@ export function principalMayUseConnector(
 ): boolean {
   if (agentMayUseConnector(principal.agentGrant ?? null, slug)) return true;
   if (principal.channelConnectorSlugs?.includes(slug)) return true;
-  return (principal.inheritedGrants ?? []).some((grant) => agentMayUseConnector(grant ?? null, slug));
+  // An ancestor entry that could not be read (its token was revoked or its
+  // session deleted) is no grant, not "no restriction": it hands nothing
+  // down. Only the caller's OWN null grant means an ungoverned project.
+  return (principal.inheritedGrants ?? []).some((grant) => grant != null && agentMayUseConnector(grant, slug));
 }
 
 /**

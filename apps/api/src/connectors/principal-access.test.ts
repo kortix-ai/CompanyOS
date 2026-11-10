@@ -44,8 +44,27 @@ test('a spawn child inherits a connector its parent holds (KRTX-4643)', () => {
   expect(principalMayUseConnector(child, 'stripe')).toBe(false);
 });
 
-test('an inherited unrestricted grant reaches everything the parent line reached', () => {
-  expect(principalMayUseConnector({ agentGrant: narrow, inheritedGrants: [null] }, 'stripe')).toBe(true);
+// A null entry is an ANCESTOR WHOSE GRANT IS GONE (its token was revoked or its
+// session deleted): it hands nothing down — the inverse of the caller's own
+// null grant, which means an ungoverned project. Fail closed.
+test('an unreadable ancestor grant hands nothing down', () => {
+  expect(principalMayUseConnector({ agentGrant: narrow, inheritedGrants: [null] }, 'stripe')).toBe(false);
+  expect(principalMayUseConnector({ agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [null] }, 'kortix_slack')).toBe(false);
+  expect(callPolicySetOf({ agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [null] }, 'stripe')).toBeNull();
+});
+
+test('a null entry is skipped, not a stop: a farther ancestor still hands its grant down', () => {
+  const parent: AgentGrant = { ...narrow, agent: 'coordinator', connectors: ['kortix_slack'] };
+  expect(principalMayUseConnector({ agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [null, parent] }, 'kortix_slack')).toBe(true);
+});
+
+test('an inherited call answers to the nearest ancestor that reaches the connector, null entries skipped', () => {
+  const parent: AgentGrant = { ...narrow, agent: 'coordinator', connectors: ['kortix_slack'], policySets: { kortix_slack: 'writes' } };
+  expect(callPolicySetOf({ agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [null, parent] }, 'kortix_slack')).toEqual({
+    name: 'writes',
+    agent: 'coordinator',
+    manifestCommit: 'b'.repeat(40),
+  });
 });
 
 test('inherited grants alone do not widen a caller whose own grant already reaches a connector', () => {

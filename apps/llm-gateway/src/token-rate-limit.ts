@@ -41,11 +41,13 @@ export type TokenRateLimit = {
  * address the Cloudflare edge overwrites), so a single caller cannot pin the
  * shared bucket and deny every not-yet-validated credential its first
  * admission. `validated(credential)` moves a real credential onto its own
- * budget and gives back the shared slot and the source slot it took, once, so
+ * budget and gives back the shared slot it took (once — the shared pool's
+ * refill heals any concurrent-charge overlap within one refill quantum) and
+ * every source slot its admitted pre-validation requests took, per source, so
  * real traffic does not drain either allowance every new credential shares;
- * the set of charged credentials that makes each refund one-time is capped, so
- * neither it nor the bucket map grows with the flood. A request without a
- * credential is not counted: the pipeline refuses it with 401 before it calls
+ * the charged-credential bookkeeping that makes each refund one-time is
+ * capped, so neither it nor the bucket map grows with the flood. A request
+ * without a credential is not counted: the pipeline refuses it with 401 before it calls
  * the API. The cost this accepts: a credential's first request spends a shared
  * slot, refunded when the API validates it, so a flood large enough to spend
  * the whole shared allowance can refuse a real credential still waiting on
@@ -86,10 +88,17 @@ export function createTokenRateLimit(
   // (MAX_BUCKETS in packages/shared/src/rate-limit.ts). A credential whose
   // entry was evicted forfeits only its one-slot refund.
   const chargedShared = new Set<string>();
-  // Credentials charged to a source slot while unvalidated: credential hash →
-  // the source key that was charged. Same cap and eviction as chargedShared;
-  // `validated()` spends the entry to refund the slot.
-  const chargedSource = new Map<string, string>();
+  // Credentials charged to source slots while unvalidated: credential hash →
+  // source key → how many of that source's slots the credential's admitted
+  // pre-validation requests took. Every charge refunds once, at validation
+  // (KRTX-4608 review: a booting credential's ten concurrent first contacts
+  // charged ten slots and one entry per credential refunded one, leaking the
+  // rest into the share legitimate traffic needs). Bounded like chargedShared:
+  // the oldest credential is evicted at MAX_CHARGED_SHARED, a credential keeps
+  // at most MAX_SOURCE_KEYS_PER_CREDENTIAL distinct sources, and each source
+  // counts at most one window's worth of refunds (sourcePolicy.limit) — what
+  // falls out of a bound forfeits its refund, as a shared-set eviction does.
+  const chargedSource = new Map<string, Map<string, number>>();
   const policy = { limit: limitPerMinute, windowMs: 60_000 };
   const sharedPolicy = { limit: Math.max(1, unvalidatedPerMinute), windowMs: 60_000 };
   // One source may spend only a small fraction of the shared allowance: a
@@ -139,11 +148,20 @@ export function createTokenRateLimit(
       }
       chargedShared.add(key);
       if (sourceKey) {
-        if (chargedSource.size >= MAX_CHARGED_SHARED) {
-          const oldest = chargedSource.keys().next().value;
-          if (oldest !== undefined) chargedSource.delete(oldest);
+        let bySource = chargedSource.get(key);
+        if (!bySource) {
+          if (chargedSource.size >= MAX_CHARGED_SHARED) {
+            const oldest = chargedSource.keys().next().value;
+            if (oldest !== undefined) chargedSource.delete(oldest);
+          }
+          bySource = new Map();
+          chargedSource.set(key, bySource);
         }
-        chargedSource.set(key, sourceKey);
+        if (bySource.size >= MAX_SOURCE_KEYS_PER_CREDENTIAL && !bySource.has(sourceKey)) {
+          const oldest = bySource.keys().next().value;
+          if (oldest !== undefined) bySource.delete(oldest);
+        }
+        bySource.set(sourceKey, Math.min((bySource.get(sourceKey) ?? 0) + 1, sourcePolicy.limit));
       }
     }
     // Advertise the allowance that governs this caller (KRTX-4608): for an
@@ -173,12 +191,14 @@ export function createTokenRateLimit(
     // Give back the shared slot this credential's pre-validation request took,
     // once: it now has its own budget to be counted against.
     if (chargedShared.delete(key)) limiter.refund(UNVALIDATED, sharedPolicy);
-    // Its source slot too (KRTX-4608): the share bounds never-validated push,
-    // and the API has vouched for this credential.
-    const sourceKey = chargedSource.get(key);
-    if (sourceKey !== undefined) {
+    // Its source slots too (KRTX-4608): the share bounds never-validated push,
+    // and the API has vouched for this credential — every slot its admitted
+    // pre-validation requests took comes back, per source.
+    const bySource = chargedSource.get(key);
+    if (bySource) {
       chargedSource.delete(key);
-      sourceLimiter.refund(sourceKey, sourcePolicy);
+      for (const [sourceKey, charges] of bySource)
+        for (let i = 0; i < charges; i++) sourceLimiter.refund(sourceKey, sourcePolicy);
     }
   };
   limit.buckets = () => limiter.keys();
@@ -194,6 +214,9 @@ const MAX_CHARGED_SHARED = 50_000;
 
 /** The cap on the per-source share of the unvalidated allowance (KRTX-4608). */
 const UNVALIDATED_SOURCE_CAP = 10;
+
+/** The distinct sources one credential may hold charge bookkeeping for. */
+const MAX_SOURCE_KEYS_PER_CREDENTIAL = 8;
 
 /**
  * The credential the pipeline will extract — the same grammar as `bearer()` in

@@ -173,6 +173,58 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     expect(admitted).toBe(10);
   });
 
+  test('every pre-validation charge of one credential refunds its source slot at validation (KRTX-4608 review)', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // A booting credential's first contacts arrive together: each spends a
+    // source slot before the API has validated anything.
+    for (let i = 0; i < 10; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      expect(
+        limit(request('/v1/models', { authorization: 'Bearer kortix_booting' }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+    }
+    // The share is spent: a new credential's first contact is refused.
+    const newcomer = request('/v1/models', { authorization: 'Bearer kortix_newcomer' });
+    expect(limit(newcomer, new Headers(), '10.0.0.1')?.status).toBe(429);
+    // The API validates the booting credential: every charge refunds, so the
+    // share is whole again and the following legitimate first contacts fit.
+    limit.validated('kortix_booting');
+    for (let i = 0; i < 10; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (100 + i) * 50));
+      expect(
+        limit(request('/v1/models', { authorization: `Bearer kortix_new_${i}` }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+    }
+  });
+
+  test('charges from distinct sources each refund their own source (KRTX-4608 review)', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // The same credential's first contacts arrive through different edge hops:
+    // three charges at each of two sources.
+    for (let i = 0; i < 3; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      expect(
+        limit(request('/v1/models', { authorization: 'Bearer kortix_booting' }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (i + 3) * 50));
+      expect(
+        limit(request('/v1/models', { authorization: 'Bearer kortix_booting' }), new Headers(), '10.0.0.2'),
+      ).toBeNull();
+    }
+    limit.validated('kortix_booting');
+    // Every source's own slots come back: each admits a full share again.
+    for (let i = 0; i < 10; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (100 + i) * 50));
+      expect(
+        limit(request('/v1/models', { authorization: `Bearer kortix_new_${i}` }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (200 + i) * 50));
+      expect(
+        limit(request('/v1/models', { authorization: `Bearer kortix_new_b_${i}` }), new Headers(), '10.0.0.2'),
+      ).toBeNull();
+    }
+  });
+
   test('a never-validated credential that proves real refunds its source slot too', () => {
     const limit = createTokenRateLimit(600, 10_000);
     // Spend the per-source share with never-validated credentials, at network

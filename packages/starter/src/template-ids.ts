@@ -4,5 +4,5 @@
  * its `kortix.yaml`. Adding a template is adding its folder and its id here.
  * This file imports nothing, so `scripts/generate-embedded.ts` can read it.
  */
-export const TEMPLATE_IDS = ['software-factory', 'security-loop', 'aeo-loop', 'changelog'] as const;
+export const TEMPLATE_IDS = ['software-factory', 'aeo-loop', 'changelog'] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];

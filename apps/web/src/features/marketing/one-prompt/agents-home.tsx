@@ -141,7 +141,7 @@ function TemplateCard({ template, index, wide }: { template: HomeTemplate; index
   return (
     <article
       id={template.id}
-      className={cn('bg-background flex scroll-mt-20 flex-col gap-8 p-8 lg:p-10', wide && 'lg:col-span-3 lg:flex-row lg:items-end lg:justify-between lg:gap-16')}
+      className={cn('bg-background flex scroll-mt-20 flex-col gap-8 p-8 lg:p-10', wide && 'lg:col-span-2 lg:flex-row lg:items-end lg:justify-between lg:gap-16')}
     >
       <div className="flex flex-col items-start gap-5">
         <Eyebrow>
@@ -216,7 +216,7 @@ export function AgentsHome() {
 
       <section id="templates" className="border-border scroll-mt-14 border-t">
         <div className="mx-auto max-w-[1120px] px-6 py-24 lg:py-32">
-          <div className="bg-border border-border grid gap-px overflow-hidden rounded-lg border lg:grid-cols-3">
+          <div className="bg-border border-border grid gap-px overflow-hidden rounded-lg border lg:grid-cols-2">
             {TEMPLATES.map((template, index) => (
               <TemplateCard key={template.id} template={template} index={index} wide={index === 0} />
             ))}

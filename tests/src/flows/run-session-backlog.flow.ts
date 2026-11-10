@@ -53,6 +53,19 @@ function echo(marker: string): string {
   return `Reply with exactly this single token and nothing else: ${marker}`;
 }
 
+/**
+ * A session has no checkout at boot (#12136): `/workspace` starts empty, and
+ * the host `commit-push` answers 409 "project repo is not materialized" until
+ * a Git repository is there. An agent with `project.gitops.read` clones the
+ * workspace repository itself. This command does it into `/workspace`, where
+ * `commit-push` looks, and works when `/workspace` already holds files.
+ * RUN-7 and GOLD-1 prepend it to the write prompt.
+ */
+const CLONE_INTO_WORKSPACE =
+  'First run this exact shell command with your shell tool: ' +
+  '`d=$(mktemp -d) && git clone -q "$KORTIX_REPO_URL" "$d/repo" && cp -a "$d/repo/." /workspace/ && git -C /workspace rev-parse HEAD`. ' +
+  'It must exit 0. ';
+
 harnessFlow(
   'SESS-10',
   {
@@ -422,13 +435,13 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
-    await ctx.step('the agent writes the requested file in the workspace', async () => {
+    await ctx.step('the agent clones the workspace repository into /workspace and writes the requested file', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        `${CLONE_INTO_WORKSPACE}Then create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).
@@ -880,12 +893,14 @@ flow(
       // "Do not commit": the next step proves the host commit-push pushes the
       // change. An agent that commits and pushes on its own leaves that call
       // nothing to do (`pushed: false`, `nothing_to_do: true`; v0.14.15
-      // release suite, 2026-11-02). RUN-7 uses the same instruction.
+      // release suite, 2026-11-02). RUN-7 uses the same instruction. The
+      // session has no checkout at boot, so the agent clones first
+      // (CLONE_INTO_WORKSPACE).
       await sendPrompt(
         ctx,
         project.id,
         session.id,
-        `Create the file ${goldenPath} containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Do not commit. Then reply with exactly: ${goldenDone}`,
+        `${CLONE_INTO_WORKSPACE}Then create the file ${goldenPath} containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Do not commit. Then reply with exactly: ${goldenDone}`,
       );
       await waitForAssistantText(ctx, project.id, session.id, goldenDone);
       const file = await ctx.client

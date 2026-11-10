@@ -117,3 +117,21 @@ free source's split-off keeps free-credit eligibility and gets one Free grant
 comped until the keeper's current period ends, with pro-rated plan credits.
 Each affected workspace shows a notice for 30 days; each OWNER gets one email,
 in `apply` mode only, never a bulk email.
+
+## 2026-11-10
+
+Release 2 and 3 handed from Marko to Dimitrije (Slack, 2026-11-10).
+
+**D12 (decided, Dimitrije 2026-11-10, "it's okay that most used project keeps
+the billing").** A paying legacy account is not held for an owner's keeper
+choice. The keeper rule (the most active project, `split-runbook.md` "Keeper
+and holds") decides which project keeps the account, its plan, credits and
+Stripe customer, as for a free account; the split-offs get the D11 billing.
+`confirm-keeper` stays as an operator override before the account's first
+move. Supersedes D4 item 4, the "Paying holds, D3" rule (design.md §3.3) and
+the open owner-confirmation deadline (design.md §3.6 item 7). The
+identity-provider hold stays. Why: nothing released a held account but an
+operator command per account; on prod, 2026-11-10, 90 paying accounts
+(277 moves, the Kortix team's own account among them) were held, so the
+Release 2 gate "0 `split_pending`" could not be reached.
+

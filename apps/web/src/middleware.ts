@@ -30,7 +30,7 @@ import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/
 import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
-import { desktopShellPath, isDesktopShell } from './lib/workspace-redirects';
+import { desktopShellPath, isDesktopShell, workspacePathOfDesktopLegacy } from './lib/workspace-redirects';
 import { NextResponse } from 'next/server';
 
 type Locale = (typeof locales)[number];
@@ -149,8 +149,8 @@ const PROTECTED_APP_PREFIXES = [
   '/panel',
   '/presentations',
   '/workspaces',
-  // An installed desktop shell keeps the pre-Workspaces app paths; next.config
-  // serves them from /workspaces (src/lib/workspace-redirects.ts).
+  // An installed desktop shell keeps the pre-Workspaces app paths; the locale
+  // rewrite below serves them from /workspaces (src/lib/workspace-redirects.ts).
   '/projects',
   '/new',
   '/rauch',
@@ -629,6 +629,15 @@ export async function middleware(request: NextRequest) {
     return finalizeEnvironmentAccess(response);
   }
 
+  // The page an installed desktop shell gets for its legacy paths (/projects…,
+  // /new): the same page under /workspaces, served in place. The mapping must
+  // happen here. A next.config rewrite runs after this middleware and sees only
+  // the locale path (/en/projects/start), so it never matched: every signed-in
+  // shell launch hit a 404. See src/lib/workspace-redirects.ts.
+  const pagePathname =
+    (isDesktopShell(request.headers.get('user-agent')) && workspacePathOfDesktopLegacy(pathname)) ||
+    pathname;
+
   // Every unprefixed page URL is rewritten onto app/[locale] (see the
   // cookieLocale definition above for where the locale comes from).
   const rewriteToLocale = (locale: Locale, base?: NextResponse) => {
@@ -637,7 +646,7 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-locale', locale);
     requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
     const target = request.nextUrl.clone();
-    target.pathname = localizedPathname(locale, pathname);
+    target.pathname = localizedPathname(locale, pagePathname);
     const response = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
     if (base) {
       // Carry refreshed/cleared Supabase cookies and headers set on the base.

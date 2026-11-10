@@ -11,8 +11,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FACTORY_RUN, TEMPLATES } from './content';
 
 const COPIED_MS = 2000;
-/** The page's one accent: the Kortix turquoise (`terminal-accent`, D32). */
-const ACCENT = 'text-[var(--terminal-accent)]';
+/** The page's one accent: the brand blue (`kortix-base`, color.accents.kortix-base). */
+const ACCENT = 'text-kortix-base';
 const FACTORY = TEMPLATES.find((template) => template.id === 'software-factory')!;
 
 function useCopy(text: string) {
@@ -42,7 +42,7 @@ function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
       type="button"
       onClick={copy}
       className={cn(
-        'text-background rounded-md bg-[var(--terminal-accent)] font-medium transition-colors hover:bg-[color-mix(in_oklab,var(--terminal-accent)_90%,transparent)]',
+        'text-background bg-kortix-base hover:bg-kortix-base/90 rounded-md font-medium transition-colors',
         size === 'md' ? 'h-10 px-5 text-sm' : 'h-8 px-3.5 text-sm',
       )}
     >
@@ -55,7 +55,7 @@ function CopyButton({ size = 'md' }: { size?: 'sm' | 'md' }) {
 function Field({ className }: { className?: string }) {
   return (
     <div aria-hidden className={cn('pointer-events-none absolute inset-x-0 bottom-0 [mask-image:linear-gradient(to_bottom,transparent,#000_85%)]', className)}>
-      <DitherField className="text-[var(--terminal-accent)]" />
+      <DitherField className="text-kortix-base" />
     </div>
   );
 }
@@ -71,7 +71,7 @@ function PromptCard() {
       type="button"
       onClick={copy}
       aria-label="Copy the prompt"
-      className="border-border bg-background group w-full rounded-lg border text-left transition-colors hover:border-[color-mix(in_oklab,var(--terminal-accent)_50%,transparent)]"
+      className="border-border bg-background group w-full rounded-lg border text-left transition-colors hover:border-kortix-base/50"
     >
       <div className="border-border text-muted-foreground flex items-center justify-between border-b px-5 py-3 font-mono text-xs">
         <span>Claude Code · Codex · Cursor</span>
@@ -102,7 +102,7 @@ const CONTROL = [
 
 /**
  * kortix.com: one product. One prompt adds a software factory to your repo.
- * Black page, one turquoise accent, the brand's dither field as the only art.
+ * Black page, one brand-blue accent, the brand's dither field as the only art.
  */
 export function FactoryHome() {
   return (

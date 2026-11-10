@@ -180,7 +180,7 @@ describe('a kortix_version 2 project', () => {
     expect(validateManifest(raw).issues).toEqual([expect.objectContaining({ path: 'agents.helper.descripton', severity: 'error', message: expect.stringContaining('Did you mean "description"?') })]);
   });
 
-  test('an agent v2 gave the repository (the key omitted, true or branch) gets workspace.gitops.read; false and runtime get nothing', () => {
+  test('an agent v2 gave the repository explicitly (true or branch) gets workspace.gitops.read; omitted, false and runtime get nothing', () => {
     const text = [
       'kortix_version: 2',
       'agents:',
@@ -194,7 +194,8 @@ describe('a kortix_version 2 project', () => {
     ].join('\n');
     const { raw } = convertLegacyManifest(parseManifestText(text), 2, 'kortix.yaml', repo({}));
     const grant = (name: string) => (raw.agents as Record<string, Record<string, unknown>>)[name]!.kortix_permissions;
-    expect(grant('omitted')).toEqual(['workspace.gitops.read']);
+    // Fail closed: an imported file's explicit `false` reaches the converter as omitted.
+    expect(grant('omitted')).toBe('none');
     expect(grant('yes')).toEqual(['project.read', 'workspace.gitops.read']);
     expect(grant('branch')).toEqual(['workspace.gitops.read']);
     expect(grant('every')).toBe('*');

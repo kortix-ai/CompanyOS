@@ -187,12 +187,17 @@ function subagentsGrant(task: unknown): unknown {
   return named.length > 0 ? named : undefined;
 }
 
-/** v2 `workspace` / `repository_access`: an omitted value cloned the repository; `read` and `runtime` did not. */
+/**
+ * v2 `workspace` / `repository_access` set to give the repository. Explicit only:
+ * v2 also cloned when the key was omitted, but an imported file is read through the
+ * `agent-workspace` rewrite before this converter sees it, which deletes an explicit
+ * `false` — so "omitted" can no longer be told from "false", and granting on it
+ * would widen an agent that opted out. Fail closed: omitted grants nothing.
+ */
 function v2ClonedRepository(block: Table): boolean {
   if (typeof block.repository_access === 'boolean') return block.repository_access;
   if (typeof block.workspace === 'string') return block.workspace === 'branch';
-  const value = table(block.workspace)?.project_repository;
-  return typeof value === 'boolean' ? value : true;
+  return table(block.workspace)?.project_repository === true;
 }
 
 /** A `kortix_permissions` grant that also holds `workspace.gitops.read`. */
@@ -441,8 +446,8 @@ function convertAgentBlock(name: string, block: Table, parts: AgentParts, ctx: C
   if (frontmatter.disable === true || block.disable === true) next.enabled = false;
   if (block.kortix_cli !== undefined && next.kortix_permissions === undefined) next.kortix_permissions = block.kortix_cli;
   if (block.connectors_personal !== undefined && next.connectors_required === undefined) next.connectors_required = block.connectors_personal;
-  // v2 cloned the repository when `workspace` / `repository_access` was omitted. The latest
-  // shape never clones: the agent clones on demand, which needs `workspace.gitops.read`.
+  // The latest shape never clones: an agent v2 gave the repository clones on demand,
+  // which needs `workspace.gitops.read`.
   if (v2ClonedRepository(block)) next.kortix_permissions = withRepositoryRead(next.kortix_permissions);
   const skillGrant = block.skills;
   next.skills = Array.isArray(skillGrant) ? skillGrant.filter((skill) => typeof skill === 'string' && (skill.startsWith('kortix-') || skills[skill] !== undefined)) : skillGrant;

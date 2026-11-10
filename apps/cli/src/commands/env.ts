@@ -240,7 +240,7 @@ async function envPush(fromArg: string | undefined, opts: CtxOpts, push: PushOpt
 /** Minimal dotenv parser. Supports `NAME=VALUE` and `export NAME=VALUE`,
  *  optional matching single/double quotes around the value, `#` line
  *  comments, blank lines. Skips entries with empty values. */
-function parseDotenv(text: string, keepEmpty = false): { name: string; value: string }[] {
+export function parseDotenv(text: string, keepEmpty = false): { name: string; value: string }[] {
   const out: { name: string; value: string }[] = [];
   for (const lineRaw of text.split(/\r?\n/)) {
     const line = lineRaw.trim();

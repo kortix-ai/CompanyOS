@@ -93,7 +93,7 @@ export async function waitForTemplate(
   client: ApiClient,
   base: string,
   slug: string,
-  opts: { knownBuildIds: Set<string>; timeoutSec: number; json: boolean },
+  opts: { knownBuildIds: Set<string>; timeoutSec: number; json: boolean; silent?: boolean },
 ): Promise<number> {
   const deadline = Date.now() + Math.max(0, opts.timeoutSec) * 1000;
   let delay = POLL_START_MS;
@@ -106,11 +106,13 @@ export async function waitForTemplate(
     );
     const failed = ours.find((b) => b.status === 'failed');
     if (template?.ready) {
+      if (opts.silent) return 0;
       if (opts.json) process.stdout.write(`${JSON.stringify({ slug, state: 'ready' })}\n`);
       else process.stdout.write(`${status.ok(`Sandbox template ${C.bold}${slug}${C.reset} is ready`)}\n`);
       return 0;
     }
     if (failed) {
+      if (opts.silent) return 1;
       if (opts.json) process.stdout.write(`${JSON.stringify({ slug, state: 'failed', build: failed })}\n`);
       else {
         process.stderr.write(`${status.err(`Build of ${slug} failed${failed.provider ? ` on ${failed.provider}` : ''}`)}\n`);
@@ -119,13 +121,14 @@ export async function waitForTemplate(
       }
       return 1;
     }
-    if (!opts.json) {
+    if (!opts.json && !opts.silent) {
       const line = ours.some((b) => b.status === 'building') ? 'building' : 'waiting for the build to start';
       if (line !== lastLine) process.stdout.write(`  ${C.dim}${slug}: ${line}${C.reset}\n`);
       lastLine = line;
     }
     if (Date.now() >= deadline) {
       const message = `Sandbox template ${slug} is not ready after ${opts.timeoutSec}s; the build continues on the server. Check it with \`kortix sandboxes builds\`.`;
+      if (opts.silent) return 1;
       if (opts.json) process.stdout.write(`${JSON.stringify({ slug, state: 'timeout' })}\n`);
       else process.stderr.write(`${status.err(message)}\n`);
       return 1;

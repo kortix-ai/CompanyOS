@@ -10,6 +10,7 @@ import { manifestCandidatePaths } from '@kortix/manifest-schema';
 import { SETUP_GUIDE } from '@kortix/shared/setup-guide';
 import { composeTemplateOnboarding, getTemplate, getTemplateFiles, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
+import { githubRepoFromRemote } from '../github-remote.ts';
 import { runGit } from '../git-run.ts';
 import { addManifestImport } from '../manifest-edit.ts';
 import { runTemplatesDoctor } from './templates-doctor.ts';
@@ -52,11 +53,7 @@ function gitRoot(): string {
   return result.ok ? result.stdout.trim() : process.cwd();
 }
 
-/** `owner/repo` from a GitHub remote URL (https, ssh or scp form). */
-export function githubRepoFromRemote(url: string): string | null {
-  const match = url.trim().match(/github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i);
-  return match ? `${match[1]}/${match[2]}` : null;
-}
+export { githubRepoFromRemote };
 
 function inferRepo(root: string): string | null {
   const remote = runGit(root, ['remote', 'get-url', 'origin']);

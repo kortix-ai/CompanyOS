@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1755,
-  "aliases": 676,
+  "count": 1757,
+  "aliases": 677,
   "routes": [
     {
       "method": "GET",
@@ -3134,6 +3134,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/channels/slack/mode",
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/mode"
@@ -5926,6 +5931,10 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/channels/slack/installation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
     },
     {
       "method": "GET",

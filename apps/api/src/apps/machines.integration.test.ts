@@ -7,9 +7,9 @@
  * deploy pointer are real.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { accounts, appArtifacts, appDeployments, appLinks, appRuntimes, appVolumes, apps, projects } from '@kortix/db';
+import { accounts, appArtifacts, appDeploymentEvents, appDeployments, appLinks, appRuntimes, appVolumes, apps, projects } from '@kortix/db';
 import { resolveAppReleaseConfig, type AppReleaseConfig } from '@kortix/shared/app-config';
-import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, notInArray } from 'drizzle-orm';
 
 process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 
@@ -95,6 +95,30 @@ async function cleanup(): Promise<void> {
   await db.delete(appArtifacts).where(eq(appArtifacts.projectId, PROJECT_ID));
   await db.delete(projects).where(eq(projects.projectId, PROJECT_ID));
   await db.delete(accounts).where(eq(accounts.accountId, ACCOUNT_ID));
+}
+
+/**
+ * `setAppScale` fires its reconcile in the background and returns before it
+ * runs. A reconcile still in flight when the next test's `cleanup()` deletes
+ * the app holds row locks against the cascade's own DELETE — the two
+ * connections of this one process deadlocked (40P01) under CI's load. The
+ * reconcile's last write is its `machines_reconciled` event, so waiting for
+ * one newer than `since` is the deterministic settle: when the event row is
+ * there, every lock the reconcile took is released.
+ */
+async function awaitReconcile(since: Date): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const [settled] = await db
+      .select({ createdAt: appDeploymentEvents.createdAt })
+      .from(appDeploymentEvents)
+      .innerJoin(appDeployments, eq(appDeployments.deploymentId, appDeploymentEvents.deploymentId))
+      .where(and(eq(appDeployments.appId, APP_ID), eq(appDeploymentEvents.type, 'machines_reconciled'), gt(appDeploymentEvents.createdAt, since)))
+      .orderBy(desc(appDeploymentEvents.createdAt))
+      .limit(1);
+    if (settled) return;
+    await Bun.sleep(25);
+  }
+  throw new Error('the background scale reconcile never settled');
 }
 
 async function seedApp(scale: Record<string, number> = {}): Promise<void> {
@@ -286,14 +310,20 @@ withDb('machines and volumes — real PostgreSQL', () => {
     await deploy(stateful, 1);
     await expect(fleet.setAppScale(await appRow(), { app: 2 })).rejects.toMatchObject({ status: 409, code: 'volume_single_machine' });
     expect((await appRow()).scale).toEqual({});
+    let before = new Date();
     expect(await fleet.setAppScale(await appRow(), { app: 2 }, { newVolumes: true })).toEqual({ app: 2 });
+    await awaitReconcile(before);
+    before = new Date();
     expect(await fleet.setAppScale(await appRow(), { app: 1 })).toEqual({ app: 1 });
+    await awaitReconcile(before);
   });
 
   test('scale: a group without a volume scales freely', async () => {
     await seedApp();
     await deploy(stateless, 1);
+    const before = new Date();
     expect(await fleet.setAppScale(await appRow(), { app: 3 })).toEqual({ app: 3 });
+    await awaitReconcile(before);
   });
 
   test('extend: a volume is the size the provider allots; a larger size is refused, never recorded', async () => {

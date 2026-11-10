@@ -233,6 +233,7 @@
     "CaptureDeviceGrantDetail",
     "CaptureDeviceHealth",
     "CaptureDeviceMachine",
+    "CaptureDeviceResources",
     "CaptureDeviceUpdate",
     "CaptureDisplay",
     "CaptureEnrollment",

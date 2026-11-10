@@ -13,15 +13,13 @@ import {
 
 import { cn } from '@kortix/ui';
 import { InlineMetaTime } from '@kortix/ui/inline-meta';
-import { APP_REGISTRY_TRANSLATION_KEYS } from '@kortix/ui/i18n/ui-catalog/app-registry-translation-keys.generated';
-import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { formatUsdAsCredits } from '@kortix/shared';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import {
   creditTransactionBadge,
   formatSignedCredits,
-  TRANSACTION_BADGES,
+  localizedTransactionBadges,
   type CreditTransactionRow,
 } from './transactions-table';
 
@@ -133,7 +131,7 @@ export function CreditActivityFeed({ rows }: { rows: CreditTransactionRow[] }) {
   const tHardcodedUi = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const locale = useLocale();
-  const badges = localizeUiCatalog(TRANSACTION_BADGES, tI18nComplete, APP_REGISTRY_TRANSLATION_KEYS);
+  const badges = localizedTransactionBadges(tI18nComplete);
   const amountLabel = tI18nComplete.raw('text2a6b24ad2872');
   const balanceLabel = tHardcodedUi.raw('componentsBillingCreditTransactions.line200JsxTextCreditsAfter');
   // Two formatters per render, not one per row.

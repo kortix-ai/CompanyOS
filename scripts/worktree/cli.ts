@@ -1223,7 +1223,12 @@ let mergedIdx: Map<string, MergedPr[]> | null | undefined;
 function mergedPrs(root: string): Map<string, MergedPr[]> | null {
   if (mergedIdx !== undefined) return mergedIdx;
   try {
-    if (Date.now() - statSync(MERGED_CACHE).mtimeMs < MERGED_CACHE_TTL_MS) return (mergedIdx = mergedPrIndex(readFileSync(MERGED_CACHE, 'utf8')));
+    // Age and content from one descriptor: a stat-then-read by path could read
+    // a cache another process replaced in between (CodeQL js/file-system-race).
+    const fd = openSync(MERGED_CACHE, 'r');
+    try {
+      if (Date.now() - fstatSync(fd).mtimeMs < MERGED_CACHE_TTL_MS) return (mergedIdx = mergedPrIndex(readFileSync(fd, 'utf8')));
+    } finally { closeSync(fd); }
   } catch {}
   if (!which('gh')) return (mergedIdx = null);
   const r = sh(['gh', 'pr', 'list', '--state', 'merged', '--limit', '500', '--json', 'number,headRefName,headRefOid'], { cwd: root });

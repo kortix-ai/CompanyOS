@@ -1137,7 +1137,7 @@
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -23314,6 +23314,16 @@
         "booted": "Started",
         "timezone": "Time zone",
         "locale": "Locale",
+        "usage": "Kortix Capture resource use",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} average · {peak} peak",
+        "usageCpuHint": "Of one core, last {minutes, plural, one {# minute} other {# minutes}}",
+        "usageMemory": "Memory",
+        "usageMemoryPeak": "{now} · {peak} peak",
+        "usageProcesses": "Processes",
+        "usageProcessCount": "{count, plural, one {# process} other {# processes}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Not reported: an older app version, or the app started less than a minute ago",
         "recordingSync": "Recording and sync",
         "status": "Status",
         "lastFrame": "Last frame",
@@ -23435,6 +23445,13 @@
       "intervalOption": "{seconds, number} s",
       "resolution": "Resolution",
       "resolutionHint": "Larger screens are scaled down to this height. 4K keeps fine detail, such as CAD drawings.",
+      "textRecognition": "Text recognition",
+      "textRecognitionHint": "Reads the text on screen so it can be searched. Off uses the least CPU: search then finds apps, window titles and URLs.",
+      "textRecognitionOption": {
+        "accurate": "Accurate",
+        "fast": "Fast",
+        "off": "Off"
+      },
       "framesHint": "Unset, each computer uses its own (one frame every 2 s at 1440p). Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots at any interval.",
       "computerDecides": "Each computer decides",
       "included": {
@@ -26022,6 +26039,7 @@
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",

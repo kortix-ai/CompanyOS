@@ -7,8 +7,9 @@
 //! settings, so a change lands within one poll. A policy narrows privacy and
 //! retention: a layer the policy turns off stops even when the person turned it
 //! on, and a layer the policy allows still needs the person's own switch. The
-//! capture rate and size (`recording.interval_ms`, `recording.max_height`) are
-//! the one exception: when present, they set the value on every device.
+//! capture rate, size and text recognition (`recording.interval_ms`,
+//! `recording.max_height`, `recording.text_recognition`) are the one
+//! exception: when present, they set the value on every device.
 //!
 //! The policy applies while sync is on. Turning sync off (or airgap) drops it.
 //! Without a reachable bucket the last copy keeps applying.
@@ -95,6 +96,9 @@ pub struct PolicyRecording {
     /// Frame height cap: 720, 1080, 1440 or 2160 (the width follows the preset).
     /// Sets `max_height`/`max_width`; null or another value keeps the device's own.
     pub max_height: Option<u32>,
+    /// Screen text recognition: `accurate`, `fast` or `off`. Sets `ocr_level`
+    /// on every device; null or another value keeps the device's own.
+    pub text_recognition: Option<String>,
 }
 
 /// The range `recording.interval_ms` is clamped to.
@@ -145,6 +149,14 @@ impl Policy {
             .and_then(|h| super::settings::resolution_preset(&format!("{h}p")))
         {
             (s.max_width, s.max_height) = (w, h);
+        }
+        if let Some(level) = self
+            .recording
+            .text_recognition
+            .as_deref()
+            .filter(|l| matches!(*l, "accurate" | "fast" | "off"))
+        {
+            s.ocr_level = level.to_string();
         }
         if !self.layers.audio {
             s.audio.enabled = false;
@@ -304,6 +316,20 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Policy> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_org_sets_text_recognition_and_ignores_unknown_levels() {
+        let apply = |json: &str| {
+            let p: Policy = serde_json::from_str(json).unwrap();
+            let mut s = Settings::default();
+            p.apply(&mut s);
+            s.ocr_level
+        };
+        assert_eq!(apply(r#"{"recording": {"text_recognition": "off"}}"#), "off");
+        assert_eq!(apply(r#"{"recording": {"text_recognition": "fast"}}"#), "fast");
+        assert_eq!(apply(r#"{"recording": {"text_recognition": "best"}}"#), "accurate");
+        assert_eq!(apply(r#"{"recording": {}}"#), "accurate");
+    }
 
     #[test]
     fn org_exclusions_join_the_persons_and_never_drop_theirs() {

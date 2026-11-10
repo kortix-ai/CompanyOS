@@ -90,16 +90,35 @@ describe('the boot path fails closed in repair mode, exactly as the resolver doe
     ).resolves.toBe('all');
   });
 
-  test('a manifest that cannot be READ is not repair mode: My Kortix still boots unrestricted', async () => {
-    // Repair mode is specifically a file that was read and is not YAML. An
-    // unreadable one is a transient git failure: `loadProjectAgents` swallows
-    // it (the resolver is the path that rethrows), and My Kortix's grant is
-    // platform-owned, so it keeps what its person holds.
+  test('a load that did not come back (git failure) closes the boot secret leg, as the resolver refuses the same load', async () => {
+    // `loadProjectAgents` swallows a read failure into a result whose
+    // `manifest` is absent — "the manifest could not be read at all". Nothing
+    // can be proven about any grant, so the boot env closes exactly as the
+    // resolver closes it (it rethrows the same load under
+    // `rethrowReadErrors`); only My Kortix's platform-owned permissions and
+    // connectors stand, so the file stays repairable.
     readManifestFromRepoImpl = async () => {
       throw new Error('git-proxy 429');
     };
     const grant = await myKortixSessionGrant(SESSION, PROJECT);
-    expect(grant).toEqual({ agent: 'mykortix', permissions: 'all', connectors: 'all', env: 'all' });
+    expect(grant).toEqual({ agent: 'mykortix', permissions: 'all', connectors: 'all', env: [] });
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix', sessionId: SESSION })).rejects.toThrow();
+  });
+
+  test('a manifest that was READ but whose imports cannot be resolved also closes the boot secret leg', async () => {
+    // A broken `imports:` throws ManifestImportError — NOT a syntax error, so
+    // it is not repair mode — and the resolver refuses the same load outright
+    // (`rethrowReadErrors`). The boot mint must not answer the refused load
+    // with every project secret (Strix on this PR: the one case the
+    // manifestSyntaxError condition missed).
+    readManifestFromRepoImpl = async () => {
+      const err = new Error('agents.legacy: imported file missing from repository');
+      err.name = 'ManifestImportError';
+      throw err;
+    };
+    const grant = await myKortixSessionGrant(SESSION, PROJECT);
+    expect(grant).toEqual({ agent: 'mykortix', permissions: 'all', connectors: 'all', env: [] });
+    await expect(resolveSessionSecretGrant({ ...PROJECT, sessionAgent: 'mykortix', sessionId: SESSION })).rejects.toThrow();
   });
 
   test('no project git context at all: unchanged, unrestricted', async () => {

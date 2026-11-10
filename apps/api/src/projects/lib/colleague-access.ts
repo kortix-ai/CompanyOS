@@ -306,8 +306,10 @@ export async function askColleagueAccess(input: {
  *
  * Only `env` narrows; permissions and connectors stay person-capped 'all' so
  * the broken file can still be repaired through the project's own tooling. A
- * file that could not be READ is not repair mode: `loadProjectAgents` swallows
- * that git failure and the platform-owned grant stands.
+ * load that did not come back at all (`manifest` absent: a git blip, a broken
+ * `imports:`) closes the secret leg the same way — the resolver refuses that
+ * same load outright, and the boot mint must not answer it with the env list
+ * it cannot prove.
  */
 export async function myKortixSessionGrant(
   sessionId: string,
@@ -315,27 +317,35 @@ export async function myKortixSessionGrant(
 ): Promise<AgentGrant> {
   // Without the git context nothing can be read, so the manifest cannot be
   // broken and the platform-owned grant stands.
-  const loaded = project?.defaultBranch
-    ? await loadProjectAgents(
-        {
-          projectId: project.projectId,
-          repoUrl: project.repoUrl,
-          defaultBranch: project.defaultBranch,
-          manifestPath: project.manifestPath ?? 'kortix.yaml',
-          gitAuthToken: null,
-        },
-        { forceRefresh: 'tip-proof' },
-      )
-    : null;
-  // Only a manifest that was READ and is broken narrows the grant. An unreadable
-  // one (a git failure) is not repair mode, and taking `grantFromLoadedAgents`'s
-  // deny-all there would strip a session that nothing is wrong with. The repair
-  // branch is taken ONLY here (`manifestSyntaxError`) and NOT for every load: an
-  // unconditional `grantFromLoadedAgents` would also answer
-  // `disabledMyKortixAgentGrant` for a project with `my_kortix` off, while this
-  // mint has always given My Kortix its platform-owned grant. The repair answer
-  // is the same rule the resolver uses, unchanged.
-  if (!loaded) return withColleagueAccess(myKortixAgentGrant(), await readColleagueAccess(sessionId));
+  if (!project?.defaultBranch) {
+    return withColleagueAccess(myKortixAgentGrant(), await readColleagueAccess(sessionId));
+  }
+  const loaded = await loadProjectAgents(
+    {
+      projectId: project.projectId,
+      repoUrl: project.repoUrl,
+      defaultBranch: project.defaultBranch,
+      manifestPath: project.manifestPath ?? 'kortix.yaml',
+      gitAuthToken: null,
+    },
+    // The resolver's own option: a load that does not come back — a git
+    // blip, an unresolvable ref, a broken `imports:` — THROWS instead of
+    // being laundered into the synthesized permissive manifest, and the
+    // catch below refuses the secret leg exactly as the resolver refuses
+    // the same load.
+    { rethrowReadErrors: true, forceRefresh: 'tip-proof' },
+  ).catch(() => null);
+  // The load did not come back: nothing can be proven about any grant, so the
+  // secret leg closes (the resolver answers the same load with
+  // `SecretGrantResolutionError`). My Kortix keeps the platform grant for
+  // permissions and connectors so the file stays repairable; only the env
+  // list we cannot prove is withheld.
+  if (!loaded) return withColleagueAccess({ ...myKortixAgentGrant(), env: [] }, await readColleagueAccess(sessionId));
+  // A manifest that was READ and is not YAML takes `grantFromLoadedAgents`'s
+  // repair answer — the resolver's own rule — and ONLY here: an unconditional
+  // call would also answer `disabledMyKortixAgentGrant` for a project with
+  // `my_kortix` off, while this mint has always given My Kortix its
+  // platform-owned grant.
   const base = loaded.manifestSyntaxError
     ? (grantFromLoadedAgents(MY_KORTIX_AGENT_NAME, loaded) ?? myKortixAgentGrant())
     : myKortixAgentGrant();

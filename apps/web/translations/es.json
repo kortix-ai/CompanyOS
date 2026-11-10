@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Llamadas de voz",
-          "description": "Llama a un agente desde su página (Personalizar → Agentes) y habla con él. Una llamada es una sesión propia de ese agente: te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de esa sesión."
+          "description": "Llama a un agente desde un cuadro de mensaje vacío, donde el botón de enviar se convierte en un botón de llamada, o desde su página (Personalizar → Agentes), y habla con él. En una sesión, la llamada va al agente de esa sesión; en el inicio del espacio de trabajo, inicia una sesión nueva. El agente te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de la sesión."
         },
         "shared_drives": {
           "name": "Unidades compartidas",
@@ -26067,6 +26067,7 @@
     "call": "Llamar",
     "calling": "Llamando…",
     "start": "Iniciar una llamada de voz",
+    "inCall": "Estás en una llamada",
     "end": "Finalizar llamada",
     "connecting": "Conectando…",
     "listening": "Escuchando",

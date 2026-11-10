@@ -8,10 +8,10 @@
  * Ledger phases (one row per project to move):
  *
  *   planned         dry-run plan; apply may take it
- *   held            the account pays (`kortix.account_is_paying`: a paid
- *                   plan, bought credits, an enterprise contract; a bare
- *                   Stripe subscription id never counts): its owner chooses
- *                   the keeper first (`confirmWorkspaceSplitKeeper`)
+ *   held            the account has an identity provider (SSO or a live
+ *                   SCIM token): the split-off would not carry it. A paying
+ *                   account is not held (D12, 2026-11-10): the keeper rule
+ *                   below decides which project keeps the billing
  *   storage_copied  the project's static App blobs are copied to the target
  *                   prefix; the database move is next (a resume starts here)
  *   done            moved; `copied_ids` lists every copy, `to_account_id` the
@@ -26,8 +26,9 @@
  * created in the last KEEPER_ACTIVITY_DAYS days, then the most recently
  * opened (`last_opened_at DESC NULLS LAST`), then the newest created, then
  * `project_id`. It keeps the account, its credits, plan and Stripe customer.
- * The keeper is frozen once a move of the account started, or once an owner
- * confirmed it; until then each plan pass re-ranks it.
+ * The keeper is frozen once a move of the account started, or once an
+ * operator confirmed another project (`confirmWorkspaceSplitKeeper`); until
+ * then each plan pass re-ranks it.
  *
  * Lease: a claim sets `heartbeat_at` and increments `attempts`; a run whose
  * heartbeat is older than LEASE_MS is reclaimable (a crash mid-run). The move
@@ -151,7 +152,7 @@ async function projectPlanFacts(projectId: string, accountId: string): Promise<R
   return facts ?? {};
 }
 
-type HoldReason = 'account_has_identity_provider' | 'account_has_billing';
+type HoldReason = 'account_has_identity_provider';
 
 /**
  * Why a move out of `accountId` must wait, or null. The planner and the move
@@ -162,21 +163,19 @@ type HoldReason = 'account_has_identity_provider' | 'account_has_billing';
  *     SCIM deprovisioning would stop at the keeper. Held until the split
  *     carries identity (design.md §3.1); confirming the keeper does not
  *     release it.
- *   - account_has_billing: the one paying rule (C6, kortix.account_is_paying)
- *     and no keeper confirmed by an owner.
+ *
+ * A paying account (C6, `kortix.account_is_paying`) is not held (D12,
+ * 2026-11-10): the most active project keeps the billing, like any keeper,
+ * and the split-offs get the C6 billing.
  */
 async function holdReasonFor(
   executor: Pick<typeof db, 'execute'>,
   accountId: string,
-  keeperConfirmed: boolean,
 ): Promise<HoldReason | null> {
-  const [row] = await executor.execute<{ idp: boolean; paying: boolean }>(sql`
+  const [row] = await executor.execute<{ idp: boolean }>(sql`
     SELECT (EXISTS (SELECT 1 FROM kortix.account_sso_providers WHERE account_id = ${accountId})
-             OR EXISTS (SELECT 1 FROM kortix.scim_tokens WHERE account_id = ${accountId} AND revoked_at IS NULL)) AS idp,
-           kortix.account_is_paying(${accountId}) AS paying`);
-  if (row?.idp) return 'account_has_identity_provider';
-  if (row?.paying && !keeperConfirmed) return 'account_has_billing';
-  return null;
+             OR EXISTS (SELECT 1 FROM kortix.scim_tokens WHERE account_id = ${accountId} AND revoked_at IS NULL)) AS idp`);
+  return row?.idp ? 'account_has_identity_provider' : null;
 }
 
 /** Plan one legacy account: upsert a ledger row per non-keeper project. */
@@ -195,11 +194,7 @@ async function planAccount(accountId: string): Promise<{ planned: number; held: 
   if (projects.length < 2) return counts;
   const { keeperId, confirmed, frozen } = await keeperFor(accountId, projects);
   const facts = await accountPlanFacts(accountId);
-  // The one paying rule (C6, kortix.account_is_paying): a paid plan however it
-  // was set, bought credits, a completed purchase, an active enterprise
-  // contract. A Stripe subscription id on a Free account is stale and pays
-  // nothing (149 legacy prod accounts carry one).
-  const holdReason = await holdReasonFor(db, accountId, confirmed);
+  const holdReason = await holdReasonFor(db, accountId);
   const phase: WorkspaceSplitPhase = holdReason ? 'held' : 'planned';
   const open = await db.execute<{ run_id: string; project_id: string; phase: WorkspaceSplitPhase }>(sql`
     SELECT run_id::text, project_id::text, phase FROM kortix.workspace_split_runs
@@ -345,7 +340,7 @@ export async function applyWorkspaceSplitRun(runId: string, deps: ApplyDeps = {}
       // The plan may be up to one plan interval old: re-check the hold under
       // the run lock. A held run moves nothing; the copied site blobs are
       // copies and stay harmless.
-      const holdReason = await holdReasonFor(tx, run!.fromAccountId, (run!.plan as Record<string, unknown>)?.keeper_confirmed === true);
+      const holdReason = await holdReasonFor(tx, run!.fromAccountId);
       if (holdReason) {
         await tx.execute(sql`UPDATE kortix.workspace_split_runs
           SET phase = 'held', heartbeat_at = NULL, updated_at = now(),
@@ -592,8 +587,10 @@ export async function reopenWorkspaceSplitRun(runId: string): Promise<void> {
 }
 
 /**
- * An owner's choice of the project that keeps the account and its billing.
- * Releases a `held` account: its other projects become `planned`.
+ * An operator's override of the keeper rule: `keeperProjectId` keeps the
+ * account and its billing (an owner asked for it before the account's first
+ * move). Freezes the keeper; the other projects are planned around it. An
+ * identity-provider hold stays held.
  */
 export async function confirmWorkspaceSplitKeeper(accountId: string, keeperProjectId: string): Promise<void> {
   const [project] = await db.execute<{ ok: boolean }>(sql`

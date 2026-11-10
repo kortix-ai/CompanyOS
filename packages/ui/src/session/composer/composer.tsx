@@ -120,6 +120,7 @@ import { promptHistoryEntries, stepPromptHistory } from './prompt-history';
 import { QuoteList } from './quote-list';
 import { createSubmitLatch } from './submit-latch';
 import type { AttachedFile, TrackedMention } from './types';
+import type { ComposerCall } from '../voice/composer-call';
 
 /** A draft captured out of the editor at Enter time — see `createSubmitLatch`. */
 interface StashedDraft {
@@ -405,6 +406,14 @@ export interface SessionChatInputProps {
   slashMenuPlacement?: 'above' | 'below';
 
   cardClassName?: string;
+
+  /**
+   * A voice call, offered in the Send button's place while there is nothing to
+   * send (flag `voice_call`; `session/voice/composer-call.ts`). Hosts opt in:
+   * project home calls a new session, a session page calls its own session.
+   * Omitted, Send is the only action, as before.
+   */
+  call?: ComposerCall;
 
   /**
    * Reply quotes to add — transcript selections the user clicked "Reply" on,

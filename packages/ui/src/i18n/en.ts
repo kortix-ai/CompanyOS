@@ -838,7 +838,7 @@ const catalog = {
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -9371,6 +9371,7 @@ const catalog = {
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",

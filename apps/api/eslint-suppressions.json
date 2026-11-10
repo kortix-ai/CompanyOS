@@ -2510,9 +2510,6 @@
     }
   },
   "src/routes/platform-endpoints.ts": {
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 4
     }

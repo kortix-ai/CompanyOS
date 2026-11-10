@@ -76,11 +76,13 @@ describe('grantFromLoadedAgents — the reserved meta coordinator', () => {
     expect(grantFromLoadedAgents('meta', { ...UNGOVERNED, builtinAgents: { my_kortix: false } })).toEqual(disabledMyKortixAgentGrant());
   });
 
-  test('carries no connectors and no secrets, on every manifest shape', () => {
-    for (const loaded of [UNGOVERNED, GOVERNED, UNREADABLE]) {
-      const grant = grantFromLoadedAgents('meta', loaded);
-      expect(grant?.connectors).toEqual([]);
-      expect(grant?.env).toEqual([]);
+  test('holds what its person holds — the platform grant — on every manifest shape where My Kortix is on', () => {
+    // Was: no connectors and no secrets on every shape. #12240 made My Kortix's
+    // grant 'all' for connectors and env — what its person holds, capped per
+    // call by the person's reach — on every shape that runs it. A manifest that
+    // does not turn My Kortix on still resolves the no-action grant (above).
+    for (const loaded of [UNGOVERNED, GOVERNED]) {
+      expect(grantFromLoadedAgents('meta', loaded)).toEqual(myKortixAgentGrant());
     }
   });
 

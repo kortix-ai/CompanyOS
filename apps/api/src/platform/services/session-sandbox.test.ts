@@ -526,8 +526,10 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        // My Kortix holds what its person holds (#12240): its grant is 'all'
+        // for connectors and env, capped per call by the person's reach.
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });

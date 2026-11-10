@@ -2,7 +2,7 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { SETUP_PROMPT, loopPrompt } from '@kortix/shared/setup-guide';
+import { REFERENCE_REPOS, SETUP_PROMPT, loopPrompt } from '@kortix/shared/setup-guide';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
@@ -158,8 +158,13 @@ function LoopShowcase({ loop, index }: { loop: LoopView; index: number }) {
           <span aria-hidden className="text-muted-foreground">→</span>
           <Chips items={loop.ships} accent />
         </div>
-        <div className="pt-2">
+        <div className="flex flex-wrap items-center gap-3 pt-2">
           <CopyButton text={loopPrompt(loop)} label={`Copy the ${loop.label} prompt`} />
+          {REFERENCE_REPOS[loop.id] ? (
+            <a href={REFERENCE_REPOS[loop.id]} className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline">
+              Read the reference repo
+            </a>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center p-8 md:p-10">

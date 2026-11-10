@@ -18,15 +18,26 @@ export const FACTORY_PROMPT = `Add a Kortix software factory to this repository 
 Follow ${FACTORY_GUIDE_URL} (curl -fsSL ${FACTORY_GUIDE_URL}) step by step.
 Ask me before each decision it names. Never print a secret value.`;
 
-/** The guide of one loop (template), served at kortix.com/loops/<id>.md. */
+/**
+ * The public reference repository of each factory: a complete kortix.yaml a
+ * setup agent reads and adapts. Onboarding is custom per repository; these are
+ * the examples, never copied as is.
+ */
+export const REFERENCE_REPOS: Record<string, string> = {
+  'software-factory': 'https://github.com/kortix-ai/software-factory',
+  marketing: 'https://github.com/kortix-ai/marketing-factory',
+};
+
+/** Kept for links to a loop's guide; the reference repository is the source an agent adapts. */
 export const loopGuideUrl = (id: string) => `https://kortix.com/loops/${id}.md`;
 
-/** The one prompt of one loop: a URL, nothing to install first. */
+/** The one prompt of one factory: read its reference repository, adapt it, follow the setup guide. */
 export function loopPrompt(loop: { id: string; name: string }): string {
-  const url = loopGuideUrl(loop.id);
-  return `Add the Kortix ${loop.name} to this repository with me.
-Follow ${url} (curl -fsSL ${url}) step by step.
-Ask me before each decision it names. Never print a secret value.`;
+  const reference = REFERENCE_REPOS[loop.id];
+  const read = reference ? `Read ${reference} and adapt it to this repository.\n` : '';
+  return `Add a Kortix ${loop.name.toLowerCase()} to this repository with me.
+${read}Set it up with the Kortix CLI, following ${SETUP_GUIDE_URL} step by step.
+Ask me before each decision. Never print a secret value.`;
 }
 
 /** What a person copies. Short on purpose: the guide it points to is versioned and served. */

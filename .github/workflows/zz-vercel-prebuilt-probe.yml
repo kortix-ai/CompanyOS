@@ -35,7 +35,9 @@ jobs:
         env:
           npm_config_engine_strict: "false"
           SOURCE_SHA: ${{ github.sha }}
-          # Probe 2: the flag Vercel's own builders set for stable /_next/static/immutable/ paths.
+          # Probe 3: the flags Vercel's own builders set: the Next adapter, and
+          # stable /_next/static/immutable/ paths.
+          NEXT_ENABLE_ADAPTER: "1"
           VERCEL_IMMUTABLE_STATIC_FILES_ENABLED: "1"
         run: |
           set -euo pipefail

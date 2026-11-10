@@ -47,6 +47,16 @@ vercel pull --yes --environment="$target" --token="$VERCEL_TOKEN" >&2
 env_file=".vercel/.env.${target}.local"
 test -f "$env_file" || { echo "::error::vercel pull wrote no $env_file" >&2; exit 1; }
 
+# `vercel pull` cannot read a Sensitive variable and writes KEY="[SENSITIVE]".
+# Drop those lines: the build sees the key unset instead of inlining the
+# placeholder. The deployment still gets the real value at runtime.
+placeholder='^[A-Za-z_][A-Za-z0-9_]*="\[SENSITIVE\]"$'
+if grep -qE "$placeholder" "$env_file"; then
+  echo "Sensitive values the build does not get (the runtime does): $(grep -E "$placeholder" "$env_file" | cut -d= -f1 | paste -sd, -)" >&2
+  grep -vE "$placeholder" "$env_file" >"${env_file}.tmp" || true
+  mv "${env_file}.tmp" "$env_file"
+fi
+
 # 2. Build values win over the pulled project values. Vercel does not document
 # which side wins when a key is in both the shell and $env_file, so the value
 # goes into both.

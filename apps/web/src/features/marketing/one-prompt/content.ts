@@ -95,6 +95,75 @@ export const TEMPLATES: HomeTemplate[] = [
       '      body.ref: refs/heads/main',
     ],
   },
+  {
+    id: 'sales',
+    line: 'Every lead researched, scored and drafted. You send.',
+    phrase: 'your sales loop',
+    name: 'Sales Loop',
+    summary:
+      'One agent that researches every signup and inbound lead, scores it against your ICP, drafts outreach and meeting briefs, and keeps your CRM clean. A person sends every message.',
+    triggers: ['New signup in your product', 'Inbound form', 'Mondays 07:00'],
+    agents: [
+      { name: 'research', role: 'Reads public sources only and cites every fact.' },
+      { name: 'qualify', role: 'Scores each lead against the ICP you wrote.' },
+      { name: 'draft', role: 'Writes the next message. A person sends it.' },
+      { name: 'hygiene', role: 'Finds stale deals and missing next steps every week.' },
+    ],
+    file: '.kortix/sales/sales.yaml',
+    excerpt: [
+      '  - slug: sales-signup',
+      '    on:',
+      '      webhook: { secret: SALES_WEBHOOK_SECRET }',
+      '    filter:',
+      '      body.kind: signup',
+    ],
+  },
+  {
+    id: 'recruiting',
+    line: 'Every applicant screened on one rubric. A person decides.',
+    phrase: 'your recruiting loop',
+    name: 'Recruiting Loop',
+    summary:
+      'One agent that screens every applicant and referral against a structured role rubric, drafts interview kits and candidate updates, and keeps your ATS pipeline clean. A person decides every step.',
+    triggers: ['New application', 'New referral', 'Weekdays, every hour 08:00-18:00', 'Mondays 07:00'],
+    agents: [
+      { name: 'screen', role: 'Scores each applicant on the role rubric, with evidence.' },
+      { name: 'decide', role: 'A person advances or rejects on the Review page.' },
+      { name: 'draft', role: 'Interview kits, scheduling and candidate updates. A person sends.' },
+      { name: 'hygiene', role: 'Finds candidates who wait too long, every week.' },
+    ],
+    file: '.kortix/recruiting/recruiting.yaml',
+    excerpt: [
+      '  - slug: recruiting-referral',
+      '    on:',
+      '      webhook: { secret: RECRUITING_WEBHOOK_SECRET }',
+      '    filter:',
+      '      body.kind: referral',
+    ],
+  },
+  {
+    id: 'support',
+    line: 'Every conversation triaged. Bugs go to engineering.',
+    phrase: 'your support loop',
+    name: 'Support Loop',
+    summary:
+      'One agent that triages support conversations, drafts answers from your docs and code, hands bugs to engineering, clusters feedback and proposes help-center fixes. Replies stay drafts until you allow sending.',
+    triggers: ['In-app feedback', 'Help desk every 15 minutes', 'Mondays 08:00'],
+    agents: [
+      { name: 'triage', role: 'Sets the category and the priority of each conversation.' },
+      { name: 'answer', role: 'Drafts the reply from your docs and code, with sources.' },
+      { name: 'handoff', role: 'Files each bug into the Software Factory or a GitHub issue.' },
+      { name: 'cluster', role: 'Groups the week’s feedback into themes with counts.' },
+    ],
+    file: '.kortix/support/support.yaml',
+    excerpt: [
+      '  - slug: support-feedback',
+      '    on:',
+      '      webhook: { secret: SUPPORT_WEBHOOK_SECRET }',
+      '    filter:',
+      '      body.kind: feedback',
+    ],
+  },
 ];
 
 export const STEPS: Array<{ title: string; body: string }> = [

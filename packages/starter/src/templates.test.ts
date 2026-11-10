@@ -39,4 +39,30 @@ describe('templates', () => {
       for (const hook of getTemplate(id).github_webhooks) expect(triggers.has(hook.trigger)).toBe(true);
     }
   });
+
+  test('every webhook secret is a template secret, and every registered skill is a SKILL.md that names itself', () => {
+    for (const id of TEMPLATE_IDS) {
+      const files = getTemplateFiles(id, { repoFullName: 'acme/shop', defaultBranch: 'main' });
+      const byPath = new Map(files.map((file) => [file.path, file.content]));
+      const secrets = new Set(getTemplate(id).secrets.map((secret) => secret.name));
+      for (const file of files) {
+        if (!/\.ya?ml$/.test(file.path)) continue;
+        const doc = parseManifestText(file.content) as {
+          skills?: Record<string, string>;
+          triggers?: Array<{ slug: string; on?: { webhook?: { secret?: string } } }>;
+        };
+        for (const trigger of doc.triggers ?? []) {
+          const secret = trigger.on?.webhook?.secret;
+          if (secret) expect({ trigger: trigger.slug, declared: secrets.has(secret) }).toEqual({ trigger: trigger.slug, declared: true });
+        }
+        for (const [name, folder] of Object.entries(doc.skills ?? {})) {
+          const skill = byPath.get(`${folder.replace(/\/$/, '')}/SKILL.md`);
+          expect({ skill: name, found: skill !== undefined }).toEqual({ skill: name, found: true });
+          const frontmatter = Bun.YAML.parse(skill!.split('---')[1]!) as { name: string; description: string };
+          expect(frontmatter.name).toBe(name);
+          expect(frontmatter.description.length).toBeGreaterThan(20);
+        }
+      }
+    }
+  });
 });

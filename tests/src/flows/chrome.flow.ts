@@ -62,17 +62,14 @@ type Frame = Record<string, any>;
 /** A control socket played from the extension's side. */
 class Control {
   private frames: Frame[] = [];
-  private listeners: Array<() => void> = [];
   closed: { code: number; reason: string } | null = null;
 
   private constructor(readonly ws: WebSocket) {
     ws.onmessage = (event) => {
       this.frames.push(JSON.parse(String(event.data)));
-      this.listeners.forEach((l) => l());
     };
     ws.onclose = (event) => {
       this.closed = { code: event.code, reason: event.reason };
-      this.listeners.forEach((l) => l());
     };
   }
 
@@ -104,20 +101,15 @@ class Control {
 
   /** Wait for the first frame that matches; remove and return it. */
   async take(match: (f: Frame) => boolean, timeoutMs = 10_000): Promise<Frame> {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const at = this.frames.findIndex(match);
-      if (at >= 0) return this.frames.splice(at, 1)[0];
-      if (this.closed) throw new Error(`socket closed ${this.closed.code} ${this.closed.reason} while waiting for a frame`);
-      if (Date.now() >= deadline) throw new Error(`no matching frame in ${timeoutMs} ms; got ${JSON.stringify(this.frames)}`);
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, 200);
-        this.listeners.push(() => {
-          clearTimeout(t);
-          resolve();
-        });
-      });
-    }
+    return (await waitFor(
+      () => {
+        const at = this.frames.findIndex(match);
+        if (at >= 0) return this.frames.splice(at, 1)[0];
+        if (this.closed) throw new Error(`socket closed ${this.closed.code} ${this.closed.reason} while waiting for a frame`);
+        return null;
+      },
+      { until: (f) => f !== null, timeoutMs, intervalMs: 100, description: 'matching frame' },
+    ))!;
   }
 
   /** Wait for the socket to close; returns the close code. */

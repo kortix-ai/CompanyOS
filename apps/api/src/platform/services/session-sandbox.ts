@@ -72,7 +72,7 @@ import { RuntimeIdentityConflictError } from '../../projects/runtime-identity-er
 import { instanceStampMetadata } from '../../projects/instance-scope';
 import { withTimeout, configuredTimeoutMs } from '../../shared/with-timeout';
 import { classifySandboxProvisioningFailure } from './sandbox-provisioning-error';
-import { myKortixAgentGrant } from '../../projects/lib/my-kortix-agent';
+import { myKortixSessionGrant } from '../../projects/surface';
 import { devTunnelStamp } from '../dev-tunnel-stamp';
 import { resolveSessionOnBehalfOf } from '../../projects/lib/on-behalf-of';
 import { agentPrincipalModeFor } from '../../iam/agent-principal';
@@ -202,8 +202,9 @@ export async function mintSessionToken(opts: {
   // The reserved coordinator uses a platform-owned full project grant. It acts
   // as the launching user and never resolves through a project-declared agent
   // or standing service account.
+  // A My Kortix colleague also holds the connectors and secrets a person allowed it.
   const [agentGrant, serviceAccountId] = platformMetaAgent
-    ? [myKortixAgentGrant(), null]
+    ? [await myKortixSessionGrant(opts.sandboxId), null]
     : await Promise.all([
         // Resolve the per-session grant AND the agent's standing-identity
         // service account in parallel. Grant resolution must throw on failure.

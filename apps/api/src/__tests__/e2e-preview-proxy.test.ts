@@ -1174,7 +1174,8 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 401');
+    // The 502 body is stable and termless: the upstream status stays server-side.
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');
   });
@@ -1195,7 +1196,7 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 500');
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockWakeCalls).toEqual([]);
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');

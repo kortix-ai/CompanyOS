@@ -21428,7 +21428,8 @@
         "question": "質問",
         "permission": "権限",
         "approval": "コネクタ承認"
-      }
+      },
+      "allowed": "許可しました"
     },
     "reviewBulk": {
       "approve": "承認",
@@ -21499,7 +21500,21 @@
       "senderUnavailable": "送信アカウントを読み込めませんでした。差出人の行を確認してください。",
       "quoted": "「{text}」"
     },
-    "promptHistory": "履歴 {index}/{total}"
+    "promptHistory": "履歴 {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix が同僚へのアクセスを求めています",
+      "task": "タスク",
+      "connector": "コネクター",
+      "secret": "シークレット",
+      "onlyThis": "同僚が受け取るのはこれだけで、このタスク限りです。",
+      "deny": "拒否",
+      "allow": "許可",
+      "allowed": "アクセスを許可しました",
+      "allowedDescription": "My Kortix が同僚を開始します。",
+      "denied": "アクセスを拒否しました",
+      "deniedDescription": "My Kortix にあなたの回答が届きます。",
+      "failed": "決定を送信できませんでした。もう一度お試しください。"
+    }
   },
   "commandPalette": {
     "title": "コマンドパレット",

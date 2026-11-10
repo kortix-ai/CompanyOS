@@ -218,10 +218,12 @@ describe('pi turn lifecycle: Stop is bounded', () => {
   test('Stop during a tool that ignores the abort returns at the bound; a restart runs the next prompt', async () => {
     const r = await boot({ script: [{ tool: 'hang', args: {} }, { text: 'after restart' }], env: hanging, prepare: writeHang })
     const rt = r.service.runtime()!
+    // The gateway counter is shared by the file: wait for THIS turn's call, and
+    // for the turn to be busy, not for a fixed 50 ms (a loaded CI runner missed it).
+    const callsBefore = gateway.calls()
     expect((await prompt(r, 'call the hang tool')).status).toBe(204)
-    await waitFor(() => gateway.calls() > 0)
-    await Bun.sleep(50)
-    expect(rt.busy()).toBe(true)
+    await waitFor(() => gateway.calls() > callsBefore)
+    await waitFor(() => rt.busy())
 
     const startedAt = Date.now()
     expect((await r.user(`/session/${rt.rootId}/abort`, { method: 'POST' })).status).toBe(200)

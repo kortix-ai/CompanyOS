@@ -6284,7 +6284,8 @@ const catalog = {
         "question": "Question",
         "permission": "Permission",
         "approval": "Connector approval"
-      }
+      },
+      "allowed": "Allowed"
     },
     "reviewBulk": {
       "approve": "Approve",
@@ -6354,7 +6355,21 @@ const catalog = {
       "senderUnavailable": "Couldn't load the sending account. Check the From row.",
       "quoted": "“{text}”"
     },
-    "promptHistory": "History {index}/{total}"
+    "promptHistory": "History {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix asks to give a colleague access",
+      "task": "Task",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "The colleague gets only these, for this one task.",
+      "deny": "Deny",
+      "allow": "Allow",
+      "allowed": "Access allowed",
+      "allowedDescription": "My Kortix starts the colleague.",
+      "denied": "Access denied",
+      "deniedDescription": "My Kortix gets your answer.",
+      "failed": "Could not send your decision. Try again."
+    }
   },
   "commandPalette": {
     "title": "Command Palette",

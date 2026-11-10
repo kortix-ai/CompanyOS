@@ -98,14 +98,6 @@ const CONTROLS: { name: string; file: string; from: string; to: string }[] = [
     to: 'function ProjectStartError(',
   },
   {
-    name: "/workspaces/new's Log out",
-    file: 'features/workspace/new/new-workspace-page.tsx',
-    // The control moved into `AccountTopBar` (#8286); the page owns only the
-    // `onLogOut` handler it passes in, so the slice is that handler.
-    from: 'onLogOut={() => {',
-    to: 'back={{',
-  },
-  {
     name: "phone verification's Sign out",
     file: 'app/[locale]/(auth)/auth/phone-verification/page.tsx',
     from: 'const signOutMutation = useMutation(',

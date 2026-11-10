@@ -21428,7 +21428,8 @@
         "question": "问题",
         "permission": "权限",
         "approval": "连接器审批"
-      }
+      },
+      "allowed": "已允许"
     },
     "reviewBulk": {
       "approve": "批准",
@@ -21499,7 +21500,21 @@
       "senderUnavailable": "无法加载发送账户。请检查发件人一行。",
       "quoted": "“{text}”"
     },
-    "promptHistory": "历史记录 {index}/{total}"
+    "promptHistory": "历史记录 {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix 请求为一位同事开通访问权限",
+      "task": "任务",
+      "connector": "连接器",
+      "secret": "密钥",
+      "onlyThis": "这位同事只获得这些，且仅用于这一个任务。",
+      "deny": "拒绝",
+      "allow": "允许",
+      "allowed": "已允许访问",
+      "allowedDescription": "My Kortix 会启动这位同事。",
+      "denied": "已拒绝访问",
+      "deniedDescription": "My Kortix 会收到你的答复。",
+      "failed": "无法发送你的决定。请重试。"
+    }
   },
   "commandPalette": {
     "title": "命令面板",

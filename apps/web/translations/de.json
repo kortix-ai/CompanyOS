@@ -21428,7 +21428,8 @@
         "question": "Frage",
         "permission": "Berechtigung",
         "approval": "Connector-Freigabe"
-      }
+      },
+      "allowed": "Erlaubt"
     },
     "reviewBulk": {
       "approve": "Genehmigen",
@@ -21499,7 +21500,21 @@
       "senderUnavailable": "Das sendende Konto konnte nicht geladen werden. Prüfe die Zeile „Von“.",
       "quoted": "„{text}“"
     },
-    "promptHistory": "Verlauf {index}/{total}"
+    "promptHistory": "Verlauf {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix möchte einem Kollegen Zugriff geben",
+      "task": "Aufgabe",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "Der Kollege bekommt nur diese, nur für diese eine Aufgabe.",
+      "deny": "Ablehnen",
+      "allow": "Erlauben",
+      "allowed": "Zugriff erlaubt",
+      "allowedDescription": "My Kortix startet den Kollegen.",
+      "denied": "Zugriff abgelehnt",
+      "deniedDescription": "My Kortix erhält deine Antwort.",
+      "failed": "Deine Entscheidung konnte nicht gesendet werden. Versuch es erneut."
+    }
   },
   "commandPalette": {
     "title": "Befehlspalette",

@@ -9,6 +9,7 @@ import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { type CliResult, CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 function parseCliJson<T>(result: CliResult, action: string): T {
   throwIfCliInfraFailure(result, action);
@@ -2575,10 +2576,10 @@ flow(
         // The stale narrow grant a token minted before the manifest changed
         // would hold: only `stripe`, no provenance at all.
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
              SET account_id = $2, user_id = $3, project_id = $4,
                  session_id = $5, agent_grant = $6::jsonb
-           WHERE token_id = $1`,
+           WHERE token_id = $1`),
           [
             tokenId,
             team.id,
@@ -2777,7 +2778,7 @@ flow(
             [childSessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`,
+            lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1`),
             [childTokenId, team.id, ownerUserId, p.id, childSessionId],
           );
           const child = ctx.client.withBearer(childCredential.secret_key, 'SESSION_TOKEN');
@@ -3060,9 +3061,9 @@ flow(
             [sessionId, team.id, p.id],
           );
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-             WHERE token_id = $1`,
+             WHERE token_id = $1`),
             [
               tokenId,
               team.id,
@@ -4115,9 +4116,9 @@ flow(
             const credential = minted.json<{ token_id: string; secret_key: string }>();
             tokenIds.push(credential.token_id);
             await db.query(
-              `UPDATE kortix.account_tokens
+              lockProjectFirst(`UPDATE kortix.account_tokens
                  SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-               WHERE token_id = $1`,
+               WHERE token_id = $1`),
               [
                 credential.token_id,
                 team.id,
@@ -5137,10 +5138,11 @@ flow(
 // ── CONN-CALL-1 — the call contract: binding, output, upstream status ───────
 // Beside `data`, a call names its `binding`, the `upstream_status` and the
 // unwrapped `output`. An upstream 429 or 503 keeps its status with Retry-After;
-// an MCP `isError` result and GraphQL `errors` without data stay HTTP 200 and
-// name the failure in `upstream_error`; a hung upstream answers 500
-// `upstream_timeout` at the gateway deadline. The upstream is runner-local, so
-// every step runs on the local target only.
+// the upstream's other 4xx pass through and its 5xx answers 503 (never 502/504:
+// Cloudflare replaces their bodies); an MCP `isError` result and GraphQL
+// `errors` without data stay HTTP 200 and name the failure in `upstream_error`;
+// a hung upstream answers 500 `upstream_timeout` at the gateway deadline. The
+// upstream is runner-local, so every step runs on the local target only.
 flow(
   'CONN-CALL-1',
   {
@@ -5173,6 +5175,8 @@ flow(
       if (req.url === '/api/ok') return json(200, { items: [1, 2] });
       if (req.url === '/api/limited') return json(429, { message: 'slow down' }, { 'retry-after': '2' });
       if (req.url === '/api/unavailable') return json(503, { message: 'maintenance' }, { 'retry-after': '30' });
+      if (req.url === '/api/rejected') return json(400, { message: 'the upstream refused the args' });
+      if (req.url === '/api/downstream-down') return json(502, { message: 'the provider itself failed' });
       if (req.url === '/api/slow') {
         // Answers only after 70 s; the gateway deadline (60 s, or the local
         // profile's KORTIX_CONNECTOR_CALL_TIMEOUT_MS) closes the socket first.
@@ -5254,7 +5258,7 @@ flow(
         };
         const route = (path: string) => ({ path, binding: { kind: 'openapi', method: 'GET', path: `/api/${path}`, server: base } });
         const intentRoute = { path: 'intent_fetch', binding: { kind: 'openapi', method: 'GET', path: '/api/intents/{intentId}', server: base } };
-        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('slow'), intentRoute]);
+        await seed(slug.api, 'openapi', {}, [route('ok'), route('limited'), route('unavailable'), route('rejected'), route('downstream-down'), route('slow'), intentRoute]);
         await seed(slug.mcp, 'mcp', { url: `${base}/mcp` }, [{ path: 'get_issue', binding: { kind: 'mcp', tool: 'get_issue' } }]);
         await seed(slug.gql, 'graphql', { endpoint: `${base}/graphql` }, [
           { path: 'issue', binding: { kind: 'graphql', operation: 'query', field: 'issue' } },
@@ -5311,6 +5315,29 @@ flow(
         const r = await call(slug.api, 'unavailable');
         r.status(503).body().has('$.upstream_status', 503).has('$.retry_after_seconds', 30);
         if (r.header('retry-after') !== '30') throw new Error(`Retry-After: ${r.header('retry-after')}`);
+      });
+
+      await ctx.step('upstream 400 (the caller\'s args) → HTTP 400 with the upstream reason, not a 5xx', async () => {
+        // KRTX-4614: a caller error used to read as a server fault — a 5xx
+        // invites a retry of args that can never succeed, and the route's 5xx
+        // metric counts it.
+        const r = await call(slug.api, 'rejected');
+        r.status(400)
+          .body()
+          .has('$.status', 'error')
+          .has('$.reason', 'upstream_400: {"message":"the upstream refused the args"}')
+          .has('$.upstream_status', 400)
+          .has('$.binding', 'openapi');
+      });
+
+      await ctx.step('upstream 502 → HTTP 503, the body intact (Cloudflare replaces a 502 body)', async () => {
+        const r = await call(slug.api, 'downstream-down');
+        r.status(503)
+          .body()
+          .has('$.status', 'error')
+          .has('$.reason', 'upstream_502: {"message":"the provider itself failed"}')
+          .has('$.upstream_status', 502)
+          .has('$.binding', 'openapi');
       });
 
       await ctx.step('an MCP isError result → 200 with ok false, status tool_error and the tool text', async () => {
@@ -6082,9 +6109,9 @@ flow(
           // A grant without manifest provenance: the gateway re-derives it
           // from kortix.yaml on the first call, policy sets included.
           await db.query(
-            `UPDATE kortix.account_tokens
+            lockProjectFirst(`UPDATE kortix.account_tokens
                 SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-              WHERE token_id = $1`,
+              WHERE token_id = $1`),
             [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent, connectors: [], permissions: [], env: [] })],
           );
         }
@@ -6472,9 +6499,9 @@ flow(
           [sessionId, team.id, p.id],
         );
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
               SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-            WHERE token_id = $1`,
+            WHERE token_id = $1`),
           [credential.token_id, team.id, ownerUserId, p.id, sessionId, JSON.stringify({ agent: 'support', connectors: 'all', permissions: ['project.connector.read', 'project.connector.write'], env: [] })],
         );
         const refused = await agentClient.post(

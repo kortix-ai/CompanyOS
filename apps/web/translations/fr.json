@@ -21428,7 +21428,8 @@
         "question": "Question",
         "permission": "Autorisation",
         "approval": "Approbation de connecteur"
-      }
+      },
+      "allowed": "Autorisé"
     },
     "reviewBulk": {
       "approve": "Approuver",
@@ -21499,7 +21500,21 @@
       "senderUnavailable": "Impossible de charger le compte d'envoi. Vérifie la ligne De.",
       "quoted": "« {text} »"
     },
-    "promptHistory": "Historique {index}/{total}"
+    "promptHistory": "Historique {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix demande à donner un accès à un collègue",
+      "task": "Tâche",
+      "connector": "Connecteur",
+      "secret": "Secret",
+      "onlyThis": "Le collègue n’obtient que ceux-ci, pour cette seule tâche.",
+      "deny": "Refuser",
+      "allow": "Autoriser",
+      "allowed": "Accès autorisé",
+      "allowedDescription": "My Kortix démarre le collègue.",
+      "denied": "Accès refusé",
+      "deniedDescription": "My Kortix reçoit votre réponse.",
+      "failed": "Impossible d’envoyer votre décision. Réessayez."
+    }
   },
   "commandPalette": {
     "title": "Palette de commandes",

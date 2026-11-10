@@ -1277,7 +1277,7 @@ function agentBlockV3Schema(): JsonSchemaFragment {
         description: 'Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`"*"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`.',
       },
       prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both.' },
-      prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The whole file is the system prompt.' },
+      prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is.' },
       enabled: { type: 'boolean', default: true, description: '`false`: no session starts with the agent, and no agent starts it as a subagent.' },
       codemode: {
         type: 'string',

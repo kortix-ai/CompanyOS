@@ -211,8 +211,9 @@ describe('provider handoff characterization', () => {
       });
       expect(current().detail).toBeNull();
       await act(async () => { useKortixComputerStore.getState().focusToolCall('missing-call'); });
+      // An unknown call opens nothing. Its focus stays armed for a lagging
+      // derivation (#12055), so the store keeps the id.
       expect(current().detail).toBeNull();
-      expect(useKortixComputerStore.getState().focusedToolCallId).toBeNull();
     } finally {
       await act(async () => { renderer?.unmount(); });
     }

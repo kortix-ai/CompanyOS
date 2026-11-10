@@ -26,6 +26,7 @@ import { slackSigned, withDb } from "../fixtures/chat";
 import { waitFor } from "../core/poll";
 import { CliSandbox } from "../fixtures/cli";
 import { createDatabaseSession } from "../fixtures/database-project";
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 const UNKNOWN = "00000000-0000-4000-a000-000000000000";
 
@@ -1434,7 +1435,7 @@ flow(
           [own, accountId, p.id],
         );
         await db.query(
-          "UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1",
+          lockProjectFirst("UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1"),
           [tokenId, accountId, ownerUserId, p.id, own],
         );
         // The workspace the project's Slack install proved (the install paths

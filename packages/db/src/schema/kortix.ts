@@ -4431,6 +4431,8 @@ export const oauthAuthorizationCodes = kortixSchema.table(
     uniqueIndex('idx_oauth_codes_code').on(table.code),
     index('idx_oauth_codes_client').on(table.clientId),
     index('idx_oauth_codes_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_authorization_codes_account_id').on(table.accountId),
   ],
 );
 
@@ -4461,6 +4463,8 @@ export const oauthAccessTokens = kortixSchema.table(
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),
     index('idx_oauth_access_tokens_client').on(table.clientId),
     index('idx_oauth_access_tokens_user').on(table.userId),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_access_tokens_account_id').on(table.accountId),
   ],
 );
 
@@ -5587,6 +5591,59 @@ export const sessionPendingPermissions = kortixSchema.table(
   ],
 ).enableRLS();
 
+/**
+ * Access My Kortix asked to hand a colleague: connectors and project secrets
+ * that My Kortix itself does not hold (api projects/lib/colleague-access.ts).
+ * A person allows or denies the exact list. My Kortix's next start of a
+ * colleague with the same list consumes an allow once, and the colleague it
+ * creates (`consumed_by_session_id`) runs with that list on every turn. Only
+ * the API writes this table: no box route inserts or decides a row.
+ */
+export const sessionColleagueAccess = kortixSchema.table(
+  'session_colleague_access',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    accountId: uuid('account_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    /** The My Kortix session that asked. */
+    sessionId: text('session_id').notNull(),
+    /** As `session_pending_questions.surface_session_id`. */
+    surfaceSessionId: text('surface_session_id'),
+    /** The colleague's task, one line: what the card names. */
+    title: text().notNull(),
+    /** Canonical connector slugs, sorted. */
+    connectors: jsonb().default([]).notNull(),
+    /** Project secret identifiers, sorted. */
+    secrets: jsonb().default([]).notNull(),
+    /** sha256 of the sorted lists: the key a re-run matches. */
+    accessHash: text('access_hash').notNull(),
+    askedAt: timestamp('asked_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    /** Null while open. */
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }),
+    /** allow | deny. */
+    decision: text(),
+    decidedBy: uuid('decided_by'),
+    /** The start that used an allow, and the colleague it created. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    consumedBySessionId: text('consumed_by_session_id'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('session_colleague_access_open_uniq').on(table.sessionId, table.accessHash).where(sql`decided_at IS NULL`),
+    index('session_colleague_access_project_open_idx').on(table.projectId).where(sql`decided_at IS NULL`),
+    uniqueIndex('session_colleague_access_colleague_uniq')
+      .on(table.consumedBySessionId)
+      .where(sql`consumed_by_session_id IS NOT NULL`),
+    foreignKey({
+      name: 'session_colleague_access_session_fk',
+      columns: [table.sessionId],
+      foreignColumns: [projectSessions.sessionId],
+    }).onDelete('cascade'),
+  ],
+).enableRLS();
+
 export const sandboxComputeSessions = kortixSchema.table(
   'sandbox_compute_sessions',
   {
@@ -6081,6 +6138,8 @@ export const appVolumes = kortixSchema.table(
     uniqueIndex('app_volumes_machine_live_unique')
       .on(table.machineId)
       .where(sql`${table.deletedAt} IS NULL AND ${table.machineId} IS NOT NULL`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_volumes_account_id').on(table.accountId),
   ],
 );
 
@@ -6133,6 +6192,8 @@ export const appRuntimes = kortixSchema.table(
     uniqueIndex('app_runtimes_one_live_per_machine')
       .on(table.deploymentId, sql`coalesce(${table.machineId}, ${table.runtimeId})`)
       .where(sql`${table.status} IN ('provisioning', 'starting', 'running', 'stopping')`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_runtimes_account_id').on(table.accountId),
   ],
 );
 
@@ -8738,6 +8799,8 @@ export const captureDeviceGrants = kortixSchema.table(
     uniqueIndex('idx_capture_device_grants_user_code').on(table.userCode),
     uniqueIndex('idx_capture_device_grants_device_code').on(table.deviceCodeHash),
     index('idx_capture_device_grants_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_capture_device_grants_account_id').on(table.accountId),
     check(
       'capture_device_grants_status',
       sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`,
@@ -9750,6 +9813,8 @@ export const cliDeviceGrants = kortixSchema.table('cli_device_grants', {
   workspaceId: uuid('workspace_id'),
 }, (table) => [
   check('cli_device_grants_status_check', sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`),
+  // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+  index('idx_cli_device_grants_account_id').on(table.accountId),
 ]);
 
 /**

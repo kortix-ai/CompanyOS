@@ -21428,7 +21428,8 @@
         "question": "Domanda",
         "permission": "Permesso",
         "approval": "Approvazione connettore"
-      }
+      },
+      "allowed": "Consentito"
     },
     "reviewBulk": {
       "approve": "Approva",
@@ -21499,7 +21500,21 @@
       "senderUnavailable": "Impossibile caricare l'account di invio. Controlla la riga Da.",
       "quoted": "«{text}»"
     },
-    "promptHistory": "Cronologia {index}/{total}"
+    "promptHistory": "Cronologia {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix chiede di dare accesso a un collega",
+      "task": "Attività",
+      "connector": "Connettore",
+      "secret": "Segreto",
+      "onlyThis": "Il collega riceve solo questi, per questa sola attività.",
+      "deny": "Nega",
+      "allow": "Consenti",
+      "allowed": "Accesso consentito",
+      "allowedDescription": "My Kortix avvia il collega.",
+      "denied": "Accesso negato",
+      "deniedDescription": "My Kortix riceve la tua risposta.",
+      "failed": "Impossibile inviare la tua decisione. Riprova."
+    }
   },
   "commandPalette": {
     "title": "Tavolozza dei comandi",

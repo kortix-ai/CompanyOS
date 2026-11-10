@@ -683,7 +683,7 @@ const envSchema = z.object({
   KORTIX_DRIVES_SESSION_MOUNT: optStr,
   KORTIX_DRIVES_SYNC: optStr,
   // `on` (or 1/true/yes): `workspace_volume` (stateless sandboxes) is on for
-  // every project without its own choice; dev sets it (deploy-dev.yml).
+  // every project without its own choice; dev and prod set it.
   // `off` (or 0/false/no): no new session gets a /workspace volume, whatever its
   // project's flag says. Unset: each project's own choice, default off. A
   // session that already has a volume keeps it (platform/services/workspace-volume.ts).

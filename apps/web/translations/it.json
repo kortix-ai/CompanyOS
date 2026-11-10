@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Chiamate vocali",
-          "description": "Chiama un agente dalla sua pagina (Personalizza → Agenti) e parlagli. Una chiamata è una sessione a sé di quell'agente: ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat di quella sessione."
+          "description": "Chiama un agente da una casella di messaggio vuota, dove il pulsante di invio diventa un pulsante di chiamata, o dalla sua pagina (Personalizza → Agenti), e parlagli. In una sessione la chiamata va all'agente di quella sessione; dalla home dello spazio di lavoro avvia una nuova sessione. L'agente ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat della sessione."
         },
         "shared_drives": {
           "name": "Drive condivisi",
@@ -26067,6 +26067,7 @@
     "call": "Chiama",
     "calling": "Chiamata in corso…",
     "start": "Avvia una chiamata vocale",
+    "inCall": "Sei in una chiamata",
     "end": "Termina chiamata",
     "connecting": "Connessione…",
     "listening": "In ascolto",

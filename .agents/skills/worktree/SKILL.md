@@ -133,7 +133,8 @@ pnpm worktree create <n>        [flags]   # positional name also works
 | `--no-tunnel` | off | Skip the Cloudflare tunnel (offline; cloud sandboxes won't be reachable). |
 | `--no-web` | off | Boot without `next dev` (also on `start`). Use it for API/CLI-only work; each `next dev` holds GBs of RAM. Open the UI later with `pnpm worktree web <n>`. |
 
-What it does, in order: toolchain preflight → allocate the lowest slot that no
+What it does, in order: `autoclean` and the disk guard (see `autoclean` below;
+exit `2` below 4 GB free) → toolchain preflight → allocate the lowest slot that no
 registered worktree holds and whose whole port block is free (one `lsof` scan, up
 to 100 unregistered slots, the first 5 clashes logged) → `git worktree add` (new branch from
 `--from`, or checkout existing `--branch`) → `pnpm install` into the worktree's
@@ -153,7 +154,7 @@ pnpm worktree start <n> [--stripe] [--no-tunnel] [--no-web]
 pnpm worktree web <n> [--billing]   # only `next dev`, for a stack started with --no-web
 ```
 
-In shared-DB mode, ensures the primary local Supabase is reachable, checks that
+First runs `autoclean` and the disk guard (warn only). In shared-DB mode, ensures the primary local Supabase is reachable, checks that
 the `kortix` schema exists, then runs **api + web in the foreground and blocks
 until Ctrl+C**. In `--db` mode, applies the branch's pending migrations to
 `kortix_wt_<n>` and reconciles `auth.users` first (and re-copies the primary if
@@ -234,10 +235,10 @@ remove`, `git branch -d`, slot freed). Selection rules, in order:
 
 - a **running** stack (web or api port answering) is always kept;
 - a slot whose **directory is missing** is always freed;
-- **uncommitted tracked changes** keep the worktree unless `--include-dirty`;
+- **uncommitted changes** (tracked or untracked, except the generated-noise
+  files in `NOISE_PATHS`) keep the worktree unless `--include-dirty`;
 - `--older-than <dur>` compares the registry `createdAt`;
-- `--idle <dur>` compares last activity = max(HEAD commit time, worktree index
-  mtime); a slot with no readable activity falls back to `createdAt`.
+- `--idle <dur>` compares last activity, defined as for `autoclean` below.
 
 Durations are `<n>m|h|d|w` (`30m`, `12h`, `3d`, `2w`). Both time rules must
 pass when both are given. With no time rule every stopped, clean slot is
@@ -329,8 +330,65 @@ Deletes `.next`, `.turbo`, `dist`, `target`, `test-results` and
 scratchpad checkouts included). It skips a checkout with a process inside it or
 naming it on its command line, or any file written within `--idle` (default
 `60m`). It keeps any dir that holds a tracked file (`packages/ui/dist`). Run it
-first when the disk is full: build output is where the space goes, and removing
-a worktree frees only ~0.2 GB because pnpm clones files.
+first when the disk is full: build output is the largest lever. `apps/web/.next`
+grows without bound under `next dev` (3.4 GB and 7.0 GB in two checkouts on
+2026-11-10). Removing a worktree frees its build output plus ~1.3 GB of unshared
+files; its 5.6 GB `node_modules` is mostly hardlinks into the pnpm store.
+
+### `autoclean` — automatic housekeeping (runs on `create` and `start`)
+
+```sh
+pnpm worktree autoclean --dry-run       # what it would do, per worktree, with sizes
+pnpm worktree autoclean --yes           # do it now
+pnpm worktree autoclean --install-cron  # also run it every hour (asks nothing; you opt in)
+pnpm worktree autoclean --uninstall-cron
+```
+
+`create` and `start` run it first, with no prompt. It prints one summary line,
+or nothing when there is nothing to do. Per registered worktree:
+
+| State | Action |
+| --- | --- |
+| primary checkout, running stack, a process inside or naming it, or a directory `git worktree list` does not name | never touched |
+| idle ≥ 24h | build output (`ARTIFACT_DIRS`) deleted, as `sweep` |
+| idle ≥ 48h, no real changes, every commit of HEAD and its branch on a remote | worktree removed with the `nuke` path; branch deleted |
+| idle ≥ 48h with real changes or commits on no remote | kept, build output swept |
+| registry slot whose directory is gone, idle ≥ 48h | slot freed |
+
+- **Activity** = newest of registry `createdAt`, registry `lastUsedAt`
+  (`create`, `start`, `web` and `stop <n>` write it), the HEAD commit time,
+  and the mtime of each changed file. A read never counts: probes run
+  `git --no-optional-locks`, and the index mtime is not used (a read-only
+  `git status` refreshes it).
+- **Generated noise:** `NOISE_PATHS` in `scripts/worktree/lib/autoclean.ts`
+  (today `apps/web/src/lib/seo/content-timestamps.json`, which `next dev`
+  rewrites). A change only there is clean; removal restores the file first.
+- **The worktree the command runs for** is never removed. Unregistered
+  checkouts (scratchpad `git worktree add`) are never touched.
+- One autoclean runs at a time per machine (`$KORTIX_HOME/worktrees/autoclean.lock`).
+
+| Env | Default | Effect |
+| --- | --- | --- |
+| `KORTIX_WORKTREE_AUTOCLEAN=0` | on | Turns off the automatic run on `create`/`start`. The explicit command still works. |
+| `KORTIX_WORKTREE_SWEEP_IDLE` | `24h` | Idle time before build output is swept. `<n>m\|h\|d\|w`. |
+| `KORTIX_WORKTREE_REMOVE_IDLE` | `48h` | Idle time before a clean, pushed worktree is removed. |
+| `KORTIX_WORKTREE_DISK_WARN_GB` | `10` | Disk guard warn level. |
+| `KORTIX_WORKTREE_DISK_REFUSE_GB` | `4` | Disk guard refuse level. |
+
+**Disk guard.** After autoclean, `create` and `start` read the free space of
+the filesystem that holds the worktrees (`df -Pk`). Below 10 GB they warn and
+list the 5 largest registered checkouts (unshared size and `.next` size). Below
+4 GB `create` exits `2` and names `pnpm worktree autoclean --yes`, `sweep` and
+`nuke --all`; `start` only warns.
+
+**Hourly cron (opt-in).** `--install-cron` adds one user crontab line, marked
+`# kortix-worktree-autoclean`, that runs `autoclean --yes --quiet` from the
+primary checkout at minute 17 and appends to
+`$KORTIX_HOME/worktrees/autoclean.log`. It pins `PATH` and `KORTIX_HOME` from
+the installing shell. Re-running replaces the line; `--uninstall-cron` removes
+only that line. It refuses until the primary checkout carries the `autoclean`
+command (pull `dev` there first). `create` prints a one-time hint when the line
+is missing; agents never install it on their own.
 
 ## Kortix Capture in a worktree
 

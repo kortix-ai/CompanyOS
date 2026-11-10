@@ -17,7 +17,7 @@ import { manifestNeeds, type ManifestNeeds } from './manifest-needs.ts';
 
 /**
  * Public repositories an agent reads and adapts: working examples of loops,
- * not something a command installs. Planned: neither repository is public yet.
+ * not something a command installs. Both are public since 2026-11-10.
  */
 export const REFERENCE_REPOS = [
   { name: 'software-factory', url: 'https://github.com/kortix-ai/software-factory', summary: 'Issues, errors, logs and feedback become tickets, then reviewed pull requests.' },

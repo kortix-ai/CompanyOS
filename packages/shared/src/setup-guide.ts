@@ -69,252 +69,165 @@ The Kortix workspace exists already: it reads kortix.yaml from ${repository} on 
 
 export const SETUP_GUIDE = `# Set up Kortix on this repository
 
-You are a coding agent on the person's own computer. You set up Kortix with them:
-agents that run 24/7 in Kortix cloud sandboxes, on their own Claude or ChatGPT
-plan or an API key, started by schedules and GitHub events. The whole setup is
-one \`kortix.yaml\` and one \`.kortix/\` folder in their repository.
+The person pasted a prompt like "Add a Kortix software factory to this
+repository with me". You are the coding agent on their computer. From here you
+do everything: install the Kortix CLI, sign them in (one click in their
+browser), agree with them what to build, write their \`kortix.yaml\` by adapting a
+reference repository, and loop until \`kortix doctor --loops\` is green and one
+real run worked. Their part is the conversation about what to build, one "go"
+for the plan, and a few clicks only a person can make.
 
-Rules for the whole guide:
+When you are done, agents run 24/7 in Kortix cloud sandboxes on a copy of their
+dev environment, on their Claude or Codex plan or an API key, started by the
+signals the plan named (GitHub issues, failing tests, errors, Slack, schedules).
 
-1. Ask the person before each step marked **Ask**. Do the rest yourself.
-2. Never print, echo, log or commit a secret value. Pass values through pipes and
-   \`KEY=-\` (stdin), never as command arguments.
-3. Run every command yourself and read its exit code. When one fails, read the
-   message, fix the cause and run it again. Stop and tell the person only when
-   the fix needs them.
-4. Keep the person's existing \`kortix.yaml\`, agents and comments. Add to them.
+\`kortix\` is your only tool for the platform. Use \`--json\` for everything you
+parse.
 
-## 1. The Kortix CLI
+## Rules
 
-1. Run \`kortix --version\`. If the command is missing, install it:
-   \`curl -fsSL https://kortix.com/install | bash\`, then open a new shell or add
-   the printed path to \`PATH\`.
-2. Run \`kortix templates ls --json\`. If the command is unknown, run
-   \`kortix update\` (or install again) and repeat.
+1. **Talk about what to build, approve once.** Investigate first. Settle the
+   factories and their sources with the person in as many turns as they want;
+   then show the whole plan and get one "go". After the go, do not ask again
+   unless something fails in a way only they can decide.
+2. **Secrets.** Values move only through \`kortix\` (it reads them in-process).
+   Never print a secret, never put one in a command argument, never paste one
+   into a file. **Never open a file that may hold one**: no \`cat\`, \`head\`,
+   \`grep\` with context, or your own file-read tool on \`.env*\`, \`*.keys\`,
+   \`.envrc\` or credential files. Reading a file sends its values to your model
+   provider. Use the names-only view: \`kortix plan --json\` (\`env\`: every key,
+   classed \`local\`, \`remote\` or \`prod\`).
+3. **Never point agents at a shared backend.** A name classed \`remote\` or
+   \`prod\` is not uploaded. The agents' dev environment runs locally and
+   throwaway in the sandbox.
+4. **Adapt, never copy.** A reference repository is an example. The
+   person's \`kortix.yaml\` fits their repository: their tracker, their
+   commands, their channels.
+5. **Verify, don't assume.** A step is done when \`kortix doctor --loops\` or a
+   real run proves it.
+6. **Be brief.** One line per step while you work; a short report at the end.
 
-## 2. Where the config lives
+## 0. Install
 
-1. Run \`git rev-parse --show-toplevel\` and \`git remote get-url origin\`. The code
-   must be on GitHub: the agents clone it and open pull requests there.
-2. **Ask** where the Kortix config lives. Offer two choices:
-   - **In this repository** (recommended for a monorepo): one \`kortix.yaml\` and
-     one \`.kortix/\` folder at its root. Nothing else changes.
-   - **Its own repository**: a new private \`<owner>/kortix\` holds every Kortix
-     file, and the code repository gets no file at all. Choose it when the person
-     wants nothing added to their code, or the agents work on several repositories.
-3. In this repository: \`cd\` to its root. Make sure the working tree is clean or
-   that the person agrees to commit the setup on top of their changes.
-4. Its own repository: run \`gh repo create <owner>/kortix --private --clone\` next
-   to the code checkout and \`cd\` into it. When \`<owner>/kortix\` exists and
-   holds no \`kortix.yaml\`, never write into it: **Ask** for another name
-   (recommend \`<code-repo>-kortix\`). Then run \`git branch -M main\`, so the first
-   push creates \`main\`. From now on, pass the code repository to
-   every \`kortix templates add\` as \`--repo <owner>/<code-repo> --branch <default>\`,
-   and read the code (step 5) from the original checkout. The GitHub webhooks
-   (step 10) still go on the code repository.
+\`\`\`bash
+command -v kortix || curl -fsSL https://kortix.com/install | bash
+kortix --version
+\`\`\`
 
-## 3. Sign in
+## 1. Sign in and see the plan
 
-1. Run \`kortix whoami\`. If it is not signed in, run \`kortix login\`. It opens the
-   person's browser: they click once. On a machine with no browser, run
-   \`kortix login --device\` and give them the link and the code it prints.
-2. With no workspace yet, \`kortix ship\` creates one in step 8. Continue.
+\`\`\`bash
+kortix whoami          # signed in? if not:
+kortix login           # opens the browser: "click Authorize in the tab that just opened"
+kortix plan --json     # the deterministic baseline, names only
+\`\`\`
 
-## 4. Pick templates
+\`kortix plan\` reports the repository (GitHub origin, default branch, monorepo
+layout, clean or dirty), the stack (runtimes, package managers, services, dev,
+test and end-to-end commands, CI), every env key by class, the integrations it
+detected with evidence (Sentry, PostHog, Linear, Slack, Convex, Supabase…), the
+Kortix state (workspace, connectors, Slack, models), a dev-environment proposal
+and the reference repositories.
 
-1. Show the person the templates from \`kortix templates ls --json\`: name and
-   summary, one line each.
-2. **Ask** which ones to add. More than one is fine.
-3. For each one: \`kortix templates add <id> --json\`. Keep the JSON: its \`next\`
-   lists the secrets and GitHub webhooks this template needs.
-4. Read every file the command wrote under \`.kortix/<id>/\`. If an agent name or
-   a trigger slug collides with one the repository already has, rename the new
-   one in its file and in every trigger that names it.
-5. Keep the agent setup the repository already has. Do not move or edit it.
-   - For each \`.claude/agents/<name>.md\`, add an agent \`<name>\` to
-     \`kortix.yaml\` with \`prompt_file: .claude/agents/<name>.md\`, the
-     \`description\` from its frontmatter, \`mode: primary\` and \`tools: "*"\`.
-   - For each folder that holds a \`SKILL.md\` (\`.agents/skills/<name>\`,
-     \`.claude/skills/<name>\`, \`skills/<name>\`), add \`<name>: <folder>\` under
-     \`skills:\`. Skip a name that starts with \`kortix-\`.
+## 2. Read the reference and find what the baseline misses
 
-## 5. The dev environment
+1. Read the reference repository the prompt names (clone it into a temporary
+   folder, or read it on GitHub): its \`README.md\`, its \`ADAPTING.md\` (what to
+   ask and check for that factory), \`kortix.yaml\` and \`.kortix/\`.
+2. Read this repository the way a new engineer would: \`AGENTS.md\`,
+   \`CLAUDE.md\`, \`CONTRIBUTING.md\`, the README, CI workflows, the scripts the
+   team runs. Note every rule that conflicts with the factory (for example
+   "push to main"): the person decides which wins.
+3. For a monorepo, decide which apps the agents work on and how each one
+   starts and tests.
 
-The agents work on the code in their own cloud sandbox, so the sandbox needs the
-repository's tools. Skip this step when no chosen template has
-\`needs_dev_sandbox: true\`.
+## 3. Agree on what to build, then the plan
 
-1. Read the repository: package managers and lockfiles, language versions
-   (\`.nvmrc\`, \`.tool-versions\`, \`engines\`, \`pyproject.toml\`, \`go.mod\`),
-   services (\`docker-compose.yml\`, databases), the dev, test and end-to-end
-   commands, and the README.
-2. Write \`.kortix/sandbox/Dockerfile\`: a Debian-family base image, the language
-   runtimes at the repository's versions, the system packages, \`git\` and \`gh\`.
-   Do not \`COPY\` from the repository and do not use a \`RUN\` heredoc:
-   \`kortix validate\` refuses both. The agents clone the code at run time.
-3. Set \`container_runtime: true\` on the template when the dev environment runs
-   Docker (a database in a container, \`docker compose\`).
-4. Add the template to the root \`kortix.yaml\`:
+**What to build is a conversation.** Show, numbered: the factories that fit
+(from the prompt and the plan), and for each one its sources (what starts work:
+issues, tests, errors, Slack, schedules) with your pre-selection from the
+detected integrations, where tickets live, and who merges. Go back and forth as
+long as the person wants.
 
-   \`\`\`yaml
-   sandbox:
-     default: dev
-     templates:
-       - slug: dev
-         dockerfile: .kortix/sandbox/Dockerfile
-   \`\`\`
-5. Write the \`dev-environment\` skill, the page every agent loads before it
-   works: \`.kortix/skills/dev-environment/SKILL.md\`, with a frontmatter
-   \`name: dev-environment\` and a one-line \`description\`, then exact commands
-   only: install, start each service and the app, the type check, the linter,
-   the tests, the end-to-end tests, the URLs and ports. Register it in
-   \`kortix.yaml\`:
+**Then the plan, once**, on one screen:
 
-   \`\`\`yaml
-   skills:
-     dev-environment: .kortix/skills/dev-environment
-   \`\`\`
-6. Build the image once to prove it: \`kortix sandboxes build --local dev\` when
-   Docker runs here. Otherwise \`kortix ship\` starts its cloud build in step 8.
+- the files you will write: \`kortix.yaml\` and \`.kortix/<factory>/\`, adapted;
+  where the config lives (this repository, or its own private repository so
+  the code gets no file);
+- the dev environment: the sandbox image and the \`dev-environment\` skill
+  (install, start, test, end-to-end commands; local services only);
+- the secrets: the env names to upload (only \`local\`), the ones a person
+  pastes through a link (the factory's own GitHub token), the webhook secrets
+  \`kortix\` generates;
+- the integrations: each connector to connect (one sign-in link each) and the
+  Slack channels the bot joins;
+- the models: the person's Claude or ChatGPT plan, shared with the workspace,
+  or an API key; the reviewer on the strongest model;
+- what you skip and why.
 
-## 6. Secrets
+One "go" approves it all.
 
-1. Find the dotenv files: \`.env\`, \`.env.local\`, \`.env.development\` and the
-   same names under each app folder. Never \`cat\` one.
-2. For each file run \`kortix env push --from <file> --names --json\`. It prints
-   names only.
-3. **Ask**: show the names, grouped by file. Recommend the ones the dev
-   environment needs. Never upload a name marked \`remote\`: its value points
-   at a shared backend (a staging or production database, a hosted API), and
-   agents that test against it change real data. The dev environment runs
-   locally and throwaway in the sandbox: point those names at local services
-   in the \`dev-environment\` skill instead (for example a local database the
-   skill starts). Flag every name that looks like production (\`PROD\`,
-   \`LIVE\`, \`sk_live\`) and recommend leaving it out. Files named for a
-   shared environment (\`.env.staging\`, \`.env.production\`) are never a
-   source.
-4. After the person approves, the workspace must exist: run step 8's
-   \`kortix ship\` first if it has not run. Then
-   \`kortix env push --from <file> --only <A,B,C>\`. Names it marks
-   \`encrypted\` (dotenvx) need a decrypted copy: ask the person.
-5. Add every approved name under \`env.required\` in \`kortix.yaml\`, so the next
-   person who sets up the workspace is asked for it.
+## 4. Write the configuration
 
-## 7. Models
+Adapt the reference into this repository (or the config repository): write
+\`kortix.yaml\` with \`env.required\` and \`env.optional\` listing every secret the
+loops use, the \`.kortix/<factory>/\` folder, the sandbox \`Dockerfile\` (a
+Debian-family base, the repository's runtimes at their pinned versions, git and
+gh, no \`COPY\` from the repository) and the \`dev-environment\` skill. Then:
 
-**Ask** which plan the agents run on. Then:
+\`\`\`bash
+kortix validate
+\`\`\`
 
-- **Claude Pro or Max:** run \`kortix providers login claude --start --share workspace --json\`.
-  Give the person the \`authorize_url\`. They approve on claude.com and paste the
-  code to you. Run \`kortix providers login claude --flow <flow_id> --code <code> --share workspace\`.
-- **ChatGPT Plus or Pro:** run \`kortix providers login openai\` in the
-  background. Give the person the link and the code it prints. It finishes
-  when they approve.
-- **An API key:** run \`kortix providers set <provider>\` and let the person type
-  the key there, or ask them to run it themselves. Providers:
-  \`kortix providers --help\`.
+Fix every error and warning in the files you wrote.
 
-Then run \`kortix models ls\` and confirm that a model of that plan is listed.
+## 5. Connect the models
 
-## 8. Validate and push
+- **Claude Pro or Max:** \`kortix providers login claude --start --share workspace --json\`;
+  give the person the \`authorize_url\`; they paste the code back;
+  \`kortix providers login claude --flow <flow_id> --code <code> --share workspace\`.
+- **ChatGPT Plus or Pro:** \`kortix providers login openai\` in the background;
+  give the person the link and the code it prints.
+- **An API key:** \`kortix providers set <provider>\`; the person types the key.
 
-1. Run \`kortix validate\`. Fix every error and warning in the files you wrote.
-2. Commit only the Kortix files: \`kortix.yaml\` and \`.kortix/\` (in its own
-   repository: everything). Message:
-   \`chore: add Kortix agents (<template names>)\`.
-3. **Ask** how the setup reaches the default branch, which Kortix reads:
-   - **Push it** (recommended for the config's own repository): \`kortix ship\`.
-   - **A pull request** (recommended when other people work on the code): push a
-     branch \`kortix/setup\`, open the pull request with \`gh pr create\`, wait until
-     the person merges it, then pull the default branch and run \`kortix ship\`.
-4. \`kortix ship -y\` stages every change before it commits: run it only on a
-   clean tree. It creates the workspace on the first run, links the GitHub
-   repository and pushes. Give the person the workspace link it prints.
-5. When \`ship\` stops with "Kortix GitHub App not installed", give the person the
-   install link it printed: one click on GitHub. Wait until they say it is done,
-   then run \`kortix ship -y\` again. Where the App cannot be installed, **Ask**
-   whether you may link with their GitHub login instead:
-   \`gh auth token | kortix ship -y --github-token -\` (the token never sits in a
-   command line).
-6. When kortix.yaml declares a sandbox template, \`ship\` starts its cloud build
-   after the push and prints one line per template. Run
-   \`kortix sandboxes build <slug> --wait\` before step 11: a session that starts
-   before the image is ready boots the platform default image. On a failed
-   build, read the error it prints, fix the Dockerfile, \`kortix ship\` again.
+## 6. Do it
 
-## 9. Template secrets
+\`\`\`bash
+kortix onboard --yes --json \\
+  [--env-file <file> --only <A,B>]... \\
+  [--channels <a,b>] [--connect <slug,...>] \\
+  [--repo <owner/repo>] [--github-token -]
+\`\`\`
 
-For each secret in each template's \`next.secrets\`:
+It runs in phases, each skipping what is done: \`validate\`, \`ship\` (link and
+push; it refuses a dirty tree), \`secrets\` (approved names, generated webhook
+secrets, one intake link for the rest), \`webhooks\` (the GitHub repository
+webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
+(connect link, the bot joins the channels), \`connectors\` (a sign-in link each),
+\`sandbox\` (build every image and wait), \`doctor\`.
 
-- \`generate: true\`: make a random value and store it without printing it:
-  \`openssl rand -hex 32 | kortix secrets set <NAME>=- --scope connector\` when
-  \`delivery\` is \`connector\`, without \`--scope\` when it is \`sandbox\`.
-  Keep the value for step 10 in a shell variable or a file under \`/tmp\` with
-  mode 600, and delete the file after step 10.
-- A GitHub token (\`GH_TOKEN\`, or \`FACTORY_GITHUB_TOKEN\` for the Software
-  Factory): the agents' own GitHub identity. A template's onboarding that names
-  its own token steps replaces this bullet. **Ask** whether the agents act as a
-  machine user (recommended: a GitHub account such as \`<owner>-kortix-bot\`
-  with Write access to the repository) or as the person. Open this page for the
-  account that owns the token, signed in as it (it pre-fills a fine-grained
-  token):
-  \`https://github.com/settings/personal-access-tokens/new?name=Kortix%20agents&description=Kortix%20cloud%20agents&target_name=<owner>&expires_in=366&contents=write&pull_requests=write&issues=write&metadata=read&workflows=write\`,
-  with \`<owner>\` the repository's owner. They select the repository and create it. A
-  fine-grained token reaches an organization's repository only when its
-  account is a member, and never another user's repository: a machine user on
-  a personal-account repository needs a classic token
-  (\`https://github.com/settings/tokens/new?description=Kortix%20agents&scopes=repo,workflow\`).
-  Then run \`kortix secrets request <NAME> --scope runtime\` and give them the
-  link: they paste the token there, so it never passes through you. A token of
-  the person makes every agent action theirs and the agents' reviews plain
-  comments: GitHub refuses an approval of a pull request the same account
-  opened.
-- Any other secret: \`kortix secrets request <NAME> --scope runtime\` and give the
-  person the link.
+Exit 0 is done and green. Exit 4 means \`user_actions\` are left: give the person
+each one, exactly once, with its link (install the GitHub App, Allow in Slack,
+sign in to a connector, paste a token, \`/invite\` the bot to a private channel).
+When they say it is done, run \`kortix onboard --yes --json\` again. Exit 1: read
+the failed phase's \`detail\`, fix it, run again.
 
-## 10. GitHub webhooks
+## 7. Prove it, and loop until it works
 
-For each entry in each template's \`next.github_webhooks\`:
+\`\`\`bash
+kortix doctor --loops --json        # every check of what kortix.yaml declares
+kortix doctor --loops --fix --json  # re-runs the phase a red line names
+\`\`\`
 
-1. Read the trigger's URL: \`kortix triggers info <trigger> --json\` (\`webhook_url\`).
-2. Create the webhook with the person's own \`gh\` (run \`gh auth status\` first):
+Loop until \`ready: true\`. Then one real run, the cheapest one the factory has:
+for the Software Factory, file one tiny real ticket the analysis found, label
+it, \`kortix triggers fire factory-intake --wait 300s\`, and wait for the pull
+request. Show it to the person: the summary, the commands with their real
+output, the demo when the change is visible. Nobody merges it but them.
 
-   \`\`\`sh
-   gh api repos/<owner>/<repo>/hooks --method POST \\
-     -f name=web -F active=true \\
-     -f 'config[url]=<webhook_url>' -f 'config[content_type]=json' \\
-     -f "config[secret]=$SECRET" -f 'events[]=<event>'
-   \`\`\`
+## 8. Hand over
 
-   \`$SECRET\` is the value you generated for the trigger's webhook secret.
-3. GitHub sends a \`ping\` at once. \`kortix triggers runs <trigger>\` shows it as
-   skipped by the filter: that proves the signature works.
-4. Create the template's label when it names one: \`gh label create <label>\`.
-
-## 11. Prove one run
-
-1. Pick the cheapest trigger of the chosen templates, such as a nightly
-   schedule. Run \`kortix triggers fire <slug> --wait 300s\`.
-2. On failure, read the output and \`kortix triggers runs <slug>\`, fix the
-   cause and fire again.
-3. When it passes, give the person the session link and one line on what the
-   agent did.
-
-## 12. Doctor: every line green
-
-Run \`kortix templates doctor <id> --json\` for each template you added (from the
-config checkout; pass \`--repo <owner>/<code-repo>\` when the config lives in
-its own repository). It checks the template, the workspace, the secrets, the
-triggers, the dev image, the model and the GitHub webhooks. Fix every \`fail\`
-line with its \`fix\` and run it again. Setup is not done while one line is red.
-
-## 13. Done
-
-Tell the person, in a short list:
-
-- the templates, agents and triggers now running, with the schedule of each;
-- how to start work by hand: label a GitHub issue with \`kortix\`, or
-  \`kortix triggers fire <slug>\`;
-- where to watch: the workspace link;
-- what is still open, such as a secret request they have not filled in.
+A short report: the loops now running and what starts each, where tickets
+land, who merges, how to start work by hand (label an issue, \`kortix triggers
+fire <slug>\`), where to watch (the workspace link), and anything still open.
 `;

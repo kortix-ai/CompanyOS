@@ -145,34 +145,14 @@ job the same way.
    agents you no longer need (`task_stop`), mark the status file done, and
    give the person a short final report with links.
 
-### Worked example: from 12 quotes to one order
-
-The person asks: "Find sticker printers, get quotes for 500 stickers, and
-order from the best one." In the first turn:
-
-1. Plan in `out/status.md`: find printers (parallel), request quotes (wait
-   on replies), compare (after replies), order (wait on delivery).
-2. A `workflow` with 4 agents searches 4 districts and returns 12 printers
-   as data. Its result arrives as a message: no loop.
-3. A named agent `printer-outreach` sends the 12 emails and keeps the record
-   `out/printers.md` in its own session. It sets its own email trigger and
-   fallback loop, as in the 12-printer example above, and reports each check
-   back to this session.
-4. This session sets one loop for the whole job: `kortix loop "Long job: the
-   sticker order. Read out/status.md first. Ask printer-outreach for the
-   quote count; at 12 quotes or on 2026-11-07, compare them and ask the
-   person to pick one. Stop on 2026-11-14." --cron "0 0 10 * * 1-5"
-   --timezone Europe/Berlin`.
-5. The reply ends: "Searching for printers and requesting 12 quotes. I'll
-   check every working morning until 14 Nov and bring you the comparison."
-
-When the person picks a printer, `printer-outreach` places the order; this
-session replaces its loop with a daily delivery check until the tracking
-says delivered. The person says the team orders stickers every quarter:
-propose a quarterly trigger for a fresh quote round, and create it only
-after they agree. At delivery: remove both loops, `task_stop`
-`printer-outreach`, mark `out/status.md` done, and report the order, the
-printer and the delivery date in three lines.
+Worked through the 12-printer quote request: the first turn plans in
+`out/status.md`, a `workflow` returns the printers as data (no loop), a
+named `printer-outreach` agent sends the emails with its own trigger and
+fallback loop and reports each check back, and this session keeps one loop
+for the whole job (`"Long job: … Read out/status.md first … Stop on <end
+date>"`). When the person picks a printer the order is placed, the loop
+becomes a daily delivery check, and a recurring need ends as a proposed
+quarterly trigger — created only after they agree. Close out as in step 6.
 
 ## Where a trigger lives
 

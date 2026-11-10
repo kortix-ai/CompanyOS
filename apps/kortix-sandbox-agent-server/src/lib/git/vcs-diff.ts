@@ -133,16 +133,20 @@ export async function vcsDiff(cwd: string, mode: string, defaultBranch: string):
 
   const rows = tracked.map((t, i) => finish(t.file, t.status, chunkFor(i)))
   const newFiles = untracked.code === 0 ? untracked.stdout.split('\0').filter(Boolean) : []
-  // An embedded git repo lists as `dir/` — not stageable, no file patch. The old
-  // per-file diff degraded just that row (its own --no-index errored); filtering
-  // it out of the batch keeps the other files' patches with it.
-  const staged = newFiles.filter((f) => !f.endsWith('/')).slice(0, MAX_UNTRACKED_PATCHES)
+  // The cap counts the original entries (the old per-file loop's cap), then an
+  // embedded repo (`dir/` — not stageable, no file patch) drops out of the
+  // batch. The old per-file diff degraded just that row; filtering keeps the
+  // other files' patches with it.
+  const staged = newFiles.slice(0, MAX_UNTRACKED_PATCHES).filter((f) => !f.endsWith('/'))
   const untrackedChunks = (await untrackedPatchText(cwd, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
-  // `git diff --cached` writes the patch in the same sorted order as `ls-files --others`:
-  // one `diff --git` chunk per staged file, matched by position like the tracked chunks above.
-  const untrackedChunkFor = (i: number) => (untrackedChunks.length === staged.length ? untrackedChunks[i] : undefined)
+  // `git diff --cached` writes the patch in the same sorted order as the staged
+  // list: one `diff --git` chunk per staged file, keyed by path so a filtered
+  // directory entry cannot shift a patch onto the wrong row.
+  const chunkByFile = untrackedChunks.length === staged.length
+    ? new Map(staged.map((file, i) => [file, untrackedChunks[i]!]))
+    : undefined
   for (const [i, file] of newFiles.entries()) {
-    rows.push(finish(file, 'added', i < MAX_UNTRACKED_PATCHES ? untrackedChunkFor(i) : undefined))
+    rows.push(finish(file, 'added', i < MAX_UNTRACKED_PATCHES ? chunkByFile?.get(file) : undefined))
   }
   return rows.sort((a, b) => a.file.localeCompare(b.file))
 }

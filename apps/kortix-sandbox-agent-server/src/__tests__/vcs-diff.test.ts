@@ -142,18 +142,20 @@ describe('vcsDiff', () => {
     const root = await makeRepo()
     try {
       // `ls-files --others` lists an embedded repo as `dir/` — a row the old
-      // per-file diff degraded on its own. The batch must keep that isolation.
-      await realRunGit(['init', '-q', 'nested'], { cwd: root })
-      await writeFile(join(root, 'nested/f.txt'), 'x\n')
+      // per-file diff degraded on its own, wherever it sorts. The batch must
+      // keep that isolation without shifting a patch onto the wrong row.
+      await realRunGit(['init', '-q', 'aaa-nested'], { cwd: root })
+      await writeFile(join(root, 'aaa-nested/f.txt'), 'x\n')
       await writeFile(join(root, 'fresh.txt'), 'fresh\n')
       const files = await vcsDiff(root, 'branch', 'main')
       const fresh = files.find((f) => f.file === 'fresh.txt')
       expect(fresh?.status).toBe('added')
       expect(fresh?.additions).toBe(1)
       expect(fresh?.patch).toContain('+fresh')
-      const nested = files.find((f) => f.file === 'nested/')
+      const nested = files.find((f) => f.file === 'aaa-nested/')
       expect(nested?.status).toBe('added')
       expect(nested?.patch).toBeUndefined()
+      expect(nested?.additions).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

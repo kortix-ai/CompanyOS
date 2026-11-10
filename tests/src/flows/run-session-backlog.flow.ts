@@ -423,11 +423,17 @@ harnessFlow(
     const done = `RUN7_DONE_${Date.now()}`;
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
+      // No repository checkout at boot (#12136): /workspace starts empty and
+      // commit-push refuses an unmaterialized repo with 409 (release suite
+      // run 42849516582, 2026-11-10). The agent materializes it first — the
+      // CLI clone checks out the session branch (push.default=current); the
+      // plain-git fallback works because the daemon's credential helper is
+      // configured for $KORTIX_REPO_URL.
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        `First materialize the workspace repository: run \`kortix workspaces clone ${projectId} /workspace\` (if that fails, run \`git clone "$KORTIX_REPO_URL" /tmp/repo && cp -a /tmp/repo/. /workspace/ && rm -rf /tmp/repo\` instead). Then create the file ${path} at the repository root containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).
@@ -852,11 +858,14 @@ flow(
       // change. An agent that commits and pushes on its own leaves that call
       // nothing to do (`pushed: false`, `nothing_to_do: true`; v0.14.15
       // release suite, 2026-11-02). RUN-7 uses the same instruction.
+      // No repository checkout at boot (#12136): the agent materializes the
+      // repository at /workspace first, or commit-push 409s (same release
+      // suite failure as RUN-7, run 42849516582).
       await sendPrompt(
         ctx,
         project.id,
         session.id,
-        `Create the file ${goldenPath} containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Do not commit. Then reply with exactly: ${goldenDone}`,
+        `First materialize the workspace repository: run \`kortix workspaces clone ${project.id} /workspace\` (if that fails, run \`git clone "$KORTIX_REPO_URL" /tmp/repo && cp -a /tmp/repo/. /workspace/ && rm -rf /tmp/repo\` instead). Then create the file ${goldenPath} at the repository root containing exactly this single line: ${goldenMarker}. Use the file-writing tool; do not merely describe the change. Do not commit. Then reply with exactly: ${goldenDone}`,
       );
       await waitForAssistantText(ctx, project.id, session.id, goldenDone);
       const file = await ctx.client

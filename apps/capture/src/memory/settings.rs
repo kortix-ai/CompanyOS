@@ -38,6 +38,7 @@ pub struct Settings {
     /// Frames this long after the last keyboard/mouse input are marked inactive.
     pub inactivity_seconds: u64,
     /// "accurate" or "fast".
+    /// `accurate`, `fast`, or `off` (no screen text read while recording).
     pub ocr_level: String,
     /// BCP-47 languages for OCR; empty = automatic.
     pub ocr_languages: Vec<String>,
@@ -502,6 +503,16 @@ pub fn resolution_preset(name: &str) -> Option<(u32, u32)> {
 }
 
 impl Settings {
+    /// The level to ask the engine for when text must be read (local PII masking,
+    /// an agent asking for one frame's text): `fast` while recording is set to `off`.
+    pub fn ocr_engine_level(&self) -> &str {
+        if self.ocr_level == "off" {
+            "fast"
+        } else {
+            &self.ocr_level
+        }
+    }
+
     pub fn load(paths: &MemoryPaths) -> Self {
         std::fs::read(paths.settings())
             .ok()
@@ -709,7 +720,7 @@ impl Settings {
         if self.inactivity_seconds == 0 {
             bail!("inactivity_seconds must be at least 1");
         }
-        one_of("ocr_level", &self.ocr_level, &["accurate", "fast"])?;
+        one_of("ocr_level", &self.ocr_level, &["accurate", "fast", "off"])?;
         for g in &self.enabled_exclusion_groups {
             let ids: Vec<&str> = exclusion_groups().iter().map(|x| x.id).collect();
             one_of("enabled_exclusion_groups", g, &ids)?;

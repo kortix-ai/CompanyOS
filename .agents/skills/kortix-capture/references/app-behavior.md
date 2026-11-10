@@ -162,6 +162,7 @@ agents ──> kortix-capture list|usage|query|now|link|grab-screen (read-only S
 | Path | Content |
 |---|---|
 | `memory.db` | SQLite: `frame`, `segment`, `application`, `domain`, `video`, `ocr`, `window_bound`, `ocr_fts` (FTS5, porter), `ax_blob`/`ax_snapshot`, `timezone`, `app_version`, `metadata`, `once_tasks` (one-shot data migrations already applied), `audio`, `audio_transcript`, `audio_fts` (FTS5, porter) |
+| `memory.db-wal` | SQLite write-ahead log. `journal_size_limit` is 64 MB. The finalize loop runs `PRAGMA optimize` and `wal_checkpoint(TRUNCATE)` every hour (`store::maintain`) |
 | `frames/` | Staged JPEG stills awaiting OCR and encoding |
 | `videos/` | 1 fps HEVC MP4 chunks, frame *i* at *t* = *i* s, ≤ 30 frames each |
 | `icons/` | App icons and website favicons |
@@ -187,7 +188,10 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    changes (see "Change-driven capture"). The engine returns the frontmost
    app, focused window, browser URL (AX `AXWebArea`/`AXURL`), the window
    stack, an optional AX tree of the focused window, and a JPEG still of the
-   display that holds the focused window. Excluded apps' windows are removed
+   display that holds the focused window. The AX tree (`ax_enabled`) is read on
+   the first capture, on a capture a focus change pulled forward, and at least
+   every 30 s; other frames carry none. Each read stops after 250 ms (partial
+   tree), because the focused app answers it on its own UI thread. Excluded apps' windows are removed
    from the image (ScreenCaptureKit filter).
 2. **Skip** instead of capture when: screen locked, no input for
    `inactivity_seconds`, excluded app or domain in front, private browsing
@@ -202,7 +206,17 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    frames or when more than 45% changed. Text inside the focused window goes
    to `foreground`, the rest to `background`; box offsets index into
    `foreground || background`.
-4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted.
+   OCR stays out of the person's way: a still within 2 dhash bits of its
+   display's last read copies that text for up to 20 s; while the person works
+   (input in the last 5 s) a display is read at most every 30 s; after each
+   read OCR rests 4x as long as the read took (at most 20% of one core).
+   `ocr_level` `off` (or the policy's `recording.text_recognition`) reads no
+   screen text at all: frames finish with `ocr_status` 4 and search finds apps,
+   window titles, URLs and accessibility text only.
+4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted. While
+   the person works, encoding waits for a pause, at most 5 min. A capture that
+   takes longer than half its interval stretches the interval (at most half the
+   recorder's time capturing).
 
 5. **Retain**: every 10 min, `storage_cap` mode deletes (or downscales) the
    oldest chunks until the library is 5% under `limit_gb`; `retention` mode
@@ -443,6 +457,13 @@ depth), `audio_pending`, `actions_pending` (and `_uploaded`, `_remote_only`),
 (remote deletes queued), `multipart_in_progress`, `throughput_bps`,
 `bytes_uploaded`, `last_error`, `last_error_class`, `next_retry_ms`,
 `encrypted`, `key_id` and `clock_offset_ms`.
+
+The sync thread ticks every 5 s. It reads the queue counters again only when
+a new row, a new upload, a tombstone or its own write changes the queue, and
+at least every 60 s (`STATE_REFRESH_MS`). It writes `sync.json` only when the
+content changes (`updated_at_ms` does not count). With a queue,
+`oldest_unsent_ms` is at most 60 s old. A change from another process that
+adds no row and no upload (retention, `forget`) shows within 60 s.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -1219,10 +1240,11 @@ Fail-safe rules:
   not in front.
 | | Windows | Linux (X11) |
 |---|---|---|
-| Screen | GDI `BitBlt` of the monitor with the focused window (per-monitor DPI aware) | X11 `GetImage` of the RandR monitor with the focused window |
+| Screen | DXGI Desktop Duplication of each monitor, GDI `BitBlt` as the fallback (per-monitor DPI aware). A monitor with no new desktop image since the last read and the same window layout is not read again (`reused: true`) | X11 `GetImage` of the RandR monitor with the focused window |
 | Excluded apps | Frame skipped when one is focused. Other excluded windows are painted black from the z-ordered window list (rectangular approximation, no rounded corners or transparency) | Same |
-| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others | None (needs AT-SPI) |
-| AX tree | UI Automation control view | None |
+| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; read fresh on every probe from the address-bar element found once per window (a full search only when that element is gone) | None (needs AT-SPI) |
+| AX tree | UI Automation control view, one cached call per node, 250 ms budget | None |
+| Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | nice 10 for every Capture process (macOS too); input recording is passive (XRecord, a listen-only event tap) |
 | Private windows | Title markers (InPrivate, Incognito, Private Browsing) | Same |
 | Idle / lock | `GetLastInputInfo`; lock = input desktop not openable | XScreenSaver idle; lock = screensaver active |
 | OCR | `Windows.Media.Ocr`. Needs an OCR language pack. No confidence (reports 1.0). Words are grouped into line boxes split at column gaps | `tesseract` CLI (`apt install tesseract-ocr`) |
@@ -1257,8 +1279,14 @@ Kortix Capture merges two recorders that share no capture code:
 
 Screen APIs of the action recorder (`screenshots` 0.8.10): macOS
 `CGWindowListCreateImage` (legacy; macOS 15+ re-asks for screen recording
-consent), Windows GDI `StretchBlt` (CPU scaling), Linux X11 `GetImage` and the
-Wayland portal.
+consent), Linux X11 `GetImage` and the Wayland portal. On every OS an action
+screenshot reads only the displays it keeps (the pointer's, and on macOS the
+focused window's); the other displays keep their layout and no image. No
+screenshot is taken while the window in front would be dropped (an excluded
+app, or one that is not included). Windows reads the display through the
+engine's DXGI Desktop Duplication (`capture_engine::grab_monitor`), so GPU-drawn
+content (a 3D canvas, video) is in the frame, and a display with no new desktop
+image reuses the last read.
 
 ### Stages
 

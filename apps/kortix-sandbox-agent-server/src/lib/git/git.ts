@@ -432,6 +432,28 @@ type CommitPushResult = {
 }
 
 /**
+ * The workspace repository's working tree for the host-driven git flows
+ * (`commitAndPushWorkingTree`, `refreshRepo`).
+ *
+ * A session no longer checks the repository out at boot (2026-11-08):
+ * `/workspace` starts empty, and an agent that needs the code runs
+ * `kortix workspaces clone`, which lands the checkout in
+ * `<projectTarget>/<repo-name>` on the session branch. The boot root is still
+ * the working tree when it holds the checkout (sessions booted before that
+ * change, template images); otherwise the clone whose folder name matches the
+ * workspace repository's basename (`KORTIX_REPO_URL`, the same default the
+ * CLI's clone picks) is used. Null when neither is a checkout: the callers
+ * report the workspace repository as not materialized.
+ */
+export async function resolveWorkspaceRepoTarget(cfg: Config): Promise<string | null> {
+  if (await readRepoInfo(cfg.projectTarget)) return cfg.projectTarget
+  const repoName = cfg.repoUrl?.split('/').pop()?.replace(/\.git$/i, '')
+  if (!repoName) return null
+  const clone = join(cfg.projectTarget, repoName)
+  return (await readRepoInfo(clone)) ? clone : null
+}
+
+/**
  * Commit the workspace's pending changes and push the session branch to
  * origin — the host-driven equivalent of what an agent does before opening a
  * change request, so the dashboard could open one without routing through the
@@ -452,7 +474,8 @@ export async function commitAndPushWorkingTree(
   cfg: Config,
   opts: { message?: string } = {},
 ): Promise<CommitPushResult> {
-  const target = cfg.projectTarget
+  const target = await resolveWorkspaceRepoTarget(cfg)
+  if (!target) throw new Error('project repo is not materialized')
   const before = await readRepoInfo(target)
   if (!before) throw new Error('project repo is not materialized')
 
@@ -506,7 +529,10 @@ export async function commitAndPushWorkingTree(
 }
 
 export async function refreshRepo(cfg: Config): Promise<{ before: RepoInfo; after: RepoInfo }> {
-  const target = cfg.projectTarget
+  const target = await resolveWorkspaceRepoTarget(cfg)
+  if (!target) {
+    throw new Error('project repo is not materialized')
+  }
   const before = await readRepoInfo(target)
   if (!before) {
     throw new Error('project repo is not materialized')

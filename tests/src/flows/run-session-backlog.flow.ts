@@ -409,6 +409,7 @@ harnessFlow(
       'POST /v1/workspaces/:projectId/sessions',
       'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
       'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       'POST /v1/workspaces/:projectId/sessions/:sessionId/commit-push',
       'GET /v1/workspaces/:projectId/files/content',
@@ -421,20 +422,36 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
+    // A session no longer checks the repository out at boot (#12136): the agent
+    // clones it with `kortix workspaces clone`, which lands the checkout in the
+    // folder named after the clone URL's basename, on the session branch — the
+    // same rule the CLI's clone and the daemon's commit-push both use. The
+    // clone (not the empty boot root) is the working tree commit-push commits.
+    const detail = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId', {
+      params: { projectId },
+    });
+    const urls = detail.json<{ repo_url?: string; git_origin_url?: string }>();
+    // The CLI's rule (apps/cli/src/project-git.ts): the Kortix git proxy is the
+    // universal client-facing origin, so it wins whenever the project advertises one.
+    const origin = urls.git_origin_url ?? '';
+    const cloneUrl = /\/v1\/git\//.test(origin) ? origin : (urls.repo_url ?? origin);
+    const cloneFolder = cloneUrl.split('/').pop()?.replace(/\.git$/i, '') ?? '';
+    if (!cloneFolder) throw new Error(`no clone url on workspace ${projectId}: ${JSON.stringify(urls)}`);
+    const clonePath = `${cloneFolder}/${path}`;
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        `Run \`kortix workspaces clone\` to clone the workspace repository, then inside the cloned repository create the file ${clonePath} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).
       await waitForTurn(ctx, projectId, sessionId, endedAfter(before), 'the write turn to end');
       const file = await ctx.client
         .as(ctx.P.OWNER)
-        .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(path)}`));
+        .get(runtimePath(session.sandboxId, `/file/content?path=${encodeURIComponent(clonePath)}`));
       file.status(200).body().matches('$.content', new RegExp(`^${content}\\n?$`));
     });
     await ctx.step('POST .../commit-push → 200 pushed', async () => {

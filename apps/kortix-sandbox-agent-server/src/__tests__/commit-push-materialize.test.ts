@@ -412,6 +412,22 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     expect(tree.split('\n').sort()).toEqual(['README.md', 'agent-file.md', 'apps/x.ts'])
   })
 
+  it('a connected repository with zero commits still refuses with the standing error', async () => {
+    const { root, target } = makeRepo()
+    // The remote exists but has no commit: nothing to adopt. The standing
+    // refusal (the route maps it to 409), not a 500 the route cannot classify.
+    const emptyRemote = join(root, 'empty.git')
+    git(['init', '--bare', '-b', 'main', emptyRemote])
+
+    await expect(
+      commitAndPushWorkingTree(
+        testConfig({ projectTarget: target, repoUrl: emptyRemote, branchName: 'session-abc' }),
+        { message: 'nothing to adopt' },
+      ),
+    ).rejects.toThrow('project repo is not materialized')
+    expect(existsSync(join(target, '.git'))).toBe(false)
+  })
+
   it('no connected repository still refuses with the standing error', async () => {
     const { target } = makeRepo()
     expect(

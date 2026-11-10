@@ -502,7 +502,15 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
         credential, repoUrl, ['-C', target, 'remote', 'set-head', 'origin', '--auto'],
         { timeoutMs: 120_000 },
       )
-      if (setHead.code !== 0) throw new Error(`git remote set-head failed: ${setHead.stderr || setHead.stdout}`)
+      if (setHead.code !== 0) {
+        // A remote with zero commits has no HEAD to adopt: the standing
+        // refusal (the route maps it to 409), not a 500 the route cannot
+        // classify.
+        if (/Cannot determine remote HEAD/i.test(setHead.stderr)) {
+          throw new Error('project repo is not materialized')
+        }
+        throw new Error(`git remote set-head failed: ${setHead.stderr || setHead.stdout}`)
+      }
       const r = await execGit(['-C', target, 'rev-parse', '--verify', '--quiet', 'origin/HEAD'])
       if (r.code !== 0) throw new Error('git fetch produced no default branch')
       base = r.stdout.trim()
@@ -515,8 +523,8 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
       if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
     }
 
-    const deleted = await execGit(['-C', target, 'ls-files', '--stage', '-z'])
-    if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
+    const stagedIndex = await execGit(['-C', target, 'ls-files', '--stage', '-z'])
+    if (stagedIndex.code !== 0) throw new Error(`git ls-files failed: ${stagedIndex.stderr || stagedIndex.stdout}`)
     // Shape collisions first: the repository's tree and the agent's files can
     // collide at a path — the repo has `a/b` where the workspace has a file
     // `a`, or a blob `a` where the workspace has a directory `a/`. The union
@@ -525,7 +533,7 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
     // write — the caller retries into the same honest error instead of
     // silently dropping either side.
     const missing: string[] = []
-    for (const entry of deleted.stdout.split('\0').filter(Boolean)) {
+    for (const entry of stagedIndex.stdout.split('\0').filter(Boolean)) {
       const tab = entry.indexOf('\t')
       const path = entry.slice(tab + 1)
       if (entry.slice(0, 6) === '160000') continue // gitlink: a submodule checkout, not ours
@@ -665,10 +673,6 @@ export async function commitAndPushWorkingTree(
     return { committed: false, pushed: false, nothingToDo: true, branch, headSha: before.commit }
   }
 
-  // 2. Push HEAD to the session branch on origin.
-  const cloneCredential = await resolveCloneCredential(cfg)
-  const authRepoUrl = cfg.repoUrl ?? before.remoteUrl ?? undefined
-
   // 2. Integrate the session branch's remote tip before pushing. Another
   // writer can land a commit on the branch while this session works — the
   // API's config-release commit lands on the session branch at create, after
@@ -677,9 +681,11 @@ export async function commitAndPushWorkingTree(
   // counterpart"). Rebase the local commit on top; a missing remote branch
   // is the first push. A rebase conflict is a real collision the caller
   // sees — nothing is dropped.
+  const cloneCredential = await resolveCloneCredential(cfg)
+  const authRepoUrl = cfg.repoUrl ?? before.remoteUrl ?? undefined
   const fetched = await gitWithAuth(cloneCredential, authRepoUrl, [
     '-C', target, 'fetch', '--quiet', 'origin', branch,
-  ])
+  ], { timeoutMs: 120_000 })
   const missingRemoteBranch =
     fetched.code !== 0 && /couldn't find remote ref|referenced refspec|does not (appear to|match)/i.test(fetched.stderr)
   if (fetched.code !== 0 && !missingRemoteBranch) {

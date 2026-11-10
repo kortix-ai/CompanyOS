@@ -11,6 +11,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 
 import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
 import type { LoopView } from './loops-content';
+import { HeroScenes } from './hero-scenes';
 import { YamlLine } from '@/features/marketing/code-panel';
 
 const COPIED_MS = 2000;
@@ -113,62 +114,6 @@ const STATE_DOT: Record<string, string> = {
   ready: 'bg-muted-foreground',
 };
 
-/** The factory as it ran on the demo repository: tickets, a worker, the pull request. */
-function ProductWindow() {
-  return (
-    <Window title={<span className="font-mono">kortix · {DEMO.repo} · Software Factory</span>}>
-      <div className="grid min-h-[420px] lg:grid-cols-[260px_1fr_340px]">
-        <aside className="border-border hidden flex-col gap-1 border-r p-3 lg:flex">
-          <span className="text-muted-foreground px-2 pt-1 pb-2 text-xs">Tickets · GitHub Issues</span>
-          {DEMO.tickets.map((ticket, index) => (
-            <div key={ticket.number} className={cn('flex gap-2.5 rounded-md px-2 py-2', index === 0 && 'bg-accent')}>
-              <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', STATE_DOT[ticket.state])} />
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-foreground truncate text-sm">{ticket.title}</span>
-                <span className="text-muted-foreground text-xs">
-                  #{ticket.number} · {ticket.state}
-                </span>
-              </span>
-            </div>
-          ))}
-        </aside>
-        <div className="border-border flex flex-col border-r">
-          <div className="border-border text-muted-foreground border-b px-5 py-3 text-xs">worker · #{DEMO.tickets[0]!.number}</div>
-          <div className="flex flex-1 flex-col gap-4 p-5 font-mono text-xs leading-6">
-            {DEMO.worker.map((line) => (
-              <div key={line.text} className={line.kind === 'cmd' ? 'text-foreground' : line.kind === 'ok' ? ACCENT : 'text-muted-foreground'}>
-                {line.kind === 'cmd' ? <span className="text-muted-foreground select-none">$ </span> : null}
-                {line.text}
-              </div>
-            ))}
-          </div>
-          <div className="border-border m-3 rounded-md border px-4 py-3 text-sm">
-            <span className="text-muted-foreground">Add a Kortix software factory to this repository with me.</span>
-          </div>
-        </div>
-        <div className="hidden flex-col lg:flex">
-          <div className="border-border text-muted-foreground border-b px-5 py-3 text-xs">pull request #{DEMO.pr.number}</div>
-          <div className="flex flex-col gap-4 p-5">
-            <span className="text-foreground text-sm font-medium">{DEMO.pr.title}</span>
-            <span className="text-muted-foreground text-xs">
-              +{DEMO.pr.additions} −{DEMO.pr.deletions} · {DEMO.pr.branch}
-            </span>
-            <div className="border-border flex flex-col gap-2 rounded-md border p-4">
-              <span className="text-foreground text-xs font-medium">What I ran</span>
-              {DEMO.pr.checks.map((check) => (
-                <span key={check} className="text-muted-foreground font-mono text-xs">
-                  {check}
-                </span>
-              ))}
-            </div>
-            <span className="text-muted-foreground text-xs">Waiting for a person to merge.</span>
-          </div>
-        </div>
-      </div>
-    </Window>
-  );
-}
-
 function Bento({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn('border-border grid border-t md:grid-cols-2', className)}>{children}</div>;
 }
@@ -206,10 +151,9 @@ function LoopShowcase({ loop, index }: { loop: LoopView; index: number }) {
           {String(index + 1).padStart(2, '0')} · {loop.label}
         </Eyebrow>
         <h3 className="text-foreground text-3xl font-medium tracking-tight text-balance lg:text-4xl">{loop.line}</h3>
-        <div className="flex flex-col gap-3">
-          <span className="text-muted-foreground text-xs">Watches</span>
+        <div className="flex flex-wrap items-center gap-2">
           <Chips items={loop.observes} />
-          <span className="text-muted-foreground pt-1 text-xs">Ships</span>
+          <span aria-hidden className="text-muted-foreground">→</span>
           <Chips items={loop.ships} accent />
         </div>
         <div className="pt-2">
@@ -286,7 +230,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             </div>
           </div>
           <div className="relative px-4 pb-24 md:px-8 lg:pb-32">
-            <ProductWindow />
+            <HeroScenes />
           </div>
         </section>
 

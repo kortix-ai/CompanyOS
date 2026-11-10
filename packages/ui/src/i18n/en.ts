@@ -6197,7 +6197,11 @@ const catalog = {
       "textfd8fee75dbb5": "IdP groups map to roles in this workspace",
       "textadca5dfd1e42": "Bundle members into groups and give the whole group a role: one grant instead of dozens, revoked just as easily.",
       "text16ba47efb9f2": "A complete, filterable trail of every admin and agent action in this workspace: who did what, where, and when.",
-      "textfd8b8dae4421": "Danger zone"
+      "textfd8b8dae4421": "Danger zone",
+      "textab3aff8f7642": "Top-up Bonus",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Storage",
+      "text765a8cb04cf5": "LLM Hold Refund"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",

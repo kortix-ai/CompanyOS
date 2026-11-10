@@ -1399,7 +1399,7 @@
       "heatMore": "多",
       "busiestDay": "{name}：{day} 支出 {amount}，为支出最高的一天",
       "noSpendInRange": "{name}：此期间无支出",
-      "idleWorkspaces": "{count} 个工作区在此期间无支出",
+      "idleWorkspaces": "{count, plural, one {此期间有 # 个工作区无支出} other {此期间有 # 个工作区无支出}}",
       "showIdle": "显示",
       "hideIdle": "隐藏"
     },
@@ -13925,7 +13925,7 @@
       "text67f10b9f6d71": "已完成的 LLM 请求和计费计算时段。",
       "text67f2187d81d7": "所有分区均已隐藏。请从视图菜单中的“显示”重新启用一个分区。",
       "text67f332ec4359": "审计日志 日志 事件 历史 轨迹 合规",
-      "text67fc62497e85": "沙盒",
+      "text67fc62497e85": "沙箱",
       "text680d59689583": "证书 SHA-256 指纹",
       "text681d1d8cf3d9": "Kortix 渠道",
       "text68269b6f8874": "秘密命令",
@@ -15179,7 +15179,7 @@
       "text8d49ce8a5936": "每行一个。登录时逐字节匹配；除 localhost 外一律使用 https。",
       "text8d525e5f158b": "已复制",
       "text8d56fc37564c": "使用你自己的 Azure 机器人，而不是 Kortix 托管机器人",
-      "text8d59829c1e15": "使用情况",
+      "text8d59829c1e15": "用量",
       "text8d5ac88c84ff": "让其他应用通过发送请求来启动代理。",
       "text8d5b051dd6bb": "通过各应用自己的 OAuth 页面，轻松连接 3,000 多个应用。如果你的销售技术栈包含目录中没有的服务——内部报价服务、区域 CRM——仍可通过 OpenAPI、GraphQL、原始 HTTP 或远程 MCP 服务器访问。",
       "text8d5ee8fe6a2e": "模型已切换为 {value0}",
@@ -21320,7 +21320,11 @@
       "text4b892277843c": "创建工作区",
       "text41018e566b60": "新建 工作区 创建 添加 团队",
       "texta99ac8f9050b": "工作区 · 访问权限",
-      "textfd8b8dae4421": "危险区域"
+      "textfd8b8dae4421": "危险区域",
+      "textab3aff8f7642": "充值奖励",
+      "texta68ee4167406": "代理",
+      "texta69c4dece144": "存储",
+      "text765a8cb04cf5": "LLM 预扣退款"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -23018,8 +23022,8 @@
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
     "treeCollapse": "收起 {name}",
-    "emptyWorkspaces": "{count} 个工作区没有文件",
-    "storageMoreWorkspaces": "另外 {count} 个工作区",
+    "emptyWorkspaces": "{count, plural, one {# 个工作区没有文件} other {# 个工作区没有文件}}",
+    "storageMoreWorkspaces": "{count, plural, one {另外 # 个工作区} other {另外 # 个工作区}}",
     "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
     "storageShowFewer": "收起"
   },

@@ -128,4 +128,8 @@ export const APP_REGISTRY_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   "IdP groups map to roles in this workspace": 'textfd8fee75dbb5',
   "Bundle members into groups and give the whole group a role: one grant instead of dozens, revoked just as easily.": 'textadca5dfd1e42',
   "A complete, filterable trail of every admin and agent action in this workspace: who did what, where, and when.": 'text16ba47efb9f2',
+  'Top-up Bonus': 'textab3aff8f7642',
+  'Proxy': 'texta68ee4167406',
+  'Storage': 'texta69c4dece144',
+  'LLM Hold Refund': 'text765a8cb04cf5',
 };

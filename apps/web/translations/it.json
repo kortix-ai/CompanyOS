@@ -21320,7 +21320,11 @@
       "text4b892277843c": "Crea workspace",
       "text41018e566b60": "nuovo workspace crea aggiungi team",
       "texta99ac8f9050b": "Workspace · Accesso",
-      "textfd8b8dae4421": "Zona pericolosa"
+      "textfd8b8dae4421": "Zona pericolosa",
+      "textab3aff8f7642": "Bonus di ricarica",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Archiviazione",
+      "text765a8cb04cf5": "Rimborso blocco LLM"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",

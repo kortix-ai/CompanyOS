@@ -15179,7 +15179,7 @@
       "text8d49ce8a5936": "Uma por linha. Correspondência byte a byte no login; use https em todos os casos, exceto localhost.",
       "text8d525e5f158b": "Copiado",
       "text8d56fc37564c": "Usar seu próprio bot do Azure em vez do bot gerenciado do Kortix",
-      "text8d59829c1e15": "Uso",
+      "text8d59829c1e15": "Utilização",
       "text8d5ac88c84ff": "Permita que outro aplicativo inicie um agente enviando uma solicitação.",
       "text8d5b051dd6bb": "A conexão fácil abrange mais de 3.000 aplicativos por meio de suas próprias telas OAuth. Se sua stack de vendas incluir algo que não esteja nesse catálogo — um serviço interno de cotações, um CRM regional — ainda será possível acessá-lo via OpenAPI, GraphQL, HTTP bruto ou um servidor MCP remoto.",
       "text8d5ee8fe6a2e": "Modelo alterado para {value0}",
@@ -21320,7 +21320,11 @@
       "text4b892277843c": "Criar espaço de trabalho",
       "text41018e566b60": "novo espaço de trabalho criar adicionar equipe",
       "texta99ac8f9050b": "Espaço de trabalho · Acesso",
-      "textfd8b8dae4421": "Zona de perigo"
+      "textfd8b8dae4421": "Zona de perigo",
+      "textab3aff8f7642": "Bónus de carregamento",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Armazenamento",
+      "text765a8cb04cf5": "Reembolso de reserva LLM"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",

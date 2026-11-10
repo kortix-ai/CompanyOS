@@ -1399,7 +1399,7 @@
       "heatMore": "多",
       "busiestDay": "{name}: {day} に {amount}（最も多い日）",
       "noSpendInRange": "{name}: この期間の利用はありません",
-      "idleWorkspaces": "この期間に利用のないワークスペース {count} 件",
+      "idleWorkspaces": "{count, plural, one {この期間に利用のないワークスペース # 件} other {この期間に利用のないワークスペース # 件}}",
       "showIdle": "表示",
       "hideIdle": "非表示"
     },
@@ -15179,7 +15179,7 @@
       "text8d49ce8a5936": "1行に1つ。サインイン時にバイト単位で完全一致します。localhost以外では常にhttpsを使用してください。",
       "text8d525e5f158b": "コピーしました",
       "text8d56fc37564c": "管理されたKortix botの代わりに独自のAzure botを使用",
-      "text8d59829c1e15": "使用状況",
+      "text8d59829c1e15": "使用量",
       "text8d5ac88c84ff": "別のアプリからリクエストを送信してエージェントを起動します。",
       "text8d5b051dd6bb": "Easy connectでは、各サービスのOAuth画面を通じて3,000以上のアプリに接続できます。営業スタックにカタログにないもの（社内の見積サービスや地域限定のCRMなど）が含まれていても、OpenAPI、GraphQL、raw HTTP、リモートMCP server経由で接続できます。",
       "text8d5ee8fe6a2e": "モデルを{value0}に切り替えました",
@@ -21320,7 +21320,11 @@
       "text4b892277843c": "ワークスペースを作成",
       "text41018e566b60": "新規 ワークスペース 作成 追加 チーム",
       "texta99ac8f9050b": "ワークスペース · アクセス",
-      "textfd8b8dae4421": "危険な操作"
+      "textfd8b8dae4421": "危険な操作",
+      "textab3aff8f7642": "チャージ ボーナス",
+      "texta68ee4167406": "プロキシ",
+      "texta69c4dece144": "ストレージ",
+      "text765a8cb04cf5": "LLM維持の返金"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -23018,8 +23022,8 @@
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
     "treeCollapse": "{name} を閉じる",
-    "emptyWorkspaces": "ファイルのないワークスペース {count} 件",
-    "storageMoreWorkspaces": "他 {count} 件のワークスペース",
+    "emptyWorkspaces": "{count, plural, one {ファイルのないワークスペース # 件} other {ファイルのないワークスペース # 件}}",
+    "storageMoreWorkspaces": "{count, plural, one {他 # 件のワークスペース} other {他 # 件のワークスペース}}",
     "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
     "storageShowFewer": "表示を減らす"
   },

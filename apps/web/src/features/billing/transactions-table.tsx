@@ -6,12 +6,13 @@
  * `GET /billing/transactions`; the admin account sheet feeds it from
  * `GET /admin/api/accounts/{id}/ledger`. Both are the same `credit_ledger`
  * rows, and both render through `CreditActivityFeed`, so an operator looking
- * at a support ticket sees exactly what the customer sees.
+ * at a support ticket sees exactly what the customer sees. The badge labels
+ * live with the feed (`credit-activity-feed.tsx`) — that is where they
+ * localize.
  *
  * The admin adapter lives in `app/admin/accounts/ledger-rows.ts`.
  */
 
-import { Badge } from '@kortix/ui/badge';
 import { formatUsdAsCredits } from '@kortix/shared';
 
 /** One `credit_ledger` row, normalized across the two endpoints. */
@@ -19,7 +20,7 @@ export interface CreditTransactionRow {
   id: string;
   /** ISO-8601, or null when the source has no timestamp. */
   createdAt: string | null;
-  /** Raw ledger type, e.g. `admin_grant`. Labelled by {@link creditTransactionBadge}. */
+  /** Raw ledger type, e.g. `admin_grant` — labelled by `creditTransactionBadge` in `credit-activity-feed.tsx`. */
   type: string;
   description: string | null;
   /** Absent = the source does not say, and the Credit type cell stays empty. */
@@ -27,41 +28,6 @@ export interface CreditTransactionRow {
   expiresAt?: string | null;
   amount: number;
   balanceAfter: number;
-}
-
-type BadgeVariant = React.ComponentProps<typeof Badge>['variant'];
-
-export const TRANSACTION_BADGES: Record<string, { label: string; variant: BadgeVariant }> = {
-  tier_grant: { label: 'Tier Grant', variant: 'default' },
-  free_tier_grant: { label: 'Tier Grant', variant: 'secondary' },
-  purchase: { label: 'Purchase', variant: 'default' },
-  auto_topup: { label: 'Auto Top-up', variant: 'default' },
-  topup_bonus: { label: 'Top-up Bonus', variant: 'secondary' },
-  machine_bonus: { label: 'Machine Bonus', variant: 'secondary' },
-  admin_grant: { label: 'Admin Grant', variant: 'secondary' },
-  promotional: { label: 'Promotional', variant: 'secondary' },
-  daily_refresh: { label: 'Daily Refresh', variant: 'secondary' },
-  usage: { label: 'Usage', variant: 'outline' },
-  llm_debit: { label: 'LLM', variant: 'outline' },
-  token_deduction: { label: 'LLM', variant: 'outline' },
-  token_overage: { label: 'LLM Overage', variant: 'outline' },
-  compute_debit: { label: 'Sandbox', variant: 'outline' },
-  compute_refund: { label: 'Sandbox Refund', variant: 'secondary' },
-  llm_reservation_refund: { label: 'LLM Hold Refund', variant: 'secondary' },
-  proxy_debit: { label: 'Proxy', variant: 'outline' },
-  storage_debit: { label: 'Storage', variant: 'outline' },
-  refund: { label: 'Refund', variant: 'secondary' },
-  adjustment: { label: 'Adjustment', variant: 'outline' },
-  expired: { label: 'Expired', variant: 'destructive' },
-};
-
-/**
- * Label and badge variant for a ledger type. An unknown type renders as its own
- * key — new types ship from the API before the UI learns them, and a raw key
- * beats a blank cell.
- */
-export function creditTransactionBadge(type: string): { label: string; variant: BadgeVariant } {
-  return TRANSACTION_BADGES[type] ?? { label: type, variant: 'outline' };
 }
 
 /**

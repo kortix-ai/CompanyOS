@@ -18,12 +18,45 @@ import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { formatUsdAsCredits } from '@kortix/shared';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
-import {
-  creditTransactionBadge,
-  formatSignedCredits,
-  TRANSACTION_BADGES,
-  type CreditTransactionRow,
-} from './transactions-table';
+import { formatSignedCredits, type CreditTransactionRow } from './transactions-table';
+import { Badge } from '@kortix/ui/badge';
+
+type BadgeVariant = React.ComponentProps<typeof Badge>['variant'];
+
+/**
+ * One `credit_ledger` row's badge per ledger type, localized where it renders:
+ * the map feeds `localizeUiCatalog` below, and the value→key pairs live in
+ * `@kortix/ui/i18n/ui-catalog/app-registry-translation-keys.generated` — an
+ * unknown type renders as its own key: new types ship from the API before the
+ * UI learns them, and a raw key beats a blank cell.
+ */
+export const TRANSACTION_BADGES: Record<string, { label: string; variant: BadgeVariant }> = {
+  tier_grant: { label: 'Tier Grant', variant: 'default' },
+  free_tier_grant: { label: 'Tier Grant', variant: 'secondary' },
+  purchase: { label: 'Purchase', variant: 'default' },
+  auto_topup: { label: 'Auto Top-up', variant: 'default' },
+  topup_bonus: { label: 'Top-up Bonus', variant: 'secondary' },
+  machine_bonus: { label: 'Machine Bonus', variant: 'secondary' },
+  admin_grant: { label: 'Admin Grant', variant: 'secondary' },
+  promotional: { label: 'Promotional', variant: 'secondary' },
+  daily_refresh: { label: 'Daily Refresh', variant: 'secondary' },
+  usage: { label: 'Usage', variant: 'outline' },
+  llm_debit: { label: 'LLM', variant: 'outline' },
+  token_deduction: { label: 'LLM', variant: 'outline' },
+  token_overage: { label: 'LLM Overage', variant: 'outline' },
+  compute_debit: { label: 'Sandbox', variant: 'outline' },
+  compute_refund: { label: 'Sandbox Refund', variant: 'secondary' },
+  llm_reservation_refund: { label: 'LLM Hold Refund', variant: 'secondary' },
+  proxy_debit: { label: 'Proxy', variant: 'outline' },
+  storage_debit: { label: 'Storage', variant: 'outline' },
+  refund: { label: 'Refund', variant: 'secondary' },
+  adjustment: { label: 'Adjustment', variant: 'outline' },
+  expired: { label: 'Expired', variant: 'destructive' },
+};
+
+export function creditTransactionBadge(type: string): { label: string; variant: BadgeVariant } {
+  return TRANSACTION_BADGES[type] ?? { label: type, variant: 'outline' };
+}
 
 /**
  * What kind of ledger entry a row is, for its tile. Five kinds, each with one

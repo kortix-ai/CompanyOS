@@ -21365,7 +21365,11 @@
       "text4b892277843c": "Create workspace",
       "text41018e566b60": "new workspace create add team",
       "texta99ac8f9050b": "Workspace · Access",
-      "textfd8b8dae4421": "Danger zone"
+      "textfd8b8dae4421": "Danger zone",
+      "textab3aff8f7642": "Top-up Bonus",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Storage",
+      "text765a8cb04cf5": "LLM Hold Refund"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",

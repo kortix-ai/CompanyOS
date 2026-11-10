@@ -9,8 +9,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TooltipProvider } from '@kortix/ui/tooltip';
-import { CreditActivityFeed, formatEntryTime } from './credit-activity-feed';
-import { creditTransactionBadge, type CreditTransactionRow } from './transactions-table';
+import { CreditActivityFeed, creditTransactionBadge, formatEntryTime } from './credit-activity-feed';
+import { type CreditTransactionRow } from './transactions-table';
 
 const dir = import.meta.dir;
 const creditTransactionsSource = readFileSync(join(dir, 'credit-transactions.tsx'), 'utf8');

@@ -12615,7 +12615,7 @@
       "text42408db46dd9": "1440p",
       "text4243d9cbb711": "Las claves de los conectores nunca entran en la máquina",
       "text4247cae34d45": "Las líneas sin conciliar y las codificaciones inciertas llegan como una cola, no como una decisión. Un agente que resuelve la ambigüedad en silencio es peor que no tener agente en esta función.",
-      "text424a2551d356": "Caducado",
+      "text424a2551d356": "Expirado",
       "text424dfcf4d7e8": "Un agente de ingeniería que entrega correcciones.",
       "text425aa668a9e4": "en tu equipo",
       "text426a8655550c": "Escribiendo en la memoria…",
@@ -13925,7 +13925,7 @@
       "text67f10b9f6d71": "Solicitudes LLM finalizadas y ventanas de cómputo facturadas.",
       "text67f2187d81d7": "Todas las secciones están ocultas. Vuelve a activar una desde Mostrar en el menú de vista.",
       "text67f332ec4359": "registro de auditoría registros eventos historial seguimiento cumplimiento",
-      "text67fc62497e85": "Entorno aislado",
+      "text67fc62497e85": "Sandbox",
       "text680d59689583": "Huella digital SHA-256 del certificado",
       "text681d1d8cf3d9": "Canales de Kortix",
       "text68269b6f8874": "comando secretos",
@@ -21320,7 +21320,11 @@
       "text4b892277843c": "Crear espacio de trabajo",
       "text41018e566b60": "nuevo espacio de trabajo crear añadir equipo",
       "texta99ac8f9050b": "Espacio de trabajo · Acceso",
-      "textfd8b8dae4421": "Zona de peligro"
+      "textfd8b8dae4421": "Zona de peligro",
+      "textab3aff8f7642": "Bono de recarga",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Almacenamiento",
+      "text765a8cb04cf5": "Reembolso de retención LLM"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",

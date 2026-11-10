@@ -13925,7 +13925,7 @@
       "text67f10b9f6d71": "Requêtes LLM finalisées et fenêtres de calcul facturées.",
       "text67f2187d81d7": "Toutes les sections sont masquées. Réactivez-en une depuis Afficher dans le menu d’affichage.",
       "text67f332ec4359": "journal d’audit journaux événements historique piste conformité",
-      "text67fc62497e85": "Bac à sable",
+      "text67fc62497e85": "Sandbox",
       "text680d59689583": "Empreinte SHA-256 du certificat",
       "text681d1d8cf3d9": "Canaux Kortix",
       "text68269b6f8874": "Commande secrète",
@@ -21320,7 +21320,11 @@
       "text4b892277843c": "Créer un espace de travail",
       "text41018e566b60": "nouvel espace de travail créer ajouter équipe",
       "texta99ac8f9050b": "Espace de travail · Accès",
-      "textfd8b8dae4421": "Zone de danger"
+      "textfd8b8dae4421": "Zone de danger",
+      "textab3aff8f7642": "Bonus de recharge",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Stockage",
+      "text765a8cb04cf5": "Remboursement de réserve LLM"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",

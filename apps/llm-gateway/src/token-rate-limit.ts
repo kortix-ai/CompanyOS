@@ -152,8 +152,9 @@ export function createTokenRateLimit(
     const key = hashOf(credential);
     const validated = validatedKeys.has(key);
     // The caller's own pre-validation allowance, checked first: a credential
-    // its own bucket refuses never spends its source's shared slots (KRTX-4608
-    // review — refusals must not consume the capacity other callers share).
+    // its own bucket refuses stops here, before the source is read — its
+    // refusals never spend the source's shared slots (KRTX-4608 review: a
+    // hammering credential must not consume the capacity other callers share).
     const preValidation = !validated
       ? preValidationLimiter.check(key, preValidationPolicy)
       : null;
@@ -163,7 +164,12 @@ export function createTokenRateLimit(
     // source's small share.
     const sourceKey =
       !validated && source && (options.trustEdgeClientIp ?? true) ? source : null;
-    const fromSource = sourceKey ? sourceLimiter.check(sourceKey, sourcePolicy) : null;
+    const fromSource =
+      preValidation && !preValidation.allowed
+        ? null
+        : sourceKey
+          ? sourceLimiter.check(sourceKey, sourcePolicy)
+          : null;
     const result =
       preValidation && !preValidation.allowed
         ? preValidation

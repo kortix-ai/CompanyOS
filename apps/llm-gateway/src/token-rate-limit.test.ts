@@ -187,6 +187,29 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     }
   });
 
+  test('a credential its own allowance refuses never spends its source\'s shared slots (KRTX-4608 review)', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // Ten first contacts exhaust the credential's own allowance; every repeat
+    // is refused at that check, before the source is read.
+    const hammer = request('/v1/models', { authorization: 'Bearer kortix_hammer' });
+    for (let i = 0; i < 10; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      expect(limit(hammer, new Headers(), '10.0.0.1')).toBeNull();
+    }
+    for (let i = 0; i < 90; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (10 + i) * 50));
+      expect(limit(hammer, new Headers(), '10.0.0.1')?.status).toBe(429);
+    }
+    // The 90 refused repeats spent nothing of the source's share: the other
+    // callers behind the same edge keep the capacity the hammer never owned.
+    for (let i = 0; i < 90; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + (200 + i) * 50));
+      expect(
+        limit(request('/v1/models', { authorization: `Bearer kortix_legit_${i}` }), new Headers(), '10.0.0.1'),
+      ).toBeNull();
+    }
+  });
+
   test('every pre-validation charge of one credential refunds its source slot at validation (KRTX-4608 review)', () => {
     // unvalidated 1 000/min puts the per-source share at its 1% fraction
     // (10/min), small enough for one credential's charges to exhaust it.

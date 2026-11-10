@@ -2,9 +2,10 @@
  * Colleague access: connectors and project secrets My Kortix hands one
  * colleague (an inline child that runs as My Kortix, inline-colleague.ts).
  *
- * My Kortix holds no connector and no secret (`myKortixAgentGrant`). To give a
- * colleague some, it names them on the start (`colleague_access`). A person
- * allows or denies that exact list first:
+ * My Kortix holds every connector and secret its person can use
+ * (`myKortixAgentGrant`), and an inline colleague inherits that. The list below
+ * still exists for a narrower grant (a session that predates it, or a
+ * disabled My Kortix). A colleague's extra list is allowed or denied first:
  *
  *   1. The start names a list nobody allowed yet: the API records an ask
  *      (`session_colleague_access`) and answers 409

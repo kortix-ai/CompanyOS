@@ -70,27 +70,20 @@ export const INBOX_ORDER_BACKOFF_MS = 300;
  */
 export const INBOX_ORDER_MAX_BACKOFF_MS = 2_000;
 /**
- * A row refused this many times (~2 min at the 2s cap) behind an older prompt
- * on a box that is NOT running waits on a parked head: a failed or stopped
- * session whose head sits out the runtime-unreachable ladder. It re-polls once
- * a minute instead. Prod 2026-10-20: ~200 such rows, every one on a stopped
- * box, were refused 28 times a second.
+ * A row that cannot go next re-polls once a minute: a row behind an older
+ * prompt (any box), and a row behind the head of a live turn. Only the head can
+ * be admitted next. The minute is a fallback, not the wake. These exits make
+ * the next row due at once (`promoteNextInboxRow`): turn end, the reaper,
+ * forwarded-strand reconcile, a `noReply` delivery, a dead-lettered head
+ * (`markCommandFailed`), a removed head (`deleteInboxPrompt`), and a head
+ * closed without a post (`executeQueuedContinue`: consumed in band, skipped).
+ * Prod 2026-10-20: ~200 rows behind parked heads refused 28 times a second.
+ * Prod 2026-11-03: 93 cron prompts behind live turns, 29 claims a second.
+ * Prod 2026-11-09: 374 rows behind parked heads of one failed session, put
+ * back several times a minute each, and every claim of one wrote two audit rows.
  *
- * The box gate is what makes this safe. `admission_refusals` counts every
- * reason, `turn_active` included, so a row that waited out a long live turn
- * crosses 64 while its head still moves; on a running box it keeps the 2s cap.
- * The minute is a fallback, not the wake. These exits make the next row due at
- * once (`promoteNextInboxRow`): turn end, the reaper, forwarded-strand
- * reconcile, a `noReply` delivery, a dead-lettered head (`markCommandFailed`),
- * a removed head (`deleteInboxPrompt`), and a head closed without a post
- * (`executeQueuedContinue`: consumed in band, skipped).
- */
-/*
- * The same minute applies to a row that waits behind a live turn but is not the
- * session's head. Prod 2026-11-03: 93 cron prompts queued behind turns in 4
- * sessions were each re-polled every 2 s, 29 claims a second, each reading the
- * sandbox row twice. Only the head can be admitted next, and the turn's end
- * wakes the head, never a row behind it.
+ * The HEAD keeps the short clock. It waits on a parked box after this many
+ * refusals (~2 min at the 2 s cap) for a delivery on the wire to finish.
  */
 export const INBOX_STALE_ORDER_REFUSALS = 64;
 export const INBOX_STALE_ORDER_BACKOFF_MS = 60_000;
@@ -173,7 +166,7 @@ export interface InboxAdmissionDeps {
   hasOlderPendingPrompt: (sessionId: string, row: SessionLifecycleCommandRow) => Promise<boolean>;
   /** Is another prompt of this session ALREADY CLAIMED and mid-delivery?
    *  Separate from the ordering read because it binds even a promoted row. */
-  hasInFlightPrompt: (sessionId: string, exceptCommandId: string) => Promise<boolean>;
+  hasInFlightPrompt: (sessionId: string, row: SessionLifecycleCommandRow) => Promise<boolean>;
   /** The person who prompted the turn behind `messageId` (`turnPrompterOf`).
    *  Read only for a head Quick Queue row while a turn runs. Absent: no row is
    *  its prompter, so only a `mayStopAnyTurn` row arms the interrupt. */
@@ -372,7 +365,8 @@ export const liveInboxAdmissionDeps: InboxAdmissionDeps = {
       .limit(1);
     return !!older;
   },
-  async hasInFlightPrompt(sessionId, exceptCommandId) {
+  async hasInFlightPrompt(sessionId, row) {
+    const result = sessionLifecycleCommands.result;
     const [running] = await db
       .select({ commandId: sessionLifecycleCommands.commandId })
       .from(sessionLifecycleCommands)
@@ -381,7 +375,18 @@ export const liveInboxAdmissionDeps: InboxAdmissionDeps = {
           eq(sessionLifecycleCommands.sessionId, sessionId),
           eq(sessionLifecycleCommands.commandType, 'continue_session'),
           eq(sessionLifecycleCommands.status, 'running'),
-          ne(sessionLifecycleCommands.commandId, exceptCommandId),
+          ne(sessionLifecycleCommands.commandId, row.commandId),
+          // A row BEHIND this one that a drain claimed but that has not passed
+          // admission is not on the wire: its own order read sees this row
+          // and refuses it. Counting it let a busy queue refuse its own head,
+          // and a head refused 64 times on a parked box waits a minute per
+          // refusal. Still in flight: a row past admission
+          // (`delivery_started_at`), a promoted row (it skips the order read),
+          // a direct follow-up (it skips admission), and any row ahead of this one.
+          sql`NOT (${inboxFollowsRow(row)}
+                   AND NOT (${result} ? 'delivery_started_at')
+                   AND COALESCE(${result}->>'promoted', '') <> 'true'
+                   AND COALESCE(${sessionLifecycleCommands.payload}->>'directFollowUp', '') <> 'true')`,
         ),
       )
       .limit(1);
@@ -524,7 +529,7 @@ export async function admitInboxPrompt(
     return promise;
   };
   const sandboxRead = started(deps.readSandbox(row.sessionId));
-  const inFlightRead = started(deps.hasInFlightPrompt(row.sessionId, row.commandId));
+  const inFlightRead = started(deps.hasInFlightPrompt(row.sessionId, row));
   const olderRead = started(deps.hasOlderPendingPrompt(row.sessionId, row));
 
   // A live turn holds delivery for both placements. Quick Queue may request
@@ -581,6 +586,19 @@ export async function admitInboxPrompt(
   const waitBackoffMs =
     parked && refusals >= INBOX_STALE_ORDER_REFUSALS ? INBOX_STALE_ORDER_BACKOFF_MS : orderBackoffMs;
 
+  // "Send now"/retry stamps `promoted`: the user pointed at ONE row and asked
+  // for THAT message. QUEUE ORDER yields to that; the in-flight check below
+  // does not, because it is about a delivery already happening rather than
+  // about which message goes first.
+  const promoted = (row.result as { promoted?: unknown } | null)?.promoted === true;
+  // A row behind an older prompt cannot go next, on any box. Every exit of the
+  // older prompt wakes the next row (`promoteNextInboxRow`: turn end, reaper,
+  // dead-letter, removal, a delivery that opens no turn), so the minute is a
+  // fallback for a lost wake. Prod 2026-11-09: 374 rows behind the parked heads
+  // of one failed session were put back at least once a minute each.
+  const behindOlder = !promoted && (await olderRead);
+  const behindBackoffMs = Math.max(orderBackoffMs, INBOX_STALE_ORDER_BACKOFF_MS);
+
   // ONE PROMPT OF A SESSION ON THE WIRE AT A TIME, and this check binds even a
   // promoted row. A claimed row spends up to READY_DEADLINE_MS (5 min) inside
   // `continueSession` waiting for a cold box, with no message written for any
@@ -588,16 +606,15 @@ export async function admitInboxPrompt(
   // one session, and the runtime orders what it receives by ARRIVAL — so the loser
   // of that race is the message the user typed FIRST.
   if (await inFlightRead) {
-    return { admit: false, reason: 'older_prompt_pending', retryAfterMs: waitBackoffMs };
+    return {
+      admit: false,
+      reason: 'older_prompt_pending',
+      retryAfterMs: behindOlder ? behindBackoffMs : waitBackoffMs,
+    };
   }
 
-  // "Send now"/retry stamps `promoted`: the user pointed at ONE row and asked
-  // for THAT message. QUEUE ORDER yields to that; the in-flight check above
-  // does not, because it is about a delivery already happening rather than
-  // about which message goes first.
-  const promoted = (row.result as { promoted?: unknown } | null)?.promoted === true;
-  if (!promoted && (await olderRead)) {
-    return { admit: false, reason: 'older_prompt_pending', retryAfterMs: waitBackoffMs };
+  if (behindOlder) {
+    return { admit: false, reason: 'older_prompt_pending', retryAfterMs: behindBackoffMs };
   }
 
   return { admit: true };

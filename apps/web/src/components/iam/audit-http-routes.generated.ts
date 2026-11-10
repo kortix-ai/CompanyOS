@@ -473,7 +473,6 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "GET|v1|edge|tls-check",
   "POST|v1|feedback",
   "GET|v1|generation",
-  "GET|v1|git|:project|fast-boot-bundle",
   "POST|v1|git|:project|git-receive-pack",
   "POST|v1|git|:project|git-upload-pack",
   "GET|v1|git|:project|info|refs",

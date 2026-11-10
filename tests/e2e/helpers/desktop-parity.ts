@@ -340,6 +340,58 @@ export function defineDesktopParity(runtime: "web" | "desktop"): void {
       }
     });
 
+    // The shipped shell (KortixDesktop/0.1.0) opens /projects/start at launch
+    // and /projects/<id> for a workspace, never /workspaces. On prod every one
+    // of those answered 404 for a signed-in user (2026-11-10, v0.15.3): the
+    // middleware rewrote /projects/… onto /en/projects/…, which no page serves.
+    test("a signed-in shell opens its legacy /projects paths in place", async ({
+      page,
+      baseURL,
+    }) => {
+      test.skip(!desktop, "only the desktop shell keeps the /projects paths");
+      test.setTimeout(120_000);
+      const databaseUrl =
+        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
+      if (!databaseUrl)
+        throw new Error("Desktop parity requires the configured test database");
+      const email = `e2e-desktop-legacy-${randomUUID()}@example.test`;
+      const user = await createAuthUser(email, authOptions);
+      const session = await signIn(email, authOptions);
+      let project: ManifestProject | undefined;
+      try {
+        const accounts = await accountsOf(session.access_token);
+        project = await createManifestProject({
+          api,
+          accessToken: session.access_token,
+          accountId: accounts[0].account_id,
+          userId: user.id,
+          name: "Desktop legacy paths",
+          databaseUrl,
+        });
+        const opened = await installBrowserSessionDirect(
+          page,
+          session,
+          `${baseURL}/projects/${project.id}`,
+          authOptions,
+        );
+        // Served in place (no redirect the shell would open in a browser),
+        // then DesktopLegacyPathSync shows the canonical /workspaces URL.
+        expect(opened?.status()).toBe(200);
+        expect(opened?.request().redirectedFrom()).toBeNull();
+        await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}`), {
+          timeout: 30_000,
+        });
+        await expect(page.getByText("404 Page not found")).toHaveCount(0);
+
+        const start = await page.goto(`${baseURL}/projects/start`);
+        expect(start?.status()).toBe(200);
+        await expect(page.getByText("404 Page not found")).toHaveCount(0);
+      } finally {
+        await project?.dispose();
+        await deleteAuthUser(user.id, authOptions);
+      }
+    });
+
     test("sidebar, settings, agents and connectors remain aligned and clickable", async ({
       page,
       baseURL,

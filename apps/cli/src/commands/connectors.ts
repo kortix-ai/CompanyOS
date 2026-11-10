@@ -238,7 +238,9 @@ Find and install:
           [--way <id>] [--name <n>] unless --way). Installing an app that is
           [--slug <s>] [--json]     already installed changes nothing and exits
           [--new-profile]           3; --new-profile makes a second profile
-                                    (only for another way or other base rules).
+          [--url <url>]             (only for another way or other base rules).
+                                    --url: the server URL of an MCP way the
+                                    catalogue lists without one.
   add <slug> --provider <p> [...]   Declare a profile by hand (an MCP URL, a
                                     spec). Add --apply to apply it now.
   rm <slug> [--apply]               Remove a profile.
@@ -687,16 +689,9 @@ export async function runConnectors(argv: string[]): Promise<number> {
         try {
           resp = await ctx.client.post<AddResult>(`${ex}/connectors`, draft);
         } catch (err) {
-          // An agent session may not add a server the project does not have:
-          // a person confirms it on the page the API links to.
-          const body = (err as { details?: { code?: string; setup_url?: string } }).details;
-          if (body?.code !== 'custom_connector_needs_human') throw err;
-          if (json) emitJson({ ok: false, ...body });
-          else
-            process.stderr.write(
-              `${status.err('A person must confirm a connector the catalog does not list.')}\n  Hand them this link: ${C.cyan}${body.setup_url ?? ''}${C.reset}\n`,
-            );
-          return 1;
+          const handOff = connectorApprovalHandOff(err, json);
+          if (handOff === null) throw err;
+          return handOff;
         }
         if (json) {
           emitJson(resp);
@@ -1519,17 +1514,25 @@ export async function runConnectors(argv: string[]): Promise<number> {
             const marks = [
               v.recommended ? 'recommended' : '',
               v.oneClick ? '1-click' : '',
-              v.kind === 'kortix' ? 'built into Kortix, set up on its page' : !v.connector && v.kind !== 'composio' ? 'not installable' : '',
+              v.kind === 'kortix'
+                ? 'built into Kortix, set up on its page'
+                : v.kind === 'mcp' && !v.connector
+                  ? 'catalogue has no URL: install with --url <server url>'
+                  : !v.connector && v.kind !== 'composio'
+                    ? 'not installable'
+                    : '',
             ].filter(Boolean).join(', ');
             process.stdout.write(
               `  ${C.cyan}${pad(v.id, idW)}${C.reset}  ${pad(wayLabel(v.kind), 9)}  ${trim(v.name, 28)}${marks ? ` ${C.faded}(${marks})${C.reset}` : ''}${v.url ? `  ${C.dim}${v.url}${C.reset}` : ''}\n`,
             );
           }
+          if (detail.variants.some((v) => v.kind === 'composio')) {
+            process.stdout.write(
+              `\n  ${C.dim}Composio is a third-party partner that runs the sign-in for you (one click).${C.reset}\n`,
+            );
+          } else process.stdout.write('\n');
           process.stdout.write(
-            `\n  ${C.dim}Composio is a third-party partner that runs the sign-in for you (one click).${C.reset}\n`,
-          );
-          process.stdout.write(
-            `  ${C.dim}Install: kortix connectors catalog install ${detail.item.id} [--way <id>] [--name <name>]${C.reset}\n\n`,
+            `  ${C.dim}Install: kortix connectors catalog install ${detail.item.id} [--way <id>] [--name <name>] [--url <url>]${C.reset}\n\n`,
           );
           if (tools) printTools(id, tools, 25);
           return 0;
@@ -1576,7 +1579,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         if (action === 'install' || action === 'add') {
           const id = positional[1];
           if (!id) return missing('a catalogue record id');
-          const done = await ctx.client.post<{
+          type Installed = {
             slug: string;
             name: string;
             provider: string;
@@ -1586,13 +1589,22 @@ export async function runConnectors(argv: string[]): Promise<number> {
             existing?: boolean;
             /** With `next: 'fix'`: why the install's sync failed. */
             error?: string;
-          }>(`${ex}/discover/install`, {
-            id,
-            ...(f.way ? { way: f.way } : {}),
-            ...(f.name ? { name: f.name } : {}),
-            ...(f.slug ? { slug: f.slug } : {}),
-            ...(f.newProfile === 'true' ? { as_new_profile: true } : {}),
-          });
+          };
+          let done: Installed;
+          try {
+            done = await ctx.client.post<Installed>(`${ex}/discover/install`, {
+              id,
+              ...(f.way ? { way: f.way } : {}),
+              ...(f.name ? { name: f.name } : {}),
+              ...(f.slug ? { slug: f.slug } : {}),
+              ...(f.url ? { url: f.url } : {}),
+              ...(f.newProfile === 'true' ? { as_new_profile: true } : {}),
+            });
+          } catch (err) {
+            const handOff = connectorApprovalHandOff(err, json);
+            if (handOff === null) throw err;
+            return handOff;
+          }
           const nextStep =
             done.next === 'connect'
               ? `kortix connectors connect ${done.slug}`
@@ -2426,6 +2438,32 @@ function connectionActionPastTense(action: 'revoke' | 'activate' | 'default'): s
 }
 
 // ── Local kortix.yaml config edits (source of truth; no cloud round-trip) ────
+
+/**
+ * The two answers that hand a step to a person instead of failing: a server
+ * nobody approved yet (`custom_connector_needs_human`, an agent session) and
+ * a catalogue way listed without its URL (`connector_needs_url`). Prints the
+ * link and returns the exit code (1), or null for any other error.
+ */
+function connectorApprovalHandOff(err: unknown, json: boolean): number | null {
+  const body = (err as { details?: { code?: string; error?: string; setup_url?: string | null; docs?: string | null } })
+    .details;
+  if (body?.code !== 'custom_connector_needs_human' && body?.code !== 'connector_needs_url') return null;
+  if (json) {
+    emitJson({ ok: false, ...body });
+    return 1;
+  }
+  const lead =
+    body.code === 'custom_connector_needs_human'
+      ? 'This connector needs a one-time approval from a person who manages connectors (an owner, admin or manager).'
+      : (body.error ?? 'The catalogue lists this way without its server URL. Pass it with --url <url>.');
+  process.stderr.write(
+    `${status.warn(lead)}\n` +
+      (body.setup_url ? `  ${C.dim}They approve it here:${C.reset} ${C.cyan}${body.setup_url}${C.reset}\n` : '') +
+      (body.docs ? `  ${C.dim}Where to find the URL:${C.reset} ${body.docs}\n` : ''),
+  );
+  return 1;
+}
 
 /** What a missing --provider usually means: a SaaS app, which the catalog installs. */
 const ADD_PROVIDER_HINT =

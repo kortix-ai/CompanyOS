@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { authorize, PROJECT_ACTIONS } from '../iam';
+import { assertAuthorized } from '../iam/authorize';
 import { actorOf } from '../iam/actor';
 import { loadProjectForUser } from '../projects/lib/access';
 import { reconcileStoredSessionAgentGrant } from '../projects/lib/session-token-grant';
@@ -225,6 +226,32 @@ async function resolveProjectUserWith(
   return { accountId: proj.accountId, userId };
 }
 
+/**
+ * The gate form of `resolveProjectUserWith`: null only when the caller or the
+ * project is unknown; a denied caller gets the standard 403 that names the
+ * permission and which side lacks it (the person's role, or the agent's
+ * grant). A person and an agent session acting for that person get the same
+ * answer. Never a probe: a caller that only asks "may they?" uses
+ * `resolveProjectUserWith`.
+ */
+async function assertProjectUserWith(
+  c: Context,
+  projectId: string,
+  action: typeof PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE | typeof PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+): Promise<{ accountId: string; userId: string } | null> {
+  if (!isUuid(projectId)) return null;
+  const userId = c.get('userId') as string | undefined;
+  if (!userId) return null;
+  const [proj] = await db
+    .select({ accountId: projectsView.accountId })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
+    .limit(1);
+  if (!proj) return null;
+  await assertAuthorized(await actorOf(c, proj.accountId), action, { type: 'project', id: projectId });
+  return { accountId: proj.accountId, userId };
+}
+
 // Connector administration (create/delete connectors, write shared credentials,
 // grants/policies) is project.connector.write — NOT the coarse, fold-exempt
 // project.write.
@@ -232,7 +259,7 @@ export async function resolveAdmin(
   c: Context,
   projectId: string,
 ): Promise<{ accountId: string; userId: string } | null> {
-  return resolveProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
+  return assertProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
 }
 
 // Connecting an account the whole project can use is administration, and this
@@ -241,11 +268,7 @@ export async function resolveConnectionsManager(
   c: Context,
   projectId: string,
 ): Promise<{ accountId: string; userId: string } | null> {
-  return resolveProjectUserWith(
-    c,
-    projectId,
-    PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
-  );
+  return assertProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE);
 }
 
 export async function resolveSecretBindingAdmin(

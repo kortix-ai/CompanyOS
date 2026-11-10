@@ -122,9 +122,19 @@ async function readErrorBody(
   return { message, data };
 }
 
-/** True when `handleErrorResponse` would not report this error to `onError`. */
-export function isExpectedApiError(error: { status?: number; data?: unknown; message: string }): boolean {
-  return error.status !== undefined && isExpectedResponse(error.status, error.data, error.message);
+/**
+ * Whether the request layer reports this failed write to `onError`: an HTTP
+ * failure that is not an expected response (`handleErrorResponse`), or a
+ * dropped connection. Never a timeout, a signed-out caller or an abort
+ * (`request.ts`). For a write the SDK sends again with `showErrors: false`,
+ * which reports its final failure itself.
+ */
+export function isReportedWriteFailure(error: ApiError): boolean {
+  if (error.code === 'TIMEOUT' || error.code === 'NO_SESSION' || error.code === 'ABORTED' || error.name === 'AbortError') {
+    return false;
+  }
+  if (error.status === undefined) return true;
+  return !isExpectedResponse(error.status, error.data, error.message);
 }
 
 function isExpectedResponse(status: number, data: any, message: string): boolean {

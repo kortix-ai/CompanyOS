@@ -7,7 +7,7 @@ import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
 import { abortableDelay } from '../../http/abort';
 import { platformConfig } from '../../http/config';
-import { isExpectedApiError } from '../../http/response-error';
+import { isReportedWriteFailure } from '../../http/response-error';
 import { platformRequestHeaders } from '../../http/transport';
 import { unwrap } from './shared';
 import { stripTrailingSlashes } from '../../../platform/strings';
@@ -522,8 +522,10 @@ interface ProgressRequest {
  * A one-request body that fails transiently (408, 429, 5xx, a timeout or a
  * dropped connection; never an abort) is sent again after 0.5, 1, 2, 4 and
  * 8 s: at most 6 tries, 15.5 s of waits. With `ifMatch` only a 429 is sent
- * again: a timed-out conditional write may have landed. Only the final
- * failure reaches the app-wide `onError`. A caller adds no retry of its own.
+ * again: a timed-out conditional write may have landed. On the `fetch` path
+ * (no `onProgress`) only the final failure reaches the app-wide `onError`;
+ * the `XMLHttpRequest` and block paths leave every failure to the caller. A
+ * caller adds no retry of its own.
  *
  * `onProgress(sentBytes, totalBytes)` reports the body going up. A resend
  * reports from 0 again. `fetch` has
@@ -565,7 +567,7 @@ export async function uploadDriveFile(
       retry,
     );
   } catch (error) {
-    if (error instanceof ApiError && !isAbort(error) && !isExpectedApiError(error)) platformConfig().onError?.(error);
+    if (error instanceof ApiError && isReportedWriteFailure(error)) platformConfig().onError?.(error);
     throw error;
   }
   const size = body instanceof Blob ? body.size : body.byteLength;
@@ -590,9 +592,6 @@ function isTransient(error: Error | undefined): boolean {
   if (e.code === 'TIMEOUT') return true;
   return e.status === undefined ? e.code !== 'NO_SESSION' : TRANSIENT_STATUSES.has(e.status);
 }
-
-/** An abort is the caller's own doing: never reported. */
-const isAbort = (e: ApiError) => e.code === 'ABORTED' || e.name === 'AbortError';
 
 /**
  * `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails

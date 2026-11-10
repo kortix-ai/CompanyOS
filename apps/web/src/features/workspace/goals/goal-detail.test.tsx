@@ -87,7 +87,7 @@ mock.module('@kortix/ui/dropdown-menu', () => ({
 type FilesData = { brief: string | null; log: string | null; notes: string | null; verification: string | null };
 
 interface QueryShape<T> {
-  data: T | undefined;
+  data: T | null | undefined;
   isError: boolean;
   error: Error | null;
   isPending: boolean;
@@ -122,6 +122,9 @@ const controlFn = (input: { goal: ProjectGoal; action: string }): Promise<Projec
     controlDeferred = { resolve: () => resolve(null), reject };
   });
 };
+
+// After the window exists: react-dom decides at load whether the DOM fires `input` events.
+const { createRoot } = await import('react-dom/client');
 
 const realSdk = await import('@kortix/sdk');
 const { GoalDetail } = await import('./goal-detail');
@@ -375,6 +378,89 @@ describe('GoalDetail — Activity', () => {
     );
     expect(html).toContain('goals.eventsLoadError');
     expect(html).toContain('goals.retry');
+  });
+});
+
+let root: Root | null = null;
+
+afterEach(async () => {
+  await act(async () => root?.unmount());
+  root = null;
+  document.body.innerHTML = '';
+  controlCalls.length = 0;
+  controlDeferred = null;
+  routerPushes.length = 0;
+});
+
+/** Mounts the page live so the answer flow can run for real: type, submit, watch the header. */
+/** happy-dom's runtime objects through the lib-dom type they match at runtime: the one bridge in this file. */
+const dom = <T,>(value: unknown): T => value as T;
+
+async function mountPage(fixture: { goal: ProjectGoal; files?: FilesData; events?: ProjectGoalEvent[] }): Promise<void> {
+  goalResult = { data: fixture.goal, isError: false, error: null, isPending: false, refetch: async () => undefined };
+  filesResult = { data: fixture.files ?? { brief: null, log: null, notes: null, verification: null }, isError: false, error: null, isPending: false, refetch: async () => undefined };
+  eventsResult = { data: { events: fixture.events ?? [] }, isError: false, error: null, isPending: false, refetch: async () => undefined };
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const mounted = createRoot(dom<Element>(host));
+  root = mounted;
+  await act(async () =>
+    mounted.render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(GoalDetail, { projectId: 'p-1', goalId: 'g-1' }))),
+  );
+}
+
+async function sendMessage(text: string): Promise<void> {
+  const textarea = dom<HTMLTextAreaElement | null>(document.querySelector('[data-testid="goal-message"]'));
+  if (!textarea) throw new Error('the page rendered no note box');
+  await act(async () => {
+    const setValue = Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, 'value')?.set;
+    if (!setValue) throw new Error('no textarea value setter');
+    setValue.call(textarea, text);
+    textarea.dispatchEvent(dom<Event>(new win.Event('input', { bubbles: true })));
+  });
+  const form = dom<HTMLFormElement | null>(textarea.closest('form'));
+  if (!form) throw new Error('the note box rendered no form');
+  await act(async () => {
+    form.dispatchEvent(dom<Event>(new win.Event('submit', { bubbles: true, cancelable: true })));
+    // react-query notifies its observers on a scheduler tick, not synchronously: give it one.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+}
+
+function headerButton(testId: string): HTMLButtonElement {
+  const button = document.querySelector(`[data-testid="${testId}"]`);
+  if (!button) throw new Error(`the header rendered no ${testId}`);
+  return button as HTMLButtonElement;
+}
+
+describe('GoalDetail — one control channel', () => {
+  test('an answer in flight disables the header controls', async () => {
+    await mountPage({ goal: goalFixture() });
+    expect(headerButton('goal-pause').disabled).toBe(false);
+
+    await sendMessage('Please send the wire by Friday');
+    expect(controlCalls).toEqual([{ action: 'answer', goalId: 'g-1' }]);
+    // One request at a time: the running answer disables Pause and Stop, not just the box.
+    expect(headerButton('goal-message-send').disabled).toBe(true);
+    expect(headerButton('goal-pause').disabled).toBe(true);
+    expect(headerButton('goal-stop').disabled).toBe(true);
+
+    await act(async () => controlDeferred?.resolve(null));
+    expect(headerButton('goal-pause').disabled).toBe(false);
+    expect(headerButton('goal-stop').disabled).toBe(false);
+    expect((document.querySelector('[data-testid="goal-message"]') as HTMLTextAreaElement).value).toBe('');
+    expect(document.body.innerHTML).toContain('goals.messageSent');
+  });
+
+  test('an answer failure shows in the box with its retry, not in the page banner', async () => {
+    await mountPage({ goal: goalFixture() });
+    await sendMessage('Please send the wire by Friday');
+    await act(async () => controlDeferred?.reject(new Error('The wake failed')));
+
+    const error = document.querySelector('[data-testid="goal-answer-error"]');
+    expect(error?.textContent).toContain('The wake failed');
+    expect(document.body.innerHTML).toContain('goals.retry');
+    expect(document.querySelector('[data-testid="goal-control-error"]')).toBeNull();
   });
 });
 

@@ -425,6 +425,59 @@ test('seeded managed ship fast-forwards a folder the remote moved past', async (
   }
 });
 
+test('seeded managed ship refuses to overwrite a folder file the ignore rules keep out', async () => {
+  useLocalRepo = true;
+  managedRepo = true;
+  link();
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    expect(result.exitCode).toBe(0);
+    return result.stdout.toString().trim();
+  };
+  git('config', 'user.name', 'Synthetic');
+  git('config', 'user.email', 'synthetic@example.test');
+  writeFileSync(join(cwd, '.git/info/exclude'), '/remote.git/\n/.bun/\n');
+  writeFileSync(join(cwd, '.gitignore'), '.env\n');
+  git('add', 'kortix.yaml', '.gitignore');
+  git('commit', '-m', 'seed');
+  git('clone', '--bare', '.', bareRepo);
+  git('checkout', '--orphan', 'local');
+  writeFileSync(join(cwd, 'kortix.yaml'), 'name: local-work\n');
+  writeFileSync(join(cwd, '.gitignore'), '.env\n');
+  writeFileSync(join(cwd, '.env'), 'LOCAL_SECRET=synthetic-local\n');
+  git('add', 'kortix.yaml', '.gitignore');
+  git('commit', '-m', 'local work');
+  git('branch', '-M', 'main');
+  git('add', '-A');
+  git('commit', '-m', 'fixture files');
+  // A tracked .env lands on the workspace remote (a teammate or an agent
+  // pushed it with add -f): the merge would silently overwrite the folder's
+  // ignored local file with it.
+  const mover = mkdtempSync(join(tmpdir(), 'kortix-ship-mover2-'));
+  try {
+    expect(Bun.spawnSync(['git', 'clone', bareRepo, mover], { stdout: 'pipe' }).exitCode).toBe(0);
+    writeFileSync(join(mover, '.env'), 'PLANTED=synthetic-remote\n');
+    const commit = (args: string[]) => {
+      const result = Bun.spawnSync(['git', ...args], { cwd: mover, stdout: 'pipe', stderr: 'pipe' });
+      expect(result.exitCode).toBe(0);
+    };
+    commit(['add', '-f', '.env']);
+    commit(['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '-m', 'plant .env']);
+    commit(['push', 'origin', 'main']);
+    const remoteTip = git('--git-dir', bareRepo, 'rev-parse', 'main');
+
+    const result = await cli(['ship', '--host', 'workspace', '--no-verify', '--no-env', '--no-connect', '-y']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('keeps locally');
+    expect(result.stderr).toContain('.env');
+    // The local file survived untouched and nothing reached the workspace.
+    expect(readFileSync(join(cwd, '.env'), 'utf8')).toBe('LOCAL_SECRET=synthetic-local\n');
+    expect(git('--git-dir', bareRepo, 'rev-parse', 'main')).toBe(remoteTip);
+  } finally {
+    rmSync(mover, { recursive: true, force: true });
+  }
+});
+
 test('seeded managed ship keeps the recovery guidance when the remote cannot be fetched', async () => {
   useLocalRepo = true;
   managedRepo = true;

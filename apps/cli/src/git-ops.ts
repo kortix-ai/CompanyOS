@@ -207,16 +207,52 @@ function managedShipRecovery(projectId: string): void {
 }
 
 /**
+ * Paths the fetched branch would create or change that this folder keeps on
+ * disk OUTSIDE the index — the ignored files (`.env`, `node_modules/`, …) git
+ * overwrites silently during a merge: git refuses an untracked collision only
+ * for non-ignored paths. A workspace commit carrying a tracked file at such a
+ * path would clobber the folder's local secrets (and, once tracked, push them
+ * back on the next ship) or plant files in ignored directories. Empty when the
+ * merge cannot clobber anything the folder keeps locally.
+ */
+function filesTheMergeWouldOverwrite(): string[] {
+  const incoming = run(['diff', '--name-only', 'HEAD', 'FETCH_HEAD']);
+  if (!incoming.ok) return [];
+  const ignoredHere = new Set(
+    run(['ls-files', '--others', '--ignored', '--exclude-standard'])
+      .stdout.split('\n')
+      .map((path) => path.trim())
+      .filter(Boolean),
+  );
+  return incoming.stdout
+    .split('\n')
+    .map((path) => path.trim())
+    .filter((path) => path.length > 0 && ignoredHere.has(path));
+}
+
+/**
  * Reconcile the fetched remote branch with this folder's history so the push is
  * a fast-forward. A product-created workspace is seeded with scaffold commits
  * before the first ship, while `kortix init` starts from its own unrelated
  * commit — the customer's first ship must merge that history in and push, not
  * fail on a rejection they cannot answer. Content conflicts keep the local
  * tree: the folder is what the customer shipped. Returns false only when the
- * histories diverged and the merge itself failed, so the caller falls back to
- * the manual recovery guidance.
+ * merge itself is refused, so the caller falls back to the manual recovery
+ * guidance.
  */
 function reconcileWithFetchedRemote(branch: string): boolean {
+  // A merge writes the fetched tree into this folder. Paths the folder keeps
+  // locally (`.env`, `node_modules/`, …) are untracked, so git treats a
+  // collision there as safe to overwrite — refuse instead of clobbering them.
+  const overwritten = filesTheMergeWouldOverwrite();
+  if (overwritten.length > 0) {
+    process.stderr.write(
+      `${status.err('The workspace has files this folder keeps locally. Nothing was merged or pushed.')}\n` +
+        overwritten.map((path) => `    ${C.cyan}${path}${C.reset}\n`).join('') +
+        `  ${C.dim}Move them aside and re-run, or copy them into a fresh ${C.reset}${C.cyan}kortix workspaces clone${C.reset}${C.dim} of the workspace.${C.reset}\n`,
+    );
+    return false;
+  }
   if (run(['merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD']).ok) return true;
   if (run(['merge-base', '--is-ancestor', 'HEAD', 'FETCH_HEAD']).ok) {
     // The remote moved past this folder (a session or teammate pushed): catch

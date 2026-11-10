@@ -127,6 +127,7 @@
     "./internal/hooks/use-debounced-value",
     "./internal/hooks/use-slash-focus",
     "./internal/icons/claude",
+    "./internal/icons/codex",
     "./internal/icons/discord",
     "./internal/icons/download",
     "./internal/icons/edge",

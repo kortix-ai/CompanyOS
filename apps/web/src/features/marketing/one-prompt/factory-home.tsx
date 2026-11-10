@@ -3,6 +3,8 @@
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
 import { FACTORY_PROMPT } from '@kortix/shared/setup-guide';
+import { Claude } from '@kortix/ui/internal/icons/claude';
+import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -60,6 +62,17 @@ function GhostButton({ href, children }: { href: string; children: ReactNode }) 
     <Link href={href} className="border-border bg-card text-foreground hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium transition-colors">
       {children}
     </Link>
+  );
+}
+
+/** A product name with its mark, inline in running text (founder call 2026-11-10: Claude and Codex show their logos). */
+function Mark({ name }: { name: 'Claude' | 'Codex' | 'Claude Code' }) {
+  const Icon = name === 'Codex' ? Codex : Claude;
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <Icon className="size-[1em] shrink-0" />
+      {name}
+    </span>
   );
 }
 
@@ -205,7 +218,7 @@ export function FactoryHome() {
             <div className="flex flex-col items-start gap-7">
               <span className="border-border bg-card text-foreground inline-flex items-center gap-2 rounded-full border py-1 pr-3 pl-1.5 text-sm">
                 <span className="bg-kortix-base/15 text-kortix-base rounded-full px-2 py-0.5 font-mono text-xs">new</span>
-                Runs on your Claude or Codex plan
+                Runs on your <Mark name="Claude" /> or <Mark name="Codex" /> plan
               </span>
               <h1 className="text-foreground text-[40px] leading-[1.06] font-medium tracking-tight text-balance sm:text-5xl lg:text-[56px]">
                 One prompt adds a software factory to your repo.
@@ -232,7 +245,7 @@ export function FactoryHome() {
             <Eyebrow>Works with the tools you already use</Eyebrow>
             <ul className="text-muted-foreground flex flex-wrap justify-center gap-x-12 gap-y-4 text-xl font-medium tracking-tight">
               {TOOLS.map((tool) => (
-                <li key={tool}>{tool}</li>
+                <li key={tool}>{tool === 'Claude Code' || tool === 'Codex' ? <Mark name={tool} /> : tool}</li>
               ))}
             </ul>
           </div>
@@ -249,14 +262,14 @@ export function FactoryHome() {
             >
               <span className="text-foreground block text-sm">{FACTORY_PROMPT.split('\n')[0]}</span>
               <span className="text-muted-foreground mt-4 flex items-center justify-between text-xs">
-                <span className="font-mono">claude · codex · cursor</span>
+                <span className="text-foreground flex items-center gap-3"><Mark name="Claude Code" /><Mark name="Codex" /></span>
                 <span aria-live="polite" className={copied ? ACCENT : undefined}>{copied ? 'copied' : 'click to copy'}</span>
               </span>
             </button>
             <div className="flex flex-col items-center gap-3">
               <h2 className="text-foreground max-w-md text-3xl font-medium tracking-tight text-balance">Bring the plan you already pay for.</h2>
               <p className="text-muted-foreground max-w-md text-base">
-                Your Claude or ChatGPT subscription, or any API key. Shared with your workspace, so a 3 a.m. run uses it too.
+                Your <Mark name="Claude" /> or <Mark name="Codex" /> plan, or any API key. Shared with your workspace, so a 3 a.m. run uses it too.
               </p>
             </div>
           </div>

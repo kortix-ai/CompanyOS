@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { createDb, accounts, projects, type Database } from '@kortix/db';
-import { metadataClearSubtreeKey, metadataMerge, metadataMergeSubtree } from '../../workspaces/rows';
+import { metadataClearSubtreeKey, metadataMerge, metadataMergeGitSeed, metadataMergeSubtree } from '../../workspaces/rows';
 import { activateWithCas } from '../provider-transition/provider-transition-activate';
 import {
   ACTIVE_EXTERNAL_ID_META_KEY, ACTIVE_SNAPSHOT_NAME_META_KEY, PIN_META_KEY, readActiveRouting,
@@ -153,17 +153,14 @@ d('atomic merge preserves the routing pin (throwaway Postgres)', () => {
     const wiped = await readMeta(projectId);
     expect((wiped.git as Record<string, unknown>).managed).toBeUndefined();
 
-    // Redo the insert state and run the FIXED expression: the nested merge
-    // keeps managed/url/auth, lands the seed, and the disjoint top-level
-    // default_agent patch rides the same write.
+    // Redo the insert state and run the SHIPPED write expression (the same
+    // helper seedProvisionedRepo calls): the nested merge keeps managed/url/auth,
+    // lands the seed, and the disjoint top-level default_agent patch rides the
+    // same write.
     await db.update(projects).set({ metadata: metadataMerge({ git: seededGit }) }).where(eq(projects.projectId, projectId));
     await db
       .update(projects)
-      .set({
-        metadata: sql`${metadataMergeSubtree('git', { seed: { seeded: true, reason: 'seeded' } })} || ${JSON.stringify(
-          { default_agent: 'mykortix' },
-        )}::jsonb`,
-      })
+      .set({ metadata: metadataMergeGitSeed({ seeded: true, reason: 'seeded' }, { default_agent: 'mykortix' }) })
       .where(eq(projects.projectId, projectId));
 
     const after = await readMeta(projectId);

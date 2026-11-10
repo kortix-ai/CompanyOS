@@ -46,7 +46,7 @@ import { remoteBranchExists } from './git';
 import { config } from '../config';
 import { logger as appLogger } from '../lib/logger';
 import { db } from '../shared/db';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { getProjectMemberRole, grantProjectRole, projectCreationDenial } from './lib/access';
 import {
@@ -92,7 +92,7 @@ import {
   newWorkspaceConflict,
   resolveNewWorkspaceAccount,
 } from './new-workspace';
-import { deleteProjectRows, insertProjectRow, metadataMergeSubtree, type ProjectRowInsert, projectsView, updateProjectRows } from '../workspaces/rows';
+import { deleteProjectRows, insertProjectRow, metadataMergeGitSeed, type ProjectRowInsert, projectsView, updateProjectRows } from '../workspaces/rows';
 
 export const PROVISION_PHASES = [
   'validating',
@@ -943,13 +943,15 @@ async function seedProvisionedRepo(
       // shallow top-level patch of the whole `git` object wiped `managed`,
       // `url` and `auth` from the row the insert wrote microseconds earlier, so
       // every seeded workspace served `metadata.git` without `managed` and the
-      // CLI read the managed repo as unmanaged. `default_agent` is a disjoint
-      // top-level key, safe behind the same shallow merge. `row.metadata` above
-      // stays the in-memory copy the creation response serializes.
+      // CLI read the managed repo as unmanaged. The composed write lives in
+      // `metadataMergeGitSeed` (workspaces/rows.ts) so the regression test
+      // exercises the same expression. `row.metadata` above stays the
+      // in-memory copy the creation response serializes.
       await updateProjectRows(eq(projectsView.projectId, row.projectId), {
-        metadata: sql`${metadataMergeSubtree('git', { seed: verifiedSeedState })} || ${JSON.stringify(
+        metadata: metadataMergeGitSeed(
+          verifiedSeedState,
           seededDefaultAgent ? { default_agent: seededDefaultAgent } : {},
-        )}::jsonb`,
+        ),
         updatedAt: new Date(),
       }).catch(() => {}); // best-effort — a mirror-write hiccup must not fail project creation
 

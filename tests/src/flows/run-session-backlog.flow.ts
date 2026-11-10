@@ -421,6 +421,22 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
+    await ctx.step('the agent materializes the repository at /workspace on the session branch', async () => {
+      // #12136: a session no longer checks the repository out at boot, and
+      // /workspace starts with the config release's files, so a plain `git
+      // clone` cannot land there. The product flow is init + fetch + checkout
+      // onto the session branch (what the daemon's workspace setup runs for a
+      // declared clone): commit-push then has a repository to commit.
+      const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
+      await sendPrompt(
+        ctx,
+        projectId,
+        sessionId,
+        'Set up this workspace repository so you can commit and push. Run this one shell command exactly as written, then use no other tool and reply with exactly:\n' +
+          'git -C /workspace init -q && git -C /workspace remote add origin "$KORTIX_REPO_URL" && git -C /workspace fetch -q origin && git -C /workspace checkout -qf -B "$KORTIX_BRANCH_NAME" "origin/$KORTIX_DEFAULT_BRANCH" && git -C /workspace config push.default current',
+      );
+      await waitForTurn(ctx, projectId, sessionId, endedAfter(before), 'the clone turn to end');
+    });
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
       await sendPrompt(

@@ -421,6 +421,36 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
+    await ctx.step('the session materializes its repository (no checkout at boot, #12136)', async () => {
+      // /workspace starts empty since #12136: the box materializes the project
+      // repository on demand (the manifest's workspace setup, or the agent's
+      // own `kortix workspaces clone`). The host-driven commit-push below is
+      // the box's git harness, which refuses a repo that is not materialized
+      // (409 `project repo is not materialized` — release gate, head 5c6c90e).
+      // Materialize it the way the agent would: git init + fetch + checkout
+      // the session branch into the box's working folder.
+      const exec = await ctx.client.as(ctx.P.OWNER).post(
+        runtimePath(session.sandboxId, '/kortix/env-rpc'),
+        {
+          op: 'exec',
+          args: {
+            command: [
+              'cd "$KORTIX_PROJECT_TARGET"',
+              'test -d .git || { git init -q && git remote add origin "$KORTIX_REPO_URL"; }',
+              'git fetch -q origin',
+              'if git rev-parse -q --verify "refs/remotes/origin/$KORTIX_BRANCH_NAME" >/dev/null 2>&1',
+              'then git checkout -q -B "$KORTIX_BRANCH_NAME" "origin/$KORTIX_BRANCH_NAME"',
+              'else git checkout -q -B "$KORTIX_BRANCH_NAME" "origin/$KORTIX_DEFAULT_BRANCH"',
+              'fi',
+              'git config push.default current',
+            ].join(' && '),
+            timeout: 120_000,
+          },
+        },
+        { timeoutMs: 150_000 },
+      );
+      exec.status(200).body().has('$.ok', true).has('$.value.exitCode', 0);
+    });
     await ctx.step('the agent writes the requested file in the workspace', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
       await sendPrompt(

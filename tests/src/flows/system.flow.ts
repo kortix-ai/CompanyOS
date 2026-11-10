@@ -40,9 +40,9 @@ flow("SYS-7", { domain: "system", tags: ["smoke"], routes: ["POST /v1/system/dem
     const r = await ctx.client.post("/v1/system/demo-request", { email: "not-an-email" });
     r.status(400);
   });
-  await ctx.step("POST /v1/system/demo-request (valid) → 200 accepted", async () => {
-    // Public lead capture. `emailed` is false when no email provider is configured on
-    // the target env — the request is still accepted (graceful skip).
+  await ctx.step("POST /v1/system/demo-request (valid) → 200 stored", async () => {
+    // Public lead capture: the row is stored in kortix.contact_forms (`persisted: true`) before
+    // the email. `emailed` is false when no email provider is configured on the target env.
     const r = await ctx.client.post("/v1/system/demo-request", {
       name: "ke2e probe",
       email: `probe-${Date.now()}@ke2e.kortix.test`,
@@ -50,7 +50,7 @@ flow("SYS-7", { domain: "system", tags: ["smoke"], routes: ["POST /v1/system/dem
       company_size: "51-200",
       source: "ke2e",
     });
-    r.status(200).body().has("$.ok", true).exists("$.emailed");
+    r.status(200).body().has("$.ok", true).has("$.persisted", true).exists("$.emailed");
   });
 });
 

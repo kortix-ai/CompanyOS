@@ -296,6 +296,10 @@ const nextConfig = (): NextConfig => ({
   // file. Disable standalone on Vercel, where the platform does not use it.
   // See https://github.com/vercel/next.js/issues/96646.
   output: IS_PREVIEW_BUILD || process.env.VERCEL ? undefined : 'standalone',
+  // Skew Protection on Vercel. The deploy builds on a GitHub runner
+  // (infra/scripts/vercel-deploy-prebuilt.sh), where Vercel does not supply a
+  // deployment ID, so the script sets a unique one. Unset everywhere else.
+  deploymentId: process.env.KORTIX_VERCEL_DEPLOYMENT_ID || undefined,
   // Inline the resolved version so NEXT_PUBLIC_KORTIX_VERSION is available in
   // both the server (runtime-config) and client bundles, even on Vercel.
   env: {

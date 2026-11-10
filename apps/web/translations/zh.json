@@ -21542,11 +21542,6 @@
     "dismiss": "关闭",
     "emailCopied": "已复制电子邮件地址"
   },
-  "repositoryAccess": {
-    "label": "工作区仓库访问权限",
-    "enabled": "新会话会获得工作区仓库。Git 权限仍然适用。现有会话保留原有的访问设置。",
-    "disabled": "新会话在没有工作区仓库的情况下运行。仍可创建文件并使用已授权的工具。现有会话保留原有的访问设置。"
-  },
   "customProvider": {
     "intro": "目录中没有的端点。",
     "add": "添加自定义提供商",
@@ -26083,7 +26078,6 @@
   "agentMounts": {
     "lead": "此智能体的会话从“文件”中挂载的文件夹。更改立即生效，并适用于所有新会话。",
     "mount": "Mount folder",
-    "repository": "工作区仓库",
     "viaAgent": "与此智能体共享",
     "viaProject": "与此工作区中的所有人共享",
     "from": "{path} · {who}",

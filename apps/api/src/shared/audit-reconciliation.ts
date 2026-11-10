@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { LATE_ROW_MAX_AGE_DAYS } from './audit-archive/format';
 import { auditDb } from './audit-db';
 
 export interface AuditReconciliationResult {
@@ -13,7 +14,7 @@ const LOOKBACK = sql.raw(`interval '1 hour'`);
 // Every account's whole history is re-verified this often, not on every visit.
 export const FULL_RESCAN_DAYS = 7;
 // A pass covers about this many source rows, over every ledger together.
-// Prod 2026-10-03: an 80-day pass over a heavy account (~300k usage and gateway
+// Prod 2026-10-03 (then an 80-day window): an 80-day pass over a heavy account (~300k usage and gateway
 // rows, up to ~85k on one day) outran the audit pool's 10 s statement_timeout on
 // every visit. A cold probe of the partitioned audit table costs ~0.8–1.5 ms.
 export const BATCH_ROWS = 1_000;
@@ -61,9 +62,9 @@ export async function reconcileAuditEvents(
   const mark = await readReconciliationMark(accountId);
   // A full pass: no mark yet, the weekly rescan is due, or one is under way.
   const full = !mark || mark.fullDue;
-  // Never reconstruct a row older than the hot window (80 days; retention archives and
-  // drops partitions older than 90). After the legacy table and the old partitions are gone,
-  // an old source row has no audit row to find, and a full rescan would re-insert it.
+  // Never reconstruct a row older than LATE_ROW_MAX_AGE_DAYS (retention archives and drops
+  // partitions older than HOT_DAYS). After a week is archived and its partition is gone, an old
+  // source row has no audit row to find, and a full rescan would re-insert it.
   // A new full scan starts at that floor; a scan under way resumes at its mark.
   const start = full && !mark?.inProgress ? null : mark.since;
   const window = await readReconciliationWindow(accountId, start, batchRows);
@@ -162,7 +163,7 @@ async function readReconciliationWindow(accountId: string, start: string | null,
   const [window] = Array.from(
     (await auditDb().execute(sql`
       WITH w AS (
-        SELECT greatest(${start}::timestamptz, now() - interval '80 days') AS "from"
+        SELECT greatest(${start}::timestamptz, now() - make_interval(days => ${LATE_ROW_MAX_AGE_DAYS}::int)) AS "from"
       )
       SELECT w."from"::text AS "from",
              -- Rows sharing one timestamp must not stall the scan in place.

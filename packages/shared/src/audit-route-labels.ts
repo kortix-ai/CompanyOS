@@ -403,7 +403,6 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'GET /v1/drives/:driveId/agents/:agentName/mounts': { action: 'drive.mount.agent_list', title: "Viewed an agent's drive mounts" },
   'GET /v1/edge/tls-check': { action: 'system.edge_tls.check', title: 'Checked TLS certificate eligibility' },
   'GET /v1/generation': { action: 'gateway.generation.read', title: 'Viewed LLM generation details' },
-  'GET /v1/git/:project/fast-boot-bundle': { action: 'git.fast_boot_bundle.download', title: 'Downloaded fast-boot Git bundle' },
   'POST /v1/git/:project/git-receive-pack': { action: 'git.push', title: 'Pushed to Git repository' },
   'POST /v1/git/:project/git-upload-pack': { action: 'git.clone', title: 'Cloned or fetched Git repository' },
   'GET /v1/git/:project/info/refs': { action: 'git.ref.list', title: 'Listed Git repository refs' },

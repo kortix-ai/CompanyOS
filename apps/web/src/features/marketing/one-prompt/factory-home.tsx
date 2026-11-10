@@ -63,27 +63,6 @@ function GhostButton({ href, children }: { href: string; children: ReactNode }) 
   );
 }
 
-/** The pixel ruler along the top and left edges of the page. Art only. */
-function Rulers() {
-  const ticks = 'repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px 10px)';
-  const ticksY = 'repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px 10px)';
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="border-border bg-background absolute inset-x-0 top-0 hidden h-6 border-b md:block">
-        <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ backgroundImage: ticks }} />
-        {Array.from({ length: 19 }, (_, i) => (i + 1) * 100).map((x) => (
-          <span key={x} className="text-muted-foreground/60 absolute top-1 font-mono text-[10px]" style={{ left: x - 10 }}>
-            {x}
-          </span>
-        ))}
-      </div>
-      <div className="border-border bg-background absolute top-0 bottom-0 left-0 hidden w-6 border-r md:block">
-        <div className="absolute inset-y-0 right-0 w-1.5" style={{ backgroundImage: ticksY }} />
-      </div>
-    </div>
-  );
-}
-
 function Eyebrow({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">{children}</span>;
 }
@@ -193,16 +172,14 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 /**
  * kortix.com: one product. One prompt adds a software factory to your repo.
- * The page frame (rulers, one railed column, hairline bento grids, glow bands)
+ * The page frame (one railed column, hairline bento grids, glow bands)
  * after wonder.design; the look, words and every panel are Kortix's own: the
  * brand blue, the dither field, and data from a real factory run.
  */
 export function FactoryHome() {
   const { copied, copy } = useCopy(FACTORY_PROMPT);
   return (
-    <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip md:pt-6 md:pl-6">
-      <Rulers />
-
+    <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
       <div className={cn(COLUMN, 'border-border relative border-x')}>
         <header className="border-border bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-8 backdrop-blur md:px-10">
           <Link href="/" aria-label="Kortix" className="text-foreground">

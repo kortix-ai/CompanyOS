@@ -1,7 +1,6 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { act } from 'react';
-import type { Container, Root } from 'react-dom/client';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 const win = new Window({ url: 'http://localhost/panel' });
@@ -55,35 +54,36 @@ mock.module('./panel-channel', () => ({
 const { ChromePanelHome } = await import('./chrome-panel-home');
 const { useComposerPrefillStore } = await import('@kortix/ui/internal/stores/composer-prefill-store');
 
-const container = win.document.createElement('div');
-win.document.body.append(container);
-let root: Root = createRoot(container as unknown as Container);
+const container = document.createElement('div');
+document.body.append(container);
+let root = createRoot(container);
 
 afterEach(async () => {
   await act(async () => root.unmount());
   container.replaceChildren();
-  root = createRoot(container as unknown as Container);
+  root = createRoot(container);
   pushed.mockClear();
   useComposerPrefillStore.setState({ prefillByProject: {} });
 });
 const textarea = () => {
-  const node = win.document.body.querySelector('#panel-prompt');
-  if (!(node instanceof win.HTMLTextAreaElement)) throw new Error('missing the prompt textarea');
+  const node = document.body.querySelector('#panel-prompt');
+  if (!(node instanceof HTMLTextAreaElement)) throw new Error('missing the prompt textarea');
   return node;
 };
 const type = async (text: string) => {
   await act(async () => {
-    const set = Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, 'value')!.set!;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+    if (!set) throw new Error('the value property has no setter');
     set.call(textarea(), text);
-    textarea().dispatchEvent(new win.Event('input', { bubbles: true }));
+    textarea().dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
 const prefill = () => useComposerPrefillStore.getState().prefillByProject['p1'];
 
 test('a quick action hands the read page text to the project composer as a when-ready prefill', async () => {
   await act(async () => root.render(<ChromePanelHome />));
-  const summarize = [...win.document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Summarize this page');
-  if (!summarize) throw new Error('missing the summarize quick action');
+  const summarize = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Summarize this page');
+  if (!(summarize instanceof HTMLElement)) throw new Error('missing the summarize quick action');
   await act(async () => {
     summarize.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -97,16 +97,17 @@ test('a quick action hands the read page text to the project composer as a when-
     throw new Error('the attachment is not a readable File');
   }
   expect(await attached.file.text()).toContain('The page body.');
-  expect(pushed.mock.calls).toEqual([['/workspaces/p1']]);
+  expect(pushed).toHaveBeenCalledTimes(1);
+  expect(pushed.mock.calls[0]?.[0]).toBe('/workspaces/p1');
 });
 
 test('send carries the quoted selection: the prefill quotes it with its source tab', async () => {
   await act(async () => root.render(<ChromePanelHome />));
   await act(() => onContext({ tab: activeTab, quote: 'Selected words' }));
-  expect(win.document.body.textContent).toContain('Selected words');
+  expect(document.body.textContent).toContain('Selected words');
   await type('Do this');
-  const send = [...win.document.body.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Send');
-  if (!send) throw new Error('missing the send button');
+  const send = [...document.body.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Send');
+  if (!(send instanceof HTMLElement)) throw new Error('missing the send button');
   await act(async () => {
     send.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -116,5 +117,6 @@ test('send carries the quoted selection: the prefill quotes it with its source t
   expect(prefill2?.text).toContain('> Selected words');
   expect(prefill2?.text).toContain('from “Docs page”');
   expect(prefill2?.submit).toBe('when-ready');
-  expect(pushed.mock.calls).toEqual([['/workspaces/p1']]);
+  expect(pushed).toHaveBeenCalledTimes(1);
+  expect(pushed.mock.calls[0]?.[0]).toBe('/workspaces/p1');
 });

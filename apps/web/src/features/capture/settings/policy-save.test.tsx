@@ -1,7 +1,6 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { act } from 'react';
-import type { Container, Root } from 'react-dom/client';
 import type { CapturePolicy } from '@kortix/sdk';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -47,35 +46,35 @@ mock.module('@kortix/ui/internal/capture/use-capture-area', () => ({
 }));
 const { CaptureSettingsPane } = await import('./settings-view');
 
-const container = win.document.createElement('div');
-win.document.body.append(container);
-let root: Root = createRoot(container as unknown as Container);
+const container = document.createElement('div');
+document.body.append(container);
+let root = createRoot(container);
 
 afterEach(async () => {
   await act(async () => root.unmount());
   container.replaceChildren();
-  root = createRoot(container as unknown as Container);
+  root = createRoot(container);
   saved.mockClear();
 });
-const switches = () => [...win.document.body.querySelectorAll('[role="switch"]')];
-const click = async (node: (ReturnType<typeof switches>)[number]) => {
-  if (!(node instanceof win.HTMLElement)) throw new Error('not a clickable element');
+const switches = () => [...document.body.querySelectorAll('[role="switch"]')];
+const click = async (node: Element) => {
+  if (!(node instanceof HTMLElement)) throw new Error('not a clickable element');
   await act(() => node.click());
 };
 const button = (label: string) => {
-  const node = [...win.document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
-  if (!node) throw new Error(`missing the ${label} button`);
+  const node = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+  if (!(node instanceof HTMLElement)) throw new Error(`missing the ${label} button`);
   return node;
 };
 
 test('toggling a layer shows the save bar and saving posts the patched policy', async () => {
   await act(() => root.render(<CaptureSettingsPane accountId="account-1" />));
   // No save bar while the draft matches the stored policy.
-  expect(win.document.body.textContent).not.toContain('Unsaved changes');
+  expect(document.body.textContent).not.toContain('Unsaved changes');
   const screen = switches()[0];
   if (!screen) throw new Error('missing the screen layer switch');
   await click(screen);
-  expect(win.document.body.textContent).toContain('Unsaved changes');
+  expect(document.body.textContent).toContain('Unsaved changes');
   await click(button('Save changes'));
   expect(saved).toHaveBeenCalledTimes(1);
   expect(saved.mock.calls[0]?.[0]).toEqual({ ...basePolicy, layers: { screen: false, actions: false, audio: false } });
@@ -83,10 +82,12 @@ test('toggling a layer shows the save bar and saving posts the patched policy', 
 
 test('discard returns the draft to the stored policy and hides the save bar', async () => {
   await act(() => root.render(<CaptureSettingsPane accountId="account-1" />));
-  await click(switches()[0]);
+  const screen = switches()[0];
+  if (!screen) throw new Error('missing the screen layer switch');
+  await click(screen);
   await click(button('Discard changes'));
-  expect(saved.mock.calls).toEqual([]);
-  expect(win.document.body.textContent).not.toContain('Unsaved changes');
+  expect(saved).not.toHaveBeenCalled();
+  expect(document.body.textContent).not.toContain('Unsaved changes');
   // The switch is back to the stored value.
   expect(switches()[0]?.getAttribute('aria-checked')).toBe('true');
 });

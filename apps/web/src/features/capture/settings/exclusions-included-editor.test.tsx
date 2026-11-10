@@ -1,7 +1,6 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { act, useState } from 'react';
-import type { Container, Root } from 'react-dom/client';
 import type { CapturePolicy } from '@kortix/sdk';
 import { applyToPrivacy, includedView, type ExclusionChange } from './exclusions-model';
 
@@ -25,9 +24,9 @@ for (const key of Object.getOwnPropertyNames(win)) {
 const { createRoot } = await import('react-dom/client');
 
 const { IncludedEditor } = await import('./exclusions-editor');
-const container = win.document.createElement('div');
-win.document.body.append(container);
-let root: Root = createRoot(container as unknown as Container);
+const container = document.createElement('div');
+document.body.append(container);
+let root = createRoot(container);
 const changed = mock((_change: ExclusionChange) => {});
 const privacy: CapturePolicy['privacy'] = {
   redact_pii: false, excluded_bundle_ids: [], excluded_domains: [], exclusion_groups: [],
@@ -41,28 +40,29 @@ function Editor() {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.replaceChildren();
-  root = createRoot(container as unknown as Container);
+  root = createRoot(container);
   changed.mockClear();
 });
 const input = () => {
-  const node = win.document.body.querySelector('input');
-  if (!(node instanceof win.HTMLInputElement)) throw new Error('missing the search input');
+  const node = document.body.querySelector('input');
+  if (!(node instanceof HTMLInputElement)) throw new Error('missing the search input');
   return node;
 };
 const type = async (text: string) => {
   await act(async () => {
-    const set = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value')!.set!;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (!set) throw new Error('the value property has no setter');
     set.call(input(), text);
-    input().dispatchEvent(new win.Event('input', { bubbles: true }));
+    input().dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
 const pressEnter = async () => {
-  await act(() => input().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }) as never));
+  await act(() => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
 };
 const pickTab = async (label: string) => {
-  const tab = [...win.document.body.querySelectorAll('[role="tab"]')].find((t) => t.textContent === label);
-  if (!tab) throw new Error(`missing the ${label} tab`);
-  await act(() => tab.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, button: 0 }) as never));
+  const tab: Element | undefined = [...document.body.querySelectorAll('[role="tab"]')].find((t) => t.textContent === label);
+  if (!(tab instanceof HTMLElement)) throw new Error(`missing the ${label} tab`);
+  await act(() => tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
 };
 
 test('a typed app joins the included list with one include-app change', async () => {
@@ -71,7 +71,7 @@ test('a typed app joins the included list with one include-app change', async ()
   await pressEnter();
   expect(changed.mock.calls).toEqual([[{ kind: 'include-app', id: 'com.example.new', on: true }]]);
   // The row appears named by its id, the input clears for the next entry.
-  const rows = [...win.document.body.querySelectorAll('li p')].map((p) => p.textContent);
+  const rows = [...document.body.querySelectorAll('li p')].map((p) => p.textContent);
   expect(rows).toContain('com.example.new');
   expect(input().value).toBe('');
 });
@@ -82,7 +82,7 @@ test('a typed website on the websites tab emits one include-domain change', asyn
   await type('notion.example');
   await pressEnter();
   expect(changed.mock.calls).toEqual([[{ kind: 'include-domain', id: 'notion.example', on: true }]]);
-  const rows = [...win.document.body.querySelectorAll('li p')].map((p) => p.textContent);
+  const rows = [...document.body.querySelectorAll('li p')].map((p) => p.textContent);
   expect(rows).toContain('notion.example');
 });
 
@@ -93,14 +93,14 @@ test('a website already included is not added again', async () => {
   await pressEnter();
   expect(changed.mock.calls).toEqual([]);
   // The add button stays hidden: nothing to add.
-  expect([...win.document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('kept.example'))).toBe(false);
+  expect([...document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('kept.example'))).toBe(false);
 });
 
 test('the add button emits the same include change as Enter', async () => {
   await act(() => root.render(<Editor />));
   await type('added.example');
-  const add = [...win.document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('added.example'));
-  if (!add) throw new Error('missing the add button');
+  const add = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('added.example'));
+  if (!(add instanceof HTMLElement)) throw new Error('missing the add button');
   await act(() => add.click());
   expect(changed.mock.calls).toEqual([[{ kind: 'include-app', id: 'added.example', on: true }]]);
 });

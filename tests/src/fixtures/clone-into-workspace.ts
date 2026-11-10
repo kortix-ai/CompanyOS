@@ -17,11 +17,7 @@
  * suite 42868914454, GOLD-1).
  */
 export const CLONE_INTO_WORKSPACE_COMMAND =
-  'git -C /workspace rev-parse --git-dir >/dev/null 2>&1 || ' +
-  '{ d=$(mktemp -d) && git clone -q "$KORTIX_REPO_URL" "$d/repo" && cp -a "$d/repo/." /workspace/ && ' +
-  '{ git -C /workspace checkout -q -B "$KORTIX_BRANCH_NAME" "origin/$KORTIX_BRANCH_NAME" 2>/dev/null || ' +
-  'git -C /workspace checkout -q -B "$KORTIX_BRANCH_NAME"; }; }; ' +
-  'git -C /workspace rev-parse HEAD';
+  'git -C /workspace rev-parse --git-dir >/dev/null 2>&1 || { d=$(mktemp -d) && git clone -q "$KORTIX_REPO_URL" "$d/repo" && cp -a "$d/repo/." /workspace/ && { git -C /workspace checkout -q -B "$KORTIX_BRANCH_NAME" "origin/$KORTIX_BRANCH_NAME" 2>/dev/null || git -C /workspace checkout -q -B "$KORTIX_BRANCH_NAME"; }; }; git -C /workspace rev-parse HEAD';
 
 /** The prompt prefix: the command, and the rule that it must succeed. */
 export const CLONE_INTO_WORKSPACE = `First run this exact shell command with your shell tool: \`${CLONE_INTO_WORKSPACE_COMMAND}\`. It must exit 0. `;

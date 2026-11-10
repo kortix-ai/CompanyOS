@@ -19,7 +19,7 @@
  * `blob:<sha256>` ref for the stored object's ref (`withStoredRefs`).
  */
 import { createHash } from 'node:crypto';
-import { fromV1, type SessionLog, type SessionLogMessage, type V1Row } from '@kortix/api-contract/session-log';
+import { fromV1, TodoSchema, type SessionLog, type SessionLogMessage, type V1Row } from '@kortix/api-contract/session-log';
 import type { MessageRow, StoreSnapshot } from './opencode-store';
 
 /** The 1×1 PNG the daemon's offload pass left in a row whose bytes moved to a sidecar file. */
@@ -164,13 +164,17 @@ export function recoverSessionLog(input: {
   delete log.grade_counts;
   log.harness = { current: 'opencode', history: [{ harness: 'opencode', version, from_seq: 1, at: log.created_at }] };
   const rootThread = log.threads.find((t) => !t.parent_thread_id)?.thread_id;
+  // OpenCode kept a todo's status and priority as free text. One value outside
+  // the session-log enums failed the whole log (prod, 2026-11-08: 9 sessions).
+  // A todo with an unknown status is left out; an unknown priority is dropped.
   log.todos = store.todos
     .filter((t) => t.session_id === rootThread)
-    .map((t) => ({
-      content: t.content,
-      status: t.status as SessionLog['todos'][number]['status'],
-      priority: t.priority as SessionLog['todos'][number]['priority'],
-    }));
+    .flatMap((t) => {
+      const todo = TodoSchema.safeParse({ content: t.content, status: t.status, priority: t.priority });
+      if (todo.success) return [todo.data];
+      const bare = TodoSchema.safeParse({ content: t.content, status: t.status });
+      return bare.success ? [bare.data] : [];
+    });
   return {
     log,
     blobs: new Map([...attachments.values()].map((r) => [r.sha256, { mime: r.mime, data: r.data }])),

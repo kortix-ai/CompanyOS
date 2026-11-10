@@ -28,7 +28,6 @@ import {
 } from '../shared/audit';
 import { auditCredentialNames } from '../shared/audit-credential-names';
 import { readAuditActivity } from '../shared/audit-activity';
-import { requestClientIp } from '../middleware/client-ip';
 import {
   deliverTestEvent,
   generateWebhookSecret,
@@ -49,7 +48,7 @@ import { auditArchiveStore } from '../shared/audit-archive/store';
 import { reconcileAuditEvents } from '../shared/audit-reconciliation';
 import type { AppEnv } from '../types';
 import { buildFilters } from './audit-filters';
-import { requireEntitlement } from './iam/http-helpers';
+import { auditIam, requireEntitlement } from './iam/http-helpers';
 import { readJsonObject } from '../shared/http-body';
 import { accountIdParam } from '../shared/route-params';
 
@@ -740,16 +739,12 @@ auditRouter.openapi(
       .returning();
 
     // Audit the webhook config itself — meta-auditing.
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.create',
       resourceType: 'audit_webhook',
       resourceId: row.webhookId,
       after: { name: row.name, url: row.url, action_prefix: row.actionPrefix },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     // Fire a one-shot test delivery so a mistyped/unreachable URL surfaces at
@@ -821,17 +816,13 @@ auditRouter.openapi(
       .where(eq(auditWebhooks.webhookId, webhookId))
       .returning();
 
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.update',
       resourceType: 'audit_webhook',
       resourceId: webhookId,
       before: { name: before.name, enabled: before.enabled, action_prefix: before.actionPrefix },
       after: { name: updated.name, enabled: updated.enabled, action_prefix: updated.actionPrefix },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     return c.json(serializeWebhook(updated));
@@ -978,16 +969,12 @@ auditRouter.openapi(
       .returning({ name: auditWebhooks.name, url: auditWebhooks.url });
     if (rows.length === 0) return c.json({ error: 'webhook not found' }, 404);
 
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.delete',
       resourceType: 'audit_webhook',
       resourceId: webhookId,
       before: { name: rows[0]!.name, url: rows[0]!.url },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     return c.json({ deleted: true });

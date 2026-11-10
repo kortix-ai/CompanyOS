@@ -29,6 +29,7 @@ import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogDecision,
   deadCredentialLogKey,
+  isAgentGrantDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
@@ -370,7 +371,13 @@ function handleHttpException(
   // body with no session_token_revoked code — only the line is throttled,
   // first per window per normalized key, next line carrying `suppressed`.
   // auth-audit's auditLoginFail at each throw site keeps exact accounting.
-  if (isDeadCredential(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
+  // The agent-grant denial family joins the same treatment (KRTX-4635): the
+  // typed body already names the permission and the remedy, and a caller that
+  // never acts on it — an in-sandbox agent looping a denied command — put 590
+  // warn lines in two hours on one prod route, 8.8k in eight days across ~10
+  // routes, all one reason (`agent_scope_insufficient`). Same line, same
+  // grouping; only the rate and the severity band change.
+  if (isDeadCredential(err) || isAgentGrantDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.

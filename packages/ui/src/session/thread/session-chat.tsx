@@ -4,6 +4,7 @@
 import { ModelSwitchHistory } from '../panel/model-switch-event';
 import { uiRoutes } from '../../lib/routes';
 import { isQuestionTool } from '@kortix/sdk';
+import { SessionAccessPrompt } from '../prompts/session-access-prompt';
 import { SessionApprovalPrompt } from '../prompts/session-approval-prompt';
 import { childSessionHref } from '../tool/tools/session-spawn-urls';
 import { SessionPermissionPrompt } from '../prompts/session-permission-prompt';
@@ -1841,10 +1842,19 @@ export function SessionChat({
   const parkedAsks = useSessionNeedsYou(projectId ?? '', projectSessionId ?? '', {
     enabled: Boolean(projectId && projectSessionId),
   }).asks;
+  // Only questions and permission asks merge into the runtime's own cards.
+  // A connector approval docks as `SessionApprovalPrompt`, colleague access
+  // as `SessionAccessPrompt`; neither is answered by request id.
   const parkedAskIdByRequest = useMemo(
-    () => new Map(parkedAsks.filter((ask) => ask.kind !== 'approval').map((ask) => [ask.request_id, ask.id])),
+    () =>
+      new Map(
+        parkedAsks
+          .filter((ask) => ask.kind === 'question' || ask.kind === 'permission')
+          .map((ask) => [ask.request_id, ask.id]),
+      ),
     [parkedAsks],
   );
+  const accessAsks = useMemo(() => parkedAsks.filter((ask) => ask.kind === 'access'), [parkedAsks]);
   const pendingPermissions = useMemo(() => {
     const live = new Set(livePermissions.map((p) => p.id));
     const parked = parkedAsks
@@ -1922,6 +1932,8 @@ export function SessionChat({
   // A connector call waiting on a decision docks onto the composer the way a
   // question does (`SessionApprovalPrompt` reports it).
   const [approvalDocked, setApprovalDocked] = useState(false);
+  // My Kortix asking to give a colleague access docks the same way.
+  const [accessDocked, setAccessDocked] = useState(false);
   const questionPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const nextQuestion = activePendingQuestion;
@@ -4117,6 +4129,9 @@ export function SessionChat({
         {/* Connector actions a policy gated for approval — pauses the run
             until the human decides. Self-hides when nothing's pending. */}
         <SessionApprovalPrompt onDockedChange={setApprovalDocked} />
+        {/* My Kortix asks to start a colleague with extra connectors or
+            secrets. Self-hides when nothing's pending. */}
+        <SessionAccessPrompt projectId={projectId ?? ''} asks={accessAsks} onDockedChange={setAccessDocked} />
         {/* Runtime tool permissions (bash/edit/…) awaiting a decision —
             the turn is blocked inside the runtime and resumes the moment
             a reply lands. Self-hides when nothing's pending. */}
@@ -4148,6 +4163,8 @@ export function SessionChat({
       </>
     ),
     [
+      projectId,
+      accessAsks,
       sessionId,
       sessionScopeAgentName,
       pendingPermissions,
@@ -5221,7 +5238,7 @@ export function SessionChat({
                 lockForApproval={runtimePermissionLocksComposer(livePermissions.length, isBusy)}
                 onCustomAnswer={handleCustomAnswer}
                 questionButtonLabel={renderedQuestion ? questionAction.label : null}
-                questionActive={!!renderedQuestion || approvalDocked}
+                questionActive={!!renderedQuestion || approvalDocked || accessDocked}
                 questionCanAct={questionAction.canAct}
                 onQuestionAction={handleQuestionAction}
                 aboveSlot={chatAboveSlot}

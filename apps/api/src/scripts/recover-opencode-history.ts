@@ -34,6 +34,9 @@
  *
  *   bun src/scripts/recover-opencode-history.ts --env prod --apply --max-store-mb 2048 --concurrency 1
  *
+ * The cap goes up to 8192 MiB. The conversion peaks near 2.4x the store (262 MB
+ * store: 636 MB RSS), so a 2 vCPU / 16 GB task takes a store up to ~6 GB.
+ *
  * STOP RULES (the run ends by itself and exits 1): 5 failures in a row; more
  * than 2 invalid logs and over 5 % of the processed sessions; Platinum
  * throttling (429) for over 5 minutes; SIGTERM (in-flight boxes finish first).
@@ -97,8 +100,8 @@ function parseArgs(argv: string[]): Args {
   }
   if (out.limit !== null && !(out.limit > 0)) throw new Error('--limit must be a positive number');
   if (!(out.concurrency >= 1 && out.concurrency <= 6)) throw new Error('--concurrency must be 1..6');
-  if (!(Number.isSafeInteger(out.maxStoreBytes) && out.maxStoreBytes > 0 && out.maxStoreBytes <= 4096 * 1024 * 1024)) {
-    throw new Error('--max-store-mb must be a whole number, 1..4096');
+  if (!(Number.isSafeInteger(out.maxStoreBytes) && out.maxStoreBytes > 0 && out.maxStoreBytes <= 8192 * 1024 * 1024)) {
+    throw new Error('--max-store-mb must be a whole number, 1..8192');
   }
   // Memory: the conversion holds a store several times over.
   if (out.maxStoreBytes > MAX_STORE_BYTES && out.concurrency !== 1) throw new Error('--max-store-mb above 128 needs --concurrency 1');
@@ -151,6 +154,10 @@ function candidateFilter(args: Args) {
       AND (
         NOT ss.metadata ? ${RECOVERY_KEY}
         OR (ss.metadata->${RECOVERY_KEY}->>'outcome' = 'retry'
+            AND coalesce((ss.metadata->${RECOVERY_KEY}->>'attempts')::int, 0) < ${MAX_ATTEMPTS})
+        -- Refused for a todo status before the converter dropped unknown ones (prod, 2026-11-08).
+        OR (ss.metadata->${RECOVERY_KEY}->>'outcome' = 'invalid'
+            AND coalesce(ss.metadata->${RECOVERY_KEY}->>'detail', '') LIKE 'todos.%'
             AND coalesce((ss.metadata->${RECOVERY_KEY}->>'attempts')::int, 0) < ${MAX_ATTEMPTS})
         ${args.maxStoreBytes > MAX_STORE_BYTES ? retakeTooLarge(args.maxStoreBytes) : sql``}
       )

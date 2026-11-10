@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { flow } from '../core/flow';
 import type { FlowContext } from '../core/types';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 type Db = {
   query<T = Record<string, unknown>>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
@@ -183,7 +184,7 @@ flow(
           `INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')`,
           [sessionId, team.id, project.id],
         );
-        await db.query(`UPDATE kortix.account_tokens SET account_id = $2, project_id = $3, session_id = $4 WHERE token_id = $1`, [tokenId, team.id, project.id, sessionId]);
+        await db.query(lockProjectFirst(`UPDATE kortix.account_tokens SET account_id = $2, project_id = $3, session_id = $4 WHERE token_id = $1`), [tokenId, team.id, project.id, sessionId]);
         const asSession = ctx.client.withBearer(minted.secret_key, 'SESSION_TOKEN');
         const got = paths((await search(asSession, { q: word, limit: '100' })).status(200));
         const want = [`${AGENT_DRIVE}/${word}-logo.png`, `${AGENT_DRIVE}/plan.md`, `${ownerFolder}/diary.md`, ...TEAM_FOLDERS.map((f) => `${f}/brief.md`)].sort();

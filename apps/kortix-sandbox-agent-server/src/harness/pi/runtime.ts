@@ -2130,6 +2130,10 @@ export class PiRuntime {
       controlPlane: cloud !== null,
       background: input.background,
     })
+    // Access beyond this session's own is granted by the API to a new session: never dropped into an in-process child.
+    if (input.access && !(route.session === 'separate' && cloud)) {
+      throw new Error('An inline agent with its own connectors or secrets needs its own session, and this computer cannot start one. Do the work without that access, or name a project agent that has it.')
+    }
     if (route.session === 'separate' && cloud) {
       // The agent and its tools are read per call: a prompt may switch the agent (applyAgent).
       // The spread keeps the shared `live` counter.

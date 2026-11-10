@@ -225,7 +225,22 @@ flow(
       }
       const listed = (await ctx.client.as(pat).get('/v1/projects')).status(200).json<any[]>();
       if (listed.some((w) => w.project_id !== p.id)) throw new Error('a workspace key listed another workspace');
-      if ((await sameAnswer(ctx, pat, '/v1/accounts/me', '/v1/me')) !== 200) throw new Error('identity probe refused');
+      // The key belongs to OWNER, whose membership list grows while other
+      // flows create teams, so the two bodies' `accounts` can differ by a
+      // workspace. The identity and the key's context must not.
+      const [legacyMe, me] = await Promise.all([
+        ctx.client.as(pat).get('/v1/accounts/me'),
+        ctx.client.as(pat).get('/v1/me'),
+      ]);
+      legacyMe.status(200);
+      me.status(200);
+      const identity = (r: typeof me) => {
+        const { accounts: _accounts, ...rest } = r.json<Record<string, unknown>>();
+        return stable(JSON.stringify(rest));
+      };
+      if (identity(legacyMe) !== identity(me)) {
+        throw new Error(`identity probe differs:\n${legacyMe.text().slice(0, 300)}\n${me.text().slice(0, 300)}`);
+      }
     });
 
     await ctx.step('a key minted under a workspace path is bound to that workspace; a legacy account key names its workspace on /v1/accounts only', async () => {

@@ -2505,7 +2505,23 @@
         "askOwnerBody": "Solo los propietarios y administradores del espacio de trabajo pueden gestionar la facturación. Pide a uno de ellos que elija un nivel de créditos para el espacio de trabajo.",
         "planTitle": "Plan y créditos",
         "planDescription": "Cambia tu plan mensual o añade créditos para este mes.",
-        "topupSecondary": "¿Necesitas más este mes? Añade créditos"
+        "paymentFailedHint": "Actualiza la tarjeta y Stripe reintentará el cobro.",
+        "updatePaymentMethod": "Actualizar método de pago",
+        "topUpInstead": "Añadir créditos en su lugar",
+        "memberBody": "Solo los propietarios y administradores pueden añadir créditos. Pídeselo desde aquí o envía a uno de ellos el enlace de facturación de este espacio de trabajo.",
+        "memberCopyLink": "Copiar enlace de facturación",
+        "memberLinkCopied": "Enlace copiado",
+        "memberLinkCopyFailed": "No se pudo copiar el enlace",
+        "roleOwner": "Propietario",
+        "roleAdmin": "Administrador",
+        "newBalance": "Nuevo saldo",
+        "continue": "Continuar",
+        "balanceRetry": "Reintentar",
+        "addLine": "Añade créditos para que tus agentes sigan funcionando.",
+        "raiseLine": "Sube tu plan para que tus agentes sigan funcionando.",
+        "subscribeLine": "Suscríbete para que tus agentes sigan funcionando.",
+        "switchToMonthly": "¿Prefieres créditos mensuales? Cambiar plan",
+        "autoTopupRetired": "La recarga automática ya no aplica en este plan."
       },
       "admin": {
         "plan": "Plan",
@@ -2528,7 +2544,9 @@
           "growing": "Equipos en crecimiento",
           "scale": "Scale",
           "large": "Grandes organizaciones"
-        }
+        },
+        "once": "una vez",
+        "onceLabel": "Importe único de créditos"
       }
     },
     "popular": "Popular",
@@ -13577,7 +13595,7 @@
       "text5ebe32e1b916": "Las credenciales de los conectores nunca entran en un sandbox",
       "text5ec6ae29f4b6": "También instala:",
       "text5ec9729027c3": "Convierte lo que dicen los usuarios en lo que se publica.",
-      "text5ecbbab0d8d8": "Tu cartera está vacía, por lo que no se pueden iniciar sesiones. Añade saldo para mantener la ejecución y los últimos modelos de IA; {value0} no se verá afectado.",
+      "text5ecbbab0d8d8": "Tu cartera está vacía, por lo que no se pueden iniciar sesiones. Añade créditos para mantener la ejecución y los últimos modelos de IA; {value0} no se verá afectado.",
       "text5ecf97e61ad9": "Copia este código. Después, abre la página de autenticación e introdúcelo para conectar ChatGPT.",
       "text5ed9bd98de1b": "No se pudo actualizar el valor predeterminado del espacio de trabajo",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17447,7 +17465,7 @@
       "textcdd7efcb7e2c": "política resuelta",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Soluciones de Kortix por rol",
-      "textce0c20c05842": "Tu último pago no se ha procesado. Actualiza tu método de pago en Gestionar facturación o añade saldo para seguir ejecutando sesiones mientras tanto.",
+      "textce0c20c05842": "Tu último pago no se ha procesado. Actualiza tu método de pago para que tu plan siga activo.",
       "textce0faee27592": "facturación pago tarjeta de crédito suscripción administrar cartera nivel plan límites resumen gasto",
       "textce18e358bf01": "Pruebe con un término diferente.",
       "textce1e609b7bf5": "Solo puertos del sandbox",
@@ -20405,7 +20423,7 @@
       "text2b2c3ec032a6": "Espacio de trabajo transferido",
       "text44f9fff8bdae": "Cambió el plan de créditos",
       "text3fa17bba73e1": "Este espacio de trabajo aún no tiene un plan. Elige un importe mensual de créditos para ejecutar sesiones. Todos los miembros comparten un único fondo.",
-      "text6821e42be2c1": "Tu monedero está vacío, así que las sesiones no pueden ejecutarse. Recarga para mantener el cómputo y los últimos modelos de IA en marcha; tu plan no se ve afectado.",
+      "text6821e42be2c1": "Tu monedero está vacío, así que las sesiones no pueden ejecutarse. Añade créditos para mantener el cómputo y los últimos modelos de IA en marcha; tu plan no se ve afectado.",
       "text146aaf3c71fa": "Mantiene habilitados SSO, SCIM, RBAC y auditoría en un espacio de trabajo Enterprise firmado que también se factura mediante un plan de pago, para que la conciliación de Stripe no los retire.",
       "text517105fd13ce": "Los créditos financian el cómputo en sandbox: incluso una prueba BYOK necesita saldo en el monedero para ejecutar sesiones. La concesión de bienvenida gratuita es de 2 $.",
       "text2f1d17f50af8": "Enterprise desbloquea SAML SSO, sincronización de directorio SCIM, RBAC y acceso a auditoría para este espacio de trabajo. El plan facturado no cambia.",
@@ -21415,7 +21433,8 @@
         "question": "Pregunta",
         "permission": "Permiso",
         "approval": "Aprobación de conector"
-      }
+      },
+      "allowed": "Permitido"
     },
     "reviewBulk": {
       "approve": "Aprobar",
@@ -21486,7 +21505,21 @@
       "senderUnavailable": "No se pudo cargar la cuenta de envío. Revisa la fila De.",
       "quoted": "«{text}»"
     },
-    "promptHistory": "Historial {index}/{total}"
+    "promptHistory": "Historial {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix pide dar acceso a un compañero",
+      "task": "Tarea",
+      "connector": "Conector",
+      "secret": "Secreto",
+      "onlyThis": "El compañero recibe solo esto, para esta única tarea.",
+      "deny": "Denegar",
+      "allow": "Permitir",
+      "allowed": "Acceso permitido",
+      "allowedDescription": "My Kortix inicia al compañero.",
+      "denied": "Acceso denegado",
+      "deniedDescription": "My Kortix recibe tu respuesta.",
+      "failed": "No se pudo enviar tu decisión. Inténtalo de nuevo."
+    }
   },
   "commandPalette": {
     "title": "Paleta de comandos",

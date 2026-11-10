@@ -65,9 +65,7 @@
     "./count-badge": "./src/primitives/count-badge.tsx",
     "./customize": "./src/customize/index.ts",
     "./customize/agents/agent-apps-grant": "./src/customize/agents/agent-apps-grant.ts",
-    "./customize/agents/agent-detail-aside": "./src/customize/agents/agent-detail-aside.tsx",
     "./customize/agents/agent-page": "./src/customize/agents/agent-page.tsx",
-    "./customize/agents/agents-page": "./src/customize/agents/agents-page.tsx",
     "./customize/connectors/connector-routes": "./src/customize/connectors/connector-routes.ts",
     "./customize/connectors/connectors-app-return-bar": "./src/customize/connectors/connectors-app-return-bar.tsx",
     "./customize/connectors/detail/app-page": "./src/customize/connectors/detail/app-page.tsx",
@@ -96,7 +94,6 @@
     "./customize/sections/view/gateway/gateway-budgets": "./src/customize/sections/view/gateway/gateway-budgets.tsx",
     "./customize/sections/view/gateway/gateway-overview": "./src/customize/sections/view/gateway/gateway-overview.tsx",
     "./customize/sections/view/gateway/gateway-routing": "./src/customize/sections/view/gateway/gateway-routing.tsx",
-    "./customize/sections/view/review-view": "./src/customize/sections/view/review-view.tsx",
     "./customize/sections/view/sandbox-provider-coverage": "./src/customize/sections/view/sandbox-provider-coverage.tsx",
     "./customize/settings/rail": "./src/customize/settings/rail.ts",
     "./customize/settings/rail-copy-context": "./src/customize/settings/rail-copy-context.tsx",
@@ -433,6 +430,7 @@
     "./session-panel": "./src/session/panel/index.ts",
     "./session/actions/session-label": "./src/session/actions/session-label.ts",
     "./session/composer/attachment-tiles": "./src/session/composer/attachment-tiles.tsx",
+    "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
     "./session/composer/composer-agent-access": "./src/session/composer/composer-agent-access.ts",
     "./session/composer/composer-chat-input": "./src/session/composer/composer-chat-input.tsx",
     "./session/composer/composer-draft-recovery": "./src/session/composer/composer-draft-recovery.ts",
@@ -735,17 +733,9 @@
         "types": "./dist/customize/agents/agent-apps-grant.d.ts",
         "import": "./dist/customize/agents/agent-apps-grant.js"
       },
-      "./customize/agents/agent-detail-aside": {
-        "types": "./dist/customize/agents/agent-detail-aside.d.ts",
-        "import": "./dist/customize/agents/agent-detail-aside.js"
-      },
       "./customize/agents/agent-page": {
         "types": "./dist/customize/agents/agent-page.d.ts",
         "import": "./dist/customize/agents/agent-page.js"
-      },
-      "./customize/agents/agents-page": {
-        "types": "./dist/customize/agents/agents-page.d.ts",
-        "import": "./dist/customize/agents/agents-page.js"
       },
       "./customize/connectors/connector-routes": {
         "types": "./dist/customize/connectors/connector-routes.d.ts",
@@ -858,10 +848,6 @@
       "./customize/sections/view/gateway/gateway-routing": {
         "types": "./dist/customize/sections/view/gateway/gateway-routing.d.ts",
         "import": "./dist/customize/sections/view/gateway/gateway-routing.js"
-      },
-      "./customize/sections/view/review-view": {
-        "types": "./dist/customize/sections/view/review-view.d.ts",
-        "import": "./dist/customize/sections/view/review-view.js"
       },
       "./customize/sections/view/sandbox-provider-coverage": {
         "types": "./dist/customize/sections/view/sandbox-provider-coverage.d.ts",

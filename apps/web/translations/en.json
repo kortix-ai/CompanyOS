@@ -2505,7 +2505,23 @@
         "askOwnerBody": "Only workspace owners and admins can manage billing. Ask one of them to pick a credits tier for the workspace.",
         "planTitle": "Plan and credits",
         "planDescription": "Change your monthly plan, or add credits for this month.",
-        "topupSecondary": "Need more this month? Add credits"
+        "paymentFailedHint": "Update the card and Stripe retries the charge.",
+        "updatePaymentMethod": "Update payment method",
+        "topUpInstead": "Add credits instead",
+        "memberBody": "Only owners and admins can add credits. Ask them from here, or send one of them this workspace’s billing link.",
+        "memberCopyLink": "Copy billing link",
+        "memberLinkCopied": "Link copied",
+        "memberLinkCopyFailed": "Couldn’t copy the link",
+        "roleOwner": "Owner",
+        "roleAdmin": "Admin",
+        "newBalance": "New balance",
+        "continue": "Continue",
+        "balanceRetry": "Retry",
+        "addLine": "Add credits to keep your agents running.",
+        "raiseLine": "Raise your plan to keep your agents running.",
+        "subscribeLine": "Subscribe to keep your agents running.",
+        "switchToMonthly": "Prefer monthly credits? Switch plan",
+        "autoTopupRetired": "Auto top-up no longer applies on this plan."
       },
       "admin": {
         "plan": "Plan",
@@ -2528,7 +2544,9 @@
           "growing": "Growing teams",
           "scale": "Scale",
           "large": "Large organizations"
-        }
+        },
+        "once": "once",
+        "onceLabel": "One-time credit amount"
       }
     },
     "popular": "Popular",
@@ -13622,7 +13640,7 @@
       "text5ebe32e1b916": "Connector credentials never enter a sandbox",
       "text5ec6ae29f4b6": "Also installs:",
       "text5ec9729027c3": "Turns what users say into what ships.",
-      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Top up to keep compute and the latest AI models running — {value0} unaffected.",
+      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Add credits to keep compute and the latest AI models running — {value0} unaffected.",
       "text5ecf97e61ad9": "Copy this code. Then open the auth page and enter it to connect ChatGPT.",
       "text5ed9bd98de1b": "Could not update the workspace default",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17492,7 +17510,7 @@
       "textcdd7efcb7e2c": "policy resolved",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Kortix Solutions by role",
-      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method under Manage billing, or top up to keep running in the meantime.",
+      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method so your plan keeps running.",
       "textce0faee27592": "billing payment credit card subscription manage wallet tier plan limits overview spend",
       "textce18e358bf01": "Try a different term.",
       "textce1e609b7bf5": "Sandbox ports only",
@@ -20450,7 +20468,7 @@
       "text2b2c3ec032a6": "Transferred workspace",
       "text44f9fff8bdae": "Changed the credits plan",
       "text3fa17bba73e1": "This workspace has no plan yet. Pick a monthly amount of credits to run sessions. Every member shares one pool.",
-      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Top up to keep compute and the latest AI models going — your plan is unaffected.",
+      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Add credits to keep compute and the latest AI models going — your plan is unaffected.",
       "text146aaf3c71fa": "Keeps SSO, SCIM, RBAC, and audit entitled for a signed Enterprise workspace that is also billed through a paid plan, so the Stripe reconciliation cannot strip them.",
       "text517105fd13ce": "Credits fund sandbox compute — even a BYOK trial needs wallet balance to run sessions. The free welcome grant is $2.",
       "text2f1d17f50af8": "Enterprise unlocks SAML SSO, SCIM directory sync, RBAC and audit access for this workspace. The billed plan is unchanged.",
@@ -21460,7 +21478,8 @@
         "question": "Question",
         "permission": "Permission",
         "approval": "Connector approval"
-      }
+      },
+      "allowed": "Allowed"
     },
     "reviewBulk": {
       "approve": "Approve",
@@ -21531,7 +21550,21 @@
       "senderUnavailable": "Couldn't load the sending account. Check the From row.",
       "quoted": "“{text}”"
     },
-    "promptHistory": "History {index}/{total}"
+    "promptHistory": "History {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix asks to give a colleague access",
+      "task": "Task",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "The colleague gets only these, for this one task.",
+      "deny": "Deny",
+      "allow": "Allow",
+      "allowed": "Access allowed",
+      "allowedDescription": "My Kortix starts the colleague.",
+      "denied": "Access denied",
+      "deniedDescription": "My Kortix gets your answer.",
+      "failed": "Could not send your decision. Try again."
+    }
   },
   "commandPalette": {
     "title": "Command Palette",

@@ -20,6 +20,7 @@ import { waitFor } from '../core/poll';
 import { createDatabaseSession, fundDatabaseAccount } from '../fixtures/database-project';
 import { seedSessionTranscript } from '../fixtures/session-transcript';
 import { openFlowDb, seedTurnSession } from '../fixtures/turn-end';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 flow(
   'SESS-1',
@@ -2449,9 +2450,9 @@ flow(
           [sessionId, project.accountId, project.id],
         );
         await db.query(
-          `UPDATE kortix.account_tokens
+          lockProjectFirst(`UPDATE kortix.account_tokens
               SET account_id = $2, user_id = $3, project_id = $4, session_id = $5
-            WHERE token_id = $1`,
+            WHERE token_id = $1`),
           [tokenId, project.accountId, ownerUserId, project.id, sessionId],
         );
       });
@@ -3625,7 +3626,7 @@ flow(
         const credential = minted.json<{ token_id: string; secret_key: string }>();
         // The sandbox credential the platform issues: an account token bound to the project and the
         // session, live while the session's sandbox row is (the SLOG-1 pattern).
-        await db.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1', [credential.token_id, project.id, sessionId]);
+        await db.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1'), [credential.token_id, project.id, sessionId]);
         await db.query(
           "INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')",
           [sessionId, team.id, project.id],

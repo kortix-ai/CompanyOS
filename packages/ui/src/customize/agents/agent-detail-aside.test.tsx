@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from '@/i18n/test-source';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import {
   buildScopeChecklist,
   buildSecretScopeOptions,
   toggleScopeSelection,
-} from '@kortix/ui/customize/agents/agent-detail-aside';
-import { uiSourcePath } from '@/test-utils/read-source';
+} from './agent-detail-aside';
 
 const secret = (identifier: string, name: string) => ({ identifier, name });
 
@@ -144,7 +142,7 @@ describe('toggleScopeSelection', () => {
  * So the wiring the pure builder cannot cover is asserted against the source.
  */
 describe('AgentScopeCard wiring', () => {
-  const source = readFileSync(uiSourcePath('customize/agents/agent-detail-aside.tsx'), 'utf8');
+  const source = readFileSync(new URL('./agent-detail-aside.tsx', import.meta.url), 'utf8');
 
   test('the Secrets checklist comes from the identifier-keyed builder', () => {
     expect(source).toContain('buildSecretScopeOptions(secretsQuery.data?.items ?? [])');
@@ -166,6 +164,7 @@ describe('AgentScopeCard wiring', () => {
   });
 
   test('the Connectors editor stays on the exact default', () => {
-    expect(source).not.toMatch(/label="Connectors"[\s\S]{0,320}?match=/);
+    // The Connectors editor's label (`textc3d2e79ebdd0`); no `match=` may follow it.
+    expect(source).not.toMatch(/raw\('textc3d2e79ebdd0'\)[\s\S]{0,320}?match=/);
   });
 });

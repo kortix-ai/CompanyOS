@@ -53,15 +53,15 @@ process.env.ALLOWED_SANDBOX_PROVIDERS = 'platinum,daytona';
 const { config } = await import('../config');
 
 // Committed manifest text served by the git mock; null = a blank project.
-// A declared agent only gets the project checkout with `workspace: { project_repository: true }`
-// (KRTX-165), so a test that names a non-default agent declares it here. The mocked
+// A declared agent gets repository access from `kortix_permissions` (project.gitops.read),
+// so a test that names a non-default agent declares it here. The mocked
 // `readManifestFromRepo` returns the text as is, so it is in the current format.
 let manifestYaml: string | null = null;
 const REVIEWER_MANIFEST = [
   'default_agent: kortix',
   'agents:',
-  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
-  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
+  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
+  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
   '',
 ].join('\n');
 let sandboxProvisionCalls = 0;
@@ -1265,7 +1265,7 @@ describe('project session runtime guards', () => {
   beforeEach(() => resetState());
 
   test('creates an omitted-agent session with the meta REST runtime when kortix.yaml turns My Kortix on', async () => {
-    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, workspace: { project_repository: true } }\n';
+    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, kortix_permissions: all }\n';
     const app = createApp();
     const response = await app.request(`/v1/projects/${PROJECT_ID}/sessions`, {
       method: 'POST',

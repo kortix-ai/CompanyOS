@@ -88,7 +88,7 @@ import {
   newWorkspaceConflict,
   resolveNewWorkspaceAccount,
 } from './new-workspace';
-import { deleteProjectRows, insertProjectRow, metadataMerge, type ProjectRowInsert, projectsView, updateProjectRows } from '../workspaces/rows';
+import { deleteProjectRows, insertProjectRow, metadataMergeGitSeed, type ProjectRowInsert, projectsView, updateProjectRows } from '../workspaces/rows';
 
 export const PROVISION_PHASES = [
   'validating',
@@ -933,15 +933,19 @@ async function seedProvisionedRepo(
           seed: verifiedSeedState,
         },
       };
-      // Persist ONLY the keys this step owns via a SQL-side atomic merge (never
-      // the whole object) so this creation-seed write can't revert a pin the
-      // prebuild kick may have activated concurrently. `row.metadata` above is
-      // the in-memory copy the creation response serializes.
+      // Persist ONLY the keys this step owns: `git` merges NESTED, in-SQL — a
+      // shallow top-level patch of the whole `git` object wiped `managed`,
+      // `url` and `auth` from the row the insert wrote microseconds earlier, so
+      // every seeded workspace served `metadata.git` without `managed` and the
+      // CLI read the managed repo as unmanaged. The composed write lives in
+      // `metadataMergeGitSeed` (workspaces/rows.ts) so the regression test
+      // exercises the same expression. `row.metadata` above stays the
+      // in-memory copy the creation response serializes.
       await updateProjectRows(eq(projectsView.projectId, row.projectId), {
-        metadata: metadataMerge({
-          ...(seededDefaultAgent ? { default_agent: seededDefaultAgent } : {}),
-          git: { seed: verifiedSeedState },
-        }),
+        metadata: metadataMergeGitSeed(
+          verifiedSeedState,
+          seededDefaultAgent ? { default_agent: seededDefaultAgent } : {},
+        ),
         updatedAt: new Date(),
       }).catch(() => {}); // best-effort — a mirror-write hiccup must not fail project creation
 

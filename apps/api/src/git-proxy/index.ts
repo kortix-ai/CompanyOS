@@ -315,17 +315,7 @@ async function forwardAuthorized(
         void (async () => {
           try {
             const repoPath = await refreshMirror(gitProject);
-            const listed = await runGit(
-              ['ls-tree', gitProject.defaultBranch, '--', 'kortix.yaml', 'kortix.yml'],
-              repoPath,
-            );
-            if (!listed.stdout.trim()) {
-              console.error(
-                `[git-proxy] MANIFEST MISSING after push to ${projectId}: ` +
-                  `${gitProject.defaultBranch} has no kortix.yaml. This project runs ` +
-                  `its built-in agents only.`,
-              );
-            }
+            await warnMissingManifestAfterPush(projectId, gitProject.defaultBranch, repoPath);
           } catch (err) {
             console.warn(
               `[git-proxy] manifest tripwire skipped for ${projectId}:`,
@@ -355,6 +345,33 @@ async function forwardAuthorized(
   }
 
   return new Response(res.body, { status: res.status, headers: respHeaders });
+}
+
+/**
+ * MANIFEST TRIPWIRE, one pathspec-scoped ls-tree on the refreshed mirror: log
+ * when the pushed default branch carries no kortix.yaml. The state is an
+ * expected, tolerated project configuration — the push itself succeeded (2xx)
+ * and the project runs its built-in agents, typed downstream as `agent_not_found`
+ * — so it logs at WARN, never at ERROR: an error-level line classifies as a prod
+ * API error pattern and pages the error sweep on every plain push of a
+ * manifest-less repo (KRTX-4605). Git failures propagate to the caller's
+ * "tripwire skipped" catch.
+ */
+export async function warnMissingManifestAfterPush(
+  projectId: string,
+  defaultBranch: string,
+  repoPath: string,
+): Promise<void> {
+  const listed = await runGit(
+    ['ls-tree', defaultBranch, '--', 'kortix.yaml', 'kortix.yml'],
+    repoPath,
+  );
+  if (listed.stdout.trim()) return;
+  console.warn(
+    `[git-proxy] MANIFEST MISSING after push to ${projectId}: ` +
+      `${defaultBranch} has no kortix.yaml. This project runs ` +
+      `its built-in agents only.`,
+  );
 }
 
 /**

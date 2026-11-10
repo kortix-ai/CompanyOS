@@ -127,6 +127,7 @@ export const WORKSPACE_KEY_CLASSES = {
     'provider_transitions',
     'review_items',
     'rooms',
+    'session_colleague_access',
     'session_content_purges',
     'session_idle_watches',
     'session_lifecycle_commands',

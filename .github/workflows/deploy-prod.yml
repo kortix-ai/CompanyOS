@@ -1323,7 +1323,14 @@ jobs:
       # infra/terraform/modules/project-snapshots-bucket): that role has NO
       # s3:DeleteObject, and expiry is safe because the archive is a cache the
       # API rebuilds from its Git mirror.
-      KORTIX_ECS_ENV_OVERRIDES: '{"KORTIX_PREVIEW_BASE_DOMAIN":"p.kortix.com","KORTIX_CAPTURE_S3_BUCKET":"kortix-prod-capture-store","KORTIX_CAPTURE_S3_REGION":"eu-west-2","KORTIX_CAPTURE_SQS_QUEUE_URL":"https://sqs.eu-west-2.amazonaws.com/935064898258/kortix-prod-capture-store-manifests","KORTIX_CAPTURE_STS_ROLE_ARN":"arn:aws:iam::935064898258:role/kortix-prod-capture-store-device","AUDIT_ARCHIVE_BUCKET":"kortix-prod-audit-archive","AUDIT_ARCHIVE_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_S3_BUCKET":"kortix-prod-project-snapshots","KORTIX_CONFIG_ARCHIVE_S3_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_RETAIN_PER_PROJECT":"0"}'
+      #
+      # KORTIX_WORKSPACE_VOLUMES=on turns `workspace_volume` (stateless
+      # sandboxes) on for every prod project that has made no choice: each new
+      # session keeps /workspace on its own Platinum volume, and a box stopped
+      # for KORTIX_SANDBOX_IDLE_DELETE_MINUTES is deleted. A project an
+      # operator set to `false` stays off. Rollback: remove the key and
+      # redeploy; sessions that already have a volume keep it.
+      KORTIX_ECS_ENV_OVERRIDES: '{"KORTIX_PREVIEW_BASE_DOMAIN":"p.kortix.com","KORTIX_CAPTURE_S3_BUCKET":"kortix-prod-capture-store","KORTIX_CAPTURE_S3_REGION":"eu-west-2","KORTIX_CAPTURE_SQS_QUEUE_URL":"https://sqs.eu-west-2.amazonaws.com/935064898258/kortix-prod-capture-store-manifests","KORTIX_CAPTURE_STS_ROLE_ARN":"arn:aws:iam::935064898258:role/kortix-prod-capture-store-device","AUDIT_ARCHIVE_BUCKET":"kortix-prod-audit-archive","AUDIT_ARCHIVE_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_S3_BUCKET":"kortix-prod-project-snapshots","KORTIX_CONFIG_ARCHIVE_S3_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_RETAIN_PER_PROJECT":"0","KORTIX_WORKSPACE_VOLUMES":"on"}'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure AWS credentials (OIDC)

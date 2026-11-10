@@ -17,6 +17,7 @@
 import { Button } from '@kortix/ui/button';
 import Loading from '@kortix/ui/loading';
 import {
+  CREDIT_TIERS,
   DEFAULT_TIER_USD,
   FREE_MONTHLY_CREDITS,
   formatWholeUsd,
@@ -27,6 +28,7 @@ import {
 import { CreditExpiry } from '@/features/billing/credit-expiry';
 import { FreeGrantNotice, showsFreeGrantNotice } from '@/features/billing/free-grant-notice';
 import { CreditTierSelect } from '@/features/billing/credit-tier-select';
+import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useChangeCreditPlan } from '@/features/billing/use-change-credit-plan';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { accountHasLiveSubscription } from '@kortix/ui/internal/lib/billing/billing-gate-state';
@@ -195,13 +197,41 @@ export function planPickerView(state: AccountState): PlanPickerView {
 }
 
 /**
+ * The tier the out-of-credits modal opens on. No subscription: the default
+ * tier. A subscriber: the smallest tier above the current one that covers this
+ * period's usage with 20% to spare, so the suggestion is the account's own
+ * number, not a pitch. The top tier when nothing larger fits.
+ */
+export function recommendedPlanUsd(state: AccountState): number {
+  const { currentUsd } = planPickerView(state);
+  if (!accountHasLiveSubscription(state) || currentUsd === null) return DEFAULT_TIER_USD;
+  const target = (state.usage_this_period?.total_usd ?? 0) * 1.2;
+  const next = CREDIT_TIERS.find((tier) => tier.monthlyUsd > currentUsd && tier.monthlyUsd >= target);
+  return next?.monthlyUsd ?? CREDIT_TIERS[CREDIT_TIERS.length - 1].monthlyUsd;
+}
+
+/**
  * Pick a monthly amount and apply it. Renders nothing when billing is off, and
  * shows who to ask to anyone who may not change billing.
+ *
+ * `card` (default): the tier select in the Plan pane. `ladder`: the /pricing
+ * slider with a full-width action, for the out-of-credits modal, opening on
+ * `recommendedPlanUsd`.
  */
-export function PlanChanger({ state, className }: { state: AccountState; className?: string }) {
+export function PlanChanger({
+  state,
+  className,
+  variant = 'card',
+}: {
+  state: AccountState;
+  className?: string;
+  variant?: 'card' | 'ladder';
+}) {
   const t = useTranslations('billing.credits.planCard');
   const locale = useLocale();
-  const { currentUsd, initialUsd } = planPickerView(state);
+  const view = planPickerView(state);
+  const currentUsd = view.currentUsd;
+  const initialUsd = variant === 'ladder' ? recommendedPlanUsd(state) : view.initialUsd;
   const hasSubscription = accountHasLiveSubscription(state);
   const scheduled = scheduledDowngrade(state);
   const [monthlyUsd, setMonthlyUsd] = useState<number | null>(initialUsd);
@@ -235,6 +265,8 @@ export function PlanChanger({ state, className }: { state: AccountState; classNa
     locale,
   );
   const due = preview.data ? formatChargeUsd(preview.data.due_now_usd, locale) : null;
+  const actionDisabled =
+    isPending || kind === 'invalid' || kind === 'unchanged' || (kind === 'raise' && preview.isLoading);
   const creditsNow = preview.data ? formatCredits(preview.data.credits_now, { locale }) : null;
 
   const hint =
@@ -268,6 +300,33 @@ export function PlanChanger({ state, className }: { state: AccountState; classNa
           : kind === 'keep'
             ? t('keepAction')
             : t('chooseAction');
+
+  if (variant === 'ladder') {
+    return (
+      <section className={cn('space-y-6', className)} data-testid="plan-ladder">
+        <CreditLadder
+          value={monthlyUsd ?? DEFAULT_TIER_USD}
+          onChange={setMonthlyUsd}
+          disabled={isPending}
+          stackBelowXl={false}
+        />
+        <div className="space-y-3">
+          <Button
+            size="lg"
+            className="w-full gap-1.5 motion-safe:active:scale-[0.96]"
+            disabled={actionDisabled}
+            onClick={() => monthlyUsd !== null && change(monthlyUsd)}
+          >
+            {isPending ? <Loading className="size-4 shrink-0" /> : null}
+            {label}
+          </Button>
+          <p className="text-muted-foreground text-center text-xs text-balance" aria-live="polite">
+            {hint}
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={cn('space-y-3 px-4 py-4', className)}>
@@ -306,12 +365,7 @@ export function PlanChanger({ state, className }: { state: AccountState; classNa
         <Button
           size="sm"
           className="gap-1.5"
-          disabled={
-            isPending ||
-            kind === 'invalid' ||
-            kind === 'unchanged' ||
-            (kind === 'raise' && preview.isLoading)
-          }
+          disabled={actionDisabled}
           onClick={() => monthlyUsd !== null && change(monthlyUsd)}
         >
           {isPending ? <Loading className="size-4 shrink-0" /> : null}

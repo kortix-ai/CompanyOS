@@ -216,8 +216,7 @@ export function registerRoutes(
   const messages = limited(inference(inflight, recordOutcome, 'messages', replay, gateway.messages));
   const responses = limited(inference(inflight, recordOutcome, 'responses', replay, gateway.responses));
   // The project's ChatGPT login generates and edits images (pipeline/images.ts).
-  // A thrown error gets the Responses-style 503 envelope. The replay scope is
-  // per operation: one key + body can be valid on both ingresses.
+  // A thrown error gets the Responses-style 503 envelope.
   const images = (operation: 'generations' | 'edits') =>
     limited(inference(inflight, recordOutcome, `images:${operation}`, replay, (request) => gateway.images({ ...request, operation })));
   const generations = images('generations');

@@ -175,6 +175,15 @@ function LoopShowcase({ loop, index }: { loop: LoopView; index: number }) {
   );
 }
 
+/** The loop lifecycle, in kortix.yaml terms: a trigger is a signal (`on:`) plus a run (`run:`). */
+const LIFECYCLE = [
+  { key: 'on:', title: 'Signal', body: 'A schedule, a webhook, a Slack message, an email.' },
+  { key: 'trigger', title: 'Trigger', body: 'kortix.yaml says which signal starts which agent.' },
+  { key: 'run:', title: 'Run', body: 'The agent works in its own sandbox, with its skills and permissions.' },
+  { key: 'output', title: 'Output', body: 'A pull request, a post, a draft, a ticket.' },
+  { key: 'gate', title: 'You', body: 'You approve. The result lands in your tools and starts the next loop.' },
+];
+
 /**
  * kortix.com: one prompt adds loops to your repo (Engineering, Marketing, Sales, ...).
  * The page frame (one railed column, hairline bento grids, glow bands)
@@ -261,6 +270,21 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           {loops.map((loop, index) => (
             <LoopShowcase key={loop.id} loop={loop} index={index} />
           ))}
+        </section>
+
+        <section id="lifecycle" className="border-border scroll-mt-16 border-t">
+          <h2 className="text-foreground px-8 pt-24 pb-12 text-3xl font-medium tracking-tight md:px-10 lg:text-[40px] lg:leading-tight">How a loop runs.</h2>
+          <ol className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-5">
+            {LIFECYCLE.map((step, index) => (
+              <li key={step.title} className="border-border flex flex-col gap-2 border-b p-8 lg:border-r lg:border-b-0 lg:last:border-r-0">
+                <span className={cn('font-mono text-xs', ACCENT)}>
+                  {String(index + 1).padStart(2, '0')} · {step.key}
+                </span>
+                <span className="text-foreground text-base font-medium">{step.title}</span>
+                <span className="text-muted-foreground text-sm">{step.body}</span>
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section className="border-border relative overflow-hidden border-t">

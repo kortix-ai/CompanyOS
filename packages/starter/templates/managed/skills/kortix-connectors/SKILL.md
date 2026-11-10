@@ -41,6 +41,10 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
    Install prints the next step. `Ready` means no sign-in is needed: call it.
    Exit 3 means the app is already installed: use that slug. When the human
    finishes signing in, Kortix tells you; do not mint a second link.
+   For an account the whole workspace uses, `connect <slug> --owner workspace`.
+   You act with your person's rights: it works when they may manage the
+   workspace's connections (an owner, admin or manager) and your grant
+   includes it. A refusal names the missing permission and who holds it.
 3. **Pick the account** (see `<accounts>`). With 2 or more accounts, pass
    `--account "<label>"`.
 4. **Read the action before calling it.** `kortix connectors show <slug>.<action>`
@@ -159,6 +163,11 @@ it already has. `--new-profile` makes a second profile; use it only for a
 human who asks for one. Another way of connecting (Stripe over MCP and over
 REST) is its own profile: different tools, different sign-in.
 
+The catalog is an index, not a list of what may be connected. Prefer the
+vendor's own MCP server over Composio whenever it exists. A way marked
+`catalogue has no URL` installs with the server URL: get it from the human or
+the vendor's docs, then
+`kortix connectors catalog install <id> --way <way-id> --url <url>`.
 The catalog is large, not complete. When it lacks the app, search the web for
 the vendor's MCP server (its developer docs, registry.modelcontextprotocol.io)
 or OpenAPI spec, then add it:
@@ -168,9 +177,11 @@ kortix connectors add acme --provider mcp --url https://mcp.acme.com/mcp --trans
 kortix connectors add acme --provider openapi --spec https://acme.com/openapi.json --apply
 ```
 
-Without `--apply`, `add` edits only this session branch's `kortix.yaml`. In a
-governed agent, a URL that is not in the catalog returns
-`custom_connector_needs_human` with a `setup_url`: hand it to the human.
+Without `--apply`, `add` edits only this session branch's `kortix.yaml`. A
+server URL that neither the catalog publishes nor the workspace already has
+needs a one-time approval of that exact URL: the answer is
+`custom_connector_needs_human` with a `setup_url`. Hand the human the link;
+it opens the server prefilled, and adding it is the approval. Do not retry.
 
 Credentials:
 - an API key the human gave you: `kortix secrets set NAME=- --scope connector`,

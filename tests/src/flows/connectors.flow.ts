@@ -6482,7 +6482,7 @@ flow(
         if (slugs.filter((s) => s === 'wiki' || s === 'deepwiki').length !== 2) throw new Error(`profiles: ${slugs.join(',')}`);
       });
 
-      await ctx.step('an agent session cannot add a server nobody chose → 403 custom_connector_needs_human with a setup link', async () => {
+      await ctx.step('an agent session adding a server nobody approved yet gets the one-time approval → 403 custom_connector_needs_human with a setup link', async () => {
         const minted = await owner.post('/v1/accounts/tokens', { name: `CONN-41 ${sessionId.slice(0, 8)}` });
         minted.status(201);
         const credential = minted.json<{ token_id: string; secret_key: string }>();

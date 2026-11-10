@@ -1,11 +1,12 @@
 /**
  * Integration test (real local PostgreSQL, the real app and auth middleware):
- * a connector account a person revoked stays revoked until a person turns it
- * back on. An agent session's token (governed, or one that borrows its
- * launcher's authority) cannot activate, re-credential, re-pin or re-create
- * it, cannot share a person's private account, and cannot connect an account
- * the whole project uses. A person still can. Found live: an agent turned a
- * revoked Telegram account back on with `PUT …/activate` and kept sending.
+ * AGENT = HUMAN on connector accounts. An agent session acting for a person
+ * gets exactly that person's answer on every connector-account write: revive
+ * a revoked account, re-credential it, re-pin it, re-create it by label,
+ * share a private account, connect the workspace's shared account. The
+ * decision is the person's role ∩ the agent's grant and nothing else: an
+ * agent whose grant lacks the permission is refused with the standard 403
+ * that names the permission, never for being an agent.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { accountMembers, accountTokens, connectorConnections, connectors, projectSessions, projects, sessionSandboxes } from '@kortix/db';
@@ -111,54 +112,76 @@ beforeEach(async () => {
   await db.update(connectorConnections).set({ status: 'active' }).where(eq(connectorConnections.connectorId, connectorId));
 });
 
-describe('a revoked connector account stays revoked until a person turns it back on — migrated PostgreSQL', () => {
-  test('an agent session cannot activate, re-credential, re-pin or re-create an account a person revoked', async () => {
-    expect((await request('PUT', p(`/connections/${shared}/revoke`), tokens.person)).status).toBe(200);
-    expect(await statusOf(shared)).toBe('revoked');
-    for (const token of [tokens.governed, tokens.borrowed]) {
-      for (const [method, path, body] of [
-        ['PUT', `/connections/${shared}/activate`, {}],
-        ['PUT', `/connections/${shared}/credential`, { value: 'synthetic-key' }],
-        ['PUT', `/connections/${shared}/default`, {}],
-        ['POST', '/connections', { connector_alias: SLUG, owner_type: 'project', label: 'Shared CRM' }],
-      ] as const) {
-        const response = await request(method, p(path), token, body);
-        expect({ path, status: response.status, body: await response.json() }).toEqual({
-          path,
-          status: 403,
-          body: expect.objectContaining({ code: 'agent_session_forbidden' }),
-        });
-        expect(await statusOf(shared)).toBe('revoked');
+const AGENTS = ['governed', 'borrowed'] as const;
+
+/** Revoke the shared account as the person, then run one write as `token`. */
+async function onRevoked(token: string, method: string, path: string, body: unknown) {
+  await db.update(connectorConnections).set({ status: 'revoked' }).where(eq(connectorConnections.connectionId, shared));
+  const response = await request(method, p(path), token, body);
+  return { status: response.status, after: await statusOf(shared) };
+}
+
+describe('AGENT = HUMAN on connector accounts — migrated PostgreSQL', () => {
+  test('an agent session revives, re-credentials, re-pins and re-creates a revoked account exactly as its person does', async () => {
+    for (const [method, path, body] of [
+      ['PUT', `/connections/${shared}/activate`, {}],
+      ['PUT', `/connections/${shared}/credential`, { value: 'synthetic-key' }],
+      ['PUT', `/connections/${shared}/default`, {}],
+      ['POST', '/connections', { connector_alias: SLUG, owner_type: 'project', label: 'Shared CRM' }],
+    ] as const) {
+      const person = await onRevoked(tokens.person, method, path, body);
+      expect(person.status).toBeLessThan(300);
+      for (const agent of AGENTS) {
+        expect({ agent, path, ...(await onRevoked(tokens[agent], method, path, body)) }).toEqual({ agent, path, ...person });
       }
     }
   });
 
-  test('a person turns it back on', async () => {
-    await db.update(connectorConnections).set({ status: 'revoked' }).where(eq(connectorConnections.connectionId, shared));
-    expect((await request('PUT', p(`/connections/${shared}/activate`), tokens.person)).status).toBe(200);
-    expect(await statusOf(shared)).toBe('active');
-  });
-
-  test('an agent still manages an account nobody revoked', async () => {
-    const response = await request('PUT', p(`/connections/${shared}/label`), tokens.governed, { label: 'Shared CRM' });
-    expect(response.status).toBe(200);
-  });
-
-  test("an agent session cannot share a person's private account", async () => {
-    for (const token of [tokens.governed, tokens.borrowed]) {
-      const response = await request('POST', p(`/connections/${personal}/share`), token, { principals: [] });
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ code: 'agent_session_forbidden' });
+  test("a session acting as its person (My Kortix) shares the person's private account exactly as the person does", async () => {
+    for (const who of ['person', 'borrowed'] as const) {
+      await db.update(connectorConnections).set({ ownerType: 'member', ownerId: ADMIN }).where(eq(connectorConnections.connectionId, personal));
+      const response = await request('POST', p(`/connections/${personal}/share`), tokens[who], { principals: [] });
+      expect({ who, status: response.status }).toEqual({ who, status: 200 });
+      const [row] = await db.select({ ownerType: connectorConnections.ownerType }).from(connectorConnections).where(eq(connectorConnections.connectionId, personal));
+      expect(row!.ownerType).toBe('project');
     }
-    const [row] = await db.select({ ownerType: connectorConnections.ownerType }).from(connectorConnections).where(eq(connectorConnections.connectionId, personal));
-    expect(row!.ownerType).toBe('member');
   });
 
-  test('an agent session cannot connect an account the whole project uses', async () => {
+  test("a governed agent is its own principal: a member's private account is not its to share (404, never a refusal for being an agent)", async () => {
+    await db.update(connectorConnections).set({ ownerType: 'member', ownerId: ADMIN }).where(eq(connectorConnections.connectionId, personal));
+    const response = await request('POST', p(`/connections/${personal}/share`), tokens.governed, { principals: [] });
+    expect(response.status).toBe(404);
+  });
+
+  test("starting a workspace-shared connect answers an agent session exactly as its person, never agent_session_forbidden", async () => {
     for (const path of ['connect', 'connect/finalize']) {
-      const response = await request('POST', `/v1/connectors/projects/${project.project_id}/connectors/${SLUG}/${path}`, tokens.borrowed, { owner: 'project' });
-      expect({ path, status: response.status }).toEqual({ path, status: 403 });
-      expect(await response.json()).toMatchObject({ code: 'agent_session_forbidden' });
+      const url = `/v1/connectors/projects/${project.project_id}/connectors/${SLUG}/${path}`;
+      const person = await request('POST', url, tokens.person, { owner: 'project' });
+      const personBody = await person.json();
+      for (const agent of AGENTS) {
+        const response = await request('POST', url, tokens[agent], { owner: 'project' });
+        expect({ agent, path, status: response.status, body: await response.json() }).toEqual({ agent, path, status: person.status, body: personBody });
+      }
     }
+  });
+
+  test('an agent whose grant lacks connections.manage is refused by permission, naming it', async () => {
+    const narrow = (
+      await createAccountToken({
+        accountId: project.account_id,
+        userId: ADMIN,
+        projectId: project.project_id,
+        sessionId: await liveSession(),
+        name: 'narrow',
+        agentGrant: { agent: 'worker', permissions: ['project.connector.write', 'project.connector.read'], connectors: 'all', env: 'all' } as never,
+        serviceAccountId: await ensureAgentServiceAccount({ accountId: project.account_id, projectId: project.project_id, agentName: 'worker' }),
+      })
+    ).secretKey;
+    clearAuthorizeCaches();
+    const response = await request('POST', `/v1/connectors/projects/${project.project_id}/connectors/${SLUG}/connect`, narrow, { owner: 'project' });
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'agent_scope_insufficient', action: 'project.connector.connections.manage' });
+    expect(JSON.stringify(body)).not.toMatch(/agent sessions? cannot|an agent cannot/i);
   });
 });

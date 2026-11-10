@@ -514,7 +514,12 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
     if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
     const missing = deleted.stdout.split('\0').filter(Boolean)
     for (let i = 0; i < missing.length; i += 500) {
-      const co = await execGit(['-C', target, 'checkout', '--quiet', '--', ...missing.slice(i, i + 500)])
+      // Paths are literals, not pathspecs: a file literally named `:(glob)*.txt`
+      // must restore itself, never glob-match the agent's files over them.
+      const co = await execGit([
+        '--literal-pathspecs', '-C', target, 'checkout', '--quiet', '--',
+        ...missing.slice(i, i + 500),
+      ])
       if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
     }
 

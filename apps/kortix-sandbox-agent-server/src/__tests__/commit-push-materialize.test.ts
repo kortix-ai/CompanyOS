@@ -198,6 +198,31 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     )
   })
 
+  it('populating a pathspec-magic filename never overwrites the agent’s files', async () => {
+    const { root, remote, target } = makeRepo()
+    // The repo tracks a file whose NAME is git pathspec magic. The populate
+    // must restore it as a literal path — a glob would match and overwrite
+    // the agent's `real.txt` edit.
+    const seed = join(root, 'magic-seed')
+    mkdirSync(seed)
+    git(['clone', '-q', remote, seed])
+    writeFileSync(join(seed, ':(glob)*.txt'), 'magic\n')
+    writeFileSync(join(seed, 'real.txt'), 'base\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'magic'], seed)
+    git(['push', '-q', 'origin', 'main'], seed)
+
+    writeFileSync(join(target, 'real.txt'), 'agent edit\n')
+    await commitAndPushWorkingTree(
+      testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+      { message: 'agent change' },
+    )
+    const tree = git(['ls-tree', '-r', 'refs/heads/session-abc', '--name-only'], remote)
+    expect(tree.split('\n').sort()).toEqual([':(glob)*.txt', 'README.md', 'apps/x.ts', 'real.txt'].sort())
+    const kept = git(['show', 'refs/heads/session-abc:real.txt'], remote)
+    expect(kept).toBe('agent edit')
+  })
+
   it('no connected repository still refuses with the standing error', async () => {
     const { target } = makeRepo()
     expect(

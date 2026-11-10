@@ -112,6 +112,32 @@ describe('vcsDiff', () => {
     }
   })
 
+  test('an untracked path the ref already knows still gets its new-file patch', async () => {
+    const root = await makeRepo()
+    try {
+      // `git rm --cached` leaves the file on disk but in the comparison ref's
+      // tree. Its patch must stay a plain new-file diff — and one such path
+      // must not cost the other untracked files their patches.
+      await writeFile(join(root, 'kept.txt'), 'kept\n')
+      await realRunGit(['add', 'kept.txt'], { cwd: root })
+      await realRunGit(['commit', '-qm', 'kept'], { cwd: root })
+      await realRunGit(['rm', '--cached', '-q', 'kept.txt'], { cwd: root })
+      await writeFile(join(root, 'fresh.txt'), 'fresh\n')
+      const files = await vcsDiff(root, 'branch', 'main')
+      // The tracked diff also reports kept.txt as deleted (pre-existing shape);
+      // the untracked pass must add its own row with the new-file patch.
+      const kept = files.find((f) => f.file === 'kept.txt' && f.status === 'added')
+      expect(kept?.status).toBe('added')
+      expect(kept?.additions).toBe(1)
+      expect(kept?.patch).toContain('+kept')
+      const fresh = files.find((f) => f.file === 'fresh.txt')
+      expect(fresh?.patch).toContain('+fresh')
+      expect(fresh?.additions).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a directory that is not a git repo has no changes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kortix-vcs-diff-plain-'))
     try {

@@ -73,24 +73,26 @@ const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 /**
  * The untracked files' patch text, generated in ONE git process: a throwaway
- * index (GIT_INDEX_FILE) seeded from the diff base, with the untracked files
- * staged into it from the working tree, then `git diff --cached` against the
- * base. Same new-file patches one `git diff --no-index /dev/null <file>` per
- * file would produce, which cost one spawn per file — up to 200 sequential
- * spawns per poll on an agent-written workspace, seconds of CPU the diff
- * route (and every daemon route behind it) pays on each UI refetch (KRTX-4601).
+ * index (GIT_INDEX_FILE), EMPTY, with the untracked files staged into it from
+ * the working tree, then `git diff --cached` against the empty tree. Every
+ * selected path comes out as a new-file patch — the exact text one
+ * `git diff --no-index /dev/null <file>` per file produced, which cost one
+ * spawn per file, up to 200 sequential spawns per poll on an agent-written
+ * workspace: seconds of CPU the diff route (and every daemon route behind it)
+ * pays on each UI refetch (KRTX-4601). The ref never enters it, so a path the
+ * comparison base already knows (`git rm --cached`) still shows as an addition.
  * Undefined when git could not build the index; callers then list the files
  * without patches, the same degraded row a per-file failure produced.
  */
-async function untrackedPatchText(cwd: string, ref: string, files: string[]): Promise<string | undefined> {
+async function untrackedPatchText(cwd: string, files: string[]): Promise<string | undefined> {
   if (files.length === 0) return undefined
   const index = join(tmpdir(), `kortix-diff-${process.pid}-${randomUUID()}`)
   const env = { GIT_INDEX_FILE: index }
   try {
-    if ((await git(cwd, ['read-tree', ref], { env })).code !== 0) return undefined
+    if ((await git(cwd, ['read-tree', '--empty'], { env })).code !== 0) return undefined
     const staged = await git(cwd, ['update-index', '--add', '-z', '--stdin'], { env, input: files.join('\0') + '\0' })
     if (staged.code !== 0) return undefined
-    const patch = await git(cwd, ['diff', '--cached', '--no-ext-diff', '--no-renames', ref, '--', '.'], { env })
+    const patch = await git(cwd, ['diff', '--cached', '--no-ext-diff', EMPTY_TREE, '--', '.'], { env })
     return patch.code === 0 && patch.stdout ? patch.stdout : undefined
   } finally {
     await rm(index, { force: true }).catch(() => {})
@@ -132,7 +134,7 @@ export async function vcsDiff(cwd: string, mode: string, defaultBranch: string):
   const rows = tracked.map((t, i) => finish(t.file, t.status, chunkFor(i)))
   const newFiles = untracked.code === 0 ? untracked.stdout.split('\0').filter(Boolean) : []
   const staged = newFiles.slice(0, MAX_UNTRACKED_PATCHES)
-  const untrackedChunks = (await untrackedPatchText(cwd, ref, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
+  const untrackedChunks = (await untrackedPatchText(cwd, staged))?.split(/^(?=diff --git )/m).filter(Boolean) ?? []
   // `git diff --cached` writes the patch in the same sorted order as `ls-files --others`:
   // one `diff --git` chunk per staged file, matched by position like the tracked chunks above.
   const untrackedChunkFor = (i: number) => (untrackedChunks.length === staged.length ? untrackedChunks[i] : undefined)

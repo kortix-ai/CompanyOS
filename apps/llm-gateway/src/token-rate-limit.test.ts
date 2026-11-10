@@ -172,4 +172,66 @@ describe('credentials the gateway has not validated (KRTX-4528)', () => {
     // share skipped, the shared 10 apply.
     expect(admitted).toBe(10);
   });
+
+  test('a never-validated credential that proves real refunds its source slot too', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    // Spend the per-source share with never-validated credentials, at network
+    // pace (the clock moves 50ms per request — a real client's round trip).
+    let lastAdmitted = '';
+    for (let i = 0; i < 30; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      const credential = `kortix_unproven_${i}`;
+      const headers = new Headers();
+      if (limit(request('/v1/models', { authorization: `Bearer ${credential}` }), headers, '10.0.0.1') === null)
+        lastAdmitted = credential;
+    }
+    expect(lastAdmitted).not.toBe('');
+    // The share is spent: the next first contact is refused.
+    const next = request('/v1/models', { authorization: 'Bearer kortix_unproven_next' });
+    expect(limit(next, new Headers(), '10.0.0.1')?.status).toBe(429);
+    // The API answered the last admitted credential with a principal. Its
+    // source slot comes back, so the next first contact fits: the share
+    // bounds never-validated push, not credentials the API has vouched for.
+    limit.validated(lastAdmitted);
+    expect(limit(next, new Headers(), '10.0.0.1')).toBeNull();
+  });
+});
+
+describe('the unvalidated surface advertises the allowance that enforces it (KRTX-4608)', () => {
+  // The pentest probe (ratelimit/counter-inert) sent 8 metered requests on one
+  // bearer and read ratelimit-remaining 9999 of 10000 every time: the shared
+  // pool refills ~166 tokens/s, faster than any honest client spends, so the
+  // advertised counter never moved and the 429 path was unreachable.
+  test('successive unvalidated requests advertise a remaining count that moves', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    const remaining: number[] = [];
+    // Network pace: 50ms between sends, a real client's round trip. A refill
+    // faster than that hides every spend.
+    for (let i = 0; i < 8; i++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + i * 50));
+      const headers = new Headers();
+      expect(
+        limit(request('/v1/models', { authorization: 'Bearer kortix_unproven' }), headers, '10.0.0.1'),
+      ).toBeNull();
+      remaining.push(Number(headers.get('RateLimit-Remaining')));
+    }
+    for (let i = 1; i < remaining.length; i++)
+      expect(remaining[i]).toBeLessThan(remaining[i - 1]);
+  });
+
+  test('a bounded burst exhausts the advertised allowance into a 429', () => {
+    const limit = createTokenRateLimit(600, 10_000);
+    let refused: Response | null = null;
+    for (let sent = 0; sent < 25 && !refused; sent++) {
+      setSystemTime(new Date(Date.parse('2026-11-02T12:00:00Z') + sent * 50));
+      refused = limit(
+        request('/v1/models', { authorization: 'Bearer kortix_unproven' }),
+        new Headers(),
+        '10.0.0.1',
+      );
+    }
+    expect(refused?.status).toBe(429);
+    expect(refused?.headers.get('retry-after')).toBeTruthy();
+    expect(refused?.headers.get('RateLimit-Remaining')).toBe('0');
+  });
 });

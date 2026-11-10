@@ -7,7 +7,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { manifestCandidatePaths } from '@kortix/manifest-schema';
-import { getTemplate, getTemplateFiles, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
+import { SETUP_GUIDE } from '@kortix/shared/setup-guide';
+import { getTemplate, getTemplateFiles, getTemplateOnboarding, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { runGit } from '../git-run.ts';
 import { addManifestImport } from '../manifest-edit.ts';
@@ -21,6 +22,9 @@ adds it under imports: in kortix.yaml. Nothing reaches Kortix until you push.
 Commands:
   ls                     List the templates.
   show <id>              The template's agents, triggers, secrets and webhooks.
+  onboard <id>           Print the steps a coding agent follows to set the
+                         template up with you: its own onboarding, then the
+                         setup guide with the template chosen.
   add <id>               Add the template to the repository in this directory.
 
 Options for add:
@@ -189,6 +193,26 @@ function runAdd(argv: string[], json: boolean): number {
   return 0;
 }
 
+function runOnboard(id: string | undefined): number {
+  if (!isTemplateId(id)) return fail(`Name a template: ${TEMPLATE_IDS.join(', ')}`);
+  const template = getTemplate(id);
+  const own = getTemplateOnboarding(id);
+  process.stdout.write(
+    [
+      `# Set up the Kortix ${template.name}`,
+      '',
+      `${template.summary}`,
+      '',
+      `The template is chosen: \`${template.id}\`. In step 4 of the guide below, add only this one`,
+      `(\`kortix templates add ${template.id} --json\`) and skip the question which templates to add.`,
+      '',
+      ...(own ? [own.trim(), ''] : []),
+      SETUP_GUIDE,
+    ].join('\n'),
+  );
+  return 0;
+}
+
 export function runTemplates(argv: string[]): number {
   const args = [...argv];
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
@@ -200,5 +224,6 @@ export function runTemplates(argv: string[]): number {
   if (command === 'ls' || command === 'list') return rest.length > 0 ? fail(`Unexpected argument: ${rest[0]}`) : runList(json);
   if (command === 'show') return runShow(rest[0], json);
   if (command === 'add') return runAdd(rest, json);
+  if (command === 'onboard') return runOnboard(rest[0]);
   return fail(`Unknown command: templates ${command}. Run kortix templates --help.`);
 }

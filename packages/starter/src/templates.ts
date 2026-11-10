@@ -82,11 +82,16 @@ export function listTemplates(): TemplateInfo[] {
   return TEMPLATE_IDS.map(getTemplate);
 }
 
+/** The template's own onboarding steps (`onboarding.md` beside template.json), or null. */
+export function getTemplateOnboarding(id: TemplateId): string | null {
+  return rawTemplateFiles(id).find((file) => file.path === 'onboarding.md')?.content ?? null;
+}
+
 /** The files a repository receives, `{{repoFullName}}` and `{{defaultBranch}}` resolved. */
 export function getTemplateFiles(id: TemplateId, vars: TemplateVars): Array<{ path: string; content: string }> {
   const values: Record<string, string> = { repoFullName: vars.repoFullName, defaultBranch: vars.defaultBranch };
   return rawTemplateFiles(id)
-    .filter((file) => file.path !== 'template.json')
+    .filter((file) => file.path !== 'template.json' && file.path !== 'onboarding.md')
     .map((file) => ({
       path: file.path,
       content: file.content.replace(/\{\{(repoFullName|defaultBranch)\}\}/g, (_m, key: string) => values[key]!),

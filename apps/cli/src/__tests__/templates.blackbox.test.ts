@@ -97,3 +97,12 @@ test('sameGitHubRepository: https, ssh and scp forms of one repository match; an
   expect(sameGitHubRepository('https://github.com/acme/other.git', 'https://github.com/acme/shop.git')).toBe(false);
   expect(sameGitHubRepository('https://api.kortix.com/v1/git/123', 'https://github.com/acme/shop.git')).toBe(false);
 });
+
+test('onboard prints the chosen template, then the setup guide; an unknown template is refused', () => {
+  const r = kortix(['templates', 'onboard', 'software-factory']);
+  expect(r.code).toBe(0);
+  expect(r.stdout).toContain('# Set up the Kortix Software Factory');
+  expect(r.stdout).toContain('kortix templates add software-factory --json');
+  expect(r.stdout).toContain('# Set up Kortix on this repository');
+  expect(kortix(['templates', 'onboard', 'nope']).code).toBe(1);
+});

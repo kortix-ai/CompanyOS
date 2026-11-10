@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Window } from 'happy-dom';
+import type { Element as HappyElement, HTMLPreElement } from 'happy-dom';
 // Bun does not compile MDX frontmatter. Supply the content boundary, not a page
 // or section mock, so the actual shipped composition still renders end to end.
 mock.module('@/lib/use-cases-source', () => ({
@@ -103,7 +104,7 @@ function projectHero(html: string) {
 function projectTerminals(html: string) {
   const document = new Window().document;
   document.body.innerHTML = html;
-  const line = (pre: Element, pick: (s: Element) => boolean) =>
+  const line = (pre: HTMLPreElement, pick: (s: HappyElement) => boolean) =>
     [...pre.querySelectorAll('span')].find(pick)?.className ?? null;
   return [...document.querySelectorAll('pre')].map((pre) => ({
     class: pre.className,

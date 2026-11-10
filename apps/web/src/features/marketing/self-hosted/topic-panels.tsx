@@ -6,7 +6,7 @@ import { ArrowRightIcon, CheckIcon, XIcon } from '@phosphor-icons/react/dist/ssr
 import type { ReactNode } from 'react';
 
 import { localizeMarketingContent as localizeModel, type TopicId } from './model';
-import { Terminal, Window } from './parts';
+import { Terminal, Window } from '@/features/marketing/kit/window';
 
 /*
  * One focused visual per topic tab. Each fits the tab's panel at 390 px: one
@@ -101,7 +101,7 @@ function EnterprisePanel() {
   return (
     <div className="flex flex-col gap-6">
       <Window title={tMarketing('texte6a39a255b29')}>
-        <Terminal lines={enterpriseLines} className="p-4" />
+        <Terminal lines={enterpriseLines} className="p-4" wrap />
       </Window>
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {enterpriseFeatures.map((item) => (
@@ -150,7 +150,7 @@ export const TOPIC_PANELS: Record<TopicId, () => ReactNode> = {
     const { updateLines } = localizeModel(tMarketing);
     return (
       <Window title={tMarketing('texte6a39a255b29')}>
-        <Terminal lines={updateLines} className="p-4" />
+        <Terminal lines={updateLines} className="p-4" wrap />
       </Window>
     );
   },

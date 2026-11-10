@@ -5,7 +5,7 @@ import { useTranslations } from '@/i18n/use-translations';
 import type { ReactNode } from 'react';
 
 import { localizeMarketingContent as localizeContent, type TopicId } from './content';
-import { Terminal, Window } from './parts';
+import { Terminal, Window } from '@/features/marketing/kit/window';
 
 /*
  * One focused visual per topic tab. Each fits the tab's panel at 390 px: one

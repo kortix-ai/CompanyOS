@@ -6,7 +6,7 @@ import { CodePanel } from '@/features/marketing/code-panel';
 import { ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
 import type { ReactNode } from 'react';
 
-import { Window } from '@/features/marketing/enterprise/parts';
+import { Window } from '@/features/marketing/kit/window';
 import { TopicTabs } from '@/features/marketing/enterprise/topic-tabs';
 import { localizeMarketingContent as localizeContent, type TopicId } from './content';
 

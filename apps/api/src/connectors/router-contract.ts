@@ -30,9 +30,18 @@ export interface ConnectorPrincipal {
    *  agent may call. Null = no restriction (non-agent token). */
   agentGrant?: AgentGrant | null;
   /** Canonical slugs of the channel connector(s) that CREATED this session
-   *  (Slack/Teams/email). Always reachable, whatever the grant says — see
-   *  `principalMayUseConnector`. Empty for a session no channel created. */
+   *  (Slack/Teams/email), or that created the nearest session on its spawn
+   *  line. Always reachable, whatever the grant says — see
+   *  `principalMayUseConnector`. Empty for a session whose line no channel
+   *  created. */
   channelConnectorSlugs?: string[];
+  /** The stored agent grant of every ancestor on this session's spawn line,
+   *  nearest parent first (`sessionConnectorLineage`). A spawned session — a
+   *  subagent, a fork, a colleague — inherits what the line above it could
+   *  reach, so a delegate of a session that holds a connector can call it too
+   *  (KRTX-4643). An inherited call runs under the same policy set the
+   *  ancestor's own calls run under (`callPolicySetOf`). */
+  inheritedGrants?: (AgentGrant | null)[];
   /**
    * The account THIS call asked to run as (`account` in the call body), by
    * connection label or id. A per-request value, carried on the principal

@@ -1,7 +1,8 @@
 /** Who is calling: resolve the connector principal from a token or a project path, and the admin/reader/manager authorization checks. */
-import { connectors, projectSessions } from '@kortix/db';
+import { accountTokens, connectors, projectSessions, readStoredAgentGrant } from '@kortix/db';
+import type { AgentGrant } from '@kortix/db';
 import { CHANNEL_PLATFORM_IDS } from '@kortix/shared/channel-descriptors';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { reconcileStoredSessionAgentGrant } from '../projects/lib/session-token-grant';
 import { canonicalConnectorAlias } from '../projects/lib/session-connector-bindings';
 import {
@@ -58,23 +59,67 @@ export function projectSessionIdForProjectPrincipal(
   return tokenProjectId ? (contextualSessionId ?? null) : null;
 }
 
+/** `project_sessions.metadata.source` values that name a channel platform. */
+const CHANNEL_SOURCES: ReadonlySet<string> = new Set(CHANNEL_PLATFORM_IDS);
+
+/** Sessions a spawn line reaches up at most: above the subagent depth cap (kortixd, 2 by default). */
+const CHANNEL_INHERIT_MAX_HOPS = 4;
+
 /**
- * The channel connector(s) that CREATED a session, resolved from
- * `metadata.source` and the project's channel connector rows — never from
- * the request. See `principalMayUseConnector` for why they stay reachable
- * under any grant. A child that runs as its parent's own agent (an inline
- * colleague, a built-in, a fork: kortixd `cloud-subagent.ts`) has its
- * parent's access, so it also reaches the channel that created its parent
- * ({@link sessionChannelSource}).
+ * The connector reach a session inherits down its spawn line, resolved from
+ * `metadata.source`, the ancestors' rows and their stored token grants — never
+ * from the request. See `principalMayUseConnector` for why they stay
+ * reachable: a spawned session (an inline colleague, a built-in, a fork, a
+ * named agent: kortixd `cloud-subagent.ts`) exists to do its parent's work
+ * with the tools the parent handed it, so it reaches what the line above it
+ * reached (KRTX-4643) — the channel that created any session on the line, and
+ * every ancestor's stored grant, nearest parent first.
  */
-export async function sessionChannelConnectorSlugs(
+export interface SessionConnectorLineage {
+  /** Canonical slugs of the channel connector(s) that created the session or
+   *  the nearest ancestor on its spawn line. */
+  channelSlugs: string[];
+  /** The stored agent grant of every ancestor, nearest parent first. The
+   *  session's own grant is not here — the caller's principal already carries
+   *  it. Null entries: the ancestor had no readable stored grant. */
+  ancestorGrants: (AgentGrant | null)[];
+}
+
+/**
+ * Walk the spawn line nearest-first: the session's own channel source ends it
+ * (a channel-created session is the root of a delegation line in practice);
+ * every other ancestor contributes its stored grant. A child that runs as a
+ * different agent no longer ends the line — the delegate inherits the parent's
+ * reach under `principalMayUseConnector` (KRTX-4643).
+ */
+export async function sessionConnectorLineage(
   projectId: string,
   sessionId: string | null,
-): Promise<string[]> {
-  if (!sessionId) return [];
+): Promise<SessionConnectorLineage> {
+  if (!sessionId) return { channelSlugs: [], ancestorGrants: [] };
   try {
-    const source = await sessionChannelSource(projectId, sessionId);
-    if (!source) return [];
+    let channelPlatformName: string | null = null;
+    const ancestorGrants: (AgentGrant | null)[] = [];
+    let id: string | null = sessionId;
+    for (let hop = 0; id && hop <= CHANNEL_INHERIT_MAX_HOPS; hop += 1) {
+      const [row] = await db
+        .select({
+          metadata: projectSessions.metadata,
+          parentSessionId: projectSessions.parentSessionId,
+        })
+        .from(projectSessions)
+        .where(and(eq(projectSessions.sessionId, id), eq(projectSessions.projectId, projectId)))
+        .limit(1);
+      if (!row) break;
+      if (hop > 0) ancestorGrants.push(await storedSessionGrant(id));
+      const source = (row.metadata as { source?: unknown } | null)?.source;
+      if (typeof source === 'string' && CHANNEL_SOURCES.has(source)) {
+        channelPlatformName = source;
+        break;
+      }
+      id = row.parentSessionId;
+    }
+    if (!channelPlatformName) return { channelSlugs: [], ancestorGrants };
     const rows = await db
       .select({ slug: connectors.slug, config: connectors.config, providerType: connectors.providerType })
       .from(connectors)
@@ -85,47 +130,37 @@ export async function sessionChannelConnectorSlugs(
           eq(connectors.enabled, true),
         ),
       );
-    return rows
-      .filter((row) => channelPlatform(row.config) === source)
-      .map((row) => canonicalConnectorAlias(row.slug));
+    return {
+      channelSlugs: rows
+        .filter((row) => channelPlatform(row.config) === channelPlatformName)
+        .map((row) => canonicalConnectorAlias(row.slug)),
+      ancestorGrants,
+    };
   } catch (err) {
-    console.warn('[connectors] could not resolve the session channel connector', {
+    console.warn('[connectors] could not resolve the session connector lineage', {
       projectId,
       sessionId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return [];
+    return { channelSlugs: [], ancestorGrants: [] };
   }
 }
 
-/** `project_sessions.metadata.source` values that name a channel platform. */
-const CHANNEL_SOURCES: ReadonlySet<string> = new Set(CHANNEL_PLATFORM_IDS);
-
-/** Parents a channel passes through at most: above the subagent depth cap (kortixd, 2 by default). */
-const CHANNEL_INHERIT_MAX_HOPS = 4;
-
-/**
- * The channel platform that created this session, or the one that created
- * the nearest ancestor in an unbroken line of children that each run as
- * their parent's agent. A child of another agent ends the line: that agent
- * has its own grant, not its parent's access. Null: no channel.
- */
-async function sessionChannelSource(projectId: string, sessionId: string): Promise<string | null> {
-  let id: string | null = sessionId;
-  let childAgent: string | null = null;
-  for (let hop = 0; id && hop <= CHANNEL_INHERIT_MAX_HOPS; hop += 1) {
-    const [row] = await db
-      .select({ metadata: projectSessions.metadata, agentName: projectSessions.agentName, parentSessionId: projectSessions.parentSessionId })
-      .from(projectSessions)
-      .where(and(eq(projectSessions.sessionId, id), eq(projectSessions.projectId, projectId)))
-      .limit(1);
-    if (!row || (hop > 0 && row.agentName !== childAgent)) return null;
-    const source = (row.metadata as { source?: unknown } | null)?.source;
-    if (typeof source === 'string' && CHANNEL_SOURCES.has(source)) return source;
-    childAgent = row.agentName;
-    id = row.parentSessionId;
-  }
-  return null;
+/** The active, unrevoked token grant of one session, or null: a read failure
+ *  grants nothing (fail closed for the ancestor), a revoked token stays dead. */
+async function storedSessionGrant(sessionId: string): Promise<AgentGrant | null> {
+  const [token] = await db
+    .select({ agentGrant: accountTokens.agentGrant })
+    .from(accountTokens)
+    .where(
+      and(
+        eq(accountTokens.sessionId, sessionId),
+        eq(accountTokens.status, 'active'),
+        isNull(accountTokens.revokedAt),
+      ),
+    )
+    .limit(1);
+  return readStoredAgentGrant(token?.agentGrant);
 }
 
 /**
@@ -146,7 +181,7 @@ export async function resolveTokenPrincipal(
     requestedSessionId,
   );
   if (!sessionIdentity.ok) return null;
-  const [agentGrant, channelConnectorSlugs] = await Promise.all([
+  const [agentGrant, lineage] = await Promise.all([
     sessionIdentity.sessionId
       ? reconcileStoredSessionAgentGrant({
           projectId: result.projectId,
@@ -157,7 +192,7 @@ export async function resolveTokenPrincipal(
           storedGrant: result.agentGrant ?? null,
         })
       : Promise.resolve(result.agentGrant ?? null),
-    sessionChannelConnectorSlugs(result.projectId, sessionIdentity.sessionId),
+    sessionConnectorLineage(result.projectId, sessionIdentity.sessionId),
   ]);
   return {
     userId: result.userId,
@@ -167,7 +202,8 @@ export async function resolveTokenPrincipal(
     tokenId: result.tokenId ?? null,
     subject: await resolveShareSubject(result.userId),
     agentGrant,
-    channelConnectorSlugs,
+    channelConnectorSlugs: lineage.channelSlugs,
+    inheritedGrants: lineage.ancestorGrants,
     agentPrincipal: await tokenAgentPrincipalScope({
       projectId: result.projectId,
       tokenId: result.tokenId ?? null,
@@ -234,16 +270,16 @@ export async function rebuildHeldCallPrincipal(held: HeldCallInput): Promise<Hel
   // that gap for a held run.
   if (!member && !serviceAccountActive) return { ok: false, reason: 'caller_revoked' };
 
-  const [agentGrant, channelConnectorSlugs] = await Promise.all([
+  const [agentGrant, lineage] = await Promise.all([
     sessionId
       ? reconcileStoredSessionAgentGrant({ projectId, sessionId, storedGrant: token.agentGrant ?? null })
       : Promise.resolve(token.agentGrant ?? null),
-    sessionChannelConnectorSlugs(projectId, sessionId),
+    sessionConnectorLineage(projectId, sessionId),
   ]);
   const slug = canonicalConnectorAlias(held.connector_slug);
   if (
-    !principalMayUseConnector({ agentGrant: held.agent_grant, channelConnectorSlugs }, slug) ||
-    !principalMayUseConnector({ agentGrant, channelConnectorSlugs }, slug)
+    !principalMayUseConnector({ agentGrant: held.agent_grant, channelConnectorSlugs: lineage.channelSlugs, inheritedGrants: lineage.ancestorGrants }, slug) ||
+    !principalMayUseConnector({ agentGrant, channelConnectorSlugs: lineage.channelSlugs, inheritedGrants: lineage.ancestorGrants }, slug)
   ) {
     return { ok: false, reason: 'grant_narrowed' };
   }
@@ -266,7 +302,8 @@ export async function rebuildHeldCallPrincipal(held: HeldCallInput): Promise<Hel
     tokenId: token.tokenId ?? null,
     subject: await resolveShareSubject(userId),
     agentGrant,
-    channelConnectorSlugs,
+    channelConnectorSlugs: lineage.channelSlugs,
+    inheritedGrants: lineage.ancestorGrants,
     agentPrincipal,
     requestedConnectorAccount: held.connection_id,
   };

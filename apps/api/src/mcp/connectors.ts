@@ -322,7 +322,7 @@ export function denialNext(reason: string, body: any): string | undefined {
     case 'account_required':
       return 'Several accounts are connected and none is the default: retry with `account` set to one of available_accounts (or ask the human which).';
     case 'connector_not_assigned':
-      return 'The agent or token behind this call is not granted this connector.';
+      return 'The agent or token behind this call is not granted this connector. Do not start another agent for it: a spawned session inherits the spawning session\'s connectors, so every delegate is denied the same way. Fix the grant in kortix.yaml or tell the human.';
     case 'connector_not_found':
       return 'No such connector in this project: list_connectors shows the slugs, add_connector adds one.';
     case 'action_not_found':

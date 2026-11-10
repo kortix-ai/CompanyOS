@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { AgentGrant } from '@kortix/db';
-import { connectorDenialBody, principalMayUseConnector } from './principal-access';
+import { callPolicySetOf, connectorDenialBody, principalMayUseConnector } from './principal-access';
 
 const narrow: AgentGrant = {
   agent: 'release-bot',
@@ -27,6 +27,62 @@ test("the session's originating channel connector is reachable under ANY grant, 
   expect(principalMayUseConnector(p, 'kortix_email')).toBe(false);
   expect(principalMayUseConnector(p, 'stripe')).toBe(false);
   expect(principalMayUseConnector({ agentGrant: narrow, channelConnectorSlugs: [] }, 'kortix_slack')).toBe(false);
+});
+
+test('a spawn child inherits a connector its parent holds (KRTX-4643)', () => {
+  const parent: AgentGrant = {
+    agent: 'coordinator',
+    connectors: ['kortix_slack'],
+    permissions: [],
+    env: [],
+    manifestRevision: 'e'.repeat(40),
+    manifestCommit: 'f'.repeat(40),
+  };
+  const child = { agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [parent] };
+  expect(principalMayUseConnector(child, 'kortix_slack')).toBe(true);
+  expect(principalMayUseConnector(child, 'github')).toBe(false);
+  expect(principalMayUseConnector(child, 'stripe')).toBe(false);
+});
+
+test('an inherited unrestricted grant reaches everything the parent line reached', () => {
+  expect(principalMayUseConnector({ agentGrant: narrow, inheritedGrants: [null] }, 'stripe')).toBe(true);
+});
+
+test('inherited grants alone do not widen a caller whose own grant already reaches a connector', () => {
+  const parent: AgentGrant = { ...narrow, connectors: ['github'] };
+  expect(principalMayUseConnector({ agentGrant: narrow, inheritedGrants: [parent] }, 'github')).toBe(true);
+});
+
+test('an inherited call runs under the nearest ancestor policy set that reaches the connector', () => {
+  const near: AgentGrant = { ...narrow, agent: 'coordinator', connectors: ['kortix_slack'], policySets: { kortix_slack: 'read_only' } };
+  const far: AgentGrant = { ...narrow, agent: 'root-agent', connectors: ['kortix_slack', 'github'], policySets: { kortix_slack: 'writes' } };
+  // The parent's own grant reaches the connector: its set or the base rules win, never a farther ancestor's.
+  expect(callPolicySetOf({ agentGrant: near, inheritedGrants: [far] }, 'kortix_slack')).toEqual({
+    name: 'read_only',
+    agent: 'coordinator',
+    manifestCommit: 'b'.repeat(40),
+  });
+  // The child's own grant does not reach it: the nearest ancestor that does names the set.
+  const child = { agentGrant: { ...narrow, connectors: [] as string[] }, inheritedGrants: [near, far] };
+  expect(callPolicySetOf(child, 'kortix_slack')).toEqual({ name: 'read_only', agent: 'coordinator', manifestCommit: 'b'.repeat(40) });
+  // A nearer ancestor that reaches the connector without a set stops the walk: base rules, exactly its own calls.
+  const bare: AgentGrant = { ...narrow, agent: 'middle', connectors: ['kortix_slack'] };
+  expect(callPolicySetOf({ agentGrant: child.agentGrant, inheritedGrants: [bare, far] }, 'kortix_slack')).toBeNull();
+});
+
+test('a channel call still runs the base rules when no inherited grant carries a set', () => {
+  const parent: AgentGrant = { ...narrow, agent: 'coordinator', connectors: [] };
+  const p = { agentGrant: { ...narrow, connectors: [] as string[] }, channelConnectorSlugs: ['kortix_slack'], inheritedGrants: [parent] };
+  expect(principalMayUseConnector(p, 'kortix_slack')).toBe(true);
+  expect(callPolicySetOf(p, 'kortix_slack')).toBeNull();
+});
+
+test('connector_not_assigned tells the agent never to retry through another spawn (KRTX-4643)', () => {
+  const body = connectorDenialBody('connector_not_assigned', {
+    principal: { agentGrant: narrow },
+    connector: 'stripe',
+  });
+  expect(String(body.hint)).toContain('Do not start another agent');
 });
 
 test('connector_not_assigned names the agent, what it holds, and the manifest it came from', () => {

@@ -16,7 +16,7 @@ import {
   projectSessionIdForProjectPrincipal,
   resolveTokenBoundSessionId,
   resolveTokenPrincipal,
-  sessionChannelConnectorSlugs,
+  sessionConnectorLineage,
 } from './db-deps-principal';
 import { bearerToken } from '../shared/bearer-token';
 import { projectsView } from '../workspaces/rows';
@@ -153,7 +153,7 @@ export async function resolveProjectPrincipal(
   if (!sessionIdentity.ok) return null;
 
   const storedAgentGrant = (c.get('agentGrant') as ConnectorPrincipal['agentGrant']) ?? null;
-  const [agentGrant, channelConnectorSlugs] = await Promise.all([
+  const [agentGrant, lineage] = await Promise.all([
     sessionIdentity.sessionId
       ? reconcileStoredSessionAgentGrant({
           projectId,
@@ -167,7 +167,7 @@ export async function resolveProjectPrincipal(
           projectRow,
         })
       : Promise.resolve(storedAgentGrant),
-    sessionChannelConnectorSlugs(projectId, sessionIdentity.sessionId),
+    sessionConnectorLineage(projectId, sessionIdentity.sessionId),
   ]);
 
   const tokenId = (c.get('iamTokenId') as string | undefined) ?? null;
@@ -179,7 +179,8 @@ export async function resolveProjectPrincipal(
     tokenId,
     subject: await resolveShareSubject(userId),
     agentGrant,
-    channelConnectorSlugs,
+    channelConnectorSlugs: lineage.channelSlugs,
+    inheritedGrants: lineage.ancestorGrants,
     // Only a project-scoped (session) token can be an agent principal; a
     // human JWT/PAT keeps the legacy rule. The fresh on_behalf_of comes from
     // the auth middleware, so a clear by a foreign prompt applies at once.

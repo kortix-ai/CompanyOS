@@ -14,15 +14,12 @@ type CareersContent = ReturnType<typeof getLocalizedCareersContent>;
 /**
  * The board, in a band (after Linear's and Runway's open-roles lists on
  * Mobbin): one row per opening with the role, its full name, its location and
- * one action. A row with a role page links to it ("View role"); the rest open
- * Apply directly.
+ * "View role", which opens the opening's page.
  */
 function Board({
   hero,
   openings,
-  apply,
-  onApply,
-}: Pick<CareersContent, 'hero' | 'openings' | 'apply'> & { onApply: () => void }): ReactNode {
+}: Pick<CareersContent, 'hero' | 'openings'>): ReactNode {
   return (
     <Band>
       <div className="px-6 lg:px-11">
@@ -34,29 +31,19 @@ function Board({
           {openings.map((opening) => (
             <li key={opening.id} className="grid grid-cols-1 items-center gap-y-3 py-6 lg:grid-cols-12">
               <span className="flex flex-col gap-1 lg:col-span-6 lg:pr-8">
-                {opening.href ? (
-                  <Link
-                    href={opening.href}
-                    className="text-xl font-medium tracking-tight underline-offset-4 hover:underline"
-                  >
-                    {opening.name}
-                  </Link>
-                ) : (
-                  <span className="text-xl font-medium tracking-tight">{opening.name}</span>
-                )}
+                <Link
+                  href={opening.href}
+                  className="text-xl font-medium tracking-tight underline-offset-4 hover:underline"
+                >
+                  {opening.name}
+                </Link>
                 <span className="text-muted-foreground text-sm">{opening.full}</span>
               </span>
               <span className="flex items-center justify-between gap-4 lg:col-span-6">
                 <span className="text-foreground text-base">{opening.location}</span>
-                {opening.href ? (
-                  <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
-                    <Link href={opening.href}>{hero.viewRole}</Link>
-                  </MarketingButton>
-                ) : (
-                  <MarketingButton size="md" variant="secondary" className="hit-area-y-1" onClick={onApply}>
-                    {apply.cta}
-                  </MarketingButton>
-                )}
+                <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
+                  <Link href={opening.href}>{hero.viewRole}</Link>
+                </MarketingButton>
               </span>
             </li>
           ))}
@@ -100,7 +87,7 @@ export function CareersPage(): ReactNode {
             </>
           }
         />
-        <Board hero={hero} openings={openings} apply={apply} onApply={openApply} />
+        <Board hero={hero} openings={openings} />
       </section>
 
       {/* The bar: seven cells, and the eighth is the way in. */}

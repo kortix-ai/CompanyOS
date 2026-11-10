@@ -1,7 +1,7 @@
 /**
  * `/careers` copy. The page is a job board, not an essay: the openings, the
- * bar, and how to apply. The two founding GTM roles each have a role page
- * (`/careers/<slug>`, `roles` below). The company thesis lives on `/about`.
+ * bar, and how to apply. Every opening has a role page (`/careers/<slug>`,
+ * `roles` below). The company thesis lives on `/about`.
  *
  * Plain English lives here, not in `apps/web/translations/*.json`, so the copy
  * can iterate before paying the 8-locale parity gate (`pnpm i18n:translations`).
@@ -19,9 +19,10 @@
  *    Developers based in San Francisco, US remote possible for both.
  *  - The openings are the founder's own list and order: Founding GTM
  *    (Enterprise), Founding GTM (Developers), MTS, FDE. The board shows the
- *    role and its location only, no summary line. The GTM role pages carry
- *    the spec; the title is open (Founding GTM Lead, Head of GTM, Head of
- *    Business, CBO).
+ *    role and its location only, no summary line. Every opening has a role
+ *    page with the spec (founder, 2026-11-10). The GTM title is open (Founding
+ *    GTM Lead, Head of GTM, Head of Business, CBO). The MTS and FDE pages name
+ *    no pay at all ("we share the numbers in the first call") and no manager.
  *  - "How we sell" is the public half of the GTM thesis. No internal numbers.
  *  - Applications go through `ApplyModal`, which posts to the same
  *    `/api/demo-request` pipeline as "Book your demo". There is no ATS and no
@@ -53,18 +54,18 @@ export const hero = {
   allOpenings: 'All openings',
 } as const;
 
-/** The two founding GTM role pages, by URL slug. */
-export const ROLE_SLUGS = ['gtm-enterprise', 'gtm-developers'] as const;
+/** Every opening's role page, by URL slug. */
+export const ROLE_SLUGS = ['gtm-enterprise', 'gtm-developers', 'mts', 'fde'] as const;
 export type RoleSlug = (typeof ROLE_SLUGS)[number];
 
 /** The board: the role, its full name and its location, in the founder's order. No summary line
- *  (founder, 2026-11-10). A GTM row links to its role page. */
+ *  (founder, 2026-11-10). Every row links to its role page. */
 export const openings: readonly {
   id: string;
   name: string;
   full: string;
   location: string;
-  href?: `/careers/${RoleSlug}`;
+  href: `/careers/${RoleSlug}`;
 }[] = [
   {
     id: 'gtm-enterprise',
@@ -85,12 +86,14 @@ export const openings: readonly {
     name: 'MTS',
     full: 'Member of Technical Staff',
     location: TECH_LOCATION,
+    href: '/careers/mts',
   },
   {
     id: 'fde',
     name: 'FDE',
     full: 'Forward Deployed Engineer',
     location: TECH_LOCATION,
+    href: '/careers/fde',
   },
 ];
 
@@ -162,7 +165,79 @@ const gtmProcess = [
   },
 ] as const;
 
-/** One founding GTM role page. `applyArea` must equal one of `applyForm.areaOptions`. */
+/** What both technical role pages show the same way. */
+const techFacts = {
+  location: { k: 'Location', v: 'Belgrade, Serbia, or remote' },
+  team: { k: 'Team', v: 'A small engineering team. No PMs, no QA.' },
+  pay: { k: 'Compensation', v: 'We share the numbers in the first call.' },
+} as const;
+
+/** How engineering works at Kortix, from the bar in `CLAUDE.md`. Shared by MTS and FDE. */
+export const howWeBuild = {
+  title: 'How we build.',
+  titleMuted: 'Agents do the typing. You own the result.',
+  sub: 'An extremely small team ships the whole stack. That works because every engineer runs agents and owns their work end to end.',
+  items: [
+    {
+      id: 'agents',
+      n: '01',
+      k: 'Agents do the typing',
+      v: 'You run several coding agents in parallel, on Kortix. You decide what gets built and judge what comes back.',
+    },
+    {
+      id: 'end-to-end',
+      n: '02',
+      k: 'End to end',
+      v: 'From "we have a problem" to "nobody has to think about this again": the code, the docs and the announcement.',
+    },
+    {
+      id: 'prove',
+      n: '03',
+      k: 'Prove it',
+      v: 'Not "the tests pass". Run it on the real surface, then confirm it is live in production.',
+    },
+    {
+      id: 'open',
+      n: '04',
+      k: 'In the open',
+      v: 'Kortix is open source. What you build ships in public on GitHub.',
+    },
+  ],
+} as const;
+
+/** The interview loop, the same for both technical roles. */
+const techProcess = [
+  {
+    id: 'intro',
+    k: 'Intro call, 30 min',
+    v: 'With Marko. What you built and owned, in your own words.',
+  },
+  {
+    id: 'deep-dive',
+    k: 'Deep dive, 60 min',
+    v: 'Walk two engineers through a system you built: the decisions, what broke, and the result.',
+  },
+  {
+    id: 'sample',
+    k: 'Work sample',
+    v: 'A real task on Kortix, done the way you work, agents included. Then you walk us through it.',
+  },
+  {
+    id: 'references',
+    k: 'References, then the offer',
+    v: 'Two people you built with, and one former manager.',
+  },
+] as const;
+
+/** One role page. `applyArea` must equal one of `applyForm.areaOptions`. `principles` is "How we
+ *  sell" on a GTM page and "How we build" on a technical one. */
+type Principles = {
+  title: string;
+  titleMuted: string;
+  sub: string;
+  items: readonly { id: string; n: string; k: string; v: string }[];
+};
+
 type RolePage = {
   hero: { title: string; titleMuted: string; sub: string };
   facts: readonly { k: string; v: string }[];
@@ -173,6 +248,7 @@ type RolePage = {
     items: readonly { id: string; n: string; k: string; v: string }[];
   };
   have: { title: string; titleMuted: string; rows: readonly { id: string; k: string; v: string }[] };
+  principles: Principles;
   process: { title: string; titleMuted: string; rows: readonly { id: string; k: string; v: string }[] };
   applyArea: string;
   meta: { title: string; description: string };
@@ -293,6 +369,7 @@ export const roles: Record<RoleSlug, RolePage> = {
         },
       ],
     },
+    principles: howWeSell,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: gtmProcess },
     applyArea: 'Founding GTM — Enterprise',
     meta: {
@@ -410,12 +487,249 @@ export const roles: Record<RoleSlug, RolePage> = {
         },
       ],
     },
+    principles: howWeSell,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: gtmProcess },
     applyArea: 'Founding GTM — Developers',
     meta: {
       title: 'Founding GTM, Developers — Kortix careers',
       description:
         'The first developer and product-led growth hire at Kortix: the funnel, activation, launches and community. San Francisco or US remote.',
+    },
+  },
+  mts: {
+    hero: {
+      title: 'Member of Technical Staff.',
+      titleMuted: 'Belgrade, Serbia, or remote.',
+      sub: 'Build Kortix itself, anywhere in the stack: the agent runtime, the API, the apps and the infrastructure under them.',
+    },
+    facts: [
+      techFacts.location,
+      techFacts.team,
+      techFacts.pay,
+      { k: 'Stack', v: 'TypeScript, Bun, Next.js, Postgres, Rust' },
+    ],
+    own: {
+      title: 'What you own.',
+      titleMuted: 'Any part of the stack, end to end.',
+      rows: [
+        {
+          id: 'product',
+          k: 'The product',
+          v: 'The API, the web app, the CLI, the SDK, and the desktop and mobile apps.',
+        },
+        {
+          id: 'runtime',
+          k: 'The agent runtime',
+          v: 'The daemon that runs every session on its own isolated machine, the agent harness, and the LLM gateway.',
+        },
+        {
+          id: 'infrastructure',
+          k: 'Infrastructure',
+          v: 'The sandbox fleet, deploys and the release pipeline.',
+        },
+        {
+          id: 'quality',
+          k: 'Quality you prove',
+          v: 'Every change verified on the real surface: the route, the CLI, the page. Then live on dev, then in production.',
+        },
+        {
+          id: 'agents',
+          k: 'Your agents',
+          v: 'How your coding agents work: the skills, the checks and the context they get.',
+        },
+      ],
+    },
+    year: {
+      title: 'The first 12 months.',
+      titleMuted: 'From your first change to an area that runs without you.',
+      items: [
+        {
+          id: 'ship',
+          n: 'Days 0–30',
+          k: 'Ship',
+          v: 'Get a change to production in your first two weeks. Learn the stack by fixing what users report.',
+        },
+        {
+          id: 'own',
+          n: 'Days 31–90',
+          k: 'Own an area',
+          v: 'Take one area (the runtime, the web app, the CLI, infrastructure) and own it end to end.',
+        },
+        {
+          id: 'lead',
+          n: 'Days 91–180',
+          k: 'Lead a project',
+          v: 'Drive a multi-week project from the problem to production, announcement included.',
+        },
+        {
+          id: 'raise',
+          n: 'Days 181–365',
+          k: 'Raise the bar',
+          v: 'Your area runs without you: tests, docs, skills for the agents, and the people you helped hire.',
+        },
+      ],
+    },
+    have: {
+      title: 'What you have done.',
+      titleMuted: 'The non-negotiables.',
+      rows: [
+        {
+          id: 'shipped',
+          k: 'Shipped and owned',
+          v: 'You owned software that real users depend on, for a long stretch.',
+        },
+        {
+          id: 'depth',
+          k: 'Depth',
+          v: 'You are strong in TypeScript and comfortable below the application: processes, networks, databases.',
+        },
+        {
+          id: 'agents',
+          k: 'You run on agents',
+          v: 'You already work with several coding agents in parallel and review what they produce.',
+        },
+        {
+          id: 'end-to-end',
+          k: 'End to end',
+          v: 'You take work from a vague problem to production, and you prove it works.',
+        },
+        {
+          id: 'write',
+          k: 'You write',
+          v: 'Your pull requests and docs are short and exact.',
+        },
+        {
+          id: 'plus',
+          k: 'A plus',
+          v: 'Rust, Linux and virtual machines, distributed systems, or React Native.',
+        },
+      ],
+    },
+    principles: howWeBuild,
+    process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
+    applyArea: 'MTS — Member of Technical Staff',
+    meta: {
+      title: 'Member of Technical Staff — Kortix careers',
+      description:
+        'Build Kortix anywhere in the stack: the agent runtime, the API, the apps and the infrastructure. Belgrade, Serbia, or remote.',
+    },
+  },
+  fde: {
+    hero: {
+      title: 'Forward Deployed Engineer.',
+      titleMuted: 'Belgrade, Serbia, or remote.',
+      sub: 'Put Kortix to work across a customer\'s company. You map how they work, connect their data, and ship the agents and apps that run it.',
+    },
+    facts: [
+      techFacts.location,
+      techFacts.team,
+      techFacts.pay,
+      { k: 'Works with', v: 'The founding GTM leads on every deal' },
+    ],
+    own: {
+      title: 'What you own.',
+      titleMuted: 'A customer\'s outcome, from the first map to live work.',
+      rows: [
+        {
+          id: 'deployments',
+          k: 'Deployments',
+          v: 'Map the work, connect the data, and build the agents and apps that do it.',
+        },
+        {
+          id: 'pilots',
+          k: 'Pilot to production',
+          v: 'Take a scoped pilot to a live outcome the customer uses every week.',
+        },
+        {
+          id: 'repo',
+          k: 'The customer\'s repo',
+          v: 'Everything you build lives in a git repo the customer owns: agents, skills, connectors and apps.',
+        },
+        {
+          id: 'feedback',
+          k: 'Product feedback',
+          v: 'Every gap you hit goes back to the product as a named issue, or as a fix you ship yourself.',
+        },
+        {
+          id: 'templates',
+          k: 'Templates',
+          v: 'What works for one customer becomes a template for the next.',
+        },
+      ],
+    },
+    year: {
+      title: 'The first 12 months.',
+      titleMuted: 'From your first deployment to the playbook.',
+      items: [
+        {
+          id: 'learn',
+          n: 'Days 0–30',
+          k: 'Learn Kortix deeply',
+          v: 'Build real work on Kortix for Kortix itself. Join a live deployment.',
+        },
+        {
+          id: 'first',
+          n: 'Days 31–90',
+          k: 'First deployment',
+          v: 'Own one customer deployment from the first map to a live outcome.',
+        },
+        {
+          id: 'several',
+          n: 'Days 91–180',
+          k: 'Run several',
+          v: 'Run several deployments at once, with agents doing most of the build.',
+        },
+        {
+          id: 'playbook',
+          n: 'Days 181–365',
+          k: 'Write the playbook',
+          v: 'Turn what works into templates, skills and a playbook the next FDE uses on day one.',
+        },
+      ],
+    },
+    have: {
+      title: 'What you have done.',
+      titleMuted: 'The non-negotiables.',
+      rows: [
+        {
+          id: 'build',
+          k: 'You build fast',
+          v: 'You ship full-stack apps and integrations, and you are at home with APIs, data and auth.',
+        },
+        {
+          id: 'customers',
+          k: 'You work with customers',
+          v: 'You sat with users, understood their work, and built what they needed.',
+        },
+        {
+          id: 'agents',
+          k: 'You run on agents',
+          v: 'You already build with several coding agents in parallel.',
+        },
+        {
+          id: 'end-to-end',
+          k: 'End to end',
+          v: 'You take a messy problem to a live result that someone uses.',
+        },
+        {
+          id: 'write',
+          k: 'You write',
+          v: 'Your updates to a customer are short and exact.',
+        },
+        {
+          id: 'plus',
+          k: 'A plus',
+          v: 'Consulting, solutions engineering, or a company you founded.',
+        },
+      ],
+    },
+    principles: howWeBuild,
+    process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
+    applyArea: 'FDE — Forward Deployed Engineer',
+    meta: {
+      title: 'Forward Deployed Engineer — Kortix careers',
+      description:
+        'Put Kortix to work across a customer\'s company: map the work, connect the data, ship the agents and apps. Belgrade, Serbia, or remote.',
     },
   },
 };

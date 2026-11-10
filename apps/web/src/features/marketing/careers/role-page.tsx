@@ -18,14 +18,15 @@ import { ApplyModal } from './apply-modal';
 import { getLocalizedCareersContent, type RoleSlug } from './content';
 
 /**
- * `/careers/<slug>`: one founding GTM role, in the same frame as `/careers`.
- * The hero and the facts, what the role owns, the first 12 months, the
- * non-negotiables, how we sell (shared by both GTM roles), and how we hire.
+ * `/careers/<slug>`: one opening, in the same frame as `/careers`. The hero
+ * and the facts, what the role owns, the first 12 months, the non-negotiables,
+ * the principles ("How we sell" for GTM, "How we build" for MTS and FDE), and
+ * how we hire.
  * Apply opens `ApplyModal` with this opening pre-selected.
  */
 export function RolePage({ slug }: { slug: RoleSlug }): ReactNode {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const { hero, roles, howWeSell, apply } = getLocalizedCareersContent(tI18nComplete);
+  const { hero, roles, apply } = getLocalizedCareersContent(tI18nComplete);
   const role = roles[slug];
   const [applyOpen, setApplyOpen] = useState(false);
   const openApply = () => setApplyOpen(true);
@@ -75,10 +76,14 @@ export function RolePage({ slug }: { slug: RoleSlug }): ReactNode {
         </Band>
       </Block>
 
-      <Block id="how-we-sell">
-        <Heading title={howWeSell.title} titleMuted={howWeSell.titleMuted} sub={howWeSell.sub} />
+      <Block id="principles">
+        <Heading
+          title={role.principles.title}
+          titleMuted={role.principles.titleMuted}
+          sub={role.principles.sub}
+        />
         <Band className="mt-12">
-          <CellGrid items={howWeSell.items} cols="lg:grid-cols-4" />
+          <CellGrid items={role.principles.items} cols="lg:grid-cols-4" />
         </Band>
       </Block>
 

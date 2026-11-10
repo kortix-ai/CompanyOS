@@ -2051,7 +2051,9 @@ function renderSettings() {
           ? row('Screenshot size', `Set by ${by}.`, `<span>${orgRec.max_height === 2160 ? '4K' : orgRec.max_height + 'p'}</span>`)
           : row('Screenshot size', 'Screenshots are scaled down to fit, never up.',
           `<select id="resolution">${settingsData.resolution_presets.map((p) => `<option value="${p.name}"${res === p.name ? ' selected' : ''}>${p.name} (${p.max_width} × ${p.max_height})</option>`).join('')}${res === 'custom' ? `<option value="custom" selected>Custom (${s.max_width} × ${s.max_height})</option>` : ''}</select>`)}
-        ${row('Text recognition', 'Fast uses less power and misses more small text.', `<select data-path="ocr_level" data-type="str">${[['accurate', 'Accurate'], ['fast', 'Fast']].map(([k, n]) => `<option value="${k}"${s.ocr_level === k ? ' selected' : ''}>${n}</option>`).join('')}</select>`)}
+        ${orgRec.text_recognition != null
+          ? row('Text recognition', `Set by ${by}.`, `<span>${{ accurate: 'Accurate', fast: 'Fast', off: 'Off' }[orgRec.text_recognition] || orgRec.text_recognition}</span>`)
+          : row('Text recognition', 'Fast uses less power and misses more small text. Off reads no screen text: search finds apps, window titles and URLs only.', `<select data-path="ocr_level" data-type="str">${[['accurate', 'Accurate'], ['fast', 'Fast'], ['off', 'Off']].map(([k, n]) => `<option value="${k}"${s.ocr_level === k ? ' selected' : ''}>${n}</option>`).join('')}</select>`)}
       </details>
     </div></div>`;
   $('.panel-body', settingsEl).scrollTop = scroll;

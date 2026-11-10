@@ -198,7 +198,7 @@ function UploadStatus({ upload, onRetry }: { upload: DriveUpload; onRetry: () =>
       // The header gauge carries the byte share of the whole run.
       return (
         <span className="flex shrink-0">
-          <Loading className="size-4 shrink-0" />
+          <Loading variant="spokes" className="size-4 shrink-0" />
           <span className="sr-only">{t('uploadingFile', { name: upload.file.name })}</span>
         </span>
       );

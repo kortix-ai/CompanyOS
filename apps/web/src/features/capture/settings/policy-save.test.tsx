@@ -58,6 +58,10 @@ afterEach(async () => {
   saved.mockClear();
 });
 const switches = () => [...win.document.body.querySelectorAll('[role="switch"]')];
+const click = async (node: (ReturnType<typeof switches>)[number]) => {
+  if (!(node instanceof win.HTMLElement)) throw new Error('not a clickable element');
+  await act(() => node.click());
+};
 const button = (label: string) => {
   const node = [...win.document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
   if (!node) throw new Error(`missing the ${label} button`);
@@ -70,19 +74,19 @@ test('toggling a layer shows the save bar and saving posts the patched policy', 
   expect(win.document.body.textContent).not.toContain('Unsaved changes');
   const screen = switches()[0];
   if (!screen) throw new Error('missing the screen layer switch');
-  await act(() => screen.click());
+  await click(screen);
   expect(win.document.body.textContent).toContain('Unsaved changes');
-  await act(() => button('Save changes').click());
+  await click(button('Save changes'));
   expect(saved).toHaveBeenCalledTimes(1);
   expect(saved.mock.calls[0]?.[0]).toEqual({ ...basePolicy, layers: { screen: false, actions: false, audio: false } });
 });
 
 test('discard returns the draft to the stored policy and hides the save bar', async () => {
   await act(() => root.render(<CaptureSettingsPane accountId="account-1" />));
-  await act(() => switches()[0].click());
-  await act(() => button('Discard changes').click());
+  await click(switches()[0]);
+  await click(button('Discard changes'));
   expect(saved.mock.calls).toEqual([]);
   expect(win.document.body.textContent).not.toContain('Unsaved changes');
   // The switch is back to the stored value.
-  expect(switches()[0].getAttribute('aria-checked')).toBe('true');
+  expect(switches()[0]?.getAttribute('aria-checked')).toBe('true');
 });

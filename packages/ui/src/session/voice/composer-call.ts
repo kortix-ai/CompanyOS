@@ -22,12 +22,14 @@ export interface ComposerCall {
 }
 
 /**
- * Whether this project may place a voice call from here: the project's `voice_call` flag is on, and the page is not
- * the desktop shell, whose signed app has no microphone entitlement yet (apps/desktop-electron).
+ * Whether this project may place a voice call from here: the project's `voice_call` flag is on, the host mounts a
+ * call card to run it (`VoiceCallCard`: apps/web's project shell does, a white-label host may not), and the page is
+ * not the desktop shell, whose signed app has no microphone entitlement yet (apps/desktop-electron).
  */
 export function useVoiceCallsEnabled(projectId: string | undefined): boolean {
   const { enabled } = useFeatureFlag(projectId ?? null, 'voice_call');
-  return enabled && !!projectId && !isDesktop();
+  const runnable = useVoiceCallStore((s) => s.cards > 0);
+  return enabled && runnable && !!projectId && !isDesktop();
 }
 
 /**

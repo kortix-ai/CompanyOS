@@ -1,17 +1,72 @@
 /**
- * The one-prompt setup. A developer pastes `SETUP_PROMPT` into the coding
- * agent on their own computer (Claude Code, Codex, any agent with a shell).
- * That agent fetches `SETUP_GUIDE` from https://kortix.com/setup.md and does
- * every step with them: sign in, models, a template, the dev environment,
- * secrets, push, webhooks, and one real run.
+ * The one-prompt setup. A developer pastes a prompt into the coding agent on
+ * their own computer (Claude Code, Codex, any agent with a shell). That agent
+ * fetches the guide from \`<origin>/setup.md\` and does every step with them:
+ * sign in, models, a template, the dev environment, secrets, push, webhooks,
+ * and one real run.
  *
- * One source: the web serves this text (`apps/web/src/app/setup.md`), the
- * landing page and the workspace setup page copy `SETUP_PROMPT`.
+ * Every prompt and the guide are built for one deployment (\`SetupTarget\`):
+ * kortix.com serves the production prompt; dev.kortix.com and a local stack
+ * serve prompts and a guide that point at themselves and their own API, so a
+ * copied prompt is always testable where it was copied.
  */
 
-export const SETUP_GUIDE_URL = 'https://kortix.com/setup.md';
+/** The Kortix deployment a prompt and the guide point at. */
+export interface SetupTarget {
+  /** The web origin that serves the guide and the installer, without a trailing slash. */
+  origin: string;
+  /** The API base the CLI signs in to, without \`/v1\`. */
+  apiBase: string;
+}
 
-export const FACTORY_GUIDE_URL = 'https://kortix.com/factory.md';
+export const PROD_TARGET: SetupTarget = { origin: 'https://kortix.com', apiBase: 'https://api.kortix.com' };
+
+const trim = (url: string) => url.trim().replace(/\/+$/, '');
+
+/**
+ * The target of one deployment from its web origin and its backend URL
+ * (\`NEXT_PUBLIC_BACKEND_URL\`: absolute or root-relative, with or without \`/v1\`).
+ * Missing values fall back to production.
+ */
+export function setupTarget(origin?: string | null, backendUrl?: string | null): SetupTarget {
+  const web = origin ? trim(origin) : PROD_TARGET.origin;
+  if (web === PROD_TARGET.origin) return PROD_TARGET;
+  const backend = backendUrl?.trim() ? trim(backendUrl) : '';
+  const absolute = /^https?:\/\//.test(backend) ? backend : backend ? `${web}${backend.startsWith('/') ? '' : '/'}${backend}` : '';
+  return { origin: web, apiBase: absolute ? absolute.replace(/\/v1$/, '') : PROD_TARGET.apiBase };
+}
+
+const isProd = (target: SetupTarget) => target.origin === PROD_TARGET.origin && target.apiBase === PROD_TARGET.apiBase;
+
+/** The CLI host name of a non-production deployment: \`dev.kortix.com\` → \`dev-kortix-com\`, \`localhost:3000\` → \`localhost-3000\`. */
+export function setupHostName(target: SetupTarget): string {
+  return target.origin.replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+}
+
+export const guideUrl = (target: SetupTarget = PROD_TARGET) => `${target.origin}/setup.md`;
+export const SETUP_GUIDE_URL = guideUrl();
+export const FACTORY_GUIDE_URL = `${PROD_TARGET.origin}/factory.md`;
+
+/** Step 0 of the guide: install the CLI and, off production, point it at this deployment. */
+function installBlock(target: SetupTarget): string {
+  if (isProd(target)) {
+    return ['```bash', `command -v kortix || curl -fsSL ${target.origin}/install | bash`, 'kortix --version', '```'].join('\n');
+  }
+  const host = setupHostName(target);
+  return [
+    `This guide is served by the Kortix deployment at ${target.origin} (API ${target.apiBase}),`,
+    'not production. Point the CLI at it before anything else; every later',
+    'command then talks to this deployment.',
+    '',
+    '```bash',
+    `command -v kortix || curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash`,
+    'kortix --version',
+    `kortix hosts rm ${host} 2>/dev/null; kortix hosts add ${host} --url ${target.apiBase}`,
+    `kortix hosts use ${host}`,
+    'kortix hosts current   # must print ' + host,
+    '```',
+  ].join('\n');
+}
 
 /** The one prompt of the Software Factory: a URL, nothing to install first. */
 export const FACTORY_PROMPT = `Add a Kortix software factory to this repository with me.
@@ -29,45 +84,57 @@ export const REFERENCE_REPOS: Record<string, string> = {
 };
 
 /** Kept for links to a loop's guide; the reference repository is the source an agent adapts. */
-export const loopGuideUrl = (id: string) => `https://kortix.com/loops/${id}.md`;
+export const loopGuideUrl = (id: string, target: SetupTarget = PROD_TARGET) => `${target.origin}/loops/${id}.md`;
 
 /** The one prompt of one factory: read its reference repository, adapt it, follow the setup guide. */
-export function loopPrompt(loop: { id: string; name: string }): string {
+export function loopPrompt(loop: { id: string; name: string }, target: SetupTarget = PROD_TARGET): string {
   const reference = REFERENCE_REPOS[loop.id];
   const read = reference ? `Read ${reference} and adapt it to this repository.\n` : '';
   return `Add a Kortix ${loop.name.toLowerCase()} to this repository with me.
-${read}Set it up with the Kortix CLI, following ${SETUP_GUIDE_URL} step by step.
+${read}Set it up with the Kortix CLI, following ${guideUrl(target)} step by step.
 Ask me before each decision. Never print a secret value.`;
 }
 
 /** What a person copies. Short on purpose: the guide it points to is versioned and served. */
-export const SETUP_PROMPT = `Set up Kortix cloud agents on this repository with me.
-Read ${SETUP_GUIDE_URL} (curl -fsSL ${SETUP_GUIDE_URL}) and follow it step by step.
+export function setupPromptFor(target: SetupTarget = PROD_TARGET): string {
+  const url = guideUrl(target);
+  return `Set up Kortix cloud agents on this repository with me.
+Read ${url} (curl -fsSL ${url}) and follow it step by step.
 Ask me before each decision it names. Never print a secret value.`;
+}
+
+/** The production prompt. */
+export const SETUP_PROMPT = setupPromptFor();
 
 /**
  * The prompt for one template. The CLI carries the template's onboarding
- * (`kortix templates onboard <id>`), so it always matches the installed version.
+ * (\`kortix templates onboard <id>\`), so it always matches the installed version.
  */
-export function templatePrompt(template: { id: string; name: string }): string {
+export function templatePrompt(template: { id: string; name: string }, target: SetupTarget = PROD_TARGET): string {
   return `Set up the Kortix ${template.name} on this repository with me.
-Install the Kortix CLI if it is missing (curl -fsSL https://kortix.com/install | bash), then run \`kortix templates onboard ${template.id}\` and follow what it prints, step by step.
+Install the Kortix CLI if it is missing (curl -fsSL ${target.origin}/install | bash), then run \`kortix templates onboard ${template.id}\` and follow what it prints, step by step.
 Ask me before each decision it names. Never print a secret value.`;
 }
 
 /**
- * The prompt for a workspace that exists already and reads `kortix.yaml`
- * from `repository` on `branch`: the setup must push there.
+ * The prompt for a workspace that exists already and reads \`kortix.yaml\`
+ * from \`repository\` on \`branch\`: the setup must push there.
  */
-export function setupPrompt(workspace?: { repository?: string | null; branch?: string | null }): string {
+export function setupPrompt(
+  workspace?: { repository?: string | null; branch?: string | null },
+  target: SetupTarget = PROD_TARGET,
+): string {
+  const prompt = setupPromptFor(target);
   const repository = workspace?.repository?.trim();
-  if (!repository) return SETUP_PROMPT;
+  if (!repository) return prompt;
   const branch = workspace?.branch?.trim() || 'its default branch';
-  return `${SETUP_PROMPT}
+  return `${prompt}
 The Kortix workspace exists already: it reads kortix.yaml from ${repository} on ${branch}. Push the setup there.`;
 }
 
-export const SETUP_GUIDE = `# Set up Kortix on this repository
+/** The guide for one deployment, served at \`<origin>/setup.md\`. */
+export function setupGuide(target: SetupTarget = PROD_TARGET): string {
+  return `# Set up Kortix on this repository
 
 The person pasted a prompt like "Add a Kortix software factory to this
 repository with me". You are the coding agent on their computer. From here you
@@ -109,10 +176,7 @@ parse.
 
 ## 0. Install
 
-\`\`\`bash
-command -v kortix || curl -fsSL https://kortix.com/install | bash
-kortix --version
-\`\`\`
+${installBlock(target)}
 
 ## 1. Sign in and see the plan
 
@@ -233,3 +297,7 @@ A short report: the loops now running and what starts each, where tickets
 land, who merges, how to start work by hand (label an issue, \`kortix triggers
 fire <slug>\`), where to watch (the workspace link), and anything still open.
 `;
+}
+
+/** The production guide. */
+export const SETUP_GUIDE = setupGuide();

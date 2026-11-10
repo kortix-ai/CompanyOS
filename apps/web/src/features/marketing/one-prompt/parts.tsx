@@ -1,13 +1,25 @@
 'use client';
 
-import { SETUP_PROMPT } from '@kortix/shared/setup-guide';
+import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 const COPIED_MS = 2000;
+
+const noSubscription = () => () => {};
+
+/**
+ * The deployment this page is served from: a prompt copied on dev.kortix.com or
+ * localhost points at that deployment's own guide, so it is testable there.
+ * The server render uses production; the browser corrects it after hydration.
+ */
+export function useSetupTarget(): SetupTarget {
+  const origin = useSyncExternalStore(noSubscription, () => window.location.origin, () => PROD_TARGET.origin);
+  return useMemo(() => setupTarget(origin), [origin]);
+}
 
 export function useCopy(text: string) {
   const [copied, setCopied] = useState(false);
@@ -28,8 +40,9 @@ export function useCopy(text: string) {
   return { copied, copy };
 }
 
-export function CopyButton({ size = 'md', text = SETUP_PROMPT, label = 'Copy the prompt' }: { size?: 'sm' | 'md'; text?: string; label?: string }) {
-  const { copied, copy } = useCopy(text);
+export function CopyButton({ size = 'md', text, label = 'Copy the prompt' }: { size?: 'sm' | 'md'; text?: string; label?: string }) {
+  const target = useSetupTarget();
+  const { copied, copy } = useCopy(text ?? setupPromptFor(target));
   return (
     <button
       type="button"

@@ -1,4 +1,4 @@
-import { setupPrompt } from '@kortix/shared/setup-guide';
+import { setupPrompt, setupTarget } from '@kortix/shared/setup-guide';
 
 /**
  * The prompt a person copies into their own coding agent (Claude Code, Codex,
@@ -16,8 +16,20 @@ export function existingRepoSetupPrompt(input: {
   repository: string | null | undefined;
   /** The branch the project reads `kortix.yaml` from. */
   branch: string | null | undefined;
+  /** The project's page in the web app (`dashboard_url`): its origin serves the guide this prompt names. */
+  dashboardUrl?: string | null;
 }): string {
-  return setupPrompt({ repository: input.repository, branch: input.branch });
+  return setupPrompt({ repository: input.repository, branch: input.branch }, setupTarget(webOrigin(input.dashboardUrl)));
+}
+
+/** The origin of a web-app URL; undefined when absent or not a URL (the prompt then names production). */
+function webOrigin(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `owner/name` from a GitHub clone URL, else the URL without `.git`. */

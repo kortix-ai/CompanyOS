@@ -1,11 +1,11 @@
 'use client';
 
-import { REFERENCE_REPOS, SETUP_PROMPT, loopPrompt } from '@kortix/shared/setup-guide';
+import { REFERENCE_REPOS, loopPrompt, setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import type { LoopView } from './loops-content';
-import { Chips, CopyButton, Eyebrow, Window } from './parts';
+import { Chips, CopyButton, Eyebrow, Window, useSetupTarget } from './parts';
 
 /** The workspace every card sits in: one Kortix workspace is the company. Synthetic name. */
 const WORKSPACE = 'your-company';
@@ -105,7 +105,7 @@ function CardBar({ index, total, team }: { index: number; total: number; team: s
 
 /** One factory: the template (what it runs) beside the one prompt that sets the same up on your codebase. */
 function FactoryCard({ loop, index, total }: { loop: LoopView; index: number; total: number }) {
-  const prompt = loopPrompt(loop);
+  const prompt = loopPrompt(loop, useSetupTarget());
   const reference = REFERENCE_REPOS[loop.id];
   return (
     <>
@@ -187,6 +187,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 /** The last card: every other team, built from a description by the same prompt. */
 function MoreCard({ more, index, total }: { more: Array<{ name: string; line: string }>; index: number; total: number }) {
+  const prompt = setupPromptFor(useSetupTarget());
   return (
     <>
       <CardBar index={index} total={total} team="& more" />
@@ -200,9 +201,9 @@ function MoreCard({ more, index, total }: { more: Array<{ name: string; line: st
             </p>
           </div>
           <div className="mt-auto flex flex-col gap-3">
-            <pre className="border-border bg-background text-foreground/90 overflow-x-auto rounded-md border p-4 font-mono text-xs leading-5 whitespace-pre-wrap">{SETUP_PROMPT}</pre>
+            <pre className="border-border bg-background text-foreground/90 overflow-x-auto rounded-md border p-4 font-mono text-xs leading-5 whitespace-pre-wrap">{prompt}</pre>
             <div>
-              <CopyButton />
+              <CopyButton text={prompt} />
             </div>
           </div>
         </div>

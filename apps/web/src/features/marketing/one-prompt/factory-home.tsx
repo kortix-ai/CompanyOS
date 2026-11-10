@@ -2,7 +2,7 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { SETUP_PROMPT } from '@kortix/shared/setup-guide';
+import { setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
 import { type CSSProperties, type ReactNode } from 'react';
@@ -11,7 +11,7 @@ import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
 import { FactoryStack } from './factory-stack';
 import { HeroScenes } from './hero-scenes';
 import type { LoopView } from './loops-content';
-import { CopyButton, Eyebrow, GhostButton, Mark, Window, useCopy } from './parts';
+import { CopyButton, Eyebrow, GhostButton, Mark, Window, useCopy, useSetupTarget } from './parts';
 /** The page's one accent: the brand blue (`kortix-base`). */
 const ACCENT = 'text-kortix-base';
 /** The column every section sits in, between the two hairline rails. */
@@ -69,7 +69,8 @@ const LIFECYCLE = [
  * brand blue, the dither field, and data from a real factory run.
  */
 export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Array<{ name: string; line: string }> }) {
-  const { copied, copy } = useCopy(SETUP_PROMPT);
+  const prompt = setupPromptFor(useSetupTarget());
+  const { copied, copy } = useCopy(prompt);
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
       <div className={cn(COLUMN, 'border-border relative border-x')}>
@@ -169,7 +170,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Ar
               onClick={copy}
               className="border-border bg-card/80 hover:border-kortix-base/50 w-full max-w-lg rounded-xl border p-4 text-left backdrop-blur transition-colors"
             >
-              <span className="text-foreground block text-sm">{SETUP_PROMPT.split('\n')[0]}</span>
+              <span className="text-foreground block text-sm">{prompt.split('\n')[0]}</span>
               <span className="text-muted-foreground mt-4 flex items-center justify-between text-xs">
                 <span className="text-foreground flex items-center gap-3"><Mark name="Claude Code" /><Mark name="Codex" /></span>
                 <span aria-live="polite" className={copied ? ACCENT : undefined}>{copied ? 'copied' : 'click to copy'}</span>

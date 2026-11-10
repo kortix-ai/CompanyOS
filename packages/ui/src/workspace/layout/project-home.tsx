@@ -466,6 +466,7 @@ function ProjectHomeView({
           reason={noAgentReason}
           repoUrl={projectRowQuery.data?.repo_url}
           branch={projectRowQuery.data?.default_branch}
+          dashboardUrl={projectRowQuery.data?.dashboard_url}
         />
       ) : firstChat ? (
         <FirstChat composer={composer} />

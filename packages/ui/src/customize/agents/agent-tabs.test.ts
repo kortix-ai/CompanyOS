@@ -28,6 +28,9 @@ describe('changedItems', () => {
       ).sort(),
     ).toEqual(['actions', 'basics', 'connectors', 'model', 'overview', 'tools', 'workspace']);
   });
+  test('a changed workspace field lands on the Workspace rail, not the Model fallback', () => {
+    expect(changedItems({ workspace: { clones: ['x'] } }, {})).toEqual(['workspace']);
+  });
 });
 
 describe('closestAgentName', () => {

@@ -1399,7 +1399,7 @@
       "heatMore": "多",
       "busiestDay": "{name}: {day} に {amount}（最も多い日）",
       "noSpendInRange": "{name}: この期間の利用はありません",
-      "idleWorkspaces": "この期間に利用のないワークスペース {count} 件",
+      "idleWorkspaces": "この期間に利用のないワークスペース {count, plural, other {# 件}}",
       "showIdle": "表示",
       "hideIdle": "非表示"
     },
@@ -23018,8 +23018,8 @@
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
     "treeCollapse": "{name} を閉じる",
-    "emptyWorkspaces": "ファイルのないワークスペース {count} 件",
-    "storageMoreWorkspaces": "他 {count} 件のワークスペース",
+    "emptyWorkspaces": "ファイルのないワークスペース {count, plural, other {# 件}}",
+    "storageMoreWorkspaces": "他 {count, plural, other {# 件のワークスペース}}",
     "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
     "storageShowFewer": "表示を減らす"
   },

@@ -206,6 +206,33 @@ function managedShipRecovery(projectId: string): void {
   );
 }
 
+/**
+ * Reconcile the fetched remote branch with this folder's history so the push is
+ * a fast-forward. A product-created workspace is seeded with scaffold commits
+ * before the first ship, while `kortix init` starts from its own unrelated
+ * commit — the customer's first ship must merge that history in and push, not
+ * fail on a rejection they cannot answer. Content conflicts keep the local
+ * tree: the folder is what the customer shipped. Returns false only when the
+ * histories diverged and the merge itself failed, so the caller falls back to
+ * the manual recovery guidance.
+ */
+function reconcileWithFetchedRemote(branch: string): boolean {
+  if (run(['merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD']).ok) return true;
+  if (run(['merge-base', '--is-ancestor', 'HEAD', 'FETCH_HEAD']).ok) {
+    // The remote moved past this folder (a session or teammate pushed): catch
+    // the folder up instead of rejecting the push.
+    return run(['merge', '--ff-only', 'FETCH_HEAD']).ok;
+  }
+  const merged = run([
+    'merge', '--allow-unrelated-histories', '-X', 'ours', '--no-edit',
+    '-m', `Merge remote ${branch} history (kortix ship)`, 'FETCH_HEAD',
+  ]);
+  if (!merged.ok) {
+    process.stderr.write(`${merged.stderr.trim()}\n`);
+  }
+  return merged.ok;
+}
+
 function pushCurrentBranch(
   repoUrl: string,
   pushToken: string | null,
@@ -219,15 +246,16 @@ function pushCurrentBranch(
     );
     return null;
   }
-  // Refuse divergent histories before trying either push transport. A web-created
-  // project already contains work; a fresh local init must not overwrite it.
+  // Fetch the remote branch and reconcile with it before either push transport.
+  // A product-created (seeded) workspace always contains history this folder
+  // lacks; a fresh local init must never overwrite it — ship merges it in.
   if (opts.managedProjectId) {
     const env = pushToken ? authGitEnv(repoUrl, pushToken, gitUsername) : undefined;
     const shallow = run(['rev-parse', '--is-shallow-repository']).stdout.trim() === 'true';
     const fetched = run([
       'fetch', '--no-tags', ...(shallow ? ['--unshallow'] : []), 'origin', `refs/heads/${branch}`,
     ], { env });
-    if (fetched.ok && !run(['merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD']).ok) {
+    if (fetched.ok && !reconcileWithFetchedRemote(branch)) {
       managedShipRecovery(opts.managedProjectId);
       return false;
     }

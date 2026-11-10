@@ -14,7 +14,7 @@ Read-only: this source never edits code.
 | Signal value | `signal: loc=<n> duplicates=<n> dead_exports=<n> complexity=<n>` for the unit |
 | Priority | 2 a correctness risk (its own ticket, `kind:bug`); 3 refactors in files changed at least 5 times in 30 days; 4 others |
 | Kind | `refactor` (`bug` for a correctness risk) |
-| Credentials | `GH_TOKEN`, read-only use |
+| Credentials | `FACTORY_GITHUB_TOKEN`, read-only use |
 
 ## Run
 

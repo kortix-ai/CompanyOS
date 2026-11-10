@@ -45,7 +45,7 @@ auto-merge.
 | Signal value | `signal: severity=<1-4> reproduced=2/2` |
 | Priority | 1 critical or high; 2 medium; 3 low or hardening |
 | Kind | `security` |
-| Credentials | `GH_TOKEN` read; the dev environment secrets; `SECURITY_TEST_*` for a deployed target |
+| Credentials | `FACTORY_GITHUB_TOKEN` read; the dev environment secrets; `SECURITY_TEST_*` for a deployed target |
 
 ## Attack classes
 

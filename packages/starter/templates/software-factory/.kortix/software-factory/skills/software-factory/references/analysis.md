@@ -39,16 +39,24 @@ need a private store (`sources/security.md`, rule 6).
 
 ## 3. Signals the factory can read
 
-| Source | Evidence in the repository | Credential to ask for (names only) |
+Recommend a source only when its evidence is in the repository or the
+workspace. Each row names the evidence, the source to recommend and what it
+needs (names only).
+
+| Evidence in the repository or the workspace | Source | Needs |
 |---|---|---|
-| errors | `@sentry/*`, `sentry-sdk`, `sentry.*.config.*` → Sentry; `@logtail/*`, `@betterstack/*`, `logtail` → Better Stack; `rollbar`, `@bugsnag/*`, `honeybadger`, `dd-trace`, `@datadog/*`, `posthog` → generic | `SENTRY_AUTH_TOKEN` + `SENTRY_ORG`; `BETTERSTACK_API_TOKEN`; the tracker's read token |
-| logs-anomaly | Postgres URLs in `.env.example`, `supabase/`, ClickHouse clients (`@clickhouse/client`), Better Stack Telemetry, Datadog, Loki, CloudWatch | a **read-only** role: `FACTORY_DB_READONLY_URL`, `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF`, `CLICKHOUSE_URL` |
-| tests | an end-to-end config (`playwright`, `cypress`, `e2e/`, `tests/e2e`) | the dev environment's own secrets |
-| slack | a Slack connector in the workspace; a bug channel named in the README or CONTRIBUTING | the `slack` connector |
-| support-inbox | an Intercom, Zendesk, Front or Help Scout widget or SDK | the support tool's connector |
-| dependencies | any lockfile | none beyond `GH_TOKEN` |
-| security | any app with routes or authentication | none for localhost; `SECURITY_TEST_*` only for a deployed target a person owns |
-| codebase-analysis | any repository over ~5,000 lines | none |
+| `@sentry/*`, `sentry-sdk`, `sentry_sdk`, `sentry.*.config.*`, a `SENTRY_DSN` name in `.env.example` | `errors`, tracker `sentry`, delivery `poll` | `SENTRY_AUTH_TOKEN` (`event:read`, `project:read`) + `SENTRY_ORG` |
+| `@logtail/*`, `@betterstack/*`, `logtail`, a Better Stack DSN | `errors`, tracker `betterstack`, delivery `poll`; `logs-anomaly` when logs go there | `BETTERSTACK_API_TOKEN`; `CLICKHOUSE_URL` (Telemetry, read-only) |
+| `rollbar`, `@bugsnag/*`, `honeybadger`, `dd-trace`, `@datadog/*`, `@highlight-run/*`, `posthog` | `errors`, tracker `generic`, delivery `push` | the tracker's webhook with `FACTORY_ERRORS_WEBHOOK_SECRET` |
+| ClickHouse clients (`@clickhouse/client`), Loki, CloudWatch, Datadog logs, Elastic | `logs-anomaly` | a read-only logs credential |
+| Postgres: `pg`, `postgres`, `psycopg`, `prisma` with `postgresql`, `drizzle-orm/pg-core`, a `DATABASE_URL` name, `migrations/` with SQL | `db-observer`, backend `postgres` | `FACTORY_DB_READONLY_URL` (the role in `sources/db-observer.md`) |
+| `supabase/config.toml`, `@supabase/supabase-js`, `supabase` in `.env.example` | `db-observer`, backend `supabase` | `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` |
+| an end-to-end config (`playwright`, `cypress`, `e2e/`, `tests/e2e`) | `tests` | the dev environment's own secrets |
+| Slack connected (`kortix channels status`); a bug or support channel named in the README or CONTRIBUTING | `slack` | the channel names; the bot in each channel |
+| an Intercom, Zendesk or Plain widget or SDK; a support email in the README; a mobile app (`ios/`, `android/`, `app.json`, `pubspec.yaml`); a feedback form | `customer-feedback` | the channel's read credential (`sources/customer-feedback.md`) |
+| any lockfile | `dependencies` | none beyond `FACTORY_GITHUB_TOKEN` |
+| any app with routes or authentication | `security` | none for localhost; `SECURITY_TEST_*` only for a deployed target a person owns |
+| any repository over ~5,000 lines | `codebase-analysis` | none |
 
 ## 4. Existing agents and rules
 
@@ -74,6 +82,9 @@ which one wins.
 
 Write every key of the template's `factory.json`:
 
+- `identity`: `kind` (`machine-user` or `personal`, onboarding step B); the
+  setup agent writes `github_login`, `name` and `email` from the identity
+  check's run line.
 - `store`: the person's answer (section 2), with `target`, `agent_identity`
   and, for Asana or Jira, the `states` mapping read from the tool.
 - `sources`: `github-issues` on; `tests` on when an end-to-end command exists

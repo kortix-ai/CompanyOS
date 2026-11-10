@@ -12,7 +12,7 @@ default. Read-only.
 | Signal value | `signal: severity=<1-4> reachable=<0\|1> dependents=<n>` |
 | Priority | 1 critical and reachable; 2 high and reachable; 3 medium or end of life; 4 others |
 | Kind | `dependency` (`security` when it is a vulnerability) |
-| Credentials | `GH_TOKEN` (read Dependabot alerts with `security_events` read when the token has it) |
+| Credentials | `FACTORY_GITHUB_TOKEN` (read Dependabot alerts with `security_events` read when the token has it) |
 
 ## Run
 

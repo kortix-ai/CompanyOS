@@ -7,18 +7,38 @@ done properly.
 
 ## 1. Setup
 
-1. Read the brief, then the whole ticket and every comment (`ticket.get`,
+1. **Identity** (contract §0.1). Run this block in every new shell before
+   the first `gh` or `git` command. It is idempotent: a second run changes
+   nothing.
+
+   ```sh
+   . /workspace/.kortix/software-factory/scripts/github-identity.sh || exit 1
+   # prints: factory-identity: login=<login> author=<name> <id+login@users.noreply.github.com>
+   ```
+
+   What it guarantees, in order: no `GITHUB_TOKEN`, enterprise token or
+   `GIT_AUTHOR_*` / `GIT_COMMITTER_*` override survives; `GH_TOKEN` is
+   `FACTORY_GITHUB_TOKEN`; `gh api user` answers with
+   `identity.github_login` (else `errors=wrong-identity`); git asks `gh` for
+   github.com credentials (`gh auth setup-git`); `user.name` and `user.email`
+   are `identity.name` and `identity.email` (defaults: the GitHub name or
+   login, and `<id>+<login>@users.noreply.github.com`), globally and in the
+   current checkout. It fails: post nothing, end with
+   `factory-worker: ticket=<id> errors=<code>`. Never use another token.
+2. Read the brief, then the whole ticket and every comment (`ticket.get`,
    `ticket.comments`). The ticket is the spec. A closing comment or feedback
    items in the brief are a must-fix list.
-2. Code: `gh repo clone <repo> ~/work/repo -- --depth 200`, or fetch an
-   existing clone. Branch: the brief's name from `origin/<trunk>`; a rework or
-   an existing pull request: check out its branch
-   (`gh pr checkout <n>`) and merge `origin/<trunk>` into it.
-3. Load the `dev-environment` skill (`verify.skill`). Install. Start only what
+3. Code: `gh repo clone <repo> ~/work/repo -- --depth 200`, or fetch an
+   existing clone. `cd ~/work/repo`, then run the identity block again: it
+   writes the identity into the clone's local config. Check it:
+   `git config user.email` prints `identity.email`. Branch: the brief's name
+   from `origin/<trunk>`; a rework or an existing pull request: check out its
+   branch (`gh pr checkout <n>`) and merge `origin/<trunk>` into it.
+4. Load the `dev-environment` skill (`verify.skill`). Install. Start only what
    the ticket needs. Read the repository's own agent rules (`AGENTS.md`,
    `CLAUDE.md`, `CONTRIBUTING.md`, `.github/pull_request_template.md`): they
    override this file where they are stricter.
-4. Post `[factory-worker] plan · branch <branch>` with at most 5 bullets.
+5. Post `[factory-worker] plan · branch <branch>` with at most 5 bullets.
 
 ## 2. Build
 
@@ -36,7 +56,28 @@ done properly.
 4. **Feature tickets need a spec.** Build a feature only when the ticket names
    the problem, the expected behavior and the scope. One is missing: post
    `[factory-worker] blocked · spec: <the missing items>` and stop.
-5. Commit in the repository's style. Push the branch. Never push to the trunk.
+5. **Commit and push as the factory.** Commit in the repository's style. The
+   author is the identity; never pass `--author` or `-c user.*`. When a
+   person asked for the change (the ticket's creator is a person, or a person
+   added the accept label or the assignment) and `identity.co_author_requester`
+   is true, end every commit message with one trailer for that person:
+
+   ```sh
+   # GitHub Issues: the issue's author, or (a factory-filed issue) who added the accept label
+   who=$(gh issue view <n> -R $R --json author --jq .author.login)
+   [ "$who" = "$FACTORY_GITHUB_LOGIN" ] && who=$(gh api repos/$R/issues/<n>/events \
+     --jq '[.[] | select(.event=="labeled" and .label.name=="<labels.accept>")] | last | .actor.login // empty')
+   trailer=
+   [ -n "$who" ] && [ "$who" != "$FACTORY_GITHUB_LOGIN" ] && [ "$(gh api users/$who --jq .type)" = User ] \
+     && trailer="Co-authored-by: $who <$(gh api users/$who --jq .id)+$who@users.noreply.github.com>"
+   git commit -m "<subject>" -m "<body>" ${trailer:+-m "$trailer"}
+   ```
+
+   A requester without a GitHub login (Linear, Jira, Asana, Slack, a source)
+   gets no trailer. Never write a private email address. Before the push:
+   `gh api user --jq .login` equals `identity.github_login` and
+   `git log -1 --format='%an <%ae>'` shows the identity; else run the
+   identity block again. Push the branch. Never push to the trunk.
 
 ## 3. Verify in the box
 

@@ -1,6 +1,6 @@
 ---
 name: software-factory
-description: The Software Factory contract. Sources file tickets into one ticket store (GitHub Issues, Linear, Jira, Asana or a JSON file); intake hands each ready ticket to one worker session; workers verify on the dev environment and open a pull request with evidence; feedback, the merge gate, groom and eval keep it moving. Defines the store operations, labels, dedup keys, upsert, states, markers, caps, ticket body, worker brief, models, pull request evidence, follow-ups and the hard rules. Load it in every factory run (every trigger of the `factory` agent, every worker and reviewer session) and in any session that files or changes factory tickets.
+description: The Software Factory contract. Sources file tickets into one ticket store (GitHub Issues, Linear, Jira, Asana or a JSON file); intake hands each ready ticket to one worker session; workers verify on the dev environment and open a pull request with evidence; feedback, the merge gate, groom and eval keep it moving. The factory acts on GitHub as its own account (FACTORY_GITHUB_TOKEN, scripts/github-identity.sh). Defines the GitHub identity, the store operations, labels, dedup keys, upsert, states, markers, caps, ticket body, worker brief, models, pull request evidence, follow-ups and the hard rules. Load it in every factory run (every trigger of the `factory` agent, every worker and reviewer session) and in any session that files or changes factory tickets.
 ---
 
 # Software Factory: the contract
@@ -25,6 +25,7 @@ No file: stop the run with `errors=no-config`. Never guess a store.
 |---|---|
 | `repository.full_name`, `repository.trunk` | the code repository and its default branch. Resolve the trunk again with `gh api repos/<repo> --jq .default_branch`; a mismatch: use GitHub's value and name it in the run line |
 | `repository.branch_prefix` | every worker branch starts with it (default `kortix/`) |
+| `identity` | the factory's own GitHub account: `kind` (`machine-user` or `personal`), `github_login`, `name`, `email` (default `<id>+<login>@users.noreply.github.com`), `co_author_requester` (§0.1) |
 | `store.kind`, `store.target` | the ticket store and where (`references/stores/<kind>.md`) |
 | `store.agent_identity` | the store user the factory acts as (Linear viewer, Jira account, Asana user); `null` for GitHub Issues and JSON |
 | `store.states` | store state names for the factory states (§3), when the store needs a mapping |
@@ -34,6 +35,40 @@ No file: stop the run with `errors=no-config`. Never guess a store.
 | `merge` | the merge policy (§12) |
 | `models` | the model per role (§10); `null` = the agent's model |
 | `verify.skill` | the skill with the install, start and test commands |
+
+## 0.1 GitHub identity
+
+The factory acts on GitHub as its own account, never as a person: every
+issue, comment, branch, commit, pull request and review comment comes from
+`identity.github_login`, authenticated by the secret `FACTORY_GITHUB_TOKEN`.
+The recommended account is a machine user (a GitHub account such as
+`<org>-kortix-bot` with write access to the repository). A person's own token
+is the fallback (`identity.kind: personal`): every factory action then shows
+as that person, GitHub refuses that person's approval of a factory pull
+request (an author cannot approve their own pull request), and feedback cannot
+tell the person's comments from the factory's except by the markers.
+
+Start every shell that runs `gh` or `git` with:
+
+```sh
+. /workspace/.kortix/software-factory/scripts/github-identity.sh || exit 1
+```
+
+It unsets every other GitHub credential, exports `GH_TOKEN` from
+`FACTORY_GITHUB_TOKEN`, checks the token's login against
+`identity.github_login`, runs `gh auth setup-git`, and sets `user.name` and
+`user.email` (global, and local inside a checkout). It is idempotent. The file
+is missing (the config lives elsewhere): fetch it once with
+`GH_TOKEN="$FACTORY_GITHUB_TOKEN" gh api repos/<config repo>/contents/.kortix/software-factory/scripts/github-identity.sh --jq .content | base64 -d > /tmp/factory/github-identity.sh`
+and source that copy. It fails: end the run with its `errors=` code
+(`no-token`, `token-rejected`, `wrong-identity`). Never fall back to another
+token. `references/execution/identity.md` checks the identity end to end.
+
+Commits: the author and committer are always the identity. A commit carries
+one `Co-authored-by:` trailer only when a person asked for the change (a
+person filed or handed over the ticket) and `identity.co_author_requester` is
+true: the requester's GitHub login and noreply address, never a private email
+(`references/execution/worker.md` §2.5).
 
 The person changes behavior by editing factory.json. A trigger's `enabled`
 switch and factory.json's `sources.<name>.enabled` must agree: a source run
@@ -109,7 +144,11 @@ whose factory.json entry is disabled writes nothing and ends with
 19. **Lists go through code.** A read that returns more than about 20 tickets
     lands in a file (`/tmp/factory/<role>/…json`) and `jq` or `bun` reduces it
     to compact lines. Never paste a whole ticket list into the conversation.
-20. **Failures.** A network error, 5xx, rate limit or expired credential: retry
+20. **Act as the factory** (§0.1). Every GitHub read and write runs after the
+    identity script in the same shell. Before every push and every
+    `gh pr create`, `gh api user --jq .login` equals `identity.github_login`.
+    A mismatch stops the run with `errors=wrong-identity`.
+21. **Failures.** A network error, 5xx, rate limit or expired credential: retry
     once after 30 s. Fails again: end the run with one run line that names the
     error code. The next run retries. Never write partial state to compensate.
 
@@ -123,7 +162,7 @@ source label and one kind label. A store without labels uses its tag or field
 |---|---|
 | `factory` | the factory filed or accepted it |
 | `kortix` (`labels.accept`) | a person handed the ticket to the factory |
-| `source:<name>` | the producer: `source:github-issues`, `source:tests`, `source:slack`, `source:errors`, `source:logs`, `source:codebase`, `source:dependencies`, `source:security`, `source:support`, `source:factory-eval` |
+| `source:<name>` | the producer: `source:github-issues`, `source:tests`, `source:slack`, `source:errors`, `source:logs`, `source:db`, `source:feedback`, `source:codebase`, `source:dependencies`, `source:security`, `source:factory-eval`, `source:factory-identity` |
 | `kind:<kind>` | `bug`, `feature`, `task`, `refactor`, `security`, `dependency`, `test` |
 | `factory:<state>` | the state on stores without native states (GitHub Issues, §3) |
 | `do-not-merge` | a person's hold on a pull request; the merge gate never merges it |
@@ -170,12 +209,14 @@ factory-key: <key>
 | tests | `tests:<suite>:<test-id-slug>` |
 | slack | `slack:<channel-id>:<thread-ts>` |
 | errors | `errors:<tracker>:<project>:<fingerprint>` |
-| logs-anomaly | `logs:<backend>:<sha1-12 of normalized message + route>` · `db:<backend>:<kind>:<sha1-12 of normalized statement>` |
+| logs-anomaly | `logs:<backend>:<sha1-12 of normalized message + route>` |
+| db-observer | `db:<backend>:<kind>:<sha1-12 of normalized statement, or schema.table[.index]>` |
 | codebase-analysis | `code:<unit>:<finding-slug>` |
 | dependencies | `deps:<ecosystem>:<package>:<advisory-or-eol-id>` |
 | security | `security:<cwe-or-class>:<anchor-slug>` |
-| support-inbox | `support:<defect-slug>` |
+| customer-feedback | `feedback:<surface-slug>:<defect-or-request-slug>` |
 | factory-eval | `factory-eval:<change-slug>` |
+| factory-identity | `factory-identity:token` |
 | a person's ticket without a key | none; the ticket id is the key |
 
 Key rules: lowercase, characters `a-z 0-9 : . _ - / #` only, anything else
@@ -450,6 +491,7 @@ most twice per ticket.
 | `role=intake` | `factory-intake` | `references/execution/intake.md` |
 | `role=worker` | intake | `references/execution/worker.md` |
 | `role=reviewer` | the merge gate | `references/execution/review.md` |
+| `role=identity` | `factory-identity`; the setup agent | `references/execution/identity.md` |
 | `role=feedback` | `factory-feedback`, `factory-feedback-github` | `references/execution/feedback.md` |
 | `role=merge` | `factory-merge` | `references/execution/merge-gate.md` |
 | `role=groom` | `factory-groom` | `references/execution/groom.md` |

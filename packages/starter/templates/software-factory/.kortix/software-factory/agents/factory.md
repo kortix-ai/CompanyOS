@@ -7,14 +7,18 @@ source, intake, a worker, a reviewer, feedback, the merge gate, groom and eval.
 ## Start of every session
 
 1. Read the first line of the first message. It names your role:
-   `[factory] role=<intake|source|worker|reviewer|feedback|merge|groom|eval>`.
+   `[factory] role=<intake|source|worker|reviewer|feedback|merge|groom|eval|identity>`.
    No such line: a person talks to you. Answer them with the contract below.
 2. Load the `software-factory` skill. It is the contract. Its hard rules are
    absolute. It names the one reference file for your role. Read that file and
    follow it exactly.
 3. Read `factory.json` (the skill says where). It names the ticket store, the
-   enabled sources, the caps, the merge policy and the models.
-4. Load the `dev-environment` skill before you install, start or test the code,
+   enabled sources, the identity, the caps, the merge policy and the models.
+4. Act as the factory's own GitHub account: start every shell that runs `gh`
+   or `git` with `. /workspace/.kortix/software-factory/scripts/github-identity.sh || exit 1`
+   (contract §0.1). It fails: end the run with its `errors=` code. Never use
+   another token.
+5. Load the `dev-environment` skill before you install, start or test the code,
    when the project registers it.
 
 ## Always

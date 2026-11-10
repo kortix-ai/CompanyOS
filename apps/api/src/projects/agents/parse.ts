@@ -10,7 +10,6 @@ import {
   isManifestSyntaxError,
   resolveGrantSet,
   SLUG_RE,
-  resolveProjectRepository,
   type GrantSetV2,
 } from '@kortix/manifest-schema';
 import { readAgentBlockV2 } from '../lib/agent-config-v2';
@@ -192,8 +191,6 @@ function parseAgentEntry(name: string, block: unknown, filename: string): ParseO
   const enabled = row.enabled !== false;
   const model = typeof row.model === 'string' ? row.model : null;
   const sandbox = typeof row.sandbox === 'string' && row.sandbox.trim() ? row.sandbox.trim() : null;
-  const repository = resolveProjectRepository(row);
-  if (!repository.ok) return err(`agents.${name}.${repository.path} ${repository.message}`);
 
   const connectorsResolved = resolveGrantSet(row.connectors, 'none');
   const connectorsRequired = Array.isArray(row.connectors_required)
@@ -238,8 +235,6 @@ function parseAgentEntry(name: string, block: unknown, filename: string): ParseO
       apps: toGrantSet(resolveGrantSet(row.apps, 'none')),
       model,
       sandbox,
-      repositoryAccess: repository.value,
-      legacyReadWorkspace: repository.legacyRead,
     },
   };
 }

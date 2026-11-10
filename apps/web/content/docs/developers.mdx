@@ -118,7 +118,7 @@ my-agent/
 
 - `kortix.yaml` turns on My Kortix (`builtin_agents: { my_kortix: true }`) and sets `default_agent: mykortix`. A session that names no agent runs My Kortix, and My Kortix hands project work to `worker` by name.
 - `worker` is a general-purpose agent. Every grant it has is `"*"`: every name. A workspace created before `worker` existed keeps its `kortix` agent.
-- `worker` sets `workspace: { project_repository: true }`, so each session gets a checkout of the repository on its own branch in `/workspace`.
+- Each session starts with an empty `/workspace`. To work on the repository, `worker` runs `kortix workspaces clone` in its sandbox. The clone is on the session's own branch.
 - `kortix-cli` is the one Kortix skill in the folder. The other `kortix-*` skills are always registered and come with every session. The `skills` key in `kortix.yaml` lists the other 10.
 
 `kortix init` also writes files for the coding tools you picked. Codex, pi and Cursor get `AGENTS.md`. Codex, Claude Code and pi get a link to `skills/` in `.agents/`, `.claude/` or `.pi/`. Every key is in the [kortix.yaml reference](/docs/developers#kortixyaml-reference).
@@ -154,17 +154,16 @@ agents:
     description: "General-purpose worker: coding, research, writing, ops and data work."
     mode: primary
     permission: allow
-    prompt: "You work in this repository. Read AGENTS.md or CLAUDE.md first when it exists."
+    prompt: "Your session starts with an empty /workspace. Run `kortix workspaces clone` to get this repository, then read AGENTS.md or CLAUDE.md when it exists."
     tools: "*"
     skills: "*"
     connectors: "*"
     secrets: "*"
     kortix_permissions: "*"
-    workspace: { project_repository: true }
 ```
 
 3. Keep the agent setup this repository already has. Do not move, copy or edit those files.
-   - For each `.claude/agents/<name>.md`, add an agent `<name>` with `prompt_file: .claude/agents/<name>.md`, the `description` from its frontmatter, `mode: primary`, `tools: "*"` and `workspace: { project_repository: true }`.
+   - For each `.claude/agents/<name>.md`, add an agent `<name>` with `prompt_file: .claude/agents/<name>.md`, the `description` from its frontmatter, `mode: primary`, `tools: "*"` and `kortix_permissions: [workspace.gitops.read]`, so it can clone the repository.
    - For each folder that holds a `SKILL.md` (`.agents/skills/<name>`, `.claude/skills/<name>`, `skills/<name>`), add `<name>: <folder>` under `skills:`. Skip a name that starts with `kortix-`.
 4. Run `kortix validate`. Fix every error it prints and run it again until it exits 0.
 5. Commit only `kortix.yaml` with the message "chore: add kortix.yaml" and push it to the branch the workspace uses.
@@ -476,9 +475,16 @@ Kortix refuses the whole push when it refuses one ref. Git prints the reason for
 
 Each session works on its own branch. The branch name is the `session_id`, with no prefix. Kortix cuts the branch from the session's `base_ref`, which is the workspace default branch unless the session was created with another one.
 
-A session gets the branch and a checkout in `/workspace` only when its agent sets `workspace: { project_repository: true }`. The starter agents set it. Without it, repository calls answer `403` `session_repository_access_denied`.
+Kortix never checks out the repository at session start. `/workspace` starts empty. To work on the repository, the agent runs `kortix workspaces clone` (or `git clone "$KORTIX_REPO_URL"`) in its sandbox.
 
-Inside the sandbox, the branch is `$KORTIX_BRANCH_NAME`. The agent commits there and runs `git push origin HEAD`. [Inside a session sandbox](/docs/developers#inside-a-session-sandbox) lists the other variables.
+A session may read the repository only when two grants hold:
+
+- the session's agent has `project.gitops.read` in `kortix_permissions` (for example `kortix_permissions: "*"`);
+- the person who launched the session holds `project.file.read`.
+
+Otherwise, repository calls answer `403` `session_repository_access_denied`, and the session's config release compiles only the session's own agent.
+
+Inside the sandbox, the branch is `$KORTIX_BRANCH_NAME`. The agent commits there and runs `git push origin HEAD`. The Git proxy accepts a push only to the session's own branch. [Inside a session sandbox](/docs/developers#inside-a-session-sandbox) lists the other variables.
 
 A pushed branch stays in the repository after the session stops and after the session is deleted. `/workspace` holds this session's files, kept for the life of the session. Work the agent did not push is gone when the session is deleted. See [Computers](/docs/guide#computers).
 
@@ -799,7 +805,6 @@ agents:
     prompt: You answer questions about this project. Read the files before you answer.
     tools: "*"                               # every tool; omitted: every tool, with a warning
     skills: "*"                              # every skill; omitted: no skills
-    workspace: { project_repository: true }  # omitted: no repository in /workspace
 ```
 
 Every key is optional. No tool call of this agent waits for a person: an omitted `permission` is `allow`. A file with no `agents` runs only the built-in agents it turns on (`builtin_agents`).
@@ -883,7 +888,7 @@ Kortix reads the file and the files it points at as the format on this page: eac
 
 ### Deprecated keys
 
-Each row still works. `kortix validate --fix` writes the replacement with the same meaning.
+Each row still validates. `kortix validate --fix` writes the replacement with the same meaning. A session never checks out the repository, so the keys of `agent-workspace`, `agent-repository-access` and `agent-workspace-mode` are replaced by a grant: an agent that had the checkout gets `workspace.gitops.read` in `kortix_permissions`, so it can still run `kortix workspaces clone`. `--fix` and every Kortix write delete the keys.
 
 | Fix id | Deprecated | Write instead |
 | --- | --- | --- |
@@ -894,8 +899,9 @@ Each row still works. `kortix validate --fix` writes the replacement with the sa
 | `agent-env` | An agent's `env` | `secrets` |
 | `agent-kortix-cli` | `kortix_cli` | `kortix_permissions` |
 | `agent-connectors-personal` | `connectors_personal` | `connectors_required` |
-| `agent-repository-access` | `repository_access: true` | `workspace: { project_repository: true }` |
-| `agent-workspace-mode` | `workspace: branch` or `workspace: runtime` | `workspace: { project_repository: true }` or `false` |
+| `agent-repository-access` | `repository_access: true` | `kortix_permissions` gains `workspace.gitops.read`; the key goes (deprecation `agent-workspace`). |
+| `agent-workspace-mode` | `workspace: branch` or `workspace: runtime` | `branch` adds `workspace.gitops.read`; `runtime` adds nothing; the key goes (deprecation `agent-workspace`). |
+| `agent-workspace` | An agent's `workspace: …` (any shape) or `repository_access: …` | `project_repository: true` adds `workspace.gitops.read` to `kortix_permissions` (`"*"` already holds it); any other value adds nothing. The key goes. A session never checks out the repository: the agent runs `kortix workspaces clone`. |
 | `sandbox-templates` | The top-level `sandboxes` list | `sandbox.templates` |
 | `sandbox-singular` | Image keys (`image`, `dockerfile`, `context`, …) set on `sandbox` itself | One `sandbox.templates` entry, named as `sandbox.default` |
 | `acp-runtimes` | `runtimes`, and an agent's `runtime` and `agent` | Nothing: delete them. Every session runs pi. |
@@ -988,8 +994,7 @@ agents:
     extensions: [web-access]
     connectors: [helpdesk]
     secrets: [HELPDESK_TOKEN]
-    kortix_permissions: [project.session.read, project.gitops.push]
-    workspace: { project_repository: true }
+    kortix_permissions: [project.session.read, project.gitops.read, project.gitops.push]
   researcher:
     description: Looks up an order's history. Never edits files.
     mode: subagent
@@ -1057,7 +1062,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 - **A grant** is `"*"` (every name), `none` (or `""`), or a list of names. Quote the `*`: a bare `*` is a YAML alias, and `kortix validate` prints the quoted line. `all` is the accepted alias of `"*"`, and a list that contains `"*"` is every name too.
 - **Omitted means none.** An omitted `skills`, `subagents`, `commands`, `extensions`, `connectors`, `secrets`, `apps` or `kortix_permissions` grants nothing.
 - **Three keys are open by default:** `tools` is `"*"` (`kortix validate` warns when an agent omits it), `permission` is `allow`, and `codemode` is `on`.
-- **`workspace.project_repository` defaults to `false`.** Set `true` on every agent that reads or changes the repository, runs its scripts, or opens change requests.
+- **No session gets a checkout.** `/workspace` starts empty. An agent that reads or changes the repository runs `kortix workspaces clone`, and needs `project.gitops.read` in `kortix_permissions`.
 - **Names must exist.** A listed skill, command, extension, subagent or tool that is not registered or built in is an error.
 - **`secrets` reaches the sandbox.** A granted secret is an environment variable or a network-enforced secret in the agent's sandbox. Model logins, connector and git credentials stay with Kortix services: the agent's model and connector settings decide their use.
 - **Built in, with no entry.** The Kortix skills: `kortix-cli`, `kortix-memory` and the other `kortix-*` skills. The Kortix tools: `web_search`, `image_search`, `image_gen`, `scrape_webpage`, `show`. See [Kortix tools](/docs/developers#kortix-tools). The built-in tools: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `question`, `task`. An agent loads a Kortix skill only when its `skills` grant names it or is `"*"`.
@@ -1124,8 +1129,6 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `secrets` | grant | `none` | Secret names the agent's sandbox receives. |
 | `apps` | grant | `none` | App slugs the agent may open when the App's access is restricted or private. |
 | `kortix_permissions` | grant | `none` | Project permissions (`project.*`) the agent holds, whoever starts the session. `kortix validate --scopes` prints them. An account permission is an error. See [Agents](/docs/guide#agents). |
-| `workspace` | `branch`, `runtime`, `read` | — | What new sessions of this agent get in /workspace. Any other key under `workspace` is an error. |
-| `workspace.project_repository` | boolean | `false` | `true`: new sessions check out the project repository in `/workspace`, on their own session branch. `false`: no checkout, and repository calls answer `403` `session_repository_access_denied`. Project tools still load. |
 | `sandbox` | string | `sandbox.default` | A template slug, or `default` for the platform image. |
 | `space` | string | — | The space the agent works in (a key of the top-level `spaces` map, or a bare slug). Grouping only. |
 | `network_egress` | map | — | Only `{ version: 1, default: deny, rules: [] }`. It validates with a warning: Kortix does not enforce it. |
@@ -2100,6 +2103,7 @@ Commands an agent uses:
 
 | Command | Purpose |
 | --- | --- |
+| `kortix workspaces clone` | Clone the workspace repository. `/workspace` starts empty: a session gets no checkout. The sandbox also has `KORTIX_REPO_URL` and the session branch `KORTIX_BRANCH_NAME`. |
 | `kortix connectors call <slug> <action> [json]` | Call a connector action. See [Connectors](/docs/guide#connectors). |
 | `kortix secrets request <NAME>` | Mint a link, valid for 7 days, for a person to enter a secret value. |
 | `kortix secrets sync` | Pull this session's secrets and grants now. |

@@ -169,7 +169,7 @@ export async function refuseSessionOrControlAccess(input: {
   // never decides one here, as `POST /asks/:askId/answer` refuses it. Without
   // this the proxy also records the agent's reply as decided by the launcher.
   if (access.kind === 'principal' && access.sandboxAuthored && isProxiedAskDecision(upstreamPort, method, remainingPath)) {
-    return jsonProxyError({ error: 'An agent cannot answer its own ask — a person must', code: 'ASK_REQUIRES_HUMAN' }, 403, origin);
+    return jsonProxyError({ error: "This ask waits for a person: the person the session works for answers it.", code: 'ASK_REQUIRES_HUMAN' }, 403, origin);
   }
   if (isProxiedBaseReset(upstreamPort, remainingPath, queryString)) {
     console.warn(`[PREVIEW] Refused base=1 branch reset on ${sandboxId} from a proxied caller`);

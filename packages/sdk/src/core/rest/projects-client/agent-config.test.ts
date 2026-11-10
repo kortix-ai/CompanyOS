@@ -195,30 +195,20 @@ describe('getAgentConfig', () => {
 });
 
 
-describe('repository access compatibility', () => {
-  test('reads legacy restricted agents as repository access disabled', async () => {
-    for (const workspace of ['runtime', 'read']) {
-      nextBody = { agent: 'support', schema_version: 2, block: { workspace } };
+describe('repository access is obsolete', () => {
+  test('a read drops repository_access and workspace, whichever API answered', async () => {
+    for (const block of [{ workspace: 'runtime' }, { workspace: 'read' }, { repository_access: true }, { repository_access: false, workspace: 'branch' }]) {
+      nextBody = { agent: 'support', schema_version: 2, block: { ...block, connectors: 'all' } };
       const response = await getAgentConfig('project-1', 'support');
-      expect(response.block).toEqual({ repository_access: false });
+      expect(response.block).toEqual({ connectors: 'all' });
     }
   });
 
-  test('writes the boolean field when an older caller supplies a supported workspace alias', async () => {
-    await updateAgentConfig('project-1', 'support', { workspace: 'runtime' });
-    expect(calls[0]?.body).toEqual({ repository_access: false });
-  });
-
-  test('rejects conflicting aliases before sending a request', async () => {
-    await expect(updateAgentConfig('project-1', 'support', {
-      repository_access: true, workspace: 'runtime',
-    } as AgentConfigBlock)).rejects.toThrow('repository_access conflicts with workspace');
-    expect(calls).toHaveLength(0);
-  });
-
-  test('does not turn an unavailable read request into a working session implicitly', async () => {
-    await expect(updateAgentConfig('project-1', 'support', { workspace: 'read' }))
-      .rejects.toThrow('Set repository_access explicitly');
-    expect(calls).toHaveLength(0);
+  test('a write sends neither key and never throws on an old shape', async () => {
+    for (const block of [{ workspace: 'runtime' }, { workspace: 'read' }, { repository_access: true, workspace: 'runtime' }, { repository_access: false }]) {
+      calls = [];
+      await updateAgentConfig('project-1', 'support', { ...block, connectors: 'all' } as AgentConfigBlock);
+      expect(calls[0]?.body).toEqual({ connectors: 'all' });
+    }
   });
 });

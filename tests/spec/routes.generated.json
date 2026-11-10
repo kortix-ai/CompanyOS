@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1753,
+  "count": 1752,
   "aliases": 675,
   "routes": [
     {
@@ -2088,10 +2088,6 @@
     {
       "method": "GET",
       "path": "/v1/generation"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/git/:project/fast-boot-bundle"
     },
     {
       "method": "POST",

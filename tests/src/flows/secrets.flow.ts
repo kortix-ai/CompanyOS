@@ -866,14 +866,14 @@ flow('SEC-9', {
     }
   });
 
-  await ctx.step('an agent session cannot choose any other delivery policy', async () => {
+  await ctx.step('any other delivery policy is handed to a person → 403 secret_delivery_needs_person', async () => {
     for (const body of [
       { strategy: 'broker', consumer: 'llm_gateway' },
       { strategy: 'denied' },
       { strategy: 'egress', consumer: 'network', egress_policy: { hosts: ['api.example.com'] } },
     ]) {
       (await agent.post('/v1/projects/:projectId/secrets', { name: 'AGENT_POLICY_KEY', value: 'x', ...body }, { params }))
-        .status(403).body().has('$.error', 'Agent sessions cannot change secret delivery policy');
+        .status(403).body().has('$.code', 'secret_delivery_needs_person');
     }
     if (await stored('AGENT_POLICY_KEY')) throw new Error('a refused policy write still stored a row');
   });
@@ -1942,13 +1942,10 @@ flow('SEC-AUD-1', {
       if (seen.length !== before) throw new Error('a shared session or a trigger reached the upstream');
     });
 
-    await ctx.step('an agent session cannot change who can use a secret → 403', async () => {
+    await ctx.step("an agent session acting for the holder widens it to everyone ([]) exactly as the holder does → 200; the other manager call now succeeds", async () => {
       const agent = await sessionToken({ visibility: 'private' });
       (await agent.post('/v1/projects/:projectId/secrets', { name: 'PAYROLL_API_TOKEN', shared_with: [] }, { params }))
-        .status(403);
-    });
-
-    await ctx.step('the holder widens it to everyone ([]) → the other manager call now succeeds', async () => {
+        .status(200);
       (await share([])).status(200);
       expectAdmitted(ctx.env.target, await call(outsider), seen, 'Bearer payroll-holder-value', 'outsider call after widening');
       const row = await listed(outsider);

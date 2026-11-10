@@ -118,8 +118,8 @@ export function connectorDenialBody(
         hint: !grant
           ? `Connector "${input.connector}" is not assigned to this principal.`
           : isMyKortixAgentName(grant.agent)
-            // My Kortix is not in kortix.yaml: it hands connector work on (projects/lib/colleague-access.ts).
-            ? `My Kortix holds no connector "${input.connector}". Hand the work to a workspace agent that has it, or start a colleague with agent.connectors: ["${input.connector}"] (the person approves it).`
+            // A session minted before My Kortix held every connector: its next prompt re-mints the grant.
+            ? `This session's grant predates My Kortix holding every connector. Send another message so the session re-reads its grant, then call "${input.connector}" again.`
             : `Agent "${grant.agent}" is not granted connector "${input.connector}". Add it to agents.${grant.agent}.connectors in kortix.yaml (or set connectors: "*"), then send another message so the session re-reads the manifest.`,
       };
     case 'connector_not_connected': {

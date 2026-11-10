@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { RUNTIME_AUDIT_SUMMARY_KEYS } from '@kortix/api-contract/runtime-relay';
+import { LATE_ROW_MAX_AGE_DAYS } from './audit-archive/format';
 import { parseRuntimeAuditBatch } from './runtime-audit-ingestion';
 
 const scope = {
@@ -391,8 +392,8 @@ describe('parseRuntimeAuditBatch: instants the partitioned table cannot hold', (
     parseRuntimeAuditBatch({ events: [event({ occurred_at: occurredAt.toISOString() })] }, { ...scope, now })
       .values[0]!;
 
-  test('an instant inside [now - 80 days, now + 1 day] is stored as sent', () => {
-    for (const at of [new Date(now.getTime() - 79 * DAY), new Date(now.getTime() - 5_000), new Date(now.getTime() + 0.5 * DAY)]) {
+  test('an instant inside [now - LATE_ROW_MAX_AGE_DAYS, now + 1 day] is stored as sent', () => {
+    for (const at of [new Date(now.getTime() - (LATE_ROW_MAX_AGE_DAYS - 1) * DAY), new Date(now.getTime() - 5_000), new Date(now.getTime() + 0.5 * DAY)]) {
       const value = parseOne(at);
       expect(value.occurredAt).toEqual(at);
       expect(value.metadata).not.toHaveProperty('original_occurred_at');
@@ -401,7 +402,7 @@ describe('parseRuntimeAuditBatch: instants the partitioned table cannot hold', (
 
   test('an older or later instant moves to the start of today (UTC) and keeps the real one in metadata', () => {
     const today = new Date('2026-10-01T00:00:00.000Z');
-    for (const at of [new Date(now.getTime() - 81 * DAY), new Date(now.getTime() + 2 * DAY)]) {
+    for (const at of [new Date(now.getTime() - (LATE_ROW_MAX_AGE_DAYS + 1) * DAY), new Date(now.getTime() + 2 * DAY)]) {
       const value = parseOne(at);
       expect(value.occurredAt).toEqual(today);
       expect(value.metadata).toMatchObject({ original_occurred_at: at.toISOString() });

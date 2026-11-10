@@ -2277,6 +2277,8 @@ pub struct Runtime {
     pub awake_since_ms: i64,
     /// End of the last loop iteration, to see a sleep gap.
     pub last_tick_ms: i64,
+    /// CPU and memory of Kortix Capture's own processes: status.json `resources`.
+    pub resources: crate::self_usage::Sampler,
 }
 
 /// Queue and progress counters from the database plus the runtime state.
@@ -2564,6 +2566,7 @@ fn pass_with(conn: &Connection, ctx: &Ctx, s: &Settings, rt: &mut Runtime) -> Re
         let mut status = super::cli::device_status(ctx.paths, app_version());
         status["reportedAtMs"] = json!(now_ms());
         status["host"] = json!({"awakeSinceMs": rt.awake_since_ms});
+        status["resources"] = rt.resources.report();
         put_json(ctx, &format!("{device}/status.json"), &status)?;
         rt.status_at = now_ms();
     }
@@ -2623,6 +2626,7 @@ pub fn run(paths: MemoryPaths, stop: Arc<AtomicBool>) -> Result<()> {
     let mut last_target: Option<(String, String)> = None;
     while !stop.load(Ordering::SeqCst) {
         note_wake(&mut rt, now_ms());
+        rt.resources.tick(now_ms(), rt.awake_since_ms);
         let s = Settings::effective(&paths);
         let enabled = s.sync.enabled && !s.airgap;
         let device = device_id(&paths, &s);
@@ -2633,6 +2637,7 @@ pub fn run(paths: MemoryPaths, stop: Arc<AtomicBool>) -> Result<()> {
                 bytes_uploaded: rt.bytes_uploaded,
                 awake_since_ms: rt.awake_since_ms,
                 last_tick_ms: rt.last_tick_ms,
+                resources: std::mem::take(&mut rt.resources),
                 ..Runtime::default()
             };
             last_target = Some(here);

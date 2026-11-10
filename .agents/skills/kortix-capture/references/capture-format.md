@@ -218,11 +218,39 @@ every connected display, the focused one first), `appVersion`, `actionsRecording
 `policy` (null, or the policy in force: `source`, `updatedAtMs`, `fetchedAtMs`),
 `host` (`awakeSinceMs`: when the computer last woke from sleep, or the app started),
 `update` (null without the machine service, else its self-update state: see the
-release runbook, section Updater), plus `reportedAtMs`. status.json goes out every 15 s. A reader
+release runbook, section Updater), `resources` (below), plus `reportedAtMs`. status.json goes out every 15 s. A reader
 shows a device as offline when `reportedAtMs` is older than 120 s. After the
 policy in force changes, the device writes status.json about 15 s later (once its
 recorders followed the change), so a policy change shows within ~80 s. status.json is
 plaintext JSON even when encryption is on; it holds no recorded content.
+
+`resources` is what Kortix Capture itself costs the computer (`src/self_usage.rs`).
+The sync thread reads the process table once a minute and reports the last 10
+samples. It counts every process whose executable starts with `kortix-capture` or
+`kortix-backend` (`.exe` on Windows), or is `Kortix Capture` (the macOS app), and
+that this user can read: on Windows this session and session 0, on macOS and Linux
+this user's processes. A machine service that runs as SYSTEM or root is not
+readable, so it is not counted.
+
+```json
+"resources": {
+  "windowMs": 600000, "samples": 10,
+  "cpuPercentAvg": 4.2, "cpuPercentPeak": 18.0,
+  "memoryBytes": 325058560, "memoryBytesPeak": 331350016, "processCount": 7,
+  "processes": [{"name": "kortix-capture-engine", "count": 2, "cpuPercentAvg": 3.1, "memoryBytes": 184549376}],
+  "sampledAtMs": 1790845320000, "readMicros": 310
+}
+```
+
+- CPU is a percentage of one core (100 = one core busy), averaged over the window
+  (`cpuPercentAvg`) and for its busiest minute (`cpuPercentPeak`).
+- Memory is the working set (Windows) or resident size (macOS, Linux) at the last
+  sample; `memoryBytesPeak` is the highest total in the window.
+- `processes`: one entry per executable name (lower case, no `.exe`), the most CPU
+  first, at most 16. `count` 0: every process of that name exited.
+- `readMicros`: the wall time of the last process table read.
+- null during the first minute after the app starts, and after `sync now` from
+  the command line. Absent from app versions without it.
 
 ## policy.json
 

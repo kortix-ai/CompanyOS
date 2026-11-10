@@ -427,7 +427,16 @@ harnessFlow(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        // No session checks out the repository at boot (#12136): /workspace
+        // starts empty. The host commit-push below commits the WORKING TREE at
+        // the project target (/workspace/.git), so the agent materializes the
+        // checkout first — the CLI's own path, with the session branch and
+        // push.default=current — and writes the file inside it.
+        `Your /workspace is empty. First run exactly: kortix workspaces clone ${projectId} /workspace` +
+          ' (the directory exists and is empty; the clone checks out your session branch). ' +
+          `Then create the file ${path} inside it containing exactly this single line: ${content}. ` +
+          'Use the file-writing tool; do not describe the change. Do not commit. ' +
+          `Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).

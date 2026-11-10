@@ -1,6 +1,6 @@
 {
   "id": "recruiting",
-  "name": "Recruiting Loop",
+  "name": "Recruiting Factory",
   "summary": "One agent that screens every applicant and referral against a structured role rubric, drafts interview kits and candidate updates, and keeps your ATS pipeline clean. A person decides every step.",
   "secrets": [
     { "name": "RECRUITING_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the webhook your careers form, your referral form or an ATS relay calls for a new application or referral (Authorization: Bearer).", "generate": true },

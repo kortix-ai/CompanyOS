@@ -1,4 +1,4 @@
-## Recruiting Loop: the steps of this template
+## Recruiting Factory: the steps of this template
 
 Run the guide below as written. This template adds five steps at the points
 named here. The loop is one agent, `recruiting`, with one contract skill,

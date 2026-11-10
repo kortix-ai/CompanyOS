@@ -2,21 +2,16 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { REFERENCE_REPOS, SETUP_PROMPT, loopPrompt } from '@kortix/shared/setup-guide';
-import { Claude } from '@kortix/ui/internal/icons/claude';
-import { Codex } from '@kortix/ui/internal/icons/codex';
+import { SETUP_PROMPT } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
 
 import { DEMO, FAQ, RUNS, SOURCES, TOOLS } from './factory-content';
-import type { LoopView } from './loops-content';
-
-type CatalogEntry = { name: string; line: string; available: boolean; id?: string };
+import { FactoryStack } from './factory-stack';
 import { HeroScenes } from './hero-scenes';
-import { YamlLine } from '@/features/marketing/code-panel';
-
-const COPIED_MS = 2000;
+import type { LoopView } from './loops-content';
+import { CopyButton, Eyebrow, GhostButton, Mark, Window, useCopy } from './parts';
 /** The page's one accent: the brand blue (`kortix-base`). */
 const ACCENT = 'text-kortix-base';
 /** The column every section sits in, between the two hairline rails. */
@@ -27,86 +22,12 @@ const light = (at: string, strength = 30): CSSProperties => ({
   backgroundImage: `radial-gradient(55% 90% at ${at}, color-mix(in oklch, var(--kortix-base) ${strength}%, transparent), transparent 70%)`,
 });
 
-function useCopy(text: string) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      return; // Nothing reached the clipboard: claim nothing.
-    }
-    setCopied(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), COPIED_MS);
-  };
-  return { copied, copy };
-}
-
-function CopyButton({ size = 'md', text = SETUP_PROMPT, label = 'Copy the prompt' }: { size?: 'sm' | 'md'; text?: string; label?: string }) {
-  const { copied, copy } = useCopy(text);
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className={cn(
-        'bg-kortix-base hover:bg-kortix-base/90 rounded-md font-medium text-white transition-colors',
-        size === 'md' ? 'h-9 px-4 text-sm' : 'h-8 px-3 text-sm',
-      )}
-    >
-      <span aria-live="polite">{copied ? 'Copied' : label}</span>
-    </button>
-  );
-}
-
-function GhostButton({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="border-border bg-card text-foreground hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium transition-colors">
-      {children}
-    </Link>
-  );
-}
-
-/** A product name with its mark, inline in running text (founder call 2026-11-10: Claude and Codex show their logos). */
-function Mark({ name }: { name: 'Claude' | 'Codex' | 'Claude Code' }) {
-  const Icon = name === 'Codex' ? Codex : Claude;
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <Icon className="size-[1em] shrink-0" />
-      {name}
-    </span>
-  );
-}
-
-function Eyebrow({ children }: { children: ReactNode }) {
-  return <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">{children}</span>;
-}
-
 /** A caption that opens in the foreground and continues muted. */
 function Caption({ lead, rest }: { lead: string; rest: string }) {
   return (
     <p className="max-w-sm text-base leading-6">
       <span className="text-foreground font-medium">{lead}</span> <span className="text-muted-foreground">{rest}</span>
     </p>
-  );
-}
-
-function Window({ title, children, className }: { title: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('border-border bg-background overflow-hidden rounded-lg border shadow-2xl shadow-black/40', className)}>
-      <div className="border-border text-muted-foreground flex items-center gap-3 border-b px-4 py-2.5 text-xs">
-        <span aria-hidden className="flex gap-1.5">
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-          <span className="bg-muted-foreground/30 size-2.5 rounded-full" />
-        </span>
-        {title}
-      </div>
-      {children}
-    </div>
   );
 }
 
@@ -132,56 +53,6 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-function Chips({ items, accent }: { items: string[]; accent?: boolean }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <span key={item} className={cn('rounded-full border px-2.5 py-1 text-xs', accent ? 'border-kortix-base/30 text-kortix-base' : 'border-border text-muted-foreground')}>
-          {item}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** One loop: what it watches, what it ships, its prompt, and its real trigger YAML. */
-function LoopShowcase({ loop, index }: { loop: LoopView; index: number }) {
-  return (
-    <div id={`loop-${loop.id}`} className="border-border grid scroll-mt-16 border-t lg:grid-cols-2">
-      <div className={cn('border-border flex flex-col gap-6 p-8 md:p-10 lg:border-r', index % 2 === 1 && 'lg:order-2 lg:border-r-0 lg:border-l')}>
-        <Eyebrow>
-          {String(index + 1).padStart(2, '0')} · {loop.label}
-        </Eyebrow>
-        <h3 className="text-foreground text-3xl font-medium tracking-tight text-balance lg:text-4xl">{loop.line}</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <Chips items={loop.observes} />
-          <span aria-hidden className="text-muted-foreground">→</span>
-          <Chips items={loop.ships} accent />
-        </div>
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <CopyButton text={loopPrompt(loop)} label={`Copy the ${loop.label} prompt`} />
-          {REFERENCE_REPOS[loop.id] ? (
-            <a href={REFERENCE_REPOS[loop.id]} className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline">
-              Read the reference repo
-            </a>
-          ) : null}
-        </div>
-      </div>
-      <div className="flex items-center p-8 md:p-10">
-        <Window title={<span className="font-mono">{loop.file}</span>} className="w-full">
-          <pre className="overflow-x-auto px-5 py-5 font-mono text-xs leading-6">
-            {loop.excerpt.map((line, i) => (
-              <span key={`${loop.id}-${i}`} className="block whitespace-pre">
-                <YamlLine line={line} />
-              </span>
-            ))}
-          </pre>
-        </Window>
-      </div>
-    </div>
-  );
-}
-
 /** The loop lifecycle, in kortix.yaml terms: a trigger is a signal (`on:`) plus a run (`run:`). */
 const LIFECYCLE = [
   { key: 'on:', title: 'Signal', body: 'A schedule, a webhook, a Slack message, an email.' },
@@ -197,7 +68,7 @@ const LIFECYCLE = [
  * after wonder.design; the look, words and every panel are Kortix's own: the
  * brand blue, the dither field, and data from a real factory run.
  */
-export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: CatalogEntry[] }) {
+export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Array<{ name: string; line: string }> }) {
   const { copied, copy } = useCopy(SETUP_PROMPT);
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
@@ -241,7 +112,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Ca
               </p>
               <div className="flex flex-wrap gap-2.5">
                 <CopyButton />
-                <GhostButton href="#loops">See the loops</GhostButton>
+                <GhostButton href="#factories">See the factories</GhostButton>
               </div>
             </div>
           </div>
@@ -261,47 +132,17 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: Ca
           </div>
         </section>
 
-        <section id="loops" className="border-border scroll-mt-16 border-t">
-          <div className="flex flex-col gap-6 px-8 pt-24 pb-16 md:px-10">
-            <h2 className="text-foreground text-3xl font-medium tracking-tight text-balance lg:text-[40px] lg:leading-tight">
-              One engine. A loop for every team.
+        <section id="factories" className="border-border scroll-mt-16 border-t">
+          <div className="flex flex-col gap-4 px-8 pt-24 pb-14 md:px-10">
+            <Eyebrow>One workspace = your company</Eyebrow>
+            <h2 className="text-foreground max-w-3xl text-3xl font-medium tracking-tight text-balance lg:text-[40px] lg:leading-tight">
+              A factory for every team. See what it runs, then copy one prompt.
             </h2>
-            <nav className="flex flex-wrap gap-2">
-              {loops.map((loop) => (
-                <a key={loop.id} href={`#loop-${loop.id}`} className="border-border bg-card text-foreground hover:bg-accent rounded-full border px-4 py-1.5 text-sm transition-colors">
-                  {loop.label}
-                </a>
-              ))}
-            </nav>
+            <p className="text-muted-foreground max-w-2xl text-base text-pretty">
+              Each template is a real kortix.yaml: agents, triggers, skills. Your agent adapts it to your codebase. Every factory runs in your one Kortix workspace.
+            </p>
           </div>
-          {loops.map((loop, index) => (
-            <LoopShowcase key={loop.id} loop={loop} index={index} />
-          ))}
-        </section>
-
-        <section id="catalog" className="border-border scroll-mt-16 border-t">
-          <h2 className="text-foreground px-8 pt-24 pb-12 text-3xl font-medium tracking-tight md:px-10 lg:text-[40px] lg:leading-tight">Every team. One loop at a time.</h2>
-          <ul className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-4">
-            {catalog.map((entry) => {
-              const tile = (
-                <>
-                  <span className="text-foreground text-base font-medium">{entry.name}</span>
-                  <span className="text-muted-foreground text-sm">{entry.line}</span>
-                </>
-              );
-              return (
-                <li key={entry.name} className="border-border border-r border-b">
-                  {entry.id ? (
-                    <a href={`#loop-${entry.id}`} className="hover:bg-card flex h-full flex-col gap-2 p-6 transition-colors">
-                      {tile}
-                    </a>
-                  ) : (
-                    <div className="flex h-full flex-col gap-2 p-6">{tile}</div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <FactoryStack loops={loops} more={catalog} />
         </section>
 
         <section id="lifecycle" className="border-border scroll-mt-16 border-t">

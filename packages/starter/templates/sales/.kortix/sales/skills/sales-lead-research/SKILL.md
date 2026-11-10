@@ -1,6 +1,6 @@
 ---
 name: sales-lead-research
-description: Research one lead (a company and a person) from public sources only, and write one cited research note into the system of record. Load it for every new lead of the Sales Loop, and whenever a person asks who a company or a contact is before a call.
+description: Research one lead (a company and a person) from public sources only, and write one cited research note into the system of record. Load it for every new lead of the Sales Factory, and whenever a person asks who a company or a contact is before a call.
 ---
 
 # Lead research

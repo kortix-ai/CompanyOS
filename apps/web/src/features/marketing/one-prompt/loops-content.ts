@@ -1,86 +1,147 @@
 import { getTemplate, getTemplateFiles, TEMPLATE_IDS } from '@kortix/starter/templates';
+import { parse } from 'yaml';
 
-/** One loop as the home shows it. Name, summary and YAML come from the template files. */
+/** One trigger of a template, as the card lists it: what starts it, in words. */
+export interface TriggerView {
+  name: string;
+  signal: string;
+}
+
+/** One factory as the home shows it. Name, summary, agents, triggers and skills come from the template files. */
 export interface LoopView {
   id: string;
-  /** The department, as the reader says it. */
-  label: string;
+  /** The team, as the reader says it. */
+  team: string;
   name: string;
   line: string;
   summary: string;
   observes: string[];
   ships: string[];
-  file: string;
-  excerpt: string[];
+  /** The template's folder, as it lands in a repository. */
+  folder: string;
+  agents: string[];
+  triggers: TriggerView[];
+  triggerCount: number;
+  /** Every trigger the template ships, the switched-off sources included. */
+  triggerTotal: number;
+  skills: string[];
 }
 
-/** The words only the page adds: a department label, one line, what it watches and what it ships. */
-const PRESENTATION: Record<string, Pick<LoopView, 'label' | 'line' | 'observes' | 'ships'>> = {
+/** The words only the page adds: a team, one line, what it watches and what it ships. */
+const PRESENTATION: Record<string, Pick<LoopView, 'team' | 'line' | 'observes' | 'ships'>> = {
   'software-factory': {
-    label: 'Software Factory',
+    team: 'Engineering',
     line: 'Signals in. Verified pull requests out.',
-    observes: ['GitHub issues', 'Failing tests', 'Production errors', 'Database anomalies', 'Slack threads', 'Customer feedback'],
-    ships: ['Pull requests with tests', 'A demo video', 'Ticket updates'],
+    observes: ['GitHub issues', 'Failing tests', 'Production errors', 'Database anomalies', 'Slack threads'],
+    ships: ['Pull requests with tests', 'Demo videos', 'Ticket updates'],
   },
   marketing: {
-    label: 'Marketing Factory',
+    team: 'Marketing',
     line: 'Content, search and paid, on autopilot.',
-    observes: ['Merged pull requests', 'Search and AI answers', 'Ad platforms', 'Competitors'],
-    ships: ['Changelog, posts, videos', 'AEO, SEO and GEO fixes', 'Ad performance reports'],
+    observes: ['Merged pull requests', 'AI answers and search', 'Ad platforms', 'Competitors'],
+    ships: ['Changelog, posts, videos', 'AEO, SEO and GEO fixes', 'Ad reports'],
   },
   sales: {
-    label: 'Sales',
+    team: 'Sales',
     line: 'Every signup researched before you wake up.',
     observes: ['New signups', 'Inbound forms', 'Your CRM'],
     ships: ['Lead research', 'Qualification', 'Outreach drafts', 'Meeting prep'],
   },
-  recruiting: {
-    label: 'Recruiting',
-    line: 'Every applicant scored against the role.',
-    observes: ['New applicants', 'Referrals', 'Your ATS'],
-    ships: ['Scorecards', 'Interview kits', 'Candidate update drafts'],
-  },
   support: {
-    label: 'Support',
+    team: 'Support',
     line: 'Every ticket answered or routed.',
     observes: ['Support inbox', 'Help desk', 'In-app feedback'],
     ships: ['Answer drafts', 'Bug tickets for engineering', 'Help-center fixes'],
   },
+  recruiting: {
+    team: 'Recruiting',
+    line: 'Every applicant scored against the role.',
+    observes: ['New applicants', 'Referrals', 'Your ATS'],
+    ships: ['Scorecards', 'Interview kits', 'Candidate update drafts'],
+  },
 };
 
-/** The first trigger of the template, as its YAML says it (6 lines). */
-function firstTrigger(id: (typeof TEMPLATE_IDS)[number]): { file: string; excerpt: string[] } {
-  const files = getTemplateFiles(id, { repoFullName: 'your-org/your-repo', defaultBranch: 'main' });
-  for (const file of files.filter((f) => /\.ya?ml$/.test(f.path))) {
-    const lines = file.content.split('\n');
-    // A source trigger shows what the loop watches; else the first trigger.
-    const source = lines.findIndex((line) => /^\s*- slug: source-/.test(line));
-    const at = source >= 0 ? source : lines.findIndex((line) => /^\s*- slug:/.test(line));
-    if (at >= 0) return { file: file.path, excerpt: lines.slice(at, at + 6).filter((line) => !/^\s*name:/.test(line)) };
+/** The order the stack shows the factories in. */
+const ORDER = ['software-factory', 'marketing', 'sales', 'support', 'recruiting'];
+/** Triggers one card lists; the rest is a count. */
+const SHOWN_TRIGGERS = 5;
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const pad = (n: string) => n.padStart(2, '0');
+
+/** A six-field Kortix cron (`sec min hour dom mon dow`) in words; anything unusual stays the expression. */
+export function describeCron(expr: string): string {
+  const [, min, hour, dom, mon, dow] = expr.trim().split(/\s+/);
+  if (!min || !hour || dom !== '*' || mon !== '*' || !dow) return `cron ${expr}`;
+  const step = /^\*\/(\d+)$/.exec(min);
+  if (step && hour === '*' && dow === '*') return `every ${step[1]} min`;
+  if (/^\d+(,\d+)+$/.test(min) && hour === '*' && dow === '*') {
+    const marks = min.split(',').map(Number);
+    const gaps = new Set(marks.map((m, i) => ((marks[(i + 1) % marks.length]! - m + 60) % 60)));
+    return gaps.size === 1 ? `every ${[...gaps][0]} min` : `${marks.length}× an hour`;
   }
-  return { file: `.kortix/${id}/`, excerpt: [] };
+  if (/^\d+$/.test(min) && hour === '*' && dow === '*') return 'hourly';
+  const days = dow === '*' ? 'daily' : dow === '1-5' ? 'weekdays' : /^\d$/.test(dow) ? WEEKDAYS[Number(dow)] : null;
+  if (days && /^\d+$/.test(min) && /^\d+$/.test(hour)) return `${days} ${pad(hour)}:${pad(min)}`;
+  const span = /^(\d+)-(\d+)$/.exec(hour);
+  if (days && /^\d+$/.test(min) && span) return `hourly ${pad(span[1]!)}–${pad(span[2]!)}${days === 'daily' ? '' : `, ${days}`}`;
+  return `cron ${expr}`;
 }
 
-/** Every loop of this build, Engineering first. Server-side: it reads the template files. */
+type RawTrigger = { slug?: string; name?: string; enabled?: boolean; on?: Record<string, unknown> };
+
+/** What starts a trigger, in words: a schedule, a webhook, or an app event. */
+function describeSignal(on: Record<string, unknown> | undefined): string {
+  if (!on) return 'manual';
+  if (typeof on.cron === 'string') return describeCron(on.cron);
+  if (on.webhook) {
+    const secret = (on.webhook as { secret?: string }).secret ?? '';
+    return /GITHUB/.test(secret) ? 'GitHub webhook' : 'webhook';
+  }
+  if (typeof on.connector === 'string') return `${on.connector} event`;
+  return Object.keys(on)[0] ?? 'manual';
+}
+
+/** "Sales: a new signup in your product" → "A new signup in your product". */
+function triggerName(trigger: RawTrigger): string {
+  const name = (trigger.name ?? trigger.slug ?? '').replace(/^[^:]{1,40}:\s*/, '');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** The agents, triggers and skills of one template, read from its YAML. */
+function anatomy(id: string): Pick<LoopView, 'folder' | 'agents' | 'triggers' | 'triggerCount' | 'triggerTotal' | 'skills'> {
+  const files = getTemplateFiles(id as (typeof TEMPLATE_IDS)[number], { repoFullName: 'your-org/your-repo', defaultBranch: 'main' });
+  const agents: string[] = [];
+  const skills: string[] = [];
+  const triggers: RawTrigger[] = [];
+  for (const file of files.filter((f) => /\.ya?ml$/.test(f.path))) {
+    const doc = parse(file.content) as { agents?: Record<string, unknown>; skills?: Record<string, unknown>; triggers?: RawTrigger[] } | null;
+    agents.push(...Object.keys(doc?.agents ?? {}));
+    skills.push(...Object.keys(doc?.skills ?? {}));
+    triggers.push(...(doc?.triggers ?? []));
+  }
+  const live = triggers.filter((t) => t.enabled !== false);
+  return {
+    folder: `.kortix/${id}/`,
+    agents,
+    skills,
+    triggers: live.slice(0, SHOWN_TRIGGERS).map((t) => ({ name: triggerName(t), signal: describeSignal(t.on) })),
+    triggerCount: live.length,
+    triggerTotal: triggers.length,
+  };
+}
+
+/** Every factory of this build, in stack order. Server-side: it reads the template files. */
 export function loopViews(): LoopView[] {
-  return [...TEMPLATE_IDS]
-    .sort((a, b) => (a === 'software-factory' ? -1 : b === 'software-factory' ? 1 : 0))
-    .flatMap((id): LoopView[] => {
-      const words = PRESENTATION[id];
-      // Featured loops only (founder call 2026-11-10: Engineering and Marketing first).
-      if (!words || !FEATURED.has(id)) return [];
-      const template = getTemplate(id);
-      return [{ id, name: template.name, summary: template.summary, ...words, ...firstTrigger(id) }];
-    });
+  const built = new Set<string>(TEMPLATE_IDS);
+  return ORDER.filter((id) => built.has(id) && PRESENTATION[id]).map((id) => {
+    const template = getTemplate(id as (typeof TEMPLATE_IDS)[number]);
+    return { id, name: template.name, summary: template.summary, ...PRESENTATION[id]!, ...anatomy(id) };
+  });
 }
 
-/** Every common function, as the home lists it. `template`: the id that ships it, when one does. */
-const CATALOG: Array<{ name: string; line: string; template?: string }> = [
-  { name: 'Engineering', line: 'Ticket triage, fixes, reviews, tests.', template: 'software-factory' },
-  { name: 'Marketing', line: 'Changelog, posts, videos, SEO.', template: 'marketing' },
-  { name: 'Support', line: 'Triage, first replies, routing.', template: 'support' },
-  { name: 'Sales', line: 'Lead research, CRM updates, follow-ups.', template: 'sales' },
-  { name: 'Recruiting', line: 'Sourcing, screening, scheduling.', template: 'recruiting' },
+/** The functions with no ready-made template yet: the same prompt builds them from a description. */
+const MORE: Array<{ name: string; line: string }> = [
   { name: 'Research', line: 'Briefs, market and competitor tracking.' },
   { name: 'Reporting', line: 'Weekly numbers, board-pack drafts.' },
   { name: 'Operations', line: 'Handoffs, status updates, data entry.' },
@@ -90,17 +151,6 @@ const CATALOG: Array<{ name: string; line: string; template?: string }> = [
   { name: 'Back office', line: 'Documents, records, checklists.' },
 ];
 
-/** Every function Kortix loops (all of them run today); `id` links the ones with a ready-made template. */
-export function catalogViews(): Array<{ name: string; line: string; available: boolean; id?: string }> {
-  const built = new Set<string>(TEMPLATE_IDS);
-  return CATALOG.map((entry) => ({
-    name: entry.name,
-    line: entry.line,
-    available: entry.template !== undefined && built.has(entry.template),
-    // Only featured loops have a showcase to link to.
-    id: entry.template && built.has(entry.template) && FEATURED.has(entry.template) ? entry.template : undefined,
-  }));
+export function catalogViews(): Array<{ name: string; line: string }> {
+  return MORE;
 }
-
-/** The loops the home features: Engineering and Marketing, when built. */
-export const FEATURED = new Set(['software-factory', 'marketing']);

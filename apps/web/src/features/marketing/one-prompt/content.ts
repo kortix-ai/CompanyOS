@@ -78,7 +78,7 @@ export const TEMPLATES: HomeTemplate[] = [
     id: 'sales',
     line: 'Every lead researched, scored and drafted. You send.',
     phrase: 'your sales loop',
-    name: 'Sales Loop',
+    name: 'Sales Factory',
     summary:
       'One agent that researches every signup and inbound lead, scores it against your ICP, drafts outreach and meeting briefs, and keeps your CRM clean. A person sends every message.',
     triggers: ['New signup in your product', 'Inbound form', 'Mondays 07:00'],
@@ -101,7 +101,7 @@ export const TEMPLATES: HomeTemplate[] = [
     id: 'recruiting',
     line: 'Every applicant screened on one rubric. A person decides.',
     phrase: 'your recruiting loop',
-    name: 'Recruiting Loop',
+    name: 'Recruiting Factory',
     summary:
       'One agent that screens every applicant and referral against a structured role rubric, drafts interview kits and candidate updates, and keeps your ATS pipeline clean. A person decides every step.',
     triggers: ['New application', 'New referral', 'Weekdays, every hour 08:00-18:00', 'Mondays 07:00'],
@@ -124,7 +124,7 @@ export const TEMPLATES: HomeTemplate[] = [
     id: 'support',
     line: 'Every conversation triaged. Bugs go to engineering.',
     phrase: 'your support loop',
-    name: 'Support Loop',
+    name: 'Support Factory',
     summary:
       'One agent that triages support conversations, drafts answers from your docs and code, hands bugs to engineering, clusters feedback and proposes help-center fixes. Replies stay drafts until you allow sending.',
     triggers: ['In-app feedback', 'Help desk every 15 minutes', 'Mondays 08:00'],

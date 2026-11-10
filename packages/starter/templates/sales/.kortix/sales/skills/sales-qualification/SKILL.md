@@ -1,6 +1,6 @@
 ---
 name: sales-qualification
-description: Score one researched lead against the ICP in sales.json (must-haves, nice-to-haves, disqualifiers, thresholds) and write the score, the tier and a cited scorecard into the system of record. Load it after lead research in the Sales Loop, and when a person asks whether a lead fits.
+description: Score one researched lead against the ICP in sales.json (must-haves, nice-to-haves, disqualifiers, thresholds) and write the score, the tier and a cited scorecard into the system of record. Load it after lead research in the Sales Factory, and when a person asks whether a lead fits.
 ---
 
 # Qualification

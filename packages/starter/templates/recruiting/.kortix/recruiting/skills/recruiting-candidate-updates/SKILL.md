@@ -1,6 +1,6 @@
 ---
 name: recruiting-candidate-updates
-description: Draft a message to a candidate — the reject a person decided, a status update when the team has been silent, an answer to a candidate's question, or a first message to a referred or sourced person a person approved. Never sends; a person approves every message. Load it in the Recruiting Loop whenever a candidate needs to hear from the team.
+description: Draft a message to a candidate — the reject a person decided, a status update when the team has been silent, an answer to a candidate's question, or a first message to a referred or sourced person a person approved. Never sends; a person approves every message. Load it in the Recruiting Factory whenever a candidate needs to hear from the team.
 ---
 
 # Candidate updates (drafts)

@@ -1,6 +1,6 @@
 {
   "id": "sales",
-  "name": "Sales Loop",
+  "name": "Sales Factory",
   "summary": "One agent that researches every signup and inbound lead, scores it against your ICP, drafts outreach and meeting briefs, and keeps your CRM clean. A person sends every message.",
   "secrets": [
     { "name": "SALES_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the webhook your product and your forms call for a new signup or an inbound lead (Authorization: Bearer).", "generate": true },

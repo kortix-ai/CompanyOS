@@ -1,4 +1,4 @@
-## Sales Loop: the steps of this template
+## Sales Factory: the steps of this template
 
 Run the guide below as written. This template adds five steps at the points
 named here. The loop is one agent, `sales`, with one contract skill,

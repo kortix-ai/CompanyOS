@@ -1,4 +1,4 @@
-# Recruiting Loop for {{repoFullName}}: one agent, one system of record, many sources.
+# Recruiting Factory for {{repoFullName}}: one agent, one system of record, many sources.
 # Sources bring applicants in. The agent screens against a structured rubric and drafts.
 # A person decides every advance and every reject, and approves every message.
 # The contract is the `recruiting-loop` skill. The settings are recruiting.json.
@@ -6,7 +6,7 @@
 
 agents:
   recruiting:
-    description: "The Recruiting Loop: screens every applicant and referral against the role rubric, drafts interview kits, scheduling and candidate updates, keeps the pipeline clean. A person decides every step and sends every message."
+    description: "The Recruiting Factory: screens every applicant and referral against the role rubric, drafts interview kits, scheduling and candidate updates, keeps the pipeline clean. A person decides every step and sends every message."
     mode: primary
     prompt_file: .kortix/recruiting/agents/recruiting.md
     skills:

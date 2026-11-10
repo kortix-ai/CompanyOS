@@ -1,4 +1,4 @@
-# Support Loop for {{repoFullName}}: one agent, one desk, many sources.
+# Support Factory for {{repoFullName}}: one agent, one desk, many sources.
 # Sources bring conversations in. The agent triages, drafts answers, hands bugs to
 # engineering and clusters feedback. A person approves every reply by default.
 # The contract is the `support-loop` skill. The settings are support.json.
@@ -6,7 +6,7 @@
 
 agents:
   support:
-    description: "The Support Loop: triages every conversation, drafts answers from the docs and the code, hands bugs to engineering, clusters feedback, proposes help-center fixes. Replies are drafts unless a person allows more."
+    description: "The Support Factory: triages every conversation, drafts answers from the docs and the code, hands bugs to engineering, clusters feedback, proposes help-center fixes. Replies are drafts unless a person allows more."
     mode: primary
     prompt_file: .kortix/support/agents/support.md
     skills:

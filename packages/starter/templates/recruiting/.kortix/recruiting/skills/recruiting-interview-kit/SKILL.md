@@ -1,6 +1,6 @@
 ---
 name: recruiting-interview-kit
-description: Draft the interview kit for one candidate's next stage from the role's interview plan and rubric in recruiting.json — the same structured questions for every candidate of the role, plus the follow-ups this candidate's scorecard leaves open. Load it in the Recruiting Loop after a person decided to advance a candidate.
+description: Draft the interview kit for one candidate's next stage from the role's interview plan and rubric in recruiting.json — the same structured questions for every candidate of the role, plus the follow-ups this candidate's scorecard leaves open. Load it in the Recruiting Factory after a person decided to advance a candidate.
 ---
 
 # Interview kit: one stage, one kit

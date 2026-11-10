@@ -1,6 +1,6 @@
 ---
 name: sales-outreach-drafts
-description: Draft one outreach message (a first touch, a follow-up or a reply) for a qualified lead, grounded in the research note, and deliver it as a draft for a person to send, per the approval mode in sales.json. Never sends. Load it after qualification in the Sales Loop, and when a person asks for an outreach or follow-up draft.
+description: Draft one outreach message (a first touch, a follow-up or a reply) for a qualified lead, grounded in the research note, and deliver it as a draft for a person to send, per the approval mode in sales.json. Never sends. Load it after qualification in the Sales Factory, and when a person asks for an outreach or follow-up draft.
 ---
 
 # Outreach drafts

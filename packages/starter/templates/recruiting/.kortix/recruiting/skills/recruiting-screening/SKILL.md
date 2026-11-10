@@ -1,6 +1,6 @@
 ---
 name: recruiting-screening
-description: Screen one application against the structured rubric of its role in recruiting.json and write an evidence-backed scorecard. Never reads or infers a protected attribute, never rejects or advances. Load it in the Recruiting Loop for every new application, after the `recruiting-loop` contract.
+description: Screen one application against the structured rubric of its role in recruiting.json and write an evidence-backed scorecard. Never reads or infers a protected attribute, never rejects or advances. Load it in the Recruiting Factory for every new application, after the `recruiting-loop` contract.
 ---
 
 # Screening: one application, one scorecard

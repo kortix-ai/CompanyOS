@@ -1,11 +1,11 @@
-# Sales Loop for {{repoFullName}}: one agent, one system of record, many sources.
+# Sales Factory for {{repoFullName}}: one agent, one system of record, many sources.
 # Sources bring leads in. The agent researches, qualifies and drafts. A person sends.
 # The contract is the `sales-loop` skill. The settings are sales.json.
 # Remove the template: delete this folder and its line under `imports:` in kortix.yaml.
 
 agents:
   sales:
-    description: "The Sales Loop: researches every signup and inbound lead, scores it against the ICP, drafts outreach and meeting briefs, keeps the CRM clean. Never sends a message itself."
+    description: "The Sales Factory: researches every signup and inbound lead, scores it against the ICP, drafts outreach and meeting briefs, keeps the CRM clean. Never sends a message itself."
     mode: primary
     prompt_file: .kortix/sales/agents/sales.md
     skills:

@@ -1,6 +1,6 @@
 {
   "id": "support",
-  "name": "Support Loop",
+  "name": "Support Factory",
   "summary": "One agent that triages support conversations, drafts answers from your docs and code, hands bugs to engineering, clusters feedback and proposes help-center fixes. Replies stay drafts until you allow sending.",
   "secrets": [
     { "name": "SUPPORT_WEBHOOK_SECRET", "required": true, "delivery": "connector", "why": "Signs the webhook your product calls for in-app feedback (Authorization: Bearer).", "generate": true },

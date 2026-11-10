@@ -1,5 +1,5 @@
 {
-  "$comment": "The Support Loop configuration. The support agent reads this file at the start of every run. The setup agent writes it with you (skills/support-loop/references/analysis.md). Change it with a commit; the next run reads the new values.",
+  "$comment": "The Support Factory configuration. The support agent reads this file at the start of every run. The setup agent writes it with you (skills/support-loop/references/analysis.md). Change it with a commit; the next run reads the new values.",
   "version": 1,
   "company": {
     "name": null,

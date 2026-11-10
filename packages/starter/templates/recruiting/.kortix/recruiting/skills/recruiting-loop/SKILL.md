@@ -1,9 +1,9 @@
 ---
 name: recruiting-loop
-description: The Recruiting Loop contract. Sources (applications from a careers form or an ATS relay, referrals, the jobs inbox, an ATS poll) bring candidates; the agent screens each against the structured rubric of its role in recruiting.json, writes the scorecard into one system of record (Ashby, Greenhouse, Lever, Workable or a JSON file) and submits a decision for a person; after the person decides, it drafts the interview kit, the scheduling message or the candidate update. Defines the fairness rules, record operations, dedup keys, markers, approval modes, retention, caps, run lines and hard rules. Load it in every run of the `recruiting` agent and in any session that writes recruiting records.
+description: The Recruiting Factory contract. Sources (applications from a careers form or an ATS relay, referrals, the jobs inbox, an ATS poll) bring candidates; the agent screens each against the structured rubric of its role in recruiting.json, writes the scorecard into one system of record (Ashby, Greenhouse, Lever, Workable or a JSON file) and submits a decision for a person; after the person decides, it drafts the interview kit, the scheduling message or the candidate update. Defines the fairness rules, record operations, dedup keys, markers, approval modes, retention, caps, run lines and hard rules. Load it in every run of the `recruiting` agent and in any session that writes recruiting records.
 ---
 
-# Recruiting Loop: the contract
+# Recruiting Factory: the contract
 
 This file is the only place that defines the conventions. The references
 implement them: `references/records/<kind>.md` maps every record operation to

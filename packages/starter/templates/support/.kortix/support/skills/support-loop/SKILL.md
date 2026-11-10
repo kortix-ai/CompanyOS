@@ -1,9 +1,9 @@
 ---
 name: support-loop
-description: The Support Loop contract. Sources (in-app feedback, the desk queue in Plain, Intercom, Zendesk or a JSON file, the support mailbox, Slack shared channels) bring conversations; the agent triages each, drafts an answer from the docs and the code, hands product defects to engineering (the Software Factory's store when present), clusters feedback and proposes help-center fixes. Defines the desk operations, categories, approval modes, dedup keys, markers, caps, run lines and hard rules. Load it in every run of the `support` agent and in any session that writes to the support desk.
+description: The Support Factory contract. Sources (in-app feedback, the desk queue in Plain, Intercom, Zendesk or a JSON file, the support mailbox, Slack shared channels) bring conversations; the agent triages each, drafts an answer from the docs and the code, hands product defects to engineering (the Software Factory's store when present), clusters feedback and proposes help-center fixes. Defines the desk operations, categories, approval modes, dedup keys, markers, caps, run lines and hard rules. Load it in every run of the `support` agent and in any session that writes to the support desk.
 ---
 
-# Support Loop: the contract
+# Support Factory: the contract
 
 This file is the only place that defines the conventions. The references
 implement them: `references/desks/<kind>.md` maps every desk operation to one

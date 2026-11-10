@@ -1,5 +1,5 @@
 {
-  "$comment": "The Sales Loop configuration. The sales agent reads this file at the start of every run. The setup agent writes it with you (skills/sales-loop/references/analysis.md). Change it with a commit; the next run reads the new values.",
+  "$comment": "The Sales Factory configuration. The sales agent reads this file at the start of every run. The setup agent writes it with you (skills/sales-loop/references/analysis.md). Change it with a commit; the next run reads the new values.",
   "version": 1,
   "company": {
     "name": null,

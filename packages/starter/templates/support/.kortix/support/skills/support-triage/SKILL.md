@@ -1,6 +1,6 @@
 ---
 name: support-triage
-description: Triage one support conversation for the Support Loop - the category (how-to, bug, feature-request, billing, account, security, other), the priority 1-4, a confidence, and whether it is noise or an escalation. Writes the `[support-loop] triaged` note and the category tag. Load it for contract step 2 of the support-loop skill, or when a person asks to triage a conversation.
+description: Triage one support conversation for the Support Factory - the category (how-to, bug, feature-request, billing, account, security, other), the priority 1-4, a confidence, and whether it is noise or an escalation. Writes the `[support-loop] triaged` note and the category tag. Load it for contract step 2 of the support-loop skill, or when a person asks to triage a conversation.
 ---
 
 # Support triage

@@ -1,9 +1,9 @@
 ---
 name: sales-loop
-description: The Sales Loop contract. Sources (product signups, inbound forms, the sales inbox, CRM changes) bring leads; the agent researches each from public sources, scores it against the ICP in sales.json, writes notes into one system of record (Attio, HubSpot, Salesforce, Pipedrive, a JSON file or a Google Sheet) and drafts the next message for a person to send. Defines the record operations, dedup keys, markers, approval modes, caps, run lines and hard rules. Load it in every run of the `sales` agent and in any session that writes sales records.
+description: The Sales Factory contract. Sources (product signups, inbound forms, the sales inbox, CRM changes) bring leads; the agent researches each from public sources, scores it against the ICP in sales.json, writes notes into one system of record (Attio, HubSpot, Salesforce, Pipedrive, a JSON file or a Google Sheet) and drafts the next message for a person to send. Defines the record operations, dedup keys, markers, approval modes, caps, run lines and hard rules. Load it in every run of the `sales` agent and in any session that writes sales records.
 ---
 
-# Sales Loop: the contract
+# Sales Factory: the contract
 
 This file is the only place that defines the conventions. The references
 implement them: `references/records/<kind>.md` maps every record operation to

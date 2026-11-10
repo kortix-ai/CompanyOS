@@ -1,6 +1,6 @@
 ---
 name: recruiting-sourcing
-description: Build a weekly list of people who match an open role, from public professional profiles and public work only, scored against the role's rubric. Contacts nobody; a person approves the list before any first-message draft. Load it in the Recruiting Loop from the `recruiting-sourcing` trigger, for roles whose `sourcing.enabled` is true.
+description: Build a weekly list of people who match an open role, from public professional profiles and public work only, scored against the role's rubric. Contacts nobody; a person approves the list before any first-message draft. Load it in the Recruiting Factory from the `recruiting-sourcing` trigger, for roles whose `sourcing.enabled` is true.
 ---
 
 # Sourcing: a list for a person, never outreach

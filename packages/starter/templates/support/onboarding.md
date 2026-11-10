@@ -1,4 +1,4 @@
-## Support Loop: the steps of this template
+## Support Factory: the steps of this template
 
 Run the guide below as written. This template adds five steps at the points
 named here. The loop is one agent, `support`, with one contract skill,

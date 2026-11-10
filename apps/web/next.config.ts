@@ -9,7 +9,7 @@ import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
 import { locales } from './src/i18n/catalog.mjs';
-import { workspaceDesktopRewrites, workspaceRedirects } from './src/lib/workspace-redirects';
+import { workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
@@ -1021,9 +1021,6 @@ const nextConfig = (): NextConfig => ({
       { type: 'header' as const, key: 'accept', value: '(?:.*,)?\\s*text/markdown.*' },
     ];
     const beforeFiles = [
-      // An installed desktop shell keeps /projects and /new, served in place
-      // (src/lib/workspace-redirects.ts).
-      ...workspaceDesktopRewrites(),
       {
         source: '/docs',
         has: acceptsMarkdown,

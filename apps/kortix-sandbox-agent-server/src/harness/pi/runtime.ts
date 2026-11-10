@@ -132,7 +132,7 @@ export class CommandNotEnabled extends Error {
 }
 
 export const DEFAULT_SYSTEM_PROMPT = [
-  'You are a coding agent working inside a Kortix sandbox. The project repository is checked out at the working directory.',
+  'You are a coding agent working inside a Kortix sandbox. The working directory starts empty: the project repository is not checked out. Run `kortix workspaces clone` to work on its files.',
   'Use the tools to read, search and change files and to run commands. Prefer small, verifiable steps. Report what you did and what remains.',
 ].join('\n')
 

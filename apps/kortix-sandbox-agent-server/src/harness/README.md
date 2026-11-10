@@ -1015,8 +1015,8 @@ session. Every rule below holds for the working tree and for a config release.
   column? }`) adds a section to the session notice (below): the error and
   warning counts, one line per issue (`kortix.yaml:<line>:<col> <severity>
   <path> <message>`), the rule that an agent or trigger with an error is off
-  until it is fixed, and the fix (edit `/workspace/kortix.yaml`, run `kortix
-  validate`, open a change request). No issues: no section
+  until it is fixed, and the fix (`kortix workspaces clone`, edit `kortix.yaml`
+  in the clone, run `kortix validate`, push, `kortix cr open`). No issues: no section
   (`services/config-provider/notice.ts` `manifestIssuesOf`).
 
 ### Config releases
@@ -1632,8 +1632,10 @@ starts; running agents finish), `resume`, `restart_agent` (stop that child and
 start it again with the same prompt, counted as an attempt), `stop`. `404`
 for an unknown run; `409 run_in_runner` with `runner_session_id` for a
 background run (control it on the runner's box), `409 run_ended`, `409
-agent_not_running`. Saved workflows of the checkout and the bundled
-`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands.
+agent_not_running`. Saved workflows of a checkout in `/workspace` and the bundled
+`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands. The box
+never checks out the repository at boot, so without a clone in `/workspace` only the
+bundled ones are listed; a saved workflow still runs by name from the API's project files.
 
 - **Names.** `agent({ name })` writes metadata `agent_handle` on the child;
   `agent({ name, team: true })` from a depth-0 session with flag

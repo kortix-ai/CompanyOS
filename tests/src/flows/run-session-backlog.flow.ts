@@ -421,13 +421,17 @@ harnessFlow(
     const path = `ke2e-run7-${Date.now()}.md`;
     const content = `ke2e-run7-${crypto.randomUUID()}`;
     const done = `RUN7_DONE_${Date.now()}`;
-    await ctx.step('the agent writes the requested file in the workspace', async () => {
+    await ctx.step('the agent clones the workspace repo and writes the requested file', async () => {
       const before = (await readTurn(ctx, projectId, sessionId)).last_ended?.turn_token;
+      // No checkout at boot (#12136): /workspace starts empty and the box holds
+      // no repository until the agent clones it. The prompt makes the agent take
+      // the documented path — clone into /workspace, then write — before the
+      // host-driven commit-push can push the session branch.
       await sendPrompt(
         ctx,
         projectId,
         sessionId,
-        `Create the file ${path} containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
+        `Your /workspace has no repository checked out yet. First run this shell command exactly as written (from /workspace): git clone "$KORTIX_REPO_URL" . — it must exit 0 before anything else. Then create the file ${path} in /workspace containing exactly this single line: ${content}. Use the file-writing tool; do not describe the change. Do not commit. Then reply with exactly: ${done}`,
       );
       // The file is the proof, not the closing marker: a model sometimes ends
       // the turn without echoing it (staging, 2026-10-11).

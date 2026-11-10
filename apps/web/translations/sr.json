@@ -23440,9 +23440,6 @@
       "privacyControlsHint": "Prikaži maskiranje ličnih podataka. Isključivanje ga sakriva; podešeno i dalje važi.",
       "maskingTitle": "Maskiranje",
       "framesTitle": "Snimci ekrana",
-      "interval": "Jedan snimak svakih",
-      "intervalHint": "Kraći razmaci čuvaju više detalja i troše više procesora i prostora.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Rezolucija",
       "resolutionHint": "Veći ekrani se smanjuju na ovu visinu. 4K čuva fine detalje, na primer CAD crteže.",
       "textRecognition": "Prepoznavanje teksta",
@@ -23452,7 +23449,7 @@
         "fast": "Brzo",
         "off": "Isključeno"
       },
-      "framesHint": "Bez vrednosti, svaki računar koristi svoju (jedan snimak na svake 2 s u 1440p). Sa vrednošću, svi računari je koriste i niko ne može da je promeni. Klikovi, kucanje i skrolovanje snimaju se sa sopstvenim snimcima ekrana pri bilo kom intervalu.",
+      "framesHint": "Kortix Capture sam bira brzinu snimanja: do 2 snimka u sekundi dok neko radi, inače jedan na svake 2 s, a ređe na opterećenom računaru. Bez vrednosti, svaki računar koristi 1440p i precizno prepoznavanje teksta. Sa vrednošću, svi računari je koriste i niko ne može da je promeni. Klikovi, kucanje i skrolovanje snimaju se sa sopstvenim snimcima ekrana.",
       "computerDecides": "Svaki računar odlučuje",
       "included": {
         "title": "Aplikacije i veb-sajtovi",

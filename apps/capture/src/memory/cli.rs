@@ -3035,7 +3035,7 @@ mod tests {
     }
 
     #[test]
-    fn status_json_reports_the_frame_rate_and_size_the_policy_set() {
+    fn status_json_reports_the_size_the_policy_set() {
         let paths = scratch("policy-rate");
         std::fs::create_dir_all(&paths.root).unwrap();
         std::fs::write(paths.settings(), r#"{"sync": {"enabled": true}}"#).unwrap();
@@ -3046,7 +3046,8 @@ mod tests {
         )
         .unwrap();
         let v = device_status(&paths, "v1");
-        assert_eq!(v["capture"], json!({"intervalMs": 1000, "maxHeight": 2160}));
+        // The policy sets the size; the capture rate is Kortix Capture's own.
+        assert_eq!(v["capture"], json!({"intervalMs": 2000, "maxHeight": 2160}));
         // With sync off the device follows no policy: its own settings apply.
         std::fs::write(paths.settings(), r#"{"sync": {"enabled": false}}"#).unwrap();
         let v = device_status(&paths, "v1");

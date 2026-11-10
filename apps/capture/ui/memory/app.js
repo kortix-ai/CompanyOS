@@ -2043,10 +2043,9 @@ function renderSettings() {
 
       <details class="adv"${draft.adv ? ' open' : ''}><summary>Advanced</summary>
         <div id="sec-sync-dest"><div id="sync-adv"></div></div>
-        ${orgRec.interval_ms != null ? row('Capture interval', `Set by ${by}.`, `<span>${orgRec.interval_ms / 1000} s</span>`) : ''}
         ${orgRec.max_height != null ? row('Screenshot size', `Set by ${by}.`, `<span>${orgRec.max_height === 2160 ? '4K' : orgRec.max_height + 'p'}</span>`) : ''}
         ${orgRec.text_recognition != null ? row('Text recognition', `Set by ${by}.`, `<span>${{ accurate: 'Accurate', fast: 'Fast', off: 'Off' }[orgRec.text_recognition] || orgRec.text_recognition}</span>`) : ''}
-        ${row('Capture quality', 'Kortix Capture sets how often it captures, the screenshot size and text recognition, and adjusts them to this computer.', '')}
+        ${row('Capture quality', 'Kortix Capture sets its own frame rate (up to 2 a second while you work, one every 2 s otherwise, slower on a busy computer), the screenshot size and text recognition.', '')}
       </details>
     </div></div>`;
   $('.panel-body', settingsEl).scrollTop = scroll;

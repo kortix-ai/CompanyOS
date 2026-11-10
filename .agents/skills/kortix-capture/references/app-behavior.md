@@ -184,7 +184,9 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
 
 ## Pipeline
 
-1. **Capture** every `interval_ms` (2000), and also right after the focus
+1. **Capture** every 500 ms while the person works (input in the last 5 s)
+   and every 2 s otherwise (`capture_interval`; no setting or policy changes
+   it; `paced` stretches it on a slow computer), and also right after the focus
    changes (see "Change-driven capture"). The engine returns the frontmost
    app, focused window, browser URL (AX `AXWebArea`/`AXURL`), the window
    stack, an optional AX tree of the focused window, and a JPEG still of the
@@ -1088,12 +1090,19 @@ these, and nothing a person, the CLI or an older version wrote to
 value back. `settings <key> <value>` and `POST /api/settings` answer "managed
 by Kortix Capture" (exit 1, `400`). Only the organization's policy
 (`recording.interval_ms`, `recording.max_height`, `recording.text_recognition`)
-changes them. Development and test scripts set `KORTIX_CAPTURE_TUNING=1` to keep
-the file's values.
+changes the screenshot size and text recognition; the capture rate is never
+set by anyone. Development and test scripts set `KORTIX_CAPTURE_TUNING=1` to keep
+the file's values (then `interval_ms` is the capture tick).
+
+**Pauses on an organization's computer** (a policy applies): turning recording
+off, or a pause longer than that, ends at the next 06:00 local time, at most
+24 h away (`Settings::bound_org_pause`). The bound is written to
+`settings.json` once, so the end time stays fixed. The tray drops "Pause until
+I resume" there. A personal computer keeps the person's choice.
 
 | Managed key | Value | Meaning |
 |---|---|---|
-| `interval_ms` | 2000 | Capture tick (stretched on a slow computer, see Pipeline) |
+| `interval_ms` | 2000 | Not read by the recorder: it captures every 500 ms while the person works and every 2 s otherwise (see Pipeline) |
 | `capture_on_change` | true | Extra capture on app, window title or URL change (max 1 per second) |
 | `max_width`, `max_height` (`resolution`) | 2560, 1440 | Still size box; a still is scaled to fit and never enlarged |
 | `staging_quality`, `video_quality`, `chunk_max_frames` | 0.8, 0.5, 30 | Still JPEG, video quality, frames per chunk |

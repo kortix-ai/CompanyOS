@@ -832,6 +832,32 @@ describe('audit relay emission volume', () => {
   });
 });
 
+describe('the audit summary allowlist (KRTX-4621 characterization)', () => {
+  test('the sanitizer keeps a custom summary property the way it keeps every other allowlisted key', () => {
+    const sanitized = sanitizeRuntimeEvent(
+      {
+        type: 'tool.execute.after',
+        properties: { sessionID: 'ses_1', custom: 'note', tool: 'bash' },
+      },
+      new Date('2026-08-07T12:00:00Z'),
+    );
+    expect(sanitized?.input_summary).toMatchObject({ sessionID: 'ses_1', custom: 'note', tool: 'bash' });
+  });
+
+  test('a spool event whose summary carries custom reloads', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'kortix-audit-spool-custom-'));
+    const spoolPath = join(directory, 'events.json');
+    try {
+      const first = createAuditRelay(async () => {}, { flushMs: 60_000, spoolPath });
+      first.enqueue({ type: 'tool.execute.after', properties: { sessionID: 'ses_1', custom: 'note' } });
+      await first.stop({ flush: false });
+      expect(() => createAuditRelay(async () => {}, { spoolPath })).not.toThrow();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('the runtime audit relay every harness runs (E12)', () => {
   const KEYS = ['KORTIX_PROJECT_ID', 'KORTIX_SESSION_ID', 'KORTIX_TOKEN', 'KORTIX_API_URL'] as const;
   const saved = new Map<string, string | undefined>();

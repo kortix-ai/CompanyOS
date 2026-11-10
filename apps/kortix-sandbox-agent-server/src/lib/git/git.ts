@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, rm, stat } from 'node:fs/promises'
+import { lstat, mkdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { Config } from '../config/config'
@@ -466,6 +466,11 @@ type CommitPushResult = {
  * branch's tip. The default is resolved with `remote set-head --auto` —
  * FETCH_HEAD's first entry is fetch order, not the default branch.
  *
+ * A shape collision (the repo has `a/b` where the workspace has a file `a`,
+ * or a blob `a` where the workspace has a directory `a/`) has no union:
+ * restoring would delete the agent's file, staging would delete the repo's
+ * blob — the call refuses before any write instead of dropping either side.
+ *
  * Any failure removes the `.git` this call created (the working tree was
  * never written), so the next call retries the whole materialization
  * instead of reading the partial repository as already materialized.
@@ -510,9 +515,36 @@ async function materializeRepoForCommit(cfg: Config, target: string): Promise<Re
       if (co.code !== 0) throw new Error(`git checkout failed: ${co.stderr || co.stdout}`)
     }
 
-    const deleted = await execGit(['-C', target, 'ls-files', '--deleted', '-z'])
+    const deleted = await execGit(['-C', target, 'ls-files', '--stage', '-z'])
     if (deleted.code !== 0) throw new Error(`git ls-files failed: ${deleted.stderr || deleted.stdout}`)
-    const missing = deleted.stdout.split('\0').filter(Boolean)
+    // Shape collisions first: the repository's tree and the agent's files can
+    // collide at a path — the repo has `a/b` where the workspace has a file
+    // `a`, or a blob `a` where the workspace has a directory `a/`. The union
+    // does not exist: restoring would delete the agent's file to create the
+    // directory, and staging would delete the repo's blob. Refuse before any
+    // write — the caller retries into the same honest error instead of
+    // silently dropping either side.
+    const missing: string[] = []
+    for (const entry of deleted.stdout.split('\0').filter(Boolean)) {
+      const tab = entry.indexOf('\t')
+      const path = entry.slice(tab + 1)
+      if (entry.slice(0, 6) === '160000') continue // gitlink: a submodule checkout, not ours
+      const disk = await lstat(join(target, path)).catch(() => null)
+      if (disk) {
+        if (disk.isDirectory()) {
+          throw new Error(`git materialize conflict: the repository tracks "${path}" but the workspace has a directory there`)
+        }
+        continue
+      }
+      const parts = path.split('/')
+      for (let i = 1; i < parts.length; i++) {
+        const anc = await lstat(join(target, ...parts.slice(0, i))).catch(() => null)
+        if (anc && !anc.isDirectory()) {
+          throw new Error(`git materialize conflict: the workspace has a file at "${parts.slice(0, i).join('/')}" where the repository tracks "${path}"`)
+        }
+      }
+      missing.push(path)
+    }
     for (let i = 0; i < missing.length; i += 500) {
       // Paths are literals, not pathspecs: a file literally named `:(glob)*.txt`
       // must restore itself, never glob-match the agent's files over them.

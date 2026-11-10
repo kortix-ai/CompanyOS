@@ -8,7 +8,7 @@
  * local bare remote.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
@@ -221,6 +221,54 @@ describe('commitAndPushWorkingTree on a stateless session', () => {
     expect(tree.split('\n').sort()).toEqual([':(glob)*.txt', 'README.md', 'apps/x.ts', 'real.txt'].sort())
     const kept = git(['show', 'refs/heads/session-abc:real.txt'], remote)
     expect(kept).toBe('agent edit')
+  })
+
+  it('a repo directory where the workspace has a file refuses instead of deleting the agent file', async () => {
+    const { root, remote, target } = makeRepo()
+    // The repo tracks foo/base.txt; the agent made a FILE foo. The union does
+    // not exist — the call must refuse and leave the agent's bytes alone.
+    const seed = join(root, 'dir-seed')
+    mkdirSync(seed)
+    git(['clone', '-q', remote, seed])
+    mkdirSync(join(seed, 'foo'), { recursive: true })
+    writeFileSync(join(seed, 'foo', 'base.txt'), 'repo\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'dir'], seed)
+    git(['push', '-q', 'origin', 'main'], seed)
+
+    writeFileSync(join(target, 'foo'), 'agent bytes\n')
+    await expect(
+      commitAndPushWorkingTree(
+        testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+        { message: 'agent change' },
+      ),
+    ).rejects.toThrow('git materialize conflict')
+    expect(readFileSync(join(target, 'foo'), 'utf8')).toBe('agent bytes\n')
+    expect(existsSync(join(target, '.git'))).toBe(false)
+  })
+
+  it('a repo file where the workspace has a directory refuses instead of staging the deletion', async () => {
+    const { root, remote, target } = makeRepo()
+    // The mirror collision: the repo tracks a blob foo, the agent made a
+    // directory foo/. Staging would push the repo file as deleted — refuse.
+    const seed = join(root, 'blob-seed')
+    mkdirSync(seed)
+    git(['clone', '-q', remote, seed])
+    writeFileSync(join(seed, 'foo'), 'repo blob\n')
+    git(['add', '-A'], seed)
+    git(['-c', 'user.email=test@kortix.dev', '-c', 'user.name=Kortix Test', 'commit', '-m', 'blob'], seed)
+    git(['push', '-q', 'origin', 'main'], seed)
+
+    mkdirSync(join(target, 'foo'))
+    writeFileSync(join(target, 'foo', 'bar.md'), 'agent bytes\n')
+    await expect(
+      commitAndPushWorkingTree(
+        testConfig({ projectTarget: target, repoUrl: remote, branchName: 'session-abc' }),
+        { message: 'agent change' },
+      ),
+    ).rejects.toThrow('git materialize conflict')
+    expect(readFileSync(join(target, 'foo', 'bar.md'), 'utf8')).toBe('agent bytes\n')
+    expect(existsSync(join(target, '.git'))).toBe(false)
   })
 
   it('no connected repository still refuses with the standing error', async () => {

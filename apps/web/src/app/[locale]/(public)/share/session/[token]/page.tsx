@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { getAuthToken } from '@/lib/auth-token';
+import { getSupabaseAccessToken } from '@/lib/auth-token';
 import { getEnv } from '@/lib/env-config';
 import { getPublicShareByToken, startSessionWithToken } from '@kortix/sdk';
 import { Alert as BannerAlert, AlertDescription as BannerAlertDescription } from '@kortix/ui/alert';
@@ -129,7 +129,7 @@ export default function PublicSessionSharePage() {
         if (!cancelled) setLoading(false);
       }
     })();
-    getAuthToken().then((authToken) => {
+    getSupabaseAccessToken().then((authToken) => {
       if (!cancelled) setHasAuth(Boolean(authToken));
     });
     return () => {
@@ -153,7 +153,7 @@ export default function PublicSessionSharePage() {
     setStarting(true);
     setStartError(null);
     try {
-      const authToken = await getAuthToken();
+      const authToken = await getSupabaseAccessToken();
       if (!authToken) {
         // nav-contract: prefetch-only — a defensive bounce for a token that expired between render and click; the offline panel's Sign in <Link> already prefetches this href.
         router.push(`/auth?next=${encodeURIComponent(`/share/session/${token}`)}`);

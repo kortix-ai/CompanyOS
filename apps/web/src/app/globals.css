@@ -1327,7 +1327,7 @@ html[data-desktop-titlebar='overlay']
     [role='alertdialog'],
     [role='menu'],
     [role='listbox'],
-    [data-radix-popper-content-wrapper],
+    [data-kortix-floating],
     [data-sonner-toaster]
   )
   :is(
@@ -1360,7 +1360,7 @@ html[data-desktop-platform='macos']
     [role='alertdialog'],
     [role='menu'],
     [role='listbox'],
-    [data-radix-popper-content-wrapper],
+    [data-kortix-floating],
     [data-sonner-toaster]
   )
   :is(

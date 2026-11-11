@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 
-export const KORTIX_WEB_ORIGIN = 'https://kortix.com';
-export const KORTIX_API_ORIGIN = 'https://api.kortix.com/v1';
-export const KORTIX_OAUTH_ISSUER = 'https://jbriwassebxdwoieikga.supabase.co/auth/v1';
+const KORTIX_WEB_ORIGIN = 'https://kortix.com';
+const KORTIX_API_ORIGIN = 'https://api.kortix.com/v1';
+const KORTIX_OAUTH_ISSUER = 'https://jbriwassebxdwoieikga.supabase.co/auth/v1';
 export const DISCOVERY_CACHE_CONTROL = 'public, max-age=3600, s-maxage=3600';
 /** Must match SUPPORTED_PROTOCOL_VERSIONS in apps/api/src/mcp/index.ts. */
-export const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] as const;
-export const MCP_SERVER_VERSION = '1.0.0';
+const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] as const;
+const MCP_SERVER_VERSION = '1.0.0';
 /** The one Kortix MCP server: the API's hosted endpoint (apps/api/src/mcp). */
 export const KORTIX_MCP_URL = `${KORTIX_API_ORIGIN}/mcp`;
 

@@ -23,7 +23,7 @@ import { matchesAllWords, paletteWords } from './palette-match';
  * Search text vs. cmdk value — they are NOT the same string
  * ---------------------------------------------------------------------------
  *
- * cmdk 0.2.1 (the installed version) has no `keywords` prop, so a row's
+ * The command core (`@kortix/ui/command`, a port of cmdk 0.2.1) has no `keywords` prop, so a row's
  * `value` is simultaneously its search text AND its selection identity, and
  * cmdk requires the identity to be unique — two rows sharing a `value` are
  * both marked `aria-selected` and Enter always fires the first one. A legacy

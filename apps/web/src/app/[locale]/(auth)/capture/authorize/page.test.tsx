@@ -13,7 +13,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, con
  * assertions must read the same before and after; no expectation is updated.
  */
 
-// happy-dom window: Radix RadioGroup and sonner read DOM globals at effect
+// happy-dom window: the RadioGroup and sonner read DOM globals at effect
 // and import time, and react-test-renderer has none. Same setup as
 // `components/iam/audit-session-picker.test.tsx`.
 const win = new Window({ width: 1440, height: 900 });

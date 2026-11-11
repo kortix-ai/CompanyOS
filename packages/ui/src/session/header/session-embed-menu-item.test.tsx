@@ -14,7 +14,7 @@ mock.module('../../primitives/toast', () => ({
   errorToast: (message: string) => toasts.push(message),
 }));
 // Menu shells that render inline and pass the handler through: the test
-// judges the submenu's composition and copy wiring, not the Radix portals.
+// judges the submenu's composition and copy wiring, not the portals.
 const slot =
   (testid: string) =>
   function MenuShell({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) {

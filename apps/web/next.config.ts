@@ -477,7 +477,6 @@ const nextConfig = (): NextConfig => ({
       'recharts',
       'date-fns',
       '@tanstack/react-query',
-      'cmdk',
       'next-intl',
     ],
   },

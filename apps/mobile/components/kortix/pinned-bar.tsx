@@ -66,9 +66,9 @@ const PINNED_BAR_BLUR_ABOVE = 64;
 const PINNED_BAR_CONTENT_GAP = 16;
 
 /** Bottom padding for the content under a `PinnedBar` with controls this tall. */
-export function usePinnedBarInset(controlHeight: number): number {
+export function usePinnedBarInset(controlHeight: number, bottomGap: number = PINNED_BAR_BOTTOM_GAP): number {
   const insets = useSafeAreaInsets();
-  return insets.bottom + PINNED_BAR_BOTTOM_GAP + controlHeight + PINNED_BAR_CONTENT_GAP;
+  return insets.bottom + bottomGap + controlHeight + PINNED_BAR_CONTENT_GAP;
 }
 
 interface PinnedBarProps {
@@ -88,6 +88,8 @@ interface PinnedBarProps {
   blur?: boolean;
   /** The blur's tint: the app's theme. */
   dark?: boolean;
+  /** Space between the controls and the safe-area edge. Default `PINNED_BAR_BOTTOM_GAP` (16). Pass the same value to `usePinnedBarInset`. */
+  bottomGap?: number;
   children: React.ReactNode;
 }
 
@@ -109,14 +111,14 @@ function ShiftedRoot({ shift, style, children }: { shift: SharedValue<number>; s
   );
 }
 
-export function PinnedBar({ controlHeight, background, className, fade: fadeProp = true, blur = false, dark = false, children }: PinnedBarProps) {
+export function PinnedBar({ controlHeight, background, className, fade: fadeProp = true, blur = false, dark = false, bottomGap = PINNED_BAR_BOTTOM_GAP, children }: PinnedBarProps) {
   const insets = useSafeAreaInsets();
   // On the iOS 26 native sheet glass there is no colour to fade to: a fade in
   // the popover colour would draw an opaque band over the glass.
   const nativeSheet = useNativeSheet();
   const fade = fadeProp && !(nativeSheet && nativeSheet.surface === null);
   const shift = React.useContext(PinnedBarShiftContext);
-  const barBottom = insets.bottom + PINNED_BAR_BOTTOM_GAP;
+  const barBottom = insets.bottom + bottomGap;
   const blurred = blur && fade && BLUR != null;
   // The blur starts higher than the fade: rows soften before they fade.
   const rootStyle = { height: barBottom + controlHeight + (blurred ? PINNED_BAR_BLUR_ABOVE : PINNED_BAR_FADE_ABOVE) };

@@ -141,6 +141,10 @@ import { THEME, withAlpha } from '@/lib/utils/theme';
 
 /** `Button size="lg"` height: the New session pill and the avatar match it. */
 const BAR_CONTROL_HEIGHT = 44;
+/** The drawer's bottom bar sits this far above the home indicator (the shared bar's 16, plus 8). */
+const DRAWER_BAR_BOTTOM_GAP = 24;
+/** Extra room between the list's last row and the bottom bar. */
+const DRAWER_LIST_END_EXTRA = 16;
 /**
  * The avatar inside its 44pt glass circle on iOS 26: a 4pt rim of glass shows
  * around it. Without glass the avatar is the whole 44pt control.
@@ -528,7 +532,10 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
 
   // The list scrolls under the bottom bar's fade; its last row rests above
   // the controls.
-  const listBottomPadding = usePinnedBarInset(BAR_CONTROL_HEIGHT);
+  // More room at the drawer's foot (Jay, 2026-11-11): the bar sits
+  // DRAWER_BAR_BOTTOM_GAP above the home indicator, and the list ends
+  // DRAWER_LIST_END_EXTRA further above the bar.
+  const listBottomPadding = usePinnedBarInset(BAR_CONTROL_HEIGHT, DRAWER_BAR_BOTTOM_GAP) + DRAWER_LIST_END_EXTRA;
 
   // Top fade: follows the scroll offset on the UI thread (no re-render per frame).
   const listScrollY = useSharedValue(0);
@@ -917,7 +924,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
           with white text in light mode, inverted in dark (Jay, 2026-11-11);
           on iOS 26 that is glass tinted in the primary colour, elsewhere the
           solid primary fill. */}
-      <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} blur dark={isDark} className="justify-between px-5">
+      <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} blur dark={isDark} bottomGap={DRAWER_BAR_BOTTOM_GAP} className="justify-between px-5">
         <GlassButtons>
           <Button
             variant="ghost"

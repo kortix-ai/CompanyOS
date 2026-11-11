@@ -505,7 +505,7 @@ const { verifyKortixUserContext, KORTIX_USER_CONTEXT_HEADER } = await import(
 );
 const { resolvePreviewWsUpstream } = await import('../sandbox-proxy/routes/preview');
 const { invalidateSandbox } = await import('../sandbox-proxy/backend');
-const { __resetDialDeadForTests, recordDialTimeout, clearDialDead, dialDeadKey } = await import(
+const { __resetDialDeadForTests, __setDialProbeForTests, recordDialTimeout, clearDialDead, dialDeadKey } = await import(
   '../sandbox-proxy/forward/dial-dead'
 );
 const { preparePreviewWsUpgrade } = await import('../sandbox-proxy/ws-proxy');
@@ -555,6 +555,10 @@ beforeEach(() => {
   __resetPromptDedupe();
   __resetProxyRetryDelaysForTests();
   __resetDialDeadForTests();
+  // The harness's dead-box tests run against a mocked network; the TCP
+  // confirmation probe must not dial the real one. The slow-handler regression
+  // below restores the real probe against a local Bun.serve.
+  __setDialProbeForTests(async () => false);
   resetLogWindowsForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
@@ -1979,23 +1983,29 @@ describe('Preview proxy: long-turn completion timeout', () => {
     expect(mockWakeCalls.length).toBe(1);
   });
 
-  // The dial-dead mark (KRTX-4459): once a box's dials keep timing out, the
-  // requests that follow fail fast WITHOUT dialling — the observed dead-box
-  // cadence was ~7-request bursts every ~2-3 min, each request burning the
-  // full ~50 s ladder before the give-up 502, which put the route's p95 at
-  // 15-45 s while its p50 stayed at ~90 ms.
+  // The dial-dead mark (KRTX-4459): once a box PROVES dial-dead at the TCP
+  // layer (two connect timeouts AND a failed direct TCP probe), the requests
+  // that follow fail fast WITHOUT dialling — the observed dead-box cadence was
+  // ~7-request bursts every ~2-3 min, each request burning the full ~50 s
+  // ladder before the give-up 502, which put the route's p95 at 15-45 s while
+  // its p50 stayed at ~90 ms. Two timeouts alone are only a CANDIDATE: the
+  // connect timer bounds the header phase too, so a healthy-but-slow handler
+  // must never mark (the next request must still dial).
   describe('Preview proxy: dial-dead fast-fail', () => {
     // Marks key on the EXTERNAL id the proxy resolves the request to (the DB
     // row's), which is TEST_SANDBOX_ID here — not the URL's spelling.
     const deadSandbox = TEST_SANDBOX_ID;
 
-    test('a marked box answers the give-up 502 with zero dials and zero wakes', async () => {
+    test('two timeouts alone are a candidate: the request still dials, the probe confirms dead', async () => {
       recordDialTimeout(dialDeadKey(deadSandbox, 8000));
       recordDialTimeout(dialDeadKey(deadSandbox, 8000));
       const app = createProxyTestApp();
       const res = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
         headers: { Authorization: 'Bearer test' },
       });
+      // The harness's probe stub answers unreachable, so this first request
+      // confirms the mark through the probe and fast-fails with ZERO upstream
+      // fetches (the probe is the TCP layer, not the mocked HTTP fetch).
       expect(res.status).toBe(502);
       expect(mockFetchCallCount).toBe(0);
       expect(mockWakeCalls.length).toBe(0);
@@ -2030,8 +2040,67 @@ describe('Preview proxy: long-turn completion timeout', () => {
       expect(res.status).toBe(502);
       expect(mockFetchCallCount).toBe(0);
     });
+
+    // The reviewer's regression (2026-11-11): the connect timer bounds the
+    // HEADER phase too, so a healthy-but-slow handler (a busy box answering
+    // headers in >15 s) produces the same TimeoutError as a dead dial. Two of
+    // those must NOT mark the port — the TCP probe proves the port serves
+    // connections and clears the streak, so the next request dials normally.
+    test('a healthy-but-slow handler never marks the port: the TCP probe clears the streak', async () => {
+      // The e2e harness's beforeEach stubs the probe; this test needs the probe
+      // to answer what a real TCP layer answers for a LIVE port. A real
+      // Bun.connect against a local Bun.serve would work, but the proxy's fake
+      // clock replaces globalThis.setTimeout with a synchronous fake for the
+      // whole test, which fires the real probe's 5 s budget timer instantly and
+      // answers "unreachable" for every target. So the probe stub here IS the
+      // TCP layer's answer: true = the port accepted a connection.
+      __setDialProbeForTests(async () => true);
+      const savedFetch = globalThis.fetch;
+      const origSetTimeout = globalThis.setTimeout;
+      let callCount = 0;
+      // The reviewer's exact shape: the upstream accepts nothing the proxy can
+      // read — its fetch never resolves, the attempt's connect timer (fired
+      // synchronously by the fake clock) aborts it every attempt.
+      globalThis.fetch = ((_url: any, init?: RequestInit) => {
+        callCount++;
+        const signal = init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          const abortWith = () =>
+            reject((signal as any)?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
+          if (signal?.aborted) {
+            abortWith();
+            return;
+          }
+          signal?.addEventListener('abort', abortWith);
+        });
+      }) as any;
+      globalThis.setTimeout = ((fn: any) => {
+        fn();
+        return 0 as any;
+      }) as any;
+      try {
+        const app = createProxyTestApp();
+        const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        // The TCP probe proved the port serves connections; the streak cleared;
+        // the ladder ran all four attempts against the slow-but-alive upstream
+        // (today's behavior, unchanged).
+        expect(res.status).toBe(502);
+        expect(callCount).toBe(4);
+        // The next request dials normally: no fast-fail mark.
+        const res2 = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res2.status).toBe(502);
+        expect(callCount).toBe(8);
+      } finally {
+        globalThis.setTimeout = origSetTimeout;
+        globalThis.fetch = savedFetch;
+        __setDialProbeForTests(async () => false);
+      }
+    });
   });
-});
 
 describe('Preview proxy: no-trailing-slash', () => {
   test('/:sandboxId/:port without a trailing slash is proxied like the root', async () => {
@@ -2184,4 +2253,5 @@ describe('Preview proxy: dead daemon on a running box', () => {
     await sendUpload(TEST_PORT);
     expect(mockDaemonRepairRequests).toEqual([]);
   });
+});
 });

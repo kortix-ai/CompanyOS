@@ -313,13 +313,19 @@ export type TurnOutcome = 'completed' | 'error' | 'aborted'
  * My Kortix's platform tools are here: each card is the outcome of an action taken for the person.
  */
 const NATIVE_PART_TOOLS: readonly string[] = ['show', 'image_gen', ...KORTIX_PLATFORM_TOOL_NAMES, ...MESSAGING_TOOLS, ...TEAM_TASK_TOOLS, TASK_STOP_TOOL]
+/**
+ * Tools a codemode script may call that still get their own card: the native-part tools, and
+ * `agent`/`task`, whose card carries the child session link and its `task_id` (the web opens
+ * the child from it). Published from the session event like a direct call (`onSessionEvent`).
+ */
+const SCRIPT_CARD_TOOLS: readonly string[] = [...NATIVE_PART_TOOLS, 'agent', 'task']
 /** The multi-agent tools: their grant follows the `agent` tool's unless the agent's `tools` names them (`rootToolAllowed`). */
 const DELEGATION_TOOLS: readonly string[] = ['workflow', ...MESSAGING_TOOLS, ...TEAM_TASK_TOOLS, TASK_STOP_TOOL]
 /** The feature flag of agent teams (teammates and the shared task list). */
 export const AGENT_TEAMS_FLAG = 'agent_teams'
 /**
  * Built-in tools the model calls directly also with codemode `only`: presentation (NATIVE_PART_TOOLS)
- * and `question`, which a script may not call (`nestedCallGate`). `agent` is the subagents
+ * and `question`, whose answer lands on the model-issued call (`nestedCallGate`). `agent` is the subagents
  * extension's (`KortixHost.codemodeOnly`).
  */
 const CODEMODE_ONLY_DIRECT_TOOLS: readonly string[] = [...NATIVE_PART_TOOLS, 'question']
@@ -1588,7 +1594,7 @@ export class PiRuntime {
     if (
       (event.type === 'tool_execution_start' || event.type === 'tool_execution_update' || event.type === 'tool_execution_end') &&
       event.parentToolCallId &&
-      NATIVE_PART_TOOLS.includes(event.toolName)
+      SCRIPT_CARD_TOOLS.includes(event.toolName)
     ) {
       this.translateAndPublish(event)
       return
@@ -1774,10 +1780,15 @@ export class PiRuntime {
           if (!parent) return undefined
           // A subagent's script call already passed the child's own gate (stricter than rootRule); re-deciding here would double an `ask`.
           if (this.childNestedCalls.has(event.toolCallId)) return undefined
-          // A subagent thread links to its root `agent`/`task` call; a question needs the model-issued call it answers;
-          // a workflow holds the turn for hours and must not run inside a script's worker.
-          if (event.toolName === 'agent' || event.toolName === 'task' || event.toolName === 'question' || event.toolName === 'workflow') {
-            return { block: true, reason: `Call ${event.toolName} directly, not from a script.` }
+          // `agent`/`task` run from a script like a direct call: the policy below decides, and each gets its
+          // own card with the child's link (SCRIPT_CARD_TOOLS). Two stay direct calls, for a reason the model
+          // can act on: a question's answer lands on the model-issued call it answers, and a workflow holds
+          // the turn for hours, longer than a script's worker lives.
+          if (event.toolName === 'question') {
+            return { block: true, reason: 'Call question directly, not from a script: the person\'s answer arrives on that call.' }
+          }
+          if (event.toolName === 'workflow') {
+            return { block: true, reason: 'Call workflow directly, not from a script: a run can outlive the script that starts it.' }
           }
           return this.decide(this.rootRule(event.toolName, event.input), event.toolName, event.input, () => this.adapter?.toolRef(event.toolCallId) ?? this.adapter?.toolRef(parent))
         })
@@ -2160,15 +2171,19 @@ export class PiRuntime {
    * included, so the child runs with intersection(its own tools, these).
    * Undefined = this agent is not narrowed at all.
    */
-  private cloudParent(): Pick<CloudSubagentApi, 'parentAgent' | 'toolAllowlist' | 'coordinator'> {
+  private cloudParent(): Pick<CloudSubagentApi, 'parentAgent' | 'toolAllowlist' | 'coordinator' | 'parentModel'> {
+    // The model the running turn uses: a child with no model of its own inherits it.
+    const running = this.agent?.state.model as { provider?: string; id?: string } | undefined
+    const parentModel = running?.provider && running.id ? `${running.provider}/${running.id}` : undefined
     // A front's worker gets every tool of its own agent, never narrowed to the front's.
-    if (this.subagentContext.front) return { parentAgent: undefined, toolAllowlist: undefined }
+    if (this.subagentContext.front) return { parentAgent: undefined, toolAllowlist: undefined, ...(parentModel ? { parentModel } : {}) }
     const declared = Object.prototype.hasOwnProperty.call(this.compiled?.agent ?? {}, this.agentName)
     const narrowed = this.compiledAgent()?.tools !== undefined || this.subagentContext.tools !== undefined
     return {
       parentAgent: declared ? this.agentName : undefined,
       ...(this.env.KORTIX_META_AGENT === '1' ? { coordinator: true } : {}),
       toolAllowlist: narrowed ? this.ownToolNames() : undefined,
+      ...(parentModel ? { parentModel } : {}),
     }
   }
 

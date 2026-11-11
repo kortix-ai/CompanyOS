@@ -1,4 +1,4 @@
-import { sessionLifecycleCommands, sessionSandboxes } from '@kortix/db';
+import { projectSessions, sessionLifecycleCommands, sessionSandboxes } from '@kortix/db';
 import { RUNTIME_STABLE_MESSAGE_ID_CAPABILITY, type RuntimeCapability } from '@kortix/api-contract/runtime-relay';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
@@ -273,6 +273,13 @@ export interface SteerAdmissionDeps {
   /** An OLDER steer row of the session is queued or claimed (not held). */
   hasOlderSteerPrompt: (sessionId: string, row: SessionLifecycleCommandRow) => Promise<boolean>;
   recordFallback: (row: SessionLifecycleCommandRow, reason: 'unsupported' | 'not_prompter') => Promise<void>;
+  /**
+   * A turn with no person prompter (an agent's, a trigger's, a session's first
+   * prompt delivered at boot): may this row steer it? Yes for a message from the
+   * session's parent session, and for a person who may stop the turn (the
+   * session's creator or a project manager). Absent: no.
+   */
+  mayAddressUnpromptedTurn?: (row: SessionLifecycleCommandRow) => Promise<boolean>;
 }
 
 const STEER_CAPABILITY: RuntimeCapability = 'session.steer';
@@ -428,6 +435,22 @@ export const liveInboxAdmissionDeps: InboxAdmissionDeps = {
       return !!older;
     },
     recordFallback: (row, reason) => recordSteerFallback(row, reason),
+    async mayAddressUnpromptedTurn(row) {
+      const sessionId = row.sessionId;
+      if (!sessionId) return false;
+      const [session] = await db
+        .select({ parentSessionId: projectSessions.parentSessionId, projectId: projectSessions.projectId, accountId: projectSessions.accountId })
+        .from(projectSessions)
+        .where(eq(projectSessions.sessionId, sessionId))
+        .limit(1);
+      if (!session) return false;
+      const author = (row.payload as Record<string, unknown> | null)?.authorSessionId;
+      if (typeof author === 'string' && author === session.parentSessionId) return true;
+      if (!row.actorUserId) return false;
+      // Dynamic: `turn-stop-authority.ts` imports this module.
+      const { sessionLifecycleStandingFor } = await import('./turn-stop-authority');
+      return sessionLifecycleStandingFor({ userId: row.actorUserId, accountId: session.accountId, projectId: session.projectId, sessionId });
+    },
   },
 };
 
@@ -464,9 +487,16 @@ async function admitSteer(
     steer.hasOlderSteerPrompt(sessionId, row),
   ]);
   if (capabilities === null) return { admit: false, reason: 'turn_active', retryAfterMs };
+  // A person's turn is theirs to steer. A turn nobody prompted in person (an
+  // agent's, a trigger's, a first prompt delivered at boot) is steered by the
+  // session that started it and by whoever may stop it: without this, every
+  // message into a child session's first turn waited for the whole run.
+  const mayAsPrompter = prompter
+    ? !!row.actorUserId && prompter === row.actorUserId
+    : (await steer.mayAddressUnpromptedTurn?.(row)) === true;
   const fallback = !capabilities.includes(STEER_CAPABILITY)
     ? 'unsupported'
-    : !row.actorUserId || prompter !== row.actorUserId
+    : !mayAsPrompter
       ? 'not_prompter'
       : null;
   if (fallback) {

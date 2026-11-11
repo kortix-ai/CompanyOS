@@ -5328,18 +5328,29 @@ describe('pi codemode', () => {
     expect(after.messages.flatMap((m) => m.parts).find((p) => p.tool === 'codemode')!.state).toMatchObject({ status: 'completed', output: expect.stringContaining('gated') })
   })
 
-  test('a script cannot spawn a subagent, run a workflow or ask a question', async () => {
+  test('a script may hand off to an agent (its own card); a workflow or a question stays a direct call, with the reason', async () => {
     const r = await boot({
       script: [
-        script("const out = await Promise.allSettled([tools.task({ description: 'x', prompt: 'x', subagent_type: 'general' }), tools.workflow({ description: 'x', script: 'return 1' }), tools.question({ questions: [{ question: 'Which way?', header: 'Pick', options: [{ label: 'A', description: 'a' }] }] })]); return out.map((o) => o.status + ':' + (o.reason?.message ?? ''))"),
-        { text: 'done' },
+        script("const handoff = await tools.task({ description: 'Check', prompt: 'check it', subagent_type: 'general', session: 'same' }); const out = await Promise.allSettled([tools.workflow({ description: 'x', script: 'return 1' }), tools.question({ questions: [{ question: 'Which way?', header: 'Pick', options: [{ label: 'A', description: 'a' }] }] })]); return [String(handoff).slice(0, 40), ...out.map((o) => o.status + ':' + (o.reason?.message ?? ''))].join('\\n')"),
+        { text: 'child done' },
+        { text: 'parent done' },
       ],
     })
-    const [part] = await run(r)
-    expect(part!.state.output).toContain('rejected:Call task directly, not from a script.')
-    expect(part!.state.output).toContain('rejected:Call workflow directly, not from a script.')
-    expect(part!.state.output).toContain('rejected:Call question directly, not from a script.')
-    expect(r.service.runtime()!.questions.list()).toHaveLength(0)
+    const rt = r.service.runtime()!
+    expect((await prompt(r, rt.rootId, { parts: [{ type: 'text', text: 'go' }] })).status).toBe(204)
+    await waitFor(() => !rt.busy())
+    const page = (await r.bearer(`/kortix/runtime/messages/${rt.rootId}`).then((res) => res.json())) as WirePage
+    const codemode = toolParts(page, 'codemode')[0]!
+    expect(codemode.state.status).toBe('completed')
+    expect(codemode.state.output).toContain('task_id:')
+    expect(codemode.state.output).toContain('rejected:Call workflow directly, not from a script: a run can outlive the script that starts it.')
+    expect(codemode.state.output).toContain("rejected:Call question directly, not from a script: the person's answer arrives on that call.")
+    // The hand-off is its own card, with the child it started.
+    const [task] = toolParts(page, 'task')
+    expect(task!.state.status).toBe('completed')
+    expect(task!.state.metadata).toMatchObject({ session: 'same' })
+    expect(task!.state.metadata?.sessionId).toBeString()
+    expect(rt.questions.list()).toHaveLength(0)
   })
 
   test("a script's image_gen and show calls run, each published as its own native part with its input and output", async () => {

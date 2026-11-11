@@ -444,6 +444,7 @@ describe('steer admission (R10)', () => {
     olderSteer?: boolean;
     olderQueue?: boolean;
     sandbox?: typeof liveBox;
+    mayAddressUnprompted?: boolean;
   } = {}) {
     const fallbacks: string[] = [];
     const deps = {
@@ -460,6 +461,7 @@ describe('steer admission (R10)', () => {
         recordFallback: async (_r: SessionLifecycleCommandRow, reason: string) => {
           fallbacks.push(reason);
         },
+        mayAddressUnpromptedTurn: async () => over.mayAddressUnprompted ?? false,
       },
     };
     return { deps, fallbacks };
@@ -481,6 +483,16 @@ describe('steer admission (R10)', () => {
     const { deps, fallbacks } = steerDeps({ capabilities: ['runtime.turns.v1'] });
     expect(await admitInboxPrompt(steerRow(), deps)).toMatchObject({ admit: false, reason: 'turn_active' });
     expect(fallbacks).toEqual(['unsupported']);
+  });
+
+  test('a turn nobody prompted in person (a child session\'s first turn) is steered by its parent or a person who may stop it', async () => {
+    const allowed = steerDeps({ prompter: null, mayAddressUnprompted: true });
+    expect(await admitInboxPrompt(steerRow(), allowed.deps)).toEqual({ admit: true, steerInto: 'msg_1' });
+    expect(allowed.fallbacks).toEqual([]);
+    // Another member's person turn stays theirs, whoever else may stop it.
+    const theirs = steerDeps({ prompter: 'user-b', mayAddressUnprompted: true });
+    expect(await admitInboxPrompt(steerRow(), theirs.deps)).toMatchObject({ admit: false, reason: 'turn_active' });
+    expect(theirs.fallbacks).toEqual(['not_prompter']);
   });
 
   test("another member's turn falls back not_prompter; a turn with no inbox row too", async () => {

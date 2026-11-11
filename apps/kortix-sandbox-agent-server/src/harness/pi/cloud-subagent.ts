@@ -157,6 +157,9 @@ const RUNTIME_CONTEXT_MAX_BYTES = 16 * 1024
 const TOOL_NAME = /^[A-Za-z0-9_.:-]{1,128}$/
 
 /** The API callback target and this parent's limits, from the box env. */
+/** `runtime_context` key: the model the parent's turn runs, for a child created with no model (`session-create.ts`). */
+export const PARENT_MODEL_CONTEXT_KEY = 'kortix.parent_model'
+
 export interface CloudSubagentApi {
   /** `KORTIX_API_URL`, with or without the `/v1` suffix. */
   apiUrl: string
@@ -169,6 +172,12 @@ export interface CloudSubagentApi {
   parentAgent?: string
   /** This session is the platform coordinator (My Kortix): every spec prompt is its child's own system prompt. */
   coordinator?: boolean
+  /**
+   * The model this session's turn runs on (`provider/model`), set per call. A
+   * child the call names no model for inherits it, unless its agent pins one
+   * (the API decides that: this box may not compile the child's agent).
+   */
+  parentModel?: string
   /** This session's own subagent depth (0 for a root session). */
   depth: number
   maxDepth: number
@@ -532,6 +541,8 @@ function buildCreateBody(api: CloudSubagentApi, input: SpawnSessionInput): Recor
     ...(handle ? { [AGENT_HANDLE_CONTEXT_KEY]: handle } : {}),
     ...(teammate ? { [TEAM_LEAD_CONTEXT_KEY]: teammate.lead } : {}),
     ...(ownPrompt ? { [AGENT_INSTRUCTIONS_CONTEXT_KEY]: ownPrompt } : {}),
+    // No model on the call: the API runs the child on this turn's model unless its agent pins one.
+    ...(!input.model && api.parentModel ? { [PARENT_MODEL_CONTEXT_KEY]: api.parentModel } : {}),
   }
   const bytes = new TextEncoder().encode(JSON.stringify(runtimeContext)).byteLength
   if (bytes > RUNTIME_CONTEXT_MAX_BYTES) {

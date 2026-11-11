@@ -39,7 +39,7 @@ import {
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
-import { logWindowDecision } from './shared/log-window';
+import { logWindowDecision, logWindowWarnDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -405,18 +405,28 @@ function handleHttpException(
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = logWindowDecision(
-      deadCredentialLogKey(method, path, err.status, reason),
-      Date.now(),
-    );
+    const key = deadCredentialLogKey(method, path, err.status, reason);
+    const { log, suppressed } = logWindowDecision(key, Date.now());
     // SEVERITY FOLLOWS THE VOLUME (KRTX-4454). The steady state of this class
     // is designed churn — every session stop leaves its box probing with a
     // dead credential, forever — so a flat warn level keeps a 0-baseline warn
     // pattern alive that re-trips the infra-sweep's new-pattern detector every
     // time. The pending count the decision just measured separates churn from
     // a caller ignoring the typed stop code: under the band ships at info
-    // (still queryable, same grouping), above it the line stays warn.
-    if (log) appLogger[suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED ? 'warn' : 'info'](line, { ...fields, suppressed });
+    // (still queryable, same grouping), above it the line stays warn. The
+    // escalation itself is capped at one warn per key per hour
+    // (logWindowWarnDecision): the escalation is evaluated per window and is
+    // replica-local, so a grind hour made every window's line ship at warn —
+    // 16/15/15 per route across three replicas, 2026-11-11 09:00 UTC — above
+    // the sweep's 10/h new-warn-pattern bar (KRTX-4674 residual). The hour's
+    // other window lines drop to info, still carrying the suppressed count.
+    if (log) {
+      const severity =
+        suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED && logWindowWarnDecision(key, Date.now())
+          ? 'warn'
+          : 'info';
+      appLogger[severity](line, { ...fields, suppressed });
+    }
   } else {
     appLogger[level](line, fields);
   }

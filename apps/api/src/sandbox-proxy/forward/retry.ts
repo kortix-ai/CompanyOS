@@ -2,7 +2,7 @@ import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
 import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
-import { logWindowDecision } from '../../shared/log-window';
+import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
 import {
   buildSandboxUpstreamHeaders,
   invalidatePreviewLink,
@@ -166,13 +166,14 @@ export function reportPortNotAnswering(
   port: number,
   now = Date.now(),
 ): void {
-  const { log, suppressed } = logWindowDecision(
-    `preview port still not answering ${sandboxId}:${port}`,
-    now,
-  );
+  const key = `preview port still not answering ${sandboxId}:${port}`;
+  const { log, suppressed } = logWindowDecision(key, now);
   if (!log) return;
   const fields = { sandboxId, port, suppressed };
-  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED) logger.warn(message, fields);
+  // The escalation shares the hourly warn cap of the other burst-band sites
+  // (logWindowWarnDecision): a grind hour cannot ship every window's line at
+  // warn and re-trip the infra-sweep's 10/h new-warn-pattern bar (KRTX-4674).
+  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED && logWindowWarnDecision(key, now)) logger.warn(message, fields);
   else logger.info(message, fields);
 }
 

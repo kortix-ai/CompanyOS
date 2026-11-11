@@ -172,6 +172,21 @@ suite('Workspaces R2a: twin foreign keys into kortix.workspaces', () => {
         // Idempotent: a rerun changes nothing.
         await reconcileMissingRows(pgm as never);
         expect(await count()).toBe(1);
+
+        // A project row the trigger never saw, in an account that has its row.
+        await client.query('begin');
+        await client.query('alter table kortix.projects disable trigger projects_workspaces_sync');
+        await client.query(
+          `insert into kortix.projects (project_id, account_id, name, repo_url) values ($1, $2, 'Synthetic lost', 'https://example.invalid/lost.git')`,
+          [PROJECT, LOST_ACCOUNT],
+        );
+        await client.query('alter table kortix.projects enable trigger projects_workspaces_sync');
+        await client.query('commit');
+        const projectRow = async () =>
+          Number((await client.query(`select count(*)::int as n from kortix.workspaces where workspace_id = $1`, [PROJECT])).rows[0].n);
+        expect(await projectRow()).toBe(0);
+        await reconcileMissingRows(pgm as never);
+        expect(await projectRow()).toBe(1);
       } finally {
         await client.query('rollback').catch(() => undefined);
         await client.query(`delete from kortix.accounts where account_id = $1`, [LOST_ACCOUNT]);

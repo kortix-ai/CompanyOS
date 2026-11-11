@@ -157,8 +157,8 @@ flow(
         const text = JSON.stringify(body);
         if (body.status !== "error" || !text.includes("app_unavailable") || !text.includes("no ready release")) throw new Error(`call: ${r.status} ${text.slice(0, 400)}`);
         const logged = await world.db.query<{ status: string; session_id: string | null }>(
-          "SELECT c.status, c.session_id FROM kortix.connector_calls c JOIN kortix.connectors k ON k.connector_id = c.connector_id WHERE k.project_id = $1 AND k.slug = $2 AND c.action_path = 'list_notes'",
-          [project.id, connector],
+          "SELECT c.status, c.session_id FROM kortix.connector_calls c JOIN kortix.connectors k ON k.connector_id = c.connector_id WHERE k.project_id = $1 AND k.slug = $2 AND c.action_path = $3",
+          [project.id, connector, `${connector}.list_notes`],
         );
         if (!logged.rows.some((row) => row.status === "error" && row.session_id === support!.sessionId)) throw new Error(`call log: ${JSON.stringify(logged.rows)}`);
       });

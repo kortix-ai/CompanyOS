@@ -6,7 +6,6 @@ import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing
 import { contract, qk } from '@kortix/sdk/react';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import {
-  adminBypassAvailable,
   errorStatus,
   gateAction,
   gateCopyKeys,
@@ -169,16 +168,12 @@ describe('isForbiddenState', () => {
   });
 });
 
-describe('adminBypassAvailable', () => {
-  test('offers "Open as admin" behind a 403 and a 404, never behind a transient failure', () => {
-    // A non-member gets 404 from GET /v1/workspaces/:id, so the 404 screen is
-    // where a platform admin lands on a customer workspace link.
-    expect(ALL_STATES.filter(adminBypassAvailable)).toEqual([
-      'request',
-      'sent',
-      'alreadyRequested',
-      'notFound',
-    ]);
+describe('admin escape hatch', () => {
+  test('shows behind the three 403 faces only', () => {
+    // The API answers a live workspace the caller cannot read with 403
+    // workspace_access_denied; a 404 is a workspace that is gone, where acting
+    // as the account opens nothing.
+    expect(ALL_STATES.filter(isForbiddenState)).toEqual(['request', 'sent', 'alreadyRequested']);
   });
 });
 

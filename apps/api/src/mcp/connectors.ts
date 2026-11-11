@@ -334,7 +334,9 @@ export function denialNext(reason: string, body: any): string | undefined {
     case 'connector_not_found':
       return 'No such connector in this project: list_connectors shows the slugs, add_connector adds one.';
     case 'action_not_found':
-      return 'No such action: search_connector_actions finds the right `tool` id.';
+      return Array.isArray(body?.did_you_mean) && body.did_you_mean.length > 0
+        ? `No such action. Did you mean ${body.did_you_mean.join(', ')}? Call it with that \`tool\`, or search_connector_actions to find another.`
+        : 'No such action: search_connector_actions finds the right `tool` id.';
     default:
       return undefined;
   }

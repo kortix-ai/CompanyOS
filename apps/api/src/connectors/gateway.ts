@@ -210,6 +210,8 @@ export interface GatewayDeps {
    *  in hand (the call path does), so the store skips its duplicate read of
    *  the `connectors` row. */
   loadAction(connectorId: string, relPath: string, providerType: string): Promise<GatewayAction | null>;
+  /** Up to 3 action paths of the connector closest to `relPath`, for an `action_not_found` denial. */
+  suggestActions?(connectorId: string, relPath: string, providerType: string): Promise<string[]>;
   /**
    * Resolve the credential value/binding for a connector. `userId=null` = shared;
    * set = that member's own. Receives the loaded connector so the resolver can
@@ -265,6 +267,12 @@ export interface GatewayDeps {
    * Absent = unconfined: production always wires it (db-deps.ts).
    */
   gateChannelWrite?(input: ChannelReadInput): Promise<ChannelWriteGate>;
+  /**
+   * The author a session's Slack post shows: its agent's name and face
+   * (channels/slack/persona.ts). Set here, after the argument check, so an
+   * agent cannot post under another agent's name. Null: the app's own name.
+   */
+  slackAuthor?(input: { projectId: string; sessionId: string; token: string }): Promise<{ username: string; icon_url?: string } | null>;
   /** Email connections represent one installed email (Resend) inbox. */
   loadEmailConnectorContext?(
     projectId: string,
@@ -515,7 +523,15 @@ export type CallResult =
       upstreamError?: string;
     }
   /** `message`: the sentence the agent reads, for a denial whose fix is not in `reason` alone. */
-  | { status: 'denied'; reason: string; message?: string; policySet?: string; agent?: string }
+  | {
+      status: 'denied';
+      reason: string;
+      message?: string;
+      policySet?: string;
+      agent?: string;
+      /** `action_not_found`: the connector's closest action paths, best first. */
+      suggestions?: string[];
+    }
   | {
       status: 'pending_approval';
       reason: string;
@@ -951,10 +967,14 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
 
   const action = await deps.loadAction(connector.connectorId, input.actionPath, connector.provider);
   if (!action) {
+    const suggestions = deps.suggestActions
+      ? await deps.suggestActions(connector.connectorId, input.actionPath, connector.provider).catch(() => [])
+      : [];
     await audit(deps, input, connector, 'denied', null, {
       reason: 'action_not_found',
+      ...(suggestions.length > 0 ? { suggestions } : {}),
     });
-    return { status: 'denied', reason: 'action_not_found' };
+    return { status: 'denied', reason: 'action_not_found', ...(suggestions.length > 0 ? { suggestions } : {}) };
   }
 
   // A channel call carries only the arguments its action declares: the gates
@@ -1497,6 +1517,19 @@ async function runConnectorAction(
         connector.provider === 'channel'
           ? withChannelDefaults(connector.platform ?? '', input.actionPath, executionArgs)
           : executionArgs;
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        input.actionPath === 'send_message' &&
+        input.sessionId &&
+        typeof executionSecret === 'string' &&
+        deps.slackAuthor
+      ) {
+        const author = await deps
+          .slackAuthor({ projectId: input.projectId, sessionId: input.sessionId, token: executionSecret })
+          .catch(() => null);
+        if (author) providerArgs = { ...providerArgs, ...author };
+      }
       const scope = {
         accountId: input.accountId,
         projectId: input.projectId,
@@ -1539,19 +1572,47 @@ async function runConnectorAction(
         );
       }
       const appAuthorization = await appAuthorizationForCall(deps, input, connector, action.binding);
-      result = await withDeadline(
-        executeCall({
-          binding: action.binding,
-          baseUrl: connector.baseUrl,
-          auth: connector.auth,
-          headers: connector.headers,
-          secret: executionSecret,
-          args: providerArgs,
-          paramHints: paramHintsFromSchema(action.inputSchema),
-          appAuthorization,
-          fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
-        }),
-      );
+      const runAction = () =>
+        withDeadline(
+          executeCall({
+            binding: action.binding,
+            baseUrl: connector.baseUrl,
+            auth: connector.auth,
+            headers: connector.headers,
+            secret: executionSecret,
+            args: providerArgs,
+            paramHints: paramHintsFromSchema(action.inputSchema),
+            appAuthorization,
+            fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
+          }),
+        );
+      result = await runAction();
+      // A read of a public channel the bot is not in: join it, then read
+      // again, once. The join is its own call through this whole gateway: the
+      // write gate (never another workspace's channel), this agent's rules for
+      // `join_channel` (allow runs it, ask returns the approval, block
+      // refuses) and its own audit row. The read repeats only after a join
+      // that ran. A private channel answers `channel_not_found` and stays
+      // closed until a person invites the bot.
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        action.risk === 'read' &&
+        slackError(result.data) === 'not_in_channel' &&
+        typeof providerArgs.channel === 'string'
+      ) {
+        const joined = await handleCall(deps, {
+          ...input,
+          actionPath: 'join_channel',
+          args: { channel: providerArgs.channel },
+          // The read's own approval and held run name the read, not the join.
+          approvalExecutionId: null,
+          heldApproval: null,
+          approvalContext: `Join the channel to read it (${input.actionPath}).`,
+        });
+        if (joined.status === 'ok') result = await runAction();
+        else if (joined.status === 'pending_approval') return joined;
+      }
       // Email `send_message` created a draft: send it now, as one action.
       const draftId =
         result.ok && isEmailChannel && input.actionPath === 'send_message' ? createdDraftId(result.data) : null;
@@ -1934,6 +1995,14 @@ async function withSlackAuthorNames(
  * real outcome in `{ ok: boolean, error? }`. Map `ok:false` to a failed
  * ExecResult so the gateway's normal error path surfaces the cause.
  */
+/** A Slack `{ ok:false, error }` answer's error code; null for a success or another shape. */
+function slackError(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const body = data as { ok?: unknown; error?: unknown };
+  if (body.ok !== false) return null;
+  return typeof body.error === 'string' ? body.error : 'unknown_error';
+}
+
 function mapChannelEnvelope(result: ExecResult): ExecResult {
   const data = result.data as { ok?: unknown } | null;
   if (result.ok && data && typeof data === 'object' && data.ok === false) {

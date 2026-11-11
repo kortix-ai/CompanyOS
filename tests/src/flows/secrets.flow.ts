@@ -437,11 +437,13 @@ flow('SEC-POOL-4', {
   const listPath = `${path}?project_id=${project.id}`;
   const input = { project_id: project.id, label: 'Project key', provider_id: 'anthropic',
     name: 'ANTHROPIC_API_KEY', value: 'project-key-test-value', consumer: 'llm_gateway', strategy: 'broker' };
-  await ctx.step('flag off rejects a project-scoped credential', async () => {
+  await ctx.step('flag off still saves a project-scoped key: named accounts are the one store of provider keys', async () => {
     // The flag is on by default since 2026-10-31 (#11335): turn it off first.
     (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false },
       { params: { projectId: project.id } })).status(200);
-    (await owner.post(path, input, { params })).status(403);
+    const saved = await owner.post(path, { ...input, label: 'Saved with the flag off' }, { params });
+    saved.status(201);
+    (await owner.del(`${path}/:secretId`, { params: { ...params, secretId: saved.json<{ secret_id: string }>().secret_id } })).status(200);
   });
   (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true },
     { params: { projectId: project.id } })).status(200);
@@ -880,6 +882,79 @@ flow('SEC-POOL-7', {
   } finally {
     (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
     (await owner.del('/v1/accounts/:accountId/secret-resources/:secretId', { params: { ...resourceParams, secretId } })).status([200, 404]);
+  }
+}));
+
+flow('SEC-POOL-8', {
+  domain: 'secrets', requires: ['database'],
+  routes: [
+    'PATCH /v1/projects/:projectId/features',
+    'POST /v1/projects/:projectId/secrets',
+    'GET /v1/projects/:projectId/secrets',
+    'DELETE /v1/projects/:projectId/secrets/:name',
+    'PUT /v1/projects/:projectId/secrets/:identifier/strategy',
+    'GET /v1/accounts/:accountId/secret-resources',
+    'POST /v1/workspaces/:projectId/gateway/keys',
+    'DELETE /v1/workspaces/:projectId/gateway/keys/:keyId',
+    'POST /v1/llm/chat/completions',
+  ],
+}, deletingSandboxRows(async (ctx, track) => {
+  const team = await ctx.fixtures.team();
+  track(team.id);
+  const project = await team.project({ seed: true, allowAllSecrets: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: project.id };
+  const model = 'anthropic/claude-sonnet-4.6';
+  const chat = { model, max_tokens: 8, messages: [{ role: 'user', content: 'Reply with: pong' }] };
+  type Resource = { secret_id: string; label: string; provider_id: string | null; name: string; access_mode: string };
+  const workspaceKeys = async () => (await owner.get('/v1/accounts/:accountId/secret-resources', {
+    params: { accountId: team.id }, query: { project_id: project.id },
+  })).status(200).json<{ secrets: Resource[] }>().secrets
+    .filter((row) => row.name === 'ANTHROPIC_API_KEY' && row.label === 'Workspace key');
+  const gatewayKey = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: ctx.fixtures.name('gw') }, { params });
+  gatewayKey.status(200);
+  const { key_id: keyId, secret_key: gatewaySecret } = gatewayKey.json<{ key_id: string; secret_key: string }>();
+  const viaGatewayKey = ctx.client.withBearer(gatewaySecret, 'GATEWAY_KEY');
+  try {
+    let secretId = '';
+    await ctx.step('an old-style provider key write lands as a named workspace key, not a project secret', async () => {
+      const saved = await owner.post('/v1/projects/:projectId/secrets', {
+        name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key-1', strategy: 'broker', consumer: 'llm_gateway',
+      }, { params });
+      saved.status(200).body().has('$.stored_in', 'provider_account').has('$.provider_id', 'anthropic');
+      const keys = await workspaceKeys();
+      if (keys.length !== 1 || keys[0]!.access_mode !== 'project' || keys[0]!.provider_id !== 'anthropic') {
+        throw new Error(`expected one workspace key, got ${JSON.stringify(keys)}`);
+      }
+      secretId = keys[0]!.secret_id;
+      const legacy = (await owner.get('/v1/projects/:projectId/secrets', { params })).status(200).text();
+      if (legacy.includes('"ANTHROPIC_API_KEY"')) throw new Error('a project secret was written for the provider key');
+    });
+    await ctx.step('a second write replaces the value of the same named key', async () => {
+      (await owner.post('/v1/projects/:projectId/secrets', {
+        name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key-2', strategy: 'broker', consumer: 'llm_gateway',
+      }, { params })).status(200).body().has('$.secret_resource_id', secretId);
+      const keys = await workspaceKeys();
+      if (keys.length !== 1) throw new Error(`expected one workspace key, got ${keys.length}`);
+    });
+    await ctx.step('the gateway sends that key with pooled_provider_secrets off too', async () => {
+      (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false }, { params })).status(200);
+      reachedProvider(await viaGatewayKey.post('/v1/llm/chat/completions', chat), 'gateway API key, flag off');
+    });
+    await ctx.step('moving another secret into the gateway delivery is refused with where to add the key', async () => {
+      (await owner.post('/v1/projects/:projectId/secrets', { name: 'SOME_TOKEN', value: 'plain', strategy: 'runtime' }, { params })).status(200);
+      const refused = await owner.put('/v1/projects/:projectId/secrets/:identifier/strategy', { strategy: 'broker', consumer: 'llm_gateway' }, {
+        params: { ...params, identifier: 'SOME_TOKEN' },
+      });
+      refused.status(409).body().has('$.code', 'provider_key_store');
+    });
+    await ctx.step('an old-style delete removes the named workspace key, and the gateway then has none', async () => {
+      (await owner.del('/v1/projects/:projectId/secrets/:name', { params: { ...params, name: 'ANTHROPIC_API_KEY' } })).status(200);
+      if ((await workspaceKeys()).length !== 0) throw new Error('the workspace key survived the delete');
+      (await viaGatewayKey.post('/v1/llm/chat/completions', chat)).status(400).body().has('$.error.code', 'provider_not_connected');
+    });
+  } finally {
+    (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
   }
 }));
 

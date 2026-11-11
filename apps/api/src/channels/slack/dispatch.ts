@@ -492,10 +492,26 @@ export async function classifyEvent(
   // double-answers.
   if (botUserId && mentionsUser(event.text ?? '', botUserId)) return 'mention';
   if (event.channel_type === 'im') return 'dm';
-  // In a channel thread only a mention runs the agent. An untagged reply is
-  // people talking to each other, owned thread or not. The agent reads those
-  // replies on its next mention, with `slack thread`.
+  // In a channel thread a mention runs the agent. An untagged reply is people
+  // talking to each other, except the thread starter's in the agent's own
+  // thread (`isStarterReplyInOwnThread`, checked by the caller, which knows
+  // the project). The agent reads the rest on its next turn, with `slack thread`.
   return 'ignore';
+}
+
+/**
+ * A reply, with no @mention, from the person who started this thread with the
+ * agent: they are talking to it, as in a DM. Anyone else in the thread is
+ * talking to people and still tags the agent to reach it. Only the session's
+ * own origin thread counts (`metadata.slack`, written when the session
+ * started), not a thread the agent posted into later.
+ */
+export async function isStarterReplyInOwnThread(projectId: string, teamId: string, event: SlackEvent): Promise<boolean> {
+  if (event.type !== 'message' || event.subtype || event.bot_id || !event.user || !event.channel) return false;
+  if (!event.thread_ts || event.thread_ts === event.ts || event.channel_type === 'im') return false;
+  const session = await findChatThreadSession({ platform: 'slack', workspaceId: teamId, threadId: event.thread_ts }, projectId);
+  const origin = (session?.metadata as { slack?: { user?: unknown; channel?: unknown; thread_ts?: unknown } } | null)?.slack;
+  return origin?.thread_ts === event.thread_ts && origin.channel === event.channel && origin.user === event.user;
 }
 
 const CHANNEL_INTRO_FALLBACK = "Kortix is now connected to this channel. Mention @Kortix with a task to get started.";
@@ -615,7 +631,8 @@ export async function dispatchSlackEvent(
 
   if (isOwnBotEvent(event, botUserId, botId)) return;
 
-  const eventClass = await classifyEvent(teamId, event, botUserId);
+  let eventClass = await classifyEvent(teamId, event, botUserId);
+  if (eventClass === 'ignore' && (await isStarterReplyInOwnThread(projectId, teamId, event))) eventClass = 'mention';
   if (eventClass === 'ignore') return;
 
   // Exactly-once gate. ONE user message can arrive as several events (Slack

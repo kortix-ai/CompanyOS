@@ -1,6 +1,5 @@
 import { type AuthedPrincipal, GatewayResolutionError } from '@kortix/llm-gateway';
 import { connectedByokPickerModels } from '../models/picker-catalog';
-import { listProjectSecretNamesForConsumer } from '../../projects/secrets';
 import { DEFAULT_AGENT_SENTINEL } from '../../projects/agents';
 import {
   type AccountModelDefaults,
@@ -19,7 +18,7 @@ import { resolveCandidates } from './resolve-candidates';
 import { checkClaudeAgentRef, isClaudeAgentModelRef } from './claude-agent';
 import { CLAUDE_AGENT_DEFAULT_MODEL, CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent';
 import { hasClaudeCredential } from '../../claude-subscription/accounts';
-import { listGrantedGatewaySecretNames } from '../../secrets/account-resource';
+import { connectedGatewayKeyNames } from '../credentials/gateway-keys';
 import { getProjectGatewayResolution } from '../../repositories/project-model-access';
 import { modelAccessAllows } from '../model-access';
 import { runtimeModelCatalog } from '../models/runtime-catalog';
@@ -114,16 +113,12 @@ async function connectedByokFallback(
 ): Promise<string | null> {
   if (!projectId) return null;
   try {
-    const [names, panelNames] = await Promise.all([
-      listProjectSecretNamesForConsumer({
-        projectId,
-        principalUserId,
-        consumer: 'llm_gateway',
-      }),
-      // Its own catch: a failed read of the panel's keys never hides the project's.
-      member ? modelsPanelKeyNames(projectId, member).catch(() => [] as string[]) : [],
-    ]);
-    const connected = new Set([...names, ...panelNames]);
+    const connected = await connectedGatewayKeyNames({
+      accountId: member?.accountId ?? '', projectId,
+      // No member: no named key is reachable, as before.
+      userId: member?.userId, grantUserId: member?.grantUserId ?? null,
+      legacyPersonalUserId: principalUserId ?? null,
+    });
     return connectedByokPickerModels(connected)[0]?.id ?? null;
   } catch {
     return null; // never let a secrets-read hiccup break default resolution
@@ -132,16 +127,6 @@ async function connectedByokFallback(
 
 /** The member a default is resolved for, and whose grants count (null: keys shared with the whole project only). */
 type KeyMember = { accountId: string; userId: string; grantUserId: string | null };
-
-/**
- * The key names of the Models panel's keys `member` may use, as the picker
- * counts them (servable-catalog.ts). A project that turned
- * `pooled_provider_secrets` off has none.
- */
-async function modelsPanelKeyNames(projectId: string, member: KeyMember): Promise<string[]> {
-  if (!(await getProjectGatewayResolution(projectId)).pooledEnabled) return [];
-  return listGrantedGatewaySecretNames(member.accountId, projectId, member.userId, member.grantUserId);
-}
 
 /**
  * The degrade target for an unservable default: a ChatGPT (`codex/…`) default

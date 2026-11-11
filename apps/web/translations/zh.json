@@ -791,14 +791,8 @@
         "noResults": "未找到主题"
       },
       "densities": {
-        "normal": {
-          "label": "标准",
-          "description": "Kortix 工作时实时显示步骤和思考过程。"
-        },
-        "minimal": {
-          "label": "精简",
-          "description": "展开前仅显示一行状态。"
-        }
+        "normal": "标准",
+        "minimal": "精简"
       },
       "wallpapers": {
         "dither": "抖动",
@@ -12597,6 +12591,7 @@
       "text41ffc5e14073": "设置为{value0}",
       "text420962cdca94": "同一个工作区、同一组连接器、同一份记忆——底层却承载着八种不同的工作。每支团队为自己的工作编写技能，无需搭建第二套系统。",
       "text420aaa63cba7": "页面总计",
+      "textbe57ff2d7907": "未归属到任何会话",
       "text42113e7bf6fc": "Kortix 支持",
       "text42117ed2a1f5": "通常的做法",
       "text421c4b1fed48": "产品 / 控制平面",
@@ -21312,7 +21307,12 @@
       "text4b892277843c": "创建工作区",
       "text41018e566b60": "新建 工作区 创建 添加 团队",
       "texta99ac8f9050b": "工作区 · 访问权限",
-      "textfd8b8dae4421": "危险区域"
+      "textfd8b8dae4421": "危险区域",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM 预留退款",
+      "texta68ee4167406": "代理",
+      "texta69c4dece144": "存储",
+      "textab3aff8f7642": "充值奖励"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "邀请成员加入 {name}",
       "leave": "离开 {name}",
-      "invitePeople": "邀请成员",
-      "more": "更多"
+      "invitePeople": "邀请成员"
     },
     "roles": {
       "owner": {

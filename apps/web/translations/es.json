@@ -791,14 +791,8 @@
         "noResults": "No se encontraron temas"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Los pasos y el razonamiento se muestran en tiempo real mientras Kortix trabaja."
-        },
-        "minimal": {
-          "label": "Mínima",
-          "description": "Una línea de estado hasta que la expanda."
-        }
+        "normal": "Normal",
+        "minimal": "Mínima"
       },
       "wallpapers": {
         "dither": "Tramado",
@@ -12597,6 +12591,7 @@
       "text41ffc5e14073": "Establecer en {value0}",
       "text420962cdca94": "El mismo espacio de trabajo, los mismos conectores, la misma memoria — y ocho trabajos distintos por debajo. Cada equipo escribe las habilidades para su propio trabajo y nadie crea un segundo sistema para hacerlo.",
       "text420aaa63cba7": "Total de la página",
+      "textbe57ff2d7907": "No atribuido a ninguna sesión",
       "text42113e7bf6fc": "Soporte de Kortix",
       "text42117ed2a1f5": "La forma habitual",
       "text421c4b1fed48": "Producto / plano de control",
@@ -21312,7 +21307,12 @@
       "text4b892277843c": "Crear espacio de trabajo",
       "text41018e566b60": "nuevo espacio de trabajo crear añadir equipo",
       "texta99ac8f9050b": "Espacio de trabajo · Acceso",
-      "textfd8b8dae4421": "Zona de peligro"
+      "textfd8b8dae4421": "Zona de peligro",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Reembolso de retención de LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Almacenamiento",
+      "textab3aff8f7642": "Bono de recarga"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",
@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "Invitar personas a {name}",
       "leave": "Salir de {name}",
-      "invitePeople": "Invitar personas",
-      "more": "Más"
+      "invitePeople": "Invitar personas"
     },
     "roles": {
       "owner": {

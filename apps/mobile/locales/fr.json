@@ -1356,5 +1356,47 @@
       "serverBody": "Réessayez, ou ouvrez un autre espace de travail.",
       "signInAgain": "Se reconnecter"
     }
+  },
+  "artifacts": {
+    "title": "Artefacts",
+    "search": "Rechercher des artefacts",
+    "scope": {
+      "all": "Tous",
+      "mine": "Les vôtres",
+      "shared": "Partagés avec vous",
+      "pinned": "Épinglés"
+    },
+    "type": {
+      "doc": "Document",
+      "html": "HTML"
+    },
+    "loadError": "Impossible de charger les artefacts.",
+    "retry": "Réessayer",
+    "empty": "Aucun artefact pour l’instant",
+    "emptyFiltered": "Aucun artefact ne correspond",
+    "pin": "Épingler",
+    "unpin": "Désépingler",
+    "rename": "Renommer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "notFoundTitle": "Cet artefact n’est pas disponible",
+    "notFoundHint": "Il a été supprimé, ou son propriétaire a arrêté de le partager.",
+    "remove": "Arrêter le partage",
+    "removeTitle": "Arrêter de partager cet artefact ?",
+    "removeHint": "Il quitte Artefacts et ses liens cessent de fonctionner. Ses fichiers restent dans Fichiers.",
+    "removed": "Plus partagé",
+    "shareLink": "Partager le lien",
+    "openInBrowser": "Ouvrir dans le navigateur",
+    "reload": "Recharger",
+    "scopeEmpty": "Rien ici pour le moment",
+    "pinDone": "Épinglé",
+    "unpinDone": "Désépinglé",
+    "actionFailed": "Impossible de mettre à jour l’artefact. Réessayez.",
+    "renamed": "Artefact renommé",
+    "namePlaceholder": "Nom de l’artefact",
+    "saving": "Enregistrement…",
+    "openError": "Impossible d’ouvrir cet artefact",
+    "more": "Actions de l’artefact",
+    "unavailable": "Les artefacts ne sont pas disponibles dans cet espace de travail"
   }
 }

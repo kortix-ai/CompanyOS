@@ -74,6 +74,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
+  CardsThreeIcon,
   FoldersIcon,
   CaretDownIcon,
   CaretRightIcon,
@@ -110,13 +111,14 @@ import { useActivePlanName } from '@/hooks/useActivePlanName';
 import { useProfileEditor } from '@/hooks/useProfileEditor';
 import { haptics } from '@/lib/haptics';
 import { useRefetchOnOpen } from '@/components/session/use-refetch-on-open';
-import { useCans, useProjectApps } from '@kortix/sdk/react';
+import { useCans, useFeatureFlag, useProjectApps } from '@kortix/sdk/react';
 import { useProject, useProjectSessionsPaged } from '@/lib/projects/hooks';
-import { NAV_ACTIONS, REVIEW_ACCESS, appsRowVisible, navAccessAllowed } from '@/lib/session/nav-access';
+import { NAV_ACTIONS, REVIEW_ACCESS, appsRowVisible, artifactsRowVisible, navAccessAllowed } from '@/lib/session/nav-access';
 import { sessionListState, shouldLoadMoreSessions } from '@/lib/session/session-pages';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import {
   PROJECT_ACCOUNT_ROUTE,
+  PROJECT_ARTIFACTS_ROUTE,
   PROJECT_FILES_ROUTE,
   PROJECT_SESSIONS_ROUTE,
   type ProjectDrawerRoute,
@@ -316,6 +318,9 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   const appsQuery = useProjectApps(projectId);
   const showReview = navAccessAllowed(navCans, REVIEW_ACCESS);
   const showApps = appsRowVisible(navCans, appsQuery.data?.length);
+  // Artifacts: the platform stores a Drive, and the caller may read artifacts.
+  const artifactsFlag = useFeatureFlag(projectId, 'artifacts');
+  const showArtifacts = artifactsRowVisible(navCans, artifactsFlag.enabled);
 
   // The switcher row's workspace tile and name.
   const { data: project } = useProject(projectId);
@@ -579,6 +584,11 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     [navigateOnce, onNavigateRoute]
   );
 
+  const goToArtifacts = useCallback(
+    () => navigateOnce(() => onNavigateRoute(PROJECT_ARTIFACTS_ROUTE)),
+    [navigateOnce, onNavigateRoute]
+  );
+
   // Review is a tab-store page, not a drawer route: `navigateToPage` alone is
   // enough regardless of which project route is focused (ProjectScreen's old
   // gear button used the same call).
@@ -756,6 +766,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
         <View className={ROW_COLUMN}>
           <NavPill icon={MagnifyingGlassIcon} label="Search" onPress={goToSearch} />
           <NavPill icon={FoldersIcon} label="Files" onPress={goToFiles} />
+          {showArtifacts ? <NavPill icon={CardsThreeIcon} label={t('artifacts.title')} onPress={goToArtifacts} /> : null}
           {showReview ? (
             <NavPill
               icon={SealCheckIcon}
@@ -793,10 +804,13 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     [
       goToSearch,
       goToFiles,
+      goToArtifacts,
+      t,
       goToReview,
       goToApps,
       showReview,
       showApps,
+      showArtifacts,
       reviewNeedsYouCount,
       needsYouSessions,
       needsYouBySession,

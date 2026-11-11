@@ -613,14 +613,8 @@
         "noResults": "No themes found"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Steps and thinking stream live while Kortix works."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "One status line until you expand it."
-        }
+        "normal": "Normal",
+        "minimal": "Minimal"
       },
       "wallpapers": {
         "dither": "Dither",
@@ -12642,6 +12636,7 @@
       "text41ffc5e14073": "Set to {value0}",
       "text420962cdca94": "The same workspace, the same connectors, the same memory — and eight different jobs underneath. Each team writes the skills for its own work, and nobody stands up a second system to do it.",
       "text420aaa63cba7": "Page total",
+      "textbe57ff2d7907": "Not attributed to a session",
       "text42113e7bf6fc": "Kortix support",
       "text42117ed2a1f5": "The usual way",
       "text421c4b1fed48": "Product / Control Plane",
@@ -21357,7 +21352,12 @@
       "text4b892277843c": "Create workspace",
       "text41018e566b60": "new workspace create add team",
       "texta99ac8f9050b": "Workspace · Access",
-      "textfd8b8dae4421": "Danger zone"
+      "textfd8b8dae4421": "Danger zone",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM Hold Refund",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Storage",
+      "textab3aff8f7642": "Top-up Bonus"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "Invite people to {name}",
       "leave": "Leave {name}",
-      "invitePeople": "Invite people",
-      "more": "More"
+      "invitePeople": "Invite people"
     },
     "roles": {
       "owner": {

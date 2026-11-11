@@ -1,3 +1,4 @@
+import { cn } from '@kortix/ui';
 import type { ReactNode } from 'react';
 
 /*
@@ -65,6 +66,38 @@ export function PageHero({
     <div className="grid grid-cols-1 items-center gap-12 px-8 pt-32 pb-16 lg:grid-cols-[3fr_2fr] lg:gap-16 lg:px-28 lg:pt-48 lg:pb-32">
       {copy}
       <div className="hidden items-center justify-center lg:flex">{aside}</div>
+    </div>
+  );
+}
+
+/** The hero's rail band: the walkthrough (or stage) and its caption, on a
+ *  card between the rails. `className` extends the band's inner container:
+ *  /multiplayer centres tighter (`px-3`), the surface pages clip their stage
+ *  (`overflow-hidden`). */
+export function HeroBand({
+  caption,
+  captionMuted,
+  children,
+  className,
+}: {
+  caption: string;
+  captionMuted: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="kx-rail-fade relative border-y px-4 lg:px-17">
+      <div
+        className={cn(
+          'bg-card flex flex-col items-center gap-7 px-4 py-8 lg:gap-10 lg:px-11 lg:pt-17 lg:pb-10',
+          className,
+        )}
+      >
+        {children}
+        <p className="text-foreground px-4 text-center text-base font-medium text-balance">
+          {caption} <span className="text-muted-foreground">{captionMuted}</span>
+        </p>
+      </div>
     </div>
   );
 }

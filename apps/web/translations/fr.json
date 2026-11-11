@@ -791,14 +791,8 @@
         "noResults": "Aucun thème trouvé"
       },
       "densities": {
-        "normal": {
-          "label": "Normale",
-          "description": "Les étapes et le raisonnement s'affichent en direct pendant que Kortix travaille."
-        },
-        "minimal": {
-          "label": "Minimale",
-          "description": "Une seule ligne d'état jusqu'à ce que vous la développiez."
-        }
+        "normal": "Normale",
+        "minimal": "Minimale"
       },
       "wallpapers": {
         "dither": "Tramage",
@@ -12597,6 +12591,7 @@
       "text41ffc5e14073": "Définir sur {value0}",
       "text420962cdca94": "Le même espace de travail, les mêmes connecteurs, la même mémoire — et huit métiers différents en dessous. Chaque équipe écrit les compétences adaptées à son travail, sans mettre en place un second système.",
       "text420aaa63cba7": "Total de la page",
+      "textbe57ff2d7907": "Non attribué à une session",
       "text42113e7bf6fc": "Assistance Kortix",
       "text42117ed2a1f5": "La méthode habituelle",
       "text421c4b1fed48": "Produit / plan de contrôle",
@@ -21312,7 +21307,12 @@
       "text4b892277843c": "Créer un espace de travail",
       "text41018e566b60": "nouvel espace de travail créer ajouter équipe",
       "texta99ac8f9050b": "Espace de travail · Accès",
-      "textfd8b8dae4421": "Zone de danger"
+      "textfd8b8dae4421": "Zone de danger",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Remboursement de réserve LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Stockage",
+      "textab3aff8f7642": "Bonus de recharge"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",
@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "Inviter des personnes dans {name}",
       "leave": "Quitter {name}",
-      "invitePeople": "Inviter des personnes",
-      "more": "Plus"
+      "invitePeople": "Inviter des personnes"
     },
     "roles": {
       "owner": {

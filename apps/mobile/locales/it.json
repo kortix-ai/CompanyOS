@@ -1356,5 +1356,47 @@
       "serverBody": "Riprova, oppure apri un altro workspace.",
       "signInAgain": "Accedi di nuovo"
     }
+  },
+  "artifacts": {
+    "title": "Artefatti",
+    "search": "Cerca artefatti",
+    "scope": {
+      "all": "Tutti",
+      "mine": "Tuoi",
+      "shared": "Condivisi con te",
+      "pinned": "Fissati"
+    },
+    "type": {
+      "doc": "Documento",
+      "html": "HTML"
+    },
+    "loadError": "Impossibile caricare gli artefatti.",
+    "retry": "Riprova",
+    "empty": "Ancora nessun artefatto",
+    "emptyFiltered": "Nessun artefatto corrisponde",
+    "pin": "Fissa",
+    "unpin": "Rimuovi",
+    "rename": "Rinomina",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "notFoundTitle": "Questo artefatto non è disponibile",
+    "notFoundHint": "È stato eliminato oppure il proprietario ha smesso di condividerlo.",
+    "remove": "Interrompi condivisione",
+    "removeTitle": "Interrompere la condivisione di questo artefatto?",
+    "removeHint": "Esce da Artefatti e i suoi link smettono di funzionare. I suoi file restano in File.",
+    "removed": "Non più condiviso",
+    "shareLink": "Condividi link",
+    "openInBrowser": "Apri nel browser",
+    "reload": "Ricarica",
+    "scopeEmpty": "Ancora niente qui",
+    "pinDone": "Fissato",
+    "unpinDone": "Non più fissato",
+    "actionFailed": "Impossibile aggiornare l’artefatto. Riprova.",
+    "renamed": "Artefatto rinominato",
+    "namePlaceholder": "Nome dell’artefatto",
+    "saving": "Salvataggio…",
+    "openError": "Impossibile aprire questo artefatto",
+    "more": "Azioni dell’artefatto",
+    "unavailable": "Gli artefatti non sono disponibili in questo workspace"
   }
 }

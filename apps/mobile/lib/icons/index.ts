@@ -25,10 +25,12 @@ import { ArrowsOutSimpleIcon as ArrowsOutSimpleGlyph } from 'phosphor-react-nati
 import { BellIcon as BellGlyph } from 'phosphor-react-native/src/icons/Bell';
 import { BookOpenIcon as BookOpenGlyph } from 'phosphor-react-native/src/icons/BookOpen';
 import { BrainIcon as BrainGlyph } from 'phosphor-react-native/src/icons/Brain';
+import { BrowserIcon as BrowserGlyph } from 'phosphor-react-native/src/icons/Browser';
 import { BuildingsIcon as BuildingsGlyph } from 'phosphor-react-native/src/icons/Buildings';
 import { CalendarDotsIcon as CalendarDotsGlyph } from 'phosphor-react-native/src/icons/CalendarDots';
 import { CalendarIcon as CalendarGlyph } from 'phosphor-react-native/src/icons/Calendar';
 import { CameraIcon as CameraGlyph } from 'phosphor-react-native/src/icons/Camera';
+import { CardsThreeIcon as CardsThreeGlyph } from 'phosphor-react-native/src/icons/CardsThree';
 import { CaretDownIcon as CaretDownGlyph } from 'phosphor-react-native/src/icons/CaretDown';
 import { CaretLeftIcon as CaretLeftGlyph } from 'phosphor-react-native/src/icons/CaretLeft';
 import { CaretRightIcon as CaretRightGlyph } from 'phosphor-react-native/src/icons/CaretRight';
@@ -209,10 +211,12 @@ export const ArrowsOutSimpleIcon = withAppWeight(ArrowsOutSimpleGlyph, 'ArrowsOu
 export const BellIcon = withAppWeight(BellGlyph, 'BellIcon');
 export const BookOpenIcon = withAppWeight(BookOpenGlyph, 'BookOpenIcon');
 export const BrainIcon = withAppWeight(BrainGlyph, 'BrainIcon');
+export const BrowserIcon = withAppWeight(BrowserGlyph, 'BrowserIcon');
 export const BuildingsIcon = withAppWeight(BuildingsGlyph, 'BuildingsIcon');
 export const CalendarDotsIcon = withAppWeight(CalendarDotsGlyph, 'CalendarDotsIcon');
 export const CalendarIcon = withAppWeight(CalendarGlyph, 'CalendarIcon');
 export const CameraIcon = withAppWeight(CameraGlyph, 'CameraIcon');
+export const CardsThreeIcon = withAppWeight(CardsThreeGlyph, 'CardsThreeIcon');
 export const CaretDownIcon = withAppWeight(CaretDownGlyph, 'CaretDownIcon');
 export const CaretLeftIcon = withAppWeight(CaretLeftGlyph, 'CaretLeftIcon');
 export const CaretRightIcon = withAppWeight(CaretRightGlyph, 'CaretRightIcon');

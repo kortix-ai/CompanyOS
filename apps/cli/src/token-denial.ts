@@ -30,6 +30,8 @@ interface RecordedDenial {
    *  an older server; the hint then falls back to the manifest remedy. */
   code?: string;
   action?: string;
+  /** The fence's `check` (credential_fence_refused only). */
+  check?: string;
   /** The credential the refused request carried (host + token, memory only).
    *  The footer resolves the identity FROM it. The active host's identity is a
    *  DIFFERENT credential — inside a sandbox it is the injected session token
@@ -43,6 +45,8 @@ interface RecordedDenial {
 export interface DenialDetail {
   code?: string;
   action?: string;
+  /** The fence's `check` on a credential_fence_refused body. */
+  check?: string;
 }
 
 let denial: RecordedDenial | null = null;
@@ -78,6 +82,7 @@ export function recordPermissionDenial(
     status,
     ...(typeof detail?.code === 'string' ? { code: detail.code } : {}),
     ...(typeof detail?.action === 'string' ? { action: detail.action } : {}),
+    ...(typeof detail?.check === 'string' ? { check: detail.check } : {}),
     ...(credential ? { credential } : {}),
   };
 }
@@ -103,9 +108,11 @@ export function denialDetailFromBody(body: unknown): DenialDetail {
       : typeof record.action === 'string'
         ? toWorkspaceAction(record.action)
         : undefined;
+  const check = typeof record.check === 'string' ? record.check : undefined;
   return {
     ...(code ? { code } : {}),
     ...(action ? { action } : {}),
+    ...(check ? { check } : {}),
   };
 }
 
@@ -127,9 +134,33 @@ const FENCE_FIX_LINE =
   'this credential is bound to one workspace and this route is outside it; no grant changes that. ' +
   'Run it in that workspace, or ask a person with access to do it';
 
+/** The server's code when a workspace-bound token asks for account-wide data
+ *  its own workspace still shares with the other workspaces of its legacy
+ *  account (split_pending). */
+export const TOKEN_ACCOUNT_SHARED = 'token_account_shared';
+/** The fence check for the same constraint on an account-family route. */
+const SHARED_ACCOUNT_CHECK = 'account-wider-than-workspace';
+
+/** The remedy for a shared-account refusal: a personal key, never a flag. */
+export const SHARED_ACCOUNT_FIX_LINE =
+  'this workspace still shares its legacy account with other workspaces, so account-wide data ' +
+  '(members, roles, groups, keys, audit log, credit ledger) needs a personal key: run `kortix login` ' +
+  'on your own machine, or use the web app; no grant, --workspace or new token changes that. ' +
+  'This workspace\'s own audit events and spend work with this token: `kortix audit workspace <workspace id>`, `kortix billing costs`';
+
+/** The fix line for a fence refusal or a shared-account denial; null for any other code. */
+function credentialFixLine(pending: RecordedDenial): string | null {
+  if (pending.code === TOKEN_ACCOUNT_SHARED) return SHARED_ACCOUNT_FIX_LINE;
+  if (pending.code === CREDENTIAL_FENCE_REFUSED) {
+    return pending.check === SHARED_ACCOUNT_CHECK ? SHARED_ACCOUNT_FIX_LINE : FENCE_FIX_LINE;
+  }
+  return null;
+}
+
 function agentFixLine(agent: string, pending: RecordedDenial, granted?: string[] | 'all' | null): string {
   const actionText = pending.action ? `${C.cyan}${pending.action}${C.reset}` : 'the action';
-  if (pending.code === CREDENTIAL_FENCE_REFUSED) return FENCE_FIX_LINE;
+  const credentialLine = credentialFixLine(pending);
+  if (credentialLine) return credentialLine;
   if ((pending.code === undefined || pending.code === 'agent_scope_insufficient') && grantHolds(granted, pending.action)) {
     // The grant already holds it: kortix.yaml is not the cause.
     return (
@@ -261,7 +292,8 @@ export async function printPermissionDenialIdentity(): Promise<void> {
     lines.push(`  ${C.dim}fix       ${C.reset}${agentFixLine(identity.agent, pending, identity.permissions)}`);
   } else {
     if (identity.userEmail) lines.push(`  ${C.dim}user      ${C.reset}${identity.userEmail}`);
-    if (pending.code === CREDENTIAL_FENCE_REFUSED) lines.push(`  ${C.dim}fix       ${C.reset}${FENCE_FIX_LINE}`);
+    const credentialLine = credentialFixLine(pending);
+    if (credentialLine) lines.push(`  ${C.dim}fix       ${C.reset}${credentialLine}`);
   }
   process.stderr.write(`${lines.join('\n')}\n`);
 }

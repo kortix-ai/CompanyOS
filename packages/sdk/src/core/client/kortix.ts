@@ -95,6 +95,9 @@ export function createKortix(config: KortixPlatformConfig, opts?: { global?: boo
       ...bindProjectPlatformSecurity(projectId),
       /** One connector of this project: `run`, `call`, `describe`, `accounts`, `paginate`. */
       connector: <S extends string>(slug: S) => connectorHandle(projectId, slug),
+      /** The agent tools of this project: `skills`, `search`, `describe`, `call`, `execute`, `resume`. */
+      agentTools: (options: Omit<P.AgentToolsClientOptions, 'projectId'> = {}) =>
+        P.createAgentToolsClient({ ...options, projectId }),
       session: (sessionId: string) =>
         session(projectId, sessionId, config, resolvePreviewOptsForSandbox),
     };
@@ -141,6 +144,12 @@ export function createKortix(config: KortixPlatformConfig, opts?: { global?: boo
     connectors: connectorDataPlane(),
     /** One connector in the token's scope (a project-scoped token or a session token). */
     connector: <S extends string>(slug: S) => connectorHandle(undefined, slug),
+    /**
+     * The agent tools (`/v1/agent-tools/*`): `skills`, `search`, `describe`,
+     * `call`, `execute`, `resume`. Pass `projectId` to act in one project;
+     * `surface` (default `api`) names the caller in call logs and approvals.
+     */
+    agentTools: (options?: P.AgentToolsClientOptions) => P.createAgentToolsClient(options),
     project,
     session: (projectId: string, sessionId: string) =>
       session(projectId, sessionId, config, resolvePreviewOptsForSandbox),

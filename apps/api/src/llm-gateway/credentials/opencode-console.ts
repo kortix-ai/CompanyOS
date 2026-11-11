@@ -23,7 +23,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { accountSecretResources, projectSecrets } from '@kortix/db';
 import type { ProviderKind } from '@kortix/llm-gateway';
 import { db } from '../../shared/db';
-import { decryptProjectSecret, encryptProjectSecret } from '../../projects/secrets/envelope';
+import { decryptProjectSecret, encryptProjectSecret, projectSecretAad } from '../../projects/secrets/envelope';
 import { decryptAccountSecret } from '../../secrets/account-resource';
 import { recordAuditEvent } from '../../shared/audit';
 import { isPermanentRefreshRejection, refreshErrorCode } from './codex-core';
@@ -251,12 +251,12 @@ async function loadOpencodeLoginRow(input: { accountId: string; projectId: strin
       return null;
     }
   }
-  const [secret] = await db.select({ valueEnc: projectSecrets.valueEnc })
+  const [secret] = await db.select({ valueEnc: projectSecrets.valueEnc, identifier: projectSecrets.identifier })
     .from(projectSecrets)
     .where(and(eq(projectSecrets.projectId, input.projectId), eq(projectSecrets.secretId, input.secretId))).limit(1);
   if (!secret) return null;
   try {
-    return { ...base, storage: 'project', value: decryptProjectSecret(input.projectId, secret.valueEnc) };
+    return { ...base, storage: 'project', value: decryptProjectSecret(input.projectId, secret.valueEnc, projectSecretAad(secret.identifier)) };
   } catch {
     return null;
   }

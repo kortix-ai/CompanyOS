@@ -36,7 +36,7 @@ import { parseGitHubRepoUrl } from './git';
 import { isPlaceholderSessionTitle, runtimeRootTitleFromSnapshot } from './session-title-placeholder';
 import { normalizeProjectGlyph } from './project-glyph';
 import { normalizeProjectIcon } from './project-icon';
-import { probeProjectSecret } from '../secrets/envelope';
+import { probeProjectSecret, projectSecretAad } from '../secrets/envelope';
 import { isDeprecatedProvider } from '../../platform/providers/deprecated';
 import { isPlatinumConfigured } from '../../shared/platinum';
 import { projectsView } from '../../workspaces/rows';
@@ -635,7 +635,7 @@ export function buildSecretView(input: {
       ? {
           active: personal.active,
           updated_at: personal.updatedAt.toISOString(),
-          status: probeProjectSecret(personal.projectId, personal.valueEnc),
+          status: probeProjectSecret(personal.projectId, personal.valueEnc, projectSecretAad(identifier)),
         }
       : null,
     // What actually gets injected into my sessions for this identifier.
@@ -673,7 +673,7 @@ export function buildSecretView(input: {
     requires_rotation: requiresRotation,
     // One decrypt of the SHARED value, the one a shared write replaces; the
     // plaintext is discarded. No shared value, no status: `mine.status` says it.
-    status: shared ? probeProjectSecret(shared.projectId, shared.valueEnc) : undefined,
+    status: shared ? probeProjectSecret(shared.projectId, shared.valueEnc, projectSecretAad(identifier)) : undefined,
   };
 }
 

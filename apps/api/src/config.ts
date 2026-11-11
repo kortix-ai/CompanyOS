@@ -330,6 +330,12 @@ const envSchema = z.object({
   // alternative (a capability header on every request) costs a round trip per
   // relayed request and still cannot un-consume a body already streamed.
   KORTIX_SECRET_RELAY_STREAM_ENABLED: optBoolTrue,
+  // New project-secret writes use the `v2:` envelope, whose ciphertext is bound
+  // to the row's identifier (AES-GCM AAD). Every build since v2 shipped reads
+  // both versions; an OLDER build reads only `v1:`. Set false before rolling
+  // the API back past the v2 release, so values written in the meantime stay
+  // readable by the older build.
+  KORTIX_SECRET_ENVELOPE_V2_WRITES: optBoolTrue,
   // Byte budgets. These are a RESOURCE guard, not a product limit: 1 GiB is
   // 1024x the legacy request cap and 205x the response cap — effectively
   // uncapped for any real API call — but it stops one runaway sandbox.
@@ -1503,6 +1509,7 @@ export const config = {
     .map((host) => host.trim())
     .filter(Boolean),
   KORTIX_SECRET_RELAY_STREAM_ENABLED: env.KORTIX_SECRET_RELAY_STREAM_ENABLED,
+  KORTIX_SECRET_ENVELOPE_V2_WRITES: env.KORTIX_SECRET_ENVELOPE_V2_WRITES,
   KORTIX_RELAY_MAX_REQUEST_BYTES: env.KORTIX_RELAY_MAX_REQUEST_BYTES,
   KORTIX_RELAY_MAX_RESPONSE_BYTES: env.KORTIX_RELAY_MAX_RESPONSE_BYTES,
   KORTIX_RELAY_HEADERS_TIMEOUT_MS: env.KORTIX_RELAY_HEADERS_TIMEOUT_MS,

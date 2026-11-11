@@ -36,6 +36,7 @@ import {
   decryptProjectSecret,
   intersectSecretGrants,
   loadProjectSecretDefaultStrategy,
+  projectSecretAad,
 } from '../projects/secrets';
 import { ACTIVE_SESSION_STATUSES } from '../projects/lib/session-status';
 import { db } from '../shared/db';
@@ -187,7 +188,11 @@ export async function resolveSpendableHandles(input: {
     substitutions.push({
       identifier: row.identifier,
       handle,
-      value: decryptProjectSecret(input.projectId, (slot?.personal ?? shared).valueEnc),
+      value: decryptProjectSecret(
+        input.projectId,
+        (slot?.personal ?? shared).valueEnc,
+        projectSecretAad(row.identifier),
+      ),
       policy: row.policySnapshot,
     });
   }
@@ -491,7 +496,7 @@ export async function authorizeSecretRelay(
   const primary = spendable.substitutions.find((entry) => entry.identifier === input.identifier);
   const secret =
     primary?.value ??
-    decryptProjectSecret(input.projectId, personal?.valueEnc ?? shared.valueEnc);
+    decryptProjectSecret(input.projectId, personal?.valueEnc ?? shared.valueEnc, projectSecretAad(input.identifier));
 
   return {
     ok: true,

@@ -21,7 +21,7 @@ import {
   buildSecretCapabilities,
   serializeSecretCapabilities,
 } from './secret-capabilities';
-import { decryptNamedProjectSecret, encryptProjectSecret } from './secrets/envelope';
+import { decryptNamedProjectSecret, encryptProjectSecret, projectSecretAad } from './secrets/envelope';
 import { projectSecretsRevision, resolveGrantedSecretSelection } from './secrets/grant-policy';
 import { mintSessionSecretHandle } from './secrets/handles';
 import { projectsView } from '../workspaces/rows';
@@ -55,7 +55,7 @@ export async function writeSharedProjectSecret(input: {
       projectId: input.projectId,
       identifier,
       name: input.name,
-      valueEnc: encryptProjectSecret(input.projectId, input.value),
+      valueEnc: encryptProjectSecret(input.projectId, input.value, projectSecretAad(identifier)),
       scope: serverSide ? 'connector' : 'runtime',
       strategy: serverSide ? 'broker' : 'runtime',
       consumer: serverSide ? 'connector' : 'sandbox',
@@ -70,7 +70,7 @@ export async function writeSharedProjectSecret(input: {
       targetWhere: isNull(projectSecrets.ownerUserId),
       set: {
         name: input.name,
-        valueEnc: encryptProjectSecret(input.projectId, input.value),
+        valueEnc: encryptProjectSecret(input.projectId, input.value, projectSecretAad(identifier)),
         ...(serverSide
           ? {
               scope: 'connector' as const,
@@ -218,7 +218,13 @@ export async function listProjectSecrets(projectId: string): Promise<Record<stri
     if (row.scope === 'connector') continue;
     const canonical = row.identifier === row.name;
     if (row.name in env && winnerIsCanonical.has(row.name) && !canonical) continue;
-    env[row.name] = decryptNamedProjectSecret(projectId, row.valueEnc, `Project secret ${row.identifier}`);
+    env[row.name] = decryptNamedProjectSecret(
+      projectId,
+      row.valueEnc,
+      `Project secret ${row.identifier}`,
+      undefined,
+      projectSecretAad(row.identifier),
+    );
     if (canonical) winnerIsCanonical.add(row.name);
   }
   return env;
@@ -347,6 +353,8 @@ export async function listResolvedProjectSecrets(
         projectId,
         chosen.valueEnc,
         chosen === slot.personal ? `Your own value of project secret ${identifier}` : `Project secret ${identifier}`,
+        undefined,
+        projectSecretAad(identifier),
       ),
       strategy: policyRow.strategy ?? undefined,
       consumer: policyRow.consumer ?? undefined,

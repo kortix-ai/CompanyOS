@@ -827,12 +827,40 @@ export function describeLegacyBootstrapRetry(
   return { status: 'idle', classification, attempts, lastAttemptAt: record.lastAttemptAt, lastError: record.error ?? null, nextRetryAt: null };
 }
 
+/** Outcomes `finishBootstrap` already logged; every other outcome needs the verdict line. */
+const SCRIPT_RAN_OUTCOMES: ReadonlySet<LegacyBootstrapOutcome> = new Set(['converged', 'failed', 'staged']);
+
 /**
  * Decide, and when warranted do, the bootstrap for one sandbox. Pure over
  * `deps`; every side effect is injected so the policy is unit-testable and the
  * wiring (DB, provider, ingress, audit) lives in one place.
  */
 export async function bootstrapLegacyRuntime(
+  input: LegacyBootstrapInput,
+  deps: LegacyBootstrapDeps,
+): Promise<LegacyBootstrapResult> {
+  const result = await decideBootstrap(input, deps);
+  // ONE VERDICT LINE PER RUN. Every gate before the script used to return
+  // without a line, so a repair that was requested and silently skipped left
+  // nothing behind. Prod 2026-11-11: a session's daemon port stopped answering;
+  // `/start` requested the dead-daemon relaunch a dozen times in six minutes,
+  // not one `[legacy-bootstrap]` line shipped, and the box recovered on its
+  // own — nobody could say why nothing was repaired. Name the verdict.
+  if (!SCRIPT_RAN_OUTCOMES.has(result.outcome)) {
+    deps.log(`skipped: ${result.outcome}`, {
+      sandboxId: input.sandboxId,
+      externalId: input.externalId,
+      provider: input.provider,
+      reason: input.reason,
+      detail: result.detail ?? null,
+      klass: result.classification?.klass ?? null,
+      staleReasons: result.classification?.staleReasons ?? [],
+    });
+  }
+  return result;
+}
+
+async function decideBootstrap(
   input: LegacyBootstrapInput,
   deps: LegacyBootstrapDeps,
 ): Promise<LegacyBootstrapResult> {
@@ -943,7 +971,9 @@ async function probeRuntimeForBootstrap(
   // this module owns what to DO with each class.
   const expectedRunningAssets = await deps.expectedRunningAssets?.();
   let classification = classifyDaemonHealth(health, expectedRunningAssets ?? undefined);
-  if (classification.klass === 'not-ok') return { result: { outcome: 'unreachable', classification } };
+  if (classification.klass === 'not-ok') {
+    return { result: { outcome: 'unreachable', classification, detail: 'the daemon answered a health body that does not say ok' } };
+  }
   // A DEAD DAEMON ON A RUNNING BOX. Silence alone means nothing — a stopped box
   // answers exactly the same way, and there is nothing there to repair. The
   // provider's own state is what tells the two apart, and it is asked only
@@ -967,7 +997,15 @@ async function probeRuntimeForBootstrap(
     const running = deps.providerRunning
       ? await deps.providerRunning().catch(() => false)
       : false;
-    if (!running) return { result: { outcome: 'unreachable', classification } };
+    if (!running) {
+      return {
+        result: {
+          outcome: 'unreachable',
+          classification,
+          detail: 'daemon silent twice; the provider could not confirm the box is running',
+        },
+      };
+    }
     // TWO SILENT READS, never one. An 8 s ingress timeout, a restarting proxy
     // or a GC pause reads exactly like a corpse, and a relaunch kills PTYs and
     // restages assets under whoever is using the box. This is
@@ -986,10 +1024,6 @@ async function probeRuntimeForBootstrap(
         .exec(['bash', '-c', `curl -fsS --max-time 3 -o /dev/null ${LOOPBACK_HEALTH_URL}`], LOOPBACK_PROBE_TIMEOUT_MS)
         .catch(() => null);
       if (loopback?.exitCode === 0) {
-        deps.log('daemon answers on the box loopback; the ingress was silent, nothing to repair', {
-          sandboxId: input.sandboxId,
-          externalId: input.externalId,
-        });
         return { result: { outcome: 'not-legacy', detail: 'daemon alive in the box; the ingress was unreachable', classification } };
       }
       deadDaemonOnRunningBox = true;

@@ -23713,7 +23713,13 @@
   },
   "triggerAutoPause": {
     "title": "Messo in pausa automaticamente",
-    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo."
+    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo.",
+    "billingTitle": "In pausa: crediti esauriti",
+    "billingDescription": "Nessuna esecuzione può essere pagata, quindi ha smesso di avviarle. Riprende da solo pochi minuti dopo la ricarica del saldo.",
+    "modelTitle": "In pausa: nessun modello disponibile",
+    "modelDescription": "Le automazioni usano solo chiavi di modello e account condivisi con tutto il workspace, e nessuno è utilizzabile. Riprende da solo pochi minuti dopo che ne aggiungi uno in Modelli.",
+    "listBilling": "Crediti esauriti",
+    "listModel": "Nessun modello"
   },
   "featureGate": {
     "enable": "Abilita {name}",

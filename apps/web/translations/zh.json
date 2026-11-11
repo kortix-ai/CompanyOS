@@ -23713,7 +23713,13 @@
   },
   "triggerAutoPause": {
     "title": "已自动暂停",
-    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。"
+    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。",
+    "billingTitle": "已暂停：额度不足",
+    "billingDescription": "无法为任何运行付费，因此已停止启动运行。余额充值后几分钟内会自动恢复。",
+    "modelTitle": "已暂停：没有可用模型",
+    "modelDescription": "自动化只使用与整个工作区共享的模型密钥和账户，而目前没有可用的。在“模型”中添加一个后，几分钟内会自动恢复。",
+    "listBilling": "额度不足",
+    "listModel": "没有模型"
   },
   "featureGate": {
     "enable": "启用{name}",

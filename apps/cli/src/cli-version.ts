@@ -20,7 +20,7 @@ function bakedCommit(baked: string): string | null {
 
 export function resolveCliVersion(
   baked: string,
-  env: { KORTIX_RELEASE_VERSION?: string; KORTIX_RELEASE_COMMIT?: string },
+  env: Record<string, string | undefined>,
 ): string {
   const release = env.KORTIX_RELEASE_VERSION?.trim();
   const commit = env.KORTIX_RELEASE_COMMIT?.trim().toLowerCase();

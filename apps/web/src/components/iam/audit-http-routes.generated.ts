@@ -260,6 +260,7 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "PUT|v1|admin|api|provider-fallback",
   "GET|v1|admin|api|sandboxes",
   "POST|v1|admin|api|sandboxes|:sessionId|migrate",
+  "GET|v1|agent-marks|:file",
   "GET|v1|approval-links|:token",
   "GET|v1|apps|edge|tls-check",
   "GET|v1|artifacts|meta|:artifactId",

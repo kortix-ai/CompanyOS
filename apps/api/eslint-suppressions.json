@@ -442,9 +442,6 @@
     "no-console": {
       "count": 1
     },
-    "no-restricted-imports": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -589,9 +586,6 @@
   },
   "src/channels/teams/identity-routes.ts": {
     "no-console": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },

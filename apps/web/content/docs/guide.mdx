@@ -1017,8 +1017,10 @@ Channels connect a workspace to Slack, Microsoft Teams, Telegram and Discord. Pe
 <a id="one-thread-one-session" />
 
 - **In Slack, one thread is one session.** The first message in a thread starts the session, and later messages in the thread continue it.
-- **In a Slack channel, only a mention reaches the agent.** A reply without a mention stays between people. The agent reads the whole thread the next time someone mentions it.
-- **In a direct message with the bot, every message reaches the agent.** That session is private to you.
+- **In a Slack channel, a mention starts the agent.** In the agent's thread, the person who started it keeps talking with plain replies. Anyone else mentions the bot to reach it; their other replies stay between people, and the agent reads them the next time it runs.
+- **In a direct message with the bot, every message reaches the agent.** That session is private to you. The bot's status line shows what the agent is doing.
+- **Each reply is signed by the agent.** The author is the agent's name and face, as in Kortix, not "Kortix". The first reply in a thread says which agent the channel selected. Every reply has **Switch agent**, which changes the agent for the channel's next threads, and **Open in Kortix**, which opens the session.
+- **The agent moves through public channels on its own.** It joins a public channel when it needs to read one. A private channel needs a person to invite the bot.
 - **In Teams, each channel post is its own session.** A personal or group chat keeps one session until someone sends `/new`.
 
 #### Each person links their account

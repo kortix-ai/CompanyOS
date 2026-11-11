@@ -104,6 +104,28 @@ const feedbackLimiter = new TokenBucketRateLimiter('feedback');
 const deviceTokenReleaseLimiter = new TokenBucketRateLimiter('device_token_release');
 
 /**
+ * Per-session ceiling on stored-log reads (`GET /v1/workspaces/:id/sessions/:id/log`,
+ * `KORTIX_SESSION_LOG_READS_PER_MIN`, 300). INCIDENT 2026-11-10 23:38 UTC (KRTX-4696):
+ * one CLI client polled the stored log of ONE session in waves that peaked near 24
+ * requests/s for minutes (about 50k requests against the one session in an evening).
+ * Every poll pays the full session-read gate plus the page transaction and a
+ * multi-100 kB serialize+gzip, so the route's p50 hit 1.25 s (p95 2.6 s) and the
+ * API-wide p95 rose with it. The bucket sits in front of the gate, keyed by the
+ * path's session id, so a hot poller costs the API one in-memory check per poll;
+ * 300/min keeps every real watcher unthrottled (the CLI wait loop polls at 60/min
+ * per waiter, the web sync on events). Replica-local, like every limiter here.
+ */
+const sessionLogReadLimiter = new TokenBucketRateLimiter('session_log_read');
+
+/** The per-session read verdict for one stored-log GET; the route turns a denial into its 429. */
+export function sessionLogReadLimit(sessionId: string): RateLimitResult {
+  return sessionLogReadLimiter.check(sessionId, {
+    limit: positiveInt(config.KORTIX_SESSION_LOG_READS_PER_MIN, 300),
+    windowMs: 60_000,
+  });
+}
+
+/**
  * Per-project budget on secret WRITES (POST/PUT/PATCH/DELETE under
  * /:projectId/secrets*). Reads pass untouched.
  *

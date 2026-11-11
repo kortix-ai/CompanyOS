@@ -22,7 +22,7 @@ async function verb(name: string, body: Record<string, unknown>, context: ToolCo
   const token = context.env.KORTIX_TOKEN?.trim()
   if (!api || !token) throw new Error('This session has no Kortix API (KORTIX_API_URL and KORTIX_TOKEN are not set).')
   const project = context.env.KORTIX_PROJECT_ID?.trim()
-  const url = `${api.endsWith('/v1') ? api : `${api}/v1`}/agent-tools/${name}${project ? `?project=${encodeURIComponent(project)}` : ''}`
+  const url = `${api.endsWith('/v1') ? api : `${api}/v1`}/agent-tools/${name}${project ? `?project_id=${encodeURIComponent(project)}` : ''}`
   const signal = context.signal ? AbortSignal.any([context.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS)
   const res = await fetch(url, {
     method: 'POST',

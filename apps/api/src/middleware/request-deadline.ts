@@ -69,6 +69,8 @@ const EXEMPT_PREFIXES = [
   '/v1/admin', // operator maintenance endpoints — deliberate long ops
   '/kortix-capture', // Capture store passthrough (self-host without a domain): device chunk uploads
   '/v1/mcp', // MCP server — bounds itself at 55 s (waits for turns, runs commands)
+  '/v1/agent-tools', // the same six tools as plain JSON — bounds itself at 55 s like /v1/mcp
+  '/v1/openapi.json', // built once per process, then cached; a cold build under load can pass 25 s
 ];
 
 // Path fragments for streaming or legitimately long *synchronous* endpoints

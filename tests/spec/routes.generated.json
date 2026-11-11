@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1752,
+  "count": 1753,
   "aliases": 675,
   "routes": [
     {
@@ -1195,6 +1195,10 @@
     {
       "method": "POST",
       "path": "/v1/admin/api/sandboxes/:sessionId/migrate"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agent-tools/:verb"
     },
     {
       "method": "GET",

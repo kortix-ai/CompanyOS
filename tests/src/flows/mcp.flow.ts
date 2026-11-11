@@ -264,10 +264,13 @@ flow(
       const me = await ctx.client.as(ctx.P.ANON).get("/v1/me", { headers: { Authorization: `Bearer ${token}` } });
       me.status(200).body().has("$.token_context.auth_type", "oauth");
     });
-    await ctx.step("initialize → the requested protocol version, tools capability, instructions that start at list_projects (no feature flag)", async () => {
+    await ctx.step("initialize → the requested protocol version, tools capability, instructions that teach the six tools and start at projects.list (no feature flag)", async () => {
       const r = await mcp(rpc(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "flow", version: "1" } }));
       r.status(200).body().has("$.result.protocolVersion", "2025-06-18").has("$.result.serverInfo.name", "kortix").exists("$.result.capabilities.tools");
-      if (!r.json<any>().result.instructions.includes("list_projects")) throw new Error("instructions do not point at list_projects");
+      const instructions: string = r.json<any>().result.instructions;
+      for (const word of ["`search`", "`describe`", "`call`", "`execute`", "`resume`", "`skills`", "projects.list", "never repeat the call", "Never ask a person for a password"]) {
+        if (!instructions.includes(word)) throw new Error(`instructions lack ${word}`);
+      }
     });
     await ctx.step("notifications/initialized → 202; GET and DELETE → 405 (stateless: no stream, no session)", async () => {
       const n = await mcp({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -277,24 +280,16 @@ flow(
       const d = await ctx.client.as(ctx.P.ANON).del("/v1/mcp", { headers: { Authorization: `Bearer ${token}` } });
       d.status(405);
     });
-    await ctx.step("tools/list → the fourteen session/API tools (search_project included), the ten connector tools and `kortix`", async () => {
+    await ctx.step("tools/list → exactly the six tools, whatever the catalog holds; the older tools are unlisted and still described by id", async () => {
       const r = await mcp(rpc(2, "tools/list"));
       r.status(200);
-      const names = r.json<any>().result.tools.map((t: { name: string }) => t.name).sort();
-      const want = [
-        "add_connector", "call_api", "call_connector", "connect_connector", "describe_api", "describe_connector_action", "get_connector_app", "kortix",
-        "list_connector_accounts", "list_connectors", "list_files", "list_projects", "list_sessions", "read_file", "read_session", "read_skill",
-        "remove_connector", "run_command", "search_api", "search_connector_actions", "search_connector_apps", "search_project",
-        "send_message", "start_session", "upload_connector_attachment", "write_file",
-      ];
-      if (JSON.stringify(names) !== JSON.stringify(want)) throw new Error(`tools: ${names}`);
-      const tool = (name: string) => r.json<any>().result.tools.find((t: { name: string }) => t.name === name);
-      if (!tool("read_file").inputSchema.properties.offset || !tool("read_file").inputSchema.properties.limit || !tool("list_files").inputSchema.properties.offset) {
-        throw new Error("read_file / list_files lack offset and limit");
-      }
-      const hints = (name: string) => JSON.stringify(tool(name).annotations);
-      if (hints("read_file") !== '{"readOnlyHint":true,"openWorldHint":false}' || hints("list_files") !== '{"readOnlyHint":true,"openWorldHint":false}' || hints("search_project") !== '{"readOnlyHint":true,"openWorldHint":false}') throw new Error("read annotations");
-      if (!tool("write_file").annotations.idempotentHint || !tool("write_file").annotations.destructiveHint || !tool("run_command").annotations.destructiveHint) throw new Error("write annotations");
+      const names = r.json<any>().result.tools.map((t: { name: string }) => t.name);
+      if (JSON.stringify(names) !== JSON.stringify(["skills", "search", "describe", "call", "execute", "resume"])) throw new Error(`tools: ${names}`);
+      // The built-ins keep their schemas, now behind describe.
+      const read = JSON.parse((await mcp(rpc(48, "tools/call", { name: "describe", arguments: { id: "sandbox.read_file" } }))).json<any>().result.content[0].text);
+      if (!read.input_schema?.properties?.offset || !read.input_schema?.properties?.limit || read.risk !== "read") throw new Error(`sandbox.read_file: ${JSON.stringify(read).slice(0, 300)}`);
+      const write = JSON.parse((await mcp(rpc(49, "tools/call", { name: "describe", arguments: { id: "sandbox.write_file" } }))).json<any>().result.content[0].text);
+      if (write.risk !== "destructive") throw new Error(`sandbox.write_file risk: ${write.risk}`);
     });
     await ctx.step("search_api finds the secrets routes; describe_api reads one", async () => {
       const s = await mcp(rpc(3, "tools/call", { name: "search_api", arguments: { query: "secrets" } }));
@@ -505,18 +500,15 @@ flow(
       if (ok.status !== 200) throw new Error(`good MCP-Protocol-Version: ${ok.status}`);
     });
     await ctx.step("tools/list: titles, and annotations that tell an approval UI what is safe", async () => {
-      const tools = (await (await mcp(rpc(45, "tools/list"))).json<any>()).result.tools as Array<{ name: string; title?: string; annotations: Record<string, boolean> }>;
+      const tools = (await (await mcp(rpc(45, "tools/list"))).json<any>()).result.tools as Array<{ name: string; title?: string; annotations: Record<string, boolean>; inputSchema: any }>;
       const by = (n: string) => tools.find((t) => t.name === n)!;
-      for (const n of ["list_projects", "start_session", "send_message", "read_session", "list_sessions", "read_skill", "search_api", "describe_api", "call_api"]) {
-        if (!by(n).title || typeof by(n).annotations.readOnlyHint !== "boolean") throw new Error(`${n}: ${JSON.stringify(by(n))}`);
+      for (const n of ["skills", "search", "describe", "resume"]) {
+        if (!by(n).title || by(n).annotations.readOnlyHint !== true || by(n).annotations.openWorldHint !== false) throw new Error(`${n} annotations: ${JSON.stringify(by(n))}`);
       }
-      for (const n of ["list_projects", "read_session", "list_sessions", "read_skill", "search_api", "describe_api"]) {
-        if (by(n).annotations.readOnlyHint !== true || by(n).annotations.openWorldHint !== false) throw new Error(`${n} annotations: ${JSON.stringify(by(n).annotations)}`);
+      for (const n of ["call", "execute"]) {
+        if (!by(n).title || by(n).annotations.destructiveHint !== true || by(n).annotations.openWorldHint !== true) throw new Error(`${n} must be destructive and open-world`);
       }
-      for (const n of ["start_session", "send_message"]) if (by(n).annotations.destructiveHint !== false) throw new Error(`${n} is not marked non-destructive`);
-      if (by("call_api").annotations.destructiveHint !== true) throw new Error("call_api must stay destructive");
-      const body = (by("call_api") as any).inputSchema.properties.body;
-      if (body.type !== "object") throw new Error(`call_api body schema: ${JSON.stringify(body)}`);
+      if (by("call").inputSchema.properties.input.type !== "object") throw new Error(`call input schema: ${JSON.stringify(by("call").inputSchema)}`);
     });
     await ctx.step("call_api: no bypass of the /v1/oauth and MCP block by dot segments, %-escapes or double slashes", async () => {
       for (const path of ["/v1/projects/../oauth/grants", "/v1/%6fauth/grants", "/v1/projects/%2e%2e/oauth/grants", "/v1/%6dcp", "/v1//oauth/grants"]) {
@@ -660,6 +652,7 @@ flow(
       "GET /v1/connectors/workspaces/:projectId/connectors/:slug/accounts",
       "POST /v1/connectors/workspaces/:projectId/call",
       "POST /v1/connectors/workspaces/:projectId/attachments",
+      "POST /v1/workspaces/:workspaceId/approvals/:executionId",
     ],
   },
   async (ctx) => {
@@ -708,19 +701,15 @@ flow(
           else outsiderPat = created.json<{ secret_key: string }>().secret_key;
         }
       });
-      await ctx.step("tools/list carries the ten connector tools with titles and honest annotations", async () => {
+      await ctx.step("tools/list carries the six tools; the connector tools still run by name and keep their schemas behind describe", async () => {
         const r = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(1, "tools/list"), { headers: { Authorization: `Bearer ${pat}` } });
-        const tools = r.json<any>().result.tools as Array<{ name: string; title?: string; description: string; annotations: Record<string, boolean>; inputSchema: { additionalProperties?: boolean } }>;
-        const by = (n: string) => tools.find((t) => t.name === n)!;
-        const readOnly = ["list_connectors", "list_connector_accounts", "search_connector_actions", "describe_connector_action", "search_connector_apps", "get_connector_app"];
-        const writes = ["call_connector", "upload_connector_attachment", "connect_connector", "add_connector", "remove_connector"];
-        for (const n of [...readOnly, ...writes]) {
-          if (!by(n)?.title || by(n).description.length < 80 || by(n).inputSchema.additionalProperties !== false) throw new Error(`${n}: ${JSON.stringify(by(n))?.slice(0, 200)}`);
+        const names = (r.json<any>().result.tools as Array<{ name: string }>).map((t) => t.name);
+        if (JSON.stringify(names) !== JSON.stringify(["skills", "search", "describe", "call", "execute", "resume"])) throw new Error(`tools: ${names}`);
+        for (const id of ["connector_admin.list", "connector_admin.connect", "connector_admin.add", "connector_admin.remove"]) {
+          const d = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(2, "tools/call", { name: "describe", arguments: { id } }), { headers: { Authorization: `Bearer ${pat}` } });
+          const doc = JSON.parse(d.json<any>().result.content[0].text);
+          if (doc.id !== id || doc.description.length < 80 || doc.input_schema?.additionalProperties !== false) throw new Error(`${id}: ${JSON.stringify(doc).slice(0, 200)}`);
         }
-        for (const n of readOnly) if (by(n).annotations.readOnlyHint !== true) throw new Error(`${n} must be readOnly`);
-        for (const n of ["call_connector", "remove_connector"]) if (by(n).annotations.destructiveHint !== true) throw new Error(`${n} must be destructive`);
-        if (by("call_connector").annotations.openWorldHint !== true) throw new Error("call_connector reaches the outside world");
-        if (by("upload_connector_attachment").annotations.destructiveHint !== false) throw new Error("upload is not destructive");
       });
       await ctx.step("seed one connected OpenAPI connector (read, write, destructive, big-result actions) and one never-connected one", async () => {
         const seeded = await db.query<{ connector_id: string }>(
@@ -813,6 +802,41 @@ flow(
         const r = await tool(15, "call_connector", { project_id: p.id, tool: `${slug}.purge` });
         const body = r.json();
         if (!r.isError || body.status !== "denied" || body.reason !== "policy_block" || !body.next.includes("Do not retry")) throw new Error(`block: ${r.text}`);
+      });
+      await ctx.step("the six tools reach the same connector: search ranks its action first, call runs it, a write is held, its own token cannot approve it, resume reads it, and the call log names the surface", async () => {
+        const verb = async (id: number, name: string, args: Record<string, unknown>) => {
+          const res = await ctx.client.as(ctx.P.ANON).post(`/v1/mcp?project=${p.id}`, rpc(id, "tools/call", { name, arguments: args }), { headers: { Authorization: `Bearer ${pat}` } });
+          const result = res.json<any>().result;
+          return { isError: result.isError === true, body: JSON.parse(result.content[0].text) };
+        };
+        const found = await verb(60, "search", { query: "widgets in the warehouse", family: "connectors" });
+        if (found.body.results[0]?.id !== `connectors.${slug}.list_items` || found.body.results[0].risk !== "read") throw new Error(`search: ${JSON.stringify(found.body).slice(0, 400)}`);
+        if (onLocal) {
+          const ran = await verb(61, "call", { id: `connectors.${slug}.list_items`, input: { limit: 2 } });
+          if (ran.isError || ran.body.status !== "ok" || ran.body.data?.items?.[0]?.name !== "widget") throw new Error(`call: ${JSON.stringify(ran.body).slice(0, 300)}`);
+        }
+        const before = hits.length;
+        const held = await verb(62, "call", { id: `connectors.${slug}.send_note`, input: { body: { text: "six tools" } } });
+        if (held.body.status !== "pending_approval" || !held.body.execution_id) throw new Error(`held: ${JSON.stringify(held.body)}`);
+        if (hits.length !== before) throw new Error("the upstream ran before approval");
+        const own = await verb(63, "call", {
+          id: "kortix.POST /v1/workspaces/{workspaceId}/approvals/{executionId}",
+          input: { params: { executionId: held.body.execution_id }, body: { decision: "approve" } },
+        });
+        if (!own.isError || own.body.data?.code !== "APPROVAL_OWN_CALL") throw new Error(`own approval: ${JSON.stringify(own.body)}`);
+        const resumed = await verb(64, "resume", { execution_id: held.body.execution_id });
+        if (resumed.body.state !== "pending" || resumed.body.action !== `${slug}.send_note`) throw new Error(`resume: ${JSON.stringify(resumed.body)}`);
+        const row = await db.query<{ surface: string; credential_id: string | null; phase: string }>(
+          `SELECT surface, credential_id, phase FROM kortix.connector_calls WHERE execution_id = $1`,
+          [held.body.execution_id],
+        );
+        if (row.rows[0]?.surface !== "mcp" || !row.rows[0].credential_id || row.rows[0].phase !== "approval") throw new Error(`call log: ${JSON.stringify(row.rows)}`);
+        const denied = await ctx.client.as(ctx.P.OWNER).post(`/v1/workspaces/${p.id}/approvals/${held.body.execution_id}`, { decision: "deny" });
+        denied.status(200);
+        const again = await verb(65, "call", { id: `connectors.${slug}.send_note`, input: { body: { text: "six tools" } } });
+        if (!again.isError || again.body.reason !== "previously_denied") throw new Error(`repeat after deny: ${JSON.stringify(again.body)}`);
+        const program = await verb(66, "execute", { code: `const r = await search({ query: "widgets", family: "connectors", limit: 1 }); return r.results[0].id;` });
+        if (program.isError || program.body.value !== `connectors.${slug}.list_items` || program.body.calls !== 1) throw new Error(`execute: ${JSON.stringify(program.body)}`);
       });
       await ctx.step("upload_connector_attachment stages base64 and returns the $kortix_attachment ref with where to put it", async () => {
         const bytes = Buffer.from("weekly report ✓");
@@ -912,14 +936,14 @@ flow(
         await world.close();
       }
     });
-    await ctx.step("tools/list: `kortix` takes args (required), project_id and session_id, and its description teaches discovery and the refusals", async () => {
-      const r = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(1, "tools/list"), { headers: { Authorization: `Bearer ${pat}` } });
-      const tool = r.json<any>().result.tools.find((t: { name: string }) => t.name === "kortix");
-      if (!tool?.title || tool.inputSchema.required?.join() !== "args" || tool.inputSchema.additionalProperties !== false) throw new Error(JSON.stringify(tool)?.slice(0, 300));
-      for (const k of ["args", "project_id", "session_id"]) if (!tool.inputSchema.properties[k]) throw new Error(`no ${k}`);
+    await ctx.step("describe cli.run: it takes args (required), project_id and session_id, and its description teaches discovery and the refusals", async () => {
+      const r = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(1, "tools/call", { name: "describe", arguments: { id: "cli.run" } }), { headers: { Authorization: `Bearer ${pat}` } });
+      const tool = JSON.parse(r.json<any>().result.content[0].text);
+      if (!tool?.title || tool.input_schema?.required?.join() !== "args" || tool.input_schema.additionalProperties !== false) throw new Error(JSON.stringify(tool)?.slice(0, 300));
+      for (const k of ["args", "project_id", "session_id"]) if (!tool.input_schema.properties[k]) throw new Error(`no ${k}`);
       for (const word of ["--help", "--json", "start_session", "--host", "apps deploy"]) if (!tool.description.includes(word)) throw new Error(`description lacks ${word}`);
       const init = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(2, "initialize", { protocolVersion: "2025-06-18" }), { headers: { Authorization: `Bearer ${pat}` } });
-      if (!String(init.json<any>().result.instructions).includes("`kortix` tool")) throw new Error("instructions do not name the kortix tool");
+      if (!String(init.json<any>().result.instructions).includes("cli.run")) throw new Error("instructions do not name cli.run");
     });
     await ctx.step("[\"--help\"] lists the command groups; [\"secrets\",\"--help\"] lists its subcommands", async () => {
       const top = await cli(3, ["--help"]);
@@ -954,8 +978,12 @@ flow(
       const ls = await cli(8, ["secrets", "ls", "--json"], { project_id: p.id });
       if (ls.isError || !JSON.stringify(ls.out!.json ?? ls.out!.stdout).includes("MCP_T")) throw new Error(ls.text.slice(0, 500));
       if (ls.text.includes(value) || set.text.includes(value)) throw new Error("the secret value appeared in a tool result");
+      // Without a project the CLI may answer for its default workspace (the CLI
+      // contract, project-bind.test.ts), but only by naming it on stderr: it never
+      // answers silently for an arbitrary project.
       const without = await cli(9, ["secrets", "ls", "--json"]);
-      if (JSON.stringify(without.out?.json ?? without.out?.stdout ?? "").includes("MCP_T") && without.out?.exit_code === 0) throw new Error("secrets ls without a project answered for one");
+      const answered = JSON.stringify(without.out?.json ?? without.out?.stdout ?? "").includes("MCP_T") && without.out?.exit_code === 0;
+      if (answered && !String(without.out?.stderr ?? "").includes("Default workspace:")) throw new Error("secrets ls without a project answered for one without naming it");
       await cli(10, ["secrets", "rm", "MCP_T", "--yes"], { project_id: p.id });
     });
     await ctx.step("triggers ls, system-skills and a failing command: exit code and stderr come back, a non-zero exit is isError", async () => {
@@ -1016,6 +1044,61 @@ flow(
       if (!escape.isError) throw new Error("a reference path may not leave the skill directory");
       const outsider = await call(29, "read_skill", { project_id: p.id }, outsiderPat);
       if (!outsider.isError) throw new Error(`an outsider listed the project's skills: ${outsider.text.slice(0, 200)}`);
+    });
+  },
+);
+
+// MCP-7: the six tools as plain JSON. pi in a session and the kortix CLI call
+// POST /v1/agent-tools/{verb} with their own token; the answers are the MCP
+// tools' answers without the JSON-RPC envelope.
+flow(
+  "MCP-7",
+  {
+    domain: "mcp",
+    routes: ["POST /v1/accounts/tokens", "POST /v1/agent-tools/:verb"],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const p = await team.project();
+    let pat = "";
+    const verb = (name: string, body: unknown, token: string | null = pat, query = `?project_id=${p.id}`) =>
+      ctx.client.as(ctx.P.ANON).post(`/v1/agent-tools/${name}${query}`, body, token ? { headers: { Authorization: `Bearer ${token}`, "x-kortix-surface": "cli" } } : {});
+    await ctx.step("mint the owner's personal token", async () => {
+      const created = await ctx.client.as(ctx.P.OWNER).post("/v1/accounts/tokens", { name: "MCP-7 owner" });
+      created.status(201);
+      pat = created.json<{ secret_key: string }>().secret_key;
+    });
+    await ctx.step("no token → 401; an unknown verb → 404 naming the six; a body that is not an object → 400", async () => {
+      (await verb("search", { query: "x" }, null)).status(401);
+      const unknown = await verb("approve", {});
+      unknown.status(404).body().has("$.error", "unknown_verb").has("$.verbs[0]", "skills");
+      (await verb("search", ["not", "an", "object"])).status(400);
+      const missing = await verb("search", {});
+      missing.status(400).body().has("$.error", "invalid_input");
+    });
+    await ctx.step("search finds the Kortix API route by intent, as a kortix.<METHOD> <path> id with its risk", async () => {
+      const r = await verb("search", { query: "list workspace secrets", family: "kortix", limit: 3 });
+      r.status(200);
+      const results = r.json<{ results: Array<{ id: string; risk: string }> }>().results;
+      if (!results.some((x) => x.id === "kortix.GET /v1/workspaces/{workspaceId}/secrets" && x.risk === "read")) throw new Error(`search: ${JSON.stringify(results)}`);
+    });
+    await ctx.step("describe returns the route's input schema; call runs it as the token with the project filled in", async () => {
+      const d = await verb("describe", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets" });
+      d.status(200).body().has("$.risk", "read").exists("$.input_schema.properties.params");
+      const c = await verb("call", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets" });
+      c.status(200).body().has("$.status", "ok").exists("$.data.items");
+      const listed = await verb("call", { id: "projects.list" });
+      listed.status(200);
+      if (!listed.json<{ data: Array<{ project_id: string }> }>().data.some((x) => x.project_id === p.id)) throw new Error("projects.list misses the project");
+    });
+    await ctx.step("an unknown id is a 422 tool error that names the closest ids; execute runs a program over the same tools", async () => {
+      const bad = await verb("call", { id: "projects.lst" });
+      bad.status(422).body().has("$.status", "error").has("$.reason", "unknown_tool");
+      if (!bad.json<{ message: string }>().message.includes("projects.list")) throw new Error(`suggestions: ${bad.text()}`);
+      const program = await verb("execute", { code: "const r = await call({ id: \"projects.list\" }); text(r.status); return r.data.length;" });
+      program.status(200).body().has("$.ok", true).has("$.output", "ok").has("$.calls", 1);
+      const sandboxed = await verb("execute", { code: "return [typeof fetch, typeof process, typeof setTimeout].join(',');" });
+      sandboxed.status(200).body().has("$.value", "undefined,undefined,undefined");
     });
   },
 );

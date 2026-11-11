@@ -64,3 +64,19 @@ test('the ALB health check path is never redirected', async () => {
   const res = await middleware(req);
   expect(res.status).not.toBe(308);
 });
+
+test("a container's own probe of localhost is never redirected, whatever its bind address", async () => {
+  // The standalone server builds nextUrl from its bind address (0.0.0.0), and
+  // the self-host compose probes http://localhost:3000/ (2026-11-11: every
+  // self-host frontend update to v0.15.5 rolled back on a 308 to https://0.0.0.0:3000/).
+  for (const host of ['localhost:3000', '127.0.0.1:3000', '[::1]:3000']) {
+    const req = new NextRequest('http://0.0.0.0:3000/', { headers: { host } });
+    req.headers.set('x-forwarded-proto', 'http');
+    expect((await middleware(req)).status).not.toBe(308);
+  }
+  const visitor = new NextRequest('http://0.0.0.0:3000/', { headers: { host: 'kortix.example.com' } });
+  visitor.headers.set('x-forwarded-proto', 'http');
+  const location = await redirectLocation(visitor);
+  expect(location?.protocol).toBe('https:');
+  expect(location?.host).toBe('kortix.example.com');
+});

@@ -227,8 +227,7 @@ const SelectScrollUpButton = React.forwardRef<
   <SelectPrimitive.ScrollUpArrow
     ref={ref}
     className={cn(
-      // cursor-default: hover-scroll area, not a control.
-      'bg-popover absolute inset-x-0 top-0 z-[1] flex cursor-default items-center justify-center py-1',
+      'bg-popover absolute inset-x-0 top-0 z-[1] flex cursor-default items-center justify-center py-1', // cursor-default: hover-scroll area, not a control.
       className,
     )}
     {...props}
@@ -245,7 +244,7 @@ const SelectScrollDownButton = React.forwardRef<
   <SelectPrimitive.ScrollDownArrow
     ref={ref}
     className={cn(
-      'bg-popover absolute inset-x-0 bottom-0 z-[1] flex cursor-default items-center justify-center py-1',
+      'bg-popover absolute inset-x-0 bottom-0 z-[1] flex cursor-default items-center justify-center py-1', // cursor-default: hover-scroll area, not a control.
       className,
     )}
     {...props}

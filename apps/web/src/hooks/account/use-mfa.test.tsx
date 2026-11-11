@@ -19,7 +19,6 @@ let probe: {
   mfaFactors?: unknown;
   standaloneFactors?: unknown;
   mfaSessionVerified?: boolean;
-  mfaChallengeRequired?: boolean;
 } = {};
 
 mock.module('@/features/providers/auth-provider', () => ({
@@ -68,7 +67,6 @@ function MfaProbe() {
       mfaFactors: mfa.factors,
       standaloneFactors: standaloneFactors.data?.factors,
       mfaSessionVerified: mfa.sessionVerified,
-      mfaChallengeRequired: mfa.challengeRequired,
     };
   });
   return createElement(

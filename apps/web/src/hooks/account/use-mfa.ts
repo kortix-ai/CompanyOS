@@ -18,11 +18,9 @@ import { useTranslations } from '@/i18n/use-translations';
  * That guarded version is what this hook keeps.
  *
  * KRTX-4748 merged the phone-verification page's second copies of these
- * queries into this file: that module read the same service under its own
- * factor key and carried a second `['mfa-aal']` policy, so a factor enrolled
- * on the phone page never invalidated the list the Security tab renders.
- * The queries and the four phone challenge mutations now live here together,
- * so this module is the one home every MFA hook is imported from.
+ * queries (its own factor key + a second `['mfa-aal']` policy) into this
+ * file; the four phone challenge mutations moved here too, so this module is
+ * the one home every MFA hook is imported from.
  *
  * `FactorRow` (the pure per-factor row) and `totpQrSrc` (the QR data-URL
  * normalizer) are NOT here — they're view code, not state, and this file
@@ -54,7 +52,7 @@ export const MFA_AAL_QUERY_KEY = ['mfa-aal'] as const;
 // phone copy's (the page runs pre-login, where `listFactors` throws) and the
 // short staleTime the Security-tab copy's. Finite window so enrolled/
 // unenrolled factors picked up elsewhere refetch on mount/focus (mutations
-// still invalidate explicitly). Was Infinity, which never refetched despite
+// still invalidate explicitly) — was Infinity, which never refetched despite
 // the "2 minutes" intent.
 export function useMfaFactors() {
   const { user } = useAuth();

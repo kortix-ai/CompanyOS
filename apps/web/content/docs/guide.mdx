@@ -1234,6 +1234,60 @@ On the first call, your browser opens the Kortix consent screen. Approve it only
 </Step>
 </Steps>
 
+#### Add it from a terminal
+
+Each command adds Kortix Cloud. On a self-hosted Kortix, replace the URL with `https://api.<your domain>/v1/mcp`.
+
+<Tabs>
+<Tab title="Claude Code">
+
+```sh
+claude mcp add --transport http kortix https://api.kortix.com/v1/mcp
+```
+
+Then run `/mcp` in Claude Code, select `kortix` and select **Authenticate**.
+
+</Tab>
+<Tab title="Codex">
+
+```sh
+codex mcp add kortix --url https://api.kortix.com/v1/mcp
+codex mcp login kortix
+```
+
+The second command opens the browser sign-in.
+
+</Tab>
+<Tab title="Cursor and other clients">
+
+Add the server to the client's MCP configuration file. Cursor reads `~/.cursor/mcp.json`. Keep the servers the file already has.
+
+```json
+{
+  "mcpServers": {
+    "kortix": {
+      "url": "https://api.kortix.com/v1/mcp"
+    }
+  }
+}
+```
+
+</Tab>
+<Tab title="Several clients">
+
+```sh
+npx add-mcp https://api.kortix.com/v1/mcp --name kortix -g
+```
+
+`add-mcp` lists the coding agents it supports and selects the ones installed on your computer. It writes the configuration of each agent you keep. Without `-g`, it writes the configuration files of the current folder.
+
+</Tab>
+</Tabs>
+
+#### Let your coding agent set it up
+
+Send your coding agent this line: "Read https://kortix.com/setup-prompt.md and follow it." You can also paste the [setup prompt](https://kortix.com/setup-prompt.md) itself. The agent adds the server, starts the browser sign-in, reads the Kortix guides and starts a first session. It never asks you for a secret in the chat.
+
 To disconnect a tool, open **Settings** → **Personal access keys** → **Connected apps** and select **Revoke access**. Its access stops at once.
 
 ## People and access

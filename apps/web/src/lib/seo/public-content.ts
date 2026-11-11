@@ -516,8 +516,24 @@ function renderMdxTagLine(line: string, stack: MdxRenderContext[]): string | nul
   return undefined;
 }
 
-function formatMdxContentLine(line: string, stack: MdxRenderContext[]): string {
-  const content = stack.length ? line.replace(/^\s{2,}/, '') : line;
+/**
+ * A line inside a component loses the indentation the MDX source gave it. A
+ * line inside a fenced code block loses only the fence's own indentation
+ * (`fenceIndent`): the code keeps its own, so a JSON block in a <Tab> stays
+ * the JSON a reader copies.
+ */
+function formatMdxContentLine(
+  line: string,
+  stack: MdxRenderContext[],
+  fenceIndent?: number,
+): string {
+  let content = line;
+  if (stack.length) {
+    content =
+      fenceIndent === undefined
+        ? line.replace(/^\s{2,}/, '')
+        : line.slice(Math.min(fenceIndent, /^\s*/.exec(line)![0].length));
+  }
   if (stack.some((item) => item.quote)) return content.trim() ? `> ${content}` : '>';
   return content;
 }
@@ -527,19 +543,21 @@ export function renderPlainMarkdownFromMdx(source: string): string {
   const rendered: string[] = [];
   const stack: MdxRenderContext[] = [];
   let inFence = false;
+  let fenceIndent = 0;
   let skippingModule = false;
 
   for (let index = 0; index < lines.length; index += 1) {
     let line = lines[index];
-    const fence = /^\s*(```|~~~)/.test(line);
+    const fence = /^(\s*)(```|~~~)/.exec(line);
     if (fence) {
       inFence = !inFence;
+      if (inFence) fenceIndent = fence[1].length;
       rendered.push(formatMdxContentLine(line, stack));
       continue;
     }
 
     if (inFence) {
-      rendered.push(formatMdxContentLine(line, stack));
+      rendered.push(formatMdxContentLine(line, stack, fenceIndent));
       continue;
     }
 

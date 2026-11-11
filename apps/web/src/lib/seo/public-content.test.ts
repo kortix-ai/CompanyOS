@@ -18,6 +18,7 @@ import {
 } from '@/lib/seo/public-content';
 import { resetAiIndexRateLimitsForTests } from '@/lib/seo/rate-limit';
 import { markdownResponse } from '@/lib/seo/response';
+import { MCP_INSTALL } from '@/lib/seo/setup-prompt';
 import { renderRobotsTxt } from '@/lib/seo/robots';
 import { CANONICAL_ORIGIN } from '@kortix/ui/internal/lib/site-metadata';
 
@@ -304,6 +305,14 @@ describe('Markdown twins of pages without MDX source', () => {
     expect(twin('download')).toContain('curl -fsSL https://kortix.com/install | bash');
     expect(twin('marketplace')).toContain('GET https://api.kortix.com/v1/marketplace/items?query=');
     expect(twin('changelog')).toContain('https://github.com/kortix-ai/CompanyOS/releases.atom');
+  });
+
+  test('the MCP docs print the install commands the setup prompt prints', () => {
+    const guide = resolvePublicMarkdown(['docs', 'guide.md'])!.markdown;
+    for (const text of [MCP_INSTALL.claudeCode, MCP_INSTALL.codex, MCP_INSTALL.json]) {
+      expect(guide).toContain(text);
+    }
+    expect(guide).toContain('https://kortix.com/setup-prompt.md');
   });
 });
 

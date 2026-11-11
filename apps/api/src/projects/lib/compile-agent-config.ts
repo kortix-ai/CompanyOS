@@ -52,6 +52,7 @@ import {
   type MirrorRefresh,
 } from '../git';
 import { manifestIssueSummary } from '../manifest-io';
+import { prefetchRepoFiles } from '../git/files';
 import { reportedManifestIssues } from './manifest-health';
 
 /**
@@ -553,7 +554,12 @@ interface CompileReadOptions {
  */
 // replica-local: a cache of immutable per-commit output; a miss recompiles.
 const compiledAtCommit = new Map<string, { raw: Record<string, unknown>; compiled: string | null }>();
-const COMPILED_AT_COMMIT_MAX = 32;
+// Holds the ACTIVE fleet's (project x selection) keys — prod 2026-11-11 ticks
+// ~30 projects an hour; at 32 every tick evicted and recompiled. Entries are
+// bounded by the config size (~128 KiB cap), so 1,000 is a few tens of MB at
+// the absolute worst, ~10 MB typical.
+// ponytail: count-bounded, not byte-bounded; add a byte budget if configs grow.
+const COMPILED_AT_COMMIT_MAX = 1_000;
 
 function compiledAt(key: string | null): { raw: Record<string, unknown>; compiled: string | null } | undefined {
   const hit = key ? compiledAtCommit.get(key) : undefined;
@@ -593,6 +599,12 @@ async function readPromptFiles(project: GitBackedProject, raw: Record<string, un
   for (const block of [...Object.values(mapOf<{ prompt_file?: unknown }>(raw.agents)), ...Object.values(mapOf<{ prompt_file?: unknown }>(raw.commands))]) {
     if (typeof block?.prompt_file === 'string' && safeAgentFile(block.prompt_file)) paths.add(block.prompt_file);
   }
+  // One batched object fetch for every prompt file, before the reads: a
+  // partial store faults blobs one `git fetch` at a time, and the fetches of
+  // one store run serially — the per-file reads would pay one fetch per file
+  // (KRTX-4740: a prompt-heavy project's tick paid 40-260 of them, p95 7.9 s).
+  // A converted legacy file (in the overlay) reads without the repo.
+  await prefetchRepoFiles(project, [...paths].filter((path) => overlay[path] === undefined), ref);
   const files: Record<string, string> = {};
   await Promise.all([...paths].map(async (path) => {
     // A converted legacy file: the prompt without its frontmatter, or a command moved out of the harness folder.

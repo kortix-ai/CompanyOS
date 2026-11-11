@@ -1,0 +1,102 @@
+/**
+ * Characterization tests for the analytics page gate: which document may load
+ * a third-party analytics script. The desktop app never loads one; a
+ * signed-in or capability-token page (`isAnalyticsExcludedPath`) never does;
+ * the visitor pixel loads only on a kortix.com host. The gate is decided once
+ * per document, on mount.
+ */
+import { afterEach, expect, mock, test } from 'bun:test';
+import React, { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Window } from 'happy-dom';
+
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
+
+let desktop = false;
+
+mock.module('@kortix/ui/internal/lib/desktop', () => ({ isDesktop: () => desktop }));
+mock.module('next/script', () => ({
+  default: (props: { id: string }) => <script id={props.id} />,
+}));
+
+const { GoogleTagManager } = await import('./google-tag-manager');
+const { VisitorPixel } = await import('./visitor-pixel');
+
+let win: InstanceType<typeof Window> | null = null;
+
+function installWindow(url: string) {
+  win = new Window();
+  const globals = globalThis as Record<string, unknown>;
+  globals.window = win;
+  globals.document = win.document;
+  globals.navigator = win.navigator;
+  globals.location = win.location;
+  win.location.href = url;
+}
+
+afterEach(() => {
+  win?.happyDOM.abort();
+  win = null;
+});
+
+/** Mounts the element inside act() so the mount effect decides the gate. */
+async function mount(element: React.ReactElement): Promise<{ container: HTMLElement; unmount: () => void }> {
+  const container = win!.document.createElement('div');
+  win!.document.body.appendChild(container);
+  let root: Root | null = null;
+  await act(async () => {
+    root = createRoot(container);
+    root!.render(element);
+  });
+  return {
+    container,
+    unmount: () => {
+      act(() => root!.unmount());
+    },
+  };
+}
+
+test('GoogleTagManager loads on a public page outside the desktop app', async () => {
+  installWindow('https://kortix.com/pricing');
+  const { container, unmount } = await mount(<GoogleTagManager gtmId="GTM-TEST" />);
+  expect(container.querySelector('#_next-gtm-init')).not.toBeNull();
+  expect(container.querySelector('#_next-gtm')).not.toBeNull();
+  unmount();
+});
+
+test('GoogleTagManager never loads inside the desktop app', async () => {
+  desktop = true;
+  installWindow('https://kortix.com/pricing');
+  const { container, unmount } = await mount(<GoogleTagManager gtmId="GTM-TEST" />);
+  expect(container.querySelector('#_next-gtm')).toBeNull();
+  unmount();
+  desktop = false;
+});
+
+test('GoogleTagManager never loads on an excluded path', async () => {
+  installWindow('https://kortix.com/en/workspaces');
+  const { container, unmount } = await mount(<GoogleTagManager gtmId="GTM-TEST" />);
+  expect(container.querySelector('#_next-gtm')).toBeNull();
+  unmount();
+});
+
+test('VisitorPixel loads on a kortix.com host', async () => {
+  installWindow('https://kortix.com/pricing');
+  const { container, unmount } = await mount(<VisitorPixel />);
+  expect(container.querySelector('#visitor-pixel')).not.toBeNull();
+  unmount();
+});
+
+test('VisitorPixel never loads on another host', async () => {
+  installWindow('https://localhost:3000/pricing');
+  const { container, unmount } = await mount(<VisitorPixel />);
+  expect(container.querySelector('#visitor-pixel')).toBeNull();
+  unmount();
+});
+
+test('VisitorPixel never loads on an excluded path of the production host', async () => {
+  installWindow('https://kortix.com/admin');
+  const { container, unmount } = await mount(<VisitorPixel />);
+  expect(container.querySelector('#visitor-pixel')).toBeNull();
+  unmount();
+});

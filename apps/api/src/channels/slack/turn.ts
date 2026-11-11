@@ -16,6 +16,7 @@ import {
   postBlocks,
   postMessage,
   removeReaction,
+  setAssistantStatus,
   startStream,
   stopStream,
   updateBlocks,
@@ -241,6 +242,7 @@ export async function startTurn(
   // plan stream is opened lazily on the first `slack step`; the final answer is
   // posted by `slack send`.
   await addReaction(token, event.channel, event.ts, WORKING_EMOJI);
+  await showWorkingStatus(token, event, 'is working…');
 
   return {
     channel: event.channel,
@@ -255,6 +257,16 @@ export async function startTurn(
     ts: '',
     steps: [],
   };
+}
+
+/**
+ * The DM assistant pane's own status line ("My Kortix is working…"). Only a
+ * DM thread has one; a channel shows the ⏳ and the live plan instead.
+ */
+async function showWorkingStatus(token: string, event: SlackEvent, status: string): Promise<void> {
+  const threadTs = event.thread_ts ?? event.ts;
+  if (!event.channel || !threadTs || !slackChannelIsDm(event.channel)) return;
+  await setAssistantStatus(token, event.channel, threadTs, status);
 }
 
 // Create the plan-checklist message on the first `slack step`. We open a native
@@ -430,8 +442,10 @@ export async function finalizeTurn(
   } catch (err) {
     console.warn('[slack-webhook] finalize render failed (turn still closed)', { sessionId: handle.sessionId, err: (err as Error)?.message });
   }
-  // ALWAYS clear the ⏳ — even if the render above failed.
+  // ALWAYS clear the ⏳ — even if the render above failed — and the pane's
+  // status line, which a turn that posted nothing would otherwise keep.
   await removeReaction(handle.token, handle.channel, handle.triggerTs, WORKING_EMOJI).catch(() => {});
+  await showWorkingStatus(handle.token, ev, '');
 }
 
 // Slack Block Kit caps a section's text at 3000 chars and the outer message has
@@ -609,6 +623,11 @@ export type TurnRelayReason =
 
 export type TurnRelayResult = { ok: true } | { ok: false; reason: TurnRelayReason };
 
+/** "Reading the logs" → "reading the logs", for "My Kortix is reading the logs". */
+function lowerFirst(text: string): string {
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+}
+
 export async function relayTurnStepDetailed(
   sessionId: string,
   title: string,
@@ -649,10 +668,13 @@ export async function relayTurnStepDetailed(
     if (opts.detail) firstStep.details = asText(markdownToMrkdwn(opts.detail)).slice(0, 500);
     const opened = await openPlanMessage(handle, firstStep);
     if (!opened) return { ok: false, reason: 'stream_open_failed' };
+    await showWorkingStatus(handle.token, handle.originatingEvent, `is ${lowerFirst(firstStep.title)}`);
     handle.expiry = Date.now() + STREAM_TTL_MS;
     await saveTurn(handle);
     return { ok: true };
   }
+
+  await showWorkingStatus(handle.token, handle.originatingEvent, `is ${lowerFirst(asText(title))}`.slice(0, 120));
 
   // Subsequent step → mark the previous one complete (with its output/sources),
   // append the new one, and repaint the whole plan via chat.update.

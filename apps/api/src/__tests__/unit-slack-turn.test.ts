@@ -30,6 +30,7 @@ mock.module('../channels/slack-api', () => ({
     return '99.99';
   },
   removeReaction: async (...a: unknown[]) => record('removeReaction')(...a),
+  setAssistantStatus: async () => {},
   startStream: async (...a: unknown[]) => {
     record('startStream')(...a);
     return '11.11';

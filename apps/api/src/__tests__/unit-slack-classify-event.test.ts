@@ -79,6 +79,7 @@ mock.module('../channels/slack-api', () => ({
   postMessage: async () => 'ts',
   publishHomeView: async () => {},
   removeReaction: async () => {},
+  setAssistantStatus: async () => {},
   startStream: async () => 'ts',
   stopStream: async () => {},
   updateBlocks: async () => {},

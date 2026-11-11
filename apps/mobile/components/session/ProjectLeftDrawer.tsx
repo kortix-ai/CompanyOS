@@ -847,6 +847,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   const chrome = isDark ? THEME.dark.chromeBackground : THEME.light.chromeBackground;
   const topFadeColors = [withAlpha(chrome, 1), withAlpha(chrome, 0)] as const;
   const glassy = LIQUID_GLASS_AVAILABLE;
+  // New session's glass tint: the primary fill, near-black in light mode and white in dark.
+  const primaryFill = isDark ? THEME.dark.primary : THEME.light.primary;
 
   return (
     // One icon column: nav icons and session status marks each sit in a 20pt
@@ -887,10 +889,11 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
       </View>
 
       {/* Avatar left, New session right (Jay, 2026-09-23), over the drawer
-          surface's fade. On iOS 26 the avatar is a Liquid Glass button (the
-          Button draws inside the glass). New session is the solid primary
-          pill on every platform: black with white text in light mode,
-          inverted in dark (Jay, 2026-11-11), so it stays outside the glass. */}
+          surface's fade. On iOS 26 each is a Liquid Glass button (the Button
+          draws inside the glass). New session is the primary pill: black
+          with white text in light mode, inverted in dark (Jay, 2026-11-11);
+          on iOS 26 that is glass tinted in the primary colour, elsewhere the
+          solid primary fill. */}
       <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} className="justify-between px-5">
         <GlassButtons>
           <Button
@@ -913,11 +916,18 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
             </View>
           </Button>
         </GlassButtons>
-        <Button size="lg" variant="default" className="rounded-full" onPress={handleNewSession}>
-          {/* Web's New session glyph (project-sidebar.tsx), flipped horizontally: tip up-right. */}
-          <Icon as={NavigationArrowIcon} size={20} style={{ transform: [{ scaleX: -1 }] }} />
-          <Text maxFontSizeMultiplier={BUTTON_LABEL_MAX_FONT_SCALE.lg}>New session</Text>
-        </Button>
+        <GlassButtons tintColor={primaryFill}>
+          <Button
+            size="lg"
+            variant="default"
+            // On glass the tint is the fill: the solid primary would hide the glass.
+            className={glassy ? 'rounded-full bg-transparent dark:bg-transparent' : 'rounded-full'}
+            onPress={handleNewSession}>
+            {/* Web's New session glyph (project-sidebar.tsx), flipped horizontally: tip up-right. */}
+            <Icon as={NavigationArrowIcon} size={20} style={{ transform: [{ scaleX: -1 }] }} />
+            <Text maxFontSizeMultiplier={BUTTON_LABEL_MAX_FONT_SCALE.lg}>New session</Text>
+          </Button>
+        </GlassButtons>
       </PinnedBar>
     </View>
   );

@@ -275,8 +275,10 @@ ghost button (Jay, 2026-10-20), and so does the thread's scroll-to-bottom
 chevron above the composer (`ScrollToBottomButton` in `SessionPage.tsx`; its
 bordered `secondary` circle stays elsewhere). The project drawer's bottom bar
 puts the avatar (36pt photo in a 44pt glass circle) on glass (`GlassButtons`
-in `ProjectLeftDrawer`; the bare avatar elsewhere). New session stays the solid
-primary `lg` pill on every platform, outside the glass (Jay, 2026-11-11). `PageHeader`'s right column (`rightActions` +
+in `ProjectLeftDrawer`; the bare avatar elsewhere). New session is the primary
+`lg` pill: on iOS 26 glass tinted in the primary colour (`GlassButtons
+tintColor`, black in light, white in dark), elsewhere the solid primary fill
+(Jay, 2026-11-11). `PageHeader`'s right column (`rightActions` +
 `+`) shares one glass capsule, a button group. Never the native SwiftUI glass
 button there (rejected 2026-09-17).
 Every sheet title row (`SheetTitleRow`: `KortixBottomSheetModal title`,

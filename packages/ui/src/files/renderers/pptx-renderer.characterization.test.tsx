@@ -103,7 +103,7 @@ const renderPptx = async (blob: Blob | null) => {
 };
 
 const stage = (): HTMLElement | null =>
-  win.document.querySelector<HTMLElement>('[data-pptx-minimal]');
+  win.document.querySelector('[data-pptx-minimal]') as unknown as HTMLElement | null;
 
 // ── the stage scale ─────────────────────────────────────────────────────────
 

@@ -141,8 +141,10 @@ const renderViewer = async (props: ViewerProps) => {
 // ── assertions helpers ──────────────────────────────────────────────────────
 
 /** The slide indicator dots: one button per slide, aria-label "Slide <n>". */
-const dots = () =>
-  Array.from(win.document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Slide"]'));
+const dots = (): HTMLButtonElement[] =>
+  Array.from(
+    win.document.querySelectorAll('button[aria-label^="Slide"]'),
+  ) as unknown as HTMLButtonElement[];
 
 const activeDot = () => {
   const active = dots().find((d) => d.className.includes('bg-black'));
@@ -162,9 +164,9 @@ const pressKey = (key: string) => {
   let event: KeyboardEvent | null = null;
   act(() => {
     event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-    win.document.dispatchEvent(event);
+    (win.document as unknown as { dispatchEvent: (e: unknown) => boolean }).dispatchEvent(event);
   });
-  return event as KeyboardEvent;
+  return event as unknown as KeyboardEvent;
 };
 
 const bodyText = () => win.document.body.textContent ?? '';
@@ -358,7 +360,9 @@ describe('FullScreenPresentationViewer — keyboard map', () => {
     });
 
     // Enter the editor through its toolbar button.
-    const editButton = win.document.querySelector<HTMLButtonElement>('button[title="Edit presentation"]');
+    const editButton = win.document.querySelector(
+      'button[title="Edit presentation"]',
+    ) as unknown as HTMLButtonElement | null;
     expect(editButton).not.toBeNull();
     act(() => {
       editButton!.click();

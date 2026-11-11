@@ -4,8 +4,9 @@
  *
  * A viewer token counts as MFA-verified only when the cookie it was minted from
  * was opened by a browser session at aal2. A cookie opened without it (before
- * the account required MFA, or for a PAT or agent session token) never gains it:
- * not on redeem, not on renewal (Strix review of #12419, 2026-11-11).
+ * the account required MFA, or for a PAT or agent session token) never gains it
+ * (Strix review of #12419). A renewal drops it, so the level lasts at most the
+ * 8 h of the redeemed cookie (Strix review of #12423, 2026-11-11).
  */
 import { describe, expect, test } from 'bun:test';
 import { appAccessCookieName, appAccessSecret, appAccessSessionUrl, createAppAccessToken, verifyAppAccessToken } from './access';
@@ -50,12 +51,13 @@ describe('the App cookie records the second factor of the session that opened it
     expect(appViewerSessionAal(new Request(url), url, app, VIEWER)).toBeUndefined();
   });
 
-  test('a renewal keeps the level; a cookie opened without it never gains it', () => {
+  test('a renewal drops the level, so it never outlives the redeemed cookie', () => {
     const url = new URL(`${origin}/_kortix/token`);
     const halfSpent = new Date(now.getTime() + 2 * 3600_000);
     const renewed = (aal?: 'aal2') =>
       payloadOf(renewedAppAccessCookie(withCookie(cookieValue(aal, { expiresAt: halfSpent })), url, app, VIEWER, now));
-    expect(renewed('aal2').aal).toBe('aal2');
+    expect(renewed('aal2').aal).toBeUndefined();
+    expect(renewed('aal2').userId).toBe(VIEWER);
     expect(renewed().aal).toBeUndefined();
   });
 });

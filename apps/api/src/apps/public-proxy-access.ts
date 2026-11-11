@@ -563,9 +563,10 @@ export function renewedAppAccessCookie(
       appId: app.appId,
       kind: 'kortix',
       userId,
-      // A renewal keeps the level the session was opened with, as a refreshed
-      // browser session does. A cookie opened without it never gains it.
-      aal: payload.aal,
+      // No `aal`: a renewal drops the second factor. The level then lasts at
+      // most the 8 h of the cookie the access link was redeemed into, never
+      // past the browser session that proved it (Strix, 2026-11-11). Reopening
+      // the App from Kortix at aal2 marks a new cookie.
       revision: app.accessRevision,
       expiresAt: new Date(now.getTime() + APP_SESSION_SECONDS * 1000),
     },

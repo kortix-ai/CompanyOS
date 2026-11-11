@@ -56,6 +56,13 @@ mock.module('../session-log-read', () => ({
 }));
 
 const { projectsApp } = await import('../lib/app');
+// The caller the guard keys on: the handler reads `userId` (auth middleware sets
+// it in prod); this test mints it from a header so each caller is addressable.
+projectsApp.use('*', async (c, next) => {
+  const testUser = c.req.header('x-test-user');
+  if (testUser) c.set('userId', testUser);
+  await next();
+});
 const { registerSessionLogRoutes } = await import('./session-log');
 registerSessionLogRoutes();
 
@@ -85,12 +92,25 @@ describe('GET …/log under the per-session read guard', () => {
     expect(statuses).toEqual([200, 200, 200, 429, 429]);
     expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
     expect(body).toMatchObject({ error: 'rate_limit_exceeded' });
-    expect(Number(body?.retry_after_seconds)).toBeGreaterThanOrEqual(1);
   });
 
   test('another session of the same caller keeps reading', async () => {
     const res = await projectsApp.request(`/${PROJECT_ID}/sessions/${OTHER_SESSION_ID}/log`);
     expect(res.status).toBe(200);
     await res.text();
+  });
+
+  test('a different caller on the same session gets a fresh bucket', async () => {
+    // The same session the first test exhausted under the default caller key.
+    const callerA = await projectsApp.request(`/${PROJECT_ID}/sessions/${SESSION_ID}/log`, {
+      headers: { 'x-test-user': 'd7900000-0000-4000-a000-00000000000a' },
+    });
+    expect(callerA.status).toBe(200);
+    await callerA.text();
+    const callerB = await projectsApp.request(`/${PROJECT_ID}/sessions/${SESSION_ID}/log`, {
+      headers: { 'x-test-user': 'd7900000-0000-4000-a000-00000000000b' },
+    });
+    expect(callerB.status).toBe(200);
+    await callerB.text();
   });
 });

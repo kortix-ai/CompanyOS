@@ -53,7 +53,7 @@ import { logger } from '../../lib/logger';
 import { PROJECT_ACTIONS } from '../../iam';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
-import { sessionLogReadLimit } from '../../middleware/rate-limit';
+import { storedLogReadDenial } from '../../middleware/rate-limit';
 import { auth, boundedIssues, errors, json } from '../../openapi';
 import type { AppEnv } from '../../types';
 import { assertProjectCapability, loadVisibleSession, sessionIsTombstoned } from '../lib/access';
@@ -392,22 +392,12 @@ export function registerSessionLogRoutes(): void {
     async (c) => {
       const { workspaceId: projectId, sessionId } = c.req.valid('param');
       // In front of the gate: a hot poller costs one in-memory check per poll, not
-      // the IAM stack. The header is inline, never `c.header(...)` first: the request
-      // deadline may have answered this request already (KRTX-2737), and the body
-      // shape is the one the SDK's log sync already backs off on (`Retry-After`).
-      const readLimit = sessionLogReadLimit(sessionId);
-      if (!readLimit.allowed) {
-        const retryAfterSeconds = String(Math.ceil((readLimit.retryAfterMs ?? readLimit.resetMs) / 1000));
-        return c.json(
-          {
-            error: 'rate_limit_exceeded',
-            message: 'This session is being read faster than the per-session limit. Slow the polling or honor Retry-After.',
-            retry_after_seconds: Number(retryAfterSeconds),
-          },
-          429,
-          { 'Retry-After': retryAfterSeconds },
-        );
-      }
+      // the IAM stack. The guard is keyed on (caller, session), so a caller can only
+      // spend their own bucket. In front of the gate: the request deadline may have
+      // answered this request already, so the 429 headers are inline (KRTX-2737);
+      // the body shape is the one the SDK's log sync already backs off on.
+      const denied = storedLogReadDenial(c, sessionId);
+      if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
       const query = c.req.valid('query');
       const limit = parseBoundedPositiveInt(query.limit, 40, 1, 500, 'limit');
       if (!limit.ok) return c.json({ error: limit.error }, 400);

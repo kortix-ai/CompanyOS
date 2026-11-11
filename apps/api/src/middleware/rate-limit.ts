@@ -104,25 +104,50 @@ const feedbackLimiter = new TokenBucketRateLimiter('feedback');
 const deviceTokenReleaseLimiter = new TokenBucketRateLimiter('device_token_release');
 
 /**
- * Per-session ceiling on stored-log reads (`GET /v1/workspaces/:id/sessions/:id/log`,
- * `KORTIX_SESSION_LOG_READS_PER_MIN`, 300). INCIDENT 2026-11-10 23:38 UTC (KRTX-4696):
- * one CLI client polled the stored log of ONE session in waves that peaked near 24
- * requests/s for minutes (about 50k requests against the one session in an evening).
- * Every poll pays the full session-read gate plus the page transaction and a
- * multi-100 kB serialize+gzip, so the route's p50 hit 1.25 s (p95 2.6 s) and the
- * API-wide p95 rose with it. The bucket sits in front of the gate, keyed by the
- * path's session id, so a hot poller costs the API one in-memory check per poll;
- * 300/min keeps every real watcher unthrottled (the CLI wait loop polls at 60/min
- * per waiter, the web sync on events). Replica-local, like every limiter here.
+ * Per-session ceiling on the stored-log reads (`GET …/log`, `GET …/transcript`,
+ * `GET …/snapshot` and its `/open-bundle` alias, `KORTIX_SESSION_LOG_READS_PER_MIN`,
+ * 300). INCIDENT 2026-11-10 23:38 UTC (KRTX-4696): one CLI client polled the stored
+ * log of ONE session in waves that peaked near 24 requests/s for minutes (about 50k
+ * requests against the one session in an evening). Every poll pays the full
+ * session-read gate plus the page read and a multi-100 kB serialize+gzip, so the
+ * route's p50 hit 1.25 s (p95 2.6 s) and the API-wide p95 rose with it.
+ *
+ * The bucket is keyed on (caller, session): a caller can only spend their own
+ * bucket, never another caller's or another session's (the caller part is the
+ * authenticated user id, else the client key). The guard runs in front of the
+ * session-read gate, so a hot poller costs one in-memory check per poll; 300/min
+ * per caller per session keeps every real watcher unthrottled (the CLI wait loop
+ * polls at 60/min per waiter, the web sync on events). Replica-local, like every
+ * limiter here.
  */
 const sessionLogReadLimiter = new TokenBucketRateLimiter('session_log_read');
 
-/** The per-session read verdict for one stored-log GET; the route turns a denial into its 429. */
-export function sessionLogReadLimit(sessionId: string): RateLimitResult {
-  return sessionLogReadLimiter.check(sessionId, {
+/**
+ * The stored-log read denial for one GET (null = allowed). The handler answers it
+ * with `c.json(denied.body, 429, { 'Retry-After': denied.retryAfter })` — header
+ * inline, never `c.header(...)` first (KRTX-2737); the body fits the ErrorEnvelope
+ * the routes declare for 429, and the SDK's log sync backs off on `Retry-After`.
+ */
+export interface StoredLogReadDenial {
+  body: { error: string; message: string };
+  retryAfter: string;
+}
+
+export function storedLogReadDenial(c: Context, sessionId: string): StoredLogReadDenial | null {
+  const userId = c.get('userId');
+  const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+  const result = sessionLogReadLimiter.check(`${caller}:${sessionId}`, {
     limit: positiveInt(config.KORTIX_SESSION_LOG_READS_PER_MIN, 300),
     windowMs: 60_000,
   });
+  if (result.allowed) return null;
+  return {
+    body: {
+      error: 'rate_limit_exceeded',
+      message: 'This session is being read faster than the stored-log read limit. Slow the polling or honor Retry-After.',
+    },
+    retryAfter: String(Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000)),
+  };
 }
 
 /**

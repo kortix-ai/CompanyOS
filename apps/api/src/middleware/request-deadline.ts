@@ -185,16 +185,28 @@ export function isExempt(c: Context): boolean {
 // The session-log attachment upload (P2.13, `PUT …/log/blobs/<sha256>`) gets the
 // same deadline for the same reason: it reads up to 50 MiB from the box, hashes
 // it and writes it to Storage, and a 503 makes the daemon send it again.
+// KRTX-4738: an App machine exec (`POST …/apps/:appId/exec`) is the third
+// route of this class: one command under the caller's own timeout (`timeout_s`
+// 1–300, default 60; the provider call aborts at `timeoutMs + 30 s`, and the
+// SDK client waits 120 s). The general 25 s deadline killed every exec that
+// outlived it — prod: an App deploy restarted the machine and 4 execs against
+// it each died at exactly 25 s while siblings answered 178 ms–17.9 s. 95 s
+// still answers before Cloudflare's 100 s proxy timeout.
 const ATTACHMENT_COMPLETE = /^\/v1\/projects\/[^/]+\/attachments\/[^/]+\/complete$/;
 const LOG_BLOB_UPLOAD = /^\/v1\/projects\/[^/]+\/sessions\/[^/]+\/log\/blobs\/[0-9a-f]{64}$/;
-const ATTACHMENT_COMPLETE_DEADLINE_MS = 95_000;
+const APP_EXEC = /^\/v1\/projects\/[^/]+\/apps\/[^/]+\/exec$/;
+const COMPLETION_DEADLINE_MS = 95_000;
 
 /** This request's wall-clock deadline, or null when it is exempt or the guard is off. */
 export function requestDeadlineMs(c: Context): number | null {
   if (!ENABLED || isExempt(c)) return null;
   const path = asLegacyWorkspaceRoute(c.req.path);
-  if ((c.req.method === 'POST' && ATTACHMENT_COMPLETE.test(path)) || (c.req.method === 'PUT' && LOG_BLOB_UPLOAD.test(path)))
-    return Math.max(DEADLINE_MS, ATTACHMENT_COMPLETE_DEADLINE_MS);
+  if (
+    (c.req.method === 'POST' && ATTACHMENT_COMPLETE.test(path)) ||
+    (c.req.method === 'PUT' && LOG_BLOB_UPLOAD.test(path)) ||
+    (c.req.method === 'POST' && APP_EXEC.test(path))
+  )
+    return Math.max(DEADLINE_MS, COMPLETION_DEADLINE_MS);
   return DEADLINE_MS;
 }
 
@@ -226,16 +238,16 @@ export const markDeadlineServed = (c: Context): RequestDeadlineHTTPException => 
   return new RequestDeadlineHTTPException();
 };
 
-export const markAttachmentDeadlineServed = (c: Context): RequestDeadlineHTTPException => {
+export const markCompletionDeadlineServed = (c: Context): RequestDeadlineHTTPException => {
   c.set(DEADLINE_SERVED_VAR, true);
-  return new RequestDeadlineHTTPException(Math.max(DEADLINE_MS, ATTACHMENT_COMPLETE_DEADLINE_MS));
+  return new RequestDeadlineHTTPException(Math.max(DEADLINE_MS, COMPLETION_DEADLINE_MS));
 };
 
 // Built once — each duration is constant for the process lifetime.
 const bounded = timeout(Math.max(DEADLINE_MS, 1), markDeadlineServed);
 const completionBounded = timeout(
-  Math.max(DEADLINE_MS, ATTACHMENT_COMPLETE_DEADLINE_MS),
-  markAttachmentDeadlineServed,
+  Math.max(DEADLINE_MS, COMPLETION_DEADLINE_MS),
+  markCompletionDeadlineServed,
 );
 
 /**

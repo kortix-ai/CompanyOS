@@ -57,6 +57,12 @@ const IDENTITY_PROBE_PATHS = new Set(['/v1/accounts/me', '/v1/oauth/userinfo', '
 const DELEGATED_WRITE_DENIED: readonly RegExp[] = [
   /^\/v1\/auth(\/|$)/,
   /^\/v1\/accounts\/[^/]+\/iam\/pat-policy$/,
+  // The account's own sign-in rules: the MFA requirement, the session policy,
+  // single sign-on. An App viewer token can count as the second factor in its
+  // account; it must never be able to switch that factor off (Strix,
+  // 2026-11-11).
+  /^\/v1\/accounts\/[^/]+\/iam\/(mfa-required|session-policy)$/,
+  /^\/v1\/accounts\/[^/]+\/iam\/sso(\/|$)/,
   /^\/v1\/projects\/[^/]+\/apps\/[^/]+\/token$/,
   /^\/v1\/(billing\/)?account\/(request|cancel)-deletion$/,
   /^\/v1\/tunnel\/connections\/[^/]+\/rotate-token$/,

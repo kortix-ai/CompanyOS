@@ -107,7 +107,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           </div>
           <div className="relative flex flex-col items-center gap-8 px-8 pt-20 pb-24 text-center md:px-10 lg:pt-24 lg:pb-28">
             <span className="border-border bg-card text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-sm">
-              The multiplayer cloud harness for AI agents
+              Cloud loops for your coding agent
             </span>
             <h1 className="text-foreground text-[40px] leading-[1.04] font-medium tracking-tight sm:text-6xl lg:text-[72px]">
               One prompt. Your

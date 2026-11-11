@@ -6,9 +6,9 @@
 // `ReferenceError: Element is not defined`.
 //
 // Each global is a lazy accessor that reads the test's current `window`, so
-// it follows whichever window the test installed. With no window a DOM class
+// it follows whichever window the test installed. With no window a global
 // stays `undefined`; a hand-built window without DOM classes gets empty
-// placeholder classes; the frame functions fall back to a 16 ms timer. A test that assigns or defines its own value replaces the
+// placeholder classes. Test for a frame clock with `typeof`, not `in`. A test that assigns or defines its own value replaces the
 // accessor with a plain property.
 const NAMES = [
   'Element',
@@ -32,13 +32,6 @@ const placeholder = (name: string) => {
   return placeholders.get(name);
 };
 
-// Bun has no frame clock. A present `requestAnimationFrame` is always callable:
-// the window's when it has one, else a 16 ms timer, as a browser tab would pace.
-const FRAME_FALLBACK: Record<string, unknown> = {
-  requestAnimationFrame: (fn: (time: number) => void) => setTimeout(() => fn(performance.now()), 16),
-  cancelAnimationFrame: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
-};
-
 for (const name of NAMES) {
   if (name in globalThis) continue;
   Object.defineProperty(globalThis, name, {
@@ -48,7 +41,7 @@ for (const name of NAMES) {
       const value = win?.[name];
       if (win && value === undefined && CLASSES.has(name)) return placeholder(name);
       if (name.endsWith('AnimationFrame')) {
-        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(win) : FRAME_FALLBACK[name];
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(win) : undefined;
       }
       return value;
     },

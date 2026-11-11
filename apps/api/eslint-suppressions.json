@@ -1187,16 +1187,6 @@
       "count": 1
     }
   },
-  "src/mcp/connectors.ts": {
-    "kortix-api/layers": {
-      "count": 1
-    }
-  },
-  "src/mcp/index.ts": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "src/middleware/auth-actor.ts": {
     "no-console": {
       "count": 1

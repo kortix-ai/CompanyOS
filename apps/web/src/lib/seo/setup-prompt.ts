@@ -81,36 +81,52 @@ The server answers the first call with an OAuth challenge. The client opens the 
 1. In Claude Code, run \`/mcp\`, select \`kortix\` and select **Authenticate**. Codex signs in with \`codex mcp login kortix\`. Other clients start the sign-in on the first tool call or from their MCP settings.
 2. Tell the person: "Your browser opens the Kortix consent screen. Sign in, check that the request comes from this tool, and approve it."
 3. A person with no Kortix account creates one at ${KORTIX_WEB_ORIGIN}/auth, then approves.
-4. Wait until the person confirms. Then call \`list_projects\` to check the connection.
+4. Wait until the person confirms. Then call \`call\` with \`id: "projects.list"\` to check the connection.
 
 If the client has no browser sign-in, stop. Send the person to ${KORTIX_WEB_ORIGIN}/docs/guide#other-ai-tools-mcp.
 
-## Step 3. Read the Kortix guides
+## Step 3. Learn the six tools
 
-The Kortix guides tell you how Kortix works. Read them before you do work.
+The Kortix server has six tools. They reach everything the person may use.
 
-1. Call \`read_skill\` with no arguments. It lists the guides.
-2. Call \`read_skill\` with \`name: "kortix-system"\`. It explains workspaces, sessions, agents, \`kortix.yaml\`, triggers, change requests and the \`kortix\` CLI.
-3. Call \`read_skill\` with \`name: "kortix-connectors"\`. It explains how connectors reach apps and APIs, and how a person connects an account.
-4. Read a guide's reference file (\`read_skill\` with \`name\` and \`file\`) only when the task needs it.
+- \`skills\`: list the Kortix guides, or read one by \`name\`.
+- \`search\`: find a tool by intent, e.g. \`query: "send a slack message"\`. It returns tool ids.
+- \`describe\`: read one tool id's full input schema.
+- \`call\`: run one tool id with its \`input\`.
+- \`execute\`: run a short JavaScript program that calls \`search\`, \`describe\`, \`call\` and \`skills\`. Use it for loops and for big results you filter before you read them.
+- \`resume\`: read a call that waits for a person's approval.
+
+Read the guides before you do work:
+
+1. Call \`skills\` with no arguments. It lists the guides.
+2. Call \`skills\` with \`name: "kortix-system"\`. It explains workspaces, sessions, agents, \`kortix.yaml\`, triggers, change requests and the \`kortix\` CLI.
+3. Call \`skills\` with \`name: "kortix-connectors"\`. It explains how connectors reach apps and APIs, and how a person connects an account.
+4. Read a guide's reference file (\`skills\` with \`name\` and \`file\`) only when the task needs it.
 
 ## Step 4. Do a first task
 
-1. Call \`list_projects\`. It lists every workspace the person can open. The tools name a workspace a project: \`project_id\` is the workspace ID.
-2. Show the person their workspaces: name and role. If the list is empty, send them to ${KORTIX_WEB_ORIGIN}/workspaces to create one, then call \`list_projects\` again.
+1. Call \`call\` with \`id: "projects.list"\`. It lists every workspace the person can open. The tools name a workspace a project: \`project_id\` is the workspace ID.
+2. Show the person their workspaces: name and role. If the list is empty, send them to ${KORTIX_WEB_ORIGIN}/workspaces to create one, then list them again.
 3. Ask which workspace to use and what the first task is. If they have no task, offer this one: "Read the repo and list its agents, skills and connectors."
-4. Call \`start_session\` with the \`project_id\` and the task as \`prompt\`. An agent runs it on its own cloud computer and its own git branch. Keep the \`session_id\` it returns.
-5. Call \`read_session\` with the \`session_id\` and \`wait_seconds\`. The first turn needs about 10 to 60 seconds while the sandbox boots. Call it again until the turn ends.
+4. Call \`call\` with \`id: "sessions.start"\` and \`input: { project_id, prompt }\`. An agent runs the task on its own cloud computer and its own git branch. Keep the \`session_id\` it returns.
+5. Call \`call\` with \`id: "sessions.read"\` and \`input: { session_id, wait_seconds: 30 }\`. The first turn needs about 10 to 60 seconds while the sandbox boots. Call it again until the turn ends.
 6. Tell the person what the agent did, in a few lines. Give them the \`session_id\`.
+
+## Rules
+
+- A connector write can return \`pending_approval\` with an \`approval_url\`. Give the person that link and stop. Never repeat the call: \`resume\` with the \`execution_id\` reads the outcome. You can never approve a call yourself.
+- Never ask the person for a password, token or API key in chat. \`connector_admin.connect\` returns a link they open to connect an account.
 
 ## What to do next
 
-- \`list_sessions\`, \`send_message\` and \`read_session\`: follow and continue sessions.
-- \`run_command\`, \`read_file\`, \`write_file\` and \`list_files\`: work on a session's cloud computer or in the workspace repo.
-- \`search_project\`: search the workspace's files.
-- \`list_connectors\`, \`search_connector_actions\` and \`call_connector\`: use the workspace's connectors.
-- \`search_api\`, \`describe_api\` and \`call_api\`: reach any Kortix API route the person may use.
-- \`kortix\`: run a \`kortix\` CLI command as the person.
+Use \`search\` to find the tool for a task. Tool ids name their family:
+
+- \`sessions.*\`: start, follow and continue agent sessions.
+- \`sandbox.*\`: run commands and read or write files on a session's cloud computer.
+- \`connectors.<slug>.<action>\`: the workspace's connectors (Gmail, Slack, GitHub, MCP servers, APIs).
+- \`connector_admin.*\`: list, connect, add and remove connectors.
+- \`kortix.<METHOD> <path>\`: any Kortix API route the person may use.
+- \`cli.run\`: run a \`kortix\` CLI command as the person.
 
 Docs: ${KORTIX_WEB_ORIGIN}/docs. Full index for agents: ${KORTIX_WEB_ORIGIN}/llms.txt.
 `;

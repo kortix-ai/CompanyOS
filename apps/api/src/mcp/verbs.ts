@@ -225,7 +225,8 @@ async function executeProgram(
         released = true;
       };
     },
-    tools: [
+    // Top-level functions in the program (`await call({...})`), as the tool description promises.
+    globals: [
       {
         name: 'search',
         description: 'search({query, family?, limit?}) → {results:[{id,title,risk,description,input}]}',
@@ -262,7 +263,7 @@ async function executeProgram(
       ok: result.ok,
       ...(result.ok ? { value: result.value } : { error: { kind: result.error.kind, message: result.error.message } }),
       ...(output ? { output } : {}),
-      calls: result.calls.length,
+      calls,
       ...(pending.length
         ? { pending_approvals: pending, next: 'A person approves each pending call at its approval_url. resume({execution_id}) reads its outcome. Do not repeat the calls.' }
         : {}),
@@ -284,18 +285,21 @@ async function resumeCall(ctx: ToolContext, input: Record<string, unknown>, opts
   if (!projectId) throw new ToolInputError('project_id is required');
   const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/review/items/call:${executionId}`);
   if (r.status >= 400) return text(`HTTP ${r.status}\n${r.body}`, true);
-  const item = JSON.parse(r.body);
-  const detail = (item?.detail ?? {}) as Record<string, unknown>;
+  const item = (JSON.parse(r.body)?.review_item ?? {}) as Record<string, any>;
+  const detail = (item.detail ?? {}) as Record<string, unknown>;
+  const pending = item.status === 'needs_you';
   return json({
     execution_id: executionId,
-    state: item?.status ?? null,
+    state: pending ? 'pending' : (item.status ?? null),
+    action: detail.action_path ?? null,
     decision: detail.decision ?? null,
-    decided_by: detail.decided_by ?? null,
-    decision_note: detail.decision_note ?? null,
-    outcome: detail.outcome ?? detail.run_outcome ?? null,
-    next:
-      item?.status === 'pending'
-        ? 'Still waiting for a person. Do not repeat the call; read it again later.'
-        : 'Decided. Do not repeat the call.',
+    decided_by: item.acted_by ?? detail.decided_by ?? null,
+    decided_at: item.acted_at ?? null,
+    note: detail.decision_note ?? item.feedback ?? null,
+    outcome: detail.outcome ?? null,
+    expires_at: item.expires_at ?? null,
+    next: pending
+      ? 'Still waiting for a person. Do not repeat the call; read it again later.'
+      : 'Decided. Do not repeat the call; if it was approved and Kortix did not run it, call it once more with the same input.',
   });
 }

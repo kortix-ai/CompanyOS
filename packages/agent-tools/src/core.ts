@@ -64,9 +64,18 @@ export function createToolCore(options: { sources: ToolSource[]; skills?: SkillS
   };
   const sourceOf = (id: string) => sources.find((s) => id.startsWith(s.prefix)) ?? null;
 
+  // Typos first (edit distance within the id's family), then words (BM25).
   const suggest = async (id: string, limit = 3) => {
     const idx = await loadIndex();
-    return idx.search(id.replace(/[._]/g, ' '), limit).map((h) => h.entry.id);
+    const family = id.includes('.') ? id.slice(0, id.indexOf('.') + 1) : '';
+    const near = idx.entries
+      .filter((e) => family && e.id.startsWith(family))
+      .map((e) => ({ id: e.id, d: editDistance(id, e.id) }))
+      .filter((x) => x.d <= Math.max(2, Math.floor(id.length / 5)))
+      .sort((a, b) => a.d - b.d)
+      .map((x) => x.id);
+    const words = idx.search(id.replace(/[._]/g, ' '), limit).map((h) => h.entry.id);
+    return [...new Set([...near, ...words])].slice(0, limit);
   };
 
   return {
@@ -124,7 +133,10 @@ export function createToolCore(options: { sources: ToolSource[]; skills?: SkillS
 
     async call(id, input) {
       const source = sourceOf(id);
-      if (!source) {
+      const known = source
+        ? (await loadIndex()).entries.some((e) => e.id === id) || (await source.describe?.(id)) != null
+        : false;
+      if (!source || !known) {
         const suggestions = await suggest(id);
         return {
           status: 'error',
@@ -163,4 +175,17 @@ function typeName(schema: JsonSchema | undefined): string {
   if (Array.isArray(t)) return t.join('|');
   if (t === 'array') return `${typeName(schema.items as JsonSchema | undefined)}[]`;
   return typeof t === 'string' ? t : 'object';
+}
+
+/** Levenshtein distance, two rows. Ids are short. */
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length]!;
 }

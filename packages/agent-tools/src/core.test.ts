@@ -125,3 +125,20 @@ describe('describe and call', () => {
     expect((await core.search({ query: 'slack' })).results.length).toBeGreaterThan(0);
   });
 });
+
+describe('call of an unknown id inside a known family', () => {
+  test('is refused with suggestions before the source runs', async () => {
+    const calls: unknown[] = [];
+    const core = createToolCore({ sources: [source('connectors.', slack, calls)] });
+    const out = await core.call('connectors.slack.send_mesage', {});
+    expect(out).toMatchObject({ status: 'error', reason: 'unknown_tool' });
+    expect(out.status === 'error' && out.message).toContain('connectors.slack.send_message');
+    expect(calls).toHaveLength(0);
+  });
+});
+
+test('a typo of a built-in id suggests the built-in first', async () => {
+  const builtins: ToolEntry[] = [{ id: 'projects.list', title: 'List projects', description: 'Every project.', risk: 'read' }];
+  const core = createToolCore({ sources: [source('projects.', builtins), source('kortix.', kortix)] });
+  expect((await core.suggest('projects.lst'))[0]).toBe('projects.list');
+});

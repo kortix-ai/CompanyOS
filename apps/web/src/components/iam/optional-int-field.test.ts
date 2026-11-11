@@ -9,7 +9,7 @@ import { parseOptionalIntField, toField } from './optional-int-field';
  * from their own catalog keys and pass them in, so the parser stays free of
  * the translator.
  *
- * Carries every case of the former `parseMinutes` / `parseDaysField` tests
+ * Carries every case of the two former per-form parser tests
  * (session-controls-card.test.ts, key-rules-card.test.ts) verbatim.
  */
 describe('parseOptionalIntField', () => {

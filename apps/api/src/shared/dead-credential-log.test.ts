@@ -40,7 +40,7 @@ const {
   markDeadCredential,
   markAgentGrantDenial,
 } = await import('./dead-credential-log');
-const { logWindowDecision, resetLogWindowsForTests } = await import('./log-window');
+const { logWindowDecision, logWindowWarnDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
 const { buildDenialError } = await import('../iam/denial-message');
 
@@ -63,6 +63,17 @@ function deadCredential401Like(message = 'PAT not found or revoked'): HTTPExcept
   });
   markDeadCredential(err);
   return err;
+}
+
+// What denyProjectAccess throws when an account's "Require MFA" policy
+// denies an aal1 browser session: buildDenialError's typed 403, marked.
+function appWithMfaDenial(): OpenAPIHono {
+  const app = new OpenAPIHono();
+  installHttpErrors(app);
+  app.get('/v1/projects/:workspaceId/sessions', () => {
+    throw buildDenialError('project.session.read', 'account_mfa_required');
+  });
+  return app;
 }
 
 
@@ -341,14 +352,6 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   // hour across three list routes, 0 in the 24 h before). The mark routes
   // the LINE through the shared window throttle; the typed 403 response,
   // which the web app's step-up dialog keys on, ships untouched every time.
-  function appWithMfaDenial(): OpenAPIHono {
-    const app = new OpenAPIHono();
-    installHttpErrors(app);
-    app.get('/v1/projects/:workspaceId/sessions', () => {
-      throw buildDenialError('project.session.read', 'account_mfa_required');
-    });
-    return app;
-  }
 
   test('five identical denials log one info line; the typed 403 body ships every time', async () => {
     resetLogWindowsForTests();
@@ -413,5 +416,39 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
     }
     expect(logged.slice(before).filter((entry) => entry.level === 'info')).toHaveLength(1);
     expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(0);
+  });
+});
+
+describe('the escalation is capped at one warn per key per hour (KRTX-4674 residual)', () => {
+  // The severity escalation is evaluated per ten-minute window and is
+  // replica-local, so a caller grinding past the burst band through a whole
+  // hour made EVERY window's line ship at warn: 16/15/15 lines per route
+  // across three replicas in the 2026-11-11 09:00 UTC hour — above the
+  // infra-sweep's new-warn-pattern bar (10/h per normalized pattern), which
+  // re-filed this issue. The engine now caps the escalation: the hour's
+  // first escalated line stays warn (the grind signal), the hour's other
+  // windows drop to info carrying the suppressed count.
+
+  test("the handler's second escalated window of the hour ships at info, suppressed carried", async () => {
+    resetLogWindowsForTests();
+    const path = '/v1/projects/p/sessions';
+    const reason = buildDenialError('project.session.read', 'account_mfa_required').message ?? '';
+    const key = deadCredentialLogKey('GET', path, 403, reason);
+    // The hour's warn is already spent: one escalated line shipped this hour.
+    expect(logWindowWarnDecision(key, Date.now())).toBe(true);
+    // An expired window holds the burst band pending (the trick the tests
+    // above use): the handler must open the next window and ship its pending
+    // volume — at info now, the hourly warn budget spent.
+    const past = Date.now() - 601_000;
+    logWindowDecision(key, past);
+    for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) logWindowDecision(key, past + 1_000);
+    const app = appWithMfaDenial();
+    const before = logged.length;
+    const res = await app.request(path);
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.context?.suppressed).toBe(DEAD_CREDENTIAL_BURST_SUPPRESSED);
   });
 });

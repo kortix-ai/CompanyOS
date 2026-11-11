@@ -4,7 +4,10 @@
  * denials, MFA step-up denials, keyed by method, normalized route, status and
  * reason. The window limiter itself is shared/log-window.ts (a ten-minute
  * window, six lines per key per process per hour; suppression counts are
- * best-effort). Responses and emitted message text stay unchanged.
+ * best-effort) and caps the severity escalation at one warn per key per hour
+ * (KRTX-4674's residual: an hour of grinding past the burst band shipped
+ * every window's line at warn and re-tripped the infra-sweep's new-pattern
+ * bar). Responses and emitted message text stay unchanged.
  */
 import { HTTPException } from 'hono/http-exception';
 
@@ -18,7 +21,10 @@ import { HTTPException } from 'hono/http-exception';
  * audit-events route, 2026-11-07). Measured prod steady state: a pending
  * count of 0-4 per route/reason per replica window; the KRTX-1039 storm ran
  * ~200. Above this band is a caller ignoring the typed stop code — that
- * stays warn.
+ * stays warn, at most one line per key per hour (log-window.ts's hourly warn
+ * cap, KRTX-4674: the escalation is replica-local and per window, and a
+ * heavy hour shipped 16/15/15 warns per route across three replicas — over
+ * the sweep's 10/h bar).
  */
 export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 

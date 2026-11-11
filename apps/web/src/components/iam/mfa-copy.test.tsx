@@ -107,7 +107,7 @@ async function openModal(root: ReactTestRenderer): Promise<string> {
 
 const LOCKOUT_1 = '1 member will be locked out until they enrol MFA:';
 const LOCKOUT_2 = '2 members will be locked out until they enrol MFA:';
-const EXEMPT_1 = '1 super-admin without MFA — they won\u2019t be locked out, but consider asking them to enrol:'.replace('\u2019', "'");
+const EXEMPT_1 = "1 super-admin without MFA — they won't be locked out, but consider asking them to enrol:";
 const EXEMPT_2 = "2 super-admins without MFA — they won't be locked out, but consider asking them to enrol:";
 
 test('the lockout title reads the singular sentence for one member', async () => {

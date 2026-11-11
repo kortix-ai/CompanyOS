@@ -148,8 +148,8 @@ function MoreCard({ more, index, total }: { more: string[]; index: number; total
       <div className={CARD_GRID}>
         <div className="border-border flex flex-col gap-8 border-b p-6 md:p-8 lg:border-r lg:border-b-0">
           <div className="flex flex-col gap-3">
-            <h3 className="text-foreground text-3xl font-medium tracking-tight lg:text-[40px] lg:leading-tight">Anything else.</h3>
-            <p className="text-muted-foreground max-w-sm text-base text-pretty">Describe the work. Your agent writes the factory.</p>
+            <h3 className="text-foreground text-3xl font-medium tracking-tight lg:text-[40px] lg:leading-tight">Any loop you describe.</h3>
+            <p className="text-muted-foreground max-w-sm text-base text-pretty">Say what should happen and when. Your agent writes it as code.</p>
           </div>
           <div className="mt-auto">
             <CopyButton text={prompt} />

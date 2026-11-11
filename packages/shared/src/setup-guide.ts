@@ -68,6 +68,18 @@ function installBlock(target: SetupTarget): string {
   ].join('\n');
 }
 
+/** Step 8 of the guide: register this deployment's MCP server with the local coding agents and link the skills. */
+function agentBlock(target: SetupTarget): string {
+  const url = `${target.apiBase}/v1/mcp`;
+  return [
+    '```bash',
+    `command -v claude >/dev/null && claude mcp add --transport http kortix ${url}`,
+    `command -v codex >/dev/null && codex mcp add kortix --url ${url} && codex mcp login kortix`,
+    'kortix init --force',
+    '```',
+  ].join('\n');
+}
+
 /** The one prompt of the Software Factory: a URL, nothing to install first. */
 export const FACTORY_PROMPT = `Add a Kortix software factory to this repository with me.
 Follow ${FACTORY_GUIDE_URL} (curl -fsSL ${FACTORY_GUIDE_URL}) step by step.
@@ -139,9 +151,11 @@ export function setupGuide(target: SetupTarget = PROD_TARGET): string {
 The person pasted a prompt like "Add a Kortix software factory to this
 repository with me". You are the coding agent on their computer. From here you
 do everything: install the Kortix CLI, sign them in (one click in their
-browser), agree with them what to build, write their \`kortix.yaml\` by adapting a
-reference repository, and loop until \`kortix doctor --loops\` is green and one
-real run worked. Their part is the conversation about what to build, one "go"
+browser), find every piece of software they use, agree with them what to
+connect, which signals to listen to and which loops to run, write their
+\`kortix.yaml\` by adapting a reference repository, loop until \`kortix doctor
+--loops\` is green and one real run worked, and wire their local coding agents
+to Kortix. Their part is the conversation about what to build, one "go"
 for the plan, and a few clicks only a person can make.
 
 When you are done, agents run 24/7 in Kortix cloud sandboxes on a copy of their
@@ -188,10 +202,13 @@ kortix plan --json     # the deterministic baseline, names only
 
 \`kortix plan\` reports the repository (GitHub origin, default branch, monorepo
 layout, clean or dirty), the stack (runtimes, package managers, services, dev,
-test and end-to-end commands, CI), every env key by class, the integrations it
-detected with evidence (Sentry, PostHog, Linear, Slack, Convex, Supabase…), the
-Kortix state (workspace, connectors, Slack, models), a dev-environment proposal
-and the reference repositories.
+test and end-to-end commands, CI), every env key by class, the software it
+found (\`integrations\`: each with a category and its evidence; about 90
+products are known), the credentials it could not name
+(\`unrecognized_services\`: a key prefix each), the MCP servers the repository's
+coding tools already use (\`mcp_servers\`, names only), the Kortix state
+(workspace, connectors, Slack, models), a dev-environment proposal and the
+reference repositories.
 
 ## 2. Read the reference and find what the baseline misses
 
@@ -204,14 +221,30 @@ and the reference repositories.
    "push to main"): the person decides which wins.
 3. For a monorepo, decide which apps the agents work on and how each one
    starts and tests.
+4. **Inventory every piece of software, and go deep.** The plan's list is the
+   floor, not the ceiling. Add what you find yourself: SDK imports, webhook
+   handlers, secret names in CI workflows, links in the docs, deploy configs.
+   For each \`unrecognized_services\` prefix, ask the person what it is. Then
+   ask once what the company uses that the repository does not show: the
+   tracker, the CRM, the support desk, the analytics, the docs, the calendar,
+   the applicant tracker. Every loop is only as good as what it can reach.
 
 ## 3. Agree on what to build, then the plan
 
-**What to build is a conversation.** Show, numbered: the factories that fit
-(from the prompt and the plan), and for each one its sources (what starts work:
-issues, tests, errors, Slack, schedules) with your pre-selection from the
-detected integrations, where tickets live, and who merges. Go back and forth as
-long as the person wants.
+**What to build is a conversation**, in three lists. Go back and forth as long
+as the person wants.
+
+1. **Connect.** Every piece of software from the inventory, numbered, with
+   your pre-selection: connect it as a Kortix connector (the agents can call
+   it), leave it out, or decide later. Plus the env names to upload.
+2. **Signals.** What the agents listen to, per connected tool: a labeled
+   issue, a merged pull request, a failing test run, a new error, a Slack
+   message or mention, a new signup, an inbound email, a schedule. Pre-select
+   the ones the evidence supports.
+3. **Loops.** What runs on each signal and what it ships: the reference
+   factory's loops, adapted, plus any loop the person describes in their own
+   words. A custom loop is a trigger, a prompt and the skills it needs; write
+   it the same way. For each loop: who approves its output.
 
 **Then the plan, once**, on one screen:
 
@@ -291,11 +324,37 @@ it, \`kortix triggers fire factory-intake --wait 300s\`, and wait for the pull
 request. Show it to the person: the summary, the commands with their real
 output, the demo when the change is visible. Nobody merges it but them.
 
-## 8. Hand over
+## 8. Wire this computer's coding agents
+
+So the person can run, change and add loops by talking to the agent they
+already use. Tell them each thing you add.
+
+${agentBlock(target)}
+
+- The MCP server lets a coding agent start Kortix sessions, read their
+  progress, run commands in a session's sandbox and call the workspace's
+  connectors, as the person, with their permissions. The first call opens a
+  consent page in the browser. A coding agent loads a new MCP server at its
+  next start: say so.
+- \`kortix init --force\` links the workspace's skills where each local tool
+  reads them (never committed) and adds an \`AGENTS.md\` pointer.
+- With the person's yes, add this rule to the repository's \`AGENTS.md\` (and
+  \`CLAUDE.md\` when it exists): "This repository runs Kortix loops, defined
+  in \`kortix.yaml\`. To reach an outside tool, use the Kortix connectors
+  (\`kortix connectors\` or the Kortix MCP server) before any local
+  credential. To add or change a loop, edit \`kortix.yaml\`, run \`kortix
+  validate\`, then \`kortix ship\`."
+- Use the CLI for setup and scripts, the MCP server in conversation. Both
+  reach the same workspace.
+
+## 9. Hand over
 
 A short report: the loops now running and what starts each, where tickets
 land, who merges, how to start work by hand (label an issue, \`kortix triggers
-fire <slug>\`), where to watch (the workspace link), and anything still open.
+fire <slug>\`), how to add the next loop (ask this agent: it edits
+\`kortix.yaml\` and ships it), what you wired on this computer (the MCP
+server, the skills), where to watch (the workspace link), and anything still
+open.
 `;
 }
 

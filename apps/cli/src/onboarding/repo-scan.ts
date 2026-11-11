@@ -441,13 +441,27 @@ export function scanEnv(root: string, fileList: string[]): EnvReport {
 
 // ── Integrations ─────────────────────────────────────────────────────────────
 
+export type IntegrationCategory =
+  | 'code' | 'tracker' | 'chat' | 'errors' | 'analytics' | 'email' | 'crm' | 'support' | 'payments' | 'auth'
+  | 'data' | 'hosting' | 'ai' | 'content' | 'recruiting' | 'flags' | 'jobs' | 'productivity';
+
 export interface Integration {
   name: string;
+  /** What kind of software it is: decides which loops can use it and which signals it can give. */
+  category: IntegrationCategory;
+  evidence: string[];
+}
+
+/** A third-party service the repository names (an env key) that no rule knows. The person says what it is. */
+export interface UnrecognizedService {
+  /** The key prefix, for example `ACME` for `ACME_API_KEY`. */
+  prefix: string;
   evidence: string[];
 }
 
 interface Rule {
   name: string;
+  category: IntegrationCategory;
   deps?: RegExp;
   files?: RegExp;
   keys?: RegExp;
@@ -455,30 +469,144 @@ interface Rule {
   links?: RegExp;
 }
 
+const PUB = '(NEXT_PUBLIC_|VITE_|PUBLIC_|EXPO_PUBLIC_|REACT_APP_)?';
+const key = (names: string) => new RegExp(`^${PUB}(${names})(_|$)`);
+
+// One rule per product. Order is the order `kortix plan` lists them in.
 const RULES: Rule[] = [
-  { name: 'Sentry', deps: /^(@sentry\/|sentry-sdk$|raven$)/, files: /(^|\/)sentry\.[\w.-]*config\.(ts|js|mjs)$|(^|\/)\.sentryclirc$/, keys: /^(NEXT_PUBLIC_|VITE_)?SENTRY_/ },
-  { name: 'Better Stack', deps: /^(@logtail\/|@betterstack\/|logtail$)/, keys: /^(BETTERSTACK|BETTER_STACK|LOGTAIL)_/ },
-  { name: 'PostHog', deps: /^(posthog-js|posthog-node|posthog|posthog-react-native)$/, keys: /POSTHOG/ },
-  { name: 'Google Analytics 4', deps: /^(react-ga4|@next\/third-parties|ga-4-react|vue-gtag)$/, keys: /(^|_)(GA|GA4|GTAG|GOOGLE_ANALYTICS)(_|$)|MEASUREMENT_ID/ },
-  { name: 'Linear', deps: /^@linear\/sdk$/, keys: /^LINEAR_/, links: /linear\.app\// },
-  { name: 'Jira', deps: /^(jira-client|jira\.js)$/, keys: /^JIRA_/, links: /[\w-]+\.atlassian\.net\/(browse|jira)/ },
-  { name: 'Slack', deps: /^@slack\//, keys: /^SLACK_/ },
-  { name: 'Stripe', deps: /^(stripe|@stripe\/)/, keys: /^(NEXT_PUBLIC_|VITE_)?STRIPE_/ },
-  { name: 'Supabase', deps: /^@supabase\//, files: /^supabase\/config\.toml$/, keys: /^(NEXT_PUBLIC_|VITE_)?SUPABASE_/ },
-  { name: 'Convex', deps: /^(convex|@convex-dev\/)/, files: /^convex\.json$|^convex\/schema\.ts$/, keys: /^(NEXT_PUBLIC_|VITE_)?CONVEX_/ },
-  { name: 'Vercel', deps: /^@vercel\//, files: /(^|\/)vercel\.json$/, keys: /^VERCEL_/ },
-  { name: 'Cloudflare', deps: /^(@cloudflare\/|wrangler$)/, files: /(^|\/)wrangler\.(toml|json|jsonc)$/, keys: /^(CLOUDFLARE|CF)_/ },
-  { name: 'Plain', deps: /^@team-plain\//, keys: /^PLAIN_/ },
-  { name: 'Intercom', deps: /^(@intercom\/|intercom-client$|react-use-intercom$)/, keys: /INTERCOM/ },
-  { name: 'Zendesk', deps: /^(node-zendesk|zendesk)/, keys: /^ZENDESK_/ },
+  // Errors, logs, uptime
+  { name: 'Sentry', category: 'errors', deps: /^(@sentry\/|sentry-sdk$|sentry-ruby$|raven$)/, files: /(^|\/)sentry\.[\w.-]*config\.(ts|js|mjs)$|(^|\/)\.sentryclirc$/, keys: key('SENTRY') },
+  { name: 'Better Stack', category: 'errors', deps: /^(@logtail\/|@betterstack\/|logtail$)/, keys: key('BETTERSTACK|BETTER_STACK|LOGTAIL') },
+  { name: 'Datadog', category: 'errors', deps: /^(dd-trace|datadog|ddtrace|@datadog\/)/, keys: key('DD|DATADOG') },
+  { name: 'New Relic', category: 'errors', deps: /^(newrelic|@newrelic\/)/, files: /(^|\/)newrelic\.(js|yml|ini)$/, keys: key('NEW_RELIC|NEWRELIC') },
+  { name: 'Honeycomb', category: 'errors', deps: /^(@honeycombio\/|honeycomb-beeline)/, keys: key('HONEYCOMB') },
+  { name: 'Grafana', category: 'errors', deps: /^@grafana\//, keys: key('GRAFANA') },
+  { name: 'LogRocket', category: 'errors', deps: /^logrocket/, keys: key('LOGROCKET') },
+  { name: 'PagerDuty', category: 'errors', deps: /^(@pagerduty\/|pdpyras$|node-pagerduty$)/, keys: key('PAGERDUTY') },
+  // Analytics
+  { name: 'PostHog', category: 'analytics', deps: /^(posthog-js|posthog-node|posthog|posthog-react-native)$/, keys: /POSTHOG/ },
+  { name: 'Google Analytics 4', category: 'analytics', deps: /^(react-ga4|@next\/third-parties|ga-4-react|vue-gtag)$/, keys: /(^|_)(GA|GA4|GTAG|GOOGLE_ANALYTICS)(_|$)|MEASUREMENT_ID/ },
+  { name: 'Segment', category: 'analytics', deps: /^(@segment\/|analytics-node$|segment-analytics-python$)/, keys: key('SEGMENT') },
+  { name: 'Mixpanel', category: 'analytics', deps: /^mixpanel/, keys: key('MIXPANEL') },
+  { name: 'Amplitude', category: 'analytics', deps: /^(@amplitude\/|amplitude-js$|amplitude-analytics$)/, keys: key('AMPLITUDE') },
+  { name: 'Plausible', category: 'analytics', deps: /^(plausible-tracker|next-plausible)$/, keys: key('PLAUSIBLE') },
+  // Trackers
+  { name: 'Linear', category: 'tracker', deps: /^@linear\/sdk$/, keys: key('LINEAR'), links: /linear\.app\// },
+  { name: 'Jira', category: 'tracker', deps: /^(jira-client|jira\.js|jira)$/, keys: key('JIRA|ATLASSIAN'), links: /[\w-]+\.atlassian\.net\/(browse|jira)/ },
+  { name: 'Asana', category: 'tracker', deps: /^asana$/, keys: key('ASANA'), links: /app\.asana\.com\// },
+  { name: 'ClickUp', category: 'tracker', keys: key('CLICKUP'), links: /app\.clickup\.com\// },
+  { name: 'Shortcut', category: 'tracker', deps: /^@shortcut\/client$/, keys: key('SHORTCUT'), links: /app\.shortcut\.com\// },
+  { name: 'Trello', category: 'tracker', deps: /^trello/, keys: key('TRELLO'), links: /trello\.com\/b\// },
+  { name: 'Notion', category: 'productivity', deps: /^(@notionhq\/client|notion-client)$/, keys: key('NOTION'), links: /notion\.so\// },
+  // Chat
+  { name: 'Slack', category: 'chat', deps: /^(@slack\/|slack-sdk$|slack_sdk$|slack-bolt$)/, keys: key('SLACK') },
+  { name: 'Discord', category: 'chat', deps: /^(discord\.js|discord\.py|discord-interactions|@discordjs\/)/, keys: key('DISCORD') },
+  { name: 'Telegram', category: 'chat', deps: /^(telegraf|node-telegram-bot-api|python-telegram-bot|grammy)$/, keys: key('TELEGRAM') },
+  { name: 'Twilio', category: 'chat', deps: /^(twilio|@twilio\/)/, keys: key('TWILIO') },
+  // Email
+  { name: 'Resend', category: 'email', deps: /^resend$/, keys: key('RESEND') },
+  { name: 'SendGrid', category: 'email', deps: /^(@sendgrid\/|sendgrid$)/, keys: key('SENDGRID') },
+  { name: 'Postmark', category: 'email', deps: /^(postmark|postmarker)$/, keys: key('POSTMARK') },
+  { name: 'Mailgun', category: 'email', deps: /^(mailgun\.js|mailgun-js|mailgun)$/, keys: key('MAILGUN') },
+  { name: 'Loops', category: 'email', deps: /^loops$/, keys: key('LOOPS') },
+  { name: 'Customer.io', category: 'email', deps: /^(customerio-node|customerio)$/, keys: key('CUSTOMERIO|CUSTOMER_IO|CIO') },
+  { name: 'Mailchimp', category: 'email', deps: /^@mailchimp\//, keys: key('MAILCHIMP') },
+  // CRM and sales
+  { name: 'HubSpot', category: 'crm', deps: /^(@hubspot\/|hubspot-api-client$)/, keys: key('HUBSPOT') },
+  { name: 'Salesforce', category: 'crm', deps: /^(jsforce|simple-salesforce|@salesforce\/)/, keys: key('SALESFORCE|SFDC') },
+  { name: 'Attio', category: 'crm', deps: /^attio/, keys: key('ATTIO') },
+  { name: 'Pipedrive', category: 'crm', deps: /^pipedrive$/, keys: key('PIPEDRIVE') },
+  { name: 'Apollo', category: 'crm', keys: key('APOLLO_IO|APOLLOIO') },
+  // Support
+  { name: 'Plain', category: 'support', deps: /^@team-plain\//, keys: key('PLAIN') },
+  { name: 'Intercom', category: 'support', deps: /^(@intercom\/|intercom-client$|react-use-intercom$)/, keys: /INTERCOM/ },
+  { name: 'Zendesk', category: 'support', deps: /^(node-zendesk|zendesk)/, keys: key('ZENDESK') },
+  { name: 'Front', category: 'support', keys: key('FRONTAPP|FRONT_API') },
+  { name: 'Crisp', category: 'support', deps: /^(crisp-api|crisp-sdk-web)$/, keys: key('CRISP') },
+  // Payments
+  { name: 'Stripe', category: 'payments', deps: /^(stripe|@stripe\/)/, keys: key('STRIPE') },
+  { name: 'Paddle', category: 'payments', deps: /^@paddle\//, keys: key('PADDLE') },
+  { name: 'Lemon Squeezy', category: 'payments', deps: /^@lemonsqueezy\//, keys: key('LEMONSQUEEZY|LEMON_SQUEEZY') },
+  { name: 'Polar', category: 'payments', deps: /^@polar-sh\//, keys: key('POLAR') },
+  { name: 'Shopify', category: 'payments', deps: /^(@shopify\/|shopify-api-node$|ShopifyAPI$)/i, keys: key('SHOPIFY') },
+  // Auth
+  { name: 'Clerk', category: 'auth', deps: /^@clerk\//, keys: key('CLERK') },
+  { name: 'Auth0', category: 'auth', deps: /^(@auth0\/|auth0$|auth0-python$)/, keys: key('AUTH0') },
+  { name: 'WorkOS', category: 'auth', deps: /^(@workos-inc\/|workos$)/, keys: key('WORKOS') },
+  // Data and backends
+  { name: 'Supabase', category: 'data', deps: /^(@supabase\/|supabase$)/, files: /^supabase\/config\.toml$/, keys: key('SUPABASE') },
+  { name: 'Convex', category: 'data', deps: /^(convex|@convex-dev\/)/, files: /^convex\.json$|^convex\/schema\.ts$/, keys: key('CONVEX') },
+  { name: 'Firebase', category: 'data', deps: /^(firebase|firebase-admin|@firebase\/)/, files: /(^|\/)firebase\.json$/, keys: key('FIREBASE') },
+  { name: 'Neon', category: 'data', deps: /^@neondatabase\//, keys: key('NEON') },
+  { name: 'PlanetScale', category: 'data', deps: /^@planetscale\//, keys: key('PLANETSCALE') },
+  { name: 'MongoDB', category: 'data', deps: /^(mongodb|mongoose|pymongo|motor)$/, keys: key('MONGO|MONGODB') },
+  { name: 'Upstash', category: 'data', deps: /^@upstash\//, keys: key('UPSTASH') },
+  { name: 'Algolia', category: 'data', deps: /^(algoliasearch|@algolia\/)/, keys: key('ALGOLIA') },
+  { name: 'Pinecone', category: 'data', deps: /^(@pinecone-database\/|pinecone-client$|pinecone$)/, keys: key('PINECONE') },
+  { name: 'Airtable', category: 'data', deps: /^(airtable|pyairtable)$/, keys: key('AIRTABLE') },
+  // Hosting and cloud
+  { name: 'Vercel', category: 'hosting', deps: /^@vercel\//, files: /(^|\/)vercel\.json$/, keys: key('VERCEL') },
+  { name: 'Cloudflare', category: 'hosting', deps: /^(@cloudflare\/|wrangler$)/, files: /(^|\/)wrangler\.(toml|json|jsonc)$/, keys: key('CLOUDFLARE|CF') },
+  { name: 'Netlify', category: 'hosting', deps: /^@netlify\//, files: /(^|\/)netlify\.toml$/, keys: key('NETLIFY') },
+  { name: 'Fly.io', category: 'hosting', files: /(^|\/)fly\.toml$/, keys: key('FLY') },
+  { name: 'Render', category: 'hosting', files: /(^|\/)render\.yaml$/, keys: key('RENDER') },
+  { name: 'Railway', category: 'hosting', files: /(^|\/)railway\.(json|toml)$/, keys: key('RAILWAY') },
+  { name: 'AWS', category: 'hosting', deps: /^(@aws-sdk\/|aws-sdk$|boto3$|aws-cdk-lib$|sst$)/, files: /(^|\/)(serverless\.ya?ml|samconfig\.toml|cdk\.json)$/, keys: key('AWS') },
+  { name: 'Google Cloud', category: 'hosting', deps: /^(@google-cloud\/|google-cloud-)/, files: /(^|\/)(app\.yaml|cloudbuild\.ya?ml)$/, keys: key('GCP|GCLOUD|GOOGLE_CLOUD|GOOGLE_APPLICATION_CREDENTIALS') },
+  { name: 'Azure', category: 'hosting', deps: /^(@azure\/|azure-)/, keys: key('AZURE') },
+  { name: 'Expo', category: 'hosting', deps: /^(expo|eas-cli)$/, files: /(^|\/)eas\.json$/, keys: key('EXPO|EAS') },
+  // AI
+  { name: 'OpenAI', category: 'ai', deps: /^(openai|@ai-sdk\/openai)$/, keys: key('OPENAI') },
+  { name: 'Anthropic', category: 'ai', deps: /^(@anthropic-ai\/|anthropic$|@ai-sdk\/anthropic$)/, keys: key('ANTHROPIC|CLAUDE') },
+  { name: 'Google AI', category: 'ai', deps: /^(@google\/genai|@google\/generative-ai|google-genai|google-generativeai|@ai-sdk\/google)$/, keys: key('GEMINI|GOOGLE_GENERATIVE_AI') },
+  { name: 'OpenRouter', category: 'ai', deps: /^@openrouter\//, keys: key('OPENROUTER') },
+  { name: 'Replicate', category: 'ai', deps: /^replicate$/, keys: key('REPLICATE') },
+  { name: 'ElevenLabs', category: 'ai', deps: /^(elevenlabs|@elevenlabs\/)/, keys: key('ELEVENLABS|ELEVEN_LABS') },
+  // Content and design
+  { name: 'Contentful', category: 'content', deps: /^contentful/, keys: key('CONTENTFUL') },
+  { name: 'Sanity', category: 'content', deps: /^(@sanity\/|sanity$|next-sanity$)/, files: /(^|\/)sanity\.config\.(ts|js)$/, keys: key('SANITY') },
+  { name: 'Figma', category: 'content', deps: /^(figma-api|@figma\/)/, keys: key('FIGMA') },
+  // Feature flags and background jobs
+  { name: 'LaunchDarkly', category: 'flags', deps: /^(launchdarkly-|@launchdarkly\/)/, keys: key('LAUNCHDARKLY|LD_SDK') },
+  { name: 'Statsig', category: 'flags', deps: /^(statsig-|@statsig\/)/, keys: key('STATSIG') },
+  { name: 'Inngest', category: 'jobs', deps: /^inngest$/, keys: key('INNGEST') },
+  { name: 'Trigger.dev', category: 'jobs', deps: /^@trigger\.dev\//, files: /(^|\/)trigger\.config\.(ts|js)$/, keys: key('TRIGGER') },
+  { name: 'Temporal', category: 'jobs', deps: /^(@temporalio\/|temporalio$)/, keys: key('TEMPORAL') },
+  // Productivity and scheduling
+  { name: 'Google Workspace', category: 'productivity', deps: /^(googleapis|google-api-python-client|@googleapis\/)/, keys: key('GOOGLE_CLIENT|GOOGLE_OAUTH|GMAIL|GOOGLE_CALENDAR|GOOGLE_DRIVE|GOOGLE_SHEETS') },
+  { name: 'Cal.com', category: 'productivity', deps: /^@calcom\//, keys: key('CALCOM|CAL_COM') },
+  { name: 'Calendly', category: 'productivity', keys: key('CALENDLY') },
+  { name: 'Zoom', category: 'productivity', deps: /^@zoom\//, keys: key('ZOOM') },
+  // Recruiting
+  { name: 'Ashby', category: 'recruiting', keys: key('ASHBY'), links: /jobs\.ashbyhq\.com\// },
+  { name: 'Greenhouse', category: 'recruiting', keys: key('GREENHOUSE'), links: /boards\.greenhouse\.io\// },
+  { name: 'Lever', category: 'recruiting', keys: key('LEVER'), links: /jobs\.lever\.co\// },
+  { name: 'Workable', category: 'recruiting', keys: key('WORKABLE'), links: /apply\.workable\.com\// },
 ];
+
+/** Dependency names of the manifests npm does not cover: Python, Go, Ruby, Rust, PHP. */
+function otherDeps(root: string, fileList: string[]): Array<{ file: string; dep: string }> {
+  const out: Array<{ file: string; dep: string }> = [];
+  const take = (file: string, re: RegExp) => {
+    if (!fileList.includes(file)) return;
+    for (const m of (readText(join(root, file)) ?? '').matchAll(re)) out.push({ file, dep: m[1]!.toLowerCase() });
+  };
+  take('requirements.txt', /^\s*([A-Za-z0-9_.-]+)/gm);
+  take('pyproject.toml', /^\s*["']?([A-Za-z0-9_.-]+)\s*(?:[=<>~!\["']|$)/gm);
+  take('Gemfile', /^\s*gem\s+["']([\w.-]+)["']/gm);
+  take('go.mod', /^\s*(?:require\s+)?(?:github\.com\/)?([\w.\-/]+)\s+v\d/gm);
+  take('Cargo.toml', /^\s*([\w-]+)\s*=/gm);
+  take('composer.json', /"([\w.-]+\/[\w.-]+)"\s*:/g);
+  return out;
+}
 
 export function scanIntegrations(root: string, fileList: string[], repo: RepositoryReport, env: EnvReport): Integration[] {
   const pkgs = packageJsons(root, repo);
-  const pyText = ['requirements.txt', 'pyproject.toml'].map((f) => (fileList.includes(f) ? readText(join(root, f)) ?? '' : '')).join('\n');
-  const pyDeps = [...pyText.matchAll(/^\s*["']?([A-Za-z0-9_.-]+)/gm)].map((m) => m[1]!.toLowerCase());
+  const others = otherDeps(root, fileList);
   const docs = fileList.filter((f) => /^(README|CONTRIBUTING|AGENTS|CLAUDE)\.md$/i.test(f) || /^\.github\/.*\.md$/i.test(f));
+  const docText = docs.map((doc) => ({ doc, text: readText(join(root, doc)) ?? '' }));
   const out: Integration[] = [];
+  if (repo.github) out.push({ name: 'GitHub', category: 'code', evidence: [`origin: ${repo.github.owner}/${repo.github.repo}`] });
   for (const rule of RULES) {
     const evidence: string[] = [];
     if (rule.deps) {
@@ -486,18 +614,57 @@ export function scanIntegrations(root: string, fileList: string[], repo: Reposit
         const hit = depsOf(pkg).find((dep) => rule.deps!.test(dep));
         if (hit) evidence.push(`${dir === '.' ? '' : `${dir}/`}package.json: ${hit}`);
       }
-      const py = pyDeps.find((dep) => rule.deps!.test(dep));
-      if (py) evidence.push(`python: ${py}`);
+      const other = others.find(({ dep }) => rule.deps!.test(dep));
+      if (other) evidence.push(`${other.file}: ${other.dep}`);
     }
     if (rule.files) for (const file of fileList.filter((f) => rule.files!.test(f)).slice(0, 3)) evidence.push(file);
     if (rule.keys) {
       for (const file of env.files) {
-        const key = file.keys.find((k) => rule.keys!.test(k.name));
-        if (key) evidence.push(`${file.file}: ${key.name}`);
+        const hit = file.keys.find((k) => rule.keys!.test(k.name));
+        if (hit) evidence.push(`${file.file}: ${hit.name}`);
       }
     }
-    if (rule.links) for (const doc of docs) if (rule.links.test(readText(join(root, doc)) ?? '')) evidence.push(doc);
-    if (evidence.length > 0) out.push({ name: rule.name, evidence: evidence.slice(0, 5) });
+    if (rule.links) for (const { doc, text } of docText) if (rule.links.test(text)) evidence.push(doc);
+    if (evidence.length > 0) out.push({ name: rule.name, category: rule.category, evidence: evidence.slice(0, 5) });
+  }
+  return out;
+}
+
+const CREDENTIAL_SUFFIX = /_(API_KEY|API_TOKEN|ACCESS_TOKEN|AUTH_TOKEN|SECRET_KEY|WEBHOOK_SECRET|CLIENT_SECRET|CLIENT_ID|API_SECRET|TOKEN|SECRET|DSN|KEY)$/;
+/** Prefixes that name the app's own plumbing, never a third party. */
+const OWN_PREFIX = /^(APP|API|AUTH|NEXTAUTH|BETTER_AUTH|JWT|SESSION|COOKIE|CSRF|ENCRYPTION|ENCRYPT|SIGNING|ADMIN|INTERNAL|CRON|DATABASE|DB|POSTGRES|PG|MYSQL|REDIS|SECRET|PRIVATE|PUBLIC|MASTER|ROOT|SERVICE|SERVER|CLIENT|WEBHOOK|OAUTH|SMTP|S3|STORAGE|TEST|E2E|CI|NODE|DOTENV|KORTIX)$/;
+
+/**
+ * Credentials for a service no rule names: `ACME_API_KEY` reports `ACME`. The
+ * setup agent asks the person what each one is, so no software is missed.
+ */
+export function scanUnrecognized(env: EnvReport): UnrecognizedService[] {
+  const byPrefix = new Map<string, string[]>();
+  for (const file of env.files) {
+    for (const { name } of file.keys) {
+      const bare = name.replace(new RegExp(`^${PUB}`), '');
+      if (!CREDENTIAL_SUFFIX.test(bare) || RULES.some((rule) => rule.keys?.test(name))) continue;
+      const prefix = bare.replace(CREDENTIAL_SUFFIX, '');
+      if (!prefix || OWN_PREFIX.test(prefix)) continue;
+      byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), `${file.file}: ${name}`]);
+    }
+  }
+  return [...byPrefix].map(([prefix, evidence]) => ({ prefix, evidence: evidence.slice(0, 3) }));
+}
+
+const MCP_CONFIG = /^(\.mcp\.json|\.cursor\/mcp\.json|\.vscode\/mcp\.json|\.codex\/config\.toml)$/;
+
+/** MCP servers the repository's coding tools already use. Names only: a URL or an argument can hold a token. */
+export function scanMcpServers(root: string, fileList: string[]): Array<{ name: string; file: string }> {
+  const out: Array<{ name: string; file: string }> = [];
+  for (const file of fileList.filter((f) => MCP_CONFIG.test(f))) {
+    if (file.endsWith('.toml')) {
+      for (const m of (readText(join(root, file)) ?? '').matchAll(/^\[mcp_servers\.([\w-]+)\]/gm)) out.push({ name: m[1]!, file });
+      continue;
+    }
+    const json = readJson(join(root, file));
+    const servers = (json?.mcpServers ?? json?.servers) as Record<string, unknown> | undefined;
+    for (const name of Object.keys(servers ?? {})) out.push({ name, file });
   }
   return out;
 }

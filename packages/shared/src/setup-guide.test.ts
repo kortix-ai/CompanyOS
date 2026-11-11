@@ -33,5 +33,8 @@ describe('setup target', () => {
     expect(guide).toContain('kortix hosts use dev-kortix-com');
     expect(setupGuide()).toContain('curl -fsSL https://kortix.com/install | bash');
     expect(setupGuide()).not.toContain('kortix hosts use');
+    // The MCP server the guide registers is this deployment's own.
+    expect(guide).toContain('claude mcp add --transport http kortix https://dev-api.kortix.com/v1/mcp');
+    expect(setupGuide()).toContain('codex mcp add kortix --url https://api.kortix.com/v1/mcp');
   });
 });

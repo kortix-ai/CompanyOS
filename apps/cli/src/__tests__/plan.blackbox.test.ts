@@ -56,7 +56,9 @@ beforeAll(() => {
   write('.env', `DATABASE_URL=${VALUES[0]}\nAPI_URL="${VALUES[1]}"\nSTRIPE_SECRET_KEY=${VALUES[2]}\nexport SESSION_SECRET=${VALUES[3]}\nEMPTY=\nSEALED=${VALUES[5]}\nSLACK_WEBHOOK_URL=\n`);
   write('apps/web/.env.production', `NEXT_PUBLIC_SITE=${VALUES[4]}\n`);
   write('apps/web/.env.local', `NEXT_PUBLIC_SITE=http://localhost:3000\n`);
-  write('.env.example', 'DATABASE_URL=\nNEW_ONLY=\n');
+  write('.env.example', 'DATABASE_URL=\nNEW_ONLY=\nACME_API_KEY=\nACME_WEBHOOK_SECRET=\n');
+  write('.mcp.json', JSON.stringify({ mcpServers: { tracker: { url: `https://mcp.example.com/${VALUES[2]}` } } }));
+  write('Gemfile', "gem 'sentry-ruby'\ngem 'hubspot-api-client'\n");
   write('node_modules/ignored/.env', `IGNORED=${VALUES[3]}\n`);
   spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
   spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:synthetic-owner/synthetic-mono.git'], { cwd: root });
@@ -88,7 +90,7 @@ test('env keys are classified local, remote or prod; example-only names are list
   expect(file('apps/web/.env.production').keys[0]).toMatchObject({ name: 'NEXT_PUBLIC_SITE', class: 'prod' });
   expect(file('apps/web/.env.local').keys[0]).toMatchObject({ class: 'local' });
   expect(file('.env.example').example).toBe(true);
-  expect(out.env.example_only).toEqual([{ name: 'NEW_ONLY', example: '.env.example' }]);
+  expect(out.env.example_only.map((e: { name: string }) => e.name)).toEqual(['NEW_ONLY', 'ACME_API_KEY', 'ACME_WEBHOOK_SECRET']);
   expect(out.env.files.map((f: { file: string }) => f.file)).not.toContain('node_modules/ignored/.env');
   expect(out.env.schemes).toEqual(['postgres']);
   // Only local, non-empty, unencrypted names are proposed for upload.
@@ -105,7 +107,12 @@ test('repository, monorepo layout, stack and integrations', () => {
   expect(out.stack.browser_tests).toEqual([{ tool: 'playwright', evidence: 'playwright.config.ts' }]);
   expect(out.stack.commands).toContainEqual({ name: 'e2e', command: 'playwright test', package: '.' });
   expect(out.stack.commands).toContainEqual({ name: 'build', command: 'next build', package: 'apps/web' });
-  expect(out.integrations.map((i: { name: string }) => i.name)).toEqual(['Sentry', 'PostHog', 'Linear', 'Slack', 'Stripe', 'Supabase']);
+  expect(out.integrations.map((i: { name: string }) => i.name)).toEqual(['GitHub', 'Sentry', 'PostHog', 'Linear', 'Slack', 'HubSpot', 'Stripe', 'Supabase']);
+  expect(out.integrations.find((i: { name: string }) => i.name === 'HubSpot')).toEqual({ name: 'HubSpot', category: 'crm', evidence: ['Gemfile: hubspot-api-client'] });
+  // A credential no rule names is reported by prefix, so the person is asked what it is.
+  expect(out.unrecognized_services).toEqual([{ prefix: 'ACME', evidence: ['.env.example: ACME_API_KEY', '.env.example: ACME_WEBHOOK_SECRET'] }]);
+  // MCP servers by name only: the URL holds a token.
+  expect(out.mcp_servers).toEqual([{ name: 'tracker', file: '.mcp.json' }]);
   expect(out.integrations.find((i: { name: string }) => i.name === 'Linear').evidence).toEqual(['README.md']);
   expect(out.recommendation.dev_environment).toMatchObject({ container_runtime: true, commands: { install: 'yarn install --frozen-lockfile', e2e: 'yarn e2e' } });
   expect(out.recommendation.references.map((r: { name: string }) => r.name)).toEqual(['software-factory', 'marketing-factory']);

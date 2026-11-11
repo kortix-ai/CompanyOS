@@ -10,7 +10,7 @@ import { takeFlags } from '../command-argv.ts';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { runGit } from '../git-run.ts';
 import { readKortixState, REFERENCE_REPOS } from '../onboarding/kortix-state.ts';
-import { envValues, listFiles, proposeDevEnv, scanEnv, scanIntegrations, scanRepository, scanStack, scrubValues } from '../onboarding/repo-scan.ts';
+import { envValues, listFiles, proposeDevEnv, scanEnv, scanIntegrations, scanMcpServers, scanRepository, scanStack, scanUnrecognized, scrubValues } from '../onboarding/repo-scan.ts';
 import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix plan [options]
@@ -43,6 +43,8 @@ export async function buildPlan(dir: string) {
   const stack = scanStack(root, fileList, repository);
   const env = scanEnv(root, fileList);
   const integrations = scanIntegrations(root, fileList, repository, env);
+  const unrecognized = scanUnrecognized(env);
+  const mcpServers = scanMcpServers(root, fileList);
   process.chdir(root);
   const kortix = await readKortixState(root);
   return scrubValues({
@@ -50,6 +52,8 @@ export async function buildPlan(dir: string) {
     stack,
     env,
     integrations,
+    unrecognized_services: unrecognized,
+    mcp_servers: mcpServers,
     kortix,
     recommendation: {
       references: REFERENCE_REPOS.map((ref) => ({ ...ref, status: 'published' as const })),
@@ -62,7 +66,7 @@ export async function buildPlan(dir: string) {
 }
 
 function printPlan(plan: Awaited<ReturnType<typeof buildPlan>>): void {
-  const { repository: repo, stack, env, integrations, kortix } = plan;
+  const { repository: repo, stack, env, integrations, unrecognized_services: unrecognized, mcp_servers: mcpServers, kortix } = plan;
   const line = (label: string, value: string) => process.stdout.write(`  ${C.dim}${label.padEnd(14)}${C.reset}${value}\n`);
   process.stdout.write(`\n  ${C.bold}kortix plan${C.reset}  ${C.dim}${repo.root}${C.reset}\n\n`);
   line('repository', `${repo.github ? `${repo.github.owner}/${repo.github.repo}` : `origin: ${repo.origin}`} · ${repo.default_branch ?? 'no branch'} · ${repo.clean ? 'clean' : `${repo.changed_files} changed files`}`);
@@ -77,6 +81,8 @@ function printPlan(plan: Awaited<ReturnType<typeof buildPlan>>): void {
     process.stdout.write(`    ${file.file}  ${C.dim}${count('local')} local, ${count('remote')} remote, ${count('prod')} prod${file.example ? ' (example)' : ''}${C.reset}\n`);
   }
   if (integrations.length) line('integrations', integrations.map((i) => i.name).join(', '));
+  if (unrecognized.length) line('unrecognized', `${unrecognized.map((u) => u.prefix).join(', ')} ${C.dim}(ask the person what each is)${C.reset}`);
+  if (mcpServers.length) line('mcp servers', mcpServers.map((m) => m.name).join(', '));
   line('kortix', kortix.signed_in ? `signed in to ${kortix.host ?? 'default'}${kortix.workspace ? ` · workspace ${kortix.workspace.id}` : ' · no workspace linked'}` : 'not signed in (kortix login)');
   line('kortix.yaml', kortix.manifest ? `${kortix.manifest.file}${kortix.manifest.imports.length ? `, imports ${kortix.manifest.imports.join(', ')}` : ''}` : 'none');
   process.stdout.write(`\n  ${status.info('Agree the plan with the person, then run: kortix onboard --yes --json')}\n\n`);

@@ -25,11 +25,11 @@ const light = (at: string, strength = 30): CSSProperties => ({
 
 /** What the one prompt does, in order: the onboarding is the product. */
 const STEPS = [
-  { title: 'Scans your codebase.', body: 'Your stack, your env names, every tool you already use. Names only, never a secret value.' },
-  { title: 'Asks what is missing.', body: 'Which factories, which channels, which tracker. Then one plan and one yes.' },
-  { title: 'Connects everything.', body: 'Secrets, integrations, Slack and a dev environment built from your repo.' },
-  { title: 'Writes it as code.', body: 'One kortix.yaml in your repo. Every change after that is a pull request.' },
-  { title: 'Proves it runs.', body: 'It loops until every check is green and one real run has finished.' },
+  { title: 'Finds your software.', body: 'It scans the codebase for every tool you use and asks about the ones it cannot see. Names only, never a secret value.' },
+  { title: 'Connects it.', body: 'Secrets, 3,000+ app connectors, Slack and a dev environment built from your repo.' },
+  { title: 'Sets the signals.', body: 'Issues, merges, errors, messages, signups, schedules. You pick what the agents listen to.' },
+  { title: 'Runs your loops.', body: 'A ready-made factory or any loop you describe. All of it in one kortix.yaml.' },
+  { title: 'Proves it, then stays.', body: 'It loops until one real run finishes. Then it adds the Kortix MCP server to your coding agent, so the next loop is one sentence.' },
 ];
 
 /** The second line of the headline: one factory after another. */
@@ -115,8 +115,8 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
               <RotatingFactory names={loops.map((loop) => loop.name)} />
             </h1>
             <p className="text-foreground/70 max-w-xl text-lg text-pretty">
-              Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />. It scans your codebase, connects your tools and secrets, and puts agents
-              to work 24/7.
+              Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />. It connects your stack and puts agents on a loop, 24/7, in the
+              cloud.
             </p>
             <PromptBox className="mt-2" />
           </div>
@@ -125,7 +125,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
         <section id="how" className="border-border scroll-mt-16 border-t">
           <div className="flex flex-col gap-3 px-8 pt-20 pb-12 md:px-10">
             <Eyebrow>What the one prompt does</Eyebrow>
-            <h2 className={H2}>It onboards your whole company. In code.</h2>
+            <h2 className={H2}>Connect your stack. Pick your signals. Run your loops.</h2>
           </div>
           <ol className="border-border grid border-t sm:grid-cols-2 lg:grid-cols-5">
             {STEPS.map((step, index) => (

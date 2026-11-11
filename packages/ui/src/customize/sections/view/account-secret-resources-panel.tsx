@@ -217,7 +217,9 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
   const [reconnectLabel, setReconnectLabel] = useState('');
   if (reconnecting && reconnecting.label !== reconnectLabel) setReconnectLabel(reconnecting.label);
   const [sharing, setSharing] = useState<AccountSecretResource | null>(null);
-  // New connections are private to their creator: sharing is opt-in.
+  // A new connection is shared with everyone in the workspace. A viewer who may
+  // not share gets "Only you", the one choice the API accepts from them.
+  // `openCreate` sets it from the probe's answer when the dialog opens.
   const [createMode, setCreateMode] = useState<ConnectionAccessChoice>('private');
   const [sharingMode, setSharingMode] = useState<'project' | 'members'>('project');
   const [selectedMembers, setSelectedMembers] = useState<PrincipalSelection>(NO_MEMBERS);
@@ -324,7 +326,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
     },
   });
   const openCreate = () => {
-    setCreateMode('private');
+    setCreateMode(canShare ? 'project' : 'private');
     setSelectedMembers(NO_MEMBERS);
     setLabel(defaultLabel());
     save.reset();

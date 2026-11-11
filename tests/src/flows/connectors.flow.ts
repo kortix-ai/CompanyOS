@@ -4803,6 +4803,20 @@ flow(
         }
       });
 
+      await ctx.step('a wrong action name → 404 action_not_found naming the closest actions; a name close to nothing names none', async () => {
+        const before = hits.length;
+        const guessed = await callAction('VENDOR_CHARGES_LIST');
+        guessed.status(404).body().has('$.ok', false).has('$.reason', 'action_not_found').has('$.did_you_mean', ['charges_list']);
+        const hint = guessed.json<{ hint?: string }>().hint ?? '';
+        if (!hint.startsWith(`Unknown action VENDOR_CHARGES_LIST on connector "${slug}". Did you mean ${slug}.charges_list?`)) {
+          throw new Error(`hint does not name the closest action: ${hint}`);
+        }
+        const unrelated = await callAction('refunds_issue');
+        unrelated.status(404).body().has('$.reason', 'action_not_found');
+        if ('did_you_mean' in unrelated.json<Record<string, unknown>>()) throw new Error(`unexpected suggestions: ${unrelated.text()}`);
+        if (hits.length !== before) throw new Error('a denied call reached the upstream');
+      });
+
       await ctx.step('with no policy rows (default_mode allow_all) the write runs', async () => {
         await expectRan('charges_create');
       });

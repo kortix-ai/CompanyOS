@@ -47,6 +47,7 @@ import { connectorAttachmentStore } from './attachments';
 import { gateChannelRead } from './channel-read-scope';
 import { gateChannelWrite } from './channel-write-scope';
 import { resolveCredentialValue, resolveConnectionCredentialValue } from './credentials';
+import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
 import { CredentialNotSharedError } from './gateway';
 import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
@@ -54,6 +55,7 @@ import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
 import { graphToken } from '../channels/teams-auth';
 import { runPipedreamAction, runPipedreamProxy } from './pipedream';
 import type { ConnectorPrincipal } from './router-contract';
+import { closestActionPaths } from './action-suggest';
 import { COMPUTER_SLUG, withComputerCatalog } from './computers';
 import { ensureProjectComputer } from './sync';
 import { isUuid } from '../shared/validate';
@@ -578,6 +580,35 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
         }),
         binding: a.binding as unknown as ActionBinding,
       } satisfies GatewayAction;
+    },
+    suggestActions: async (connectorId, relPath, providerType) => {
+      const paths =
+        providerType === 'computer'
+          ? withComputerCatalog(connectorId, 'computer', []).map((row) => row.path)
+          : (
+              await db
+                .select({ path: connectorActions.path })
+                .from(connectorActions)
+                .where(eq(connectorActions.connectorId, connectorId))
+            ).map((row) => row.path);
+      return closestActionPaths(relPath, paths);
+    },
+    completeComposioAuthorization: async ({ projectId, connector }) => {
+      if (!connector.connectionId) return null;
+      try {
+        return await recordFinishedComposioAuthorization({
+          projectId,
+          slug: connector.slug,
+          connectionId: connector.connectionId,
+          metadata: connector.connectionMetadata ?? {},
+        });
+      } catch (error) {
+        logger.warn('[composio] recording a finished sign-in failed; the call answers needs_auth', {
+          connectionId: connector.connectionId,
+          error: error instanceof Error ? error.message.split('\n')[0] : String(error),
+        });
+        return null;
+      }
     },
     resolveCredential: async (connector, userId) => {
       // Channel connectors resolve to their platform install token (server-side);

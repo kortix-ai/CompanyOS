@@ -21,7 +21,7 @@ import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 import { diagnosticsText, formatBytes, usageMinutes, versionView, type VersionState } from './device-diagnostics';
 import { deviceStatus } from './device-status';
-import { StatusLabel } from './device-status-ui';
+import { StatusLabel } from './device-status-label';
 
 /** The version and, when it matters, its update state: "0.14.19 · Update failed". */
 export function VersionBadge({ device }: { device: CaptureDevice }) {

@@ -106,16 +106,6 @@
     "access": "Zugriff",
     "actions": "Aktionen",
     "coolingDown": "Abklingzeit aktiv",
-    "usageFiveHour": "5 Stunden",
-    "usageWeekly": "Wöchentlich",
-    "usageWeeklyModel": "Wöchentlich · {model}",
-    "usagePercent": "{percent} % genutzt",
-    "usagePercentResets": "{percent} % · zurückgesetzt {time}",
-    "usageLimitReached": "Limit erreicht",
-    "usageLimitResets": "Limit erreicht · zurückgesetzt {time}",
-    "usageNotSeen": "Die Nutzung erscheint nach der ersten Anfrage",
-    "usageObserved": "Aktualisiert {time}",
-    "usageAriaLabel": "{window}: {percent} % genutzt",
     "member": "Mitglied",
     "members": "Mitglieder",
     "actionsFor": "Aktionen für {label}",
@@ -801,14 +791,8 @@
         "noResults": "Keine Designs gefunden"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Schritte und Überlegungen werden live angezeigt, während Kortix arbeitet."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "Eine Statuszeile, bis Sie sie erweitern."
-        }
+        "normal": "Normal",
+        "minimal": "Minimal"
       },
       "wallpapers": {
         "dither": "Raster",
@@ -3016,6 +3000,8 @@
         "title": "E-Mail prüfen",
         "description": "Wir haben einen Link an <address>{email}</address> gesendet. Öffne ihn, um fortzufahren.",
         "confirmDescription": "Wir haben eine Bestätigungs-E-Mail an <address>{email}</address> gesendet. Bestätige deine E-Mail, um fortzufahren.",
+        "unknownDescription": "Wir haben eine E-Mail an <address>{email}</address> geschickt — ein Anmelde-Link oder ein Bestätigungs-Link für ein neues Konto.",
+        "closedDescription": "Falls <address>{email}</address> ein Konto hat, ist sein Anmelde-Link unterwegs.",
         "notReceived": "Keinen Link erhalten?",
         "confirmNotReceived": "Keine Bestätigungs-E-Mail erhalten?",
         "resendIn": "Erneut senden in {seconds}",
@@ -12605,6 +12591,7 @@
       "text41ffc5e14073": "Auf {value0} setzen",
       "text420962cdca94": "Dasselbe Workspace, dieselben Konnektoren, derselbe Speicher – und darunter acht verschiedene Aufgaben. Jedes Team schreibt die Skills für seine eigene Arbeit, und niemand setzt dafür ein zweites System auf.",
       "text420aaa63cba7": "Seitensumme",
+      "textbe57ff2d7907": "Keiner Sitzung zugeordnet",
       "text42113e7bf6fc": "Kortix Support",
       "text42117ed2a1f5": "Der übliche Weg",
       "text421c4b1fed48": "Produkt / Steuerungsebene",
@@ -21320,7 +21307,12 @@
       "text4b892277843c": "Workspace erstellen",
       "text41018e566b60": "neuer workspace erstellen hinzufügen team",
       "texta99ac8f9050b": "Workspace · Zugriff",
-      "textfd8b8dae4421": "Gefahrenzone"
+      "textfd8b8dae4421": "Gefahrenzone",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM-Reservierungserstattung",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Speicher",
+      "textab3aff8f7642": "Aufladebonus"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",
@@ -21527,6 +21519,10 @@
       "denied": "Zugriff abgelehnt",
       "deniedDescription": "My Kortix erhält deine Antwort.",
       "failed": "Deine Entscheidung konnte nicht gesendet werden. Versuch es erneut."
+    },
+    "reviewPane": {
+      "emptyTitle": "Wähle einen Eintrag",
+      "emptyDescription": "Die Details öffnen sich hier. Mit J und K bewegst du dich durch die Liste."
     }
   },
   "commandPalette": {
@@ -26454,48 +26450,37 @@
     "issue": "Issue #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 Stunden",
+    "weekly": "Wöchentlich",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "Abo-Nutzung ist nicht verfügbar",
-    "disabledDescription": "Abo-Verbindungen sind für diesen Workspace nicht aktiviert.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Zurücksetzungszeit verstrichen · aktualisieren, um die aktuelle Nutzung zu sehen",
-    "text10": "Zurücksetzungszeit nicht gemeldet",
-    "text11": "Checking provider usage…",
-    "text12": "Noch keine Nutzung gemeldet. Aktualisiere, nachdem du dieses Abo genutzt hast.",
-    "text13": "Aktualisierung fehlgeschlagen. Zeigt die zuletzt bekannten Daten.",
-    "text14": "Warten auf Daten des Anbieters",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Behalte die Limits deiner verbundenen ChatGPT- und Claude-Abos im Blick.",
-    "text19": "Nutzung konnte nicht geladen werden",
-    "text20": "Versuche, deine verbundenen Abos erneut zu laden.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Verbinde ChatGPT oder Claude unter Anbieter, um gemeldete Nutzung und Zurücksetzungszeiten zu sehen.",
-    "text24": "Connect a subscription",
-    "text25": "Die Nutzung wird von allen Apps geteilt, die dasselbe Abo verwenden. Wird automatisch jede Minute geprüft, solange dieser Tab geöffnet ist.",
-    "text26": "Limits variieren je nach Tarif. Hier erscheinen nur Zeitfenster, die deine Verbindung meldet; fehlende Daten bedeuten nicht unbegrenzte Nutzung. Dateilimits werden nicht gemeldet. API-Ausgaben erscheinen unter Kosten.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Fünf-Stunden-Fenster von dieser Verbindung nicht gemeldet.",
-    "fableIncluded": "Die Nutzung von Fable zählt auch zu deinem gesamten Wochenkontingent.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Zusatznutzung",
+    "apps": "Apps",
+    "codeReview": "Code-Review",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · zurückgesetzt {time}",
+    "percentBack": "{percent}% · wieder ab {time}",
+    "resetPassed": "Zurückgesetzt · wird aktualisiert",
+    "notStarted": "Nicht gestartet",
+    "reconnectToSee": "Neu verbinden, um die Nutzung zu sehen",
+    "availableNow": "Jetzt verfügbar",
+    "availableCount": "{available} von {total, plural, one {# Konto} other {# Konten}}",
+    "nextBack": "Nächstes wieder ab",
+    "rowPeak": "{window} · {percent}% genutzt",
+    "rowSomeLimited": "{limited} von {total} am Limit",
+    "rowAllLimited": "Am Limit",
+    "rowAllLimitedBack": "Am Limit · wieder ab {time}",
+    "noUsageYet": "Noch keine Nutzung gemeldet.",
+    "refreshFailed": "Aktualisierung fehlgeschlagen · zuletzt bekannte Nutzung.",
+    "loadFailed": "Nutzung konnte nicht geladen werden.",
+    "rowSomeLimitedBack": "{limited} von {total} am Limit · nächstes wieder ab {time}",
+    "weeklyAll": "Wöchentlich · alle Modelle",
+    "notReported": "Nicht gemeldet"
   },
   "gatewayRouting": {
     "exceptions": "Ausnahmen",
@@ -26731,8 +26716,7 @@
     "menu": {
       "invite": "Personen zu {name} einladen",
       "leave": "{name} verlassen",
-      "invitePeople": "Personen einladen",
-      "more": "Mehr"
+      "invitePeople": "Personen einladen"
     },
     "roles": {
       "owner": {

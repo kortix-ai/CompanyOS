@@ -29,7 +29,7 @@ import { PROJECT_ACTIONS } from '../../../internal/lib/project-actions';
 import { useProjectCan } from '../../../internal/lib/use-project-can';
 import { accessSummary, chatGptSharing, type ConnectionAccessChoice, keyAccessFields, labelOwnerName, needsReconnection } from '../../../internal/lib/account-secret-access';
 import { UndecryptableValue } from './undecryptable-value';
-import { isSubscriptionLogin, SubscriptionAccountLine, SubscriptionUsageMeters } from './subscription-usage';
+import { isSubscriptionLogin, SubscriptionAccountLine, SubscriptionAccountUsage } from './subscription-usage';
 
 const NO_MEMBERS: PrincipalSelection = { memberIds: [], groupIds: [], inviteEmails: [] };
 type StartInput = NonNullable<Parameters<typeof startProjectProviderOAuth>[2]>;
@@ -367,13 +367,14 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
           // A value Kortix cannot decrypt is lost (KRTX-1719): the gateway skips
           // it. A login is reconnected; a key is entered again.
           const undecryptable = secret.status === 'undecryptable';
-          // A subscription login shows its plan windows; they say "limit reached" and when it resets.
+          // A subscription login names its email and plan, and shows every plan
+          // window under it; the sheet's summary sits above this list.
           const usageShown = Boolean(oauth) && isSubscriptionLogin(secret) && !undecryptable;
           return (
             <li key={secret.secret_id} className={usageShown ? 'border-border flex min-w-0 items-start gap-3 rounded-md border px-3 py-2' : 'border-border flex min-w-0 items-center gap-3 rounded-md border px-3 py-1.5'}>
               <span className="text-foreground min-w-0 flex-1 text-sm font-medium">
                 <span className="block break-words">{secret.label}</span>
-                {usageShown && <SubscriptionAccountLine accountId={accountId} secret={secret} />}
+                {usageShown && oauth && <SubscriptionAccountLine accountId={accountId} projectId={oauth.projectId} secret={secret} />}
                 <span className="text-muted-foreground block text-xs font-normal">{accessLine(secret)}</span>
                 {stale && (
                   <span className="text-muted-foreground block text-xs font-normal">{t('needsReconnection')}</span>
@@ -381,7 +382,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
                 {!(usageShown && secret.usage) && secret.cooldown_until && Date.parse(secret.cooldown_until) > resources.dataUpdatedAt && (
                   <span className="text-muted-foreground block text-xs font-normal">{t('coolingDown')}</span>
                 )}
-                {usageShown && <SubscriptionUsageMeters accountId={accountId} secret={secret} />}
+                {usageShown && oauth && <SubscriptionAccountUsage accountId={accountId} projectId={oauth.projectId} secret={secret} />}
               </span>
               {undecryptable && <UndecryptableValue hint={tUndecryptable(oauth ? 'loginHint' : 'keyHint')} />}
               {(stale || undecryptable) && canReconnect && (

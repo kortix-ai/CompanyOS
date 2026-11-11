@@ -106,16 +106,6 @@
     "access": "アクセス",
     "actions": "アクション",
     "coolingDown": "クールダウン中",
-    "usageFiveHour": "5時間",
-    "usageWeekly": "週間",
-    "usageWeeklyModel": "週間 · {model}",
-    "usagePercent": "{percent}% 使用",
-    "usagePercentResets": "{percent}% · {time} にリセット",
-    "usageLimitReached": "上限に達しました",
-    "usageLimitResets": "上限に達しました · {time} にリセット",
-    "usageNotSeen": "最初のリクエスト後に使用量が表示されます",
-    "usageObserved": "{time} に更新",
-    "usageAriaLabel": "{window}: {percent}% 使用",
     "member": "メンバー",
     "members": "人のメンバー",
     "actionsFor": "{label} の操作",
@@ -801,14 +791,8 @@
         "noResults": "テーマが見つかりません"
       },
       "densities": {
-        "normal": {
-          "label": "標準",
-          "description": "Kortix の作業中に手順と思考をリアルタイムで表示します。"
-        },
-        "minimal": {
-          "label": "最小",
-          "description": "展開するまで 1 行のステータスだけを表示します。"
-        }
+        "normal": "標準",
+        "minimal": "最小"
       },
       "wallpapers": {
         "dither": "ディザー",
@@ -3016,6 +3000,8 @@
         "title": "メールを確認してください",
         "description": "<address>{email}</address> にリンクを送信しました。リンクを開いて続行してください。",
         "confirmDescription": "<address>{email}</address> に確認メールを送信しました。メールを確認して続行してください。",
+        "unknownDescription": "<address>{email}</address> にメールを送信しました — サインイン用リンク、または新規アカウント用の確認リンクです。",
+        "closedDescription": "<address>{email}</address> のアカウントがある場合、サインイン用リンクを送信しました。",
         "notReceived": "リンクが届きませんか？",
         "confirmNotReceived": "確認メールが届きませんか？",
         "resendIn": "{seconds}秒後に再送信",
@@ -12605,6 +12591,7 @@
       "text41ffc5e14073": "{value0} に設定します",
       "text420962cdca94": "同じワークスペース、同じコネクタ、同じメモリ。その下で8つの異なる仕事が動きます。各チームが自分の仕事に必要なスキルを書き、別のシステムを立ち上げる必要はありません。",
       "text420aaa63cba7": "ページ合計",
+      "textbe57ff2d7907": "セッションに紐付いていない",
       "text42113e7bf6fc": "Kortixサポート",
       "text42117ed2a1f5": "従来の方法",
       "text421c4b1fed48": "プロダクト／コントロールプレーン",
@@ -21320,7 +21307,12 @@
       "text4b892277843c": "ワークスペースを作成",
       "text41018e566b60": "新規 ワークスペース 作成 追加 チーム",
       "texta99ac8f9050b": "ワークスペース · アクセス",
-      "textfd8b8dae4421": "危険な操作"
+      "textfd8b8dae4421": "危険な操作",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM保留返金",
+      "texta68ee4167406": "プロキシ",
+      "texta69c4dece144": "ストレージ",
+      "textab3aff8f7642": "トップアップボーナス"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21527,6 +21519,10 @@
       "denied": "アクセスを拒否しました",
       "deniedDescription": "My Kortix にあなたの回答が届きます。",
       "failed": "決定を送信できませんでした。もう一度お試しください。"
+    },
+    "reviewPane": {
+      "emptyTitle": "項目を選択してください",
+      "emptyDescription": "詳細はここに表示されます。J と K でリストを移動できます。"
     }
   },
   "commandPalette": {
@@ -26454,48 +26450,37 @@
     "issue": "課題 #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5時間",
+    "weekly": "週間",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "サブスクリプションの使用状況は利用できません",
-    "disabledDescription": "このワークスペースではサブスクリプション接続が有効になっていません。",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "リセット時刻を過ぎました · 更新して最新の使用状況を確認",
-    "text10": "リセット時刻が報告されていません",
-    "text11": "Checking provider usage…",
-    "text12": "使用状況はまだ報告されていません。このサブスクリプションを使用した後に更新してください。",
-    "text13": "更新できませんでした。最後に取得したデータを表示しています。",
-    "text14": "プロバイダーのデータを待っています",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "接続済みのChatGPTとClaudeのサブスクリプションの上限を確認できます。",
-    "text19": "使用状況を読み込めませんでした",
-    "text20": "接続済みのサブスクリプションをもう一度読み込んでください。",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "プロバイダーでChatGPTまたはClaudeを接続すると、報告された使用状況とリセット時刻を確認できます。",
-    "text24": "Connect a subscription",
-    "text25": "使用状況は、同じサブスクリプションを使うアプリ間で共有されます。このタブを開いている間は1分ごとに自動で確認します。",
-    "text26": "上限はプランによって異なります。接続から報告された期間のみ表示され、データがないことは無制限を意味しません。ファイルの上限は報告されません。APIの支出はコストに表示されます。",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "この接続では5時間枠が報告されていません。",
-    "fableIncluded": "Fableの使用量は、週間の総合上限にも含まれます。",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "追加使用量",
+    "apps": "アプリ",
+    "codeReview": "コードレビュー",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · {time} にリセット",
+    "percentBack": "{percent}% · {time} に再開",
+    "resetPassed": "リセット済み · 更新中",
+    "notStarted": "未開始",
+    "reconnectToSee": "使用状況を見るには再接続してください",
+    "availableNow": "現在利用可能",
+    "availableCount": "{total} 件中 {available} 件",
+    "nextBack": "次の再開",
+    "rowPeak": "{window} · {percent}% 使用",
+    "rowSomeLimited": "{total} 件中 {limited} 件が上限",
+    "rowAllLimited": "上限に到達",
+    "rowAllLimitedBack": "上限に到達 · {time} に再開",
+    "noUsageYet": "まだ使用状況が報告されていません。",
+    "refreshFailed": "更新できませんでした · 最後に確認した使用状況を表示しています。",
+    "loadFailed": "使用状況を読み込めませんでした。",
+    "rowSomeLimitedBack": "{total} 件中 {limited} 件が上限 · 次の再開 {time}",
+    "weeklyAll": "週間 · 全モデル",
+    "notReported": "未報告"
   },
   "gatewayRouting": {
     "exceptions": "例外",
@@ -26731,8 +26716,7 @@
     "menu": {
       "invite": "{name} にメンバーを招待",
       "leave": "{name} から退出",
-      "invitePeople": "メンバーを招待",
-      "more": "その他"
+      "invitePeople": "メンバーを招待"
     },
     "roles": {
       "owner": {

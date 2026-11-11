@@ -1,13 +1,13 @@
-import { useTranslations } from '@/i18n/use-translations';
 import { cn } from '@kortix/ui';
 import type { ReactNode } from 'react';
 
 /*
- * The /sovereign page's product frames. Lines wrap instead of scrolling, so a
- * long command stays readable at 390 px.
+ * The product frames the solution pages share: one window with a title bar,
+ * one terminal renderer. Lines wrap instead of scrolling, so each frame
+ * stays readable at 390 px.
  */
 
-/** A window with a title bar: the frame every hero step and code tab uses. */
+/** A window with a title bar: the frame every hero step and tab uses. */
 export function Window({
   title,
   children,
@@ -39,11 +39,19 @@ export function Window({
 
 /**
  * Shell lines: `$` starts a command, `#` a comment, `✓` a success line, and
- * anything else is output. An empty string is a blank line.
+ * anything else is output. An empty string is a blank line. `wrap` gives the
+ * success line the hanging indent the /self-hosted frames use; /sovereign
+ * keeps it on one line.
  */
-export function Terminal({ lines, className }: { lines: readonly string[]; className?: string }) {
-  const tMarketing = useTranslations('hardcodedUi.i18nComplete');
-
+export function Terminal({
+  lines,
+  className,
+  wrap,
+}: {
+  lines: readonly string[];
+  className?: string;
+  wrap?: boolean;
+}) {
   return (
     <pre
       className={cn(
@@ -73,7 +81,10 @@ export function Terminal({ lines, className }: { lines: readonly string[]; class
           }
           if (line.startsWith('✓')) {
             return (
-              <span key={key} className="text-foreground">
+              <span
+                key={key}
+                className={wrap ? 'text-foreground pl-4 -indent-4 wrap-break-word' : 'text-foreground'}
+              >
                 <span className="text-kortix-green">✓</span>
                 {line.slice(1)}
               </span>

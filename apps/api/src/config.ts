@@ -315,7 +315,9 @@ const envSchema = z.object({
    * Comma-separated hostnames or IP literals, matched exactly. Empty (the
    * default) means every connector endpoint must be a public address. Set it
    * on a self-hosted deployment whose connectors call internal APIs; the local
-   * test stack sets `127.0.0.1` for its loopback upstream.
+   * test stack sets `127.0.0.1` for its loopback upstream. The connector's
+   * OAuth 2.0 token and refresh calls honor the same list; they still require
+   * https.
    */
   KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS: optStr,
   /**

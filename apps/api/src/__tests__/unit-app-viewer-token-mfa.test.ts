@@ -27,7 +27,8 @@ async function actorFor(vars: Record<string, string>, accountId: string) {
   return out!;
 }
 
-const appViewerToken = { userId: VIEWER, authType: 'oauth', accountId: APP_ACCOUNT, oauthAppAccountId: APP_ACCOUNT };
+// What auth-oauth sets for a token whose row records mfa_aal = 'aal2'.
+const appViewerToken = { userId: VIEWER, authType: 'oauth', accountId: APP_ACCOUNT, oauthMfaAccountId: APP_ACCOUNT };
 
 describe('an App viewer token in the IAM actor', () => {
   test('counts as aal2 in the App account', async () => {
@@ -38,7 +39,7 @@ describe('an App viewer token in the IAM actor', () => {
     expect((await actorFor(appViewerToken, OTHER_ACCOUNT)).ctx.mfaAal).toBeUndefined();
   });
 
-  test('a Sign in with Kortix token (no App) carries no level', async () => {
+  test('a token whose row records no level carries none', async () => {
     expect((await actorFor({ userId: VIEWER, authType: 'oauth', accountId: APP_ACCOUNT }, APP_ACCOUNT)).ctx.mfaAal).toBeUndefined();
   });
 

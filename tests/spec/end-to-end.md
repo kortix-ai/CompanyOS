@@ -1564,13 +1564,15 @@ with the App cookie and `Sec-Fetch-Site: same-origin`,
 `GET /_kortix/api/v1/projects/:projectId` → **200**, and no `Set-Cookie`
 reaches the App origin. `Sec-Fetch-Site: cross-site` → **403**
 `cross_site_request`; `/_kortix/api/v1/oauth/*` → **404**. In a workspace that
-requires MFA (`PATCH /accounts/:accountId/iam/mfa-required`), the viewer's own
-session without a second factor gets **403** `account_mfa_required` on
-`GET /projects/:projectId`, while the App still acts as them:
-`GET /_kortix/api/v1/projects/:projectId` → **200** and the viewer token →
-**200**. The gate admitted the viewer only through `access-session`, which the
-MFA gate passes first, so the token counts as the second factor in the App's
-own account and in no other (`apps/api/src/__tests__/unit-app-viewer-token-mfa.test.ts`).
+requires MFA (`PATCH /accounts/:accountId/iam/mfa-required`), an App opened
+from a session without a second factor does not act as its viewer: the
+viewer's own session, `GET /_kortix/api/v1/projects/:projectId` and the viewer
+token each get **403** `account_mfa_required`, and `POST …/access-session` →
+**403**. A viewer token counts as the second factor only when `access-session`
+was asked by a browser session at aal2; the cookie records it, the token row
+keeps it (`mfa_aal`), and the API honors it in the App's own account only
+(`apps/api/src/apps/viewer-session-aal.test.ts`,
+`apps/api/src/__tests__/unit-app-viewer-token-mfa.test.ts`).
 The real CLI process `kortix apps access <app>
 --viewer identity` switches the scope and keeps `restricted` and the members;
 `--viewer everything` exits non-zero. `identity` scope yields `profile email` only, and

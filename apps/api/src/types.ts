@@ -38,9 +38,9 @@ export interface AuthVariables {
   oauthScopes?: string[];
   /** Sign in with Kortix: the `oauth_access_tokens` row id of the token. */
   oauthTokenId?: string;
-  /** An App viewer token (minted by the Apps gate): the App's account. The
+  /** An OAuth token whose row records `mfa_aal = 'aal2'`: its account. The
    *  token counts as MFA-verified in that account only (`middleware/actor.ts`). */
-  oauthAppAccountId?: string;
+  oauthMfaAccountId?: string;
   keyId?: string;
   sandboxId?: string;
   /** Set for project-scoped CLI PATs — enforced against the URL :projectId. */

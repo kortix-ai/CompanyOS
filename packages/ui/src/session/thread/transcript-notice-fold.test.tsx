@@ -6,7 +6,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { sessionLogOfV1Rows, sessionLogTurns, type SessionLogTurn, type V1MessageRow } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogTurns, type SessionLogTurn } from '@kortix/sdk';
+
+/** One v1 row: the shape `sessionLogOfV1Rows` converts and the store's `hydrate` takes. */
+type V1MessageRow = Parameters<typeof sessionLogOfV1Rows>[2][number];
 
 import { TranscriptTurnRow } from '../index';
 

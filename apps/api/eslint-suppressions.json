@@ -2560,7 +2560,7 @@
   },
   "src/sandbox-proxy/forward/access.ts": {
     "no-console": {
-      "count": 3
+      "count": 2
     }
   },
   "src/sandbox-proxy/forward/context.ts": {

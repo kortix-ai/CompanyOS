@@ -27,13 +27,14 @@ import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
-  deadCredentialLogDecision,
   deadCredentialLogKey,
+  isAccountMfaDenial,
   isAgentGrantDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
+import { logWindowDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -377,11 +378,17 @@ function handleHttpException(
   // warn lines in two hours on one prod route, 8.8k in eight days across ~10
   // routes, all one reason (`agent_scope_insufficient`). Same line, same
   // grouping; only the rate and the severity band change.
-  if (isDeadCredential(err) || isAgentGrantDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
+  // The account-MFA step-up denial joins the same treatment (KRTX-4674): the
+  // typed body already tells the client to verify its second factor, and a
+  // caller that polls through it — the web app's workspace list panels —
+  // put 700+ warn lines in one hour across three routes, 0 in the 24 h
+  // before, until its people complete the step-up. Same line, same
+  // grouping; only the rate and the severity band change.
+  if (isDeadCredential(err) || isAgentGrantDenial(err) || isAccountMfaDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = deadCredentialLogDecision(
+    const { log, suppressed } = logWindowDecision(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );

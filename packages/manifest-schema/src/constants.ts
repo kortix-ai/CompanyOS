@@ -436,11 +436,24 @@ export const HARNESS_TOOL_NAMES = [
  * other tool. A project replaces one with its own module under the same name
  * in `tools:`.
  *
- * Connector access is the `kortix connectors` CLI, never a built-in tool. The
- * MCP-era `kortix-connectors_call` / `kortix-connectors_describe` meta-tools
- * were re-added once (#9902) and removed again; a test pins them out.
+ * `skills` and `tool_search` / `tool_describe` / `tool_call` / `tool_resume`
+ * are the agent tool surface: the same tools the hosted MCP server and the
+ * CLI serve, over one namespace (connectors, the Kortix API, sessions,
+ * sandboxes). The MCP-era `kortix-connectors_call` / `kortix-connectors_describe`
+ * meta-tools stay retired; a test pins them out.
  */
-export const KORTIX_TOOL_NAMES = ['web_search', 'image_search', 'image_gen', 'scrape_webpage', 'show'] as const;
+export const KORTIX_TOOL_NAMES = [
+  'web_search',
+  'image_search',
+  'image_gen',
+  'scrape_webpage',
+  'show',
+  'skills',
+  'tool_search',
+  'tool_describe',
+  'tool_call',
+  'tool_resume',
+] as const;
 /** Kortix tools a v2 `tools:` map loaded without naming them. Only the legacy converter reads this. */
 export const DEFAULT_ON_KORTIX_TOOLS = ['image_gen'] as const;
 /** True for a `DEFAULT_ON_KORTIX_TOOLS` name. */

@@ -369,6 +369,12 @@ test('project(id).review hits the review-items endpoints', async () => {
   expect(last().url).toContain('/workspaces/PID123/review/summary');
 });
 
+test('project(id).toolCalls.list reads the tool call log with its filters', async () => {
+  await kortix.project('PID123').toolCalls.list({ agent: 'helper', surface: 'mcp', limit: 5 });
+  expect(last().url).toContain('/workspaces/PID123/tool-calls?agent=helper&surface=mcp&limit=5');
+  expect(last().method).toBe('GET');
+});
+
 test('project(id).approvals hits the approvals inbox endpoints', async () => {
   await kortix.project('PID123').approvals.list();
   expect(last().url).toContain('/workspaces/PID123/approvals');

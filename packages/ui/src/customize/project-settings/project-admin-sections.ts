@@ -8,6 +8,7 @@ import {
   PlugsConnectedIcon,
   RobotIcon,
   TimerIcon,
+  WrenchIcon,
   type Icon,
 } from '@phosphor-icons/react';
 
@@ -47,7 +48,7 @@ export type ProjectAdminSectionKey = WorkspaceSettingsSection;
 
 export type ProjectAdminResourceKey = Extract<
   WorkspaceSettingsSection,
-  'agents' | 'connectors' | 'skills' | 'triggers' | 'models' | 'secrets' | 'apps' | 'drives' | 'repo'
+  'agents' | 'connectors' | 'skills' | 'triggers' | 'models' | 'secrets' | 'apps' | 'drives' | 'repo' | 'tool-calls'
 >;
 
 /**
@@ -175,6 +176,9 @@ export const PROJECT_ADMIN_RESOURCES: readonly ProjectAdminResource[] = [
   { key: 'triggers', icon: TimerIcon, capability: 'triggers', host: false },
   { key: 'models', icon: CpuIcon, capability: 'models', host: false },
   { key: 'repo', icon: FoldersIcon, capability: 'files', host: false, flag: 'drives' },
+  // Every member opens it: the API lists a member's own calls and the calls of
+  // the sessions they can open, a manager's every call.
+  { key: 'tool-calls', icon: WrenchIcon, capability: null, host: false, memberOpen: true },
 ];
 
 /** Sections that no longer exist here: their links open the Agents list. */

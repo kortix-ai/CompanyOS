@@ -61,6 +61,50 @@ export const RELAY_META_HEADER = 'x-kortix-relay-meta';
 export const RELAY_STATUS_HEADER = 'x-kortix-relay-status';
 /** The `SecretBrokerErrorCode` when Kortix refused, alongside the JSON envelope. */
 export const RELAY_ERROR_HEADER = 'x-kortix-relay-error';
+/**
+ * WHY Kortix refused a relayed or brokered request, from the closed set
+ * `RELAY_REFUSAL_REASONS`. Present on every refusal (Kortix decided not to
+ * send the request), absent on an upstream failure and on success. It rides
+ * beside `x-kortix-relay-error`, which keeps the legacy wire code unchanged for
+ * already-deployed daemons. The in-guest shim forwards it to the client.
+ */
+export const REFUSED_HEADER = 'x-kortix-refused';
+
+/**
+ * The closed set of refusal reasons. One reason per thing a person or an agent
+ * fixes differently:
+ *
+ * - `private_address`      — the destination resolves to a private or reserved IP.
+ * - `credential_host`      — no rule of the secret's policy admits this host, a
+ *                            handle was sent to a host its policy does not admit,
+ *                            or a redirect would carry the credential elsewhere.
+ * - `credential_placement` — a handle sat in a request surface (header, query,
+ *                            path, body) its rule does not allow.
+ * - `credential_transport` — not HTTPS on 443, credentials in the URL, or an
+ *                            encoding the echo scan cannot read.
+ * - `credential_method`    — the HTTP method is not allowed (TRACE always).
+ * - `credential_expired`   — the session or its handle is no longer active.
+ * - `credential_forged`    — a handle whose tag does not verify, or one minted
+ *                            for another session.
+ * - `policy_denied`        — every other refusal: grant, delivery mode, path,
+ *                            malformed request.
+ */
+export const RELAY_REFUSAL_REASONS = [
+  'private_address',
+  'credential_host',
+  'credential_placement',
+  'credential_transport',
+  'credential_method',
+  'credential_expired',
+  'credential_forged',
+  'policy_denied',
+] as const;
+export type RelayRefusalReason = (typeof RELAY_REFUSAL_REASONS)[number];
+
+export function isRelayRefusalReason(value: unknown): value is RelayRefusalReason {
+  return typeof value === 'string' && (RELAY_REFUSAL_REASONS as readonly string[]).includes(value);
+}
+
 /** Capability probe marker — one bodyless POST per shim process. */
 export const RELAY_PROBE_HEADER = 'x-kortix-relay-probe';
 /** The HMAC ticket that carries the IAM verdict into the websocket upgrade. */
@@ -175,14 +219,16 @@ export class RelayCodecError extends Error {
   constructor(
     readonly code: 'relay_meta_invalid' | 'relay_meta_too_large',
     message: string,
+    /** Set when the codec refusal has a more specific reason than `policy_denied`. */
+    readonly refused?: RelayRefusalReason,
   ) {
     super(message);
     this.name = 'RelayCodecError';
   }
 }
 
-function invalid(message: string): never {
-  throw new RelayCodecError('relay_meta_invalid', message);
+function invalid(message: string, refused?: RelayRefusalReason): never {
+  throw new RelayCodecError('relay_meta_invalid', message, refused);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -230,8 +276,8 @@ function parseUrl(raw: unknown): string {
   } catch {
     invalid('url must be absolute');
   }
-  if (url.protocol !== 'https:') invalid('url must use HTTPS');
-  if (url.username || url.password) invalid('url must not contain credentials');
+  if (url.protocol !== 'https:') invalid('url must use HTTPS', 'credential_transport');
+  if (url.username || url.password) invalid('url must not contain credentials', 'credential_transport');
   return raw;
 }
 
@@ -279,7 +325,13 @@ export function decodeRelayMeta(encoded: string): SecretRelayMeta {
   if (raw.v !== RELAY_VERSION) invalid(`unsupported relay protocol version: ${String(raw.v)}`);
   const method = raw.method;
   if (typeof method !== 'string' || !(RELAY_METHODS as readonly string[]).includes(method)) {
-    invalid(`unsupported method: ${String(method)}`);
+    // TRACE (and every other method outside the list) stays refused: TRACE
+    // echoes the request, credential headers included, back to the caller.
+    throw new RelayCodecError(
+      'relay_meta_invalid',
+      `unsupported method: ${String(method)}`,
+      'credential_method',
+    );
   }
   const body = raw.body;
   if (!isRecord(body) || typeof body.present !== 'boolean') invalid('body shape is invalid');

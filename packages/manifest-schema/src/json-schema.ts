@@ -1083,6 +1083,11 @@ function appBlockV2Schema(): JsonSchemaFragment {
       build_command: NON_EMPTY_STRING,
       spa: { type: 'boolean' },
       readiness_path: { type: 'string', pattern: '^/' },
+      tools: {
+        type: 'string',
+        pattern: '^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.(?:json|ya?ml)$',
+        description: "An OpenAPI 3 document inside the App's folder. Each operation becomes a tool of the connector `app-<slug>`.",
+      },
       idle_timeout_seconds: { type: 'integer', minimum: 120, maximum: 86400 },
       always_on: { type: 'boolean' },
       uses: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' } },
@@ -1286,7 +1291,7 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       ),
       commands: namedGrantSchema('Registered commands the agent runs.'),
       extensions: excludableGrantSchema('Registered extensions that a session of the agent loads. `{ exclude: [...] }` grants every one but those.'),
-      connectors: namedGrantSchema('Connector slugs the agent may call.', v2.properties.connectors),
+      connectors: namedGrantSchema('Connector slugs the agent may call. An App that exposes tools (`apps.<slug>.tools`) is the connector `app-<slug>`.', v2.properties.connectors),
       connectors_required: { ...v2.properties.connectors_required, description: 'Connector slugs, a subset of `connectors`. Sessions do not check it.' },
       policy_sets: {
         ...v2.properties.policy_sets,

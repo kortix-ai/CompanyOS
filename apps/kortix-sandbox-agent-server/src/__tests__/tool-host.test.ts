@@ -38,7 +38,7 @@ afterEach(() => {
 describe('loadTools', () => {
   test('the Kortix tools load with no project tool declared', async () => {
     const { tools, failed } = await loadTools(root, undefined)
-    expect(tools.map((tool) => tool.name)).toEqual(['web_search', 'image_search', 'image_gen', 'scrape_webpage', 'show'])
+    expect(tools.map((tool) => tool.name)).toEqual(['web_search', 'image_search', 'image_gen', 'scrape_webpage', 'show', 'skills', 'tool_search', 'tool_describe', 'tool_call', 'tool_resume'])
     expect(tools.every((tool) => tool.source === 'kortix')).toBe(true)
     expect(failed).toEqual([])
   })
@@ -54,7 +54,7 @@ describe('loadTools', () => {
 
   test('kortix_tools picks the Kortix tools; absent, all of them load', async () => {
     const names = async (compiled: Parameters<typeof loadTools>[1]) => (await loadTools(root, compiled)).tools.map((tool) => tool.name)
-    const all = ['web_search', 'image_search', 'image_gen', 'scrape_webpage', 'show']
+    const all = ['web_search', 'image_search', 'image_gen', 'scrape_webpage', 'show', 'skills', 'tool_search', 'tool_describe', 'tool_call', 'tool_resume']
     expect(await names(undefined)).toEqual(all)
     expect(await names(null)).toEqual(all)
     expect(await names({})).toEqual(all)

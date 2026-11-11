@@ -13,9 +13,11 @@ import {
   legacyInjectionDetail,
   missingAgentGrantNotice,
   parseEnforcedHosts,
+  readSecretDeliveryChoice,
   readSecretDeliverySync,
   secretDeliveryBlockedReason,
   secretDeliveryLegend,
+  secretDeliveryChoiceNotice,
   secretDeliveryPresentation,
   secretDeliverySyncWarning,
   secretDeliveryTarget,
@@ -159,7 +161,7 @@ describe('classifyNewSecret', () => {
 
   test('a recognized provider whose SDK hardcodes the host prefills the curated fallback', () => {
     // models.dev declares no `api` for Anthropic — the SDK hardcodes it, so the
-    // catalog `apiHost` is null. Without the curated `WELL_KNOWN_API_HOSTS`
+    // catalog `apiHost` is null. Without the curated `WELL_KNOWN_PROVIDER_API_HOSTS`
     // fallback the hosts field stays empty (spec §7). The fallback is a stable
     // documented constant, not a value guessed from a catalog URL.
     const classification = classifyNewSecret({ key: 'ANTHROPIC_API_KEY', value: 'sk-ant-abc' });
@@ -836,10 +838,12 @@ describe('legacyInjectionDetail', () => {
  * expect it makes a working request look broken.
  */
 describe('enforcedEchoNotice', () => {
-  test('names the redacted echo and denies the wrong conclusion', () => {
+  test('names the re-sealed echo and denies the wrong conclusion', () => {
     const notice = enforcedEchoNotice('api.stripe.com', testUiTranslator);
-    expect(notice.title).toContain('[REDACTED]');
-    expect(notice.body).toContain('[REDACTED]');
+    // The relay re-seals an echoed value to its handle; `[REDACTED]` is gone.
+    expect(notice.title).toBe('An echoed secret comes back as its handle');
+    expect(notice.body).toContain("the secret's handle in its place");
+    expect(`${notice.title} ${notice.body}`).not.toContain('[REDACTED]');
     expect(notice.body).toContain('a real failure');
   });
 
@@ -873,5 +877,65 @@ describe('enforcedEchoNotice', () => {
     expect(text).not.toContain('env ');
     expect(text).not.toContain('{{secret}}');
     expect(text.toLowerCase()).not.toContain('authorization:');
+  });
+});
+
+describe('classifyNewSecret with the network default', () => {
+  test('a known API key opens on enforced with its host when the project default is network', () => {
+    const classification = classifyNewSecret({ key: 'ANTHROPIC_API_KEY', value: 'sk-ant-abc', egressDefault: true });
+    expect(classification.exposure).toBe('enforced');
+    expect(classification.hosts).toEqual(['api.anthropic.com']);
+  });
+
+  test('an unknown name, a multi-use name and signing material still open on environment', () => {
+    expect(classifyNewSecret({ key: 'SERVICE_API_KEY', value: 'x', egressDefault: true }).exposure).toBe('environment');
+    expect(classifyNewSecret({ key: 'GITHUB_TOKEN', value: 'x', egressDefault: true }).exposure).toBe('environment');
+    expect(
+      classifyNewSecret({ key: 'OPENAI_API_KEY', value: 'AKIAIOSFODNN7EXAMPLE', egressDefault: true }).exposure,
+    ).toBe('environment');
+  });
+});
+
+describe('readSecretDeliveryChoice / secretDeliveryChoiceNotice', () => {
+  const known = { delivery_choice: { strategy: 'egress', reason: 'known_api_host', hosts: ['api.anthropic.com'] } };
+
+  test('reads the block POST /secrets returns', () => {
+    expect(readSecretDeliveryChoice(known)).toEqual({
+      strategy: 'egress',
+      reason: 'known_api_host',
+      hosts: ['api.anthropic.com'],
+    });
+    expect(readSecretDeliveryChoice({ delivery_choice: { strategy: 'runtime', reason: 'default' } })).toEqual({
+      strategy: 'runtime',
+      reason: 'default',
+      hosts: [],
+    });
+  });
+
+  test('an older server or an unknown shape reads as null', () => {
+    expect(readSecretDeliveryChoice(null)).toBeNull();
+    expect(readSecretDeliveryChoice({})).toBeNull();
+    expect(readSecretDeliveryChoice({ delivery_choice: { strategy: 'egress', reason: 'guess' } })).toBeNull();
+  });
+
+  test('a network delivery the API chose names the host and the reason', () => {
+    expect(secretDeliveryChoiceNotice(known, testUiTranslator)).toBe(
+      'Enforced at the network. The sandbox holds a handle that works only on api.anthropic.com. Kortix chose this because the name belongs to a known API.',
+    );
+  });
+
+  test('the environment default says agent code can read the value', () => {
+    expect(
+      secretDeliveryChoiceNotice({ delivery_choice: { strategy: 'runtime', reason: 'default' } }, testUiTranslator),
+    ).toBe('Loaded as an environment variable. Agent code and commands can read the real value.');
+  });
+
+  test('a delivery the user picked, or a stored row, needs no notice', () => {
+    for (const reason of ['requested', 'existing']) {
+      expect(
+        secretDeliveryChoiceNotice({ delivery_choice: { strategy: 'runtime', reason } }, testUiTranslator),
+      ).toBeNull();
+    }
+    expect(secretDeliveryChoiceNotice(undefined, testUiTranslator)).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 /**
  * Review Center adapters — Change Requests folded into the inbox read model.
  */
+import { EMPTY_CALL_LOG } from '../connectors/call-log-fixture';
 import { describe, expect, test } from 'bun:test';
 import type { changeRequests, connectorCalls } from '@kortix/db';
 import {
@@ -51,6 +52,7 @@ describe('adapterSourceForId / isAdaptedId', () => {
 });
 
 const baseCall: ConnectorCallRow = {
+  ...EMPTY_CALL_LOG,
   executionId: 'ex-1',
   accountId: 'acc-1',
   projectId: 'proj-1',

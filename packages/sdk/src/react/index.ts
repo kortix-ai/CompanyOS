@@ -372,4 +372,6 @@ export {
   useRevokeGatewayKey,
 } from './use-project-gateway';
 
+export { TOOL_CALLS_PAGE_SIZE, type ToolCallFilters, useToolCalls } from './use-tool-calls';
+
 export * from './use-admin-providers';

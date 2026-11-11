@@ -47,7 +47,19 @@ export const KORTIX_ITEM_TYPES = [
   'registry:project', // a whole Kortix project (full repo scaffold)
   'registry:bundle', // a curated set of other items (a "starter"/use-case)
   'registry:template', // an installable use-case: a bundle + declared inputs
+  'registry:app', // a Kortix App: its folder (files → apps/<slug>/…) + its `apps.<slug>` block in `meta.app`
 ] as const;
+
+/**
+ * The `meta.app` of a `registry:app` item: the App's slug and its
+ * `apps.<slug>` kortix.yaml block (with `tools:` when the App exposes tools).
+ * The installing agent merges the item's files into the App's folder and this
+ * block under `apps:`. Versions and rollback stay App releases.
+ */
+export interface RegistryAppMeta {
+  slug: string;
+  manifest: Record<string, unknown>;
+}
 
 export const ALL_ITEM_TYPES = [...SHADCN_ITEM_TYPES, ...KORTIX_ITEM_TYPES] as const;
 

@@ -10,7 +10,12 @@
 // long after both sides of the cycle have finished evaluating.
 import { chatChannelBindings, chatInstalls, projectSecrets } from '@kortix/db';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { decryptProjectSecret, encryptProjectSecret, getProjectSecretValueForConsumer } from '../projects/secrets';
+import {
+  decryptProjectSecret,
+  encryptProjectSecret,
+  getProjectSecretValueForConsumer,
+  projectSecretAad,
+} from '../projects/secrets';
 
 // The email inbox accounts encrypt their credential with the project key
 // (channels/email/installs.ts); they reach it here, the channels' one door
@@ -67,7 +72,7 @@ export async function listProjectsForWorkspace(
 }
 
 export async function upsertSecret(projectId: string, name: string, value: string): Promise<void> {
-  const valueEnc = encryptProjectSecret(projectId, value);
+  const valueEnc = encryptProjectSecret(projectId, value, projectSecretAad(name));
   const updated = await updateSharedSecret(projectId, name, valueEnc);
   if (updated) return;
 

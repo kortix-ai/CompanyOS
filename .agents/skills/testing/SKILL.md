@@ -83,6 +83,12 @@ ran under 10 ms, and 33 files of 1,188 took 262 of 388 s. Every one of the
 7. Regenerate `tests/spec/routes.generated.json` after route changes.
 
 Do not import API handlers into a product flow. Do not mock the product boundary.
+`tests/unit/flow-imports.test.ts` fails a flow that imports `apps/` code or a
+package's `src/` internals outside its listed exceptions. Declare where a flow
+applies with `meta.targets` (`local` / `deployed` / `selfhost`: `true` or
+`{ skip: '<one sentence.>' }`). Stand up third parties with the shared
+loopback fakes in `tests/src/fixtures/fakes/` (OAuth issuer, MCP server,
+OpenAPI upstream), not a new inline server.
 Use reusable local database and bare Git fixtures unless the contract requires
 resource isolation.
 
@@ -135,6 +141,27 @@ add the `test` label once, or set `KORTIX_FULL_TEST=1` when a person asks.
 
 ## Prove the result
 
+- **Prove an assertion can fail before you trust it.** Run it once against
+  the unfixed code, or against a temporary violation (revert the fix in a
+  copy, break the rule in a scratch line, add a forbidden import), watch it go
+  red for the right reason, then restore. A test that never failed proves
+  nothing. Restore from a copy in your scratchpad, never with `git stash`.
+- **A setup error or a timeout is not proof.** A flow that died in a fixture,
+  a provision, or `flow X exceeded Nms` did not reach its contract, whatever
+  its status. Read the failing step and its case log
+  (`tests/test-results/<runId>/case-logs/`) before you call a result red or
+  green.
+- **Report the executed-flow count.** Quote the `executed <n>/<m> scheduled
+  flows · target <kind>` line `ke2e` prints, and the excluded flows with
+  their reasons. A selection is exact: an unknown `--id`, `--domain` or
+  `--tag` fails, and an empty one exits `2`.
+- **Wait on observable state, never sleep.** Poll the route, the row, or the
+  event that proves the state (`waitFor` in `src/core/poll.ts`) with a
+  deadline. A fixed `sleep` is slow when the system is fast and flaky when it
+  is slow.
+- Every step records an assertion: `.status()`, `.body()`, `assert()` or
+  `check()` from `tests/src/core/expect.ts`. A bare `throw` records nothing,
+  and the runner fails a pass with zero steps or zero recorded assertions.
 - Report the exact command, exit code, pass count, fail count, and duration.
 - Use `tests/test-results/<runId>/results.json` for request and fixture counts.
 - Distinguish parallel flow workers from serialized external provisioning.

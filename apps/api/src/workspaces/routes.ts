@@ -88,7 +88,7 @@ export const WorkspaceSchema = ProjectSchema.extend({
     description: 'Set for 30 days after a legacy account with several projects became one workspace per project; null otherwise.',
   }),
   secret_default_strategy: z.enum(['runtime', 'egress', 'broker', 'denied']).openapi({
-    description: 'How a secret with no strategy of its own reaches a session.',
+    description: 'How a secret with no strategy of its own reaches a session. `egress` or `broker` answers 409 `secret_floor_withholds` with `withheld` (the identifiers) and `fix` when it would withhold a stored secret that has no host list; `egress` answers 403 `feature_disabled` while `secrets_egress` is off.',
   }),
   workspace: WorkspaceSettingsSchema.nullable().openapi({
     description: 'The workspace settings. Null when the caller reaches the workspace but may not read its settings.',
@@ -194,7 +194,7 @@ export function registerWorkspaceRootRoutes(): void {
                 default_branch: z.string().optional().openapi({ description: 'New default branch.' }),
                 manifest_path: z.string().optional().openapi({ description: 'New manifest path.' }),
                 secret_default_strategy: z.enum(['runtime', 'egress', 'broker', 'denied']).optional().openapi({
-                  description: 'How a secret with no strategy of its own reaches a session.',
+                  description: 'How a secret with no strategy of its own reaches a session. `egress` or `broker` answers 409 `secret_floor_withholds` with `withheld` (the identifiers) and `fix` when it would withhold a stored secret that has no host list; `egress` answers 403 `feature_disabled` while `secrets_egress` is off.',
                 }),
               }),
             },

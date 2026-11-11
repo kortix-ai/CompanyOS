@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import type { ListAuditFilter } from '@/lib/iam-client';
-import { auditFilterWire } from './audit-tab';
+import { auditFilterWire, RESOURCE_TYPES } from './audit-tab';
 
 type FilterState = Parameters<typeof auditFilterWire>[0];
 
@@ -94,5 +94,26 @@ describe('audit quick filters', () => {
     expect(source).toContain('QUICK_FILTERS.find((item) => item.id === value)');
     expect(source).not.toContain('value={preset.label}');
     expect(source).not.toContain('item.label === value');
+  });
+});
+
+describe('resource filter', () => {
+  // The "Connector action" option sent `connector_action`, a resource type no
+  // trigger writes, so the filter always answered an empty log. The connector
+  // call trigger writes `connector_call` (packages/db/migrations, the latest
+  // `audit_connector_call` definition).
+  test('"Connector action" filters on the resource type the connector call trigger writes', () => {
+    const option = RESOURCE_TYPES.find((item) => item.label === 'Connector action');
+    expect(option?.value).toBe('connector_call');
+    expect(auditFilterWire({ ...EMPTY, resourceType: option!.value }).resource_type).toBe('connector_call');
+
+    const migrations = new URL('../../../../../packages/db/migrations/', import.meta.url);
+    const latest = readdirSync(migrations)
+      .filter((name) => name.endsWith('.sql'))
+      .sort()
+      .filter((name) => readFileSync(new URL(name, migrations), 'utf8').includes('FUNCTION kortix.audit_connector_call'))
+      .at(-1);
+    expect(latest).toBeDefined();
+    expect(readFileSync(new URL(latest!, migrations), 'utf8')).toContain(`'${option!.value}'`);
   });
 });

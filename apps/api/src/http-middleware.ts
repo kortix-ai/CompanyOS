@@ -20,6 +20,14 @@ import {
   requestTimingLogField,
 } from './lib/request-log-level';
 import { installFetchTiming } from './lib/server-timing';
+import {
+  TEST_CASE_CONTEXT_FIELD,
+  TEST_CASE_HEADER,
+  appendTestCaseLog,
+  enableTestCaseLog,
+  testCaseFromHeader,
+  testCaseLogEnabled,
+} from './lib/test-case-log';
 import { addBreadcrumb } from './lib/sentry';
 import { compressResponse } from './middleware/compress';
 import { protectResponseCache } from './middleware/cache-control';
@@ -156,12 +164,21 @@ app.use('*', async (c, next) => {
   await next();
 });
 
+// The local test stack's per-case evidence (lib/test-case-log.ts). Config keeps
+// KORTIX_TEST_LOG_DIR empty unless KORTIX_LOCAL_TEST_PROFILE=1.
+if (config.KORTIX_TEST_LOG_DIR) enableTestCaseLog(config.KORTIX_TEST_LOG_DIR);
+
 // ─── Request context (AsyncLocalStorage) ────────────────────────────────────
 // Must be FIRST — wraps the entire request lifecycle so all downstream code
 // (auth, route handlers, console.error calls) automatically gets context fields
 // (requestId, userId, accountId, sandboxId) attached to every log.
 app.use('*', async (c, next) => {
   const withRequestFields = async () => {
+    // Local test stack only (lib/test-case-log.ts): name the flow case this
+    // request belongs to, so its log lines and SQL land in the case's file.
+    const testCase = testCaseFromHeader(testCaseLogEnabled() ? c.req.header(TEST_CASE_HEADER) : undefined);
+    if (testCase) setContextField(TEST_CASE_CONTEXT_FIELD, testCase);
+    const startedAt = testCase ? performance.now() : 0;
     // Auto-extract common resource IDs from URL patterns for logs/traces.
     const path = c.req.path;
     const projectSessionMatch = path.match(/\/projects\/([^/]+)\/sessions\/([^/]+)/);
@@ -184,6 +201,16 @@ app.use('*', async (c, next) => {
     if (ctx) {
       c.header('X-Request-Id', ctx.requestId);
       c.header('traceparent', ctx.traceparent);
+    }
+    if (testCase) {
+      appendTestCaseLog(testCase, {
+        kind: 'request',
+        method: c.req.method,
+        path,
+        status: c.res.status,
+        request_id: ctx?.requestId,
+        duration_ms: Math.round(performance.now() - startedAt),
+      });
     }
   };
   // The server edge (shared/audit-edge.ts) already opened this request's

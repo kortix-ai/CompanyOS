@@ -7,6 +7,7 @@ import {
   listConnectorMoves,
   moveConnector,
   renameConnection,
+  updateConnection,
   revokeConnection,
   setConnectorSecretBinding,
   shareConnection,
@@ -34,6 +35,7 @@ import {
 import { surfacePolicySetError } from '../policy-set-errors.ts';
 import { promptSecret } from '../prompts.ts';
 import { C, help, pad, status, trim } from '../style.ts';
+import { runConnectorCalls } from './connector-calls.ts';
 import { runConnector } from './connector-gateway.ts';
 import { renderConnectorTypes } from './connector-types.ts';
 import { fromWorkspaceAlias } from '../command-argv.ts';
@@ -99,6 +101,8 @@ interface Connection {
  * `@kortix/sdk`; `label` is what `call --account` matches on.
  */
 interface ConnectorAccountRow {
+  /** What the account is for, written for agents. */
+  description?: string | null;
   connection_id: string;
   label: string;
   owner_type: string;
@@ -291,6 +295,11 @@ Call:
   upload <file> --connector <slug>  Stage one file; prints \`ref\` for call args.
   types [--connector <a,b>]         TypeScript types for every action, for
         [--out <file>]              \`connectors.callAction\` in the SDK.
+  calls [--agent <slug>]            The tool call log, newest first: who,
+        [--connector <slug>]        which action, the outcome, the refusal
+        [--surface <s>]             reason, Kortix and upstream ms. Never
+        [--status <s>]              the arguments (see \`calls --help\`).
+        [--limit <n>] [--json]
 
 Rules:
   policy-sets <slug> ls             The profile's rule sets and their agents.
@@ -452,8 +461,11 @@ Subcommands:
   revoke <id>                       Revoke a connection.
   activate <id>                     Activate a connection.
   default <id>                      Make a connection its owner-scope default.
-  rename <id> <label…>              Rename a connection. Label only: the account,
-                                    owner, and default stay; no re-authorization.
+  rename <id> [label…] [--description <text>]
+                                    Rename a connection and/or set what it is for,
+                                    written for agents (--description "" clears it).
+                                    The account, owner, and default stay; no
+                                    re-authorization.
   share <id> [--group <id>]… [--user <email|id>]… [--everyone]
                                     Share YOUR private account: it becomes a
                                     shared account only they may use (--everyone:
@@ -503,6 +515,8 @@ export async function runConnectors(argv: string[]): Promise<number> {
     process.stdout.write(POLICY_SETS_HELP);
     return rest.length === 0 ? 2 : 0;
   }
+  // `calls` owns its flags (`--status` is a filter there, a switch elsewhere) and its help.
+  if (sub === 'calls') return runConnectorCalls(rest);
   // The root help promises `kortix connectors <subcommand> --help`. Only
   // `connections` and `policy` (handled above) own dedicated help text; every
   // other subcommand would otherwise treat `--help` as an ordinary positional
@@ -1231,6 +1245,8 @@ export async function runConnectors(argv: string[]): Promise<number> {
               `${account.is_default ? `  ${C.dim}(pinned default)${C.reset}` : ''}` +
               `${account.credential_rejected_at ? `  ${C.red}(credential rejected — replace it)${C.reset}` : ''}\n`,
           );
+          // What the account is for, as its owners wrote it for agents.
+          if (account.description) process.stdout.write(`  ${C.dim}  ${account.description}${C.reset}\n`);
         }
         process.stdout.write('\n');
         // A ready-to-copy example per account, plus the two selector words —
@@ -2311,16 +2327,21 @@ async function runConnections(input: {
       // The label is every remaining word, so `rename <id> Support inbox`
       // needs no quotes — the same shape as `kortix connectors rename`.
       const label = positional.slice(1).join(' ').trim();
-      if (!label) return missing('a new label');
+      // `--description` sets what the account is for, written for agents;
+      // `--description ""` clears it. A label is optional when it is given.
+      const description = flags.description;
+      if (!label && description === undefined) return missing('a new label (or --description)');
       const response = await withKortixScope(ctx.auth, () =>
-        renameConnection(ctx.projectId, connectionId, label),
+        description === undefined
+          ? renameConnection(ctx.projectId, connectionId, label)
+          : updateConnection(ctx.projectId, connectionId, { ...(label ? { label } : {}), description: description || null }),
       );
       if (json) {
         emitJson(response);
         return 0;
       }
       process.stdout.write(
-        `${status.ok(`Renamed connection ${C.bold}${connectionId}${C.reset} → ${C.bold}${response.label}${C.reset}`)}\n`,
+        `${status.ok(`Updated connection ${C.bold}${connectionId}${C.reset} → ${C.bold}${response.label}${C.reset}${response.description ? ` — ${response.description}` : ''}`)}\n`,
       );
       return 0;
     }

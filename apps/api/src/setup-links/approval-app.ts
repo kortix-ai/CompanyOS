@@ -34,6 +34,7 @@ import { isApprovalExpired } from '../connectors/approval-expiry';
 import { isPlainRecord, summarizeArgsPreview } from '../connectors/args-preview';
 import {
   approvalCallerOf,
+  approvalRefusalBody,
   approvalTargetSession,
   loadProjectForUser,
   mayResolveApproval,
@@ -122,6 +123,8 @@ approvalLinksApp.openapi(createRoute({
       createdAt: connectorCalls.createdAt,
       resolvedAt: connectorCalls.resolvedAt,
       expiresAt: connectorCalls.expiresAt,
+      credentialId: connectorCalls.credentialId,
+      approvalDelivery: connectorCalls.approvalDelivery,
     })
     .from(connectorCalls)
     .where(
@@ -142,23 +145,10 @@ approvalLinksApp.openapi(createRoute({
     ...(await approvalCallerOf(c, loaded, projectId)),
     targetSessionOrigin: target.origin,
     targetSessionCreatedBy: target.createdBy,
+    targetCredentialId: row.credentialId,
+    targetApprovalDelivery: row.approvalDelivery,
   });
-  if (!verdict.allowed) {
-    return c.json(
-      verdict.reason === 'session_bound_caller'
-        ? {
-            error: "This approval waits for a person: the session's launcher or a project manager approves or denies it.",
-            code: 'APPROVAL_REQUIRES_HUMAN',
-          }
-        : verdict.reason === 'non_human_caller'
-          ? {
-              error: 'Sign in with a Kortix account to review this approval',
-              code: 'APPROVAL_REQUIRES_HUMAN',
-            }
-          : { error: 'Only a workspace manager or the session launcher can resolve this' },
-      403,
-    );
-  }
+  if (!verdict.allowed) return c.json(approvalRefusalBody(verdict.reason, 'review'), 403);
 
   const [project] = await db
     .select({ name: projectsView.name })

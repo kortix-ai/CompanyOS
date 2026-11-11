@@ -62,6 +62,8 @@ let sessionRow: Record<string, unknown> | null = {
   sessionId: SESSION_ID,
   secretsAllowlist: ['PRIMARY'],
 };
+/** `projects.secret_default_strategy` the relay reads. */
+let projectFloor: string | null = "runtime";
 let secretRows: Array<Record<string, unknown>> = [];
 let handleRows: Array<Record<string, unknown>> = [];
 const audits: Array<Record<string, unknown>> = [];
@@ -121,6 +123,7 @@ mock.module('../projects/lib/access', () => ({
 }));
 mock.module('../projects/secrets', () => ({
   ...realProjectSecrets,
+  loadProjectSecretDefaultStrategy: async () => projectFloor,
   decryptProjectSecret: () => SECRET_VALUE,
 }));
 mock.module('../shared/audit', () => ({
@@ -420,21 +423,27 @@ describe('substitution covers every carrier the guest can use', () => {
   });
 });
 
-describe('echo redaction is inline, on BOTH exits', () => {
-  test('a secret echoed in the streamed body comes back [REDACTED]', async () => {
+describe('echo re-sealing is inline, on BOTH exits', () => {
+  test('a secret echoed in the streamed body comes back as its HANDLE', async () => {
     upstreamBody = [`{"echo":"${SECRET_VALUE}"}`];
     const response = await relay();
-    expect(await response.text()).toBe('{"echo":"[REDACTED]"}');
+    expect(await response.text()).toBe(`{"echo":"${HANDLE}"}`);
   });
 
-  test('a secret SPLIT across upstream chunks is still redacted', async () => {
+  test('a base64 echo comes back as the base64 of the handle', async () => {
+    upstreamBody = [`{"echo":"${Buffer.from(SECRET_VALUE).toString('base64')}"}`];
+    const response = await relay();
+    expect(await response.text()).toBe(`{"echo":"${Buffer.from(HANDLE).toString('base64')}"}`);
+  });
+
+  test('a secret SPLIT across upstream chunks is still re-sealed', async () => {
     const half = Math.floor(SECRET_VALUE.length / 2);
     upstreamBody = [`{"echo":"${SECRET_VALUE.slice(0, half)}`, `${SECRET_VALUE.slice(half)}"}`];
     const response = await relay();
-    expect(await response.text()).toBe('{"echo":"[REDACTED]"}');
+    expect(await response.text()).toBe(`{"echo":"${HANDLE}"}`);
   });
 
-  test('a secret echoed in a WHITELISTED response header comes back [REDACTED]', async () => {
+  test('a secret echoed in a WHITELISTED response header comes back as its handle', async () => {
     // The body is not the only exit.
     upstreamHeaders = [
       ['content-type', 'application/json'],
@@ -442,7 +451,7 @@ describe('echo redaction is inline, on BOTH exits', () => {
     ];
     const response = await relay();
     const status = decodeRelayStatus(response.headers.get(RELAY_STATUS_HEADER)!);
-    expect(status.headers).toContainEqual(['x-request-id', 'req_[REDACTED]']);
+    expect(status.headers).toContainEqual(['x-request-id', `req_${HANDLE}`]);
   });
 
   test('response headers outside the whitelist never travel', async () => {
@@ -837,12 +846,14 @@ describe('a handle presented in a STREAMED body is still classified', () => {
   // time; the forensic line was not.
   const FORGED = mintHandle({ lookupId: 'bbbbbbbbbbbbbbbbbbbb', prefix: null, rootSecret: 'a-different-root-secret' });
 
-  test('a forged handle in a length-less (streamed) body is audited', async () => {
+  test('a forged handle in a length-less (streamed) body is audited and the request aborted', async () => {
     const body = `{"probe":"${FORGED}"}`;
     const response = await relay({
       meta: meta({ body: { present: true, length: null } }),
       body,
     });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_forged');
     await response.arrayBuffer();
     const refused = audits.find((event) => event.action === 'secret.handle.refused');
     expect(refused?.after).toMatchObject({
@@ -864,5 +875,186 @@ describe('a handle presented in a STREAMED body is still classified', () => {
     });
     await response.arrayBuffer();
     expect(audits.some((event) => event.action === 'secret.handle.refused')).toBe(false);
+  });
+});
+
+// ── Typed refusals and placements ────────────────────────────────────────────
+
+const SECOND_ID = '77777777-7777-4777-8777-777777777777';
+const SECOND_LOOKUP = 'cccccccccccccccccccc';
+const SECOND_HANDLE = mintHandle({ lookupId: SECOND_LOOKUP, prefix: null, rootSecret: config.API_KEY_SECRET });
+
+function withRule(extra: Record<string, unknown>) {
+  return { ...POLICY, rules: [{ ...POLICY.rules[0], ...extra }] };
+}
+
+describe('x-kortix-refused names every refusal from the closed set', () => {
+  test('an out-of-policy host is credential_host', async () => {
+    const response = await relay({ meta: meta({ url: 'https://other.example.com/v1/x' }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('policy_denied');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_host');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test('a method the rule does not allow is credential_method', async () => {
+    const response = await relay({ meta: meta({ method: 'DELETE' }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_method');
+  });
+
+  test('TRACE stays refused as relay_meta_invalid, tagged credential_method', async () => {
+    const encoded = Buffer.from(JSON.stringify({ ...meta(), method: 'TRACE' })).toString('base64url');
+    const response = await relay({ meta: encoded });
+    expect(response.status).toBe(400);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('relay_meta_invalid');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_method');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test('a path outside the rule is policy_denied', async () => {
+    const response = await relay({ meta: meta({ url: 'https://api.example.com/v2/x' }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('policy_denied');
+  });
+
+  test('plain HTTP is credential_transport', async () => {
+    const encoded = Buffer.from(JSON.stringify({ ...meta(), url: 'http://api.example.com/v1/x' })).toString('base64url');
+    const response = await relay({ meta: encoded });
+    expect(response.status).toBe(400);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_transport');
+  });
+
+  test('a non-443 port is credential_transport', async () => {
+    const response = await relay({ meta: meta({ url: 'https://api.example.com:8443/v1/x' }) });
+    expect(response.status).toBe(400);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('unsafe_destination');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_transport');
+  });
+
+  test('an ended session is credential_expired', async () => {
+    sessionRow = null;
+    const response = await relay();
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_expired');
+  });
+
+  test('a session that no longer holds the handle is credential_expired', async () => {
+    handleRows = [handleFor({ expiresAt: new Date(Date.now() - 60_000) })];
+    const response = await relay();
+    expect(response.status).toBe(409);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('session_secret_handle_required');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_expired');
+  });
+
+  test('a forged handle in a header refuses the request: credential_forged, audited, not sent', async () => {
+    const forged = mintHandle({ lookupId: 'dddddddddddddddddddd', prefix: null, rootSecret: 'another-root' });
+    const response = await relay({ meta: meta({ headers: [['x-probe', forged]] }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('policy_denied');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_forged');
+    expect(upstreamCalls).toHaveLength(0);
+    expect(audits.find((event) => event.action === 'secret.handle.refused')?.after).toMatchObject({
+      refusals: { forged: 1, stolen: 0, host_denied: 0 },
+    });
+  });
+
+  test('a valid handle minted for another session is credential_forged', async () => {
+    const carried = mintHandle({ lookupId: 'eeeeeeeeeeeeeeeeeeee', prefix: null, rootSecret: config.API_KEY_SECRET });
+    const response = await relay({ meta: meta({ headers: [['x-carried', carried]] }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_forged');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test("this session's own handle on a host its policy does not admit is credential_host", async () => {
+    agentGrant = { agent: 'default', permissions: 'all', connectors: 'all', env: ['PRIMARY', 'SECOND'] };
+    sessionRow = { sessionId: SESSION_ID, secretsAllowlist: ['PRIMARY', 'SECOND'] };
+    const otherPolicy = { backend: 'kortix_fetch' as const, rules: [{ host: 'billing.example.com' }] };
+    secretRows = [
+      sharedSecret(),
+      sharedSecret({ secretId: SECOND_ID, identifier: 'SECOND', valueEnc: 'second', egressPolicy: otherPolicy }),
+    ];
+    handleRows = [
+      handleFor(),
+      handleFor({
+        secretId: SECOND_ID,
+        identifier: 'SECOND',
+        lookupId: SECOND_LOOKUP,
+        handleHash: createHash('sha256').update(SECOND_HANDLE).digest('hex'),
+        policySnapshot: otherPolicy,
+      }),
+    ];
+    const response = await relay({ meta: meta({ headers: [['x-other', SECOND_HANDLE]] }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_host');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test('an upstream failure is NOT a refusal: no x-kortix-refused', async () => {
+    upstreamThrows = true;
+    const response = await relay();
+    expect(response.status).toBe(502);
+    expect(response.headers.get('x-kortix-refused')).toBeNull();
+  });
+
+  test('a success carries no x-kortix-refused', async () => {
+    const response = await relay();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-kortix-refused')).toBeNull();
+  });
+});
+
+describe('placements decide which request surface a handle may ride in', () => {
+  test('a rule without placements still substitutes in the query (existing rows unchanged)', async () => {
+    const response = await relay({ meta: meta({ url: `https://api.example.com/v1/x?key=${HANDLE}` }) });
+    expect(response.status).toBe(200);
+    expect(upstreamCalls[0]!.url).toContain(`key=${SECRET_VALUE}`);
+  });
+
+  test('a handle in the query when only headers are allowed is refused: credential_placement, not sent', async () => {
+    handleRows = [handleFor({ policySnapshot: withRule({ placements: ['header'] }) })];
+    const response = await relay({ meta: meta({ url: `https://api.example.com/v1/x?key=${HANDLE}` }) });
+    expect(response.status).toBe(403);
+    expect(response.headers.get(RELAY_ERROR_HEADER)).toBe('policy_denied');
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_placement');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test('an allowed surface is substituted under the same rule', async () => {
+    handleRows = [handleFor({ policySnapshot: withRule({ placements: ['header'] }) })];
+    const response = await relay({ meta: meta({ headers: [['authorization', `Bearer ${HANDLE}`]] }) });
+    expect(response.status).toBe(200);
+    expect(upstreamCalls[0]!.headers.authorization).toBe(`Bearer ${SECRET_VALUE}`);
+  });
+
+  test('an exact header name refuses the handle in any other header', async () => {
+    handleRows = [handleFor({ policySnapshot: withRule({ placements: ['header'], header: 'authorization' }) })];
+    const refused = await relay({ meta: meta({ headers: [['x-api-key', HANDLE]] }) });
+    expect(refused.status).toBe(403);
+    expect(refused.headers.get('x-kortix-refused')).toBe('credential_placement');
+    expect(upstreamCalls).toHaveLength(0);
+
+    const allowed = await relay({ meta: meta({ headers: [['authorization', `Bearer ${HANDLE}`]] }) });
+    expect(allowed.status).toBe(200);
+  });
+
+  test('a handle in a buffered body when the body is not allowed is refused before the upstream', async () => {
+    handleRows = [handleFor({ policySnapshot: withRule({ placements: ['header'] }) })];
+    const body = JSON.stringify({ key: HANDLE });
+    const response = await relay({ meta: meta({ body: { present: true, length: body.length } }), body });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_placement');
+    expect(upstreamCalls).toHaveLength(0);
+  });
+
+  test('a handle in a STREAMED body when the body is not allowed aborts the request', async () => {
+    handleRows = [handleFor({ policySnapshot: withRule({ placements: ['header'] }) })];
+    const body = JSON.stringify({ key: HANDLE });
+    const response = await relay({ meta: meta({ body: { present: true, length: null } }), body });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('x-kortix-refused')).toBe('credential_placement');
+    // The upstream never received the handle bytes.
+    for (const call of upstreamCalls) expect(call.body.toString('utf8')).not.toContain(HANDLE);
   });
 });

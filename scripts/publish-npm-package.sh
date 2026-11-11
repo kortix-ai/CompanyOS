@@ -61,15 +61,41 @@ fi
 # deps, version lock) from the package's own publishConfig, and verify dist/.
 VERSION="$VERSION" node ../../scripts/stage-npm-publish.mjs
 
-npm pack --dry-run
+# Pack once: the tarball checked here is the tarball published, byte for byte.
+pack_dir="$(mktemp -d)"
+trap 'rm -rf "$pack_dir"' EXIT
+pack_json="$(npm pack --json --pack-destination "$pack_dir")"
+tarball="$pack_dir/$(node -e 'const p = JSON.parse(process.argv[1]); process.stdout.write(p[0].filename)' "$pack_json")"
+staged_shasum="$(node -e 'const p = JSON.parse(process.argv[1]); process.stdout.write(p[0].shasum)' "$pack_json")"
+echo "Staged ${name}@${VERSION}: $(basename "$tarball") sha1 ${staged_shasum}"
 
-# Idempotent: a re-run of the same release must not hard-fail on E409.
+# Idempotent: a re-run of the same release must not hard-fail on E409. A
+# rebuilt dist/ is not guaranteed byte-identical, so a different shasum on a
+# re-run is reported, not fatal; the first publish is the one checked below.
 if npm view "${name}@${VERSION}" version >/dev/null 2>&1; then
-  echo "${name}@${VERSION} already on npm — skipping (idempotent re-run)."
+  published="$(npm view "${name}@${VERSION}" dist.shasum 2>/dev/null || true)"
+  if [ "$published" != "$staged_shasum" ]; then
+    echo "::warning::${name}@${VERSION} is already on npm with sha1 ${published}; this run staged ${staged_shasum}. Skipping (idempotent re-run)."
+  else
+    echo "${name}@${VERSION} already on npm with the staged bytes — skipping (idempotent re-run)."
+  fi
   exit 0
 fi
 
 # With TP configured + OIDC available, npm publishes via OIDC (+provenance) and
 # ignores the token; otherwise it falls back to NODE_AUTH_TOKEN.
-npm publish
-echo "Published ${name}@${VERSION} ✅"
+npm publish "$tarball"
+
+# The registry must hold exactly the staged bytes. Its metadata can lag a few
+# seconds behind the publish, so read it until it answers (at most ~60 s).
+published=""
+for _ in $(seq 1 12); do
+  published="$(npm view "${name}@${VERSION}" dist.shasum 2>/dev/null || true)"
+  [ -n "$published" ] && break
+  sleep 5
+done
+if [ "$published" != "$staged_shasum" ]; then
+  echo "::error::${name}@${VERSION}: the registry serves sha1 '${published}', the staged tarball is ${staged_shasum}."
+  exit 1
+fi
+echo "Published ${name}@${VERSION} ✅ (registry sha1 matches the staged tarball)"

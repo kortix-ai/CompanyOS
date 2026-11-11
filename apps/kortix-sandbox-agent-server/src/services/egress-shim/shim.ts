@@ -38,11 +38,12 @@ import net from 'node:net'
 import type { Duplex } from 'node:stream'
 import zlib from 'node:zlib'
 
-import { BLOCKED_REQUEST_HEADERS } from '@kortix/api-contract/secret-relay'
+import { BLOCKED_REQUEST_HEADERS, REFUSED_HEADER } from '@kortix/api-contract/secret-relay'
 import { LeafIssuer, type EphemeralCa } from './ca'
 import {
   canStreamDecode,
   probeRelay,
+  refusedReason,
   relayStreaming,
   RelayRefusedError,
 } from './relay-client'
@@ -203,7 +204,10 @@ async function relayBuffered(
             `'${contentEncoding}'. Send it uncompressed.`,
           code: 'unsupported_request_encoding',
         }),
-        { status: 400, headers: { 'content-type': 'application/json' } },
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json', [REFUSED_HEADER]: 'credential_transport' },
+        },
       )
     }
     payload = decoded
@@ -230,9 +234,13 @@ async function relayBuffered(
     // host must reach the agent as that, not as a generic proxy error it will
     // waste a turn guessing about.
     const detail = await response.text().catch(() => '')
+    const refused = refusedReason(response.headers)
     return new Response(detail || JSON.stringify({ error: 'broker refused the request' }), {
       status: response.status,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(refused ? { [REFUSED_HEADER]: refused } : {}),
+      },
     })
   }
 
@@ -361,7 +369,12 @@ export async function createEgressShim(options: EgressShimOptions): Promise<http
           }
           return new Response(err.payload, {
             status: err.status,
-            headers: { 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              // The closed-set reason Kortix refused with, so the client (and
+              // the agent reading its error) knows what to fix.
+              ...(err.refused ? { [REFUSED_HEADER]: err.refused } : {}),
+            },
           })
         }
         throw err
@@ -466,7 +479,7 @@ export async function createEgressShim(options: EgressShimOptions): Promise<http
     // request would have Kortix add a credential to a connection that then
     // continues in the clear, which is strictly worse than not having the
     // feature.
-    res.writeHead(405).end('kortix egress shim: HTTPS CONNECT only')
+    res.writeHead(405, { [REFUSED_HEADER]: 'credential_transport' }).end('kortix egress shim: HTTPS CONNECT only')
   })
 
   server.on('connect', (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {

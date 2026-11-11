@@ -9,6 +9,8 @@
  *
  *   kortix tools ls [--json]          name, kind, source; and the removed Kortix tools
  *   kortix tools eject <name>         tools/<name>.ts + `tools.<name>: tools/<name>.ts`
+ *   kortix tools search|describe|call|execute|resume|skills
+ *                                     the agent tools (./tools-agent.ts)
  *
  * Every Kortix tool is always registered; `tools:` maps a name to a project
  * module, and a Kortix tool's name replaces that tool. The ejected source is
@@ -35,6 +37,7 @@ import { resolveLocalManifestImports } from '../manifest-imports.ts';
 import { setYamlMapEntry } from '../manifest-edit.ts';
 import { resolveLocalManifest } from '../manifest.ts';
 import { C, help, pad, status } from '../style.ts';
+import { AGENT_TOOLS_HELP, isAgentToolVerb, runAgentToolVerb } from './tools-agent.ts';
 
 const HELP = help`Usage: kortix tools <subcommand> [options]
 
@@ -56,14 +59,16 @@ Subcommands:
                             The copy is yours to change; Kortix no longer
                             updates it. Refuses when tools/<name>.ts exists.
 
+${AGENT_TOOLS_HELP}
 Options:
-  --json              ls: machine-readable output.
+  --json              ls and the agent-tool verbs: machine-readable output.
   --ref <ver>         ls: the version (branch) to read when there is no local
                       kortix.yaml. Default: the workspace's default branch.
   --force             eject: overwrite tools/<name>.ts.
   --workspace <id>    ls: the workspace to read when there is no local
                       kortix.yaml (default: linked, or the session's).
-  --host <name>       ls: the Kortix host of that workspace.
+                      Agent-tool verbs: the workspace the tools act in.
+  --host <name>       ls and the agent-tool verbs: the Kortix host.
   -h, --help          Show this help.
 
 Limit the tools of one agent: \`agents.<name>.tools\` in kortix.yaml
@@ -286,6 +291,7 @@ export async function runTools(argv: string[]): Promise<number> {
   const helpCode = splitHelp(argv, HELP);
   if (helpCode !== null) return helpCode;
   const [sub, ...rest] = argv;
+  if (isAgentToolVerb(sub)) return runAgentToolVerb(sub, rest);
   const json = takeFlagBool(rest, ['--json']);
   const force = takeFlagBool(rest, ['--force']);
   const remote: RemoteOpts = {};

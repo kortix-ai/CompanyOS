@@ -1,0 +1,21 @@
+{
+  "name": "@kortix/agent-tools",
+  "version": "1.0.0",
+  "description": "The one agent tool surface: skills, search, describe, call, execute, resume over one tool namespace. Framework-free; adapters live in apps/api (MCP + REST), kortixd (pi) and the CLI.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsgo.tsbuildinfo",
+    "test": "node ../../scripts/test-guard.mjs \"bun test --timeout ${KORTIX_TEST_TIMEOUT_MS:-15000}\""
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "typescript": "^5.0.0"
+  }
+}

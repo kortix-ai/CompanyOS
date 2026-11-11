@@ -2,6 +2,7 @@
  * Gateway routes (sandbox-facing): the catalog, attachments and `/call`, on the
  * token-scoped face and the project-explicit face. One implementation, two faces.
  */
+import { APPROVAL_DELIVERY_HEADER, CALL_SURFACE_HEADER, isApprovalDelivery, isCallSurface, type CallSurface } from '@kortix/api-contract/tool-calls';
 import { type OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SLUG_RE } from '@kortix/manifest-schema';
 import type { Context } from 'hono';
@@ -9,7 +10,7 @@ import { auth, errors, json } from '../../openapi';
 import { canonicalConnectorAlias } from '../../projects/lib/session-connector-bindings';
 import { ATTACHMENT_REF_KEY } from '../attachment-inline';
 import { MAX_CONNECTOR_ATTACHMENT_BYTES, type StageConnectorAttachmentInput } from '../attachments';
-import { INVALID_ARGS, handleCall } from '../gateway';
+import { INVALID_ARGS, handleCall, type CallCaller } from '../gateway';
 import {
   type ConnectorDenialReason,
   callPolicySetOf,
@@ -152,6 +153,36 @@ const catalogResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPr
   });
   return c.json({ connectors });
 };
+/**
+ * Who made this call, for the call log. Authority facts come from the
+ * principal; the surface header only labels a Kortix client and is checked
+ * against the known values.
+ */
+export function callCallerOf(
+  p: ConnectorPrincipal,
+  surfaceHeader: string | undefined,
+  authType: string | undefined,
+  deliveryHeader?: string | undefined,
+): CallCaller {
+  const agentSlug = p.agentGrant?.agent ?? null;
+  const surface: CallSurface = isCallSurface(surfaceHeader)
+    ? surfaceHeader
+    : p.sessionId
+      ? 'session'
+      : authType === 'oauth'
+        ? 'mcp'
+        : 'api';
+  return {
+    credentialId: p.tokenId ?? null,
+    principalKind: p.agentPrincipal || agentSlug || p.sessionId ? 'agent' : 'user',
+    agentSlug,
+    surface,
+    // `browser` only narrows who may decide (mayResolveApproval refuses every
+    // bearer token), so a client may ask for it; `model` is the default.
+    approvalDelivery: isApprovalDelivery(deliveryHeader) ? deliveryHeader : 'model',
+  };
+}
+
 const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrincipal) => {
   let body: any;
   try {
@@ -240,6 +271,7 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
     approvalExecutionId,
     approvalContext: typeof body?.approval_context === 'string' ? body.approval_context : null,
     policySet: callPolicySetOf(p, connectorSlug),
+    caller: callCallerOf(p, c.req.header(CALL_SURFACE_HEADER), c.get('authType') as string | undefined, c.req.header(APPROVAL_DELIVERY_HEADER)),
   });
   switch (result.status) {
     case 'ok':

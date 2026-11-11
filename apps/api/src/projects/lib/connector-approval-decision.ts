@@ -37,6 +37,10 @@ export interface PendingApprovalRow {
   resolvedAt: Date | null;
   resultSummary: unknown;
   expiresAt: Date | null;
+  /** The credential that made the call; it never decides it. */
+  credentialId: string | null;
+  /** How the approval is delivered; `browser` = only a signed-in browser decides. */
+  approvalDelivery: string | null;
 }
 
 /** The one pending-approval column list: a new column cannot drift between
@@ -52,6 +56,8 @@ const PENDING_APPROVAL_COLUMNS = {
   resolvedAt: connectorCalls.resolvedAt,
   resultSummary: connectorCalls.resultSummary,
   expiresAt: connectorCalls.expiresAt,
+  credentialId: connectorCalls.credentialId,
+  approvalDelivery: connectorCalls.approvalDelivery,
 };
 
 export async function loadApprovalRow(
@@ -299,6 +305,8 @@ export async function resolveApprovalAs(input: {
     ...input.caller,
     targetSessionOrigin: target.origin,
     targetSessionCreatedBy: target.createdBy,
+    targetCredentialId: row.credentialId,
+    targetApprovalDelivery: row.approvalDelivery,
   });
   if (!verdict.allowed) return { outcome: 'forbidden', reason: verdict.reason };
   const outcome = await decideConnectorApproval({

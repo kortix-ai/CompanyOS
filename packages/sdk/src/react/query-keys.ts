@@ -744,6 +744,10 @@ export const qk = {
     sandboxTemplates: (id: string) => [...qk.project.sandboxes(id), 'templates'] as const,
     snapshots: (id: string) => [...qk.project.scope(id), 'snapshots'] as const,
 
+    /** The tool call log; `filters` are the blank-free `ToolCallFilters`. */
+    toolCalls: (id: string, filters: Record<string, string | undefined>) =>
+      [...qk.project.scope(id), 'tool-calls', filters] as const,
+
     /** Prefix for the gateway family — keys, budgets, series, logs, overview. */
     gateway: (id: string) => [...qk.project.scope(id), 'gateway'] as const,
     gatewayOverview: (id: string, days: number) =>

@@ -156,6 +156,58 @@ grants it a project role (`kortix access grant --service-account <id> --role
 member --project <id>`). Never put a provider API key in an App or a Convex
 deployment when a connector exists. Guide: <https://kortix.com/docs/#call-a-connector>.
 
+### Search and call every tool an agent can reach
+
+`agentTools()` serves the six tools every Kortix agent gets, over
+`POST /v1/agent-tools/{verb}`: `skills`, `search`, `describe`, `call`,
+`execute` and `resume`. One search covers the project's connectors
+(`connectors.<slug>.<action>`), the Kortix API (`kortix.<METHOD> <path>`),
+sessions, sandboxes and connector setup. A call runs with the caller's own
+authority, through the same access, policy, approval and call log as a call
+from a session.
+
+```ts
+const tools = kortix.project(projectId).agentTools(); // surface 'api'; { surface: 'cli' | 'app' }
+
+const { results } = await tools.search({ query: 'post a message', family: 'connectors', limit: 5 });
+const schema = await tools.describe(results[0].id);
+if ('suggestions' in schema) console.log('closest ids:', schema.suggestions);
+
+const result = await tools.call('connectors.echo.post_echo', { text: 'hi' });
+switch (result.status) {
+  case 'ok': console.log(result.data); break;
+  case 'pending_approval': // a person approves at approval_url; never repeat the call
+    console.log(result.approval_url);
+    console.log(await tools.resume(result.execution_id!)); // { state: 'pending' | …, outcome }
+    break;
+  default: console.error(result.reason, result.message); // 'denied' | 'error'
+}
+
+// A multi-step program runs on the server; only its return value comes back.
+const run = await tools.execute(`
+  const { results } = await search({ query: 'list sessions' });
+  return results.map((r) => r.id);
+`);
+run.ok ? console.log(run.value, run.calls) : console.error(run.error);
+
+const { text } = await tools.skills({ name: 'kortix-system' });
+```
+
+`kortix.agentTools({ projectId?, surface? })` is the same client without a
+bound project: the server then uses the caller's only project.
+`surface` is sent as `x-kortix-surface` and names the caller in call logs and
+approvals (default `api`).
+
+A tool that ran and reported a failure answers HTTP 422 with the verb's own
+shape, and the method resolves it: `status: 'denied' | 'error'` from `call`,
+`{ error, suggestions }` from `describe`, `ok: false` from `execute`. Invalid
+input (400), a refused token (401) and any other 422 reject with `ApiError`.
+A big `call` result arrives as `data_truncated`, `data_chars`, `data_preview`
+and `note` instead of `data`. Types: `AgentToolsClient`, `AgentToolSearchResult`,
+`AgentToolDescribeResult`, `AgentToolCallResult`, `AgentToolExecuteResult`,
+`AgentToolResumeResult`, `AgentToolSkillsResult`. The CLI is `kortix tools
+search|describe|call|execute|resume|skills`.
+
 ### Upload prompt attachments before Send
 
 Create one controller per composer. `add(file)` starts a private project upload
@@ -713,6 +765,7 @@ exhaustive — see `API-MAP.md` for the full per-domain surface:
 | `kortix.notifications` | native push for a person's devices: `registerDeviceToken` · `unregisterDeviceToken` (Expo push tokens) · `releaseDeviceToken(token, { backendUrl?, signal? })` (**no token needed**: a signed-out app removes its device token from a backend, `POST /v1/notifications/device-token/release`; resolves `{ ok: true }`, a non-2xx answer throws `ApiError` with `status`). A session push reaches the phone of the person who created the session |
 | `kortix.mobileClientPolicy()` | the operator's mobile release policy, `GET /v1/clients/mobile`, **no token needed** (read before login): resolves `{ minimum_version, store_url_ios, store_url_android }`, each a string or `null`; a non-200 answer throws `ApiError`. A mobile host compares its app version to `minimum_version` with `compareSemver(a, b)` (`-1 \| 0 \| 1`, or `null` when either side does not parse; ignores a leading `v` and `-pre`/`+build` suffixes) and fails open on `null`. Also exported standalone as `getMobileClientPolicy` and the `MobileClientPolicy` type. The operator sets `MOBILE_MIN_VERSION`, `MOBILE_STORE_URL_IOS`, `MOBILE_STORE_URL_ANDROID` on the API |
 | `kortix.validateToken()` | pasted-API-key validation helper — `GET /me`, never throws, resolves `{valid, identity?, error?}` |
+| `kortix.agentTools(opts?)` | the six agent tools (`/v1/agent-tools/*`): `skills` · `search` · `describe` · `call` · `execute` · `resume`; `opts`: `projectId`, `surface` (`api` default, `cli`, `app`). Also `kortix.project(id).agentTools({ surface? })`. See [Search and call every tool an agent can reach](#search-and-call-every-tool-an-agent-can-reach) |
 | `kortix.connectors` | Connector data plane for an agent-minted session token: `catalog` · `tools` · `search` · `describe` · `call` (`{ account }`) · `accounts` · `uploadAttachment` |
 | `kortix.project(id)` | id-bound handle: `.apps` (stable App URLs, access, artifacts, deployments, logs, rollback, start/stop, machines (`machines.list/start/stop/restart/destroy`, `scale`, `exec`), volumes (`volumes.list/create/update/destroy/snapshots/snapshot/restore/fork`), and `token`) · `.secrets` · `.access` · `.connectors` (data plane + configuration + Connections) · `.policies` · `.triggers` (cron / webhook / app; `.fire(slug, { payload, dryRun })`; run history `.runs(slug)` / `.projectRuns({ status })`; `.replay(slug, runId)`) · `.files` · `.git` · `.changeRequests` (incl. `requestChanges`) · `.sessions` · `.tokens` (project-scoped CLI PATs — the `KORTIX_TOKEN` shape) · `.setupLinks.{requestSecret,requestConnector}` (agent-minted secret-entry / connector links) · `.validateManifest` · `.gitToken` · `.setDefaultAgent(name)` · `.session(sid)` (+ more namespaces: `.skills`, `.review`, `.approvals`, `.gateway` (incl. `.routing` and `.playground`), `.channels`, `.modelDefaults`, `.sandbox`) |
 | `kortix.session(pid, sid)` | id-bound handle: lifecycle (`get`/`update`/`delete`/`restore`/`start`/`restart`/`stop`/`reloadConfig`/`reloadConfigStream`/`setSharing`/`participants`/`setPinned`/`setArchived`/`presence`/`previews`/`commit`/`publicShares`/`ensureReady`) · finalized `cost()` · `send`/`abort`/`rewind`/`restoreRewind` (needs `session.rewind`)/`setModel`/`setAgent` · `transcript()` · `.files` · runtime URL helpers (`health`/`previewUrl`/`proxyUrl`) · the session verbs (`messages`/`pending`/`answerPermission`/`answerQuestion`/`compact`) · `stream()` · the deprecated `.runtime` |

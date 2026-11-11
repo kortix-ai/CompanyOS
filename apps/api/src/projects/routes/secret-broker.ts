@@ -5,9 +5,17 @@ import {
 import { createRoute, z } from '@hono/zod-openapi';
 import { getAgentGrant } from '../../iam/agent-scope';
 import { auth, errors, json } from '../../openapi';
+import type { Context } from 'hono';
+import {
+  REFUSED_HEADER,
+  RELAY_METHODS,
+  type RelayRefusalReason,
+} from '@kortix/api-contract/secret-relay';
 import { executeSecretBrokerRequest, SecretBrokerError } from '../../secrets/http-broker';
+import { refusalReasonFor } from '../../secrets/broker/errors';
 import {
   classifyPresentedHandles,
+  presentedHandleRefusalReason,
   requestSurfaceText,
   summarizeHandleRefusals,
 } from '../../secrets/handle-substitution';
@@ -22,6 +30,31 @@ import {
 import { projectsApp } from '../lib/app';
 import { readJsonObject } from '../../shared/http-body';
 import { workspaceIdParam } from '../../shared/route-params';
+
+/**
+ * The buffered route's error envelope: the legacy body `{ error, code }`,
+ * unchanged, plus `x-kortix-refused` when Kortix refused. Status codes and
+ * codes are unchanged for deployed daemons.
+ */
+function brokerError(
+  c: Context,
+  code: string,
+  message: string,
+  status: number,
+  refused?: RelayRefusalReason | null,
+): BrokerErrorResponse {
+  const reason = refusalReasonFor(code, status, refused);
+  if (reason) c.header(REFUSED_HEADER, reason);
+  // Cast: the typed route handler accepts only its declared response shapes,
+  // and the error shapes it declares (`errors(...)`) are exactly this one.
+  return c.json(
+    { error: message, code },
+    status as 400 | 403 | 404 | 409 | 413 | 502 | 504,
+  ) as unknown as BrokerErrorResponse;
+}
+
+/** The typed-route stand-in for an error response; see `brokerError`. */
+type BrokerErrorResponse = never;
 
 export function registerSecretBrokerRoutes(): void {
   projectsApp.openapi(
@@ -43,9 +76,21 @@ export function registerSecretBrokerRoutes(): void {
     async (c) => {
       const projectId = workspaceIdParam(c);
       const identifier = c.req.param('identifier')?.trim();
-      const parsed = SecretBrokerRequestSchema.safeParse(await readJsonObject(c));
+      const rawBody = await readJsonObject(c);
+      const parsed = SecretBrokerRequestSchema.safeParse(rawBody);
       if (!identifier || !parsed.success) {
-        return c.json({ error: 'Invalid broker request', code: 'invalid_request' }, 400);
+        // TRACE (and any method outside the schema) stays refused, tagged: TRACE
+        // echoes the request, credential headers included, back to the caller.
+        const method = typeof rawBody.method === 'string' ? rawBody.method.toUpperCase() : undefined;
+        const badMethod =
+          method !== undefined && !(RELAY_METHODS as readonly string[]).includes(method);
+        return brokerError(
+          c,
+          'invalid_request',
+          'Invalid broker request',
+          400,
+          badMethod ? 'credential_method' : undefined,
+        );
       }
 
       const agentGrant = getAgentGrant(c);
@@ -56,11 +101,10 @@ export function registerSecretBrokerRoutes(): void {
         !sessionId ||
         !agentGrant
       ) {
-        return c.json(
-          {
-            error: 'Secret broker requests require a session-scoped agent token',
-            code: 'session_agent_token_required',
-          },
+        return brokerError(
+          c,
+          'session_agent_token_required',
+          'Secret broker requests require a session-scoped agent token',
           403,
         );
       }
@@ -85,11 +129,10 @@ export function registerSecretBrokerRoutes(): void {
         });
       }
       if (!pin.ok && config.KORTIX_SANDBOX_EGRESS_PIN_ENFORCED) {
-        return c.json(
-          {
-            error: 'This session credential may only be used from its own sandbox',
-            code: 'sandbox_egress_mismatch',
-          },
+        return brokerError(
+          c,
+          'sandbox_egress_mismatch',
+          'This session credential may only be used from its own sandbox',
           403,
         );
       }
@@ -101,7 +144,7 @@ export function registerSecretBrokerRoutes(): void {
       try {
         destination = new URL(parsed.data.url);
       } catch {
-        return c.json({ error: 'Invalid broker URL', code: 'invalid_request' }, 400);
+        return brokerError(c, 'invalid_request', 'Invalid broker URL', 400);
       }
       const shape = {
         host: destination.hostname,
@@ -131,9 +174,11 @@ export function registerSecretBrokerRoutes(): void {
       const auditContext = authz.audit;
       if (!auditContext) {
         if (authz.ok) throw new Error('unreachable: an authorized relay always has an audit context');
-        return authz.code === 'secret_not_found'
-          ? c.json({ error: authz.message }, 404)
-          : c.json({ error: authz.message, code: authz.code }, 403);
+        if (authz.code === 'secret_not_found') {
+          c.header(REFUSED_HEADER, 'policy_denied');
+          return c.json({ error: authz.message }, 404);
+        }
+        return brokerError(c, authz.code, authz.message, 403);
       }
 
       const auditBase = {
@@ -167,10 +212,7 @@ export function registerSecretBrokerRoutes(): void {
           httpStatus: authz.status,
           after: { reason: authz.code },
         });
-        return c.json(
-          { error: authz.message, code: authz.code },
-          authz.status as 400 | 403 | 409 | 413 | 502 | 504,
-        );
+        return brokerError(c, authz.code, authz.message, authz.status);
       }
 
       try {
@@ -207,12 +249,20 @@ export function registerSecretBrokerRoutes(): void {
               detail: refusals,
             },
           });
+          // The request does not leave. See `presentedHandleRefusalReason`.
+          throw new SecretBrokerError(
+            'policy_denied',
+            'the request carries a secret handle this session may not spend on this destination; it was not sent',
+            403,
+            presentedHandleRefusalReason(refusals)!,
+          );
         }
 
         const applied = new Set<string>();
         const result = await executeSecretBrokerRequest(authz.policy, authz.secret, parsed.data, {
           substitutions: spendable.substitutions,
           applied,
+          secretHandle: authz.secretHandle,
         });
         await recordAuditEvent({
           ...auditBase,
@@ -226,21 +276,23 @@ export function registerSecretBrokerRoutes(): void {
         });
         return c.json(result, 200);
       } catch (error) {
-        const brokerError =
+        const failure =
           error instanceof SecretBrokerError
             ? error
             : new SecretBrokerError('upstream_failed', 'Secret broker request failed', 502);
         await recordAuditEvent({
           ...auditBase,
           action: 'secret.broker.failed',
-          outcome: brokerError.status === 403 ? 'denied' : 'failure',
-          httpStatus: brokerError.status,
-          after: { reason: brokerError.code },
+          outcome: failure.status === 403 ? 'denied' : 'failure',
+          httpStatus: failure.status,
+          after: {
+            reason: failure.code,
+            ...(refusalReasonFor(failure.code, failure.status, failure.refused) && {
+              refused: refusalReasonFor(failure.code, failure.status, failure.refused),
+            }),
+          },
         });
-        return c.json(
-          { error: brokerError.message, code: brokerError.code },
-          brokerError.status as 400 | 403 | 413 | 502 | 504,
-        );
+        return brokerError(c, failure.code, failure.message, failure.status, failure.refused);
       }
     },
   );

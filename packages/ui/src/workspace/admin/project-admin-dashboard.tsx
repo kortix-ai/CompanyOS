@@ -174,6 +174,7 @@ const RESOURCE_PAGES: Partial<Record<ProjectAdminResourceKey, SectionPage>> = {
   models: lazyPage(() => import('../../customize/models/models-page'), (m) => m.ModelsPage),
   secrets: lazyPage(() => import('../../customize/secrets/secrets-page'), (m) => m.SecretsPage),
   repo: lazyPage(() => import('../layout/project-files-view'), (m) => m.ProjectFilesView),
+  'tool-calls': lazyPage(() => import('../../customize/tool-calls/tool-calls-page'), (m) => m.ToolCallsPage),
 };
 
 

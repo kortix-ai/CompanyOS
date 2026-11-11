@@ -83,6 +83,7 @@ export interface ConnectorRequirementRow {
 
 interface ConnectorConnectionRow {
   connectionId: string;
+  description?: string | null;
   isDefault: boolean;
   ownerType: 'project' | 'agent' | 'member' | 'subject' | 'external';
   ownerId: string | null;
@@ -709,6 +710,7 @@ export async function loadSessionConnectorResolutionData(input: {
       connectorId: connectorConnections.connectorId,
       connectionId: connectorConnections.connectionId,
       label: connectorConnections.label,
+      description: connectorConnections.description,
       isDefault: connectorConnections.isDefault,
       ownerType: connectorConnections.ownerType,
       ownerId: connectorConnections.ownerId,
@@ -1037,6 +1039,8 @@ export interface EntitledConnectorConnection {
   alias: string;
   /** Human-facing account name. What `--account` matches on. */
   label: string;
+  /** What the account is for, written for agents. */
+  description?: string | null;
   ownerType: 'project' | 'agent' | 'member' | 'subject' | 'external';
   isDefault: boolean;
   status: 'active' | 'revoked' | 'error';
@@ -1123,6 +1127,7 @@ export async function listEntitledConnectorConnections(input: {
     .select({
       connectionId: connectorConnections.connectionId,
       label: connectorConnections.label,
+      description: connectorConnections.description,
       isDefault: connectorConnections.isDefault,
       ownerType: connectorConnections.ownerType,
       ownerId: connectorConnections.ownerId,
@@ -1184,6 +1189,7 @@ export async function listEntitledConnectorConnections(input: {
       connectorId: connector.connectorId,
       alias,
       label: row.label,
+      description: row.description ?? null,
       ownerType: row.ownerType,
       isDefault: row.isDefault,
       status: row.status,
@@ -1267,6 +1273,7 @@ export async function listEntitledConnectorConnectionsBatch(input: {
       connectorId: connectorConnections.connectorId,
       connectionId: connectorConnections.connectionId,
       label: connectorConnections.label,
+      description: connectorConnections.description,
       isDefault: connectorConnections.isDefault,
       ownerType: connectorConnections.ownerType,
       ownerId: connectorConnections.ownerId,

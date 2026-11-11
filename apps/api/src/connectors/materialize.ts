@@ -60,6 +60,11 @@ export function connectorConfig(
           baseUrl: channelApiBase(spec.platform ?? ''),
           auth: channelAuth(spec.platform ?? ''),
         };
+      case 'app':
+        // The App (by slug) and the repo path of its OpenAPI document. No
+        // credential and no base URL: the gateway calls the App in-cluster
+        // (apps/app-tool-call.ts). Explicit `none` auth → hasAuth=false.
+        return { app: spec.app, spec: spec.spec, auth: { type: 'none', in: 'header', name: null, prefix: null } };
       case 'computer':
         // No credential and no base URL — the gateway routes `tunnel` bindings
         // through the shared tunnel RPC core, not executeCall. The machine is

@@ -1146,7 +1146,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `subagents` | grant | `none` | Agents this agent may start with the `agent` tool (alias `task`): declared, enabled, `mode` `subagent` or `all`, and not itself. A subagent cannot start another subagent. |
 | `commands` | grant | `none` | Registered commands the agent runs. |
 | `extensions` | grant or map | — | Registered extensions that a session of the agent loads. `{ exclude: [...] }` grants every one but those. "*" (every name; alias `all`), "none" (default), a list of names, or `{ exclude: [names] }` for every name but those. |
-| `connectors` | grant | `none` | Connector slugs the agent may call. |
+| `connectors` | grant | `none` | Connector slugs the agent may call. An App that exposes tools (`apps.<slug>.tools`) is the connector `app-<slug>`. |
 | `connectors_required` | list | — | Connector slugs, a subset of `connectors`. Sessions do not check it. |
 | `policy_sets` | map | the base rules | Connector slug → the name of a policy set on that connector. See [Connector rules and approvals](#connector-rules-and-approvals). |
 | `secrets` | grant | `none` | Secret names the agent's sandbox receives. |
@@ -1312,7 +1312,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `apps.<slug>` | map | — | One App's deploy settings. Any other key is an error. Its keys: `path`, `type`, `image`, `dockerfile`, `command`, `port`, `root`, `output_dir`, `install_command`, `build_command`, `spa`, `readiness_path`, `idle_timeout_seconds`, `always_on`, `uses`, `resources`, `env`, `secrets`, `processes`, `http_service`, `services`, `mounts`, `vm`, `deploy`, `labels`, `display`. Full reference: [Configure in kortix.yaml](/docs/developers#configure-in-kortixyaml). |
+| `apps.<slug>` | map | — | One App's deploy settings. Any other key is an error. Its keys: `path`, `type`, `image`, `dockerfile`, `command`, `port`, `root`, `output_dir`, `install_command`, `build_command`, `spa`, `readiness_path`, `tools`, `idle_timeout_seconds`, `always_on`, `uses`, `resources`, `env`, `secrets`, `processes`, `http_service`, `services`, `mounts`, `vm`, `deploy`, `labels`, `display`. Full reference: [Configure in kortix.yaml](/docs/developers#configure-in-kortixyaml). |
 
 {/* generated:kortix-yaml:end */}
 
@@ -2122,7 +2122,7 @@ Exit `3` means the agent waits on a question or a permission. Answer it with `ko
 </Step>
 </Steps>
 
-An MCP client can use Kortix without the CLI. See [Other AI tools (MCP)](/docs/guide#other-ai-tools-mcp).
+An MCP client can use Kortix without the CLI. Add it with `claude mcp add --transport http kortix https://api.kortix.com/v1/mcp` (Claude Code) or `codex mcp add kortix --url https://api.kortix.com/v1/mcp` (Codex). Every client: [Other AI tools (MCP)](/docs/guide#other-ai-tools-mcp). To let a coding agent do the setup, send it [the setup prompt](https://kortix.com/setup-prompt.md).
 
 ### Inside a session sandbox
 
@@ -2484,7 +2484,7 @@ All four surfaces reach the same API with the same permissions.
 | REST API | Any language. Integrations, scripts, and servers that are not TypeScript. | A bearer token from [Authenticate](#authenticate) |
 | [SDK](/docs/developers#sdk) (`@kortix/sdk`) | TypeScript and React. Sessions with live streaming, typed errors, automatic retries, and the session runtime. | `getToken` returns a bearer token |
 | [CLI](/docs/developers#cli) (`kortix`) | Terminals, CI jobs, and agents inside a session sandbox. | `kortix login`, or a token in CI |
-| [Kortix MCP server](/docs/guide#other-ai-tools-mcp) | Claude, Cursor, ChatGPT, and other MCP clients that act as you. Its `search_api`, `describe_api`, and `call_api` tools read and call this API. | OAuth sign-in from the client |
+| [Kortix MCP server](/docs/guide#other-ai-tools-mcp) | Claude, Cursor, ChatGPT, and other MCP clients that act as you. Its six tools (`skills`, `search`, `describe`, `call`, `execute`, `resume`) reach every route of this API and every workspace connector. | OAuth sign-in from the client |
 
 Prefer the SDK for anything that drives a session. It owns the start, the
 readiness wait, the event stream, and the runtime routes. The REST reference
@@ -3560,6 +3560,54 @@ never accepts a Kortix credential.
 An `openapi` or `http` connector whose base URL is an App of the same workspace
 needs no Kortix credential. The connector gateway adds a signed, 60-second
 assertion for the calling session. See [Connectors](/docs/guide#connectors).
+
+### Apps that expose tools
+
+A server App gives agents tools with `apps.<slug>.tools`: the path of an
+OpenAPI 3 document (`.json`, `.yaml` or `.yml`) inside the App's folder
+(`apps.<slug>.path`, default `apps/<slug>`). Every `kortix.yaml` sync makes it
+the connector `app-<slug>`, with one tool per operation:
+`connectors.app-<slug>.<operationId>`. Search, describe, call, the agent's
+`connectors:` grant, policies, approvals and the call log work as for every
+connector.
+
+```yaml
+apps:
+  orders:
+    path: apps/orders
+    type: dockerfile
+    command: ["node", "server.js"]
+    port: 3000
+    tools: openapi.json        # apps/orders/openapi.json
+agents:
+  support:
+    connectors: [app-orders]
+policies:
+  - match: app-orders.create_order
+    action: require_approval
+```
+
+| Rule | Behavior |
+|---|---|
+| Tool name | The operation's `operationId`, required. A document with an operation without one is refused; the sync error names the operation. |
+| Description | `summary`, else `description`. |
+| Input | Path and query parameters by name, the JSON request body under `body`. |
+| Risk | `GET` → `read`, `DELETE` → `destructive`, any other method → `write`. `x-kortix-risk: read \| write \| destructive` on the operation overrides it. |
+| Source | The document at the manifest's commit, not the running release. An edit applies on the next sync. |
+| Slug | `app-<slug>`. A `connectors:` entry with the same slug wins, and the sync reports the App's tools as an error. |
+
+A call wakes the App when it is stopped and goes in-cluster to its `http`
+service, like a trigger target, so a private App receives it. Kortix sends no
+stored credential. The request carries `x-kortix-app-viewer`, the person the
+call acts for, signed with the App's `KORTIX_APP_VIEWER_SECRET`
+(`readAppViewer(request)` from `@kortix/sdk/server`), and `x-kortix-tool`. An
+agent session call also carries `x-kortix-agent`, `x-kortix-session-id` and
+the 60-second `X-Kortix-App-Authorization` assertion. Authorize on the signed
+viewer only. The App's answer, with any status, is the tool's result.
+
+A marketplace item of type `registry:app` ships an App folder and its
+`apps.<slug>` block; the install session merges both and opens a change
+request. The App's releases stay its versions.
 
 ### Triggers and App events
 
@@ -6432,6 +6480,36 @@ await p.connectors.policies.set('gmail', [
 
 How workspace rules, policy sets and base rules combine is in [Connectors](/docs/guide#connectors).
 
+### Search and call any tool
+
+`p.agentTools()` gives a program the six tools every Kortix agent gets: `skills`, `search`, `describe`, `call`, `execute` and `resume` (`POST /v1/agent-tools/{verb}?project_id=<project_id>`). One search covers the workspace's connectors (`connectors.<slug>.<action>`), the Kortix API (`kortix.<METHOD> <path>`), sessions, sandboxes and connector setup. A call runs as the caller, through the same access rules, connector policies, approvals and call log as a call from a session.
+
+```ts
+const tools = p.agentTools(); // sent as surface `api`; pass { surface: 'cli' } or { surface: 'app' }
+
+const { results } = await tools.search({ query: 'send email', family: 'connectors', limit: 5 });
+const schema = await tools.describe(results[0].id); // input_schema, output_schema
+
+const result = await tools.call(results[0].id, { to: 'ops@example.test', subject: 'Report', body: 'Attached.' });
+if (result.status === 'pending_approval') {
+  // A person approves at result.approval_url. Never repeat the call.
+  const state = await tools.resume(result.execution_id!); // state: 'pending', then the decision and outcome
+}
+```
+
+| Method | Resolves |
+| --- | --- |
+| `search({ query, family?, limit? })` | `{ results: [{ id, title, risk, description, input }], truncated, next }`. `limit` defaults to 10, at most 50. |
+| `describe(id)` | `{ id, title, description, risk, input_schema, output_schema }`, or `{ error, suggestions }` for an unknown id. |
+| `call(id, input?)` | `{ status: 'ok', data }` · `{ status: 'pending_approval', execution_id, approval_url, runs_on_approval, next }` · `{ status: 'denied' \| 'error', reason, message, data? }`. A result over the size limit has `data_preview` and `note` in place of `data`. |
+| `execute(code)` | Runs `code`, an async JavaScript function body, on the server. The program calls `search`, `describe`, `call` and `skills` as functions. Resolves `{ ok, value \| error, output?, calls, pending_approvals?, next? }`. Limits: 65,536 characters, 100 tool calls, 50 s. |
+| `resume(executionId)` | `{ execution_id, state, action, decision, decided_by, decided_at, note, outcome, expires_at, next }`. It reads; it never approves. |
+| `skills({ name?, file? })` | `{ text }`: the skill list, one skill, or one of its reference files, as Markdown. |
+
+A tool that reports a failure answers HTTP `422` with the shapes above, and the method resolves them. Invalid input (`400`, `invalid_input`), a refused token (`401`) and any other `422` reject with `ApiError`. `kortix.agentTools({ projectId?, surface? })` is the same client with no bound workspace: the server then uses the caller's only workspace.
+
+From a shell, the same verbs are `kortix tools search <query>`, `kortix tools describe <id>`, `kortix tools call <id> --input '<json>'`, `kortix tools execute --file <path>`, `kortix tools resume <execution_id>` and `kortix tools skills [name]`. Each takes `--json` and `--workspace <id>`. `call` exits `0` on `ok`, `3` when the call waits for an approval (it prints the approval URL), `1` on `denied` or `error`, and `2` on a usage error. `describe` of an unknown id prints the closest ids and exits `1`. Quote an id that has spaces: `kortix tools describe 'kortix.GET /v1/projects'`.
+
 ### Store secrets
 
 `p.secrets.upsert(input)` creates or updates a workspace secret. The value is write-only: no call returns it. With the `runtime` strategy, a session reads the secret as an environment variable named `name`.
@@ -8410,6 +8488,7 @@ Stable entry points follow semver. A deep path into `dist/` has no semver.
 | `project(projectId)` | The [workspace handle](#the-workspace-handle) without the workspace-level members. | `/projects/{projectId}/…` |
 | `session(projectId, sessionId)` | The [session handle](#the-session-handle). | `/projects/{projectId}/sessions/{sessionId}/…` |
 | `connectors` · `connector(slug)` | Connector calls with a token that carries its workspace, such as a session token. Same methods as the data-plane half of `p.connectors` and as `p.connector(slug)`. | `/connectors/…` |
+| `agentTools(options?)` | The six agent tools: `skills` · `search` · `describe` · `call` · `execute` · `resume`. `options`: `projectId`, `surface` (`api`, `cli` or `app`; default `api`). `p.agentTools({ surface? })` binds the workspace. See [Search and call any tool](#search-and-call-any-tool). | `/agent-tools/{verb}` |
 | `github` | GitHub App installations and repository links, per account. | `/projects/github/…` |
 | `gitBackend` | The instance git backend that holds Kortix-managed repositories. | `/projects/git/backend` |
 | `billing` | Plan, credit balance, transactions, usage, per-session usage, subscription. | `/billing/…` |

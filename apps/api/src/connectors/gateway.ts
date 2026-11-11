@@ -57,6 +57,10 @@ import { invalidArgsReason } from './args-validate';
  */
 import { type DefaultMode, type Policy, resolveEffectiveAction } from './policy';
 import { connectorRequestDigest } from './request-digest';
+import { callPhaseOf } from './call-log';
+import type { ApprovalDelivery, CallPhase, CallPrincipalKind, CallSurface } from '@kortix/api-contract/tool-calls';
+import { getRequestContext } from '../lib/request-context';
+import { type CallSpanStep, type CallSpanWindow, emitConnectorCallSpans } from './call-spans';
 import type { ShareSubject } from './share';
 import type { ActionBinding, Risk } from './types';
 import type { ConnectionOwnerType } from '../projects/lib/connection-access';
@@ -88,7 +92,9 @@ export interface GatewayConnector {
     | 'graphql'
     | 'http'
     | 'channel'
-    | 'computer';
+    | 'computer'
+    // An App of the project exposing tools (`apps.<slug>.tools`).
+    | 'app';
   platform?: string | null;
   /** Computer connectors: the paired machine of the resolved account. Null
    *  when the machine was unpaired. */
@@ -139,6 +145,18 @@ export interface ExecutionRecord {
   /** Only on a new `pending_approval` row: the call input to hold, encrypted,
    *  for the approved run. Never part of `resultSummary`. */
   held?: HeldExecutionInput;
+  /** The call log columns. Absent on rows written by older callers. */
+  log?: CallLogFields;
+}
+
+/** The call log columns of one `connector_calls` row. */
+export interface CallLogFields extends CallCaller {
+  refusalReason: string | null;
+  phase: CallPhase | null;
+  requestId: string | null;
+  traceId: string | null;
+  kortixMs: number | null;
+  upstreamMs: number | null;
 }
 
 /** The call half of the held input. The caller half comes from the deps' principal. */
@@ -175,6 +193,23 @@ export interface GatewayDeps {
     sessionId: string;
     tokenId: string;
   }): Promise<string | null>;
+  /**
+   * Runs a tool an App of the project exposes (`app` binding): the in-cluster
+   * call to the App (apps/app-tool-call.ts `callAppTool`), with the caller
+   * headers it adds. Optional: absent = an App tool call fails with
+   * `app connector calls are not wired here`.
+   */
+  callAppTool?(input: {
+    projectId: string;
+    app: string;
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    body?: string;
+    caller: { userId: string; sessionId: string | null; actingTokenId: string | null; agentSlug: string | null; tool: string };
+    signal?: AbortSignal;
+    maxResponseBytes: number;
+  }): Promise<{ status: number; ok: boolean; text: string }>;
   /**
    * WHY `loadConnectorBySlug` answered null. That function collapses three
    * states into one null — no such row, a disabled row, and a row with no
@@ -282,6 +317,16 @@ export interface GatewayDeps {
   /** `connection_credentials.kind` of the connection's stored credential, or
    *  null when it has none. Read only after an upstream 401, to name the fix. */
   credentialKind?(connectionId: string): Promise<string | null>;
+  /** True when a person denied this exact request recently (same session,
+   *  caller, connector, action, digest): the gate refuses it instead of asking again. */
+  findPersonDenial?(input: {
+    projectId: string;
+    sessionId: string | null;
+    actingUserId: string;
+    connectorId: string;
+    actionPath: string;
+    requestDigest: string;
+  }): Promise<boolean>;
   /** Approval carry-over: atomically claim a recent human approval for this
    *  exact request. The callback asks the session to continue, and its next
    *  attempt consumes the approval once instead of creating another gate. */
@@ -464,6 +509,61 @@ export interface CallInput {
   /** The approved held run (connectors/held-call-run.ts) only. The route
    *  builds `CallInput` field by field and never sets it. */
   heldApproval?: { executionId: string; approvedBy: string | null } | null;
+  /** Who made the call and from where, for the call log. Built by the route
+   *  from the resolved actor, never from the request body. */
+  caller?: CallCaller | null;
+  /** Timing of this call. `handleCall` creates it; spreads of `input` share it. */
+  clock?: CallClock;
+}
+
+/** The call log's caller half (`connector_calls.credential_id` … `approval_delivery`). */
+export interface CallCaller {
+  credentialId: string | null;
+  principalKind: CallPrincipalKind | null;
+  agentSlug: string | null;
+  surface: CallSurface | null;
+  approvalDelivery: ApprovalDelivery | null;
+}
+
+/** Wall-clock start, the upstream time measured inside it, and the measured
+ *  steps the call's OpenTelemetry spans show (`call-spans.ts`). */
+export interface CallClock {
+  startedAt: number;
+  upstreamMs: number | null;
+  windows?: CallSpanWindow[];
+  /** Set once the call's spans went out: one call, one span tree. */
+  spansEmitted?: boolean;
+}
+
+function startClock(input: CallInput): CallInput {
+  return input.clock ? input : { ...input, clock: { startedAt: performance.now(), upstreamMs: null, windows: [] } };
+}
+
+/** Records a step that started at `startedAt` and ends now. */
+function endStep(input: CallInput, name: CallSpanStep, startedAt: number): void {
+  input.clock?.windows?.push({ name, startedAt, endedAt: performance.now() });
+}
+
+/** Records `work` as one step of the call's span tree. */
+async function timeStep<T>(input: CallInput, name: CallSpanStep, work: () => Promise<T>): Promise<T> {
+  const t0 = performance.now();
+  try {
+    return await work();
+  } finally {
+    input.clock?.windows?.push({ name, startedAt: t0, endedAt: performance.now() });
+  }
+}
+
+/** Adds the time `work` takes to the call's upstream time. */
+async function timeUpstream<T>(input: CallInput, work: Promise<T>): Promise<T> {
+  const t0 = performance.now();
+  try {
+    return await work;
+  } finally {
+    const t1 = performance.now();
+    if (input.clock) input.clock.upstreamMs = (input.clock.upstreamMs ?? 0) + Math.round(t1 - t0);
+    input.clock?.windows?.push({ name: 'connector.upstream', startedAt: t0, endedAt: t1 });
+  }
 }
 
 export type HeldApprovalVerdict =
@@ -893,6 +993,7 @@ export class CredentialNotSharedError extends Error {
 }
 
 export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<CallResult> {
+  input = startClock(input);
   const resolved = await resolveConnectorForCall(deps, input);
   const fullPath = `${resolved.slug}.${input.actionPath}`;
 
@@ -936,7 +1037,7 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
   // approval or upstream call. Channel calls fill their path values from the
   // session context later, so they are exempt.
   const emptyPathArg =
-    connector.provider !== 'channel' && (action.binding.kind === 'openapi' || action.binding.kind === 'http')
+    connector.provider !== 'channel' && (action.binding.kind === 'openapi' || action.binding.kind === 'http' || action.binding.kind === 'app')
       ? missingPathArg(action.binding.path, input.args)
       : null;
   if (emptyPathArg !== null) {
@@ -977,11 +1078,13 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
     return { status: 'denied', reason, message };
   }
 
+  const credentialStartedAt = performance.now();
   const emailExecution = await resolveEmailExecutionContext(deps, input, connector, resolved.slug);
   let usable: Awaited<ReturnType<typeof connectorUsable>>;
   try {
     usable = await connectorUsable(deps, connector, input, emailExecution.secretOverride);
   } catch (error) {
+    endStep(input, 'connector.credential', credentialStartedAt);
     if (error instanceof CredentialNotSharedError) {
       await audit(deps, input, connector, 'denied', action.risk, { reason: error.reason });
       return { status: 'denied', reason: error.reason, message: error.message };
@@ -996,6 +1099,7 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
     });
     return { status: 'error', reason };
   }
+  endStep(input, 'connector.credential', credentialStartedAt);
   if (!usable.ok) {
     await audit(deps, input, connector, 'denied', action.risk, {
       reason: usable.reason,
@@ -1036,15 +1140,8 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
 
   // Layered enforcement: project → connection → risk default.
   if (deps.enforcePolicies !== false) {
-    const gated = await enforceCallPolicies(
-      deps,
-      input,
-      connector,
-      action,
-      fullPath,
-      executionArgs,
-      requestDigest,
-      heldVerdict,
+    const gated = await timeStep(input, 'connector.policy', () =>
+      enforceCallPolicies(deps, input, connector, action, fullPath, executionArgs, requestDigest, heldVerdict),
     );
     if (gated) return gated;
   }
@@ -1266,6 +1363,36 @@ async function enforceCallPolicies(
         ...setDetails,
       });
     } else {
+      // A person already denied this exact call: refuse it, never ask again.
+      // Different arguments are a different digest and get a fresh gate.
+      if (
+        !contentChanged &&
+        deps.findPersonDenial &&
+        (await deps.findPersonDenial({
+          projectId: input.projectId,
+          sessionId: input.sessionId ?? null,
+          actingUserId: input.subject.userId,
+          connectorId: connector.connectorId,
+          actionPath: `${input.connectorSlug}.${input.actionPath}`,
+          requestDigest,
+        }))
+      ) {
+        await audit(
+          deps,
+          input,
+          connector,
+          'denied',
+          action.risk,
+          { reason: 'previously_denied', policy_source: decision.source, ...setDetails },
+          requestDigest,
+        );
+        return {
+          status: 'denied',
+          reason: 'previously_denied',
+          message:
+            'A person denied this exact call. Do not repeat it: change the arguments, or ask the person what to do instead.',
+        };
+      }
       // Older clients can pass an existing id. Preserve that row instead of
       // stacking another one, but never poll it. New clients make one request
       // and wait for the server-side session callback.
@@ -1445,7 +1572,7 @@ async function runConnectorAction(
     // the signal also closes the socket of an http-family request.
     const deadline = callTimeoutMs(deps);
     const signal = AbortSignal.timeout(deadline);
-    const withDeadline = <T>(work: Promise<T>) => withTimeout(work, deadline, UPSTREAM_TIMEOUT);
+    const withDeadline = <T>(work: Promise<T>) => timeUpstream(input, withTimeout(work, deadline, UPSTREAM_TIMEOUT));
     let result: ExecResult;
     if (connector.provider === 'pipedream') {
       result = await withDeadline(
@@ -1510,6 +1637,24 @@ async function runConnectorAction(
           args: providerArgs,
           paramHints: paramHintsFromSchema(action.inputSchema),
           appAuthorization,
+          ...(deps.callAppTool
+            ? {
+                callApp: (request) =>
+                  deps.callAppTool!({
+                    projectId: input.projectId,
+                    ...request,
+                    caller: {
+                      userId: input.subject.userId,
+                      sessionId: input.sessionId ?? null,
+                      actingTokenId: input.actingTokenId ?? null,
+                      agentSlug: input.caller?.agentSlug ?? null,
+                      tool: `connectors.${fullPath}`,
+                    },
+                    signal,
+                    maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES,
+                  }),
+              }
+            : {}),
           fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
         }),
       );
@@ -1616,17 +1761,22 @@ async function runConnectorAction(
       teamsReadConsentHint(connector, result) +
       (attachmentRefs.length > 0 ? redactInlineBytes(upstream) : upstream) +
       fallbackHint(connector, action.binding);
+    // The upstream body can hold the account's data (a record, a message, an
+    // echoed argument). The caller gets it in `reason`; the audit row and the
+    // log line, which leave the call, carry only its code and byte length.
+    const failure = upstreamFailureFields(result.status, credentialRejected ? CREDENTIAL_REJECTED : null, upstream);
     await audit(deps, input, connector, 'error', action.risk, {
       http_status: result.status,
       ...(credentialRejected ? { error_code: CREDENTIAL_REJECTED } : {}),
-      reason: reason.slice(0, 500),
+      reason: failure.reason,
+      upstream_bytes: failure.upstream_bytes,
     });
-    const message = `[connector] ${fullPath} failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
-    if (connector.provider === 'composio' && result.status === 400) logger.debug(message);
-    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message);
+    const message = `[connector] ${fullPath} failed (upstream ${result.status})`;
+    if (connector.provider === 'composio' && result.status === 400) logger.debug(message, failure);
+    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message, failure);
     // A suppressed repeat still lands at debug: prod (LOG_LEVEL=info) never
     // ships it, a developer debugging the retry path still sees every failure.
-    else logger.debug(message);
+    else logger.debug(message, failure);
     return {
       status: 'error',
       reason,
@@ -1644,10 +1794,15 @@ async function runConnectorAction(
       ? `${UPSTREAM_TIMEOUT}: ${fullPath} did not answer within ${callTimeoutMs(deps) / 1000} s. ` +
         'The call may still have run upstream: check its effect before you repeat a write.'
       : (e as Error).message + fallbackHint(connector, action.binding);
-    await audit(deps, input, connector, 'error', action.risk, {
-      reason: reason.slice(0, 500),
-    });
-    logger.warn(`[connector] ${fullPath} threw: ${reason.slice(0, 500)}`);
+    // A thrown provider error can quote the upstream body: the row and the
+    // log line keep its code, class and length, the caller gets `reason`.
+    const failure = {
+      reason: isTimeout(e) ? UPSTREAM_TIMEOUT : 'upstream_threw',
+      error_name: e instanceof Error ? e.name : typeof e,
+      upstream_bytes: Buffer.byteLength(reason),
+    };
+    await audit(deps, input, connector, 'error', action.risk, failure);
+    logger.warn(`[connector] ${fullPath} threw`, failure);
     return { status: 'error', reason, binding: action.binding.kind };
   }
 }
@@ -1701,7 +1856,11 @@ async function runComputerCall(
   if (outcome.kind !== 'error') {
     return { status: 'error', reason: `${outcome.kind}: ${outcome.message}`, binding: 'tunnel' };
   }
-  logger.warn(`[connector] ${fullPath} computer call failed: ${outcome.message.slice(0, 500)}`);
+  // The machine's own failure text stays out of the shipped log line.
+  logger.warn(`[connector] ${fullPath} computer call failed`, {
+    reason: outcome.kind,
+    message_bytes: Buffer.byteLength(outcome.message),
+  });
   return { status: 'error', reason: outcome.message, binding: 'tunnel' };
 }
 
@@ -1923,6 +2082,19 @@ function upstreamReason(result: ExecResult): string {
   return `upstream_${result.status}`;
 }
 
+/**
+ * What an upstream failure leaves outside the call: the HTTP status, the
+ * machine reason (`upstream_<status>` or `credential_rejected`) and the byte
+ * length of the upstream answer. Never the answer itself.
+ */
+export function upstreamFailureFields(
+  status: number,
+  errorCode: string | null,
+  upstream: string,
+): { http_status: number; reason: string; upstream_bytes: number } {
+  return { http_status: status, reason: errorCode ?? `upstream_${status}`, upstream_bytes: Buffer.byteLength(upstream) };
+}
+
 const CREDENTIAL_REJECTED = 'credential_rejected';
 
 /**
@@ -2000,6 +2172,66 @@ function fallbackHint(connector: GatewayConnector, binding: ActionBinding): stri
   return ` — fallback: the \`${connector.slug}.request\` tool calls the app's API directly and is unaffected by component failures`;
 }
 
+/** The call log columns for one audit row: caller, refusal, phase, ids, timings. */
+export function callLogFields(
+  input: CallInput,
+  status: ExecutionRecord['status'],
+  summary: Record<string, unknown> | null,
+): CallLogFields {
+  const reason = status === 'denied' || status === 'error' ? reasonOf(summary) : null;
+  const ctx = getRequestContext();
+  const elapsed = input.clock ? Math.round(performance.now() - input.clock.startedAt) : null;
+  const upstreamMs = input.clock?.upstreamMs ?? null;
+  return {
+    credentialId: input.caller?.credentialId ?? null,
+    principalKind: input.caller?.principalKind ?? null,
+    agentSlug: input.caller?.agentSlug ?? null,
+    surface: input.heldApproval ? 'held_run' : (input.caller?.surface ?? null),
+    approvalDelivery: input.caller?.approvalDelivery ?? null,
+    refusalReason: reason,
+    phase: callPhaseOf(status, reason),
+    requestId: ctx?.requestId?.slice(0, 64) ?? null,
+    traceId: ctx?.traceId?.slice(0, 32) ?? null,
+    kortixMs: elapsed === null ? null : Math.max(0, elapsed - (upstreamMs ?? 0)),
+    upstreamMs,
+  };
+}
+
+/** The machine reason of a refusal or failure, at most 64 characters. */
+function reasonOf(summary: Record<string, unknown> | null): string | null {
+  const raw = typeof summary?.reason === 'string' ? summary.reason : null;
+  if (!raw) return null;
+  // Some reasons carry a sentence after a code (`code: detail`); keep the code.
+  const code = raw.split(/[:\s]/, 1)[0] ?? raw;
+  return code.slice(0, 64) || null;
+}
+
+/** The call's span tree, once per call (a call writes one audit row per outcome). */
+function emitCallSpans(input: CallInput, risk: Risk | null, status: ExecutionRecord['status'], log: CallLogFields): void {
+  const clock = input.clock;
+  if (!clock || clock.spansEmitted) return;
+  clock.spansEmitted = true;
+  try {
+    emitConnectorCallSpans(
+      { startedAt: clock.startedAt, endedAt: performance.now(), windows: clock.windows ?? [] },
+      {
+        connectorSlug: input.connectorSlug,
+        actionPath: `${input.connectorSlug}.${input.actionPath}`,
+        risk,
+        status,
+        refusalReason: log.refusalReason,
+        surface: log.surface,
+        agentSlug: log.agentSlug,
+        phase: log.phase,
+        kortixMs: log.kortixMs,
+        upstreamMs: log.upstreamMs,
+      },
+    );
+  } catch {
+    /* tracing must never break the call path */
+  }
+}
+
 async function audit(
   deps: GatewayDeps,
   input: CallInput,
@@ -2010,6 +2242,8 @@ async function audit(
   requestDigest?: string | null,
   held?: HeldExecutionInput,
 ): Promise<string | null> {
+  const log = callLogFields(input, status, summary);
+  emitCallSpans(input, risk, status, log);
   try {
     return await deps.recordExecution({
       accountId: input.accountId,
@@ -2031,6 +2265,7 @@ async function audit(
           }
         : summary,
       ...(held ? { held } : {}),
+      log,
     });
   } catch {
     /* auditing must never break the call path */

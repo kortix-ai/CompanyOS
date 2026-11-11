@@ -3,6 +3,7 @@ import { stripAnsi } from '../style.ts';
 import { deliveryCell } from './secrets-ls.ts';
 import { describeLinkValidity } from './secrets-audience.ts';
 import { parseExposure } from './secrets-delivery.ts';
+import { describeDeliveryChoice } from './secrets.ts';
 
 describe('describeLinkValidity', () => {
   const now = Date.parse('2026-08-07T12:00:00.000Z');
@@ -91,5 +92,25 @@ describe('parseExposure', () => {
     expect(parseExposure('plaintext')).toBeNull();
     expect(parseExposure('')).toBeNull();
     expect(parseExposure(undefined)).toBeNull();
+  });
+});
+
+describe('describeDeliveryChoice', () => {
+  test('names the hosts and the opt-out when the API chose network delivery', () => {
+    expect(
+      describeDeliveryChoice(
+        { strategy: 'egress', reason: 'known_api_host', hosts: ['api.anthropic.com'] },
+        'ANTHROPIC_API_KEY',
+      ),
+    ).toBe(
+      'network-delivered: the sandbox holds a handle, Kortix substitutes the value on api.anthropic.com only. ' +
+        'To load the plain value into the sandbox instead: kortix secrets delivery ANTHROPIC_API_KEY environment',
+    );
+  });
+
+  test('says nothing for the runtime default, a requested delivery, or an older API', () => {
+    expect(describeDeliveryChoice({ strategy: 'runtime', reason: 'default' }, 'X')).toBeNull();
+    expect(describeDeliveryChoice({ strategy: 'egress', reason: 'requested' }, 'X')).toBeNull();
+    expect(describeDeliveryChoice(undefined, 'X')).toBeNull();
   });
 });

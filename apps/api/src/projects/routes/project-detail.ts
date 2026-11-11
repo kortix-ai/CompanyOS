@@ -2,6 +2,8 @@ import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { type SQL, eq, sql } from 'drizzle-orm';
 /** One project: read, detail, and update. */
+import { featureDisabledBody } from '../../feature-flags/gate';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { PROJECT_ACTIONS } from '../../iam';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import { db } from '../../shared/db';
@@ -22,6 +24,7 @@ import { renameAccountOfSoleProject } from '../lib/workspace-name';
 import { normalizeProjectIcon } from '../lib/project-icon';
 import { normalizeProjectGlyph } from '../lib/project-glyph';
 import { workspaceIdParam } from '../../shared/route-params';
+import { floorWithholdsBody, listSecretsWithheldByFloor } from '../secrets/floor-guard';
 import type { AppEnv } from '../../types';
 import { metadataMerge, projectsView, updateProjectRows, updateProjectRowsReturning, type ProjectRowInsert, type ProjectRowSet } from '../../workspaces/rows';
 
@@ -180,12 +183,12 @@ export function registerProjectDetailRoutes(): void {
             manifest_path: z.string().optional().openapi({ description: 'New manifest path.' }),
             icon: z.string().optional().openapi({ description: 'Project icon name. null clears it.' }),
             icon_glyph: z.string().optional().openapi({ description: 'Project icon glyph. null clears it.' }),
-            secret_default_strategy: z.enum(SECRET_STRATEGIES).optional().openapi({ description: 'How a secret with no strategy of its own is delivered to sessions.' }),
+            secret_default_strategy: z.enum(SECRET_STRATEGIES).optional().openapi({ description: 'How a secret with no strategy of its own is delivered to sessions. `egress` or `broker` answers 409 `secret_floor_withholds` with `withheld` and `fix` when it would withhold a stored secret that has no host list.' }),
           }) } } },
       },
       responses: {
         200: json(ProjectSchema, 'The updated project'),
-        ...errors(400, 404, 409),
+        ...errors(400, 403, 404, 409),
       },
     }),
     // biome-ignore lint/suspicious/noExplicitAny: the shared handler answers a plain Response.
@@ -231,6 +234,22 @@ export async function patchProjectRecord(c: Context<AppEnv>): Promise<Response> 
     // The default decides how every unconfigured secret reaches a session:
     // the secret-write capability, on top of the settings write above.
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE);
+    // A floor above runtime raises every plain secret to it. Network delivery
+    // is the `secrets_egress` feature: with it off a project cannot move its
+    // secrets there, one at a time or all at once.
+    if (
+      strategy === 'egress' &&
+      loaded.row.secretDefaultStrategy !== 'egress' &&
+      !resolveFeatureFlag(loaded.row.metadata, 'secrets_egress')
+    ) {
+      return c.json(featureDisabledBody('secrets_egress'), 403);
+    }
+    // A raised row with nowhere to go is dropped from every session env
+    // (`materializeSecretDelivery`). Refuse instead, and name each one.
+    const withheld = await listSecretsWithheldByFloor(projectId, strategy as (typeof SECRET_STRATEGIES)[number]);
+    if (withheld.length > 0) {
+      return c.json(floorWithholdsBody(strategy as (typeof SECRET_STRATEGIES)[number], withheld), 409);
+    }
     updates.secretDefaultStrategy = strategy as (typeof SECRET_STRATEGIES)[number];
   }
 

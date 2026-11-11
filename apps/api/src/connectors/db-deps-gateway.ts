@@ -10,6 +10,7 @@ import {
   connectorProjectSettings,
 } from '@kortix/db';
 import { appAuthorizationForConnectorCall } from '../apps/connector-assertion';
+import { callAppTool } from '../apps/app-tool-call';
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { resolveEmailApiKey } from '../channels/resend-email-api';
 import { bindSlackThreadToSession } from '../channels/slack/binding';
@@ -48,7 +49,7 @@ import { gateChannelWrite } from './channel-write-scope';
 import { resolveCredentialValue, resolveConnectionCredentialValue } from './credentials';
 import { connectorEgressFetch } from './egress';
 import { CredentialNotSharedError } from './gateway';
-import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
+import type { CallLogFields, ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
 import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
 import { graphToken } from '../channels/teams-auth';
 import { runPipedreamAction, runPipedreamProxy } from './pipedream';
@@ -90,6 +91,46 @@ import {
  * the not-yet-consumed marker is atomic, so two racing calls cannot both claim
  * it. Newest approval first; one claim per approval.
  */
+/** How long a person's deny of one exact call refuses the same call again. */
+export const PERSON_DENIAL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * True when a person denied this exact request (same session, caller,
+ * connector, action and argument digest) within the denial window. The agent
+ * must not get a fresh gate by repeating a call that was just refused.
+ */
+export async function findPersonDenial(input: {
+  projectId: string;
+  sessionId: string | null;
+  actingUserId: string;
+  connectorId: string;
+  actionPath: string;
+  requestDigest: string;
+}): Promise<boolean> {
+  const cutoff = new Date(Date.now() - PERSON_DENIAL_WINDOW_MS);
+  const [row] = await db
+    .select({ executionId: connectorCalls.executionId })
+    .from(connectorCalls)
+    .where(
+      and(
+        eq(connectorCalls.projectId, input.projectId),
+        input.sessionId ? eq(connectorCalls.sessionId, input.sessionId) : isNull(connectorCalls.sessionId),
+        eq(connectorCalls.actingUserId, input.actingUserId),
+        eq(connectorCalls.connectorId, input.connectorId),
+        eq(connectorCalls.actionPath, input.actionPath),
+        eq(connectorCalls.requestDigest, input.requestDigest),
+        // A person's deny: the resolve endpoint sets `denied` + approvedBy and
+        // `decision: deny`. Policy blocks never carry approvedBy.
+        eq(connectorCalls.status, 'denied'),
+        isNotNull(connectorCalls.approvedBy),
+        gt(connectorCalls.resolvedAt, cutoff),
+        sql`${connectorCalls.resultSummary} ->> 'decision' = 'deny'`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
 export async function consumeApprovedExecution(input: {
   sessionId: string | null;
   actingUserId: string;
@@ -341,6 +382,23 @@ export function toGatewayConnector(
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Inserts the audit row and returns its execution id. */
+/** The call log columns of a row, by `connector_calls` field name. */
+function callLogColumns(log: CallLogFields) {
+  return {
+    credentialId: log.credentialId,
+    principalKind: log.principalKind,
+    agentSlug: log.agentSlug,
+    surface: log.surface,
+    approvalDelivery: log.approvalDelivery,
+    refusalReason: log.refusalReason,
+    phase: log.phase,
+    requestId: log.requestId,
+    traceId: log.traceId,
+    kortixMs: log.kortixMs,
+    upstreamMs: log.upstreamMs,
+  };
+}
+
 async function insertConnectorCall(exec: Tx | typeof db, rec: ExecutionRecord): Promise<string | null> {
   const [row] = await exec
     .insert(connectorCalls)
@@ -356,6 +414,7 @@ async function insertConnectorCall(exec: Tx | typeof db, rec: ExecutionRecord): 
       risk: rec.risk,
       requestDigest: rec.requestDigest ?? null,
       resultSummary: rec.resultSummary,
+      ...(rec.log ? callLogColumns(rec.log) : {}),
       // A pending_approval row is genuinely UNRESOLVED — it's awaiting a human
       // approve/deny (the approvals inbox). Every terminal status (ok/error/
       // denied) resolves at insert. Leaving pending rows unresolved is what lets
@@ -434,6 +493,8 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
     attachmentStore: connectorAttachmentStore,
     // Spec 2026-09-22 §2.5: an agent session calling a same-project Kortix App.
     appAuthorizationFor: (input) => appAuthorizationForConnectorCall(input),
+    // A tool an App of the project exposes (`apps.<slug>.tools`).
+    callAppTool: (input) => callAppTool(input),
     loadConnectorBySlug: async (projectId, slug) => {
       if (canonicalConnectorAlias(slug) === COMPUTER_SLUG) {
         await ensureProjectComputer(projectId, principal.userId);
@@ -697,6 +758,7 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
           })
         : insertConnectorCall(db, rec),
     consumeApprovedExecution: consumeApprovedExecution,
+    findPersonDenial,
     isPendingApprovalExecution: isPendingApprovalExecution,
     verifyHeldApproval,
     findOpenHeldExecution,

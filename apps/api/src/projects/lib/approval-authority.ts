@@ -36,6 +36,8 @@ import type { Credential } from '../../iam/actor';
 export type ApprovalRefusal =
   | 'non_human_caller'
   | 'session_bound_caller'
+  | 'own_call'
+  | 'browser_only'
   | 'not_launcher_or_manager';
 
 export function mayResolveApproval(input: {
@@ -56,9 +58,26 @@ export function mayResolveApproval(input: {
   /** The caller's OWN session when its credential is bound to one (a sandbox
    *  token). Non-null means an automated caller. */
   callerSessionId: string | null;
+  /** The caller's presented credential id (token or service account), when any. */
+  callerCredentialId?: string | null;
+  /** The credential that made the gated call (`connector_calls.credential_id`). */
+  targetCredentialId?: string | null;
+  /** The gated call's approval delivery (`connector_calls.approval_delivery`). */
+  targetApprovalDelivery?: string | null;
 }): { allowed: true } | { allowed: false; reason: ApprovalRefusal } {
   if (input.callerAuthType !== 'supabase' && input.callerCredentialKind !== 'pat') {
     return { allowed: false, reason: 'non_human_caller' };
+  }
+  // The credential that made a gated call never decides it. A person's PAT is
+  // a human credential, but an outside agent holding that PAT made this call
+  // and would otherwise approve its own request.
+  if (input.targetCredentialId && input.callerCredentialId === input.targetCredentialId) {
+    return { allowed: false, reason: 'own_call' };
+  }
+  // A browser-delivered approval is decided only in a signed-in browser
+  // session, never with a bearer token an agent could hold.
+  if (input.targetApprovalDelivery === 'browser' && input.callerAuthType !== 'supabase') {
+    return { allowed: false, reason: 'browser_only' };
   }
   // ORDER MATTERS. The session-bound check runs FIRST, before the manager
   // branch, because an agent's token inherits the role of the user who minted
@@ -163,4 +182,29 @@ export function maySeeSessionApprovals(input: {
   if (input.isManager) return true;
   if (input.targetSessionOrigin === 'backend') return false;
   return input.targetSessionCreatedBy === input.callerUserId;
+}
+
+/** The 403 body every approval surface returns for a refusal (resolve route, approval page). */
+export function approvalRefusalBody(reason: ApprovalRefusal, verb: 'resolve' | 'review' = 'resolve'): { error: string; code?: string } {
+  switch (reason) {
+    case 'session_bound_caller':
+      return {
+        error: "This approval waits for a person: the session's launcher or a project manager approves or denies it.",
+        code: 'APPROVAL_REQUIRES_HUMAN',
+      };
+    case 'non_human_caller':
+      return { error: `Sign in with a Kortix account to ${verb} this approval`, code: 'APPROVAL_REQUIRES_HUMAN' };
+    case 'own_call':
+      return {
+        error: 'The credential that made this call cannot decide it. Approve or deny it in Kortix, signed in as yourself.',
+        code: 'APPROVAL_OWN_CALL',
+      };
+    case 'browser_only':
+      return {
+        error: 'This approval is decided only in a signed-in browser. Open its approval link in Kortix.',
+        code: 'APPROVAL_BROWSER_ONLY',
+      };
+    case 'not_launcher_or_manager':
+      return { error: 'Only a workspace manager or the session launcher can resolve this' };
+  }
 }

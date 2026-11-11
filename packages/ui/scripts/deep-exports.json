@@ -159,6 +159,7 @@
     "./internal/lib/interface-theme-defaults",
     "./internal/lib/kortix-cli",
     "./internal/lib/manifest-health",
+    "./internal/lib/mcp-install",
     "./internal/lib/mobile-store-urls",
     "./internal/lib/navigation/modified-click",
     "./internal/lib/navigation/router-bridge",

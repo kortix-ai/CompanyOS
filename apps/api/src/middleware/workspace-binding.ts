@@ -225,6 +225,9 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   // Account deletion deletes the PERSON (design.md §3.1 finding 2).
   ...both('/v1/billing/account', PERSON),
   ...both('/v1/billing', PARAM),
+  // The agent tool surface: `project_id` (query or body) names the workspace;
+  // each tool call inside runs through the fence again as its own request.
+  ...both('/v1/agent-tools', PARAM),
 
   // ── the person's own surfaces ──────────────────────────────────────────
   ...[

@@ -51,6 +51,11 @@ const KORTIX_TOOL_DESCRIPTIONS: Record<(typeof KORTIX_TOOL_NAMES)[number], strin
   image_gen: 'Kortix image generation, with an image model the project can use.',
   scrape_webpage: 'Kortix page reader: web pages as clean text.',
   show: 'Show you a file, image or result in the Kortix conversation.',
+  skills: 'Read the Kortix guides and the project skills.',
+  tool_search: 'Find a tool by intent: connectors, the Kortix API, sessions and sandboxes.',
+  tool_describe: "Read one tool's input and output schema.",
+  tool_call: 'Run one tool as this agent, with its grant, policies and approvals.',
+  tool_resume: 'Read a call that waits for a person; it never approves anything.',
 };
 
 /** The extensions the pi runtime loads for every agent (`harness/pi/runtime.ts`), in `PLATFORM_EXTENSION_IDS`. */

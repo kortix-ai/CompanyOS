@@ -873,22 +873,22 @@
     {
       "idx": 124,
       "version": "7",
-      "when": 1791377463859,
-      "tag": "20261007125103_drop_session_environments",
-      "breakpoints": true
-    },
-    {
-      "idx": 125,
-      "version": "7",
       "when": 1791365887483,
       "tag": "20261007154600_apps_static_hosting",
       "breakpoints": true
     },
     {
-      "idx": 126,
+      "idx": 125,
       "version": "7",
       "when": 1791369023739,
       "tag": "20261007154601_apps_always_on",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1791377463859,
+      "tag": "20261007125103_drop_session_environments",
       "breakpoints": true
     },
     {
@@ -922,43 +922,43 @@
     {
       "idx": 131,
       "version": "7",
-      "when": 1791422887237,
-      "tag": "20261008012807_krtx_1769_cost_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 132,
-      "version": "7",
-      "when": 1791445153230,
-      "tag": "20261008073913_push_device_token_auth_session",
-      "breakpoints": true
-    },
-    {
-      "idx": 133,
-      "version": "7",
       "when": 1791421203000,
       "tag": "20261008200003_backends_snapshot",
       "breakpoints": true
     },
     {
-      "idx": 134,
+      "idx": 132,
       "version": "7",
       "when": 1791421204000,
       "tag": "20261008200004_backend_auth_issuer",
       "breakpoints": true
     },
     {
-      "idx": 135,
+      "idx": 133,
       "version": "7",
       "when": 1791421205000,
       "tag": "20261008200005_backend_workload_type",
       "breakpoints": true
     },
     {
-      "idx": 136,
+      "idx": 134,
       "version": "7",
       "when": 1791421207000,
       "tag": "20261008200007_app_backends",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1791422887237,
+      "tag": "20261008012807_krtx_1769_cost_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1791445153230,
+      "tag": "20261008073913_push_device_token_auth_session",
       "breakpoints": true
     },
     {
@@ -1594,22 +1594,22 @@
     {
       "idx": 227,
       "version": "7",
-      "when": 1793973700352,
-      "tag": "20261106140140_lifecycle_status_checks",
+      "when": 1793973070444,
+      "tag": "20261106135110_workspaces_r1_merged",
       "breakpoints": true
     },
     {
       "idx": 228,
       "version": "7",
-      "when": 1793976046739,
-      "tag": "20261106144046_credit_codes",
+      "when": 1793973700352,
+      "tag": "20261106140140_lifecycle_status_checks",
       "breakpoints": true
     },
     {
       "idx": 229,
       "version": "7",
-      "when": 1793973070444,
-      "tag": "20261106135110_workspaces_r1_merged",
+      "when": 1793976046739,
+      "tag": "20261106144046_credit_codes",
       "breakpoints": true
     },
     {
@@ -1680,6 +1680,27 @@
       "version": "7",
       "when": 1794409525800,
       "tag": "20261111150525_probe_merge_drift2",
+      "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1794410631765,
+      "tag": "20261111152351_connector_calls_call_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1794415716855,
+      "tag": "20261111164836_connector_connections_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1794416755059,
+      "tag": "20261111170555_probe_merge_drift3",
       "breakpoints": true
     }
   ]

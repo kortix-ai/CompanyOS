@@ -15,6 +15,8 @@ import {
   resolveLocalTopology,
   waitUntilReady,
 } from './local-stack';
+import { assertFlowFilterArgs } from './selection';
+import { DEPLOYED_TAG } from './targets';
 import { resolveTargetSmokeConfig, waitForTargetSha } from './target-smoke';
 
 export interface LocalTestLane {
@@ -82,9 +84,9 @@ function deployedFlowTimeoutMs(): string {
  * health and SHA, CORS and domains. The seam-to-flow table is in
  * tests/README.md ("Release gate"). `--require-all` applies to this set.
  */
-export const DEPLOYED_FLOW_TAG = 'deployed';
+export const DEPLOYED_FLOW_TAG = DEPLOYED_TAG;
 
-const flowFilterFlags = new Set(['--domain', '--id', '--tag', '--smoke']);
+const flowFilterFlags = new Set(['--domain', '--id', '--tag', '--grep', '--smoke']);
 
 function hasFlowFilter(args: string[]): boolean {
   return args.some((arg) => {
@@ -114,6 +116,9 @@ function browserShardPlaywrightArgs(shard: string | undefined, target: ShardTarg
 }
 
 export function buildLocalTestPlan(args: string[]): LocalTestPlan {
+  // `--id=` or `--domain` with no value used to run every flow. A filter is
+  // exact or the run does not start (src/core/selection.ts).
+  assertFlowFilterArgs(args);
   const full = args.includes('--full');
   const flowsOnly = args.includes('--flows-only') || (!args.includes('--agentic-only') && hasFlowFilter(args));
   const sdkOnly = args.includes('--sdk-only');
@@ -632,7 +637,13 @@ export function refusesSuiteRun(plan: LocalTestPlan, platform: string, env: Reco
 }
 
 export async function runLocalTests(root: string, args: string[]): Promise<number> {
-  const plan = buildLocalTestPlan(args);
+  let plan: LocalTestPlan;
+  try {
+    plan = buildLocalTestPlan(args);
+  } catch (error) {
+    console.error(`[test] USAGE: ${error instanceof Error ? error.message : String(error)}`);
+    return 2;
+  }
   if (refusesSuiteRun(plan, process.platform, process.env)) {
     console.error(
       [

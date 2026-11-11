@@ -84,6 +84,8 @@ interface CatalogAction {
 export interface CatalogAccount {
   connection_id: string;
   label: string;
+  /** What the account is for, written for agents; null when nobody wrote one. */
+  description?: string | null;
   owner_type: string;
   is_default: boolean;
 }

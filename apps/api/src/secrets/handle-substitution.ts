@@ -116,3 +116,18 @@ export function summarizeHandleRefusals(
   for (const refusal of refusals) summary[refusal.reason] += 1;
   return summary;
 }
+
+/**
+ * The `x-kortix-refused` reason for a request carrying refused handles, or
+ * null when there are none. A forged tag or a handle minted for another session
+ * is `credential_forged`; this session's own handle on a host its frozen policy
+ * does not admit is `credential_host`. Forged wins: it is the alert.
+ */
+export function presentedHandleRefusalReason(
+  refusals: readonly PresentedHandleRefusal[],
+): 'credential_forged' | 'credential_host' | null {
+  if (refusals.length === 0) return null;
+  return refusals.some((refusal) => refusal.reason !== 'host_denied')
+    ? 'credential_forged'
+    : 'credential_host';
+}

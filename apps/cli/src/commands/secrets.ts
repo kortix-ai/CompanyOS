@@ -35,15 +35,19 @@ second credential profile under the same key.
 
 Each secret has one EXPOSURE — can agent code read the value?
 
-  environment  The default for \`set\`. The real value loads into the sandbox env. Required
+  environment  The default for \`set\`, except a NEW secret whose name belongs
+               to one known API (ANTHROPIC_API_KEY, OPENAI_API_KEY, …): that
+               one is created enforced on its API host while \`secrets_egress\`
+               is on, and \`set\` prints the host. The real value loads into
+               the sandbox env. Required
                for a credential the code must COMPUTE with (AWS SigV4, HMAC
                webhook signing, JWT assertions, SSH/PEM keys) and for anything
                that is not HTTPS.
   enforced     EXPERIMENTAL — requires the workspace's \`secrets_egress\` feature
                flag (Settings → Feature flags), on by default. The env var
                holds a HANDLE, not the value. Kortix substitutes the real value
-               outside the sandbox, only on the approved hosts, and rewrites any
-               echo of it to [REDACTED].
+               outside the sandbox, only on the approved hosts, and turns any
+               echo of it back into the handle.
   none         No sandbox presence. A Kortix service spends the value (LLM
                gateway, connector, Git), or the secret is stored and disabled.
 
@@ -123,7 +127,7 @@ Subcommands:
                                     that validates the credential's format.
   call IDENTIFIER URL               Send one policy-bound HTTPS request through
                                     Kortix — same hosts, same policy, same
-                                    [REDACTED] on an echoed value. The explicit
+                                    handle back for an echoed value. The explicit
                                     fallback for a request the sandbox cannot
                                     intercept, not a second way to configure a
                                     secret. Applies to enforced exposure, which
@@ -292,7 +296,7 @@ async function secretsSet(args: string[], opts: CtxOpts): Promise<number> {
         ? `${C.bold}${shownId}${C.reset} ${C.dim}→ ${p.key}${C.reset}`
         : `${C.bold}${p.key}${C.reset}`;
     try {
-      await ctx.client.post<ProjectSecret>(`/workspaces/${ctx.projectId}/secrets`, {
+      const written = await ctx.client.post<ProjectSecret & { delivery_choice?: SecretDeliveryChoice }>(`/workspaces/${ctx.projectId}/secrets`, {
         name: p.key,
         ...(identifier !== undefined ? { identifier } : {}),
         // Same two scopes as `secrets request`: connector keeps the value
@@ -303,6 +307,8 @@ async function secretsSet(args: string[], opts: CtxOpts): Promise<number> {
       });
       okCount += 1;
       process.stdout.write(`${status.ok(label)}\n`);
+      const deliveryLine = describeDeliveryChoice(written?.delivery_choice, shownId);
+      if (deliveryLine) process.stdout.write(`  ${C.dim}└─ ${deliveryLine}${C.reset}\n`);
     } catch (err) {
       surfaceApiError(err);
       process.stderr.write(`  ${C.dim}└─ for ${shownId}${C.reset}\n`);
@@ -310,6 +316,30 @@ async function secretsSet(args: string[], opts: CtxOpts): Promise<number> {
   }
   process.stdout.write(`\n  ${C.dim}${okCount}/${pairs.length} set${C.reset}\n\n`);
   return okCount === pairs.length ? 0 : 1;
+}
+
+/** What `POST /workspaces/:id/secrets` reports about the delivery a write got. */
+export interface SecretDeliveryChoice {
+  strategy: 'runtime' | 'egress' | 'broker' | 'denied';
+  reason: 'requested' | 'existing' | 'known_api_host' | 'default';
+  hosts?: string[];
+}
+
+/**
+ * One line naming where the value went, or null when there is nothing to say
+ * (an older API sends no `delivery_choice`; a requested or kept delivery is
+ * what the caller already knows).
+ */
+export function describeDeliveryChoice(
+  choice: SecretDeliveryChoice | undefined,
+  identifier: string,
+): string | null {
+  if (!choice || choice.reason !== 'known_api_host') return null;
+  const hosts = (choice.hosts ?? []).join(', ');
+  return (
+    `network-delivered: the sandbox holds a handle, Kortix substitutes the value on ${hosts} only. ` +
+    `To load the plain value into the sandbox instead: kortix secrets delivery ${identifier} environment`
+  );
 }
 
 async function secretsUnset(names: string[], opts: CtxOpts): Promise<number> {

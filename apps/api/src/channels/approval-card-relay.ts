@@ -241,6 +241,8 @@ export async function markApprovalCardRan(projectId: string, executionId: string
       resolvedAt: connectorCalls.resolvedAt,
       resultSummary: connectorCalls.resultSummary,
       expiresAt: connectorCalls.expiresAt,
+      credentialId: connectorCalls.credentialId,
+      approvalDelivery: connectorCalls.approvalDelivery,
     })
     .from(connectorCalls)
     .where(eq(connectorCalls.executionId, executionId))

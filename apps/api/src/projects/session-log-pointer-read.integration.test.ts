@@ -48,9 +48,8 @@ function pageOf(page: Awaited<ReturnType<typeof readSessionLogPage>>) {
 }
 
 /** A synthetic message record whose stored jsonb is roughly `kilobytes` big (high-entropy text: the TOAST compression must not shrink the fixture). */
-const recordOf = (kilobytes: number, seq: number) => ({
+const recordOf = (kilobytes: number) => ({
   id: `msg-${Math.random().toString(36).slice(2)}`,
-  seq,
   blocks: [
     { type: 'text', id: 'b1', text: 'pointer-read fixture' },
     {
@@ -87,7 +86,7 @@ async function seedMessage(sizeKilobytes: number): Promise<void> {
     generation: 0,
     rev: 1_791_681_474_000 + seq,
     contentHash: `h${seq}`,
-    record: recordOf(sizeKilobytes, seq),
+    record: recordOf(sizeKilobytes),
   });
 }
 
@@ -137,7 +136,7 @@ async function reseed(): Promise<void> {
     .values({ sessionId: SESSION_ID, threadId: 'root', v: 2, record: { id: 'root' } });
 }
 
-describeWithDb('GET …/log pointer read (limit 0) — real PostgreSQL', () => {
+describeWithDb('readSessionLogPage pointer read (limit 0) — real PostgreSQL', () => {
   beforeAll(async () => {
     await cleanup();
     await reseed();

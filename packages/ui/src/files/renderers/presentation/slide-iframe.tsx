@@ -3,7 +3,7 @@
 import { buildStaticFilePreviewUrl as constructHtmlPreviewUrl } from '@kortix/sdk';
 import { PresentationIcon as Presentation } from '@phosphor-icons/react';
 import { memo } from 'react';
-import { useTranslations } from '../../../i18n';
+import type { useTranslations } from '../../../i18n';
 import { framePolicy } from '../../viewer/preview-policy';
 import { useStageFitScale } from '../shared/use-stage-fit-scale';
 import type { SlideMetadata } from './use-presentation-metadata';

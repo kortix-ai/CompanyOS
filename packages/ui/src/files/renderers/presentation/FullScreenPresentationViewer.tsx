@@ -1,6 +1,5 @@
 import { Button } from '../../../primitives/button';
 import { KortixLoader } from '../../../primitives/kortix-loader';
-import { useSandboxProxy } from '../../../internal/hooks/use-sandbox-proxy';
 import { useTranslations } from '../../../i18n';
 import { cn } from '../../../lib/utils';
 import {

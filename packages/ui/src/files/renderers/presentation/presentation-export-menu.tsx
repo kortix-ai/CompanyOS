@@ -5,7 +5,7 @@ import {
   PresentationIcon as Presentation,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { useTranslations } from '../../../i18n';
+import type { useTranslations } from '../../../i18n';
 import { Download } from '../../../internal/icons/download';
 import { useDownloadRestriction } from '../../../internal/billing/use-download-restriction';
 import { Button } from '../../../primitives/button';

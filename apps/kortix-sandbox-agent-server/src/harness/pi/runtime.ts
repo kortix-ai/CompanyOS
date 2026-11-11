@@ -45,15 +45,16 @@ import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetc
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
 import { cloudChildReport, cloudChildToolDetails, cloudSpawnSession, cloudStopChild, cloudSubagentApiFrom, routeSubagent, subagentContextFrom, type CloudSubagentApi, type SubagentContext } from './cloud-subagent'
-import type { ControlPlane } from './extensions/control-plane'
+import { callApi, sessionPath, type ControlPlane } from './extensions/control-plane'
 import { messaging, MESSAGING_TOOLS } from './extensions/messaging'
 import { TEAM_TASK_TOOLS, teamTasks } from './extensions/team-tasks'
 import { VOICE_CALL_FLAG, voice } from './extensions/voice'
+import { LOOPS_FLAG, followThrough } from './extensions/follow-through'
 import { BUNDLED_WORKFLOWS } from './extensions/bundled-workflows'
 import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnswer } from './extensions/workflow'
 import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
-import { promptOrigin, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
@@ -879,7 +880,7 @@ export class PiRuntime {
         prebuilt: project.prebuilt,
         baseTools: this.baseTools,
         // The nested-call gate is first: pi runs `tool_call` handlers in load order and stops at the first block.
-        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
+        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
         systemPrompt: () => this.systemPrompt(),
         skillAllowed: (name) => skillGranted(this.policy, name),
         // Every provider a turn may switch to: the gateway, and Claude subscription models.
@@ -1933,6 +1934,35 @@ export class PiRuntime {
     const session = this.controlPlane()?.sessionId
     if (!session || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(VOICE_CALL_FLAG)) return []
     return [voice(session, this.agentName)]
+  }
+
+  /**
+   * Follow-through (`extensions/follow-through.ts`): a top-level session with
+   * Loops on never ends a turn with a wait it set no wake-up for. Not for a
+   * peer message or a trigger-started session: nobody waits on those turns.
+   */
+  private followThroughExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    if (!plane || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(LOOPS_FLAG)) return []
+    return [
+      followThrough({
+        applies: () => {
+          const text = this.active?.input.text ?? ''
+          return promptOrigin(text) !== 'peer' && !text.includes(TRIGGER_EVENT_TAG)
+        },
+        hasWakeUp: async () => {
+          try {
+            const answer = await callApi(plane, 'GET', sessionPath(plane.projectId, plane.sessionId, '/reminders'))
+            const rows = (answer.body as { reminders?: { state?: string }[] } | null)?.reminders
+            // An unreadable list counts as a wake-up: the guard never nudges on a guess.
+            return answer.status !== 200 || !Array.isArray(rows) || rows.some((row) => row.state === 'active')
+          } catch {
+            return true
+          }
+        },
+        onNudge: (wait) => logger.info('[pi] follow-through nudge', { rootId: this.rootId, kind: wait.kind, actions: wait.kind === 'acted' ? wait.actions : undefined }),
+      }),
+    ]
   }
 
   /** The lead whose task list this session uses: itself at depth 0, its lead as a teammate; null without agent teams. */

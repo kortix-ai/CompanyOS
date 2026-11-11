@@ -88,6 +88,13 @@ describe('My Kortix agent', () => {
     );
   });
 
+  // A closing offer to check later is how My Kortix used to drop a wait: the voice rule must not ask for it.
+  test('the prompt owns the outcome and never ends with an offer to check later', () => {
+    expect(MY_KORTIX_PROMPT.indexOf('## You own the outcome')).toBeLessThan(MY_KORTIX_PROMPT.indexOf('## Your voice'));
+    expect(MY_KORTIX_PROMPT).toContain('End with what happens next, never with a question about it.');
+    expect(MY_KORTIX_PROMPT).not.toContain('phrased as an offer');
+  });
+
   // The follow-through rule names the kortixd `kortix_schedules` actions: a renamed action
   // there leaves My Kortix calling one that does not exist.
   test('the prompt sets a check-in after every wait, with the kortix_schedules actions', () => {

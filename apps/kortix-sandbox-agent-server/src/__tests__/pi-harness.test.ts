@@ -1867,6 +1867,45 @@ export default function (pi) {
     expect(JSON.stringify(conversation[0]!.content)).toContain('two')
   })
 
+  // extensions/follow-through.ts in the real runtime: an offer to check later sends the run back to the model once.
+  test('follow-through: a reply that offers a later check goes back to the model once, with the hidden note', async () => {
+    const reads: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        const path = new URL(req.url).pathname
+        reads.push(path)
+        return path === '/v1/workspaces/proj-pi-test/sessions/sess-pi-test/reminders' ? Response.json({ reminders: [] }) : new Response('not found', { status: 404 })
+      },
+    })
+    try {
+      const offer = 'Sent. Want me to check the thread for her answer in a couple of hours?'
+      const run = async (flags: string) => {
+        const r = await boot({
+          script: [{ text: offer }, { text: "⏳ I'll check the thread at 15:00." }],
+          env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`, KORTIX_FEATURE_FLAGS: flags },
+        })
+        const before = gateway.sent.length
+        await promptAndSettle(r, 'pay this and confirm via email')
+        return gateway.sent.slice(before)
+      }
+      const nudged = await run('reminders')
+      expect(nudged).toHaveLength(2)
+      expect(JSON.stringify(nudged[1])).toContain('[follow-through] Your reply offers a later check instead of setting it')
+      // The person's transcript has their prompt and both replies, never the note.
+      const { log } = piSessionLog(rigs.at(-1)!.service.runtime()!.sessionLogSnapshot()!)
+      expect(() => upcastSessionLog(log)).not.toThrow()
+      const wire = JSON.stringify(log.threads[0]!.messages.filter((m) => m.kind !== 'context'))
+      expect(wire).toContain('pay this and confirm via email')
+      expect(wire).toContain("I'll check the thread at 15:00.")
+      expect(wire).not.toContain('[follow-through]')
+      // Loops off: kortix_schedules cannot set a wake-up, so the guard is not loaded.
+      expect(await run('')).toHaveLength(1)
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('the provider hooks route through the current runner, and pass through without one', async () => {
     const ref: { current?: any } = {}
     const hooks = extensionAgentHooks(ref)

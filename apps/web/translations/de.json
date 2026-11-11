@@ -21307,7 +21307,12 @@
       "text4b892277843c": "Workspace erstellen",
       "text41018e566b60": "neuer workspace erstellen hinzufügen team",
       "texta99ac8f9050b": "Workspace · Zugriff",
-      "textfd8b8dae4421": "Gefahrenzone"
+      "textfd8b8dae4421": "Gefahrenzone",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM-Reservierungserstattung",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Speicher",
+      "textab3aff8f7642": "Aufladebonus"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",

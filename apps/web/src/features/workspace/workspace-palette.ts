@@ -1,6 +1,7 @@
 import type { KortixAccount, KortixProject } from '@kortix/sdk';
 
 import { buildWorkspaceRows } from '@kortix/ui/workspace/project-selector/project-selector-model';
+import { matchesAllWords, paletteWords } from './palette-match';
 
 /**
  * ============================================================================
@@ -98,12 +99,9 @@ export function filterWorkspacePaletteRows(
   rows: WorkspacePaletteRow[],
   query: string,
 ): WorkspacePaletteRow[] {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const words = paletteWords(query);
   if (words.length === 0) return rows;
-  return rows.filter((row) => {
-    const haystack = workspacePaletteSearchText(row).toLowerCase();
-    return words.every((word) => haystack.includes(word));
-  });
+  return rows.filter((row) => matchesAllWords(workspacePaletteSearchText(row), words));
 }
 
 /**

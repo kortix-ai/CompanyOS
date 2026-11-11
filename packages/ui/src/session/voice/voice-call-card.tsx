@@ -10,7 +10,7 @@ import {
   ScreencastIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { AgentMark, agentDisplayName } from '../../internal/components/agent-mark';
@@ -22,6 +22,7 @@ import { SessionDotMatrix } from '../../primitives/dot-matrix/session-dot-matrix
 import Hint from '../../primitives/hint';
 import { useUiRouter } from '../../providers/ui-provider';
 import { callTime, ringback } from './call-ring';
+import { useCallCardPosition } from './use-call-card-position';
 import { useVoiceCall } from './use-voice-call';
 import { INITIAL_CALL, type CallEnd, type CallLine, type CallState } from './voice-call-state';
 import { useVoiceCallStore, type ActiveCall } from './voice-call-store';
@@ -123,6 +124,10 @@ function Card({
   const t = useTranslations('voiceCall');
   const router = useUiRouter();
   const end = useVoiceCallStore((s) => s.end);
+  // Draggable wherever it helps: the person drags the card off the composer it covers, the spot
+  // sticks. The controls are no drag handles; the card around them is.
+  const cardRef = useRef<HTMLElement | null>(null);
+  const { spot, dragging, dragHandlers } = useCallCardPosition(cardRef);
   const hangUp = () => end(call.sessionId);
   const openChat = () => router.push(uiRoutes().session(call.projectId, call.sessionId));
   const name = agentDisplayName(call.agent);
@@ -137,8 +142,15 @@ function Card({
   const line: CallLine | null | undefined = state?.line;
   return (
     <section
+      ref={cardRef}
+      {...dragHandlers}
+      onDragStart={(event) => event.preventDefault()}
       aria-label={t('title')}
-      className="kx-fade-up bg-background border-border fixed right-4 bottom-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-xl border p-3 shadow-lg"
+      style={spot ? { left: spot.left, top: spot.top, right: 'auto', bottom: 'auto' } : undefined}
+      className={cn(
+        'kx-fade-up bg-background border-border fixed right-4 bottom-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-xl border p-3 shadow-lg select-none touch-none',
+        dragging ? 'cursor-grabbing' : 'cursor-grab',
+      )}
     >
       <div className="flex items-center gap-3">
         {/* The agent leans in while it speaks: a small lift, no motion for those who ask for none. */}
@@ -147,7 +159,7 @@ function Card({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-foreground truncate text-sm font-medium">{name}</p>
-          <p role="status" className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
+          <div role="status" className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
             {ended ? (
               <>
                 {ended.dot && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', ended.dot)} />}
@@ -167,7 +179,7 @@ function Card({
                 {t(status)}
               </>
             )}
-          </p>
+          </div>
         </div>
       </div>
       {!ended && (state?.micBlocked || line) ? (
@@ -187,7 +199,7 @@ function Card({
         {ended ? (
           <>
             {state?.end !== 'unavailable' && controls && (
-              <Button variant="secondary" size="sm" onClick={controls.callAgain}>
+              <Button variant="secondary" size="sm" onClick={controls.callAgain} className="cursor-default">
                 <PhoneIcon weight="fill" className="size-3.5" />
                 {t('callAgain')}
               </Button>
@@ -220,7 +232,7 @@ function Card({
             </CardButton>
             <span className="flex-1" />
             <Hint side="top" sideOffset={4} delayDuration={300} label={t('end')}>
-              <Button size="icon" aria-label={t('end')} onClick={hangUp} className="bg-kortix-red hover:bg-kortix-red/90 rounded-full text-white">
+              <Button size="icon" aria-label={t('end')} onClick={hangUp} className="bg-kortix-red hover:bg-kortix-red/90 rounded-full text-white cursor-default">
                 <PhoneDisconnectIcon weight="fill" className="size-4" />
               </Button>
             </Hint>
@@ -241,7 +253,8 @@ function CardButton({ label, pressed, disabled, onClick, children }: { label: st
         aria-pressed={pressed}
         disabled={disabled}
         onClick={onClick}
-        className="text-muted-foreground hover:text-foreground aria-pressed:bg-foreground/10 aria-pressed:text-foreground transition-colors active:scale-[0.96]"
+        // The card around the controls drags (its cursor says so); a control keeps the plain one.
+        className="text-muted-foreground hover:text-foreground aria-pressed:bg-foreground/10 aria-pressed:text-foreground transition-colors active:scale-[0.96] cursor-default"
       >
         {children}
       </Button>

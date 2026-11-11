@@ -21520,6 +21520,10 @@
       "denied": "Zugriff abgelehnt",
       "deniedDescription": "My Kortix erhält deine Antwort.",
       "failed": "Deine Entscheidung konnte nicht gesendet werden. Versuch es erneut."
+    },
+    "reviewPane": {
+      "emptyTitle": "Wähle einen Eintrag",
+      "emptyDescription": "Die Details öffnen sich hier. Mit J und K bewegst du dich durch die Liste."
     }
   },
   "commandPalette": {

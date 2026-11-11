@@ -21565,6 +21565,10 @@
       "denied": "Access denied",
       "deniedDescription": "My Kortix gets your answer.",
       "failed": "Could not send your decision. Try again."
+    },
+    "reviewPane": {
+      "emptyTitle": "Select an item",
+      "emptyDescription": "Its details open here. Press J and K to move through the list."
     }
   },
   "commandPalette": {

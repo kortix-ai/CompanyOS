@@ -21520,6 +21520,10 @@
       "denied": "Приступ одбијен",
       "deniedDescription": "My Kortix добија ваш одговор.",
       "failed": "Ваша одлука није послата. Покушајте поново."
+    },
+    "reviewPane": {
+      "emptyTitle": "Izaberi stavku",
+      "emptyDescription": "Detalji se otvaraju ovde. Pritisni J i K da se krećeš kroz listu."
     }
   },
   "commandPalette": {

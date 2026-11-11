@@ -21520,6 +21520,10 @@
       "denied": "已拒绝访问",
       "deniedDescription": "My Kortix 会收到你的答复。",
       "failed": "无法发送你的决定。请重试。"
+    },
+    "reviewPane": {
+      "emptyTitle": "选择一个项目",
+      "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
     }
   },
   "commandPalette": {

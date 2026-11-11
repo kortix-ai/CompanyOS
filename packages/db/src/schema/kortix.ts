@@ -6819,6 +6819,9 @@ export const accessRequests = kortixSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
+  // One waitlist row per address: the request-access endpoint replays must be
+  // idempotent (KRTX-4699). Constraint, not a performance index.
+  (table) => [uniqueIndex('idx_access_requests_email').on(table.email)],
 );
 
 // ─── Change Requests ────────────────────────────────────────────────────────

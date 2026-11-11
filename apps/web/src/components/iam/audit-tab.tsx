@@ -141,11 +141,13 @@ const QUICK_FILTERS: Array<{
   { id: 'failures', label: 'Failures', outcome: 'failure' },
 ];
 
-const RESOURCE_TYPES = [
+// Each value is a `resource_type` an audit trigger writes. The connector call
+// trigger (`audit_connector_call`) writes `connector_call`.
+export const RESOURCE_TYPES = [
   { label: 'Any resource', value: '' },
   { label: 'Workspace', value: 'project' },
   { label: 'Session', value: 'project_session' },
-  { label: 'Connector action', value: 'connector_action' },
+  { label: 'Connector action', value: 'connector_call' },
   { label: 'Connector approval', value: 'connector_approval' },
   { label: 'Computer connection', value: 'computer_tunnel' },
   { label: 'Secret', value: 'project_secret' },

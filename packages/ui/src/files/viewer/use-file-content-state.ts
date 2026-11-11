@@ -98,9 +98,10 @@ export function useFileContentState({
     dataUpdatedAt,
   } = useFileContent(isHeicImage || isZipArchive || sharedImagePath ? null : filePath);
 
-  // The agent's turn end refetches this file. The xlsx and sqlite renderers
-  // read their own bytes, so they remount only when the content really
-  // changed (structural sharing keeps the reference otherwise). The HTML frame
+  // The agent's turn end refetches this file. The sqlite renderer still
+  // reads its own bytes, and the xlsx renderer re-parses the blob its parent
+  // passes, so both remount only when the content really changed
+  // (structural sharing keeps the reference otherwise). The HTML frame
   // reloads on every refetch: its stylesheets can change while its markup
   // does not. Neither moves on the first load.
   const contentRevision = useContentRevision(fileContent);

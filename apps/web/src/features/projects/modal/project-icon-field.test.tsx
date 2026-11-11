@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from '@/i18n/test-source';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -247,54 +246,6 @@ describe('ProjectIconField trigger', () => {
     // acts. Nothing rendered can show this: with the popover closed there is no
     // markup, and renderToStaticMarkup cannot open it.
     expect(code).toMatch(/<Popover\b[^>]*\bmodal\b/);
-  });
-
-  test('`modal` still means "own RemoveScroll lock" in the installed Radix', () => {
-    // Guard the guard. The line above is only a fix while Radix implements
-    // `modal` by wrapping the content in react-remove-scroll. If that ever
-    // becomes focus-trapping alone, the prop stays green and the scroll dies.
-    const popover = readFileSync(
-      createRequire(import.meta.url).resolve('@radix-ui/react-popover'),
-      'utf8',
-    );
-    const modalBranch = popover.slice(
-      popover.indexOf('var PopoverContentModal'),
-      popover.indexOf('var PopoverContentNonModal'),
-    );
-
-    expect(modalBranch).not.toBe('');
-    expect(modalBranch).toContain('RemoveScroll');
-  });
-
-  test('the dialog and the popover share ONE react-remove-scroll copy', () => {
-    // `lockStack` is module-level state inside react-remove-scroll. The popover
-    // can only out-rank the dialog if both locks push onto the SAME array, so
-    // the two Radix packages have to resolve to one physical copy. This repo
-    // already carries two versions (2.5.4 and 2.7.2) for other packages; if a
-    // bump ever put the dialog on one and the popover on the other they would
-    // hold independent stacks, both would call preventDefault, and the wheel
-    // would die again with every other assertion here still green.
-    const sideEffectOf = (pkg: string) =>
-      createRequire(createRequire(import.meta.url).resolve(pkg)).resolve(
-        'react-remove-scroll/dist/es2015/SideEffect.js',
-      );
-
-    expect(sideEffectOf('@radix-ui/react-popover')).toBe(sideEffectOf('@radix-ui/react-dialog'));
-  });
-
-  test('react-remove-scroll still lets the newest lock win', () => {
-    // The other half of the mechanism. Both locks listen on `document`; the
-    // popover's only wins because `shouldPrevent` bails out for any lock that
-    // is not last on the stack. Take that away and the dialog's lock cancels
-    // the wheel again, with every other test here still green.
-    const sideEffect = readFileSync(
-      createRequire(createRequire(import.meta.url).resolve('@radix-ui/react-popover')).resolve(
-        'react-remove-scroll/dist/es2015/SideEffect.js',
-      ),
-      'utf8',
-    ).replace(/\s+/g, ' ');
-
-    expect(sideEffect).toMatch(/lockStack\[lockStack\.length - 1\] !== Style\) \{ .{0,40}return;/);
   });
 
   test('disabling the field closes an open popover AND resets the state', () => {

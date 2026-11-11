@@ -37,7 +37,7 @@ for (const name of NAMES) {
   Object.defineProperty(globalThis, name, {
     configurable: true,
     get() {
-      const win = (globalThis as { window?: Record<string, unknown> }).window;
+      const win = (globalThis as unknown as { window?: Record<string, unknown> }).window;
       const value = win?.[name];
       if (win && value === undefined && CLASSES.has(name)) return placeholder(name);
       return typeof value === 'function' && name.endsWith('AnimationFrame')

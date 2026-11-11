@@ -21307,7 +21307,12 @@
       "text4b892277843c": "Créer un espace de travail",
       "text41018e566b60": "nouvel espace de travail créer ajouter équipe",
       "texta99ac8f9050b": "Espace de travail · Accès",
-      "textfd8b8dae4421": "Zone de danger"
+      "textfd8b8dae4421": "Zone de danger",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Remboursement de réserve LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Stockage",
+      "textab3aff8f7642": "Bonus de recharge"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",

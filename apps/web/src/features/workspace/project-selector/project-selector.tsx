@@ -73,8 +73,6 @@ export interface ProjectSelectorViewProps {
   name?: string | null;
   loading: boolean;
   loadFailed: boolean;
-  /** Some account's project list failed: the list may be missing rows. */
-  partialFailure?: boolean;
   workspaces: WorkspaceRow[];
   invites: MyAccountInvite[];
   /** `/workspaces/new`, or null when this caller may not create a workspace. */
@@ -225,15 +223,6 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
                     </ul>
                   )}
                 </section>
-              ) : null}
-
-              {props.partialFailure ? (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-dashed px-4 py-3">
-                  <p className="text-muted-foreground text-xs">{t('partialError')}</p>
-                  <Button size="sm" variant="outline" onClick={props.onRetryAll}>
-                    {t('retry')}
-                  </Button>
-                </div>
               ) : null}
 
               {createHref && inlineCreate ? (
@@ -542,7 +531,6 @@ export function ProjectSelector({ connectComputer }: { connectComputer?: boolean
       name={user?.user_metadata?.name}
       loading={data.listsLoading || data.invitesQuery.isLoading}
       loadFailed={data.accountsQuery.isError || data.allListsFailed}
-      partialFailure={data.failedAccountIds.length > 0}
       workspaces={data.workspaces}
       invites={data.invites}
       createHref={createHref}

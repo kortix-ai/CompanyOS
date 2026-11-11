@@ -21307,7 +21307,12 @@
       "text4b892277843c": "创建工作区",
       "text41018e566b60": "新建 工作区 创建 添加 团队",
       "texta99ac8f9050b": "工作区 · 访问权限",
-      "textfd8b8dae4421": "危险区域"
+      "textfd8b8dae4421": "危险区域",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM 预留退款",
+      "texta68ee4167406": "代理",
+      "texta69c4dece144": "存储",
+      "textab3aff8f7642": "充值奖励"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",

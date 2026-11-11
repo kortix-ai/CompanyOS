@@ -2,6 +2,7 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
+import { AudienceGate, AudienceSwitch } from './audience-gate';
 import { setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
@@ -84,11 +85,15 @@ function PromptBox({ className }: { className?: string }) {
 export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: string[] }) {
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
+      <AudienceGate />
       <div className={cn(COLUMN, 'border-border relative border-x')}>
         <header className="border-border bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-8 backdrop-blur md:px-10">
-          <Link href="/" aria-label="Kortix" className="text-foreground">
-            <KortixLogo size={16} variant="logomark" />
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" aria-label="Kortix" className="text-foreground">
+              <KortixLogo size={16} variant="logomark" />
+            </Link>
+            <AudienceSwitch />
+          </div>
           <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
             <Link href="#factories" className="hover:text-foreground">Factories</Link>
             <Link href="#how" className="hover:text-foreground">How it works</Link>

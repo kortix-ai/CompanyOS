@@ -160,6 +160,7 @@ import {
   secretDeliveryBlockedReason,
   secretDeliveryLegend,
   secretDeliveryPresentation,
+  secretDeliveryChoiceNotice,
   secretDeliverySyncWarning,
   secretDeliveryTarget,
   secretExposure,
@@ -237,6 +238,9 @@ type SecretSavePlan = {
   hasValueChange: boolean;
   shouldSetStrategy: boolean;
   egressPolicy: SecretEgressPolicy | undefined;
+  /** False for a NEW secret whose delivery the user never touched: the write
+   *  names no delivery and the API picks it (`delivery_choice`). */
+  deliveryChosen: boolean;
   bindingChanges: { bind: string[]; unbind: string[] };
   /** The new audience; absent when Save leaves it unchanged. */
   sharedWith?: SecretSharePrincipal[];
@@ -1131,7 +1135,10 @@ function SecretDialog({
    * pastes an `AKIA…` value has to see the environment default and the signing
    * sentence at the moment they paste it, not after they leave the field.
    */
-  const classification = useMemo(() => classifyNewSecret({ key, value }), [key, value]);
+  const classification = useMemo(
+    () => classifyNewSecret({ key, value, egressDefault: egressEnabled && !isEdit }),
+    [key, value, egressEnabled, isEdit],
+  );
   /**
    * ONE control, one piece of state: "can your code read this value?".
    *
@@ -1231,6 +1238,10 @@ function SecretDialog({
         : undefined;
 
     const hasValueChange = Boolean(value.trim()) || !row?.configured;
+    // A new secret whose Access and hosts the user left alone: the dialog only
+    // previewed the delivery, so the write names none and the API decides. Any
+    // explicit pick, Environment variable included, is sent as chosen.
+    const deliveryChosen = isEdit || pickedExposure !== null || editedHosts !== null;
     const egressPolicy = needsHosts ? (enforcedPolicy ?? undefined) : undefined;
     const shouldSetStrategy =
       strategy !== (row?.strategy ?? 'runtime') ||
@@ -1246,6 +1257,7 @@ function SecretDialog({
       hasValueChange,
       shouldSetStrategy,
       egressPolicy,
+      deliveryChosen,
       bindingChanges,
       sharedWith,
       optimistic: {
@@ -1272,6 +1284,7 @@ function SecretDialog({
         hasValueChange,
         shouldSetStrategy,
         egressPolicy,
+        deliveryChosen,
         bindingChanges,
         sharedWith,
       } = plan;
@@ -1296,9 +1309,13 @@ function SecretDialog({
           name: finalKey,
           identifier: finalIdentifier,
           ...(nextValue ? { value: nextValue } : {}),
-          strategy,
-          consumer: nextConsumer,
-          ...(egressPolicy ? { egress_policy: egressPolicy } : {}),
+          ...(deliveryChosen
+            ? {
+                strategy,
+                consumer: nextConsumer,
+                ...(egressPolicy ? { egress_policy: egressPolicy } : {}),
+              }
+            : {}),
           ...(sharedWith ? { shared_with: sharedWith } : {}),
         });
         if (strategy === 'broker' && nextConsumer === 'connector') {
@@ -1350,7 +1367,13 @@ function SecretDialog({
       if (syncWarning) {
         warningToast(syncWarning.message, { description: syncWarning.description });
       } else {
-        successToast(tI18nComplete('textaf6b8a4894f0', { value0: plan.finalIdentifier }));
+        // The API decided the delivery of a secret the user did not choose
+        // for: say what it got and why, before anyone has to open the row.
+        const choice = secretDeliveryChoiceNotice(result, tI18nComplete);
+        successToast(
+          tI18nComplete('textaf6b8a4894f0', { value0: plan.finalIdentifier }),
+          choice ? { description: choice } : undefined,
+        );
       }
       resetForm();
       onOpenChange(false);

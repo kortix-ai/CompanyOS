@@ -156,7 +156,7 @@ export const pillars = {
      pending_approval, 403 denied); developers.mdx rule order.
    secrets: projects/secrets/envelope.ts (AES-256-GCM, HKDF per project);
      guide.mdx "Security" (audience, delivery); feature-flags/registry.ts
-     (secrets_egress experimental); secrets/http-broker.test.ts ([REDACTED]).
+     (secrets_egress experimental); secrets/placements-and-refusals.test.ts (an echo comes back as its handle).
    models: guide.mdx "Models".
    changes: developers.mdx "Git" (own branch; project.gitops.merge;
      CR_SELF_MERGE_REFUSED); guide.mdx "Agents" warning callout. */
@@ -361,7 +361,7 @@ export const faqItems = [
     id: 'faq-secret-read',
     question: 'Can code in a session read a secret?',
     answer:
-      'A secret delivered as an environment variable is a real value, so code in the session can read it. Mark a web API key Enforced and the computer gets a stand-in instead. Kortix swaps in the real value outside the computer, only on requests to the hosts you list, and an echoed value comes back as [REDACTED].',
+      'A secret delivered as an environment variable is a real value, so code in the session can read it. Mark a web API key Enforced and the computer gets a stand-in instead. Kortix swaps in the real value outside the computer, only on requests to the hosts you list, and an echoed secret comes back as its handle.',
   },
   {
     id: 'faq-egress',

@@ -436,6 +436,8 @@ flow(
       'PATCH /v1/projects/:workspaceId',
       'PATCH /v1/workspaces/:workspaceId/iam/session-policy',
       'GET /v1/workspaces/:workspaceId',
+      'POST /v1/projects/:workspaceId/secrets',
+      'DELETE /v1/projects/:workspaceId/secrets/:name',
     ],
   },
   async (ctx) => {
@@ -469,6 +471,19 @@ flow(
       r.status(200).body().has('$.name', name).has('$.secret_default_strategy', 'broker').has('$.role', 'owner').exists('$.workspace');
       (await owner.patch(`/v1/workspaces/${p.id}`, { secret_default_strategy: 'nope' })).status(400);
       (await owner.patch(`/v1/projects/${p.id}`, { mfa_required: true })).status(200);
+      (await owner.patch(`/v1/workspaces/${p.id}`, { secret_default_strategy: 'runtime' })).status(200);
+    });
+
+    await ctx.step('a default of egress or broker that would withhold a plain secret → 409 secret_floor_withholds naming it; the default stays runtime', async () => {
+      (await owner.post(`/v1/projects/${p.id}/secrets`, { name: 'FLOOR_PLAIN_TOKEN', value: 'synthetic-value', strategy: 'runtime' })).status(200);
+      for (const floor of ['egress', 'broker']) {
+        const r = await owner.patch(`/v1/workspaces/${p.id}`, { secret_default_strategy: floor });
+        r.status(409).body().has('$.code', 'secret_floor_withholds').has('$.floor', floor).has('$.withheld[0]', 'FLOOR_PLAIN_TOKEN').exists('$.fix');
+      }
+      const ws = (await owner.get(`/v1/workspaces/${p.id}`)).status(200).json<any>();
+      if (ws.secret_default_strategy !== 'runtime') throw new Error(`a refused PATCH wrote ${ws.secret_default_strategy}`);
+      (await owner.del(`/v1/projects/${p.id}/secrets/FLOOR_PLAIN_TOKEN`)).status(200);
+      (await owner.patch(`/v1/workspaces/${p.id}`, { secret_default_strategy: 'egress' })).status(200).body().has('$.secret_default_strategy', 'egress');
       (await owner.patch(`/v1/workspaces/${p.id}`, { secret_default_strategy: 'runtime' })).status(200);
     });
   },

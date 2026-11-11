@@ -220,19 +220,22 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'secrets_egress',
     name: 'Network-Enforced Secrets',
     description:
-      'Let a secret be enforced at the network instead of loaded into the sandbox: the sandbox holds a handle and Kortix substitutes the real value only on requests to approved hosts. Off ⇒ every secret loads into the sandbox environment and the "Enforce at the network" option is hidden.',
+      'Let a secret be enforced at the network instead of loaded into the sandbox: the sandbox holds a handle and Kortix substitutes the real value only on requests to approved hosts. On ⇒ a new secret whose name belongs to a known model API is enforced at the network unless you pick otherwise. Off ⇒ every new secret loads into the sandbox environment and the "Enforce at the network" option is hidden.',
     stability: 'experimental',
     available: () => true,
-    // On by default (Marko, 2026-09-03). The OPTION is available; a new secret
-    // still defaults to an environment variable — enforcing at the network is
-    // a per-secret choice. A project that turns the flag off hides the option
-    // and the write routes refuse to move a secret into egress delivery.
+    // On by default (Marko, 2026-09-03). The OPTION is available, and a NEW
+    // secret with no requested delivery whose name maps to one known API host
+    // (`knownSecretApiHosts`) is created network-delivered. Every other new
+    // secret defaults to an environment variable. Existing rows never change.
+    // A project that turns the flag off hides the option and the write routes
+    // refuse to move a secret into egress delivery.
     platformDefault: () => true,
     enforcement: 'behavioral',
     enforcementNote:
       'No dedicated routes. The secret write paths (POST /secrets in ' +
       'projects/routes/secrets.ts, PUT /secrets/:id/strategy in ' +
-      'projects/routes/secret-delivery.ts) reject a request that ' +
+      'projects/routes/secret-delivery.ts) and the project floor PATCH ' +
+      '(secret_default_strategy in projects/routes/project-detail.ts) reject a request that ' +
       'moves a secret INTO egress delivery when the flag is off. A secret that ' +
       'is already egress keeps serving and stays editable, so turning the flag ' +
       'off never strands an existing enforced secret.',
@@ -626,18 +629,6 @@ export function hiddenIamActions(projectMetadatas: readonly unknown[]): Set<stri
     for (const action of flag.iamActions) hidden.add(action);
   }
   return hidden;
-}
-
-/**
- * True only when the project itself switched the flag on — not when it merely
- * inherits a platform default of on. For behavior that CHANGES a default the
- * project never chose (see the secret create default in
- * projects/routes/secrets.ts), an inherited `true` is not consent.
- */
-export function featureFlagExplicitlyOn(metadata: unknown, key: FeatureFlagKey): boolean {
-  const def = FLAG_BY_KEY[key];
-  if (!def || !def.available()) return false;
-  return explicitOverride(metadata, key) === true;
 }
 
 /** Effective enablement for every flag, keyed by flag id. */

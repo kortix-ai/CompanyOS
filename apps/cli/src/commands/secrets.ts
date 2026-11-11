@@ -35,7 +35,11 @@ second credential profile under the same key.
 
 Each secret has one EXPOSURE — can agent code read the value?
 
-  environment  The default for \`set\`. The real value loads into the sandbox env. Required
+  environment  The default for \`set\`, except a NEW secret whose name belongs
+               to one known API (ANTHROPIC_API_KEY, OPENAI_API_KEY, …): that
+               one is created enforced on its API host while \`secrets_egress\`
+               is on, and \`set\` prints the host. The real value loads into
+               the sandbox env. Required
                for a credential the code must COMPUTE with (AWS SigV4, HMAC
                webhook signing, JWT assertions, SSH/PEM keys) and for anything
                that is not HTTPS.

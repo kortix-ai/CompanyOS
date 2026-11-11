@@ -21568,10 +21568,11 @@
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Add Kortix to your home screen for a full-screen, app-like experience.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "On iPhone and iPad: tap Share, then Add to Home Screen.",
     "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix was updated. Refresh to get the new version.",
-"reviewPane": {
+    "reviewPane": {
       "emptyTitle": "Select an item",
       "emptyDescription": "Its details open here. Press J and K to move through the list."
-    }  },
+    }
+  },
   "commandPalette": {
     "title": "Command Palette",
     "description": "Search for a command to run...",

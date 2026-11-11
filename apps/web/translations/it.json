@@ -21523,10 +21523,11 @@
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Aggiungi Kortix alla schermata Home per un'esperienza a schermo intero, come un'app.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Su iPhone e iPad: tocca Condividi, poi Aggiungi alla schermata Home.",
     "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix è stato aggiornato. Ricarica per ottenere la nuova versione.",
-"reviewPane": {
+    "reviewPane": {
       "emptyTitle": "Seleziona un elemento",
       "emptyDescription": "I dettagli si aprono qui. Premi J e K per scorrere l’elenco."
-    }  },
+    }
+  },
   "commandPalette": {
     "title": "Tavolozza dei comandi",
     "description": "Cerca un comando da eseguire...",

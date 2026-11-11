@@ -21523,10 +21523,11 @@
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Ajoutez Kortix à votre écran d'accueil pour une expérience plein écran, comme une app.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Sur iPhone et iPad : touchez Partager, puis Sur l'écran d'accueil.",
     "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix a été mis à jour. Actualisez pour obtenir la nouvelle version.",
-"reviewPane": {
+    "reviewPane": {
       "emptyTitle": "Sélectionnez un élément",
       "emptyDescription": "Ses détails s’ouvrent ici. Appuyez sur J et K pour parcourir la liste."
-    }  },
+    }
+  },
   "commandPalette": {
     "title": "Palette de commandes",
     "description": "Rechercher une commande à exécuter...",

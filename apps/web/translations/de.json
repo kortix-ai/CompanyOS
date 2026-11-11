@@ -21523,10 +21523,11 @@
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Füge Kortix zu deinem Home-Bildschirm hinzu – für ein Vollbild-App-Erlebnis.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Auf iPhone und iPad: auf „Teilen“ tippen, dann „Zum Home-Bildschirm“.",
     "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix wurde aktualisiert. Lade neu, um die neue Version zu erhalten.",
-"reviewPane": {
+    "reviewPane": {
       "emptyTitle": "Wähle einen Eintrag",
       "emptyDescription": "Die Details öffnen sich hier. Mit J und K bewegst du dich durch die Liste."
-    }  },
+    }
+  },
   "commandPalette": {
     "title": "Befehlspalette",
     "description": "Nach einem auszuführenden Befehl suchen...",

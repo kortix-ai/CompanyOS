@@ -21523,10 +21523,11 @@
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "将 Kortix 添加到主屏幕，获得全屏的应用体验。",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "在 iPhone 和 iPad 上：点按“共享”，然后选择“添加到主屏幕”。",
     "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix 已更新。刷新以获取新版本。",
-"reviewPane": {
+    "reviewPane": {
       "emptyTitle": "选择一个项目",
       "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
-    }  },
+    }
+  },
   "commandPalette": {
     "title": "命令面板",
     "description": "搜索要运行的命令...",

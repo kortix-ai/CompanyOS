@@ -2,7 +2,7 @@ import { Toggle as TogglePrimitive } from '@base-ui/react/toggle';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { asChildRender, nativeButtonFor, stateRender } from '../lib/base-ui-compat';
+import { asChildRender, composeRefs, stateRender, useNativeButton } from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
 
 const toggleVariants = cva(
@@ -40,13 +40,14 @@ type ToggleProps = Omit<React.ComponentPropsWithoutRef<'button'>, 'value'> &
 const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
   ({ className, variant, size, asChild, children, onPressedChange, ...props }, ref) => {
     const slot = asChildRender(asChild, children);
+    const native = useNativeButton(asChild, children);
     return (
       <TogglePrimitive
-        ref={ref}
+        ref={composeRefs(ref, native.ref)}
         className={cn(toggleVariants({ variant, size, className }))}
         {...props}
         onPressedChange={(pressed) => onPressedChange?.(pressed)}
-        nativeButton={nativeButtonFor(asChild, children)}
+        nativeButton={native.nativeButton}
         render={stateRender(
           'button',
           (s: { pressed: boolean }) => (s.pressed ? 'on' : 'off'),

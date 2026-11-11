@@ -91,7 +91,8 @@ export function mergeElementProps(own: AnyProps, slot: AnyProps): AnyProps {
     } else if (key === 'style' && a && b) {
       merged[key] = { ...(a as object), ...(b as object) };
     } else if (key === 'ref') {
-      merged[key] = b && a ? composeRefs(a as React.Ref<unknown>, b as React.Ref<unknown>) : (b ?? a);
+      merged[key] =
+        b && a ? composeRefs(a as React.Ref<unknown>, b as React.Ref<unknown>) : (b ?? a);
     } else if (key === 'children') {
       merged[key] = b ?? a;
     }
@@ -252,16 +253,55 @@ export function focusProps(
 }
 
 /**
- * Base UI `nativeButton` for a trigger: true when it renders a real `<button>`,
- * which is the default and an `asChild` child that is `<button>` or `Button`.
+ * Base UI `nativeButton` for a trigger: true when it renders a real `<button>`.
+ * That is the default, an `asChild` child that is `<button>`, and an `asChild`
+ * child component whose name ends in `Button` (`Button`, `SidebarMenuButton`,
+ * ...) and does not itself slot into another element.
  */
 export function nativeButtonFor(asChild: boolean | undefined, children: React.ReactNode): boolean {
   if (!asChild) return true;
   if (!React.isValidElement(children)) return false;
-  const type = children.type as string | { name?: string; displayName?: string };
-  if (typeof type === 'string') return type === 'button';
-  const name = type.displayName ?? type.name;
-  return name === 'Button' && !(children.props as { asChild?: boolean }).asChild;
+  if (typeof children.type === 'string') return children.type === 'button';
+  return (
+    /Button$/.test(componentName(children.type)) &&
+    !(children.props as { asChild?: boolean }).asChild
+  );
+}
+
+/**
+ * `nativeButton` for a trigger, checked against the DOM. `nativeButtonFor`
+ * guesses from the child's name, which a production build can minify away;
+ * after mount this reads the rendered element's tag and corrects the guess.
+ * Spread `ref` onto the Base UI part (compose it with the caller's ref).
+ */
+export function useNativeButton(asChild: boolean | undefined, children: React.ReactNode) {
+  const guess = nativeButtonFor(asChild, children);
+  const [actual, setActual] = React.useState<boolean | null>(null);
+  const ref = React.useCallback(
+    (node: HTMLElement | null) => {
+      if (!node || !asChild) return;
+      const isButton = node.tagName === 'BUTTON';
+      setActual((current) => (current === isButton ? current : isButton));
+    },
+    [asChild],
+  );
+  return { nativeButton: actual ?? guess, ref };
+}
+
+/** The name of a component, through `forwardRef` and `memo` wrappers. */
+function componentName(type: unknown): string {
+  const t = type as {
+    displayName?: string;
+    name?: string;
+    render?: unknown;
+    type?: unknown;
+  } | null;
+  if (!t) return '';
+  return (
+    t.displayName ??
+    t.name ??
+    (t.render ? componentName(t.render) : t.type ? componentName(t.type) : '')
+  );
 }
 
 /**
@@ -308,7 +348,8 @@ export function splitPosition<P extends LegacyPositionProps>(props: P) {
   if (collisionBoundary) positioner.collisionBoundary = collisionBoundary;
   if (avoidCollisions === false) positioner.collisionAvoidance = { side: 'none', align: 'none' };
   if (sticky === 'always') positioner.sticky = true;
-  for (const key of Object.keys(positioner)) if (positioner[key] === undefined) delete positioner[key];
+  for (const key of Object.keys(positioner))
+    if (positioner[key] === undefined) delete positioner[key];
   return { positioner, rest };
 }
 

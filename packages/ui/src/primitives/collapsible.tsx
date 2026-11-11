@@ -3,7 +3,13 @@
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible';
 import * as React from 'react';
 
-import { asChildRender, openState, stateRender, nativeButtonFor } from '../lib/base-ui-compat';
+import {
+  asChildRender,
+  composeRefs,
+  openState,
+  stateRender,
+  useNativeButton,
+} from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
 
 interface CollapsibleProps extends Omit<React.ComponentPropsWithoutRef<'div'>, 'onChange'> {
@@ -35,13 +41,15 @@ function CollapsibleTrigger({
   ...props
 }: React.ComponentPropsWithoutRef<'button'> & { asChild?: boolean }) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <CollapsiblePrimitive.Trigger
       data-slot="collapsible-trigger"
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       className={cn('cursor-pointer', className)}
       render={stateRender('button', openState, slot.render)}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </CollapsiblePrimitive.Trigger>

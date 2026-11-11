@@ -4,7 +4,13 @@ import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import * as React from 'react';
 
-import { asChildRender, composeRefs, nativeButtonFor, stateRender, controlRender } from '../lib/base-ui-compat';
+import {
+  asChildRender,
+  composeRefs,
+  controlRender,
+  stateRender,
+  useNativeButton,
+} from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
 import { SlidingTabIndicator } from './sliding-tab-indicator';
 
@@ -334,7 +340,8 @@ function TabsTrigger({
   // clears it (in a layout effect and its ref) to keep the tab focusable; this
   // effect runs after both, because a child's layout effects run first.
   const buttonRef = React.useRef<HTMLElement | null>(null);
-  const mergedRef = React.useMemo(() => composeRefs(ref, buttonRef), [ref]);
+  const native = useNativeButton(asChild, children);
+  const mergedRef = React.useMemo(() => composeRefs(ref, buttonRef, native.ref), [ref, native.ref]);
   React.useLayoutEffect(() => {
     const node = buttonRef.current;
     if (node?.tagName === 'BUTTON') (node as HTMLButtonElement).disabled = Boolean(disabled);
@@ -417,7 +424,7 @@ function TabsTrigger({
           select(value);
         }
       }}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
       render={
         slot.render ? stateRender('button', activeState, slot.render) : controlRender(activeState)
       }

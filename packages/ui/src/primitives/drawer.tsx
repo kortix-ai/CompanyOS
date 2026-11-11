@@ -3,7 +3,13 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import * as React from 'react';
 
-import { asChildRender, nativeButtonFor, openState, stateRender } from '../lib/base-ui-compat';
+import {
+  asChildRender,
+  composeRefs,
+  openState,
+  stateRender,
+  useNativeButton,
+} from '../lib/base-ui-compat';
 import { usePortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
 
@@ -56,12 +62,14 @@ type ButtonLikeProps = React.ComponentProps<'button'> & { asChild?: boolean };
 
 function DrawerTrigger({ asChild, children, ...props }: ButtonLikeProps) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <DrawerPrimitive.Trigger
       data-slot="drawer-trigger"
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       render={stateRender('button', openState, slot.render)}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </DrawerPrimitive.Trigger>
@@ -85,12 +93,14 @@ function DrawerPortal({
 
 function DrawerClose({ asChild, children, ...props }: ButtonLikeProps) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <DrawerPrimitive.Close
       data-slot="drawer-close"
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       render={slot.render}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </DrawerPrimitive.Close>

@@ -32,6 +32,7 @@ import {
   type ChangeDetails,
   type DismissHandlers,
   type LegacyPositionProps,
+  useNativeButton,
 } from '../lib/base-ui-compat';
 import { usePortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
@@ -233,9 +234,12 @@ export function makeMenuItem(slotName?: string) {
     ) => {
       const slot = asChildRender(asChild, children);
       const handleClick = useSelectHandler(onSelect, onClick, disabled);
+      // A row is a <div>; with `asChild` it is whatever the child renders.
+      const native = useNativeButton(asChild, children);
       return (
         <MenuPrimitive.Item
-          ref={ref}
+          ref={composeRefs(ref, native.ref)}
+          nativeButton={asChild ? native.nativeButton : false}
           data-slot={slotName}
           className={cn(menuRow(size, variant), inset && MENU_INSET, className)}
           disabled={disabled}

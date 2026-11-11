@@ -6,16 +6,16 @@ import * as React from 'react';
 import {
   asChildRender,
   composeRefs,
+  FLOATING_LAYER_ATTR,
+  focusProps,
   openState,
   radixPositionVars,
   splitPosition,
   stateRender,
   useDismissRoot,
+  useNativeButton,
   type DismissHandlers,
   type LegacyPositionProps,
-  FLOATING_LAYER_ATTR,
-  focusProps,
-  nativeButtonFor,
 } from '../lib/base-ui-compat';
 import { usePortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
@@ -95,14 +95,16 @@ function PopoverTrigger({
   ...props
 }: PopoverTriggerProps) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <PopoverPrimitive.Trigger
       data-slot="popover-trigger"
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       // With `asChild` the child owns its styling — merging ours would double it.
       className={asChild ? className : cn(triggerVariants({ variant, size }), className)}
       render={stateRender('button', openState, slot.render)}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </PopoverPrimitive.Trigger>

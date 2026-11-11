@@ -3,22 +3,22 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import * as React from 'react';
 
+import { cva, VariantProps } from 'class-variance-authority';
 import { Close } from '../icons/close';
 import {
   asChildRender,
   composeRefs,
   DismissProvider,
-  nativeButtonFor,
   focusProps,
   openState,
   stateRender,
   useDismissContent,
   useDismissRoot,
+  useNativeButton,
   type DismissHandlers,
 } from '../lib/base-ui-compat';
 import { withPortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
-import { useUiStrings } from '../providers/ui-provider';
 import {
   dialogContentZ,
   DialogDepthProvider,
@@ -26,7 +26,7 @@ import {
   useDialogDepth,
   useDialogRootLayer,
 } from '../lib/z-stack';
-import { cva, VariantProps } from 'class-variance-authority';
+import { useUiStrings } from '../providers/ui-provider';
 import { buttonVariants } from './button';
 import { triggerVariants, type TriggerVariantProps } from './trigger-variants';
 
@@ -61,14 +61,15 @@ type ButtonLikeProps = Omit<React.ComponentPropsWithoutRef<'button'>, 'size'> & 
 const DialogTrigger = React.forwardRef<HTMLButtonElement, ButtonLikeProps & TriggerVariantProps>(
   ({ className, variant, size, asChild, children, ...props }, ref) => {
     const slot = asChildRender(asChild, children);
+    const native = useNativeButton(asChild, children);
     return (
       <DialogPrimitive.Trigger
-        ref={ref}
+        ref={composeRefs(ref, native.ref)}
         {...props}
         // With `asChild` the child owns its styling — merging ours would double it.
         className={asChild ? className : cn(triggerVariants({ variant, size }), className)}
         render={stateRender('button', openState, slot.render)}
-        nativeButton={nativeButtonFor(asChild, children)}
+        nativeButton={native.nativeButton}
       >
         {slot.children}
       </DialogPrimitive.Trigger>
@@ -82,12 +83,13 @@ const DialogPortal = withPortalContainer(DialogPrimitive.Portal);
 const DialogClose = React.forwardRef<HTMLButtonElement, ButtonLikeProps>(
   ({ asChild, children, ...props }, ref) => {
     const slot = asChildRender(asChild, children);
+    const native = useNativeButton(asChild, children);
     return (
       <DialogPrimitive.Close
-        ref={ref}
+        ref={composeRefs(ref, native.ref)}
         {...props}
         render={slot.render}
-        nativeButton={nativeButtonFor(asChild, children)}
+        nativeButton={native.nativeButton}
       >
         {slot.children}
       </DialogPrimitive.Close>
@@ -104,7 +106,7 @@ const DialogOverlay = React.forwardRef<HTMLDivElement, React.ComponentPropsWitho
       <DialogPrimitive.Backdrop
         ref={ref}
         className={cn(
-          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 bg-black/65 backdrop-blur-xs duration-moderate',
+          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-moderate fixed inset-0 bg-black/65 backdrop-blur-xs',
           className,
         )}
         style={{ zIndex: dialogOverlayZ(depth), ...style }}
@@ -163,7 +165,12 @@ const DialogPopup = React.forwardRef<HTMLDivElement, DialogContentBaseProps>(
     },
     ref,
   ) => {
-    useDismissContent('dialog', { onEscapeKeyDown, onPointerDownOutside, onFocusOutside, onInteractOutside });
+    useDismissContent('dialog', {
+      onEscapeKeyDown,
+      onPointerDownOutside,
+      onFocusOutside,
+      onInteractOutside,
+    });
     const slot = asChildRender(asChild, children);
     const popupRef = React.useRef<HTMLDivElement | null>(null);
     return (

@@ -316,6 +316,10 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
     const labelId = React.useId();
     const inputId = React.useId();
     const schedule = useScheduleLayoutEffect();
+    // True while the selection is the core's own pick (the first row), false
+    // once the user moves it with the keyboard or the pointer.
+    const autoSelected = React.useRef(true);
+    const pickingFirst = React.useRef(false);
 
     useIsomorphicLayoutEffect(() => {
       if (value !== undefined) {
@@ -340,6 +344,7 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
             sort();
             schedule(1, selectFirstItem);
           } else if (key === 'value') {
+            autoSelected.current = pickingFirst.current;
             if (propsRef.current.value !== undefined) {
               propsRef.current.onValueChange?.((next as string | undefined) ?? '');
               return;
@@ -363,6 +368,7 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
             state.current.filtered.items.set(id, score(next));
             schedule(2, () => {
               sort();
+              ensureSelection();
               store.emit();
             });
           }
@@ -377,7 +383,7 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
           schedule(3, () => {
             filterItems();
             sort();
-            if (!state.current.value) selectFirstItem();
+            ensureSelection();
             store.emit();
           });
           return () => {
@@ -388,6 +394,7 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
             schedule(4, () => {
               filterItems();
               if (selected?.getAttribute('id') === id) selectFirstItem();
+              else ensureSelection();
               store.emit();
             });
           };
@@ -451,10 +458,28 @@ export const CommandRoot = React.forwardRef<HTMLDivElement, CommandRootProps>(
         });
     }
 
+    /**
+     * Keeps the selection on a row that is rendered, and keeps the core's own
+     * pick on the first row as rows arrive. A row that stops matching
+     * renders nothing but stays mounted, so its unmount never reselects. A host
+     * that renders its rows from a deferred copy of the search (the command
+     * palette) mounts the matching rows a render later; without this check the
+     * selection stays on a hidden row and Enter does nothing.
+     */
+    function ensureSelection() {
+      if (autoSelected.current) return selectFirstItem();
+      const current = state.current.value;
+      if (current && getValidItems().some((el) => el.getAttribute(VALUE_ATTR) === current)) return;
+      selectFirstItem();
+    }
+
     function selectFirstItem() {
       const item = getValidItems().find((el) => el.getAttribute('aria-disabled') !== 'true');
       const next = item?.getAttribute(VALUE_ATTR);
+      pickingFirst.current = true;
       store.setState('value', (next || undefined) as string);
+      pickingFirst.current = false;
+      autoSelected.current = true;
     }
 
     function filterItems() {

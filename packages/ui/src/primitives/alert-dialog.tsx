@@ -3,27 +3,28 @@
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import * as React from 'react';
 
-import { ButtonProps, buttonVariants } from './button';
 import {
   asChildRender,
+  composeRefs,
   DismissProvider,
   focusProps,
-  nativeButtonFor,
   openState,
   stateRender,
   useDismissContent,
   useDismissRoot,
+  useNativeButton,
   type DismissHandlers,
 } from '../lib/base-ui-compat';
 import { usePortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
 import {
-  DialogDepthProvider,
   dialogContentZ,
+  DialogDepthProvider,
   dialogOverlayZ,
   useDialogDepth,
   useDialogRootLayer,
 } from '../lib/z-stack';
+import { ButtonProps, buttonVariants } from './button';
 
 type ButtonLikeProps = Omit<React.ComponentProps<'button'>, 'size'> & { asChild?: boolean };
 
@@ -55,12 +56,14 @@ function AlertDialog({ children, open, defaultOpen, onOpenChange }: AlertDialogP
 
 function AlertDialogTrigger({ asChild, children, ...props }: ButtonLikeProps) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <AlertDialogPrimitive.Trigger
       data-slot="alert-dialog-trigger"
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       render={stateRender('button', openState, slot.render)}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </AlertDialogPrimitive.Trigger>
@@ -135,7 +138,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          'bg-sidebar border-muted/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 space-y-5 rounded-xl border p-5 shadow-lg duration-moderate sm:max-w-md',
+          'bg-sidebar border-muted/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-moderate fixed top-[50%] left-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 space-y-5 rounded-xl border p-5 shadow-lg sm:max-w-md',
           className,
         )}
         style={{ zIndex: dialogContentZ(depth), ...style }}
@@ -195,7 +198,10 @@ function AlertDialogDescription({
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
-      className={cn('text-muted-foreground text-[length:var(--text-md,0.9rem)] leading-snug', className)}
+      className={cn(
+        'text-muted-foreground text-[length:var(--text-md,0.9rem)] leading-snug',
+        className,
+      )}
       {...props}
       {...asChildRender(asChild, children)}
     />
@@ -208,9 +214,11 @@ function AlertDialogDescription({
  */
 function AlertDialogClose({ asChild, children, onClick, ...props }: ButtonLikeProps) {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <AlertDialogPrimitive.Close
       {...props}
+      ref={composeRefs((props as { ref?: React.Ref<HTMLButtonElement> }).ref, native.ref)}
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) {
@@ -218,7 +226,7 @@ function AlertDialogClose({ asChild, children, onClick, ...props }: ButtonLikePr
         }
       }}
       render={slot.render}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </AlertDialogPrimitive.Close>
@@ -233,7 +241,10 @@ function AlertDialogAction({
   variant?: ButtonProps['variant'];
 }) {
   return (
-    <AlertDialogClose className={cn(buttonVariants({ size: 'sm', variant }), className)} {...props} />
+    <AlertDialogClose
+      className={cn(buttonVariants({ size: 'sm', variant }), className)}
+      {...props}
+    />
   );
 }
 

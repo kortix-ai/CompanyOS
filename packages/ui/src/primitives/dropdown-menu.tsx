@@ -1,7 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { asChildRender, nativeButtonFor, openState, stateRender } from '../lib/base-ui-compat';
+import {
+  asChildRender,
+  composeRefs,
+  openState,
+  stateRender,
+  useNativeButton,
+} from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
 import {
   makeMenuCheckboxItem,
@@ -62,14 +68,15 @@ const DropdownMenuTrigger = React.forwardRef<
     TriggerVariantProps & { asChild?: boolean }
 >(({ className, variant, size, asChild, children, ...props }, ref) => {
   const slot = asChildRender(asChild, children);
+  const native = useNativeButton(asChild, children);
   return (
     <MenuPrimitive.Trigger
-      ref={ref}
+      ref={composeRefs(ref, native.ref)}
       {...props}
       // With `asChild` the child owns its styling — merging ours would double it.
       className={asChild ? className : cn(triggerVariants({ variant, size }), className)}
       render={stateRender('button', openState, slot.render)}
-      nativeButton={nativeButtonFor(asChild, children)}
+      nativeButton={native.nativeButton}
     >
       {slot.children}
     </MenuPrimitive.Trigger>

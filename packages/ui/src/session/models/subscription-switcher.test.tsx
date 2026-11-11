@@ -123,13 +123,16 @@ describe('SubscriptionSwitcher', () => {
 
   test('the pane usage is the fullest window still in force that gates the login', () => {
     const now = Date.parse('2026-11-11T12:00:00Z');
-    const usage = (windows: Array<{ id: string; used_percent?: number; resets_at?: string | null }>) =>
-      peakBlockingWindow({ windows: windows as never, limited: false, observed_at: '', source: 'usage_endpoint' }, now);
+    const usage = (windows: Array<{ id: string; used_percent: number; resets_at: string | null }>) =>
+      peakBlockingWindow(
+        { windows: windows.map((w) => ({ window_minutes: null, ...w })), limited: false, observed_at: '', source: 'usage_endpoint' },
+        now,
+      );
     // Code review never gates a call; the plain weekly window does.
-    expect(usage([{ id: 'code_review_weekly', used_percent: 90 }, { id: 'weekly', used_percent: 42 }])?.id).toBe('weekly');
+    expect(usage([{ id: 'code_review_weekly', used_percent: 90, resets_at: null }, { id: 'weekly', used_percent: 42, resets_at: null }])?.id).toBe('weekly');
     // A window whose reset passed no longer counts.
-    expect(usage([{ id: 'weekly', used_percent: 99, resets_at: '2026-11-11T00:00:00Z' }, { id: 'five_hour', used_percent: 10 }])?.id).toBe('five_hour');
-    expect(usage([{ id: 'extra_usage', used_percent: 99 }])).toBeNull();
+    expect(usage([{ id: 'weekly', used_percent: 99, resets_at: '2026-11-11T00:00:00Z' }, { id: 'five_hour', used_percent: 10, resets_at: null }])?.id).toBe('five_hour');
+    expect(usage([{ id: 'extra_usage', used_percent: 99, resets_at: null }])).toBeNull();
     expect(peakBlockingWindow(null, now)).toBeNull();
   });
 
@@ -176,7 +179,8 @@ describe('SubscriptionSwitcher', () => {
       renderer = create(tree(client, 's', <SubscriptionSwitcher providerId="claude-agent" />));
     });
     expect(radios(renderer)).toHaveLength(3);
-    await act(async () => { radios(renderer)[2]!.props.onClick(); });
+    const pin = radios(renderer)[2];
+    await act(async () => { pin?.props.onClick(); });
     const put = calls.find((call) => call.method === 'PUT');
     expect(put?.path).toBe('/workspaces/p/sessions/s/provider-secret-pools/claude-agent');
     expect(put?.body).toEqual({ secret_ids: ['login-b'] });
@@ -196,7 +200,8 @@ describe('SubscriptionSwitcher', () => {
     await act(async () => {
       renderer = create(tree(client, 's', <SubscriptionSwitcher providerId="claude-agent" />));
     });
-    await act(async () => { radios(renderer)[0]!.props.onClick(); });
+    const reset = radios(renderer)[0];
+    await act(async () => { reset?.props.onClick(); });
     const put = calls.find((call) => call.method === 'PUT');
     expect(put?.path).toBe('/workspaces/p/sessions/s/provider-secret-pools/claude-agent');
     expect(put?.body).toEqual({ secret_ids: null });

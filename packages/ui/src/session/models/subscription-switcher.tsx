@@ -81,7 +81,7 @@ export function SubscriptionSwitcher({ providerId }: { providerId: 'codex' | 'cl
 
   const pinned = pools.data?.pools.find((pool) => pool.provider_id === providerId)?.secret_ids ?? null;
   // A pool of several logins rotates; the pane reads that as the default.
-  const pinnedId = pinned && pinned.length === 1 ? pinned[0]! : null;
+  const pinnedId = pinned && pinned.length === 1 ? pinned[0] : null;
   const canEdit = pools.data?.can_edit === true;
   const pending = pools.setPool.isPending;
   // The clock the usage reads judge resets by: the pool read's own timestamp

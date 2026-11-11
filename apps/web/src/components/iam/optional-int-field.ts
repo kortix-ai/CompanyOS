@@ -7,12 +7,12 @@
  * wants, built from its own catalog keys.
  */
 
-export type OptionalIntField =
+type OptionalIntField =
   | { ok: true; value: number | null }
   | { ok: false; error: string };
 
 /** The two sentences a form shows: one per failure rule. */
-export interface OptionalIntFieldMessages {
+interface OptionalIntFieldMessages {
   notInteger: string;
   overMax: string;
 }

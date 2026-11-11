@@ -527,7 +527,7 @@ export async function sessionHasPersonalConnectorBinding(input: {
 }
 
 const liveConnectionGrant = sql`
-  ra.scope_type = 'project'
+  ra.scope_type in ('project', 'workspace')
   and ra.scope_id = ${connectorConnections.projectId}
   and ra.object_type = 'connection'
   and ra.object_id = ${connectorConnections.connectionId}::text

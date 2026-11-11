@@ -286,6 +286,20 @@ describe('permission-denial identity footer', () => {
     expect(out).not.toContain('kortix_permissions');
   });
 
+  test('a shared-account refusal names the personal key, never --workspace or kortix_permissions', async () => {
+    for (const body of [
+      { code: 'token_account_shared', action: 'member.read' },
+      { code: 'credential_fence_refused', check: 'account-wider-than-workspace' },
+    ]) {
+      resetPermissionDenial();
+      const out = await footerFor(denialDetailFromBody(body));
+      expect(out).toContain('kortix login');
+      expect(out).toContain('personal key');
+      expect(out).not.toContain('kortix_permissions');
+      expect(out).not.toContain('Run it in that workspace');
+    }
+  });
+
   test('an older server\'s untyped fence message gets the fence remedy', async () => {
     const out = await footerFor(
       denialDetailFromBody({ message: 'Project-scoped token cannot list projects [check=token-project-scope:project-list]' }),

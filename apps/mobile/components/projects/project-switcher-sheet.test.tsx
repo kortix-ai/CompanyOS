@@ -34,6 +34,7 @@ const fakes: Record<string, Record<string, unknown>> = {
     StyleSheet: { flatten: (s: unknown) => s, create: (s: unknown) => s },
     Platform: { OS: 'ios', select: (o: Record<string, unknown>) => o.ios },
     useWindowDimensions: () => ({ width: 400, height: 800 }),
+    Keyboard: { addListener: () => ({ remove: () => {} }), dismiss: () => {} },
   },
   // The base component drives gorhom's modal directly; the head drives it
   // through `KortixBottomSheetModal`. Both get the same imperative handle:

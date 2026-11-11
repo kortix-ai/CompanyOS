@@ -14,7 +14,7 @@
  */
 import { Hono, type Context, type Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { CALL_SURFACE_HEADER, isCallSurface } from '@kortix/api-contract/tool-calls';
+import { APPROVAL_DELIVERY_HEADER, CALL_SURFACE_HEADER, isCallSurface } from '@kortix/api-contract/tool-calls';
 import { supabaseAuth } from '../middleware/auth';
 import { mcpResourceMetadataUrl, oauthIssuer } from '../oauth/discovery';
 import { OAUTH_SCOPE_KORTIX } from '../oauth/access-token';
@@ -143,6 +143,10 @@ export function createMcpApp(dispatch: Dispatch) {
     // Every API call this request makes is labelled as the MCP surface in the call log.
     const headers = new Headers(c.req.raw.headers);
     headers.set(CALL_SURFACE_HEADER, 'mcp');
+    // `?approvals=browser` fixes how this connection's gated calls are decided:
+    // only a person signed in to Kortix in a browser, never a token.
+    if (new URL(c.req.url).searchParams.get('approvals') === 'browser') headers.set(APPROVAL_DELIVERY_HEADER, 'browser');
+    else headers.delete(APPROVAL_DELIVERY_HEADER);
     const ctx: ToolContext = {
       authorization: c.req.header('Authorization')!,
       origin: oauthIssuer(new URL(c.req.url).origin),

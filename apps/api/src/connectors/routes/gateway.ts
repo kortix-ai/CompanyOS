@@ -2,7 +2,7 @@
  * Gateway routes (sandbox-facing): the catalog, attachments and `/call`, on the
  * token-scoped face and the project-explicit face. One implementation, two faces.
  */
-import { CALL_SURFACE_HEADER, isCallSurface, type CallSurface } from '@kortix/api-contract/tool-calls';
+import { APPROVAL_DELIVERY_HEADER, CALL_SURFACE_HEADER, isApprovalDelivery, isCallSurface, type CallSurface } from '@kortix/api-contract/tool-calls';
 import { type OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { SLUG_RE } from '@kortix/manifest-schema';
 import type { Context } from 'hono';
@@ -158,7 +158,12 @@ const catalogResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPr
  * principal; the surface header only labels a Kortix client and is checked
  * against the known values.
  */
-export function callCallerOf(p: ConnectorPrincipal, surfaceHeader: string | undefined, authType: string | undefined): CallCaller {
+export function callCallerOf(
+  p: ConnectorPrincipal,
+  surfaceHeader: string | undefined,
+  authType: string | undefined,
+  deliveryHeader?: string | undefined,
+): CallCaller {
   const agentSlug = p.agentGrant?.agent ?? null;
   const surface: CallSurface = isCallSurface(surfaceHeader)
     ? surfaceHeader
@@ -172,7 +177,9 @@ export function callCallerOf(p: ConnectorPrincipal, surfaceHeader: string | unde
     principalKind: p.agentPrincipal || agentSlug || p.sessionId ? 'agent' : 'user',
     agentSlug,
     surface,
-    approvalDelivery: null,
+    // `browser` only narrows who may decide (mayResolveApproval refuses every
+    // bearer token), so a client may ask for it; `model` is the default.
+    approvalDelivery: isApprovalDelivery(deliveryHeader) ? deliveryHeader : 'model',
   };
 }
 
@@ -264,7 +271,7 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
     approvalExecutionId,
     approvalContext: typeof body?.approval_context === 'string' ? body.approval_context : null,
     policySet: callPolicySetOf(p, connectorSlug),
-    caller: callCallerOf(p, c.req.header(CALL_SURFACE_HEADER), c.get('authType') as string | undefined),
+    caller: callCallerOf(p, c.req.header(CALL_SURFACE_HEADER), c.get('authType') as string | undefined, c.req.header(APPROVAL_DELIVERY_HEADER)),
   });
   switch (result.status) {
     case 'ok':

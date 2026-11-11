@@ -664,6 +664,8 @@ flow(
     const local = databaseUrl.includes("localhost") || databaseUrl.includes("127.0.0.1");
     const db = new PgClient({ connectionString: databaseUrl, ssl: local ? false : { rejectUnauthorized: false } });
     const hits: string[] = [];
+    // The action requests the upstream received since `before`; a background probe of its root (GET /) can land at any time.
+    const actionHits = (before: number) => hits.slice(before).filter((h) => h !== "GET /");
     const upstream = createServer((req, res) => {
       hits.push(`${req.method} ${req.url}`);
       res.writeHead(200, { "content-type": "application/json" });
@@ -774,8 +776,10 @@ flow(
         if (onLocal) {
           const body = r.json();
           if (r.isError || body.ok !== true || body.data?.items?.[0]?.name !== "widget" || body.account?.label !== "Warehouse team" || body.risk !== "read") throw new Error(`call: ${r.text}`);
-          if (hits.length !== before + 1 || !hits.at(-1)!.startsWith("GET /items")) throw new Error(`upstream: ${hits.at(-1)}`);
-        } else if (!r.isError || !r.text.includes("connector_egress_blocked") || hits.length !== before) {
+          // A background probe of the upstream's root (GET /) can land at any time: count only the action's own request.
+          const ran = actionHits(before);
+          if (ran.length !== 1 || !ran[0]!.startsWith("GET /items")) throw new Error(`upstream: ${JSON.stringify(hits.slice(before))}`);
+        } else if (!r.isError || !r.text.includes("connector_egress_blocked") || actionHits(before).length !== 0) {
           throw new Error(`egress: ${r.text.slice(0, 300)}`);
         }
         const wrong = await tool(12, "call_connector", { project_id: p.id, tool: `${slug}.list_items`, account: "No such account" });
@@ -794,7 +798,7 @@ flow(
         const body = r.json();
         if (r.isError || body.status !== "pending_approval" || !body.execution_id || !body.next.includes("same tool")) throw new Error(`pending: ${r.text}`);
         if (ctx.env.target === "local" && !String(body.approval_url ?? "").includes("/")) throw new Error(`no approval link: ${r.text}`);
-        if (hits.length !== before) throw new Error("the upstream ran before approval");
+        if (actionHits(before).length !== 0) throw new Error("the upstream ran before approval");
         const row = await db.query<{ result_summary: { approval_context?: string } }>(`SELECT result_summary FROM kortix.connector_calls WHERE execution_id = $1`, [body.execution_id]);
         if (row.rows[0]?.result_summary?.approval_context !== reason) throw new Error(`reason not stored: ${JSON.stringify(row.rows)}`);
       });
@@ -818,7 +822,7 @@ flow(
         const before = hits.length;
         const held = await verb(62, "call", { id: `connectors.${slug}.send_note`, input: { body: { text: "six tools" } } });
         if (held.body.status !== "pending_approval" || !held.body.execution_id) throw new Error(`held: ${JSON.stringify(held.body)}`);
-        if (hits.length !== before) throw new Error("the upstream ran before approval");
+        if (actionHits(before).length !== 0) throw new Error("the upstream ran before approval");
         const own = await verb(63, "call", {
           id: "kortix.POST /v1/workspaces/{workspaceId}/approvals/{executionId}",
           input: { params: { executionId: held.body.execution_id }, body: { decision: "approve" } },
@@ -835,6 +839,26 @@ flow(
         denied.status(200);
         const again = await verb(65, "call", { id: `connectors.${slug}.send_note`, input: { body: { text: "six tools" } } });
         if (!again.isError || again.body.reason !== "previously_denied") throw new Error(`repeat after deny: ${JSON.stringify(again.body)}`);
+        // ?approvals=browser: only a signed-in browser session decides this connection's gated calls.
+        const strict = await ctx.client.as(ctx.P.ANON).post(
+          `/v1/mcp?project=${p.id}&approvals=browser`,
+          rpc(67, "tools/call", { name: "call", arguments: { id: `connectors.${slug}.send_note`, input: { body: { text: "browser only" } } } }),
+          { headers: { Authorization: `Bearer ${pat}` } },
+        );
+        const strictBody = JSON.parse(strict.json<any>().result.content[0].text);
+        if (strictBody.status !== "pending_approval") throw new Error(`strict held: ${JSON.stringify(strictBody)}`);
+        const strictRow = await db.query<{ approval_delivery: string }>(`SELECT approval_delivery FROM kortix.connector_calls WHERE execution_id = $1`, [strictBody.execution_id]);
+        if (strictRow.rows[0]?.approval_delivery !== "browser") throw new Error(`delivery: ${JSON.stringify(strictRow.rows)}`);
+        const otherToken = await ctx.client.as(ctx.P.OWNER).post("/v1/accounts/tokens", { name: "MCP-5 second key" });
+        otherToken.status(201);
+        const byToken = await ctx.client.as(ctx.P.ANON).post(
+          `/v1/workspaces/${p.id}/approvals/${strictBody.execution_id}`,
+          { decision: "deny" },
+          { headers: { Authorization: `Bearer ${otherToken.json<{ secret_key: string }>().secret_key}` } },
+        );
+        byToken.status(403).body().has("$.code", "APPROVAL_BROWSER_ONLY");
+        const byBrowser = await ctx.client.as(ctx.P.OWNER).post(`/v1/workspaces/${p.id}/approvals/${strictBody.execution_id}`, { decision: "deny" });
+        byBrowser.status(200);
         const program = await verb(66, "execute", { code: `const r = await search({ query: "widgets", family: "connectors", limit: 1 }); return r.results[0].id;` });
         if (program.isError || program.body.value !== `connectors.${slug}.list_items` || program.body.calls !== 1) throw new Error(`execute: ${JSON.stringify(program.body)}`);
       });
@@ -866,7 +890,7 @@ flow(
           const r = await tool(id, name, { project_id: p.id, ...args }, outsiderPat);
           if (!r.isError || !/HTTP 40[34]/.test(r.text) && !/forbidden|Not found/i.test(r.text) || r.text.includes("widget")) throw new Error(`${name}: ${r.text.slice(0, 200)}`);
         }
-        if (hits.length !== before) throw new Error("an outsider's call reached the upstream");
+        if (actionHits(before).length !== 0) throw new Error("an outsider's call reached the upstream");
       });
     } finally {
       upstream.close();

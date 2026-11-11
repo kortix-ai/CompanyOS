@@ -1301,6 +1301,8 @@ claude mcp add --transport http kortix-scout https://api.kortix.com/v1/mcp --hea
 
 Every call the tool makes is recorded as that agent. Revoke the key in **API keys** to stop it.
 
+To make sure only a person in the Kortix web app approves what the tool asks for, add `?approvals=browser` to the URL (`https://api.kortix.com/v1/mcp?approvals=browser`). Then no key, the tool's or yours, can approve its calls.
+
 #### Let your coding agent set it up
 
 Send your coding agent this line: "Read https://kortix.com/setup-prompt.md and follow it." You can also paste the [setup prompt](https://kortix.com/setup-prompt.md) itself. The agent adds the server, starts the browser sign-in, reads the Kortix guides and starts a first session. It never asks you for a secret in the chat.

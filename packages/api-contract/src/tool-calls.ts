@@ -28,6 +28,9 @@ export type ApprovalDelivery = (typeof APPROVAL_DELIVERIES)[number];
 export const CALL_PHASES = ['grant', 'policy', 'account', 'credential', 'approval', 'upstream', 'done'] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
 
+/** How a client asks that its gated calls be decided: `browser` only narrows who may decide. */
+export const APPROVAL_DELIVERY_HEADER = 'x-kortix-approval-delivery';
+
 /** The `x-kortix-surface` request header a Kortix client sends; labels only, never authority. */
 export const CALL_SURFACE_HEADER = 'x-kortix-surface';
 

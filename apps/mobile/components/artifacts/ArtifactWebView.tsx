@@ -19,7 +19,7 @@
 import * as React from 'react';
 import { Platform, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
+import type { ShouldStartLoadRequest, WebViewOpenWindowEvent } from 'react-native-webview/lib/WebViewTypes';
 
 import { KortixLoader } from '@/components/kortix/kortix-loader';
 import { artifactContentPrefix, decideArtifactNavigation } from '@/lib/artifacts/artifacts';
@@ -54,18 +54,43 @@ export function ArtifactWebView({ viewUrl, background, bottomInset, onHttpError,
     if (invalid) onLoadError();
   }, [invalid, onLoadError]);
 
+  const webViewRef = React.useRef<React.ElementRef<typeof WebView>>(null);
+
+  // A link to another artifact of this project opens in the viewer (the
+  // browser would ask the reader to sign in again); any other web link in the
+  // in-app browser.
+  const openOutside = React.useCallback((url: string) => {
+    if (openArtifactLink(url)) return;
+    openLink(url).catch((error) => log.warn('[ArtifactWebView] Failed to open link:', error));
+  }, []);
+
   const guard = React.useCallback(
     (request: ShouldStartLoadRequest) => {
       if (!prefix) return false;
       const action = decideArtifactNavigation(request.url, prefix, { isTopFrame: request.isTopFrame });
-      // A link to another artifact of this project opens in the viewer; the
-      // browser would ask the reader to sign in again.
-      if (action === 'open-external' && !openArtifactLink(request.url)) {
-        openLink(request.url).catch((error) => log.warn('[ArtifactWebView] Failed to open link:', error));
-      }
+      if (action === 'open-external') openOutside(request.url);
       return action === 'allow';
     },
-    [prefix],
+    [openOutside, prefix],
+  );
+
+  // iOS: a navigation with no target frame (`target="_blank"`, `window.open`)
+  // comes here, never to the guard. The guard would see it as a frame load:
+  // iOS reports `isTopFrame` by comparing the URL with the main document URL,
+  // and a new window has none. Decide it as the top frame it would become.
+  const openWindow = React.useCallback(
+    (event: WebViewOpenWindowEvent) => {
+      const url = event.nativeEvent.targetUrl;
+      if (!prefix) return;
+      const action = decideArtifactNavigation(url, prefix, { isTopFrame: true });
+      if (action === 'allow') {
+        // A page of this artifact: load it here, through the guard again.
+        webViewRef.current?.injectJavaScript(`window.location.href = ${JSON.stringify(url)}; true;`);
+      } else if (action === 'open-external') {
+        openOutside(url);
+      }
+    },
+    [openOutside, prefix],
   );
 
   const loading = React.useCallback(
@@ -83,6 +108,7 @@ export function ArtifactWebView({ viewUrl, background, bottomInset, onHttpError,
     // Android draws edge to edge and has no content inset: pad the container.
     <View style={{ flex: 1, backgroundColor: background, paddingBottom: Platform.OS === 'android' ? bottomInset : 0 }}>
       <WebView
+        ref={webViewRef}
         key={generation}
         source={{ uri }}
         style={{ flex: 1, backgroundColor: background }}
@@ -90,8 +116,10 @@ export function ArtifactWebView({ viewUrl, background, bottomInset, onHttpError,
         // `tel:` or app deep link goes straight to `Linking.openURL`.
         originWhitelist={['*']}
         onShouldStartLoadWithRequest={guard}
-        // No new window: a `target="_blank"` link loads here and meets the
-        // guard (iOS without `onOpenWindow`; Android with one window).
+        // No new window. iOS hands every new-window navigation to
+        // `onOpenWindow` and cancels it; Android with one window loads a
+        // `target="_blank"` link here, as a top frame, through the guard.
+        onOpenWindow={openWindow}
         setSupportMultipleWindows={false}
         javaScriptEnabled
         javaScriptCanOpenWindowsAutomatically={false}

@@ -10,6 +10,7 @@
  *
  * Accounts, connectors, secrets and retired flows keep the legacy names.
  */
+import { check } from '../core/expect';
 import { flow } from '../core/flow';
 import type { FlowContext, Principal } from '../core/types';
 import { createDatabaseSession, fundDatabaseAccount } from '../fixtures/database-project';
@@ -22,12 +23,13 @@ const stable = (text: string) => text.replace(VOLATILE, '"$1":"*"').replace(DENI
 
 async function sameAnswer(ctx: FlowContext, who: Principal, legacy: string, canonical: string): Promise<number> {
   const [a, b] = await Promise.all([ctx.client.as(who).get(legacy), ctx.client.as(who).get(canonical)]);
-  if (a.statusCode !== b.statusCode) {
-    throw new Error(`${legacy} → ${a.statusCode}, ${canonical} → ${b.statusCode}`);
-  }
-  if (stable(a.text()) !== stable(b.text())) {
-    throw new Error(`${legacy} and ${canonical} answer different bodies:\n${a.text().slice(0, 300)}\n${b.text().slice(0, 300)}`);
-  }
+  check(a.statusCode === b.statusCode, `${legacy} and ${canonical} answer the same status`, a.statusCode, b.statusCode);
+  check(
+    stable(a.text()) === stable(b.text()),
+    `${legacy} and ${canonical} answer the same body`,
+    a.text().slice(0, 300),
+    b.text().slice(0, 300),
+  );
   return a.statusCode;
 }
 
@@ -655,7 +657,7 @@ flow(
     const w = await team.project();
     await ctx.step('GET /accounts/:team/subscription-connections (no project_id) answers like /workspaces/:w/subscription-connections → 200', async () => {
       const status = await sameAnswer(ctx, ctx.P.OWNER, `/v1/accounts/${team.id}/subscription-connections`, `/v1/workspaces/${w.id}/subscription-connections`);
-      if (status !== 200) throw new Error(`expected 200, got ${status}`);
+      check(status === 200, 'both routes answer 200', status, 200);
     });
   },
 );

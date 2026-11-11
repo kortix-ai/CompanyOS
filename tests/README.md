@@ -72,6 +72,20 @@ pnpm test -- --target-api-full # Deployed seam API flows only (the release gate'
 pnpm test -- --target-browser-full --browser-shard=1/3 # One deployed browser shard
 ```
 
+### Selection is exact
+
+Every filter value must select something (`src/core/selection.ts`):
+
+- `--id ACC-4,BOGUS` fails with `unknown flow id: BOGUS`. It never runs
+  `ACC-4` alone.
+- An unknown `--domain` or `--tag` fails. A named `--id` that another filter
+  drops fails.
+- `--id`, `--domain`, `--tag` or `--grep` with no value (`--id=`, `--id=,`,
+  `--domain` at the end) exits `2` before any lane starts. It never means
+  "every flow".
+- `--grep <substring>` is a flow filter: it selects the flows lane and matches
+  flow ids and domains.
+
 `--target-full` runs both deployed lanes in one process. The two per-lane modes
 run one lane each, so the release gate can run them as parallel GitHub jobs.
 Both assert the deployed SHA exactly as `--target-full` does. The API lane runs
@@ -273,7 +287,9 @@ The release suite's contract lanes run every flow on the release tree.
 The release gate runs against deployed staging, so it tests only what a
 deployment can break. Its API job runs the flows tagged `deployed`
 (`DEPLOYED_FLOW_TAG` in `src/core/local-runner.ts`), one or more per seam, the
-money path first. `--require-all` applies to that set: a skipped, todo, or
+money path first. A flow joins the set with `targets: { deployed: true }`
+(see "Per-target applicability"); the `deployed` tag is its alias, and
+registration folds the two together. `--require-all` applies to that set: a skipped, todo, or
 failed `deployed` flow fails the gate.
 
 | Seam | Flows |
@@ -302,9 +318,9 @@ failed `deployed` flow fails the gate.
 RUN-3 failed once on a request timeout (run 38399331524). Their median times
 sum to ~10 min of flow work, which the 9 workers run in ~3 min. `unit/deployed-set.test.ts`
 pins this table to the tags, keeps the set between 30 and 50 flows, and rejects
-a todo `deployed` flow. To add a seam, tag its flow
-(`tags: ['deployed']`, or add `deployed` to the existing tags) and add the row
-here and in that test. A `harnessFlow` tag covers both harness variants.
+a todo `deployed` flow. To add a seam, declare its flow
+(`targets: { deployed: true }`, or the alias `tags: ['deployed']`) and add the
+row here and in that test. A `harnessFlow` tag covers both harness variants.
 
 The gate is three parallel jobs and an aggregator:
 
@@ -474,6 +490,106 @@ bun bin/ke2e.ts run --domain system,access
 Each flow run writes `results.json` and `report.html` under
 `tests/test-results/<runId>/`. Use `results.json` to prove fixture and request
 counts. Do not infer those counts from source files.
+
+### Per-target applicability
+
+A run has one target kind (`src/core/targets.ts`): `local` (`pnpm test`,
+`ke2e local`), `selfhost` (the pull request preview, `KE2E_TARGET=preview`),
+or `deployed` (a cloud deployment, staging in the release gate).
+`meta.targets` declares where a flow applies:
+
+```ts
+flow('EXAMPLE-1', flowMeta('billing', routes, {
+  targets: {
+    deployed: true, // in the release gate's deployed set
+    local: { skip: 'The local profile has no Stripe account to charge.' },
+  },
+}), async (ctx) => { /* ... */ });
+```
+
+- `true`: applicable. `targets.deployed: true` puts the flow in the deployed
+  set.
+- `{ skip: '<sentence>' }`: not applicable. The runner never schedules the
+  flow on that target and lists it under `excludedFlows` with the reason. The
+  reason is one sentence: three or more words, ending with a period.
+  Registration throws on anything else, and on a `deployed` tag that
+  contradicts a `deployed` skip.
+- The local profile still infers exclusions from `requires` (external
+  capabilities) and `todo`. An explicit `targets.local` skip wins.
+- Every run logs, and the report and step summary show,
+  `target <kind>: <n>/<m> scheduled · <k> excluded with a reason` and each
+  target's declared and skipped counts.
+
+### Proof that every scheduled flow ran
+
+- `results.json` records `scheduled`: every flow id handed to the scheduler,
+  and `targetKind`.
+- A scheduled flow with no result, or a flow with two results, becomes a
+  failed result (`scheduled but never executed`). The run cannot report green
+  on a subset.
+- A `pass` with zero steps fails (`passed with zero steps`). A `pass` whose
+  steps recorded zero assertions fails (`zero recorded assertions`). A bare
+  `return` once recorded a pass with zero steps and hid a connector OAuth
+  regression on every run without that provider (KRTX-2852).
+- `.status()`, `.body()`, `assert()` and `check()` (`src/core/expect.ts`)
+  record assertions. A bare `throw new Error(...)` fails a step but records
+  nothing: write `check(ok, '<what must hold>', actual)` instead.
+- `ke2e` prints `executed <n>/<m> scheduled flows · target <kind>` after the
+  totals. Report that line with every run.
+
+### Case logs: per-case server evidence
+
+Every request a flow sends carries
+`x-kortix-test-case: <runId>/<flowId>/<attempt>/<step>` (`step` is 1-based;
+`0` is the flow body outside any step). The contract is
+`@kortix/api-contract/test-case`.
+
+The local stack starts the API with `KORTIX_LOCAL_TEST_PROFILE=1` and
+`KORTIX_TEST_LOG_DIR=tests/test-results`. The API then appends JSONL for each
+case to `tests/test-results/<runId>/case-logs/<flowId>.<attempt>.<step>.jsonl`:
+
+| `kind` | Content |
+| --- | --- |
+| `request` | method, path, status, `request_id` (the `x-request-id` header), `duration_ms` |
+| `log` | every `logger` line at every level, with its context |
+| `sql` | every pool statement, whitespace-normalized, without parameters |
+
+`report.html` links each failed step, and a failed flow body, to its case
+log, and shows the step's `x-request-id` values. `ke2e` prints the same per
+failed flow: reason, step, last request, `x-request-id`, case log path. A
+step without a link means the API wrote no file: an API started before this
+change, or any API without the test profile. Restart the local stack.
+
+The API ignores the header unless both variables are set. With them unset it
+never reads the header, installs no SQL hook, and writes nothing
+(`apps/api/src/lib/test-case-log.test.ts`). `console.*` output and requests
+the CLI sends from its own process carry no case id.
+
+`unit/flow-evidence.test.ts` runs three failing synthetic flows in process
+(an assertion failure, a thrown error, a zero-step pass) against a loopback
+API and asserts the reason, step, request, `x-request-id` and case-log link
+of each.
+
+### Loopback fakes
+
+`src/fixtures/fakes/` holds the shared loopback servers. Each binds
+`127.0.0.1` on port 0, records the requests it received, and returns
+`{ url, close() }`:
+
+| Module | Serves |
+| --- | --- |
+| `oauth-issuer.ts` | OAuth 2.0 issuer: RFC 8414 discovery, authorize with PKCE S256, code exchange, refresh with rotation, RFC 7591 registration, RFC 7009 revocation, introspection, configurable failures and token lifetimes |
+| `mcp-server.ts` | streamable HTTP JSON-RPC MCP server: `initialize`, `tools/list`, `tools/call`; optional bearer auth against the issuer with RFC 9728 metadata |
+| `openapi-upstream.ts` | an OpenAPI 3 spec plus echo endpoints; optional bearer check |
+
+Use them instead of a new inline server. The local API exempts only
+`127.0.0.1` from the connector egress check
+(`KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS`). OAuth token calls are https-only on
+every target, so the issuer serves TLS with the certificate the local stack
+creates at `tests/test-results/.loopback-tls/` (`ensureLoopbackTls`, an
+`127.0.0.1` IP SAN, valid 365 days, reused while valid). The API trusts it
+through `NODE_EXTRA_CA_CERTS`, and `ke2e local` exports its directory as
+`KE2E_LOOPBACK_TLS_DIR`. `unit/fakes.test.ts` covers the fakes.
 
 ## Runner scheduling, retries, and load knobs
 
@@ -665,6 +781,17 @@ Nothing is quarantined: no browser journey, no API flow, no DB suite (testing
 reset, 2026-10-16). The mechanism is gone. A test that fails twice without a
 Kortix defect is fixed or deleted the same day. A test that fails because of a
 Kortix defect stays red until the defect is fixed.
+
+### A flaky journey fails the run
+
+Playwright keeps retries: 2 on CI, 1 on a deployed target
+(`E2E_DEPLOYED_RETRIES`), 0 locally. On CI and on a deployed target
+`failOnFlakyTests` is on (`resolveFlakePolicy` in `playwright.config.ts`): a
+journey that fails and then passes on a retry is reported `flaky`, with the
+traces of both attempts, and the run fails. A flaky journey is a defect to fix
+or delete the same day. The release suite's `rerun-failed-once.yml` reruns a
+failed job once; a job that passes on that rerun is a flake to fix the same
+way.
 
 ### Deployed-target resilience
 

@@ -21,6 +21,7 @@
  *   never create a real inbox.
  */
 import { randomUUID } from "node:crypto";
+import { check } from "../core/expect";
 import { flow } from "../core/flow";
 import { slackSigned, withDb } from "../fixtures/chat";
 import { waitFor } from "../core/poll";
@@ -276,8 +277,8 @@ flow(
               connected: boolean;
               install_url: string | null;
             };
-            if (result.exitCode !== 0) throw new Error(result.all);
-            if (!output.install_url) throw new Error("CLI returned no Slack install URL");
+            check(result.exitCode === 0, "kortix channels connect --json exits 0", result.exitCode);
+            check(output.install_url, "the CLI returns a Slack install URL", output.install_url);
             const cliUrl = new URL(output.install_url);
             const apiUrl = new URL(mode.install_url);
             const cliState = cliUrl.searchParams.get("state");
@@ -285,16 +286,14 @@ flow(
             if (!cliState || !apiState) throw new Error("Slack install URL omitted signed state");
             cliUrl.searchParams.delete("state");
             apiUrl.searchParams.delete("state");
-            if (cliUrl.toString() !== apiUrl.toString()) {
-              throw new Error(`CLI install URL ${cliUrl} != API ${apiUrl}`);
-            }
+            check(cliUrl.toString() === apiUrl.toString(), "the CLI install URL equals the API install URL (state aside)", cliUrl.toString(), apiUrl.toString());
           } else {
-            if (result.exitCode !== 2) {
-              throw new Error(`manual setup without credentials must exit 2, got ${result.exitCode}`);
-            }
-            if (!/--bot-token/.test(result.stderr) || !/channels manifest/.test(result.stderr)) {
-              throw new Error(`CLI did not print the manual Slack setup path: ${result.stderr}`);
-            }
+            check(result.exitCode === 2, "manual setup without credentials exits 2", result.exitCode, 2);
+            check(
+              /--bot-token/.test(result.stderr) && /channels manifest/.test(result.stderr),
+              "the CLI prints the manual Slack setup path (--bot-token, channels manifest)",
+              result.stderr.slice(0, 600),
+            );
           }
         },
       );

@@ -1,6 +1,7 @@
 /**
- * The release gate's API lane runs only the flows tagged `deployed`
- * (`DEPLOYED_FLOW_TAG`, `--target-api-full`). The `Tests` lanes already ran
+ * The release gate's API lane runs only the flows declared `targets.deployed:
+ * true` (`FlowMeta.targets`; the `deployed` tag is its alias, folded in at
+ * registration, and `--target-api-full` selects by that tag). The `Tests` lanes already ran
  * every flow on the same tree, so the gate proves only what a deployment can
  * break. This file pins that set: each deployed seam keeps at least one flow,
  * and the set stays small enough for one API job of about 5 minutes.
@@ -37,6 +38,10 @@ const SEAMS: Record<string, string[]> = {
 interface TaggedFlow {
   id: string;
   todo: boolean;
+  /** `targets.deployed === true`. */
+  declared: boolean;
+  /** Carries the `deployed` tag the lane selects by. */
+  tagged: boolean;
 }
 
 /** Bun-only registry (see unit/shard.test.ts), read in a `bun` subprocess. */
@@ -47,8 +52,13 @@ function deployedFlows(): TaggedFlow[] {
     const { allFlows } = await import(${JSON.stringify(`${testsDir}/src/core/flow.ts`)});
     await discoverFlows();
     console.log(JSON.stringify(allFlows()
-      .filter((f) => (f.meta.tags ?? []).includes(${JSON.stringify(DEPLOYED_FLOW_TAG)}))
-      .map((f) => ({ id: f.id, todo: Boolean(f.meta.todo) }))));
+      .filter((f) => f.meta.targets?.deployed === true || (f.meta.tags ?? []).includes(${JSON.stringify(DEPLOYED_FLOW_TAG)}))
+      .map((f) => ({
+        id: f.id,
+        todo: Boolean(f.meta.todo),
+        declared: f.meta.targets?.deployed === true,
+        tagged: (f.meta.tags ?? []).includes(${JSON.stringify(DEPLOYED_FLOW_TAG)}),
+      }))));
   `;
   const out = execFileSync('bun', ['-e', script], { encoding: 'utf8', cwd: testsDir });
   return JSON.parse(out.trim().split('\n').at(-1) as string) as TaggedFlow[];
@@ -70,6 +80,10 @@ describe('the deployed flow set', () => {
   it('stays a smoke: 30 to 50 flows', () => {
     expect(flows.length).toBeGreaterThanOrEqual(30);
     expect(flows.length).toBeLessThanOrEqual(50);
+  });
+
+  it('declares every member with targets.deployed and the lane tag, so the field and the alias never disagree', () => {
+    expect(flows.filter((f) => !f.declared || !f.tagged).map((f) => f.id)).toEqual([]);
   });
 
   it('holds no todo flow, so --require-all means every seam ran', () => {

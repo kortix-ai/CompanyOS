@@ -135,6 +135,12 @@ const envSchema = z.object({
   // Debug only: append each SQL statement the API pool sends (whitespace-normalized
   // text, no params) as one line to this file. Empty = off.
   KORTIX_SQL_TRACE: optStr,
+  // `1` on the deterministic local test stack (tests/src/core/local-stack.ts).
+  KORTIX_LOCAL_TEST_PROFILE: optStr,
+  // Test stack only, read only when KORTIX_LOCAL_TEST_PROFILE=1: the directory
+  // the API writes per-case evidence to (`x-kortix-test-case` →
+  // <dir>/<runId>/case-logs/<flow>.<attempt>.<step>.jsonl). Empty = off.
+  KORTIX_TEST_LOG_DIR: optStr,
 
   // ── Supabase (REQUIRED) ──────────────────────────────────────────────────
   SUPABASE_URL: z
@@ -309,7 +315,9 @@ const envSchema = z.object({
    * Comma-separated hostnames or IP literals, matched exactly. Empty (the
    * default) means every connector endpoint must be a public address. Set it
    * on a self-hosted deployment whose connectors call internal APIs; the local
-   * test stack sets `127.0.0.1` for its loopback upstream.
+   * test stack sets `127.0.0.1` for its loopback upstream. The connector's
+   * OAuth 2.0 token and refresh calls honor the same list; they still require
+   * https.
    */
   KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS: optStr,
   /**
@@ -1526,6 +1534,8 @@ export const config = {
   // ─── Database ──────────────────────────────────────────────────────────────
   DATABASE_URL: env.DATABASE_URL,
   KORTIX_SQL_TRACE: env.KORTIX_SQL_TRACE,
+  KORTIX_LOCAL_TEST_PROFILE: env.KORTIX_LOCAL_TEST_PROFILE === '1',
+  KORTIX_TEST_LOG_DIR: env.KORTIX_LOCAL_TEST_PROFILE === '1' ? env.KORTIX_TEST_LOG_DIR : '',
 
   // ─── Supabase ──────────────────────────────────────────────────────────────
   SUPABASE_URL: env.SUPABASE_URL,

@@ -16,6 +16,7 @@
  *  - git-token: 409 for BYO / 503 if managed git unconfigured / 200 push token.
  *  - upstream credentials remain inside the Git proxy.
  */
+import { assert } from "../core/expect";
 import { flow } from "../core/flow";
 import type { FlowContext } from "../core/types";
 import { withTransientGitRetry } from "../fixtures/git-transient";
@@ -1057,9 +1058,14 @@ flow(
         code = typeof error.code === 'number' ? error.code : -1;
         output = String(error.stdout ?? '') + String(error.stderr ?? '');
       }
-      if ((expected === 'ok') !== (code === 0)) {
-        throw new Error(`git ${args[0]}: expected ${expected}, got exit ${code}: ${output.replaceAll(secret, '[redacted]')}`);
-      }
+      assert({
+        kind: 'exit',
+        description: `git ${args[0]} ${expected === 'ok' ? 'exits 0' : 'is rejected'}`,
+        expected: expected === 'ok' ? 0 : 'non-zero',
+        actual: code,
+        pass: (expected === 'ok') === (code === 0),
+        detail: output.replaceAll(secret, '[redacted]').slice(0, 1_200),
+      });
       return output;
     };
     try {

@@ -37,6 +37,16 @@ export function assert(a: Assertion): void {
 }
 
 /**
+ * Record a boolean check as an assertion; throw an AssertionError when it
+ * fails, and narrow `pass` for TypeScript. Use it where a flow would otherwise write `if (!ok) throw new
+ * Error(...)`: a bare throw fails the flow but records nothing, and the
+ * runner fails a pass with zero recorded assertions.
+ */
+export function check(pass: unknown, description: string, actual?: unknown, expected: unknown = true): asserts pass {
+  assert({ kind: 'check', description, expected, actual: actual === undefined ? Boolean(pass) : actual, pass: Boolean(pass) });
+}
+
+/**
  * jsonpath-lite: supports `$.a.b`, `a.b[0].c`, leading `$.` optional.
  * Returns undefined for any missing segment.
  */

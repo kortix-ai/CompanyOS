@@ -1293,6 +1293,19 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
     expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-token']);
   });
 
+  test('a gateway API key whose workspace has only private ChatGPT accounts: the refusal names the rule and the way out', async () => {
+    pooledEnabled = true;
+    codexCredential = null;
+    sharedSecrets = { coolingDown: false, withheld: 1, secrets: [] };
+    const refusal = await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6').catch((err) => err);
+    expect(refusal).toMatchObject({ code: 'provider_not_connected' });
+    expect(refusal.message).toContain('a gateway API key uses only ChatGPT accounts shared with everyone');
+    expect(refusal.suggestion).toContain('personal access token');
+    // The legacy project connection still serves first when there is one.
+    codexCredential = { access: 'legacy-token' };
+    expect((await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6')).map((c) => c.apiKey)).toEqual(['legacy-token']);
+  });
+
   test('flag off: shared accounts are never read', async () => {
     pooledEnabled = false;
     codexCredential = { access: 'legacy-token' };

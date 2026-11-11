@@ -184,6 +184,14 @@ async function codexSharedCandidates(context: Context): Promise<UpstreamDescript
   }
   if (shared.coolingDown) return chatGptAccountsResting('All ChatGPT connections shared with this project',
     shared.retryAfterSeconds, 'Retry after the cooldown, or connect another ChatGPT account.');
+  // A gateway API key is a workspace key: anyone who manages the workspace
+  // lists and revokes it, and it outlives its creator's session. So it never
+  // spends a member's private ChatGPT plan (see the doc above). A person's own
+  // token (a personal access token) acts as that person and does. Say so,
+  // instead of "Connect Codex" to someone whose account is connected.
+  if (principal.keyId && (shared.withheld ?? 0) > 0) return new GatewayResolutionError('provider_not_connected',
+    "This workspace's ChatGPT accounts are private to the members who connected them, and a gateway API key uses only ChatGPT accounts shared with everyone in the workspace.",
+    'Share a ChatGPT account with everyone in the workspace in Models, or call the gateway with your personal access token scoped to this workspace to use your own account.');
   return null;
 }
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 // KRTX-4744: marketing pages must scroll like the browser scrolls. The
 // marketing, SEO and services shells used to mount a Lenis smooth-scroll
@@ -9,18 +9,6 @@ import { expect, test, type Page } from '@playwright/test';
 // One route per shell: the marketing shell ('/', '/pricing'), the SEO shell
 // ('/use-cases') and the services sales shell ('/services').
 const SHELL_ROUTES = ['/', '/pricing', '/use-cases', '/services'] as const;
-
-/** The wheel moves the page like on every native page. */
-async function expectWheelScrolls(page: Page): Promise<void> {
-  // Wheel over the hero heading: plain text, never an inner scroller.
-  const heading = page.locator('h1').first();
-  const box = (await heading.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.wheel(0, 1200);
-  await expect
-    .poll(() => page.evaluate(() => window.scrollY), { timeout: 5_000 })
-    .toBeGreaterThan(0);
-}
 
 test('marketing pages scroll natively: no scroll hijack on the wheel', async ({ page }) => {
   for (const route of SHELL_ROUTES) {
@@ -35,6 +23,15 @@ test('marketing pages scroll natively: no scroll hijack on the wheel', async ({ 
     // No hijack at rest: the document root carries no Lenis classes.
     await expect(page.locator('html')).not.toHaveClass(/lenis/);
 
-    await expectWheelScrolls(page);
+    // The wheel moves the page, like on every native page. Wheel over the
+    // hero heading: plain text, never an inner scroller.
+    const heading = page.locator('h1').first();
+    const box = await heading.boundingBox();
+    if (!box) throw new Error(`the hero heading is not rendered on ${route}`);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 1200);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY), { timeout: 5_000 })
+      .toBeGreaterThan(0);
   }
 });

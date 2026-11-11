@@ -1256,7 +1256,8 @@ reason.
 
 | Code | Status | Meaning | Predicate / constant |
 |---|---|---|---|
-| `workspace_not_found` | 404 | No such workspace, an account id on a canonical path, or no access | `WORKSPACE_NOT_FOUND_CODE` |
+| `workspace_not_found` | 404 | No such workspace, an account id on a canonical path, or a workspace being deleted | `WORKSPACE_NOT_FOUND_CODE` |
+| `workspace_access_denied` | 403 | The workspace exists and the caller cannot read it; `requestProjectAccess` asks its managers | — |
 | `workspace_setup_required` | 409 | The workspace has no repository yet: `setupWorkspace` | `WORKSPACE_SETUP_REQUIRED_CODE` |
 | `workspace_deleting` | 409 | The workspace is being deleted: an owner restores it first | `WORKSPACE_DELETING_CODE` |
 | `workspace_has_project` | 409 | The account already holds its workspace's project; the body names it (`workspace_id`). Create another workspace instead | `WORKSPACE_HAS_PROJECT_CODE` · `isWorkspaceHasProjectError` |
@@ -1538,9 +1539,9 @@ permanently:
 | `GET`/`POST /v1/workspaces` · `GET`/`PATCH /v1/workspaces/:id` · `/v1/workspaces/:id/tokens` | `/v1/accounts` · `/v1/accounts/:accountId` · `/v1/accounts/tokens` | Not aliases: deprecated in the OpenAPI spec (`x-kortix-replaced-by`) |
 
 **Ids.** A canonical path takes the workspace id only. An account id, an
-unknown id or a workspace the caller cannot read answers `404
-workspace_not_found` on every sub-path, so a caller cannot probe which ids
-exist. A legacy path accepts either id forever. Ids are case-insensitive. An
+unknown id answers `404 workspace_not_found` on every sub-path. A workspace
+the caller cannot read answers `403 workspace_access_denied`, so a person
+holding a link can ask for access. A legacy path accepts either id forever. Ids are case-insensitive. An
 `Account*` function that holds an account id calls the legacy name.
 
 An API older than the workspace routes answers a canonical name with its

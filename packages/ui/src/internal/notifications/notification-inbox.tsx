@@ -147,16 +147,17 @@ export function NotificationInboxView({
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Tabs value={tab} onValueChange={(value) => setTab(value as NotificationTab)}>
-              <TabsList>
-                <TabsTrigger value="all" className="gap-1.5">
+              {/* Flat chips, the Review list's own: never the segmented control. */}
+              <TabsList variant="secondary" size="sm">
+                <TabsTrigger value="all" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabAll')}
                   {unreadCount > 0 ? <CountBadge count={unreadCount} /> : null}
                 </TabsTrigger>
-                <TabsTrigger value="needs" className="gap-1.5">
+                <TabsTrigger value="needs" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabNeedsYou')}
                   {needsCount > 0 ? <CountBadge count={needsCount} tone="waiting" /> : null}
                 </TabsTrigger>
-                <TabsTrigger value="done" className="gap-1.5">
+                <TabsTrigger value="done" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabDone')}
                   {doneCount > 0 ? <CountBadge count={doneCount} /> : null}
                 </TabsTrigger>

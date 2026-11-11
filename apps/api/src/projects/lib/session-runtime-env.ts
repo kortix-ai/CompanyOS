@@ -9,6 +9,8 @@ export interface SessionRuntimeEnvInput {
   baseRef: string;
   agentName: string;
   apiUrl: string;
+  /** The API's release (`KORTIX_VERSION`) and build commit; sent as `KORTIX_RELEASE_VERSION` / `KORTIX_RELEASE_COMMIT`. */
+  release?: { version: string; commit: string };
   /** Frontend base URL (no /v1) the sandbox surfaces as user-facing links. */
   frontendUrl?: string;
   sessionModel?: string | null;
@@ -99,6 +101,13 @@ export function buildSessionRuntimeEnv(input: SessionRuntimeEnvInput): Record<st
     KORTIX_SERVICE_PORT: '8000',
     KORTIX_AGENT_NAME: input.agentName,
     KORTIX_API_URL: input.apiUrl,
+    // The sandbox CLI is the staging build's binary on prod too (images are
+    // retagged, not rebuilt), so its baked version reads `X.Y.Z-staging.<sha8>`.
+    // With these two values it reports the release this API serves instead
+    // (apps/cli/src/cli-version.ts), and only when the commits match.
+    ...(input.release?.version && input.release.commit
+      ? { KORTIX_RELEASE_VERSION: input.release.version, KORTIX_RELEASE_COMMIT: input.release.commit }
+      : {}),
     // A daemon released before 2026-11-08 clones when this reads '1'. Keep it
     // explicit until the runtime floor (session-open/runtime-floor-policy.ts)
     // excludes those daemons.

@@ -18,7 +18,7 @@ import {
   type AccountMembershipsCopy,
 } from './tabs/account-memberships';
 import type { RailGroup, RailItem } from '@kortix/ui/customize/settings/type';
-export function RailNav({
+function RailNav({
   groups,
   showGroupLabels,
   organizations,

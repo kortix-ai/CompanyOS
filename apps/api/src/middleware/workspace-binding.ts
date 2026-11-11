@@ -155,6 +155,11 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   // ── ambient, bound by the handler to the credential's own workspace ────
   { pattern: '/v1/usage/cost-summary', methods: ['GET'], binding: OWN_WORKSPACE },
   { pattern: '/v1/usage/cost-by-project', methods: ['GET'], binding: OWN_WORKSPACE },
+  // Session costs: the handler pins a bound credential to its own workspace's
+  // sessions (resolveSessionCostScope), and to the caller's own sessions
+  // unless it may read the member directory.
+  { pattern: '/v1/usage/session-costs', methods: ['GET'], binding: OWN_WORKSPACE },
+  { pattern: '/v1/usage/session-costs/:sessionId', methods: ['GET'], binding: OWN_WORKSPACE },
   { pattern: '/v1/capture/me/*', methods: ['GET'], binding: OWN_WORKSPACE },
   // Before `/v1/projects/:workspaceId`, which also matches `current`.
   { pattern: '/v1/projects/current', methods: ['GET'], binding: OWN_WORKSPACE },
@@ -327,14 +332,25 @@ export interface WorkspaceParams {
 
 const REFUSALS: Record<WorkspaceFenceCheck, string> = {
   'cross-workspace': 'This workspace key cannot access another workspace',
-  'account-wider-than-workspace': 'This workspace key cannot act on a legacy account that holds several workspaces; name the workspace',
+  // The request named a legacy ACCOUNT key that holds several workspaces: the
+  // workspace id names exactly one, so naming it fixes this.
+  'account-wider-than-workspace': 'This workspace key cannot act on a legacy account id that holds several workspaces; use the workspace id instead of the account id',
   'platform-route': 'This workspace key cannot call platform routes',
   'person-route': "This workspace key cannot call a person's own routes; use a personal key or sign in",
   'foreign-sandbox': 'This workspace key cannot access a sandbox outside its workspace',
   'default-deny': 'This workspace key cannot call this route',
 };
 
-const refuse = (check: WorkspaceFenceCheck): WorkspaceFenceVerdict => ({ allowed: false, check, reason: REFUSALS[check] });
+/**
+ * The path already names the key's OWN workspace, but the route acts on the
+ * account rows that workspace still shares with the other workspaces of its
+ * split_pending legacy account. No id, flag or grant fixes it: a person's own
+ * key does (the person acts in each workspace, `authorize` decides).
+ */
+export const SHARED_ACCOUNT_REFUSAL =
+  'This workspace key cannot reach account-wide settings (members, roles, groups, keys, invites) that this workspace still shares with other workspaces of the same legacy account; use a personal key: run `kortix login` on your own machine, or open the web app';
+
+const refuse = (check: WorkspaceFenceCheck, reason: string = REFUSALS[check]): WorkspaceFenceVerdict => ({ allowed: false, check, reason });
 const ALLOWED: WorkspaceFenceVerdict = { allowed: true };
 
 /** Does one id (a workspace id or a legacy account key) name the credential's workspace? */
@@ -382,7 +398,7 @@ export async function workspaceFenceVerdict(
     case 'path': {
       const verdict = await namesOwnWorkspace(matched.params[b.param]!, credential, deps, b.via === 'account');
       if (verdict.allowed && b.family && (await deps.workspaceSplitPending?.(credential.workspaceId))) {
-        return refuse('account-wider-than-workspace');
+        return refuse('account-wider-than-workspace', SHARED_ACCOUNT_REFUSAL);
       }
       return verdict;
     }

@@ -413,6 +413,16 @@ that date beside remaining plan credits. The ledger shows each grant's own
 `expires_at` when recorded, never a current account schedule substituted for
 a historical grant. New free welcome grants record their scheduled reset date.
 
+### Account state without `billing.read`
+
+A caller without `billing.read` (a custom role without it, or a workspace key
+or session token of a `split_pending` legacy account) gets the gating view
+(`gatingView` in `billing/routes/account-state.ts`): plan, `billing_state`,
+`credits.can_run` and entitlements. `credits.total`, `daily`, `monthly` and
+`extra` are absent, never `0` (flow BILL-21 asserts the absence). `credits.hidden
+{ reason, message }` names the verdict reason and the remedy. The CLI's
+`billing status` prints `credits hidden — <message>`.
+
 ## Wallet admission and model access
 
 `credits.can_run` and `billing_state` describe wallet admission, not model

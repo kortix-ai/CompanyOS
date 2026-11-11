@@ -71,10 +71,10 @@ export interface ProjectSelectorViewProps {
   connectComputer?: boolean;
   email: string | null;
   name?: string | null;
+  /** `user_metadata.avatar_url` — the picture Settings → Profile stored (KRTX-4492). */
+  avatarUrl?: string | null;
   loading: boolean;
   loadFailed: boolean;
-  /** Some account's project list failed: the list may be missing rows. */
-  partialFailure?: boolean;
   workspaces: WorkspaceRow[];
   invites: MyAccountInvite[];
   /** `/workspaces/new`, or null when this caller may not create a workspace. */
@@ -115,7 +115,7 @@ export interface InlineCreateProps {
 
 export function ProjectSelectorView(props: ProjectSelectorViewProps) {
   const t = useTranslations('workspaces.chooser');
-  const { email, loading, loadFailed, workspaces, invites } = props;
+  const { email, loading, loadFailed, workspaces, invites, avatarUrl } = props;
   const createHref =
     props.createHref && props.connectComputer ? `${props.createHref}?connect=computer` : props.createHref;
   const [query, setQuery] = useState('');
@@ -141,7 +141,13 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-lg flex-col px-6 py-20">
-      <AccountTopBar email={email} name={props.name} signingOut={props.signingOut} onLogOut={props.onLogOut} />
+      <AccountTopBar
+        email={email}
+        name={props.name}
+        avatarUrl={avatarUrl}
+        signingOut={props.signingOut}
+        onLogOut={props.onLogOut}
+      />
 
       {/* `my-auto` centers the block in the viewport while it fits, and lets
           it start at the top and scroll once the list is taller. Blank while
@@ -225,15 +231,6 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
                     </ul>
                   )}
                 </section>
-              ) : null}
-
-              {props.partialFailure ? (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-dashed px-4 py-3">
-                  <p className="text-muted-foreground text-xs">{t('partialError')}</p>
-                  <Button size="sm" variant="outline" onClick={props.onRetryAll}>
-                    {t('retry')}
-                  </Button>
-                </div>
               ) : null}
 
               {createHref && inlineCreate ? (
@@ -540,9 +537,9 @@ export function ProjectSelector({ connectComputer }: { connectComputer?: boolean
       connectComputer={connectComputer}
       email={user?.email ?? null}
       name={user?.user_metadata?.name}
+      avatarUrl={user?.user_metadata?.avatar_url}
       loading={data.listsLoading || data.invitesQuery.isLoading}
       loadFailed={data.accountsQuery.isError || data.allListsFailed}
-      partialFailure={data.failedAccountIds.length > 0}
       workspaces={data.workspaces}
       invites={data.invites}
       createHref={createHref}

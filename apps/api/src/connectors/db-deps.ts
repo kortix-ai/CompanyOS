@@ -110,7 +110,7 @@ import {
   resolveSecretReader,
 } from './db-deps-principal';
 import { connectorConnected } from './db-deps-rows';
-import { projectsView } from '../workspaces/rows';
+import { accountKeyOfWorkspace } from '../workspaces/rows';
 
 export {
   composioConnectionMetadata,
@@ -376,14 +376,10 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
           .where(eq(projectSessions.sessionId, sessionId))
           .limit(1)
       : [];
-    const [project] = await db
-      .select({ accountId: projectsView.accountId })
-      .from(projectsView)
-      .where(eq(projectsView.projectId, projectId))
-      .limit(1);
-    if (!project) return [];
+    const projectAccountId = await accountKeyOfWorkspace(projectId);
+    if (!projectAccountId) return [];
     const entitled = await listEntitledConnectorConnections({
-      accountId: project.accountId,
+      accountId: projectAccountId,
       projectId,
       alias: canonicalConnectorAlias(slug),
       actingUserId: userId,

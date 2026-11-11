@@ -148,7 +148,7 @@
     "pdf-lib": "^1.17.1",
     "playwright": "^1.57.0",
     "postcss": "8.5.23",
-    "posthog-js": "^1.258.6",
+    "posthog-js": "^1.447.12",
     "pptx-react-viewer": "^1.15.0",
     "radix-ui": "^1.6.0",
     "react": "^19.2.0",

@@ -168,7 +168,7 @@ flow(
       "PATCH /v1/workspaces/:projectId/sessions/:sessionId",
       "GET /v1/workspaces/:projectId/sessions/:sessionId/turn",
       "GET /v1/workspaces/:projectId/sessions/:sessionId/prompts",
-      "GET /v1/workspaces/:projectId/sessions/:sessionId/transcript",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
     ],
   },
   async (ctx) => {

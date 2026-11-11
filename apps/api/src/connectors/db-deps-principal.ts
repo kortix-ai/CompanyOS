@@ -21,7 +21,7 @@ import { callPolicySetOf, principalMayUseConnector } from './principal-access';
 import type { ConnectorPrincipal } from './router-contract';
 import { resolveShareSubject } from './share';
 import { channelPlatform } from './db-deps-rows';
-import { projectsView } from '../workspaces/rows';
+import { accountKeyOfWorkspace } from '../workspaces/rows';
 
 // The request authorizers (`resolvePrincipal`, `resolveProjectPrincipal`,
 // `resolveAdmin`, `resolveConnectionsManager`, `resolveSecretBindingAdmin`,
@@ -275,12 +275,12 @@ export async function rebuildHeldCallPrincipal(held: HeldCallInput): Promise<Hel
   const userId = held.user_id;
   const sessionId = held.session_id;
 
-  const [[project], [member], serviceAccountActive] = await Promise.all([
-    db.select({ accountId: projectsView.accountId }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1),
+  const [projectAccountId, [member], serviceAccountActive] = await Promise.all([
+    accountKeyOfWorkspace(projectId),
     accountMemberRow(accountId, userId),
     isServiceAccountActive(accountId, userId),
   ]);
-  if (!project || project.accountId !== accountId) return { ok: false, reason: 'caller_mismatch' };
+  if (!projectAccountId || projectAccountId !== accountId) return { ok: false, reason: 'caller_mismatch' };
   // The caller must still exist in the account: a human as a member, a service
   // account (a trigger session re-minted from `created_by`) as active.
   // Offboarding revokes the tokens and only logs a failure; this read closes

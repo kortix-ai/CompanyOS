@@ -56,6 +56,7 @@ import type { ConnectorPrincipal } from './router-contract';
 import { COMPUTER_SLUG, withComputerCatalog } from './computers';
 import { ensureProjectComputer } from './sync';
 import { isUuid } from '../shared/validate';
+import { unannotatedActionRisk } from './action-risk';
 import type { ActionBinding, Risk } from './types';
 import {
   type ConnectorRow,
@@ -566,7 +567,14 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
         path: a.path,
         relPath: a.path,
         inputSchema: a.inputSchema ?? null,
-        risk: a.risk as Risk,
+        // Composio and Pipedream store a fallback `write`; the reviewed
+        // classifier decides for them (action-risk.ts).
+        risk: unannotatedActionRisk(providerType, {
+          path: a.path,
+          description: a.description,
+          risk: a.risk as Risk,
+          bindingKind: (a.binding as { kind?: string } | null)?.kind ?? null,
+        }),
         binding: a.binding as unknown as ActionBinding,
       } satisfies GatewayAction;
     },

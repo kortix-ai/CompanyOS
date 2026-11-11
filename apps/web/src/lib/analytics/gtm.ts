@@ -11,10 +11,12 @@
 // RouteChangeTracker), so an unguarded access would crash analytics on the
 // marketing site for those browsers.
 import { locales } from '@/i18n/catalog.mjs';
+import { useEffect, useEffectEvent, useState } from 'react';
 import {
   safeSessionGetItem,
   safeSessionSetItem,
 } from '@kortix/ui/internal/lib/storage/managed-storage';
+import { isDesktop } from '@kortix/ui/internal/lib/desktop';
 
 // Extend the Window interface to include dataLayer
 interface GTMWindow extends Window {
@@ -87,6 +89,37 @@ export function isAnalyticsExcludedPath(pathname: string): boolean {
   return ANALYTICS_EXCLUDED_PREFIXES.some(
     (prefix) => withoutLocale === prefix || withoutLocale.startsWith(`${prefix}/`),
   );
+}
+
+/**
+ * Whether this document may load a third-party analytics script: never inside
+ * the desktop app (its user agent carries `DESKTOP_UA_TOKEN`); GTM carries
+ * visitor de-anonymization tags that have no place in the authenticated native
+ * client.
+ *
+ * Never loads when the document opens on a signed-in or capability-token page
+ * (`isAnalyticsExcludedPath`: /workspaces, /admin, /secret-intake, …). Scripts
+ * GTM injects run with the page's privileges, and the Supabase session cookie
+ * is readable from script. The decision is made once per document: a script
+ * cannot be unloaded, so a visitor who opens a marketing page and then
+ * navigates into the app in the same tab keeps the container that page loaded.
+ *
+ * `extra` is the caller's own guard, evaluated once on mount with
+ * `window.location`. `useEffectEvent` keeps the caller's callback out of the
+ * effect's dependencies, so the decision is structurally once per document,
+ * however the caller builds its callback.
+ */
+export function useAnalyticsPageEnabled(extra?: (location: Location) => boolean): boolean {
+  const [enabled, setEnabled] = useState(false);
+  const onGate = useEffectEvent((location: Location) => extra?.(location) ?? true);
+  useEffect(() => {
+    setEnabled(
+      !isDesktop() &&
+        !isAnalyticsExcludedPath(window.location.pathname) &&
+        onGate(window.location),
+    );
+  }, []);
+  return enabled;
 }
 
 /**

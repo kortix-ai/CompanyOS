@@ -84,7 +84,7 @@ const BAR_TONE_CLASS = {
 
 /** Rows shown before the list folds: an account can hold dozens of
  *  workspaces, and the card sits beside the balance card. */
-export const STORAGE_ROWS_FOLDED = 5;
+const STORAGE_ROWS_FOLDED = 5;
 
 /**
  * Each bar's length against the largest workspace, not against the limit: the

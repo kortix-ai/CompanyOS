@@ -61,7 +61,7 @@ import type {
   SlackQuestionPress,
   SlashResponse,
 } from './types';
-import { projectsView } from '../../workspaces/rows';
+import { projectsView, accountKeyOfWorkspace } from '../../workspaces/rows';
 
 type SlackTurnOpts = { ownThreadsOnly?: boolean; threadProjectResolved?: boolean; authorizedResume?: boolean; press?: SlackQuestionPress };
 
@@ -637,14 +637,10 @@ export async function dispatchSlackEvent(
   // content, so don't stop here — send them to the agent.
   if (eventClass === 'mention' && !stripMentions(event.text ?? '') && !event.files?.length) {
     if (config.SLACK_REQUIRE_USER_IDENTITY) {
-      const [project] = await db
-        .select({ accountId: projectsView.accountId })
-        .from(projectsView)
-        .where(eq(projectsView.projectId, projectId))
-        .limit(1);
-      if (!project) return;
+      const projectAccountId = await accountKeyOfWorkspace(projectId);
+      if (!projectAccountId) return;
       const slackUserId = event.user ?? '';
-      const actor = await resolveChatActor(chatUser('slack', teamId, slackUserId), { projectId, accountId: project.accountId });
+      const actor = await resolveChatActor(chatUser('slack', teamId, slackUserId), { projectId, accountId: projectAccountId });
       if ('reason' in actor) {
         // Same reason as the main path below: a bot cannot read a prompt
         // addressed to it. See `<cmd> link-bot`.

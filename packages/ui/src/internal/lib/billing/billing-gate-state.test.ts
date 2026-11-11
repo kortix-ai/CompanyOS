@@ -8,6 +8,7 @@ import {
   billingModalCopy,
   billingStateAllowsRun,
   billingStateNeedsTopUp,
+  freeGrantUnspentElsewhere,
   resolveBillingState,
   walletSeverity,
 } from './billing-gate-state';
@@ -20,6 +21,51 @@ function accountState(overrides: Partial<AccountStateLike> = {}): AccountStateLi
     ...overrides,
   } as AccountStateLike;
 }
+
+// KRTX-4713: a further workspace on Free holds no free credits by design — the
+// person's grant sits unspent in their first workspace (`free_grant`). Opening
+// that workspace must never greet them with the Out-of-credits modal; the
+// modal waits for an actual blocked turn.
+describe('freeGrantUnspentElsewhere — the on-open paywall gate', () => {
+  const furtherWorkspace = (claimed: string | null) =>
+    accountState({
+      billing_state: 'no_subscription',
+      credits: {
+        can_run: false,
+        total: 0,
+        free_grant: { eligible: false, claimed_workspace_id: claimed },
+      },
+      subscription: { subscription_id: null, status: null },
+      tier: { can_purchase_credits: true, monthly_credits: 0 },
+    });
+
+  test('free credits unspent in the claimed workspace: hold the modal', () => {
+    const claimed = accountState({ credits: { can_run: true, total: 5 } });
+    expect(freeGrantUnspentElsewhere(furtherWorkspace('ws-first'), claimed)).toBe(true);
+  });
+
+  test('the claimed wallet spent (a true zero balance): the modal may open', () => {
+    const claimed = accountState({
+      billing_state: 'no_subscription',
+      credits: { can_run: false, total: 0 },
+      subscription: { subscription_id: null, status: null },
+    });
+    expect(freeGrantUnspentElsewhere(furtherWorkspace('ws-first'), claimed)).toBe(false);
+  });
+
+  test('a claim whose state has not loaded: hold, never greet with a paywall', () => {
+    expect(freeGrantUnspentElsewhere(furtherWorkspace('ws-first'), undefined)).toBeUndefined();
+  });
+
+  test('the workspace that holds the grant, a member-less claim and no state never hold it', () => {
+    const eligible = accountState({
+      credits: { can_run: true, total: 5, free_grant: { eligible: true, claimed_workspace_id: null } },
+    });
+    expect(freeGrantUnspentElsewhere(eligible, undefined)).toBe(false);
+    expect(freeGrantUnspentElsewhere(furtherWorkspace(null), undefined)).toBe(false);
+    expect(freeGrantUnspentElsewhere(undefined, undefined)).toBe(false);
+  });
+});
 
 describe('resolveBillingState — the server state wins', () => {
   test('a server-sent billing_state is used verbatim', () => {

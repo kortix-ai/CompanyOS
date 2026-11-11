@@ -2063,6 +2063,22 @@ export const projectSessions = kortixSchema.table(
         table.createdAt.desc(),
       )
       .where(sql`(${table.metadata} ->> 'trigger_slug') is not null`),
+    // Agent-handle lookups (peer-messages `to` resolution, the team-tasks
+    // handle-taken check): without an expression index the planner filters
+    // every session of the project on the JSON extraction. Partial: only
+    // named agents carry a handle.
+    index('idx_project_sessions_project_agent_handle')
+      .on(table.projectId, sql`(${table.metadata} ->> 'agent_handle')`)
+      .where(sql`(${table.metadata} ->> 'agent_handle') is not null`),
+    // A session's multi-agent circle (peer-messages `circleOf`: lead,
+    // children, teammates) and the lead's teammate list filter on
+    // `metadata.team_lead` with NO project predicate, so the planner
+    // seq-scans the table. This is the only index that can serve the
+    // `team_lead IN (...)` arm of that OR. Partial: only teammates carry
+    // the key.
+    index('idx_project_sessions_team_lead')
+      .on(sql`(${table.metadata} ->> 'team_lead')`)
+      .where(sql`(${table.metadata} ->> 'team_lead') is not null`),
     uniqueIndex('idx_project_sessions_project_branch').on(table.projectId, table.branchName),
     uniqueIndex('idx_project_sessions_tenant_identity').on(
       table.accountId,
@@ -4472,6 +4488,10 @@ export const oauthAccessTokens = kortixSchema.table(
      *  the token acts as the person in every workspace (every token issued
      *  before 2026-11-06). */
     boundWorkspaceId: uuid('bound_workspace_id'),
+    /** The second factor the minting session passed: 'aal2', or NULL for none.
+     *  Set by the Apps gate for a viewer whose App cookie a browser session at
+     *  aal2 opened. The API honors it in `account_id` only. */
+    mfaAal: text('mfa_aal'),
   },
   (table) => [
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),

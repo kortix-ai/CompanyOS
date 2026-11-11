@@ -35,6 +35,7 @@ import {
 import { surfacePolicySetError } from '../policy-set-errors.ts';
 import { promptSecret } from '../prompts.ts';
 import { C, help, pad, status, trim } from '../style.ts';
+import { runConnectorCalls } from './connector-calls.ts';
 import { runConnector } from './connector-gateway.ts';
 import { renderConnectorTypes } from './connector-types.ts';
 import { fromWorkspaceAlias } from '../command-argv.ts';
@@ -294,6 +295,11 @@ Call:
   upload <file> --connector <slug>  Stage one file; prints \`ref\` for call args.
   types [--connector <a,b>]         TypeScript types for every action, for
         [--out <file>]              \`connectors.callAction\` in the SDK.
+  calls [--agent <slug>]            The tool call log, newest first: who,
+        [--connector <slug>]        which action, the outcome, the refusal
+        [--surface <s>]             reason, Kortix and upstream ms. Never
+        [--status <s>]              the arguments (see \`calls --help\`).
+        [--limit <n>] [--json]
 
 Rules:
   policy-sets <slug> ls             The profile's rule sets and their agents.
@@ -509,6 +515,8 @@ export async function runConnectors(argv: string[]): Promise<number> {
     process.stdout.write(POLICY_SETS_HELP);
     return rest.length === 0 ? 2 : 0;
   }
+  // `calls` owns its flags (`--status` is a filter there, a switch elsewhere) and its help.
+  if (sub === 'calls') return runConnectorCalls(rest);
   // The root help promises `kortix connectors <subcommand> --help`. Only
   // `connections` and `policy` (handled above) own dedicated help text; every
   // other subcommand would otherwise treat `--help` as an ordinary positional

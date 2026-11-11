@@ -17,6 +17,7 @@ export * from './account-secret-resources';
 export * from './connectors';
 export * from './connector-run';
 export * from './agent-tools';
+export * from './tool-calls';
 export * from './policies';
 export * from './sandbox';
 export * from './files';

@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1753,
-  "aliases": 675,
+  "count": 1755,
+  "aliases": 676,
   "routes": [
     {
       "method": "GET",
@@ -4702,6 +4702,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/spaces/private"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/tool-calls",
+      "aliasOf": "/v1/workspaces/:workspaceId/tool-calls"
+    },
+    {
       "method": "POST",
       "path": "/v1/projects/:workspaceId/transfer",
       "aliasOf": "/v1/workspaces/:workspaceId/transfer"
@@ -7541,6 +7546,10 @@
     {
       "method": "DELETE",
       "path": "/v1/workspaces/:workspaceId/tokens/:tokenId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/tool-calls"
     },
     {
       "method": "POST",

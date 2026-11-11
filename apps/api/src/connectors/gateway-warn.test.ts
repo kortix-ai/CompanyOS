@@ -13,13 +13,27 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 
 const warns: string[] = [];
+const warnLines: string[] = [];
 mock.module('../lib/logger', () => ({
-  logger: { debug() {}, info() {}, error() {}, warn: (message: string) => warns.push(message) },
+  logger: {
+    debug() {},
+    info() {},
+    error() {},
+    warn: (message: string, fields?: unknown) => {
+      warns.push(message);
+      warnLines.push(JSON.stringify({ message, fields }));
+    },
+  },
 }));
 
-import { type GatewayDeps, handleCall } from './gateway';
+import { type GatewayDeps, type ExecutionRecord, handleCall } from './gateway';
 
-function deps(actionPath: string): GatewayDeps {
+/** The upstream body a provider answers: account data the log must never ship. */
+const UPSTREAM_BODY = '{"error":"not found","customer_note":"synthetic-private-record-7731"}';
+
+const records: ExecutionRecord[] = [];
+
+function deps(actionPath: string, body = 'bad gateway'): GatewayDeps {
   return {
     loadConnectorBySlug: async () => ({
       connectorId: 'conn-linear',
@@ -40,14 +54,17 @@ function deps(actionPath: string): GatewayDeps {
     }),
     resolveCredential: async () => 'synthetic-credential',
     loadPolicies: async () => [],
-    recordExecution: async () => 'exec-1',
+    recordExecution: async (record) => {
+      records.push(record);
+      return 'exec-1';
+    },
     // The upstream answers the way a provider outage does: a 502 with a body.
-    fetchImpl: async () => ({ status: 502, ok: false, text: async () => 'bad gateway' }),
+    fetchImpl: async () => ({ status: 502, ok: false, text: async () => body }),
   };
 }
 
-const call = (actionPath: string) =>
-  handleCall(deps(actionPath), {
+const call = (actionPath: string, body?: string) =>
+  handleCall(deps(actionPath, body), {
     projectId: 'project-fake',
     accountId: 'account-fake',
     subject: { userId: 'user-fake', groupIds: [] },
@@ -71,6 +88,8 @@ afterEach(() => {
   // A new test starts with an empty window, so test order cannot hide a
   // failure: a stale throttle entry would wrongly suppress the next first warn.
   warns.length = 0;
+  warnLines.length = 0;
+  records.length = 0;
 });
 
 test('the first failure warns, repeats inside the interval stay silent, one after it warns again', async () => {
@@ -97,4 +116,29 @@ test('a second failing call path warns independently inside the same interval', 
   expect(await call('run_query_or_mutation')).toMatchObject({ status: 'error' });
   expect(await call('get_linear_issue')).toMatchObject({ status: 'error' });
   expect(warns).toHaveLength(2); // one per call path, not one per interval overall
+});
+
+test('the warn line and the audit row carry the status, reason and byte length, never the upstream body', async () => {
+  clock += 300_000;
+  restore = useFakeClock();
+  const result = await call('get_record', UPSTREAM_BODY);
+  // The caller still gets the provider's answer, so it can fix its call.
+  expect(result).toMatchObject({ status: 'error' });
+  expect((result as { reason: string }).reason).toContain('synthetic-private-record-7731');
+
+  expect(warnLines).toHaveLength(1);
+  expect(warnLines[0]).not.toContain('synthetic-private-record-7731');
+  expect(warnLines[0]).not.toContain('not found');
+  const line = JSON.parse(warnLines[0]!);
+  expect(line).toEqual({
+    message: '[connector] linear.get_record failed (upstream 502)',
+    fields: { http_status: 502, reason: 'upstream_502', upstream_bytes: expect.any(Number) },
+  });
+  // The length of the answer the caller got: at least the body itself.
+  expect(line.fields.upstream_bytes).toBeGreaterThanOrEqual(Buffer.byteLength(UPSTREAM_BODY));
+
+  const row = records.at(-1)!;
+  expect(JSON.stringify(row)).not.toContain('synthetic-private-record-7731');
+  expect(row.resultSummary).toEqual({ http_status: 502, reason: 'upstream_502', upstream_bytes: line.fields.upstream_bytes });
+  expect(row.log).toMatchObject({ refusalReason: 'upstream_502', phase: 'upstream' });
 });

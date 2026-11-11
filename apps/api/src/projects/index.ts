@@ -69,6 +69,7 @@ import { registerSessionOpenBundleRoutes } from './routes/session-open-bundle';
 import { registerSessionStreamRoutes } from './routes/session-stream';
 import { registerProjectAuditRoutes } from './routes/project-audit';
 import { registerApprovalsRoutes } from './routes/approvals';
+import { registerToolCallRoutes } from './routes/tool-calls';
 import { registerResourceGrantsRoutes } from './routes/resource-grants';
 import { registerSessionScopeRoutes } from './routes/session-scope';
 import { registerSessionConfigRoutes } from './routes/session-config';
@@ -175,6 +176,7 @@ export function registerAllProjectRoutes(): void {
   registerSessionStreamRoutes();
   registerProjectAuditRoutes();
   registerApprovalsRoutes();
+  registerToolCallRoutes();
   registerResourceGrantsRoutes();
   registerSessionScopeRoutes();
   registerSessionConfigRoutes();

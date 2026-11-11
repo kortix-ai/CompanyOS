@@ -10,7 +10,7 @@ import { takeFlags } from '../command-argv.ts';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { runGit } from '../git-run.ts';
 import { readKortixState, REFERENCE_REPOS } from '../onboarding/kortix-state.ts';
-import { envValues, listFiles, proposeDevEnv, scanEnv, scanIntegrations, scanMcpServers, scanRepository, scanStack, scanUnrecognized, scrubValues } from '../onboarding/repo-scan.ts';
+import { envValues, listFiles, proposeDevEnv, scanEnv, scanCodeEnvNames, scanIntegrations, scanMcpServers, scanRepository, scanStack, scanUnrecognized, scrubValues } from '../onboarding/repo-scan.ts';
 import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix plan [options]
@@ -42,8 +42,13 @@ export async function buildPlan(dir: string) {
   const repository = scanRepository(root, new Set(fileList));
   const stack = scanStack(root, fileList, repository);
   const env = scanEnv(root, fileList);
-  const integrations = scanIntegrations(root, fileList, repository, env);
-  const unrecognized = scanUnrecognized(env);
+  const named = scanCodeEnvNames(root, fileList, stack);
+  const integrations = scanIntegrations(root, fileList, repository, env, named);
+  const unrecognized = scanUnrecognized(env, named);
+  const envToPush = env.files
+    .filter((file) => !file.example && !file.dotenvx_keys)
+    .flatMap((file) => file.keys.filter((k) => k.class === 'local' && !k.empty && !k.encrypted).map((k) => ({ file: file.file, name: k.name })));
+  const valueFiles = env.files.filter((file) => !file.example && !file.dotenvx_keys);
   const mcpServers = scanMcpServers(root, fileList);
   process.chdir(root);
   const kortix = await readKortixState(root);
@@ -58,9 +63,15 @@ export async function buildPlan(dir: string) {
     recommendation: {
       references: REFERENCE_REPOS.map((ref) => ({ ...ref, status: 'published' as const })),
       dev_environment: proposeDevEnv(stack, env, { workerd: integrations.some((i) => i.name === 'Cloudflare') }),
-      env_to_push: env.files
-        .filter((file) => !file.example && !file.dotenvx_keys)
-        .flatMap((file) => file.keys.filter((k) => k.class === 'local' && !k.empty && !k.encrypted).map((k) => ({ file: file.file, name: k.name }))),
+      env_to_push: envToPush,
+      /** Why the list is empty: an agent must not read that as "nothing is needed". */
+      env_to_push_reason: envToPush.length
+        ? null
+        : valueFiles.length === 0
+          ? env.files.some((file) => file.example)
+            ? 'no env file with values here: only an example file. Ask the person where the dev values are'
+            : 'this repository has no env file'
+          : 'every value is empty, encrypted, remote or production: none is safe to push without the person',
     },
   }, envValues(root, fileList));
 }

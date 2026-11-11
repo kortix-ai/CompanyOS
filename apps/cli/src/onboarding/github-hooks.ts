@@ -39,9 +39,32 @@ export function listHooks(repo: string): RepoHook[] | { error: string } {
   }
 }
 
-/** The hook that calls this trigger: the exact URL, else a URL that ends with the trigger slug. */
-export function findHook(hooks: RepoHook[], webhookUrl: string | null, slug: string): RepoHook | null {
-  return hooks.find((h) => webhookUrl && h.url === webhookUrl) ?? hooks.find((h) => h.url.endsWith(`/${slug}`)) ?? null;
+function pathOf(url: string): string | null {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The hook that calls this trigger: the same URL path on any host. The path
+ * holds the workspace id, so a tunnel that moved still matches and a hook of
+ * another workspace never does.
+ */
+export function findHook(hooks: RepoHook[], webhookUrl: string | null, _slug?: string): RepoHook | null {
+  const path = webhookUrl ? pathOf(webhookUrl) : null;
+  if (!path) return null;
+  return hooks.find((h) => h.url === webhookUrl) ?? hooks.find((h) => pathOf(h.url) === path) ?? null;
+}
+
+/** Active hooks that send the same trigger slug to ANOTHER Kortix workspace. */
+export function foreignHooks(hooks: RepoHook[], webhookUrl: string | null, slug: string): Array<RepoHook & { workspace: string }> {
+  const own = webhookUrl ? pathOf(webhookUrl) : null;
+  return hooks.flatMap((h) => {
+    const match = h.active ? pathOf(h.url)?.match(/\/v1\/webhooks\/workspaces\/([^/]+)\/([^/]+)$/) : null;
+    return match && match[2] === slug && pathOf(h.url) !== own ? [{ ...h, workspace: match[1]! }] : [];
+  });
 }
 
 function hookBody(url: string, events: string[], secret: string): string {

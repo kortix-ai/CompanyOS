@@ -425,7 +425,7 @@ async function shipFirstTime(
     );
     if (flags.dryRun) {
       process.stdout.write(
-        `  ${C.dim}[dry-run] would: link ${byoUrl} via GitHub App${flags.githubToken ? ' token' : ' (1-click install if needed)'} + push${C.reset}\n\n`,
+        `  ${C.dim}[dry-run] would: link ${byoUrl} ${flags.githubToken ? 'with the GitHub token from stdin' : 'via the Kortix GitHub App (1-click install if needed)'} + push${C.reset}\n\n`,
       );
       return 0;
     }

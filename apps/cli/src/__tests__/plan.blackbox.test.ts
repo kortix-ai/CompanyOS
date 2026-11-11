@@ -50,7 +50,9 @@ beforeAll(() => {
   write('apps/web/package.json', JSON.stringify({ name: 'web', dependencies: { '@sentry/nextjs': '8', 'posthog-js': '1', stripe: '17' }, scripts: { dev: 'next dev', build: 'next build' } }));
   write('packages/ui/package.json', JSON.stringify({ name: 'ui', dependencies: { '@supabase/supabase-js': '2' } }));
   write('docker-compose.yml', 'services:\n  db:\n    image: postgres:16\n  cache:\n    image: redis:7\n');
-  write('.github/workflows/ci.yml', `on: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: yarn install --frozen-lockfile\n      - run: echo "${VALUES[1]}"\n`);
+  write('.github/workflows/ci.yml', `on: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: yarn install --frozen-lockfile\n      - run: echo "${VALUES[1]}"\n        env:\n          DEPLOY: \${{ secrets.ZETA_DEPLOY_TOKEN }}\n`);
+  // A service the code calls with fetch: no dependency, no env line. The name it reads is the evidence.
+  write('src/mail.ts', 'export const key = process.env.RESEND_API_KEY;\n');
   write('README.md', 'Tickets live in https://linear.app/synthetic/team/ENG\n');
   write('playwright.config.ts', 'export default {};\n');
   write('.env', `DATABASE_URL=${VALUES[0]}\nAPI_URL="${VALUES[1]}"\nSTRIPE_SECRET_KEY=${VALUES[2]}\nexport SESSION_SECRET=${VALUES[3]}\nEMPTY=\nSEALED=${VALUES[5]}\nSLACK_WEBHOOK_URL=\n`);
@@ -107,10 +109,15 @@ test('repository, monorepo layout, stack and integrations', () => {
   expect(out.stack.browser_tests).toEqual([{ tool: 'playwright', evidence: 'playwright.config.ts' }]);
   expect(out.stack.commands).toContainEqual({ name: 'e2e', command: 'playwright test', package: '.' });
   expect(out.stack.commands).toContainEqual({ name: 'build', command: 'next build', package: 'apps/web' });
-  expect(out.integrations.map((i: { name: string }) => i.name)).toEqual(['GitHub', 'Sentry', 'PostHog', 'Linear', 'Slack', 'HubSpot', 'Stripe', 'Supabase']);
+  expect(out.integrations.map((i: { name: string }) => i.name)).toEqual(['GitHub', 'Sentry', 'PostHog', 'Linear', 'Slack', 'Resend', 'HubSpot', 'Stripe', 'Supabase']);
+  expect(out.integrations.find((i: { name: string }) => i.name === 'Resend').evidence).toEqual(['src/mail.ts: RESEND_API_KEY']);
+  expect(out.stack.ci[0].secrets).toEqual(['ZETA_DEPLOY_TOKEN']);
   expect(out.integrations.find((i: { name: string }) => i.name === 'HubSpot')).toEqual({ name: 'HubSpot', category: 'crm', evidence: ['Gemfile: hubspot-api-client'] });
   // A credential no rule names is reported by prefix, so the person is asked what it is.
-  expect(out.unrecognized_services).toEqual([{ prefix: 'ACME', evidence: ['.env.example: ACME_API_KEY', '.env.example: ACME_WEBHOOK_SECRET'] }]);
+  expect(out.unrecognized_services).toEqual([
+    { prefix: 'ACME', evidence: ['.env.example: ACME_API_KEY', '.env.example: ACME_WEBHOOK_SECRET'] },
+    { prefix: 'ZETA_DEPLOY', evidence: ['.github/workflows/ci.yml: ZETA_DEPLOY_TOKEN'] },
+  ]);
   // MCP servers by name only: the URL holds a token.
   expect(out.mcp_servers).toEqual([{ name: 'tracker', file: '.mcp.json' }]);
   expect(out.integrations.find((i: { name: string }) => i.name === 'Linear').evidence).toEqual(['README.md']);

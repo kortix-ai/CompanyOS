@@ -5,8 +5,6 @@
  * used. `kortix onboard` makes these real; `kortix doctor --loops` checks them.
  * Pure: reads the merged document and the files it points at, never a value.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { declaredTemplateSlugs } from '../commands/sandboxes-build.ts';
 import { envSpecFromManifest } from '../manifest.ts';
 
@@ -30,6 +28,8 @@ export interface GitHubWebhookTrigger {
   enabled: boolean;
   /** `filter: body.label.name: <label>`: the repository label that starts the trigger. */
   label: string | null;
+  /** `filter: body.repository.full_name: <owner/repo>`: the repository the webhook goes on. */
+  repo: string | null;
 }
 
 export interface DeclaredConnector {
@@ -44,7 +44,7 @@ export interface ManifestNeeds {
   sandbox_templates: string[];
   sandbox_default: string | null;
   connectors: DeclaredConnector[];
-  /** A connector, an agent grant or a prompt names Slack (`kortix_slack`, `provider: channel, platform: slack`). */
+  /** A channel connector, an agent grant (`kortix_slack`) or a trigger that is ON names Slack. A disabled Slack trigger needs nothing. */
   uses_slack: boolean;
 }
 
@@ -68,30 +68,8 @@ export function githubEventsOfFilter(filter: unknown): string[] {
   return stringList(value);
 }
 
-/** Text of every file under the import paths and every agent prompt_file (UTF-8, under 512 KiB each). */
-function referencedText(root: string, data: Record<string, unknown>): string {
-  const paths = new Set<string>(stringList(data.imports));
-  for (const agent of Object.values(isRow(data.agents) ? data.agents : {})) {
-    if (isRow(agent) && typeof agent.prompt_file === 'string') paths.add(agent.prompt_file);
-  }
-  let text = '';
-  const read = (abs: string) => {
-    const info = statSync(abs);
-    if (info.isDirectory()) {
-      for (const entry of readdirSync(abs)) if (entry !== 'node_modules' && entry !== '.git') read(join(abs, entry));
-    } else if (info.size < 512 * 1024) {
-      text += readFileSync(abs, 'utf8');
-    }
-  };
-  for (const path of paths) {
-    const abs = resolve(root, path);
-    if (abs.startsWith(resolve(root)) && existsSync(abs)) read(abs);
-  }
-  return text;
-}
-
 /** Read the needs from the merged manifest document rooted at `root`. */
-export function manifestNeeds(data: Record<string, unknown>, root: string): ManifestNeeds {
+export function manifestNeeds(data: Record<string, unknown>, _root?: string): ManifestNeeds {
   const secrets = new Map<string, NeededSecret>();
   const add = (name: string, source: SecretSource, required: boolean, webhook = false) => {
     const key = name.trim().toUpperCase();
@@ -117,19 +95,24 @@ export function manifestNeeds(data: Record<string, unknown>, root: string): Mani
 
   const triggers: ManifestNeeds['triggers'] = [];
   const github: GitHubWebhookTrigger[] = [];
+  let slackTrigger = false;
   for (const trigger of Array.isArray(data.triggers) ? data.triggers : []) {
     if (!isRow(trigger) || typeof trigger.slug !== 'string') continue;
     const enabled = trigger.enabled !== false;
     const on = isRow(trigger.on) ? trigger.on : {};
     const webhook = on.webhook !== undefined;
     triggers.push({ slug: trigger.slug, enabled, webhook });
+    const run = isRow(trigger.run) ? trigger.run : {};
+    if (enabled && /\bslack\b/i.test(`${trigger.slug} ${typeof run.prompt === 'string' ? run.prompt : ''}`)) slackTrigger = true;
     if (!webhook) continue;
     const secret = isRow(on.webhook) && typeof on.webhook.secret === 'string' ? on.webhook.secret.trim().toUpperCase() : null;
     if (secret) add(secret, `trigger:${trigger.slug}`, enabled, true);
     const events = githubEventsOfFilter(trigger.filter);
     const filter = isRow(trigger.filter) ? trigger.filter : {};
     const label = typeof filter['body.label.name'] === 'string' ? filter['body.label.name'] : null;
-    if (events.length > 0) github.push({ slug: trigger.slug, events, secret, enabled, label });
+    const fullName = filter['body.repository.full_name'];
+    const repo = typeof fullName === 'string' && /^[\w.-]+\/[\w.-]+$/.test(fullName) ? fullName : null;
+    if (events.length > 0) github.push({ slug: trigger.slug, events, secret, enabled, label, repo });
   }
 
   const connectors: DeclaredConnector[] = [];
@@ -146,7 +129,7 @@ export function manifestNeeds(data: Record<string, unknown>, root: string): Mani
   }
 
   const sandbox = isRow(data.sandbox) ? data.sandbox : {};
-  const usesSlack = slackGrant || slackConnector || /\bkortix_slack\b/.test(referencedText(root, data));
+  const usesSlack = slackGrant || slackConnector || slackTrigger;
   return {
     secrets: [...secrets.values()].sort((a, b) => a.name.localeCompare(b.name)),
     triggers,

@@ -278,7 +278,15 @@ stack crashes the tests), and the \`dev-environment\` skill. Then:
 kortix validate
 \`\`\`
 
-Fix every error and warning in the files you wrote.
+Fix every error and warning in the files you wrote. Two rules save a round:
+
+- Give every agent you add a \`tools\` list (or \`"*"\`). An agent without one
+  trips a deprecation warning.
+- When \`kortix.yaml\` lives in its own repository, add
+  \`body.repository.full_name: <owner>/<repo>\` to the \`filter\` of every
+  GitHub webhook trigger. It names the code repository in code: \`onboard\`
+  and \`doctor\` then put the webhooks and labels there, and an event from any
+  other repository never starts a run.
 
 ## 5. Connect the models
 
@@ -295,15 +303,31 @@ Fix every error and warning in the files you wrote.
 kortix onboard --yes --json \\
   [--env-file <file> --only <A,B>]... \\
   [--channels <a,b>] [--connect <slug,...>] \\
-  [--repo <owner/repo>] [--github-token -]
+  [--name "<workspace name>"] [--repo <owner/repo>] [--github-token -]
 \`\`\`
+
+The first run creates the workspace. \`--name\` is its display name (default:
+\`project.name\` in \`kortix.yaml\`, else the folder name): agree it with the
+person, for example "Acme Loops". \`--repo\` is the code repository for the
+webhooks when \`kortix.yaml\` lives elsewhere and its triggers carry no
+\`body.repository.full_name\` filter.
 
 It runs in phases, each skipping what is done: \`validate\`, \`ship\` (link and
 push; it refuses a dirty tree), \`secrets\` (approved names, generated webhook
 secrets, one intake link for the rest), \`webhooks\` (the GitHub repository
 webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
 (connect link, the bot joins the channels), \`connectors\` (a sign-in link each),
-\`sandbox\` (build every image and wait), \`doctor\`.
+\`sandbox\` (build every image and wait; a first build takes 5 to 10 minutes
+and prints nothing in \`--json\` mode: tell the person before you start),
+\`doctor\`.
+
+A repository webhook that already sends the same event to another Kortix
+workspace is left in place and reported in the \`webhooks\` detail. Tell the
+person: two workspaces would act on the same event. They pick one; delete the
+other hook with the command \`kortix doctor --loops\` prints.
+
+A source that is off needs nothing: a disabled Slack trigger asks for no Slack
+connection.
 
 Exit 0 is done and green. Exit 4 means \`user_actions\` are left: give the person
 each one, exactly once, with its link (install the GitHub App, Allow in Slack,
@@ -317,6 +341,8 @@ the failed phase's \`detail\`, fix it, run again.
 kortix doctor --loops --json        # every check of what kortix.yaml declares
 kortix doctor --loops --fix --json  # re-runs the phase a red line names
 \`\`\`
+
+Pass the same \`--repo <owner/repo>\` you gave \`onboard\`, if any.
 
 Loop until \`ready: true\`. Then one real run, the cheapest one the factory has:
 for the Software Factory, file one tiny real ticket the analysis found, label
@@ -336,8 +362,11 @@ ${agentBlock(target)}
   connectors, as the person, with their permissions. The first call opens a
   consent page in the browser. A coding agent loads a new MCP server at its
   next start: say so.
-- \`kortix init --force\` links the workspace's skills where each local tool
-  reads them (never committed) and adds an \`AGENTS.md\` pointer.
+- \`kortix init --force\` runs in the repository that holds \`kortix.yaml\`. It
+  links every skill \`kortix.yaml\` registers where each local tool reads
+  skills (never committed). An \`AGENTS.md\` the repository already has is
+  kept: it gets one marked Kortix section at the end. A code repository
+  without \`kortix.yaml\` gets the MCP server and the rule below, nothing else.
 - With the person's yes, add this rule to the repository's \`AGENTS.md\` (and
   \`CLAUDE.md\` when it exists): "This repository runs Kortix loops, defined
   in \`kortix.yaml\`. To reach an outside tool, use the Kortix connectors

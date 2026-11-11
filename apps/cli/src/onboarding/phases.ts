@@ -17,7 +17,7 @@ import { parseDotenv } from '../commands/env.ts';
 import { currentBuildIds, reconcileTemplates, waitForTemplate } from '../commands/sandboxes-build.ts';
 import { runGit } from '../git-run.ts';
 import { classifyEnvKey } from './repo-scan.ts';
-import { createHook, ensureLabel, findHook, ghProblem, listHooks, updateHook } from './github-hooks.ts';
+import { createHook, ensureLabel, findHook, foreignHooks, ghProblem, listHooks, type RepoHook, updateHook } from './github-hooks.ts';
 import type { ManifestNeeds } from './manifest-needs.ts';
 import { runSelf } from './self-cli.ts';
 
@@ -47,6 +47,8 @@ export interface OnboardOptions {
   githubToken: string | null;
   buildTimeoutSec: number;
   message: string;
+  /** Display name for a workspace this run creates. */
+  name?: string | null;
 }
 
 export interface OnboardState {
@@ -107,6 +109,7 @@ export async function phaseShip(state: OnboardState): Promise<PhaseOutcome> {
     }
   }
   const args = ['ship', '-y', '--no-env', '--no-connect', '-m', state.opts.message];
+  if (state.opts.name && !state.ctx) args.push('--name', state.opts.name);
   if (state.opts.githubToken) args.push('--github-token', '-');
   const run = await runSelf(args, state.root, state.opts.githubToken ?? undefined);
   const out = `${run.stdout}\n${run.stderr}`;
@@ -227,17 +230,22 @@ export async function phaseWebhooks(state: OnboardState): Promise<PhaseOutcome> 
   const wanted = state.needs.github_webhooks;
   if (wanted.length === 0) return { status: 'skipped', detail: 'no webhook trigger filters on a GitHub event' };
   if (!state.ctx) return { status: 'failed', detail: 'no workspace' };
-  if (!state.repo) return { status: 'failed', detail: 'no GitHub repository: pass --repo <owner/repo>' };
+  // A trigger that filters on `body.repository.full_name` names its own repository.
+  const repoOf = (want: (typeof wanted)[number]) => want.repo ?? state.repo;
+  if (wanted.some((want) => !repoOf(want))) return { status: 'failed', detail: 'no GitHub repository: pass --repo <owner/repo>, or filter the trigger on body.repository.full_name' };
   const problem = ghProblem();
   if (problem) {
     state.actions.push({ kind: 'run', what: `${problem}: sign in so onboarding can create the webhooks, then run onboard again`, command: 'gh auth login' });
     return { status: 'waiting_on_person', detail: problem };
   }
-  const repo = state.repo;
   const triggers = await state.ctx.client.get<{ triggers: Array<{ slug: string; webhook_url?: string | null }> }>(`${base(state)}/triggers`);
   const urls = new Map(triggers.triggers.map((t) => [t.slug, t.webhook_url ?? null]));
-  const hooks = listHooks(repo);
-  if ('error' in hooks) return { status: 'failed', detail: `gh cannot read the hooks of ${repo}: ${hooks.error}` };
+  const hooksOf = new Map<string, RepoHook[]>();
+  for (const repo of new Set(wanted.map((want) => repoOf(want)!))) {
+    const hooks = listHooks(repo);
+    if ('error' in hooks) return { status: 'failed', detail: `gh cannot read the hooks of ${repo}: ${hooks.error}` };
+    hooksOf.set(repo, hooks);
+  }
 
   const notes: string[] = [];
   const errors: string[] = [];
@@ -250,10 +258,11 @@ export async function phaseWebhooks(state: OnboardState): Promise<PhaseOutcome> 
   for (const [key, members] of groups) {
     const secretName = key.startsWith('(none):') ? null : key;
     const rows = members.map((want) => {
+      const repo = repoOf(want)!;
       const url = urls.get(want.slug) ?? null;
-      const hook = findHook(hooks, url, want.slug);
+      const hook = findHook(hooksOf.get(repo)!, url);
       const current = !!hook && !!url && hook.url === url && want.events.every((e) => hook.events.includes(e) || hook.events.includes('*'));
-      return { want, url, hook, current };
+      return { want, repo, url, hook, current };
     });
     const absent = rows.filter((r) => !r.url).map((r) => r.want.slug);
     if (absent.length) { errors.push(`no webhook URL for ${absent.join(', ')} (ship first)`); continue; }
@@ -267,22 +276,41 @@ export async function phaseWebhooks(state: OnboardState): Promise<PhaseOutcome> 
       notes.push(`${secretName} rotated`);
     }
     for (const row of rows) {
-      const result = row.hook ? updateHook(repo, row.hook.id, row.url!, row.want.events, value ?? '') : createHook(repo, row.url!, row.want.events, value ?? '');
+      const result = row.hook ? updateHook(row.repo, row.hook.id, row.url!, row.want.events, value ?? '') : createHook(row.repo, row.url!, row.want.events, value ?? '');
       if (result.ok) notes.push(`${row.want.slug}: ${row.hook ? 'updated' : 'created'}`);
       else errors.push(`${row.want.slug}: ${result.error}`);
     }
   }
-  for (const label of [...new Set(wanted.map((w) => w.label).filter((l): l is string => !!l))]) {
-    const result = ensureLabel(repo, label);
+  // A hook that sends the same trigger to another workspace is never repointed: it is that workspace's.
+  const warnings: string[] = [];
+  for (const want of wanted) {
+    for (const other of foreignHooks(hooksOf.get(repoOf(want)!)!, urls.get(want.slug) ?? null, want.slug)) {
+      warnings.push(`${want.slug}: workspace ${other.workspace.slice(0, 8)} receives the same events (hook ${other.id}, left in place)`);
+    }
+  }
+  const labels = new Map<string, string>();
+  for (const want of wanted) if (want.label) labels.set(`${repoOf(want)} ${want.label}`, want.label);
+  for (const [key, label] of labels) {
+    const result = ensureLabel(key.split(' ')[0]!, label);
     if (typeof result === 'object') errors.push(`label ${label}: ${result.error}`);
     else if (result === 'created') notes.push(`label ${label} created`);
   }
-  if (errors.length) return { status: 'failed', detail: [...errors, ...notes].join('; ') };
+  if (errors.length) return { status: 'failed', detail: [...errors, ...notes, ...warnings].join('; ') };
   const changed = notes.some((n) => !n.endsWith('in place'));
-  return { status: changed ? 'done' : 'skipped', detail: notes.join('; ') };
+  return { status: changed ? 'done' : 'skipped', detail: [...notes, ...warnings].join('; ') };
 }
 
 // ── Slack ────────────────────────────────────────────────────────────────────
+
+/** False when the Slack app of this host sends the person back to another deployment: the install can never finish here. */
+export function slackReturnsHere(installUrl: string, apiBase: string | null): boolean {
+  try {
+    const back = new URL(installUrl).searchParams.get('redirect_uri');
+    return !back || !apiBase || new URL(back).host === new URL(apiBase).host;
+  } catch {
+    return true;
+  }
+}
 
 export async function phaseSlack(state: OnboardState): Promise<PhaseOutcome> {
   if (state.opts.channels.length === 0 && !state.needs.uses_slack) return { status: 'skipped', detail: 'no --channels and kortix.yaml does not use Slack' };
@@ -291,7 +319,7 @@ export async function phaseSlack(state: OnboardState): Promise<PhaseOutcome> {
   const install = await client.get<{ workspaceName?: string | null } | null>(`${base(state)}/channels/slack/installation`).catch(() => null);
   if (!install) {
     const mode = await client.get<{ oauth_available: boolean; install_url: string | null }>(`${base(state)}/channels/slack/mode`).catch(() => null);
-    if (mode?.oauth_available && mode.install_url) state.actions.push({ kind: 'slack_install', what: 'Add Kortix to Slack: pick the Slack workspace, click Allow, then run onboard again', url: mode.install_url });
+    if (mode?.oauth_available && mode.install_url && slackReturnsHere(mode.install_url, state.ctx.apiBase)) state.actions.push({ kind: 'slack_install', what: 'Add Kortix to Slack: pick the Slack workspace, click Allow, then run onboard again', url: mode.install_url });
     else state.actions.push({ kind: 'slack_install', what: 'Connect Slack with a bot token (this host has no one-click Slack app), then run onboard again', command: 'kortix channels connect --manual' });
     return { status: 'waiting_on_person', detail: 'Slack is not connected' };
   }

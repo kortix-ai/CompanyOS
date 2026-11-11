@@ -172,7 +172,8 @@ export interface StackReport {
   package_managers: Array<{ name: string; lockfile: string | null; version: string | null }>;
   services: Array<{ name: string; kind: string; evidence: string }>;
   commands: Array<{ name: string; command: string; package: string }>;
-  ci: Array<{ workflow: string; on: string[]; runs: string[] }>;
+  /** `secrets`: the secret names the workflow reads (`secrets.NAME`), never a value. */
+  ci: Array<{ workflow: string; on: string[]; runs: string[]; secrets: string[] }>;
   browser_tests: Array<{ tool: string; evidence: string }>;
 }
 
@@ -202,8 +203,10 @@ function depsOf(pkg: Record<string, unknown>): string[] {
 function composeServices(root: string, files: string[]): StackReport['services'] {
   const out: StackReport['services'] = [];
   for (const file of files.filter((f) => /(^|\/)(docker-)?compose(\.[\w-]+)?\.ya?ml$/.test(f))) {
+    const text = readText(join(root, file)) ?? '';
+    const secrets = [...new Set([...text.matchAll(/\bsecrets\.([A-Z][A-Z0-9_]*)\b/g)].map((m) => m[1]!))].filter((name) => name !== 'GITHUB_TOKEN').sort();
     try {
-      const doc = parseYaml(readText(join(root, file)) ?? '') as { services?: Record<string, { image?: unknown }> };
+      const doc = parseYaml(text) as { services?: Record<string, { image?: unknown }> };
       for (const [name, svc] of Object.entries(doc?.services ?? {})) {
         const image = typeof svc?.image === 'string' ? svc.image.split(':')[0]! : 'build';
         out.push({ name, kind: `docker-compose (${image})`, evidence: file });
@@ -218,8 +221,10 @@ function composeServices(root: string, files: string[]): StackReport['services']
 function ciWorkflows(root: string, files: string[]): StackReport['ci'] {
   const out: StackReport['ci'] = [];
   for (const file of files.filter((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))) {
+    const text = readText(join(root, file)) ?? '';
+    const secrets = [...new Set([...text.matchAll(/\bsecrets\.([A-Z][A-Z0-9_]*)\b/g)].map((m) => m[1]!))].filter((name) => name !== 'GITHUB_TOKEN').sort();
     try {
-      const doc = parseYaml(readText(join(root, file)) ?? '') as { on?: unknown; true?: unknown; jobs?: Record<string, { steps?: Array<{ run?: unknown }> }> };
+      const doc = parseYaml(text) as { on?: unknown; true?: unknown; jobs?: Record<string, { steps?: Array<{ run?: unknown }> }> };
       const on = doc?.on ?? doc?.true;
       const events = typeof on === 'string' ? [on] : Array.isArray(on) ? on.map(String) : on && typeof on === 'object' ? Object.keys(on) : [];
       const runs: string[] = [];
@@ -232,9 +237,9 @@ function ciWorkflows(root: string, files: string[]): StackReport['ci'] {
           }
         }
       }
-      out.push({ workflow: file, on: events, runs });
+      out.push({ workflow: file, on: events, runs, secrets });
     } catch {
-      out.push({ workflow: file, on: [], runs: [] });
+      out.push({ workflow: file, on: [], runs: [], secrets });
     }
   }
   return out;
@@ -584,6 +589,40 @@ const RULES: Rule[] = [
   { name: 'Workable', category: 'recruiting', keys: key('WORKABLE'), links: /apply\.workable\.com\// },
 ];
 
+/** A name the code or the CI reads from the environment, with the first file that reads it. */
+export interface NamedEnv {
+  name: string;
+  file: string;
+}
+
+const CODE_FILE = /\.(m?[jt]sx?|cjs|py|rb|go|rs|php|java|kt|swift|ex|exs|cs)$/;
+const ENV_READ = /(?:process\.env|import\.meta\.env|Bun\.env)(?:\.|\[["'])([A-Z][A-Z0-9_]{2,})|(?:os\.environ(?:\.get)?|os\.getenv|os\.Getenv|Deno\.env\.get|ENV(?:\.fetch)?|getenv|env::var|System\.getenv|env)\s*[(\[]\s*["']([A-Z][A-Z0-9_]{2,})["']/g;
+const MAX_CODE_FILES = 3000;
+const MAX_CODE_BYTES = 256 * 1024;
+
+/**
+ * Environment names the source code and the CI workflows read. A service the
+ * code calls with `fetch` has no dependency and often no line in an env file:
+ * the name it reads is the evidence. Names only, never a value.
+ */
+export function scanCodeEnvNames(root: string, fileList: string[], stack: StackReport): NamedEnv[] {
+  const seen = new Map<string, string>();
+  for (const file of fileList.filter((f) => CODE_FILE.test(f) && !/(^|\/)(dist|build|vendor|__generated__|_generated)\//.test(f)).slice(0, MAX_CODE_FILES)) {
+    const abs = join(root, file);
+    try {
+      if (statSync(abs).size > MAX_CODE_BYTES) continue;
+    } catch {
+      continue;
+    }
+    for (const m of (readText(abs) ?? '').matchAll(ENV_READ)) {
+      const name = m[1] ?? m[2]!;
+      if (!seen.has(name)) seen.set(name, file);
+    }
+  }
+  for (const ci of stack.ci) for (const name of ci.secrets) if (!seen.has(name)) seen.set(name, ci.workflow);
+  return [...seen].map(([name, file]) => ({ name, file }));
+}
+
 /** Dependency names of the manifests npm does not cover: Python, Go, Ruby, Rust, PHP. */
 function otherDeps(root: string, fileList: string[]): Array<{ file: string; dep: string }> {
   const out: Array<{ file: string; dep: string }> = [];
@@ -600,7 +639,7 @@ function otherDeps(root: string, fileList: string[]): Array<{ file: string; dep:
   return out;
 }
 
-export function scanIntegrations(root: string, fileList: string[], repo: RepositoryReport, env: EnvReport): Integration[] {
+export function scanIntegrations(root: string, fileList: string[], repo: RepositoryReport, env: EnvReport, named: NamedEnv[] = []): Integration[] {
   const pkgs = packageJsons(root, repo);
   const others = otherDeps(root, fileList);
   const docs = fileList.filter((f) => /^(README|CONTRIBUTING|AGENTS|CLAUDE)\.md$/i.test(f) || /^\.github\/.*\.md$/i.test(f));
@@ -624,6 +663,10 @@ export function scanIntegrations(root: string, fileList: string[], repo: Reposit
         if (hit) evidence.push(`${file.file}: ${hit.name}`);
       }
     }
+    if (rule.keys && evidence.length < 5) {
+      const read = named.find((n) => rule.keys!.test(n.name) && !evidence.some((line) => line.endsWith(`: ${n.name}`)));
+      if (read) evidence.push(`${read.file}: ${read.name}`);
+    }
     if (rule.links) for (const { doc, text } of docText) if (rule.links.test(text)) evidence.push(doc);
     if (evidence.length > 0) out.push({ name: rule.name, category: rule.category, evidence: evidence.slice(0, 5) });
   }
@@ -638,9 +681,11 @@ const OWN_PREFIX = /^(APP|API|AUTH|NEXTAUTH|BETTER_AUTH|JWT|SESSION|COOKIE|CSRF|
  * Credentials for a service no rule names: `ACME_API_KEY` reports `ACME`. The
  * setup agent asks the person what each one is, so no software is missed.
  */
-export function scanUnrecognized(env: EnvReport): UnrecognizedService[] {
+export function scanUnrecognized(env: EnvReport, named: NamedEnv[] = []): UnrecognizedService[] {
   const byPrefix = new Map<string, string[]>();
-  for (const file of env.files) {
+  const inEnv = new Set(env.files.flatMap((file) => file.keys.map((k) => k.name)));
+  const sources = [...env.files, ...named.filter((n) => !inEnv.has(n.name)).map((n) => ({ file: n.file, keys: [{ name: n.name }] }))];
+  for (const file of sources) {
     for (const { name } of file.keys) {
       const bare = name.replace(new RegExp(`^${PUB}`), '');
       if (!CREDENTIAL_SUFFIX.test(bare) || RULES.some((rule) => rule.keys?.test(name))) continue;

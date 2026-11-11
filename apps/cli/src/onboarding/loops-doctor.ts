@@ -9,7 +9,7 @@
 import { sdkBackendUrl } from '../api/sdk.ts';
 import type { ApiClient } from '../api/client.ts';
 import { formatIssueLine, validateManifestFile } from '../manifest.ts';
-import { findHook, ghProblem, labelExists, listHooks } from './github-hooks.ts';
+import { findHook, foreignHooks, ghProblem, labelExists, listHooks, type RepoHook } from './github-hooks.ts';
 import type { ManifestNeeds } from './manifest-needs.ts';
 
 export type CheckState = 'ok' | 'fail' | 'warn';
@@ -159,22 +159,33 @@ export async function collectLoopChecks(ctx: DoctorContext): Promise<Check[]> {
 
   // GitHub webhooks for GitHub-filtered webhook triggers.
   if (needs.github_webhooks.length > 0) {
-    const problem = ctx.repo ? ghProblem() : null;
-    const hooks = ctx.repo && !problem ? listHooks(ctx.repo) : null;
+    const problem = ghProblem();
+    const listed = new Map<string, RepoHook[] | { error: string }>();
+    const labelled = new Set<string>();
     for (const want of needs.github_webhooks) {
       const name = `webhook ${want.slug}`;
-      if (!ctx.repo) { checks.push({ name, state: 'fail', detail: 'no GitHub repository known', fix: 'pass --repo <owner/repo>' }); continue; }
+      // A trigger that filters on `body.repository.full_name` names its own repository.
+      const repo = want.repo ?? ctx.repo;
+      if (!repo) { checks.push({ name, state: 'fail', detail: 'no GitHub repository known', fix: 'pass --repo <owner/repo>, or filter the trigger on body.repository.full_name' }); continue; }
       if (problem) { checks.push({ name, state: 'warn', detail: `${problem}: cannot read the repository hooks`, fix: 'gh auth login' }); continue; }
-      if (!hooks || 'error' in hooks) { checks.push({ name, state: 'warn', detail: `gh cannot read the hooks of ${ctx.repo}`, fix: 'gh auth refresh -s admin:repo_hook' }); continue; }
+      if (!listed.has(repo)) listed.set(repo, listHooks(repo));
+      const hooks = listed.get(repo)!;
+      if ('error' in hooks) { checks.push({ name, state: 'warn', detail: `gh cannot read the hooks of ${repo}`, fix: 'gh auth refresh -s admin:repo_hook' }); continue; }
       const url = live.get(want.slug)?.webhook_url ?? null;
-      const hook = findHook(hooks, url, want.slug);
+      const hook = findHook(hooks, url);
       const missingEvents = hook ? want.events.filter((e) => !hook.events.includes(e) && !hook.events.includes('*')) : want.events;
-      if (!hook) checks.push({ name, state: 'fail', detail: `no ${want.events.join(', ')} webhook on ${ctx.repo}`, fix: 'kortix onboard --yes', phase: 'webhooks' });
+      if (!hook) checks.push({ name, state: 'fail', detail: `no ${want.events.join(', ')} webhook on ${repo}`, fix: 'kortix onboard --yes', phase: 'webhooks' });
       else if (url && hook.url !== url) checks.push({ name, state: 'fail', detail: 'the webhook calls an old URL', fix: 'kortix onboard --yes', phase: 'webhooks' });
       else if (missingEvents.length) checks.push({ name, state: 'fail', detail: `events missing: ${missingEvents.join(', ')}`, fix: 'kortix onboard --yes', phase: 'webhooks' });
       else if (hook.last_code !== null && (hook.last_code < 200 || hook.last_code >= 300)) checks.push({ name, state: 'fail', detail: `last delivery answered ${hook.last_code}`, fix: 'kortix triggers runs ' + want.slug });
       else checks.push({ name, state: 'ok', detail: hook.last_code ? `last delivery ${hook.last_code}` : 'created, no delivery yet' });
-      if (want.label && !labelExists(ctx.repo, want.label)) checks.push({ name: `label ${want.label}`, state: 'fail', detail: `no label "${want.label}" on ${ctx.repo}`, fix: `gh label create ${want.label}`, phase: 'webhooks' });
+      for (const other of foreignHooks(hooks, url, want.slug)) {
+        checks.push({ name: `${name} (other workspace)`, state: 'warn', detail: `workspace ${other.workspace.slice(0, 8)} receives the same events from ${repo}: two workspaces would act on one event`, fix: `turn the trigger off in the other workspace, or delete its hook: gh api -X DELETE repos/${repo}/hooks/${other.id}` });
+      }
+      if (want.label && !labelled.has(`${repo} ${want.label}`)) {
+        labelled.add(`${repo} ${want.label}`);
+        if (!labelExists(repo, want.label)) checks.push({ name: `label ${want.label}`, state: 'fail', detail: `no label "${want.label}" on ${repo}`, fix: `gh label create ${want.label} --repo ${repo}`, phase: 'webhooks' });
+      }
     }
   }
 

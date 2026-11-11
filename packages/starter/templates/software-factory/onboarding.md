@@ -8,7 +8,7 @@ proof**. The factory is one agent, `factory`, with one contract skill,
 and 1 at least), so you know the identity, the store, the sources and the
 merge policy you set up.
 
-### A. After guide step 4: analysis, then factory.json
+### A. In guide steps 2 to 4: analysis, then factory.json
 
 1. Run every check of
    `.kortix/software-factory/skills/software-factory/references/analysis.md` on
@@ -40,16 +40,16 @@ skill. When the config lives in its own repository, the code repository's skills
 (`.agents/skills`, `.claude/skills`) cannot be registered from it: the worker reads
 them from its clone, and the `dev-environment` skill names where they are.
 
-### B. After guide step 5: grant the dev environment
+### B. In guide step 4: grant the dev environment
 
 Add `dev-environment` to `agents.factory.skills` in
-`.kortix/software-factory/factory.yaml`, once guide step 5 registered it. The
+`.kortix/software-factory/factory.yaml`, once `kortix.yaml` registers it. The
 workers verify every change with its commands.
 
-### C. In guide step 9: the factory's own GitHub identity
+### C. After guide step 6: the factory's own GitHub identity
 
 The factory needs `FACTORY_GITHUB_TOKEN`, not `GH_TOKEN`. Do this instead of
-the guide's GitHub token bullet. `<owner>/<repo>` is the code repository.
+a generic GitHub token secret. `<owner>/<repo>` is the code repository.
 
 1. **Ask**: "Should the factory act as its own GitHub account (a machine
    user, recommended) or as you?" A machine user keeps every factory issue,
@@ -121,12 +121,12 @@ the guide's GitHub token bullet. `<owner>/<repo>` is the code repository.
 6. Write `identity.github_login`, `identity.name` and `identity.email` from
    the run line into `factory.json`, commit
    `chore(factory): pin the factory's GitHub identity` and push it the way
-   guide step 8 did. From now on every factory shell refuses another account
+   `kortix ship` does. From now on every factory shell refuses another account
    (`errors=wrong-identity`).
 
-### D. After guide step 10: the store
+### D. After guide step 6: the store
 
-The guide's step 10 also covers this template: it creates two GitHub
+`kortix onboard` (guide step 6) covers this template: it creates two GitHub
 webhooks, `issues` → `source-github-issues` and `pull_request_review`,
 `pull_request_review_comment`, `issue_comment` → `factory-feedback-github`,
 both with `FACTORY_GITHUB_WEBHOOK_SECRET`. Then:
@@ -159,10 +159,12 @@ Fire each enabled source once (`kortix triggers fire <slug> --wait 300s`)
 and read its run line in `kortix triggers runs <slug>`: `errors=none`, and
 `created=0` is a valid first result.
 
-### F. Instead of guide step 11: prove one ticket end to end
+### F. In guide step 7: prove one ticket end to end
 
 0. **First wait for the dev image**: `kortix sandboxes build <slug> --wait`, then
-   `kortix templates doctor software-factory --json` until `ready: true`. A worker
+   `kortix doctor --loops --json` until `ready: true` (add
+   `--repo <owner>/<repo>` when the config lives in its own repository and
+   the triggers carry no `body.repository.full_name` filter). A worker
    started on an unbuilt image runs on the platform default and cannot boot the app.
    The reviewer should run on the strongest connected model: when `models.reviewer`
    and `models.worker_hard` are null and a stronger model than the workspace
@@ -186,7 +188,7 @@ and read its run line in `kortix triggers runs <slug>`: `errors=none`, and
 6. `kortix triggers fire factory-merge --wait 300s`. Under `hold`, the pull
    request gets `needs-review` and one held comment: the person merges it.
 
-### G. Add to the guide's step 13 report
+### G. Add to the guide's step 9 report
 
 - The factory's GitHub account (`identity.github_login`), the token's expiry
   date, and that `factory-identity` re-checks it every Monday and files a

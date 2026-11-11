@@ -52,8 +52,10 @@ An open issue is factory work when it carries `factory` and a `factory-key:`
 last line (the factory filed it), or `kortix` (a person added it). Read the
 label event to prove a person added `kortix`:
 `gh api repos/$R/issues/<n>/events --jq '[.[] | select(.event=="labeled" and .label.name=="kortix")] | last | .actor | {login, type}'`
-must be `User` and its `.actor.login` must not be `identity.github_login`
-(a machine user is also of type `User`).
+must be `User`. With `identity.kind: machine-user` its `.actor.login` must
+also differ from `identity.github_login` (a machine user is of type `User`
+too). With `identity.kind: personal` the person and the factory share one
+login: a `User` actor is enough.
 
 ## Limits
 

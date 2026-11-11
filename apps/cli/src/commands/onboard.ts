@@ -59,8 +59,13 @@ user_action. Without --yes it prints what it would do and changes nothing.
 Options:
   --yes, -y                 Do it.
   --json                    Print JSON: { phases, user_actions, doctor, next }.
-  --repo <owner/repo>       The GitHub repository for the webhooks (default:
-                            this repository's origin).
+  --name <workspace>        Display name when this run creates the workspace
+                            (default: project.name in kortix.yaml, else the
+                            folder name).
+  --repo <owner/repo>       The GitHub repository for the webhooks (default: a
+                            trigger's body.repository.full_name filter, else
+                            this repository's origin). Pass it when kortix.yaml
+                            lives in its own repository.
   --env-file <file>         A dotenv file to push names from. Pair each with
     --only <A,B>            the names the person approved. A value is read in
                             this process only; prod-looking names are refused.
@@ -169,6 +174,7 @@ export async function runOnboard(argv: string[]): Promise<number> {
       yes: takeFlagBool(rest, ['--yes', '-y']),
       json: takeFlagBool(rest, ['--json']),
       repo: takeFlagValue(rest, ['--repo']),
+      name: takeFlagValue(rest, ['--name']),
       allowRemote: takeFlagBool(rest, ['--allow-remote']),
       channels: channelList(takeFlagValues(rest, ['--channels'])),
       connect: takeFlagValues(rest, ['--connect']).flatMap((v) => v.split(',')).map((s) => s.trim()).filter(Boolean),
@@ -206,6 +212,7 @@ export async function runOnboard(argv: string[]): Promise<number> {
     connect: flags.connect,
     githubToken,
     buildTimeoutSec: flags.buildTimeout,
+    name: flags.name ?? null,
     message: flags.message,
   };
   const { state, manifestFile, manifestError } = await loadLoopsState({ repo: flags.repo ?? null, options });

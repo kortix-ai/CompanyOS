@@ -17,8 +17,8 @@
  *   View (Grid · List) and Download (this folder, or every file).
  * - Search (the Schedules page's `SearchListHeader`), then the breadcrumb
  *   (chips, never clipped). On iOS the search sits at the bottom instead
- *   (`BottomSearchBar`): the version switcher stays bottom left, the search
- *   circle sits bottom right. Inside a folder the
+ *   (`BottomSearchBar`): the search circle sits bottom left, the version
+ *   switcher bottom right (Jay, 2026-11-11). Inside a folder the
  *   hamburger (or, as a sub-page, Go back) stays: a crumb, or Android back,
  *   goes up one folder, never to home. Go back on the sub-page leaves the
  *   page from any folder.
@@ -884,7 +884,7 @@ export function FilesNavPage({
               value={search}
               onChangeText={setSearch}
               placeholder="Search files"
-              leading={versionSwitcher}
+              trailing={versionSwitcher}
               background={pageBackground}
             />
           ) : (

@@ -7,12 +7,14 @@
  * At rest the page has no search field at the top. A `PinnedBar` (fade +
  * progressive blur of `background`) holds one row:
  *
- *   [leading] [search circle]                    [action pill]
+ *   [search circle]                    [trailing] [action pill]
  *
- * - Left: `leading` when given (the Files version switcher), else the search
- *   circle.
- * - Right: the search circle when `leading` takes the left, then the action
- *   pill. No `action`: no pill.
+ * - Left: the search circle.
+ * - Right: `trailing` when given (the Files version switcher), then the
+ *   action pill. No `action`: no pill.
+ * - `fieldAtRest` (a page with no action, the Apps page): the full-width
+ *   search field shows at rest instead of the circle, with no X; the X shows
+ *   next to it while the field is focused or holds text (Jay, 2026-11-11).
  * - The search circle is a 44pt Liquid Glass circle with a magnifier
  *   (`GlassButtons`, the drawer's avatar circle). The action pill is the
  *   drawer's New session: `Button size="lg"` on glass tinted in the primary
@@ -109,8 +111,10 @@ interface BottomSearchBarProps {
   searchLabel?: string;
   /** The page's primary action, a pill at the bottom right. Omit for none. */
   action?: BottomSearchAction;
-  /** A control that stays at the bottom left; the search circle moves right. Hidden while expanded. */
-  leading?: React.ReactNode;
+  /** A control at the bottom right, before the action (the Files version switcher). Hidden while expanded. */
+  trailing?: React.ReactNode;
+  /** Show the full-width field at rest instead of the circle; the X shows only while focused or with text. */
+  fieldAtRest?: boolean;
   /** Start expanded with the field focused. */
   autoFocusOnMount?: boolean;
   /** `false` hides the search circle and keeps the action. Default true. */
@@ -125,7 +129,8 @@ export function BottomSearchBar({
   placeholder = 'Search',
   searchLabel = 'Search',
   action,
-  leading,
+  trailing,
+  fieldAtRest = false,
   autoFocusOnMount = false,
   searchEnabled = true,
   background,
@@ -207,7 +212,7 @@ export function BottomSearchBar({
     />
   );
 
-  const row = expanded ? (
+  const fieldRow = (withClose: boolean) => (
     <>
       {glassy ? (
         <LiquidGlass interactive={false} style={{ flex: 1, flexDirection: 'row' }}>
@@ -216,15 +221,19 @@ export function BottomSearchBar({
       ) : (
         field
       )}
-      {circle(XIcon, 'Close search', close)}
+      {withClose ? circle(XIcon, 'Close search', close) : null}
     </>
+  );
+
+  const row = expanded ? (
+    fieldRow(true)
+  ) : fieldAtRest && searchEnabled ? (
+    fieldRow(false)
   ) : (
     <>
+      {searchCircle ?? <View />}
       <View className="min-w-0 flex-row items-center gap-2" style={{ flexShrink: 1 }}>
-        {leading ?? searchCircle}
-      </View>
-      <View className="flex-row items-center gap-2">
-        {leading ? searchCircle : null}
+        {trailing}
         {actionPill}
       </View>
     </>
@@ -236,7 +245,7 @@ export function BottomSearchBar({
       background={background}
       blur
       dark={isDark}
-      className={expanded ? 'gap-2 px-4' : 'justify-between gap-2 px-4'}>
+      className={expanded || (fieldAtRest && searchEnabled) ? 'gap-2 px-4' : 'justify-between gap-2 px-4'}>
       {row}
     </PinnedBar>
   );

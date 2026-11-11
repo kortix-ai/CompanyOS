@@ -7,7 +7,7 @@
  * a sandbox with `kortix apps deploy`, so the page has no create action: it
  * is a list you open things from. The Schedules page's search pill sits under
  * the header and filters the cards by name and slug; on iOS the search sits at
- * the bottom instead (`BottomSearchBar`: the search circle alone, no action).
+ * the bottom instead (`BottomSearchBar fieldAtRest`: the full-width field, with an X while it is focused; no action).
  *
  * The preview (KRTX-2183; rules in `lib/projects/app-preview.ts`) is a
  * WebView that takes no input, mounted only while its card is on screen, the
@@ -175,7 +175,7 @@ export function AppsPage({ page, projectId, onOpenDrawer }: AppsPageProps) {
         />
       </PageContent>
 
-      <BottomSearchBar value={search} onChangeText={setSearch} placeholder="Search apps" background={bgColor} />
+      <BottomSearchBar value={search} onChangeText={setSearch} placeholder="Search apps" fieldAtRest background={bgColor} />
     </View>
   );
 }

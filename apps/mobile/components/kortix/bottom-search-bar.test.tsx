@@ -152,14 +152,27 @@ describe('BottomSearchBar', () => {
     expect((pill()[0].props.inputProps as { autoFocus: boolean }).autoFocus).toBe(true);
   });
 
-  test('leading stays bottom left and the search circle moves right; searchEnabled false hides it', () => {
-    render(<Page action={undefined} leading={React.createElement('view-leading')} />);
-    expect(tree!.root.findAllByType('view-leading' as never)).toHaveLength(1);
+  test('the search circle stays bottom left and trailing sits right (Files); searchEnabled false hides the circle', () => {
+    render(<Page action={undefined} trailing={React.createElement('view-trailing')} />);
+    expect(tree!.root.findAllByType('view-trailing' as never)).toHaveLength(1);
     expect(button('Search')).toHaveLength(1);
     act(() => tree!.unmount());
     render(<Page searchEnabled={false} />);
     expect(button('Search')).toHaveLength(0);
     expect(tree!.root.findAll((n: { type: unknown }) => n.type === 'button').some((b: any) => textOf(b) === 'New schedule')).toBe(true);
+  });
+
+  test('fieldAtRest (Apps): the full field at rest with no X; focus adds the X; X clears and blurs back', () => {
+    render(<Page action={undefined} fieldAtRest />);
+    expect(pill()).toHaveLength(1);
+    expect(button('Search')).toHaveLength(0);
+    expect(button('Close search')).toHaveLength(0);
+    act(() => (pill()[0]!.props.inputProps.onFocus as () => void)());
+    expect(pill()).toHaveLength(1);
+    expect(button('Close search')).toHaveLength(1);
+    act(() => (button('Close search')[0]!.props.onPress as () => void)());
+    expect(pill()).toHaveLength(1);
+    expect(button('Close search')).toHaveLength(0);
   });
 
   test('Android renders nothing: the page keeps its top search', () => {

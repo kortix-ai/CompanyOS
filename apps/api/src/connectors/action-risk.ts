@@ -2,7 +2,7 @@
  * The risk the gateway enforces for one connector action.
  *
  * Composio and Pipedream send no per-action risk annotation, so their
- * normalizer stored `write` for every action: `GMAIL_LIST_LABELS` needed write
+ * normalizer stored `write` for every action, so `GMAIL_LIST_LABELS` needed write
  * approval and a read-only rule set blocked it. For those two sources the
  * reviewed classifier (`classifyUnannotatedToolRisk`) decides: a read verb with
  * no write word in the name or the description is `read`, anything else stays

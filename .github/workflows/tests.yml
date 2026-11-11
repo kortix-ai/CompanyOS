@@ -162,10 +162,11 @@ jobs:
             # The API image's git line, from GitHub's source archive (63 s in an ubuntu:24.04 container).
             sudo rm -f /etc/apt/sources.list.d/git-core-ubuntu-ppa-*
             sudo apt-get update -qq
-            sudo apt-get install -y -qq --no-install-recommends build-essential ca-certificates curl libcurl4-openssl-dev libexpat1-dev libssl-dev zlib1g-dev
+            sudo apt-get install -y -qq --no-install-recommends build-essential ca-certificates curl libcurl4-openssl-dev libexpat1-dev libpcre2-dev libssl-dev zlib1g-dev
             src="$(mktemp -d)"
             curl -fsSL --retry 3 https://github.com/git/git/archive/refs/tags/v2.47.3.tar.gz | tar -xz -C "$src" --strip-components=1
-            opts=(prefix=/usr/local NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1)
+            # USE_LIBPCRE: tests run `git grep -P` (docker-rm-removes-volumes.test.ts).
+            opts=(prefix=/usr/local USE_LIBPCRE=YesPlease NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1)
             make -C "$src" -j"$(nproc)" "${opts[@]}" all >/dev/null
             sudo make -C "$src" "${opts[@]}" install >/dev/null
             # Later steps and every process they start find this git before /usr/bin/git.

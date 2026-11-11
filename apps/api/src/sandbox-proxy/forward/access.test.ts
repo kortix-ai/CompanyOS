@@ -12,6 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
+import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
 import { logger } from '../../lib/logger';
 import { resetLogWindowsForTests } from '../../shared/log-window';
 
@@ -187,5 +188,41 @@ describe('[preview] session access refused — the line is throttled, the 403 is
     }
     const fields = shippedRefusalLines()[0]?.args[1] as Record<string, unknown>;
     expect(fields.detail).toBe('no recorded verdict (served from the visibility cache)');
+  });
+});
+
+describe('the escalation shares the hourly warn cap (KRTX-4674)', () => {
+  // The severity escalation is evaluated per ten-minute window and is
+  // replica-local: a caller grinding past the burst band through a whole hour
+  // made every window's line ship at warn (16/15/15 per route across three
+  // replicas in one hour — above the infra-sweep's 10/h new-warn-pattern
+  // bar). The escalation asks the shared hourly warn budget
+  // (logWindowWarnDecision) before it ships warn: the hour's first escalated
+  // line stays warn, the second drops to info carrying the suppressed count,
+  // and the slot renews after the hour.
+  test('first escalated window warns, the second ships info with the suppressed count, the slot renews after the hour', () => {
+    const band = DEAD_CREDENTIAL_BURST_SUPPRESSED;
+    const start = Date.now();
+    // Window 1 opens and fills past the burst band (the first call ships the
+    // line, the rest swell the pending count).
+    for (let i = 0; i <= band; i += 1) reportSessionAccessRefusal({ n: i }, start + i * 1_000);
+    // The hour's first escalated line ships at warn.
+    reportSessionAccessRefusal({ n: band }, start + 11 * 60_000);
+    // Window 2 fills past the band again, inside the same warn hour.
+    for (let i = 0; i < band; i += 1) {
+      reportSessionAccessRefusal({ n: i }, start + 11 * 60_000 + 1_000 + i * 1_000);
+    }
+    // The second escalated window of the hour drops to info, suppressed kept.
+    reportSessionAccessRefusal({ n: band }, start + 22 * 60_000);
+    // Window 3 fills past the band; past the warn hour the slot renews.
+    for (let i = 0; i < band; i += 1) {
+      reportSessionAccessRefusal({ n: i }, start + 22 * 60_000 + 1_000 + i * 1_000);
+    }
+    reportSessionAccessRefusal({ n: band }, start + 73 * 60_000);
+
+    const lines = shippedRefusalLines();
+    expect(lines.map((line) => line.channel)).toEqual(['logger.info', 'logger.warn', 'logger.info', 'logger.warn']);
+    expect((lines[1]?.args[1] as Record<string, unknown>).suppressed).toBe(band);
+    expect((lines[2]?.args[1] as Record<string, unknown>).suppressed).toBe(band);
   });
 });

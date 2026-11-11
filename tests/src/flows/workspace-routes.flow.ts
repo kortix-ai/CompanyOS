@@ -6,7 +6,8 @@
  * status and body, so an alias can never drift from its route. The workspace
  * resource itself (list, create, record, update) is its own route, and the
  * legacy names keep their old meaning. Canonical paths take workspace ids
- * only (404 `workspace_not_found` otherwise); legacy paths take either id.
+ * only (404 `workspace_not_found` otherwise; 403 `workspace_access_denied`
+ * for a live workspace the caller cannot read); legacy paths take either id.
  *
  * Accounts, connectors, secrets and retired flows keep the legacy names.
  */
@@ -35,6 +36,12 @@ async function sameAnswer(ctx: FlowContext, who: Principal, legacy: string, cano
 async function notFound(ctx: FlowContext, who: Principal, path: string): Promise<void> {
   const r = await ctx.client.as(who).get(path);
   r.status(404).body().has('$.code', 'workspace_not_found');
+}
+
+/** A live workspace the caller cannot read: the caller holds its id, so it may ask for access. */
+async function denied(ctx: FlowContext, who: Principal, path: string): Promise<void> {
+  const r = await ctx.client.as(who).get(path);
+  r.status(403).body().has('$.code', 'workspace_access_denied');
 }
 
 const randomId = () => crypto.randomUUID();
@@ -99,11 +106,11 @@ flow(
       if ('workspace' in legacy || 'role' in legacy || legacy.workspace_id !== p.id) throw new Error('legacy record shape changed');
     });
 
-    await ctx.step('a non-member: the legacy name keeps its refusal; the canonical name answers 404 workspace_not_found; ANON → 401', async () => {
+    await ctx.step('a non-member: the legacy name keeps its refusal; the canonical name answers 403 workspace_access_denied; ANON → 401', async () => {
       for (const tail of ['', '/sessions']) {
         const legacy = await ctx.client.as(ctx.P.NONMEMBER).get(`/v1/projects/${p.id}${tail}`);
         if (legacy.statusCode !== 403 && legacy.statusCode !== 404) throw new Error(`legacy ${tail || 'record'} → ${legacy.statusCode}`);
-        await notFound(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}${tail}`);
+        await denied(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}${tail}`);
       }
       (await ctx.client.get(`/v1/workspaces/${p.id}/sessions`)).status(401);
     });
@@ -142,9 +149,9 @@ flow(
       }
     });
 
-    await ctx.step('a non-member: the legacy family keeps its 403; the canonical family answers 404 workspace_not_found', async () => {
+    await ctx.step('a non-member: the legacy family keeps its 403; the canonical family answers 403 workspace_access_denied', async () => {
       (await ctx.client.as(ctx.P.NONMEMBER).get(`/v1/accounts/${team.id}/members`)).status(403);
-      await notFound(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}/members`);
+      await denied(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}/members`);
     });
 
     await ctx.step('an account with no project that does not pay: its legacy routes answer; it is no workspace on the canonical names', async () => {
@@ -284,7 +291,7 @@ flow(
       (await ctx.client.as(pat).get(`/v1/workspaces/${p.id}/sessions`)).status(401);
       (await ctx.client.as(ctx.P.OWNER).post(`/v1/accounts/${team.id}/tokens`, { name: '' })).status(400);
       (await ctx.client.as(ctx.P.NONMEMBER).get(`/v1/accounts/${team.id}/tokens`)).status(403);
-      await notFound(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}/tokens`);
+      await denied(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${p.id}/tokens`);
     });
   },
 );
@@ -397,14 +404,14 @@ flow(
     const foreign = await foreignTeam.project();
     const tails = ['', '/sessions', '/members', '/iam/groups'];
 
-    await ctx.step('an account id, an unknown id and a foreign workspace each answer 404 workspace_not_found on every sub-path', async () => {
+    await ctx.step('an account id and an unknown id answer 404 workspace_not_found, a foreign workspace 403 workspace_access_denied, on every sub-path', async () => {
       for (const tail of tails) {
         await notFound(ctx, ctx.P.OWNER, `/v1/workspaces/${team.id}${tail}`);
         await notFound(ctx, ctx.P.OWNER, `/v1/workspaces/${randomId()}${tail}`);
-        await notFound(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${foreign.id}${tail}`);
+        await denied(ctx, ctx.P.NONMEMBER, `/v1/workspaces/${foreign.id}${tail}`);
       }
       await notFound(ctx, ctx.P.OWNER, `/v1/connectors/workspaces/${team.id}/connectors`);
-      await notFound(ctx, ctx.P.NONMEMBER, `/v1/connectors/workspaces/${p.id}/connectors`);
+      await denied(ctx, ctx.P.NONMEMBER, `/v1/connectors/workspaces/${p.id}/connectors`);
     });
 
     await ctx.step('the workspace id answers on every sub-path, in any letter case', async () => {

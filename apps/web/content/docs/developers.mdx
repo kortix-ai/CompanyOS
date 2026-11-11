@@ -2653,8 +2653,10 @@ permanently, so a script written against them keeps working.
 | `GET /v1/workspaces` · `POST /v1/workspaces` · `GET`/`PATCH /v1/workspaces/:workspaceId` · `/v1/workspaces/:workspaceId/tokens` | `GET`/`POST /v1/accounts` · `GET`/`PATCH /v1/accounts/:accountId` · `/v1/accounts/tokens` | Different routes with their own meaning, deprecated in `/v1/openapi.json` (`x-kortix-replaced-by` names the route to call). |
 
 **Ids.** A canonical path takes the workspace id (`workspace_id`, equal to
-`project_id`) only. An account id, an unknown id or a workspace you cannot
-read answers `404 workspace_not_found` on every sub-path. A legacy path accepts
+`project_id`) only. An account id or an unknown id answers
+`404 workspace_not_found` on every sub-path. A workspace you cannot read
+answers `403 workspace_access_denied`: ask its managers for access with
+`POST /v1/workspaces/:workspaceId/access-requests`. A legacy path accepts
 either id. Ids are case-insensitive. Every response that names a workspace
 carries `workspace_id` next to `project_id` (records, sessions, secrets, keys,
 access and member rows). `account_id` stays and is deprecated.
@@ -2721,7 +2723,8 @@ These are the codes clients branch on most. The linked section explains each fix
 | `session_sandbox_removal_pending` | `409` | A restore came before the provider confirmed the deleted session's sandbox removed, or while a sandbox that was starting at the delete can still arrive. | Retry the restore in a minute. [Computers](/docs/guide#computers) |
 | `session_purged` | `410` | The session was deleted more than 30 days ago. Its messages, files and branch are deleted. | [Computers](/docs/guide#computers) |
 | `project_archived` | `404` | The workspace was deleted. | Use another workspace. |
-| `workspace_not_found` | `404` | A canonical path named no workspace you can read: an account id, an unknown id, or no access. | [Workspace routes](#workspace-routes) |
+| `workspace_not_found` | `404` | A canonical path named no workspace: an account id, an unknown id, or a workspace being deleted. | [Workspace routes](#workspace-routes) |
+| `workspace_access_denied` | `403` | The workspace exists and you cannot read it. Ask for access with `POST /v1/workspaces/:workspaceId/access-requests`. | [Workspace routes](#workspace-routes) |
 | `workspace_setup_required` | `409` | The workspace pays but has no repository yet. | `POST /v1/workspaces/:id/setup` |
 | `workspace_deleting` | `409` | The workspace is being deleted. An owner restores it first. | `POST /v1/workspaces/:id/restore` |
 | `workspace_has_project` | `409` | The account already holds its workspace's project. The body names it (`workspace_id`). | Create another workspace: `POST /v1/workspaces`. |
@@ -7539,7 +7542,7 @@ Install the same release version of `@kortix/ui` and `@kortix/sdk`. Version rule
 | `@phosphor-icons/react@2.1.10` | Your own icons. Pin the version `@kortix/ui` uses, so `IconProvider` reaches your icons too. |
 
 <Callout type="info">
-Name `react@19 react-dom@19` in the install. An unversioned `react` lets npm pick React 18 to satisfy the React 18 peer of `cmdk@0.2.1`, and the install does not finish. `Command` works on React 19. A host with `strict-peer-dependencies` must allow the React peer of `cmdk`.
+Name `react@19 react-dom@19` in the install. `@kortix/ui` needs React 19. `Command` works on React 19. A host with `strict-peer-dependencies` must allow the React peer of `cmdk`.
 </Callout>
 
 #### Import map

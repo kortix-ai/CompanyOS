@@ -80,7 +80,7 @@ describe('AppearanceTabView', () => {
     expect(headings(html())).toEqual(EXPECTED_HEADINGS);
   });
 
-  // The Select's own option list renders in a Radix portal, which static
+  // The Select's own option list renders in a portal, which static
   // markup cannot reach — `INTERFACE_THEME_OPTIONS` is locked in
   // user-menu.test.tsx. What IS reachable is the trigger: it names and
   // previews the selection, for every one of the 117 rows (System, the 4

@@ -50,7 +50,7 @@ import {
 
 /**
  * The value `onVariantChange(null)` means: no variant, let the model decide.
- * A sentinel is needed because Radix's radio group addresses items by string
+ * A sentinel is needed because the radio group addresses items by string
  * and cannot carry `null`.
  */
 const AUTO = '__auto__';

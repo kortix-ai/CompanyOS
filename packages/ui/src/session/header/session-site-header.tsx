@@ -176,7 +176,7 @@ export function SessionSiteHeader({
   // The name edits in place: the name button swaps for a field. The menu's
   // Rename item opens the same field, so there is one rename surface.
   const [isRenaming, setIsRenaming] = useState(false);
-  // Set by the menu's Rename item. Radix returns focus to the caret trigger
+  // Set by the menu's Rename item. The menu returns focus to the caret trigger
   // when the menu closes, which would blur, and so save, the field that just
   // opened; `onCloseAutoFocus` reads this and keeps focus in the field.
   const renameFromMenu = useRef(false);
@@ -556,7 +556,7 @@ export function SessionSiteHeader({
             instead. */}
         <div
           className={cn(
-            'flex items-center justify-between p-2 px-3.5 pt-2 pr-4',
+            'flex items-center justify-between p-2 px-3.5 pt-[max(0.5rem,env(safe-area-inset-top))] pr-4', // audit:allow device safe-area inset, not a spacing step
             // Unconditional on the shell. The LEFT indent depends on the
             // sidebar (expanded, it covers the macOS lights itself) and is
             // gated by the data attribute — but the RIGHT one does not: this

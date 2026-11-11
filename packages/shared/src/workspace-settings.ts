@@ -18,7 +18,9 @@ export const WORKSPACE_SETTINGS_GROUPS = [
   // configures the repository connection; Repository browses its files
   // (with Drive on).
   { id: 'library', sections: ['agents', 'models', 'connectors', 'secrets', 'skills', 'drives', 'apps', 'triggers', 'sandbox', 'git', 'repo'] },
-  { id: 'people', sections: ['members', 'groups', 'roles', 'identity', 'audit'] },
+  // Tool calls sits beside the Audit log: what the workspace's agents and
+  // people did with their tools, one row per call.
+  { id: 'people', sections: ['members', 'groups', 'roles', 'identity', 'audit', 'tool-calls'] },
   { id: 'billing', sections: ['plan', 'usage'] },
   { id: 'advanced', sections: ['feature-flags'] },
   { id: 'danger', sections: ['danger-zone'] },
@@ -81,6 +83,7 @@ export const WORKSPACE_SETTINGS_LABELS: Readonly<Record<WorkspaceSettingsSection
   roles: 'Roles',
   identity: 'Identity',
   audit: 'Audit log',
+  'tool-calls': 'Tool calls',
   plan: 'Plan',
   usage: 'Usage',
   help: 'Help',

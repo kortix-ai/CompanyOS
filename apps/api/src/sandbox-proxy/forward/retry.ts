@@ -34,9 +34,11 @@ import { isProviderIngressAuthFailure } from '../provider-auth';
 import { portFailureHop } from '../proxy-hop';
 import { shouldBypassIngressCache } from '../sse-stall';
 import type { ForwardRequest, ForwardState } from './context';
+import { clearDialDead, dialDeadKey, recordDialTimeout, shouldFailFast } from './dial-dead';
 import { placePromptWireId, syncEnvBeforeTurnStart } from './turn-start';
 import {
   buildUpstreamRequestHeaders,
+  PROXY_CONNECT_TIMEOUT_MESSAGE,
   respondFromUpstream,
   sendUpstreamAttempt,
 } from './upstream';
@@ -166,7 +168,36 @@ export function reportPortNotAnswering(
   port: number,
   now = Date.now(),
 ): void {
-  const key = `preview port still not answering ${sandboxId}:${port}`;
+  reportPortOutcome(message, 'still-not-answering', sandboxId, port, now);
+}
+
+/**
+ * Ship the fast-fail line of a dial-dead box through the same throttle: the
+ * request never dialled (the box's last two dials timed out), and its rate is
+ * the caller's poll rate — the same burst cadence the give-up line throttles.
+ * Keyed per (sandbox, port) window, so the two settled outcomes (a request
+ * that dialled and exhausted, one that was skipped) each ship their own first
+ * line.
+ */
+export function reportDialDeadFastFail(sandboxId: string, port: number, now = Date.now()): void {
+  reportPortOutcome(
+    `[PREVIEW] Sandbox ${sandboxId}:${port} not dialled — marked dial-dead after repeated connect timeouts, failing this request fast`,
+    'dial-dead-fast-fail',
+    sandboxId,
+    port,
+    now,
+  );
+}
+
+/** The shared log-noise throttle behind both settled-outcome lines. */
+function reportPortOutcome(
+  message: string,
+  kind: string,
+  sandboxId: string,
+  port: number,
+  now: number,
+): void {
+  const key = `preview port ${kind} ${sandboxId}:${port}`;
   const { log, suppressed } = logWindowDecision(key, now);
   if (!log) return;
   const fields = { sandboxId, port, suppressed };
@@ -186,6 +217,19 @@ async function forwardAttempt(
   budgetRemainingMs: number,
 ): Promise<Response | 'retry'> {
   const { sandboxId, port, method, remainingPath, queryString, upstreamPort, record, ingressRequest, ptl, userId, serviceKey } = req;
+
+  // A dial-dead box (its last two dials timed out) gets no dial at all — the
+  // ladder's remaining attempts would each hang the full connect timer against
+  // a box that never answers TCP (KRTX-4459). Reads fail fast to the same
+  // give-up response they would have reached ~45 s later; writes keep the
+  // ladder and its ambiguity guards. Once per probe window one request dials
+  // again (shouldFailFast renews the slot), so a revived box is served again.
+  if (!plan.nonReplayableWrite && shouldFailFast(dialDeadKey(sandboxId, port))) {
+    state.lastAttemptHop = portFailureHop(upstreamPort);
+    reportDialDeadFastFail(sandboxId, port);
+    return giveUpForward(req, state);
+  }
+
   state.lastAttemptHop = 'provider_ingress';
   if (req.isSseEventStreamRequest && attempt === 0 && shouldBypassIngressCache(plan.sseStallKey)) {
     console.warn(
@@ -246,6 +290,9 @@ async function forwardAttempt(
   );
   if ('refusal' in sent) return sent.refusal;
   const upstream = sent.upstream;
+  // The dial reached the box — any answer, even an error status, proves the
+  // path and drops a dial-dead mark (a revived box is served again).
+  clearDialDead(plan.sseStallKey);
 
   const failure = await handleUpstreamFailureStatus(req, state, plan, upstream, previewUrl, attempt);
   if (failure) return failure;
@@ -561,6 +608,14 @@ async function recoverFromAttemptError(
     // claim so a client retry can't double-enqueue.
     state.promptDeliveryMaybeAccepted = true;
     return 'stop';
+  }
+
+  // The proxy's own connect timer fired: the dial never reached the box.
+  // A stale cached ingress times out exactly once and the retry below
+  // re-resolves and recovers, so the FIRST timeout must not mark — the
+  // dial-dead mark needs a second consecutive timeout (dial-dead.ts).
+  if (err instanceof DOMException && err.message === PROXY_CONNECT_TIMEOUT_MESSAGE) {
+    recordDialTimeout(plan.sseStallKey);
   }
 
   if (!state.wakeTriggered) {

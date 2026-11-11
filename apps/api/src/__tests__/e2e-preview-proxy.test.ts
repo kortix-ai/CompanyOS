@@ -505,6 +505,9 @@ const { verifyKortixUserContext, KORTIX_USER_CONTEXT_HEADER } = await import(
 );
 const { resolvePreviewWsUpstream } = await import('../sandbox-proxy/routes/preview');
 const { invalidateSandbox } = await import('../sandbox-proxy/backend');
+const { __resetDialDeadForTests, recordDialTimeout, clearDialDead, dialDeadKey } = await import(
+  '../sandbox-proxy/forward/dial-dead'
+);
 const { preparePreviewWsUpgrade } = await import('../sandbox-proxy/ws-proxy');
 const { __resetPromptDedupe } = await import('../sandbox-proxy/prompt-dedupe');
 
@@ -551,6 +554,7 @@ function createProxyTestApp() {
 beforeEach(() => {
   __resetPromptDedupe();
   __resetProxyRetryDelaysForTests();
+  __resetDialDeadForTests();
   resetLogWindowsForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
@@ -1758,19 +1762,25 @@ describe('Preview proxy: retry exhaustion', () => {
       }
     }
 
-    test('an ordinary request answers before the ALB idle cut, each attempt shrunk to the budget left', async () => {
+    // Two consecutive connect timeouts mark the box dial-dead (dial-dead.ts):
+    // attempt 1 (stale-ingress chance) still retries, attempt 2 proves the box
+    // never answers TCP, and the ladder stops instead of dialling a third and
+    // fourth time (KRTX-4459). The 50 s budget still bounds any request whose
+    // attempts don't time out — the response-path give-up below covers that.
+    test('an ordinary request answers before the ALB idle cut; the second connect timeout stops the ladder', async () => {
       const run = await hangingRun('/');
       expect(run.status).toBe(502);
-      expect(run.dials).toBe(4);
+      expect(run.dials).toBe(2);
       expect(run.elapsedMs).toBeLessThan(60_000);
     });
 
-    // Each ingress resolution takes 1 s. Three attempts end at 52.25 s, past
-    // the 50 s budget, so the loop answers instead of dialling a fourth time.
-    test('no attempt starts once the budget is spent', async () => {
+    // The mark holds regardless of how much budget is left: once the box has
+    // proven dial-dead, no attempt starts, budget or not (the 1 s ingress
+    // resolutions would otherwise buy the ladder two more full dials).
+    test('no attempt starts once the box is marked dial-dead', async () => {
       const run = await hangingRun('/', 'GET', 1_000);
       expect(run.status).toBe(502);
-      expect(run.dials).toBe(3);
+      expect(run.dials).toBe(2);
       expect(run.elapsedMs).toBeLessThan(60_000);
     });
   });
@@ -1928,7 +1938,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
     expect(mockWakeCalls.length).toBe(0);
   });
 
-  test('an ordinary connect-timer abort (non-message path) still wakes + retries as before', async () => {
+  test('an ordinary connect-timer abort (non-message path) wakes, then stops dialling after the second timeout', async () => {
     const savedFetch = globalThis.fetch;
     const origSetTimeout = globalThis.setTimeout;
     let callCount = 0;
@@ -1937,7 +1947,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
       const signal = init?.signal;
       return new Promise((_resolve, reject) => {
         const abortWith = () =>
-          reject((signal as any)?.reason ?? new DOMException('aborted', 'TimeoutError'));
+          reject((signal as any)?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
         if (signal?.aborted) {
           abortWith();
           return;
@@ -1959,10 +1969,67 @@ describe('Preview proxy: long-turn completion timeout', () => {
     globalThis.fetch = savedFetch;
 
     // Unchanged prior behavior: a plain GET that never gets bytes is a real
-    // stall, not a long-turn completion — full retry/wake path still applies.
+    // stall, not a long-turn completion. The FIRST timeout still wakes +
+    // retries (one timeout is the stale-ingress case a re-resolve recovers
+    // from); the SECOND consecutive timeout marks the box dial-dead and the
+    // ladder stops dialling a box that never answers TCP (KRTX-4459) — two
+    // dials, then the give-up 502, instead of four dials against a dead box.
     expect(res.status).toBe(502);
-    expect(callCount).toBe(4);
+    expect(callCount).toBe(2);
     expect(mockWakeCalls.length).toBe(1);
+  });
+
+  // The dial-dead mark (KRTX-4459): once a box's dials keep timing out, the
+  // requests that follow fail fast WITHOUT dialling — the observed dead-box
+  // cadence was ~7-request bursts every ~2-3 min, each request burning the
+  // full ~50 s ladder before the give-up 502, which put the route's p95 at
+  // 15-45 s while its p50 stayed at ~90 ms.
+  describe('Preview proxy: dial-dead fast-fail', () => {
+    // Marks key on the EXTERNAL id the proxy resolves the request to (the DB
+    // row's), which is TEST_SANDBOX_ID here — not the URL's spelling.
+    const deadSandbox = TEST_SANDBOX_ID;
+
+    test('a marked box answers the give-up 502 with zero dials and zero wakes', async () => {
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      const app = createProxyTestApp();
+      const res = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(502);
+      expect(mockFetchCallCount).toBe(0);
+      expect(mockWakeCalls.length).toBe(0);
+      // The answer attributes the hop it never reached (the port's own).
+      expect(res.headers.get('X-Kortix-Proxy-Hop')).toBe('daemon');
+    });
+
+    test('a revival clears the mark and the next request dials again', async () => {
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      clearDialDead(dialDeadKey(deadSandbox, 8000));
+      const app = createProxyTestApp();
+      const res = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(200);
+      expect(mockFetchCallCount).toBe(1);
+    });
+
+    test('a replayable POST fast-fails like a GET (only prompt deliveries and uploads keep the ladder)', async () => {
+      // A plain POST is replayable — nothing reached the box, so the same
+      // zero-dial give-up is safe. The non-replayable classes (prompt
+      // delivery, upload, env-rpc) skip this gate entirely and keep today's
+      // ladder and their own ambiguity guards.
+      recordDialTimeout(dialDeadKey(deadSandbox, TEST_PORT));
+      recordDialTimeout(dialDeadKey(deadSandbox, TEST_PORT));
+      const app = createProxyTestApp();
+      const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/api/x`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(502);
+      expect(mockFetchCallCount).toBe(0);
+    });
   });
 });
 

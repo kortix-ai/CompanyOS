@@ -23,7 +23,7 @@
       "sizes": "1440x900",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "The Kortix workspace on desktop: sessions, agents, and the composer."
+      "label": "The Kortix workspace on desktop: sessions and the composer."
     },
     {
       "src": "/screenshots/workspace-narrow.png",

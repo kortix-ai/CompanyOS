@@ -4,7 +4,7 @@ incident_date: 2026-11-03
 ---
 # Run every image whose process spawns children under an init (tini); Bun as PID 1 never reaps orphans and aborts when PIDs run out
 
-**Rule:** A container whose main process starts child processes (git, a shell, a CLI) runs an init as PID 1: `ENTRYPOINT ["/usr/bin/tini", "-s", "--", ...]` in the image, or `init: true` in compose. Never let `bun` be PID 1. A deploy config overrides `command`, never `entryPoint`.
+**Rule:** A container whose main process starts child processes (git, a shell, a CLI) runs an init as PID 1: `ENTRYPOINT ["/usr/bin/tini", "-s", "--", ...]` in the image, or `init: true` in compose. Never let `bun` be PID 1. A deploy config overrides only the command (ECS and compose `command`, Kubernetes `args`), never the entrypoint (Kubernetes `command`).
 
 **Trigger surface:** writing or changing a Dockerfile `ENTRYPOINT`/`CMD`, an ECS task definition `entryPoint`, a compose or Kubernetes `command`, or adding a child process to a service. Also: a "Bun has crashed" report whose stack ends in `WTF::Thread::create`.
 

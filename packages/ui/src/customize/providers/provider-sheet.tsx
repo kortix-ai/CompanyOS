@@ -86,6 +86,7 @@ import {
   providerDisconnectPlan,
 } from '../sections/llm-provider/utils';
 import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDER_BY_ID, type LlmProviderEntry, type LlmProviderModel } from '../../internal/lib/llm-providers';
 import { cn } from '../../internal/lib/utils';
@@ -952,6 +953,7 @@ export function ProviderSheet({
   } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'openai') {
     content = (
       <SplitSheetBody className="space-y-7">
+        <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="codex" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('chatGptAccounts')}</p>
           <p className="text-muted-foreground text-xs text-pretty">{tPooled('oauthPrivateDescription')}</p>
@@ -964,7 +966,7 @@ export function ProviderSheet({
             canWrite
             oauth={{ projectId, onConnected: () => undefined }}
           />
-          <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly />
+          <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
         </div>
         {models}
       </SplitSheetBody>
@@ -973,6 +975,7 @@ export function ProviderSheet({
     // Claude accounts, exactly as OpenAI lists ChatGPT accounts; Anthropic API keys below them.
     content = (
       <SplitSheetBody className="space-y-7">
+        <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="claude-agent" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('claudeAccounts')}</p>
           <p className="text-muted-foreground text-xs text-pretty">{tPooled('claudeOauthPrivateDescription')}</p>

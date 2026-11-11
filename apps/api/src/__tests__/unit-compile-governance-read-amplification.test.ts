@@ -49,7 +49,7 @@ mock.module('../projects/git/files', () => ({
   },
 }));
 
-const { resolveCompiledAgentConfigForSession, __resetCompiledAtCommitForTests } = await import(
+const { resolveCompiledAgentConfigForSession, __resetCompiledAtCommitForTests, __setCompiledAtCommitBudgetForTests } = await import(
   '../projects/lib/compile-agent-config'
 );
 type GitBackedProject = Parameters<typeof resolveCompiledAgentConfigForSession>[0];
@@ -115,6 +115,7 @@ afterAll(() => {
 
 beforeEach(() => {
   __resetCompiledAtCommitForTests();
+  __setCompiledAtCommitBudgetForTests(64 * 1024 * 1024);
   prefetchCalls.length = 0;
   readFileCalls.length = 0;
 });
@@ -142,5 +143,21 @@ describe('the governance compile of a prompt-heavy manifest', () => {
 
     for (const p of projects) await resolveCompiledAgentConfigForSession(p, 'main');
     expect(readFileCalls).toHaveLength(0);
+  });
+
+  test('the byte budget evicts the oldest entries: a tenant cannot grow the cache past its budget', async () => {
+    // A small budget and a project whose compiled config is large: three
+    // entries over a 1-entry budget must evict, not accumulate.
+    __setCompiledAtCommitBudgetForTests(4_000);
+    const big = Array.from({ length: 34 }, (_, i) => project(`prefetch-bytes-${i}`));
+    for (const p of big) await resolveCompiledAgentConfigForSession(p, 'main');
+    const afterRoundOne = readFileCalls.length;
+    expect(afterRoundOne).toBeGreaterThan(0);
+    readFileCalls.length = 0;
+
+    // Only the LAST entry's bytes fit the 4,000-byte budget; everything else
+    // was evicted, so every compile re-reads.
+    for (const p of big) await resolveCompiledAgentConfigForSession(p, 'main');
+    expect(readFileCalls.length).toBeGreaterThan(afterRoundOne / 2);
   });
 });

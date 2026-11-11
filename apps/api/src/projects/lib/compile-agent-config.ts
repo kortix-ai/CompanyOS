@@ -553,15 +553,17 @@ interface CompileReadOptions {
  * ~380 KB from ~40 files (2026-10-30).
  */
 // replica-local: a cache of immutable per-commit output; a miss recompiles.
-const compiledAtCommit = new Map<string, { raw: Record<string, unknown>; compiled: string | null }>();
-// Holds the ACTIVE fleet's (project x selection) keys — prod 2026-11-11 ticks
-// ~30 projects an hour; at 32 every tick evicted and recompiled. Entries are
-// bounded by the config size (~128 KiB cap), so 1,000 is a few tens of MB at
-// the absolute worst, ~10 MB typical.
-// ponytail: count-bounded, not byte-bounded; add a byte budget if configs grow.
+const compiledAtCommit = new Map<string, { raw: Record<string, unknown>; compiled: string | null; bytes: number }>();
+let compiledAtBytes = 0;
+/** Holds the ACTIVE fleet's (project x selection) keys — prod 2026-11-11 ticks
+ *  ~30 projects an hour; at 32 every tick evicted and recompiled. Byte-bounded
+ *  like the read cache (`MAX_CACHE_BYTES`): 64 MiB of compiled-config strings
+ *  per process, so even a working set over 1,000 entries evicts, never grows.
+ *  The count bound is the same ladder rung: a working set the fleet fits. */
 const COMPILED_AT_COMMIT_MAX = 1_000;
+let COMPILED_AT_COMMIT_MAX_BYTES = 64 * 1024 * 1024;
 
-function compiledAt(key: string | null): { raw: Record<string, unknown>; compiled: string | null } | undefined {
+function compiledAt(key: string | null): { raw: Record<string, unknown>; compiled: string | null; bytes: number } | undefined {
   const hit = key ? compiledAtCommit.get(key) : undefined;
   if (hit) {
     // Re-insert: the Map's insertion order is the eviction order.
@@ -573,9 +575,19 @@ function compiledAt(key: string | null): { raw: Record<string, unknown>; compile
 
 function rememberCompiled(key: string | null, entry: { raw: Record<string, unknown>; compiled: string | null }): void {
   if (!key) return;
-  compiledAtCommit.set(key, entry);
-  while (compiledAtCommit.size > COMPILED_AT_COMMIT_MAX) {
-    compiledAtCommit.delete(compiledAtCommit.keys().next().value!);
+  // Byte-accounted like the read cache (UTF-16 strings, 2 bytes/char): the
+  // cached strings are tenant-controlled, so the budget, not the count, is
+  // the bound that cannot grow with a tenant's config.
+  const bytes = (JSON.stringify(entry.raw)?.length + (entry.compiled?.length ?? 0)) * 2;
+  const previous = compiledAtCommit.get(key);
+  if (previous) compiledAtBytes -= previous.bytes;
+  const stored = { ...entry, bytes };
+  compiledAtCommit.set(key, stored);
+  compiledAtBytes += bytes;
+  while (compiledAtCommit.size > COMPILED_AT_COMMIT_MAX || compiledAtBytes > COMPILED_AT_COMMIT_MAX_BYTES) {
+    const oldest = compiledAtCommit.keys().next().value!;
+    compiledAtBytes -= compiledAtCommit.get(oldest)!.bytes;
+    compiledAtCommit.delete(oldest);
   }
 }
 
@@ -587,6 +599,12 @@ function commitKey(project: GitBackedProject, found: { commit: string | null; pa
 /** Test seam: start from a cold cache. */
 export function __resetCompiledAtCommitForTests(): void {
   compiledAtCommit.clear();
+  compiledAtBytes = 0;
+}
+
+/** Test seam: size the byte budget. */
+export function __setCompiledAtCommitBudgetForTests(bytes: number): void {
+  COMPILED_AT_COMMIT_MAX_BYTES = bytes;
 }
 
 /**

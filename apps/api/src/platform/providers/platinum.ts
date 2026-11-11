@@ -60,6 +60,7 @@ import { currentInstanceId } from '../../projects/instance-scope';
 import { isOpencodePort } from '../../shared/opencode-ports';
 import { logger } from '../../lib/logger';
 import { platinumJson, platinumJsonResponse, type PlatinumHttpError } from '../../shared/platinum';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import { sandboxFrontendBaseUrl } from '../sandbox-frontend-url';
 import { serviceKeyForExternalId } from '../service-key';
 import type {
@@ -558,18 +559,6 @@ function volumeRegionRefusal(error: unknown): { volumeRegion: string | null } | 
 function isNameTakenConflict(error: unknown): boolean {
   const http = platinumHttp(error);
   return http.status === 409 && http.code === 'name_taken';
-}
-
-/**
- * The typed not-running verdict: `shared/platinum.ts` throws its
- * `PlatinumSandboxNotRunningError` for every 409 whose body carries
- * `sandbox_not_running`, from any method (a GET for a natively auto-stopped
- * box answers the same 409 its expose/exec give). Matched by the pinned
- * class NAME rather than an instanceof so a test's stand-in error
- * classifies the same as the real one.
- */
-function isNotRunningVerdict(err: unknown): boolean {
-  return err instanceof Error && err.name === 'PlatinumSandboxNotRunningError';
 }
 
 export class PlatinumProvider implements SandboxProvider {
@@ -1425,7 +1414,7 @@ export class PlatinumProvider implements SandboxProvider {
       // cannot misread a boot. Matched by the pinned class NAME, not an
       // instanceof: the expose-not-running tests establish the name as the
       // contract, and a name survives every test's module mock.
-      if (isNotRunningVerdict(err)) return 'stopped';
+      if (isPlatinumNotRunningVerdict(err)) return 'stopped';
       return 'unknown';
     }
   }
@@ -1623,7 +1612,7 @@ export class PlatinumProvider implements SandboxProvider {
     // GET last answered `running` — the control plane can contradict itself,
     // and the verdict is the authoritative half. Start without re-trusting
     // the GET.
-    if (isNotRunningVerdict(wakeReason)) {
+    if (isPlatinumNotRunningVerdict(wakeReason)) {
       console.warn(`[PLATINUM] Sandbox ${externalId} is stopped (control-plane verdict), waking up...`);
       await this.start(externalId);
       return;

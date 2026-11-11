@@ -737,10 +737,14 @@ test('executeComposio states only the title of a Cloudflare WAF block page and k
     sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_UPDATE_LINEAR_COMMENT',
     args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: blocked }),
   });
+  // KRTX-4722: the edge's 403 refused the request as sent — the tool never
+  // ran, so the result carries the upstream 4xx (a caller-fixes-it status),
+  // not a blanket 502 that reads as transient and invites the same retry.
   expect(blockedResult).toEqual({
     ok: false,
-    status: 502,
-    data: 'composio_upstream_unavailable: Composio answered 403 with an HTML error page (page: Attention Required! | Cloudflare)',
+    status: 403,
+    data:
+      'composio_upstream_unavailable: Composio answered 403 with an HTML error page (page: Attention Required! | Cloudflare): the edge refused the call before it reached the provider, so the tool did not run — the same arguments will be refused again.',
   });
 
   const untitled = session({
@@ -762,6 +766,27 @@ test('executeComposio states only the title of a Cloudflare WAF block page and k
     ok: false,
     status: 502,
     data: 'composio_upstream_unavailable: Composio answered 502 with an HTML error page',
+  });
+
+  // A provider-side HTML 4xx is not an edge block: its status carries through
+  // (still non-retryable for the SDK hook), but the reason never claims the
+  // call died at the edge — only the 403 class states that (KRTX-4722).
+  const notFound = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(new Error('404 <html><body>Not Found</body></html>'), { status: 404 });
+    },
+  });
+  const notFoundResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_GET_LINEAR_ISSUE',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: notFound }),
+  });
+  expect(notFoundResult).toEqual({
+    ok: false,
+    status: 404,
+    data: 'composio_upstream_unavailable: Composio answered 404 with an HTML error page',
   });
 });
 

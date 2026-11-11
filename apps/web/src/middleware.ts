@@ -969,14 +969,21 @@ export async function middleware(request: NextRequest) {
  * source between DESKTOP_ALLOWED_ROUTES and the middleware export for
  * route literals, and this helper's health path is not a desktop route.
  */
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0']);
 
 function httpsRedirectTarget(request: NextRequest): URL | null {
   if (request.nextUrl.pathname === '/api/health') return null;
   // Local dev serves plain HTTP and Next dev stamps `x-forwarded-proto: http`
   // on every request, so without this every local page 308s to an https
-  // origin nothing listens on.
-  if (LOCAL_HOSTNAMES.has(request.nextUrl.hostname)) return null;
+  // origin nothing listens on. The `Host` header decides, not `nextUrl`: the
+  // standalone server builds `nextUrl` from its bind address (`0.0.0.0`), so
+  // a container's own health probe of `http://localhost:3000/` was sent to
+  // `https://0.0.0.0:3000/` and every self-host frontend update rolled back
+  // (2026-11-11, v0.15.5).
+  const host = hostnameOf(
+    request.headers.get('x-forwarded-host')?.split(',')[0].trim() || request.headers.get('host') || request.nextUrl.host,
+  );
+  if (LOCAL_HOSTNAMES.has(host)) return null;
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
   if (forwardedProto !== 'http') {
     let cfScheme: string | undefined;
@@ -989,7 +996,16 @@ function httpsRedirectTarget(request: NextRequest): URL | null {
   }
   const url = request.nextUrl.clone();
   url.protocol = 'https:';
+  // The visitor's host, on the default https port: never the bind address.
+  url.host = host;
+  url.port = '';
   return url;
+}
+
+/** `localhost:3000` → `localhost`, `[::1]:3000` → `[::1]`. */
+function hostnameOf(host: string): string {
+  if (host.startsWith('[')) return host.slice(0, host.indexOf(']') + 1);
+  return host.split(':')[0];
 }
 
 export const config = {

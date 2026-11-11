@@ -115,6 +115,7 @@ import {
   Composer as SessionChatInput,
 } from '../composer/composer';
 import { ComposerDropZone } from '../composer/composer-drop-zone';
+import { useSessionComposerCall } from '../voice/composer-call';
 import { AgentsLine } from '../agents/agent-strip';
 import { HeldMessages } from '../agents/held-messages';
 import { SessionPromptContext } from '../agents/session-prompt';
@@ -981,6 +982,15 @@ export function SessionChat({
   });
   const composerAgentName = composerAgent.selected;
   const noAccessibleAgents = composerAgent.disabled;
+  // Nothing typed: the Send button calls this session instead (flag
+  // `voice_call`, `voice/composer-call.ts`). Its agent answers here, so the
+  // call's turns fill this chat. Not a sub-session: its box binds no relay.
+  const composerCall = useSessionComposerCall({
+    projectId,
+    sessionId: projectSessionId,
+    agent: projectSessionRow?.agent_name ?? composerAgentName,
+    topLevel: !!projectSessionRow && !projectSessionRow.parent_session_id,
+  });
   // The slash menu lists only the commands the composer's agent may run. The
   // transcript keeps the full list: a past turn may have run any of them.
   const { data: agentCommands } = useRuntimeCommands({ agent: composerAgentName ?? undefined });
@@ -1625,8 +1635,8 @@ export function SessionChat({
     [promptInbox.retry],
   );
 
-  // "Stop and send": the waiting row becomes Quick Queue. The running turn
-  // ends after its running tool, then this row runs.
+  // "Send now": the waiting row goes next, ahead of older waiting rows, and
+  // steers the running turn. The turn does not stop.
   const handleStopAndSendQueuedMessage = useCallback(
     (id: string) => {
       void promptInbox
@@ -1979,7 +1989,7 @@ export function SessionChat({
       parkedAskIdByRequest.has(renderedQuestion.id)
     );
   }, [renderedQuestion, liveQuestions, parkedAskIdByRequest]);
-  // Quick Queue entries share the turn renderer. The inbox marks their IDs as
+  // Transcript-placed waiting entries share the turn renderer. The inbox marks their IDs as
   // pending until delivery; a client-minted wire ID does not place a message.
   // Each is the user message `sessionLogPromptMessage` mints for its prompt.
   const queuedSyntheticMessages = useMemo(() => {
@@ -2804,7 +2814,7 @@ export function SessionChat({
          * at once and never waits behind an earlier Send of this session.
          */
         commitsRewind?: boolean;
-        /** Quick Queue paints a transcript bubble; Queue List adds a row above the composer. */
+        /** `transcript` paints a bubble now; `composer` adds a waiting row above the composer. */
         placement?: 'transcript' | 'composer';
         /** How the prompt reaches a running turn (`composerSendDelivery`). */
         delivery?: SessionPromptDelivery;
@@ -2922,8 +2932,9 @@ export function SessionChat({
       }
       const placement = overrides?.placement ?? 'transcript';
       const delivery = overrides?.delivery;
-      // Placement decides WHERE the send waits: Quick Queue paints its bubble in
-      // the transcript now, Queue List draws a row above the composer. Busy
+      // Placement decides WHERE the send waits: an idle send paints its bubble
+      // in the transcript now, a send into a running turn draws a row above the
+      // composer until the turn reads it. Busy
       // state or earlier live rows decide only whether it waits at all.
       const willQueue =
         isBusyRef.current || promptInbox.prompts.some((prompt) => prompt.state !== 'failed');
@@ -5158,7 +5169,7 @@ export function SessionChat({
                 autoFocus={deferComposerFocus || !composerAutoFocus ? false : undefined}
                 onSend={async (text, files, mentions, attachments, placement) => {
                   if (await queueEdit.save(text)) return;
-                  // Enter while a turn runs steers it (D9.1); Cmd/Ctrl+Enter is Queue List.
+                  // Enter or Cmd/Ctrl+Enter while a turn runs steers it (one delivery mode).
                   await handleSend(
                     text,
                     files,
@@ -5258,6 +5269,7 @@ export function SessionChat({
                 // beside it sits `pb-4` off the window's bottom edge: the same
                 // margins, so the two boxes line up.
                 parentClassName={transcriptRows ? 'max-w-none px-5 pb-4' : undefined}
+                call={composerCall}
                 onNoticeRetry={
                   composerReadiness.notice && composerReadiness.retryable
                     ? requestRuntimeReconnect

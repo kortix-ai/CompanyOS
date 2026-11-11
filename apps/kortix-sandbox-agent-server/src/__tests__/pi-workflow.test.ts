@@ -777,6 +777,8 @@ describe('pi workflow tool, always in the background from a top-level session', 
       'kortix.workflow.planned': 2,
       'kortix.workflow.handoff_sha256': sha256(handoffJson(runner.initial_prompt)),
       'kortix.subagent.depth': 1,
+      // The runner inherits the model the parent's turn runs.
+      'kortix.parent_model': 'kortix/test-model',
     })
     expect(api.reads).toEqual([])
     expect(part.status).toBe('completed')

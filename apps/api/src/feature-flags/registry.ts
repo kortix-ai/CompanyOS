@@ -497,7 +497,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'voice_call',
     name: 'Voice calls',
     description:
-      'Call an agent from its page (Customize → Agents) and talk it through: a call is a session of its own on that agent, which hears you, answers in a voice and sees a screen you share; the conversation is that session\'s chat.',
+      'Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session\'s agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session\'s chat.',
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -506,7 +506,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
     enforcementNote:
       'Off ⇒ nothing of the voice loads. BOX: absent from KORTIX_FEATURE_FLAGS (projects/lib/feature-flag-env.ts), so ' +
       'kortixd registers no voice extension and opens no voice port; a change reaches the next new box. WEB: no call ' +
-      'button on the agent page. The gateway\'s audio routes are inference like chat: billed per use, not gated here.',
+      'button on the agent page, and an empty composer keeps its Send (packages/ui/src/session/voice/composer-call.ts: ' +
+      'project home, the session boot shell and the session chat). The gateway\'s audio routes are inference like ' +
+      'chat: billed per use, not gated here.',
   },
   {
     key: 'chat_input',

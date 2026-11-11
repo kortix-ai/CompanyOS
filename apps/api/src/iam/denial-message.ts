@@ -6,7 +6,7 @@
 
 import { HTTPException } from 'hono/http-exception';
 import { toWorkspaceAction } from '@kortix/shared/workspace-actions';
-import { markAgentGrantDenial } from '../shared/dead-credential-log';
+import { markAccountMfaDenial, markAgentGrantDenial } from '../shared/dead-credential-log';
 
 const MFA_DENIAL_MESSAGE =
   'This workspace requires multi-factor authentication. Verify your second factor and retry.';
@@ -16,10 +16,11 @@ const MFA_DENIAL_MESSAGE =
  * STABLE property of the caller (its kortix_permissions grant, its ceiling,
  * its service-account role) and whose remedy the typed body already names.
  * Their warn lines share the log throttle — see shared/dead-credential-log.ts
- * (KRTX-4635). Deliberately outside: `account_mfa_required` (the caller fixes
- * it in the step-up dialog) and `sso_required` (one redirect fixes it), whose
- * constraints clear in-session, and the generic fallbacks, whose cause is
- * unknown here.
+ * (KRTX-4635). Deliberately outside: `sso_required` (one redirect fixes it),
+ * whose constraint clears in-session, and the generic fallbacks, whose cause
+ * is unknown here. `account_mfa_required` joined the throttle separately
+ * (KRTX-4674): its constraint clears only through the step-up dialog, so a
+ * caller that polls instead of stepping up receives the same refusal forever.
  */
 const AGENT_GRANT_DENIAL_REASONS = new Set([
   'agent_scope_insufficient',
@@ -79,6 +80,10 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
       return `This key's scope does not include "${action}". Mint a key with that permission, or use a full key.`;
     case 'token_out_of_scope':
       return 'This key is bound to one workspace and cannot be used for this request.';
+    case 'token_account_shared':
+      // The token's own workspace, but its legacy account still holds other
+      // workspaces: the account rows are theirs too. No grant or flag lifts it.
+      return `"${action}" reads or changes account-wide data that this workspace still shares with other workspaces of the same legacy account, so a workspace key or session token cannot use it. Use a personal key: run \`kortix login\` on your own machine, or open the web app.`;
     case 'workspace_closed':
       return 'This workspace is being deleted. Only its owners can open it, to restore it.';
     case 'resource_scope_insufficient':
@@ -109,10 +114,14 @@ export function buildDenialError(
 ): HTTPException {
   const workspaceAction = toWorkspaceAction(action);
   if (reason === 'account_mfa_required') {
-    return new HTTPException(403, {
+    const mfaErr = new HTTPException(403, {
       message: MFA_DENIAL_MESSAGE,
       res: jsonResponse({ error: MFA_DENIAL_MESSAGE, code: 'account_mfa_required', action, workspace_action: workspaceAction }),
     });
+    // An account-policy refusal a polling caller can receive forever, so its
+    // LINE joins the log throttle (KRTX-4674). The response is untouched.
+    markAccountMfaDenial(mfaErr);
+    return mfaErr;
   }
   const base =
     messageOverride ??

@@ -106,16 +106,6 @@
     "access": "Accesso",
     "actions": "Azioni",
     "coolingDown": "In pausa dopo il limite",
-    "usageFiveHour": "5 ore",
-    "usageWeekly": "Settimanale",
-    "usageWeeklyModel": "Settimanale · {model}",
-    "usagePercent": "{percent}% usato",
-    "usagePercentResets": "{percent}% · si azzera {time}",
-    "usageLimitReached": "Limite raggiunto",
-    "usageLimitResets": "Limite raggiunto · si azzera {time}",
-    "usageNotSeen": "L’utilizzo appare dopo la prima richiesta",
-    "usageObserved": "Aggiornato {time}",
-    "usageAriaLabel": "{window}: {percent}% usato",
     "member": "membro",
     "members": "membri",
     "actionsFor": "Azioni per {label}",
@@ -801,14 +791,8 @@
         "noResults": "Nessun tema trovato"
       },
       "densities": {
-        "normal": {
-          "label": "Normale",
-          "description": "I passaggi e il ragionamento vengono mostrati in tempo reale mentre Kortix lavora."
-        },
-        "minimal": {
-          "label": "Minima",
-          "description": "Una sola riga di stato finché non la espandi."
-        }
+        "normal": "Normale",
+        "minimal": "Minima"
       },
       "wallpapers": {
         "dither": "Retino",
@@ -1315,7 +1299,7 @@
         },
         "voice_call": {
           "name": "Chiamate vocali",
-          "description": "Chiama un agente dalla sua pagina (Personalizza → Agenti) e parlagli. Una chiamata è una sessione a sé di quell'agente: ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat di quella sessione."
+          "description": "Chiama un agente da una casella di messaggio vuota, dove il pulsante di invio diventa un pulsante di chiamata, o dalla sua pagina (Personalizza → Agenti), e parlagli. In una sessione la chiamata va all'agente di quella sessione; dalla home dello spazio di lavoro avvia una nuova sessione. L'agente ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat della sessione."
         },
         "shared_drives": {
           "name": "Drive condivisi",
@@ -2342,15 +2326,15 @@
     "hintNewLine": "Premi Shift+Enter per una nuova riga",
     "hintSettings": "Premi {modifier}, per aprire le impostazioni",
     "hintCompact": "Chiedi di compattare la sessione quando diventa lunga",
-    "queueList": "Queue List",
+    "queueList": "Messaggi in attesa",
     "quoteCount": "{count, plural, one {# citazione} other {# citazioni}}",
     "expandQuotes": "Espandi citazioni",
     "collapseQuotes": "Comprimi citazioni",
     "stopUnconfirmed": "Impossibile confermare l’arresto. L’agente potrebbe essere ancora in esecuzione. Riprova.",
     "stoppedBy": "Interrotto da {name}",
-    "queued": "In coda",
+    "queued": "In attesa",
     "queuedFiles": "{count, plural, one {# file} other {# file}}",
-    "queuedCount": "{count} in coda",
+    "queuedCount": "{count} in attesa",
     "editingQueued": "In modifica",
     "queuedActions": "Azioni del messaggio",
     "steerNextStep": "Letto al passo successivo",
@@ -2359,11 +2343,11 @@
     "steerFallbackUnsupported": "Attende questo turno. Questa sessione non accetta messaggi durante un turno.",
     "steerFallbackNotPrompter": "Attende questo turno. Lo ha avviato un altro membro.",
     "steerFallbackTurnEnded": "Viene eseguito come turno a sé. Il turno è terminato prima.",
-    "stopAndSend": "Interrompi e invia",
-    "stopAndSendFailed": "Impossibile interrompere e inviare quel messaggio",
+    "stopAndSend": "Invia ora",
+    "stopAndSendFailed": "Impossibile inviare ora quel messaggio",
     "submitEdit": "Invia",
-    "collapseQueue": "Comprimi coda",
-    "expandQueue": "Espandi coda",
+    "collapseQueue": "Comprimi i messaggi in attesa",
+    "expandQueue": "Espandi i messaggi in attesa",
     "myKortixRoutes": "Affida ogni attività all’agente giusto",
     "chatInputReset": "Reset"
   },
@@ -2722,8 +2706,8 @@
           "note": "Inizia con veri crediti sandbox.",
           "f1": "500 crediti / mese nel tuo primo workspace",
           "f2": "Nessuna carta richiesta",
-          "f3": "Usa la tua chiave API per qualsiasi modello premium",
-          "f4": "Collega il tuo abbonamento ChatGPT"
+          "f3": "I modelli funzionano con la tua chiave API o il tuo abbonamento ChatGPT",
+          "f4": "I modelli gestiti da Kortix richiedono Credits"
         },
         "credits": {
           "name": "Crediti",
@@ -3016,6 +3000,8 @@
         "title": "Controlla la tua email",
         "description": "Abbiamo inviato un link a <address>{email}</address>. Aprilo per continuare.",
         "confirmDescription": "Abbiamo inviato un'email di conferma a <address>{email}</address>. Conferma la tua email per continuare.",
+        "unknownDescription": "Ti abbiamo inviato un'e-mail a <address>{email}</address> — un link di accesso o un link di conferma per un nuovo account.",
+        "closedDescription": "Se <address>{email}</address> ha un account, il suo link di accesso è in arrivo.",
         "notReceived": "Non hai ricevuto il link?",
         "confirmNotReceived": "Non hai ricevuto l'email di conferma?",
         "resendIn": "Invia di nuovo tra {seconds}",
@@ -12605,6 +12591,7 @@
       "text41ffc5e14073": "Imposta su {value0}",
       "text420962cdca94": "Lo stesso workspace, gli stessi connettori, la stessa memoria — e otto attività diverse sotto la superficie. Ogni team scrive le competenze per il proprio lavoro e nessuno crea un secondo sistema per svolgerlo.",
       "text420aaa63cba7": "Totale pagina",
+      "textbe57ff2d7907": "Non attribuito a una sessione",
       "text42113e7bf6fc": "Supporto Kortix",
       "text42117ed2a1f5": "Il metodo abituale",
       "text421c4b1fed48": "Piano di controllo del prodotto",
@@ -21320,7 +21307,12 @@
       "text4b892277843c": "Crea workspace",
       "text41018e566b60": "nuovo workspace crea aggiungi team",
       "texta99ac8f9050b": "Workspace · Accesso",
-      "textfd8b8dae4421": "Zona pericolosa"
+      "textfd8b8dae4421": "Zona pericolosa",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Rimborso blocco LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Archiviazione",
+      "textab3aff8f7642": "Bonus ricarica"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",
@@ -21527,6 +21519,10 @@
       "denied": "Accesso negato",
       "deniedDescription": "My Kortix riceve la tua risposta.",
       "failed": "Impossibile inviare la tua decisione. Riprova."
+    },
+    "reviewPane": {
+      "emptyTitle": "Seleziona un elemento",
+      "emptyDescription": "I dettagli si aprono qui. Premi J e K per scorrere l’elenco."
     }
   },
   "commandPalette": {
@@ -22040,6 +22036,9 @@
     "addMcpUrlNamed": "Aggiunge il connettore {name}.",
     "addMcpUrlInvalid": "Inserisci un URL che inizia con https://",
     "addMcpConnect": "Connetti",
+    "addMcpStageConnector": "Connessione al server e caricamento dei suoi strumenti…",
+    "addMcpStageAccount": "Preparazione dell'account…",
+    "addMcpStageSignIn": "Avvio dell'accesso…",
     "addMcpConnected": "{name} è connesso. Gli agenti possono usare i suoi strumenti.",
     "addMcpSignInFailed": "Impossibile avviare l'accesso a {name}: {reason}",
     "addMcpFailed": "Impossibile aggiungere il server MCP",
@@ -23314,6 +23313,16 @@
         "booted": "Avviato",
         "timezone": "Fuso orario",
         "locale": "Impostazioni locali",
+        "usage": "Risorse usate da Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} in media · {peak} di picco",
+        "usageCpuHint": "Di un core, {minutes, plural, one {ultimo minuto} other {ultimi # minuti}}",
+        "usageMemory": "Memoria",
+        "usageMemoryPeak": "{now} · {peak} di picco",
+        "usageProcesses": "Processi",
+        "usageProcessCount": "{count, plural, one {# processo} other {# processi}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Non segnalato: una versione precedente dell'app, oppure l'app è partita da meno di un minuto",
         "recordingSync": "Registrazione e sincronizzazione",
         "status": "Stato",
         "lastFrame": "Ultimo fotogramma",
@@ -23430,12 +23439,16 @@
       "privacyControlsHint": "Mostra il mascheramento dei dati personali. Disattivarlo lo nasconde; ciò che è impostato continua ad applicarsi.",
       "maskingTitle": "Mascheramento",
       "framesTitle": "Fotogrammi dello schermo",
-      "interval": "Un fotogramma ogni",
-      "intervalHint": "Intervalli più brevi conservano più dettagli e usano più CPU e spazio.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Risoluzione",
       "resolutionHint": "Gli schermi più grandi vengono ridotti a questa altezza. Il 4K conserva i dettagli fini, come i disegni CAD.",
-      "framesHint": "Senza valore, ogni computer usa il proprio (un'immagine ogni 2 s a 1440p). Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate a qualsiasi intervallo.",
+      "textRecognition": "Riconoscimento del testo",
+      "textRecognitionHint": "Legge il testo sullo schermo per renderlo ricercabile. Disattivato usa meno CPU: la ricerca trova allora app, titoli delle finestre e URL.",
+      "textRecognitionOption": {
+        "accurate": "Accurato",
+        "fast": "Veloce",
+        "off": "Disattivato"
+      },
+      "framesHint": "Kortix Capture sceglie da solo la frequenza: fino a 2 immagini al secondo mentre qualcuno lavora, una ogni 2 s altrimenti, meno su un computer occupato. Senza valore, ogni computer usa 1440p e il riconoscimento del testo accurato. Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate.",
       "computerDecides": "Decide ogni computer",
       "included": {
         "title": "App e siti web",
@@ -26067,6 +26080,7 @@
     "call": "Chiama",
     "calling": "Chiamata in corso…",
     "start": "Avvia una chiamata vocale",
+    "inCall": "Sei in una chiamata",
     "end": "Termina chiamata",
     "connecting": "Connessione…",
     "listening": "In ascolto",
@@ -26436,48 +26450,37 @@
     "issue": "Problema #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 ore",
+    "weekly": "Settimanale",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "L'utilizzo dell'abbonamento non è disponibile",
-    "disabledDescription": "Le connessioni agli abbonamenti non sono abilitate per questo workspace.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Orario di reset trascorso · aggiorna per l'utilizzo attuale",
-    "text10": "Orario di reset non indicato",
-    "text11": "Checking provider usage…",
-    "text12": "Nessun utilizzo ancora segnalato. Aggiorna dopo aver usato questo abbonamento.",
-    "text13": "Impossibile aggiornare. Vengono mostrati gli ultimi dati noti.",
-    "text14": "In attesa dei dati del provider",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Tieni traccia dei limiti dei tuoi abbonamenti ChatGPT e Claude collegati.",
-    "text19": "Impossibile caricare l'utilizzo",
-    "text20": "Prova a ricaricare i tuoi abbonamenti collegati.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Collega ChatGPT o Claude in Provider per vedere l'utilizzo segnalato e gli orari di reset.",
-    "text24": "Connect a subscription",
-    "text25": "L'utilizzo è condiviso tra le app che usano lo stesso abbonamento. Il controllo avviene automaticamente ogni minuto finché questa scheda è aperta.",
-    "text26": "I limiti variano in base al piano. Qui compaiono solo le finestre segnalate dalla tua connessione; dati mancanti non significano utilizzo illimitato. I limiti dei file non sono segnalati. La spesa API appare in Costi.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Finestra di cinque ore non segnalata da questa connessione.",
-    "fableIncluded": "L'utilizzo di Fable conta anche per la tua quota settimanale complessiva.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Utilizzo extra",
+    "apps": "App",
+    "codeReview": "Revisione del codice",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · si azzera {time}",
+    "percentBack": "{percent}% · di nuovo {time}",
+    "resetPassed": "Azzerato · aggiornamento",
+    "notStarted": "Non iniziato",
+    "reconnectToSee": "Ricollega per vedere l'utilizzo",
+    "availableNow": "Disponibili ora",
+    "availableCount": "{available} di {total, plural, one {# account} other {# account}}",
+    "nextBack": "Prossimo ritorno",
+    "rowPeak": "{window} · {percent}% usato",
+    "rowSomeLimited": "{limited} di {total} al limite",
+    "rowAllLimited": "Al limite",
+    "rowAllLimitedBack": "Al limite · di nuovo {time}",
+    "noUsageYet": "Nessun utilizzo segnalato.",
+    "refreshFailed": "Aggiornamento non riuscito · ultimo utilizzo noto.",
+    "loadFailed": "Impossibile caricare l'utilizzo.",
+    "rowSomeLimitedBack": "{limited} di {total} al limite · prossimo ritorno {time}",
+    "weeklyAll": "Settimanale · tutti i modelli",
+    "notReported": "Non segnalato"
   },
   "gatewayRouting": {
     "exceptions": "Eccezioni",
@@ -26713,8 +26716,7 @@
     "menu": {
       "invite": "Invita persone in {name}",
       "leave": "Lascia {name}",
-      "invitePeople": "Invita persone",
-      "more": "Altro"
+      "invitePeople": "Invita persone"
     },
     "roles": {
       "owner": {

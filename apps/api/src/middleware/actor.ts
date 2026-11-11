@@ -26,7 +26,7 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
 
   const ctx = {
     ip: requestClientIp(c) ?? undefined,
-    mfaAal: (c.get('mfaAal') as string | undefined) ?? undefined,
+    mfaAal: requestMfaAal(c, accountId),
   };
 
   const authType = c.get('authType') as string | undefined;
@@ -76,6 +76,28 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
   }
 
   return { userId, accountId, credential: { kind: 'jwt' }, ctx };
+}
+
+/**
+ * The MFA level this request carries for `accountId`.
+ *
+ * A browser session carries its own (`aal` claim). An App viewer token carries
+ * none: the Apps gate mints it for the viewer its cookie names, and that cookie
+ * comes only from `access-session`, which the account MFA gate already passed
+ * (`appCheckActor` in `apps/access.ts` relies on the same fact). So the token
+ * counts as aal2 in the App's own account. Without this, every App that acts
+ * as its viewer got `403 account_mfa_required` in an MFA account, for every
+ * member who is not a super admin (2026-11-11).
+ *
+ * Only that account: a viewer who opened an App in an account without MFA,
+ * from a session with no second factor, must not carry its token into an
+ * account that requires MFA.
+ */
+function requestMfaAal(c: Context, accountId: string): string | undefined {
+  const own = c.get('mfaAal') as string | undefined;
+  if (own) return own;
+  const appAccountId = c.get('oauthAppAccountId') as string | undefined;
+  return appAccountId && appAccountId === accountId ? 'aal2' : undefined;
 }
 
 /**

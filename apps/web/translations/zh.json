@@ -106,16 +106,6 @@
     "access": "访问权限",
     "actions": "操作",
     "coolingDown": "冷却中",
-    "usageFiveHour": "5 小时",
-    "usageWeekly": "每周",
-    "usageWeeklyModel": "每周 · {model}",
-    "usagePercent": "已用 {percent}%",
-    "usagePercentResets": "{percent}% · {time} 重置",
-    "usageLimitReached": "已达上限",
-    "usageLimitResets": "已达上限 · {time} 重置",
-    "usageNotSeen": "首次请求后显示用量",
-    "usageObserved": "更新于 {time}",
-    "usageAriaLabel": "{window}：已用 {percent}%",
     "member": "成员",
     "members": "位成员",
     "actionsFor": "{label} 的操作",
@@ -801,14 +791,8 @@
         "noResults": "未找到主题"
       },
       "densities": {
-        "normal": {
-          "label": "标准",
-          "description": "Kortix 工作时实时显示步骤和思考过程。"
-        },
-        "minimal": {
-          "label": "精简",
-          "description": "展开前仅显示一行状态。"
-        }
+        "normal": "标准",
+        "minimal": "精简"
       },
       "wallpapers": {
         "dither": "抖动",
@@ -1315,7 +1299,7 @@
         },
         "voice_call": {
           "name": "语音通话",
-          "description": "在智能体的页面（自定义 → 智能体）呼叫它并与它交谈。每次通话都是该智能体的一个独立会话：它能听到你的声音、用语音回答并看到你共享的屏幕，对话就是该会话的聊天。"
+          "description": "在空白消息框中呼叫智能体（发送按钮会变成通话按钮），或在智能体的页面（自定义 → 智能体）呼叫它并与它交谈。在会话中，通话会接通该会话的智能体；在工作区主页，它会开启一个新会话。智能体能听到你的声音、用语音回答并看到你共享的屏幕，对话就是该会话的聊天。"
         },
         "shared_drives": {
           "name": "共享云盘",
@@ -1399,7 +1383,7 @@
       "heatMore": "多",
       "busiestDay": "{name}：{day} 支出 {amount}，为支出最高的一天",
       "noSpendInRange": "{name}：此期间无支出",
-      "idleWorkspaces": "{count} 个工作区在此期间无支出",
+      "idleWorkspaces": "{count, plural, other {# 个工作区}}在此期间无支出",
       "showIdle": "显示",
       "hideIdle": "隐藏"
     },
@@ -2342,15 +2326,15 @@
     "hintNewLine": "按 Shift+Enter 换行",
     "hintSettings": "按 {modifier}, 打开设置",
     "hintCompact": "会话过长时，请要求压缩会话",
-    "queueList": "Queue List",
+    "queueList": "等待中的消息",
     "quoteCount": "{count, plural, other {# 条引用}}",
     "expandQuotes": "展开引用",
     "collapseQuotes": "收起引用",
     "stopUnconfirmed": "无法确认停止。代理可能仍在运行。请再次尝试停止。",
     "stoppedBy": "由 {name} 停止",
-    "queued": "排队中",
+    "queued": "等待中",
     "queuedFiles": "{count, plural, other {# 个文件}}",
-    "queuedCount": "{count} 条排队中",
+    "queuedCount": "{count} 条等待中",
     "editingQueued": "编辑中",
     "queuedActions": "消息操作",
     "steerNextStep": "在下一步读取",
@@ -2359,11 +2343,11 @@
     "steerFallbackUnsupported": "等待本轮结束。此会话无法在一轮进行中接收消息。",
     "steerFallbackNotPrompter": "等待本轮结束。本轮由其他成员发起。",
     "steerFallbackTurnEnded": "作为独立的一轮运行。本轮已先结束。",
-    "stopAndSend": "停止并发送",
-    "stopAndSendFailed": "无法停止并发送该消息",
+    "stopAndSend": "立即发送",
+    "stopAndSendFailed": "无法立即发送该消息",
     "submitEdit": "提交",
-    "collapseQueue": "收起队列",
-    "expandQueue": "展开队列",
+    "collapseQueue": "折叠等待中的消息",
+    "expandQueue": "展开等待中的消息",
     "myKortixRoutes": "把每个任务交给合适的智能体",
     "chatInputReset": "Reset"
   },
@@ -2722,8 +2706,8 @@
           "note": "从真实的沙盒积分开始。",
           "f1": "首个工作区每月 500 积分",
           "f2": "无需银行卡",
-          "f3": "可自带 API 密钥使用任何高级模型",
-          "f4": "连接你的 ChatGPT 订阅"
+          "f3": "模型可使用你自己的 API 密钥或 ChatGPT 订阅",
+          "f4": "Kortix 托管模型需要 Credits 套餐"
         },
         "credits": {
           "name": "积分版",
@@ -3016,6 +3000,8 @@
         "title": "查看您的邮箱",
         "description": "我们已向 <address>{email}</address> 发送链接。打开链接即可继续。",
         "confirmDescription": "我们已向 <address>{email}</address> 发送确认邮件。请确认您的邮箱以继续。",
+        "unknownDescription": "我们已发送邮件至 <address>{email}</address> — 登录链接，或新账号的确认链接。",
+        "closedDescription": "如果 <address>{email}</address> 拥有账号，登录链接正在发送途中。",
         "notReceived": "未收到链接？",
         "confirmNotReceived": "未收到确认邮件？",
         "resendIn": "{seconds} 秒后重新发送",
@@ -12605,6 +12591,7 @@
       "text41ffc5e14073": "设置为{value0}",
       "text420962cdca94": "同一个工作区、同一组连接器、同一份记忆——底层却承载着八种不同的工作。每支团队为自己的工作编写技能，无需搭建第二套系统。",
       "text420aaa63cba7": "页面总计",
+      "textbe57ff2d7907": "未归属到任何会话",
       "text42113e7bf6fc": "Kortix 支持",
       "text42117ed2a1f5": "通常的做法",
       "text421c4b1fed48": "产品 / 控制平面",
@@ -21320,7 +21307,12 @@
       "text4b892277843c": "创建工作区",
       "text41018e566b60": "新建 工作区 创建 添加 团队",
       "texta99ac8f9050b": "工作区 · 访问权限",
-      "textfd8b8dae4421": "危险区域"
+      "textfd8b8dae4421": "危险区域",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM 预留退款",
+      "texta68ee4167406": "代理",
+      "texta69c4dece144": "存储",
+      "textab3aff8f7642": "充值奖励"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -21527,6 +21519,10 @@
       "denied": "已拒绝访问",
       "deniedDescription": "My Kortix 会收到你的答复。",
       "failed": "无法发送你的决定。请重试。"
+    },
+    "reviewPane": {
+      "emptyTitle": "选择一个项目",
+      "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
     }
   },
   "commandPalette": {
@@ -22040,6 +22036,9 @@
     "addMcpUrlNamed": "添加连接器 {name}。",
     "addMcpUrlInvalid": "请输入以 https:// 开头的 URL",
     "addMcpConnect": "连接",
+    "addMcpStageConnector": "正在连接服务器并加载其工具…",
+    "addMcpStageAccount": "正在准备账户…",
+    "addMcpStageSignIn": "正在开始登录…",
     "addMcpConnected": "{name} 已连接。智能体可以使用其工具。",
     "addMcpSignInFailed": "无法开始 {name} 的登录：{reason}",
     "addMcpFailed": "无法添加 MCP 服务器",
@@ -23018,8 +23017,8 @@
     "treeYou": "{name}（你）",
     "treeExpand": "展开 {name}",
     "treeCollapse": "收起 {name}",
-    "emptyWorkspaces": "{count} 个工作区没有文件",
-    "storageMoreWorkspaces": "另外 {count} 个工作区",
+    "emptyWorkspaces": "{count, plural, other {# 个工作区}}没有文件",
+    "storageMoreWorkspaces": "另外 {count, plural, other {# 个工作区}}",
     "storageWorkspaceLimit": "每个工作区最多可存储 {limit}",
     "storageShowFewer": "收起"
   },
@@ -23314,6 +23313,16 @@
         "booted": "启动时间",
         "timezone": "时区",
         "locale": "区域设置",
+        "usage": "Kortix Capture 资源占用",
+        "usageCpu": "CPU",
+        "usageCpuValue": "平均 {avg} · 峰值 {peak}",
+        "usageCpuHint": "按单个核心计，最近 {minutes, plural, other {# 分钟}}",
+        "usageMemory": "内存",
+        "usageMemoryPeak": "{now} · 峰值 {peak}",
+        "usageProcesses": "进程",
+        "usageProcessCount": "{count, plural, other {# 个进程}}",
+        "usageProcessValue": "CPU {cpu} · {memory}",
+        "usageNotReported": "未上报：应用版本较旧，或应用启动不到一分钟",
         "recordingSync": "录制与同步",
         "status": "状态",
         "lastFrame": "上一帧",
@@ -23430,12 +23439,16 @@
       "privacyControlsHint": "显示个人数据遮盖。关闭后会隐藏此项；已设置的内容继续生效。",
       "maskingTitle": "遮盖",
       "framesTitle": "屏幕帧",
-      "interval": "帧间隔",
-      "intervalHint": "间隔越短，细节越多，占用的 CPU 和存储也越多。",
-      "intervalOption": "{seconds, number} 秒",
       "resolution": "分辨率",
       "resolutionHint": "更大的屏幕会缩小到此高度。4K 可保留 CAD 图纸等细节。",
-      "framesHint": "未设置时，每台电脑使用自己的设置（1440p，每 2 秒一帧）。设置后，所有电脑都使用该值，用户无法更改。无论间隔多长，点击、输入和滚动都会连同各自的截图一起记录。",
+      "textRecognition": "文字识别",
+      "textRecognitionHint": "读取屏幕上的文字以便搜索。关闭时 CPU 占用最少：搜索只能找到应用、窗口标题和 URL。",
+      "textRecognitionOption": {
+        "accurate": "精确",
+        "fast": "快速",
+        "off": "关闭"
+      },
+      "framesHint": "Kortix Capture 自动决定帧率：有人操作时最多每秒 2 帧，否则每 2 秒一帧，电脑繁忙时更少。未设置时，每台电脑使用 1440p 和精确文字识别。设置后，所有电脑都使用该值，用户无法更改。点击、输入和滚动会连同各自的截图一起记录。",
       "computerDecides": "由每台电脑决定",
       "included": {
         "title": "应用和网站",
@@ -26067,6 +26080,7 @@
     "call": "通话",
     "calling": "正在呼叫…",
     "start": "开始语音通话",
+    "inCall": "正在通话中",
     "end": "结束通话",
     "connecting": "正在连接…",
     "listening": "正在聆听",
@@ -26436,48 +26450,37 @@
     "issue": "议题 #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 小时",
+    "weekly": "每周",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "订阅用量不可用",
-    "disabledDescription": "此工作区未启用订阅连接。",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "重置时间已过 · 刷新以查看当前用量",
-    "text10": "未报告重置时间",
-    "text11": "Checking provider usage…",
-    "text12": "尚无用量报告。使用此订阅后请刷新。",
-    "text13": "无法更新。显示的是最近一次已知数据。",
-    "text14": "正在等待提供方数据",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "跟踪你已连接的 ChatGPT 和 Claude 订阅的额度。",
-    "text19": "无法加载用量",
-    "text20": "请重新尝试加载你已连接的订阅。",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "在“提供方”中连接 ChatGPT 或 Claude，即可查看已报告的用量和重置时间。",
-    "text24": "Connect a subscription",
-    "text25": "使用同一订阅的各应用共享用量。此标签页打开期间，每分钟自动检查一次。",
-    "text26": "额度因套餐而异。此处仅显示你的连接所报告的时间窗口；缺少数据并不代表用量无限制。文件额度不会被报告。API 支出显示在“费用”中。",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "此连接未报告五小时窗口。",
-    "fableIncluded": "Fable 的用量也会计入你的每周总额度。",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "额外用量",
+    "apps": "应用",
+    "codeReview": "代码审查",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · {time} 重置",
+    "percentBack": "{percent}% · {time} 恢复",
+    "resetPassed": "已重置 · 正在更新",
+    "notStarted": "未开始",
+    "reconnectToSee": "重新连接以查看用量",
+    "availableNow": "当前可用",
+    "availableCount": "{available} / {total} 个账户",
+    "nextBack": "下次恢复",
+    "rowPeak": "{window} · 已用 {percent}%",
+    "rowSomeLimited": "{limited} / {total} 已达上限",
+    "rowAllLimited": "已达上限",
+    "rowAllLimitedBack": "已达上限 · {time} 恢复",
+    "noUsageYet": "尚未报告用量。",
+    "refreshFailed": "无法刷新 · 显示最近一次已知用量。",
+    "loadFailed": "无法加载用量。",
+    "rowSomeLimitedBack": "{limited} / {total} 已达上限 · 下次恢复 {time}",
+    "weeklyAll": "每周 · 所有模型",
+    "notReported": "未报告"
   },
   "gatewayRouting": {
     "exceptions": "例外",
@@ -26713,8 +26716,7 @@
     "menu": {
       "invite": "邀请成员加入 {name}",
       "leave": "离开 {name}",
-      "invitePeople": "邀请成员",
-      "more": "更多"
+      "invitePeople": "邀请成员"
     },
     "roles": {
       "owner": {

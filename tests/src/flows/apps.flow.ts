@@ -1081,6 +1081,7 @@ flow(
       "POST /v1/workspaces/:projectId/sessions",
       "GET /v1/me",
       "GET /v1/workspaces/:projectId",
+      "PATCH /v1/accounts/:accountId/iam/mfa-required",
       "DELETE /v1/workspaces/:projectId/apps/:appId",
     ],
   },
@@ -1208,6 +1209,29 @@ flow(
         }
         const oauth = await gate("/_kortix/api/v1/oauth/clients", { cookie, "sec-fetch-site": "same-origin" });
         if (oauth.status !== 404) throw new Error(`expected 404 for /v1/oauth through the gate, got ${oauth.status}`);
+      });
+
+      await ctx.step("in a workspace that requires MFA, the App still acts as its viewer: /_kortix/api/v1/projects/:projectId → 200 and the viewer token → 200, while the viewer's own session without a second factor → 403 account_mfa_required", async () => {
+        // The gate's cookie comes only from access-session, which the account
+        // MFA gate passes first (aal2 in production). Local Supabase has MFA
+        // off, so the viewer signs in before the requirement is switched on:
+        // the cookie is the same either way, it carries no MFA level.
+        const cookie = await signIn();
+        const token = (await viewerToken(cookie)).access_token!;
+        const mfa = (enabled: boolean) => owner.patch("/v1/accounts/:accountId/iam/mfa-required", { enabled },
+          { params: { accountId: team.id } });
+        (await mfa(true)).status(200).body().has("$.enabled", true);
+        try {
+          (await viewer.get("/v1/workspaces/:projectId", { params: projectParams })).status(403)
+            .body().has("$.code", "account_mfa_required");
+          const read = await gate(`/_kortix/api/v1/projects/${project.id}`, { cookie, "sec-fetch-site": "same-origin" });
+          if (read.status !== 200 || read.body?.project_id !== project.id) {
+            throw new Error(`expected the viewer's project through the gate, got ${read.status} ${read.text.slice(0, 300)}`);
+          }
+          (await asToken(token).get("/v1/workspaces/:projectId", { params: projectParams })).status(200);
+        } finally {
+          (await mfa(false)).status(200);
+        }
       });
 
       await ctx.step("kortix apps access --viewer identity switches the scope and keeps mode and members", async () => {

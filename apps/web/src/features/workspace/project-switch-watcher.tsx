@@ -26,7 +26,7 @@ import { projectIdFromPathname, useProjectSwitchStore } from '@kortix/ui/interna
  */
 const SWITCH_TIMEOUT_MS = 20_000;
 
-export type ProjectSwitchOutcome = 'idle' | 'pending' | 'arrived' | 'diverted';
+type ProjectSwitchOutcome = 'idle' | 'pending' | 'arrived' | 'diverted';
 
 export function resolveProjectSwitchOutcome(args: {
   targetProjectId: string | null;

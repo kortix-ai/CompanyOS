@@ -319,12 +319,15 @@ export function ChatGptSubscriptionConnect({
   projectId,
   onConnected,
   accessSlot,
+  usageSlot,
   legacyOnly = false,
   kind = 'chatgpt',
 }: {
   projectId: string;
   onConnected: (providerId: string) => void;
   accessSlot?: ReactNode;
+  /** The login's plan windows, under its name (the legacy project login). */
+  usageSlot?: ReactNode;
   legacyOnly?: boolean;
   kind?: SubscriptionKind;
 }) {
@@ -359,6 +362,7 @@ export function ChatGptSubscriptionConnect({
         </div>
         {accessSlot}
       </div>
+      {usageSlot ? <div className="mt-3">{usageSlot}</div> : null}
 
       {waiting && (
         <div className="border-border bg-muted/30 mt-3 rounded-md border p-3">

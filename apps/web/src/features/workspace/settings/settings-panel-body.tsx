@@ -246,7 +246,7 @@ export function SettingsPanelBody({ projectId }: { projectId?: string }) {
   );
 }
 
-export interface SettingsPanelViewProps {
+interface SettingsPanelViewProps {
   open: boolean;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
@@ -522,11 +522,8 @@ function SettingsTabPane({
     computer: () => (projectId ? <ComputerTab projectId={projectId} /> : null),
   };
   const pane = panes[item.tab];
-  if (
-    pane &&
-    (!['workspace', 'sandbox', 'feature-flags', 'computer'].includes(item.tab) ||
-      projectId)
-  )
+  // The rail's own gate — one rule for which tabs need a project.
+  if (pane && isSettingsTabAllowed(item.tab, { hasProject: !!projectId }))
     return pane();
 
   // Unreachable while every `SettingsTab` member has a branch above, and kept

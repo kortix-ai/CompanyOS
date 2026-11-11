@@ -26469,7 +26469,7 @@
     "notStarted": "未开始",
     "reconnectToSee": "重新连接以查看用量",
     "availableNow": "当前可用",
-    "availableCount": "{available} / {total} 个账户",
+    "availableCount": "{available} / {total, plural, other {# 个账户}}",
     "nextBack": "下次恢复",
     "rowPeak": "{window} · 已用 {percent}%",
     "rowSomeLimited": "{limited} / {total} 已达上限",

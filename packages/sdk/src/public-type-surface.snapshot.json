@@ -4578,6 +4578,7 @@
     "useStopImpersonation",
     "useSubscriptionConnections",
     "useSubscriptionUsage",
+    "useSubscriptionUsages",
     "useSummarizeRuntimeSession",
     "useTeamTasks",
     "useTeammates",

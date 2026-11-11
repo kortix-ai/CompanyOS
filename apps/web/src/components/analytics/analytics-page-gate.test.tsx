@@ -61,6 +61,32 @@ async function mount(element: React.ReactElement): Promise<{ container: HTMLElem
   };
 }
 
+/** Mounts the probe, re-renders it `times` more with fresh elements, and leaves it mounted. */
+async function mountAndRerender(
+  factory: (render: number) => React.ReactElement,
+  times: number,
+): Promise<{ container: HTMLElement; unmount: () => void }> {
+  const raw = win!.document.createElement('div');
+  const container = raw as unknown as HTMLElement;
+  win!.document.body.appendChild(raw);
+  let root: Root | null = null;
+  await act(async () => {
+    root = createRoot(container);
+    root!.render(factory(0));
+  });
+  for (let render = 1; render <= times; render += 1) {
+    await act(async () => {
+      root!.render(factory(render));
+    });
+  }
+  return {
+    container,
+    unmount: () => {
+      act(() => root!.unmount());
+    },
+  };
+}
+
 test('GoogleTagManager loads on a public page outside the desktop app', async () => {
   installWindow('https://kortix.com/pricing');
   const { container, unmount } = await mount(<GoogleTagManager gtmId="GTM-TEST" />);
@@ -113,9 +139,9 @@ function GateProbe({ extra }: { extra?: (location: Location) => boolean }) {
 }
 
 async function gateEnabled(extra?: (location: Location) => boolean): Promise<boolean> {
-  const { container, unmount } = await mount(<GateProbe extra={extra} />);
-  const enabled = container.firstElementChild!.getAttribute('data-enabled') === 'true';
-  unmount();
+  const mounted = await mount(<GateProbe extra={extra} />);
+  const enabled = mounted.container.firstElementChild!.getAttribute('data-enabled') === 'true';
+  mounted.unmount();
   return enabled;
 }
 
@@ -139,6 +165,18 @@ test('useAnalyticsPageEnabled is true on a public page', async () => {
 test('useAnalyticsPageEnabled is false when the extra guard refuses', async () => {
   installWindow('https://kortix.com/pricing');
   expect(await gateEnabled(() => false)).toBe(false);
+});
+
+test('useAnalyticsPageEnabled evaluates the guard exactly once, whatever the caller renders', async () => {
+  installWindow('https://kortix.com/pricing');
+  let calls = 0;
+  const { container, unmount } = await mountAndRerender(
+    (render) => <GateProbe extra={() => { calls += 1; return true; }} />,
+    3,
+  );
+  expect(container.firstElementChild!.getAttribute('data-enabled')).toBe('true');
+  expect(calls).toBe(1);
+  unmount();
 });
 
 test('useAnalyticsPageEnabled is true when the extra guard allows', async () => {

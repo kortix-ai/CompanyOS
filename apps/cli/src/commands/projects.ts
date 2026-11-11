@@ -37,7 +37,7 @@ import {
   resolveProjectId,
   saveLink,
 } from '../project-link.ts';
-import { listWorkspaceRowsReport, type WorkspaceListFailure, type WorkspaceRow } from '../project-bind.ts';
+import { listWorkspaceRowsReport, listableWorkspace, type WorkspaceListFailure, type WorkspaceRow } from '../project-bind.ts';
 import { confirm } from '../prompts.ts';
 import { C, help, pad, status } from '../style.ts';
 import { selectFromList } from '../tui-select.ts';
@@ -1116,12 +1116,7 @@ function renderWorkspaceTable(rows: WorkspaceRow[], marks: { linked?: string; de
     const isDefault = p.project_id === marks.def;
     const isLinked = p.project_id === marks.linked;
     const marker = isDefault ? `${C.green}● ${C.reset}` : isLinked ? `${C.cyan}◆ ${C.reset}` : '  ';
-    const state =
-      p.state === 'setup_required'
-        ? `   ${C.yellow}set up needed${C.reset}`
-        : p.state === 'deleting'
-          ? `   ${C.yellow}deleting${C.reset}`
-          : '';
+    const state = p.state === 'setup_required' ? `   ${C.yellow}set up needed${C.reset}` : '';
     const tag =
       (isDefault
         ? `   ${C.green}default${C.reset}`
@@ -1167,8 +1162,9 @@ async function projectsLsOlder(
   let projects: ProjectSummary[];
   try {
     // GET /workspaces lists every workspace of the caller: keep the active
-    // account's, which is what this older command has always listed.
-    const every = await client.get<ProjectSummary[]>('/workspaces');
+    // account's, which is what this older command has always listed. A deleted
+    // workspace (restore window) is left out (KRTX-4714).
+    const every = (await client.get<ProjectSummary[]>('/workspaces')).filter(listableWorkspace);
     projects = filterProjects(accountId ? every.filter((p) => p.account_id === accountId) : every, query);
   } catch (err) {
     return surface(err);
@@ -1286,12 +1282,7 @@ function renderProjectTable(
     const isDefault = p.project_id === marks.def;
     const isLinked = p.project_id === marks.linked;
     const marker = isDefault ? `${C.green}● ${C.reset}` : isLinked ? `${C.cyan}◆ ${C.reset}` : '  ';
-    const state =
-      p.state === 'setup_required'
-        ? `   ${C.yellow}set up needed${C.reset}`
-        : p.state === 'deleting'
-          ? `   ${C.yellow}deleting${C.reset}`
-          : '';
+    const state = p.state === 'setup_required' ? `   ${C.yellow}set up needed${C.reset}` : '';
     const tag =
       (isDefault
         ? `   ${C.green}default${C.reset}`

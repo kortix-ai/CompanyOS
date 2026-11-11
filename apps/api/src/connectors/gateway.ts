@@ -254,6 +254,12 @@ export interface GatewayDeps {
    * Absent = unconfined: production always wires it (db-deps.ts).
    */
   gateChannelWrite?(input: ChannelReadInput): Promise<ChannelWriteGate>;
+  /**
+   * The author a session's Slack post shows: its agent's name and face
+   * (channels/slack/persona.ts). Set here, after the argument check, so an
+   * agent cannot post under another agent's name. Null: the app's own name.
+   */
+  slackAuthor?(input: { projectId: string; sessionId: string; token: string }): Promise<{ username: string; icon_url?: string } | null>;
   /** Email connections represent one installed email (Resend) inbox. */
   loadEmailConnectorContext?(
     projectId: string,
@@ -1458,6 +1464,19 @@ async function runConnectorAction(
         connector.provider === 'channel'
           ? withChannelDefaults(connector.platform ?? '', input.actionPath, executionArgs)
           : executionArgs;
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        input.actionPath === 'send_message' &&
+        input.sessionId &&
+        typeof executionSecret === 'string' &&
+        deps.slackAuthor
+      ) {
+        const author = await deps
+          .slackAuthor({ projectId: input.projectId, sessionId: input.sessionId, token: executionSecret })
+          .catch(() => null);
+        if (author) providerArgs = { ...providerArgs, ...author };
+      }
       const scope = {
         accountId: input.accountId,
         projectId: input.projectId,

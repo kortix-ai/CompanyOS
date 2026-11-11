@@ -14,6 +14,7 @@ import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { resolveEmailApiKey } from '../channels/resend-email-api';
 import { bindSlackThreadToSession } from '../channels/slack/binding';
 import { slackUserNames } from '../channels/slack/labels';
+import { slackAgentPersona } from '../channels/slack/persona';
 import {
   emailOwnKeyForAccount,
   emailOwnKeyForInbox,
@@ -653,6 +654,7 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
       ),
     gateChannelRead: (input) => gateChannelRead(input),
     gateChannelWrite: (input) => gateChannelWrite(input),
+    slackAuthor: (input) => slackAgentPersona(input),
     loadEmailSessionContext: async () => null,
     // No selected account: the project's default inbox.
     loadEmailConnectorContext: async (projectId) => {

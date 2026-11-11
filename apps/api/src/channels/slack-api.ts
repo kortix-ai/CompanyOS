@@ -132,6 +132,8 @@ export async function getFileInfo(token: string, fileId: string): Promise<SlackA
  */
 export interface SlackPersona {
   username: string;
+  /** The agent's face (`agentMarkUrl`). None: Slack shows the app's picture. */
+  icon_url?: string;
 }
 
 /**
@@ -146,7 +148,12 @@ async function createWithPersona(
   persona: SlackPersona | null | undefined,
 ): Promise<SlackApiResult> {
   if (!persona) return slackApiCall(token, method, args, { idempotent: false });
-  const r = await slackApiCall(token, method, { ...args, username: persona.username }, { idempotent: false });
+  const r = await slackApiCall(
+    token,
+    method,
+    { ...args, username: persona.username, ...(persona.icon_url ? { icon_url: persona.icon_url } : {}) },
+    { idempotent: false },
+  );
   if (!r.ok && r.error === 'missing_scope') return slackApiCall(token, method, args, { idempotent: false });
   return r;
 }

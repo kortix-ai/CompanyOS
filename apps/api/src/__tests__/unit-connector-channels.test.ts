@@ -363,6 +363,41 @@ describe('handleCall — channel (slack)', () => {
     expect(JSON.parse(expectDefined(call.body))).toEqual({ channel: 'C123', text: 'hi' });
   });
 
+  test("a session's post carries its agent's name and face; the agent cannot set them", async () => {
+    const { deps, fetchCalls } = makeDeps('{"ok":true,"ts":"123.45","channel":"C123"}');
+    const asked: Array<{ projectId: string; sessionId: string; token: string }> = [];
+    deps.slackAuthor = async (i) => {
+      asked.push(i);
+      return { username: 'My Kortix', icon_url: 'https://api.example.com/v1/agent-marks/mykortix.png?v=1' };
+    };
+    expect((await handleCall(deps, input)).status).toBe('ok');
+    expect(asked).toEqual([{ projectId: 'proj-1', sessionId: 'sess-1', token: 'xoxb-install-token' }]);
+    expect(JSON.parse(expectDefined(fetchCalls[0]?.body))).toEqual({
+      channel: 'C123',
+      text: 'hi',
+      username: 'My Kortix',
+      icon_url: 'https://api.example.com/v1/agent-marks/mykortix.png?v=1',
+    });
+
+    const forged = await handleCall(deps, { ...input, args: { channel: 'C123', text: 'hi', username: 'CEO' } });
+    expect(forged.status).toBe('denied');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  test('a post with no session, or no known author, goes out as the app', async () => {
+    const { deps, fetchCalls } = makeDeps('{"ok":true,"ts":"123.45","channel":"C123"}');
+    deps.slackAuthor = async () => null;
+    await handleCall(deps, input);
+    let author = true;
+    deps.slackAuthor = async () => {
+      author = false;
+      return { username: 'never' };
+    };
+    await handleCall(deps, { ...input, sessionId: null });
+    expect(author).toBe(true);
+    expect(fetchCalls.map((c) => JSON.parse(expectDefined(c.body)).username)).toEqual([undefined, undefined]);
+  });
+
   test('Slack {ok:false} (HTTP 200) is surfaced as an error, not a silent ok', async () => {
     const { deps } = makeDeps('{"ok":false,"error":"channel_not_found"}');
     const res = await handleCall(deps, input);

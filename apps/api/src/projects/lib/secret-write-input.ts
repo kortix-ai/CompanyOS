@@ -19,6 +19,7 @@ import { networkBoundaryPolicyError } from '../../secrets/network-boundary';
 import { parseEgressPolicy } from '../../secrets/strategy';
 import { isValidIdentifier, isValidSecretName } from '../secrets';
 import { CODEX_AUTH_JSON_SECRET_NAME, isTeamsInstallSecretName, normalizeString } from './serializers';
+import { looksLikeSigningCredential } from '@kortix/shared/secret-api-hosts';
 
 /**
  * The hand-off an agent session gets when it sets a secret's delivery policy:
@@ -250,5 +251,68 @@ export function resolveSecretWriteInput(
       explicitPolicy,
       explicitHandlePrefix,
     },
+  };
+}
+
+/**
+ * Which delivery a write got, and why. Returned on every create/update so the
+ * caller (the web dialog, `kortix secrets set`, an agent) never has to guess
+ * where a value went.
+ *
+ * - `requested`      — the caller named a strategy.
+ * - `existing`       — an update with no strategy keeps the row's own.
+ * - `known_api_host` — no strategy was sent, the name belongs to a known API
+ *                      host, and the project has `secrets_egress` on: the
+ *                      secret is network-delivered, substituted only on that host.
+ * - `default`        — none of the above: runtime, the value loads into the
+ *                      sandbox environment.
+ */
+export type SecretDeliveryChoiceReason = 'requested' | 'existing' | 'known_api_host' | 'default';
+
+export interface SecretCreateDefault {
+  strategy: 'egress';
+  consumer: 'network';
+  policy: SecretEgressPolicy;
+  hosts: string[];
+}
+
+/**
+ * The delivery a NEW secret gets when its caller sent no strategy. Pure.
+ *
+ * Network delivery is chosen only when all of these hold:
+ *  1. the caller sent no `strategy`, `consumer` or `egress_policy`;
+ *  2. the project has the experimental `secrets_egress` flag on;
+ *  3. the name maps to a known API host (`secretApiHostsForName`), which is
+ *     empty for a multi-use name such as `GITHUB_TOKEN`;
+ *  4. the value is not signing material, which never travels in a request.
+ *
+ * Null keeps the runtime default, byte-identical to the pre-flag behavior.
+ */
+export function chooseSecretCreateDefault(input: {
+  body: Record<string, unknown>;
+  value: string | null;
+  egressEnabled: boolean;
+  hosts: readonly string[];
+}): SecretCreateDefault | null {
+  if (!input.egressEnabled || input.value === null) return null;
+  if (
+    input.body.strategy !== undefined ||
+    input.body.consumer !== undefined ||
+    input.body.egress_policy !== undefined
+  ) {
+    return null;
+  }
+  if (input.hosts.length === 0 || looksLikeSigningCredential(input.value)) return null;
+  const parsed = parseEgressPolicy({
+    rules: input.hosts.map((host) => ({ host })),
+    on_no_match: 'deny',
+    tls: 'terminate',
+  });
+  if (!parsed.ok || networkBoundaryPolicyError(parsed.policy) !== null) return null;
+  return {
+    strategy: 'egress',
+    consumer: 'network',
+    policy: parsed.policy,
+    hosts: parsed.policy.rules.map((rule) => rule.host),
   };
 }

@@ -3,21 +3,29 @@
 import type { SecretBrokerRequest, SecretBrokerResponse } from '@kortix/api-contract';
 import type { SecretEgressPolicy } from '@kortix/db';
 import { MAX_REDIRECTS, SAFE_RESPONSE_HEADERS, SecretBrokerError } from './broker/errors';
-import { redactSecretFromResponse, type SecretSubstitution } from './broker/substitution';
+import { resealSecretInResponse, type ResealPair, type SecretSubstitution } from './broker/substitution';
 import { prepareSecretBrokerRequest, type BrokerTransport } from './broker/request-gate';
 import { pinnedHttpsTransport } from './broker/pinned-transport';
 
 export { MAX_REDIRECTS, REDACTED, SAFE_RESPONSE_HEADERS, SecretBrokerError } from './broker/errors';
 export {
   bodyEncoding,
+  handlePresent,
   encodeSecretRepresentation,
   redactSecretFromResponse,
+  resealSecretInResponse,
   secretRepresentations,
   substituteBuffer,
 } from './broker/substitution';
-export type { SecretEncoding, SecretSubstitution } from './broker/substitution';
-export { assertPolicyAdmitsPath, prepareRelayHead, prepareSecretBrokerRequest } from './broker/request-gate';
-export type { BrokerTransport, PreparedRelayHead } from './broker/request-gate';
+export type { ResealPair, SecretEncoding, SecretSubstitution } from './broker/substitution';
+export {
+  assertPolicyAdmitsPath,
+  prepareRelayHead,
+  prepareSecretBrokerRequest,
+  substitutePlaced,
+} from './broker/request-gate';
+export type { AdmittedSubstitution, BrokerTransport, PreparedRelayHead } from './broker/request-gate';
+export { refusalReasonFor } from './broker/errors';
 export { createPinnedRequestOptions, resolvePinnedAddress } from './broker/pinned-transport';
 
 export function responseHeaders(
@@ -53,6 +61,9 @@ interface SecretBrokerExecuteOptions {
    *  An out-param rather than a return field because the return type is the
    *  wire contract (`SecretBrokerResponse`) and audit is not part of it. */
   applied?: Set<string>;
+  /** The handle that stands in for the route's OWN secret in the sandbox. An
+   *  echo of the secret is re-sealed to it; absent = `[REDACTED]`. */
+  secretHandle?: string | null;
 }
 
 export async function executeSecretBrokerRequest(
@@ -100,16 +111,16 @@ export async function executeSecretBrokerRequest(
     // the other values straight back.
     // Every secret that could appear in this response: the route's own injected
     // secret, plus every substituted value that actually rode out on the wire.
-    const secretsToRedact = [
-      secret,
+    const secretsToReseal: ResealPair[] = [
+      { value: secret, handle: options.secretHandle ?? null },
       ...substitutions
         .filter((substitution) => applied.has(substitution.identifier))
-        .map((substitution) => substitution.value),
+        .map((substitution) => ({ value: substitution.value, handle: substitution.handle })),
     ];
 
     let body = upstream.body;
-    for (const value of secretsToRedact) {
-      body = redactSecretFromResponse(body, value);
+    for (const pair of secretsToReseal) {
+      body = resealSecretInResponse(body, pair);
     }
 
     // The whitelisted response headers travel back verbatim, so an upstream can
@@ -119,8 +130,8 @@ export async function executeSecretBrokerRequest(
     const headers = responseHeaders(upstream.headers);
     for (const [name, headerValue] of Object.entries(headers)) {
       let redacted: Buffer = Buffer.from(headerValue);
-      for (const value of secretsToRedact) {
-        redacted = redactSecretFromResponse(redacted, value);
+      for (const pair of secretsToReseal) {
+        redacted = resealSecretInResponse(redacted, pair);
       }
       headers[name] = redacted.toString('utf8');
     }

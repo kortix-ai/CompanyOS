@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveSecretWriteInput } from './secret-write-input';
+import { chooseSecretCreateDefault, resolveSecretWriteInput } from './secret-write-input';
 
 // `MS_TEAMS_TENANT_ID` once chose whose Microsoft Graph data the Teams
 // connector read, with the managed app every customer shares. A project writer
@@ -69,5 +69,47 @@ describe('resolveSecretWriteInput: the strategy→consumer contract', () => {
       status: 400,
       body: { error: 'policy must be an object', code: 'secret_delivery_policy_invalid' },
     });
+  });
+});
+
+describe('chooseSecretCreateDefault', () => {
+  const base = {
+    body: { name: 'ANTHROPIC_API_KEY', value: 'sk-synthetic' } as Record<string, unknown>,
+    value: 'sk-synthetic',
+    egressEnabled: true,
+    hosts: ['api.anthropic.com'],
+  };
+
+  test('flag on + known host + no strategy: network delivery on that host', () => {
+    expect(chooseSecretCreateDefault(base)).toEqual({
+      strategy: 'egress',
+      consumer: 'network',
+      policy: { rules: [{ host: 'api.anthropic.com' }], on_no_match: 'deny', tls: 'terminate' },
+      hosts: ['api.anthropic.com'],
+    });
+  });
+
+  test('flag off: runtime default, unchanged', () => {
+    expect(chooseSecretCreateDefault({ ...base, egressEnabled: false })).toBeNull();
+  });
+
+  test('an unknown name keeps the runtime default', () => {
+    expect(chooseSecretCreateDefault({ ...base, hosts: [] })).toBeNull();
+  });
+
+  test('a requested strategy, consumer or policy is never overridden', () => {
+    expect(chooseSecretCreateDefault({ ...base, body: { ...base.body, strategy: 'runtime' } })).toBeNull();
+    expect(chooseSecretCreateDefault({ ...base, body: { ...base.body, consumer: 'sandbox' } })).toBeNull();
+    expect(
+      chooseSecretCreateDefault({ ...base, body: { ...base.body, egress_policy: { rules: [] } } }),
+    ).toBeNull();
+  });
+
+  test('signing material keeps the runtime default: it never travels in a request', () => {
+    expect(chooseSecretCreateDefault({ ...base, value: 'AKIAIOSFODNN7EXAMPLE' })).toBeNull();
+  });
+
+  test('a delivery-only update (no value) is not a create', () => {
+    expect(chooseSecretCreateDefault({ ...base, value: null })).toBeNull();
   });
 });

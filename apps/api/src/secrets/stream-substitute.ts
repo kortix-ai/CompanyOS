@@ -77,6 +77,17 @@ export interface StreamReplacement {
   /** Reported through `applied` when this pair matches at least once, so the
    *  caller can audit WHICH secrets rode out on the wire. */
   label?: string;
+  /**
+   * A REFUSE pair: a match sets `refusedLabel` and the substituter emits
+   * nothing from the match onward — the matched bytes and everything after
+   * them are dropped. Used for a handle that sits in a request surface its rule
+   * does not allow. The caller aborts the stream. `replacement` is ignored.
+   *
+   * Not a throw: measured on bun 1.3.14, an error raised inside a
+   * `pipeThrough` stage that feeds `Readable.fromWeb` is reported as an
+   * unhandled rejection and the consumer hangs forever.
+   */
+  refuse?: boolean;
 }
 
 export class StreamSubstituter {
@@ -89,6 +100,9 @@ export class StreamSubstituter {
     // A zero-length needle would match everywhere and never advance.
     this.pairs = pairs.filter((pair) => pair.needle.byteLength > 0);
   }
+
+  /** The label of the refuse pair that ended this stream, or null. */
+  refusedLabel: string | null = null;
 
   /** Labels whose needle matched at least once so far. */
   get applied(): string[] {
@@ -108,6 +122,7 @@ export class StreamSubstituter {
    */
   push(chunk: Buffer): Buffer {
     if (this.done) throw new Error('StreamSubstituter: push after flush');
+    if (this.refusedLabel !== null) return Buffer.alloc(0);
     if (this.pairs.length === 0) return chunk;
     const work = this.pending.byteLength === 0 ? chunk : Buffer.concat([this.pending, chunk]);
     // Everything BEFORE the cutoff is decided: no future byte can extend it into
@@ -189,6 +204,10 @@ export class StreamSubstituter {
   flush(): Buffer {
     if (this.done) return Buffer.alloc(0);
     this.done = true;
+    if (this.refusedLabel !== null) {
+      this.pending = Buffer.alloc(0);
+      return Buffer.alloc(0);
+    }
     if (this.pairs.length === 0 || this.pending.byteLength === 0) {
       const tail = this.pending;
       this.pending = Buffer.alloc(0);
@@ -231,6 +250,13 @@ export class StreamSubstituter {
         }
       }
       if (bestIndex === -1 || !bestPair) break;
+      if (bestPair.refuse) {
+        this.refusedLabel = bestPair.label ?? '';
+        chunks.push(work.subarray(cursor, bestIndex));
+        // Consume the rest: nothing after a refused needle is emitted.
+        cursor = work.byteLength;
+        break;
+      }
       chunks.push(work.subarray(cursor, bestIndex), bestPair.replacement);
       if (bestPair.label) this.hits.add(bestPair.label);
       cursor = bestIndex + bestPair.needle.byteLength;

@@ -2709,6 +2709,12 @@ export const SecretEgressPolicySchema = z.object({
       methods: z.array(z.string()).optional(),
       path: z.string().optional(),
       inject: SecretInjectionSlotSchema.optional(),
+      /** Request surfaces a handle may be substituted in. Omit for all four. A
+       *  handle in another surface refuses the request
+       *  (`x-kortix-refused: credential_placement`). */
+      placements: z.array(z.enum(['header', 'query', 'path', 'body'])).optional(),
+      /** The one header name the handle may ride in. Requires `placements` to list `header`. */
+      header: z.string().optional(),
     }),
   ),
   /**

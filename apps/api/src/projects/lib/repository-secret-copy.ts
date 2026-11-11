@@ -10,7 +10,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { projectSecrets } from '@kortix/db';
 import * as iamAuthorize from '../../iam/authorize';
 import { db } from '../../shared/db';
-import { decryptProjectSecret, encryptProjectSecret } from '../secrets';
+import { decryptProjectSecret, encryptProjectSecret, projectSecretAad } from '../secrets';
 import { projectsView } from '../../workspaces/rows';
 
 /** The transaction handle the replacement's `db.transaction` callback passes in. */
@@ -70,7 +70,11 @@ export async function copySharedSecretsIntoProject(
     const row = sourceByIdentifier.get(identifier)!;
     return {
       projectId: copy.targetProjectId, identifier, name: row.name,
-      valueEnc: encryptProjectSecret(copy.targetProjectId, decryptProjectSecret(sourceProjectId, row.valueEnc)),
+      valueEnc: encryptProjectSecret(
+        copy.targetProjectId,
+        decryptProjectSecret(sourceProjectId, row.valueEnc, projectSecretAad(identifier)),
+        projectSecretAad(identifier),
+      ),
       scope: row.scope, strategy: row.strategy, consumer: row.consumer,
       description: row.description, createdBy: copy.actorId, updatedAt: copy.now,
     };

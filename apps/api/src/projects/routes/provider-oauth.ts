@@ -18,6 +18,7 @@ import { requestPersonalOwner } from '../lib/personal-resources';
 import {
   decryptProjectSecret,
   encryptProjectSecret,
+  projectSecretAad,
   resolveProjectSecretForConsumer,
 } from '../secrets';
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
@@ -133,7 +134,7 @@ async function writeOAuthLoginSecret(input: {
         projectId,
         identifier: secretName,
         name: secretName,
-        valueEnc: encryptProjectSecret(projectId, value),
+        valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(secretName)),
         ownerUserId: userId,
         active: true,
         strategy: 'broker',
@@ -147,7 +148,7 @@ async function writeOAuthLoginSecret(input: {
         target: [projectSecrets.projectId, projectSecrets.name, projectSecrets.ownerUserId],
         targetWhere: sql`${projectSecrets.ownerUserId} is not null`,
         set: {
-          valueEnc: encryptProjectSecret(projectId, value),
+          valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(secretName)),
           active: true,
           strategy: 'broker',
           consumer: 'llm_gateway',
@@ -168,7 +169,7 @@ async function writeOAuthLoginSecret(input: {
         projectId,
         identifier: secretName,
         name: secretName,
-        valueEnc: encryptProjectSecret(projectId, value),
+        valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(secretName)),
         strategy: 'broker',
         consumer: 'llm_gateway',
         strategyLocked: true,
@@ -180,7 +181,7 @@ async function writeOAuthLoginSecret(input: {
         target: [projectSecrets.projectId, projectSecrets.identifier],
         targetWhere: isNull(projectSecrets.ownerUserId),
         set: {
-          valueEnc: encryptProjectSecret(projectId, value),
+          valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(secretName)),
           strategy: 'broker',
           consumer: 'llm_gateway',
           egressPolicy: null,

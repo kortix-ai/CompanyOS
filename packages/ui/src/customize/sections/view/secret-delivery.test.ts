@@ -159,7 +159,7 @@ describe('classifyNewSecret', () => {
 
   test('a recognized provider whose SDK hardcodes the host prefills the curated fallback', () => {
     // models.dev declares no `api` for Anthropic — the SDK hardcodes it, so the
-    // catalog `apiHost` is null. Without the curated `WELL_KNOWN_API_HOSTS`
+    // catalog `apiHost` is null. Without the curated `WELL_KNOWN_PROVIDER_API_HOSTS`
     // fallback the hosts field stays empty (spec §7). The fallback is a stable
     // documented constant, not a value guessed from a catalog URL.
     const classification = classifyNewSecret({ key: 'ANTHROPIC_API_KEY', value: 'sk-ant-abc' });

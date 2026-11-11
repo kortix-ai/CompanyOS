@@ -628,6 +628,18 @@ export function hiddenIamActions(projectMetadatas: readonly unknown[]): Set<stri
   return hidden;
 }
 
+/**
+ * True only when the project itself switched the flag on — not when it merely
+ * inherits a platform default of on. For behavior that CHANGES a default the
+ * project never chose (see the secret create default in
+ * projects/routes/secrets.ts), an inherited `true` is not consent.
+ */
+export function featureFlagExplicitlyOn(metadata: unknown, key: FeatureFlagKey): boolean {
+  const def = FLAG_BY_KEY[key];
+  if (!def || !def.available()) return false;
+  return explicitOverride(metadata, key) === true;
+}
+
 /** Effective enablement for every flag, keyed by flag id. */
 export function resolveFeatureFlags(metadata: unknown): Record<FeatureFlagKey, boolean> {
   return Object.fromEntries(

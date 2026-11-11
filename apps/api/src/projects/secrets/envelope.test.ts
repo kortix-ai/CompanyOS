@@ -6,7 +6,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { config } from '../../config';
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
-import { decryptNamedProjectSecret, encryptProjectSecret, probeProjectSecret } from './envelope';
+import {
+  decryptNamedProjectSecret,
+  decryptProjectSecret,
+  encryptProjectSecret,
+  probeProjectSecret,
+  projectSecretAad,
+} from './envelope';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_PROJECT_ID = '22222222-2222-4222-8222-222222222222';
@@ -69,5 +75,53 @@ describe('decryptNamedProjectSecret', () => {
       "Project secret OPENAI_API_KEY cannot be decrypted with this server's encryption key. Re-enter its value.",
     );
     expect(error.message).not.toContain(PLAINTEXT);
+  });
+});
+
+describe('the v2 envelope binds the ciphertext to its row', () => {
+  const AAD = projectSecretAad('BILLING_API_KEY');
+  const OTHER_AAD = projectSecretAad('OTHER_API_KEY');
+
+  afterEach(() => {
+    config.KORTIX_SECRET_ENVELOPE_V2_WRITES = true;
+  });
+
+  test('a write with a binding produces v2 and reads back with the same binding', () => {
+    const envelope = encryptProjectSecret(PROJECT_ID, PLAINTEXT, AAD);
+    expect(envelope.startsWith('v2:')).toBe(true);
+    expect(decryptProjectSecret(PROJECT_ID, envelope, AAD)).toBe(PLAINTEXT);
+  });
+
+  test('v2 ciphertext moved to another row does not decrypt', () => {
+    const envelope = encryptProjectSecret(PROJECT_ID, PLAINTEXT, AAD);
+    expect(() => decryptProjectSecret(PROJECT_ID, envelope, OTHER_AAD)).toThrow();
+    expect(probeProjectSecret(PROJECT_ID, envelope, OTHER_AAD)).toBe('undecryptable');
+    expect(() =>
+      decryptNamedProjectSecret(PROJECT_ID, envelope, 'Project secret OTHER_API_KEY', undefined, OTHER_AAD),
+    ).toThrow(SecretUndecryptableError);
+  });
+
+  test('v2 ciphertext moved to another project does not decrypt', () => {
+    const envelope = encryptProjectSecret(PROJECT_ID, PLAINTEXT, AAD);
+    expect(() => decryptProjectSecret(OTHER_PROJECT_ID, envelope, AAD)).toThrow();
+  });
+
+  test('a v2 envelope read without a binding is refused', () => {
+    const envelope = encryptProjectSecret(PROJECT_ID, PLAINTEXT, AAD);
+    expect(() => decryptProjectSecret(PROJECT_ID, envelope)).toThrow('requires its resource binding');
+  });
+
+  test('v1 still reads, with or without a binding', () => {
+    const v1 = encryptProjectSecret(PROJECT_ID, PLAINTEXT);
+    expect(v1.startsWith('v1:')).toBe(true);
+    expect(decryptProjectSecret(PROJECT_ID, v1)).toBe(PLAINTEXT);
+    expect(decryptProjectSecret(PROJECT_ID, v1, AAD)).toBe(PLAINTEXT);
+  });
+
+  test('with v2 writes switched off, a binding still writes v1 (rollback window)', () => {
+    config.KORTIX_SECRET_ENVELOPE_V2_WRITES = false;
+    const envelope = encryptProjectSecret(PROJECT_ID, PLAINTEXT, AAD);
+    expect(envelope.startsWith('v1:')).toBe(true);
+    expect(decryptProjectSecret(PROJECT_ID, envelope, AAD)).toBe(PLAINTEXT);
   });
 });

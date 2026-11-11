@@ -6,7 +6,7 @@ import { createFirstInWindow } from '../../shared/audit-dedupe';
 import { db } from '../../shared/db';
 import { filterSecretRowsByAudience, secretAudienceSubject } from '../lib/secret-audience';
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
-import { decryptProjectSecret } from './envelope';
+import { decryptProjectSecret, projectSecretAad } from './envelope';
 import { secretAudienceRank } from './grant-policy';
 import { accountKeyOfWorkspace } from '../../workspaces/rows';
 
@@ -324,7 +324,7 @@ async function resolveOneConsumerSecretRow(
 
   let value: string;
   try {
-    value = decryptProjectSecret(input.projectId, row.valueEnc);
+    value = decryptProjectSecret(input.projectId, row.valueEnc, projectSecretAad(row.identifier));
   } catch {
     await recordSecretConsumerAudit(input, accountId, {
       outcome: 'failure',

@@ -21,7 +21,7 @@ import {
   buildSecretCapabilities,
   serializeSecretCapabilities,
 } from './secret-capabilities';
-import { decryptNamedProjectSecret, encryptProjectSecret } from './secrets/envelope';
+import { decryptNamedProjectSecret, encryptProjectSecret, projectSecretAad } from './secrets/envelope';
 import { projectSecretsRevision, resolveGrantedSecretSelection } from './secrets/grant-policy';
 import { mintSessionSecretHandle } from './secrets/handles';
 import { projectsView } from '../workspaces/rows';
@@ -55,7 +55,7 @@ export async function writeSharedProjectSecret(input: {
       projectId: input.projectId,
       identifier,
       name: input.name,
-      valueEnc: encryptProjectSecret(input.projectId, input.value),
+      valueEnc: encryptProjectSecret(input.projectId, input.value, projectSecretAad(identifier)),
       scope: serverSide ? 'connector' : 'runtime',
       strategy: serverSide ? 'broker' : 'runtime',
       consumer: serverSide ? 'connector' : 'sandbox',
@@ -70,7 +70,7 @@ export async function writeSharedProjectSecret(input: {
       targetWhere: isNull(projectSecrets.ownerUserId),
       set: {
         name: input.name,
-        valueEnc: encryptProjectSecret(input.projectId, input.value),
+        valueEnc: encryptProjectSecret(input.projectId, input.value, projectSecretAad(identifier)),
         ...(serverSide
           ? {
               scope: 'connector' as const,
@@ -218,7 +218,13 @@ export async function listProjectSecrets(projectId: string): Promise<Record<stri
     if (row.scope === 'connector') continue;
     const canonical = row.identifier === row.name;
     if (row.name in env && winnerIsCanonical.has(row.name) && !canonical) continue;
-    env[row.name] = decryptNamedProjectSecret(projectId, row.valueEnc, `Project secret ${row.identifier}`);
+    env[row.name] = decryptNamedProjectSecret(
+      projectId,
+      row.valueEnc,
+      `Project secret ${row.identifier}`,
+      undefined,
+      projectSecretAad(row.identifier),
+    );
     if (canonical) winnerIsCanonical.add(row.name);
   }
   return env;
@@ -244,6 +250,10 @@ export interface ResolvedProjectSecret {
   consumer?: SecretConsumer | null;
   egressPolicy?: SecretEgressPolicy | null;
   handlePrefix?: string | null;
+  /** `projects.secret_default_strategy`, the project's delivery floor. Composed
+   *  as a MAX with `strategy` by `resolveSecretDelivery`: it can only ever make
+   *  this row stricter. Absent = no floor (the pre-floor behavior). */
+  projectDefaultStrategy?: SecretStrategy | null;
   /** How the value reaches this session (`secret-audience.ts`): through its
    *  `person`, through its `agent`, or `open` to everyone. Ranks in that order
    *  among values of the same KEY. */
@@ -261,11 +271,31 @@ export interface ResolvedProjectSecret {
  * whose audience names its person or its agent (`secret-audience.ts`). The
  * default, nobody, keeps only values shared with everyone.
  */
+/**
+ * The project's delivery floor (`projects.secret_default_strategy`).
+ *
+ * Null when the project row is gone: no floor, never a guessed one. Every
+ * `resolveSecretDelivery` caller reads it from here, so the floor applies the
+ * same way at env materialization, network-boundary provisioning, the
+ * capability catalog and the relay.
+ */
+export async function loadProjectSecretDefaultStrategy(projectId: string): Promise<SecretStrategy | null> {
+  const [row] = await db
+    .select({ strategy: projectsView.secretDefaultStrategy })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
+    .limit(1);
+  return row?.strategy ?? null;
+}
+
 export async function listResolvedProjectSecrets(
   projectId: string,
   userId: string | null,
   subject: SecretAudienceSubject | (() => Promise<SecretAudienceSubject>) = NO_SUBJECT,
 ): Promise<ResolvedProjectSecret[]> {
+  // Started beside the rows read: it does not depend on it.
+  const floorRead = loadProjectSecretDefaultStrategy(projectId);
+  floorRead.catch(() => undefined);
   const rows = await db
     .select({
       secretId: projectSecrets.secretId,
@@ -306,6 +336,7 @@ export async function listResolvedProjectSecrets(
     byIdentifier.set(row.identifier, slot);
   }
 
+  const projectDefaultStrategy = await floorRead;
   const out: ResolvedProjectSecret[] = [];
   for (const [identifier, slot] of byIdentifier) {
     const chosen = slot.personal && slot.personal.active ? slot.personal : slot.shared;
@@ -322,11 +353,14 @@ export async function listResolvedProjectSecrets(
         projectId,
         chosen.valueEnc,
         chosen === slot.personal ? `Your own value of project secret ${identifier}` : `Project secret ${identifier}`,
+        undefined,
+        projectSecretAad(identifier),
       ),
       strategy: policyRow.strategy ?? undefined,
       consumer: policyRow.consumer ?? undefined,
       egressPolicy: policyRow.egressPolicy ?? null,
       handlePrefix: policyRow.handlePrefix ?? null,
+      projectDefaultStrategy,
       audience: policyRow.audience,
     });
   }
@@ -363,6 +397,7 @@ export type SecretHandleMinter = (row: ResolvedProjectSecret) => Promise<string>
  *   - `null`/`undefined` → stripped. A row written before the column existed
  *     carries no intent to trust, so legacy behavior is preserved exactly.
  *   - `sandbox` → delivered. The user asked for this variable in their own box.
+ *   - `network` → delivered as a handle. The value stays server-side.
  *
  * What this deliberately does NOT weaken: managed credentials and anything the
  * provider-connect flow stored keep their stamp and stay withheld, and
@@ -374,7 +409,11 @@ export function gatewayStripsRow(input: {
   nameIsGatewayManaged: boolean;
   consumer: SecretConsumer | null | undefined;
 }): boolean {
-  return input.nameIsGatewayManaged && input.consumer !== 'sandbox';
+  // `network` is delivered too: the box receives a HANDLE, never the value,
+  // and the handle is spendable only on the row's own host list. Stripping it
+  // made an egress-delivered model key (the default the API picks for a known
+  // model API name under `secrets_egress`) vanish from the sandbox.
+  return input.nameIsGatewayManaged && input.consumer !== 'sandbox' && input.consumer !== 'network';
 }
 
 export async function materializeSecretDelivery(
@@ -410,6 +449,7 @@ export async function materializeSecretDelivery(
     const delivery = resolveSecretDelivery({
       identifier: row.identifier,
       strategy: row.strategy,
+      projectDefaultStrategy: row.projectDefaultStrategy,
       sessionId: input.sessionId,
       agentGrantEnv: input.grantEnv ?? null,
       sessionAllowlist: null,

@@ -358,7 +358,7 @@ export { readStoredAgentGrant } from './schema/kortix';
 export type { AccountBrandingRecord, DriveVolumeMoveRecord } from './schema/kortix';
 export type { MemoryThreadLoadLayer } from './schema/kortix';
 export type { ProjectGoalCriterion, ProjectGoalSessionRef, ProjectGoalVerification } from './schema/kortix';
-export type { SecretEgressPolicy, SecretEgressRule, SecretInjectionSlot } from './schema/kortix';
+export type { SecretEgressPolicy, SecretEgressRule, SecretHandlePlacement, SecretInjectionSlot } from './schema/kortix';
 
 export type {
   TunnelMachineInfo,

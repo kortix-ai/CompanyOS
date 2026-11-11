@@ -105,6 +105,11 @@ export function substituteString(
   return substituteBuffer(Buffer.from(value), substitutions, primary, applied).toString('utf8');
 }
 
+/** True when any representation of `handle` occurs in `source`. */
+export function handlePresent(source: Buffer, handle: string): boolean {
+  return secretRepresentations(handle).some(({ text }) => source.indexOf(text) !== -1);
+}
+
 /** Which encoding a body's own content type says its bytes are written in. */
 export function bodyEncoding(contentType: string | undefined): SecretEncoding {
   const type = contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
@@ -153,6 +158,33 @@ export function redactSecretFromResponse(body: Buffer, secret: string): Buffer {
   let result = body;
   for (const { text } of secretRepresentations(secret)) {
     result = replaceBuffer(result, Buffer.from(text), REDACTED);
+  }
+  return result;
+}
+
+/** A value the response may echo, and the handle that stands in for it in the
+ *  sandbox. `handle: null` = no handle is known; the echo becomes `[REDACTED]`. */
+export interface ResealPair {
+  value: string;
+  handle: string | null;
+}
+
+/**
+ * RE-SEAL an echoed secret: every representation of the value becomes the
+ * SAME representation of its handle. The exact dual of `substituteBuffer`.
+ *
+ * Why the handle and not `[REDACTED]`: an upstream that reflects the
+ * credential (a token-introspection reply, a "your key is ..." error, a saved
+ * config) hands the agent bytes it may send again. `[REDACTED]` breaks that
+ * round trip; the handle keeps it working, and the handle is worth nothing
+ * off its approved hosts. A pair with no handle still redacts.
+ */
+export function resealSecretInResponse(body: Buffer, pair: ResealPair): Buffer {
+  let result = body;
+  for (const { encoding, text } of secretRepresentations(pair.value)) {
+    const replacement =
+      pair.handle === null ? REDACTED : Buffer.from(encodeSecretRepresentation(pair.handle, encoding));
+    result = replaceBuffer(result, Buffer.from(text), replacement);
   }
   return result;
 }

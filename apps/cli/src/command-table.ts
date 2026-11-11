@@ -165,7 +165,7 @@ export const TIERS: readonly CommandTier[] = [
           {
             name: 'tools',
             args: '<subcommand>',
-            blurb: "List the workspace's tools (ls); copy a Kortix tool to change it (eject)",
+            blurb: "Search, describe and call every tool an agent can reach; list (ls) or eject the session tools",
           },
           {
             name: 'models',

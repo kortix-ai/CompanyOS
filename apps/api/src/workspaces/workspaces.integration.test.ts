@@ -363,4 +363,27 @@ withDb('workspaces identity', () => {
     expect(report.I10).toMatchObject({ ok: true });
     expect(report.I12).toMatchObject({ ok: true });
   });
+
+  test('I10: a deleted account keeps the workspace_id its rows were stamped with, and that is no violation', async () => {
+    // audit_reconciliation_state has no foreign key into accounts: its row
+    // outlives the account (prod 2026-11-11: 57 such rows in 5 expand tables).
+    await db.execute(sql`INSERT INTO kortix.audit_reconciliation_state (account_id, checked_at, full_scan_at)
+                         VALUES (${EMPTY_ACCOUNT}::uuid, now(), now())`);
+    const [stamped] = await db.execute<{ workspace_id: string | null }>(
+      sql`SELECT workspace_id::text FROM kortix.audit_reconciliation_state WHERE account_id = ${EMPTY_ACCOUNT}::uuid`,
+    );
+    expect(stamped?.workspace_id).toBe(EMPTY_ACCOUNT);
+    try {
+      await db.delete(accounts).where(eq(accounts.accountId, EMPTY_ACCOUNT));
+      const report = await checkWorkspaceInvariants({ accountIds: ACCOUNTS });
+      expect(report.I10).toMatchObject({ ok: true, violations: 0 });
+      // A live account's row with a wrong id is still a violation.
+      await db.execute(sql`INSERT INTO kortix.audit_reconciliation_state (account_id, checked_at, full_scan_at)
+                           VALUES (${ONE_ACCOUNT}::uuid, now(), now())`);
+      await db.execute(sql`UPDATE kortix.audit_reconciliation_state SET workspace_id = ${LEGACY_P1}::uuid WHERE account_id = ${ONE_ACCOUNT}::uuid`);
+      expect((await checkWorkspaceInvariants({ accountIds: ACCOUNTS })).I10.sample).toContain('audit_reconciliation_state:1');
+    } finally {
+      await db.execute(sql`DELETE FROM kortix.audit_reconciliation_state WHERE account_id IN (${EMPTY_ACCOUNT}::uuid, ${ONE_ACCOUNT}::uuid)`);
+    }
+  });
 });

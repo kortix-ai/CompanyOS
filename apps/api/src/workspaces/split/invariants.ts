@@ -24,7 +24,7 @@
  *       does not count (design.md §3.1 row 6)
  *   I9  the kortix.workspaces table equals kortix.workspaces_expected for every
  *       account (the reconcile triggers missed no write)
- *   I10 every expand-table row carries workspace_id = the account's live id,
+ *   I10 every expand-table row of a live account carries workspace_id = its live id,
  *       except the rows of a split_pending account (NULL until the split
  *       fills them)
  *   I11 no two credit_accounts rows share a stripe_subscription_id
@@ -269,6 +269,10 @@ async function i10(accountIds?: string[]): Promise<InvariantResult> {
         LEFT JOIN kortix.workspaces w
           ON w.legacy_account_id = t.account_id AND w.lifecycle <> 'tombstone' AND NOT w.split_pending
        WHERE t.account_id IS NOT NULL ${filter}
+         -- A deleted account's rows keep the id they were stamped with: a
+         -- ledger-like table with no foreign key into accounts outlives it
+         -- (design.md §2, gate row). Only a live account can be wrong.
+         AND EXISTS (SELECT 1 FROM kortix.accounts a WHERE a.account_id = t.account_id)
          AND NOT EXISTS (SELECT 1 FROM kortix.projects p
                           WHERE p.account_id = t.account_id AND p.status = 'active' AND p.split_pending)
          AND t.workspace_id IS DISTINCT FROM w.workspace_id`);

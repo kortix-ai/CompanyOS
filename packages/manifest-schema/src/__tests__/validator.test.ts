@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { validateManifest, formatIssues } from '../index.ts';
+import { appToolsDocumentPath, validateManifest, formatIssues } from '../index.ts';
 
 function summarize(input: string | Record<string, unknown>) {
   const result = validateManifest(input);
@@ -623,6 +623,21 @@ apps:
     expect(errors('  crm:\n    uses: [Main, ""]').map((issue) => issue.path)).toEqual(['apps.crm.uses[0]', 'apps.crm.uses[1]']);
     expect(errors('  crm:\n    uses: db').map((issue) => issue.path)).toEqual(['apps.crm.uses']);
     expect(errors('  crm:\n    uses: [crm]').map((issue) => issue.path)).toEqual(['apps.crm.uses[0]']);
+  });
+
+  test('`tools` names an OpenAPI document inside the App folder', () => {
+    const errors = (yaml: string) =>
+      validateManifest(`default_agent: w\nagents:\n  w: {}\napps:\n${yaml}`)
+        .issues.filter((issue) => issue.severity === 'error');
+    expect(errors('  orders:\n    path: apps/orders\n    tools: openapi.json')).toEqual([]);
+    expect(errors('  orders:\n    tools: ./spec/tools.yaml')).toEqual([]);
+    for (const bad of ['/etc/openapi.json', '../other/openapi.json', 'spec//x.json', 'openapi.txt', '""', '[a.json]']) {
+      expect(errors(`  orders:\n    tools: ${bad}`).map((issue) => issue.path)).toEqual(['apps.orders.tools']);
+    }
+    expect(appToolsDocumentPath('orders', { path: 'apps/orders/', tools: 'openapi.json' })).toBe('apps/orders/openapi.json');
+    expect(appToolsDocumentPath('orders', { tools: './openapi.yaml' })).toBe('apps/orders/openapi.yaml');
+    expect(appToolsDocumentPath('orders', { tools: '../x.json' })).toBeNull();
+    expect(appToolsDocumentPath('orders', {})).toBeNull();
   });
 
   test('the retired `kind` field warns and still validates: an App\'s shape comes from its config', () => {

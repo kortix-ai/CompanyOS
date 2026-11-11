@@ -57,6 +57,7 @@ import { assertConnectorEndpointUrl, connectorEgressFetch } from './egress';
 import type { ProjectPolicySpec } from '../projects/policies';
 import { connectorConfig, toPolicyRows, toPolicySetRows, toProjectPolicyRows } from './materialize';
 import {
+  normalizeAppTools,
   normalizeComposio,
   normalizeGraphql,
   normalizeHttp,
@@ -79,7 +80,32 @@ import {
   mergeAuthDiscoveries,
 } from './auth-discovery';
 import type { HttpRouteSpec, NormalizedAction } from './types';
+import { appToolConnectorSpecs, appToolsCatalogHash } from './app-tools';
 import { projectsView, updateProjectRows, updateProjectRowsReturning } from '../workspaces/rows';
+
+/**
+ * The OpenAPI document text of each App connector spec this process is
+ * syncing, read once from git at the manifest's commit. `storedManifestHash`
+ * folds it in (an edited document re-materializes the catalog) and
+ * `resolveCatalog` parses it. Keyed by the spec object, so it lives exactly as
+ * long as one sync's specs. replica-local: per-sync scratch, never shared.
+ */
+const appToolsDocuments = new WeakMap<ConnectorSpec, { text: string | null; error: string | null }>();
+
+async function readAppToolsDocuments(project: GitBackedProject, specs: ConnectorSpec[], ref: string | null): Promise<void> {
+  await Promise.all(specs.map(async (spec) => {
+    try {
+      appToolsDocuments.set(spec, { text: await readRepoFile(project, spec.spec!, ref ?? project.defaultBranch), error: null });
+    } catch (error) {
+      appToolsDocuments.set(spec, {
+        text: null,
+        error: isRepoFileNotFoundError(error)
+          ? `the App's tools document ${spec.spec} is not in the repository`
+          : `could not read the App's tools document ${spec.spec}: ${(error as Error).message}`,
+      });
+    }
+  }));
+}
 
 export interface SyncResult {
   synced: number;
@@ -121,6 +147,7 @@ function builtCatalog(spec: ConnectorSpec): { actions: NormalizedAction[]; serve
 function storedManifestHash(spec: ConnectorSpec): string {
   const built = builtCatalog(spec);
   const hash = manifestHashForConnector(spec);
+  if (spec.provider === 'app') return appToolsCatalogHash(hash, appToolsDocuments.get(spec)?.text ?? null);
   return built ? createHash('sha256').update(hash).update(JSON.stringify(built)).digest('hex') : hash;
 }
 
@@ -529,6 +556,7 @@ async function syncProjectConnectorsFenced(
   // kortix.yaml" OR a transient git error — either way we must not treat it as
   // "zero declared connectors" and delete the project's real ones below.
   let declaredSpecs: ConnectorSpec[] = [];
+  let appToolSpecs: ConnectorSpec[] = [];
   let triggerSpecs: GitTriggerSpec[] | null = null;
   if (manifest) {
     // The triggers a running project applies: one with a validation error is
@@ -541,6 +569,12 @@ async function syncProjectConnectorsFenced(
     const parsed = extractConnectors(manifest);
     declaredSpecs = parsed.specs;
     errors.push(...parsed.errors.map((e) => ({ slug: e.slug, error: e.error })));
+
+    // An App that exposes tools (`apps.<slug>.tools`) is the connector `app-<slug>`.
+    const appTools = appToolConnectorSpecs(manifest.raw.apps, manifest.path, new Set(declaredSpecs.map((spec) => spec.slug)));
+    appToolSpecs = appTools.specs;
+    errors.push(...appTools.errors);
+    await readAppToolsDocuments(gitProject, appToolSpecs, manifest.commit ?? null);
 
     // Project-level policies + settings — separate scope, reconciled (cheap).
     const projectPoliciesParsed = extractProjectPolicies(manifest);
@@ -560,7 +594,7 @@ async function syncProjectConnectorsFenced(
   // (the parser rejects `provider="computer"`). Every existing one stays
   // materialized, which also keeps its native catalog current after a code change.
   const computerSpecs = await existingComputerConnectorSpecs(projectId, declaredSpecs);
-  const specs = [...declaredSpecs, ...channelSpecs, ...computerSpecs];
+  const specs = [...declaredSpecs, ...appToolSpecs, ...channelSpecs, ...computerSpecs];
   // The summary must agree with `connectors ls` (KRTX-2669): the list applies
   // two hiding predicates (`hideMachinelessComputers` and `hideSupersededSlack`,
   // see `listConnectors`), so the summary counts a spec only when the list
@@ -1436,6 +1470,11 @@ export async function resolveCatalog(
           toolkit: spec.app,
         });
         return { actions: normalizeComposio(tools, spec.app), server: null };
+      }
+      case 'app': {
+        const read = appToolsDocuments.get(spec) ?? { text: await loadSourceText(project, spec.spec!), error: null };
+        if (read.error || read.text === null) throw new Error(read.error ?? `the App's tools document ${spec.spec} is empty`);
+        return { actions: normalizeAppTools(parseSpecDocument(read.text, spec.spec!), spec.app!), server: null };
       }
       case 'channel':
       case 'computer':

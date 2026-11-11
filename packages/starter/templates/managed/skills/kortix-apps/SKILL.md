@@ -51,6 +51,7 @@ another host.
 | A backend (data, functions, realtime) or an API only | The Convex template | references/convex.md |
 | A server of its own (SSR, native packages, a custom service), a worker, several process groups | A server App | references/web-server.md, references/apps-model.md |
 | A call to an external system from an App | The connector gateway | references/connectors.md |
+| Agents call the App's own operations (create an order, look up a customer) | A server App with `tools:` | "Expose tools" below |
 
 Default to static for every UI. Server logic for a UI (queries, writes,
 webhooks, integrations, schedules) lives in the backend App, not in a second
@@ -205,6 +206,81 @@ no model.
 cancels a pending run. An App holds at most 1,000 pending runs.
 
 Full recipe and the trigger fields: `kortix-system` → `references/scheduling.md`.
+
+## Expose tools
+
+A server App can give agents tools: `apps.<slug>.tools` names an OpenAPI 3
+document (JSON or YAML) inside the App's folder. Every sync of `kortix.yaml`
+turns it into the connector `app-<slug>`: one tool per operation, called
+`connectors.app-<slug>.<operationId>`. It works like any connector: search,
+describe and call, the agent's `connectors:` grant, policies, approvals and
+the call log.
+
+```yaml
+apps:
+  orders:
+    path: apps/orders
+    type: dockerfile
+    command: ["node", "server.js"]
+    port: 3000
+    tools: openapi.json            # apps/orders/openapi.json
+agents:
+  support:
+    connectors: [app-orders]       # nothing else reaches the App's tools
+policies:
+  - match: app-orders.create_order
+    action: require_approval
+```
+
+`apps/orders/openapi.json`, served by the same App:
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders", "version": "1" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "operationId": "get_order",
+        "summary": "Read one order by id",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
+      }
+    },
+    "/orders": {
+      "post": {
+        "operationId": "create_order",
+        "summary": "Create an order for a customer",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["customer"], "properties": { "customer": { "type": "string" }, "items": { "type": "array" } }
+        } } } }
+      }
+    }
+  }
+}
+```
+
+- **One tool per operation.** `operationId` is required and is the tool
+  name: a document with an operation without one is refused, and the sync
+  names that operation. The description is `summary`, else `description`.
+- **Input.** Path and query parameters by name, the JSON body under `body`:
+  `{"id": "o-1"}`, `{"body": {"customer": "c-9"}}`.
+- **Risk.** `GET` is `read`, `DELETE` is `destructive`, every other method is
+  `write`. `x-kortix-risk: read | write | destructive` on an operation
+  overrides it. Risk drives the default policy and the approval prompt.
+- **The call.** Kortix wakes the App when it is stopped and calls its `http`
+  service in-cluster, the way a trigger target is called: a private App gets
+  it too. Kortix sends no stored credential. The request carries
+  `x-kortix-app-viewer` (the person the call acts for: verify it with
+  `readAppViewer(request)` from `@kortix/sdk/server`), `x-kortix-tool`, and
+  for an agent session `x-kortix-agent` and `x-kortix-session-id`. Authorize
+  on the signed viewer only. The App's answer (any status) is the tool's
+  result; an answer over the gateway's size cap is refused.
+- **Change it.** Edit the document, commit, push: the next sync re-reads it.
+  The document is read at the manifest's commit, not from the running
+  release. `kortix connectors ls` shows `app-<slug>` and its error, if any.
+- **Verify.** In a session of an agent granted `app-<slug>`: `tool_search`
+  finds `connectors.app-<slug>.<operationId>`, `tool_call` runs it, and the
+  App's log shows the request. A gated write returns `pending_approval`.
 
 ## Machines, scale, exec
 

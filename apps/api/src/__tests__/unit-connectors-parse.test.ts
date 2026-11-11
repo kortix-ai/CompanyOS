@@ -797,6 +797,7 @@ describe('connectors: — runtime parser ⇄ schema gate provider agreement', ()
     { name: 'http', accept: true, body: `connectors:\n  - slug: c\n    provider: http\n    base_url: https://e.com` },
     { name: 'channel', accept: true, body: `connectors:\n  - slug: kortix_slack\n    provider: channel\n    platform: slack` },
     { name: 'computer (synth-only)', accept: false, body: `connectors:\n  - slug: computer\n    provider: computer` },
+    { name: 'app (synth-only, from apps.<slug>.tools)', accept: false, body: `connectors:\n  - slug: app-crm\n    provider: app` },
     { name: 'unknown provider', accept: false, body: `connectors:\n  - slug: c\n    provider: made-up` },
   ];
 

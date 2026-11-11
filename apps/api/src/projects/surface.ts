@@ -195,6 +195,7 @@ export { LIVE as liveClosedAccountSql } from './session-log-purge';
 export { resolveCommitSha, resolveCommitShaAt } from './git/commits';
 export { publishTipProofsTo, refreshIntervalMs, refreshMirror, useSharedTipProof } from './git/mirror';
 export type { GitBackedProject } from './git/types';
+export type { ConnectorSpec } from './connectors';
 // Saved config summaries, rebuilt when a base ref moves (consumed by ../config-releases/publish).
 export { savedProjectConfig, scheduleConfigSummary } from './config-summary/service';
 

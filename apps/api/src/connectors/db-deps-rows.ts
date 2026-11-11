@@ -91,6 +91,9 @@ export function baseUrlOf(row: ConnectorRow): string | null {
     // computer: no base URL — the gateway relays via the tunnel core, not HTTP.
     case 'computer':
       return null;
+    // app: no base URL — the gateway calls the App in-cluster by its slug.
+    case 'app':
+      return null;
     default:
       return null;
   }

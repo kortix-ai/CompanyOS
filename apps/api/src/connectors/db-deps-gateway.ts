@@ -10,6 +10,7 @@ import {
   connectorProjectSettings,
 } from '@kortix/db';
 import { appAuthorizationForConnectorCall } from '../apps/connector-assertion';
+import { callAppTool } from '../apps/app-tool-call';
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { resolveEmailApiKey } from '../channels/resend-email-api';
 import { bindSlackThreadToSession } from '../channels/slack/binding';
@@ -492,6 +493,8 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
     attachmentStore: connectorAttachmentStore,
     // Spec 2026-09-22 §2.5: an agent session calling a same-project Kortix App.
     appAuthorizationFor: (input) => appAuthorizationForConnectorCall(input),
+    // A tool an App of the project exposes (`apps.<slug>.tools`).
+    callAppTool: (input) => callAppTool(input),
     loadConnectorBySlug: async (projectId, slug) => {
       if (canonicalConnectorAlias(slug) === COMPUTER_SLUG) {
         await ensureProjectComputer(projectId, principal.userId);

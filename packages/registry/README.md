@@ -57,6 +57,7 @@ Kortix-native ones:
 | `registry:memory` | seed memory files |
 | `registry:project` | a whole Kortix project scaffold |
 | `registry:bundle` | a curated set of other items (a "use-case"/starter) |
+| `registry:app` | a Kortix App: its folder (files → `apps/<slug>/…`) and its `apps.<slug>` block in `meta.app` (`{ slug, manifest }`), `tools:` included when the App exposes tools |
 
 Every item is ultimately **files copied to `target` paths** — the richer type
 drives categorization, icons, and validation.

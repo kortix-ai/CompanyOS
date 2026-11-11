@@ -55,10 +55,11 @@ import { normalizeConditions } from '../connectors/policy';
 import { isValidSecretName } from './secrets';
 import { MANIFEST_FILENAME, type ParsedManifest } from './triggers';
 
-export type ConnectorProvider = ManifestConnectorProvider | 'computer';
+export type ConnectorProvider = ManifestConnectorProvider | 'computer' | 'app';
 const PROVIDERS: readonly ConnectorProvider[] = [
   ...CONNECTOR_PROVIDERS,
   'computer',
+  'app',
 ];
 export type ConnectorAuthorizationStrategy = (typeof CONNECTOR_AUTHORIZATION_STRATEGIES)[number];
 
@@ -466,7 +467,8 @@ function parseConnectorEntry(
         provider !== 'pipedream' &&
         provider !== 'composio' &&
         provider !== 'channel' &&
-        provider !== 'computer',
+        provider !== 'computer' &&
+        provider !== 'app',
       policies: policiesParsed.value,
       ...(setsParsed.value.length > 0 ? { policySets: setsParsed.value } : {}),
     },
@@ -533,6 +535,15 @@ function parseProviderFields(
     return err(
       slug,
       'provider="computer" is created by pairing a computer — it cannot be declared in kortix.yaml',
+      filename,
+    );
+  }
+
+  if (provider === 'app') {
+    // An App's tools materialize from `apps.<slug>.tools` (connectors/app-tools.ts).
+    return err(
+      slug,
+      'provider="app" is created from `apps.<slug>.tools` (an OpenAPI document in the App\'s folder) — it cannot be declared in `connectors:`',
       filename,
     );
   }

@@ -2115,6 +2115,11 @@
             "type": "string",
             "pattern": "^/"
           },
+          "tools": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.(?:json|ya?ml)$",
+            "description": "An OpenAPI 3 document inside the App's folder. Each operation becomes a tool of the connector `app-<slug>`."
+          },
           "idle_timeout_seconds": {
             "type": "integer",
             "minimum": 120,
@@ -2624,7 +2629,12 @@
               "image_search",
               "image_gen",
               "scrape_webpage",
-              "show"
+              "show",
+              "skills",
+              "tool_search",
+              "tool_describe",
+              "tool_call",
+              "tool_resume"
             ]
           }
         ],
@@ -3547,7 +3557,7 @@
             ]
           },
           "connectors": {
-            "description": "Connector slugs the agent may call.",
+            "description": "Connector slugs the agent may call. An App that exposes tools (`apps.<slug>.tools`) is the connector `app-<slug>`.",
             "oneOf": [
               {
                 "type": "array",

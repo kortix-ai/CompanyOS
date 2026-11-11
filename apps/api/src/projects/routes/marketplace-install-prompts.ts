@@ -167,3 +167,45 @@ export function buildTemplateInstallPrompt(entry: TemplateCatalogEntry, id: stri
     ...steps.map((s, i) => `${i + 1}. ${s}`),
   ].join('\n');
 }
+
+interface AppCatalogEntry {
+  item: {
+    name: string;
+    title?: string;
+    description?: string | null;
+    files?: Array<{ path: string; target?: string }>;
+    meta?: { app?: { slug?: string; manifest?: Record<string, unknown> } };
+  };
+}
+
+/** A `registry:app` item: the App's folder plus its `apps.<slug>` kortix.yaml
+ *  block (`meta.app`). The agent merges both and opens a change request; the
+ *  App's versions and rollback stay App releases (`kortix apps deploy`). */
+export function buildAppInstallPrompt(entry: AppCatalogEntry, id: string): string {
+  const item = entry.item;
+  const slug = item.meta?.app?.slug?.trim() || item.name;
+  const block = item.meta?.app?.manifest ?? {};
+  const exposesTools = typeof block.tools === 'string';
+  const files = (item.files ?? []).map((file) => `- ${file.target ?? file.path}`);
+  const lines: string[] = [
+    `Add the "${item.title ?? item.name}" App to THIS project.`,
+    '',
+    item.description ?? '',
+    '',
+    `Its \`apps.${slug}\` block for kortix.yaml:`,
+    '```json',
+    JSON.stringify(block, null, 2),
+    '```',
+    ...(files.length ? ['', 'Its files:', ...files] : []),
+    '',
+    'Steps:',
+    `1. Fetch its source (marketplace item id "${id}") and write its files into the App's folder (\`apps.${slug}.path\`, default \`apps/${slug}/\`). Do not overwrite another App's folder: when \`apps.${slug}\` already exists, pick a free slug and say so.`,
+    `2. Merge the block under \`apps.${slug}\` in kortix.yaml. Keep every other App, agent and connector as it is. \`kortix validate\` must pass.`,
+    ...(exposesTools
+      ? [`3. The App exposes tools (\`tools: ${String(block.tools)}\`): after the merge they are the connector \`app-${slug}\`. Add \`app-${slug}\` to \`connectors:\` of each agent that should call them, and nothing else.`]
+      : []),
+    `${exposesTools ? 4 : 3}. Open a change request with the result: do not push to the default branch. After it is merged, deploy the App with \`kortix apps deploy\` (its releases are its versions; \`kortix apps rollback\` undoes one).`,
+    `${exposesTools ? 5 : 4}. Tell me in one line what the App does and how to open it.`,
+  ];
+  return lines.join('\n');
+}

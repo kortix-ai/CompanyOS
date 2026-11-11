@@ -34,6 +34,7 @@ import { normalizeString, requestAuditContext } from '../lib/serializers';
 import { sendSessionCreateError } from '../lib/sessions';
 import { createSession } from '../session-lifecycle';
 import {
+  buildAppInstallPrompt,
   buildRegistryProjectInstallPrompt,
   buildTemplateInstallPrompt,
 } from './marketplace-install-prompts';
@@ -158,6 +159,8 @@ async function handleMarketplaceInstallSession(c: any) {
       prompt = buildRegistryProjectInstallPrompt(entry, await manifestRawOrNull(project));
     } else if (entry.item.type === 'registry:template') {
       prompt = buildTemplateInstallPrompt(entry, id);
+    } else if (entry.item.type === 'registry:app') {
+      prompt = buildAppInstallPrompt(entry as Parameters<typeof buildAppInstallPrompt>[0], id);
     } else {
       prompt = buildItemInstallPrompt(entry, id);
     }

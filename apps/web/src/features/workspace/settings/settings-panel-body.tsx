@@ -376,7 +376,7 @@ export function SettingsPanelShell({
   );
 
   return (
-    /* `activationMode="manual"`: Radix defaults to "automatic", which SELECTS
+    /* `activationMode="manual"`: `Tabs` defaults to "automatic", which SELECTS
        each tab as arrow keys pass over it. Every pane here fetches on mount,
        so under the default, arrowing down the rail mounts each pane it passes
        and fires that pane's queries — a cost only keyboard users pay, and one

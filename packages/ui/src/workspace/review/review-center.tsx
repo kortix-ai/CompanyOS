@@ -341,7 +341,7 @@ function ItemRow({
             checked={false}
             aria-label={tBulk('selectRow', { title: item.title })}
             onClick={(e) => {
-              // The row's own state decides; Radix skips its toggle.
+              // The row's own state decides; the checkbox skips its toggle.
               e.preventDefault();
               selection.onToggle(e.shiftKey);
             }}

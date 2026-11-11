@@ -179,7 +179,10 @@ describe('the row menu', () => {
       `button[aria-label="More actions for ${OUTPUT.title}"]`,
     )!;
     act(() => {
+      // A real tap: pointerdown, mousedown, then click. A touch press opens the menu on click.
       trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
     });
     return [...document.querySelectorAll('[role="menuitem"]')].map(
       (item) => item.textContent?.replace(/[ed↵]$/, '').trim() ?? '',

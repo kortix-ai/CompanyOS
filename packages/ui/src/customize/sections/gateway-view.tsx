@@ -280,7 +280,7 @@ export function ProjectDefaultPicker({ projectId }: { projectId: string }) {
  * character.
  *
  * One section at a time, by the caller's state — NOT seven `TabsContent`
- * panels. Radix keeps every panel in the tree and each one used to open its
+ * panels. `Tabs` keeps every panel element in the tree and each one used to open its
  * own `overflow-y-auto`, which is how this page ended up with three nested
  * scroll containers under a shell that already had one.
  *

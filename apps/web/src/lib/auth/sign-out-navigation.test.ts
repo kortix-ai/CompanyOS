@@ -443,7 +443,7 @@ describe('the three bare logout controls now say something is happening', () => 
 
   for (const entry of PENDING.filter((candidate) => candidate.holdsDialog)) {
     test(`${entry.name} keeps its dialog up instead of closing onto nothing`, () => {
-      // Radix closes an `AlertDialogAction` on click. Without this the user sees
+      // The alert dialog closes on an `AlertDialogAction` click. Without this the user sees
       // the dialog vanish and the unchanged app sit there for the whole budget.
       const handler = slice(code(entry.file), entry.handler[0], entry.handler[1]);
       expect(handler).toContain('event.preventDefault();');

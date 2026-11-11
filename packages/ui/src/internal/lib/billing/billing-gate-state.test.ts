@@ -27,7 +27,7 @@ function accountState(overrides: Partial<AccountStateLike> = {}): AccountStateLi
 // that workspace must never greet them with the Out-of-credits modal; the
 // modal waits for an actual blocked turn.
 describe('freeGrantUnspentElsewhere — the on-open paywall gate', () => {
-  const furtherWorkspace = (claimed: string | null, canRun?: boolean | null) =>
+  const furtherWorkspace = (claimed: string | null) =>
     accountState({
       billing_state: 'no_subscription',
       credits: {

@@ -709,13 +709,6 @@
   );
 }
 
-/* Lenis (features/marketing/kit/smooth-scroll.tsx) drives the page scroll on
-   marketing routes. The base `scroll-behavior: smooth` above would animate
-   every scrollTo it issues a second time, so it steps aside while Lenis runs. */
-html.lenis {
-  scroll-behavior: auto;
-}
-
 /* Catalogue card reveal — the cards a "View all" uncovers in a category grid.
 
    Deliberately NOT `.kx-fade-up`. That is page-enter motion for a handful of

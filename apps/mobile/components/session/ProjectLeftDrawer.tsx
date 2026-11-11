@@ -854,7 +854,11 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     // One icon column: nav icons and session status marks each sit in a 20pt
     // slot whose left edge is 20pt from the drawer edge (a 4pt `px-1` column,
     // then the row's `px-4`). `insets.left`: a landscape notch.
-    <View className="flex-1 bg-chrome-background" style={{ paddingTop: insets.top, paddingLeft: insets.left }}>
+    // No fill of its own: the Drawer's root paints the same chrome surface
+    // (`useDrawerBackdropColor`), so the page card's soft shadow falls across
+    // the sidebar's edge instead of being cut off by it (an opaque sidebar
+    // drew a darker band with a hard seam between it and the card).
+    <View className="flex-1" style={{ paddingTop: insets.top, paddingLeft: insets.left }}>
       <SwitcherRow projectName={project?.name ?? ''} onPress={openSwitcher} />
 
       <View className="flex-1">

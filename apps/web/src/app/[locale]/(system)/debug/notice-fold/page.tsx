@@ -109,6 +109,7 @@ const ROWS: V1Row[] = [
   {
     info: assistantInfo('msg_reply_prompt', 'msg_prompt', T0 + 1_000, T0 + 6_400),
     parts: [
+      { id: 'msg_reply_prompt-reasoning', sessionID: SESSION_ID, messageID: 'msg_reply_prompt', type: 'reasoning' as const, text: 'Three independent pieces: the draft, the numbers, the review. One colleague each, all in the background; I report back once they have all reported.', time: { start: T0 + 1_000, end: T0 + 3_200 } },
       toolPart('msg_reply_prompt', 1, 'agent', 'Draft the launch post', { subagent_type: 'draft-writer', description: 'Draft the launch post', prompt: 'Draft the launch post. TASK_MARKER_1.' }, 'task_id: ses_krtx4732_draft_writer (for resuming to continue this task if needed)\n\n<task_result>\nStarted.\n</task_result>'),
       toolPart('msg_reply_prompt', 2, 'agent', 'Verify the numbers', { subagent_type: 'metrics-checker', description: 'Verify the numbers', prompt: 'Verify the numbers against the Q3 report. TASK_MARKER_2.' }, 'task_id: ses_krtx4732_metrics_checker (for resuming to continue this task if needed)\n\n<task_result>\nStarted.\n</task_result>'),
       toolPart('msg_reply_prompt', 3, 'agent', 'Review the post', { subagent_type: 'post-reviewer', description: 'Review the post', prompt: 'Review the post against the style guide. TASK_MARKER_3.' }, 'task_id: ses_krtx4732_post_reviewer (for resuming to continue this task if needed)\n\n<task_result>\nStarted.\n</task_result>'),

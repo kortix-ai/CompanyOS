@@ -1,13 +1,14 @@
 /**
  * Mark the refusals the global error handler rate-limits and ships at a
  * severity that follows the window's volume: dead credentials, agent-grant
- * denials, MFA step-up denials, keyed by method, normalized route, status and
- * reason. The window limiter itself is shared/log-window.ts (a ten-minute
- * window, six lines per key per process per hour; suppression counts are
- * best-effort) and caps the severity escalation at one warn per key per hour
- * (KRTX-4674's residual: an hour of grinding past the burst band shipped
- * every window's line at warn and re-tripped the infra-sweep's new-pattern
- * bar). Responses and emitted message text stay unchanged.
+ * denials, MFA step-up denials, credential-fence denials, keyed by method,
+ * normalized route, status and reason. The window limiter itself is
+ * shared/log-window.ts (a ten-minute window, six lines per key per process
+ * per hour; suppression counts are best-effort) and caps the severity
+ * escalation at one warn per key per hour (KRTX-4674's residual: an hour of
+ * grinding past the burst band shipped every window's line at warn and
+ * re-tripped the infra-sweep's new-pattern bar). Responses and emitted
+ * message text stay unchanged.
  */
 import { HTTPException } from 'hono/http-exception';
 
@@ -156,6 +157,35 @@ export function markAccountMfaDenial(err: HTTPException): void {
 /** True for an exception `markAccountMfaDenial` marked. */
 export function isAccountMfaDenial(err: HTTPException): boolean {
   return accountMfaDenials.has(err);
+}
+
+// KRTX-4731: the credential fence's refusal (middleware/workspace-binding.ts,
+// thrown by `enforceTokenProjectScope` — the one constructor every fence
+// refusal goes through) is a designed denial: the fence is fail closed by
+// route table, and the typed 403 body names the remedy
+// (code credential_fence_refused, the check, "use a personal key or sign
+// in"). A caller that cannot or will not act on it — an OAuth workspace
+// token looping POST /v1/mcp — receives the SAME refusal forever, and
+// per-request logging turned that loop into a warn storm with a 0 baseline
+// (prod 2026-11-11: 31 warn lines in one hour on POST /v1/mcp, 0 in the 24 h
+// before). The mark routes the LINE through the shared window throttle
+// without touching the response, exactly as markAgentGrantDenial does. The
+// mark covers every check the fence reports (person-route, platform-route,
+// cross-workspace, …): a probing storm still escalates to warn above the
+// churn band — severity follows the volume.
+const credentialFenceDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as a credential-fence denial. Called by
+ * `enforceTokenProjectScope`, so every fence refusal shares it.
+ */
+export function markCredentialFenceDenial(err: HTTPException): void {
+  credentialFenceDenials.add(err);
+}
+
+/** True for an exception `markCredentialFenceDenial` marked. */
+export function isCredentialFenceDenial(err: HTTPException): boolean {
+  return credentialFenceDenials.has(err);
 }
 
 /**

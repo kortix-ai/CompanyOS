@@ -11,8 +11,7 @@ import { accountMayUseManagedModels } from '../../billing/services/entitlements'
 import { type SandboxProviderName, config } from '../../config';
 
 
-import { agentMayUseConnector, agentMayUseEnv } from '../../iam/agent-scope';
-import { usableProviderKeys } from '../../secrets/provider-key-selection';
+import { agentMayUseConnector } from '../../iam/agent-scope';
 import { decideSessionOnBehalfOf } from './on-behalf-of';
 import {
   loadSessionGrants,
@@ -853,9 +852,29 @@ async function resolveSessionModel(params: {
   if (body.provider_secret_pools !== undefined && !pooledProviderSecrets) {
     return { error: { status: 403, body: { error: 'Provider secret pools are unavailable' } } };
   }
-  // The key selection this session starts with: the caller's, or the one
-  // chosen below for a model that runs only on pooled keys.
-  let providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
+  // The key selection this session starts with: the caller's, else none, and
+  // the gateway uses every key the session may use when it runs.
+  const providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
+  // Whose personal keys the gateway will use for this session (spec 2026-09-22
+  // §2.3): a private session's person, nobody for a shared or unattended one.
+  // Every model check below uses it, so a model reached only through one
+  // person's keys is not accepted for a session that cannot use them. A child
+  // session's person is its parent's, unknown here: undefined keeps the
+  // creator's scope.
+  const personalUserId = input.callerSessionId
+    ? undefined
+    : visibility === 'private'
+      ? decideSessionOnBehalfOf({
+          userId,
+          origin,
+          // The metadata the session will carry: the request's, then the caller's.
+          metadata: { ...normalizeJsonObject(body.metadata), ...normalizeJsonObject(input.metadata) },
+          isAccountMember: true,
+          slackRequiresUserIdentity: config.SLACK_REQUIRE_USER_IDENTITY !== false,
+          teamsRequiresUserIdentity: config.TEAMS_REQUIRE_USER_IDENTITY !== false,
+        })
+      : null;
+  const scope = personalUserId === undefined ? {} : { personalUserId };
 
   // Model: normalize + fail-fast at create. Validate against the same
   // servability resolver the gateway uses and store the runtime ref form
@@ -891,54 +910,18 @@ async function resolveSessionModel(params: {
       const missing = await missingClaudeSubscription({ accountId, projectId, userId, model: claudeAgent.ref });
       if (missing) return { error: { status: 409, body: claudeSubscriptionRequiredBody(missing) } };
     }
-    let servable = await isModelServableForAccount({
+    // A caller that names only the model (the CLI, the SDK, a chat channel)
+    // selects no keys: the gateway serves the model with every key the
+    // session may use, the Models panel's keys included.
+    const servable = await isModelServableForAccount({
       userId,
       accountId,
       projectId,
       freeModelsOnly,
       model: requestedModel,
       providerSecretPools,
+      ...scope,
     });
-    // A model reached only through pooled keys needs a key selection, and a
-    // caller that names only the model (the CLI, the SDK, a chat channel)
-    // names none: it was refused here. Select every key the caller may use
-    // for its provider, so they rotate — the same keys the web offers.
-    // Personal keys only in a session private to them that acts on their
-    // behalf (spec 2026-09-22 §2.3); a child session's human is its
-    // parent's, unknown here, so it gets shared keys only.
-    if (!servable && providerSecretPools === undefined && pooledProviderSecrets) {
-      const personal =
-        visibility === 'private' && !input.callerSessionId
-          ? decideSessionOnBehalfOf({
-              userId,
-              origin,
-              // The metadata the session will carry: the request's, then the caller's.
-              metadata: { ...normalizeJsonObject(body.metadata), ...normalizeJsonObject(input.metadata) },
-              isAccountMember: true,
-              slackRequiresUserIdentity: config.SLACK_REQUIRE_USER_IDENTITY !== false,
-              teamsRequiresUserIdentity: config.TEAMS_REQUIRE_USER_IDENTITY !== false,
-            })
-          : null;
-      const selection = await usableProviderKeys({
-        accountId,
-        projectId,
-        userId,
-        grantUserId: personal,
-        model: requestedModel,
-      }).catch(() => null);
-      if (selection && agentMayUseEnv(grantFromLoadedAgents(agentName, loadedAgents), selection.envVar)) {
-        const selected = { [selection.providerId]: selection.secretIds };
-        servable = await isModelServableForAccount({
-          userId,
-          accountId,
-          projectId,
-          freeModelsOnly,
-          model: requestedModel,
-          providerSecretPools: selected,
-        });
-        if (servable) providerSecretPools = selected;
-      }
-    }
     if (!servable) {
       return {
         error: {
@@ -962,6 +945,7 @@ async function resolveSessionModel(params: {
         explicit: null,
         freeModelsOnly,
         providerSecretPools,
+        ...scope,
       });
       // A child session (another session called create) whose agent pins no
       // model runs on the model its parent's turn runs, not the project
@@ -971,7 +955,7 @@ async function resolveSessionModel(params: {
       const parentModel = input.callerSessionId && resolved.source !== 'agent' ? parentTurnModel(body.runtime_context) : null;
       if (
         parentModel &&
-        (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: parentModel, providerSecretPools }))
+        (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: parentModel, providerSecretPools, ...scope }))
       ) {
         sessionModel = toSessionModelRef(parentModel);
         sessionModelSource = 'explicit';
@@ -987,7 +971,7 @@ async function resolveSessionModel(params: {
         // No default: the box would boot with no model, and pi does not start
         // without one. The web names the person's pick only on the first prompt.
         const picked = firstPromptModelRef(body.pending_prompt);
-        if (picked && (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: picked, providerSecretPools }))) {
+        if (picked && (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: picked, providerSecretPools, ...scope }))) {
           sessionModel = toSessionModelRef(picked);
           sessionModelSource = 'explicit';
         }

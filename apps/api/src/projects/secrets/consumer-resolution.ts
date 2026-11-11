@@ -9,6 +9,16 @@ import { SecretUndecryptableError } from '../../secrets/undecryptable';
 import { decryptProjectSecret } from './envelope';
 import { secretAudienceRank } from './grant-policy';
 import { accountKeyOfWorkspace } from '../../workspaces/rows';
+import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
+
+/**
+ * A legacy `llm_gateway` row that moved to the named store
+ * (`secrets/llm-credential-move.ts`) is never read again: its named account
+ * serves. Every other consumer reads as before.
+ */
+function notMovedFor(consumer: SecretConsumer) {
+  return consumer === 'llm_gateway' ? [legacySecretNotMoved(projectSecrets.secretId)] : [];
+}
 
 export interface ProjectSecretConsumerRead {
   projectId: string;
@@ -92,6 +102,7 @@ export async function getProjectSecretConsumerConfigurationStatus(input: {
         eq(projectSecrets.projectId, input.projectId),
         eq(projectSecrets.name, normalizedName),
         isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
   if (rows.length === 0) return 'missing';
@@ -135,6 +146,7 @@ export async function listProjectSecretNamesForConsumer(input: {
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 
@@ -227,6 +239,7 @@ async function loadProjectSecretConsumerRows(
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 

@@ -295,8 +295,9 @@ describe('resolveProjectSharedProviderSecrets: the ChatGPT accounts an unconfigu
   });
 
   test('a principal that cannot read the project, or is not an account member, gets nothing', async () => {
-    expect(await shared(OUTSIDER, null)).toEqual({ coolingDown: false, secrets: [] });
-    expect(await shared(STRANGER, null)).toEqual({ coolingDown: false, secrets: [] });
+    // `withheld` (#12483) counts the project's keys the caller may not use.
+    expect(await shared(OUTSIDER, null)).toMatchObject({ coolingDown: false, secrets: [] });
+    expect(await shared(STRANGER, null)).toMatchObject({ coolingDown: false, secrets: [] });
   });
 
   test('an account cooling down is skipped; when every usable account cools down, the earliest retry is reported', async () => {

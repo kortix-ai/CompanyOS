@@ -26469,7 +26469,7 @@
     "notStarted": "未開始",
     "reconnectToSee": "使用状況を見るには再接続してください",
     "availableNow": "現在利用可能",
-    "availableCount": "{total} 件中 {available} 件",
+    "availableCount": "{total, plural, other {# 件}}中 {available} 件",
     "nextBack": "次の再開",
     "rowPeak": "{window} · {percent}% 使用",
     "rowSomeLimited": "{total} 件中 {limited} 件が上限",

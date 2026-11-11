@@ -27,7 +27,7 @@ const light = (at: string, strength = 30): CSSProperties => ({
 /** What the one prompt does, in order: the onboarding is the product. */
 const STEPS = [
   { title: 'Finds your software.', body: 'It scans the codebase for every tool you use and asks about the ones it cannot see. Names only, never a secret value.' },
-  { title: 'Connects it.', body: 'Secrets, 3,000+ app connectors, Slack and a dev environment built from your repo.' },
+  { title: 'Connects it.', body: 'Secrets, 3,000+ app connectors, Slack and an environment built from your repo.' },
   { title: 'Sets the signals.', body: 'Issues, merges, errors, messages, signups, schedules. You pick what the agents listen to.' },
   { title: 'Runs your loops.', body: 'A ready-made factory or any loop you describe. All of it in one kortix.yaml.' },
   { title: 'Proves it, then stays.', body: 'It loops until one real run finishes. Then it adds the Kortix MCP server to your coding agent, so the next loop is one sentence.' },

@@ -1270,17 +1270,54 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
     expect(JSON.stringify(body)).not.toContain('plaintext-test-value');
   });
 
-  test('flag only inherited from the platform default: a known name keeps the runtime default', async () => {
+  test('flag only inherited from the platform default: a known name is created network-delivered', async () => {
     egressFlagOn = null;
     const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'ANTHROPIC_API_KEY', value: 'plaintext-test-value' }),
+      body: JSON.stringify({ name: 'OPENAI_API_KEY', value: 'plaintext-test-value' }),
     });
     egressFlagOn = true;
     expect(response.status).toBe(200);
-    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'default' });
-    expect(row).toMatchObject({ consumer: 'sandbox' });
+    expect((await response.json()).delivery_choice).toEqual({
+      strategy: 'egress',
+      reason: 'known_api_host',
+      hosts: ['api.openai.com'],
+    });
+    expect(row).toMatchObject({
+      strategy: 'egress',
+      consumer: 'network',
+      egressPolicy: { rules: [{ host: 'api.openai.com' }] },
+    });
+  });
+
+  test.each(['HF_TOKEN', 'GOOGLE_API_KEY', 'AWS_BEARER_TOKEN_BEDROCK', 'WANDB_API_KEY'])(
+    'flag inherited: the multi-use name %s keeps the runtime default',
+    async (name) => {
+      egressFlagOn = null;
+      const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, value: 'plaintext-test-value' }),
+      });
+      egressFlagOn = true;
+      expect(response.status).toBe(200);
+      expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'default' });
+      expect(row).toMatchObject({ consumer: 'sandbox' });
+    },
+  );
+
+  test('flag inherited: an explicit runtime choice for a known name stays runtime', async () => {
+    egressFlagOn = null;
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'ANTHROPIC_API_KEY', value: 'plaintext-test-value', strategy: 'runtime' }),
+    });
+    egressFlagOn = true;
+    expect(response.status).toBe(200);
+    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'requested' });
+    expect(row).toMatchObject({ strategy: 'runtime', consumer: 'sandbox' });
   });
 
   test('flag on: an unknown name keeps the runtime default and says so', async () => {

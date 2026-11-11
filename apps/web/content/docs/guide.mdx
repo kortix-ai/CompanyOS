@@ -1434,6 +1434,8 @@ You also choose how the secret reaches the sandbox:
 - **Egress-enforced.** The sandbox gets a stand-in that is worthless on its own. Kortix swaps in the real value outside the sandbox, and only on requests to the web addresses you list.
 - **Disabled.** The value stays stored and reaches no session.
 
+A new secret whose name belongs to a known model API, such as `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, is egress-enforced by default, with that API's web address approved. Every other new secret is an environment variable. A name that other tools also read, such as `GITHUB_TOKEN` or `HF_TOKEN`, is always an environment variable by default. Pick a delivery when you save, and Kortix keeps it. After a save, Kortix tells you the delivery the secret got and why. An egress-enforced value that a response echoes back comes back as its stand-in.
+
 <a id="verify-it-with-two-probes" />
 
 To check egress-enforced delivery, run two probes in a session. First, print the variable: it shows the stand-in, not the real value. Then call an endpoint of the API that uses the credential, never one that echoes request headers back: `200` means Kortix swapped in the real value, `401` means it did not.

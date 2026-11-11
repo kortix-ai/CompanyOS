@@ -33,7 +33,7 @@ import { isGatewayManagedEnv, secretApiHostsForName } from '../../llm-gateway/sa
 import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-default';
 import { createRoute, z } from '@hono/zod-openapi';
 import { featureDisabledBody } from '../../feature-flags/gate';
-import { featureFlagExplicitlyOn, resolveFeatureFlag } from '../../feature-flags/registry';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
@@ -391,18 +391,18 @@ export function registerSecretsRoutes(): void {
       return c.json(featureDisabledBody('secrets_egress'), 403);
     }
     // A NEW secret with no requested delivery whose name belongs to a known API
-    // host is network-delivered when the project itself switched
-    // `secrets_egress` on. The value stays server-side and the box gets a handle
-    // spendable only on that host. An inherited platform default of on is NOT
-    // enough: `secrets_egress` defaults on for every project (it offers the
-    // option), and this changes where a value goes without anyone choosing it.
-    // Flag not explicitly on, an update, or an unknown name: the runtime default.
+    // host is network-delivered wherever `secrets_egress` is effectively on
+    // (the platform default is on). The value stays server-side and the box
+    // gets a handle spendable only on that host. A name other tools also read
+    // maps to no host (`isMultiUseCredentialName`). An update, an unknown name,
+    // signing material or the flag off: the runtime default. Existing rows
+    // never change here: an update keeps its stored delivery.
     const createDefault = existing
       ? null
       : chooseSecretCreateDefault({
           body,
           value,
-          egressEnabled: egressEnabled && featureFlagExplicitlyOn(loaded.row.metadata, 'secrets_egress'),
+          egressEnabled,
           hosts: secretApiHostsForName(name),
         });
     const insertStrategy = explicitStrategy ?? createDefault?.strategy;

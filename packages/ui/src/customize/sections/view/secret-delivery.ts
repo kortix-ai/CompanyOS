@@ -363,7 +363,7 @@ export const SIGNING_CREDENTIAL_NOTE =
 
 export type SecretClassification = {
   /** The exposure the dialog opens on. Never `disabled` — nothing is created
-   *  switched off. */
+   *  switched off. `enforced` only when the API would choose it too. */
   exposure: Exclude<SecretExposure, 'disabled'>;
   /** Hosts to prefill. Empty unless the catalog names the vendor's API host. */
   hosts: string[];
@@ -428,20 +428,24 @@ function hostCatalog(): SecretApiHostCatalogEntry[] {
  *     that explains why. This outranks the key name because it is a property
  *     of the credential itself: `AWS_ACCESS_KEY_ID` pasted as an `AKIA…` value
  *     cannot be enforced at any boundary, whatever the catalog says.
- *  2. **A known model key.** `environment`, but the vendor's API host is still
- *     prefilled from the same catalog the LLM providers screen reads (or
- *     the curated host when that provider's SDK hardcodes the URL). The
- *     host waits ready so that a project which has turned ON the experimental
- *     `secrets_egress` flag and switches to enforced does not have to type it.
+ *  2. **A known API key.** The vendor's API host is prefilled from the same
+ *     catalog the LLM providers screen reads (or the curated host when that
+ *     provider's SDK hardcodes the URL). With `egressDefault` (the project's
+ *     effective `secrets_egress`) the dialog opens on `enforced`: the API
+ *     creates such a secret network-delivered when the request names no
+ *     delivery (`chooseSecretCreateDefault`, apps/api). Without it, on
+ *     `environment` with the host waiting ready.
  *  3. **Everything else.** `environment` with an empty host list.
  *
- * The default is ALWAYS `environment`: the real value loads into the sandbox,
- * the mode that needs no setup and works on every provider. Enforced (network
- * substitution) is an experimental opt-in behind `secrets_egress`; a new secret
- * is never defaulted onto it, so the default never points at an option the
- * picker may not even show.
+ * The opening answer is a preview. The API decides the delivery of a secret
+ * the user did not choose for, and the dialog reports what it decided
+ * (`secretDeliveryChoiceNotice`).
  */
-export function classifyNewSecret(input: { key: string; value: string }): SecretClassification {
+export function classifyNewSecret(input: {
+  key: string;
+  value: string;
+  egressDefault?: boolean;
+}): SecretClassification {
   const key = input.key.trim().toUpperCase();
   const provider = key ? (providerByEnvVar().get(key) ?? null) : null;
   const modelProvider = provider ? { id: provider.id, label: provider.label } : null;
@@ -456,9 +460,10 @@ export function classifyNewSecret(input: { key: string; value: string }): Secret
   // The same table the API reads when it picks a delivery for a new secret
   // (`@kortix/shared/secret-api-hosts`): catalog host, else the curated host
   // for an SDK-hardcoded provider, never a host for a multi-use name.
+  const hosts = knownSecretApiHosts(key, hostCatalog());
   return {
-    exposure: 'environment',
-    hosts: knownSecretApiHosts(key, hostCatalog()),
+    exposure: input.egressDefault && hosts.length > 0 ? 'enforced' : 'environment',
+    hosts,
     modelProvider,
     signingNote: null,
   };
@@ -820,6 +825,59 @@ export function secretDeliverySyncWarning(
   };
 }
 
+export type SecretDeliveryChoice = {
+  strategy: SecretDeliveryStrategy;
+  /** Why the API stored this delivery: the request named it (`requested`), the
+   *  name belongs to a known API host (`known_api_host`), the row already had
+   *  one (`existing`), or nothing applied (`default`). */
+  reason: 'requested' | 'known_api_host' | 'existing' | 'default';
+  /** The hosts of a `known_api_host` choice. */
+  hosts: string[];
+};
+
+const DELIVERY_CHOICE_REASONS = new Set(['requested', 'known_api_host', 'existing', 'default']);
+
+/**
+ * Read the `delivery_choice` block `POST /secrets` returns. Absent on older
+ * servers and on the strategy and share routes, so an unknown shape reads as
+ * null and the dialog says nothing extra.
+ */
+export function readSecretDeliveryChoice(result: unknown): SecretDeliveryChoice | null {
+  if (typeof result !== 'object' || result === null) return null;
+  const choice = (result as { delivery_choice?: unknown }).delivery_choice;
+  if (typeof choice !== 'object' || choice === null) return null;
+  const record = choice as Record<string, unknown>;
+  if (typeof record.strategy !== 'string' || typeof record.reason !== 'string') return null;
+  if (!DELIVERY_CHOICE_REASONS.has(record.reason)) return null;
+  return {
+    strategy: record.strategy as SecretDeliveryStrategy,
+    reason: record.reason as SecretDeliveryChoice['reason'],
+    hosts: Array.isArray(record.hosts) ? record.hosts.filter((h): h is string => typeof h === 'string') : [],
+  };
+}
+
+/**
+ * What a NEW secret actually got, and why, for the save toast.
+ *
+ * Shown only when the API decided: a secret saved without a delivery choice
+ * (`known_api_host`, `default`). A delivery the user picked (`requested`) or a
+ * stored row (`existing`) needs no explanation.
+ */
+export function secretDeliveryChoiceNotice(
+  result: unknown,
+  tI18nComplete: UiTranslator,
+): string | null {
+  const choice = readSecretDeliveryChoice(result);
+  if (!choice) return null;
+  if (choice.reason === 'known_api_host' && choice.strategy === 'egress') {
+    return tI18nComplete('text8a1d77638e2c', { value0: choice.hosts.join(', ') });
+  }
+  if (choice.reason === 'default' && choice.strategy === 'runtime') {
+    return tI18nComplete.raw('textfc42c4fb00ea');
+  }
+  return null;
+}
+
 const EXACT_HOST =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -934,8 +992,8 @@ export type SecretEchoNotice = {
  * what a WORKING policy looks like when the upstream echoes the credential
  * back.
  *
- * There is one answer now. The relay returns an ordinary response with
- * `[REDACTED]` in place of the value (`redactSecretFromResponse`,
+ * There is one answer now. The relay returns an ordinary response with the
+ * secret's handle in place of the value (`resealSecretInResponse`,
  * apps/api/src/secrets/broker/substitution.ts), on every sandbox provider. The
  * provider-edge story — a cut connection that reads as `curl: (52) Empty reply
  * from server` — described a mechanism that no longer serves any project, and

@@ -92,7 +92,9 @@ export interface GatewayConnector {
     | 'graphql'
     | 'http'
     | 'channel'
-    | 'computer';
+    | 'computer'
+    // An App of the project exposing tools (`apps.<slug>.tools`).
+    | 'app';
   platform?: string | null;
   /** Computer connectors: the paired machine of the resolved account. Null
    *  when the machine was unpaired. */
@@ -191,6 +193,23 @@ export interface GatewayDeps {
     sessionId: string;
     tokenId: string;
   }): Promise<string | null>;
+  /**
+   * Runs a tool an App of the project exposes (`app` binding): the in-cluster
+   * call to the App (apps/app-tool-call.ts `callAppTool`), with the caller
+   * headers it adds. Optional: absent = an App tool call fails with
+   * `app connector calls are not wired here`.
+   */
+  callAppTool?(input: {
+    projectId: string;
+    app: string;
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    body?: string;
+    caller: { userId: string; sessionId: string | null; actingTokenId: string | null; agentSlug: string | null; tool: string };
+    signal?: AbortSignal;
+    maxResponseBytes: number;
+  }): Promise<{ status: number; ok: boolean; text: string }>;
   /**
    * WHY `loadConnectorBySlug` answered null. That function collapses three
    * states into one null — no such row, a disabled row, and a row with no
@@ -1018,7 +1037,7 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
   // approval or upstream call. Channel calls fill their path values from the
   // session context later, so they are exempt.
   const emptyPathArg =
-    connector.provider !== 'channel' && (action.binding.kind === 'openapi' || action.binding.kind === 'http')
+    connector.provider !== 'channel' && (action.binding.kind === 'openapi' || action.binding.kind === 'http' || action.binding.kind === 'app')
       ? missingPathArg(action.binding.path, input.args)
       : null;
   if (emptyPathArg !== null) {
@@ -1618,6 +1637,24 @@ async function runConnectorAction(
           args: providerArgs,
           paramHints: paramHintsFromSchema(action.inputSchema),
           appAuthorization,
+          ...(deps.callAppTool
+            ? {
+                callApp: (request) =>
+                  deps.callAppTool!({
+                    projectId: input.projectId,
+                    ...request,
+                    caller: {
+                      userId: input.subject.userId,
+                      sessionId: input.sessionId ?? null,
+                      actingTokenId: input.actingTokenId ?? null,
+                      agentSlug: input.caller?.agentSlug ?? null,
+                      tool: `connectors.${fullPath}`,
+                    },
+                    signal,
+                    maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES,
+                  }),
+              }
+            : {}),
           fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
         }),
       );

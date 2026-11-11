@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  buildAppInstallPrompt,
   buildRegistryProjectInstallPrompt,
   buildTemplateInstallPrompt,
 } from './marketplace-install-prompts';
@@ -132,3 +133,32 @@ describe('buildRegistryProjectInstallPrompt — the one kortix.yaml layout', () 
   });
 });
 
+
+describe('buildAppInstallPrompt', () => {
+  const entry = (manifest: Record<string, unknown>) => ({
+    item: {
+      name: 'orders',
+      title: 'Orders',
+      description: 'Order desk',
+      files: [{ path: 'apps/orders/server.js', target: 'apps/orders/server.js' }],
+      meta: { app: { slug: 'orders', manifest } },
+    },
+  });
+
+  test('merges the App folder and its apps.<slug> block, opens a change request, deploys after merge', () => {
+    const prompt = buildAppInstallPrompt(entry({ path: 'apps/orders', type: 'dockerfile' }), 'kortix/orders');
+    expect(prompt).toContain('`apps.orders` block');
+    expect(prompt).toContain('"type": "dockerfile"');
+    expect(prompt).toContain('- apps/orders/server.js');
+    expect(prompt).toContain('marketplace item id "kortix/orders"');
+    expect(prompt).toContain('Open a change request');
+    expect(prompt).toContain('kortix apps deploy');
+    expect(prompt).not.toContain('app-orders');
+  });
+
+  test('an App that exposes tools tells the agent to grant app-<slug>', () => {
+    const prompt = buildAppInstallPrompt(entry({ path: 'apps/orders', tools: 'openapi.json' }), 'kortix/orders');
+    expect(prompt).toContain('the connector `app-orders`');
+    expect(prompt).toContain('Add `app-orders` to `connectors:`');
+  });
+});

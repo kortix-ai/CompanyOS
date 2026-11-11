@@ -128,6 +128,11 @@ export interface AppBlockV2 {
   labels?: string[];
   /** Where Kortix shows the App: `{ listed, preview: live | none, parent }`. */
   display?: AppDisplay;
+  /**
+   * An OpenAPI 3 document (JSON or YAML) inside the App's folder: each
+   * operation becomes one tool of the connector `app-<slug>`.
+   */
+  tools?: string;
 }
 
 /**

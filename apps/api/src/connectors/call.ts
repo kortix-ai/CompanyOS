@@ -1105,6 +1105,20 @@ export async function listMcpTools(opts: {
   return tools;
 }
 
+/** The request an `app` binding hands the gateway's App transport. */
+export interface AppCallRequest {
+  app: string;
+  method: string;
+  /** Path and query string. */
+  path: string;
+  headers: Record<string, string>;
+  body?: string;
+}
+export type AppCall = (request: AppCallRequest) => Promise<{ status: number; ok: boolean; text: string }>;
+
+/** Placeholder origin for building an App request's path; it is never fetched. */
+const APP_REQUEST_ORIGIN = 'http://app.kortix.invalid';
+
 /**
  * Top-level execute — dispatch by binding kind, build the request, perform it.
  * `secret` is the resolved plaintext credential (server-side only).
@@ -1130,6 +1144,12 @@ export async function executeCall(opts: {
    * key. Wins over a static connector header of the same name.
    */
   appAuthorization?: string | null;
+  /**
+   * Runs an `app` binding: the gateway's in-cluster call to the App
+   * (apps/app-tool-call.ts). It receives the request built from the arguments
+   * and adds the caller headers itself. Absent = an `app` binding throws.
+   */
+  callApp?: AppCall;
   now?: () => Date;
   fetchImpl: FetchImpl;
 }): Promise<ExecResult> {
@@ -1184,6 +1204,29 @@ export async function executeCall(opts: {
       bodyMediaType: binding.bodyMediaType,
     });
     return performRequest(withAppAuthorization(req), opts.fetchImpl, opts.auth ?? NO_AUTH, opts.secret ?? null, opts.now ?? (() => new Date()));
+  }
+
+  if (binding.kind === 'app') {
+    if (!opts.callApp) throw new Error('app connector calls are not wired here');
+    // Path, query and body exactly as an openapi binding builds them. No
+    // connector headers, no auth and no secret: the App gets none of them.
+    const req = buildHttpRequest({
+      baseUrl: APP_REQUEST_ORIGIN,
+      method: binding.method,
+      pathTemplate: binding.path,
+      args: opts.args,
+      paramHints: opts.paramHints,
+      bodyMediaType: binding.bodyMediaType,
+    });
+    const url = new URL(req.url);
+    const answer = await opts.callApp({
+      app: binding.app,
+      method: req.method,
+      path: `${url.pathname}${url.search}`,
+      headers: req.headers,
+      ...(req.body !== undefined ? { body: req.body } : {}),
+    });
+    return { status: answer.status, ok: answer.ok, data: parseResponseBody(answer.text) };
   }
 
   if (binding.kind === 'mcp') {

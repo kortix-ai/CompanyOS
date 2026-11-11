@@ -499,3 +499,77 @@ function boundedPlainSchema(node: unknown): Record<string, unknown> | null {
 }
 
 /* ─── dispatch ───────────────────────────────────────────────────────────── */
+
+/* ─── App tools (`apps.<slug>.tools`) ────────────────────────────────────── */
+
+const RISKS: readonly Risk[] = ['read', 'write', 'destructive'];
+
+/** Refused App tools document: the sync stores the connector as `error` with this message. */
+export class AppToolsDocumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AppToolsDocumentError';
+  }
+}
+
+/**
+ * An App's OpenAPI 3 document → one action per operation, bound to the App
+ * itself (`{ kind: 'app', app, method, path }`). Stricter than a connector's
+ * OpenAPI: every operation needs an `operationId` (it is the tool's stable
+ * name), and `x-kortix-risk: read | write | destructive` on an operation
+ * overrides the method's risk. The input schema is the OpenAPI one: path and
+ * query parameters plus the JSON body under `body`.
+ */
+export function normalizeAppTools(doc: any, app: string): NormalizedAction[] {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new AppToolsDocumentError('the tools document is not an OpenAPI object');
+  }
+  const version = typeof doc.openapi === 'string' ? doc.openapi : '';
+  if (!version.startsWith('3.')) {
+    throw new AppToolsDocumentError(`the tools document must be OpenAPI 3 (\`openapi: 3.x\`), got ${JSON.stringify(doc.openapi ?? null)}`);
+  }
+  if (!doc.paths || typeof doc.paths !== 'object' || Object.keys(doc.paths).length === 0) {
+    throw new AppToolsDocumentError('the tools document has no `paths`');
+  }
+  const riskOverrides = new Map<string, Risk>();
+  const seen = new Map<string, string>();
+  for (const [pathTemplate, pathItem] of Object.entries(doc.paths as Record<string, any>)) {
+    if (!pathItem || typeof pathItem !== 'object') continue;
+    if (!pathTemplate.startsWith('/')) {
+      throw new AppToolsDocumentError(`path "${pathTemplate}" must start with "/"`);
+    }
+    for (const method of OPENAPI_METHODS) {
+      const op = pathItem[method];
+      if (!op || typeof op !== 'object') continue;
+      const where = `${method.toUpperCase()} ${pathTemplate}`;
+      const operationId = typeof op.operationId === 'string' ? op.operationId.trim() : '';
+      if (!operationId) throw new AppToolsDocumentError(`operation ${where} has no operationId: every App tool needs one`);
+      const path = seg(operationId);
+      if (!path) throw new AppToolsDocumentError(`operation ${where} has an operationId with no letters or digits`);
+      const other = seen.get(path);
+      if (other) throw new AppToolsDocumentError(`operations ${other} and ${where} have the same operationId "${path}"`);
+      seen.set(path, where);
+      const declared = op['x-kortix-risk'];
+      if (declared !== undefined) {
+        if (!RISKS.includes(declared)) {
+          throw new AppToolsDocumentError(`operation ${where}: x-kortix-risk must be read, write or destructive`);
+        }
+        riskOverrides.set(path, declared);
+      }
+    }
+  }
+  return normalizeOpenApi(doc).map((action) => {
+    const binding = action.binding as Extract<ActionBinding, { kind: 'openapi' }>;
+    return {
+      ...action,
+      risk: riskOverrides.get(action.path) ?? action.risk,
+      binding: {
+        kind: 'app',
+        app,
+        method: binding.method,
+        path: binding.path,
+        ...(binding.bodyMediaType ? { bodyMediaType: binding.bodyMediaType } : {}),
+      },
+    };
+  });
+}

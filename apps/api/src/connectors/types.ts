@@ -51,6 +51,10 @@ export type ActionBinding =
   | { kind: 'graphql'; operation: 'query' | 'mutation'; field: string }
   | { kind: 'mcp'; tool: string }
   | { kind: 'http'; method: string; path: string; bodyMediaType?: string }
+  // A Kortix App of the same project exposing tools (`apps.<slug>.tools`, an
+  // OpenAPI 3 document). The gateway calls the App's serving machine in-cluster
+  // (apps/app-call.ts), never by URL, and sends it no stored credential.
+  | { kind: 'app'; app: string; method: string; path: string; bodyMediaType?: string }
   // Agent Computer Tunnel: relay one machine-bound RPC (`fs.read`,
   // `desktop.cua.click`, …). The gateway routes these through the shared tunnel
   // RPC core instead of executeCall.

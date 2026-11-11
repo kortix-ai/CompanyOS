@@ -7758,6 +7758,10 @@ export const connectorProviderEnum = kortixSchema.enum('connector_provider', [
   // credential, with per-machine auth/scope enforced by the tunnel permission
   // layer.
   'computer',
+  // A tool-exposing Kortix App of the project (`apps.<slug>.tools`): one
+  // connector `app-<slug>` per App, its catalog read from the App's OpenAPI
+  // document, its calls made in-cluster to the App with no credential.
+  'app',
 ]);
 
 export const connectorStatusEnum = kortixSchema.enum('connector_status', [

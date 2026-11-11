@@ -1029,7 +1029,40 @@ const APP_KEYS = new Set([
   'install_command', 'build_command', 'spa', 'readiness_path', 'idle_timeout_seconds',
   'always_on', 'uses', 'resources', 'env', 'secrets',
   'processes', 'http_service', 'services', 'mounts', 'vm', 'deploy', 'labels', 'display',
+  'tools',
 ]);
+
+/** The file suffixes `apps.<slug>.tools` accepts: an OpenAPI 3 document. */
+const APP_TOOLS_SUFFIX_RE = /\.(json|ya?ml)$/i;
+
+/**
+ * The App's source folder in the repo: `apps.<slug>.path`, or the default
+ * `apps/<slug>` (the kortix-apps skill's layout). `tools` resolves inside it.
+ */
+export function appSourceFolder(slug: string, block: { path?: unknown }): string {
+  const declared = typeof block.path === 'string' ? block.path.trim().replace(/^\.\//, '').replace(/\/+$/, '') : '';
+  return declared || `apps/${slug}`;
+}
+
+/**
+ * The repo path of the OpenAPI document an App exposes as tools
+ * (`apps.<slug>.tools`), or null when the App declares none or the value is
+ * not a valid path inside the App's folder (`validateAppsV2` names why).
+ */
+export function appToolsDocumentPath(slug: string, block: { path?: unknown; tools?: unknown }): string | null {
+  if (typeof block.tools !== 'string') return null;
+  const tools = block.tools.trim().replace(/^\.\//, '');
+  if (appToolsPathIssue(tools)) return null;
+  return `${appSourceFolder(slug, block)}/${tools}`;
+}
+
+function appToolsPathIssue(tools: string): string | null {
+  if (!tools) return 'must not be empty.';
+  if (tools.startsWith('/')) return "must be a path inside the App's folder (no leading \"/\").";
+  if (tools.split('/').some((part) => part === '..' || part === '')) return "must stay inside the App's folder (no \"..\" or empty segments).";
+  if (!APP_TOOLS_SUFFIX_RE.test(tools)) return 'must name an OpenAPI 3 document: a .json, .yaml or .yml file.';
+  return null;
+}
 /** An App slug as the Apps API accepts it (`uses` entries name live Apps). */
 const APP_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -1221,6 +1254,12 @@ export function validateAppsV2(node: unknown, path: string, issues: ManifestIssu
     }
     validateAppStringMap(value.env, `${where}.env`, issues, true);
     validateAppStringMap(value.secrets, `${where}.secrets`, issues, true);
+    if (value.tools !== undefined) {
+      const issue = typeof value.tools === 'string'
+        ? appToolsPathIssue(value.tools.trim().replace(/^\.\//, ''))
+        : 'must be a string path to an OpenAPI 3 document in the App\'s folder.';
+      if (issue) issues.push({ path: `${where}.tools`, message: issue, severity: 'error' });
+    }
   }
 }
 

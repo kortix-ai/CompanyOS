@@ -1146,7 +1146,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `subagents` | grant | `none` | Agents this agent may start with the `agent` tool (alias `task`): declared, enabled, `mode` `subagent` or `all`, and not itself. A subagent cannot start another subagent. |
 | `commands` | grant | `none` | Registered commands the agent runs. |
 | `extensions` | grant or map | — | Registered extensions that a session of the agent loads. `{ exclude: [...] }` grants every one but those. "*" (every name; alias `all`), "none" (default), a list of names, or `{ exclude: [names] }` for every name but those. |
-| `connectors` | grant | `none` | Connector slugs the agent may call. |
+| `connectors` | grant | `none` | Connector slugs the agent may call. An App that exposes tools (`apps.<slug>.tools`) is the connector `app-<slug>`. |
 | `connectors_required` | list | — | Connector slugs, a subset of `connectors`. Sessions do not check it. |
 | `policy_sets` | map | the base rules | Connector slug → the name of a policy set on that connector. See [Connector rules and approvals](#connector-rules-and-approvals). |
 | `secrets` | grant | `none` | Secret names the agent's sandbox receives. |
@@ -1312,7 +1312,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `apps.<slug>` | map | — | One App's deploy settings. Any other key is an error. Its keys: `path`, `type`, `image`, `dockerfile`, `command`, `port`, `root`, `output_dir`, `install_command`, `build_command`, `spa`, `readiness_path`, `idle_timeout_seconds`, `always_on`, `uses`, `resources`, `env`, `secrets`, `processes`, `http_service`, `services`, `mounts`, `vm`, `deploy`, `labels`, `display`. Full reference: [Configure in kortix.yaml](/docs/developers#configure-in-kortixyaml). |
+| `apps.<slug>` | map | — | One App's deploy settings. Any other key is an error. Its keys: `path`, `type`, `image`, `dockerfile`, `command`, `port`, `root`, `output_dir`, `install_command`, `build_command`, `spa`, `readiness_path`, `tools`, `idle_timeout_seconds`, `always_on`, `uses`, `resources`, `env`, `secrets`, `processes`, `http_service`, `services`, `mounts`, `vm`, `deploy`, `labels`, `display`. Full reference: [Configure in kortix.yaml](/docs/developers#configure-in-kortixyaml). |
 
 {/* generated:kortix-yaml:end */}
 
@@ -3560,6 +3560,54 @@ never accepts a Kortix credential.
 An `openapi` or `http` connector whose base URL is an App of the same workspace
 needs no Kortix credential. The connector gateway adds a signed, 60-second
 assertion for the calling session. See [Connectors](/docs/guide#connectors).
+
+### Apps that expose tools
+
+A server App gives agents tools with `apps.<slug>.tools`: the path of an
+OpenAPI 3 document (`.json`, `.yaml` or `.yml`) inside the App's folder
+(`apps.<slug>.path`, default `apps/<slug>`). Every `kortix.yaml` sync makes it
+the connector `app-<slug>`, with one tool per operation:
+`connectors.app-<slug>.<operationId>`. Search, describe, call, the agent's
+`connectors:` grant, policies, approvals and the call log work as for every
+connector.
+
+```yaml
+apps:
+  orders:
+    path: apps/orders
+    type: dockerfile
+    command: ["node", "server.js"]
+    port: 3000
+    tools: openapi.json        # apps/orders/openapi.json
+agents:
+  support:
+    connectors: [app-orders]
+policies:
+  - match: app-orders.create_order
+    action: require_approval
+```
+
+| Rule | Behavior |
+|---|---|
+| Tool name | The operation's `operationId`, required. A document with an operation without one is refused; the sync error names the operation. |
+| Description | `summary`, else `description`. |
+| Input | Path and query parameters by name, the JSON request body under `body`. |
+| Risk | `GET` → `read`, `DELETE` → `destructive`, any other method → `write`. `x-kortix-risk: read \| write \| destructive` on the operation overrides it. |
+| Source | The document at the manifest's commit, not the running release. An edit applies on the next sync. |
+| Slug | `app-<slug>`. A `connectors:` entry with the same slug wins, and the sync reports the App's tools as an error. |
+
+A call wakes the App when it is stopped and goes in-cluster to its `http`
+service, like a trigger target, so a private App receives it. Kortix sends no
+stored credential. The request carries `x-kortix-app-viewer`, the person the
+call acts for, signed with the App's `KORTIX_APP_VIEWER_SECRET`
+(`readAppViewer(request)` from `@kortix/sdk/server`), and `x-kortix-tool`. An
+agent session call also carries `x-kortix-agent`, `x-kortix-session-id` and
+the 60-second `X-Kortix-App-Authorization` assertion. Authorize on the signed
+viewer only. The App's answer, with any status, is the tool's result.
+
+A marketplace item of type `registry:app` ships an App folder and its
+`apps.<slug>` block; the install session merges both and opens a change
+request. The App's releases stay its versions.
 
 ### Triggers and App events
 

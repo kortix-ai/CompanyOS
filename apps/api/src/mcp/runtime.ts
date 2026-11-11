@@ -844,7 +844,13 @@ async function listProjectsTool(ctx: ToolContext, _input: Record<string, unknown
   // `GET /v1/accounts` is a person's route and refuses it.
   const r = await callApi(ctx, 'GET', '/v1/workspaces');
   if (r.status >= 400) return apiResult(r);
-  const rows = JSON.parse(r.body) as Array<Record<string, any>>;
+  let rows = JSON.parse(r.body) as Array<Record<string, any>>;
+  // An agent key authorizes as the agent's service account, which is no
+  // member: /v1/workspaces lists nothing for it, /v1/projects lists its own.
+  if (rows.length === 0) {
+    const own = await callApi(ctx, 'GET', '/v1/projects');
+    if (own.status < 400) rows = JSON.parse(own.body) as Array<Record<string, any>>;
+  }
   const projects = rows.map((p) => ({
     project_id: p.project_id,
     name: p.name,

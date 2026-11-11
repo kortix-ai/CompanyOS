@@ -1123,8 +1123,9 @@ flow(
     await ctx.step("describe returns the route's input schema; call runs it as the token with the project filled in", async () => {
       const d = await verb("describe", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets" });
       d.status(200).body().has("$.risk", "read").exists("$.input_schema.properties.params");
-      const c = await verb("call", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets" });
-      c.status(200).body().has("$.status", "ok").exists("$.data.items");
+      // A cheap read: the call path under test is the verb, not the route behind it.
+      const c = await verb("call", { id: "kortix.GET /v1/workspaces/{workspaceId}" });
+      c.status(200).body().has("$.status", "ok").has("$.data.project_id", p.id);
       const listed = await verb("call", { id: "projects.list" });
       listed.status(200);
       if (!listed.json<{ data: Array<{ project_id: string }> }>().data.some((x) => x.project_id === p.id)) throw new Error("projects.list misses the project");

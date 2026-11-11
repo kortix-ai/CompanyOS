@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { accounts, changeRequests, iamRoles, projectGitConnections, projectGitCredentials, projectSecrets, projectSessions, projects, roleAssignments } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db';
-import { decryptProjectSecret, encryptProjectSecret } from '../secrets';
+import { decryptProjectSecret, encryptProjectSecret, projectSecretAad } from '../secrets';
 import type { GitHubRepo } from '../github';
 import { persistProjectRepositoryReplacement, RepositoryChangedError } from './repository-replacement';
 
@@ -129,7 +129,9 @@ withDb('repository replacement persists a validated source atomically', () => {
     const [target] = await db.select().from(projectSecrets).where(eq(projectSecrets.projectId, projectId));
     expect(target?.identifier).toBe('TS_AUTHKEY');
     expect(target?.valueEnc).not.toBe(encryptProjectSecret(sourceProjectId, 'source-secret'));
-    expect(decryptProjectSecret(projectId, target!.valueEnc)).toBe('source-secret');
+    // The copy is written as a v2 envelope bound to its identifier (a v1 source still reads).
+    expect(target!.valueEnc.startsWith('v2:')).toBe(true);
+    expect(decryptProjectSecret(projectId, target!.valueEnc, projectSecretAad('TS_AUTHKEY'))).toBe('source-secret');
   });
 
   test('missing source secret aborts the repository replacement', async () => {

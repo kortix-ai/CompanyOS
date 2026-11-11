@@ -63,8 +63,8 @@ flow(
       await ctx.step('seed an OpenAPI connector with two read actions on a runner-local upstream', async () => {
         const row = await db.query<{ connector_id: string }>(
           `INSERT INTO kortix.connectors (account_id, project_id, slug, name, provider_type, config, status)
-           VALUES ($1, $2, $3, $3, 'openapi', '{"auth":{"type":"none"}}'::jsonb, 'active') RETURNING connector_id`,
-          [team.id, p.id, slug],
+           VALUES ($1, $2, $3, $4, 'openapi', '{"auth":{"type":"none"}}'::jsonb, 'active') RETURNING connector_id`,
+          [team.id, p.id, slug, slug],
         );
         const connectorId = row.rows[0]?.connector_id;
         check(!!connectorId, 'the connector insert returns an id', connectorId);
@@ -76,8 +76,8 @@ flow(
         for (const path of ['ok', 'missing']) {
           await db.query(
             `INSERT INTO kortix.connector_actions (connector_id, path, name, description, input_schema, risk, binding)
-             VALUES ($1, $2, $2, $2, '{"type":"object","properties":{"q":{"type":"string","x-in":"query"}}}'::jsonb, 'read', $3::jsonb)`,
-            [connectorId, path, JSON.stringify({ kind: 'openapi', method: 'GET', path: `/api/${path}`, server: base })],
+             VALUES ($1, $2, $3, $4, '{"type":"object","properties":{"q":{"type":"string","x-in":"query"}}}'::jsonb, 'read', $5::jsonb)`,
+            [connectorId, path, path, path, JSON.stringify({ kind: 'openapi', method: 'GET', path: `/api/${path}`, server: base })],
           );
         }
       });

@@ -673,13 +673,19 @@ async function resolveSessionAgent(params: {
   // workflow runner. Nothing is picked for it from `default_agent` or the order
   // of the agents: an unnamed child is refused with the agents to name. A
   // router's worker is the exception: the router picks by space (above).
+  // Both refusals list the project agents and the exact field to set, so a
+  // caller (the CLI's `--agent`, an SDK host) can retry without guessing.
+  const startableAgents = () =>
+    loadedAgents.specs
+      .filter((spec) => spec.enabled && !spec.subagent && !isMyKortixAgentName(spec.name))
+      .map((spec) => spec.name);
   if (callerIsMeta && !requestedAgent && !callerIsFront && !isWorkflowRunnerContext(body.runtime_context)) {
-    const agents = loadedAgents.specs.filter((spec) => spec.enabled && !spec.subagent).map((spec) => spec.name);
+    const agents = startableAgents();
     return {
       error: {
         status: 400,
         body: {
-          error: `A session My Kortix starts names its agent: ${agents.join(', ') || 'none is declared'}. To start a colleague, give the agent tool inline instructions, and list the connectors and secrets it needs.`,
+          error: `A session My Kortix starts names its agent. ${nameAnAgentHint(agents)} To start a colleague, give the agent tool inline instructions, and list the connectors and secrets it needs.`,
           code: 'AGENT_REQUIRED',
           agents,
         },
@@ -689,13 +695,14 @@ async function resolveSessionAgent(params: {
   // An inline colleague (inline-colleague.ts) has My Kortix's own access, the list a person allowed it, and its own prompt.
   const myKortixColleague = platformMetaAgent && callerIsMeta && isInlineColleagueContext(body.runtime_context);
   if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker && !myKortixColleague) {
+    const agents = startableAgents();
     return {
       error: {
         status: 400,
         body: {
-          error:
-            'My Kortix cannot start another My Kortix session. Pick a project agent.',
+          error: `My Kortix cannot start another My Kortix session. ${nameAnAgentHint(agents)} To start a colleague, give the agent tool inline instructions.`,
           code: 'META_AGENT_RECURSION',
+          agents,
         },
       },
     };
@@ -714,6 +721,14 @@ async function resolveSessionAgent(params: {
       })).allowed);
 
   return { loadedAgents, projectDefaultAgent, agentName, platformMetaAgent, repositoryAccess, myKortixColleague };
+}
+
+/** The fix for an unnamed or My Kortix child: the field, the CLI flag and the agents to name. */
+function nameAnAgentHint(agents: string[]): string {
+  if (agents.length === 0) {
+    return 'No project agent is declared: add one under `agents:` in kortix.yaml, then set `agent_name` (CLI: `--agent <name>`).';
+  }
+  return `Set \`agent_name\` (CLI: \`--agent <name>\`) to one of: ${agents.join(', ')}.`;
 }
 
 /**

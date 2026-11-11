@@ -1,6 +1,6 @@
 ---
 title: Recover OpenCode-era conversations that never reached the session log
-status: prod Platinum done 2026-11-10 (6,258 of 6,425 written); 10 left for the todo-status fix and an 8 GB cap; Daytona written off (key revoked, owner decision)
+status: done and removed. Prod Platinum recovered (numbers under Status); Daytona written off; the script was deleted from the tree by the PR that set this status (restore it from git history: `git show 550757a87b:apps/api/src/scripts/recover-opencode-history.ts`)
 owner: platform
 updated: 2026-11-10
 ---
@@ -81,6 +81,10 @@ candidate filter takes those `invalid` rows (detail `todos.…`) again, up to 3
 attempts.
 
 ## Runbook
+
+The script is no longer in the tree. To run it again, restore the 9 files
+from `550757a87b` (`apps/api/src/scripts/recover-opencode-history.ts` and the
+folder beside it) on a branch, ship them in a release, then follow this runbook.
 
 Run it as a one-off ECS task of the environment (the worker task definition: its
 env, IAM and VPC), never on a laptop for prod: the files are customer data.
@@ -192,7 +196,13 @@ are stamped and skipped.
   to the key in `.env.prod` and `.env.dev` (unchanged in git; it worked on dev
   on 11-05). The prod plan counted 8,453 Daytona candidates; the owner decided
   not to recover them.
-- Open: the rerun of the 10 after the release that ships the todo fix:
-  `runbig` with `--apply --max-store-mb 8192 --concurrency 1`. pi sessions with
-  no log (146 Platinum since 08-19, `ses_pi…` roots) need a pi reader and are not
-  covered.
+- 2026-11-10 23:51Z, rerun after v0.15.4 shipped the todo fix (td `:14`,
+  2 vCPU / 16 GB, `--apply --max-store-mb 8192 --concurrency 1`, 12 sessions in
+  2.3 min): the 9 `invalid` sessions `written` (11 to 238 messages each; every
+  count matches `session_log_messages`), 1 more `no_store`. The 4,213 MB store
+  failed with `No space left on device`: the copy splits the whole store into the
+  box's `/tmp` before the download, and that box's disk cannot hold it. The owner
+  wrote it off. Final prod Platinum total: 6,267 `written`, 148 `empty_store`,
+  2 `no_store`, 9 not recovered.
+- Not covered: pi sessions with no log (146 Platinum since 08-19, `ses_pi…`
+  roots) need a pi reader.

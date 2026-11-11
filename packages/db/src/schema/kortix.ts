@@ -4472,6 +4472,10 @@ export const oauthAccessTokens = kortixSchema.table(
      *  the token acts as the person in every workspace (every token issued
      *  before 2026-11-06). */
     boundWorkspaceId: uuid('bound_workspace_id'),
+    /** The second factor the minting session passed: 'aal2', or NULL for none.
+     *  Set by the Apps gate for a viewer whose App cookie a browser session at
+     *  aal2 opened. The API honors it in `account_id` only. */
+    mfaAal: text('mfa_aal'),
   },
   (table) => [
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),
@@ -6819,6 +6823,9 @@ export const accessRequests = kortixSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
+  // One waitlist row per address: the request-access endpoint replays must be
+  // idempotent (KRTX-4699). Constraint, not a performance index.
+  (table) => [uniqueIndex('idx_access_requests_email').on(table.email)],
 );
 
 // ─── Change Requests ────────────────────────────────────────────────────────

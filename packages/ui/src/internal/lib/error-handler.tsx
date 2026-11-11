@@ -265,7 +265,6 @@ export const handleApiError = (
     (typeof errAny === 'object' ? errAny : null);
   const v2Code: string | undefined = v2Detail?.code ?? errAny?.code;
   const v2Message: string | undefined = v2Detail?.message ?? v2Detail?.error ?? errAny?.message;
-  const v2Balance: number = typeof v2Detail?.balance === 'number' ? v2Detail.balance : 0;
   // The blocked account (e.g. the project's team account), surfaced by the
   // billing 402s. Scopes the upgrade dialog so a non-billing member sees the
   // team's gated CTA, not their own primary account. Absent → primary account.
@@ -297,7 +296,6 @@ export const handleApiError = (
     useUpgradeDialogStore.getState().openUpgradeDialog({
       reason: v2Code,
       message: v2Message ?? '',
-      balance: v2Balance,
       accountId: v2AccountId,
       hasSubscription:
         typeof v2Detail?.has_subscription === 'boolean' ? v2Detail.has_subscription : undefined,

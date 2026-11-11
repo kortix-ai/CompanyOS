@@ -2576,6 +2576,10 @@ flow(
       expectIds(await rows(owner, { parent: 'root', started_by: 'others' }), [memberChat], 'others');
     });
 
+    await ctx.step('started_by=humans lists every person-started chat: mine and shared, never a machine run (KRTX-4705)', async () => {
+      expectIds(await rows(owner, { parent: 'root', started_by: 'humans' }), [memberChat, myChat], 'humans');
+    });
+
     await ctx.step('q searches server-side: a title match is `self`, a worker match returns its coordinator as `child`', async () => {
       const own = await rows(owner, { parent: 'root', q: 'APARTMENT rent' });
       expectIds(own, [myChat], 'q self');

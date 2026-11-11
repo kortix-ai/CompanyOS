@@ -35,14 +35,17 @@ mock.module('../lib/logger', () => ({
 const {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogKey,
+  isCredentialFenceDenial,
   isDeadCredential,
   isAgentGrantDenial,
+  markCredentialFenceDenial,
   markDeadCredential,
   markAgentGrantDenial,
 } = await import('./dead-credential-log');
 const { logWindowDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
 const { buildDenialError } = await import('../iam/denial-message');
+const { enforceTokenProjectScope } = await import('../middleware/auth-scope');
 
 // What authorizeV2 / assertAgentGrantAllows throw for an agent session whose
 // kortix_permissions lack the action: buildDenialError's typed 403, marked.
@@ -413,5 +416,91 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
     }
     expect(logged.slice(before).filter((entry) => entry.level === 'info')).toHaveLength(1);
     expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(0);
+  });
+});
+
+describe('credential-fence refusals are throttled at the error handler (KRTX-4731)', () => {
+  // The route throws what enforceTokenProjectScope throws for a
+  // workspace-bound credential on a person route: the real fence verdict for
+  // POST /v1/mcp (middleware/workspace-binding.ts binds it PERSON). The typed
+  // 403 body already names the remedy (code credential_fence_refused, the
+  // check, "use a personal key or sign in"), so a caller that cannot or will
+  // not act on it — an OAuth workspace token looping the MCP endpoint —
+  // receives the SAME refusal forever, and per-request logging turned that
+  // loop into a warn storm (prod 2026-11-11: 31 warn lines in one hour on
+  // POST /v1/mcp, 0 in the 24 h before). The mark routes the LINE through the
+  // shared window throttle without touching the response, exactly as
+  // markAgentGrantDenial does (KRTX-4635).
+  function appWithFenceThrow(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/v1/mcp', async (c) => {
+      await enforceTokenProjectScope(c, '00000000-0000-4000-8000-000000000001', {
+        principal: 'oauth-workspace-token',
+      });
+      return c.json({ ok: true });
+    });
+    return app;
+  }
+
+  test('five identical fence refusals log one info line; the typed 403 body ships every time', async () => {
+    resetLogWindowsForTests();
+    const app = appWithFenceThrow();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/mcp', { method: 'POST' });
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toMatchObject({
+      error: true,
+      status: 403,
+      code: 'credential_fence_refused',
+      check: 'person-route',
+    });
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first refusal line');
+    expect(first.message).toContain('-> 403 [HTTPException] This workspace key cannot call a person');
+    expect(first.context?.suppressed).toBe(0);
+  });
+
+  test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
+    const app = appWithFenceThrow();
+    // The reason the handler keys on: the thrown message, bounded at 200.
+    const probe = await app.request('/v1/mcp', { method: 'POST' });
+    expect(probe.status).toBe(403);
+    const reason = ((await probe.json()) as { message: string }).message.slice(0, 200);
+    const key = deadCredentialLogKey('POST', '/v1/mcp', 403, reason);
+    // Drop the probe's window, then stage the burst.
+    resetLogWindowsForTests();
+    // A burst in a window that already expired: one decision opens it, the
+    // rest are suppressed and left pending.
+    const past = Date.now() - 601_000;
+    expect(logWindowDecision(key, past).log).toBe(true);
+    for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) {
+      expect(logWindowDecision(key, past + 1_000).log).toBe(false);
+    }
+    // The handler opens the next window and must ship the pending volume at
+    // warn — a caller grinding on a refusal it never acts on is not the
+    // designed churn (KRTX-4454's severity follows the volume).
+    const before = logged.length;
+    const res = await app.request('/v1/mcp', { method: 'POST' });
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(0);
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(1);
+    expect(warns[0]?.context?.suppressed).toBe(DEAD_CREDENTIAL_BURST_SUPPRESSED);
+  });
+
+  test('marking a fence refusal routes it and leaves a plain 403 unthrottled', () => {
+    const plain = new HTTPException(403, { message: 'no access' });
+    const marked = new HTTPException(403, { message: 'This workspace key cannot call platform routes' });
+    markCredentialFenceDenial(marked);
+    expect(isCredentialFenceDenial(marked)).toBe(true);
+    expect(isCredentialFenceDenial(plain)).toBe(false);
   });
 });

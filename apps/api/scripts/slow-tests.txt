@@ -2,6 +2,7 @@
 # runs them in the first batch so no later batch waits on one slow file.
 # Regenerate from a junit run: bun test --reporter=junit --reporter-outfile=<f>
 # per batch, then list each <testsuite file> whose time is >= 1, slowest first.
+src/projects/routes/session-config-probe-budget.test.ts
 src/config-releases/builder.test.ts
 src/projects/git/files.test.ts
 src/projects/routes/session-prompts.test.ts

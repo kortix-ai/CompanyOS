@@ -7,7 +7,6 @@
  */
 import { expect, mock, test } from 'bun:test';
 import type { ReactElement } from 'react';
-import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('@/i18n/use-translations', () => ({

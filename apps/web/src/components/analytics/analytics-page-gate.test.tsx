@@ -44,7 +44,10 @@ afterEach(() => {
  * happy-dom implements the lib.dom surfaces; its own classes carry extra
  * members, so the crossing of that library boundary is one explicit cast.
  */
-async function mount(element: React.ReactElement): Promise<{ container: HTMLElement; unmount: () => void }> {
+async function mount(
+  element: React.ReactElement,
+  after?: (root: Root) => void,
+): Promise<{ container: HTMLElement; unmount: () => void }> {
   const raw = win!.document.createElement('div');
   const container = raw as unknown as HTMLElement;
   win!.document.body.appendChild(raw);
@@ -53,6 +56,7 @@ async function mount(element: React.ReactElement): Promise<{ container: HTMLElem
     root = createRoot(container);
     root!.render(element);
   });
+  if (after && root) after(root);
   return {
     container,
     unmount: () => {
@@ -61,30 +65,19 @@ async function mount(element: React.ReactElement): Promise<{ container: HTMLElem
   };
 }
 
-/** Mounts the probe, re-renders it `times` more with fresh elements, and leaves it mounted. */
+/**
+ * Mounts the probe, then re-renders it `times` more with fresh elements, and
+ * leaves it mounted. `factory(render)` builds each render's element.
+ */
 async function mountAndRerender(
   factory: (render: number) => React.ReactElement,
   times: number,
 ): Promise<{ container: HTMLElement; unmount: () => void }> {
-  const raw = win!.document.createElement('div');
-  const container = raw as unknown as HTMLElement;
-  win!.document.body.appendChild(raw);
-  let root: Root | null = null;
-  await act(async () => {
-    root = createRoot(container);
-    root!.render(factory(0));
+  return mount(factory(0), (root) => {
+    for (let render = 1; render <= times; render += 1) {
+      act(() => root.render(factory(render)));
+    }
   });
-  for (let render = 1; render <= times; render += 1) {
-    await act(async () => {
-      root!.render(factory(render));
-    });
-  }
-  return {
-    container,
-    unmount: () => {
-      act(() => root!.unmount());
-    },
-  };
 }
 
 test('GoogleTagManager loads on a public page outside the desktop app', async () => {

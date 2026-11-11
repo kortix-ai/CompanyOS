@@ -14,7 +14,7 @@
  */
 import { Hono, type Context, type Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { CALL_SURFACE_HEADER } from '@kortix/api-contract/tool-calls';
+import { CALL_SURFACE_HEADER, isCallSurface } from '@kortix/api-contract/tool-calls';
 import { supabaseAuth } from '../middleware/auth';
 import { mcpResourceMetadataUrl, oauthIssuer } from '../oauth/discovery';
 import { OAUTH_SCOPE_KORTIX } from '../oauth/access-token';
@@ -167,5 +167,52 @@ export function createMcpApp(dispatch: Dispatch) {
   // Stateless server: no SSE stream to open, no session to delete.
   app.on(['GET', 'DELETE'], '/', (c) => c.json({ error: 'method_not_allowed' }, 405, { Allow: 'POST' }));
 
+  return app;
+}
+
+/**
+ * `POST /v1/agent-tools/{verb}`: the same six tools as plain JSON over HTTP,
+ * for clients that are not MCP clients: pi inside a session and the `kortix`
+ * CLI. The body is the verb's input; the answer is the verb's result. Auth is
+ * the caller's own token, as for every API route.
+ */
+export function createAgentToolsApp(dispatch: Dispatch) {
+  const app = new Hono();
+  app.post('/:verb', supabaseAuth, async (c) => {
+    const verb = c.req.param('verb') ?? '';
+    if (!isVerb(verb)) return c.json({ error: 'unknown_verb', verbs: VERB_TOOLS.map((t) => t.name) }, 404);
+    const input = await c.req.json().catch(() => null);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return c.json({ error: 'body must be a JSON object' }, 400);
+    const surface = c.req.header(CALL_SURFACE_HEADER);
+    const headers = new Headers(c.req.raw.headers);
+    const resolved = isCallSurface(surface) ? surface : 'api';
+    headers.set(CALL_SURFACE_HEADER, resolved);
+    const ctx: ToolContext = {
+      authorization: c.req.header('Authorization')!,
+      origin: oauthIssuer(new URL(c.req.url).origin),
+      headers,
+      dispatch,
+      deadline: Date.now() + REQUEST_BUDGET_MS,
+    };
+    const projectId = typeof c.req.query('project') === 'string' ? mcpScopeOf(c.req.url).projectId : null;
+    try {
+      const result = await runVerb(ctx, verb, input as Record<string, unknown>, { projectId, surface: resolved });
+      const text = result.content.map((p) => (p.type === 'text' ? p.text : '')).join('\n');
+      let body: unknown = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = { text };
+      }
+      return c.json(body as Record<string, unknown>, result.isError ? 422 : 200);
+    } catch (err) {
+      if (err instanceof ToolInputError) return c.json({ error: 'invalid_input', message: err.message }, 400);
+      if (isDatabaseError(err)) {
+        logger.error('[agent-tools] verb failed on a database error', { verb, error: databaseErrorSummary(err) });
+        return c.json({ error: 'internal_error' }, 500);
+      }
+      throw err;
+    }
+  });
   return app;
 }

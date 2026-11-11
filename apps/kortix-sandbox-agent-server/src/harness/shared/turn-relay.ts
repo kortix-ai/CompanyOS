@@ -466,11 +466,16 @@ export async function relayQuestion(
   const channel = sessionChannel()
   if (!channel) return relayed
   // Name the channel the agent is in: a Teams agent has no `slack send`.
+  // Slack: the thread's starter reaches the agent with a plain reply (apps/api
+  // `isStarterReplyInOwnThread`); Teams: only a mention does.
+  const reach =
+    channel === 'Slack'
+      ? 'In a channel, the person who started the thread reaches you with a plain reply and anyone else @mentions you'
+      : 'In a channel, the reply reaches you only when it @mentions you'
   const sentinel =
     `(Posted to the ${channel} conversation. In ${channel}, questions are async — the user ` +
-    'replies in the thread, which reaches you as a NEW turn with full context. In a channel, ' +
-    'the reply reaches you only when it @mentions you; a DM reply needs no mention. Do NOT ' +
-    'wait for an answer here; finish this turn now.)'
+    `replies in the thread, which reaches you as a NEW turn with full context. ${reach}; ` +
+    'a DM reply needs no mention. Do NOT wait for an answer here; finish this turn now.)'
   return { ...relayed, answers: request.questions.map(() => [sentinel]) }
 }
 

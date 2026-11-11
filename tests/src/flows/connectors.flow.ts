@@ -4,12 +4,15 @@
  * per-connector sharing/agent-scope — retired 2026-07-06, see
  * spec/end-to-end.md §24). Maps to spec §24 (CONN-1..5, 7-9, 12-14).
  */
-import { assert } from '../core/expect';
+import { assert, check } from '../core/expect';
 import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { type CliResult, CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
 import { AgentPrincipalsWorld } from '../fixtures/agent-principals';
 import { lockProjectFirst } from '../fixtures/token-binding-lock';
+import { startMcpServer } from '../fixtures/fakes/mcp-server';
+import { type FakeOAuthIssuer, startOAuthIssuer } from '../fixtures/fakes/oauth-issuer';
+import { type FakeOpenApiUpstream, startOpenApiUpstream } from '../fixtures/fakes/openapi-upstream';
 
 function parseCliJson<T>(result: CliResult, action: string): T {
   throwIfCliInfraFailure(result, action);
@@ -4609,38 +4612,16 @@ flow(
     const slug = `ke2e-mcp-secret-${stamp}`;
     const SECRET = `KE2E_MCP_TOKEN_${stamp.toUpperCase()}`;
     const TOKEN = `ke2e-bound-${stamp}`;
-    const { createServer } = await import('node:http');
-    // What each tools/list carried in Authorization; a wrong or missing bearer gets 401.
-    const listAuth: string[] = [];
-    const upstream = createServer((req, res) => {
-      let raw = '';
-      req.on('data', (c) => (raw += c));
-      req.on('end', () => {
-        const msg = raw ? (JSON.parse(raw) as { id?: number; method?: string }) : {};
-        if (msg.method === 'tools/list') listAuth.push(req.headers.authorization ?? '');
-        if (req.headers.authorization !== `Bearer ${TOKEN}`) {
-          res.writeHead(401, { 'content-type': 'application/json' });
-          res.end('{"error":"unauthorized"}');
-          return;
-        }
-        if (msg.id === undefined) {
-          res.writeHead(202);
-          res.end();
-          return;
-        }
-        const result =
-          msg.method === 'initialize'
-            ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'ke2e', version: '1' } }
-            : msg.method === 'tools/list'
-              ? { tools: [{ name: 'ping', description: 'Answer pong', inputSchema: { type: 'object', properties: {} } }] }
-              : {};
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
-      });
+    // A wrong or missing bearer gets a plain 401 (no WWW-Authenticate).
+    const upstream = await startMcpServer({
+      tools: [{ name: 'ping', description: 'Answer pong' }],
+      auth: { token: TOKEN },
     });
-    const port = await new Promise<number>((resolve) =>
-      upstream.listen(0, '127.0.0.1', () => resolve((upstream.address() as { port: number }).port)),
-    );
+    // What each tools/list carried in Authorization, refused requests included.
+    const listAuth = () => {
+      const methods = upstream.methods();
+      return upstream.requests.filter((_, i) => methods[i] === 'tools/list').map((r) => r.headers.authorization ?? '');
+    };
     const row = async () => {
       const r = await owner.get('/v1/connectors/projects/:projectId/connectors', { params });
       r.status(200);
@@ -4658,7 +4639,7 @@ flow(
       await ctx.step('add a bearer MCP connector with no credential → 200; tools/list is refused, zero tools', async () => {
         const r = await owner.post(
           '/v1/connectors/projects/:projectId/connectors',
-          { slug, provider: 'mcp', url: `http://127.0.0.1:${port}/mcp`, transport: 'http', auth: { type: 'bearer' } },
+          { slug, provider: 'mcp', url: upstream.url, transport: 'http', auth: { type: 'bearer' } },
           { params, timeoutMs: 60_000 },
         );
         r.status(200);
@@ -4666,7 +4647,7 @@ flow(
       });
 
       await ctx.step('bind the secret → 200 with a clean re-sync; tools/list carried the secret as the bearer; the tool is listed', async () => {
-        const before = listAuth.length;
+        const before = listAuth().length;
         const r = await owner.put(
           '/v1/connectors/projects/:projectId/connectors/:slug/secret-binding',
           { secret_identifier: SECRET },
@@ -4675,23 +4656,249 @@ flow(
         r.status(200);
         const sync = r.json<{ sync?: { errors: Array<{ slug: string; error: string }> } }>().sync;
         if (!sync || sync.errors.some((e) => e.slug === slug)) throw new Error(`bind sync: ${r.text().slice(0, 400)}`);
-        if (listAuth.slice(before).at(-1) !== `Bearer ${TOKEN}`) throw new Error(`tools/list auth: ${JSON.stringify(listAuth.slice(before))}`);
+        if (listAuth().slice(before).at(-1) !== `Bearer ${TOKEN}`) throw new Error(`tools/list auth: ${JSON.stringify(listAuth().slice(before))}`);
         const c = await row();
         if (c.status !== 'active' || !c.actions.some((a) => (a.name ?? a.path) === 'ping')) throw new Error(`row: ${JSON.stringify(c)}`);
       });
 
       await ctx.step('a manual sync fetches tools/list with the bound secret again; the connector stays active', async () => {
-        const before = listAuth.length;
+        const before = listAuth().length;
         const r = await owner.post('/v1/connectors/projects/:projectId/connectors/sync', {}, { params, timeoutMs: 60_000 });
         r.status(200);
         const errors = r.json<{ errors: Array<{ slug: string; error: string }> }>().errors;
         if (errors.some((e) => e.slug === slug)) throw new Error(`sync errors: ${JSON.stringify(errors)}`);
-        if (listAuth.slice(before).at(-1) !== `Bearer ${TOKEN}`) throw new Error(`tools/list auth: ${JSON.stringify(listAuth.slice(before))}`);
+        if (listAuth().slice(before).at(-1) !== `Bearer ${TOKEN}`) throw new Error(`tools/list auth: ${JSON.stringify(listAuth().slice(before))}`);
         if ((await row()).status !== 'active') throw new Error('the connector left active after a manual sync');
       });
     } finally {
       await owner.del('/v1/connectors/projects/:projectId/connectors/:slug', { params: { ...params, slug } }).catch(() => undefined);
-      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+      await upstream.close();
+    }
+  },
+);
+
+// ── CONN-OAUTH-1 — a real Authorization Code + PKCE connect, call, refresh ───
+// The fake OAuth 2.0 issuer serves https on 127.0.0.1 with the local stack's
+// loopback certificate (`KE2E_LOOPBACK_TLS_DIR`); the API trusts it through
+// NODE_EXTRA_CA_CERTS and reaches it because 127.0.0.1 is the one host in
+// KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS. The connector and its default project
+// connection are seeded in a database-only project (no kortix.yaml, so no
+// sync removes them); every OAuth step runs through the Kortix HTTP routes.
+flow(
+  'CONN-OAUTH-1',
+  {
+    domain: 'connectors',
+    requires: ['database'],
+    timeoutMs: 120_000,
+    targets: {
+      deployed: { skip: 'A deployed API cannot reach the runner-local issuer and upstream.' },
+      selfhost: { skip: 'A self-host API cannot reach the runner-local issuer and upstream.' },
+    },
+    routes: [
+      'POST /v1/projects/:projectId/connectors/:slug/oauth2/connection',
+      'PUT /v1/projects/:projectId/connections/:connectionId/oauth2/application',
+      'POST /v1/projects/:projectId/connections/:connectionId/oauth2/authorize',
+      'GET /v1/connectors/oauth2/callback',
+      'GET /v1/projects/:projectId/connections/:connectionId/oauth2/status',
+      'POST /v1/connectors/projects/:projectId/call',
+    ],
+  },
+  async (ctx) => {
+    const tlsDir = process.env.KE2E_LOOPBACK_TLS_DIR;
+    const { existsSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const team = await ctx.fixtures.team();
+    const p = await team.project();
+    const owner = ctx.client.as(ctx.P.OWNER);
+    const stamp = Date.now().toString(36);
+    const slug = `ke2e-oauth-${stamp}`;
+    const clientId = `ke2e-client-${stamp}`;
+    const clientSecret = `ke2e-secret-${stamp}`;
+    // The API refreshes a delegated token with 60 s or less left (oauth2-delegated.ts).
+    // 65 s leaves 5 s for the connect and the first call on a fresh token, then the
+    // token is due within ~6 s. The API's clock is real, so this is the one wait.
+    const FIRST_TTL_SECONDS = 65;
+    let ca = '';
+    let issuer: FakeOAuthIssuer | null = null;
+    let upstream: FakeOpenApiUpstream | null = null;
+    let db: PgDb | null = null;
+    let connectionId = '';
+    let firstAccess = '';
+    let firstRefresh = '';
+    const conn = () => ({ projectId: p.id, connectionId });
+    const call = () =>
+      owner.post('/v1/connectors/projects/:projectId/call', { connector: slug, action: 'ping', args: {} }, { params: { projectId: p.id }, timeoutMs: 60_000 });
+    const grantsOf = (type: string) => issuer!.grants.filter((g) => g.grant_type === type);
+    /** A flow-side request to the issuer, trusting the loopback certificate. */
+    const issuerFetch = (url: string, init: RequestInit = {}) => fetch(url, { ...init, redirect: 'manual', tls: { ca } } as RequestInit);
+
+    try {
+      await ctx.step('start the fake https issuer and the http upstream with the loopback certificate', async () => {
+        const certPath = tlsDir ? join(tlsDir, 'cert.pem') : '';
+        const keyPath = tlsDir ? join(tlsDir, 'key.pem') : '';
+        check(
+          !!tlsDir && existsSync(certPath) && existsSync(keyPath),
+          'KE2E_LOOPBACK_TLS_DIR names a directory with cert.pem and key.pem (set by `ke2e local`)',
+          tlsDir ?? '(unset)',
+        );
+        ca = readFileSync(certPath, 'utf8');
+        issuer = await startOAuthIssuer({ tls: { cert: ca, key: readFileSync(keyPath, 'utf8') }, accessTokenTtlSeconds: FIRST_TTL_SECONDS });
+        upstream = await startOpenApiUpstream();
+        const meta = await issuerFetch(issuer.metadataUrl);
+        check(meta.status === 200, 'the issuer answers its RFC 8414 metadata over https', meta.status, 200);
+      });
+
+      await ctx.step('seed an OpenAPI connector with bearer auth and one read action on the upstream, plus its default project connection', async () => {
+        db = await connectFlowDb(ctx);
+        const connectorId = await seedOpenApiConnector(db, { accountId: team.id, projectId: p.id, slug, name: 'KE2E OAuth', auth: { type: 'bearer' } });
+        await db.query(
+          `INSERT INTO kortix.connector_actions (connector_id, path, name, description, input_schema, risk, binding)
+           VALUES ($1, 'ping', 'ping', 'Echo the request', '{"type":"object","properties":{}}'::jsonb, 'read', $2::jsonb)`,
+          [connectorId, JSON.stringify({ kind: 'openapi', method: 'GET', path: '/echo', server: upstream!.origin })],
+        );
+        const actions = await db.query<{ n: string }>('SELECT count(*)::text AS n FROM kortix.connector_actions WHERE connector_id = $1', [connectorId]);
+        check(actions.rows[0]?.n === '1', 'the seeded connector has one action', actions.rows[0]?.n, '1');
+      });
+
+      await ctx.step('get the connector shared OAuth2 connection → 200 with a connection id', async () => {
+        const r = await owner.post('/v1/projects/:projectId/connectors/:slug/oauth2/connection', {}, { params: { projectId: p.id, slug } });
+        r.status(200).body().exists('$.connection_id');
+        connectionId = r.json<{ connection_id: string }>().connection_id;
+      });
+
+      await ctx.step('save the OAuth2 application with the issuer https endpoints and client_secret_basic → 200', async () => {
+        const r = await owner.put(
+          '/v1/projects/:projectId/connections/:connectionId/oauth2/application',
+          {
+            issuer: issuer!.issuer,
+            authorization_url: issuer!.authorizationEndpoint,
+            token_url: issuer!.tokenEndpoint,
+            revocation_url: issuer!.revocationEndpoint,
+            client_id: clientId,
+            client_secret: clientSecret,
+            token_endpoint_auth_method: 'client_secret_basic',
+            scopes: ['read'],
+          },
+          { params: conn() },
+        );
+        r.status(200).body().has('$.ok', true);
+      });
+
+      let authorizationUrl: URL | null = null;
+      await ctx.step('start Authorization Code → 200 with an issuer URL carrying PKCE S256, state and the Kortix callback', async () => {
+        const r = await owner.post('/v1/projects/:projectId/connections/:connectionId/oauth2/authorize', {}, { params: conn() });
+        r.status(200).body().exists('$.authorization_url').exists('$.expires_at');
+        authorizationUrl = new URL(r.json<{ authorization_url: string }>().authorization_url);
+        const q = authorizationUrl.searchParams;
+        const got = {
+          endpoint: `${authorizationUrl.origin}${authorizationUrl.pathname}`,
+          client_id: q.get('client_id'),
+          method: q.get('code_challenge_method'),
+          hasChallenge: !!q.get('code_challenge'),
+          hasState: !!q.get('state'),
+          callback: new URL(q.get('redirect_uri') ?? 'about:blank').pathname,
+        };
+        const want = { endpoint: issuer!.authorizationEndpoint, client_id: clientId, method: 'S256', hasChallenge: true, hasState: true, callback: '/v1/connectors/oauth2/callback' };
+        check(JSON.stringify(got) === JSON.stringify(want), 'the authorization URL targets the issuer with PKCE S256, state and the Kortix callback', got, want);
+        // The issuer learns the client the way an operator registers one: with this exact redirect URI.
+        issuer!.addClient({ client_id: clientId, client_secret: clientSecret, token_endpoint_auth_method: 'client_secret_basic', redirect_uris: [q.get('redirect_uri')!] });
+      });
+
+      let callbackQuery = '';
+      await ctx.step('the issuer approves → 302 to the Kortix callback with code, state and iss', async () => {
+        const res = await issuerFetch(authorizationUrl!.href);
+        const location = new URL(res.headers.get('location') ?? 'about:blank');
+        const redirectUri = authorizationUrl!.searchParams.get('redirect_uri');
+        const got = {
+          status: res.status,
+          target: `${location.origin}${location.pathname}`,
+          state: location.searchParams.get('state') === authorizationUrl!.searchParams.get('state'),
+          hasCode: !!location.searchParams.get('code'),
+          iss: location.searchParams.get('iss'),
+        };
+        const want = { status: 302, target: redirectUri, state: true, hasCode: true, iss: issuer!.issuer };
+        check(JSON.stringify(got) === JSON.stringify(want), 'the issuer redirects to the registered callback with a code for the same state', got, want);
+        callbackQuery = location.search;
+      });
+
+      await ctx.step('the browser lands on the public callback → 200 "Connected"; Kortix exchanged the code with the PKCE verifier', async () => {
+        const r = await ctx.client.as(ctx.P.ANON).get(`/v1/connectors/oauth2/callback${callbackQuery}`, { timeoutMs: 30_000 });
+        r.status(200);
+        check(r.text().startsWith('Connected.'), 'the callback page says Connected', r.text().slice(0, 200));
+        const exchange = grantsOf('authorization_code');
+        const got = exchange.map((g) => ({ ok: g.ok, client: g.client_id, auth: g.auth_method }));
+        const want = [{ ok: true, client: clientId, auth: 'client_secret_basic' }];
+        check(JSON.stringify(got) === JSON.stringify(want), 'the issuer saw one successful code exchange from the Kortix client', got, want);
+        [firstAccess] = issuer!.issuedAccessTokens();
+        check(!!firstAccess && issuer!.isActive(firstAccess), 'the issuer issued one live access token', issuer!.issuedAccessTokens().length, 1);
+      });
+
+      await ctx.step('the connection status reads active with a token that is still fresh for the first call', async () => {
+        const r = await owner.get('/v1/projects/:projectId/connections/:connectionId/oauth2/status', { params: conn() });
+        r.status(200).body().has('$.status', 'active').exists('$.expires_at');
+        const left = Date.parse(r.json<{ expires_at: string }>().expires_at) - Date.now();
+        check(left > 60_000, 'more than 60 s of token life remain, so the first call needs no refresh', left, '> 60000');
+      });
+
+      await ctx.step('a connector call reaches the upstream with Authorization: Bearer <the issued access token>', async () => {
+        const before = upstream!.echoed().length;
+        const r = await call();
+        r.status(200).body().has('$.ok', true).has('$.data.path', '/echo').has('$.data.headers.authorization', `Bearer ${firstAccess}`);
+        const seen = upstream!.echoed().slice(before).map((q) => q.headers.authorization);
+        check(seen.length === 1 && seen[0] === `Bearer ${firstAccess}`, 'the upstream received one request carrying the issued bearer', seen, [`Bearer ${firstAccess}`]);
+        check(grantsOf('refresh_token').length === 0, 'no refresh happened for a fresh token', grantsOf('refresh_token').length, 0);
+      });
+
+      await ctx.step('wait until the stored token has under 60 s left, so the next call must refresh', async () => {
+        const r = await owner.get('/v1/projects/:projectId/connections/:connectionId/oauth2/status', { params: conn() });
+        r.status(200).body().has('$.status', 'active');
+        const dueAt = Date.parse(r.json<{ expires_at: string }>().expires_at) - 60_000 + 1_000;
+        const wait = Math.max(0, dueAt - Date.now());
+        check(wait <= FIRST_TTL_SECONDS * 1000, 'the refresh point is within the first token lifetime', wait, `<= ${FIRST_TTL_SECONDS * 1000}`);
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        // The refreshed token lives long, so later calls do not refresh again.
+        issuer!.setAccessTokenTtl(3600);
+        const refreshesSoFar = grantsOf('refresh_token').length;
+        check(refreshesSoFar === 0, 'no refresh happened while waiting', refreshesSoFar, 0);
+      });
+
+      await ctx.step('the second call refreshes with a refresh_token grant and reaches the upstream with the NEW access token', async () => {
+        const before = upstream!.echoed().length;
+        const r = await call();
+        r.status(200).body().has('$.ok', true);
+        const refreshes = grantsOf('refresh_token');
+        check(refreshes.length === 1 && refreshes[0]!.ok, 'the issuer saw exactly one successful refresh_token grant', refreshes.map((g) => ({ ok: g.ok, error: g.error })), [{ ok: true }]);
+        firstRefresh = refreshes[0]!.refresh_token ?? '';
+        const latest = issuer!.issuedAccessTokens().at(-1)!;
+        check(latest !== firstAccess && issuer!.isActive(latest), 'the refresh issued a different, live access token', latest === firstAccess ? 'same token' : 'new token', 'new token');
+        r.body().has('$.data.headers.authorization', `Bearer ${latest}`);
+        const seen = upstream!.echoed().slice(before).map((q) => q.headers.authorization);
+        check(seen.length === 1 && seen[0] === `Bearer ${latest}`, 'the upstream received one request carrying the refreshed bearer', seen, [`Bearer ${latest}`]);
+      });
+
+      await ctx.step('rotation: the refresh token Kortix used is now refused by the issuer (invalid_grant)', async () => {
+        check(!!firstRefresh, 'the refresh grant presented the first refresh token', firstRefresh ? 'present' : 'missing', 'present');
+        const res = await issuerFetch(issuer!.tokenEndpoint, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+          },
+          body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: firstRefresh }).toString(),
+        });
+        const body = (await res.json()) as { error?: string };
+        check(res.status === 400 && body.error === 'invalid_grant', 'a reused refresh token answers 400 invalid_grant', { status: res.status, error: body.error }, { status: 400, error: 'invalid_grant' });
+        const r = await owner.get('/v1/projects/:projectId/connections/:connectionId/oauth2/status', { params: conn() });
+        r.status(200).body().has('$.status', 'active');
+      });
+    } finally {
+      if (db) {
+        const pg: PgDb = db;
+        await pg.query('DELETE FROM kortix.connectors WHERE project_id = $1 AND slug = $2', [p.id, slug]).catch(() => {});
+        await pg.end().catch(() => {});
+      }
+      await (upstream as FakeOpenApiUpstream | null)?.close();
+      await (issuer as FakeOAuthIssuer | null)?.close();
     }
   },
 );
@@ -4870,7 +5077,6 @@ flow(
     const team = await ctx.fixtures.team();
     const p = await team.project();
     const { createHash } = await import('node:crypto');
-    const { createServer } = await import('node:http');
     const { mkdirSync, writeFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const db = await connectFlowDb(ctx);
@@ -4879,17 +5085,9 @@ flow(
     const pdf = new Uint8Array(200_000);
     pdf.set(new TextEncoder().encode('%PDF-1.7\n'));
     for (let i = 9; i < pdf.length; i++) pdf[i] = (i * 31) % 256;
-    const received: Array<{ method: string; url: string; body: string }> = [];
-    const upstream = createServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk: Buffer) => chunks.push(chunk));
-      req.on('end', () => {
-        received.push({ method: req.method ?? '', url: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') });
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ reached: true, url: req.url }));
-      });
-    });
-    const port = await new Promise<number>((resolve) => upstream.listen(0, '127.0.0.1', () => resolve((upstream.address() as { port: number }).port)));
+    // Echoes every request as JSON ({ method, path, url, query, headers, body }) and records it.
+    const upstream = await startOpenApiUpstream();
+    const received = () => upstream.echoed();
     const slug = `ke2e-cli-${Date.now().toString(36)}`;
     const pat = await ctx.fixtures.pat({ name: ctx.fixtures.name('connectors-cli') });
     const cli = new CliSandbox('connectors-cli');
@@ -4919,7 +5117,7 @@ flow(
     try {
       await ctx.step('seed an OpenAPI connector with a read action and a Graph-shaped sendMail action, plus the files the CLI reads', async () => {
         const connectorId = await seedOpenApiConnector(db, { accountId: team.id, projectId: p.id, slug, name: 'KE2E CLI', auth: { type: 'none' } });
-        const server = `http://127.0.0.1:${port}`;
+        const server = upstream.origin;
         await db.query(
           `INSERT INTO kortix.connector_actions (connector_id, path, name, description, input_schema, risk, binding)
            VALUES ($1, 'ping', 'ping', 'Ping the KE2E warehouse', $2::jsonb, 'read', $3::jsonb),
@@ -4938,53 +5136,64 @@ flow(
           user: 'sender@example.com',
           body: { message: { subject: 'CONN-33 report', toRecipients: [{ emailAddress: { address: 'recipient@example.com' } }] }, saveToSentItems: true },
         }));
+        const seeded = await db.query<{ path: string }>('SELECT path FROM kortix.connector_actions WHERE connector_id = $1 ORDER BY path', [connectorId]);
+        const paths = seeded.rows.map((r) => r.path).join(',');
+        assert({ kind: 'db', description: 'the seeded connector carries the ping and sendmail actions', expected: 'ping,sendmail', actual: paths, pass: paths === 'ping,sendmail' });
       });
 
       await ctx.step('`connectors ls` lists the connector with both actions', async () => {
         const listed = parseCliJson<{ connectors: Array<{ slug: string; actions: Array<{ path: string }> }> }>(await run(['ls', '--json']), 'kortix connectors ls');
         const row = listed.connectors.find((c) => c.slug === slug);
-        if ((row?.actions ?? []).map((a) => a.path).sort().join(',') !== 'ping,sendmail') throw new Error(`ls returned ${JSON.stringify(row)}`);
+        const actions = (row?.actions ?? []).map((a) => a.path).sort().join(',');
+        assert({ kind: 'cli', description: '`connectors ls --json` lists the connector with both actions', expected: 'ping,sendmail', actual: actions, pass: actions === 'ping,sendmail' });
       });
 
       await ctx.step('`connectors discover` finds the read action by intent and `connectors show` returns its input schema', async () => {
         const found = parseCliJson<{ matches: Array<{ tool: string; risk: string }> }>(await run(['discover', 'ping', 'warehouse']), 'kortix connectors discover');
-        if (found.matches[0]?.tool !== `${slug}.ping` || found.matches[0].risk !== 'read') throw new Error(`discover returned ${JSON.stringify(found)}`);
+        const top = { tool: found.matches[0]?.tool, risk: found.matches[0]?.risk };
+        assert({ kind: 'cli', description: '`connectors discover` ranks the read action first', expected: { tool: `${slug}.ping`, risk: 'read' }, actual: top, pass: top.tool === `${slug}.ping` && top.risk === 'read' });
         const shown = parseCliJson<{ tool: string; inputSchema: { properties?: Record<string, unknown> } | null }>(await run(['show', `${slug}.ping`]), 'kortix connectors show');
-        if (shown.tool !== `${slug}.ping` || !shown.inputSchema?.properties?.q) throw new Error(`show returned ${JSON.stringify(shown)}`);
+        assert({ kind: 'cli', description: '`connectors show` returns the action with its q input', expected: { tool: `${slug}.ping`, hasQ: true }, actual: { tool: shown.tool, hasQ: !!shown.inputSchema?.properties?.q }, pass: shown.tool === `${slug}.ping` && !!shown.inputSchema?.properties?.q });
       });
 
       if (onLocal) {
         await ctx.step('`connectors call` runs the read action in the split and the dotted form; the upstream receives each query', async () => {
           for (const [args, q] of [[['call', slug, 'ping', '{"q":"split"}'], 'split'], [['call', `${slug}.ping`, '{"q":"dotted"}'], 'dotted']] as const) {
-            const before = received.length;
+            const before = received().length;
             const called = parseCliJson<{ ok: boolean; risk: string; data: { url: string } }>(await run([...args]), `kortix connectors ${args.join(' ')}`);
-            if (called.ok !== true || called.risk !== 'read' || called.data?.url !== `/ping?q=${q}`) throw new Error(`call returned ${JSON.stringify(called)}`);
-            if (received.length !== before + 1) throw new Error(`upstream saw ${received.length - before} requests`);
+            const got = { ok: called.ok, risk: called.risk, url: called.data?.url };
+            assert({ kind: 'cli', description: `\`connectors ${args.join(' ')}\` runs the read action and returns the upstream answer`, expected: { ok: true, risk: 'read', url: `/ping?q=${q}` }, actual: got, pass: got.ok === true && got.risk === 'read' && got.url === `/ping?q=${q}` });
+            const seen = received().length - before;
+            assert({ kind: 'upstream', description: 'the upstream received exactly one request for the call', expected: 1, actual: seen, pass: seen === 1 });
           }
         });
 
         await ctx.step('`connectors call --attach` stages the PDF and the upstream receives a Graph fileAttachment, byte for byte', async () => {
           const called = parseCliJson<{ ok: boolean }>(await run(['call', `${slug}.sendmail`, `@${argsFile}`, '--attach', report]), 'kortix connectors call --attach');
-          if (called.ok !== true) throw new Error(`call returned ${JSON.stringify(called)}`);
-          const hit = received.at(-1)!;
-          if (hit.method !== 'POST' || hit.url !== '/v1.0/users/sender%40example.com/sendMail') throw new Error(`upstream hit ${hit.method} ${hit.url}`);
+          assert({ kind: 'cli', description: '`connectors call --attach` answers ok', expected: true, actual: called.ok, pass: called.ok === true });
+          const hit = received().at(-1)!;
+          const target = `${hit?.method} ${hit?.url}`;
+          assert({ kind: 'upstream', description: 'the upstream received the sendMail POST', expected: 'POST /v1.0/users/sender%40example.com/sendMail', actual: target, pass: target === 'POST /v1.0/users/sender%40example.com/sendMail' });
           const attachment = (JSON.parse(hit.body) as { message: { attachments: Array<Record<string, string>> } }).message.attachments[0]!;
-          if (attachment['@odata.type'] !== '#microsoft.graph.fileAttachment' || attachment.name !== 'weekly report.pdf' || attachment.contentType !== 'application/pdf') {
-            throw new Error(`wrong attachment item: ${JSON.stringify({ ...attachment, contentBytes: '…' })}`);
-          }
-          if (sha256(new Uint8Array(Buffer.from(attachment.contentBytes!, 'base64'))) !== sha256(pdf)) throw new Error('attachment bytes differ from the file');
+          const item = { type: attachment['@odata.type'], name: attachment.name, contentType: attachment.contentType };
+          const wantItem = { type: '#microsoft.graph.fileAttachment', name: 'weekly report.pdf', contentType: 'application/pdf' };
+          assert({ kind: 'upstream', description: 'the attachment item has the fileAttachment type, the file name and the PDF content type', expected: wantItem, actual: item, pass: JSON.stringify(item) === JSON.stringify(wantItem) });
+          const digest = sha256(new Uint8Array(Buffer.from(attachment.contentBytes!, 'base64')));
+          assert({ kind: 'upstream', description: 'the attachment bytes equal the file, byte for byte', expected: sha256(pdf), actual: digest, pass: digest === sha256(pdf) });
         });
       }
 
       await ctx.step('`connectors call --attach` on an action with no attachments array exits non-zero before any upload or upstream request', async () => {
-        const before = received.length;
+        const before = received().length;
         const refused = await run(['call', `${slug}.ping`, '{}', '--attach', report]);
         throwIfCliInfraFailure(refused, 'kortix connectors call --attach (refused)');
-        if (refused.exitCode === 0 || !refused.all.includes('does not accept attachments')) throw new Error(`expected the attachments refusal: ${refused.all}`);
-        if (received.length !== before) throw new Error('a refused call reached the upstream');
+        const refusal = { exitedNonZero: refused.exitCode !== 0, namesReason: refused.all.includes('does not accept attachments') };
+        assert({ kind: 'cli', description: 'the CLI refuses --attach on an action without an attachments array', expected: { exitedNonZero: true, namesReason: true }, actual: refusal, pass: refusal.exitedNonZero && refusal.namesReason, detail: refused.all.slice(0, 400) });
+        const seen = received().length - before;
+        assert({ kind: 'upstream', description: 'a refused call never reaches the upstream', expected: 0, actual: seen, pass: seen === 0 });
       });
     } finally {
-      upstream.close();
+      await upstream.close();
       cli.dispose();
       await db.query('DELETE FROM kortix.connectors WHERE project_id = $1 AND slug = $2', [p.id, slug]).catch(() => {});
       await db.end().catch(() => {});

@@ -2,16 +2,85 @@
 // (`prepareRelayHead`) that both the buffered and the streaming transport share.
 import { BLOCKED_REQUEST_HEADERS } from '@kortix/api-contract/secret-relay';
 import type { SecretBrokerRequest } from '@kortix/api-contract';
-import type { SecretEgressPolicy, SecretInjectionSlot } from '@kortix/db';
-import { matchRule } from '../strategy';
+import type {
+  SecretEgressPolicy,
+  SecretEgressRule,
+  SecretHandlePlacement,
+  SecretInjectionSlot,
+} from '@kortix/db';
+import { explainNoMatch, matchRule, placementAllows } from '../strategy';
 import { BASE64, HEADER_NAME, MAX_REQUEST_BYTES, SecretBrokerError } from './errors';
 import {
   assertIdentityRequestBody,
   bodyEncoding,
+  handlePresent,
   substituteBuffer,
-  substituteString,
+  type SecretEncoding,
   type SecretSubstitution,
 } from './substitution';
+
+/** A substitution admitted on THIS hop, with the rule of its own policy that
+ *  admitted it. The rule decides which request surfaces it may ride in. */
+export interface AdmittedSubstitution extends SecretSubstitution {
+  rule: SecretEgressRule;
+}
+
+function placementRefusal(surface: SecretHandlePlacement, headerName?: string): SecretBrokerError {
+  const where = surface === 'header' && headerName ? `header ${headerName}` : surface;
+  return new SecretBrokerError(
+    'policy_denied',
+    `a secret handle is not allowed in the request ${where}`,
+    403,
+    'credential_placement',
+  );
+}
+
+/**
+ * Substitute the admitted handles allowed in `surface`, and refuse the request
+ * when an admitted handle sits in a surface its rule does not allow.
+ *
+ * Refuse, not skip: a skipped handle would leave the request carrying a
+ * worthless string to an upstream that answers 401, and nothing would name the
+ * policy that caused it. A rule with no `placements` allows every surface, so
+ * a row written before placements existed behaves exactly as before.
+ */
+export function substitutePlaced(
+  source: Buffer,
+  admitted: readonly AdmittedSubstitution[],
+  surface: SecretHandlePlacement,
+  primary: SecretEncoding,
+  applied: Set<string>,
+  headerName?: string,
+): Buffer {
+  const allowed: AdmittedSubstitution[] = [];
+  for (const entry of admitted) {
+    if (placementAllows(entry.rule, surface, headerName)) allowed.push(entry);
+    else if (handlePresent(source, entry.handle)) throw placementRefusal(surface, headerName);
+  }
+  return allowed.length > 0 ? substituteBuffer(source, allowed, primary, applied) : source;
+}
+
+function substitutePlacedString(
+  value: string,
+  admitted: readonly AdmittedSubstitution[],
+  surface: SecretHandlePlacement,
+  primary: SecretEncoding,
+  applied: Set<string>,
+  headerName?: string,
+): string {
+  const source = Buffer.from(value);
+  const out = substitutePlaced(source, admitted, surface, primary, applied, headerName);
+  return out === source ? value : out.toString('utf8');
+}
+
+function noMatchError(policy: SecretEgressPolicy, shape: { host: string; method: string; path: string }) {
+  return new SecretBrokerError(
+    'policy_denied',
+    'outbound request does not match the secret policy',
+    403,
+    explainNoMatch(policy, shape),
+  );
+}
 
 export interface PreparedBrokerRequest {
   url: URL;
@@ -164,7 +233,7 @@ export interface PreparedRelayHead {
    * the policy does not admit here stays the worthless self-describing string
    * it is.
    */
-  admitted: SecretSubstitution[];
+  admitted: AdmittedSubstitution[];
   /** Live and MUTABLE: the caller adds body-side hits before reading it. */
   applied: Set<string>;
   /** True when the route's own `inject` slot placed the decrypted secret. */
@@ -217,13 +286,8 @@ export function assertPolicyAdmitsPath(
   url: URL,
   method: NonNullable<SecretBrokerRequest['method']>,
 ): void {
-  if (!matchRule(policy, { host: url.hostname, method, path: url.pathname })) {
-    throw new SecretBrokerError(
-      'policy_denied',
-      'outbound request does not match the secret policy',
-      403,
-    );
-  }
+  const shape = { host: url.hostname, method, path: url.pathname };
+  if (!matchRule(policy, shape)) throw noMatchError(policy, shape);
 }
 
 /**
@@ -269,10 +333,9 @@ export function prepareRelayHead(
   }
 
   const method = input.method ?? 'GET';
-  const rule = matchRule(policy, { host: url.hostname, method, path: url.pathname });
-  if (!rule) {
-    throw new SecretBrokerError('policy_denied', 'outbound request does not match the secret policy', 403);
-  }
+  const shape = { host: url.hostname, method, path: url.pathname };
+  const rule = matchRule(policy, shape);
+  if (!rule) throw noMatchError(policy, shape);
 
   const headers = sanitizeHeaders(foldHeaders(input.headers));
   // Force an uncompressed upstream response so echo redaction scans real bytes.
@@ -284,15 +347,16 @@ export function prepareRelayHead(
   // `executeSecretBrokerRequest` re-enters this function for every redirect,
   // and a secret whose policy admits the original host must not ride along to
   // wherever that host points next.
-  const admitted = substitutions.filter(
-    (substitution) =>
-      matchRule(substitution.policy, { host: url.hostname, method, path: url.pathname }) !== null,
-  );
+  const admitted: AdmittedSubstitution[] = [];
+  for (const substitution of substitutions) {
+    const admittedBy = matchRule(substitution.policy, shape);
+    if (admittedBy) admitted.push({ ...substitution, rule: admittedBy });
+  }
   const applied = new Set<string>();
   if (admitted.length > 0) {
     assertIdentityRequestBody(headers);
     for (const [name, value] of Object.entries(headers)) {
-      const substituted = substituteString(value, admitted, 'raw', applied);
+      const substituted = substitutePlacedString(value, admitted, 'header', 'raw', applied, name);
       if (substituted === value) continue;
       if (substituted.includes('\r') || substituted.includes('\n')) {
         throw new SecretBrokerError(
@@ -304,8 +368,8 @@ export function prepareRelayHead(
       headers[name] = substituted;
     }
 
-    const pathname = substituteString(url.pathname, admitted, 'url', applied);
-    const search = substituteString(url.search, admitted, 'url', applied);
+    const pathname = substitutePlacedString(url.pathname, admitted, 'path', 'url', applied);
+    const search = substitutePlacedString(url.search, admitted, 'query', 'url', applied);
     if (pathname !== url.pathname) url.pathname = pathname;
     if (search !== url.search) url.search = search;
     if (UNSAFE_TARGET.test(`${url.pathname}${url.search}`)) {
@@ -385,7 +449,7 @@ export function prepareSecretBrokerRequest(
 
   if (admitted.length > 0) {
     if (body && body.byteLength > 0) {
-      body = substituteBuffer(body, admitted, bodyEncoding(headers['content-type']), applied);
+      body = substitutePlaced(body, admitted, 'body', bodyEncoding(headers['content-type']), applied);
       if (body.byteLength > MAX_REQUEST_BYTES) {
         throw new SecretBrokerError(
           'invalid_request',

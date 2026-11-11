@@ -20,6 +20,7 @@
     "./multi-agent": "./src/multi-agent.ts",
     "./claude-agent": "./src/claude-agent.ts",
     "./wire-values": "./src/wire-values.ts",
+    "./test-case": "./src/test-case.ts",
     "./tool-calls": "./src/tool-calls.ts"
   },
   "scripts": {

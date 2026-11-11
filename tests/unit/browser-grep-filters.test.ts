@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveGrepFilters, resolveVideoMode } from '../playwright.config';
+import { resolveFlakePolicy, resolveGrepFilters, resolveVideoMode } from '../playwright.config';
 
 describe('browser lane grep filters', () => {
   it('runs every journey when no filter is named: there is no quarantine tag', () => {
@@ -65,5 +65,17 @@ describe('browser journey replays', () => {
   it('records every journey in CI and only failures locally', () => {
     expect(resolveVideoMode({ CI: 'true' })).toBe('on');
     expect(resolveVideoMode({})).toBe('retain-on-failure');
+  });
+});
+
+describe('browser lane flake policy', () => {
+  it('fails a flaky journey on CI and on a deployed target, and keeps the retries that reveal it', () => {
+    expect(resolveFlakePolicy({ CI: 'true' })).toEqual({ retries: 2, failOnFlakyTests: true });
+    expect(resolveFlakePolicy({ KE2E_TARGET: 'staging' })).toEqual({ retries: 1, failOnFlakyTests: true });
+    expect(resolveFlakePolicy({ KE2E_TARGET: 'staging', E2E_DEPLOYED_RETRIES: '2' }).retries).toBe(2);
+  });
+
+  it('keeps a local run at zero retries, where no flaky result can occur', () => {
+    expect(resolveFlakePolicy({})).toEqual({ retries: 0, failOnFlakyTests: false });
   });
 });

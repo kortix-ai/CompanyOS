@@ -7,6 +7,7 @@ import {
   randomUUID,
 } from 'node:crypto';
 import { CompactSign } from 'jose';
+import { config } from '../config';
 import { safeEgressFetch } from '../shared/ssrf-guard';
 
 const ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
@@ -92,7 +93,15 @@ export async function providerFetch(
   runtime: OAuth2LifecycleRuntime,
 ): Promise<Response> {
   if (runtime.fetchImpl) return runtime.fetchImpl(url, init);
-  return safeEgressFetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(10_000) });
+  // https only. A host the operator listed in KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS
+  // may resolve to a private address, exactly as for the connector's own calls
+  // (connectors/egress.ts): a self-hosted issuer, or the local test stack's
+  // loopback issuer.
+  return safeEgressFetch(url, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(10_000),
+    allowPrivateHosts: config.KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS,
+  });
 }
 
 export async function boundedJson(response: Response): Promise<Record<string, unknown>> {

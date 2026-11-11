@@ -319,7 +319,7 @@ export async function secretsDelivery(
       // relay. An agent that knows the last line does not go asking a human for
       // the raw value.
       process.stdout.write(
-        `  ${C.dim}The env var holds a handle. Kortix substitutes the real value outside the sandbox, only on those hosts, and rewrites any echo of it to [REDACTED].${C.reset}\n` +
+        `  ${C.dim}The env var holds a handle. Kortix substitutes the real value outside the sandbox, only on those hosts, and turns any echo of it back into the handle.${C.reset}\n` +
           `  ${C.dim}Agent code sends the handle with its ordinary HTTP client. For a request that cannot be intercepted, run \`kortix secrets call ${identifier} <https-url>\`.${C.reset}\n`,
       );
       if (result.network_boundary_available === false) {

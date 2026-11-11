@@ -2,6 +2,7 @@
  * Flow registration. Each test declares its stable spec ID up front — this is
  * the 1:1 mapping that makes end-to-end.md enforceable as the source of truth.
  */
+import { normalizeFlowTargets } from "./targets";
 import type { FlowContext, FlowFn, FlowMeta, Harness } from "./types";
 
 export interface RegisteredFlow {
@@ -211,6 +212,7 @@ export function flow(id: string, meta: FlowMeta, fn: FlowFn): void {
   if (registry.has(id)) {
     throw new Error(`Duplicate flow id "${id}" — every flow maps 1:1 to a spec ID.`);
   }
+  normalizeFlowTargets(id, meta);
   registry.set(id, { id, meta, fn });
 }
 

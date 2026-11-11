@@ -512,7 +512,8 @@ describe('executeSecretBrokerRequest substitution', () => {
 
     expect([...applied]).toEqual(['SECONDARY']);
     const body = Buffer.from(response.body_base64, 'base64').toString('utf8');
-    expect(body).toBe('{"echoed":"[REDACTED]"}');
+    // Re-sealed: the echoed value comes back as the handle that stands in for it.
+    expect(body).toBe(`{"echoed":"${OTHER_HANDLE}"}`);
   });
 
   // BREAK 1 (fail-closed redirect): once a substitution has put the real value
@@ -621,6 +622,23 @@ describe('executeSecretBrokerRequest substitution', () => {
       },
     );
 
-    expect(response.headers.etag).toBe('"[REDACTED]"');
+    expect(response.headers.etag).toBe(`"${OTHER_HANDLE}"`);
+  });
+
+  test("re-seals the route's own secret to its handle when the caller names it", async () => {
+    const transport: BrokerTransport = async () => ({
+      status: 200,
+      headers: { etag: `"${SECRET}"` },
+      body: Buffer.from(`{"key":"${SECRET}","url":"${encodeURIComponent(SECRET)}"}`),
+    });
+    const handle = 'kortix_brokered__use_kortix_fetch__KXS1aaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb';
+    const response = await executeSecretBrokerRequest(policy(), SECRET, request(), {
+      transport,
+      secretHandle: handle,
+    });
+    const body = Buffer.from(response.body_base64, 'base64').toString('utf8');
+    expect(body).toBe(`{"key":"${handle}","url":"${encodeURIComponent(handle)}"}`);
+    expect(response.headers.etag).toBe(`"${handle}"`);
+    expect(body).not.toContain(SECRET);
   });
 });

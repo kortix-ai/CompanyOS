@@ -965,12 +965,12 @@ describe('kortix secrets delivery', () => {
       },
     });
     // One mechanism on every provider, so the confirmation says what it does
-    // instead of promising an outcome: handle, substitution, [REDACTED], and
+    // instead of promising an outcome: handle, substitution, the handle on an echo, and
     // `call` as the fallback. It must not name a provider or offer a choice.
     const confirmation = stripAnsi(stdout);
     expect(confirmation).toContain('Enforced at the network');
     expect(confirmation).toContain('The env var holds a handle');
-    expect(confirmation).toContain('[REDACTED]');
+    expect(confirmation).toContain('turns any echo of it back into the handle');
     expect(confirmation).toContain('kortix secrets call ANTHROPIC_API_KEY <https-url>');
     expect(confirmation).not.toMatch(/platinum|daytona|e2b/i);
   });

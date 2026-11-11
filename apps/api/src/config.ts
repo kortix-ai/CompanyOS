@@ -135,6 +135,12 @@ const envSchema = z.object({
   // Debug only: append each SQL statement the API pool sends (whitespace-normalized
   // text, no params) as one line to this file. Empty = off.
   KORTIX_SQL_TRACE: optStr,
+  // `1` on the deterministic local test stack (tests/src/core/local-stack.ts).
+  KORTIX_LOCAL_TEST_PROFILE: optStr,
+  // Test stack only, read only when KORTIX_LOCAL_TEST_PROFILE=1: the directory
+  // the API writes per-case evidence to (`x-kortix-test-case` →
+  // <dir>/<runId>/case-logs/<flow>.<attempt>.<step>.jsonl). Empty = off.
+  KORTIX_TEST_LOG_DIR: optStr,
 
   // ── Supabase (REQUIRED) ──────────────────────────────────────────────────
   SUPABASE_URL: z
@@ -309,7 +315,9 @@ const envSchema = z.object({
    * Comma-separated hostnames or IP literals, matched exactly. Empty (the
    * default) means every connector endpoint must be a public address. Set it
    * on a self-hosted deployment whose connectors call internal APIs; the local
-   * test stack sets `127.0.0.1` for its loopback upstream.
+   * test stack sets `127.0.0.1` for its loopback upstream. The connector's
+   * OAuth 2.0 token and refresh calls honor the same list; they still require
+   * https.
    */
   KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS: optStr,
   /**
@@ -330,6 +338,12 @@ const envSchema = z.object({
   // alternative (a capability header on every request) costs a round trip per
   // relayed request and still cannot un-consume a body already streamed.
   KORTIX_SECRET_RELAY_STREAM_ENABLED: optBoolTrue,
+  // New project-secret writes use the `v2:` envelope, whose ciphertext is bound
+  // to the row's identifier (AES-GCM AAD). Every build since v2 shipped reads
+  // both versions; an OLDER build reads only `v1:`. Set false before rolling
+  // the API back past the v2 release, so values written in the meantime stay
+  // readable by the older build.
+  KORTIX_SECRET_ENVELOPE_V2_WRITES: optBoolTrue,
   // Byte budgets. These are a RESOURCE guard, not a product limit: 1 GiB is
   // 1024x the legacy request cap and 205x the response cap — effectively
   // uncapped for any real API call — but it stops one runaway sandbox.
@@ -1503,6 +1517,7 @@ export const config = {
     .map((host) => host.trim())
     .filter(Boolean),
   KORTIX_SECRET_RELAY_STREAM_ENABLED: env.KORTIX_SECRET_RELAY_STREAM_ENABLED,
+  KORTIX_SECRET_ENVELOPE_V2_WRITES: env.KORTIX_SECRET_ENVELOPE_V2_WRITES,
   KORTIX_RELAY_MAX_REQUEST_BYTES: env.KORTIX_RELAY_MAX_REQUEST_BYTES,
   KORTIX_RELAY_MAX_RESPONSE_BYTES: env.KORTIX_RELAY_MAX_RESPONSE_BYTES,
   KORTIX_RELAY_HEADERS_TIMEOUT_MS: env.KORTIX_RELAY_HEADERS_TIMEOUT_MS,
@@ -1526,6 +1541,8 @@ export const config = {
   // ─── Database ──────────────────────────────────────────────────────────────
   DATABASE_URL: env.DATABASE_URL,
   KORTIX_SQL_TRACE: env.KORTIX_SQL_TRACE,
+  KORTIX_LOCAL_TEST_PROFILE: env.KORTIX_LOCAL_TEST_PROFILE === '1',
+  KORTIX_TEST_LOG_DIR: env.KORTIX_LOCAL_TEST_PROFILE === '1' ? env.KORTIX_TEST_LOG_DIR : '',
 
   // ─── Supabase ──────────────────────────────────────────────────────────────
   SUPABASE_URL: env.SUPABASE_URL,

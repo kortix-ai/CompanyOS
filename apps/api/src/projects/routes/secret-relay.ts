@@ -35,6 +35,7 @@
  */
 import { createRoute, z } from '@hono/zod-openapi';
 import {
+  REFUSED_HEADER,
   RELAY_ERROR_HEADER,
   RELAY_PROBE_HEADER,
   RELAY_VERSION,
@@ -99,6 +100,7 @@ export function registerSecretRelayRoutes(): void {
         !agentGrant
       ) {
         c.header(RELAY_ERROR_HEADER, 'session_agent_token_required');
+        c.header(REFUSED_HEADER, 'policy_denied');
         return c.json(
           {
             error: 'Secret relay requests require a session-scoped agent token',
@@ -122,6 +124,7 @@ export function registerSecretRelayRoutes(): void {
       }
       if (!pin.ok && config.KORTIX_SANDBOX_EGRESS_PIN_ENFORCED) {
         c.header(RELAY_ERROR_HEADER, 'sandbox_egress_mismatch');
+        c.header(REFUSED_HEADER, 'policy_denied');
         return c.json(
           {
             error: 'This session credential may only be used from its own sandbox',

@@ -4,9 +4,13 @@ import {
   SecretBrokerError,
   secretRepresentations,
   encodeSecretRepresentation,
+  resealSecretInResponse,
+  type ResealPair,
   type SecretSubstitution,
 } from '../../secrets/http-broker';
 import type { StreamSubstituter, StreamReplacement } from '../../secrets/stream-substitute';
+import type { AdmittedSubstitution } from '../../secrets/http-broker';
+import { placementAllows } from '../../secrets/strategy';
 
 /**
  * The largest guest body still handled with the buffered, EXACT-LENGTH path.
@@ -139,23 +143,55 @@ export function requestPairs(
 }
 
 /**
- * Redaction pairs for the RETURN leg.
+ * Pairs for a STREAMED request body, placement-aware.
+ *
+ * An admitted handle whose rule allows `body` gets its substitution pairs. One
+ * whose rule does not gets REFUSE pairs instead: if it turns up in the body the
+ * stream throws `StreamRefusal`, the upstream request is aborted before its
+ * body completes, and the relay answers `credential_placement`. The handle
+ * bytes themselves are never forwarded.
+ */
+export function bodyStreamPairs(
+  admitted: readonly AdmittedSubstitution[],
+  primary: Parameters<typeof secretRepresentations>[1],
+): StreamReplacement[] {
+  const allowed = admitted.filter((entry) => placementAllows(entry.rule, 'body'));
+  const pairs = requestPairs(allowed, primary);
+  for (const entry of admitted) {
+    if (placementAllows(entry.rule, 'body')) continue;
+    for (const { text } of secretRepresentations(entry.handle, primary)) {
+      pairs.push({ needle: Buffer.from(text), replacement: Buffer.alloc(0), label: entry.identifier, refuse: true });
+    }
+  }
+  return pairs;
+}
+
+/**
+ * RE-SEAL pairs for the RETURN leg: each representation of a value becomes the
+ * same representation of its handle (`[REDACTED]` when no handle is known).
+ * See `resealSecretInResponse` for why.
  *
  * Deliberately built from every value that COULD have ridden out, not only the
  * ones a substitution actually fired for. On a streamed body the `applied` set
- * is not final until the stream ends — long after the redactor must be built —
+ * is not final until the stream ends — long after the re-sealer must be built —
  * so the choice is between fail-open and a superset. It is a superset: at worst
- * a value that never left is also scrubbed on the way back, which costs
+ * a value that never left is also re-sealed on the way back, which costs
  * nothing and cannot leak.
  */
-export function responsePairs(secrets: readonly string[]): StreamReplacement[] {
+export function responsePairs(secrets: readonly ResealPair[]): StreamReplacement[] {
   const pairs: StreamReplacement[] = [];
   const seen = new Set<string>();
   for (const secret of secrets) {
-    for (const { text } of secretRepresentations(secret)) {
+    for (const { encoding, text } of secretRepresentations(secret.value)) {
       if (!text || seen.has(text)) continue;
       seen.add(text);
-      pairs.push({ needle: Buffer.from(text), replacement: Buffer.from(REDACTED) });
+      pairs.push({
+        needle: Buffer.from(text),
+        replacement:
+          secret.handle === null
+            ? Buffer.from(REDACTED)
+            : Buffer.from(encodeSecretRepresentation(secret.handle, encoding)),
+      });
     }
   }
   return pairs;
@@ -183,13 +219,20 @@ export function substituteStream(
   tail?: Buffer,
   /** Runs after a clean flush, with the substituter's final `applied` set. */
   onComplete?: (applied: readonly string[]) => void,
+  /** Runs once, when a refuse pair matched. The caller aborts the request. */
+  onRefused?: (label: string) => void,
 ): TransformStream<Uint8Array, Uint8Array> {
+  let refusalReported = false;
   return new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
       // Zero-copy view: `Buffer.from(uint8array)` would COPY every chunk.
       const view = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
       const out = substituter.push(view);
       if (out.byteLength > 0) controller.enqueue(out);
+      if (substituter.refusedLabel !== null && !refusalReported) {
+        refusalReported = true;
+        onRefused?.(substituter.refusedLabel);
+      }
     },
     flush(controller) {
       const out = substituter.flush();
@@ -206,21 +249,17 @@ export function substituteStream(
   });
 }
 
-/** The whitelisted response headers, ordered, each echo-redacted. */
+/** The whitelisted response headers, ordered, each echo re-sealed. */
 export function safeResponseHeaders(
   rawHeaders: ReadonlyArray<readonly [string, string]>,
-  secrets: readonly string[],
+  secrets: readonly ResealPair[],
 ): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   for (const [name, value] of rawHeaders) {
     if (!SAFE_RESPONSE_HEADERS.has(name)) continue;
-    let redacted = value;
-    for (const secret of secrets) {
-      for (const { text } of secretRepresentations(secret)) {
-        if (text) redacted = redacted.split(text).join(REDACTED.toString('utf8'));
-      }
-    }
-    out.push([name, redacted]);
+    let sealed: Buffer = Buffer.from(value);
+    for (const secret of secrets) sealed = resealSecretInResponse(sealed, secret);
+    out.push([name, sealed.toString('utf8')]);
   }
   return out;
 }

@@ -15,6 +15,11 @@ import {
   type LlmProviderEntry,
   getLlmProviderCatalogRevision,
 } from '../../../internal/lib/llm-providers';
+import {
+  knownSecretApiHosts,
+  looksLikeSigningCredential,
+  type SecretApiHostCatalogEntry,
+} from '@kortix/shared/secret-api-hosts';
 
 export type ConnectorBindingOption = {
   slug: string;
@@ -369,27 +374,6 @@ export type SecretClassification = {
 };
 
 /**
- * AWS access-key ids. The prefix set is AWS's own documented list of unique
- * id prefixes; `AKIA` (long-term) and `ASIA` (STS) are the two a user pastes
- * into a secret. 16 uppercase alphanumerics follow, always.
- */
-const AWS_ACCESS_KEY_ID = /^(?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[A-Z0-9]{16}$/;
-/** PEM blocks — RSA/EC/OPENSSH private keys all carry this header. */
-const PEM_PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/;
-/** OpenSSH key material pasted without its PEM wrapper, and PuTTY's format. */
-const SSH_KEY_MATERIAL = /^(?:ssh-rsa |ssh-ed25519 |ssh-dss |ecdsa-sha2-|PuTTY-User-Key-File)/;
-
-function looksLikeSigningCredential(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return (
-    AWS_ACCESS_KEY_ID.test(trimmed) ||
-    PEM_PRIVATE_KEY.test(trimmed) ||
-    SSH_KEY_MATERIAL.test(trimmed)
-  );
-}
-
-/**
  * Env var name → catalog provider, rebuilt only when the catalog changes.
  *
  * `LLM_PROVIDER_BY_ENV_VAR` covers the PRIMARY auth method only, so it misses
@@ -417,23 +401,21 @@ function providerByEnvVar(): Map<string, LlmProviderEntry> {
 }
 
 /**
- * Curated API hosts for providers whose SDK hardcodes the base URL, so
- * models.dev declares no `api` and `LlmProviderEntry.apiHost` is null (24 of
- * 167 today — Anthropic and OpenAI among them). These are stable, documented
- * constants, NOT values derived from a catalog URL; a recognized model key with
- * no catalog host would otherwise leave the hosts field empty and Save disabled
- * until the user typed the host by hand (spec §7). Keyed by catalog provider id.
+ * The catalog in the shape `knownSecretApiHosts` reads: every env var any auth
+ * method declares, rebuilt only when the live catalog changes.
  */
-const WELL_KNOWN_API_HOSTS: Readonly<Record<string, string>> = {
-  anthropic: 'api.anthropic.com',
-  openai: 'api.openai.com',
-  google: 'generativelanguage.googleapis.com',
-};
-
-/** The catalog host, or the curated fallback for an SDK-hardcoded provider. */
-function providerApiHost(provider: LlmProviderEntry | null): string | null {
-  if (!provider) return null;
-  return provider.apiHost ?? WELL_KNOWN_API_HOSTS[provider.id] ?? null;
+let cachedHostCatalogRevision = -1;
+let cachedHostCatalog: SecretApiHostCatalogEntry[] = [];
+function hostCatalog(): SecretApiHostCatalogEntry[] {
+  const revision = getLlmProviderCatalogRevision();
+  if (revision === cachedHostCatalogRevision) return cachedHostCatalog;
+  cachedHostCatalog = LLM_PROVIDERS.map((entry) => ({
+    id: entry.id,
+    apiHost: entry.apiHost,
+    envVars: entry.authRequirement.methods.flatMap((method) => method.envVars),
+  }));
+  cachedHostCatalogRevision = revision;
+  return cachedHostCatalog;
 }
 
 /**
@@ -448,7 +430,7 @@ function providerApiHost(provider: LlmProviderEntry | null): string | null {
  *     cannot be enforced at any boundary, whatever the catalog says.
  *  2. **A known model key.** `environment`, but the vendor's API host is still
  *     prefilled from the same catalog the LLM providers screen reads (or
- *     `WELL_KNOWN_API_HOSTS` when that provider's SDK hardcodes the URL). The
+ *     the curated host when that provider's SDK hardcodes the URL). The
  *     host waits ready so that a project which has turned ON the experimental
  *     `secrets_egress` flag and switches to enforced does not have to type it.
  *  3. **Everything else.** `environment` with an empty host list.
@@ -471,10 +453,12 @@ export function classifyNewSecret(input: { key: string; value: string }): Secret
       signingNote: SIGNING_CREDENTIAL_NOTE,
     };
   }
-  const apiHost = providerApiHost(provider);
+  // The same table the API reads when it picks a delivery for a new secret
+  // (`@kortix/shared/secret-api-hosts`): catalog host, else the curated host
+  // for an SDK-hardcoded provider, never a host for a multi-use name.
   return {
     exposure: 'environment',
-    hosts: apiHost ? [apiHost] : [],
+    hosts: knownSecretApiHosts(key, hostCatalog()),
     modelProvider,
     signingNote: null,
   };

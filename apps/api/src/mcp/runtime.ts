@@ -840,6 +840,21 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
 
 async function listProjectsTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
   const accounts = await callApi(ctx, 'GET', '/v1/accounts');
+  // A workspace-bound credential (an agent key, a workspace key) has no
+  // account list: it reaches its own workspace, which /v1/projects lists alone.
+  if (accounts.status === 403) {
+    const own = await callApi(ctx, 'GET', '/v1/projects');
+    if (own.status >= 400) return apiResult(own);
+    const rows = JSON.parse(own.body) as any[];
+    return text(JSON.stringify(rows.map((p) => ({
+      project_id: p.project_id,
+      name: p.name,
+      account_id: p.account_id ?? null,
+      repository: p.repo_url ?? null,
+      default_branch: p.default_branch ?? null,
+      role: p.effective_project_role ?? null,
+    })), null, 2));
+  }
   if (accounts.status >= 400) return apiResult(accounts);
   const parsed = JSON.parse(accounts.body);
   const list = (Array.isArray(parsed) ? parsed : (parsed.accounts ?? [])) as { account_id: string; name?: string }[];

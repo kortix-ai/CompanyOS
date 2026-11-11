@@ -24,6 +24,7 @@
  * Spec IDs authored here: SEC-4, SEC-A, SEC-B, SEC-C, SEC-D, SEC-E, SEC-F,
  * SEC-G, SEC-H, SEC-I, SEC-J, SEC-K.
  */
+import { check } from '../core/expect';
 import { flow } from '../core/flow';
 
 const NIL_UUID = '00000000-0000-4000-a000-000000000000';
@@ -871,12 +872,12 @@ flow('SEC-K', { domain: 'security', routes: [] }, async (ctx) => {
           });
           const body = await res.text();
           // 404 PGRST202 = the function does not exist in this database: nothing to reach.
-          if (res.status === 404 && body.includes('PGRST202')) continue;
-          if (!refused(res.status, body)) {
-            throw new Error(
-              `SEC-K: ${who} reached rpc/${fn}: ${res.status} ${body.slice(0, 200)}`,
-            );
-          }
+          const absent = res.status === 404 && body.includes('PGRST202');
+          check(
+            absent || refused(res.status, body),
+            `${who}: rpc/${fn} is absent (404 PGRST202) or refused (401/403 42501)`,
+            `${res.status} ${body.slice(0, 200)}`,
+          );
         }
       },
     );
@@ -900,10 +901,7 @@ flow('SEC-K', { domain: 'security', routes: [] }, async (ctx) => {
           const ok =
             (res.status === 406 && body.includes('PGRST106')) ||
             refused(res.status, body);
-          if (!ok)
-            throw new Error(
-              `SEC-K: ${who} reached kortix_wallet.${fn}: ${res.status} ${body.slice(0, 200)}`,
-            );
+          check(ok, `${who}: kortix_wallet.${fn} is not exposed (406 PGRST106) or refused (42501)`, `${res.status} ${body.slice(0, 200)}`);
         }
       },
     );
@@ -924,10 +922,7 @@ flow('SEC-K', { domain: 'security', routes: [] }, async (ctx) => {
       const ok =
         (res.status === 406 && body.includes('PGRST106')) ||
         refused(res.status, body);
-      if (!ok)
-        throw new Error(
-          `SEC-K: ${who} read kortix.accounts: ${res.status} ${body.slice(0, 200)}`,
-        );
+      check(ok, `${who}: kortix.accounts is not exposed (406 PGRST106) or refused (42501)`, `${res.status} ${body.slice(0, 200)}`);
     });
   }
 });

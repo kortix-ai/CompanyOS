@@ -16,6 +16,7 @@
 
 import { Logtail } from '@logtail/node';
 import { getContextFields } from './request-context';
+import { appendCurrentTestCaseLog } from './test-case-log';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -119,6 +120,9 @@ function formatForConsole(level: LogLevel, message: string, context?: Record<str
 }
 
 function log(level: LogLevel, message: string, context?: Record<string, unknown>): void {
+  // Local test stack only: the line also lands in the flow case's evidence
+  // file, at every level (lib/test-case-log.ts). A single comparison when off.
+  appendCurrentTestCaseLog({ kind: 'log', level, message, ...(context ? { context } : {}) });
   if (!shouldLog(level)) return;
 
   // Write to stdout/stderr (Docker captures these)

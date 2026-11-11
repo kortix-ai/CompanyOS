@@ -2,6 +2,8 @@
 // allowlists, the error-code vocabulary, and `SecretBrokerError`. Every other
 // module under `broker/` speaks this contract.
 
+import type { RelayRefusalReason } from '@kortix/api-contract/secret-relay';
+
 export const MAX_REQUEST_BYTES = 1_048_576;
 export const MAX_RESPONSE_BYTES = 5_242_880;
 export const MAX_REDIRECTS = 3;
@@ -91,8 +93,54 @@ export class SecretBrokerError extends Error {
     readonly code: SecretBrokerErrorCode,
     message: string,
     readonly status: number,
+    /**
+     * The `x-kortix-refused` reason when the code alone does not name it
+     * (`policy_denied` covers a host, a method, a path and a placement). Absent
+     * = derive it from the code with `refusalReasonFor`.
+     */
+    readonly refused?: RelayRefusalReason,
   ) {
     super(message);
     this.name = 'SecretBrokerError';
+  }
+}
+
+/**
+ * The `x-kortix-refused` reason for a wire code, or null when the code is an
+ * upstream FAILURE rather than a Kortix refusal (timeouts, 5xx, size budgets,
+ * the kill switch). The mapping is total over every code a refusal can carry,
+ * including the route-level codes outside `SecretBrokerErrorCode`.
+ */
+export function refusalReasonFor(
+  code: string,
+  status: number,
+  explicit?: RelayRefusalReason | null,
+): RelayRefusalReason | null {
+  if (explicit) return explicit;
+  switch (code) {
+    case 'unsafe_destination':
+      // 403 = the resolved address is private or reserved; 400 = scheme,
+      // userinfo or port; 502 = DNS failed, which is a failure, not a refusal.
+      if (status === 403) return 'private_address';
+      if (status === 400) return 'credential_transport';
+      return null;
+    case 'upstream_encoding_unsupported':
+      return 'credential_transport';
+    case 'session_not_active':
+    case 'session_secret_handle_required':
+      return 'credential_expired';
+    case 'policy_denied':
+    case 'invalid_request':
+    case 'relay_meta_invalid':
+    case 'relay_meta_too_large':
+    case 'relay_request_too_large':
+    case 'secret_not_found':
+    case 'secret_delivery_unavailable':
+    case 'session_agent_token_required':
+    case 'sandbox_egress_mismatch':
+    case 'unsupported_request_encoding':
+      return 'policy_denied';
+    default:
+      return null;
   }
 }

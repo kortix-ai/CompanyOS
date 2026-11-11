@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Client } from "pg";
@@ -684,6 +684,10 @@ export function localApiEnvironment(options: {
   gatewayPort: number;
   apiUrl: string;
   supabase: LocalSupabaseEnvironment;
+  /** `tests/test-results`: the API writes each case's evidence under `<dir>/<runId>/case-logs/`. */
+  testLogDir?: string;
+  /** The loopback CA (`ensureLoopbackTls`) the API trusts for https fakes on 127.0.0.1. */
+  loopbackCaFile?: string;
 }): Record<string, string> {
   const { apiPort, webPort, gatewayPort, apiUrl } = options;
   const { DB_URL, API_URL, ANON_KEY, SERVICE_ROLE_KEY, JWT_SECRET, S3_PROTOCOL_ACCESS_KEY_ID, S3_PROTOCOL_ACCESS_KEY_SECRET } = options.supabase;
@@ -696,6 +700,14 @@ export function localApiEnvironment(options: {
     INTERNAL_KORTIX_ENV: "dev",
     KORTIX_LOCAL_DEV: "1",
     KORTIX_LOCAL_TEST_PROFILE: "1",
+    // Per-case evidence: every request a flow sends carries x-kortix-test-case,
+    // and the API appends its log lines, SQL and request line for that case to
+    // <dir>/<runId>/case-logs/<flow>.<attempt>.<step>.jsonl, which the run's
+    // report links (apps/api/src/lib/test-case-log.ts).
+    ...(options.testLogDir ? { KORTIX_TEST_LOG_DIR: options.testLogDir } : {}),
+    // CONN-OAUTH-1's issuer speaks https on 127.0.0.1 with this self-signed
+    // certificate: OAuth token calls are https-only, also on the local stack.
+    ...(options.loopbackCaFile ? { NODE_EXTRA_CA_CERTS: options.loopbackCaFile } : {}),
     // Connector flows stand up a loopback upstream (CONN-ATT-1, CONN-EGRESS-1).
     // Only this exact host is exempt from the connector egress check;
     // every other private address stays refused.
@@ -804,6 +816,47 @@ export function localApiEnvironment(options: {
     KORTIX_MODEL_CATALOG_LIVE_ENABLED: "0",
     KORTIX_MODEL_PRICING_LIVE_ENABLED: "0",
   };
+}
+
+/** `tests/test-results` of a checkout: run results, case logs, the loopback certificate. */
+export function localTestResultsDir(root: string): string {
+  return join(root, "tests", "test-results");
+}
+
+export interface LoopbackTls {
+  dir: string;
+  cert: string;
+  key: string;
+}
+
+/**
+ * A self-signed certificate for `127.0.0.1` (IP SAN) that loopback fakes use
+ * to speak https, and that the local API trusts through NODE_EXTRA_CA_CERTS.
+ * Created once with `openssl` under `tests/test-results/.loopback-tls/` and
+ * reused while it is valid for another day, so a reused API keeps trusting it.
+ * Null when `openssl` is missing: a flow that needs it then fails naming this.
+ */
+export function ensureLoopbackTls(root: string): LoopbackTls | null {
+  const dir = join(localTestResultsDir(root), ".loopback-tls");
+  const cert = join(dir, "cert.pem");
+  const key = join(dir, "key.pem");
+  const valid = () =>
+    existsSync(cert) &&
+    existsSync(key) &&
+    spawnSync("openssl", ["x509", "-checkend", "86400", "-noout", "-in", cert], { stdio: "ignore" }).status === 0;
+  if (valid()) return { dir, cert, key };
+  mkdirSync(dir, { recursive: true });
+  const made = spawnSync(
+    "openssl",
+    [
+      "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "365",
+      "-keyout", key, "-out", cert,
+      "-subj", "/CN=127.0.0.1",
+      "-addext", "subjectAltName=IP:127.0.0.1",
+    ],
+    { stdio: "ignore" },
+  );
+  return made.status === 0 && valid() ? { dir, cert, key } : null;
 }
 
 export async function ensureLocalWeb(
@@ -944,6 +997,8 @@ export async function ensureLocalStack(
           gatewayPort,
           apiUrl: topology.apiUrl,
           supabase: options.supabase,
+          testLogDir: localTestResultsDir(topology.root),
+          loopbackCaFile: ensureLoopbackTls(topology.root)?.cert,
         }),
       });
   if (api) owned.push(api);

@@ -14,7 +14,7 @@
  */
 import { Hono, type Context, type Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { CALL_SURFACE_HEADER, isCallSurface } from '@kortix/api-contract/tool-calls';
+import { APPROVAL_DELIVERY_HEADER, CALL_SURFACE_HEADER, isCallSurface } from '@kortix/api-contract/tool-calls';
 import { supabaseAuth } from '../middleware/auth';
 import { mcpResourceMetadataUrl, oauthIssuer } from '../oauth/discovery';
 import { OAUTH_SCOPE_KORTIX } from '../oauth/access-token';
@@ -41,7 +41,7 @@ function instructions(): string {
     'Kortix MCP. You act as the signed-in user, with their permissions, across every account and project they can open.',
     'Six tools reach everything: `search` finds a tool by intent, `describe` reads its schema, `call` runs it, `execute` runs a JavaScript program that calls tools (loops, joins, filtering big results before you read them), `resume` reads a call that waits for a person, and `skills` reads the Kortix guides (`skills` name=kortix-system is the full reference).',
     'Tool ids: connectors.<slug>.<action> (a project connector such as Gmail, Slack, GitHub, an MCP server or an API), kortix.<METHOD> <path> (any Kortix API route), sessions.* (start, follow and message agent sessions), sandbox.* (bash and files in a session sandbox), projects.* and connector_admin.* (connect, add and remove connectors).',
-    'Pass project_id, or add ?project=<id> to the MCP URL. projects.list shows the projects.',
+    'Pass project_id, or add ?project=<id> to the MCP URL. projects.list shows the projects. cli.run runs any kortix CLI command as the user (args ["--help"] lists them).',
     'Approvals: a connector write can return pending_approval with an approval_url. Give the person that link and stop; never repeat the call. `resume` with the execution_id reads the outcome. You can never approve a call yourself.',
     'Never ask a person for a password, token or API key in chat. connector_admin.connect returns a link the person opens to connect an account.',
   ].join('\n');
@@ -143,6 +143,10 @@ export function createMcpApp(dispatch: Dispatch) {
     // Every API call this request makes is labelled as the MCP surface in the call log.
     const headers = new Headers(c.req.raw.headers);
     headers.set(CALL_SURFACE_HEADER, 'mcp');
+    // `?approvals=browser` fixes how this connection's gated calls are decided:
+    // only a person signed in to Kortix in a browser, never a token.
+    if (new URL(c.req.url).searchParams.get('approvals') === 'browser') headers.set(APPROVAL_DELIVERY_HEADER, 'browser');
+    else headers.delete(APPROVAL_DELIVERY_HEADER);
     const ctx: ToolContext = {
       authorization: c.req.header('Authorization')!,
       origin: oauthIssuer(new URL(c.req.url).origin),
@@ -194,7 +198,9 @@ export function createAgentToolsApp(dispatch: Dispatch) {
       dispatch,
       deadline: Date.now() + REQUEST_BUDGET_MS,
     };
-    const projectId = typeof c.req.query('project') === 'string' ? mcpScopeOf(c.req.url).projectId : null;
+    // `project_id` (the name the credential fence reads) or `project` sets the default project.
+    const requested = c.req.query('project_id') ?? c.req.query('project') ?? null;
+    const projectId = requested && isUuid(requested) ? requested : null;
     try {
       const result = await runVerb(ctx, verb, input as Record<string, unknown>, { projectId, surface: resolved });
       const text = result.content.map((p) => (p.type === 'text' ? p.text : '')).join('\n');

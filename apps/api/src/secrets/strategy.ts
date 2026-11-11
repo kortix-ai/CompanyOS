@@ -73,7 +73,12 @@ export function maxStrategy(...declared: Array<SecretStrategy | null | undefined
  * the code that wrote it, so the parser and the column must agree by
  * construction rather than by review.
  */
-import type { SecretEgressPolicy, SecretEgressRule, SecretInjectionSlot } from '@kortix/db';
+import type {
+  SecretEgressPolicy,
+  SecretEgressRule,
+  SecretHandlePlacement,
+  SecretInjectionSlot,
+} from '@kortix/db';
 import type { SecretConsumer } from '@kortix/api-contract';
 
 export type { SecretConsumer, SecretEgressPolicy };
@@ -148,6 +153,67 @@ function parseInjectionSlot(input: unknown): SecretInjectionSlot | null {
   return null;
 }
 
+const HANDLE_PLACEMENTS: readonly SecretHandlePlacement[] = ['header', 'query', 'path', 'body'];
+
+/**
+ * `placements` and `header` of one rule. Both optional: absent placements mean
+ * all four surfaces, which is every row written before the field existed.
+ * `header` narrows the header surface to one name, so it requires `header` in
+ * the list — a header name on a rule that forbids headers is a contradiction,
+ * and a contradiction in a credential policy is refused, not resolved.
+ */
+function parsePlacements(
+  rawPlacements: unknown,
+  rawHeader: unknown,
+):
+  | { ok: true; value: Pick<SecretEgressRule, 'placements' | 'header'> }
+  | { ok: false; error: string } {
+  let placements: SecretHandlePlacement[] | undefined;
+  if (rawPlacements !== undefined) {
+    if (!Array.isArray(rawPlacements) || rawPlacements.length === 0) {
+      return { ok: false, error: 'rule.placements must be a non-empty array' };
+    }
+    const seen = new Set<SecretHandlePlacement>();
+    for (const entry of rawPlacements) {
+      if (!HANDLE_PLACEMENTS.includes(entry as SecretHandlePlacement)) {
+        return { ok: false, error: `invalid placement: ${String(entry)}` };
+      }
+      seen.add(entry as SecretHandlePlacement);
+    }
+    placements = HANDLE_PLACEMENTS.filter((placement) => seen.has(placement));
+  }
+  let header: string | undefined;
+  if (rawHeader !== undefined) {
+    const name = typeof rawHeader === 'string' ? rawHeader.trim().toLowerCase() : '';
+    if (!name || name.length > 128 || !HEADER_NAME.test(name)) {
+      return { ok: false, error: 'rule.header must be a header name' };
+    }
+    if (!placements?.includes('header')) {
+      return { ok: false, error: 'rule.header requires placements to include header' };
+    }
+    header = name;
+  }
+  return {
+    ok: true,
+    value: { ...(placements ? { placements } : {}), ...(header ? { header } : {}) },
+  };
+}
+
+/**
+ * May a handle admitted by `rule` be substituted in `surface`? Absent
+ * placements = every surface. `headerName` is the lowercase header the handle
+ * sits in, for the `header` surface only.
+ */
+export function placementAllows(
+  rule: Pick<SecretEgressRule, 'placements' | 'header'>,
+  surface: SecretHandlePlacement,
+  headerName?: string,
+): boolean {
+  if (rule.placements && !rule.placements.includes(surface)) return false;
+  if (surface === 'header' && rule.header && headerName?.toLowerCase() !== rule.header) return false;
+  return true;
+}
+
 export function parseEgressPolicy(input: unknown): EgressPolicyParse {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return { ok: false, error: 'policy must be an object' };
@@ -196,11 +262,15 @@ export function parseEgressPolicy(input: unknown): EgressPolicyParse {
       if (!inject) return { ok: false, error: 'invalid rule injection' };
     }
 
+    const placement = parsePlacements(r.placements, r.header);
+    if (!placement.ok) return { ok: false, error: placement.error };
+
     rules.push({
       host,
       ...(methods ? { methods } : {}),
       ...(path ? { path } : {}),
       ...(inject ? { inject } : {}),
+      ...placement.value,
     });
   }
 
@@ -293,6 +363,25 @@ export function matchRule(
     return rule;
   }
   return null;
+}
+
+/**
+ * Why `matchRule` returned null, as the `x-kortix-refused` reason: no rule
+ * names the host (`credential_host`); a rule names the host but not the method
+ * (`credential_method`); otherwise the path (`policy_denied`).
+ */
+export function explainNoMatch(
+  policy: SecretEgressPolicy,
+  request: OutboundRequestShape,
+): 'credential_host' | 'credential_method' | 'policy_denied' {
+  const host = request.host.trim().toLowerCase();
+  const method = request.method.trim().toUpperCase();
+  const onHost = policy.rules.filter((rule) => hostMatches(rule.host, host));
+  if (onHost.length === 0) return 'credential_host';
+  const methodOk = onHost.some(
+    (rule) => !rule.methods || rule.methods.length === 0 || rule.methods.includes(method),
+  );
+  return methodOk ? 'policy_denied' : 'credential_method';
 }
 
 // ── Handles ─────────────────────────────────────────────────────────────────

@@ -219,12 +219,19 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   // Account deletion deletes the PERSON (design.md §3.1 finding 2).
   ...both('/v1/billing/account', PERSON),
   ...both('/v1/billing', PARAM),
+  // The agent tool surface: `project_id` (query or body) names the workspace;
+  // each tool call inside runs through the fence again as its own request.
+  ...both('/v1/agent-tools', PARAM),
+  // The MCP server: a person's credential reaches every workspace it may; an
+  // agent key or a workspace key reaches its own workspace only. Every tool
+  // call inside is its own request and passes this fence again.
+  ...both('/v1/mcp', OWN_WORKSPACE),
 
   // ── the person's own surfaces ──────────────────────────────────────────
   ...[
     '/v1/access', '/v1/account', '/v1/account-invites', '/v1/approval-links', '/v1/apps',
     '/v1/artifacts', '/v1/auth', '/v1/capture', '/v1/channels', '/v1/chrome', '/v1/cli',
-    '/v1/clients', '/v1/feedback', '/v1/invites', '/v1/mcp', '/v1/notifications', '/v1/oauth',
+    '/v1/clients', '/v1/feedback', '/v1/invites', '/v1/notifications', '/v1/oauth',
     '/v1/sessions', '/v1/setup-links', '/v1/tunnel', '/v1/usage',
   ].flatMap((prefix) => both(prefix, PERSON)),
 

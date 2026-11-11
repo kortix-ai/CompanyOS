@@ -13,6 +13,7 @@
  * (`/v1/git/<project>.git`) with an OWNER PAT, the way `kortix ship` pushes.
  */
 import { subscribe } from '../fixtures/billing';
+import { check } from '../core/expect';
 import { flow, harnessFlow } from '../core/flow';
 import { sleep, waitFor } from '../core/poll';
 import type { CreatedProject, FlowContext, Harness, TeamFixture } from '../core/types';
@@ -977,18 +978,18 @@ flow(
       const own = await fixture.mint();
       await ctx.step('a session whose daemon cannot be reached reports stale null, never false, and no release block', async () => {
         const r = await fixture.configState(own.sessionId);
-        if (r.status !== 200) throw new Error(`expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
-        if (r.body.sandbox_reachable !== false) throw new Error(`sandbox_reachable ${r.body.sandbox_reachable}`);
-        if (r.body.stale !== null) throw new Error(`stale ${r.body.stale}`);
-        if ('release' in r.body) throw new Error('release block without a daemon report');
+        check(r.status === 200, 'GET /config answers 200', `${r.status}: ${JSON.stringify(r.body).slice(0, 400)}`);
+        check(r.body.sandbox_reachable === false, 'sandbox_reachable is false', r.body.sandbox_reachable);
+        check(r.body.stale === null, 'stale is null, never false', r.body.stale);
+        check(!('release' in r.body), 'no release block without a daemon report');
         for (const field of ['base_ref', 'running_etag', 'latest_etag', 'commit_sha']) {
-          if (!(field in r.body)) throw new Error(`missing ${field}`);
+          check(field in r.body, `the body has ${field}`);
         }
       });
       await ctx.step('ANON is rejected with 401', async () => {
         const origin = ctx.env.apiUrl.replace(/\/v1$/, '');
         const response = await fetch(`${origin}/v1/projects/${fixture.projectId}/sessions/${own.sessionId}/config`);
-        if (response.status !== 401) throw new Error(`expected 401, got ${response.status}`);
+        check(response.status === 401, 'ANON is refused with 401', response.status, 401);
       });
     } finally {
       await fixture.cleanup();
@@ -1465,20 +1466,20 @@ flow(
       await ctx.step('the daemon assignment and the human read resolve one desired release', async () => {
         const token = (ctx.P.OWNER.auth as { token?: string }).token ?? null;
         const daemon = await fixture.descriptor(own.secret, own.sessionId);
-        if (daemon.status !== 200) throw new Error(`descriptor: ${daemon.status}`);
+        check(daemon.status === 200, 'the daemon descriptor answers 200', daemon.status, 200);
         const human = await fixture.descriptor(token, own.sessionId);
-        if (human.status !== 200) throw new Error(`human descriptor: ${human.status}`);
+        check(human.status === 200, 'the human descriptor answers 200', human.status, 200);
         if (human.body.release_id !== daemon.body.release_id) {
           throw new Error(`human ${human.body.release_id} !== daemon ${daemon.body.release_id}`);
         }
         first = daemon.body.release_id as string;
         const state = await fixture.configState(own.sessionId);
-        if (state.status !== 200) throw new Error(`config state: ${state.status}`);
+        check(state.status === 200, 'GET /config answers 200', state.status, 200);
         // No daemon runs here, so `/config` reports the box as unreachable and
         // `stale: null`. It must never answer a confident `false`, which is
         // what the turn-start gate would read as "this box is current".
-        if (state.body.stale !== null) throw new Error(`stale ${state.body.stale}, expected null`);
-        if (state.body.sandbox_reachable !== false) throw new Error('a box answered in a profile with none');
+        check(state.body.stale === null, 'stale is null', state.body.stale, null);
+        check(state.body.sandbox_reachable === false, 'no box answers in a profile with none', state.body.sandbox_reachable, false);
       });
 
       await ctx.step('a base branch move moves the desired release for both readers together', async () => {
@@ -1489,8 +1490,8 @@ flow(
         const token = (ctx.P.OWNER.auth as { token?: string }).token ?? null;
         const daemon = await fixture.descriptor(own.secret, own.sessionId);
         const human = await fixture.descriptor(token, own.sessionId);
-        if (daemon.body.source_commit !== tip) throw new Error(`daemon commit ${daemon.body.source_commit}, tip ${tip}`);
-        if (daemon.body.release_id === first) throw new Error('the desired release did not move with the base branch');
+        check(daemon.body.source_commit === tip, 'the daemon descriptor names the new tip', daemon.body.source_commit, tip);
+        check(daemon.body.release_id !== first, 'the desired release moves with the base branch', daemon.body.release_id);
         if (human.body.release_id !== daemon.body.release_id) {
           throw new Error(`readers disagree after the move: ${human.body.release_id} vs ${daemon.body.release_id}`);
         }
@@ -1499,7 +1500,7 @@ flow(
       await ctx.step('an unchanged base branch resolves the same release again, so a current box converges nothing', async () => {
         const a = await fixture.descriptor(own.secret, own.sessionId);
         const b = await fixture.descriptor(own.secret, own.sessionId);
-        if (a.body.release_id !== b.body.release_id) throw new Error('the desired release moved without a base change');
+        check(a.body.release_id === b.body.release_id, 'the desired release stays put without a base change', a.body.release_id, b.body.release_id);
       });
     } finally {
       await fixture.cleanup();
@@ -2330,46 +2331,46 @@ flow(
 
       await ctx.step('a daemon that does not ask for v3 gets no release, and the reason names the cap (v2, unchanged)', async () => {
         const r = await fixture.descriptor(own.secret, own.sessionId);
-        if (r.status !== 200) throw new Error(`expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+        check(r.status === 200, 'GET /config answers 200', `${r.status}: ${JSON.stringify(r.body).slice(0, 400)}`);
         const d = r.body as Descriptor;
-        if (d.format !== 'config-release-v2') throw new Error(`format ${d.format}`);
+        check(d.format === 'config-release-v2', 'the format is config-release-v2', d.format);
         if (d.release_id !== null || d.files !== null || d.archive !== null) {
           throw new Error(`v2 assigned a release over the cap: ${JSON.stringify({ ...d, files: d.files?.length })}`);
         }
-        if (!d.reason?.includes('exceeds the 33554432-byte config archive limit')) throw new Error(`reason ${d.reason}`);
-        if ('snapshot' in d) throw new Error('a v2 descriptor carries a snapshot');
+        check(Boolean(d.reason?.includes('exceeds the 33554432-byte config archive limit')), 'the reason names the 33554432-byte cap', d.reason);
+        check(!('snapshot' in d), 'a v2 descriptor carries no snapshot');
       });
 
       await ctx.step('a daemon that asks for v3 gets the release: the tip, its tree, every file with its blob ID, and no archive', async () => {
         const r = await fixture.descriptor(own.secret, own.sessionId, V3);
-        if (r.status !== 200) throw new Error(`expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+        check(r.status === 200, 'GET /config answers 200', `${r.status}: ${JSON.stringify(r.body).slice(0, 400)}`);
         v3 = r.body as Descriptor;
-        if (v3.format !== 'config-release-v3') throw new Error(`format ${v3.format}`);
-        if (v3.source_commit !== tip) throw new Error(`source_commit ${v3.source_commit} is not the tip ${tip}`);
-        if (!HEX40.test(v3.config_tree_id ?? '')) throw new Error(`config_tree_id ${v3.config_tree_id}`);
-        if (v3.release_id !== (await releaseIdOf(v3))) throw new Error('release_id is not sha256(tree:etag)');
-        if (v3.archive !== null) throw new Error(`a release over the cap carries an archive: ${JSON.stringify(v3.archive)}`);
-        if (v3.reason !== null) throw new Error(`reason ${v3.reason}`);
+        check(v3.format === 'config-release-v3', 'the format is config-release-v3', v3.format);
+        check(v3.source_commit === tip, 'source_commit is the tip', v3.source_commit, tip);
+        check(HEX40.test(v3.config_tree_id ?? ''), 'config_tree_id is a 40-hex tree id', v3.config_tree_id);
+        check(v3.release_id === (await releaseIdOf(v3)), 'release_id is sha256(tree:etag)', v3.release_id);
+        check(v3.archive === null, 'a release over the cap carries no archive', v3.archive, null);
+        check(v3.reason === null, 'the v3 reason is null', v3.reason, null);
         const listed = new Map((v3.files ?? []).map(([path, mode, blob]) => [path, { mode, blob }]));
         const entry = listed.get('data/large.bin');
         if (!entry || entry.mode !== '100644' || entry.blob !== (await gitBlobId(large))) {
           throw new Error(`data/large.bin is listed as ${JSON.stringify(entry)}`);
         }
-        if (!listed.has('agents/kortix.md')) throw new Error('the release lists no agent prompt');
-        if (!('snapshot' in v3)) throw new Error('a v3 descriptor has no snapshot field');
-        if (v3.snapshot !== null && !HEX64.test(v3.snapshot?.sha256 ?? '')) throw new Error(`snapshot ${JSON.stringify(v3.snapshot)}`);
+        check(listed.has('agents/kortix.md'), 'the release lists the agent prompt');
+        check('snapshot' in v3, 'a v3 descriptor has a snapshot field');
+        check(v3.snapshot === null || HEX64.test(v3.snapshot?.sha256 ?? ''), 'the snapshot is null or names a sha256', v3.snapshot);
       });
 
       await ctx.step('the archive route refuses the tree with 413: no daemon can download an archive over the cap', async () => {
         const r = await fixture.download(own.secret, v3.config_tree_id!);
-        if (r.status !== 413) throw new Error(`expected 413, got ${r.status}`);
+        check(r.status === 413, 'the archive route refuses with 413', r.status, 413);
       });
 
       await ctx.step('a new tip that keeps the oversized blobs preserves v2 fallback and a distinct v3 release', async () => {
         const memoTip = await fixture.commit({ 'notes.md': 'The large file remains.\n' }, 'keep oversized data');
         const v2r = await fixture.descriptor(own.secret, own.sessionId);
         const v3r = await fixture.descriptor(own.secret, own.sessionId, V3);
-        if (v2r.status !== 200 || v3r.status !== 200) throw new Error(`statuses ${v2r.status}/${v3r.status}`);
+        check(v2r.status === 200 && v3r.status === 200, 'both descriptors answer 200', `${v2r.status}/${v3r.status}`);
         if (v2r.body.release_id !== null || v2r.body.files !== null || v2r.body.archive !== null) {
           throw new Error('v2 assigned a release while the oversized blobs remain');
         }
@@ -2380,28 +2381,28 @@ flow(
         if (memo.source_commit !== memoTip || memo.release_id !== (await releaseIdOf(memo)) || memo.release_id === v3.release_id) {
           throw new Error('v3 did not assign the changed oversized tree its own release');
         }
-        if (memo.archive !== null || memo.reason !== null) throw new Error('v3 did not preserve the archive fallback');
-        if (!memo.files?.some(([path]) => path === 'data/large.bin')) throw new Error('v3 lost the oversized file');
+        check(memo.archive === null && memo.reason === null, 'v3 preserves the archive fallback (no archive, no reason)', { archive: memo.archive, reason: memo.reason });
+        check(Boolean(memo.files?.some(([path]) => path === 'data/large.bin')), 'v3 still lists the oversized file');
       });
 
       await ctx.step('dropping oversized blobs restores both descriptors and the smaller tree archive immediately', async () => {
         const smallTip = await commitTo(fixture.repo, {}, 'back under the cap', ['data']);
         const v2r = await fixture.descriptor(own.secret, own.sessionId);
         const v3r = await fixture.descriptor(own.secret, own.sessionId, V3);
-        if (v2r.status !== 200 || v3r.status !== 200) throw new Error(`statuses ${v2r.status}/${v3r.status}`);
+        check(v2r.status === 200 && v3r.status === 200, 'both descriptors answer 200', `${v2r.status}/${v3r.status}`);
         const small: Descriptor = v3r.body;
         if (small.source_commit !== smallTip || !HEX40.test(small.config_tree_id ?? '') ||
             small.release_id !== (await releaseIdOf(small)) || small.release_id === v3.release_id ||
             small.release_id !== v2r.body.release_id) {
           throw new Error('v2 and v3 did not assign the smaller tree its distinct release');
         }
-        if (!v2r.body.archive || !small.archive || small.reason !== null) throw new Error('the smaller tree has no archive');
+        check(Boolean(v2r.body.archive && small.archive) && small.reason === null, 'the smaller tree has an archive and no reason');
         if (!small.files?.some(([path]) => path === 'agents/kortix.md') || small.files.some(([path]) => path.startsWith('data/'))) {
           throw new Error('v3 does not list the smaller tree');
         }
-        if (!small.config_tree_id) throw new Error('the smaller tree has no tree ID');
+        check(small.config_tree_id, 'the smaller tree has a tree ID', small.config_tree_id);
         const archive = await fixture.download(own.secret, small.config_tree_id);
-        if (archive.status !== 200 || archive.bytes.byteLength === 0) throw new Error(`explicit small-tree archive: ${archive.status}`);
+        check(archive.status === 200 && archive.bytes.byteLength > 0, 'the small-tree archive downloads with bytes', archive.status, 200);
       });
     } finally {
       await fixture.cleanup();

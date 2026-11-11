@@ -21,7 +21,7 @@ import {
 } from '../lib/serializers';
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
 import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
-import { encryptProjectSecret, isValidSecretName } from '../secrets';
+import { encryptProjectSecret, isValidSecretName, projectSecretAad } from '../secrets';
 import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerSecretPersonalRoutes(): void {
@@ -118,7 +118,7 @@ export function registerSecretPersonalRoutes(): void {
         projectId,
         identifier: name,
         name,
-        valueEnc: encryptProjectSecret(projectId, value),
+        valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(name)),
         ownerUserId: loaded.userId,
         active: active ?? true,
         createdBy: loaded.userId,
@@ -128,7 +128,7 @@ export function registerSecretPersonalRoutes(): void {
       await db
         .update(projectSecrets)
         .set({
-          ...(value !== null ? { valueEnc: encryptProjectSecret(projectId, value) } : {}),
+          ...(value !== null ? { valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(name)) } : {}),
           ...(active !== undefined ? { active } : {}),
           updatedAt: now,
         })

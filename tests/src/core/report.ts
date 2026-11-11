@@ -3,19 +3,85 @@
  * self-contained projection (no framework, no network) that opens from file://
  * or as a CI artifact. Hierarchy: domain → flow ID → step → req/res + assertions.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-import type { RunResult } from "./result";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { parseTestCaseId, testCaseLogFile } from "@kortix/api-contract/test-case";
+import type { FlowResult, RunResult, StepResult } from "./result";
 import { scrubValue } from "./scrub";
 
-export function writeResults(result: RunResult, jsonPath: string, htmlPath: string): void {
+/** The case log of a case id, relative to `resultsDir`, when the API wrote one. */
+function existingCaseLog(resultsDir: string, caseId: string | undefined): string | undefined {
+  const id = parseTestCaseId(caseId);
+  if (!id) return undefined;
+  const file = testCaseLogFile(id);
+  return existsSync(join(resultsDir, file)) ? file : undefined;
+}
+
+/**
+ * Link every step (and every flow body, step 0) to the case log the API wrote
+ * for it under `<resultsDir>/case-logs/`. An API without the local test
+ * profile writes none, so a missing file leaves no link.
+ */
+export function attachCaseLogs(result: RunResult, resultsDir: string): RunResult {
+  return {
+    ...result,
+    flows: result.flows.map((f): FlowResult => ({
+      ...f,
+      caseLog: existingCaseLog(resultsDir, f.caseId),
+      steps: f.steps.map((st): StepResult => ({ ...st, caseLog: existingCaseLog(resultsDir, st.caseId) })),
+    })),
+  };
+}
+
+/** The `x-request-id` of every response a step received, in order. */
+export function stepRequestIds(step: Pick<StepResult, "requests">): string[] {
+  return step.requests.map((r) => r.res.headers?.["x-request-id"]).filter((v): v is string => Boolean(v));
+}
+
+/**
+ * One block per failed flow for the terminal: the reason, the failing step,
+ * its last request, the response's `x-request-id`, and the case log.
+ */
+export function renderFailureLines(result: RunResult, resultsDir?: string): string[] {
+  const lines: string[] = [];
+  for (const f of result.flows) {
+    if (f.status !== "fail") continue;
+    lines.push(`FAIL ${f.id}: ${f.reason ?? "failed"}`);
+    const failed = f.steps.find((st) => st.status === "fail");
+    if (failed) {
+      lines.push(`  step: ${failed.name}`);
+      const last = failed.requests.at(-1);
+      if (last) lines.push(`  request: ${last.req.method} ${last.req.url} -> ${last.res.status}`);
+      const ids = stepRequestIds(failed);
+      if (ids.length) lines.push(`  x-request-id: ${ids.join(", ")}`);
+    }
+    const log = failed?.caseLog ?? f.caseLog;
+    if (log) lines.push(`  case log: ${resultsDir ? join(resultsDir, log) : log}`);
+    else if (failed?.caseId ?? f.caseId) lines.push(`  case: ${failed?.caseId ?? f.caseId} (the API wrote no case log)`);
+  }
+  return lines;
+}
+
+export function writeResults(result: RunResult, jsonPath: string, htmlPath: string): RunResult {
   // Both files are uploaded as public workflow artifacts. Scrub by shape here,
   // after every capture-time key mask, so no path into the tree can carry a
   // token out (see scrub.ts).
-  const safe = scrubValue(result);
+  const safe = attachCaseLogs(scrubValue(result), dirname(jsonPath));
   mkdirSync(dirname(jsonPath), { recursive: true });
   writeFileSync(jsonPath, JSON.stringify(safe, null, 2));
   writeFileSync(htmlPath, renderHtml(safe));
+  return safe;
+}
+
+function targetLine(result: RunResult): string {
+  const parts: string[] = [];
+  if (result.targetKind) {
+    parts.push(`target ${result.targetKind}: ${result.scheduled?.length ?? result.flows.length} scheduled, ${result.excludedFlows?.length ?? 0} excluded with a reason`);
+  }
+  for (const [kind, c] of Object.entries(result.targets ?? {})) {
+    parts.push(`${kind}: ${c.declared} declared, ${c.skipped.length} skip`);
+  }
+  return parts.join(" · ");
 }
 
 /** Compact GitHub step-summary markdown (flow-ID matrix). */
@@ -29,6 +95,10 @@ export function renderStepSummary(result: RunResult): string {
   const icon = (st: string) => (st === "pass" ? "✅" : st === "fail" ? "❌" : st === "skip" ? "⚪" : "🟡");
   let md = `## ke2e — ${result.target} (${result.apiUrl})\n\n`;
   md += `**${s.passed}/${s.total} passed** · ${s.failed} failed · ${s.skipped} skipped · ${s.todo} todo · ${(s.durationMs / 1000).toFixed(1)}s\n\n`;
+  const targets = targetLine(result);
+  if (targets) md += `${targets}\n\n`;
+  for (const e of result.excludedFlows ?? []) md += `- excluded \`${e.id}\`: ${e.reason}\n`;
+  if (result.excludedFlows?.length) md += "\n";
   for (const [domain, flows] of [...byDomain].sort()) {
     md += `### ${domain}\n`;
     md += flows
@@ -38,6 +108,10 @@ export function renderStepSummary(result: RunResult): string {
     md += "\n\n";
   }
   return md;
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
 function renderHtml(result: RunResult): string {
@@ -66,6 +140,7 @@ summary::-webkit-details-marker{display:none}
 .req .ln{white-space:pre-wrap;word-break:break-all}.url{color:#79c0ff}
 .assert{font-size:12px;margin:3px 0}.assert.fail{color:var(--fail)}.assert.pass{color:var(--mut)}
 .reason{color:var(--fail);font-size:12px;padding:4px 12px}
+a{color:#79c0ff}
 .tag{color:var(--mut);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-left:4px}
 button.copy{font:inherit;font-size:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:1px 6px;cursor:pointer;float:right}
 </style></head><body>
@@ -78,7 +153,8 @@ button.copy{font:inherit;font-size:10px;background:#21262d;color:var(--fg);borde
 <span class="skip">○ <b id="s-skip"></b> skipped</span>
 <span class="todo">● <b id="s-todo"></b> todo</span>
 <span class="meta"><b id="s-dur"></b></span>
-</div></header>
+</div>
+<div class="meta" id="targets">${escapeHtml(targetLine(result))}</div></header>
 <div class="matrix" id="matrix"></div>
 <main id="root"></main>
 <script>
@@ -117,9 +193,19 @@ for (const [dom, flows] of Object.entries(domains).sort()) {
     h += '<span class="dur">'+(f.durationMs/1000).toFixed(2)+'s'+(f.attempts>1?' · '+f.attempts+'×':'')+'</span></summary>';
     fd.innerHTML = h;
     if (f.reason) { const r=document.createElement('div'); r.className='reason'; r.textContent=f.reason; fd.appendChild(r); }
+    if (f.status==='fail' && f.caseLog) { const c=document.createElement('div'); c.className='reason'; c.innerHTML='flow body case log <a class="caselog" href="'+esc(f.caseLog)+'">'+esc(f.caseLog)+'</a>'; fd.appendChild(c); }
     for (const st of (f.steps||[])) {
       const sd = document.createElement('div'); sd.className='step';
       sd.innerHTML = '<div class="'+st.status+'">'+(st.status==='pass'?'✓':'✗')+' '+esc(st.name)+' <span class="dur">'+(st.durationMs/1000).toFixed(2)+'s</span></div>';
+      if (st.status==='fail') {
+        const ev = document.createElement('div'); ev.className='evidence';
+        const rids = (st.requests||[]).map(r=>(r.res.headers||{})['x-request-id']).filter(Boolean);
+        ev.innerHTML = (st.error?'<div class="reason">'+esc(st.error.message)+'</div>':'')
+          + (st.caseLog?'<div class="ln meta">case log <a class="caselog" href="'+esc(st.caseLog)+'">'+esc(st.caseLog)+'</a></div>'
+                       :(st.caseId?'<div class="ln meta">case '+esc(st.caseId)+' (the API wrote no case log)</div>':''))
+          + (rids.length?'<div class="ln meta">x-request-id '+rids.map(esc).join(', ')+'</div>':'');
+        sd.appendChild(ev);
+      }
       for (const r of (st.requests||[])) {
         const rq = document.createElement('div'); rq.className='req';
         const id='c'+Math.random().toString(36).slice(2);

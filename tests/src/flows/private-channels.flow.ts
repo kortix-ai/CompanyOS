@@ -109,9 +109,9 @@ async function thread(world: AgentPrincipalsWorld, spaceId: string, userId: stri
 
 /** `hasStorage`, and without storage the step that records the 503 `drive_storage_unavailable` it asserted. */
 async function storageOrStep(ctx: FlowContext, world: AgentPrincipalsWorld): Promise<boolean> {
-  const storage = await hasStorage(world);
-  if (!storage) await ctx.step('no drive storage on this target: a Files write → 503 drive_storage_unavailable', async () => {});
-  return storage;
+  // The probe runs inside the step, so its 201 or `503 drive_storage_unavailable`
+  // is a recorded assertion. An empty step here claimed the 503 and proved nothing.
+  return ctx.step('probe drive storage: a Files mkdir → 201, or 503 drive_storage_unavailable on a target without it', () => hasStorage(world));
 }
 
 const ids = (list: MemberList) => list.members.map((m) => m.user_id).sort();

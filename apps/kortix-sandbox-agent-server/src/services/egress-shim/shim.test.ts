@@ -1000,3 +1000,75 @@ describe('the streaming relay transport', () => {
     release()
   }, 10_000)
 })
+
+describe('a Kortix refusal reaches the client with its x-kortix-refused reason', () => {
+  async function guestRequest(port: number): Promise<string> {
+    const { socket } = await connect(port, 'api.example.com:443')
+    const tls = await import('node:tls')
+    return await new Promise<string>((resolve, reject) => {
+      const secured = tls.connect({ socket, servername: 'api.example.com', ca: CA.certPem }, () => {
+        secured.write('GET /v1/x HTTP/1.1\r\nHost: api.example.com\r\nConnection: close\r\n\r\n')
+      })
+      let raw = ''
+      secured.on('data', (chunk: Buffer) => {
+        raw += chunk.toString('utf8')
+        const sep = raw.indexOf('\r\n\r\n')
+        const length = /content-length: (\d+)/i.exec(raw)?.[1]
+        if (sep >= 0 && length !== undefined && raw.length - sep - 4 >= Number(length)) {
+          secured.destroy()
+          resolve(raw)
+        }
+      })
+      secured.once('error', reject)
+    })
+  }
+
+  const refusal = () =>
+    new Response(JSON.stringify({ error: 'outbound request does not match the secret policy', code: 'policy_denied' }), {
+      status: 403,
+      headers: {
+        'content-type': 'application/json',
+        'x-kortix-relay-error': 'policy_denied',
+        'x-kortix-refused': 'credential_host',
+      },
+    })
+
+  test('buffered /broker transport', async () => {
+    const apiUrl = fakeKortix((req) =>
+      req.headers.has('x-kortix-relay-probe') ? new Response(null, { status: 404 }) : refusal(),
+    )
+    const { port } = await shimFor(apiUrl)
+    const raw = await guestRequest(port)
+    expect(raw).toStartWith('HTTP/1.1 403')
+    expect(raw.toLowerCase()).toContain('x-kortix-refused: credential_host')
+    expect(raw).toContain('"code":"policy_denied"')
+  })
+
+  test('streaming /relay transport', async () => {
+    const seen: string[] = []
+    const apiUrl = fakeKortix((req) => {
+      if (req.headers.has('x-kortix-relay-probe')) {
+        seen.push('probe')
+        return new Response(null, { status: 204, headers: { 'x-kortix-relay': '1' } })
+      }
+      return refusal()
+    })
+    const { port } = await shimFor(apiUrl)
+    await waitForProbe(seen)
+    const raw = await guestRequest(port)
+    expect(raw).toStartWith('HTTP/1.1 403')
+    expect(raw.toLowerCase()).toContain('x-kortix-refused: credential_host')
+  })
+
+  test('a value outside the closed set is not forwarded', async () => {
+    const apiUrl = fakeKortix((req) =>
+      req.headers.has('x-kortix-relay-probe')
+        ? new Response(null, { status: 404 })
+        : new Response('{}', { status: 403, headers: { 'x-kortix-refused': 'made_up' } }),
+    )
+    const { port } = await shimFor(apiUrl)
+    const raw = await guestRequest(port)
+    expect(raw).toStartWith('HTTP/1.1 403')
+    expect(raw.toLowerCase()).not.toContain('x-kortix-refused')
+  })
+})

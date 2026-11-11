@@ -6,37 +6,19 @@
 import { Glob } from "bun";
 import { resolve } from "node:path";
 import { Client } from "./client";
-import { withRecorder, type StepRecorder } from "./context";
-import { AssertionError } from "./expect";
-import {
-  allFlows,
-  attemptsFor,
-  classifyFlowError,
-  clearRegistry,
-  withFlowDeadline,
-  maxAttemptBound,
-  readAttemptPolicy,
-  resolveFlowTimeoutMs,
-  type RegisteredFlow,
-} from "./flow";
-import { loadEnv, type Env } from "./env";
+import { allFlows, clearRegistry, type RegisteredFlow } from "./flow";
+import { runOneFlow } from "./flow-exec";
+import { loadEnv } from "./env";
 import { waitFor } from "./poll";
 import { log } from "./log";
 import { formatFlowProgress, redactSensitiveLogText } from "./progress";
 import { partitionParallelFlows, runScheduled, type ConcurrentLane } from "./lanes";
 import { planLocalFlows } from "./local-profile";
-import { isKe2eRetryableError, ke2eRetryDelayMs } from "./client";
-import {
-  summarize,
-  type Assertion,
-  type Captured,
-  type FlowResult,
-  type RunResult,
-  type StepResult,
-  type Status,
-} from "./result";
-import type { FlowContext } from "./types";
-import { buildWorld, type World } from "../fixtures/world";
+import { isKe2eRetryableError } from "./client";
+import { reconcileExecuted, summarize, type FlowResult, type RunResult } from "./result";
+import { selectFlows } from "./selection";
+import { runTargetKind, targetCounts, targetSkipReason } from "./targets";
+import { buildWorld } from "../fixtures/world";
 import { postSessionWithRetry } from "./sandbox-prebuild";
 
 export interface RunOptions {
@@ -77,203 +59,6 @@ export async function discoverFlows(): Promise<void> {
   discovered = true;
 }
 
-function selected(f: RegisteredFlow, o: RunOptions): boolean {
-  if (o.ids?.length && !o.ids.includes(f.id)) return false;
-  if (o.domains?.length && !o.domains.includes(f.meta.domain)) return false;
-  if (o.tags?.length && !(f.meta.tags ?? []).some((t) => o.tags!.includes(t))) return false;
-  if (o.grep && !f.id.includes(o.grep) && !f.meta.domain.includes(o.grep)) return false;
-  if (o.smoke && !(f.meta.tags ?? []).includes("smoke")) return false;
-  return true;
-}
-
-class StepCollector implements StepRecorder {
-  requests: Captured[] = [];
-  assertions: Assertion[] = [];
-  pushRequest(c: Captured) {
-    this.requests.push(c);
-  }
-  pushAssertion(a: Assertion) {
-    this.assertions.push(a);
-  }
-}
-
-class SkipSignal extends Error {
-  constructor(public reason: string) {
-    super(reason);
-  }
-}
-
-/**
- * The attempt-scoped context a flow runs against: a fresh client, the run's
- * principals, and fixture factories bound to this attempt's stack, names and
- * abort signal.
- */
-function mkFlowContext(
-  env: Env,
-  world: World,
-  stack: ReturnType<World["newStack"]>,
-  steps: StepResult[],
-  attempt: number,
-  signal: AbortSignal,
-): FlowContext {
-  return {
-    // Every flow's client retries gateway-generated transient 502/503/504
-    // (incl. the Cloudflare worker's MAINTENANCE_MODE laundering of an
-    // overloaded staging origin — see accounts.flow.ts and
-    // isKe2eTransientGatewayResponse). This is SAFE because that classifier
-    // requires the response to carry NO x-request-id; a genuine app 5xx does
-    // carry one and is never retried. Retrying at the request layer (not just
-    // on .status() gates) also self-heals body-only assertions that would
-    // otherwise surface the laundered 503 as a hard AssertionError.
-    client: new Client(env.apiUrl).withTransientGatewayRetries(
-      Number(process.env.KE2E_GATEWAY_RETRIES ?? 3),
-    ),
-    P: world.principals,
-    env,
-    track: (kind, id, meta) => stack.push(kind, id, meta),
-    skip: (reason) => {
-      throw new SkipSignal(reason);
-    },
-    // Attempt-scoped: a retry must not re-derive the SAME names its failed
-    // predecessor already committed (see world.ts attemptSuffix).
-    fixtures: world.makeFixtures(stack, attempt, signal),
-    step: async (name, fn) => {
-      const collector = new StepCollector();
-      const start = performance.now();
-      try {
-        const out = await withRecorder(collector, fn);
-        steps.push(stepResult(name, "pass", start, collector));
-        return out;
-      } catch (err) {
-        // A ctx.skip() fired inside this step: the step did not FAIL — it
-        // asserted what it could (its passing assertions are recorded) and
-        // then declared the rest unreachable on this target. Recording it
-        // as "fail" made every one-step assert-then-skip flow (CHN-6) count
-        // as an unasserted skip under --require-all (run 32344222963
-        // shard 1: 34/35 passed, 0 failed, exit 1).
-        steps.push(
-          stepResult(name, err instanceof SkipSignal ? "skip" : "fail", start, collector,
-            err instanceof SkipSignal ? undefined : err),
-        );
-        throw err;
-      }
-    },
-  };
-}
-
-async function runOneFlow(
-  f: RegisteredFlow,
-  env: Env,
-  world: World,
-): Promise<FlowResult> {
-  const steps: StepResult[] = [];
-  const flowStart = performance.now();
-  // Retries are budgeted PER ERROR CLASS (see flow.ts):
-  //   assertion / unmarked   → 1 attempt, never retried
-  //   flow-level timeout     → KE2E_TIMEOUT_ATTEMPTS, default 1
-  //   session-runtime ready  → KE2E_SESSION_RUNTIME_ATTEMPTS, default 2
-  //   marked infra (network, laundered 503) → KE2E_FLOW_ATTEMPTS, default 3
-  // A per-flow `meta.retry.attempts` overrides every class explicitly.
-  const policy = readAttemptPolicy();
-  const declaredAttempts = f.meta.retry?.attempts;
-  const maxAttempts = declaredAttempts ?? maxAttemptBound(policy);
-
-  // Capability gating → skip with reason.
-  const missing = (f.meta.requires ?? []).filter((cap) => !env.capabilities[cap]);
-  if (missing.length) {
-    return mkResult(f, "skip", `missing capabilities: ${missing.join(", ")}`, [], performance.now() - flowStart, 0);
-  }
-  if (f.meta.todo) {
-    return mkResult(f, "todo", f.meta.todo, [], performance.now() - flowStart, 0);
-  }
-
-  let attempt = 0;
-  let lastError: unknown;
-  while (attempt < maxAttempts) {
-    attempt++;
-    steps.length = 0;
-    const stack = world.newStack();
-    // Aborted when this attempt ends for any reason, so fixture work it left
-    // behind (a queued or rate-limited provision) stops with it.
-    const attemptController = new AbortController();
-    const ctx = mkFlowContext(env, world, stack, steps, attempt, attemptController.signal);
-
-    try {
-      await withFlowDeadline(f.fn(ctx), resolveFlowTimeoutMs(f.meta.timeoutMs), f.id, attemptController);
-      attemptController.abort(new Error(`flow ${f.id} attempt ${attempt} finished`));
-      await stack.teardown();
-      return mkResult(f, "pass", undefined, steps, performance.now() - flowStart, attempt);
-    } catch (err) {
-      if (!attemptController.signal.aborted) {
-        attemptController.abort(new Error(`flow ${f.id} attempt ${attempt} failed`));
-      }
-      await stack.teardown();
-      if (err instanceof SkipSignal) {
-        return mkResult(f, "skip", err.reason, steps, performance.now() - flowStart, attempt);
-      }
-      lastError = err;
-      // Never retry assertion failures — only infra signals, and each class
-      // gets its own budget so a timeout can never triple the serial tail.
-      const retryClass = classifyFlowError(err, err instanceof AssertionError);
-      const allowed = declaredAttempts ?? attemptsFor(retryClass, policy);
-      if (attempt >= allowed || attempt >= maxAttempts) break;
-      log.warn(
-        `retry ${f.id} (${retryClass}) after attempt ${attempt}/${allowed}: ` +
-          `${redactSensitiveLogText((err as Error)?.message ?? String(err))}`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, ke2eRetryDelayMs(err)));
-    }
-  }
-  const reason = (lastError as Error)?.message ?? String(lastError);
-  return mkResult(f, "fail", reason, steps, performance.now() - flowStart, attempt);
-}
-
-function stepResult(
-  name: string,
-  status: Status,
-  start: number,
-  c: StepCollector,
-  err?: unknown,
-): StepResult {
-  return {
-    name,
-    status,
-    durationMs: performance.now() - start,
-    requests: c.requests,
-    assertions: c.assertions,
-    error: err ? { message: (err as Error)?.message ?? String(err), stack: (err as Error)?.stack } : undefined,
-  };
-}
-
-function mkResult(
-  f: RegisteredFlow,
-  status: Status,
-  reason: string | undefined,
-  steps: StepResult[],
-  durationMs: number,
-  attempts: number,
-): FlowResult {
-  return {
-    id: f.id,
-    domain: f.meta.domain,
-    tags: f.meta.tags ?? [],
-    status,
-    reason,
-    durationMs,
-    attempts,
-    steps: [...steps],
-    // A skip that already PASSED at least one step asserted the reachable
-    // contract on this target (see FlowResult.asserted / runExitCode).
-    // Asserted = the flow proved SOMETHING before skipping: a fully passed
-    // step, or at least one passing assertion inside the step the skip fired
-    // from (the one-step assert-then-skip shape).
-    asserted:
-      status === "skip"
-        ? steps.some((s) => s.status === "pass" || s.assertions.some((a) => a.pass))
-        : undefined,
-  };
-}
-
 function positiveWorkerCount(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.trunc(value));
@@ -282,25 +67,42 @@ function positiveWorkerCount(value: number | undefined, fallback: number): numbe
 export async function runSuite(opts: RunOptions): Promise<RunResult> {
   const env = loadEnv();
   await discoverFlows();
-  const candidates = allFlows().filter((f) => selected(f, opts));
+  // Exact: an unknown id, domain or tag, or a named id the other filters drop,
+  // throws a SelectionError naming it (src/core/selection.ts).
+  const candidates = selectFlows(allFlows(), opts);
+  const targetKind = runTargetKind(opts.profile);
   const localPlan = opts.profile === "local" ? planLocalFlows(candidates) : null;
-  const flows = localPlan?.runnable ?? candidates;
+  // A flow that declares `targets[kind] = { skip }` is not applicable on this
+  // target: never scheduled, listed with its reason. The local plan already
+  // applied the local declarations.
+  const targetExcluded = localPlan
+    ? []
+    : candidates.flatMap((f) => {
+        const reason = targetSkipReason(f.meta, targetKind);
+        return reason ? [{ id: f.id, reason: `targets.${targetKind}: ${reason}` }] : [];
+      });
+  const excludedIds = new Set(targetExcluded.map((f) => f.id));
+  const flows = localPlan?.runnable ?? candidates.filter((f) => !excludedIds.has(f.id));
+  const excludedFlows = localPlan?.excluded ?? targetExcluded;
   if (flows.length === 0) {
-    const excluded = localPlan?.excluded
-      .map((flow) => `${flow.id} (${flow.reason})`)
-      .join(", ");
+    const excluded = excludedFlows.map((flow) => `${flow.id} (${flow.reason})`).join(", ");
     throw new Error(
       excluded
-        ? `no local flows selected; excluded: ${excluded}`
+        ? `no ${targetKind} flows selected; excluded: ${excluded}`
         : "no flows matched the selected filters",
     );
   }
-  if (localPlan) {
-    log.info(
-      `local profile: ${flows.length}/${candidates.length} selected · ` +
-        `${localPlan.excluded.length} external/todo excluded`,
-    );
-  }
+  const perTarget = targetCounts(candidates);
+  log.info(
+    `target ${targetKind}: ${flows.length}/${candidates.length} scheduled · ` +
+      `${excludedFlows.length} excluded with a reason`,
+  );
+  log.info(
+    "targets declared: " +
+      Object.entries(perTarget)
+        .map(([kind, c]) => `${kind} ${c.declared} applicable / ${c.skipped.length} skip`)
+        .join(" · "),
+  );
   const startedAt = new Date().toISOString();
   const start = performance.now();
 
@@ -402,7 +204,7 @@ export async function runSuite(opts: RunOptions): Promise<RunResult> {
       started += 1;
       log.step(`[${started}/${flows.length}] START ${flow.id}`);
       try {
-        const result = await runOneFlow(flow, env, world);
+        const result = await runOneFlow(flow, env, world, opts.runId);
         completed += 1;
         const progress = formatFlowProgress(result, completed, flows.length);
         if (result.status === "pass") log.pass(progress);
@@ -447,12 +249,15 @@ export async function runSuite(opts: RunOptions): Promise<RunResult> {
         { flows: sandboxLane, workers: sandboxWorkers },
       ];
     }
-    out.push(
-      ...(await runScheduled(
-        { concurrent, serial: serialLane, global: globalLane },
-        runTrackedFlow,
-      )),
+    const executed = await runScheduled(
+      { concurrent, serial: serialLane, global: globalLane },
+      runTrackedFlow,
     );
+    // Proof that every scheduled flow ran exactly once: a missing or
+    // duplicated result becomes a failed result, never a silent green.
+    out.push(...reconcileExecuted(flows.map((f) => ({ id: f.id, domain: f.meta.domain, tags: f.meta.tags })), executed));
+    const missing = flows.length - executed.length;
+    if (missing !== 0) log.fail(`executed ${executed.length} of ${flows.length} scheduled flows`);
 
     out.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
     const durationMs = performance.now() - start;
@@ -465,7 +270,10 @@ export async function runSuite(opts: RunOptions): Promise<RunResult> {
       gitSha: opts.gitSha ?? null,
       capabilities: env.capabilities as unknown as Record<string, boolean>,
       profile: opts.profile ?? "all",
-      excludedFlows: localPlan?.excluded ?? [],
+      excludedFlows,
+      targetKind,
+      scheduled: flows.map((f) => f.id),
+      targets: perTarget,
       fixtureStats: world.fixtureStats(),
       flows: out,
       summary: summarize(out, durationMs),

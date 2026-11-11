@@ -269,4 +269,73 @@ describe('materializeSecretDelivery', () => {
 
     expect(env).toEqual({});
   });
+
+  test('the project floor applies: a runtime row under a denied floor is withheld', async () => {
+    const plain = row('plain', 'PLAIN_KEY', {
+      strategy: 'runtime',
+      consumer: 'sandbox',
+      projectDefaultStrategy: 'denied',
+    });
+    const env = envFor([plain]);
+    const delivered = await materializeSecretDelivery([plain], env, {
+      sessionId: 'session-1',
+      grantEnv: 'all',
+      mintHandleFor: async () => {
+        throw new Error('must not mint');
+      },
+    });
+    expect(env).toEqual({});
+    expect(delivered).toEqual([]);
+  });
+
+  test('the project floor applies: a runtime row under an egress floor is withheld, not leaked', async () => {
+    // No host list means no handle can be minted; the floor forbids plaintext.
+    const plain = row('plain', 'PLAIN_KEY', {
+      strategy: 'runtime',
+      consumer: 'sandbox',
+      projectDefaultStrategy: 'egress',
+    });
+    const env = envFor([plain]);
+    await materializeSecretDelivery([plain], env, {
+      sessionId: 'session-1',
+      grantEnv: ['plain'],
+      mintHandleFor: async () => {
+        throw new Error('must not mint');
+      },
+    });
+    expect(env).toEqual({});
+  });
+
+  test('a runtime floor never weakens a stricter row', async () => {
+    const egress = row('billing', 'BILLING_KEY', {
+      strategy: 'egress',
+      consumer: 'network',
+      egressPolicy: { rules: [{ host: 'api.example.com' }], on_no_match: 'deny' },
+      projectDefaultStrategy: 'runtime',
+    });
+    const env = envFor([egress]);
+    await materializeSecretDelivery([egress], env, {
+      sessionId: 'session-1',
+      grantEnv: ['billing'],
+      mintHandleFor: async () => 'kortix-handle',
+    });
+    expect(env).toEqual({ BILLING_KEY: 'kortix-handle' });
+  });
+
+  test('a runtime row under a runtime floor still delivers its value', async () => {
+    const plain = row('plain', 'PLAIN_KEY', {
+      strategy: 'runtime',
+      consumer: 'sandbox',
+      projectDefaultStrategy: 'runtime',
+    });
+    const env = envFor([plain]);
+    await materializeSecretDelivery([plain], env, {
+      sessionId: 'session-1',
+      grantEnv: 'all',
+      mintHandleFor: async () => {
+        throw new Error('must not mint');
+      },
+    });
+    expect(env).toEqual({ PLAIN_KEY: 'value-of-plain' });
+  });
 });

@@ -32,7 +32,12 @@ import {
 } from '@kortix/db';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { config } from '../config';
-import { decryptProjectSecret, intersectSecretGrants } from '../projects/secrets';
+import {
+  decryptProjectSecret,
+  intersectSecretGrants,
+  loadProjectSecretDefaultStrategy,
+  projectSecretAad,
+} from '../projects/secrets';
 import { ACTIVE_SESSION_STATUSES } from '../projects/lib/session-status';
 import { db } from '../shared/db';
 import { resolveSessionPersonalOwner } from '../projects/lib/personal-resources';
@@ -46,6 +51,7 @@ import {
   parseHandle,
   resolveSecretDelivery,
   type OutboundRequestShape,
+  type SecretStrategy,
 } from './strategy';
 
 /** One active handle row, as this module reads it. */
@@ -85,6 +91,10 @@ export async function resolveSpendableHandles(input: {
   handles: readonly LiveSessionHandle[];
   effectiveGrantEnv: string[] | 'all' | undefined;
   shape: OutboundRequestShape;
+  /** `projects.secret_default_strategy`: the floor every handle is re-judged
+   *  under. A floor raised after mint (to `denied`, say) stops the handle from
+   *  being spent on the next request, not on the next session. */
+  projectDefaultStrategy?: SecretStrategy | null;
 }): Promise<{
   substitutions: SecretSubstitution[];
   facts: Map<string, SessionHandleFacts>;
@@ -143,13 +153,20 @@ export async function resolveSpendableHandles(input: {
       ? resolveSecretDelivery({
           identifier: row.identifier,
           strategy: shared.strategy,
+          projectDefaultStrategy: input.projectDefaultStrategy,
           agentGrantEnv: input.effectiveGrantEnv ?? null,
           sessionAllowlist: null,
           sessionId: input.sessionId,
         })
       : null;
+    // `delivery.strategy === shared.strategy`: a project floor that raised
+    // this row to another class (egress → broker) retires the handle the row
+    // was minted under. The new class has its own handle path.
     const spendable =
-      !!shared && shared.secretId === row.secretId && delivery?.emit === 'handle';
+      !!shared &&
+      shared.secretId === row.secretId &&
+      delivery?.emit === 'handle' &&
+      delivery.strategy === shared.strategy;
     const hostAdmitted = matchRule(row.policySnapshot, input.shape) !== null;
     facts.set(row.lookupId, { identifier: row.identifier, spendable, hostAdmitted });
     if (!spendable || !hostAdmitted || !shared) continue;
@@ -171,7 +188,11 @@ export async function resolveSpendableHandles(input: {
     substitutions.push({
       identifier: row.identifier,
       handle,
-      value: decryptProjectSecret(input.projectId, (slot?.personal ?? shared).valueEnc),
+      value: decryptProjectSecret(
+        input.projectId,
+        (slot?.personal ?? shared).valueEnc,
+        projectSecretAad(row.identifier),
+      ),
       policy: row.policySnapshot,
     });
   }
@@ -201,6 +222,10 @@ export interface SecretRelayAuthzOk {
   policy: SecretEgressPolicy;
   /** The decrypted value for the route's OWN secret. */
   secret: string;
+  /** The handle that stands in for `secret` in the sandbox, when this request's
+   *  destination admits it. An echo of `secret` is re-sealed to it; null =
+   *  `[REDACTED]`. */
+  secretHandle: string | null;
   substitutions: SecretSubstitution[];
   facts: Map<string, SessionHandleFacts>;
   isBoundarySecret: boolean;
@@ -289,6 +314,8 @@ export async function authorizeSecretRelay(
     };
   }
 
+  const floorRead = loadProjectSecretDefaultStrategy(input.projectId);
+  floorRead.catch(() => undefined);
   const rows = await db
     .select({
       secretId: projectSecrets.secretId,
@@ -335,9 +362,11 @@ export async function authorizeSecretRelay(
   };
 
   const effectiveGrantEnv = intersectSecretGrants(input.agentGrantEnv, session.secretsAllowlist);
+  const projectDefaultStrategy = await floorRead;
   const delivery = resolveSecretDelivery({
     identifier: input.identifier,
     strategy: shared.strategy,
+    projectDefaultStrategy,
     agentGrantEnv: effectiveGrantEnv,
     sessionAllowlist: null,
     sessionId: input.sessionId,
@@ -366,9 +395,14 @@ export async function authorizeSecretRelay(
   // `networkBoundaryPolicyError` is re-checked here rather than trusted from
   // save time: the row could have been written by an older build, and a policy
   // that is not a valid boundary must not be executed as one.
+  // `delivery.strategy`, not only the row's: a project floor above the row's
+  // class retires the class the row was configured for.
   const isBrokerSecret =
-    shared.strategy === 'broker' && shared.egressPolicy?.backend === 'kortix_fetch';
+    delivery.strategy === 'broker' &&
+    shared.strategy === 'broker' &&
+    shared.egressPolicy?.backend === 'kortix_fetch';
   const isBoundarySecret =
+    delivery.strategy === 'egress' &&
     shared.strategy === 'egress' &&
     !!shared.egressPolicy &&
     networkBoundaryPolicyError(shared.egressPolicy) === null;
@@ -453,6 +487,7 @@ export async function authorizeSecretRelay(
     handles: liveHandles,
     effectiveGrantEnv,
     shape: input.shape,
+    projectDefaultStrategy,
   });
 
   // The route's own secret is part of the spendable set — it is one of this
@@ -461,13 +496,14 @@ export async function authorizeSecretRelay(
   const primary = spendable.substitutions.find((entry) => entry.identifier === input.identifier);
   const secret =
     primary?.value ??
-    decryptProjectSecret(input.projectId, personal?.valueEnc ?? shared.valueEnc);
+    decryptProjectSecret(input.projectId, personal?.valueEnc ?? shared.valueEnc, projectSecretAad(input.identifier));
 
   return {
     ok: true,
     audit,
     policy: handle.policySnapshot,
     secret,
+    secretHandle: primary?.handle ?? null,
     substitutions: spendable.substitutions,
     facts: spendable.facts,
     isBoundarySecret,

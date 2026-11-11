@@ -360,6 +360,10 @@ export async function resolveDefaultProviderAccountSecret(
  * earliest one to free up.
  *
  * Resolved at use time, so a revoked grant or a deleted key affects the next call.
+ *
+ * With no usable key, `withheld` counts the provider's active keys in the
+ * project that the caller may not use (private to other members), so a
+ * refusal can say why instead of "not connected".
  */
 export async function resolveProjectSharedProviderSecrets(input: Omit<GatewaySecretQuery, 'providerId'> & {
   userId: string;
@@ -368,9 +372,13 @@ export async function resolveProjectSharedProviderSecrets(input: Omit<GatewaySec
   sessionId?: string | null;
   /** A probe (a turn gate, the picker) never moves the session's pin. */
   probe?: boolean;
-}): Promise<{ coolingDown: boolean; retryAfterSeconds?: number; secrets: ResolvedAccountSecret[] }> {
+}): Promise<{ coolingDown: boolean; retryAfterSeconds?: number; withheld?: number; secrets: ResolvedAccountSecret[] }> {
   const usable = await listUsableGatewaySecrets(input);
-  if (!usable.length) return { coolingDown: false, secrets: [] };
+  if (!usable.length) {
+    const inProject = (await gatewaySecretRows({ ...input, grantUserId: null }))
+      .filter((row) => row.projectId === null || row.projectId === input.projectId);
+    return { coolingDown: false, secrets: [], withheld: inProject.length };
+  }
   const rows = await db.select({
     secretId: accountSecretResources.secretId,
     valueEnc: accountSecretResources.valueEnc,

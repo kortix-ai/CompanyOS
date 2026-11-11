@@ -8,6 +8,7 @@ import {
   type Database,
   projectTriggerRuntime,
   projects,
+  serviceAccounts,
   sessionLifecycleCommands,
 } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
@@ -78,6 +79,7 @@ const PROJECT_ID = '00000000-0000-4000-a000-000000009822';
 const CONNECTOR_ID = '00000000-0000-4000-a000-000000009823';
 const CONNECTION_ID = '00000000-0000-4000-a000-000000009824';
 const SECOND_CONNECTION_ID = '00000000-0000-4000-a000-000000009826';
+const AGENT_SERVICE_ACCOUNT_ID = '00000000-0000-4000-a000-000000009828';
 
 let integrationDb: Database | null = null;
 function testDb(): Database {
@@ -150,6 +152,27 @@ const catalog = async (s: GitTriggerSpec) =>
     enabled: s.enabled,
     scheduleSpec: s as unknown as Record<string, unknown>,
   });
+/** The standing identity of the project's agent `agentName`, as `ensureAgentServiceAccount` writes it. */
+const agentIdentity = (agentName: string) =>
+  testDb().insert(serviceAccounts).values({
+    serviceAccountId: AGENT_SERVICE_ACCOUNT_ID,
+    accountId: ACCOUNT_ID,
+    projectId: PROJECT_ID,
+    agentName,
+    name: agentName,
+    secretHash: `event-agent-${AGENT_SERVICE_ACCOUNT_ID}`,
+    publicPrefix: 'kortix_sa_event',
+  });
+/** Narrow a shared account to the agent identity alone (a `connection` grant). */
+const shareOnlyWithAgent = async (connectionId = CONNECTION_ID) => {
+  await assignRole(SYSTEM_ACTOR, ACCOUNT_ID, {
+    principal: { type: 'service_account', id: AGENT_SERVICE_ACCOUNT_ID },
+    roleKey: 'agent-user',
+    scope: { type: 'project', id: PROJECT_ID },
+    object: { type: 'connection', id: connectionId },
+  });
+  clearAuthorizeCaches();
+};
 const status = async (slug: string) => (await store.get(PROJECT_ID, slug))?.status;
 /** The trigger's own row: what the triggers API reports as last_status / last_error. */
 const runtime = async (slug: string) => {
@@ -240,6 +263,65 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     clearAuthorizeCaches();
   });
 
+  test("a shared account granted only to the trigger's agent activates that agent's trigger", async () => {
+    await connect();
+    await agentIdentity('inbox-agent');
+    await shareOnlyWithAgent();
+    await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('a', { agent: 'inbox-agent' })]);
+    const row = await store.get(PROJECT_ID, 'a');
+    expect(row?.status).toBe('active');
+    expect(row?.connectionId).toBe(CONNECTION_ID);
+    expect(row?.lastError).toBeNull();
+    expect(calls).toEqual(['subscribe:EXAMPLE_NEW_MESSAGE']);
+    clearAuthorizeCaches();
+  });
+
+  test('an account granted to one agent never feeds a trigger of another agent or of no agent', async () => {
+    await connect();
+    await agentIdentity('inbox-agent');
+    await shareOnlyWithAgent();
+    await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('other', { agent: 'billing-agent' }), spec('none')]);
+    expect(await status('other')).toBe('error');
+    expect((await store.get(PROJECT_ID, 'other'))?.lastError).toBe(
+      'This Inbox account is shared with specific people only. Share it with everyone in the workspace or with the agent "billing-agent" to activate this trigger.',
+    );
+    expect(await status('none')).toBe('error');
+    expect((await store.get(PROJECT_ID, 'none'))?.lastError).toBe(
+      'This Inbox account is shared with specific people only. Event triggers need an account shared with the whole project.',
+    );
+    expect(calls).toEqual([]);
+    clearAuthorizeCaches();
+  });
+
+  test("an agent identity disabled after the grant no longer carries it", async () => {
+    await connect();
+    await agentIdentity('inbox-agent');
+    await shareOnlyWithAgent();
+    await testDb().update(serviceAccounts).set({ status: 'disabled' }).where(eq(serviceAccounts.serviceAccountId, AGENT_SERVICE_ACCOUNT_ID));
+    await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('a', { agent: 'inbox-agent' })]);
+    expect(await status('a')).toBe('error');
+    expect((await store.get(PROJECT_ID, 'a'))?.lastError).toContain('or with the agent "inbox-agent"');
+    expect(calls).toEqual([]);
+    clearAuthorizeCaches();
+  });
+
+  test('an agent trigger whose account loses the agent grant drops its instance', async () => {
+    await connect();
+    await agentIdentity('inbox-agent');
+    await shareOnlyWithAgent();
+    await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('a', { agent: 'inbox-agent' })]);
+    expect(await status('a')).toBe('active');
+    // The agent is retired: its identity goes, so its grant reaches nobody.
+    await testDb().delete(serviceAccounts).where(eq(serviceAccounts.serviceAccountId, AGENT_SERVICE_ACCOUNT_ID));
+    clearAuthorizeCaches();
+    await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('a', { agent: 'inbox-agent' })]);
+    const row = await store.get(PROJECT_ID, 'a');
+    expect(row?.status).toBe('error');
+    expect(row?.externalId).toBeNull();
+    expect(calls).toEqual(['subscribe:EXAMPLE_NEW_MESSAGE', 'unsubscribe:ti_EXAMPLE_NEW_MESSAGE_{}']);
+    clearAuthorizeCaches();
+  });
+
   describe('account selection (two shared accounts on one connector)', () => {
     const onAccount = (slug: string, account?: string) =>
       spec(slug, { event: { connector: 'inbox', ...(account ? { account } : {}), type: 'EXAMPLE_NEW_MESSAGE', config: {} } });
@@ -298,6 +380,22 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
       await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [onAccount('a', 'acme-bot')]);
       expect(await status('a')).toBe('needs_connection');
       expect(calls).toEqual([]);
+      clearAuthorizeCaches();
+    });
+
+    test("a named account granted to the trigger's agent feeds that agent's trigger only", async () => {
+      await agentIdentity('inbox-agent');
+      await shareOnlyWithAgent(SECOND_CONNECTION_ID);
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [
+        { ...onAccount('a', 'acme-bot'), agent: 'inbox-agent' },
+        { ...onAccount('b', 'acme-bot'), agent: 'billing-agent' },
+        onAccount('c', 'acme-bot'),
+      ]);
+      expect(await status('a')).toBe('active');
+      expect((await store.get(PROJECT_ID, 'a'))?.connectionId).toBe(SECOND_CONNECTION_ID);
+      expect(await status('b')).toBe('needs_connection');
+      expect(await status('c')).toBe('needs_connection');
+      expect(calls).toEqual(['subscribe:EXAMPLE_NEW_MESSAGE']);
       clearAuthorizeCaches();
     });
   });

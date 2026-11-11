@@ -8413,6 +8413,12 @@ export const connectorCalls = kortixSchema.table(
       table.sessionId,
       table.createdAt.desc(),
     ),
+    // The tool call log: one project's calls, newest first, keyset-paged.
+    index('idx_connector_calls_project_created').on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.executionId.desc(),
+    ),
     index('idx_connector_calls_connector').on(table.connectorId),
     index('idx_connector_calls_connection').on(table.connectionId),
     index('idx_connector_calls_status').on(table.status),

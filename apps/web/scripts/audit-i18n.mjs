@@ -975,7 +975,7 @@ function scanFile(file) {
         /^shadow-/.test(node.text);
       const coveredLocalizedSourceCatalog =
         (file === path.join(srcDir, 'features/marketplace/marketplace-meta.tsx') &&
-          ['TYPE_META', 'TYPE_FILTERS', 'TYPE_SECTIONS'].includes(catalogRoot)) ||
+          ['TYPE_META', 'TYPE_FILTERS'].includes(catalogRoot)) ||
         (file === path.join(uiSrcDir, 'session/composer/menus/slash-actions.ts') &&
           catalogRoot === 'SLASH_ACTIONS') ||
         (file === path.join(uiSrcDir, 'session/actions/session-label.ts') &&

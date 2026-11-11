@@ -6,7 +6,8 @@
  * the URL, in the in-app browser instead of an iframe. Apps are deployed from
  * a sandbox with `kortix apps deploy`, so the page has no create action: it
  * is a list you open things from. The Schedules page's search pill sits under
- * the header and filters the cards by name and slug.
+ * the header and filters the cards by name and slug; on iOS the search sits at
+ * the bottom instead (`BottomSearchBar`: the search circle alone, no action).
  *
  * The preview (KRTX-2183; rules in `lib/projects/app-preview.ts`) is a
  * WebView that takes no input, mounted only while its card is on screen, the
@@ -30,6 +31,7 @@ import { PageContent } from '@/components/kortix/page-content';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PageList } from '@/components/kortix/page-list';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { useToast } from '@/components/kortix/toast-provider';
 import { Icon } from '@/components/ui/icon';
@@ -78,6 +80,8 @@ export function AppsPage({ page, projectId, onOpenDrawer }: AppsPageProps) {
   const apps = data ?? [];
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => filterByQuery(data ?? [], search, (app) => [app.name, app.slug]), [data, search]);
+  const bottomSearch = usesBottomSearch();
+  const bottomInset = useBottomSearchInset();
 
   // Previews run only while someone can see them.
   const focused = useIsFocused();
@@ -138,7 +142,7 @@ export function AppsPage({ page, projectId, onOpenDrawer }: AppsPageProps) {
       <PageHeader title={page.label} onOpenDrawer={onOpenDrawer} />
 
       <PageContent>
-        <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search apps" />
+        {bottomSearch ? null : <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search apps" />}
 
         <PageList<App>
           isLoading={isLoading}
@@ -151,6 +155,7 @@ export function AppsPage({ page, projectId, onOpenDrawer }: AppsPageProps) {
           onRefresh={refresh}
           emptyLabel={apps.length === 0 ? 'No apps yet' : filtered.length === 0 ? noResultsLabel(search) : null}
           header={<View className="h-1" />}
+          bottomInset={bottomSearch ? bottomInset : undefined}
           data={filtered}
           keyExtractor={(app) => app.app_id}
           onViewableItemsChanged={onViewableItemsChanged}
@@ -169,6 +174,8 @@ export function AppsPage({ page, projectId, onOpenDrawer }: AppsPageProps) {
           )}
         />
       </PageContent>
+
+      <BottomSearchBar value={search} onChangeText={setSearch} placeholder="Search apps" background={bgColor} />
     </View>
   );
 }

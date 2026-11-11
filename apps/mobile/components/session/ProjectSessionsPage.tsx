@@ -50,6 +50,10 @@
  *            the project drawer's bottom bar (`PinnedBar`). The list scrolls
  *            under it. It returns to project home, whose composer starts the
  *            session.
+ *   iOS      Search and New session share the bottom bar (`BottomSearchBar`):
+ *            the search circle bottom left, the New session pill bottom
+ *            right; no search field under the header. `autoFocusSearch`
+ *            opens it expanded and focused.
  *
  * Tap a row → the session opens in the view route, which replaces this page
  * (useCoveringRoute), so the stack stays one screen over project home.
@@ -74,7 +78,7 @@ import { directSubsessions } from '@kortix/sdk';
 import { useSessionsNeedingInput } from '@kortix/sdk/react';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
-import { ArchiveIcon, FunnelIcon as Funnel, NavigationArrowIcon, XIcon } from '@/lib/icons';
+import { ArchiveIcon, FunnelIcon as Funnel, NavigationArrowIcon, PlusIcon, XIcon } from '@/lib/icons';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -85,6 +89,7 @@ import { PageContent } from '@/components/kortix/page-content';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PinnedBar, usePinnedBarInset } from '@/components/kortix/pinned-bar';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroup, SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { KortixBottomSheetModal } from '@/components/kortix/sheet';
 import { useCoveringRoute, useProjectRoute } from '@/components/session/ProjectRoutes';
@@ -598,7 +603,11 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
   );
 
   // ── New session: the project drawer's pinned button, at the bottom right ──
-  const listBottomInset = usePinnedBarInset(NEW_SESSION_BUTTON_HEIGHT);
+  // iOS: search and New session share the bottom bar (`BottomSearchBar`, 44pt).
+  const bottomSearch = usesBottomSearch();
+  const pinnedBarInset = usePinnedBarInset(NEW_SESSION_BUTTON_HEIGHT);
+  const bottomSearchInset = useBottomSearchInset();
+  const listBottomInset = bottomSearch ? bottomSearchInset : pinnedBarInset;
   const pageBackground = isDark ? THEME.dark.background : THEME.light.background;
   const mutedColor = isDark ? THEME.dark.mutedForeground : THEME.light.mutedForeground;
   const handleNewSession = React.useCallback(() => {
@@ -670,7 +679,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
           </View>
         ) : (
           <>
-            {hasSessions || filterActive || noRowYet ? (
+            {!bottomSearch && (hasSessions || filterActive || noRowYet) ? (
               <SearchListHeader
                 value={query}
                 onChangeText={setQuery}
@@ -794,7 +803,19 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
 
       {/* The project drawer's pinned bar (`PinnedBar`), its New session button at
           the bottom right. Hidden while the page loads. */}
-      {loading ? null : (
+      {loading ? null : bottomSearch ? (
+        <BottomSearchBar
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search sessions"
+          searchLabel="Search sessions"
+          searchEnabled={hasSessions || filterActive || noRowYet}
+          autoFocusOnMount={autoFocusSearch}
+          // The bar's own haptic stands in for `handleNewSession`'s.
+          action={{ label: 'New session', icon: PlusIcon, onPress: newSession }}
+          background={pageBackground}
+        />
+      ) : (
         <PinnedBar
           controlHeight={NEW_SESSION_BUTTON_HEIGHT}
           background={pageBackground}

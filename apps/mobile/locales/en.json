@@ -1301,6 +1301,7 @@
   "workspace": {
     "switcherTitle": "Workspaces",
     "create": "Create workspace",
+    "newWorkspace": "New workspace",
     "createTitle": "Create a workspace",
     "createBody": "A workspace is where your company works with Kortix: people, agents and everything they make.",
     "createOnWebTitle": "Create a workspace on the web",

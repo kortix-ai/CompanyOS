@@ -23,6 +23,9 @@ export function SearchPill({
   placeholder = 'Search…',
   icon = Search,
   clearLabel = 'Clear search',
+  size = 'default',
+  filled = true,
+  clearable = true,
   inputProps,
 }: {
   value: string;
@@ -32,13 +35,20 @@ export function SearchPill({
   icon?: AppIcon;
   /** Spoken name of the clear button. */
   clearLabel?: string;
+  /** `default` 40pt, `lg` 44pt. */
+  size?: 'default' | 'lg';
+  /** The `bg-secondary` fill. `false` on a glass capsule. */
+  filled?: boolean;
+  /** The inline clear button while there is text. */
+  clearable?: boolean;
   inputProps?: Omit<React.ComponentProps<typeof Input>, 'value' | 'onChangeText' | 'placeholder'>;
 }) {
   return (
     // Filled, borderless pill; the Input inside inherits the app-wide input
     // text (16pt Roobert Regular) and only drops its own surface.
-    <View className="h-10 flex-1 flex-row items-center rounded-full bg-secondary px-4">
-      <Icon as={icon} size={16} className="text-muted-foreground" />
+    <View
+      className={`${size === 'lg' ? 'h-11' : 'h-10'} flex-1 flex-row items-center rounded-full px-4${filled ? ' bg-secondary' : ''}`}>
+      <Icon as={icon} size={size === 'lg' ? 18 : 16} className="text-muted-foreground" />
       <Input
         value={value}
         onChangeText={onChangeText}
@@ -49,7 +59,7 @@ export function SearchPill({
         {...inputProps}
         className="ml-2 h-full flex-1 rounded-none bg-transparent px-0"
       />
-      {value.length > 0 && (
+      {clearable && value.length > 0 && (
         <Pressable
           onPress={() => onChangeText('')}
           hitSlop={10}

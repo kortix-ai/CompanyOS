@@ -26,6 +26,7 @@ import {
   CaretRightIcon as ChevronRight,
   TrashIcon as Trash2,
   ShieldWarningIcon as ShieldAlert,
+  PlusIcon,
   type AppIcon,
 } from '@/lib/icons';
 import { Text } from '@/components/ui/text';
@@ -33,6 +34,7 @@ import { KortixLoader } from '@/components/kortix/kortix-loader';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PageContent } from '@/components/kortix/page-content';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { filterByQuery, noResultsLabel } from '@/lib/ui/search-filter';
 import Animated from 'react-native-reanimated';
 import { Label } from '@/components/ui/label';
@@ -646,6 +648,11 @@ export function SecretsNavPage({
     [rows, selectedName],
   );
 
+  // iOS: search and New secret sit at the bottom (`BottomSearchBar`); elsewhere
+  // the search pill under the header and the header's `+`.
+  const bottomSearch = usesBottomSearch();
+  const bottomInset = useBottomSearchInset();
+
   const openRow = (name: string) => {
     haptics.tap();
     setSelectedName(name);
@@ -658,7 +665,7 @@ export function SecretsNavPage({
         title={page.label}
         onBack={onBack}
         onOpenDrawer={onBack ? undefined : onOpenDrawer}
-        onAdd={() => { haptics.tap(); addSheetRef.current?.present(); }}
+        onAdd={bottomSearch ? undefined : () => { haptics.tap(); addSheetRef.current?.present(); }}
         addLabel="New secret"
       />
 
@@ -674,11 +681,13 @@ export function SecretsNavPage({
           </View>
         )}
 
-        <SearchListHeader
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search secrets"
-        />
+        {bottomSearch ? null : (
+          <SearchListHeader
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search secrets"
+          />
+        )}
 
         <PageList<Row>
           isLoading={isLoading}
@@ -689,6 +698,7 @@ export function SecretsNavPage({
           // Settings rows in a group (Jay, 2026-09-22), the Agents list's
           // layout; virtualised, one `SettingsGroupItem` per row (COR-155).
           header={<View className="h-1" />}
+          bottomInset={bottomSearch ? bottomInset : undefined}
           data={filtered}
           keyExtractor={(row) => row.name}
           renderItem={(row, index) => {
@@ -721,6 +731,14 @@ export function SecretsNavPage({
           }}
         />
       </PageContent>
+
+      <BottomSearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search secrets"
+        action={{ label: 'New secret', icon: PlusIcon, onPress: () => addSheetRef.current?.present() }}
+        background={bgColor}
+      />
 
       {/* Add */}
       <KortixBottomSheetModal

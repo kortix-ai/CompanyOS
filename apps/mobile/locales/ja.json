@@ -1295,6 +1295,7 @@
   "workspace": {
     "switcherTitle": "ワークスペース",
     "create": "ワークスペースを作成",
+    "newWorkspace": "新しいワークスペース",
     "createTitle": "ワークスペースを作成",
     "createBody": "ワークスペースは、会社が Kortix で働く場所です。メンバー、エージェント、そして彼らが作るすべてがここにあります。",
     "createOnWebTitle": "ウェブでワークスペースを作成",

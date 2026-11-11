@@ -57,7 +57,7 @@ const BLUR: { BlurView: typeof import('expo-blur').BlurView; MaskedView: MaskedV
 })();
 
 /** Gap between the controls and the safe-area edge. */
-const PINNED_BAR_BOTTOM_GAP = 16;
+export const PINNED_BAR_BOTTOM_GAP = 16;
 /** How far the fade reaches above the controls. */
 const PINNED_BAR_FADE_ABOVE = 36;
 /** How far the progressive blur reaches above the controls (`blur`). */

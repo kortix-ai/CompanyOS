@@ -1300,6 +1300,7 @@
   "workspace": {
     "switcherTitle": "Workspaces",
     "create": "Workspace erstellen",
+    "newWorkspace": "Neuer Workspace",
     "createTitle": "Workspace erstellen",
     "createBody": "In einem Workspace arbeitet dein Unternehmen mit Kortix: Menschen, Agenten und alles, was sie erstellen.",
     "createOnWebTitle": "Workspace im Web erstellen",

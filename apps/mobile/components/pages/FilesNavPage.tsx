@@ -16,7 +16,9 @@
  *   opens the View options sheet: Sort (four rows, the active one checked),
  *   View (Grid · List) and Download (this folder, or every file).
  * - Search (the Schedules page's `SearchListHeader`), then the breadcrumb
- *   (chips, never clipped). Inside a folder the
+ *   (chips, never clipped). On iOS the search sits at the bottom instead
+ *   (`BottomSearchBar`): the version switcher stays bottom left, the search
+ *   circle sits bottom right. Inside a folder the
  *   hamburger (or, as a sub-page, Go back) stays: a crumb, or Android back,
  *   goes up one folder, never to home. Go back on the sub-page leaves the
  *   page from any folder.
@@ -62,6 +64,7 @@ import { GlassButtons, LIQUID_GLASS_AVAILABLE } from '@/components/kortix/liquid
 import { PinnedBar, usePinnedBarInset } from '@/components/kortix/pinned-bar';
 import { TopFade, useScrollFade } from '@/components/kortix/scroll-fade';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroup, SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { CopyContentButton, KortixBottomSheetModal, SheetTitleRow, useContentSheetBottomInset } from '@/components/kortix/sheet';
 import { POP_IN, PUSH_IN, SheetBackButton } from '@/components/kortix/sheet-push';
@@ -487,7 +490,11 @@ export function FilesNavPage({
   const sheetBottomInset = useContentSheetBottomInset();
   const toast = useToast();
   const scrollFade = useScrollFade();
-  const contentInset = usePinnedBarInset(BAR_CONTROL_HEIGHT);
+  // iOS: the search sits in the bottom bar with the version switcher (`BottomSearchBar`, 44pt).
+  const bottomSearch = usesBottomSearch();
+  const pinnedBarInset = usePinnedBarInset(BAR_CONTROL_HEIGHT);
+  const bottomSearchInset = useBottomSearchInset();
+  const contentInset = bottomSearch ? bottomSearchInset : pinnedBarInset;
 
   const [ref_, setRef] = useState('');
   const [path, setPath] = useState('');
@@ -706,6 +713,25 @@ export function FilesNavPage({
             : 'No files in this version'
         : null;
 
+  const currentVersion = ref_ ? versionLabel(ref_, branchesQuery.data?.branches) : null;
+  const versionSwitcher = (
+    <GlassButtons>
+      <Button
+        variant={LIQUID_GLASS_AVAILABLE ? 'ghost' : 'secondary'}
+        // `lg` beside the bottom search's 44pt circle; 40pt alone.
+        size={bottomSearch ? 'lg' : 'default'}
+        className="shrink rounded-full"
+        onPress={() => {
+          haptics.tap();
+          versionSheetRef.current?.present();
+        }}
+        accessibilityLabel={`Version, ${currentVersion ?? 'none'}`}>
+        <Icon as={GitBranchIcon} size={16} className="text-foreground" />
+        <Text numberOfLines={1}>{currentVersion ?? '…'}</Text>
+      </Button>
+    </GlassButtons>
+  );
+
   return (
     <View className="flex-1 bg-background">
       {/* Inside a folder the title is the folder's name. */}
@@ -731,7 +757,7 @@ export function FilesNavPage({
       />
 
       <PageContent>
-        <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search files" />
+        {bottomSearch ? null : <SearchListHeader value={search} onChangeText={setSearch} placeholder="Search files" />}
 
         {/* Breadcrumb: chips on one 40pt line, never clipped. The current
             folder is the last chip; every earlier chip goes back to it. */}
@@ -785,6 +811,7 @@ export function FilesNavPage({
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: contentInset }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={bottomSearch ? 'on-drag' : undefined}
             refreshControl={
               <RefreshControl
                 refreshing={pulling}
@@ -849,22 +876,22 @@ export function FilesNavPage({
           {/* The project drawer's pinned bar: the version switcher, bottom
               left, floating over a fade of the page. iOS 26+: Liquid Glass
               inside the button (`GlassButtons`), so a press lands on the
-              glass; elsewhere the secondary fill. */}
-          <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={pageBackground} className="px-4">
-            <GlassButtons>
-              <Button
-                variant={LIQUID_GLASS_AVAILABLE ? 'ghost' : 'secondary'}
-                className="shrink rounded-full"
-                onPress={() => {
-                  haptics.tap();
-                  versionSheetRef.current?.present();
-                }}
-                accessibilityLabel={`Version, ${ref_ ? versionLabel(ref_, branchesQuery.data?.branches) : 'none'}`}>
-                <Icon as={GitBranchIcon} size={16} className="text-foreground" />
-                <Text numberOfLines={1}>{ref_ ? versionLabel(ref_, branchesQuery.data?.branches) : '…'}</Text>
-              </Button>
-            </GlassButtons>
-          </PinnedBar>
+              glass; elsewhere the secondary fill. On iOS the bar is
+              `BottomSearchBar`: the switcher is its `leading`, the search
+              circle sits at the right. */}
+          {bottomSearch ? (
+            <BottomSearchBar
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search files"
+              leading={versionSwitcher}
+              background={pageBackground}
+            />
+          ) : (
+            <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={pageBackground} className="px-4">
+              {versionSwitcher}
+            </PinnedBar>
+          )}
         </View>
       </PageContent>
 

@@ -1300,6 +1300,7 @@
   "workspace": {
     "switcherTitle": "Espacios de trabajo",
     "create": "Crear espacio de trabajo",
+    "newWorkspace": "Nuevo espacio de trabajo",
     "createTitle": "Crea un espacio de trabajo",
     "createBody": "Un espacio de trabajo es donde tu empresa trabaja con Kortix: personas, agentes y todo lo que crean.",
     "createOnWebTitle": "Crear un espacio de trabajo en la web",

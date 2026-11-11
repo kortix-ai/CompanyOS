@@ -1295,6 +1295,7 @@
   "workspace": {
     "switcherTitle": "工作区",
     "create": "创建工作区",
+    "newWorkspace": "新建工作区",
     "createTitle": "创建工作区",
     "createBody": "工作区是你的公司使用 Kortix 工作的地方：成员、智能体以及他们创建的一切。",
     "createOnWebTitle": "在网页上创建工作区",

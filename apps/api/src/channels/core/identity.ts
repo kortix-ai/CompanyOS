@@ -7,7 +7,7 @@ import { mfaGateBlocks } from '../../iam/authorize';
 import { actorForUser } from '../../iam/actor';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { lookupEmailsByUserIds } from '../../projects/lib/access';
-import { accountsView, projectsView } from '../../workspaces/rows';
+import { accountsView, projectsView, accountKeyOfWorkspace } from '../../workspaces/rows';
 
 /**
  * The chat identity link: which Kortix user a person on a chat platform acts
@@ -235,13 +235,9 @@ export async function resolveProjectChatActor(
   projectId: string,
   action: string = PROJECT_ACTIONS.PROJECT_SESSION_START,
 ): Promise<ChatActor> {
-  const [project] = await db
-    .select({ accountId: projectsView.accountId })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  if (!project) return { reason: 'not_member' };
-  return resolveChatActor(user, { projectId, accountId: project.accountId }, action);
+  const accountId = await accountKeyOfWorkspace(projectId);
+  if (!accountId) return { reason: 'not_member' };
+  return resolveChatActor(user, { projectId, accountId }, action);
 }
 
 export type ChatAccessRequestOutcome =

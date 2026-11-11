@@ -4,12 +4,11 @@
 // it; the agent's grants in kortix.yaml decide which ones are on.
 
 import { createRoute, z } from '@hono/zod-openapi';
-import { parseFrontmatter } from '@kortix/registry';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { auth, errors, json } from '../../openapi';
 import { listManagedSkills } from '../../skills/catalog';
 import { agentNotDeclaredError } from '../agents';
-import { readRepoFile } from '../git';
+import { readProjectSkillDescriptions } from '../git';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { buildAgentCapabilities } from '../lib/agent-capabilities';
 import { projectsApp } from '../lib/app';
@@ -74,15 +73,8 @@ async function projectCatalog(c: Parameters<typeof loadProjectForUser>[0], proje
   }
 
   const registered = raw.skills;
-  const folders = registered && typeof registered === 'object' && !Array.isArray(registered) ? Object.entries(registered) : [];
-  const projectSkillDescriptions = Object.fromEntries(
-    await Promise.all(
-      folders.map(async ([name, folder]) => {
-        const text = await readRepoFile(gitProject, `${String(folder)}/SKILL.md`, loaded.row.defaultBranch).catch(() => null);
-        return [name, text ? (parseFrontmatter(text).description ?? null) : null] as const;
-      }),
-    ),
-  );
+  // One batched fetch for every SKILL.md, not one per skill (`readProjectSkillDescriptions`, KRTX-4739).
+  const projectSkillDescriptions = await readProjectSkillDescriptions(gitProject, registered, loaded.row.defaultBranch);
   return {
     catalog: buildAgentCapabilities({
       agentName: agentName ?? '',

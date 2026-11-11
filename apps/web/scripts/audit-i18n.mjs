@@ -195,6 +195,8 @@ const ignoredPathParts = [
   '/src/features/marketing/landing-sections/trust-band.tsx',
   '/src/features/marketing/landing-sections/use-case-teams.ts',
   '/src/features/marketing/landing-sections/works-with-strip.tsx',
+  // The /pricing compare table, moved out of pricing/page.tsx (#12072); it renders for `en` alone.
+  '/src/features/marketing/pricing/compare-table.tsx',
   '/src/features/marketing/security-page/approval-tabs.tsx',
   '/src/features/marketing/security-page/summary.ts',
   '/src/features/marketing/self-hosted/summary.ts',

@@ -41,7 +41,7 @@ import { composioConfigured, composioToolkitLogo } from '../connectors/composio'
 import { connectorConnectedPrompt, notifyConnectorSession } from '../connectors/notify-session';
 import { readJsonObject } from '../shared/http-body';
 import { rethrowDatabaseError } from '../shared/database-errors';
-import { projectsView } from '../workspaces/rows';
+import { projectsView, accountKeyOfWorkspace } from '../workspaces/rows';
 
 // The connector half of the notification moved to connectors/notify-session.ts so the
 // in-session Connect button's finalize can reuse it. Re-exported: this module is where
@@ -171,12 +171,7 @@ async function lookupLinkRequester(projectId: string, uid: string): Promise<{ id
 }
 
 async function projectAccount(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ accountId: projectsView.accountId })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  return row?.accountId ?? null;
+  return accountKeyOfWorkspace(projectId);
 }
 
 async function projectName(projectId: string): Promise<string> {

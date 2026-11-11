@@ -20,7 +20,7 @@ import {
   sessionConnectorLineage,
 } from './db-deps-principal';
 import { bearerToken } from '../shared/bearer-token';
-import { projectsView } from '../workspaces/rows';
+import { projectsView, accountKeyOfWorkspace } from '../workspaces/rows';
 
 /** The connector router's request authorizers: each reads who is calling from the Hono request. */
 export interface ConnectorRouterAuth {
@@ -209,21 +209,17 @@ async function resolveProjectUserWith(
   if (!isUuid(projectId)) return null;
   const userId = c.get('userId') as string | undefined;
   if (!userId) return null;
-  const [proj] = await db
-    .select({ accountId: projectsView.accountId })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  if (!proj) return null;
+  const projectAccountId = await accountKeyOfWorkspace(projectId);
+  if (!projectAccountId) return null;
   // The acting credential comes with the Actor, so the agent-grant fold and the
   // token project-scope check fire by construction: a scoped agent-session token
   // must actually hold the leaf, and a custom role can withhold it from humans.
-  const decision = await authorize(await actorOf(c, proj.accountId), action, {
+  const decision = await authorize(await actorOf(c, projectAccountId), action, {
     type: 'project',
     id: projectId,
   });
   if (!decision.allowed) return null;
-  return { accountId: proj.accountId, userId };
+  return { accountId: projectAccountId, userId };
 }
 
 /**
@@ -242,14 +238,10 @@ async function assertProjectUserWith(
   if (!isUuid(projectId)) return null;
   const userId = c.get('userId') as string | undefined;
   if (!userId) return null;
-  const [proj] = await db
-    .select({ accountId: projectsView.accountId })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  if (!proj) return null;
-  await assertAuthorized(await actorOf(c, proj.accountId), action, { type: 'project', id: projectId });
-  return { accountId: proj.accountId, userId };
+  const projectAccountId = await accountKeyOfWorkspace(projectId);
+  if (!projectAccountId) return null;
+  await assertAuthorized(await actorOf(c, projectAccountId), action, { type: 'project', id: projectId });
+  return { accountId: projectAccountId, userId };
 }
 
 // Connector administration (create/delete connectors, write shared credentials,

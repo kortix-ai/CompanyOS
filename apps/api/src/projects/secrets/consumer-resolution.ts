@@ -8,7 +8,7 @@ import { filterSecretRowsByAudience, secretAudienceSubject } from '../lib/secret
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
 import { decryptProjectSecret } from './envelope';
 import { secretAudienceRank } from './grant-policy';
-import { projectsView } from '../../workspaces/rows';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
 
 export interface ProjectSecretConsumerRead {
   projectId: string;
@@ -200,14 +200,7 @@ async function loadProjectSecretConsumerRows(
   names: string[],
 ) {
   const accountId =
-    input.accountId ??
-    (
-      await db
-        .select({ accountId: projectsView.accountId })
-        .from(projectsView)
-        .where(eq(projectsView.projectId, input.projectId))
-        .limit(1)
-    )[0]?.accountId;
+    input.accountId ?? (await accountKeyOfWorkspace(input.projectId));
   if (!accountId) return null;
   const normalizedNames = names.map((name) => name.trim().toUpperCase());
   const rows = await db

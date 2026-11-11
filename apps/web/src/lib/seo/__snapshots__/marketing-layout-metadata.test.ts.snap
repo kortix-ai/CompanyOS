@@ -77,7 +77,7 @@ exports[`public marketing layouts resolve their route metadata case-studies reso
       "zh": "https://kortix.com/zh/case-studies",
     },
   },
-  "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match…",
+  "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that write software, research candidates, match invoices and evaluate…",
   "openGraph": {
     "alternateLocale": [
       "de_DE",
@@ -89,7 +89,7 @@ exports[`public marketing layouts resolve their route metadata case-studies reso
       "es_ES",
       "sr_RS",
     ],
-    "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match…",
+    "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that write software, research candidates, match invoices and evaluate…",
     "images": [
       {
         "alt": "Kortix CompanyOS – the open-source operating system for your company",
@@ -108,7 +108,7 @@ exports[`public marketing layouts resolve their route metadata case-studies reso
   "twitter": {
     "card": "summary_large_image",
     "creator": "@kortix",
-    "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match…",
+    "description": "What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that write software, research candidates, match invoices and evaluate…",
     "images": [
       "/banner.png",
     ],

@@ -11,6 +11,7 @@ import { defaultConnectionIdForConnector } from '../../connectors/credentials';
 import { logger } from '../../lib/logger';
 import { connectionRowIsReachable } from '../lib/connection-access';
 import { loadConnectionAudience } from '../lib/connection-audience';
+import { activeAgentServiceAccountId } from '../../repositories/service-accounts';
 import type { GitTriggerSpec } from '../trigger-types';
 import { db } from '../../shared/db';
 import { canonicalJson } from './canonical-json';
@@ -59,10 +60,18 @@ async function sharedConnectionIdByLabel(connectorId: string, label: string): Pr
 export const connectionIdentity = (row: { label: string; metadata: unknown }): string =>
   connectedAsOf(row.metadata) ?? row.label;
 
+/** The agent a trigger names, or null. `default` names none: the session resolves it when it starts. */
+const namedAgent = (agent: string | null | undefined): string | null => {
+  const name = agent?.trim();
+  return name && name !== 'default' ? name : null;
+};
+
 export async function resolveSource(
   projectId: string,
   accountId: string,
   event: NonNullable<GitTriggerSpec['event']>,
+  /** The trigger's `agent`: its runs act as that agent's service account. */
+  agent?: string | null,
 ): Promise<Resolution & { providerId?: string }> {
   const [connector] = await db
     .select({
@@ -129,23 +138,34 @@ export async function resolveSource(
     .where(eq(connectorConnections.connectionId, connectionId))
     .limit(1);
   // Event data lands in a session prompt. An account narrowed to named people
-  // must not feed it, so only an account open to the whole project qualifies.
-  const audience = (await loadConnectionAudience({ projectId, accountId, userId: null }))(connectionId);
-  if (row && row.status === 'active' && audience !== 'open' && !named) {
+  // must not feed it. An account open to the whole project qualifies, and so
+  // does one shared with the trigger's own agent: the trigger's runs act as
+  // that agent, which reads the account in every session it runs.
+  const agentName = namedAgent(agent);
+  const agentId = agentName ? await activeAgentServiceAccountId({ accountId, projectId, agentName }) : null;
+  const audience = (await loadConnectionAudience({ projectId, accountId, userId: null, agentId }))(connectionId);
+  const usable = audience === 'open' || audience === 'agent';
+  if (row && row.status === 'active' && !usable && !named) {
     return {
       kind: 'error',
       providerId: provider.id,
-      message: `This ${label} account is shared with specific people only. Event triggers need an account shared with the whole project.`,
+      message: agentName
+        ? `This ${label} account is shared with specific people only. Share it with everyone in the workspace or with the agent "${agentName}" to activate this trigger.`
+        : `This ${label} account is shared with specific people only. Event triggers need an account shared with the whole project.`,
     };
   }
   if (
     !row ||
     row.status !== 'active' ||
     // A named account that is narrowed to people is not usable by a trigger: same text as "not found".
-    (named && audience !== 'open') ||
+    (named && !usable) ||
     !connectionRowIsReachable(
       { ...row, providerType: connector.provider, connectorConfig: connector.config },
-      { userId: '', isServiceAccount: true, agentPrincipal: null },
+      // The agent is the principal, with no human behind it. A null visibility
+      // is not `private`, so no member account is ever reachable.
+      agentId
+        ? { userId: '', isServiceAccount: true, agentPrincipal: { agentId, onBehalfOfUserId: null, visibility: null } }
+        : { userId: '', isServiceAccount: true, agentPrincipal: null },
       audience,
     )
   ) {
@@ -182,7 +202,7 @@ async function reconcileOne(
   // Flag off: the trigger stays declared but is never subscribed; a live instance is dropped below.
   const resolved: Resolution & { providerId?: string } = flagOff
     ? { kind: 'error', message: EVENT_TRIGGERS_OFF_MESSAGE }
-    : await resolveSource(projectId, accountId, event);
+    : await resolveSource(projectId, accountId, event, spec.agent);
   const providerId = resolved.providerId ?? prev?.provider ?? 'composio';
   // The source changed (a connector moved from Composio to Kortix): the old
   // instance belongs to the old source, and only that source can drop it, once

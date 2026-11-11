@@ -89,17 +89,28 @@ mock.module('../lib/access', () => ({
   assertProjectCapability: async () => {},
 }));
 
+/** The gateway's refusal before any provider call, as `@kortix/llm-gateway` defines it. */
+class GatewayResolutionError extends Error {
+  constructor(readonly code: string, message: string, readonly suggestion?: string) { super(message); }
+}
+/** Traces the route logged. */
+const traces: Array<Record<string, unknown>> = [];
+// A refusal the next resolve throws instead of answering (no usable key).
+let resolveRefusal: Error | null = null;
 mock.module('../../llm-gateway/resolution/resolve-candidates', () => ({
-  resolveCandidates: async () => [
-    {
-      provider: 'anthropic',
-      resolvedModel: 'claude-sonnet-4.6',
-      publicProvider: false,
-      billingMode: 'credits',
-      markup: 1,
-      pricing: undefined,
-    },
-  ],
+  resolveCandidates: async () => {
+    if (resolveRefusal) throw resolveRefusal;
+    return [
+      {
+        provider: 'anthropic',
+        resolvedModel: 'claude-sonnet-4.6',
+        publicProvider: false,
+        billingMode: 'credits',
+        markup: 1,
+        pricing: undefined,
+      },
+    ];
+  },
 }));
 
 mock.module('../../llm-gateway/models/catalog-models', () => ({
@@ -121,12 +132,13 @@ mock.module('@kortix/llm-gateway', () => ({
   publicUpstreamError: () => null,
   shownModel: () => 'claude-sonnet-4.6',
   shownProvider: () => 'anthropic',
+  GatewayResolutionError,
 }));
 
 mock.module('../../llm-gateway/hooks', () => ({
   assertGatewayBudget: async () => {},
   GatewayBudgetExceededError: class GatewayBudgetExceededError extends Error {},
-  persistGatewayTrace: async () => {},
+  persistGatewayTrace: async (trace: Record<string, unknown>) => { traces.push(trace); },
   recordGatewayUsage: async () => {
     if (recordUsageRejection) throw recordUsageRejection;
   },
@@ -155,6 +167,8 @@ interface PlaygroundResult {
 
 beforeEach(() => {
   recordUsageRejection = null;
+  resolveRefusal = null;
+  traces.length = 0;
 });
 
 describe('POST /:projectId/gateway/playground — a database error never reaches the client', () => {
@@ -196,5 +210,24 @@ describe('POST /:projectId/gateway/playground — a database error never reaches
     const body = (await res.json()) as { results: PlaygroundResult[] };
     expect(body.results[0]?.ok).toBe(false);
     expect(body.results[0]?.error).toBe('usage ledger is temporarily read-only');
+  });
+});
+
+describe('POST /:projectId/gateway/playground — a refusal before any provider call', () => {
+  test('answers the reason and logs the refused request like the gateway does', async () => {
+    resolveRefusal = new GatewayResolutionError('provider_not_connected', 'No anthropic API key is connected for this project.');
+    const res = await runPlayground(['anthropic/claude-sonnet-4.6']);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { results: PlaygroundResult[] };
+    expect(body.results[0]).toEqual({
+      model: 'anthropic/claude-sonnet-4.6', ok: false, error: 'No anthropic API key is connected for this project.',
+    });
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({
+      accountId: ACCOUNT_ID, projectId: PROJECT_ID,
+      requestedModel: 'anthropic/claude-sonnet-4.6', status: 400, ok: false,
+      errorCode: 'provider_not_connected', errorMessage: 'No anthropic API key is connected for this project.',
+      candidatesTried: [], metadata: { surface: 'gateway_playground' },
+    });
   });
 });

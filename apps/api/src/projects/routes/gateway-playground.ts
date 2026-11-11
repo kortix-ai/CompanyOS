@@ -2,6 +2,7 @@ import { config } from '../../config';
 import { publicGatewayBaseUrl } from '../../llm-gateway/public-url';
 import {
   calculateCost,
+  GatewayResolutionError,
   callUpstream,
   publicPayload,
   publicUpstreamError,
@@ -253,6 +254,22 @@ export function registerGatewayPlaygroundRoutes(): void {
               provider: shownProvider(descriptor),
             };
           } catch (err) {
+            // A refusal before any provider call (no usable key, a disabled
+            // model) is logged like the gateway logs one: the Logs tab shows
+            // why the test failed.
+            if (err instanceof GatewayResolutionError) {
+              await persistGatewayTrace({
+                requestId, startedAt: new Date().toISOString(), accountId: principal.accountId,
+                actorUserId: principal.userId, projectId, requestedModel: model, resolvedModel: model,
+                provider: '', billingMode: 'none', streaming: false, status: 400, ok: false,
+                errorCode: err.code, errorMessage: err.message, latencyMs: 0, attempts: 0, candidatesTried: [],
+                usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 },
+                upstreamCost: 0, finalCost: 0, request, response: null,
+                metadata: { surface: 'gateway_playground' },
+              }).catch((traceErr) => logger.warn('[gateway-playground] could not log a refused model', {
+                model, error: traceErr instanceof Error ? traceErr.message.split('\n')[0] : String(traceErr),
+              }));
+            }
             return { model, ok: false, error: playgroundModelError(err, model) };
           }
         }),

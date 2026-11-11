@@ -356,27 +356,75 @@ async function byokDescriptors(context: Context, provider: string,
   return descriptors;
 }
 
+/** Account keys as BYOK keys. A key this API cannot decrypt is skipped, as if it were absent. */
+function readableAccountKeys(secrets: Array<{ secretId: string; value: string | null }>) {
+  return secrets.flatMap((secret) => secret.value === null ? [] : [{ identifier: secret.secretId, secretId: secret.secretId, value: secret.value }]);
+}
+
+/**
+ * A provider's keys for a request. A session's selection is final. With no
+ * selection, the keys the Models panel lists that this principal may use
+ * serve, else the project's legacy key (a project secret, which the panel no
+ * longer shows). Dispatch fails over only between account keys, so a hidden
+ * legacy key never serves ahead of a key the person can see.
+ */
 async function resolveByokCandidates(context: Context, provider: string,
-  byok: NonNullable<ReturnType<typeof resolveCatalogUpstream>>): Promise<UpstreamDescriptor[]> {
+  byok: NonNullable<ReturnType<typeof resolveCatalogUpstream>>): Promise<UpstreamDescriptor[] | ByokMiss> {
   const { principal } = context;
   const pool = await selectedPool(context, provider, byok.envVar);
-  const keys = pool?.configured
-    // A pooled key this API cannot decrypt is skipped, as if it were not selected.
-    ? pool.secrets.flatMap((secret) => secret.value === null ? [] : [{ identifier: secret.secretId, secretId: secret.secretId, value: secret.value }])
-    : await resolveProjectSecretsForConsumer({
-        projectId: principal.projectId!, accountId: principal.accountId,
-        sessionId: principal.sessionId, actorUserId: principal.userId,
-        name: byok.envVar, consumer: 'llm_gateway',
-      });
-  if (pool?.configured && !keys.length) throw new GatewayResolutionError(
-    pool.coolingDown ? 'provider_pool_rate_limited' : 'provider_not_connected',
-    pool.coolingDown ? `All selected ${provider} keys are cooling down after rate limits.` :
-      `No usable ${provider} key is selected for this session.`,
-    pool.coolingDown ? 'Retry after the provider cooldown, or select another granted key.' :
-      'Select a granted key in session settings.', pool.retryAfterSeconds);
+  if (pool?.configured) {
+    const keys = readableAccountKeys(pool.secrets);
+    if (!keys.length) throw new GatewayResolutionError(
+      pool.coolingDown ? 'provider_pool_rate_limited' : 'provider_not_connected',
+      pool.coolingDown ? `All selected ${provider} keys are cooling down after rate limits.` :
+        `No usable ${provider} key is selected for this session.`,
+      pool.coolingDown ? 'Retry after the provider cooldown, or select another granted key.' :
+        'Select a granted key in session settings.', pool.retryAfterSeconds);
+    return byokDescriptors(context, provider, byok, keys, true);
+  }
+  const shared = context.pooledEnabled
+    ? await resolveProjectSharedProviderSecrets({
+        accountId: principal.accountId, projectId: principal.projectId!, userId: principal.userId,
+        // A gateway API key acts for no member: only keys shared with the whole workspace.
+        grantUserId: principal.keyId ? null : context.personalUserId,
+        providerId: provider, name: byok.envVar,
+        sessionId: principal.sessionId, probe: context.options?.probe,
+      })
+    : null;
+  const accountKeys = readableAccountKeys(shared?.secrets ?? []);
+  if (accountKeys.length) return byokDescriptors(context, provider, byok, accountKeys, true);
+  const legacy = await resolveProjectSecretsForConsumer({
+    projectId: principal.projectId!, accountId: principal.accountId,
+    sessionId: principal.sessionId, actorUserId: principal.userId,
+    name: byok.envVar, consumer: 'llm_gateway',
+  });
   // Never append a Kortix-managed fallback to BYOK keys: a failed BYOK key must
   // fail as BYOK, not silently become a Kortix credit charge.
-  return keys.length ? byokDescriptors(context, provider, byok, keys, !!pool?.configured) : [];
+  if (legacy.length) return byokDescriptors(context, provider, byok, legacy, false);
+  if (shared?.coolingDown) throw new GatewayResolutionError('provider_pool_rate_limited',
+    `All ${provider} keys this request may use are cooling down after rate limits.`,
+    'Retry after the provider cooldown, or add another key in Models.', shared.retryAfterSeconds);
+  return { withheld: shared?.withheld ?? 0 };
+}
+
+/** No key serves: how many keys of the provider exist in the workspace that this principal may not use. */
+type ByokMiss = { withheld: number };
+
+/**
+ * No key of a known provider serves this request. A workspace key the
+ * principal may not use is named, so "not connected" never contradicts the
+ * Models panel that lists it.
+ */
+function byokNotConnected(principal: AuthedPrincipal, provider: string, withheld: number): GatewayResolutionError {
+  if (withheld > 0 && principal.keyId) return new GatewayResolutionError('provider_not_connected',
+    `This workspace's ${provider} keys are private to the members who added them, and a gateway API key uses only keys shared with everyone in the workspace.`,
+    `Share a ${provider} key with everyone in the workspace in Models, then retry.`);
+  if (withheld > 0) return new GatewayResolutionError('provider_not_connected',
+    `This workspace's ${provider} keys are private to the members who added them, and this request may not use them.`,
+    `Ask the member who added one to share it with everyone in the workspace, or add your own ${provider} key in Models.`);
+  return new GatewayResolutionError(
+    'provider_not_connected', `No ${provider} API key is connected for this project.`,
+    `Add a ${provider} API key in project settings, then retry.`);
 }
 
 /** A project's own OpenAI-compatible endpoint (custom-providers.ts). Its key is optional. */
@@ -488,18 +536,21 @@ export async function resolveCandidates(
   if (custom) return resolveCustomCandidates(context, custom);
 
   const byok = resolveCatalogUpstream(provider, provider ? effectiveModel.slice(provider.length + 1) : undefined);
+  let byokMiss: ByokMiss | null = null;
   if (byok && principal.projectId) {
-    const candidates = await resolveByokCandidates(context, provider, byok);
-    if (candidates.length) return candidates;
+    const resolved = await resolveByokCandidates(context, provider, byok);
+    if (Array.isArray(resolved)) {
+      if (resolved.length) return resolved;
+    } else {
+      byokMiss = resolved;
+    }
   }
   const candidates = await resolveManagedCandidates(principal, effectiveModel, access);
   if (candidates.length) return candidates;
 
   // A BYOK-recognized provider with no usable key wins over the generic
   // "model not found" — the model IS real, we just can't reach it right now.
-  if (byok && principal.projectId) throw new GatewayResolutionError(
-    'provider_not_connected', `No ${provider} API key is connected for this project.`,
-    `Add a ${provider} API key in project settings, then retry.`);
+  if (byok && principal.projectId) throw byokNotConnected(principal, provider, byokMiss?.withheld ?? 0);
 
   // The model id is a known managed-model id (in the lineup, or retired) but
   // didn't resolve above. Two distinct

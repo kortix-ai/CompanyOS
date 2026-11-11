@@ -1,5 +1,4 @@
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
-import { servableProjectCatalog } from '../../llm-gateway/models/servable-catalog';
 import { toSessionModelRef } from '../../llm-gateway/resolution/effective';
 import type { PromptOverridesWire } from '../session-lifecycle/store';
 import { projectSessions, projectTriggerRuntime } from '@kortix/db';
@@ -18,6 +17,7 @@ import { triggerTargetOf } from './runtime-triggers';
 import { accountMemberRow } from '../../iam/membership-read';
 import type { TriggerFireSource } from './trigger-webhook-auth';
 import { claimTriggerCreate, releaseTriggerCreate, triggerCreateKey } from './trigger-create-claim';
+import { triggerModelRefusal } from './trigger-model-gate';
 import { alertTriggerAutoPaused, alertTriggerThrottled, clearTriggerAlert } from './trigger-alerts';
 import { autoPauseTrigger, readTriggerAutoPause, triggerAutoPauseReason, triggerRunCapVerdict } from './trigger-run-caps';
 import { triggerChecksOverlap, triggerOverlapReason } from './trigger-overlap';
@@ -747,20 +747,8 @@ async function createGitTriggerSession(
   // the chat composer gates on: zero enabled models = nothing to run. Only
   // the fresh-create path gates — reminders and re-prompts of an existing
   // session keep their semantics.
-  const catalog = await servableProjectCatalog({
-    projectId: project.projectId,
-    accountId: project.accountId,
-    // The run executes as this actor (the account owner), so its personal
-    // keys count exactly as the gateway will count them for the session.
-    principalUserId: actor,
-  });
-  if (!Object.values(catalog.models).some((model) => model.enabled)) {
-    return {
-      status: 'failed',
-      error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
-      errorCode: 'no_usable_model',
-    };
-  }
+  const refusal = await triggerModelRefusal({ projectId: project.projectId, accountId: project.accountId, actor });
+  if (refusal) return { status: 'failed', error: refusal, errorCode: 'no_usable_model' };
   const sessionResult = await createSession({
     source: `trigger:${source}`,
     project,

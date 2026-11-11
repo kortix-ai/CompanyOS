@@ -2706,8 +2706,8 @@
           "note": "Start with real sandbox credits.",
           "f1": "500 credits / month on your first workspace",
           "f2": "No card needed",
-          "f3": "Bring your own API key for any premium model",
-          "f4": "Connect your ChatGPT subscription"
+          "f3": "Models run on your own API key or ChatGPT subscription",
+          "f4": "Managed models are on the Credits plan only"
         },
         "credits": {
           "name": "Credits",

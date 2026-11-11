@@ -2706,8 +2706,8 @@
           "note": "Starte mit echten Sandbox-Credits.",
           "f1": "500 Credits / Monat in deinem ersten Workspace",
           "f2": "Keine Karte nötig",
-          "f3": "Eigener API-Schlüssel für jedes Premium-Modell",
-          "f4": "Verbinde dein ChatGPT-Abo"
+          "f3": "Modelle laufen über deinen eigenen API-Schlüssel oder dein ChatGPT-Abo",
+          "f4": "Von Kortix verwaltete Modelle gibt es nur mit Credits"
         },
         "credits": {
           "name": "Credits",

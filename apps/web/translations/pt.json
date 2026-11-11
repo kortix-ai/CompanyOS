@@ -2706,8 +2706,8 @@
           "note": "Comece com créditos reais de sandbox.",
           "f1": "500 créditos / mês no seu primeiro espaço de trabalho",
           "f2": "Sem cartão",
-          "f3": "Use sua própria chave de API para qualquer modelo premium",
-          "f4": "Conecte sua assinatura do ChatGPT"
+          "f3": "Os modelos funcionam com a sua própria chave de API ou sua assinatura do ChatGPT",
+          "f4": "Os modelos gerenciados pela Kortix exigem Credits"
         },
         "credits": {
           "name": "Créditos",

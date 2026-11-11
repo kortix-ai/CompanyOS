@@ -5,8 +5,9 @@
  * the same id in the same statement (the shadow: what the reconcile triggers
  * wrote). A difference means a trigger missed a write. It is logged with the
  * workspace id and the differing field NAMES only, never their values, and
- * counted in `kortix_workspace_shadow_mismatch_total{field}`. Release 2 flips
- * the two: the table answers, `workspaces_expected` is the shadow.
+ * counted in `kortix_workspace_shadow_mismatch_total{field}`. Release 2a step 8
+ * flipped the two (`store.ts`): the table answers, `workspaces_expected` is the
+ * shadow. The metric, the log line and the comparison keep their names.
  */
 import { logger } from '../lib/logger';
 import { Counter, registerMetricRenderer } from '../lib/metrics';

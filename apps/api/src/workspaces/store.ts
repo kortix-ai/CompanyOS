@@ -5,9 +5,10 @@
  * status) plus one project-less row (`workspace_id = account_id`) for an
  * account with no live project row. Release 1 derives the table by triggers
  * from `accounts`, `projects` and `account_deletion_requests`; nothing in code
- * writes it. Every read here answers from `kortix.workspaces_expected` (the
- * primary, the one implementation of the live-row rule) and compares the table
- * row in the same statement (the shadow, `shadow.ts`).
+ * writes it. Since Release 2a step 8 every read here answers from the table
+ * (the primary) and compares `kortix.workspaces_expected`, the live-row rule
+ * over the base tables, in the same statement (the shadow, `shadow.ts`). A
+ * difference means a trigger missed a write; Release 1 answered from the rule.
  *
  * Writes are not here. Settings are written by their dedicated routes
  * (`/v1/workspaces/:id/iam/*`, `/branding`, `/automations`), each of which owns
@@ -152,12 +153,12 @@ async function livePairs(accountIdsSql: ReturnType<typeof sql>): Promise<LivePai
 }
 
 /**
- * The live records (primary) of the accounts `accountIdsSql` yields (a
+ * The live records (the table, primary) of the accounts `accountIdsSql` yields (a
  * subquery with one `id uuid` column), shadow-checked. For the resolvers.
  */
 export async function liveRecordsOf(accountIdsSql: ReturnType<typeof sql>): Promise<WorkspaceRecord[]> {
   const pairs = await livePairs(accountIdsSql);
-  return pairs.flatMap((pair) => (pair.expected ? [workspaceRecordFromJson(pair.expected)] : []));
+  return pairs.flatMap((pair) => (pair.stored ? [workspaceRecordFromJson(pair.stored)] : []));
 }
 
 /** The account of a workspace id: its project row's account, or the account itself (a project-less workspace). */
@@ -171,8 +172,8 @@ export async function getWorkspace(workspaceId: string): Promise<WorkspaceRecord
   if (!isUuid(workspaceId)) return null;
   const id = workspaceId.toLowerCase();
   const pairs = await livePairs(accountOfWorkspaceId(id));
-  const hit = pairs.find((pair) => pair.expected && String(pair.expected.workspace_id) === id);
-  return hit?.expected ? workspaceRecordFromJson(hit.expected) : null;
+  const hit = pairs.find((pair) => pair.stored && String(pair.stored.workspace_id) === id);
+  return hit?.stored ? workspaceRecordFromJson(hit.stored) : null;
 }
 
 /** Every live workspace of one account (several only while `split_pending`). */

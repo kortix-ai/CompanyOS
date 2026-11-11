@@ -9,6 +9,12 @@ interface OTelSpanInput {
   startTimeMs: number;
   endTimeMs?: number;
   attributes?: Record<string, unknown>;
+  /** This span's id. Default: a new one (SERVER: the request's span). */
+  spanId?: string;
+  /** The parent span. Default: the request's span (SERVER: its parent). */
+  parentSpanId?: string;
+  /** Marks the span failed. Default: `http.status_code` >= 500. */
+  error?: boolean;
 }
 
 const SPAN_KIND: Record<OTelSpanKind, number> = {
@@ -44,6 +50,11 @@ function randomSpanId() {
   return randomBytes(8).toString('hex');
 }
 
+/** A new span id, for a caller that parents child spans on its own span. */
+export function newOtelSpanId(): string {
+  return randomSpanId();
+}
+
 function toUnixNano(ms: number) {
   return String(BigInt(Math.round(ms)) * 1_000_000n);
 }
@@ -77,8 +88,8 @@ export async function emitOtelSpan(input: OTelSpanInput): Promise<boolean> {
   const ctx = getRequestContext();
   if (!endpoint || !ctx) return false;
 
-  const spanId = input.kind === 'SERVER' ? ctx.spanId : randomSpanId();
-  const parentSpanId = input.kind === 'SERVER' ? ctx.parentSpanId : ctx.spanId;
+  const spanId = input.spanId ?? (input.kind === 'SERVER' ? ctx.spanId : randomSpanId());
+  const parentSpanId = input.parentSpanId ?? (input.kind === 'SERVER' ? ctx.parentSpanId : ctx.spanId);
   const attributes = {
     service: 'kortix-api',
     environment: process.env.INTERNAL_KORTIX_ENV || 'dev',
@@ -115,7 +126,7 @@ export async function emitOtelSpan(input: OTelSpanInput): Promise<boolean> {
           endTimeUnixNano: toUnixNano(input.endTimeMs ?? Date.now()),
           attributes: toOtelAttributes(attributes),
           status: {
-            code: Number(input.attributes?.['http.status_code'] ?? 0) >= 500 ? 2 : 1,
+            code: (input.error ?? Number(input.attributes?.['http.status_code'] ?? 0) >= 500) ? 2 : 1,
           },
         }],
       }],

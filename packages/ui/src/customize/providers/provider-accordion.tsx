@@ -878,7 +878,8 @@ export function ProviderAccordion({
       entry.envVars.length === 1 &&
       !SUBSCRIPTION_BY_PROVIDER[entry.id] &&
       !(pooled.pooledSecretsEnabled && supportsPooledProviderKey(entry));
-    const keyConnected = connectedIds.has(entry.id);
+    // A key saved through the form lands in the named store ("Workspace key").
+    const keyConnected = connectedIds.has(entry.id) || pooled.pooledProviderIds.has(entry.id);
 
     if (addingId === row.id && singleKey && canWrite) {
       return (

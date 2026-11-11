@@ -210,6 +210,8 @@ export interface GatewayDeps {
    *  in hand (the call path does), so the store skips its duplicate read of
    *  the `connectors` row. */
   loadAction(connectorId: string, relPath: string, providerType: string): Promise<GatewayAction | null>;
+  /** Up to 3 action paths of the connector closest to `relPath`, for an `action_not_found` denial. */
+  suggestActions?(connectorId: string, relPath: string, providerType: string): Promise<string[]>;
   /**
    * Resolve the credential value/binding for a connector. `userId=null` = shared;
    * set = that member's own. Receives the loaded connector so the resolver can
@@ -521,7 +523,15 @@ export type CallResult =
       upstreamError?: string;
     }
   /** `message`: the sentence the agent reads, for a denial whose fix is not in `reason` alone. */
-  | { status: 'denied'; reason: string; message?: string; policySet?: string; agent?: string }
+  | {
+      status: 'denied';
+      reason: string;
+      message?: string;
+      policySet?: string;
+      agent?: string;
+      /** `action_not_found`: the connector's closest action paths, best first. */
+      suggestions?: string[];
+    }
   | {
       status: 'pending_approval';
       reason: string;
@@ -957,10 +967,14 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
 
   const action = await deps.loadAction(connector.connectorId, input.actionPath, connector.provider);
   if (!action) {
+    const suggestions = deps.suggestActions
+      ? await deps.suggestActions(connector.connectorId, input.actionPath, connector.provider).catch(() => [])
+      : [];
     await audit(deps, input, connector, 'denied', null, {
       reason: 'action_not_found',
+      ...(suggestions.length > 0 ? { suggestions } : {}),
     });
-    return { status: 'denied', reason: 'action_not_found' };
+    return { status: 'denied', reason: 'action_not_found', ...(suggestions.length > 0 ? { suggestions } : {}) };
   }
 
   // A channel call carries only the arguments its action declares: the gates

@@ -716,6 +716,16 @@ mock.module('../shared/db', () => ({
   db: triggerDbMock,
 }));
 
+// The fake db has no joins, and no project here holds a named provider key: the
+// one key reader (llm-gateway/credentials/gateway-keys.ts) finds none.
+const realAccountResource = await import('../secrets/account-resource');
+mock.module('../secrets/account-resource', () => ({
+  ...realAccountResource,
+  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  resolveDefaultCodexAccountSecret: async () => null,
+  listGrantedGatewaySecretNames: async () => [],
+}));
+
 // The fake db has no joins: no trigger in these tests posts to a channel or DM.
 const realTriggerSpace = await import('../projects/lib/trigger-space');
 mock.module('../projects/lib/trigger-space', () => ({ ...realTriggerSpace, loadTriggerSpace: async () => null }));

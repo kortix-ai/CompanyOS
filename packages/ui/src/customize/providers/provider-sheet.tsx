@@ -941,7 +941,11 @@ export function ProviderSheet({
     </>
   );
 
-  const bodyProps: BodyProps = { projectId, entry, connected: keyConnected, canWrite, models };
+  // A key form writes the named store now (the API files it as a "Workspace
+  // key"), so a key saved there counts as this provider's saved key too.
+  const bodyProps: BodyProps = {
+    projectId, entry, connected: keyConnected || pooled.pooledProviderIds.has(entry.id), canWrite, models,
+  };
   let content: ReactNode;
   if (method === 'included') {
     content = (

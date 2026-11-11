@@ -414,7 +414,9 @@ describe('PUT /v1/projects/:projectId/secrets/:identifier/strategy', () => {
     expect(audits).toHaveLength(0);
   });
 
-  test('configures the LLM gateway without a network policy', async () => {
+  // One store for provider keys (2026-11-11): a secret is never moved into the
+  // legacy gateway delivery; the key is added as a named account instead.
+  test('refuses to move a secret into the LLM gateway, with where to add the key', async () => {
     const response = await buildApp().request(
       `/v1/projects/${PROJECT_ID}/secrets/SERVICE_API_KEY/strategy`,
       {
@@ -424,18 +426,9 @@ describe('PUT /v1/projects/:projectId/secrets/:identifier/strategy', () => {
       },
     );
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      strategy: 'broker',
-      consumer: 'llm_gateway',
-      delivery_status: 'available',
-      egress_policy: null,
-    });
-    expect(updates[0]).toMatchObject({
-      strategy: 'broker',
-      consumer: 'llm_gateway',
-      egressPolicy: null,
-    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'provider_key_store' });
+    expect(updates).toHaveLength(0);
   });
 
   test('configures a connector consumer without a network policy', async () => {

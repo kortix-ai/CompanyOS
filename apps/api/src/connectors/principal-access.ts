@@ -121,6 +121,8 @@ export function connectorDenialBody(
     requestedAccount?: string | null;
     /** The account names that WERE available, so the retry can be right. */
     availableAccounts?: readonly string[];
+    /** `action_not_found`: the connector's closest action paths, best first. */
+    suggestions?: readonly string[];
   },
 ): Record<string, unknown> {
   const grant = input.principal?.agentGrant ?? null;
@@ -191,10 +193,19 @@ export function connectorDenialBody(
         ...base,
         hint: `No connector "${input.connector}" is declared in this project's kortix.yaml. Run \`kortix connectors ls\` to see what exists, or \`kortix connectors add\` to declare it.`,
       };
-    case 'action_not_found':
+    case 'action_not_found': {
+      const suggestions = input.suggestions ?? [];
+      const list = `Run \`kortix connectors show ${input.connector}\` to list its actions.`;
       return {
         ...base,
-        hint: `Connector "${input.connector}" has no action "${input.action ?? ''}". Run \`kortix connectors show ${input.connector}\` to list its actions.`,
+        ...(suggestions.length > 0 ? { did_you_mean: [...suggestions] } : {}),
+        hint:
+          suggestions.length > 0
+            ? `Unknown action ${input.action ?? ''} on connector "${input.connector}". Did you mean ` +
+              `${suggestions.map((path) => `${input.connector}.${path}`).join(', ')}? ` +
+              `Call it as \`kortix connectors call ${input.connector} ${suggestions[0]}\`. ${list}`
+            : `Connector "${input.connector}" has no action "${input.action ?? ''}". ${list}`,
       };
+    }
   }
 }

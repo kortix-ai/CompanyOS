@@ -7,6 +7,7 @@ import { subscribe } from '../fixtures/billing';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
 import { log } from '../core/log';
 import type { FlowContext } from '../core/types';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 /**
  * Run a flow that inserts `active` sandbox rows for its session-bound tokens,
@@ -645,7 +646,7 @@ flow('SEC-POOL-6', {
   await database.connect();
   try {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
-    await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, sessionId,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -754,7 +755,7 @@ flow('SEC-POOL-3', {
   await database.connect();
   try {
     await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [first, team.id, project.id]);
-    await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, first,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -810,7 +811,7 @@ flow('SEC-9', {
         await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
         sandboxInserted = true;
       }
-      await database.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+      await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
         credential.token_id, project.id, sessionId,
         JSON.stringify({ agent: 'worker', permissions, connectors: 'all', env: 'all' }), team.id,
       ]);
@@ -865,14 +866,14 @@ flow('SEC-9', {
     }
   });
 
-  await ctx.step('an agent session cannot choose any other delivery policy', async () => {
+  await ctx.step('any other delivery policy is handed to a person → 403 secret_delivery_needs_person', async () => {
     for (const body of [
       { strategy: 'broker', consumer: 'llm_gateway' },
       { strategy: 'denied' },
       { strategy: 'egress', consumer: 'network', egress_policy: { hosts: ['api.example.com'] } },
     ]) {
       (await agent.post('/v1/projects/:projectId/secrets', { name: 'AGENT_POLICY_KEY', value: 'x', ...body }, { params }))
-        .status(403).body().has('$.error', 'Agent sessions cannot change secret delivery policy');
+        .status(403).body().has('$.code', 'secret_delivery_needs_person');
     }
     if (await stored('AGENT_POLICY_KEY')) throw new Error('a refused policy write still stored a row');
   });
@@ -1872,7 +1873,7 @@ flow('SEC-AUD-1', {
     minted.status(201);
     const credential = minted.json<{ token_id: string; secret_key: string }>();
     await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
-    await db.query('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1', [
+    await db.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
       credential.token_id, project.id, sessionId,
       JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
     ]);
@@ -1941,13 +1942,10 @@ flow('SEC-AUD-1', {
       if (seen.length !== before) throw new Error('a shared session or a trigger reached the upstream');
     });
 
-    await ctx.step('an agent session cannot change who can use a secret → 403', async () => {
+    await ctx.step("an agent session acting for the holder widens it to everyone ([]) exactly as the holder does → 200; the other manager call now succeeds", async () => {
       const agent = await sessionToken({ visibility: 'private' });
       (await agent.post('/v1/projects/:projectId/secrets', { name: 'PAYROLL_API_TOKEN', shared_with: [] }, { params }))
-        .status(403);
-    });
-
-    await ctx.step('the holder widens it to everyone ([]) → the other manager call now succeeds', async () => {
+        .status(200);
       (await share([])).status(200);
       expectAdmitted(ctx.env.target, await call(outsider), seen, 'Bearer payroll-holder-value', 'outsider call after widening');
       const row = await listed(outsider);
@@ -1987,7 +1985,7 @@ async function agentSessionToken(
   const credential = minted.json() as { token_id: string; secret_key: string };
   await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, input.team.id, input.projectId]);
   await db.query(
-    'UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5, service_account_id = $6 WHERE token_id = $1',
+    lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5, service_account_id = $6 WHERE token_id = $1'),
     [credential.token_id, input.projectId, sessionId, JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), input.team.id, input.serviceAccountId],
   );
   return { sessionId, client: ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION') };

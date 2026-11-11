@@ -22,6 +22,7 @@ import {
   manifestCandidatePaths,
   HARNESS_TOOL_NAMES,
   safeToolFile,
+  splitFrontmatter,
   TOOL_NAME_RE,
   usableManifest,
   validateManifest,
@@ -382,7 +383,10 @@ function compileAgent(
   else if (block.prompt_file !== undefined) {
     const prompt = promptText(files, block.prompt_file, `agents.${name}.prompt_file`, issues);
     if (prompt === null) return { disable: true };
-    out.prompt = prompt;
+    // An agent file another tool reads too (`.claude/agents/<name>.md`) opens
+    // with that tool's frontmatter: its settings, not prompt text. kortix.yaml
+    // holds the agent's settings, so the prompt is the body.
+    out.prompt = splitFrontmatter(prompt).body;
   }
   const tools = agentToolsMap(block.tools);
   if (tools) out.tools = tools;
@@ -458,6 +462,41 @@ export function manifestPiContext(raw: unknown, agentName?: string | null): 'rec
 export function manifestPiCodemode(raw: unknown, agentName?: string | null): 'off' | 'on' | 'only' | null {
   if (!raw || typeof raw !== 'object') return null;
   return manifestAgentBlock(raw as Record<string, unknown>, agentName)?.codemode ?? null;
+}
+
+/** What an agent's `workspace` asks the box to prepare after it starts: explicit clones and setup commands. */
+export interface SessionWorkspaceSetup {
+  repos: Array<{ path: string; sparse?: string[] }>;
+  /** Every step as `{ run, cwd? }`; a plain string step becomes `{ run }`. */
+  setup: Array<{ run: string; cwd?: string }>;
+}
+
+/**
+ * The session agent's `workspace: { repos, setup }`, normalized (a repo's path defaults to
+ * `/workspace`). Null when it declares neither: nothing is cloned and nothing runs. The
+ * validator already refused a bad shape; anything it let through that is not a string is
+ * dropped here rather than sent to the box.
+ */
+export function manifestWorkspaceSetup(raw: unknown, agentName?: string | null): SessionWorkspaceSetup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const workspace = (manifestAgentBlock(raw as Record<string, unknown>, agentName) as { workspace?: unknown } | undefined)?.workspace;
+  if (!workspace || typeof workspace !== 'object' || Array.isArray(workspace)) return null;
+  const { repos, setup } = workspace as { repos?: unknown; setup?: unknown };
+  const normalizedRepos = (Array.isArray(repos) ? repos : []).flatMap((repo) => {
+    if (!repo || typeof repo !== 'object') return [];
+    const { path, sparse } = repo as { path?: unknown; sparse?: unknown };
+    const at = (typeof path === 'string' && path.trim() ? path.trim().replace(/\/+$/, '') : '') || '/workspace';
+    const dirs = Array.isArray(sparse) ? sparse.filter((dir): dir is string => typeof dir === 'string' && dir.trim() !== '') : [];
+    return [{ path: at, ...(dirs.length ? { sparse: dirs } : {}) }];
+  });
+  const commands = (Array.isArray(setup) ? setup : []).flatMap((step): Array<{ run: string; cwd?: string }> => {
+    if (typeof step === 'string') return step.trim() ? [{ run: step }] : [];
+    if (!step || typeof step !== 'object') return [];
+    const { run, cwd } = step as { run?: unknown; cwd?: unknown };
+    if (typeof run !== 'string' || !run.trim()) return [];
+    return [{ run, ...(typeof cwd === 'string' && cwd.trim() ? { cwd: cwd.trim() } : {}) }];
+  });
+  return normalizedRepos.length || commands.length ? { repos: normalizedRepos, setup: commands } : null;
 }
 
 /** Every distinct non-empty package list the manifest's agents resolve to: what a merge builds. */

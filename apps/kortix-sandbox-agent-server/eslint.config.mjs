@@ -51,7 +51,6 @@ export const SERVICES = [
   'skills',
   'static-web',
   'tools',
-  'workspace-provider',
 ]
 // The wire contract is shared with apps/api through a tsconfig path (see
 // tsconfig.json). An aliased file outside the plugin root arrives as an
@@ -136,6 +135,8 @@ const independentModules = createIndependentModules({
       '@kortix/shared/ssrf-guard': [at('../../packages/shared/src/ssrf-guard.ts')],
       '@kortix/api-contract/*': [at('../../packages/api-contract/src/*')],
       '@kortix/sdk/wire-message-id': [at(`../../${SDK_WIRE_MESSAGE_ID_FILE}`)],
+      // The wire value sets: the contract file is a re-export stub over the canonical SDK body.
+      '@kortix/sdk/wire-values': [at('../../packages/sdk/src/core/wire-values.ts')],
       '@kortix/shared/peer-message-prompt': [at('../../packages/shared/src/peer-message-prompt.ts')],
       // Tests only: platform-tools.test.ts holds the tool cards' Settings links equal to the registry.
       '@kortix/shared/workspace-settings': [at('../../packages/shared/src/workspace-settings.ts')],

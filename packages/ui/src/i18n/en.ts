@@ -99,16 +99,6 @@ const catalog = {
     "access": "Access",
     "actions": "Actions",
     "coolingDown": "Cooling down",
-    "usageFiveHour": "5-hour",
-    "usageWeekly": "Weekly",
-    "usageWeeklyModel": "Weekly · {model}",
-    "usagePercent": "{percent}% used",
-    "usagePercentResets": "{percent}% · resets {time}",
-    "usageLimitReached": "Limit reached",
-    "usageLimitResets": "Limit reached · resets {time}",
-    "usageNotSeen": "Usage appears after the first request",
-    "usageObserved": "Updated {time}",
-    "usageAriaLabel": "{window}: {percent}% used",
     "member": "member",
     "members": "members",
     "actionsFor": "Actions for {label}",
@@ -296,7 +286,8 @@ const catalog = {
       "actionImport": "Import an existing repository",
       "ownerTypePersonal": "Personal account",
       "ownerTypeOrg": "Organization",
-      "createPersonalAuthorize": "Kortix asks GitHub for your authorization the first time you create a repository in a personal account."
+      "createPersonalAuthorize": "Kortix asks GitHub for your authorization the first time you create a repository in a personal account.",
+      "importHint": "Kortix reads agents from kortix.yaml in this repository. Without one, the workspace opens on a setup prompt you copy into your coding agent."
     }
   },
   "projectHome": {
@@ -837,7 +828,7 @@ const catalog = {
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -910,7 +901,15 @@ const catalog = {
       "history": "History",
       "historyDescription": "What every session cost, and every credit added or spent.",
       "openLedger": "Open ledger",
-      "unit": "{count, plural, one {credit} other {credits}}"
+      "unit": "{count, plural, one {credit} other {credits}}",
+      "dailySpend": "Daily spend",
+      "heatLess": "Less",
+      "heatMore": "More",
+      "busiestDay": "{name}: {amount} on {day}, the busiest day",
+      "noSpendInRange": "{name}: no spend in this range",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspaces}} with no spend in this range",
+      "showIdle": "Show",
+      "hideIdle": "Hide"
     },
     "tokens": {
       "keyRevoked": "API key revoked",
@@ -1444,7 +1443,13 @@ const catalog = {
       "title": "No models available",
       "description": "Connect your own provider to start using this session.",
       "upgradeDescription": "Upgrade or connect your own provider to start using this session."
-    }
+    },
+    "favorites": "Favorites",
+    "favoritesEmpty": "Star a model to keep it here.",
+    "addFavorite": "Add {model} to favorites",
+    "removeFavorite": "Remove {model} from favorites",
+    "groups": "Model groups",
+    "thinking": "Thinking"
   },
   "sessionScope": {
     "resetDefault": "Reset to default",
@@ -1472,8 +1477,12 @@ const catalog = {
   "sessionUi": {
     "modelGate": {
       "upgrade": "Upgrade",
-      "barTitle": "No model connected",
-      "barDescription": "connect one to start chatting",
+      "offerTitle": "Use your ChatGPT or Claude plan",
+      "connectChatGpt": "Connect ChatGPT",
+      "connectClaude": "Connect Claude",
+      "hidePlan": "Don’t show {name}",
+      "chatGptPlan": "Plus or Pro plan",
+      "claudePlan": "Pro or Max plan",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
       "imagesUnsupportedHint": "remove them or pick another model"
@@ -1566,15 +1575,15 @@ const catalog = {
     "title": "Threads",
     "newThread": "New Thread",
     "sendMessage": "Send message",
-    "queueList": "Queue List",
+    "queueList": "Waiting messages",
     "quoteCount": "{count, plural, one {# Quote} other {# Quotes}}",
     "expandQuotes": "Expand quotes",
     "collapseQuotes": "Collapse quotes",
     "stopUnconfirmed": "Could not confirm Stop. The agent may still be running. Try Stop again.",
     "stoppedBy": "Stopped by {name}",
-    "queued": "Queued",
+    "queued": "Waiting",
     "queuedFiles": "{count, plural, one {# file} other {# files}}",
-    "queuedCount": "{count} Queued",
+    "queuedCount": "{count} waiting",
     "editingQueued": "Editing",
     "queuedActions": "Message actions",
     "steerNextStep": "Read at next step",
@@ -1583,11 +1592,11 @@ const catalog = {
     "steerFallbackUnsupported": "Waits for this turn. This session cannot take messages mid-turn.",
     "steerFallbackNotPrompter": "Waits for this turn. Another member started it.",
     "steerFallbackTurnEnded": "Runs as its own turn. The turn ended first.",
-    "stopAndSend": "Stop and send",
-    "stopAndSendFailed": "Could not stop and send that message",
+    "stopAndSend": "Send now",
+    "stopAndSendFailed": "Could not send that message now",
     "submitEdit": "Submit",
-    "collapseQueue": "Collapse queue",
-    "expandQueue": "Expand queue",
+    "collapseQueue": "Collapse waiting messages",
+    "expandQueue": "Expand waiting messages",
     "placeholder": "Type your message...",
     "messageInput": "Message input",
     "attachFiles": "Attach files",
@@ -1761,6 +1770,8 @@ const catalog = {
         "title": "Check your email",
         "description": "We sent a link to <address>{email}</address>. Open it to continue.",
         "confirmDescription": "We sent a confirmation email to <address>{email}</address>. Confirm your email to continue.",
+        "unknownDescription": "We emailed <address>{email}</address> — a sign-in link, or a confirmation link for a new account.",
+        "closedDescription": "If <address>{email}</address> has an account, its sign-in link is on its way.",
         "notReceived": "Didn't receive the link?",
         "confirmNotReceived": "Didn't receive the confirmation email?",
         "resendIn": "Resend in {seconds}",
@@ -2152,6 +2163,9 @@ const catalog = {
     },
     "inbox": {
       "title": "Inbox",
+      "viewReview": "Review",
+      "viewNotifications": "Notifications",
+      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",
@@ -2222,6 +2236,25 @@ const catalog = {
     "startHint": "Tell Kortix what you’re working on below, or send “Onboard me” for a guided setup.",
     "placeholder": "Tell Kortix what you're working on",
     "kickoff": "Onboard me"
+  },
+  "noAgentHome": {
+    "setup": {
+      "title": "Set up Kortix in this repository",
+      "body": "Paste the setup prompt into Claude Code, Codex or Cursor in your clone. Chat opens here when <code>kortix.yaml</code> lands on <code>{branch}</code>."
+    },
+    "defaultBranch": "the default branch",
+    "copy": "Copy setup prompt",
+    "copied": "Copied",
+    "copyFailed": "Could not copy the prompt",
+    "docs": "Setup guide",
+    "noAccess": {
+      "title": "No agents available to you",
+      "body": "Anyone who manages this workspace can give you access."
+    },
+    "empty": {
+      "title": "No agents in this workspace",
+      "body": "Declare one in kortix.yaml, or create one with New agent."
+    }
   },
   "hardcodedUi": {
     "appProjectsIdCustomizeSecretsPage": {
@@ -3759,7 +3792,7 @@ const catalog = {
       "text5e3de76869f3": "Waking up the sandbox…",
       "text5e4efd91b927": "Everything resumed",
       "text5ea44c3961f1": "lines",
-      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Top up to keep compute and the latest AI models running — {value0} unaffected.",
+      "text5ecbbab0d8d8": "Your wallet is empty, so sessions can’t start. Add credits to keep compute and the latest AI models running — {value0} unaffected.",
       "text5ecf97e61ad9": "Copy this code. Then open the auth page and enter it to connect ChatGPT.",
       "text5ed9bd98de1b": "Could not update the workspace default",
       "text5eeb1e6ce9d5": "⌘P",
@@ -5092,7 +5125,7 @@ const catalog = {
       "textcdbf6975e8a3": "Goal",
       "textcdca8801db76": "per week",
       "textcdef3f586a58": "text-kortix-yellow",
-      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method under Manage billing, or top up to keep running in the meantime.",
+      "textce0c20c05842": "Your last payment didn’t go through. Update your payment method so your plan keeps running.",
       "textce0faee27592": "billing payment credit card subscription manage wallet tier plan limits overview spend",
       "textce18e358bf01": "Try a different term.",
       "textce1e609b7bf5": "Sandbox ports only",
@@ -6056,7 +6089,7 @@ const catalog = {
       "texta37dd5ef6ef2": "Customize Sidebar",
       "text8c712bd7c1ec": "sidebar customize reorder hide show navigation rows",
       "text3fa17bba73e1": "This workspace has no plan yet. Pick a monthly amount of credits to run sessions. Every member shares one pool.",
-      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Top up to keep compute and the latest AI models going — your plan is unaffected.",
+      "text6821e42be2c1": "Your wallet is empty, so sessions can’t run. Add credits to keep compute and the latest AI models going — your plan is unaffected.",
       "text1554fd387f25": "Free is $0: 500 credits a month on your first workspace and every feature, with your own key or ChatGPT subscription for models. Kortix-managed models need a paid plan. Paid plans are credits: pick a monthly amount, members are free and unlimited, and one pool covers the whole workspace. Self-hosting the software costs nothing; you pay your own model bill and your own compute bill instead.",
       "text5dffd4db88c5": "Your plan, credits, and billing for this workspace.",
       "textad828837ddd8": "members member workspace access collaborators people teammates roster who can see permissions grant share",
@@ -6251,7 +6284,8 @@ const catalog = {
         "question": "Question",
         "permission": "Permission",
         "approval": "Connector approval"
-      }
+      },
+      "allowed": "Allowed"
     },
     "reviewBulk": {
       "approve": "Approve",
@@ -6321,7 +6355,21 @@ const catalog = {
       "senderUnavailable": "Couldn't load the sending account. Check the From row.",
       "quoted": "“{text}”"
     },
-    "promptHistory": "History {index}/{total}"
+    "promptHistory": "History {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix asks to give a colleague access",
+      "task": "Task",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "The colleague gets only these, for this one task.",
+      "deny": "Deny",
+      "allow": "Allow",
+      "allowed": "Access allowed",
+      "allowedDescription": "My Kortix starts the colleague.",
+      "denied": "Access denied",
+      "deniedDescription": "My Kortix gets your answer.",
+      "failed": "Could not send your decision. Try again."
+    }
   },
   "commandPalette": {
     "title": "Command Palette",
@@ -6339,11 +6387,6 @@ const catalog = {
     "threads": "Threads",
     "recentThreads": "Recent threads",
     "searchChannels": "Search spaces, threads, commands..."
-  },
-  "repositoryAccess": {
-    "label": "Workspace repository access",
-    "enabled": "New sessions receive the workspace repository. Git permissions still apply. Existing sessions keep their access setting.",
-    "disabled": "New sessions run without the workspace repository. They can still create files and use granted tools. Existing sessions keep their access setting."
   },
   "customProvider": {
     "intro": "Endpoints the catalogue does not carry.",
@@ -6763,6 +6806,9 @@ const catalog = {
     "addMcpUrlNamed": "Adds the connector {name}.",
     "addMcpUrlInvalid": "Enter a URL that starts with https://",
     "addMcpConnect": "Connect",
+    "addMcpStageConnector": "Reaching the server and loading its tools…",
+    "addMcpStageAccount": "Preparing the account…",
+    "addMcpStageSignIn": "Starting the sign-in…",
     "addMcpConnected": "{name} is connected. Agents can use its tools.",
     "addMcpSignInFailed": "Could not start the {name} sign-in: {reason}",
     "addMcpFailed": "Could not add the MCP server",
@@ -7708,7 +7754,11 @@ const catalog = {
     "folderTree": "Folders",
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
-    "treeCollapse": "Close {name}"
+    "treeCollapse": "Close {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",
@@ -8118,8 +8168,6 @@ const catalog = {
       "requiredConnectorsHelp": "Listed in kortix.yaml (connectors_required). Not enforced: sessions start without them.",
       "models": "Models",
       "tabCapabilities": "Capabilities",
-      "pinToSidebar": "Pin to sidebar",
-      "unpinFromSidebar": "Unpin from sidebar",
       "spaceHelp": "The space this agent works in: a slug like engineering or sales. Empty: Workspace-wide.",
       "spacePlaceholder": "e.g. engineering"
     },
@@ -9318,6 +9366,7 @@ const catalog = {
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",
@@ -9362,6 +9411,7 @@ const catalog = {
     "replacedBy": "Replaced by {path}.",
     "projectTool": "Module {path}",
     "loadError": "Could not load this agent's tools, skills and extensions.",
+    "skillsLoadError": "Could not load the skills.",
     "retry": "Try again",
     "emptyProjectSkills": "No workspace skills. Register one under skills in kortix.yaml.",
     "emptyProjectExtensions": "No workspace extensions. Register one under extensions in kortix.yaml.",
@@ -9385,7 +9435,6 @@ const catalog = {
   "agentMounts": {
     "lead": "Folders from Files this agent's sessions mount. A change applies at once and reaches every new session.",
     "mount": "Mount folder",
-    "repository": "Workspace repository",
     "viaAgent": "shared with this agent",
     "viaProject": "shared with everyone in this workspace",
     "from": "{path} · {who}",
@@ -9399,6 +9448,7 @@ const catalog = {
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "Mount a folder from Files to give this agent's sessions its files.",
+    "projectEmptyDescription": "Mount a folder from Files to give every new session its files.",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -9409,6 +9459,7 @@ const catalog = {
     "alreadyMounted": "Mounted",
     "changeFailed": "Could not change this mount.",
     "loadError": "Could not load this agent's mounts.",
+    "projectLoadError": "Could not load the mounted folders.",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "Files folders every new session mounts.",
@@ -9725,48 +9776,37 @@ const catalog = {
     "issue": "Issue #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5-hour",
+    "weekly": "Weekly",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "Subscription usage is unavailable",
-    "disabledDescription": "Subscription connections are not enabled for this workspace.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Reset time passed · refresh for current usage",
-    "text10": "Reset time not reported",
-    "text11": "Checking provider usage…",
-    "text12": "No usage reported yet. Refresh after using this subscription.",
-    "text13": "Could not update. Showing last known data.",
-    "text14": "Waiting for provider data",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Track the limits of your connected ChatGPT and Claude subscriptions.",
-    "text19": "Usage could not load",
-    "text20": "Try loading your connected subscriptions again.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Connect ChatGPT or Claude in Providers to see reported usage and reset times.",
-    "text24": "Connect a subscription",
-    "text25": "Usage is shared across apps that use the same subscription. Checks automatically every minute while this tab is open.",
-    "text26": "Limits vary by plan. Only windows reported by your connection appear here; missing data does not mean unlimited usage. File limits are not reported. API spend appears in Costs.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Five-hour window not reported by this connection.",
-    "fableIncluded": "Fable usage also counts toward your overall weekly allowance.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Extra usage",
+    "apps": "Apps",
+    "codeReview": "Code review",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · resets {time}",
+    "percentBack": "{percent}% · back {time}",
+    "resetPassed": "Reset · updating",
+    "notStarted": "Not started",
+    "reconnectToSee": "Reconnect to see usage",
+    "availableNow": "Available now",
+    "availableCount": "{available} of {total, plural, one {# account} other {# accounts}}",
+    "nextBack": "Next back",
+    "rowPeak": "{window} · {percent}% used",
+    "rowSomeLimited": "{limited} of {total} at limit",
+    "rowAllLimited": "At limit",
+    "rowAllLimitedBack": "At limit · back {time}",
+    "noUsageYet": "No usage reported yet.",
+    "refreshFailed": "Could not refresh · showing last known usage.",
+    "loadFailed": "Usage could not load.",
+    "rowSomeLimitedBack": "{limited} of {total} at limit · next back {time}",
+    "weeklyAll": "Weekly · all models",
+    "notReported": "Not reported"
   },
   "gatewayRouting": {
     "exceptions": "Exceptions",
@@ -9879,6 +9919,7 @@ const catalog = {
         "help": "Help",
         "plan": "Plan",
         "usage": "Usage",
+        "agents": "Agents",
         "connectors": "Connectors",
         "skills": "Skills",
         "triggers": "Triggers",
@@ -9960,7 +10001,9 @@ const catalog = {
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
-      }
+      },
+      "searchPlaceholder": "Search settings",
+      "searchNoResults": "No settings match"
     },
     "models": {
       "yourDefault": "Workspace default",

@@ -38,6 +38,20 @@ export const salesEventOutbox = kortixSchema.table('sales_event_outbox', {
 }, (table) => [index('sales_event_outbox_due_idx').on(table.availableAt)
   .where(sql`${table.deliveredAt} IS NULL AND ${table.deadLetterAt} IS NULL`)]);
 
+/**
+ * Lead and application submissions from the web forms (POST /v1/system/demo-request, called by
+ * apps/web /api/demo-request). Moved here from the Suna-era `public.contact_forms` (2026-11);
+ * `data` keeps the submission verbatim. The AFTER INSERT trigger `sales_demo_requested`
+ * (kortix.enqueue_demo_requested) writes the Sales outbox row in the same transaction.
+ */
+export const contactForms = kortixSchema
+  .table('contact_forms', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
+  })
+  .enableRLS();
+
 export const usedRefreshTokens = kortixSchema.table('used_refresh_tokens', {
   tokenHash: text('token_hash').primaryKey(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -4431,6 +4445,8 @@ export const oauthAuthorizationCodes = kortixSchema.table(
     uniqueIndex('idx_oauth_codes_code').on(table.code),
     index('idx_oauth_codes_client').on(table.clientId),
     index('idx_oauth_codes_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_authorization_codes_account_id').on(table.accountId),
   ],
 );
 
@@ -4461,6 +4477,8 @@ export const oauthAccessTokens = kortixSchema.table(
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),
     index('idx_oauth_access_tokens_client').on(table.clientId),
     index('idx_oauth_access_tokens_user').on(table.userId),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_oauth_access_tokens_account_id').on(table.accountId),
   ],
 );
 
@@ -4976,6 +4994,20 @@ export const gatewayRequestLogs = kortixSchema.table(
     request: jsonb('request').$type<Record<string, unknown>>(),
     response: jsonb('response').$type<Record<string, unknown>>(),
     metadata: jsonb('metadata').default({}).$type<Record<string, unknown>>(),
+    // KRTX-4023: the model that answered and the usage-was-estimated flag,
+    // promoted from `metadata` (`servedModel` / `usageEstimated` keys, kept
+    // in sync by the writer) into real columns so the dashboard aggregates
+    // reading them can scan the covering indexes index-only — a jsonb
+    // expression can join an index only as a btree key, and btree expression
+    // keys never serve index-only scans (verified on PG 17.6). Nullable: the
+    // backfill (20261108090000200) and the insert-time fill trigger
+    // (20261108090000100) lift the metadata keys for every writer version, so
+    // a NULL column means the row never carried the key, and the readers fall
+    // back to the requested/resolved columns (session-model-usage.ts
+    // servedModelSql) or to not-estimated (llm-value.ts) — exactly as a
+    // missing metadata key reads.
+    servedModel: text('served_model'),
+    usageEstimated: boolean('usage_estimated'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -5022,18 +5054,23 @@ export const gatewayRequestLogs = kortixSchema.table(
     // memberRows/projectAgg + budgetSpends, gateway overview, gateway series,
     // gateway sources): index-only scan by (project_id, created_at) that never
     // touches the wide request/response jsonb heap rows. Built CONCURRENTLY
-    // with INCLUDE (session_id, account_id, ok, billing_mode,
+    // with INCLUDE (account_id, session_id, ok, provider, requested_model,
+    // resolved_model, served_model, usage_estimated, billing_mode,
     // final_cost_precise, upstream_cost_precise, input_tokens, output_tokens,
-    // latency_ms, actor_user_id, provider, resolved_model, cached_tokens,
-    // cache_write_tokens, metadata) — not expressible in drizzle-orm 0.45's
-    // index builder; the schema contract checks relation + uniqueness only,
-    // same pattern as idx_gateway_logs_account_time_covering — by
-    // 20261107164457464_gateway_logs_project_time_covering_v3.concurrent.ts
+    // cached_tokens, cache_write_tokens, latency_ms, actor_user_id) — not
+    // expressible in drizzle-orm 0.45's index builder; the schema contract
+    // checks relation + uniqueness only, same pattern as
+    // idx_gateway_logs_account_time_covering — by
+    // 20261108090000300_gateway_logs_project_time_covering_v4.concurrent.ts
     // (KRTX-4022: the value columns are what the usage-value aggregate of
     // KRTX-3560 reads; KRTX-4449: session_id and account_id are what the
     // sources aggregate's attribution join and CostScope predicate read;
+    // KRTX-4023: the promoted served_model/usage_estimated pair replaces the
+    // v3 `metadata` INCLUDE — a promoted column read cannot be served from a
+    // jsonb tuple, and dropping metadata takes its 2 KB/row out of the index
+    // — and requested_model is back for the breakdown's fallback arm;
     // without them every window row is still heap-fetched).
-    index('idx_gateway_logs_project_time_covering_v3').on(table.projectId, table.createdAt),
+    index('idx_gateway_logs_project_time_covering_v4').on(table.projectId, table.createdAt),
   ],
 );
 
@@ -5568,6 +5605,59 @@ export const sessionPendingPermissions = kortixSchema.table(
   ],
 ).enableRLS();
 
+/**
+ * Access My Kortix asked to hand a colleague: connectors and project secrets
+ * that My Kortix itself does not hold (api projects/lib/colleague-access.ts).
+ * A person allows or denies the exact list. My Kortix's next start of a
+ * colleague with the same list consumes an allow once, and the colleague it
+ * creates (`consumed_by_session_id`) runs with that list on every turn. Only
+ * the API writes this table: no box route inserts or decides a row.
+ */
+export const sessionColleagueAccess = kortixSchema.table(
+  'session_colleague_access',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    accountId: uuid('account_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    /** The My Kortix session that asked. */
+    sessionId: text('session_id').notNull(),
+    /** As `session_pending_questions.surface_session_id`. */
+    surfaceSessionId: text('surface_session_id'),
+    /** The colleague's task, one line: what the card names. */
+    title: text().notNull(),
+    /** Canonical connector slugs, sorted. */
+    connectors: jsonb().default([]).notNull(),
+    /** Project secret identifiers, sorted. */
+    secrets: jsonb().default([]).notNull(),
+    /** sha256 of the sorted lists: the key a re-run matches. */
+    accessHash: text('access_hash').notNull(),
+    askedAt: timestamp('asked_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    /** Null while open. */
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }),
+    /** allow | deny. */
+    decision: text(),
+    decidedBy: uuid('decided_by'),
+    /** The start that used an allow, and the colleague it created. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    consumedBySessionId: text('consumed_by_session_id'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('session_colleague_access_open_uniq').on(table.sessionId, table.accessHash).where(sql`decided_at IS NULL`),
+    index('session_colleague_access_project_open_idx').on(table.projectId).where(sql`decided_at IS NULL`),
+    uniqueIndex('session_colleague_access_colleague_uniq')
+      .on(table.consumedBySessionId)
+      .where(sql`consumed_by_session_id IS NOT NULL`),
+    foreignKey({
+      name: 'session_colleague_access_session_fk',
+      columns: [table.sessionId],
+      foreignColumns: [projectSessions.sessionId],
+    }).onDelete('cascade'),
+  ],
+).enableRLS();
+
 export const sandboxComputeSessions = kortixSchema.table(
   'sandbox_compute_sessions',
   {
@@ -6062,6 +6152,8 @@ export const appVolumes = kortixSchema.table(
     uniqueIndex('app_volumes_machine_live_unique')
       .on(table.machineId)
       .where(sql`${table.deletedAt} IS NULL AND ${table.machineId} IS NOT NULL`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_volumes_account_id').on(table.accountId),
   ],
 );
 
@@ -6114,6 +6206,8 @@ export const appRuntimes = kortixSchema.table(
     uniqueIndex('app_runtimes_one_live_per_machine')
       .on(table.deploymentId, sql`coalesce(${table.machineId}, ${table.runtimeId})`)
       .where(sql`${table.status} IN ('provisioning', 'starting', 'running', 'stopping')`),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_app_runtimes_account_id').on(table.accountId),
   ],
 );
 
@@ -6725,6 +6819,9 @@ export const accessRequests = kortixSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
+  // One waitlist row per address: the request-access endpoint replays must be
+  // idempotent (KRTX-4699). Constraint, not a performance index.
+  (table) => [uniqueIndex('idx_access_requests_email').on(table.email)],
 );
 
 // ─── Change Requests ────────────────────────────────────────────────────────
@@ -8719,6 +8816,8 @@ export const captureDeviceGrants = kortixSchema.table(
     uniqueIndex('idx_capture_device_grants_user_code').on(table.userCode),
     uniqueIndex('idx_capture_device_grants_device_code').on(table.deviceCodeHash),
     index('idx_capture_device_grants_expires').on(table.expiresAt),
+    // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+    index('idx_capture_device_grants_account_id').on(table.accountId),
     check(
       'capture_device_grants_status',
       sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`,
@@ -9731,6 +9830,8 @@ export const cliDeviceGrants = kortixSchema.table('cli_device_grants', {
   workspaceId: uuid('workspace_id'),
 }, (table) => [
   check('cli_device_grants_status_check', sql`${table.status} in ('pending', 'approved', 'denied', 'consumed')`),
+  // The reconcile fill's UPDATE ... WHERE account_id (workspaces M4; 20261106153050000 builds it CONCURRENTLY).
+  index('idx_cli_device_grants_account_id').on(table.accountId),
 ]);
 
 /**

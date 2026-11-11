@@ -371,6 +371,15 @@ const envSchema = z.object({
   // How long `PUT …/log/blobs/<sha256>` waits for its body (P2.13): a body not read by then is
   // cancelled with 408 and its upload slot freed. Under the route's 95 s request deadline.
   SESSION_LOG_BLOB_READ_MS: optInt(60_000),
+  // The largest page `GET …/log` reads from Postgres, in bytes of stored record size
+  // (`pg_column_size`, a lower bound of the JSON's wire length). The route serves the window's
+  // newest messages whole and stops the window at the first one that would overflow it; the
+  // first message is served however large it is. First cause (KRTX-4508, prod 2026-11-08): a heavy
+  // session's 500-record page carried 100+ MB — every page read cost 1–5 s (`db;dur` was 96 %
+  // of it), and the fleet's session-log pollers pushed the route's p95 to 1074–2240 ms while
+  // ordinary sessions stayed at 40 ms. 2 MiB bounds the page read at ~100–300 ms on the prod
+  // link and keeps a normal page (40 recent turn messages, ≤ ~1 MB) whole.
+  SESSION_LOG_PAGE_MAX_BYTES: optInt(2 * 1024 * 1024),
   // Operator switch for the retention purge of session content (P2.8, decision D6): session
   // rows 30 days after a delete, 80 days after a subscription end (inert until decision D6b), their files 7 days later.
   // On by default. Off stops the worker's tick; nothing it has not yet purged is touched.
@@ -673,9 +682,11 @@ const envSchema = z.object({
   // mounts, with the folders synced in by the box's daemon.
   KORTIX_DRIVES_SESSION_MOUNT: optStr,
   KORTIX_DRIVES_SYNC: optStr,
+  // `on` (or 1/true/yes): `workspace_volume` (stateless sandboxes) is on for
+  // every project without its own choice; dev and prod set it.
   // `off` (or 0/false/no): no new session gets a /workspace volume, whatever its
-  // project's `workspace_volume` flag says. A session that already has one keeps
-  // it (platform/services/workspace-volume.ts).
+  // project's flag says. Unset: each project's own choice, default off. A
+  // session that already has a volume keeps it (platform/services/workspace-volume.ts).
   KORTIX_WORKSPACE_VOLUMES: optStr,
   // The `us_region` default for a project that has made no choice: true puts
   // its new Files and sessions in KORTIX_PLATINUM_US_REGION. Off by default;
@@ -697,6 +708,8 @@ const envSchema = z.object({
   // a rollout. Credentials: the explicit pair below, else the AWS SDK default
   // chain (env, shared config, ECS/EKS task role). Endpoint + path style are
   // the MinIO/S3-compatible overrides; leave them unset on AWS.
+  // Ignored since 2026-11-08: a session never checks out the repository, so no
+  // session acquires its workspace from an archive. Kept so deploys that still set it parse.
   KORTIX_PROJECT_SNAPSHOT_MODE: z
     .enum(['git', 'prefer-s3', 'require-s3'])
     .optional()
@@ -743,7 +756,7 @@ const envSchema = z.object({
   KORTIX_PROJECT_SNAPSHOT_MAX_ARCHIVE_BYTES: optInt(512 * 1024 * 1024),
 
   // ── Audit archive (optional) ────────────────────────────────────────────
-  // Weeks of kortix.audit_events older than 90 days are exported to this S3 bucket (Object Lock,
+  // Weeks of kortix.audit_events older than HOT_DAYS (14, shared/audit-archive/format.ts) are exported to this S3 bucket (Object Lock,
   // retained until the week's end + 365 days) and their PostgreSQL partition is dropped. Off
   // unless AUDIT_ARCHIVE_ENABLED is true AND the bucket is set AND the bucket has Object Lock.
   // Credentials: the AWS SDK default chain (the ECS task role). Endpoint + path style: MinIO.
@@ -754,7 +767,7 @@ const envSchema = z.object({
   AUDIT_ARCHIVE_FORCE_PATH_STYLE: optBoolFalse,
   AUDIT_ARCHIVE_ACCESS_KEY_ID: optStr,
   AUDIT_ARCHIVE_SECRET_ACCESS_KEY: optStr,
-  /** Export read rate cap (rows per second): the job must not compete with ingest for IO. */
+  /** Read rate cap (rows per second) for the export and the legacy-table tally: the job must not compete with ingest for IO. */
   AUDIT_ARCHIVE_ROWS_PER_SECOND: optInt(5_000),
 
   // ── Config releases (optional) ──────────────────────────────────────────
@@ -1487,6 +1500,7 @@ export const config = {
   SESSION_LOG_RESTORE_MAX_BYTES: env.SESSION_LOG_RESTORE_MAX_BYTES,
   SESSION_LOG_BLOB_READ_MS: env.SESSION_LOG_BLOB_READ_MS,
   SESSION_LOG_PURGE_ENABLED: env.SESSION_LOG_PURGE_ENABLED,
+  SESSION_LOG_PAGE_MAX_BYTES: env.SESSION_LOG_PAGE_MAX_BYTES,
   OPENAPI_PUBLIC_DOCS: env.OPENAPI_PUBLIC_DOCS,
   MOBILE_MIN_VERSION: env.MOBILE_MIN_VERSION.trim(),
   CLI_MIN_VERSION: env.CLI_MIN_VERSION.trim(),

@@ -106,16 +106,6 @@
     "access": "Приступ",
     "actions": "Радње",
     "coolingDown": "Период хлађења",
-    "usageFiveHour": "5 sati",
-    "usageWeekly": "Nedeljno",
-    "usageWeeklyModel": "Nedeljno · {model}",
-    "usagePercent": "{percent}% iskorišćeno",
-    "usagePercentResets": "{percent}% · resetuje se {time}",
-    "usageLimitReached": "Limit dostignut",
-    "usageLimitResets": "Limit dostignut · resetuje se {time}",
-    "usageNotSeen": "Potrošnja se prikazuje posle prvog zahteva",
-    "usageObserved": "Ažurirano {time}",
-    "usageAriaLabel": "{window}: {percent}% iskorišćeno",
     "member": "члан",
     "members": "чланова",
     "actionsFor": "Радње за {label}",
@@ -347,7 +337,8 @@
       "actionImport": "Увези постојећи репозиторијум",
       "ownerTypePersonal": "Лични налог",
       "ownerTypeOrg": "Организација",
-      "createPersonalAuthorize": "Kortix će prvi put zatražiti vašu autorizaciju na GitHubu kada kreirate repozitorijum na ličnom nalogu."
+      "createPersonalAuthorize": "Kortix će prvi put zatražiti vašu autorizaciju na GitHubu kada kreirate repozitorijum na ličnom nalogu.",
+      "importHint": "Kortix čita agente iz kortix.yaml u ovom repozitorijumu. Bez njega, workspace se otvara sa promptom za podešavanje koji kopiraš u svog agenta za kodiranje."
     }
   },
   "projectHome": {
@@ -800,14 +791,8 @@
         "noResults": "Нема пронађених тема"
       },
       "densities": {
-        "normal": {
-          "label": "Нормално",
-          "description": "Кораци и размишљање се приказују уживо док Kortix ради."
-        },
-        "minimal": {
-          "label": "Минимално",
-          "description": "Један ред статуса док га не проширите."
-        }
+        "normal": "Нормално",
+        "minimal": "Минимално"
       },
       "wallpapers": {
         "dither": "Дитеринг",
@@ -1314,7 +1299,7 @@
         },
         "voice_call": {
           "name": "Гласовни позиви",
-          "description": "Позови агента са његове странице (Прилагоди → Агенти) и разговарај с њим. Позив је засебна сесија тог агента: чује те, одговара гласом и види екран који делиш, а разговор је чет те сесије."
+          "description": "Позови агента из празног поља за поруку, где дугме за слање постаје дугме за позив, или са његове странице (Прилагоди → Агенти), и разговарај с њим. У сесији позив иде агенту те сесије; са почетне странице радног простора покреће нову сесију. Агент те чује, одговара гласом и види екран који делиш, а разговор је чет сесије."
         },
         "shared_drives": {
           "name": "Deljeni drajvovi",
@@ -1392,7 +1377,15 @@
       "history": "Историја",
       "historyDescription": "Цена сваке сесије и сви додати или потрошени кредити.",
       "openLedger": "Отвори књигу",
-      "unit": "{count, plural, one {кредит} few {кредита} other {кредита}}"
+      "unit": "{count, plural, one {кредит} few {кредита} other {кредита}}",
+      "dailySpend": "Дневна потрошња",
+      "heatLess": "Мање",
+      "heatMore": "Више",
+      "busiestDay": "{name}: {amount} дана {day}, дан највеће потрошње",
+      "noSpendInRange": "{name}: нема потрошње у овом периоду",
+      "idleWorkspaces": "{count, plural, one {# радни простор} few {# радна простора} other {# радних простора}} без потрошње у овом периоду",
+      "showIdle": "Прикажи",
+      "hideIdle": "Сакриј"
     },
     "tokens": {
       "keyRevoked": "API кључ је опозван",
@@ -2046,7 +2039,13 @@
       "title": "Нема доступних модела",
       "description": "Повежите сопственог добављача да бисте започели коришћење ове сесије.",
       "upgradeDescription": "Надоградите или повежите сопственог добављача да бисте започели коришћење ове сесије."
-    }
+    },
+    "favorites": "Omiljeni",
+    "favoritesEmpty": "Označite model zvezdicom da biste ga zadržali ovde.",
+    "addFavorite": "Dodaj {model} u omiljene",
+    "removeFavorite": "Ukloni {model} iz omiljenih",
+    "groups": "Grupe modela",
+    "thinking": "Razmišljanje"
   },
   "sessionScope": {
     "resetDefault": "Врати на подразумевано",
@@ -2074,8 +2073,12 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Надогради",
-      "barTitle": "Ниједан модел није повезан",
-      "barDescription": "повежите модел да бисте започели разговор",
+      "offerTitle": "Koristite svoj ChatGPT ili Claude plan",
+      "connectChatGpt": "Poveži ChatGPT",
+      "connectClaude": "Poveži Claude",
+      "hidePlan": "Ne prikazuj {name}",
+      "chatGptPlan": "Plus ili Pro plan",
+      "claudePlan": "Pro ili Max plan",
       "connectModel": "Повежи модел",
       "imagesUnsupported": "{model} не може да чита слике",
       "imagesUnsupportedHint": "уклони их или изабери други модел"
@@ -2323,7 +2326,7 @@
     "hintNewLine": "Притисните Shift+Enter за нови ред",
     "hintSettings": "Притисните {modifier}, да отворите подешавања",
     "hintCompact": "Затражите сажимање сесије када постане дуга",
-    "queueList": "Queue List",
+    "queueList": "Поруке на чекању",
     "quoteCount": "{count, plural, one {# цитат} few {# цитата} other {# цитата}}",
     "expandQuotes": "Прошири цитате",
     "collapseQuotes": "Скупи цитате",
@@ -2331,7 +2334,7 @@
     "stoppedBy": "Zaustavio {name}",
     "queued": "На чекању",
     "queuedFiles": "{count, plural, one {# датотека} few {# датотеке} other {# датотека}}",
-    "queuedCount": "{count} u redu",
+    "queuedCount": "{count} на чекању",
     "editingQueued": "Уређивање",
     "queuedActions": "Радње поруке",
     "steerNextStep": "Чита се у следећем кораку",
@@ -2340,11 +2343,11 @@
     "steerFallbackUnsupported": "Чека овај потез. Ова сесија не прима поруке током потеза.",
     "steerFallbackNotPrompter": "Чека овај потез. Покренуо га је други члан.",
     "steerFallbackTurnEnded": "Покреће се као засебан потез. Потез се завршио раније.",
-    "stopAndSend": "Заустави и пошаљи",
-    "stopAndSendFailed": "Није могуће зауставити и послати ту поруку",
+    "stopAndSend": "Пошаљи сада",
+    "stopAndSendFailed": "Није могуће послати ту поруку сада",
     "submitEdit": "Pošalji",
-    "collapseQueue": "Skupi red",
-    "expandQueue": "Proširi red",
+    "collapseQueue": "Скупи поруке на чекању",
+    "expandQueue": "Прошири поруке на чекању",
     "myKortixRoutes": "Сваки задатак шаље правом агенту",
     "chatInputReset": "Reset"
   },
@@ -2494,7 +2497,23 @@
         "askOwnerBody": "Само власници и администратори радног простора могу да управљају обрачуном. Затражите од једног од њих да изабере ниво кредита за радни простор.",
         "planTitle": "План и кредити",
         "planDescription": "Промените месечни план или додајте кредите за овај месец.",
-        "topupSecondary": "Треба вам више овог месеца? Додајте кредите"
+        "paymentFailedHint": "Ažuriraj karticu i Stripe će ponovo pokušati naplatu.",
+        "updatePaymentMethod": "Ažuriraj način plaćanja",
+        "topUpInstead": "Umesto toga dodaj kredite",
+        "memberBody": "Samo vlasnici i administratori mogu da dodaju kredite. Zatraži odavde ili pošalji nekom od njih link za naplatu ovog radnog prostora.",
+        "memberCopyLink": "Kopiraj link za naplatu",
+        "memberLinkCopied": "Link je kopiran",
+        "memberLinkCopyFailed": "Kopiranje linka nije uspelo",
+        "roleOwner": "Vlasnik",
+        "roleAdmin": "Administrator",
+        "newBalance": "Novo stanje",
+        "continue": "Nastavi",
+        "balanceRetry": "Pokušaj ponovo",
+        "addLine": "Dodaj kredite da bi tvoji agenti nastavili da rade.",
+        "raiseLine": "Povećaj plan da bi tvoji agenti nastavili da rade.",
+        "subscribeLine": "Pretplati se da bi tvoji agenti nastavili da rade.",
+        "switchToMonthly": "Više voliš mesečne kredite? Promeni plan",
+        "autoTopupRetired": "Automatska dopuna više ne važi za ovaj plan."
       },
       "admin": {
         "plan": "План",
@@ -2517,7 +2536,9 @@
           "growing": "Тимови у расту",
           "scale": "Scale",
           "large": "Велике организације"
-        }
+        },
+        "once": "jednom",
+        "onceLabel": "Jednokratni iznos kredita"
       }
     },
     "popular": "Популарно",
@@ -2979,6 +3000,8 @@
         "title": "Проверите имејл",
         "description": "Послали смо линк на <address>{email}</address>. Отворите га да наставите.",
         "confirmDescription": "Послали смо имејл за потврду на <address>{email}</address>. Потврдите свој имејл да наставите.",
+        "unknownDescription": "Poslali smo e-mail na <address>{email}</address> — link za prijavu ili link za potvrdu novog naloga.",
+        "closedDescription": "Ako <address>{email}</address> ima nalog, link za prijavu je na putu.",
         "notReceived": "Нисте добили линк?",
         "confirmNotReceived": "Нисте добили имејл за потврду?",
         "resendIn": "Поново пошаљи за {seconds}",
@@ -3382,6 +3405,9 @@
     },
     "inbox": {
       "title": "Пријемно сандуче",
+      "viewReview": "Review",
+      "viewNotifications": "Обавештења",
+      "viewLabel": "Приказ пријемног сандучета",
       "description": "Новости о сесијама, окидачима и артефактима који вас се тичу, из свих радних простора.",
       "unreadLabel": "Пријемно сандуче: непрочитаних {count}",
       "unreadCount": "непрочитаних {count}",
@@ -3749,6 +3775,25 @@
     "startHint": "Реци Kortix-у испод на чему радиш или пошаљи „Уведи ме у Kortix“ за вођено подешавање.",
     "placeholder": "Реци Kortix-у на чему радиш",
     "kickoff": "Уведи ме у Kortix"
+  },
+  "noAgentHome": {
+    "setup": {
+      "title": "Podesi Kortix u ovom repozitorijumu",
+      "body": "Nalepi prompt za podešavanje u Claude Code, Codex ili Cursor u svom klonu. Čet se otvara ovde kada <code>kortix.yaml</code> stigne na <code>{branch}</code>."
+    },
+    "defaultBranch": "podrazumevanu granu",
+    "copy": "Kopiraj prompt za podešavanje",
+    "copied": "Kopirano",
+    "copyFailed": "Prompt nije kopiran",
+    "docs": "Vodič za podešavanje",
+    "noAccess": {
+      "title": "Nemaš dostupnih agenata",
+      "body": "Svako ko upravlja ovim workspace-om može da ti da pristup."
+    },
+    "empty": {
+      "title": "U ovom workspace-u nema agenata",
+      "body": "Deklariši jednog u kortix.yaml ili ga napravi pomoću Novi agent."
+    }
   },
   "announcements": {
     "memories": {
@@ -12546,6 +12591,7 @@
       "text41ffc5e14073": "Поставите на {value0}",
       "text420962cdca94": "Исти радни простор, исти конектори, иста меморија — и осам различитих послова у позадини. Сваки тим пише вештине за свој посао, а нико не поставља други систем да би то обавио.",
       "text420aaa63cba7": "Укупно на страници",
+      "textbe57ff2d7907": "Није приписано ниједној сесији",
       "text42113e7bf6fc": "Kortix support",
       "text42117ed2a1f5": "Уобичајени начин",
       "text421c4b1fed48": "Производ / контролни слој",
@@ -13544,7 +13590,7 @@
       "text5ebe32e1b916": "Акредитиви конектора никада не улазе у sandbox",
       "text5ec6ae29f4b6": "Такође се инсталира:",
       "text5ec9729027c3": "Претвара оно што корисници кажу у оно што се испоручује.",
-      "text5ecbbab0d8d8": "Ваш новчаник је празан, па сесије не могу да започну. Допуните стање да би рачунарски ресурси и најновији AI модели наставили да раде — {value0} није погођено.",
+      "text5ecbbab0d8d8": "Ваш новчаник је празан, па сесије не могу да започну. Додајте кредите да би рачунарски ресурси и најновији AI модели наставили да раде — {value0} није погођено.",
       "text5ecf97e61ad9": "Копирајте овај кôд. Затим отворите страницу за аутентификацију и унесите га да бисте повезали ChatGPT.",
       "text5ed9bd98de1b": "Ажурирање подразумеване вредности радног простора није успело",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17414,7 +17460,7 @@
       "textcdd7efcb7e2c": "смерница разрешена",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Kortix решења по улози",
-      "textce0c20c05842": "Последње плаћање није прошло. Ажурирајте начин плаћања у одељку Manage billing или допуните стање да бисте у међувремену наставили са радом.",
+      "textce0c20c05842": "Последње плаћање није прошло. Ажурирајте начин плаћања да би ваш план наставио да ради.",
       "textce0faee27592": "наплата плаћање кредитна картица претплата управљај новчаник ниво план ограничења преглед потрошња",
       "textce18e358bf01": "Покушајте са другим термином.",
       "textce1e609b7bf5": "Само sandbox портови",
@@ -20372,7 +20418,7 @@
       "text2b2c3ec032a6": "Радни простор је пренесен",
       "text44f9fff8bdae": "Промењен је план кредита",
       "text3fa17bba73e1": "Овај радни простор још нема план. Изаберите месечни износ кредита да бисте покретали сесије. Сви чланови деле један фонд.",
-      "text6821e42be2c1": "Ваш новчаник је празан, па сесије не могу да раде. Допуните га да би рачунарска снага и најновији AI модели наставили да раде — ваш план није погођен.",
+      "text6821e42be2c1": "Ваш новчаник је празан, па сесије не могу да раде. Додајте кредите да би рачунарска снага и најновији AI модели наставили да раде — ваш план није погођен.",
       "text146aaf3c71fa": "Одржава SSO, SCIM, RBAC и ревизију омогућеним за потписани Enterprise радни простор који се такође наплаћује преко плаћеног плана, како их Stripe усклађивање не би уклонило.",
       "text517105fd13ce": "Кредити финансирају рачунарску снагу sandbox-а — чак и BYOK пробни период захтева стање у новчанику за покретање сесија. Бесплатни уводни износ је 2 $.",
       "text2f1d17f50af8": "Enterprise омогућава SAML SSO, SCIM синхронизацију директоријума, RBAC и приступ ревизији за овај радни простор. Наплаћени план се не мења.",
@@ -21382,7 +21428,8 @@
         "question": "Pitanje",
         "permission": "Dozvola",
         "approval": "Odobrenje konektora"
-      }
+      },
+      "allowed": "Dozvoljeno"
     },
     "reviewBulk": {
       "approve": "Одобри",
@@ -21453,7 +21500,21 @@
       "senderUnavailable": "Налог пошиљаоца није могуће учитати. Проверите ред Од.",
       "quoted": "„{text}“"
     },
-    "promptHistory": "Историја {index}/{total}"
+    "promptHistory": "Историја {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix тражи приступ за колегу",
+      "task": "Задатак",
+      "connector": "Конектор",
+      "secret": "Тајна",
+      "onlyThis": "Колега добија само ово, само за овај задатак.",
+      "deny": "Одбиј",
+      "allow": "Дозволи",
+      "allowed": "Приступ дозвољен",
+      "allowedDescription": "My Kortix покреће колегу.",
+      "denied": "Приступ одбијен",
+      "deniedDescription": "My Kortix добија ваш одговор.",
+      "failed": "Ваша одлука није послата. Покушајте поново."
+    }
   },
   "commandPalette": {
     "title": "Палета команди",
@@ -21475,11 +21536,6 @@
   "personalWelcome": {
     "dismiss": "Затвори",
     "emailCopied": "Адреса е-поште је копирана"
-  },
-  "repositoryAccess": {
-    "label": "Приступ репозиторијуму радног простора",
-    "enabled": "Нове сесије добијају репозиторијум радног простора. Git дозволе и даље важе. Постојеће сесије задржавају своје подешавање приступа.",
-    "disabled": "Нове сесије раде без репозиторијума радног простора. И даље могу да праве датотеке и користе одобрене алате. Постојеће сесије задржавају своје подешавање приступа."
   },
   "customProvider": {
     "intro": "Крајње тачке којих нема у каталогу.",
@@ -21971,6 +22027,9 @@
     "addMcpUrlNamed": "Додаје конектор {name}.",
     "addMcpUrlInvalid": "Унесите URL који почиње са https://",
     "addMcpConnect": "Повежи",
+    "addMcpStageConnector": "Povezivanje sa serverom i učitavanje njegovih alata…",
+    "addMcpStageAccount": "Priprema naloga…",
+    "addMcpStageSignIn": "Pokretanje prijave…",
     "addMcpConnected": "{name} је повезан. Агенти могу да користе његове алате.",
     "addMcpSignInFailed": "Пријава на {name} није могла да почне: {reason}",
     "addMcpFailed": "MCP сервер није могуће додати",
@@ -22948,7 +23007,11 @@
     "folderTree": "Фасцикле",
     "treeYou": "{name} (ти)",
     "treeExpand": "Отвори {name}",
-    "treeCollapse": "Затвори {name}"
+    "treeCollapse": "Затвори {name}",
+    "emptyWorkspaces": "{count, plural, one {# радни простор нема} few {# радна простора немају} other {# радних простора нема}} датотеке",
+    "storageMoreWorkspaces": "{count, plural, one {Још # радни простор} few {Још # радна простора} other {Још # радних простора}}",
+    "storageWorkspaceLimit": "Сваки радни простор има до {limit}",
+    "storageShowFewer": "Прикажи мање"
   },
   "genui": {
     "showData": "Прикажи податке",
@@ -23241,6 +23304,16 @@
         "booted": "Покренут",
         "timezone": "Временска зона",
         "locale": "Локалитет",
+        "usage": "Potrošnja resursa za Kortix Capture",
+        "usageCpu": "Procesor",
+        "usageCpuValue": "{avg} prosečno · {peak} vrhunac",
+        "usageCpuHint": "Jednog jezgra, {minutes, plural, one {poslednji # minut} few {poslednja # minuta} other {poslednjih # minuta}}",
+        "usageMemory": "Memorija",
+        "usageMemoryPeak": "{now} · {peak} vrhunac",
+        "usageProcesses": "Procesi",
+        "usageProcessCount": "{count, plural, one {# proces} few {# procesa} other {# procesa}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Nije prijavljeno: starija verzija aplikacije, ili je aplikacija pokrenuta pre manje od jednog minuta",
         "recordingSync": "Снимање и синхронизација",
         "status": "Статус",
         "lastFrame": "Последњи кадар",
@@ -23357,12 +23430,16 @@
       "privacyControlsHint": "Prikaži maskiranje ličnih podataka. Isključivanje ga sakriva; podešeno i dalje važi.",
       "maskingTitle": "Maskiranje",
       "framesTitle": "Snimci ekrana",
-      "interval": "Jedan snimak svakih",
-      "intervalHint": "Kraći razmaci čuvaju više detalja i troše više procesora i prostora.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Rezolucija",
       "resolutionHint": "Veći ekrani se smanjuju na ovu visinu. 4K čuva fine detalje, na primer CAD crteže.",
-      "framesHint": "Bez vrednosti, svaki računar koristi svoju (jedan snimak na svake 2 s u 1440p). Sa vrednošću, svi računari je koriste i niko ne može da je promeni. Klikovi, kucanje i skrolovanje snimaju se sa sopstvenim snimcima ekrana pri bilo kom intervalu.",
+      "textRecognition": "Prepoznavanje teksta",
+      "textRecognitionHint": "Čita tekst na ekranu da bi mogao da se pretražuje. Isključeno troši najmanje CPU-a: pretraga tada nalazi aplikacije, naslove prozora i URL-ove.",
+      "textRecognitionOption": {
+        "accurate": "Precizno",
+        "fast": "Brzo",
+        "off": "Isključeno"
+      },
+      "framesHint": "Kortix Capture sam bira brzinu snimanja: do 2 snimka u sekundi dok neko radi, inače jedan na svake 2 s, a ređe na opterećenom računaru. Bez vrednosti, svaki računar koristi 1440p i precizno prepoznavanje teksta. Sa vrednošću, svi računari je koriste i niko ne može da je promeni. Klikovi, kucanje i skrolovanje snimaju se sa sopstvenim snimcima ekrana.",
       "computerDecides": "Svaki računar odlučuje",
       "included": {
         "title": "Aplikacije i veb-sajtovi",
@@ -24751,8 +24828,6 @@
       "models": "Модели",
       "tabCapabilities": "Mogućnosti",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "Закачи на бочну траку",
-      "unpinFromSidebar": "Откачи са бочне траке",
       "spaceHelp": "Простор у ком овај агент ради: идентификатор као engineering или sales. Празно: цео радни простор.",
       "spacePlaceholder": "нпр. engineering"
     },
@@ -25195,6 +25270,7 @@
     "replacedBy": "Zamenjeno sa {path}.",
     "projectTool": "Modul {path}",
     "loadError": "Nije moguće učitati alate, veštine i proširenja ovog agenta.",
+    "skillsLoadError": "Није могуће учитати вештине.",
     "retry": "Pokušaj ponovo",
     "emptyProjectSkills": "Нема вештина радног простора. Региструј једну под skills у kortix.yaml.",
     "emptyProjectExtensions": "Нема проширења радног простора. Региструј једно под extensions у kortix.yaml.",
@@ -25995,6 +26071,7 @@
     "call": "Позови",
     "calling": "Позивање…",
     "start": "Започни гласовни позив",
+    "inCall": "Већ сте у позиву",
     "end": "Заврши позив",
     "connecting": "Повезивање…",
     "listening": "Слуша",
@@ -26018,7 +26095,6 @@
   "agentMounts": {
     "lead": "Фасцикле из Датотека које сесије овог агента монтирају. Измене важе одмах за сваку нову сесију.",
     "mount": "Mount folder",
-    "repository": "Репозиторијум радног простора",
     "viaAgent": "подељено са овим агентом",
     "viaProject": "подељено са свима у радном простору",
     "from": "{path} · {who}",
@@ -26032,6 +26108,7 @@
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "Монтирајте фасциклу из Датотека да њене датотеке дате сесијама овог агента.",
+    "projectEmptyDescription": "Монтирајте фасциклу из Датотека да њене датотеке дате свакој новој сесији.",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -26042,6 +26119,7 @@
     "alreadyMounted": "Mounted",
     "changeFailed": "Није могуће променити ово монтирање.",
     "loadError": "Није могуће учитати монтирања овог агента.",
+    "projectLoadError": "Није могуће учитати монтиране фасцикле.",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "Files фасцикле које монтира свака нова сесија.",
@@ -26363,48 +26441,37 @@
     "issue": "Проблем #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 sati",
+    "weekly": "Nedeljno",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "Потрошња претплате није доступна",
-    "disabledDescription": "Везе са претплатама нису омогућене за овај радни простор.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Време ресетовања је прошло · освежите за тренутну потрошњу",
-    "text10": "Време ресетовања није пријављено",
-    "text11": "Checking provider usage…",
-    "text12": "Још нема пријављене потрошње. Освежите након коришћења ове претплате.",
-    "text13": "Ажурирање није успело. Приказани су последњи познати подаци.",
-    "text14": "Чека се на податке провајдера",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Пратите ограничења својих повезаних ChatGPT и Claude претплата.",
-    "text19": "Потрошњу није могуће учитати",
-    "text20": "Покушајте поново да учитате повезане претплате.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Повежите ChatGPT или Claude у одељку Провајдери да бисте видели пријављену потрошњу и времена ресетовања.",
-    "text24": "Connect a subscription",
-    "text25": "Потрошња се дели између апликација које користе исту претплату. Аутоматски се проверава сваког минута док је ова картица отворена.",
-    "text26": "Ограничења зависе од пакета. Овде се приказују само периоди које пријави ваша веза; подаци који недостају не значе неограничену потрошњу. Ограничења за фајлове се не пријављују. Потрошња на API приказана је у одељку Трошкови.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Ова веза не пријављује петочасовни период.",
-    "fableIncluded": "Потрошња Fable се такође рачуна у ваше укупно недељно ограничење.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Dodatna upotreba",
+    "apps": "Aplikacije",
+    "codeReview": "Pregled koda",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · resetuje se {time}",
+    "percentBack": "{percent}% · ponovo {time}",
+    "resetPassed": "Resetovano · ažuriranje",
+    "notStarted": "Nije započeto",
+    "reconnectToSee": "Ponovo povežite da biste videli upotrebu",
+    "availableNow": "Dostupno sada",
+    "availableCount": "{available} od {total, plural, one {# naloga} other {# naloga}}",
+    "nextBack": "Sledeće ponovo",
+    "rowPeak": "{window} · {percent}% iskorišćeno",
+    "rowSomeLimited": "{limited} od {total} na limitu",
+    "rowAllLimited": "Na limitu",
+    "rowAllLimitedBack": "Na limitu · ponovo {time}",
+    "noUsageYet": "Upotreba još nije prijavljena.",
+    "refreshFailed": "Osvežavanje nije uspelo · prikazuje se poslednja poznata upotreba.",
+    "loadFailed": "Upotreba nije mogla da se učita.",
+    "rowSomeLimitedBack": "{limited} od {total} na limitu · sledeće ponovo {time}",
+    "weeklyAll": "Nedeljno · svi modeli",
+    "notReported": "Nije prijavljeno"
   },
   "gatewayRouting": {
     "exceptions": "Izuzeci",
@@ -26524,6 +26591,7 @@
         "help": "Помоћ",
         "plan": "План",
         "usage": "Потрошња",
+        "agents": "Агенти",
         "connectors": "Конектори",
         "skills": "Вештине",
         "triggers": "Окидачи",
@@ -26605,7 +26673,9 @@
         "createdDescription": "{name} делује као {actsAs}. Kortix приказује кључ само једном: копирајте га сада и сачувајте као тајну.",
         "accessFullHint": "Све што принципал кључа сме у овом радном простору.",
         "accessCustomHint": "Само дозволе које изаберете. Свака мора бити нешто што принципал кључа сме."
-      }
+      },
+      "searchPlaceholder": "Претражи подешавања",
+      "searchNoResults": "Ниједно подешавање не одговара"
     },
     "cli": {
       "noWorkspaceTitle": "Направите радни простор да бисте пријавили CLI",
@@ -26636,7 +26706,8 @@
     },
     "menu": {
       "invite": "Позови људе у {name}",
-      "leave": "Напусти {name}"
+      "leave": "Напусти {name}",
+      "invitePeople": "Позови људе"
     },
     "roles": {
       "owner": {

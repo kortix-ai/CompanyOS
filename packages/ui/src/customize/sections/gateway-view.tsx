@@ -42,8 +42,9 @@ import { useTranslations } from '../../i18n';
  *  - **Budgets folded into Costs.** The cap belongs under the number it caps —
  *    see `gateway-budgets.tsx`.
  *
- * The page synchronizes its active tab with `?tab=`. Subscription usage also
- * reads `?provider=codex|claude-agent`; agent editors keep their local tabs.
+ * The page synchronizes its active tab with `?tab=`; agent editors keep their
+ * local tabs. The Usage tab exists only while a ChatGPT or Claude login is
+ * connected.
  * Legacy deep-links / `openCustomize('llm-providers')` set the hosting
  * panel's section, read here via `useSettingsNav()` (once, and followed on
  * change) to pick the initial tab.
@@ -93,7 +94,6 @@ import { CapabilityPageShell } from '../shared/capability-page-shell';
 import { GatewayAccessTab } from './gateway-access-tab';
 import { CustomProviderPanel } from './llm-provider/custom-provider-panel';
 import { ModelsTab } from './llm-provider/models-tab';
-import { SubscriptionUsageTab } from './view/subscription-usage-tab';
 import { GatewayLogs } from './view/gateway/gateway-logs';
 import { GatewayOverview } from './view/gateway/gateway-overview';
 import { GatewayRouting } from './view/gateway/gateway-routing';
@@ -107,7 +107,7 @@ export const MODELS_PAGE_TITLE = 'Models';
 export const MODELS_PAGE_DESCRIPTION = 'Choose the providers and models this workspace can use.';
 
 type LlmTab =
-  'providers' | 'models' | 'custom' | 'gateway' | 'routing' | 'overview' | 'logs' | 'usage';
+  'providers' | 'models' | 'custom' | 'gateway' | 'routing' | 'overview' | 'logs';
 
 interface LlmTabEntry {
   /** `agent` exists only on the agent variant (`AGENT_LLM_TABS`). */
@@ -135,7 +135,8 @@ export const LLM_TABS: LlmTabEntry[] = [
   // file's own render switch keep working unchanged.
   { id: 'overview', label: 'Costs' },
   { id: 'logs', label: 'Logs' },
-  { id: 'usage', label: 'Usage' },
+  // ChatGPT and Claude subscription usage lives in the provider's sheet
+  // (OpenAI, Anthropic), beside the accounts it describes: not a tab.
 ];
 
 /**
@@ -305,7 +306,8 @@ export function LlmSections({
   canWrite: boolean;
   /** Gates the provider list's fetch. False while the host is closed. */
   enabled: boolean;
-  /** The provider open in the host's `SplitSheet` (`ProviderSheetSplit`). */
+  /** `split`: the provider open in the host's `SplitSheet` (`ProviderSheetSplit`).
+   *  `accordion`: the row that starts expanded. */
   selectedProviderId?: string | null;
   onSelectProvider: (providerId: string) => void;
   /** `split`: the page's list + SplitSheet. `accordion`: the quick dialog's
@@ -317,7 +319,12 @@ export function LlmSections({
   return (
     <>
       {tab === 'providers' && providersVariant === 'accordion' && (
-        <ProviderAccordion projectId={projectId} canWrite={canWrite} enabled={enabled} />
+        <ProviderAccordion
+          projectId={projectId}
+          canWrite={canWrite}
+          enabled={enabled}
+          defaultExpandedId={selectedProviderId ?? null}
+        />
       )}
       {tab === 'providers' && providersVariant === 'split' && (
         /* JAY-510: this path mounts `ProviderConnect` DIRECTLY — no nested
@@ -355,9 +362,6 @@ export function LlmSections({
           used to live one tab over. */}
       {tab === 'overview' && <GatewayOverview projectId={projectId} canWrite={canWrite} />}
       {tab === 'logs' && <GatewayLogs projectId={projectId} />}
-      {tab === 'usage' && (
-        <SubscriptionUsageTab projectId={projectId} onConnect={() => onTabChange('providers')} />
-      )}
     </>
   );
 }
@@ -386,9 +390,10 @@ export function LlmManagementView({
   const agentScoped = surface.kind === 'agent' && agentSettings !== undefined;
   const urlTab = !agentScoped ? LLM_TABS.find(entry => entry.id === requestedTab)?.id as LlmTab | undefined : undefined;
   const tAgentScope = useTranslations('agentScope');
+  const pageTabs = LLM_TABS;
   const agentTabs = useMemo<LlmTabEntry[]>(
-    () => [{ id: AGENT_TAB, label: tAgentScope('thisAgent') }, ...LLM_TABS],
-    [tAgentScope],
+    () => [{ id: AGENT_TAB, label: tAgentScope('thisAgent') }, ...pageTabs],
+    [tAgentScope, pageTabs],
   );
   const [tab, setTab] = useState<LlmTab | typeof AGENT_TAB>(
     () => urlTab ?? TAB_BY_SECTION[section as LegacyLlmSubTab] ?? (agentScoped ? AGENT_TAB : 'providers'),
@@ -413,17 +418,36 @@ export function LlmManagementView({
     if (agentScoped) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', next);
-    if (next !== 'usage') params.delete('provider');
+    params.delete('provider');
     navigate(`${pathname}?${params}`, { replace: true });
   }, [searchParams, pathname, navigate, agentScoped]);
 
-  const [providerId, setProviderId] = useState<string | null>(null);
+  // `?provider=openai` opens that provider's sheet: search and the command
+  // palette link ChatGPT and Claude subscription usage there. The retired
+  // `?tab=usage` has no tab and lands on Providers.
+  // The open sheet and the URL move together, so the same link opens it again
+  // after it was closed.
+  const requestedProvider = searchParams.get('provider');
+  const [providerId, setProviderId] = useState<string | null>(requestedProvider);
+  const [linkedProvider, setLinkedProvider] = useState(requestedProvider);
+  if (linkedProvider !== requestedProvider) {
+    setLinkedProvider(requestedProvider);
+    setProviderId(requestedProvider);
+  }
+  const changeProvider = useCallback((next: string | null) => {
+    setProviderId(next);
+    if (agentScoped) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set('provider', next);
+    else params.delete('provider');
+    navigate(`${pathname}?${params}`, { replace: true });
+  }, [searchParams, pathname, navigate, agentScoped]);
 
   return (
     <ProviderSheetSplit
       projectId={projectId}
       providerId={tab === 'providers' ? providerId : null}
-      onProviderChange={setProviderId}
+      onProviderChange={changeProvider}
       canWrite={canWrite}
     >
     <CapabilityPageShell
@@ -450,7 +474,7 @@ export function LlmManagementView({
             </FadedScrollArea>
           ) : (
             <FadedScrollArea orientation="horizontal" fadeColor="from-background" className="min-w-0 max-w-full">
-              <LlmTabStrip value={tab} onValueChange={(v) => selectTab(v as LlmTab)} tabs={LLM_TABS} />
+              <LlmTabStrip value={tab} onValueChange={(v) => selectTab(v as LlmTab)} tabs={pageTabs} />
             </FadedScrollArea>
           )}
         </>
@@ -466,7 +490,7 @@ export function LlmManagementView({
           canWrite={canWrite}
           enabled={open}
           selectedProviderId={providerId}
-          onSelectProvider={setProviderId}
+          onSelectProvider={changeProvider}
         />
       )}
     </CapabilityPageShell>

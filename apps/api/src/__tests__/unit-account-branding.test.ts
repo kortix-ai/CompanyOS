@@ -7,9 +7,12 @@
 // when serving falls back to Kortix, the content-addressed object name, and
 // the product-name rules.
 import { describe, expect, test } from 'bun:test';
+import { config } from '../config';
 import {
+  brandingEntitled,
   brandingObjectPath,
   brandingObjectPathFromUrl,
+  brandingOffered,
   effectiveBranding,
   isBrandingEmpty,
   normalizeAppName,
@@ -154,6 +157,30 @@ describe('effectiveBranding — what members are SERVED', () => {
   test('stored but the entitlement lapsed → null (fall back to Kortix, no write)', async () => {
     entitled = false;
     expect(await effectiveBranding('acc', { logo_url: 'http://x/l.svg' }, check)).toBeNull();
+  });
+});
+
+describe('brandingOffered — the Kortix cloud does not offer branding', () => {
+  test('billing on (the cloud) → not offered, and no account reads as entitled', async () => {
+    const before = config.KORTIX_BILLING_INTERNAL_ENABLED;
+    config.KORTIX_BILLING_INTERNAL_ENABLED = true;
+    try {
+      expect(brandingOffered()).toBe(false);
+      // Answers before any billing read: the account id does not exist.
+      expect(await brandingEntitled('no-such-account')).toBe(false);
+    } finally {
+      config.KORTIX_BILLING_INTERNAL_ENABLED = before;
+    }
+  });
+
+  test('billing off (self-host) → offered; the entitlement decides', () => {
+    const before = config.KORTIX_BILLING_INTERNAL_ENABLED;
+    config.KORTIX_BILLING_INTERNAL_ENABLED = false;
+    try {
+      expect(brandingOffered()).toBe(true);
+    } finally {
+      config.KORTIX_BILLING_INTERNAL_ENABLED = before;
+    }
   });
 });
 

@@ -279,7 +279,7 @@ boot restores" below):
 
 `reconcileSessionLog(port)` (`shared/session-log-boot.ts`) decides, restores, and
 returns what the journal starts with (`{ generation, cursors, session }`). pi
-runs it beside the workspace checkout (pi's dump needs no `/workspace`) and
+runs it at boot (pi's dump needs no `/workspace`) and
 awaits it before `lifecycle.start()`; the runtime adopts the root the dump names
 at start, so a service built before the restore runs under the log's root. No
 turn runs at that point.
@@ -477,7 +477,6 @@ Known limits of the pi restore:
 
 Known limits of the pi export:
 - A dump written before P2.5 has no header; pi makes a fresh one on load, so `created_at` is the restart time for a session that spans the upgrade.
-- The journal does not start on a box with `repoMaterializationError` (the boot returns before it): turns run through the proxy on such a box are not journaled.
 
 ### Bumping a harness (P6.5)
 
@@ -922,7 +921,7 @@ Config it reads (all set by apps/api for every session, harness-neutral values):
 + `KORTIX_TOKEN`. The model catalog is the project's live list,
 `GET <KORTIX_LLM_BASE_URL>/models?scope=picker`; it only sizes models (window,
 output cap, images, reasoning). pi fetches it from the moment the runtime is
-built, beside the repo clone, so the first start rarely waits for it. An env
+built, so the first start rarely waits for it. An env
 push (`POST /kortix/env`) and a restart build from the list pi already has and
 refresh it in the background: a prompt never waits for the gateway. When the
 list does not answer after two tries, models run on default limits and pi
@@ -1016,8 +1015,8 @@ session. Every rule below holds for the working tree and for a config release.
   column? }`) adds a section to the session notice (below): the error and
   warning counts, one line per issue (`kortix.yaml:<line>:<col> <severity>
   <path> <message>`), the rule that an agent or trigger with an error is off
-  until it is fixed, and the fix (edit `/workspace/kortix.yaml`, run `kortix
-  validate`, open a change request). No issues: no section
+  until it is fixed, and the fix (`kortix workspaces clone`, edit `kortix.yaml`
+  in the clone, run `kortix validate`, push, `kortix cr open`). No issues: no section
   (`services/config-provider/notice.ts` `manifestIssuesOf`).
 
 ### Config releases
@@ -1032,15 +1031,16 @@ and project tools that governance registers, the `./` pi packages, and the
 root `AGENTS.md` (else `CLAUDE.md`). A descriptor's `config_dir` (an older
 API's) is ignored: the release manifest records `config_dir: null`.
 
-- **Boot.** `runPi` starts the config choice and the workspace checkout
-  together, and they never wait for each other. `lifecycle.start()` waits for
-  the config only: the desired release (downloaded from the S3 project
-  snapshot, else the API archive), then the last release this box proved
-  (`current.json`), then the image default (managed skills and the
-  provisioned governance). pi is ready before `/workspace` lands; the
-  readiness gate holds turns until it does. `/workspace` is read as config
-  only when the box has no Kortix API, or an API from before config releases
-  graduated answers `403 feature_disabled`: then pi waits for the checkout.
+- **Boot.** The box never checks out the project repository. `/workspace`
+  starts empty, and an agent that needs the files runs `kortix workspaces
+  clone`. `lifecycle.start()` waits for the config only: the desired release
+  (downloaded from the S3 project snapshot, else the API archive), then the
+  last release this box proved (`current.json`), then the image default
+  (managed skills and the provisioned governance). Readiness has no
+  repository gate. `/workspace` is read as config only when the box has no
+  Kortix API, or an API from before config releases graduated answers
+  `403 feature_disabled`. `sandbox.on_boot` reads `kortix.yaml` from the
+  running config release (`shared/on-boot.ts`) and runs in `/workspace`.
 - **Convergence** (`POST /kortix/config/converge`, the 60 s runtime-truth tick,
   one pass after ready). pi applies a release in place: the governance goes
   into the runtime's env, the skill directories and the `AGENTS.md` root
@@ -1072,8 +1072,9 @@ session create, `KORTIX_CONFIG_RELEASE`: read from the store, no API call) or
 `config-release-fetched` (the descriptor route answered),
 `config-release-<disk|snapshot|archive|git>`,
 `config-release-proven`, `pi-ready`, `initial-prompt-delivered`,
-`initial-turn-accepted`, `runtime-ready`. No workspace step is a boot mark;
-`/kortix/health` reports the checkout as `workspace_provider`.
+`initial-turn-accepted`, `runtime-ready`. The box clones no repository, so
+no boot mark names one. `/kortix/health` has no `repo_required`,
+`repo_ready` or `workspace_provider` field.
 
 A permission rule names a capability (`RUNTIME_PERMISSION_CAPABILITIES` in
 `@kortix/api-contract/transcript`: `read`, `edit`, `bash`, `webfetch`, …), not
@@ -1312,7 +1313,13 @@ characters) and the child's runtime uses them as its base prompt in place of
 its agent's, exactly as the in-process path does. Under My Kortix every spec
 prompt (a built-in's, a fork's) rides there, because My Kortix's coordinator
 prompt never runs in a child; the API lets such a My Kortix child through
-its recursion stop (`apps/api/src/projects/lib/inline-colleague.ts`). Any
+its recursion stop (`apps/api/src/projects/lib/inline-colleague.ts`). Under My
+Kortix an inline spec may also carry `connectors` and `secrets`: they ride as the
+create's `colleague_access`, and the API answers 409
+`COLLEAGUE_ACCESS_APPROVAL_REQUIRED` until a person allows that list
+(`apps/api/src/projects/lib/colleague-access.ts`). The tool then returns
+`<task_awaiting_approval>` with no task id, and its details carry
+`awaitingApproval` and the `askId`. Any
 other spec prompt is a note beside the agent's own prompt in
 `initial_context`, which the child pastes into its first message. Every child, named ones included, gets the parent agent's
 effective tool list (the tools that pass `rootToolAllowed`), intersected with
@@ -1625,8 +1632,10 @@ starts; running agents finish), `resume`, `restart_agent` (stop that child and
 start it again with the same prompt, counted as an attempt), `stop`. `404`
 for an unknown run; `409 run_in_runner` with `runner_session_id` for a
 background run (control it on the runner's box), `409 run_ended`, `409
-agent_not_running`. Saved workflows of the checkout and the bundled
-`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands.
+agent_not_running`. Saved workflows of a checkout in `/workspace` and the bundled
+`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands. The box
+never checks out the repository at boot, so without a clone in `/workspace` only the
+bundled ones are listed; a saved workflow still runs by name from the API's project files.
 
 - **Names.** `agent({ name })` writes metadata `agent_handle` on the child;
   `agent({ name, team: true })` from a depth-0 session with flag
@@ -1677,21 +1686,16 @@ a tool name to visible, with `*` for every tool not named; `toolAllowed`
 and denies a call to a hidden one, for the root and for a subagent (both
 agents' maps must allow it).
 
-## The workspace and config providers are host services, not harness logic
+## The config provider is a host service, not harness logic
 
-`src/services/workspace-provider/` (the `git` / `prefer-s3` / `require-s3`
-project acquisition, #7221) and `src/services/config-provider/` (the config
-release a boot needs) stay outside `src/harness/`. Each depends only on
-`src/lib/` and knows nothing about any harness or about the other: both read
-the S3 project snapshot through `src/lib/project-snapshot/`, each into its
-own directory, in parallel. The config provider never reads `/workspace`
-(`obtainRelease`: disk, snapshot, archive, git; the archive first from the
-published release's signed store URL). The harness composes them.
-`pi/boot.ts` calls `provideWorkspace(cfg, { onSummary })` at the point where the
-cold boot acquires the workspace; pi does not wait for the checkout before its
-proof. `contract/boot-state.ts` carries the outcome:
-`workspaceProvider` (reported in `/kortix/health` as `workspace_provider`)
-and `deferredHistoryBackfill` (`backfillAfterHydration` for an S3 start).
+`src/services/config-provider/` (the config release a boot needs) stays
+outside `src/harness/`. It depends only on `src/lib/` and knows nothing about
+any harness. It reads the S3 project snapshot through
+`src/lib/project-snapshot/` into its own directory. It never reads
+`/workspace` (`obtainRelease`: disk, snapshot, archive, git; the archive
+first from the published release's signed store URL). The harness composes
+it. No workspace provider exists: the daemon never clones the project
+repository.
 
 ## Native features remain available
 

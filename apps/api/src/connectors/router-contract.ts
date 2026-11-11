@@ -30,9 +30,18 @@ export interface ConnectorPrincipal {
    *  agent may call. Null = no restriction (non-agent token). */
   agentGrant?: AgentGrant | null;
   /** Canonical slugs of the channel connector(s) that CREATED this session
-   *  (Slack/Teams/email). Always reachable, whatever the grant says — see
-   *  `principalMayUseConnector`. Empty for a session no channel created. */
+   *  (Slack/Teams/email), or that created the nearest session on its spawn
+   *  line. Always reachable, whatever the grant says — see
+   *  `principalMayUseConnector`. Empty for a session whose line no channel
+   *  created. */
   channelConnectorSlugs?: string[];
+  /** The stored agent grant of every ancestor on this session's spawn line,
+   *  nearest parent first (`sessionConnectorLineage`). A spawned session — a
+   *  subagent, a fork, a colleague — inherits what the line above it could
+   *  reach, so a delegate of a session that holds a connector can call it too
+   *  (KRTX-4643). An inherited call runs under the same policy set the
+   *  ancestor's own calls run under (`callPolicySetOf`). */
+  inheritedGrants?: (AgentGrant | null)[];
   /**
    * The account THIS call asked to run as (`account` in the call body), by
    * connection label or id. A per-request value, carried on the principal
@@ -567,6 +576,8 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
   /** Every profile's slug and the way in it is (`connectorIdentity`): install
    *  answers an existing profile and the catalogue marks `installed`. */
   listConnectorIdentities?(projectId: string): Promise<Array<{ slug: string; identity: string | null }>>;
+  /** The catalogue publishes this MCP server URL (a registry record or a Kortix app). */
+  catalogPublishesMcpUrl?(url: string): Promise<boolean>;
   /** The web page where a person reviews and adds a custom server an agent asked for. */
   customConnectorSetupUrl?(projectId: string, draft: Record<string, unknown>): string;
   /** The tools one way to connect offers, before install (`catalog-tools.ts`). */

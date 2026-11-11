@@ -56,6 +56,48 @@ describe('api-router worker', () => {
     expect(response.headers.get('Location')).toBe('https://gateway-dev.kortix.com/.well-known/security.txt');
   });
 
+  test('every edge-served response names a referrer policy, including synthetic ones', async () => {
+    // The HTTP→HTTPS redirect never touches an origin, but a browser still
+    // follows it with a Referer: the redirect itself carries the policy.
+    const redirect = await worker.fetch(new Request('http://gateway-dev.kortix.com/.well-known/security.txt'), env);
+    expect(redirect.status).toBe(308);
+    expect(redirect.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+    expect(redirect.headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+
+    // A misconfigured backend answers 500 from the edge before any origin.
+    const broken = await worker.fetch(new Request('https://api.kortix.com/v1/health'), {});
+    expect(broken.status).toBe(500);
+    expect(broken.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+    expect(broken.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  test.each(['GET', 'HEAD', 'POST'])('answers every request to the retired api-yolo host with 410 Gone at the edge, never an origin (%s)', async (method) => {
+    globalThis.fetch = () => { throw new Error('the retired host must not fetch an origin'); };
+    const response = await worker.fetch(new Request('https://api-yolo.kortix.com/api/v1/health', { method }), env);
+    expect(response.status).toBe(410);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+    if (method === 'GET') {
+      const body = await response.json();
+      expect(body.code).toBe('retired_endpoint');
+      expect(body.error.code).toBe('retired_endpoint');
+      expect(body.error.type).toBe('retired_endpoint');
+      expect(typeof body.error.message).toBe('string');
+      expect(body.error.message.length).toBeGreaterThan(0);
+    } else if (method === 'HEAD') {
+      expect(await response.text()).toBe('');
+    }
+  });
+
+  test('the retired api-yolo route rides over the proxied tunnel record as a zone route, never a custom domain', () => {
+    const config = Bun.TOML.parse(readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8'));
+    // A custom_domain would claim the DNS record itself; the route answers over
+    // it (the staging-api approach) so the zone operator can retire the record
+    // later without touching the worker.
+    const prodRoutes = config.env.prod.routes.filter((route) => route.pattern.startsWith('api-yolo.kortix.com'));
+    expect(prodRoutes).toEqual([{ pattern: 'api-yolo.kortix.com/*', zone_name: 'kortix.com' }]);
+  });
+
   test('deploys the dev router from dev and verifies its commit and SCIM boundary', () => {
     const workflow = Bun.YAML.parse(readFileSync(new URL('../../../../.github/workflows/deploy-api-router-dev.yml', import.meta.url), 'utf8'));
     expect(workflow.on.push.branches).toEqual(['dev']);

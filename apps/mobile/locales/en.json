@@ -1353,5 +1353,47 @@
       "serverBody": "Try again, or open another workspace.",
       "signInAgain": "Sign in again"
     }
+  },
+  "artifacts": {
+    "title": "Artifacts",
+    "search": "Search artifacts",
+    "scope": {
+      "all": "All",
+      "mine": "Yours",
+      "shared": "Shared with you",
+      "pinned": "Pinned"
+    },
+    "type": {
+      "doc": "Doc",
+      "html": "HTML"
+    },
+    "loadError": "Could not load artifacts.",
+    "retry": "Try again",
+    "empty": "No artifacts yet",
+    "emptyFiltered": "No artifacts match",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "rename": "Rename",
+    "save": "Save",
+    "cancel": "Cancel",
+    "notFoundTitle": "This artifact is not available",
+    "notFoundHint": "It was deleted, or its owner stopped sharing it.",
+    "remove": "Stop sharing",
+    "removeTitle": "Stop sharing this artifact?",
+    "removeHint": "It leaves Artifacts and its links stop working. Its files stay in Files.",
+    "removed": "No longer shared",
+    "shareLink": "Share link",
+    "openInBrowser": "Open in browser",
+    "reload": "Reload",
+    "scopeEmpty": "Nothing here yet",
+    "pinDone": "Pinned",
+    "unpinDone": "Unpinned",
+    "actionFailed": "Could not update the artifact. Try again.",
+    "renamed": "Artifact renamed",
+    "namePlaceholder": "Artifact name",
+    "saving": "Saving…",
+    "openError": "Unable to open this artifact",
+    "more": "Artifact actions",
+    "unavailable": "Artifacts are not available in this workspace"
   }
 }

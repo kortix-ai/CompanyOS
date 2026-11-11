@@ -822,10 +822,14 @@ export async function executeComposio(
     const limited = error as { status?: unknown; headers?: { get?: (name: string) => string | null } };
     if (limited?.status !== 429) {
       if (isHtmlPage(error)) {
+        // Keep the page's identity (`<title>`): the only clue to WHICH edge
+        // blocked the call. A Cloudflare WAF block page on Composio's edge
+        // hit the linear calls for a week before anyone could name it (KRTX-4512).
+        const page = htmlPageTitle(error);
         return {
           ok: false,
           status: 502,
-          data: `composio_upstream_unavailable: Composio answered ${String(limited?.status ?? 502)} with an HTML error page`,
+          data: `composio_upstream_unavailable: Composio answered ${String(limited?.status ?? 502)} with an HTML error page${page ? ` (page: ${page})` : ''}`,
         };
       }
       throw error;
@@ -871,6 +875,13 @@ export async function executeComposio(
 function isHtmlPage(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /<!doctype html|<html[\s>]/i.test(message);
+}
+
+/** The page's `<title>`, truncated to 80 chars; absent when the page has none. */
+function htmlPageTitle(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const title = /<title>([^<]{1,200})<\/title>/i.exec(message)?.[1]?.trim();
+  return title ? title.slice(0, 80) : null;
 }
 
 const COMPOSIO_RATE_LIMIT = /\b429\b|rate[ _-]?limit|too many requests/i;

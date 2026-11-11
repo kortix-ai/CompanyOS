@@ -62,6 +62,7 @@ const {
   compileAgentConfig,
   compileSelectedAgentConfig,
   manifestPiCodemode,
+  manifestWorkspaceSetup,
   manifestPiPackageLists,
   manifestPiPackages,
   resolveCompiledAgentConfigForSession,
@@ -120,6 +121,14 @@ describe('a broken part of kortix.yaml is turned off, never fatal', () => {
     // A path outside the repository is never read.
     const escaped = compileAgentConfig({ default_agent: 'w', agents: { w: { prompt_file: '../secret.md' } } }, { '../secret.md': 'wrong' });
     expect(escaped.agent.w).toEqual({ disable: true });
+  });
+
+  test('a prompt_file that opens with frontmatter (a Claude Code agent) compiles to its body', () => {
+    const set = compileAgentConfig(
+      { default_agent: 'planner', agents: { planner: { prompt_file: '.claude/agents/planner.md' } } },
+      { '.claude/agents/planner.md': '---\nname: planner\ntools: Read, Grep\nmodel: opus\n---\nYou plan changes.\n' },
+    );
+    expect(set.agent.planner?.prompt).toBe('You plan changes.\n');
   });
 
   test('warnings never reach the session: only errors, at most 50', () => {
@@ -636,5 +645,39 @@ describe('compileAgentConfig — the most specific rule wins on OpenCode, whatev
     expect(permissionAction(permission, 'bash', 'ls')).toBe('ask');
     expect(permissionAction(permission, 'edit', 'apps/api/.env')).toBe('deny');
     expect(permissionAction(permission, 'read', 'x')).toBe('allow');
+  });
+});
+
+describe('manifestWorkspaceSetup', () => {
+  const raw = parseManifestText([
+    'default_agent: dev',
+    'agents:',
+    '  dev:',
+    '    prompt: hi',
+    '    workspace:',
+    '      repos:',
+    '        - {}',
+    '        - path: /workspace/web/',
+    '          sparse: [apps/web]',
+    '      setup: [pnpm install, { run: pnpm build, cwd: apps/web }]',
+    '  plain:',
+    '    prompt: hi',
+    '  machine-only:',
+    '    prompt: hi',
+    '    workspace: { sandbox: default }',
+    '',
+  ].join('\n'));
+  test('normalizes the declared clones and setup; a repo path defaults to /workspace', () => {
+    expect(manifestWorkspaceSetup(raw, 'dev')).toEqual({
+      repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
+      setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }],
+    });
+    // `default` is "no agent chosen": the manifest's default_agent answers.
+    expect(manifestWorkspaceSetup(raw, 'default')).toEqual(manifestWorkspaceSetup(raw, 'dev'));
+  });
+  test('an agent that declares no clone and no setup prepares nothing', () => {
+    expect(manifestWorkspaceSetup(raw, 'plain')).toBeNull();
+    expect(manifestWorkspaceSetup(raw, 'machine-only')).toBeNull();
+    expect(manifestWorkspaceSetup(null, 'dev')).toBeNull();
   });
 });

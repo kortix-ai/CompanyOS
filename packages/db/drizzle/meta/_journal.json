@@ -1639,6 +1639,34 @@
       "when": 1794069932492,
       "tag": "20261107164532_gateway_logs_project_time_covering_v3",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1794243053023,
+      "tag": "20261109165053_session_colleague_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "7",
+      "when": 1794250122042,
+      "tag": "20261109184842_workspaces_account_id_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1794319131206,
+      "tag": "20261110135851_add_kortix_contact_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1794359760048,
+      "tag": "20261111011600_access_requests_email_unique",
+      "breakpoints": true
     }
   ]
 }

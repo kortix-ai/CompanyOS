@@ -64,10 +64,19 @@ test('p50/p95/p99 come back per day from one ordered-set aggregate', async () =>
   expect(rows[0]).toMatchObject({ requests: 101, errors: 1, p50: 50, p95: 95, p99: 99 });
 });
 
-test('a trace whose upstream failures are huge still inserts into the metadata-carrying covering index', async () => {
-  // Incompressible text, so the btree tuple cannot shrink by pglz.
+test('a trace whose upstream failures are huge still inserts; the writer bounds metadata and the covering index carries none of it (KRTX-4023 v4)', async () => {
+  // Incompressible text, so no pglz shrinkage: the raw value below is what
+  // v2/v3's metadata INCLUDE could not hold (btree tuple max ~2.7 KB — the
+  // raw insert failed with "index row size" there). v4 replaced that INCLUDE
+  // with the promoted columns and no index carries metadata anymore, so the
+  // btree limit can never reject a trace row: the WRITER's boundMetadata is
+  // the guard that keeps rows sane, and the raw path inserts unchanged.
   const noise = () => Buffer.from(crypto.getRandomValues(new Uint8Array(4000))).toString('base64');
-  const attemptFailures = Array.from({ length: 6 }, (_, i) => ({ attempt: i + 1, code: 502, message: noise() }));
+  const attemptFailures = Array.from({ length: 6 }, (_, i) => ({
+    attempt: i + 1,
+    code: 502,
+    message: noise(),
+  }));
   const row = buildGatewayTraceRow({
     requestId: crypto.randomUUID(),
     accountId,
@@ -80,10 +89,14 @@ test('a trace whose upstream failures are huge still inserts into the metadata-c
     metadata: { attemptFailures },
   });
   await db.insert(gatewayRequestLogs).values(row);
-  // The unbounded value is what the index cannot hold: same insert, raw metadata.
-  const raw = await db
-    .insert(gatewayRequestLogs)
-    .values({ ...row, requestId: crypto.randomUUID(), metadata: { attemptFailures } })
-    .then(() => null, (error: Error & { cause?: Error }) => error.cause?.message ?? error.message);
-  expect(raw).toContain('index row');
+  // The bounded write kept the row insertable and the payload within the
+  // bound; the unbounded raw value also inserts (no index tuple carries it).
+  const rawRow = { ...row, requestId: crypto.randomUUID(), metadata: { attemptFailures } };
+  await db.insert(gatewayRequestLogs).values(rawRow);
+  const inserted = await db
+    .select({ metadata: gatewayRequestLogs.metadata })
+    .from(gatewayRequestLogs)
+    .where(eq(gatewayRequestLogs.requestId, rawRow.requestId));
+  expect(inserted).toHaveLength(1);
+  expect(inserted[0]?.metadata).toEqual({ attemptFailures });
 });

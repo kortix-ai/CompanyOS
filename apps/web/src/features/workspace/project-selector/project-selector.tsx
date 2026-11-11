@@ -23,6 +23,7 @@ import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
 import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
 import { isAccountCreationRestricted, isBillingEnabled } from '@/lib/config';
+import { showWorkspaceSurveys } from '@/lib/analytics/survey-gate';
 import { isModifiedClick } from '@kortix/ui/internal/lib/navigation/modified-click';
 import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { cn } from '@kortix/ui';
@@ -41,9 +42,9 @@ import { INITIAL_FORM_STATE, isSubmittable } from '@kortix/ui/workspace/new/new-
 import { useCreateWorkspace } from '@kortix/ui/workspace/new/use-create-workspace';
 import { WorkspaceHandoff } from '@kortix/ui/workspace/new/workspace-handoff';
 import {
-  WORKSPACE_NAME_MAX_LENGTH,
   suggestWorkspaceName,
   validateWorkspaceName,
+  workspaceNameMessage,
 } from '@kortix/ui/workspace/new/workspace-name';
 import { useWorkspaceStateActions } from '@kortix/ui/workspace/sidebar/use-workspace-list';
 import { useProjectSelectorData } from './use-project-selector-data';
@@ -493,6 +494,17 @@ export function ProjectSelector({ connectComputer }: { connectComputer?: boolean
   const setSelectedAccountId = useCurrentAccountStore((state) => state.setSelectedAccountId);
   const data = useProjectSelectorData();
   const { data: adminRole } = useAdminRole();
+  const workspaceCount = data.workspaces.length;
+
+  /**
+   * A survey may pop only after the person's first workspace exists
+   * (`survey-gate.ts`): PostHog's automatic display pinned this page behind
+   * the acquisition modal for a zero-workspace account.
+   */
+  useEffect(() => {
+    showWorkspaceSurveys(workspaceCount);
+  }, [workspaceCount]);
+
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
   // Never cleared: `performSignOut` replaces the document.
   const [signingOut, setSigningOut] = useState(false);
@@ -589,14 +601,9 @@ function useInlineCreate(allowed: boolean): InlineCreateProps {
   const state = { ...INITIAL_FORM_STATE, name };
   const submitting = status === 'creating';
 
-  const result = validateWorkspaceName(name);
-  let nameError: string | null = null;
-  if (!result.ok && result.error.startsWith('Name must be')) {
-    nameError = tNew('validation.nameTooLong', { max: WORKSPACE_NAME_MAX_LENGTH });
-  } else if (touched && !result.ok) {
-    nameError =
-      result.error === 'Name is required' ? tNew('validation.nameRequired') : tNew('validation.nameCharacters');
-  }
+  // Same rule as `/workspaces/new` (`workspaceNameMessage`): an error that
+  // disables submit reports itself live; only "required" waits for blur.
+  const nameError = workspaceNameMessage(validateWorkspaceName(name), touched, tNew);
   const canSubmit = allowed && isSubmittable(state) && !submitting;
 
   return {

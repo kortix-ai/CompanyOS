@@ -42,6 +42,7 @@ import { useTabStore, PAGE_TABS } from '@/stores/tab-store';
 import { useLastProjectStore } from '@/stores/last-project-store';
 import {
   PROJECT_ACCOUNT_ROUTE,
+  PROJECT_ARTIFACTS_ROUTE,
   PROJECT_FILES_ROUTE,
   PROJECT_HOME_ROUTE,
   PROJECT_INBOX_ROUTE,
@@ -89,6 +90,7 @@ import { DRAWER_CLOSE, DRAWER_OPEN } from '@/lib/ui/drawer-springs';
 import { useReviewNeedsYou } from '@/lib/review/use-review';
 import { needsYouBySession } from '@/lib/session/needs-you';
 import { runtimeSessionsOf, sessionParentId } from '@kortix/sdk';
+import { ArtifactViewerSheet } from '@/components/artifacts/ArtifactViewerSheet';
 import { KortixProjectProvider, useNotificationInbox, useSessionsNeedingInput } from '@kortix/sdk/react';
 import { NOTIFICATION_INBOX_LIMIT } from '@/lib/notifications/inbox';
 import { carryOverLegacyKinds } from '@/lib/notifications/registration';
@@ -908,11 +910,15 @@ export function ProjectScreen() {
             <Stack.Screen name={PROJECT_VIEW_ROUTE} />
             <Stack.Screen name={PROJECT_SESSIONS_ROUTE} />
             <Stack.Screen name={PROJECT_FILES_ROUTE} />
+            <Stack.Screen name={PROJECT_ARTIFACTS_ROUTE} />
             <Stack.Screen name={PROJECT_ACCOUNT_ROUTE} />
             <Stack.Screen name={PROJECT_INBOX_ROUTE} />
             <Stack.Screen name={PROJECT_PAGE_ROUTE} options={{ gestureEnabled: true }} />
           </Stack>
         </ProjectRouteProvider>
+        {/* One artifact viewer for the project: the Artifacts page's rows and a
+            thread's artifact links open it over the screen they are on. */}
+        <ArtifactViewerSheet projectId={projectId} />
         </KortixProjectProvider>
       </Drawer>
 

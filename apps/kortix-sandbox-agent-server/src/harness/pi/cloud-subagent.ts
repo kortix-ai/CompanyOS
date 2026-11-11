@@ -157,6 +157,9 @@ const RUNTIME_CONTEXT_MAX_BYTES = 16 * 1024
 const TOOL_NAME = /^[A-Za-z0-9_.:-]{1,128}$/
 
 /** The API callback target and this parent's limits, from the box env. */
+/** `runtime_context` key: the model the parent's turn runs, for a child created with no model (`session-create.ts`). */
+export const PARENT_MODEL_CONTEXT_KEY = 'kortix.parent_model'
+
 export interface CloudSubagentApi {
   /** `KORTIX_API_URL`, with or without the `/v1` suffix. */
   apiUrl: string
@@ -169,6 +172,12 @@ export interface CloudSubagentApi {
   parentAgent?: string
   /** This session is the platform coordinator (My Kortix): every spec prompt is its child's own system prompt. */
   coordinator?: boolean
+  /**
+   * The model this session's turn runs on (`provider/model`), set per call. A
+   * child the call names no model for inherits it, unless its agent pins one
+   * (the API decides that: this box may not compile the child's agent).
+   */
+  parentModel?: string
   /** This session's own subagent depth (0 for a root session). */
   depth: number
   maxDepth: number
@@ -370,8 +379,11 @@ export async function cloudSpawnSession(
       return { sessionId: '', status: 'error', text: '', error: `child session create failed: ${errorText(err)}`, model }
     }
     if (created.status !== 201 && created.status !== 202) {
-      const body = (await created.text().catch(() => '')).slice(0, 500)
-      return { sessionId: '', status: 'error', text: '', error: `child session create answered ${created.status}: ${body}`, model }
+      const body = (await created.text().catch(() => '')).slice(0, 2000)
+      // A colleague whose access waits for the person: nothing started, and that is not a failure.
+      const pending = created.status === 409 ? accessApproval(body) : null
+      if (pending) return { sessionId: '', status: 'awaiting_approval', text: pending.text, ...(pending.askId ? { askId: pending.askId } : {}), model }
+      return { sessionId: '', status: 'error', text: '', error: `child session create answered ${created.status}: ${body.slice(0, 500)}`, model }
     }
     const createdJson = (await created.json().catch(() => null)) as { session_id?: string; sessionId?: string } | null
     const childId = createdJson?.session_id ?? createdJson?.sessionId ?? ''
@@ -484,6 +496,17 @@ function isWorkingBackgroundChild(row: SessionRow): boolean {
   return row.status === 'provisioning' || (row.status === 'running' && row.working?.state === 'working')
 }
 
+/** A start that waits for the person to allow its access (`COLLEAGUE_ACCESS_APPROVAL_REQUIRED`): the API's text and the ask. Null: another 409. */
+function accessApproval(body: string): { text: string; askId?: string } | null {
+  try {
+    const json = JSON.parse(body) as { code?: unknown; error?: unknown; ask_id?: unknown }
+    if (json.code !== 'COLLEAGUE_ACCESS_APPROVAL_REQUIRED' || typeof json.error !== 'string') return null
+    return { text: json.error, ...(typeof json.ask_id === 'string' ? { askId: json.ask_id } : {}) }
+  } catch {
+    return null
+  }
+}
+
 /** The create body. Throws on a spec the API would refuse, before any session exists. */
 function buildCreateBody(api: CloudSubagentApi, input: SpawnSessionInput): Record<string, unknown> {
   const named = input.agent && !CLOUD_UNMAPPABLE_AGENTS.has(input.agent) ? input.agent : undefined
@@ -518,6 +541,8 @@ function buildCreateBody(api: CloudSubagentApi, input: SpawnSessionInput): Recor
     ...(handle ? { [AGENT_HANDLE_CONTEXT_KEY]: handle } : {}),
     ...(teammate ? { [TEAM_LEAD_CONTEXT_KEY]: teammate.lead } : {}),
     ...(ownPrompt ? { [AGENT_INSTRUCTIONS_CONTEXT_KEY]: ownPrompt } : {}),
+    // No model on the call: the API runs the child on this turn's model unless its agent pins one.
+    ...(!input.model && api.parentModel ? { [PARENT_MODEL_CONTEXT_KEY]: api.parentModel } : {}),
   }
   const bytes = new TextEncoder().encode(JSON.stringify(runtimeContext)).byteLength
   if (bytes > RUNTIME_CONTEXT_MAX_BYTES) {
@@ -537,6 +562,7 @@ function buildCreateBody(api: CloudSubagentApi, input: SpawnSessionInput): Recor
     ...(context ? { initial_context: context } : {}),
     ...(Object.keys(metadata).length ? { metadata } : {}),
     ...(input.fork && api.sessionId ? { fork_from_session_id: api.sessionId } : {}),
+    ...(input.access ? { colleague_access: input.access } : {}),
     runtime_context: runtimeContext,
   }
 }

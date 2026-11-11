@@ -4,6 +4,10 @@ import {
   repositoryDisconnectedBody,
 } from './shared/repository-health';
 import type { Context } from 'hono';
+import type { Router } from 'hono/router';
+import type { RouterRoute } from 'hono/types';
+import { RegExpRouter } from 'hono/router/reg-exp-router';
+import { TrieRouter } from 'hono/router/trie-router';
 import { HTTPException } from 'hono/http-exception';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { isManifestSyntaxError } from '@kortix/manifest-schema';
@@ -27,12 +31,14 @@ import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
-  deadCredentialLogDecision,
   deadCredentialLogKey,
+  isAccountMfaDenial,
+  isAgentGrantDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
+import { logWindowDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -370,11 +376,23 @@ function handleHttpException(
   // body with no session_token_revoked code — only the line is throttled,
   // first per window per normalized key, next line carrying `suppressed`.
   // auth-audit's auditLoginFail at each throw site keeps exact accounting.
-  if (isDeadCredential(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
+  // The agent-grant denial family joins the same treatment (KRTX-4635): the
+  // typed body already names the permission and the remedy, and a caller that
+  // never acts on it — an in-sandbox agent looping a denied command — put 590
+  // warn lines in two hours on one prod route, 8.8k in eight days across ~10
+  // routes, all one reason (`agent_scope_insufficient`). Same line, same
+  // grouping; only the rate and the severity band change.
+  // The account-MFA step-up denial joins the same treatment (KRTX-4674): the
+  // typed body already tells the client to verify its second factor, and a
+  // caller that polls through it — the web app's workspace list panels —
+  // put 700+ warn lines in one hour across three routes, 0 in the 24 h
+  // before, until its people complete the step-up. Same line, same
+  // grouping; only the rate and the severity band change.
+  if (isDeadCredential(err) || isAgentGrantDenial(err) || isAccountMfaDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = deadCredentialLogDecision(
+    const { log, suppressed } = logWindowDecision(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );
@@ -738,12 +756,51 @@ function handleUnhandledError(err: Error, c: Context): Response {
   return handleDatabaseOrUnknownError(err, c, errName, method, path);
 }
 
+// KRTX-4704: a wrong method on a path that matches a registered route answers
+// 405 with the Allow list RFC 9110 §15.5.5 requires; 404 stays for unmatched
+// paths. Hono answers a bare 404 for both, and its router.match folds the
+// middleware (registered as ALL) into every match result, so the allow list is
+// computed from a fresh router over the registered route table only. ALL
+// entries are middleware or catch-alls that serve every method, so a request
+// matching one never lands in this handler.
+const ALLOW_PROBE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
+
+function buildAllowRouter(routes: readonly RouterRoute[]): Router<null> {
+  const wire = (router: RegExpRouter<null> | TrieRouter<null>): Router<null> => {
+    for (const route of routes) {
+      if (route.method === 'ALL') continue;
+      router.add(route.method, route.path, null);
+    }
+    return router;
+  };
+  try {
+    const regExp = wire(new RegExpRouter<null>());
+    regExp.match('GET', '/__allow_router_warmup__'); // builds the matchers; UnsupportedPathError falls back below
+    return regExp;
+  } catch {
+    return wire(new TrieRouter<null>());
+  }
+}
+
+function allowedMethods(router: Router<null>, path: string): string[] {
+  const allow: string[] = ALLOW_PROBE_METHODS.filter((method) => router.match(method, path)[0].length > 0);
+  if (allow.includes('GET')) allow.push('HEAD'); // Hono serves HEAD by dispatching it as GET
+  return allow;
+}
+
 export function installHttpErrors(app: OpenAPIHono) {
   // === Error Handling ===
   app.onError(handleUnhandledError);
 
   // === 404 Handler ===
+  let allowRouter: Router<null> | null = null;
   app.notFound((c) => {
+    allowRouter ??= buildAllowRouter(app.routes);
+    const allow = allowedMethods(allowRouter, c.req.path);
+    if (allow.length && !allow.includes(c.req.method)) {
+      return c.body(null, 405, { Allow: allow.join(', ') });
+    }
+
     // A root-absolute link on a path-based preview (`<a href="/learn">` inside
     // /v1/p/{sandbox}/{port}/) resolves against THIS origin and lands here with
     // the prefix stripped. Put the navigation back where it belongs instead of

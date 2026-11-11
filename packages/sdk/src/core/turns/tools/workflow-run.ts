@@ -14,6 +14,7 @@ import type {
   WorkflowRunPhase,
   WorkflowRunStatus,
 } from '../../rest/projects-client/multi-agent';
+import { decodeJsonStringLiteral as decodeKey, isJsonObject as isObject, text } from '../text-scan';
 
 /** A phase's status. `pending`: declared in the script's `meta.phases`, not started yet. */
 export type WorkflowPhaseStatus = WorkflowRunPhase['status'];
@@ -56,12 +57,6 @@ const MAX_AGENTS = 200;
 const MAX_LOGS = 5;
 const MAX_LOG_CHARS = 500;
 
-type Json = Record<string, unknown>;
-
-const isObject = (value: unknown): value is Json =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-const text = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const time = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 const count = (value: unknown): number | undefined =>
@@ -318,7 +313,7 @@ export function parseWorkflowResult(output: string): WorkflowResult | null {
       const recovered = fields ? documentOf(fields) : null;
       return { kind: 'markdown', text: recovered ?? body };
     }
-    const document = isRecord(parsed) ? documentOf(Object.entries(parsed)) : null;
+    const document = isObject(parsed) ? documentOf(Object.entries(parsed)) : null;
     if (document) return { kind: 'markdown', text: document };
     return { kind: 'json', text: prettyJson(parsed, body) };
   }
@@ -357,10 +352,6 @@ function nestingDepth(body: string): number {
   return max;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** A string a person reads, not a value: it spans lines, or runs long as words (a long URL or token is data). */
 function isProse(value: string): boolean {
   return value.includes('\n') || (value.length >= 120 && /\s/.test(value.trim()));
@@ -384,6 +375,9 @@ function documentOf(fields: [string, unknown][]): string | null {
   if (fields.length === 1) return fields[0]![1].trim();
   return fields.map(([key, value]) => `## ${fieldTitle(key)}\n\n${value.trim()}`).join('\n\n');
 }
+
+const JSON_SPACE = new Set([' ', '\t', '\n', '\r']);
+const isJsonSpace = (char: string | undefined): boolean => char !== undefined && JSON_SPACE.has(char);
 
 /**
  * The `"key": "value"` pairs of a JSON object cut short, in order, with the
@@ -428,19 +422,11 @@ function cutStringFields(body: string): [string, string][] | null {
     }
     fields.push([decodeKey(head[1]!), value]);
     if (!closed) break;
-    const comma = /\s*,/y;
-    comma.lastIndex = i;
-    if (!comma.exec(body)) break;
-    at = comma.lastIndex;
+    // `\s*,` — inline scan, no regex: cutStringFields past the comma loops again.
+    at = i;
+    while (isJsonSpace(body[at])) at += 1;
+    if (body[at] !== ',') break;
+    at += 1;
   }
   return fields;
-}
-
-/** A captured JSON key with its escapes decoded, as `JSON.parse` would give it. */
-function decodeKey(raw: string): string {
-  try {
-    return JSON.parse(`"${raw}"`) as string;
-  } catch {
-    return raw;
-  }
 }

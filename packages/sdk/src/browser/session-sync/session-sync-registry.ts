@@ -5,7 +5,6 @@ import { ApiError } from '../../core/http/api/errors';
 import {
   SessionSyncController,
   type SessionSyncPage,
-  type SessionSyncReason,
   type SessionSyncTelemetryEvent,
   loadCompleteSessionHistory,
 } from '../../core/session-sync/session-sync-controller';
@@ -391,14 +390,6 @@ export function retainSessionSyncController(sessionId: string, runtimeScope?: st
   };
 }
 
-export function reconcileSessionTail(
-  sessionId: string,
-  reason: SessionSyncReason,
-  runtimeScope?: string,
-): Promise<void> {
-  return getSessionSyncController(sessionId, undefined, runtimeScope).reconcile(reason);
-}
-
 /**
  * One authoritative read of a session's runtime status. `null` when the
  * runtime exposes no status endpoint — the caller decides what silence means.
@@ -485,7 +476,7 @@ export async function loadSessionExportMessages(
   let log = saved ? useSyncStore.getState().sessionLogs[saved.sessionId] : undefined;
   // The API serves the log and the session has none yet: only the runtime can hold messages.
   let missing = false;
-  if (saved && !log && loadSessionLogPage) {
+  if (saved && !log) {
     const page = await readSessionLogAnswer(loadSessionLogPage, saved.projectId, saved.sessionId, { limit: SESSION_LOG_EXPORT_PAGE_LIMIT });
     if (page === 'missing') missing = true;
     else if (page) log = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page);

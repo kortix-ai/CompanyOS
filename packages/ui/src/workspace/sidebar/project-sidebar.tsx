@@ -19,6 +19,7 @@ import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
 import { ProjectMcpNavItem } from './footer/project-mcp-nav';
 import { ProjectComputerNavItem } from './footer/project-computer-nav';
+import { ProjectDownloadAppNavItem } from './footer/project-download-app-nav';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
@@ -43,7 +44,9 @@ import {
   NavigationArrowIcon,
 } from '@phosphor-icons/react';
 import { UiLink as Link } from '../../providers/ui-provider';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useWorkspaceSettingsRailStore } from '../../internal/stores/workspace-settings-rail-store';
+import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SidebarBalanceWarning } from './footer/project-balance-warning';
 import { SidebarUpgradeButton } from './footer/project-upgrade-button';
 import { SidebarGlyph as PanelLeft } from '../../icons/sidebar-toggle';
@@ -56,8 +59,14 @@ export function ProjectSidebar({
   projectId,
   menu,
   onOpenSearch,
+  onOpenDownloadApp,
 }: {
   projectId: string;
+  /**
+   * Opens the host's Download app dialog. Without it, the footer has no
+   * Download app row.
+   */
+  onOpenDownloadApp?: () => void;
   /**
    * Opens the host's search (apps/web: its command palette). Without it, the
    * header has no Search button.
@@ -80,6 +89,19 @@ export function ProjectSidebar({
   // Mounted outside <Sidebar>: the mobile sheet unmounts its content on close.
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
   const [connectMcpOpen, setConnectMcpOpen] = useState(false);
+
+  // Settings drill (`SidebarDrill`): a click there closes the mobile sheet.
+  const handleDrilledNavigate = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
+  // The page hides its own rail while this panel is docked open on the
+  // desktop. The value does not depend on the route, so it is already right
+  // when the settings page renders its first frame: no rail flashes in.
+  const setSidebarDocked = useWorkspaceSettingsRailStore((s) => s.setSidebarDocked);
+  useLayoutEffect(() => {
+    setSidebarDocked(isExpanded && !isMobile);
+  }, [isExpanded, isMobile, setSidebarDocked]);
+  useLayoutEffect(() => () => setSidebarDocked(false), [setSidebarDocked]);
 
   const accountId = useBillingAccountId();
   // Chat (`chat`): the spaces list replaces New session, and the session list
@@ -165,6 +187,7 @@ export function ProjectSidebar({
                   {chrome ? (
                     <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
                   ) : null}
+                  {onOpenDownloadApp ? <ProjectDownloadAppNavItem onOpenDownload={onOpenDownloadApp} /> : null}
                 </SidebarMenu>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in
@@ -303,7 +326,7 @@ export function ProjectSidebar({
           (header `p-2` + switcher `px-1` + half of the `size-6` tile). Left
           side only: right padding still clears trailing badges. */}
       <SidebarContent className="relative min-h-0 flex-1 [scrollbar-width:'none'] overflow-hidden [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden [&_[data-sidebar=menu-button]]:pl-2">
-        <div className="flex h-full min-h-0 flex-col space-y-2">
+        <SidebarDrill projectId={projectId} onNavigate={handleDrilledNavigate}>
           <SidebarGroup className="py-0">
             <SidebarMenu>
               {chat ? null : (
@@ -367,11 +390,12 @@ export function ProjectSidebar({
               {chat ? null : connectRows}
             </SidebarMenu>
           </SidebarGroup>
-        </div>
+        </SidebarDrill>
       </SidebarContent>
 
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>
+    <SettingsReturnTracker projectId={projectId} />
     <ComputerConnectModal
       projectId={projectId}
       open={computerConnectOpen}

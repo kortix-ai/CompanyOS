@@ -15,10 +15,13 @@ import { createApiJsonClient } from '../helpers/http';
 /**
  * KRTX-4492: a profile picture uploaded on /settings/profile reached the auth
  * metadata but never any identity surface — the "Logged in as" trigger on
- * /workspaces and /workspaces/new rendered text-only (0 <img> in the page),
- * and the shell menu's signed-in line was text-only too. The write path is
- * Supabase Storage + `auth.updateUser` (profile-tab.tsx); this journey runs
- * THAT path and asserts the rendered avatar where the person sees themselves.
+ * /workspaces and /workspaces/new rendered text-only (0 <img> in the page).
+ * The write path is Supabase Storage + `auth.updateUser` (profile-tab.tsx);
+ * this journey runs THAT path and asserts the rendered avatar where the
+ * person sees themselves. The account top bar is that surface on every
+ * account-level page (/workspaces, /workspaces/new, /inbox); the shell's
+ * workspace switcher is a workspace menu, not a user menu, and carries no
+ * signed-in identity line (flattened in the shorter-workspace-menu change).
  */
 
 const authOptions = {
@@ -55,7 +58,7 @@ async function gotoStable(page: Page, path: string): Promise<void> {
 }
 
 test.describe('39 — The profile picture shows where the person sees themselves', () => {
-  test('the uploaded avatar renders in the Logged in as trigger and in the shell menu', async ({
+  test('the uploaded avatar renders in the Logged in as trigger on every account page', async ({
     page,
   }) => {
     // Recorded local run: 419.5s (tests/e2e/shard-durations.json); gotoStable
@@ -106,14 +109,13 @@ test.describe('39 — The profile picture shows where the person sees themselves
         });
       });
 
-      await test.step('the shell menu shows the avatar on the signed-in line', async () => {
-        await gotoStable(page, `/workspaces/${project.id}`);
-        await page.getByRole('button', { name: 'Switch workspace' }).click({ timeout: 30_000 });
-        const menu = page.getByRole('menu');
-        await expect(menu).toBeVisible();
-        await expect(
-          menu.locator('img[src*="/storage/v1/object/public/avatars/"]'),
-        ).toBeVisible({ timeout: 15_000 });
+      await test.step('the account top bar shows the avatar on /inbox too', async () => {
+        await gotoStable(page, `/inbox`);
+        const trigger = page.getByRole('button', { name: /Logged in as/ });
+        await expect(trigger).toBeVisible({ timeout: 60_000 });
+        await expect(trigger.locator('img[src*="/storage/v1/object/public/avatars/"]')).toBeVisible({
+          timeout: 15_000,
+        });
       });
     } finally {
       if (projectId) await deleteDatabaseProject(env, projectId).catch(() => undefined);

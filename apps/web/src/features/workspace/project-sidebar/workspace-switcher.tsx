@@ -10,28 +10,25 @@ import { useTranslations as useI18nTranslations } from '@/i18n/use-translations'
  * The trigger shows the workspace, not you: its icon (an emoji if one is set,
  * otherwise the initials `EntityAvatar` derives from the name) and its name, the
  * same treatment the rows inside the switcher use, so the thing you are in looks
- * like the things you can move to. You are one menu open away, though: the menu
- * opens on the signed-in identity (KRTX-1810) — the shell's only
- * "who am I" surface since the old footer user menu was folded into this
- * control — and keeps the account rows below it.
+ * like the things you can move to. The account rows (Preferences, Log out) sit
+ * below the workspace rows.
  *
- * The menu, top to bottom (design.md §3.1 finding 21, Slack's workspace menu):
- * the workspace header (icon, name, the caller's role) → "Invite people to
- * {name}" (`project.members.manage`) → "Workspace settings" (the one Settings
- * panel, `/workspaces/<id>/admin`) → "Switch workspace" (the list, with the
- * pending-invitation count) → "Create workspace" → "Preferences" (the
- * person's own settings overlay; it keeps Mod+,) → Apps and extensions,
- * Appearance, Help, Download app → "Leave {name}" (never for the last owner)
- * → Log out, with the signed-in identity under it. Rename lives in Workspace
- * settings › General.
+ * The menu, top to bottom (`workspaceMenuGroups`): "Switch workspace" (the
+ * list, with the pending-invitation count, and "Create workspace" at its
+ * foot) → "Workspace settings" (`/workspaces/<id>/admin`) → "Invite people"
+ * (`project.members.manage`) → Inbox → "Preferences" (the person's own
+ * settings overlay; it keeps Mod+,) → "Apps and extensions" → Help → Log out,
+ * as a plain row. Rename lives in Workspace settings ›
+ * General and Leave in its Danger zone; a person who cannot open Workspace
+ * settings gets "Leave {name}" here instead. Appearance lives in Preferences;
+ * Download app is a dismissible row at the foot of the sidebar.
  *
  * Preferences pokes `useSettingsPanelStore.openSettings('profile')`: this
  * control only renders under `ProjectShell`, which mounts `SettingsPanel` as a
  * sibling, so the overlay opens in place.
  *
- * The rows that are genuinely account-level and have nowhere else to live in
- * this panel — Install App, Theme, Help, Log out — are shared with `UserMenu`
- * through `user-menu-shared.tsx` rather than copied.
+ * Help and Log out are shared through `user-menu-shared.tsx` rather than
+ * copied.
  *
  * This replaced three controls: a `<Link>` carrying the Kortix mark fused to a
  * separate dropdown trigger carrying the workspace name, plus a user menu in the
@@ -44,7 +41,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
@@ -54,7 +50,6 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
-import { UserAvatar } from '@kortix/ui/user-avatar';
 import {
   SidebarContext,
   SidebarMenu,
@@ -62,10 +57,7 @@ import {
   SidebarMenuItem,
 } from '@kortix/ui/sidebar';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { DownloadModal } from '@/features/marketing/download/download-modal';
-import { Download } from '@kortix/ui/internal/icons/download';
-import { useAuth } from '@/features/providers/auth-provider';
-import { HelpSubmenu, ThemeSubmenu, useLogoutFlow } from '@/features/layout/user-menu-shared';
+import { HelpSubmenu, useLogoutFlow } from '@/features/layout/user-menu-shared';
 import { COMPUTER_SETUP_EVENT } from '@kortix/ui/internal/tunnel/computer-connect';
 import { LocalComputerModal } from '@/features/tunnel/local-computer-modal';
 import { PROJECT_ACTIONS } from '@kortix/sdk';
@@ -88,7 +80,7 @@ import { cn } from '@kortix/ui';
 import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel-store';
 import { useAppsModalStore } from '@kortix/ui/internal/stores/apps-modal-store';
 import { getProject } from '@kortix/sdk';
-import { contract, qk, useWorkspace } from '@kortix/sdk/react';
+import { contract, qk } from '@kortix/sdk/react';
 import { useInboxSummary } from '@kortix/ui/internal/notifications/use-inbox-summary';
 import {
   ArrowsLeftRightIcon,
@@ -110,14 +102,11 @@ import { useEffect, useState } from 'react';
 export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   const t = useI18nTranslations('sidebar');
   const tWorkspaces = useI18nTranslations('workspaces.switcher');
-  const tUi = useI18nTranslations('hardcodedUi.i18nComplete');
-  const tChooser = useI18nTranslations('workspaces.chooser');
   const tWorkspaceMenu = useI18nTranslations('workspaces.menu');
   // "Invite people" follows the palette's gate; "Workspace settings" follows
   // Customize › Workspace settings (`config`).
   const canInvite = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE).allowed === true;
   const canOpenSettings = useCapabilityAccess(projectId).tabs.includes('config');
-  const role = useWorkspace(projectId).data?.role ?? null;
   const leave = useLeaveWorkspace(projectId);
   const inviteCount = useMyInvites().data?.length ?? 0;
   const directory = useWorkspaceDirectory();
@@ -125,11 +114,6 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   const inbox = useInboxSummary(projectId);
   const sidebar = React.useContext(SidebarContext);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user } = useAuth();
-  // The identity line the account top bar shows on /workspaces and /new — same
-  // precedence, same fallback — so the shell's menu says who is signed in the
-  // same way those pages do (KRTX-1810).
-  const identity = user?.user_metadata?.name?.trim() || user?.email || null;
 
   // Seeds `selectedAccountId` for a brand-new sign-in. Pre-merge this ran here
   // by way of a `UserMenu` in the project sidebar's FOOTER. That footer menu no
@@ -143,7 +127,6 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   // all from one user-scoped fetch.
   useEnsureSelectedAccount();
 
-  const [downloadOpen, setDownloadOpen] = useState(false);
   const [computerSetupOpen, setComputerSetupOpen] = useState(false);
   // Right after this desktop pairs, setup opens on the spot (see COMPUTER_SETUP_EVENT).
   // The sidebar's computer row and the Connectors pages open the other dialogs.
@@ -199,32 +182,18 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   const menuGroups = workspaceMenuGroups({
     canInvite,
     canOpenSettings,
-    canCreate,
     canLeave: leave.canLeave,
     hasInbox: inbox.href !== null,
   });
   const renderRow = (row: WorkspaceMenuRow): React.ReactNode => {
     switch (row) {
-      case 'header':
-        // The workspace first (Slack's "Acme ▾"): its icon, its name and the
-        // caller's one role in it. A label, not a row.
-        return (
-          <DropdownMenuLabel className="flex min-w-0 items-center gap-2 font-normal" data-testid="workspace-menu-header">
-            {project ? (
-              <EntityAvatar label={project.name} glyph={project.icon_glyph} emoji={project.icon} size="sm" />
-            ) : null}
-            <span className="flex min-w-0 flex-col">
-              <span className="text-foreground truncate text-sm font-medium">{project?.name ?? ''}</span>
-              {role ? <span className="text-muted-foreground text-xs">{tChooser(`role.${role}`)}</span> : null}
-            </span>
-          </DropdownMenuLabel>
-        );
       case 'invite':
         return (
           <DropdownMenuItem asChild onSelect={() => setMenuOpen(false)} size="sm">
             <Link href={`${workspaceSettingsPath(projectId, 'members')}?invite=1`} prefetch>
               <UserPlusIcon />
-              <span className="min-w-0 flex-1 truncate">{tWorkspaceMenu('invite', { name: project?.name ?? '' })}</span>
+              {/* The trigger above already names the workspace. */}
+              <span className="min-w-0 flex-1 truncate">{tWorkspaceMenu('invitePeople')}</span>
             </Link>
           </DropdownMenuItem>
         );
@@ -241,7 +210,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
         return (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <ArrowsLeftRightIcon weight="fill" />
+              <ArrowsLeftRightIcon />
               <span className="min-w-0 flex-1 truncate">{tWorkspaces('switch')}</span>
               {/* An invite that arrives later is found here: the count shows
                   without opening the list. */}
@@ -251,19 +220,25 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
               <DropdownMenuSubContent className="w-[264px] space-y-0.5" sideOffset={6}>
                 {/* Anchors, not handlers: `router.push` from a menu row runs the
                     RSC fetch cold at click time. */}
-                <WorkspaceMenuSection />
+                <WorkspaceMenuSection
+                  actions={
+                    canCreate
+                      ? () => (
+                          // Create sits under the list it adds to, not beside
+                          // the workspace's own rows.
+                          <DropdownMenuItem asChild onSelect={() => setMenuOpen(false)} size="sm">
+                            <Link href="/workspaces/new" prefetch>
+                              <PlusIcon />
+                              {tWorkspaces('create')}
+                            </Link>
+                          </DropdownMenuItem>
+                        )
+                      : undefined
+                  }
+                />
               </DropdownMenuSubContent>
             </DropdownMenuPortal>
           </DropdownMenuSub>
-        );
-      case 'create':
-        return (
-          <DropdownMenuItem asChild onSelect={() => setMenuOpen(false)} size="sm">
-            <Link href="/workspaces/new" prefetch>
-              <PlusIcon />
-              {tWorkspaces('create')}
-            </Link>
-          </DropdownMenuItem>
         );
       case 'inbox':
         // The person's notifications from every workspace (KRTX-1742). An
@@ -296,7 +271,19 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
             <DropdownMenuShortcut>{settingsShortcutLabel()}</DropdownMenuShortcut>
           </DropdownMenuItem>
         );
+      case 'leave':
+        // Only for a person without Workspace settings, whose Danger zone
+        // holds Leave for everyone else. It confirms first.
+        return (
+          <DropdownMenuItem onSelect={() => deferAfterClose(leave.open)} size="sm">
+            <DoorOpenIcon />
+            <span className="min-w-0 flex-1 truncate">{tWorkspaceMenu('leave', { name: project?.name ?? '' })}</span>
+          </DropdownMenuItem>
+        );
       case 'apps':
+        // Chrome, the desktop app, your computer, MCP: every way to use
+        // Kortix outside this tab. Also where Download app lives once its
+        // sidebar row is dismissed.
         return (
           <DropdownMenuItem
             onSelect={() => deferAfterClose(() => useAppsModalStore.getState().setOpen(true))}
@@ -306,47 +293,13 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
             {t('workspace.appsAndExtensions')}
           </DropdownMenuItem>
         );
-      case 'appearance':
-        return <ThemeSubmenu />;
       case 'help':
         return <HelpSubmenu onClose={() => setMenuOpen(false)} />;
-      case 'download':
-        // A modal, not a route: the user stays in the workspace.
-        return (
-          <DropdownMenuItem onSelect={() => deferAfterClose(() => setDownloadOpen(true))} size="sm" data-desktop-hidden>
-            <Download />
-            {t('workspace.downloadApp')}
-          </DropdownMenuItem>
-        );
-      case 'leave':
-        // Leave and Log out end something, so they sit last, and both confirm first.
-        return (
-          <DropdownMenuItem onSelect={() => deferAfterClose(leave.open)} size="sm">
-            <DoorOpenIcon />
-            <span className="min-w-0 flex-1 truncate">{tWorkspaceMenu('leave', { name: project?.name ?? '' })}</span>
-          </DropdownMenuItem>
-        );
       case 'logout':
         return (
           <DropdownMenuItem onClick={openLogoutConfirm} size="sm">
             <LogOut />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span>{t('workspace.logOut')}</span>
-              {/* Which session Log out ends (KRTX-1810), with the picture
-                  Settings → Profile stored (KRTX-4492): the shell's one "you"
-                  line reads the same auth metadata the account top bar does. */}
-              {identity ? (
-                <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
-                  <UserAvatar
-                    email={user?.email ?? ''}
-                    name={identity}
-                    avatarUrl={user?.user_metadata?.avatar_url ?? null}
-                    size="xs"
-                  />
-                  <span className="min-w-0 truncate">{identity}</span>
-                </span>
-              ) : null}
-            </span>
+            {t('workspace.logOut')}
           </DropdownMenuItem>
         );
     }
@@ -443,8 +396,6 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
       {/* Siblings of the dropdown, never children — see `useLogoutFlow`. */}
       {logoutDialog}
       {leave.dialog}
-
-      <DownloadModal open={downloadOpen} onOpenChange={setDownloadOpen} />
 
       <LocalComputerModal
         projectId={projectId}

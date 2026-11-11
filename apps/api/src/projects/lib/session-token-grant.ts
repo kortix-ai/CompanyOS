@@ -40,10 +40,11 @@
  * week before the incident.
  */
 
-import { type AgentGrant, accountTokens, readStoredAgentGrant, projectSessions, projects } from '@kortix/db';
+import { type AgentGrant, accountTokens, readStoredAgentGrant, projectSessions } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../../shared/db';
+import { loadGitProjectRow } from './project-git-row';
 import { DEFAULT_AGENT_SENTINEL, grantFromLoadedAgents, isLaunchableAgentName, loadProjectAgents, type LoadedAgents } from '../agents';
 import { type MirrorRefresh, existingProjectMirrorPath, runGitCapture } from '../git/mirror';
 import {
@@ -52,6 +53,8 @@ import {
   resolveSessionAgentGrant,
   withGrantProvenance,
 } from './secret-grant';
+import { errorMessage } from '../../shared/error-message';
+import { readColleagueAccess, withColleagueAccess } from './colleague-access';
 
 /** The re-mint could not be written. The caller must FAIL the prompt: letting it
  *  through would run the new agent against the previous agent's grant, which is
@@ -65,7 +68,7 @@ export class SessionGrantRemintError extends Error {
   ) {
     super(
       `could not re-mint the agent grant for session '${sessionId}': ${
-        cause instanceof Error ? cause.message : String(cause)
+        errorMessage(cause)
       }`,
       { cause },
     );
@@ -257,15 +260,7 @@ async function loadStoredSessionGrant(sessionId: string): Promise<AgentGrant | n
  */
 async function myKortixEnabled(projectId: string): Promise<boolean> {
   try {
-    const [project] = await db
-      .select({
-        repoUrl: projects.repoUrl,
-        defaultBranch: projects.defaultBranch,
-        manifestPath: projects.manifestPath,
-      })
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
-      .limit(1);
+    const project = await loadGitProjectRow(projectId);
     if (!project) return false;
     const loaded = project.defaultBranch
       ? await loadProjectAgents(
@@ -282,19 +277,6 @@ async function myKortixEnabled(projectId: string): Promise<boolean> {
   } catch {
     return true;
   }
-}
-
-async function loadGitProjectRow(projectId: string) {
-  const [project] = await db
-    .select({
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
-    })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
-    .limit(1);
-  return project;
 }
 
 /**
@@ -335,6 +317,7 @@ async function resolveCurrentGrant(input: {
       defaultBranch: project?.defaultBranch,
       manifestPath: project?.manifestPath,
       sessionAgent: input.sessionAgent,
+      sessionId: input.sessionId,
       requestedAgent: input.runningAgent,
       forceRefresh: input.forceRefresh,
     });
@@ -625,7 +608,7 @@ export async function reconcileStoredSessionAgentGrant(input: {
       sessionId: input.sessionId,
       projectId: input.projectId,
       reason: 'manifest_unreadable' satisfies RemintKeepReason,
-      error: unreadableError instanceof Error ? unreadableError.message : String(unreadableError),
+      error: errorMessage(unreadableError),
       stored: describeGrant(stored),
     });
     return stored;
@@ -635,6 +618,10 @@ export async function reconcileStoredSessionAgentGrant(input: {
     running = null;
   } else if (loaded) {
     running = withGrantProvenance(grantFromLoadedAgents(runningAgent, loaded), loaded);
+    // A My Kortix colleague also holds the list a person allowed it (colleague-access.ts).
+    if (running && isMyKortixAgentName(runningAgent)) {
+      running = withColleagueAccess(running, await readColleagueAccess(input.sessionId));
+    }
   } else {
     // Unreachable with `rethrowReadErrors: true` (a failed read throws, and a
     // successful one returns agents); if it ever happens, serve the stored
@@ -656,7 +643,7 @@ export async function reconcileStoredSessionAgentGrant(input: {
     console.error('[session-token-grant] could not apply the resolved session grant; serving the stored grant', {
       sessionId: input.sessionId,
       projectId: input.projectId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
       stored: describeGrant(stored),
       resolved: describeGrant(running),
     });

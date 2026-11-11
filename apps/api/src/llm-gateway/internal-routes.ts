@@ -17,12 +17,14 @@ import {
   recordGatewayUsage,
 } from './hooks';
 import { matchesInternalToken, weakInternalTokenWarnings } from './internal-auth';
+import { createFirstInWindow } from '../shared/audit-dedupe';
 import { gatewayModelCatalog } from './models/catalog-models';
 import { unavailableCatalog } from './models/picker-catalog';
 import { servableProjectCatalog } from './models/servable-catalog';
 import { codexConversationHeaders, resolveCandidates } from './resolution/resolve-candidates';
 import { MAX_ACCOUNT_SECRET_REST_SECONDS, coolDownAccountSecret } from '../secrets/account-resource';
 import { refreshRefusedCodexAccountLogin } from './credentials/codex';
+import { SubscriptionUsageSchema, recordSubscriptionUsage } from './subscription-usage';
 import { claudeCredentialsForGateway, markClaudeAccountRefused } from '../claude-subscription/accounts';
 import { refreshRefusedOpencodeLogin } from './credentials/opencode-console';
 import { codexDescriptor } from './resolution/descriptors';
@@ -38,6 +40,16 @@ const INTERNAL_EDGE_HEADER = 'x-kortix-internal-edge-key';
 export function createInternalGatewayRoutes() {
   const app = new Hono();
   const { GATEWAY_INTERNAL_TOKEN: internalToken, KORTIX_INTERNAL_EDGE_KEY: edgeKey } = process.env;
+
+  // A resolution failure here is usually a PERSISTENT state (a model this
+  // deployment cannot serve), not a transient one — and a caller repeats it
+  // per request: a box's voice pipeline resolves its TTS model on every
+  // spoken line, so one session against a deployment whose managed lineup
+  // lists no audio models logged 41 warns in 2 h against a 0.13/h baseline
+  // (KRTX-4665). Log the first occurrence per (model, code) per day; the
+  // typed error in the 200 body is unchanged, so the gateway still refuses
+  // every time.
+  const logFirstResolutionFailure = createFirstInWindow({ windowMs: 24 * 60 * 60 * 1000 });
 
   for (const warning of weakInternalTokenWarnings(internalToken)) {
     logger.error(`[gateway-internal-auth] ${warning}`);
@@ -101,7 +113,25 @@ export function createInternalGatewayRoutes() {
       // return the typed error in a 200 body so the api-client can re-throw it
       // as a GatewayResolutionError and the in-process hook contract holds.
       if (err instanceof GatewayResolutionError) {
-        logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
+        // The model string is client-controlled (the box names its model) and
+        // neither validated nor bounded on this route; cap the retained key
+        // at the same 200 the sibling /claude-credentials route caps its
+        // model field at, so a huge id cannot pin its bytes in the process.
+        // A non-string body value joins the '' key instead of crashing the
+        // catch block: the typed refusal below stays a 200, never a 500
+        // (Strix review of this PR).
+        const keyModel = typeof model === 'string' ? model.slice(0, 200) : '';
+        if (logFirstResolutionFailure(`${keyModel}:${err.code}`)) {
+          // The model id (and the error text that embeds it) are
+          // caller-influenced and reach this line unescaped: a CR/LF in the id
+          // forges extra log lines (Strix review, CWE-117). JSON.stringify
+          // neutralizes the id while keeping the quoted form normal ids
+          // already render as; the message loses control characters and is
+          // bounded like the key.
+          const loggedModel = JSON.stringify(keyModel);
+          const loggedMessage = err.message.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
+          logger.warn(`[gateway-internal] resolution failed for ${loggedModel}: ${err.code} — ${loggedMessage}`);
+        }
         return c.json({
           candidates: [],
           resolutionError: resolutionErrorBody(err),
@@ -120,6 +150,18 @@ export function createInternalGatewayRoutes() {
     }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid pool rate limit' }, 400);
     await coolDownAccountSecret(parsed.data.secretId, parsed.data.principal.accountId, parsed.data.seconds);
+    return c.json({ ok: true });
+  });
+
+  // A subscription login's plan usage from a model response's headers. Keyed
+  // by the account and the secret alone, like the rest above.
+  app.post('/pool-usage', async (c) => {
+    const parsed = z.object({
+      principal: z.object({ accountId: z.string().uuid() }),
+      secretId: z.string().uuid(), usage: SubscriptionUsageSchema,
+    }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid pool usage' }, 400);
+    await recordSubscriptionUsage(parsed.data.secretId, parsed.data.principal.accountId, parsed.data.usage);
     return c.json({ ok: true });
   });
 

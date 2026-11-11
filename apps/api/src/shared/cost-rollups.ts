@@ -1,11 +1,12 @@
 import { numberValue, isoValue } from './cost-values';
-import { gatewayRequestLogs, projectSessions, projects, sandboxComputeSessions, storageCharges } from '@kortix/db';
+import { gatewayRequestLogs, projectSessions, sandboxComputeSessions, storageCharges } from '@kortix/db';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 import type { CostSort, CostWindow } from './cost-window';
 import { db } from './db';
 import { kortixBilledSpendSql, providerBilledSpendSql } from './llm-spend';
 import { billedComputeSecondsExpression } from './session-costs';
+import { projectsView } from '../workspaces/rows';
 
 export interface ProjectCostRow {
   project_id: string;
@@ -22,6 +23,8 @@ export interface ProjectCostRow {
   storage_gib_hours: number;
   total_cost: number;
   last_activity_at: string | null;
+  /** True when the project now lives in another workspace; `project_name` is then MOVED_PROJECT_LABEL. */
+  moved?: boolean;
 }
 
 export interface ProjectCostPage {
@@ -73,6 +76,9 @@ function laterIso(left: string | null, right: string | null): string | null {
   return left > right ? left : right;
 }
 
+/** The name of a project row whose project moved to another workspace (design.md §3.1 finding 31). */
+export const MOVED_PROJECT_LABEL = 'Moved to another workspace';
+
 // Pure merge of the two windowed, per-project aggregates into one row per
 // project. Both inputs already carry numeric-ish values straight out of a
 // `coalesce(sum(...), 0)::float8` — this never re-sums money itself, it only
@@ -90,7 +96,11 @@ export function mergeProjectCostRows(
     if (existing) return existing;
     const created: ProjectCostRow = {
       project_id: projectId,
-      project_name: projectNames.get(projectId) ?? projectId,
+      // A project this account paid for that now lives in another workspace
+      // (a split or a transfer): the money stays here, the name does not.
+      // Never resolve its new name across accounts, never show a bare id.
+      project_name: projectNames.get(projectId) ?? MOVED_PROJECT_LABEL,
+      ...(projectNames.has(projectId) ? {} : { moved: true }),
       session_count: 0,
       llm_cost: 0,
       llm_kortix_cost: 0,
@@ -135,6 +145,86 @@ export function mergeProjectCostRows(
   }
 
   return [...byProject.values()];
+}
+
+/** What every account-led LLM cost scan filters on. */
+export interface CostLlmScope {
+  accountId: string;
+  projectId?: string;
+  sessionId?: string;
+}
+
+function llmScopeWhere(scope: CostLlmScope, w: CostWindow) {
+  const conditions = [
+    eq(gatewayRequestLogs.accountId, scope.accountId),
+    // createdAt is a Date-mode timestamp, so the bounds are Date objects.
+    gte(gatewayRequestLogs.createdAt, w.from),
+    lt(gatewayRequestLogs.createdAt, w.to),
+  ];
+  if (scope.projectId) conditions.push(eq(gatewayRequestLogs.projectId, scope.projectId));
+  if (scope.sessionId) conditions.push(eq(gatewayRequestLogs.sessionId, scope.sessionId));
+  return and(...conditions);
+}
+
+// The account+window LLM scans of the cost explorer (getCostSummary and
+// listCostByProject), exported as builders the way gateway-series exports
+// gatewaySeriesQuery: integration-cost-rollups-covering-index.test.ts runs
+// them under EXPLAIN and fails unless the plan is an Index Only Scan of
+// idx_gateway_logs_account_time_covering (the KRTX-4022 rule — every column
+// an aggregate reads must live in that index's INCLUDE list, or the scan
+// heap-fetches every wide request/response row in the window).
+
+export function costByProjectLlmQuery(accountId: string, window: CostWindow, projectId?: string) {
+  return db
+    .select({
+      projectId: gatewayRequestLogs.projectId,
+      llmCost: kortixBilledSpendSql,
+      llmKortixCost: kortixBilledSpendSql,
+      llmProviderCost: providerBilledSpendSql,
+      sessionCount: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
+      lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`,
+    })
+    .from(gatewayRequestLogs)
+    .where(
+      and(
+        llmScopeWhere({ accountId, projectId }, window),
+        sql`${gatewayRequestLogs.projectId} is not null`,
+      ),
+    )
+    .groupBy(gatewayRequestLogs.projectId);
+}
+
+export function costLlmGroupedQuery(scope: CostLlmScope, w: CostWindow) {
+  return db
+    .select({
+      setId: LLM_SET_ID,
+      provider: gatewayRequestLogs.provider,
+      model: gatewayRequestLogs.resolvedModel,
+      day: LLM_DAY_EXPRESSION,
+      projectId: gatewayRequestLogs.projectId,
+      llmCost: kortixBilledSpendSql,
+      llmKortixCost: kortixBilledSpendSql,
+      llmProviderCost: providerBilledSpendSql,
+      requestCount: sql<number>`count(*)::int`,
+      sessionCount: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
+    })
+    .from(gatewayRequestLogs)
+    .where(llmScopeWhere(scope, w))
+    .groupBy(
+      sql`grouping sets (
+        (${gatewayRequestLogs.provider}, ${gatewayRequestLogs.resolvedModel}),
+        (${LLM_DAY_EXPRESSION}),
+        (${gatewayRequestLogs.projectId}),
+        ()
+      )`,
+    );
+}
+
+export function costLlmPriorQuery(scope: CostLlmScope, w: CostWindow) {
+  return db
+    .select({ cost: kortixBilledSpendSql })
+    .from(gatewayRequestLogs)
+    .where(llmScopeWhere(scope, w));
 }
 
 // The JS mirror of the project rollup's order. This IS the sort, not a
@@ -187,27 +277,7 @@ export async function listCostByProject(input: {
 
   const storageDays = storageDayRange(window);
   const [llmRows, computeRows, projectRows, storageRows] = await Promise.all([
-    db
-      .select({
-        projectId: gatewayRequestLogs.projectId,
-        llmCost: kortixBilledSpendSql,
-        llmKortixCost: kortixBilledSpendSql,
-        llmProviderCost: providerBilledSpendSql,
-        sessionCount: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
-        lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`,
-      })
-      .from(gatewayRequestLogs)
-      .where(
-        and(
-          eq(gatewayRequestLogs.accountId, accountId),
-          input.projectId ? eq(gatewayRequestLogs.projectId, input.projectId) : undefined,
-          // createdAt is a Date-mode timestamp, so the bounds are Date objects.
-          gte(gatewayRequestLogs.createdAt, window.from),
-          lt(gatewayRequestLogs.createdAt, window.to),
-          sql`${gatewayRequestLogs.projectId} is not null`,
-        ),
-      )
-      .groupBy(gatewayRequestLogs.projectId),
+    costByProjectLlmQuery(accountId, window, input.projectId),
     db
       .select({
         projectId: projectSessions.projectId,
@@ -230,11 +300,11 @@ export async function listCostByProject(input: {
       )
       .groupBy(projectSessions.projectId),
     db
-      .select({ projectId: projects.projectId, name: projects.name })
-      .from(projects)
+      .select({ projectId: projectsView.projectId, name: projectsView.name })
+      .from(projectsView)
       .where(and(
-        eq(projects.accountId, accountId),
-        input.projectId ? eq(projects.projectId, input.projectId) : undefined,
+        eq(projectsView.accountId, accountId),
+        input.projectId ? eq(projectsView.projectId, input.projectId) : undefined,
       )),
     // Volume storage (idx_storage_charges_account_day), charged per UTC day.
     db
@@ -417,18 +487,7 @@ export async function getCostSummary(input: {
   window: CostWindow;
 }): Promise<CostSummary> {
   const { accountId, projectId, sessionId, window } = input;
-
-  const llmScope = (w: CostWindow) => {
-    const conditions = [
-      eq(gatewayRequestLogs.accountId, accountId),
-      // createdAt is a Date-mode timestamp, so the bounds are Date objects.
-      gte(gatewayRequestLogs.createdAt, w.from),
-      lt(gatewayRequestLogs.createdAt, w.to),
-    ];
-    if (projectId) conditions.push(eq(gatewayRequestLogs.projectId, projectId));
-    if (sessionId) conditions.push(eq(gatewayRequestLogs.sessionId, sessionId));
-    return and(...conditions);
-  };
+  const llmScope: CostLlmScope = { accountId, projectId, sessionId };
 
   // Compute rows carry no project_id of their own — reaching it means
   // joining project_sessions (session_id is its primary key, as in
@@ -502,33 +561,8 @@ export async function getCostSummary(input: {
   };
 
   const [llmGroupRows, llmPriorRows, computeGroupRows, computePriorRows, storageDayRows, storagePriorRows] = await Promise.all([
-    db
-      .select({
-        setId: LLM_SET_ID,
-        provider: gatewayRequestLogs.provider,
-        model: gatewayRequestLogs.resolvedModel,
-        day: LLM_DAY_EXPRESSION,
-        projectId: gatewayRequestLogs.projectId,
-        llmCost: kortixBilledSpendSql,
-        llmKortixCost: kortixBilledSpendSql,
-        llmProviderCost: providerBilledSpendSql,
-        requestCount: sql<number>`count(*)::int`,
-        sessionCount: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
-      })
-      .from(gatewayRequestLogs)
-      .where(llmScope(window))
-      .groupBy(
-        sql`grouping sets (
-          (${gatewayRequestLogs.provider}, ${gatewayRequestLogs.resolvedModel}),
-          (${LLM_DAY_EXPRESSION}),
-          (${gatewayRequestLogs.projectId}),
-          ()
-        )`,
-      ),
-    db
-      .select({ cost: kortixBilledSpendSql })
-      .from(gatewayRequestLogs)
-      .where(llmScope(previous)),
+    costLlmGroupedQuery(llmScope, window),
+    costLlmPriorQuery(llmScope, previous),
     db
       .select({
         setId: COMPUTE_SET_ID,

@@ -1,4 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
+import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
 import {
   buildSandboxUpstreamHeaders,
@@ -8,7 +9,7 @@ import {
   resolveSandboxIngress,
   wakeSandbox,
 } from '../backend';
-import { jsonProxyError, isTurnStartEnvSync } from '../pre-prompt-env-sync';
+import { jsonProxyError } from '../pre-prompt-env-sync';
 import {
   clientResponseHeaders,
   isBrowserNavigation,
@@ -60,7 +61,7 @@ export async function forwardWithRetry(
   const { sandboxId, port, method, remainingPath, upstreamPort, promptDelivery } = req;
   const state: ForwardState = {
     requestBody,
-    // The wire id OpenCode will actually see, once the placement check has
+    // The wire id the runtime will actually see, once the placement check has
     // run — the client's, or the proxy's re-mint. Echoed on the response so the
     // sender can correlate, and written into `turnIdentity` so the ledger and the
     // daemon's exact-message probe match the message that exists.
@@ -83,7 +84,7 @@ export async function forwardWithRetry(
     // response instead of the generic "sandbox unreachable" one.
     sawLongTurnTimeout: false,
     // A prompt delivery whose failure is AMBIGUOUS — a timeout/abort/reset where
-    // opencode may already hold the message. When true we must NOT release the
+    // the runtime may already hold the message. When true we must NOT release the
     // dedupe claim on the unreachable path below (a retry could double-enqueue).
     // It stays false only when every attempt PROVED nothing was delivered
     // (connection refused), which is the one case a retry may safely re-deliver.
@@ -172,7 +173,7 @@ async function forwardAttempt(
   const previewUrl = ingress.url;
   const targetUrl = ingressTargetUrl(ingress, remainingPath + queryString);
 
-  if (isTurnStartEnvSync(upstreamPort, method, remainingPath)) {
+  if (req.turnStartEnvSync) {
     const refusal = await syncEnvBeforeTurnStart(req, state, previewUrl, ingress.headers);
     if (refusal) return refusal;
   }
@@ -333,6 +334,28 @@ async function handleUpstreamFailureStatus(
     }
   }
 
+  // A port exposed a moment ago (`resolveIngress` exposes on first use): the
+  // Platinum control plane caches a sandbox's route for 1 s and the edge for
+  // 200 ms, so a request in that window gets the edge's own
+  // `404 port-not-exposed`. A desktop panel opened right after the session
+  // started framed that page and kept it. The edge answered itself, so even a
+  // write is safe to send again; past the retry budget the 404 passes through.
+  if (
+    upstream.status === 404 &&
+    upstream.headers.get('x-pt-edge-verdict') === 'port-not-exposed' &&
+    attempt < MAX_RETRIES
+  ) {
+    logger.warn('[PREVIEW] edge has no route for the port yet', {
+      sandboxId,
+      port,
+      attempt: attempt + 1,
+    });
+    invalidatePreviewLink(sandboxId, port);
+    await upstream.body?.cancel().catch(() => {});
+    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+    return 'retry';
+  }
+
   if (upstream.status === 502 || upstream.status === 503) {
     // A prompt-delivery or upload POST is NEVER retried on a 5xx: an upstream
     // 502 can mean the sandbox already accepted the body (the gateway just
@@ -343,15 +366,44 @@ async function handleUpstreamFailureStatus(
     // `x-pt-edge-verdict` — it did not proxy the request, so the box never
     // saw the body and a replay cannot deliver it twice (CFG-12).
     const edgeRefused = upstream.headers.has('x-pt-edge-verdict');
+    // The edge answered for a refused daemon port: the daemon is dead on a
+    // running box. Start its relaunch now; waiting for the next `/start` or
+    // reaper tick left uploads 502ing for minutes (KRTX-4438). Dynamic import:
+    // the repair wiring must stay out of this module's static graph
+    // (module-graph.test.ts).
+    if (edgeRefused && upstream.status === 502 && portFailureHop(upstreamPort) === 'daemon') {
+      void import('../../projects/surface')
+        .then(({ repairDeadDaemonOnEdgeRefusal }) => repairDeadDaemonOnEdgeRefusal(req.record.sandboxId))
+        .catch((err) =>
+          logger.warn('[PREVIEW] dead-daemon repair request failed', {
+            sandboxId,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+    }
     if ((!nonReplayableWrite || edgeRefused) && attempt < MAX_RETRIES) {
       // Port not ready yet — sandbox is booting (container running, port down).
-      console.warn(
+      // Always `info`: the loop is actively recovering from this attempt, so a
+      // settled request must not page. A per-attempt `warn` makes the log rate
+      // polls x attempts during a transient — a half-hour provider blip turned
+      // every daemon-port poll into warns and paged the sweep at 186x baseline
+      // (KRTX-4673; same amplification class as KRTX-4365's user-port warns).
+      // The give-up warn below is the one warn a failed request leaves.
+      logger.info(
         `[PREVIEW] Sandbox ${sandboxId}:${port} returned ${upstream.status} (port not ready, attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
       );
       invalidatePreviewLink(sandboxId, port);
       await upstream.body?.cancel().catch(() => {});
       await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
       return 'retry';
+    }
+    // The port never answered within the retry budget. The one `warn` for this
+    // request: only a genuinely failed request (every attempt answered
+    // 502/503) lands here, so the warn rate tracks failed requests, not polls.
+    if (attempt >= MAX_RETRIES) {
+      logger.warn(
+        `[PREVIEW] Sandbox ${sandboxId}:${port} still not answering after ${MAX_RETRIES + 1} attempts (status ${upstream.status})`,
+      );
     }
     // Retries exhausted and the port still isn't answering. Show the friendly
     // "port unreachable" page to browsers instead of the upstream's bare 5xx;
@@ -382,7 +434,7 @@ async function handleUpstreamFailureStatus(
     const isSandboxDown =
       bodyText.includes('no IP address found') ||
       bodyText.includes('failed to get runner info');
-    // Daytona rejected this BEFORE opencode — the box has no runner, so the
+    // Daytona rejected this BEFORE the runtime — the box has no runner, so the
     // prompt certainly was not enqueued. On the last attempt we stop
     // retrying and pass the 400 through, and the dedupe claim must go with
     // it: otherwise the client's retry under the same Idempotency-Key hits
@@ -462,7 +514,7 @@ async function recoverFromAttemptError(
   // error PROVES nothing reached the box (the upstream refused the
   // connection). Any other error stops here and returns the friendly
   // unreachable response below. (The Daytona "no IP / no runner" 400 branch —
-  // a rejection before opencode — retries in the response path above, which
+  // a rejection before the runtime — retries in the response path above, which
   // is safe.)
   if (
     state.promptDeliveryMayHaveReachedUpstream &&

@@ -4,39 +4,7 @@ import {
   applyAgentScopeV2,
   grantSecretToAgentV2,
   readAgentBlockV2,
-  resolveBehaviorDraft,
 } from './agent-config-v2';
-
-describe('resolveBehaviorDraft: `behavior` and its pre-W4 name `opencode`', () => {
-  const stored = { description: 'old', prompt: 'Be brief.' };
-  const edited = { description: 'new', prompt: 'Be brief.' };
-
-  test('one name alone is the draft', () => {
-    expect(resolveBehaviorDraft({ behavior: edited }, stored)).toEqual({ ok: true, draft: edited });
-    expect(resolveBehaviorDraft({ opencode: edited }, stored)).toEqual({ ok: true, draft: edited });
-    expect(resolveBehaviorDraft({}, stored)).toEqual({ ok: true, draft: undefined });
-  });
-
-  test('a round trip that edited only the pre-W4 name keeps that edit', () => {
-    // An older client echoes the GET block (both names) and edits `opencode`.
-    expect(resolveBehaviorDraft({ behavior: stored, opencode: edited }, stored)).toEqual({
-      ok: true,
-      draft: edited,
-    });
-  });
-
-  test('a round trip that edited only `behavior` keeps that edit', () => {
-    expect(resolveBehaviorDraft({ behavior: edited, opencode: stored }, stored)).toEqual({
-      ok: true,
-      draft: edited,
-    });
-  });
-
-  test('two different edits are refused, never guessed', () => {
-    const other = { description: 'other' };
-    expect(resolveBehaviorDraft({ behavior: edited, opencode: other }, stored).ok).toBe(false);
-  });
-});
 
 const manifest = (agents: Record<string, unknown>) => ({
   path: 'kortix.yaml',
@@ -222,7 +190,7 @@ describe('grantSecretToAgentV2', () => {
     const res = grantSecretToAgentV2(committed(), 'support', 'ALPHA');
     expect(res).toMatchObject({ ok: true, alreadyGranted: false, adoptedGovernance: true });
     if (!res.ok) return;
-    expect(res.raw.agents).toEqual({ support: { secrets: ['ALPHA'], workspace: { project_repository: false } } });
+    expect(res.raw.agents).toEqual({ support: { secrets: ['ALPHA'] } });
   });
 
   test('a malformed `agents:` value is refused instead of overwritten', () => {
@@ -253,6 +221,6 @@ describe('a YAML null agent entry parses past the validator — each path pins b
   test('the secret-grant path upserts it (an absent entry is widened, not rewritten)', () => {
     const res = grantSecretToAgentV2(committed(nullEntry), 'support', 'ALPHA_KEY');
     expect(res).toMatchObject({ ok: true, alreadyGranted: false, adoptedGovernance: false });
-    expect(blockOf(res).support).toEqual({ secrets: ['ALPHA_KEY'], workspace: { project_repository: false } });
+    expect(blockOf(res).support).toEqual({ secrets: ['ALPHA_KEY'] });
   });
 });

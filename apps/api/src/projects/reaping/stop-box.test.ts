@@ -3,7 +3,7 @@ import { logger } from '../../lib/logger';
 import * as realSandboxProxyBackend from '../../sandbox-proxy/backend';
 import { PlatinumHttpError, PlatinumSandboxNotRunningError } from '../../shared/platinum';
 
-// T11: close the live opencode turn on a box BEFORE `provider.stop()`
+// T11: close the live turn on a box BEFORE `provider.stop()`
 // powers it off, via `abortLiveTurnBeforeStop` (exported alongside
 // `stopExpiredBox` in stop-box.ts, and reused by session-lifecycle/stop.ts —
 // see its own coverage in session-lifecycle/__tests__/stop.test.ts).
@@ -386,5 +386,31 @@ describe('stopExpiredBox — pre-stop abort', () => {
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(applyStoppedCalls).toEqual([]);
+  });
+
+  // KRTX-4687: with Platinum's control plane slow, the stop POST itself times
+  // out at the 20s default budget. The stop may already have run — nothing was
+  // confirmed either way — so this is "no answer this pass": release the claim
+  // and let the next pass's getStatus reconcile the real state, exactly like a
+  // transition in progress. An error line here repeats once per box per pass
+  // for as long as the provider stays slow.
+  test('a Platinum stop POST transport timeout is a next-pass settle, not an error line', async () => {
+    providerStopError = new Error(
+      'platinum POST /v1/sandboxes/sbx_synthetic/stop timed out after 20000ms (default)',
+    );
+    providerStopError.name = 'TimeoutError';
+    const errorSpy = mock(() => {});
+    const origError = console.error;
+    console.error = errorSpy as unknown as typeof console.error;
+    try {
+      const outcome = await stopExpiredBox(row, NOW, 'deadline_expired');
+      expect(outcome).toBe('skipped');
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      console.error = origError;
+    }
+
+    expect(applyStoppedCalls).toEqual([]);
+    expect(stopClaimReleaseCalls).toEqual([{ sandboxId: 'sb-1', token: stopClaimCalls[0]?.token }]);
   });
 });

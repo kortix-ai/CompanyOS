@@ -17,6 +17,7 @@
 
 use anyhow::Result;
 use base64::Engine as _;
+use kortix_backend::self_usage;
 use kortix_backend::memory::{
     actions, cli,
     paths::MemoryPaths,
@@ -561,6 +562,11 @@ fn generate(out: &Path) -> Result<()> {
     device["os_version"] = json!("26.0");
     device["arch"] = json!("aarch64");
     device["member"] = json!({"email": "person@example.com"});
+    assert!(device["machine"]["cpu_cores"].as_u64().is_some_and(|n| n > 0));
+    device["machine"] = json!({"os_name": "macOS 26.0", "os_build": "25A354", "cpu": "Apple M3 Pro",
+        "cpu_cores": 12, "memory_bytes": 38_654_705_664u64, "disk_free_bytes": 412_316_860_416u64,
+        "disk_total_bytes": 994_662_584_320u64, "gpus": [], "booted_at_ms": T0 - 3_600_000,
+        "timezone": "Europe/Berlin", "utc_offset": "+01:00", "locale": "en-US"});
     device["updated_at_ms"] = json!(T0 + 120_000);
     put_json(&t, &format!("{DEVICE}/device.json"), &device);
 
@@ -571,6 +577,18 @@ fn generate(out: &Path) -> Result<()> {
     status["lastFrameMs"] = json!(T0 + 62_000);
     status["actionsRecording"] = json!(true);
     status["policy"] = json!({"source": format!("{PREFIX}/policy.json"), "updatedAtMs": T0, "fetchedAtMs": T0 + 60_000});
+    // `resources` from the real sampler, fed two synthetic samples a minute apart.
+    let proc = |pid: u32, name: &str, cpu_ms: u64, mb: u64| self_usage::Proc {
+        pid,
+        name: name.into(),
+        cpu_ns: cpu_ms * 1_000_000,
+        memory_bytes: mb << 20,
+    };
+    let mut sampler = self_usage::Sampler::default();
+    sampler.record(T0 + 60_000, vec![proc(4100, "kortix-capture", 9_000, 140), proc(4200, "kortix-capture-engine", 30_000, 180)]);
+    sampler.record(T0 + 120_000, vec![proc(4100, "kortix-capture", 9_900, 142), proc(4200, "kortix-capture-engine", 33_600, 176), proc(4300, "kortix-backend", 300, 48)]);
+    status["resources"] = sampler.report();
+    status["resources"]["readMicros"] = json!(310);
     put_json(&t, &format!("{DEVICE}/status.json"), &status);
 
     put_json(

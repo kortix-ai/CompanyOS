@@ -53,15 +53,15 @@ process.env.ALLOWED_SANDBOX_PROVIDERS = 'platinum,daytona';
 const { config } = await import('../config');
 
 // Committed manifest text served by the git mock; null = a blank project.
-// A declared agent only gets the project checkout with `workspace: { project_repository: true }`
-// (KRTX-165), so a test that names a non-default agent declares it here. The mocked
+// A declared agent gets repository access from `kortix_permissions` (project.gitops.read),
+// so a test that names a non-default agent declares it here. The mocked
 // `readManifestFromRepo` returns the text as is, so it is in the current format.
 let manifestYaml: string | null = null;
 const REVIEWER_MANIFEST = [
   'default_agent: kortix',
   'agents:',
-  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
-  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
+  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
+  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
   '',
 ].join('\n');
 let sandboxProvisionCalls = 0;
@@ -86,11 +86,11 @@ let providerRecoveryCalls = 0;
 let providerRecoveryEnabled = false;
 let providerRecoveryStatus: 'running' | 'recovering' | 'unavailable' = 'unavailable';
 let providerRecoveryGate: Promise<void> | null = null;
-/** Every call that reaches a sandbox: provider status or ingress, runtime health, OpenCode. */
+/** Every call that reaches a sandbox: provider status or ingress, runtime health, the runtime's routes. */
 let runtimeContactCalls = 0;
 let releaseProviderRecovery: (() => void) | null = null;
 let computeReopenCalls = 0;
-let opencodeEnsureReason: 'unchanged' | 'healed' | 'not_ready' | 'unreachable' = 'unchanged';
+let runtimeEnsureReason: 'unchanged' | 'healed' | 'not_ready' | 'unreachable' = 'unchanged';
 /** The signed daemon endpoint `/start` reads the runtime capabilities from. Null: unresolvable. */
 let runtimeEndpoint: { url: string; headers: Record<string, string> } | null = null;
 let sessionRow: typeof projectSessions.$inferSelect | null;
@@ -125,6 +125,7 @@ const projectRow: typeof projects.$inferSelect = {
   projectId: PROJECT_ID,
   accountId: ACCOUNT_ID,
   sandboxProviderGeneration: 0,
+  splitPending: false,
   secretDefaultStrategy: 'runtime' as const,
   name: 'Contract Project',
   repoUrl: `https://github.com/${TEST_GITHUB_OWNER}/contract-project.git`,
@@ -167,7 +168,7 @@ function resetState() {
   providerRecoveryGate = null;
   releaseProviderRecovery = null;
   computeReopenCalls = 0;
-  opencodeEnsureReason = 'unchanged';
+  runtimeEnsureReason = 'unchanged';
   runtimeEndpoint = null;
   lastSessionInsertValues = null;
   lifecycleCommandInserts.length = 0;
@@ -295,17 +296,6 @@ mock.module('../middleware/auth', () => ({
     c.set('sessionId', '00000000-0000-4000-a000-00000000auth');
     await next();
   },
-}));
-
-// The fresh-session fast-boot hint is ALWAYS resolved at session create
-// (2026-08-27): against this fixture's fake repo URL the mirror clone fails
-// slowly (~0.4 s), which let fire-and-forget provisions from earlier tests
-// land inside a later test's counter window. Resolve it instantly here; the
-// hint itself is covered by fast-boot-git-hint.test.ts and the REST flows.
-const realFastBootGitHint = await import('../projects/lib/fast-boot-git-hint');
-mock.module('../projects/lib/fast-boot-git-hint', () => ({
-  ...realFastBootGitHint,
-  resolveFastBootGitHintWithCache: async () => undefined,
 }));
 
 // The desired-release base check (`sharedBaseTip`) asks the upstream through a
@@ -597,26 +587,26 @@ mock.module('../projects/runtime-inspection', () => ({
   },
 }));
 
-mock.module('../projects/opencode-mapping', () => ({
+mock.module('../projects/runtime-session-mapping', () => ({
   pickCanonicalRoot: () => 'ses_root_existing',
   resolveRootSessionId: () => 'ses_root_existing',
-  sandboxOpencodeEndpoint: async () => {
+  sandboxRuntimeEndpoint: async () => {
     runtimeContactCalls += 1;
     return runtimeEndpoint;
   },
-  listSandboxOpencodeSessions: async () => {
+  listSandboxRuntimeSessions: async () => {
     runtimeContactCalls += 1;
     return {
       ok: false,
-      reason: opencodeEnsureReason === 'not_ready' ? 'not_ready' : 'unreachable',
+      reason: runtimeEnsureReason === 'not_ready' ? 'not_ready' : 'unreachable',
     };
   },
-  ensureOpencodeSessionPin: async (input: { currentPin: string | null }) => {
+  ensureRuntimeSessionPin: async (input: { currentPin: string | null }) => {
     runtimeContactCalls += 1;
     return {
       pin: input.currentPin ?? 'ses_root_existing',
       changed: false,
-      reason: opencodeEnsureReason,
+      reason: runtimeEnsureReason,
       sessions: [],
     };
   },
@@ -686,8 +676,6 @@ mock.module('../repositories/account-tokens', () => ({
 mock.module('../shared/account-limits', () => ({
   resolveAccountTier: async () => 'free',
   sessionLlmPolicyForTier: () => ({ limit: 60, windowMs: 60_000 }),
-  maxProjectsForAccount: async () => 100,
-  FREE_TIER_PROJECT_LIMIT: 1,
   clearAccountLimitCache: () => undefined,
 }));
 
@@ -1277,7 +1265,7 @@ describe('project session runtime guards', () => {
   beforeEach(() => resetState());
 
   test('creates an omitted-agent session with the meta REST runtime when kortix.yaml turns My Kortix on', async () => {
-    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, workspace: { project_repository: true } }\n';
+    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, kortix_permissions: all }\n';
     const app = createApp();
     const response = await app.request(`/v1/projects/${PROJECT_ID}/sessions`, {
       method: 'POST',
@@ -1407,6 +1395,54 @@ describe('project session runtime guards', () => {
     expect(created.agent_name).toBe('worker');
     expect(created.metadata?.sandbox_slug).not.toBe('mykortix');
     expect(created.metadata?.spawned_by_session).toBe(SESSION_ID);
+  });
+
+  // A project whose default agent is My Kortix, with a restrictive agent that sorts first.
+  const MY_KORTIX_DEFAULT_MANIFEST = [
+    'default_agent: mykortix',
+    'builtin_agents:',
+    '  my_kortix: true',
+    'agents:',
+    '  code-auditor: { mode: subagent, tools: all }',
+    '  compliance-officer: { tools: all }',
+    '  kortix: { tools: all }',
+    '',
+  ].join('\n');
+  const spawnAsMyKortix = (body: Record<string, unknown>) => {
+    sessionRow = { ...sessionRow!, agentName: 'mykortix' };
+    return createApp().request(`/v1/projects/${PROJECT_ID}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SESSION_BOUND_PAT}` },
+      body: JSON.stringify({ provider: 'platinum', base_ref: 'main', ...body }),
+    });
+  };
+
+  test('My Kortix naming no agent, where My Kortix is the default: 400 AGENT_REQUIRED with the agents to name, never a guessed agent', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({});
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'AGENT_REQUIRED', agents: ['compliance-officer', 'kortix'] });
+    expect(sandboxProvisionCalls).toBe(0);
+  });
+
+  test('My Kortix starting an inline colleague (kortix.agent.instructions): the child runs as My Kortix, on its sandbox, linked to the caller', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({
+      agent_name: 'mykortix',
+      runtime_context: { 'kortix.subagent.depth': 1, 'kortix.agent.instructions': 'You are a product designer and prototyper.' },
+    });
+    expect(response.status).toBe(201);
+    const created = await response.json();
+    expect(created.agent_name).toBe('mykortix');
+    expect(created.metadata?.sandbox_slug).toBe('mykortix');
+    expect(created.metadata?.spawned_by_session).toBe(SESSION_ID);
+  });
+
+  test('My Kortix naming My Kortix without instructions is still META_AGENT_RECURSION', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({ agent_name: 'mykortix' });
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('META_AGENT_RECURSION');
   });
 
   test('a session-bound spawn inherits the SPAWNING session sharing, not the private default', async () => {
@@ -1755,7 +1791,7 @@ describe('project session runtime guards', () => {
       body: JSON.stringify({
         provider: 'platinum',
         base_ref: 'main',
-        opencode_model: 'anthropic/claude-opus-4-8',
+        model: 'anthropic/claude-opus-4-8',
         agent_name: 'default',
         secrets: ['GMAIL_TOKEN'],
       }),
@@ -1772,9 +1808,9 @@ describe('project session runtime guards', () => {
     const env = lastProvisionInput!.extraEnvVars ?? {};
     expect(env).not.toHaveProperty('KORTIX_END_USER_REF');
     expect(env).not.toHaveProperty('KORTIX_ORIGIN_REF');
-    // The pin is validated by the gateway and stored in OpenCode's ref form:
+    // The pin is validated by the gateway and stored in the session ref form:
     // every model is the `kortix` provider's.
-    expect(env.KORTIX_OPENCODE_MODEL).toBe('kortix/anthropic/claude-opus-4-8');
+    expect(env.KORTIX_MODEL).toBe('kortix/anthropic/claude-opus-4-8');
     expect(env.GMAIL_TOKEN).toBe('g-secret');
     expect(env.STRIPE_SECRET).toBeUndefined();
 
@@ -1811,7 +1847,7 @@ describe('project session runtime guards', () => {
       }),
     });
     expect(res.status).toBe(201);
-    expect(((await res.json()) as { metadata: Record<string, unknown> }).metadata.opencode_model).toBe(
+    expect(((await res.json()) as { metadata: Record<string, unknown> }).metadata.model).toBe(
       'kortix/anthropic/claude-opus-4-8',
     );
     await flushUntil(() => sandboxProvisionCalls === 1);
@@ -2044,7 +2080,7 @@ describe('project session runtime guards', () => {
             'live-token': {
               token: 'live-token',
               state: 'active',
-              opencodeSessionId: 'ses_root_existing',
+              runtimeSessionId: 'ses_root_existing',
               messageId: 'msg_live',
               startedAtMs: Date.now() - 60_000,
             },
@@ -2104,7 +2140,7 @@ describe('project session runtime guards', () => {
             'live-token': {
               token: 'live-token',
               state: 'active',
-              opencodeSessionId: 'ses_root_existing',
+              runtimeSessionId: 'ses_root_existing',
               messageId: 'msg_live',
               startedAtMs: Date.now() - 60_000,
             },
@@ -2167,7 +2203,7 @@ describe('project session runtime guards', () => {
             'live-token': {
               token: 'live-token',
               state: 'active',
-              opencodeSessionId: 'ses_root_existing',
+              runtimeSessionId: 'ses_root_existing',
               messageId: 'msg_live',
               startedAtMs: Date.now() - 60_000,
             },
@@ -2416,7 +2452,7 @@ describe('project session runtime guards', () => {
       metadata: {
         existing: true,
         initial_prompt: 'DO NOT REPLAY',
-        opencode_model: 'anthropic/claude-sonnet-4-6',
+        model: 'anthropic/claude-sonnet-4-6',
       },
     };
     sessionSandboxRows = [
@@ -2480,7 +2516,7 @@ describe('project session runtime guards', () => {
       metadata: {
         existing: true,
         initial_prompt: 'DO NOT REPLAY',
-        opencode_model: 'anthropic/claude-sonnet-4-6',
+        model: 'anthropic/claude-sonnet-4-6',
       },
     };
     sessionSandboxRows = [
@@ -2927,7 +2963,6 @@ describe('project session runtime guards', () => {
     expect(env.KORTIX_API_URL).toBeTruthy();
     expect(env.KORTIX_GIT_AUTH_TOKEN).toBeUndefined();
     expect(env.KORTIX_GITHUB_TOKEN).toBeUndefined();
-    expect(env.KORTIX_BOOTSTRAP_OPENCODE_SESSION).toBe('1');
     expect(env.KORTIX_INITIAL_PROMPT).toBeUndefined();
 
     const shadowRes = await app.request(`/v1/projects/${PROJECT_ID}/secrets`, {
@@ -2963,14 +2998,13 @@ describe('project session runtime guards', () => {
     expect(body.sandbox_provider).toBe('platinum');
     expect(body.base_ref).toBe('dev');
     expect(body.status).toBe('provisioning');
-    expect(body.opencode_session_id).toBeNull();
+    expect(body.runtime_session_id).toBeNull();
     expect(body.name).toBe('Contract session');
     expect(sessionRow?.baseRef).toBe('dev');
     expect(sessionRow?.runtimeSessionId).toBeNull();
 
     await flushUntil(() => sandboxProvisionCalls === 1);
     expect(sandboxProvisionCalls).toBe(1);
-    expect(lastProvisionInput!.extraEnvVars?.KORTIX_BOOTSTRAP_OPENCODE_SESSION).toBe('1');
     expect(lastProvisionInput!.extraEnvVars?.KORTIX_BASE_REF).toBe('dev');
     expect(lastProvisionInput!.extraEnvVars?.KORTIX_INITIAL_PROMPT).toBeUndefined();
   });

@@ -8,7 +8,7 @@ import Loading from '../../primitives/loading';
 import { errorToast, successToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import { FloppyDiskIcon, PauseIcon, PlayIcon, SquareIcon, WarningIcon } from '@phosphor-icons/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { WORKFLOW_LARGE_AGENT_COUNT } from '@kortix/sdk';
 import { useSessionWorkflows } from '@kortix/sdk/react';
 import { parseWorkflowRun, type WorkflowRun, type WorkflowRunAgent } from '../tool/tools/workflow-run';
@@ -64,17 +64,6 @@ export function useLiveWorkflowRun(
   return { run, controlSessionId: sessionId, fromRunner: false };
 }
 
-/** The current time, every second while `active`: a live run's elapsed labels tick. */
-export function useNow(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, [active]);
-  return now;
-}
-
 /** The prompt "Save" sends to the session that owns the run. */
 export function useSaveWorkflowPrompt() {
   const t = useTranslations('multiAgent.workflow');
@@ -95,6 +84,8 @@ export function LargeRunBadge() {
 }
 
 export interface WorkflowRunControlsProps {
+  /** `icon` (default): the compact icon group. `text`: Pause and Stop as words. */
+  appearance?: 'icon' | 'text';
   projectId: string | undefined;
   /** The box that runs the run (the runner of a background run). */
   controlSessionId: string | undefined;
@@ -103,7 +94,10 @@ export interface WorkflowRunControlsProps {
   run: WorkflowRun;
 }
 
-export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionId, run }: WorkflowRunControlsProps) {
+export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionId, run, appearance = 'icon' }: WorkflowRunControlsProps) {
+  // `text`: words in a card header (Pause · Stop), where icons read as a media player.
+  const text = appearance === 'text';
+  const textClass = 'text-muted-foreground hover:text-foreground px-2 text-xs font-normal';
   const t = useTranslations('multiAgent.workflow');
   const { control } = useSessionWorkflows(projectId, controlSessionId, { enabled: false });
   const send = useSessionPromptSend(ownerSessionId);
@@ -137,7 +131,8 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size={text ? 'xs' : 'icon-xs'}
+          className={text ? textClass : undefined}
           aria-label={run.paused ? t('resume') : t('pause')}
           disabled={!!pending}
           onClick={(event) => {
@@ -147,6 +142,8 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
         >
           {pending === 'pause' || pending === 'resume' ? (
             <Loading className="size-3 shrink-0" />
+          ) : text ? (
+            run.paused ? t('resumeShort') : t('pauseShort')
           ) : run.paused ? (
             <PlayIcon weight="fill" className="size-3 shrink-0" />
           ) : (
@@ -160,7 +157,8 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size={text ? 'xs' : 'icon-xs'}
+          className={text ? textClass : undefined}
           aria-label={t('stop')}
           disabled={!!pending}
           onClick={(event) => {
@@ -168,7 +166,13 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
             act('stop');
           }}
         >
-          {pending === 'stop' ? <Loading className="size-3 shrink-0" /> : <SquareIcon weight="fill" className="size-2.5 shrink-0" />}
+          {pending === 'stop' ? (
+            <Loading className="size-3 shrink-0" />
+          ) : text ? (
+            t('stopShort')
+          ) : (
+            <SquareIcon weight="fill" className="size-2.5 shrink-0" />
+          )}
         </Button>
       </Hint>
     ),
@@ -178,20 +182,22 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size={text ? 'xs' : 'icon-xs'}
+          className={text ? textClass : undefined}
           aria-label={t('save')}
           onClick={(event) => {
             event.stopPropagation();
             void save();
           }}
         >
-          <FloppyDiskIcon className="size-3 shrink-0" />
+          {text ? t('save') : <FloppyDiskIcon className="size-3 shrink-0" />}
         </Button>
       </Hint>
     ),
   ].filter(Boolean);
 
   if (buttons.length === 0) return null;
+  if (text) return <>{buttons}</>;
   return buttons.length === 1 ? <>{buttons}</> : <ButtonGroup>{buttons}</ButtonGroup>;
 }
 

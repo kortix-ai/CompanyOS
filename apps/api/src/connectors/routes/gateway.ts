@@ -26,6 +26,7 @@ import {
   ProjectParam,
   featureNotSupportedResponse,
 } from './shared';
+import { workspaceIdParam } from '../../shared/route-params';
 
 function decodedAttachmentHeader(c: Context, name: string): string {
   const value = c.req.header(name);
@@ -108,20 +109,25 @@ const COMPUTER_STATES = ['computer_offline', 'computer_unpaired', 'computer_desk
 /**
  * HTTP status for a gateway `error`. Computer states the owner controls are
  * expected outcomes, not server faults: a 5xx invites a retry, and each retry
- * re-prompts the owner. An upstream 429 or 503 is "retry later" and keeps its
- * status. 500, not 502 or 504, for the rest, `upstream_timeout` included:
- * Cloudflare replaces origin 502 and 504 bodies with its own page.
+ * re-prompts the owner. The upstream's own answer maps through: its 4xx
+ * refused the request as sent (the caller fixes it, never retries), and its
+ * 5xx means a dependency is down. Everything carries the JSON body, so the
+ * only Cloudflare rule is: never answer 502 or 504 from here — their bodies
+ * get replaced by Cloudflare's own page and the sandbox SDK reads a bare
+ * "HTTP 502" — a dependency outage answers 503, a Kortix-side fault (a thrown
+ * or timed-out call, `upstream_timeout` included) 500. An upstream 401 never
+ * passes as the caller's: the caller's Kortix token is fine, and the SDK
+ * replays a 401 with a fresh token and invalidates the host's.
  */
-export function connectorErrorHttpStatus(
-  reason: string,
-  upstreamStatus?: number | null,
-): 403 | 409 | 424 | 429 | 500 | 503 {
+export function connectorErrorHttpStatus(reason: string, upstreamStatus?: number | null): number {
   const kind = reason.split(':', 1)[0];
   if (COMPUTER_REFUSALS.includes(kind)) return 403;
   // The upstream refused the stored credential: Kortix worked, the dependency did not.
   if (kind === 'credential_rejected') return 424;
   if (COMPUTER_STATES.includes(kind)) return 409;
   if (upstreamStatus === 429 || upstreamStatus === 503) return upstreamStatus;
+  if (typeof upstreamStatus === 'number' && upstreamStatus >= 400 && upstreamStatus < 500 && upstreamStatus !== 401) return upstreamStatus;
+  if (typeof upstreamStatus === 'number' && upstreamStatus >= 500) return 503;
   return 500;
 }
 
@@ -331,6 +337,26 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
     default: {
       const retryAfter = result.retryAfterSeconds;
       if (retryAfter !== undefined) c.header('Retry-After', String(retryAfter));
+      // The upstream answered 2xx and the tool still reported a failure (a
+      // channel `{ok:false}` envelope — mapChannelEnvelope): the tool's own
+      // domain result, not a server fault. HTTP 200 + `tool_error`, the same
+      // contract as the MCP-isError case above; a 5xx here pages a state the
+      // caller cannot fix by retrying (KRTX-4614: `thread_not_found` alone
+      // was 6 of the route's 8 5xx in its first hour on prod).
+      if (
+        result.upstreamStatus !== undefined &&
+        result.upstreamStatus >= 200 &&
+        result.upstreamStatus < 300
+      ) {
+        return c.json({
+          ok: false,
+          status: 'tool_error',
+          error: result.reason,
+          binding: result.binding ?? null,
+          upstream_status: result.upstreamStatus,
+          upstream_error: result.reason,
+        });
+      }
       return c.json(
         {
           ok: false,
@@ -490,7 +516,7 @@ export function registerProjectAttachmentRoutes(app: OpenAPIHono, deps: Connecto
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/attachments',
+      path: '/projects/{workspaceId}/attachments',
       tags: ['connector'],
       summary: 'Stage a private attachment in a project from raw bytes',
       description:
@@ -507,7 +533,7 @@ export function registerProjectAttachmentRoutes(app: OpenAPIHono, deps: Connecto
       },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       if (!projectId) return c.json({ error: 'forbidden' }, 403);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
@@ -552,13 +578,21 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       responses: {
         200: json(CallResponseSchema, 'Tool result (ok)'),
         202: json(CallResponseSchema, 'Pending approval'),
-        400: json(CallResponseSchema, 'Bad request (invalid_json / missing fields)'),
+        400: json(
+          CallResponseSchema,
+          // The upstream's own 4xx (its 402–499, except 401/429) also passes
+          // through as its own status with `upstream_status` set and the
+          // `reason` intact: it refused the request as sent, so retrying
+          // unchanged cannot succeed and it is not a server fault.
+          'Bad request (invalid_json / missing fields, or the upstream refused the args)',
+        ),
         401: json(CallResponseSchema, 'Unauthorized'),
         403: json(CallResponseSchema, 'Denied'),
         404: json(CallResponseSchema, 'Connector or action not found'),
+        409: json(CallResponseSchema, 'Conflict — a computer state the owner controls (offline, unpaired, permission missing)'),
         424: json(CallResponseSchema, 'The upstream rejected the stored credential (credential_rejected)'),
         429: json(CallResponseSchema, 'Upstream rate limit (Retry-After when the upstream sent one)'),
-        503: json(CallResponseSchema, 'Upstream unavailable (Retry-After when the upstream sent one)'),
+        503: json(CallResponseSchema, 'Upstream unavailable (Retry-After when the upstream sent one) — also answers for the upstream\'s own 5xx, its status in `upstream_status`'),
         // 500, NOT 502: Cloudflare replaces origin 502/504 bodies with its own
         // branded error page, which destroys the JSON `reason` before the
         // sandbox SDK can read it — the agent then sees a bare "HTTP 502" and
@@ -584,7 +618,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/catalog',
+      path: '/projects/{workspaceId}/catalog',
       tags: ['connector'],
       summary: 'List the connectors usable in a project (any valid principal)',
       ...auth,
@@ -595,7 +629,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
       return catalogResponse(deps, c, p);
@@ -606,7 +640,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/call',
+      path: '/projects/{workspaceId}/call',
       tags: ['connector'],
       summary: 'Run a connector action in a project (any valid principal)',
       ...auth,
@@ -634,17 +668,21 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       responses: {
         200: json(CallResponseSchema, 'Tool result (ok)'),
         202: json(CallResponseSchema, 'Pending approval'),
-        400: json(CallResponseSchema, 'Bad request (invalid_json / missing fields)'),
+        400: json(
+          CallResponseSchema,
+          'Bad request (invalid_json / missing fields, or the upstream refused the args — its 402–499 except 401/429 passes through as its own status)',
+        ),
         403: json(CallResponseSchema, 'Denied'),
         404: json(CallResponseSchema, 'Connector or action not found'),
+        409: json(CallResponseSchema, 'Conflict — a computer state the owner controls (offline, unpaired, permission missing)'),
         424: json(CallResponseSchema, 'The upstream rejected the stored credential (credential_rejected)'),
         429: json(CallResponseSchema, 'Upstream rate limit (Retry-After when the upstream sent one)'),
-        503: json(CallResponseSchema, 'Upstream unavailable (Retry-After when the upstream sent one)'),
+        503: json(CallResponseSchema, 'Upstream unavailable (Retry-After when the upstream sent one) — also answers for the upstream\'s own 5xx, its status in `upstream_status`'),
         500: json(CallResponseSchema, 'Execution error'),
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);
       return callResponse(deps, c, p);
@@ -661,7 +699,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connectors/{slug}/accounts',
+      path: '/projects/{workspaceId}/connectors/{slug}/accounts',
       tags: ['connector'],
       summary: 'Accounts this principal may run a connector as',
       ...auth,
@@ -674,7 +712,7 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const slug = c.req.param('slug');
       const p = await deps.resolveProjectPrincipal(c, projectId);
       if (!p) return c.json({ error: 'forbidden' }, 403);

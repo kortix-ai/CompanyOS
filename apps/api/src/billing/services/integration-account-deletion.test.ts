@@ -35,7 +35,7 @@ mock.module('../../shared/supabase', () => ({
 }));
 
 const { db } = await import('../../shared/db');
-const { processScheduledDeletions, deleteAccountImmediately } = await import('./account-deletion');
+const { processScheduledDeletions, deleteAccountImmediately, deleteLoginWithoutAccount } = await import('./account-deletion');
 const { claimDeletionRequest } = await import('../repositories/account-deletion');
 const { config } = await import('../../config');
 const { SWEEP_BATCH_SIZE } = await import('./account-deletion');
@@ -45,7 +45,8 @@ const past = () => new Date(Date.now() - 60_000).toISOString();
 
 /**
  * A requester and the account they asked to delete. By default the account is
- * their personal account, whose id is the user id (`bootstrapPersonalAccount`).
+ * their legacy personal account, whose id is the user id (sign-up created one
+ * until Workspaces D3).
  * `team` seeds an account with its own id; `requester` files the request as
  * someone who is not a member at all.
  */
@@ -280,6 +281,22 @@ describe('immediate deletion', () => {
   });
 });
 
+describe('a person with no workspace', () => {
+  test('deletes only their login; no account exists to delete', async () => {
+    const userId = crypto.randomUUID();
+    const result = await deleteLoginWithoutAccount(userId);
+    expect(result.success).toBe(true);
+    expect(deleteUser).toHaveBeenCalledWith(userId);
+    expect(stripeCancel).not.toHaveBeenCalled();
+    expect(await accountExists(userId)).toBe(false);
+  });
+
+  test('a retry after the auth user is gone succeeds', async () => {
+    deleteUser.mockImplementation(async () => ({ error: { status: 404 } }));
+    expect((await deleteLoginWithoutAccount(crypto.randomUUID())).success).toBe(true);
+  });
+});
+
 describe('auth-user-delete trigger', () => {
   test('reclaims a personal scaffold even when bootstrap never created its membership', async () => {
     const userId = crypto.randomUUID();
@@ -417,9 +434,20 @@ describe('legacy basejump references to the auth user', () => {
       create table if not exists public.admin_actions_log (
         id uuid primary key default gen_random_uuid(),
         admin_user_id uuid not null references auth.users(id));
+      create table if not exists public.legacy_presence (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid references auth.users(id) on delete set null);
       grant all on schema basejump to postgres;
       grant all on all tables in schema basejump to postgres;
-      grant all on public.agent_versions, public.google_oauth_tokens, public.user_roles, public.admin_actions_log to postgres;`);
+      grant all on public.agent_versions, public.google_oauth_tokens, public.user_roles, public.admin_actions_log, public.legacy_presence to postgres;`);
+    // Prod's legacy tables refuse INSERT and UPDATE (migration freeze_legacy_suna_tables). These
+    // were built after the migrations ran, so freeze them the same way. The fixtures below write
+    // them on this connection only; the deletion routine runs on the app pool without the opt-in.
+    await superuser.query(`select kortix.freeze_legacy_tables()`);
+    await superuser.query(`set kortix.legacy_write = 'on'`);
+  });
+  afterAll(async () => {
+    await superuser.query(`reset kortix.legacy_write`);
   });
 
   /** GoTrue's delete: a real DELETE on auth.users that FK violations can refuse. */
@@ -454,6 +482,36 @@ describe('legacy basejump references to the auth user', () => {
     await superuser.query(`insert into public.user_roles (granted_by) values ($1)`, [userId]);
     await superuser.query(`insert into basejump.accounts (primary_owner_user_id, personal_account, created_by) values ($1, true, $2)`, [other, userId]);
     return { personal, other };
+  }
+
+  test('a frozen legacy table refuses INSERT and UPDATE with a clear error, and allows DELETE and FK actions', async () => {
+    await superuser.query(`reset kortix.legacy_write`);
+    try {
+      await frozenTableContract();
+    } finally {
+      await superuser.query(`set kortix.legacy_write = 'on'`);
+    }
+  });
+
+  async function frozenTableContract() {
+    await expect(superuser.query(`insert into public.user_roles (granted_by) values (null)`)).rejects.toThrow(
+      /public\.user_roles is a frozen Suna-era table: INSERT refused/,
+    );
+    const userId = crypto.randomUUID();
+    await superuser.query(`insert into auth.users (id, email) values ($1, $2)`, [userId, `${userId}@example.test`]);
+    await superuser.query(`set kortix.legacy_write = 'on'`);
+    const role = (await superuser.query(`insert into public.user_roles (granted_by) values (null) returning id`)).rows[0].id;
+    const presence = (await superuser.query(`insert into public.legacy_presence (user_id) values ($1) returning id`, [userId])).rows[0].id;
+    await superuser.query(`reset kortix.legacy_write`);
+    await expect(superuser.query(`update public.user_roles set granted_by = null where id = $1`, [role])).rejects.toThrow(
+      /UPDATE refused/,
+    );
+    // ON DELETE SET NULL from auth.users is an UPDATE that a foreign-key action runs: it passes.
+    await superuser.query(`delete from auth.users where id = $1`, [userId]);
+    const nulled = await superuser.query(`select user_id from public.legacy_presence where id = $1`, [presence]);
+    expect(nulled.rows[0].user_id).toBeNull();
+    await superuser.query(`delete from public.user_roles where id = $1`, [role]);
+    expect((await superuser.query(`select count(*)::int n from public.user_roles where id = $1`, [role])).rows[0].n).toBe(0);
   }
 
   test('removes the personal basejump account and clears every NO ACTION reference, so the auth delete succeeds', async () => {

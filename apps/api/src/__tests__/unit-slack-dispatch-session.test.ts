@@ -16,7 +16,7 @@ function fakeSessionRow(sessionId: string): ProjectSessionRow {
   const now = new Date('2026-01-01T00:00:00Z');
   return {
     sessionId,
-    accountId: 'acc-1',
+    accountId: account,
     projectId: 'proj-1',
     branchName: 'session/test',
     baseRef: 'main',
@@ -56,6 +56,7 @@ function makeChain(): any {
   return chain;
 }
 mock.module('../shared/db', () => ({
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
   db: { select: () => makeChain(), insert: () => makeChain(), update: () => makeChain(), delete: () => makeChain() },
   hasDatabase: () => true,
 }));
@@ -217,9 +218,14 @@ const { inboundMessageKey } = await import('../channels/slack/dedup');
 const { resetSlackSessionLifecycleForTest, setSlackSessionLifecycleForTest } = await import('../channels/slack/session');
 const originalRequireIdentity = config.SLACK_REQUIRE_USER_IDENTITY;
 
+// The account id reaching the member probe comes from a session or project
+// row: a uuid in prod. The reader carries the uuid guard, so a non-uuid id
+// answers no row without a DB read — well-formed synthetic ones here.
+const account = 'aaaaaaaa-1111-4111-8111-111111111111';
+const secondAccount = 'bbbbbbbb-2222-4222-8222-222222222222';
 const envelope = { team_id: 'T1', event: undefined } as any;
 const event = { type: 'app_mention', channel: 'C1', ts: '100.1', user: 'U1', thread_ts: '90.0', text: 'hi' } as any;
-const project = { projectId: 'proj-1', accountId: 'acc-1', defaultBranch: 'main', repoUrl: 'r', name: 'P', manifestPath: 'kortix.yaml' };
+const project = { projectId: 'proj-1', accountId: account, defaultBranch: 'main', repoUrl: 'r', name: 'P', manifestPath: 'kortix.yaml' };
 
 afterAll(() => {
   config.SLACK_REQUIRE_USER_IDENTITY = originalRequireIdentity;
@@ -277,7 +283,7 @@ describe('Slack authorization matrix — project access and session visibility',
     expect(ephemerals[0]).toMatchObject({
       channel: 'C1',
       user: 'Uoutsider',
-      text: "You're connected, but don't have access to this project yet.",
+      text: "You're connected, but don't have access to this Kortix workspace yet.",
     });
   });
 
@@ -352,7 +358,7 @@ describe('Slack authorization matrix — project access and session visibility',
       [project], // createOrJoinThreadSession project lookup
       [{ eventId: 'claim' }], // claimThreadCreate won
       [], // re-check chat_threads -> none
-      [{ projectId: 'proj-1', agentName: null, opencodeModel: null, conversationPolicy: 'owner_approval' }],
+      [{ projectId: 'proj-1', agentName: null, sessionModel: null, conversationPolicy: 'owner_approval' }],
       [], // remember owner participant
     ];
 
@@ -500,7 +506,7 @@ describe('spawnAgentTurn — permanent 1:1 thread↔session, never a second sess
     followUpPlans.length = 0;
     dbResults = [
       [project],
-      [{ sessionId: 'sess-1', createdBy: 'user-1', metadata: { opencode_model: 'kortix/codex/gpt-6-astra' }, agentName: 'reviewer' }],
+      [{ sessionId: 'sess-1', createdBy: 'user-1', metadata: { model: 'kortix/codex/gpt-6-astra' }, agentName: 'reviewer' }],
       [],
     ];
     await spawnAgentTurn('proj-1', envelope, event);
@@ -651,20 +657,31 @@ describe('createOrJoinThreadSession — atomic claim arbitrates a brand-new thre
 // fresh event_id, and fans it across replicas — every one of which shares the
 // message's (team, channel, ts). The key collapses them to one identity, and
 // dispatchSlackEvent claims it atomically before ever spawning the turn.
-describe('inboundMessageKey — one message ⇒ one identity', () => {
+describe('inboundMessageKey — one message ⇒ one identity, per receiving project', () => {
   test('app_mention and message of the SAME message yield the SAME key', () => {
-    const k1 = inboundMessageKey('T1', { channel: 'C1', ts: '100.1' }); // app_mention
-    const k2 = inboundMessageKey('T1', { channel: 'C1', ts: '100.1' }); // sibling message
-    expect(k1).toBe('slack:msg:T1:C1:100.1');
+    const k1 = inboundMessageKey('proj-1', 'T1', { channel: 'C1', ts: '100.1' }); // app_mention
+    const k2 = inboundMessageKey('proj-1', 'T1', { channel: 'C1', ts: '100.1' }); // sibling message
+    expect(k1).toBe('slack:msg:proj-1:T1:C1:100.1');
     expect(k2).toBe(k1);
   });
 
   test('distinct messages → distinct keys; missing coordinates → null (no gate)', () => {
-    expect(inboundMessageKey('T1', { channel: 'C1', ts: '100.1' })).not.toBe(
-      inboundMessageKey('T1', { channel: 'C1', ts: '200.2' }),
+    expect(inboundMessageKey('proj-1', 'T1', { channel: 'C1', ts: '100.1' })).not.toBe(
+      inboundMessageKey('proj-1', 'T1', { channel: 'C1', ts: '200.2' }),
     );
-    expect(inboundMessageKey('T1', { ts: '100.1' })).toBeNull();
-    expect(inboundMessageKey('', { channel: 'C1', ts: '100.1' })).toBeNull();
+    expect(inboundMessageKey('proj-1', 'T1', { ts: '100.1' })).toBeNull();
+    expect(inboundMessageKey('proj-1', '', { channel: 'C1', ts: '100.1' })).toBeNull();
+    expect(inboundMessageKey('', 'T1', { channel: 'C1', ts: '100.1' })).toBeNull();
+  });
+
+  // Every BYO Slack app of a workspace receives every channel message, so the
+  // same message reaches us once per installed project. The claim is owed per
+  // receiving project: another project's claim must never suppress this one
+  // (CWE-863, KRTX-4447).
+  test('the SAME message in another receiving project is a distinct identity', () => {
+    expect(inboundMessageKey('proj-2', 'T1', { channel: 'C1', ts: '100.1' })).not.toBe(
+      inboundMessageKey('proj-1', 'T1', { channel: 'C1', ts: '100.1' }),
+    );
   });
 });
 
@@ -689,7 +706,7 @@ describe('dispatchSlackEvent — exactly-once per inbound user message', () => {
 
     dbResults = [
       [], // ensureProjectChannelBinding
-      [{ eventId: 'slack:msg:T1:C1:200.1' }], // claimInboundMessage → WON
+      [{ eventId: 'slack:msg:proj-1:T1:C1:200.1' }], // claimInboundMessage → WON
       [project], // project account lookup before empty-mention help
       [], // resolveSlackActor identity lookup → unlinked
     ];
@@ -717,7 +734,7 @@ describe('dispatchSlackEvent — exactly-once per inbound user message', () => {
     // Delivery #1 — claim WON, known thread, delivered into the existing session.
     dbResults = [
       [], // ensureProjectChannelBinding
-      [{ eventId: 'slack:msg:T1:C1:100.1' }], // claimInboundMessage → WON
+      [{ eventId: 'slack:msg:proj-1:T1:C1:100.1' }], // claimInboundMessage → WON
       [project],
       [{ sessionId: 'sess-1', createdBy: 'user-1', metadata: {} }], // chat_threads lookup (known thread)
       [], // update lastMessageAt
@@ -767,7 +784,7 @@ describe('dispatchSlackEvent — a mention addressed to another workspace bot', 
     deliverOutcome = 'delivered';
     dbResults = [
       [], // ensureProjectChannelBinding
-      [{ eventId: 'slack:msg:T1:C1:301.1' }], // claimInboundMessage → WON
+      [{ eventId: 'slack:msg:proj-1:T1:C1:301.1' }], // claimInboundMessage → WON
       [project],
       [{ sessionId: 'sess-1', createdBy: 'user-1', metadata: {} }], // known thread
       [], // update lastMessageAt
@@ -786,7 +803,7 @@ describe('dispatchSlackEvent — a mention addressed to another workspace bot', 
  * re-binds a channel, its older threads still belong to the original project).
  */
 describe('spawnAgentTurn — a thread owned by another project', () => {
-  const project2 = { ...project, projectId: 'proj-2', accountId: 'acc-2' };
+  const project2 = { ...project, projectId: 'proj-2', accountId: secondAccount };
   const foreignThread = { sessionId: 'sess-p1', projectId: 'proj-1', createdBy: 'user-1', metadata: {} };
 
   test('the sender is re-authorized against the thread project; without access there, nothing is delivered', async () => {
@@ -806,7 +823,7 @@ describe('spawnAgentTurn — a thread owned by another project', () => {
     expect(deliverCalls).toBe(0);
     expect(createSessionCalls).toBe(0);
     expect(ephemerals).toHaveLength(1);
-    expect(ephemerals[0].text).toBe("You're connected, but don't have access to this project yet.");
+    expect(ephemerals[0].text).toBe("You're connected, but don't have access to this Kortix workspace yet.");
   });
 
   test('a per-project app refuses a thread its project does not own, with a notice and no delivery', async () => {
@@ -823,7 +840,7 @@ describe('spawnAgentTurn — a thread owned by another project', () => {
     expect(deliverCalls).toBe(0);
     expect(createSessionCalls).toBe(0);
     expect(messages).toHaveLength(1);
-    expect(messages[0].text).toContain('belongs to a different Kortix project');
+    expect(messages[0].text).toContain('belongs to a different Kortix workspace');
   });
 });
 

@@ -7,6 +7,8 @@ import { eq } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { db } from '../shared/db';
 import { isPlatinumConfigured, platinumFetch, platinumRegionControlPlane } from '../shared/platinum';
+import { logWindowDecision } from '../shared/log-window';
+import { ttlMemo } from '../shared/ttl-memo';
 import { DEFAULT_SANDBOX_MOUNT_LIMIT } from './access';
 import { parseVolumeWriteCommit, type VolumeWriteCommit } from './volume-commit';
 
@@ -168,8 +170,10 @@ export function driveStorageAvailable(): boolean {
 }
 
 const FILE_TIMEOUT_MS = 5 * 60_000;
-/** Re-sends of a write Platinum refused with 429 transfer_limit_exceeded. */
-const TRANSFER_RETRIES = 3;
+/** Resends of a write Platinum refused for 429 before running anything: its
+ *  bytes-in-flight cap (transfer_limit_exceeded) and the org's per-second
+ *  write budget (rate_limited). */
+const RESENDS = 3;
 
 export const FILE_CHANGED_MESSAGE = 'This file changed since you opened it. Reload it to see the latest version, then save again.';
 
@@ -226,6 +230,17 @@ function volumeOrigin(volume: DriveVolume): string | undefined {
 }
 
 /**
+ * The log-throttle bucket of one call: the path with every id-sized segment
+ * collapsed (volume, sandbox, upload and commit ids, cursors) and the query
+ * dropped, so a Platinum outage logs one line per route shape per window
+ * instead of one per volume. The printed line keeps the real path.
+ */
+function callLogKey(method: string, path: string): string {
+  const [route] = path.split('?');
+  return `${method} ${route.split('/').map((s) => (s.length >= 16 ? ':id' : s)).join('/')}`;
+}
+
+/**
  * One Platinum call. `volume` names the drive volume the call is about (its
  * region's control plane gets it); null is a call about a sandbox or the
  * account, which shared/platinum.ts routes by sandbox id.
@@ -247,22 +262,40 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
       init.signal?.throwIfAborted();
       res = await platinumFetch(path, init, origin);
     }
-    // A write Platinum refused for its bytes in flight (429, #2422) never ran:
-    // it is sent again after Retry-After, up to 3 times (at most 5 s apart).
-    for (let attempt = 0; attempt < TRANSFER_RETRIES; attempt++) {
+    // A write or exec Platinum refused with 429 never ran: the bytes-in-flight
+    // cap (#2422) and the org's per-second write budget both answer before the
+    // work starts, so the request is sent again after Retry-After, up to 3
+    // times (at most 5 s apart). Without the resend one saturated sweep leaves
+    // every session's notes old until the next pass (KRTX-4020).
+    for (let attempt = 0; attempt < RESENDS; attempt++) {
       if (res.status !== 429 || init.signal?.aborted) break;
       const wait = Math.min(5, retryAfterSeconds(res.headers.get('retry-after'))) * 1_000;
       const head = await res.clone().json().catch(() => ({}) as { code?: string });
-      if ((head as { code?: string }).code !== 'transfer_limit_exceeded') break;
+      const code = (head as { code?: string }).code;
+      if (code !== 'transfer_limit_exceeded' && code !== 'rate_limited') break;
       await res.body?.cancel();
       await Bun.sleep(wait);
       init.signal?.throwIfAborted();
       res = await platinumFetch(path, init, origin);
     }
   } catch (err) {
-    logger.warn(`[drives] ${init.method ?? 'GET'} ${path} failed:`, { error: err instanceof Error ? err.message : String(err) });
+    // A failed mutation may still have landed (a timeout past the server's
+    // own commit): bust the listings conservatively. A failed GET cannot
+    // have changed anything.
+    if (volume && method !== 'GET') bustVolumeListCache(volume.name);
+    // A Platinum outage fails every call at its budget; one warn line per call
+    // put ~800 lines across dozens of route shapes into the 2026-11-10 log in
+    // four hours (KRTX-4672). Throttle the line like the global error handler
+    // throttles dead-credential refusals: the first failure of a route shape
+    // per window logs, the rest count toward its next line's `suppressed`.
+    const { log, suppressed } = logWindowDecision(callLogKey(init.method ?? 'GET', path), Date.now());
+    if (log) logger.warn(`[drives] ${init.method ?? 'GET'} ${path} failed:`, { error: err instanceof Error ? err.message : String(err), suppressed });
     throw new DriveStorageError(503, 'Drive storage is unavailable, try again shortly', 'drive_storage_unavailable');
   }
+  // A mutation may have changed the folder tree (even a refusal can have
+  // landed past a network error): no cached listing of this volume may
+  // outlive it. Every write through the volumes API funnels here.
+  if (volume && method !== 'GET') bustVolumeListCache(volume.name);
   if (res.ok || (allowRangeRefusal && res.status === 416)) return res;
   const text = await res.text().catch(() => '');
   let refusal: PlatinumRefusal = {};
@@ -395,6 +428,59 @@ export interface VolumeEntry {
   mtime: number;
 }
 
+/**
+ * The folder listing the web UI re-reads on a 10 s poll per open view (one
+ * view every ~3.5 s in the KRTX-4671 window), where Platinum's files-list
+ * costs O(volume) per call regardless of folder size (measured 2026-11-10: a
+ * one-entry folder on a 2,000-file volume listed in seconds). Memoize the RAW
+ * listing per (volume, folder): concurrent callers share the in-flight call;
+ * a settled entry answers at once while a fresh one loads behind it
+ * (`staleWhileRevalidate`), so the route's p95 tracks the cached read, not
+ * the storage round trip. Every write the API sees busts it (call()'s
+ * non-GET branch); a write it never sees (a mounted session's) is picked up
+ * by the next successful refresh — at most one interval of staleness plus
+ * that refresh. A folder that is gone (404/410) drops its entry at the first
+ * failed refresh (the loader), so the next poll re-reads storage and
+ * surfaces the 404 instead of serving the last listing forever. Only the
+ * file tree's shape is cached: non-recursive, live, no per-caller signal.
+ *
+ * ponytail: a list resolving after a write's bust can cache the pre-write
+ * listing for up to one interval (no write fencing); the next poll heals it.
+ * Fence the memo by volume head if a 10 s tree staleness ever matters.
+ */
+const volumeListKey = (volume: DriveVolume, path: string): string => `${volume.name}|${volume.region ?? ''}|${path}`;
+
+/**
+ * The memo's loader. A 404/410 (the folder or volume is gone — a mounted
+ * session deleted it and the API never saw the write) drops the memo entry:
+ * the stale-while-revalidate refresh keeps the last good value on failure,
+ * so without the drop a gone folder would serve its last listing forever.
+ */
+export const volumeListLoader = async (volume: DriveVolume, path: string): Promise<VolumeEntry[]> => {
+  try {
+    const q = new URLSearchParams({ path, recursive: 'false', limit: '10000' });
+    const r = await callJson<{ entries: VolumeEntry[] }>(volume, `${v(volume)}/files?${q}`);
+    return r.entries ?? [];
+  } catch (err) {
+    if (err instanceof DriveStorageError && err.status === 404) volumeListMemo.invalidate(volumeListKey(volume, path));
+    throw err;
+  }
+};
+
+const volumeListMemo = ttlMemo({
+  ttlMs: 10_000,
+  keyFn: volumeListKey,
+  loader: volumeListLoader,
+  staleWhileRevalidate: true,
+  maxEntries: 64,
+  enableInTests: true,
+});
+
+/** Drop every cached listing of one volume. The API's write paths call this. */
+export function bustVolumeListCache(volumeName: string): void {
+  volumeListMemo.invalidateByPrefix(`${volumeName}|`);
+}
+
 export async function listVolumeFiles(
   volume: DriveVolume,
   path: string,
@@ -402,6 +488,7 @@ export async function listVolumeFiles(
   signal?: AbortSignal,
   at?: string,
 ): Promise<VolumeEntry[]> {
+  if (!recursive && !at && !signal) return volumeListMemo(volume, path);
   const q = new URLSearchParams({ path, recursive: String(recursive), limit: '10000', ...(at ? { at } : {}) });
   const r = await callJson<{ entries: VolumeEntry[] }>(volume, `${v(volume)}/files?${q}`, signal ? { signal } : {});
   return r.entries ?? [];
@@ -636,7 +723,11 @@ export async function platinumVolumeLimits(): Promise<PlatinumMountLimits> {
       return value;
     })
     .catch((err: unknown) => {
-      logger.warn('[drives] reading the Platinum volume limits failed:', { error: err instanceof Error ? err.message : String(err) });
+      // Same throttle as call()'s failure line, its own bucket: the degraded
+      // limits read is the designed outage signal, one line per window, not
+      // one per retry.
+      const { log, suppressed } = logWindowDecision('platinum volume limits', Date.now());
+      if (log) logger.warn('[drives] reading the Platinum volume limits failed:', { error: err instanceof Error ? err.message : String(err), suppressed });
       platinumLimitsCache = { value: {}, at: Date.now() + PLATINUM_LIMITS_RETRY_MS };
       return {} as PlatinumMountLimits;
     })

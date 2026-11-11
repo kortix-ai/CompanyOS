@@ -27,10 +27,10 @@ beforeEach(() => {
 });
 for (const type of ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email']) {
   test(`verifies ${type} token hash through identity-aware success`, async () => {
-    const response = await GET(request(`token_hash=synthetic&type=${type}&returnUrl=/projects/other`, `${AUTH_BOUNCE_COOKIE}=22222222-2222-4222-8222-222222222222:ignored`));
+    const response = await GET(request(`token_hash=synthetic&type=${type}&returnUrl=/workspaces/other`, `${AUTH_BOUNCE_COOKIE}=22222222-2222-4222-8222-222222222222:ignored`));
     expect(verifyOtp).toHaveBeenCalledWith({ token_hash: 'synthetic', type });
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
-    expect(location(response).pathname).toBe('/projects/start');
+    expect(location(response).pathname).toBe('/workspaces/start');
     expect(location(response).searchParams.get('auth_event')).toBe('login');
     expect(response.headers.get('set-cookie')).toContain(`${AUTH_BOUNCE_COOKIE}=`);
   });
@@ -72,9 +72,10 @@ test('code success keeps explicit recovery destination', async () => {
   expect(location(await GET(request('code=synthetic&returnUrl=/auth/reset-password'))).pathname).toBe('/auth/reset-password');
 });
 test('provider error with CR/LF logs one line and keeps the redirect', async () => {
+  // A provider error is a handled outcome, logged as a warning.
   const errorLog = mock((..._args: unknown[]) => {});
-  const original = console.error;
-  console.error = errorLog;
+  const original = console.warn;
+  console.warn = errorLog;
   try {
     const forged = encodeURIComponent('bad\r\n[INFO] forged line');
     const response = await GET(request(`error=access_denied&error_code=x&error_description=${forged}`));
@@ -84,6 +85,6 @@ test('provider error with CR/LF logs one line and keeps the redirect', async () 
     expect(logged).toContain('forged line');
     expect(logged).not.toMatch(/[\r\n]/);
   } finally {
-    console.error = original;
+    console.warn = original;
   }
 });

@@ -1308,6 +1308,7 @@ fn record(paths: MemoryPaths, a: RecordArgs) -> Result<()> {
     }
     eprintln!("kortix-capture: recording into {}", paths.root.display());
     crate::os_proc::below_normal_priority();
+    crate::os_proc::efficiency_mode();
     recorder::run(paths, stop)
 }
 
@@ -1459,6 +1460,12 @@ pub fn summarize_device_status(
     json!({
         "recording": recording,
         "reason": reason,
+        // Why every capture fails, so Kortix shows the cause, not only `error`.
+        // A private capture's message is generic (engine.rs never echoes it).
+        "lastError": errored
+            .then(|| st.and_then(|s| s.last_error.as_deref()))
+            .flatten()
+            .map(|e| e.chars().take(300).collect::<String>()),
         "missingPermissions": missing,
         "pausedUntilMs": settings.paused_until_ms.filter(|t| *t > now),
         "audio": {
@@ -1882,6 +1889,10 @@ fn settings(paths: &MemoryPaths, a: SettingsArgs, json_out: bool) -> Result<()> 
         println!("{}", serde_json::to_string_pretty(&v)?);
         return Ok(());
     };
+    let top = key.split('.').next().unwrap_or(&key);
+    if a.value.is_some() && Settings::managed_key(top) {
+        anyhow::bail!("{key} is managed by Kortix Capture and cannot be set");
+    }
     if key == "resolution" {
         match a.value {
             None => print(&json!(s.resolution_name()), json_out, |c| {
@@ -3024,7 +3035,7 @@ mod tests {
     }
 
     #[test]
-    fn status_json_reports_the_frame_rate_and_size_the_policy_set() {
+    fn status_json_reports_the_size_the_policy_set() {
         let paths = scratch("policy-rate");
         std::fs::create_dir_all(&paths.root).unwrap();
         std::fs::write(paths.settings(), r#"{"sync": {"enabled": true}}"#).unwrap();
@@ -3035,7 +3046,8 @@ mod tests {
         )
         .unwrap();
         let v = device_status(&paths, "v1");
-        assert_eq!(v["capture"], json!({"intervalMs": 1000, "maxHeight": 2160}));
+        // The policy sets the size; the capture rate is Kortix Capture's own.
+        assert_eq!(v["capture"], json!({"intervalMs": 2000, "maxHeight": 2160}));
         // With sync off the device follows no policy: its own settings apply.
         std::fs::write(paths.settings(), r#"{"sync": {"enabled": false}}"#).unwrap();
         let v = device_status(&paths, "v1");
@@ -3124,6 +3136,13 @@ mod tests {
         assert_eq!(v["appVersion"], "v1");
         assert_eq!(v["audio"]["enabled"], false);
         assert_eq!(v["capture"], json!({"intervalMs": 2000, "maxHeight": 1440}));
+        assert_eq!(v["lastError"], Value::Null);
+
+        let mut failing = rec("error");
+        failing.last_error = Some("capture_failed: AcquireNextFrame".into());
+        let v = summarize_device_status(&s, Some(&failing), true, None, None, now, "v1", false);
+        assert_eq!((v["recording"].as_str(), v["reason"].as_str()), (Some("not_recording"), Some("error")));
+        assert_eq!(v["lastError"], "capture_failed: AcquireNextFrame");
 
         let mut idle = rec("inactive");
         idle.inactive_reason = Some("inactive".into());
@@ -3283,7 +3302,7 @@ mod tests {
     }
 
     #[test]
-    fn settings_resolution_sets_reads_and_keeps_custom() {
+    fn settings_reads_but_never_sets_what_kortix_capture_manages() {
         let paths = scratch("res");
         let run = |key: &str, value: Option<&str>| {
             settings(
@@ -3295,29 +3314,23 @@ mod tests {
                 true,
             )
         };
-        run("resolution", Some("1080p")).unwrap();
-        let s = Settings::load(&paths);
-        assert_eq!((s.max_width, s.max_height), (1920, 1080));
-        run("resolution", Some("4K")).unwrap();
-        assert_eq!(Settings::load(&paths).resolution_name(), "4k");
-        assert!(run("resolution", Some("8k"))
-            .unwrap_err()
-            .to_string()
-            .contains("unknown resolution"));
-        assert_eq!(Settings::load(&paths).resolution_name(), "4k");
-        // Custom sizes still work through the plain keys.
-        run("max_width", Some("1600")).unwrap();
-        run("max_height", Some("900")).unwrap();
-        assert_eq!(Settings::load(&paths).resolution_name(), "custom");
-        // New settings are reachable by key.
-        run("capture_on_change", Some("false")).unwrap();
+        run("resolution", None).unwrap();
+        for (key, value) in [
+            ("resolution", "1080p"),
+            ("max_width", "1600"),
+            ("interval_ms", "500000"),
+            ("capture_on_change", "false"),
+            ("ocr_level", "off"),
+        ] {
+            let err = run(key, Some(value)).unwrap_err().to_string();
+            assert!(err.contains("managed by Kortix Capture"), "{key}: {err}");
+        }
+        assert_eq!(Settings::load(&paths).interval_ms, 2000);
+        // The person's own settings stay settable.
         run("storage.reserve_mb", Some("250")).unwrap();
-        let s = Settings::load(&paths);
-        assert!(!s.capture_on_change);
-        assert_eq!(s.storage.reserve_mb, 250);
+        assert_eq!(Settings::load(&paths).storage.reserve_mb, 250);
         let _ = std::fs::remove_dir_all(&paths.root);
     }
-
     #[test]
     fn settings_refuses_what_the_settings_window_refuses() {
         let paths = scratch("validate");

@@ -1,5 +1,6 @@
 import { config } from '../../config';
 import { type ChatUser, chatUser } from '../core/identity';
+import { slackChannelIsDm } from './util';
 import type { SettingsChannel, SettingsRefusal } from '../core/settings';
 
 // The Slack side of channel settings that every setter shares: who is asking,
@@ -12,7 +13,7 @@ export function slackUserOf(ctx: { teamId: string; slackUserId: string }): ChatU
 
 /** A Slack channel for settings. DM channel ids start with `D`. */
 export function slackSettingsChannel(ctx: { teamId: string; channelId: string }): SettingsChannel {
-  return { teamId: ctx.teamId, channelId: ctx.channelId, oneToOne: ctx.channelId.startsWith('D') };
+  return { teamId: ctx.teamId, channelId: ctx.channelId, oneToOne: slackChannelIsDm(ctx.channelId) };
 }
 
 /**
@@ -23,10 +24,10 @@ export function settingsRefusalText(reason: SettingsRefusal, command: string, no
   switch (reason) {
     case 'unlinked':
       return config.SLACK_REQUIRE_USER_IDENTITY
-        ? `Connect your Kortix account first: \`${command} login\`. Channel settings change only for a linked project manager.`
+        ? `Connect your Kortix account first: \`${command} login\`. Channel settings change only for a linked workspace manager.`
         : "Change this channel's settings in Kortix: Slack account linking is off on this server.";
     case 'forbidden':
-      return "Only a project manager, or an account owner or admin, can change this channel's settings.";
+      return "Only a workspace manager, or a workspace owner or admin, can change this channel's settings.";
     case 'no_binding':
       return noBinding;
   }

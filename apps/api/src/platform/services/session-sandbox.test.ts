@@ -90,7 +90,7 @@ let imageResolutionQueue: Array<{
   isDefault: boolean;
   built: boolean;
 }> = [];
-let standardImageDeleteCalls: Array<{ slug?: string; provider?: string }> = [];
+let standardImageDeleteCalls: Array<{ slug?: string; provider?: string; snapshotName?: string }> = [];
 let accountTokenCreateCalls: Array<Record<string, unknown>> = [];
 let serviceAccountCreateCalls: Array<Record<string, unknown>> = [];
 let networkBoundaryBindings: Array<Record<string, unknown>> = [];
@@ -354,18 +354,26 @@ mock.module('../../billing/services/compute-metering', () => ({
   },
 }));
 
+const realApiKeys = await import('../../repositories/api-keys');
 mock.module('../../repositories/api-keys', () => ({
+  ...realApiKeys,
   createApiKey: async (_opts: unknown) => ({ secretKey: 'sbx-key-1' }),
 }));
 
+// The stub spreads the real module: a real importer in this test's graph
+// links validateAccountToken (release suite 42696873451), so the stub must
+// carry every export the graph resolves, with the test's override on top.
+const realAccountTokens = await import('../../repositories/account-tokens');
 mock.module('../../repositories/account-tokens', () => ({
+  ...realAccountTokens,
   createAccountToken: async (opts: Record<string, unknown>) => {
     accountTokenCreateCalls.push(opts);
     return { secretKey: 'exec-tok-1' };
   },
 }));
 
-mock.module('../../repositories/service-accounts', () => ({
+const realServiceAccounts = await import('../../repositories/service-accounts');
+mock.module('../../repositories/service-accounts', () => ({ ...realServiceAccounts,
   ensureAgentServiceAccount: async (opts: Record<string, unknown>) => {
     serviceAccountCreateCalls.push(opts);
     return null;
@@ -391,7 +399,9 @@ mock.module('../../projects/agents', () => ({
   },
 }));
 
+const realSessionFailureNotifier = await import('../../shared/session-failure-notifier');
 mock.module('../../shared/session-failure-notifier', () => ({
+  ...realSessionFailureNotifier,
   notifySessionProvisioningFailed: async () => {},
 }));
 
@@ -516,8 +526,8 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
       agentGrant: {
         agent: 'mykortix',
         permissions: 'all',
-        connectors: [],
-        env: [],
+        connectors: 'all',
+        env: 'all',
       },
       serviceAccountId: null,
     });
@@ -751,10 +761,12 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
     expect(providerCreateOpts[0]?.snapshot).toBe('snap-test-1');
   });
 
-  test('a missing image named like a retired project image heals through the SAME slug rebuild path', async () => {
-    // The per-project image system is gone: there is no longer a second delete
-    // path keyed on the image name. Every snapshot-missing heal now deletes by
-    // (slug, provider) and re-resolves, whatever the stale image was called.
+  test('a missing image named like a retired project image heals by its exact booted identity', async () => {
+    // Every snapshot-missing heal deletes the EXACT snapshot name the session
+    // booted — never a re-derive from the slug (a project template named
+    // `default-warm` that disappears mid-provision would re-resolve to the
+    // shared platform default; KRTX-4465, Strix CWE-367). Whatever the stale
+    // image was called, the heal drops that name and the retry rebuilds it.
     const legacyProjectImageName = 'kortix-ppwarm-00000000-37a8eec1-aaaaaaaaaaaa';
     imageResolutionQueue = [
       {
@@ -781,12 +793,12 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
     await provisionSessionSandbox(baseOpts());
     await opened;
 
-    expect(standardImageDeleteCalls).toEqual([{ slug: 'default', provider: 'daytona' }]);
+    expect(standardImageDeleteCalls).toEqual([{ snapshotName: legacyProjectImageName, provider: 'daytona' }]);
     expect(imageRequests).toHaveLength(2);
     expect(providerCreateOpts.at(-1)?.snapshot).toBe('kortix-default-base-intact');
   });
 
-  test('a missing standard image keeps the existing slug-based rebuild path', async () => {
+  test('a missing standard image heals by its exact booted identity and rebuilds', async () => {
     imageResolutionQueue = [
       {
         snapshotName: 'kortix-default-stale',
@@ -812,7 +824,7 @@ describe('provisionSessionSandbox — mid-provision delete race', () => {
     await provisionSessionSandbox(baseOpts());
     await opened;
 
-    expect(standardImageDeleteCalls).toEqual([{ slug: 'default', provider: 'daytona' }]);
+    expect(standardImageDeleteCalls).toEqual([{ snapshotName: 'kortix-default-stale', provider: 'daytona' }]);
     expect(imageRequests).toHaveLength(2);
     expect(providerCreateOpts.at(-1)?.snapshot).toBe('kortix-default-rebuilt');
   });

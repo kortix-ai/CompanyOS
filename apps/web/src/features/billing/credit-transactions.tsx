@@ -3,7 +3,7 @@
 import { useTranslations } from '@/i18n/use-translations';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import {
   Select,
   SelectContent,
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@kortix/ui/select';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { CreditTransactionsTable } from '@/features/billing/transactions-table';
+import { CreditActivityFeed } from '@/features/billing/credit-activity-feed';
 import { useTransactions } from '@kortix/ui/internal/billing/use-transactions';
 import { isBillingEnabled } from '@/lib/config';
 import { CoinsIcon as Coins, ArrowClockwiseIcon as RefreshCw } from '@phosphor-icons/react';
@@ -70,9 +70,9 @@ export default function CreditTransactions({ accountId }: Props) {
 
   if (error) {
     return (
-      <InfoBanner tone="destructive" title={tHardcodedUi.raw('i18nComplete.textd7982e9989d5')}>
+      <BannerAlert variant="destructive" ><BannerAlertTitle>{tHardcodedUi.raw('i18nComplete.textd7982e9989d5')}</BannerAlertTitle><BannerAlertDescription>
         {error.message || tHardcodedUi.raw('i18nComplete.textd7982e9989d5')}
-      </InfoBanner>
+      </BannerAlertDescription></BannerAlert>
     );
   }
 
@@ -154,7 +154,7 @@ export default function CreditTransactions({ accountId }: Props) {
         </p>
       ) : (
         <>
-          <CreditTransactionsTable
+          <CreditActivityFeed
             rows={transactions.map((tx) => ({
               id: tx.id,
               createdAt: tx.created_at,

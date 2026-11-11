@@ -16,7 +16,7 @@ import { callerKortixSessionId } from '../middleware/caller-session';
 import { redactHiddenChannelAuditRows } from '../shared/space-access';
 import { createRoute, z } from '@hono/zod-openapi';
 import { auditEventsAll, auditWebhookDeliveries, auditWebhooks } from '@kortix/db';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { ACCOUNT_ACTIONS, assertAuthorized } from '../iam';
 import { actorOf } from '../iam/actor';
 import { assertAllowedSourceAddress } from '../marketplace/catalog';
@@ -28,7 +28,6 @@ import {
 } from '../shared/audit';
 import { auditCredentialNames } from '../shared/audit-credential-names';
 import { readAuditActivity } from '../shared/audit-activity';
-import { requestClientIp } from '../middleware/client-ip';
 import {
   deliverTestEvent,
   generateWebhookSecret,
@@ -45,16 +44,18 @@ import {
 } from '../shared/audit-query';
 import { AuditActorTypeSchema, AuditListSchema } from '../shared/audit-schema';
 import { readExportPage } from '../shared/audit-archive/export-page';
+import { HOT_DAYS, RETENTION_DAYS } from '../shared/audit-archive/format';
 import { auditArchiveStore } from '../shared/audit-archive/store';
 import { reconcileAuditEvents } from '../shared/audit-reconciliation';
 import type { AppEnv } from '../types';
 import { buildFilters } from './audit-filters';
-import { requireEntitlement } from './iam/http-helpers';
+import { auditIam, requireEntitlement } from './iam/http-helpers';
 import { readJsonObject } from '../shared/http-body';
+import { accountIdParam } from '../shared/route-params';
 
 export const auditRouter = makeOpenApiApp<AppEnv>();
 
-const AccountIdParam = z.object({ accountId: z.string().uuid() });
+const AccountIdParam = z.object({ workspaceId: z.string().uuid() });
 const AuditWebhookSchema = z
   .object({
     webhook_id: z.string(),
@@ -119,9 +120,10 @@ const DEFAULT_LIMIT = 50;
 auditRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/audit',
+    path: '/{workspaceId}/audit',
     tags: ['accounts'],
     summary: 'List audit events (cursor-paginated)',
+    description: `Newest first. Covers the last ${HOT_DAYS} days, which PostgreSQL holds. Older events, up to ${RETENTION_DAYS} days: GET /{workspaceId}/audit/export.`,
     ...auth,
     request: {
       params: AccountIdParam,
@@ -151,7 +153,7 @@ auditRouter.openapi(
     },
   }),
   async (c: any) => {
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.AUDIT_READ);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
     if (denied) return denied;
@@ -209,6 +211,15 @@ auditRouter.openapi(
     // tie-break by event id (stable order). Cheaper than OFFSET on long lists.
     if (parsedCursor) {
       conditions.push(buildAuditCursorCondition(parsedCursor, accountId, 'descending'));
+    }
+
+    // `/v1/workspaces/<workspace id>/audit` of a legacy account that still
+    // holds other projects (`split_pending`): the workspace's own events and
+    // the account-wide ones, never another project's. A 1:1 workspace's
+    // account log already is exactly that.
+    const pathWorkspaceId = c.get('pathWorkspaceId') as string | undefined;
+    if (pathWorkspaceId && c.get('pathWorkspaceSplitPending') === true && !projectId) {
+      conditions.push(or(eq(auditEventsAll.projectId, pathWorkspaceId), isNull(auditEventsAll.projectId))!);
     }
 
     const rows = await db
@@ -282,7 +293,7 @@ function parseActivityDay(value: string | null, name: string): string | null {
 auditRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/audit/activity',
+    path: '/{workspaceId}/audit/activity',
     tags: ['accounts'],
     summary: 'Per-user activity by day (who was active, how often)',
     ...auth,
@@ -304,7 +315,7 @@ auditRouter.openapi(
     },
   }),
   async (c) => {
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.AUDIT_READ);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
     // requireEntitlement builds an untyped 402 Response; the route declares it.
@@ -359,7 +370,7 @@ const CSV_HEADERS = [
   'account_id',
   'project_id',
   'session_id',
-  'opencode_session_id',
+  'runtime_session_id',
   'turn_id',
   'message_id',
   'tool_call_id',
@@ -411,11 +422,11 @@ const CSV_HEADERS = [
 auditRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/audit/export',
+    path: '/{workspaceId}/audit/export',
     tags: ['accounts'],
     summary: 'Export audit events as CSV or JSONL',
     description:
-      'Oldest first, 10,000 events per page (follow X-Audit-Next-Cursor). Reaches back 365 days: events older than 90 days are read from the S3 archive. The list endpoint covers the last 90 days only.',
+      `Oldest first, 10,000 events per page (follow X-Audit-Next-Cursor). Reaches back ${RETENTION_DAYS} days: events older than ${HOT_DAYS} days are read from the S3 archive. The list endpoint covers the last ${HOT_DAYS} days only.`,
     ...auth,
     request: {
       params: AccountIdParam,
@@ -452,7 +463,7 @@ auditRouter.openapi(
     },
   }),
   async (c: any) => {
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.AUDIT_READ);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
     if (denied) return denied;
@@ -489,7 +500,7 @@ auditRouter.openapi(
 
     await flushAuditEvents({ waitMs: AUDIT_READ_FLUSH_BARRIER_MS });
 
-    // Ascending, across the archive (weeks older than 90 days, S3) and PostgreSQL. A bucket that is
+    // Ascending, across the archive (weeks older than HOT_DAYS, S3) and PostgreSQL. A bucket that is
     // not configured means PostgreSQL only.
     const page = await readExportPage(
       { db, store: auditArchiveStore().configured ? auditArchiveStore() : null },
@@ -567,7 +578,7 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'post',
-    path: '/{accountId}/audit/reconcile',
+    path: '/{workspaceId}/audit/reconcile',
     tags: ['accounts'],
     summary: 'Reconcile durable source ledgers into the canonical audit log',
     ...auth,
@@ -579,7 +590,7 @@ auditRouter.openapi(
   }),
   async (c: any) => {
     const userId = c.get('userId') as string;
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
     if (denied) return denied;
@@ -630,7 +641,7 @@ function serializeWebhook(w: typeof auditWebhooks.$inferSelect, includeSecret = 
 auditRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/audit/webhooks',
+    path: '/{workspaceId}/audit/webhooks',
     tags: ['accounts'],
     summary: 'List audit webhooks',
     ...auth,
@@ -641,7 +652,7 @@ auditRouter.openapi(
     },
   }),
   async (c: any) => {
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     // No entitlement gate on listing: a downgraded admin must be able to see
     // leftover webhooks to delete them. Creation/update stay gated below.
@@ -658,7 +669,7 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'post',
-    path: '/{accountId}/audit/webhooks',
+    path: '/{workspaceId}/audit/webhooks',
     tags: ['accounts'],
     summary: 'Create an audit webhook',
     ...auth,
@@ -674,7 +685,7 @@ auditRouter.openapi(
   }),
   async (c: any) => {
     const userId = c.get('userId') as string;
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
     if (denied) return denied;
@@ -730,16 +741,12 @@ auditRouter.openapi(
       .returning();
 
     // Audit the webhook config itself — meta-auditing.
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.create',
       resourceType: 'audit_webhook',
       resourceId: row.webhookId,
       after: { name: row.name, url: row.url, action_prefix: row.actionPrefix },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     // Fire a one-shot test delivery so a mistyped/unreachable URL surfaces at
@@ -758,12 +765,12 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'patch',
-    path: '/{accountId}/audit/webhooks/{webhookId}',
+    path: '/{workspaceId}/audit/webhooks/{webhookId}',
     tags: ['accounts'],
     summary: 'Update an audit webhook',
     ...auth,
     request: {
-      params: z.object({ accountId: z.string(), webhookId: z.string() }),
+      params: z.object({ workspaceId: z.string(), webhookId: z.string() }),
       body: { content: { 'application/json': { schema: AuditWebhookPatchSchema } } },
     },
     responses: {
@@ -773,7 +780,7 @@ auditRouter.openapi(
   }),
   async (c: any) => {
     const userId = c.get('userId') as string;
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     const webhookId = c.req.param('webhookId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     const denied = await requireEntitlement(c, accountId, 'auditAccess');
@@ -811,17 +818,13 @@ auditRouter.openapi(
       .where(eq(auditWebhooks.webhookId, webhookId))
       .returning();
 
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.update',
       resourceType: 'audit_webhook',
       resourceId: webhookId,
       before: { name: before.name, enabled: before.enabled, action_prefix: before.actionPrefix },
       after: { name: updated.name, enabled: updated.enabled, action_prefix: updated.actionPrefix },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     return c.json(serializeWebhook(updated));
@@ -831,12 +834,12 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/audit/webhooks/{webhookId}/deliveries',
+    path: '/{workspaceId}/audit/webhooks/{webhookId}/deliveries',
     tags: ['accounts'],
     summary: 'List durable audit webhook deliveries',
     ...auth,
     request: {
-      params: z.object({ accountId: z.string().uuid(), webhookId: z.string().uuid() }),
+      params: z.object({ workspaceId: z.string().uuid(), webhookId: z.string().uuid() }),
       query: z.object({ status: z.string().optional(), limit: z.string().optional() }),
     },
     responses: {
@@ -845,7 +848,7 @@ auditRouter.openapi(
     },
   }),
   async (c: any) => {
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     const webhookId = c.req.param('webhookId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     let limit: number;
@@ -894,13 +897,13 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'post',
-    path: '/{accountId}/audit/webhooks/{webhookId}/deliveries/{deliveryId}/replay',
+    path: '/{workspaceId}/audit/webhooks/{webhookId}/deliveries/{deliveryId}/replay',
     tags: ['accounts'],
     summary: 'Replay a durable audit webhook delivery',
     ...auth,
     request: {
       params: z.object({
-        accountId: z.string().uuid(),
+        workspaceId: z.string().uuid(),
         webhookId: z.string().uuid(),
         deliveryId: z.string().uuid(),
       }),
@@ -912,7 +915,7 @@ auditRouter.openapi(
   }),
   async (c: any) => {
     const userId = c.get('userId') as string;
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     const webhookId = c.req.param('webhookId');
     const deliveryId = c.req.param('deliveryId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
@@ -941,12 +944,12 @@ auditRouter.openapi(
 auditRouter.openapi(
   createRoute({
     method: 'delete',
-    path: '/{accountId}/audit/webhooks/{webhookId}',
+    path: '/{workspaceId}/audit/webhooks/{webhookId}',
     tags: ['accounts'],
     summary: 'Delete an audit webhook',
     ...auth,
     request: {
-      params: z.object({ accountId: z.string(), webhookId: z.string() }),
+      params: z.object({ workspaceId: z.string(), webhookId: z.string() }),
     },
     responses: {
       200: json(z.object({ deleted: z.boolean() }), 'Deleted'),
@@ -955,7 +958,7 @@ auditRouter.openapi(
   }),
   async (c: any) => {
     const userId = c.get('userId') as string;
-    const accountId = c.req.param('accountId');
+    const accountId = accountIdParam(c);
     const webhookId = c.req.param('webhookId');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     // No entitlement gate: deleting a webhook is cleanup, always allowed — and
@@ -968,16 +971,12 @@ auditRouter.openapi(
       .returning({ name: auditWebhooks.name, url: auditWebhooks.url });
     if (rows.length === 0) return c.json({ error: 'webhook not found' }, 404);
 
-    await recordAuditEvent({
+    await auditIam(c, {
       accountId,
-      actorUserId: userId,
       action: 'iam.audit.webhook.delete',
       resourceType: 'audit_webhook',
       resourceId: webhookId,
       before: { name: rows[0]!.name, url: rows[0]!.url },
-      ip:
-        requestClientIp(c),
-      userAgent: c.req.header('user-agent') || null,
     });
 
     return c.json({ deleted: true });

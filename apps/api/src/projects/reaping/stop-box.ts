@@ -2,7 +2,7 @@
  * Stopping ONE box, isolated from the pass that decides which boxes to stop.
  *
  * This file used to be `running-box.ts` and it used to make the decision too:
- * probe the box's own opencode daemon, treat 'busy' as a veto, arm an idle
+ * probe the box's own daemon, treat 'busy' as a veto, arm an idle
  * countdown in metadata, and fall back to an activity clock the box itself
  * stamped. All of that is gone. A wedged daemon answers 'busy' forever, so the
  * veto was unbounded and the countdown never once armed in production. The
@@ -24,7 +24,7 @@ import {
   claimExpiredSandboxStop,
   releaseSandboxStopClaim,
 } from './box-queries';
-import { isAlreadyNotRunning, isLifecycleTransitionInProgress } from './policy';
+import { isAlreadyNotRunning, isLifecycleTransitionInProgress, isPlatinumTransportTimeout } from './policy';
 import { applyStoppedState } from './sandbox-state-sync';
 
 export type StopBoxOutcome = 'stopped' | 'skipped' | 'errors';
@@ -99,12 +99,12 @@ function logAbortMiss(
 }
 
 /**
- * Best-effort: end the live opencode turn on a box BEFORE `provider.stop()`
- * powers it off.
+ * Best-effort: end the live turn on a box BEFORE `provider.stop()` powers it
+ * off.
  *
- * Without this, the VM powers off mid-turn and OpenCode's last assistant
- * message is left incomplete on disk — the orphan the daemon's boot
- * finalizer has to clean up later, and the historical cause of repeated
+ * Without this, the VM powers off mid-turn and the runtime's last assistant
+ * message is left incomplete on disk — the orphan a finalizer has to clean
+ * up later, and the historical cause of repeated
  * "Interrupted" turns. Closing the turn first removes that orphan class at
  * the source (T11).
  *
@@ -115,7 +115,7 @@ function logAbortMiss(
  * daemon directly server-to-server — `resolveServiceKey` +
  * `resolveSandboxIngress` (sandbox-proxy/backend.ts) and
  * `encodeKortixUserContext` (shared/kortix-user-context.ts), the same trio
- * `opencode-mapping.ts`'s `sandboxOpencodeEndpoint` and
+ * `runtime-session-mapping.ts`'s `sandboxRuntimeEndpoint` and
  * `sandbox-proxy/backend.ts`'s `buildSandboxUpstreamHeaders` compose — not a
  * new client.
  *
@@ -281,6 +281,16 @@ export async function stopExpiredBox(
     if (isProviderName(row.provider)) await getProvider(row.provider).stop(row.externalId);
   } catch (err) {
     if (isLifecycleTransitionInProgress(err)) {
+      await releaseSandboxStopClaim(row.sandboxId, claimToken);
+      return 'skipped';
+    }
+    if (isPlatinumTransportTimeout(err)) {
+      // The stop POST's answer never arrived, so the stop may already have run;
+      // nothing is confirmed either way. Release the claim and let the next
+      // pass's getStatus reconcile the real state — the same "no answer this
+      // pass" handling as a transition in progress. An error line here repeats
+      // once per box per pass for as long as the provider stays slow
+      // (KRTX-4687).
       await releaseSandboxStopClaim(row.sandboxId, claimToken);
       return 'skipped';
     }

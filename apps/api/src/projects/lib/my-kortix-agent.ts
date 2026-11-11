@@ -100,7 +100,7 @@ export function builtinAgentConfigView(key: BuiltinAgentKey, defaultAgent: strin
 /** The refusal for a write that targets a built-in agent's configuration. */
 export function builtinAgentWriteRefusal(key: BuiltinAgentKey) {
   return {
-    error: `${BUILTIN_AGENTS[key].displayName} is built in: Kortix maintains its prompt, tools and model. To remove it from this project, delete \`builtin_agents.${key}\` from kortix.yaml or set it to false.`,
+    error: `${BUILTIN_AGENTS[key].displayName} is built in: Kortix maintains its prompt, tools and model. To remove it from this workspace, delete \`builtin_agents.${key}\` from kortix.yaml or set it to false.`,
     code: 'builtin_agent_managed' as const,
   };
 }
@@ -114,7 +114,6 @@ export function addMyKortixAgent(config: ProjectConfigSummary): ProjectConfigSum
   return {
     ...config,
     default_agent: defaultAgent,
-    open_code_default_agent: defaultAgent,
     agents: [
       {
         name: MY_KORTIX_AGENT_NAME,
@@ -122,13 +121,15 @@ export function addMyKortixAgent(config: ProjectConfigSummary): ProjectConfigSum
         path: '',
         description: MY_KORTIX_DESCRIPTION,
         mode: 'primary',
-        source: 'opencode',
+        // Turned on by `builtin_agents.my_kortix` in kortix.yaml.
+        source: 'kortix.yaml',
         platform: true,
         enabled: true,
         sandbox: MY_KORTIX_SANDBOX_SLUG,
+        // The person's own reach caps each (`myKortixAgentGrant`).
         scope: {
-          env: [],
-          connectors: [],
+          env: 'all',
+          connectors: 'all',
           kortix_permissions: 'all',
           // Deprecated wire alias of kortix_permissions (pre-rename clients).
           kortix_cli: 'all',
@@ -162,18 +163,19 @@ export function buildMyKortixConfig(): string {
 }
 
 /**
- * The platform coordinator can manage every surface inside its bound project.
- *
- * The project-bound PAT and the launching user's IAM role remain the outer
- * authorization boundaries. Project secrets and connectors stay unavailable
- * because the coordinator delegates project work to specialized sessions.
+ * My Kortix acts for its person with exactly their rights (AGENT = HUMAN,
+ * 2026-11-10): every permission, every connector and every secret, each capped
+ * by the person. The launching user's IAM role caps the permissions; the
+ * person's reach caps the accounts (their private ones, and shared ones whose
+ * audience holds them) and the secret values. It calls Slack or Gmail itself:
+ * no colleague is needed to post or edit a message.
  */
 export function myKortixAgentGrant(): AgentGrant {
   return {
     agent: MY_KORTIX_AGENT_NAME,
     permissions: 'all',
-    connectors: [],
-    env: [],
+    connectors: 'all',
+    env: 'all',
   };
 }
 

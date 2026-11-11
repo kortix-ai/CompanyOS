@@ -62,6 +62,34 @@ export const KORTIX_USER_PATH_DIRS =
   '/home/kortix/.local/bin:/home/kortix/.local/share/pnpm/bin:/home/kortix/.bun/bin';
 
 /**
+ * The uid of the `kortix` runtime user in every image whose base leaves it
+ * free. Boxes share Drive folders: the person's own folder mounts read-write
+ * into every session and into My Kortix, and the drive-owner helper in
+ * apps/sandbox/entrypoint.sh hands drive entries to the runtime user. Two
+ * images with two different `kortix` uids re-owned the same shared files back
+ * and forth, and every flip was a new version of every file in storage.
+ */
+export const KORTIX_RUNTIME_UID = 1000;
+
+/**
+ * Create the `kortix` runtime user at uid {@link KORTIX_RUNTIME_UID}.
+ *
+ * ubuntu:24.04 ships a stock `ubuntu` user at uid/gid 1000 that nothing uses,
+ * so `useradd` with no uid made `kortix` 1001 there. The stock user and its
+ * group are removed first; on a base without them both checks are no-ops. A
+ * custom template whose own Dockerfile already put another user at uid 1000
+ * keeps that user, and `kortix` takes the next free uid as before (the
+ * drive-owner helper never re-owns a shared file away from uid 1000, so such a
+ * box cannot start a fight). One line, no heredoc and no backslash: E2B's
+ * Dockerfile parser keeps it intact. apps/sandbox/Dockerfile carries it
+ * verbatim; `__tests__/defaults.test.ts` fails when the two differ.
+ */
+export const SANDBOX_RUNTIME_USER_COMMAND =
+  `if [ "$(getent passwd ${KORTIX_RUNTIME_UID} | cut -d: -f1)" = ubuntu ]; then userdel --remove ubuntu; fi` +
+  ` && if [ "$(getent group ${KORTIX_RUNTIME_UID} | cut -d: -f1)" = ubuntu ]; then groupdel ubuntu; fi` +
+  ` && useradd $(getent passwd ${KORTIX_RUNTIME_UID} >/dev/null || echo --uid ${KORTIX_RUNTIME_UID}) --create-home --shell /bin/bash --user-group kortix`;
+
+/**
  * Live project secrets on tmpfs. The kortix-agent daemon writes this file
  * (apps/kortix-sandbox-agent-server/src/harness/shared/agent-env-file.ts `AGENT_ENV_SH`).
  */
@@ -214,7 +242,7 @@ export function kortixDefaultsSetup(): string {
     '    && rm -rf /var/lib/apt/lists/* \\',
     `    && ${SANDBOX_SHELL_TOOL_LINK_COMMAND}`,
     '',
-    'RUN useradd --create-home --shell /bin/bash --user-group kortix \\',
+    `RUN ${SANDBOX_RUNTIME_USER_COMMAND} \\`,
     // E2B's Dockerfile parser removes the backslash from a quoted `\\n`.
     // Use echo so every provider writes the same valid sudoers line.
     "    && echo 'kortix ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/kortix \\",
@@ -385,9 +413,9 @@ export function kortixDefaultsTail(opts: KortixArtifactLayerOpts): string {
     // that tooling's build-cache key. See kortixShellProfileScript.
     kortixShellProfileRun(),
     '',
-    // The daemon clones the project workspace at boot using KORTIX_PROJECT_AUTO_CLONE
-    // — nothing project-specific is baked into the image. /workspace is created
-    // empty here; the daemon's materializeRepo path fills it.
+    // Nothing project-specific is baked into the image, and the daemon never
+    // clones the project at boot: /workspace is created empty here and stays
+    // empty until an agent runs `kortix workspaces clone`.
     'ENV KORTIX_WORKSPACE=/workspace',
     'USER kortix',
     ...piSystemPackageWarmLines(PI_SYSTEM_PACKAGES),

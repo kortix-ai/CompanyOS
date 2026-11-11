@@ -25,8 +25,9 @@ import { join } from 'node:path';
  * from apps/api/.env so secrets never go through the shell).
  */
 import { runner } from 'node-pg-migrate';
-import pg from 'pg';
+import { ledgerExists } from '../src/ledger-exists';
 import { requiresTls } from '../src/tls';
+import { withClient } from '../src/with-client';
 import { repairLocalAuditV2Ledger } from './local-audit-v2-ledger-repair';
 import { repairEarlyAppliedMigrations } from './early-applied-migration-repair';
 import { dropLocalInvalidIndexes } from './local-invalid-index-repair';
@@ -105,18 +106,13 @@ const fmtUrl = (u: string) => {
  * fake records the baseline, this never fires again.
  */
 async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: string): Promise<void> {
-  const client = new pg.Client({ connectionString: databaseUrl });
-  await client.connect();
-  try {
+  await withClient(databaseUrl, async (client) => {
     const { rows: [schema] } = await client.query<{ exists: boolean }>(
       "select to_regclass('kortix.accounts') is not null as exists",
     );
     if (!schema?.exists) return; // fresh DB → let `up` run the baseline for real
 
-    const { rows: [tbl] } = await client.query<{ exists: boolean }>(
-      "select to_regclass('kortix_migrations.pgmigrations') is not null as exists",
-    );
-    if (tbl?.exists) {
+    if (await ledgerExists(client)) {
       const { rows: [{ n }] } = await client.query<{ n: number }>(
         'select count(*)::int as n from kortix_migrations.pgmigrations',
       );
@@ -125,9 +121,7 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
 
     console.log('[migrate] existing managed schema with an empty migration ledger → faking the baseline (mark-applied, not run).');
     await runner({ ...(base as any), direction: 'up', count: 1, fake: true });
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 /**
@@ -139,8 +133,12 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
  * `relation "basejump.account_user" does not exist`.
  *
  * Deployed cloud/dev databases already have these objects (provided by the
- * platform / historical migrations now archived), so this is gated on basejump
- * being ABSENT — it is a no-op on every provisioned DB and idempotent on re-run.
+ * platform / historical migrations now archived), so this is gated on a FRESH
+ * database: basejump ABSENT and the managed schema (`kortix.accounts`) ABSENT.
+ * It is a no-op on every provisioned DB and idempotent on re-run. The second
+ * check matters once the legacy schemas are dropped
+ * (packages/db/migrations-pending/drop_legacy_suna_schemas.sql.pending): a
+ * migrated database without basejump must not get the bootstrap again.
  *
  * Sequencing: the bootstrap installs a trigger ON auth.users (welcome email),
  * so it must run AFTER Supabase Auth (GoTrue) has created the auth schema. We
@@ -148,9 +146,7 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
  * express "GoTrue has finished its own migrations".
  */
 async function selfHostBootstrapIfFresh(databaseUrl: string): Promise<void> {
-  const client = new pg.Client({ connectionString: databaseUrl });
-  await client.connect();
-  try {
+  await withClient(databaseUrl, async (client) => {
     const deadline = Date.now() + 120_000;
     for (;;) {
       const { rows: [r] } = await client.query<{ ok: boolean }>(
@@ -163,11 +159,11 @@ async function selfHostBootstrapIfFresh(databaseUrl: string): Promise<void> {
       await new Promise((res) => setTimeout(res, 2000));
     }
 
-    const { rows: [bj] } = await client.query<{ ok: boolean }>(
-      "select to_regclass('basejump.account_user') is not null as ok",
+    const { rows: [present] } = await client.query<{ basejump: boolean; managed: boolean }>(
+      "select to_regclass('basejump.account_user') is not null as basejump, to_regclass('kortix.accounts') is not null as managed",
     );
-    if (bj?.ok) {
-      console.log('[migrate] basejump prerequisites already present — skipping bootstrap.');
+    if (present?.basejump || present?.managed) {
+      console.log('[migrate] prerequisites already present (basejump stub or managed schema) — skipping bootstrap.');
       return;
     }
 
@@ -204,9 +200,7 @@ async function selfHostBootstrapIfFresh(databaseUrl: string): Promise<void> {
       }
     }
     console.log(`[migrate] bootstrap complete (${applied} statements applied, ${skippedStorage} storage statements skipped).`);
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 async function main() {

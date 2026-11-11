@@ -1,18 +1,23 @@
 import {
+  readRequestOrigin,
   gatewayErrorResponse, gatewayOverloadedResponse, readAdmittedBody, readAdmittedBytes,
   releaseWhenResponseEnds, requestTooLargeResponse, type InflightBudget,
 } from '@kortix/llm-gateway';
-import type { AudioRequest, ClaudeCodeRequest, VoicesRequest } from '@kortix/llm-gateway';
+import { createIdempotencyReplay, type ReplayRequest } from './idempotency';
+import type { AudioRequest, ClaudeCodeRequest, RequestOrigin, VoicesRequest } from '@kortix/llm-gateway';
 import type { Hono } from 'hono';
-import { cloudflareSafe, messagesAuthorization, perRequestCapBytes } from './server';
+import { type GatewayApp, cloudflareSafe, messagesAuthorization, perRequestCapBytes } from './server';
 
-type Protocol = 'chat' | 'messages' | 'responses' | 'images' | 'audio';
-type InferenceRequest = { authorization: string | undefined; rawBody: string; signal?: AbortSignal };
+// The image operations are distinct replay scopes (`images:generations` vs
+// `images:edits`): a body with prompt + images[] is valid on both ingresses
+// — generations ignores images[] — so the protocol tag must separate them.
+type Protocol = 'chat' | 'messages' | 'responses' | 'audio' | `images:${'generations' | 'edits'}`;
+type InferenceRequest = { authorization: string | undefined; rawBody: string; signal?: AbortSignal; origin?: RequestOrigin };
 type Gateway = {
   chatCompletions: (request: InferenceRequest) => Promise<Response>;
   messages: (request: InferenceRequest) => Promise<Response>;
   responses: (request: InferenceRequest) => Promise<Response>;
-  listModels: (authorization: string | undefined, options: { managedOnly: boolean; scope?: 'picker' }) => Promise<Response>;
+  listModels: (authorization: string | undefined, options: { managedOnly: boolean; scope?: 'picker' }, openAiList: boolean) => Promise<Response>;
   images: (request: InferenceRequest & { operation: 'generations' | 'edits' }) => Promise<Response>;
   audio: (request: AudioRequest) => Promise<Response>;
   voices: (request: VoicesRequest) => Promise<Response>;
@@ -35,6 +40,7 @@ function inference(
   inflight: InflightBudget,
   recordOutcome: (status: number) => void,
   protocol: Protocol,
+  replay: ReturnType<typeof createIdempotencyReplay>,
   call: (request: InferenceRequest) => Promise<Response>,
 ) {
   return async (c: { req: { raw: Request; header: (name: string) => string | undefined } }) => {
@@ -67,9 +73,15 @@ function inference(
           // disconnected client left the provider generating, and billing, a
           // turn nobody would read.
           rawBody: body.body, signal: c.req.raw?.signal,
+          // The session message the call comes from, for the request log.
+          origin: readRequestOrigin((name) => c.req.header(name)),
         };
         body.body = '';
-        const res = await cloudflareSafe(await call(request));
+        const res = await cloudflareSafe(
+          // A retried request that carries a client `Idempotency-Key` is served
+          // the first 2xx answer instead of executing and metering again.
+          await replay(protocol, c.req.header('idempotency-key'), request, call),
+        );
         recordOutcome(res.status);
         return releaseWhenResponseEnds(res, body.release);
       } catch (error) {
@@ -169,35 +181,44 @@ function claudeCode(gateway: Gateway, inflight: InflightBudget, recordOutcome: (
  * Responses shape (Codex CLI >=0.157 speaks only `wire_api = "responses"`).
  * Both translate at the edges only: auth, grants, routing, dispatch, metering
  * and audit run through the same pipeline as chat completions.
- * `models?scope=managed` → managed lineup only (~3KB); `?scope=picker` → the
+ * `models` → the OpenAI `{object:'list',data}` of the models the key can call;
+ * `?scope=managed` → managed lineup only (~3KB); `?scope=picker` → the
  * project's servable set (~80KB), fetched by sandboxes on every boot so their
- * `kortix` provider matches the web picker. See wire.ts.
+ * `kortix` provider matches the web picker; `?scope=all` → the full discovery
+ * catalog. See wire.ts.
  * `audio/transcriptions` (multipart), `audio/speech` (streamed audio) and
  * `audio/voices?model=` are the OpenAI audio shapes, served by Kortix's
  * managed audio models and billed at the price the upstream reports.
  */
 export function registerRoutes(
-  app: Hono,
+  app: GatewayApp,
   gateway: Gateway,
   inflight: InflightBudget,
   recordOutcome: (status: number) => void,
-  rateLimit: (request: Request, headers?: Headers) => Response | null,
+  rateLimit: (request: Request, headers?: Headers, source?: string | null) => Response | null,
+  reauthorize?: (request: ReplayRequest) => Promise<boolean>,
 ) {
   // Every model route checks the per-credential limit first (token-rate-limit.ts).
-  const limited = <C extends { req: { raw: Request } }>(handler: (c: C) => Promise<Response>) =>
+  const limited = <C extends { req: { raw: Request }; env?: { clientIp?: string | null } }>(
+    handler: (c: C) => Promise<Response>,
+  ) =>
     async (c: C) => {
       const headers = new Headers();
-      const response = rateLimit(c.req.raw, headers) ?? await handler(c);
+      const response = rateLimit(c.req.raw, headers, c.env?.clientIp ?? null) ?? (await handler(c));
       headers.forEach((value, name) => response.headers.set(name, value));
       return response;
     };
-  const chat = limited(inference(inflight, recordOutcome, 'chat', gateway.chatCompletions));
-  const messages = limited(inference(inflight, recordOutcome, 'messages', gateway.messages));
-  const responses = limited(inference(inflight, recordOutcome, 'responses', gateway.responses));
+  // One replay cache per server: the entries are per credential + key + body,
+  // so tests get an isolated cache per buildServer(). Every hit re-validates
+  // the credential through the host's reauthorize (a replay is a request).
+  const replay = createIdempotencyReplay(undefined, reauthorize ? { reauthorize } : undefined);
+  const chat = limited(inference(inflight, recordOutcome, 'chat', replay, gateway.chatCompletions));
+  const messages = limited(inference(inflight, recordOutcome, 'messages', replay, gateway.messages));
+  const responses = limited(inference(inflight, recordOutcome, 'responses', replay, gateway.responses));
   // The project's ChatGPT login generates and edits images (pipeline/images.ts).
   // A thrown error gets the Responses-style 503 envelope.
   const images = (operation: 'generations' | 'edits') =>
-    limited(inference(inflight, recordOutcome, 'images', (request) => gateway.images({ ...request, operation })));
+    limited(inference(inflight, recordOutcome, `images:${operation}`, replay, (request) => gateway.images({ ...request, operation })));
   const generations = images('generations');
   const edits = images('edits');
   const transcriptions = limited(audio(gateway, inflight, recordOutcome, 'transcriptions'));
@@ -206,11 +227,17 @@ export function registerRoutes(
     gateway.voices({ authorization: c.req.header('authorization'), model: c.req.query('model') ?? '', signal: c.req.raw.signal })
       .then(cloudflareSafe));
   const claude = limited(claudeCode(gateway, inflight, recordOutcome));
-  const models = limited((c: { req: { raw: Request; header: (name: string) => string | undefined; query: (name: string) => string | undefined } }) =>
-    gateway.listModels(c.req.header('authorization'), {
-      managedOnly: c.req.query('scope') === 'managed',
-      scope: c.req.query('scope') === 'picker' ? 'picker' : undefined,
-    }).then(cloudflareSafe));
+  // Unscoped (or an unknown scope) is the OpenAI `GET /models` a client picks
+  // its model from, so it lists only what this key can call (KRTX-4427).
+  // `all` is the full discovery catalog; `picker` and `managed` stay maps.
+  const models = limited((c: { req: { raw: Request; header: (name: string) => string | undefined; query: (name: string) => string | undefined } }) => {
+    const scope = c.req.query('scope');
+    const openAiList = scope !== 'managed' && scope !== 'picker' && scope !== 'all';
+    return gateway.listModels(c.req.header('authorization'), {
+      managedOnly: scope === 'managed',
+      scope: scope === 'picker' || openAiList ? 'picker' : undefined,
+    }, openAiList).then(cloudflareSafe);
+  });
   for (const prefix of ['/', '/v1/', '/v1/llm/', '/v1/openai/']) {
     app.all(prefix + 'claude-code/*', claude);
     app.post(prefix + 'chat/completions', chat);

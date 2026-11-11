@@ -195,9 +195,9 @@ describe('stableStringify — the dirty check', () => {
     );
   });
 
-  test('disabled repository access remains distinct from an omitted or enabled policy', () => {
-    expect(stableStringify({ repository_access: false })).not.toBe(stableStringify({}));
-    expect(stableStringify({ repository_access: false })).not.toBe(stableStringify({ repository_access: true }));
+  test('an explicit false remains distinct from an omitted or true value', () => {
+    expect(stableStringify({ enabled: false })).not.toBe(stableStringify({}));
+    expect(stableStringify({ enabled: false })).not.toBe(stableStringify({ enabled: true }));
   });
 
   test('an undefined value reads the same as an absent key', () => {
@@ -233,12 +233,10 @@ describe('mode pickers use the shared component library', () => {
     expect(primitivesSource).not.toContain('FieldRow');
   });
 
-  test('Tabs stay scoped to grants; repository access uses a Switch and enums use Select', () => {
+  test('Tabs stay scoped to grants and enums use Select', () => {
     for (const source of sectionSources) {
       expect(source).not.toContain('@/components/ui/tabs');
-      expect(source).toContain(source === accessFieldsSource
-        ? "from '../../../primitives/switch'"
-        : "from '../../../primitives/select'");
+      if (source !== accessFieldsSource) expect(source).toContain("from '../../../primitives/select'");
     }
   });
 
@@ -283,21 +281,15 @@ describe('display-name maps — Select renders the value verbatim', () => {
 describe('KORTIX_PERMISSIONS_CATALOG — grantable action mirror', () => {
   const all = KORTIX_PERMISSIONS_CATALOG.flatMap((g) => g.actions);
 
-  test('only project-scoped actions appear (account-scoped admin never grantable)', () => {
-    for (const a of all) {
-      expect(a.startsWith('project.')).toBe(true);
-    }
-    expect(all).not.toContain('billing.read');
-    expect(all).not.toContain('member.invite');
-    expect(all).not.toContain('project.create');
-  });
-
-  // The three manager-tier project leaves are grantable again — reachable via
-  // a project's `manager` role, so an agent can carry them too.
-  test('the three manager-tier project leaves are present', () => {
-    expect(all).toContain('project.delete');
+  // Workspace administration is grantable (design.md §3.2 K1); HUMAN_ONLY
+  // actions (delete the workspace, mint credentials or gateway keys) never are.
+  test('workspace administration is offered; HUMAN_ONLY actions are not', () => {
+    expect(all).toContain('member.invite');
+    expect(all).toContain('billing.read');
     expect(all).toContain('project.members.manage');
-    expect(all).toContain('project.gateway.keys.manage');
+    expect(all).not.toContain('project.delete');
+    expect(all).not.toContain('project.credentials.issue');
+    expect(all).not.toContain('project.gateway.keys.manage');
   });
 
   test('full-array equality against the real GRANTABLE_KORTIX_PERMISSIONS (order-independent)', () => {

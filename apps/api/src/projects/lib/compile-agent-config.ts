@@ -22,6 +22,7 @@ import {
   manifestCandidatePaths,
   HARNESS_TOOL_NAMES,
   safeToolFile,
+  splitFrontmatter,
   TOOL_NAME_RE,
   usableManifest,
   validateManifest,
@@ -31,9 +32,11 @@ import {
   type ExtensionV3,
   KORTIX_SKILL_NAMES,
   type ManifestV3,
-  OPENCODE_BUILTIN_AGENTS_V3,
+  RUNTIME_BUILTIN_AGENTS,
   excludedNamesV3,
   grantedNamesV3,
+  isEveryGrant,
+  normalizePermissionConfig,
   type ManifestIssue,
   parseManifestText,
   type PermissionActionV2,
@@ -86,7 +89,7 @@ const BEHAVIOR_KEYS = ['description', 'mode', 'model', 'variant', 'temperature',
 /** The agent-config editor's wire schema for the `behavior` half of a PUT
  *  body: the behavior keys of an `agents.<name>` block, typed for their real
  *  shapes, plus `prompt` (the prompt text). */
-export const OpencodeAgentConfigSchema = z
+export const AgentBehaviorConfigSchema = z
   .object({
     description: z.string().max(2000).optional(),
     mode: z.enum(['primary', 'subagent', 'all']).optional(),
@@ -152,10 +155,13 @@ function projectTools(tools: unknown): Record<string, string> {
 
 /** `agents.<name>.tools` as the map a harness reads (`CompiledAgent.tools`): tool name → visible, `*` for every tool not named. Undefined: every tool. */
 function agentToolsMap(value: AgentToolsV3 | undefined): Record<string, boolean> | undefined {
-  if (value === undefined || value === 'all') return undefined;
+  // `"*"`, `all` and a list that holds `"*"`: every tool.
+  if (value === undefined || isEveryGrant(value)) return undefined;
   if (value === 'none') return { '*': false };
-  if (Array.isArray(value)) return value.includes('*') ? undefined : Object.fromEntries([['*', false], ...value.map((name) => [name, true])]);
-  return Object.fromEntries(value.exclude.map((name) => [name, false]));
+  if (Array.isArray(value)) return Object.fromEntries([['*', false], ...value.map((name) => [name, true])]);
+  const excluded = excludedNamesV3(value);
+  // A shape `validateManifest` rejects (the agent is then off) never throws here.
+  return excluded ? Object.fromEntries(excluded.map((name) => [name, false])) : { '*': false };
 }
 
 /** Every action of a rule is `deny`: the tool is off, not just filtered by pattern. */
@@ -313,7 +319,7 @@ function compileManifest(
     throw new CompileAgentConfigError(`Agent "${selected}" is off. ${manifestIssueSummary(issues.filter((i) => i.severity === 'error' && !i.unknownKey && i.path.startsWith(`agents.${selected}.`)))}`, selected);
   }
   // Only declared agents run: OpenCode's own build/plan/general/explore are off.
-  for (const builtin of OPENCODE_BUILTIN_AGENTS_V3) {
+  for (const builtin of RUNTIME_BUILTIN_AGENTS) {
     if (!blocks[builtin]) agent[builtin] = { disable: true };
   }
 
@@ -331,7 +337,13 @@ function compileManifest(
   }
 
   const used = new Set(names.flatMap((name) => agent[name]!.extensions ?? []));
-  const compiledExtensions = Object.fromEntries(Object.entries(extensions).filter(([name]) => used.has(name)));
+  // Only pi's implementation compiles: kortix.yaml still accepts an extension's
+  // `opencode` module with a deprecation warning, and no session loads it.
+  const compiledExtensions = Object.fromEntries(
+    Object.entries(extensions)
+      .filter(([name]) => used.has(name))
+      .map(([name, entry]) => [name, entry.pi === undefined ? {} : { pi: entry.pi }]),
+  );
   const tools = projectTools(m.tools);
 
   const primary = selected ?? (typeof m.default_agent === 'string' ? m.default_agent : undefined);
@@ -371,13 +383,17 @@ function compileAgent(
   else if (block.prompt_file !== undefined) {
     const prompt = promptText(files, block.prompt_file, `agents.${name}.prompt_file`, issues);
     if (prompt === null) return { disable: true };
-    out.prompt = prompt;
+    // An agent file another tool reads too (`.claude/agents/<name>.md`) opens
+    // with that tool's frontmatter: its settings, not prompt text. kortix.yaml
+    // holds the agent's settings, so the prompt is the body.
+    out.prompt = splitFrontmatter(prompt).body;
   }
   const tools = agentToolsMap(block.tools);
   if (tools) out.tools = tools;
 
   // Omitted permission is `allow`: a tool never waits for an answer unless the agent says `ask`.
-  let permission = withPermissionRule(block.permission ?? 'allow', 'skill', skillsRule(block.skills, universe.skills));
+  // `"*"` and `all` as an action are `allow`: the harness sees only allow, ask and deny.
+  let permission = withPermissionRule(normalizePermissionConfig(block.permission) ?? 'allow', 'skill', skillsRule(block.skills, universe.skills));
   permission = withPermissionRule(permission, 'task', allowlistRule(grantedNames(block.subagents, universe.subagents)));
   out.permission = orderPermissionRules(denyToolsBehindDeniedPermission(permission));
 
@@ -446,6 +462,41 @@ export function manifestPiContext(raw: unknown, agentName?: string | null): 'rec
 export function manifestPiCodemode(raw: unknown, agentName?: string | null): 'off' | 'on' | 'only' | null {
   if (!raw || typeof raw !== 'object') return null;
   return manifestAgentBlock(raw as Record<string, unknown>, agentName)?.codemode ?? null;
+}
+
+/** What an agent's `workspace` asks the box to prepare after it starts: explicit clones and setup commands. */
+export interface SessionWorkspaceSetup {
+  repos: Array<{ path: string; sparse?: string[] }>;
+  /** Every step as `{ run, cwd? }`; a plain string step becomes `{ run }`. */
+  setup: Array<{ run: string; cwd?: string }>;
+}
+
+/**
+ * The session agent's `workspace: { repos, setup }`, normalized (a repo's path defaults to
+ * `/workspace`). Null when it declares neither: nothing is cloned and nothing runs. The
+ * validator already refused a bad shape; anything it let through that is not a string is
+ * dropped here rather than sent to the box.
+ */
+export function manifestWorkspaceSetup(raw: unknown, agentName?: string | null): SessionWorkspaceSetup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const workspace = (manifestAgentBlock(raw as Record<string, unknown>, agentName) as { workspace?: unknown } | undefined)?.workspace;
+  if (!workspace || typeof workspace !== 'object' || Array.isArray(workspace)) return null;
+  const { repos, setup } = workspace as { repos?: unknown; setup?: unknown };
+  const normalizedRepos = (Array.isArray(repos) ? repos : []).flatMap((repo) => {
+    if (!repo || typeof repo !== 'object') return [];
+    const { path, sparse } = repo as { path?: unknown; sparse?: unknown };
+    const at = (typeof path === 'string' && path.trim() ? path.trim().replace(/\/+$/, '') : '') || '/workspace';
+    const dirs = Array.isArray(sparse) ? sparse.filter((dir): dir is string => typeof dir === 'string' && dir.trim() !== '') : [];
+    return [{ path: at, ...(dirs.length ? { sparse: dirs } : {}) }];
+  });
+  const commands = (Array.isArray(setup) ? setup : []).flatMap((step): Array<{ run: string; cwd?: string }> => {
+    if (typeof step === 'string') return step.trim() ? [{ run: step }] : [];
+    if (!step || typeof step !== 'object') return [];
+    const { run, cwd } = step as { run?: unknown; cwd?: unknown };
+    if (typeof run !== 'string' || !run.trim()) return [];
+    return [{ run, ...(typeof cwd === 'string' && cwd.trim() ? { cwd: cwd.trim() } : {}) }];
+  });
+  return normalizedRepos.length || commands.length ? { repos: normalizedRepos, setup: commands } : null;
 }
 
 /** Every distinct non-empty package list the manifest's agents resolve to: what a merge builds. */

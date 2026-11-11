@@ -5,7 +5,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
 /**
- * `/new` name field: the too-long message must be reachable for TYPED input.
+ * `/workspaces/new` name field: the too-long message must be reachable for TYPED input.
  *
  * The field used to carry `maxLength={120}`, so the browser silently truncated
  * typed and pasted names at 120 characters — the documented "Name must be 120
@@ -20,7 +20,7 @@ mock.module('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({}),
-  usePathname: () => '/new',
+  usePathname: () => '/workspaces/new',
 }));
 mock.module('@/features/providers/auth-provider', () => ({
   useAuth: () => ({
@@ -37,9 +37,18 @@ mock.module('@kortix/ui/internal/hooks/account/use-accounts-list', () => ({
     isLoading: false,
   }),
 }));
-mock.module('@kortix/ui/workspace/new/use-creatable-accounts', () => ({
-  useCreatableAccounts: (accounts: unknown[]) => accounts,
+// The owned empty account the create fills (`reusableEmptyAccount`).
+mock.module('@kortix/ui/workspace/sidebar/use-workspace-directory', () => ({
+  useWorkspaceDirectory: () => ({
+    accounts: [{ account_id: 'user-1', name: 'Personal', account_role: 'owner' }],
+    workspaces: [],
+    loading: false,
+    failedAccountIds: [],
+    reusableAccount: { account_id: 'user-1', name: 'Personal', account_role: 'owner' },
+    retryFailed: () => {},
+  }),
 }));
+mock.module('@kortix/ui/internal/hooks/admin/use-admin-role', () => ({ useAdminRole: () => ({ data: null }) }));
 // The quota pre-check is this file's sibling test's subject (`plan-cap.test.tsx`);
 // here it only has to stay out of the render — no data, no cap UI, no provider.
 mock.module('@kortix/ui/workspace/new/use-project-quota', () => ({
@@ -210,6 +219,51 @@ test('the limit counts trimmed characters: trailing spaces past 120 stay valid',
   const renderer = await renderPage();
   await type(renderer, `${'a'.repeat(115)}${' '.repeat(10)}`);
   expect(errorText(renderer)).toBeNull();
+  await unmount(renderer);
+});
+
+const CHARSET_MESSAGE = 'Use only letters, numbers, spaces, hyphens, underscores or dots';
+
+// KRTX-4627: `isSubmittable` refuses an illegal-character name the moment it is
+// typed, so Create disables live — and a disabled button can never fire the
+// submit that sets `touched`. An error that blocks submit live must therefore
+// report itself live, exactly like the too-long case above, or the customer is
+// stranded on a disabled button with no reason.
+test('typing an illegal character shows the charset message before the field is left', async () => {
+  const renderer = await renderPage();
+  await type(renderer, 'bad/name!');
+  expect(errorText(renderer)).toBe(CHARSET_MESSAGE);
+  await unmount(renderer);
+});
+
+test('an illegal-character name sets aria-invalid and aria-describedby', async () => {
+  const renderer = await renderPage();
+  await type(renderer, 'bad/name!');
+  const input = findInput(renderer);
+  expect(input.props['aria-invalid']).toBe(true);
+  expect(input.props['aria-describedby']).toBe('workspace-name-error');
+  await unmount(renderer);
+});
+
+test('an illegal-character name keeps Create disabled and fires no request', async () => {
+  const renderer = await renderPage();
+  await type(renderer, 'bad/name!');
+  expect(findSubmit(renderer).props.disabled).toBe(true);
+  await act(async () => {
+    findForm(renderer).props.onSubmit({ preventDefault: () => {} });
+  });
+  expect(creates).toBe(0);
+  await unmount(renderer);
+});
+
+test('a valid name after an illegal one clears the message and the aria flags', async () => {
+  const renderer = await renderPage();
+  await type(renderer, 'bad/name!');
+  expect(errorText(renderer)).toBe(CHARSET_MESSAGE);
+  await type(renderer, 'dogfood-name');
+  expect(errorText(renderer)).toBeNull();
+  expect(findInput(renderer).props['aria-invalid']).toBeUndefined();
+  expect(findInput(renderer).props['aria-describedby']).toBeUndefined();
   await unmount(renderer);
 });
 

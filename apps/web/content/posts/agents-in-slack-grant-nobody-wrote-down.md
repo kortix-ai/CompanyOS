@@ -25,7 +25,7 @@ Slack's docs do not pretend the second half is solved. Agents "are not inherentl
 
 ## Four moves to a bot in the channel
 
-How do I add an agent to Slack? In a Kortix project it takes four moves. Connect the workspace with `kortix channels connect` and open the link it prints. Invite the bot to a channel. Send `/kortix login` once, since a Slack message carries no Kortix credential. Mention the bot with the task ([channels docs](https://kortix.com/docs/connect/channels)).
+How do I add an agent to Slack? In a Kortix workspace it takes four moves. Connect the workspace with `kortix channels connect` and open the link it prints. Invite the bot to a channel. Send `/kortix login` once, since a Slack message carries no Kortix credential. Mention the bot with the task ([channels docs](https://kortix.com/docs/connect/channels)).
 
 ```bash
 kortix channels connect     # Slack; add --platform teams for Microsoft Teams
@@ -50,13 +50,11 @@ agents:
     secrets: all
     kortix_permissions: all
     skills: all
-    workspace: { project_repository: true }
 
   slack-desk:                 # the same project, scoped to one job
     file: agents/slack-desk.md
     connectors: [linear, github]
     skills: [triage]
-    workspace: { project_repository: true }
 ```
 
 The second block is the argument. `slack-desk` reaches two connectors and one skill, and holds no secrets and no project permissions, because those lines were deleted and deletion grants none. It can still answer where it was asked: the channel that started a session is always callable from it ([connectors](https://kortix.com/docs/connect/connectors)).

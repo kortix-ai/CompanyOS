@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  CAPTURE_FRAME_INTERVALS_MS,
   CAPTURE_LAYERS,
   CAPTURE_MAX_HEIGHTS,
   CAPTURE_RETENTION_LIMITS,
@@ -90,7 +89,7 @@ function Group({
 }
 
 /** A choice from a short list, or none (each computer decides), right-aligned like a switch. */
-function SelectRow<T extends number>({
+function SelectRow<T extends number | string>({
   title,
   description,
   value,
@@ -116,7 +115,9 @@ function SelectRow<T extends number>({
       </div>
       <Select
         value={value === null ? 'none' : String(value)}
-        onValueChange={(next) => onChange(next === 'none' ? null : (Number(next) as T))}
+        onValueChange={(next) =>
+          onChange(options.find((option) => String(option.value) === next)?.value ?? null)
+        }
       >
         <SelectTrigger size="sm" aria-labelledby={id} className="w-56 shrink-0">
           <SelectValue />
@@ -339,17 +340,6 @@ function PolicyForm({
       </section>
 
       <Group title={t('framesTitle')} description={t('framesHint')}>
-        <SelectRow
-          title={t('interval')}
-          description={t('intervalHint')}
-          value={draft.recording.interval_ms ?? null}
-          noneLabel={t('computerDecides')}
-          options={CAPTURE_FRAME_INTERVALS_MS.map((ms) => ({
-            value: ms,
-            label: t('intervalOption', { seconds: ms / 1000 }),
-          }))}
-          onChange={(interval_ms) => patch('recording', { interval_ms })}
-        />
         <SelectRow<CaptureMaxHeight>
           title={t('resolution')}
           description={t('resolutionHint')}
@@ -360,6 +350,17 @@ function PolicyForm({
             label: height === 2160 ? '4K' : `${height}p`,
           }))}
           onChange={(max_height) => patch('recording', { max_height })}
+        />
+        <SelectRow<'accurate' | 'fast' | 'off'>
+          title={t('textRecognition')}
+          description={t('textRecognitionHint')}
+          value={draft.recording.text_recognition ?? null}
+          noneLabel={t('computerDecides')}
+          options={(['accurate', 'fast', 'off'] as const).map((level) => ({
+            value: level,
+            label: t(`textRecognitionOption.${level}`),
+          }))}
+          onChange={(text_recognition) => patch('recording', { text_recognition })}
         />
       </Group>
 

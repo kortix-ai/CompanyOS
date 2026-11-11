@@ -10,8 +10,9 @@
 //   MAILTRAP_SIGNUPS_LIST_ID          — every signup
 //   MAILTRAP_BUSINESS_SIGNUPS_LIST_ID — signups on a work-email domain
 //
-// Fire-and-forget from bootstrapPersonalAccount: a failed sync must never
-// affect signup, so failures are logged and dropped after a few retries.
+// Fire-and-forget from createOwnedAccount (accounts/core/create-account.ts):
+// a failed sync must never affect account creation, so failures are logged
+// and dropped after a few retries.
 
 import { config } from '../config';
 import { classifyEmailKind } from './personal-email';
@@ -19,16 +20,16 @@ import { classifyEmailKind } from './personal-email';
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 2_000;
 
-export type ContactSyncResult =
+type ContactSyncResult =
   | { ok: true; kind: 'business' | 'personal'; alreadyExisted: boolean }
   | { ok: false; skipped: true; reason: 'not_configured' | 'invalid_email' }
   | { ok: false; skipped?: false; status?: number; error: string };
 
-export function isSignupContactSyncConfigured(): boolean {
+function isSignupContactSyncConfigured(): boolean {
   return !!(config.MAILTRAP_API_TOKEN && config.MAILTRAP_ACCOUNT_ID);
 }
 
-export interface ContactPlan {
+interface ContactPlan {
   kind: 'business' | 'personal';
   listIds: number[];
 }

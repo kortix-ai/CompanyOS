@@ -17,7 +17,7 @@ import {
 } from '../lib/project-resources';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import { accountMemberRow } from '../../iam/membership-read';
-import { accountGroupNamesAmong, accountGroupRow } from '../../iam/group-read';
+import { groupRow, groupRows } from '../../iam/group-read';
 import { createRoute, z } from '@hono/zod-openapi';
 import { loadProjectForUser, lookupEmailsByUserIds, parseExpiresAtBody, assertProjectCapability } from '../lib/access';
 import { projectsApp } from '../lib/app';
@@ -25,6 +25,7 @@ import { normalizeString } from '../lib/serializers';
 import { isUuid } from '../../shared/validate';
 import { readJsonObject } from '../../shared/http-body';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 /**
  * At most one forced mirror refresh per project per window. A miss is the only
@@ -59,15 +60,15 @@ export function registerResourceGrantsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/resource-grants',
+      path: '/{workspaceId}/resource-grants',
       tags: ['access'],
       summary: 'List resource grants of a project',
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(z.any(), 'Resource grants + grantable resources'), ...errors(404) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const started = performance.now();
       const stages: Record<string, number> = {};
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -161,8 +162,8 @@ export function registerResourceGrantsRoutes(): void {
         : new Map<string, string>();
       const groupNameById = new Map<string, string>();
       if (groupIds.length) {
-        const groupRows = await accountGroupNamesAmong(loaded.row.accountId, groupIds);
-        for (const g of groupRows) groupNameById.set(g.groupId, g.name);
+        const groupRowList = await groupRows({ accountId: loaded.row.accountId, groupIds });
+        for (const g of groupRowList) groupNameById.set(g.groupId, g.name);
       }
 
       const elapsed = Math.round(performance.now() - started);
@@ -208,12 +209,12 @@ export function registerResourceGrantsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/resource-grants',
+      path: '/{workspaceId}/resource-grants',
       tags: ['access'],
       summary: 'Grant a member or group access to a project resource',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             resource_type: z.enum(['agent']).openapi({ description: 'Only agent grants can be created.' }),
             resource_id: z.string().openapi({ description: 'Agent name.' }),
@@ -225,7 +226,7 @@ export function registerResourceGrantsRoutes(): void {
       responses: { 201: json(z.any(), 'The created grant'), ...errors(400, 404) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertProjectCapability(
@@ -266,7 +267,7 @@ export function registerResourceGrantsRoutes(): void {
         const [m] = await accountMemberRow(loaded.row.accountId, principalId);
         if (!m) return c.json({ error: 'member not found in this account' }, 404);
       } else {
-        const [g] = await accountGroupRow(loaded.row.accountId, principalId);
+        const [g] = await groupRow(loaded.row.accountId, principalId);
         if (!g) return c.json({ error: 'group not found in this account' }, 404);
       }
 
@@ -331,15 +332,15 @@ export function registerResourceGrantsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/resource-grants/{grantId}',
+      path: '/{workspaceId}/resource-grants/{grantId}',
       tags: ['access'],
       summary: 'Remove a resource grant',
       ...auth,
-      request: { params: z.object({ projectId: z.string(), grantId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), grantId: z.string() }) },
       responses: { 200: json(z.any(), 'OK'), ...errors(404) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const grantId = c.req.param('grantId');
       // grant_id is a uuid column — a malformed id is a clean 404 (same as missing),
       // not a 22P02 500.

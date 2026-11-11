@@ -6,6 +6,7 @@
  * lib/secret-write-input.ts.
  */
 import { randomUUID } from 'node:crypto';
+import { isMyKortixAgentName } from '@kortix/shared';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayUseEnv, getAgentGrant, isBorrowedSessionPrincipal, isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { auth, errors, json, lenientBody } from '../../openapi';
@@ -58,7 +59,7 @@ import {
   connectorSecretBindings,
   summarizeDeliverySync,
 } from '../lib/secret-writes';
-import { resolveSecretWriteInput } from '../lib/secret-write-input';
+import { SECRET_DELIVERY_NEEDS_PERSON, resolveSecretWriteInput } from '../lib/secret-write-input';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { loadConnectionSharing } from '../lib/connection-sharing';
 import {
@@ -72,6 +73,8 @@ import {
 import { registerSecretRateLimitRoutes } from './secret-rate-limit';
 import { registerSecretPersonalRoutes } from './secret-personal';
 import { registerSecretSyncRoutes } from './secret-sync';
+import { capturePersonEvent } from './product-events';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const SecretSharePrincipalSchema = z.object({
   /** `agent`: the id is the agent's service account (`/iam/agent-identities`). */
@@ -114,12 +117,12 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/secrets',
+      path: '/{workspaceId}/secrets',
       tags: ['secrets'],
       summary: 'List project secrets (names only, no values)',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(
@@ -144,7 +147,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const started = performance.now();
     const stages: Record<string, number> = {};
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -222,7 +225,8 @@ export function registerSecretsRoutes(): void {
       agentGrants,
     }))
       .filter((item) => !item.system)
-      .filter((item) => agentMayUseEnv(agentGrant, item.identifier));
+      // My Kortix holds every secret its person can use. This route never returns a value.
+      .filter((item) => agentMayUseEnv(agentGrant, item.identifier) || isMyKortixAgentName(agentGrant?.agent ?? ''));
 
     // Audience of each shared value, for the person and agent this read acts
     // for. A value
@@ -289,14 +293,14 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/secrets',
+      path: '/{workspaceId}/secrets',
       tags: ['secrets'],
       summary: 'Set a project secret',
       description:
         'Create or update a project secret by `name` (upper-cased; A-Z, 0-9, _; max 64; KORTIX_* is reserved). The value is write-only: responses never echo it.',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: {
             content: {
               'application/json': {
@@ -329,7 +333,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -341,12 +345,6 @@ export function registerSecretsRoutes(): void {
       resolved.input;
     const sharedWith = parseSecretSharedWith(body.shared_with);
     if (!sharedWith.ok) return c.json({ error: sharedWith.error }, 400);
-    if (sharedWith.value && isBorrowedSessionPrincipal(c)) {
-      return c.json(
-        { error: 'An agent cannot change who can use a secret. A person changes it in Customize → Secrets.' },
-        403,
-      );
-    }
 
     // The one ladder check that needs the database: a policy that parses and
     // passes the boundary rules can still claim a (host, header) destination
@@ -536,6 +534,22 @@ export function registerSecretsRoutes(): void {
       });
     }
 
+    // New secrets only, and only their kind: never the name or the value.
+    if (value !== null && !existing) {
+      const providerKey = isGatewayManagedEnv(name);
+      capturePersonEvent(c, loaded, projectId, 'secret_created', {
+        name_kind: providerKey ? 'provider' : 'other',
+        strategy: explicitStrategy ?? 'runtime',
+      });
+      if (providerKey) {
+        // A gateway-managed env var is one of our provider keys (ANTHROPIC_API_KEY → anthropic).
+        capturePersonEvent(c, loaded, projectId, 'provider_configured', {
+          provider: name.replace(/_(API_KEY|KEY|TOKEN)$/, '').toLowerCase(),
+          method: 'api_key',
+        });
+      }
+    }
+
     const views = await loadSecretViewsForUser({
       projectId,
       userId: loaded.userId,
@@ -556,12 +570,12 @@ export function registerSecretsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/secrets/{name}',
+      path: '/{workspaceId}/secrets/{name}',
       tags: ['secrets'],
       summary: 'Delete a project secret',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), name: z.string() }),
+          params: z.object({ workspaceId: z.string(), name: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -569,7 +583,7 @@ export function registerSecretsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const identifier = c.req.param('name')?.trim();
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -614,7 +628,7 @@ export function registerSecretsRoutes(): void {
       // plain runtime secret. Otherwise an agent could delete a tightly-scoped
       // egress row and re-create it (defeated separately by the POST guard).
       if (isBorrowedSessionPrincipal(c) && existing.strategy && existing.strategy !== 'runtime') {
-        return c.json({ error: 'Agent sessions cannot change secret delivery policy' }, 403);
+        return c.json({ error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' }, 403);
       }
       const connectors = await connectorSecretBindings(projectId, identifier);
       if (connectors.length > 0) {

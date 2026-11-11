@@ -30,6 +30,7 @@ import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/
 import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
+import { desktopShellPath, isDesktopShell, workspacePathOfDesktopLegacy } from './lib/workspace-redirects';
 import { NextResponse } from 'next/server';
 
 type Locale = (typeof locales)[number];
@@ -139,14 +140,19 @@ const PROTECTED_APP_PREFIXES = [
   '/teams',
   '/tunnel',
   '/game-of-life',
+  // The account-level Inbox (KRTX-1742): /projects, /new and /settings link it.
+  '/inbox',
   '/invites',
   '/maintenance',
-  '/new',
   '/p',
   // The Kortix in Chrome side panel's new chat (features/chrome/panel).
   '/panel',
   '/presentations',
+  '/workspaces',
+  // An installed desktop shell keeps the pre-Workspaces app paths; the locale
+  // rewrite below serves them from /workspaces (src/lib/workspace-redirects.ts).
   '/projects',
+  '/new',
   '/rauch',
   '/settings',
   '/setup',
@@ -245,18 +251,24 @@ function supportsMarkdownNegotiation(pathname: string): boolean {
 // these route prefixes — plus /auth/* for sign-in — are allowed to render
 // inside the desktop window. Every other route (the marketing homepage, blog,
 // pricing, careers, contact, legal, help, docs, share, design-system, … which
-// all live at root-level slugs) is bounced to /projects. Docs and external
+// all live at root-level slugs) is bounced to /workspaces. Docs and external
 // links are opened in the user's real browser by the Tauri shell, never shown
 // in-app. Keep this an allowlist, not a blocklist — new marketing slugs must
 // stay blocked by default.
 const DESKTOP_ALLOWED_ROUTES = [
+  '/workspaces',
+  // The pre-2026-11-06 workspace URLs. next.config.ts redirects both to
+  // /workspaces before this runs; they stay listed so the equal list of the
+  // Electron shell (nav-rules.js) keeps an old link inside the window.
   '/projects',
   '/new',
-  // `/projects/[id]/settings*` rides the `/projects` prefix; the account-scoped
+  // `/workspaces/[id]/settings*` rides the `/workspaces` prefix; the account-scoped
   // `/settings/*` mount has no `[id]` segment, so without its own entry the
   // desktop shell bounces it to the landing door — including the post-sign-in
   // redirect to `/settings/billing`.
   '/settings',
+  // The account-level Inbox; `/workspaces/[id]/inbox` rides `/workspaces`.
+  '/inbox',
   '/invites',
   '/admin',
   '/setup',
@@ -285,6 +297,11 @@ function isDecodablePath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // Every flow below (auth, cookies marked Secure) assumes the secure origin:
+  // move a plain-HTTP visitor there before any content or auth decision.
+  const httpsRedirect = httpsRedirectTarget(request);
+  if (httpsRedirect) return NextResponse.redirect(httpsRedirect, 308);
+
   let { pathname } = request.nextUrl;
   // These are probes for server files, not product routes. A plain response also
   // avoids rendering the translated application shell for sensitive-file probes.
@@ -502,7 +519,7 @@ export async function middleware(request: NextRequest) {
   // visitors can still reach kortix.com, the blog, pricing, docs, etc.
   // So we bypass the redirect for every public route (which already includes
   // /, /auth, /maintenance, marketing pages, docs, …) plus the admin panel
-  // (so admins can disable the lockdown). Everything else — /projects,
+  // (so admins can disable the lockdown). Everything else — /workspaces,
   // /accounts, /invites and the other authed product routes — still gets the
   // maintenance takeover.
   const isPublicMaintenanceRoute =
@@ -562,7 +579,7 @@ export async function middleware(request: NextRequest) {
   // ── Desktop app: logged-in product surface only ─────────────────────────
   // The desktop shell (KortixDesktop UA) must never render marketing/docs/
   // public pages. Allow only product + auth routes; bounce everything else to
-  // /projects. Runs AFTER the Supabase-at-root handling (so OAuth callbacks
+  // /workspaces. Runs AFTER the Supabase-at-root handling (so OAuth callbacks
   // still work) and BEFORE the locale/marketing logic (irrelevant for desktop).
   // This is the authoritative gate — it catches initial loads, SSR, and
   // Next.js client/RSC navigations alike. The Tauri shell separately opens
@@ -584,8 +601,9 @@ export async function middleware(request: NextRequest) {
       // Supabase user is fetched below, so there is no identity here to check
       // the cookie against — and an unowned cookie read is exactly the bug that
       // sent one account into another account's project. The door re-resolves.
+      // An installed shell loads only its own app paths: /projects, not /workspaces.
       return finalizeEnvironmentAccess(
-        NextResponse.redirect(new URL(PROJECT_LANDING_PATH, request.url)),
+        NextResponse.redirect(new URL(desktopShellPath(PROJECT_LANDING_PATH), request.url)),
       );
     }
   }
@@ -611,6 +629,15 @@ export async function middleware(request: NextRequest) {
     return finalizeEnvironmentAccess(response);
   }
 
+  // The page an installed desktop shell gets for its legacy paths (/projects…,
+  // /new): the same page under /workspaces, served in place. The mapping must
+  // happen here. A next.config rewrite runs after this middleware and sees only
+  // the locale path (/en/projects/start), so it never matched: every signed-in
+  // shell launch hit a 404. See src/lib/workspace-redirects.ts.
+  const pagePathname =
+    (isDesktopShell(request.headers.get('user-agent')) && workspacePathOfDesktopLegacy(pathname)) ||
+    pathname;
+
   // Every unprefixed page URL is rewritten onto app/[locale] (see the
   // cookieLocale definition above for where the locale comes from).
   const rewriteToLocale = (locale: Locale, base?: NextResponse) => {
@@ -619,7 +646,7 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-locale', locale);
     requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
     const target = request.nextUrl.clone();
-    target.pathname = localizedPathname(locale, pathname);
+    target.pathname = localizedPathname(locale, pagePathname);
     const response = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
     if (base) {
       // Carry refreshed/cleared Supabase cookies and headers set on the base.
@@ -640,7 +667,7 @@ export async function middleware(request: NextRequest) {
   // Self-host: when the landing/marketing site is disabled
   // (KORTIX_PUBLIC_DISABLE_LANDING_PAGE — default ON for self-host), the WHOLE
   // marketing surface is deactivated: the homepage and every marketing route
-  // bounce straight to the app — authenticated users to /projects, everyone
+  // bounce straight to the app — authenticated users to /workspaces, everyone
   // else to /auth. Functional public routes (/docs, /legal,
   // /marketplace, /share, …) are unaffected. Read via process.env directly —
   // NEXT_PUBLIC_ vars are inlined at build time, so in Docker containers they'd
@@ -828,15 +855,19 @@ export async function middleware(request: NextRequest) {
     user = null;
   }
 
-  // The default destination is a PROJECT, not the projects list. When the
-  // browser remembers which project was open last we jump straight there;
-  // otherwise the id-free landing door resolves (or provisions) one behind an
-  // instant paint. The cookie is browser-written, so `resolveDefaultLandingPath`
+  // The default destination is a WORKSPACE, not the chooser. When the
+  // browser remembers which workspace was open last we jump straight there;
+  // otherwise the id-free landing door opens the only one, or the
+  // create-or-join chooser, behind an instant paint. It never creates one. The cookie is browser-written, so `resolveDefaultLandingPath`
   // only accepts a well-formed project id and falls back to the door.
-  const defaultLandingPath = resolveDefaultLandingPath(
+  const landingPath = resolveDefaultLandingPath(
     request.cookies.get(LAST_PROJECT_COOKIE)?.value,
     user?.id,
   );
+  // The desktop shell gates server redirects by its own path list (/projects).
+  const defaultLandingPath = isDesktopShell(request.headers.get('user-agent'))
+    ? desktopShellPath(landingPath)
+    : landingPath;
 
   // FAST PATH: authenticated users hitting the homepage go straight to a project.
   if (pathname === '/' && user) {
@@ -926,6 +957,41 @@ export async function middleware(request: NextRequest) {
   }
 }
 
+/**
+ * The https URL to move a plain-HTTP visitor to, or null when the request
+ * already arrived over https (KRTX-3380, pentest http.contract). The edge
+ * (Cloudflare -> ALB) forwards the visitor's scheme in `x-forwarded-proto`
+ * — comma list, client hop leftmost — and, when it strips that header, in
+ * its own `cf-visitor` JSON; checking both covers either proxy behavior.
+ * `/api/health` is exempt: the target group probes it inside the VPC, and a
+ * 308 there would flip healthy targets out of rotation. Defined below
+ * `middleware` on purpose: middleware-desktop-routes.test.ts scrapes the
+ * source between DESKTOP_ALLOWED_ROUTES and the middleware export for
+ * route literals, and this helper's health path is not a desktop route.
+ */
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function httpsRedirectTarget(request: NextRequest): URL | null {
+  if (request.nextUrl.pathname === '/api/health') return null;
+  // Local dev serves plain HTTP and Next dev stamps `x-forwarded-proto: http`
+  // on every request, so without this every local page 308s to an https
+  // origin nothing listens on.
+  if (LOCAL_HOSTNAMES.has(request.nextUrl.hostname)) return null;
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
+  if (forwardedProto !== 'http') {
+    let cfScheme: string | undefined;
+    try {
+      cfScheme = JSON.parse(request.headers.get('cf-visitor') ?? '')?.scheme;
+    } catch {
+      cfScheme = undefined;
+    }
+    if (cfScheme !== 'http') return null;
+  }
+  const url = request.nextUrl.clone();
+  url.protocol = 'https:';
+  return url;
+}
+
 export const config = {
   matcher: [
     /*
@@ -939,7 +1005,8 @@ export const config = {
      *   a next.config rewrite on the Accept header)
      * - monitoring (Sentry/Better Stack error tracking tunnel)
      * - _betterstack (Better Stack browser telemetry proxy)
+     * - ingest (PostHog proxy, a next.config rewrite to eu.i.posthog.com)
      */
-    '/((?!_next/static|_next/image|favicon.ico|monitoring|_betterstack|docs(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|JPEG|gif|webp|avif|ico|wasm|json|woff2?|ttf|otf|js|mjs|css|map|mp4|webm|mp3|zip)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|monitoring|_betterstack|ingest/|docs(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|JPEG|gif|webp|avif|ico|wasm|json|woff2?|ttf|otf|js|mjs|css|map|mp4|webm|mp3|zip)$).*)',
   ],
 };

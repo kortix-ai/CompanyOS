@@ -18,15 +18,21 @@
  * whatever the provider answers. Unauthenticated 401 through the REAL auth
  * middleware is the SEC-G flow.
  */
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { projectSessions, sessionSandboxes } from '@kortix/db';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import { logger } from '../lib/logger';
 import { runWithContext } from '../lib/request-context';
-import { classifyPtyWebSocketPath } from '../platform/providers/pty-ingress';
+import { isPtyWebSocketPath } from '../platform/providers/pty-ingress';
 import * as realProviders from '../platform/providers';
 import * as realPreviewOwnership from '../shared/preview-ownership';
 import { __resetPromptModelSignatureCacheForTests } from '../projects/lib/sandbox-env-sync';
+import {
+  __resetProxyRetryDelaysForTests,
+  __setProxyRetryDelaysForTests,
+  PROXY_RETRY_DELAYS_MS,
+} from '../sandbox-proxy/preview-retry-budget';
 
 // ─── Mock state ──────────────────────────────────────────────────────────────
 
@@ -39,6 +45,7 @@ const TEST_PORT = 8080;
 
 let mockDbSandbox: any = {
   sandboxId: TEST_SESSION_SANDBOX_ID,
+  externalId: TEST_SANDBOX_ID,
   projectId: TEST_PROJECT_ID,
   accountId: 'account-001',
   agentName: 'default',
@@ -315,7 +322,7 @@ mock.module('../platform/providers', () => ({
       const ptyWebsocket =
         name === 'platinum' &&
         request.transport === 'websocket' &&
-        classifyPtyWebSocketPath(request.path) !== null;
+        isPtyWebSocketPath(request.path);
       return {
         effectivePort:
           name === 'platinum' && (request.port === 4096 || ptyWebsocket) ? 8000 : request.port,
@@ -431,6 +438,18 @@ mock.module('../projects/session-title-generate', () => ({
   },
 }));
 
+// Count the dead-daemon relaunch requests instead of running one: the real
+// repair reads the DB and execs into a box. Spread the real module (see above).
+const realProjectsSurface = await import('../projects/surface');
+let mockDaemonRepairRequests: string[] = [];
+mock.module('../projects/surface', () => ({
+  ...realProjectsSurface,
+  repairDeadDaemonOnEdgeRefusal: async (sandboxId: string) => {
+    mockDaemonRepairRequests.push(sandboxId);
+    return true;
+  },
+}));
+
 // Override global fetch for proxy requests
 const originalFetch = globalThis.fetch;
 function mockFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
@@ -530,11 +549,13 @@ function createProxyTestApp() {
 
 beforeEach(() => {
   __resetPromptDedupe();
+  __resetProxyRetryDelaysForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
   invalidateSandbox('daytona-oc-http');
   mockDbSandbox = {
     sandboxId: TEST_SESSION_SANDBOX_ID,
+    externalId: TEST_SANDBOX_ID,
     sessionId: '22222222-2222-4222-8222-222222222222',
     projectId: TEST_PROJECT_ID,
     accountId: 'account-001',
@@ -547,6 +568,7 @@ beforeEach(() => {
   mockPreviewUrl = 'https://preview.daytona.io/proxy-url';
   mockPreviewToken = 'daytona-preview-token-123';
   mockWakeCalls = [];
+  mockDaemonRepairRequests = [];
   mockFetchResponses = [{ status: 200, body: 'Hello from upstream' }];
   mockFetchCallCount = 0;
   mockFetchReturned = [];
@@ -574,24 +596,6 @@ describe('Preview proxy: websocket upstream resolution', () => {
   // resolves, applies the provider's query defaults, and, where the provider
   // asks for it, signs the user context into the URL as well as the header.
   test.each([
-    {
-      name: 'a Daytona opencode PTY',
-      provider: 'daytona',
-      previewUrl: 'https://preview.daytona.io/proxy-url',
-      port: 4096,
-      path: '/pty/pty_test/connect',
-      expected: 'wss://preview.daytona.io/proxy-url/pty/pty_test/connect',
-      signedInUrl: false,
-    },
-    {
-      name: 'a Platinum opencode PTY',
-      provider: 'platinum',
-      previewUrl: 'https://8000-platinum.sbx.example',
-      port: 4096,
-      path: '/pty/pty_test/connect',
-      expected: 'wss://8000-platinum.sbx.example/pty/pty_test/connect',
-      signedInUrl: true,
-    },
     {
       name: 'a Platinum Kortix-native PTY',
       provider: 'platinum',
@@ -625,7 +629,7 @@ describe('Preview proxy: websocket upstream resolution', () => {
       expect(verifyKortixUserContext(queryContext!, TEST_SERVICE_KEY).ok).toBe(true);
       expect(upstream.headers[KORTIX_USER_CONTEXT_HEADER]).toBe(queryContext!);
       // The provider's query defaults ride along.
-      if (row.port === 4096) expect(url.searchParams.get('cursor')).toBe('0');
+      expect(url.searchParams.get('cursor')).toBe('0');
     } else {
       expect(queryContext).toBeNull();
     }
@@ -634,9 +638,9 @@ describe('Preview proxy: websocket upstream resolution', () => {
   test('a sandbox token may open the PTY of its OWN session', async () => {
     const upstream = await resolvePreviewWsUpstream({
       sandboxId: TEST_SANDBOX_ID,
-      upstreamPort: 4096,
+      upstreamPort: 8000,
       userId: TEST_USER_ID,
-      remainingPath: '/pty/pty_test/connect',
+      remainingPath: '/kortix/pty/kpty_test/connect',
       queryString: '',
       // The sandbox's own session id — the legitimate case, which must keep
       // working or the narrowing has broken the product.
@@ -654,9 +658,9 @@ describe('Preview proxy: websocket upstream resolution', () => {
     // path. The leg was wired and unproven.
     const upstream = await resolvePreviewWsUpstream({
       sandboxId: TEST_SANDBOX_ID,
-      upstreamPort: 4096,
+      upstreamPort: 8000,
       userId: TEST_USER_ID,
-      remainingPath: '/pty/pty_test/connect',
+      remainingPath: '/kortix/pty/kpty_test/connect',
       queryString: '',
       callerSessionId: '99999999-9999-4999-8999-999999999999',
       boundCredentialSessionId: '99999999-9999-4999-8999-999999999999',
@@ -666,9 +670,7 @@ describe('Preview proxy: websocket upstream resolution', () => {
   });
 });
 
-// The upgrade entry point. The PTY asks the box which half of the opencode
-// port pair is live: a verified config reload boots the replacement on the idle
-// half and promotes it, and a hardcoded 4096 then dials a dead socket.
+// The upgrade entry point.
 describe('Preview proxy: websocket upgrade (path form)', () => {
   const upgradeUrl = (sandboxId: string, port: number, path: string, query = '?token=ws-token') =>
     new URL(`http://api.test/v1/p/${sandboxId}/${port}${path}${query}`);
@@ -676,53 +678,9 @@ describe('Preview proxy: websocket upgrade (path form)', () => {
 
   test('an upgrade with no token is refused', async () => {
     const res = await preparePreviewWsUpgrade(
-      upgradeUrl(TEST_SANDBOX_ID, 4096, '/pty/pty_1/connect', ''),
+      upgradeUrl(TEST_SANDBOX_ID, 8000, '/kortix/pty/kpty_1/connect', ''),
     );
     expect(res).toMatchObject({ ok: false, status: 401 });
-  });
-
-  test.each([
-    ['reports the standby port', { status: 200, body: '{"opencode_port":4097}' }, 4097],
-    ['reports a port outside the pair', { status: 200, body: '{"opencode_port":3000}' }, 4096],
-    ['reports its own daemon port', { status: 200, body: '{"opencode_port":8000}' }, 4096],
-    ['answers 500', { status: 500, body: 'boom' }, 4096],
-    ['cannot be reached', { status: 0, body: '', error: new Error('ECONNREFUSED') }, 4096],
-    ['is too old to report the field', { status: 200, body: '{"status":"ok"}' }, 4096],
-    ['names the OpenCode harness and its port', { status: 200, body: '{"harness":{"id":"opencode","details":{"port":4097}},"opencode_port":4097}' }, 4097],
-  ])('an opencode PTY dials the live port: the daemon %s', async (_label, health, port) => {
-    mockFetchResponses = [health];
-
-    const res = await preparePreviewWsUpgrade(
-      upgradeUrl(`ws-live-port-${port}-${health.status}`, 4096, '/pty/pty_1/connect'),
-    );
-
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.ingress?.port).toBe(port);
-    expect(healthReads()).toHaveLength(1);
-    // Bounded, so a wedged box cannot hang the terminal.
-    expect(healthReads()[0]?.signal).toBeInstanceOf(AbortSignal);
-  });
-
-  // R7.5: pi reports `opencode_port: null`. The 4096 fallback dialed a port
-  // where nothing listens and the terminal died with close code 4502.
-  test('an opencode PTY on a pi box is refused with 409 naming the Kortix PTY, after one health read', async () => {
-    mockFetchResponses = [{ status: 200, body: '{"harness":{"id":"pi","details":{"model":"kortix/x"}},"opencode_port":null}' }];
-    const res = await preparePreviewWsUpgrade(upgradeUrl('ws-pi-box', 4096, '/pty/pty_1/connect'));
-    expect(res).toMatchObject({ ok: false, status: 409 });
-    if (!res.ok) {
-      expect(res.message).toContain('pty_unsupported_runtime');
-      expect(res.message).toContain('/kortix/pty/');
-    }
-    expect(healthReads()).toHaveLength(1);
-  });
-
-  // The value changes on exactly the event this exists for, so it is read on
-  // every connect.
-  test('the live port is read on every connect, never cached', async () => {
-    mockFetchResponses = [{ status: 200, body: '{"opencode_port":4097}' }];
-    await preparePreviewWsUpgrade(upgradeUrl('ws-live-port-uncached', 4096, '/pty/pty_1/connect'));
-    await preparePreviewWsUpgrade(upgradeUrl('ws-live-port-uncached', 4096, '/pty/pty_1/connect'));
-    expect(healthReads()).toHaveLength(2);
   });
 
   test('a Kortix-native PTY keeps the port the client addressed and asks nothing', async () => {
@@ -735,12 +693,11 @@ describe('Preview proxy: websocket upgrade (path form)', () => {
   });
 
   test('our own credentials and wake signal never reach the upstream', async () => {
-    mockFetchResponses = [{ status: 200, body: '{"opencode_port":4096}' }];
     const res = await preparePreviewWsUpgrade(
       upgradeUrl(
         'ws-query-strip',
-        4096,
-        '/pty/pty_1/connect',
+        8000,
+        '/kortix/pty/kpty_1/connect',
         '?token=ws-token&public_share=kps_x&wake=1&cursor=5',
       ),
     );
@@ -874,7 +831,95 @@ describe('Preview proxy: forwarding', () => {
     expect(mockFetchReturned[0]!.bodyUsed).toBe(true);
   });
 
+  // A transient 502 the very next attempt recovers from is not a page: the
+  // per-attempt line is `info` on EVERY port. A provider blip (2026-11-10,
+  // KRTX-4673) answered 28 sandboxes' daemon port with transient 503s for half
+  // an hour while every client poll logged 1-3 warns and paged the log sweep
+  // at 186x baseline — the affected requests all recovered to 200. The settled
+  // give-up below is the one warn a failed request leaves behind.
+  test.each([TEST_PORT, 8000] as const)('a recovered not-ready 502 on port %p retries at info, never warn', async (port) => {
+    mockFetchResponses = [
+      { status: 502, body: 'bad gateway' },
+      { status: 200, body: 'ok' },
+    ];
+    const lines: Record<'warn' | 'info', string[]> = { warn: [], info: [] };
+    const spies = (['warn', 'info'] as const).map((level) =>
+      spyOn(logger, level).mockImplementation((message: string) => void lines[level].push(message)),
+    );
+    try {
+      const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/${port}/page`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    const notReady = (l: string[]) => l.filter((x) => x.includes('port not ready'));
+    expect(notReady(lines.warn)).toHaveLength(0);
+    expect(notReady(lines.info)).toHaveLength(1);
+  });
+
+  // Retries exhausted on the runtime's own port: exactly ONE warn — the settled
+  // outcome of the request, not one per attempt. The old per-attempt warn
+  // (KRTX-4673) multiplied with the client's poll rate during a transient.
+  test('a give-up on the daemon port logs one warn, not one per attempt', async () => {
+    __setProxyRetryDelaysForTests([1, 1, 1]);
+    mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
+    const lines: Record<'warn' | 'info', string[]> = { warn: [], info: [] };
+    const spies = (['warn', 'info'] as const).map((level) =>
+      spyOn(logger, level).mockImplementation((message: string) => void lines[level].push(message)),
+    );
+    try {
+      // No `Accept: text/html` → not a browser navigation → the upstream 502
+      // passes through to the programmatic client after the last attempt.
+      const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/8000/page`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(502);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    const notReady = (l: string[]) => l.filter((x) => x.includes('port not ready'));
+    const giveUp = (l: string[]) => l.filter((x) => x.includes('not answering after'));
+    expect(giveUp(lines.warn)).toHaveLength(1);
+    expect(giveUp(lines.info)).toHaveLength(0);
+    expect(notReady(lines.info)).toHaveLength(PROXY_RETRY_DELAYS_MS.length);
+    expect(notReady(lines.warn)).toHaveLength(0);
+  });
+
+  // A port the API exposed a moment ago: Platinum's routes lag the expose by up
+  // to ~1.2 s, and its edge answers `404 port-not-exposed` meanwhile. The edge
+  // answered itself, so the request is sent again, and a write is safe to send.
+  test('an edge port-not-exposed 404 right after the expose is sent again', async () => {
+    mockFetchResponses = [
+      { status: 404, body: 'This sandbox URL is not active.', headers: { 'x-pt-edge-verdict': 'port-not-exposed' } },
+      { status: 200, body: 'ok' },
+    ];
+    const app = createProxyTestApp();
+    const res = await app.request(`/v1/p/${TEST_SANDBOX_ID}/${TEST_PORT}/`, {
+      headers: { Authorization: 'Bearer test', Accept: 'text/html' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(mockFetchReturned[0]!.bodyUsed).toBe(true);
+  });
+
+  test('a 404 the app served itself passes through, never sent again', async () => {
+    mockFetchResponses = [
+      { status: 404, body: 'no such page', headers: { 'x-pt-edge-served': '1' } },
+      { status: 200, body: 'ok' },
+    ];
+    const app = createProxyTestApp();
+    const res = await app.request(`/v1/p/${TEST_SANDBOX_ID}/${TEST_PORT}/missing`, {
+      headers: { Authorization: 'Bearer test' },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe('no such page');
+    expect(mockFetchCalls).toHaveLength(1);
+  });
+
   test('a browser that gets the port-unreachable page leaves no upstream body unreleased', async () => {
+    __setProxyRetryDelaysForTests([1, 1, 1]);
     mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
     const app = createProxyTestApp();
     const res = await app.request(`/v1/p/${TEST_SANDBOX_ID}/${TEST_PORT}/`, {
@@ -885,7 +930,7 @@ describe('Preview proxy: forwarding', () => {
     // MAX_RETRIES = 3 → four attempts, every answer dropped.
     expect(mockFetchReturned).toHaveLength(4);
     expect(mockFetchReturned.every((r) => r.bodyUsed)).toBe(true);
-  }, 15_000);
+  });
 
   test('proxies POST request with body', async () => {
     mockFetchResponses = [{ status: 201, body: '{"id":"created"}' }];
@@ -976,9 +1021,7 @@ describe('Preview proxy: forwarding', () => {
       llmGatewayEnabled: true,
       llmGatewayBaseUrl: 'https://api.example.test/v1/llm',
       names: ['OPENROUTER_API_KEY', 'SENTRY_DSN'],
-      // `runtimeEnv` for a W3 daemon, the same map as `opencodeEnv` for an older one.
       runtimeEnv: {},
-      opencodeEnv: {},
       refreshModels: true,
       revision: 'rev-OPENROUTER_API_KEY-SENTRY_DSN',
     });
@@ -1165,7 +1208,8 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 401');
+    // The 502 body is stable and termless: the upstream status stays server-side.
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');
   });
@@ -1186,7 +1230,7 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 500');
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockWakeCalls).toEqual([]);
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');
@@ -1212,6 +1256,7 @@ describe('Preview proxy: forwarding', () => {
     expect(mockWakeCalls).toEqual([TEST_SANDBOX_ID]);
     expect(mockFetchCalls.map((call) => call.url)).toEqual([
       'https://preview.daytona.io/proxy-url/kortix/env',
+      'https://preview.daytona.io/proxy-url/kortix/health',
       'https://preview.daytona.io/proxy-url/kortix/env',
       'https://preview.daytona.io/proxy-url/session/ses_123/prompt_async',
     ]);
@@ -1244,6 +1289,7 @@ describe('Preview proxy: forwarding', () => {
     expect(mockWakeCalls).toEqual([TEST_SANDBOX_ID]);
     expect(mockFetchCalls.map((call) => call.url)).toEqual([
       'https://preview.daytona.io/proxy-url/kortix/env',
+      'https://preview.daytona.io/proxy-url/kortix/health',
       'https://preview.daytona.io/proxy-url/kortix/env',
       'https://preview.daytona.io/proxy-url/session/ses_123/prompt_async',
     ]);
@@ -1336,28 +1382,6 @@ describe('Preview proxy: forwarding', () => {
         scopes: ['*'],
       });
     }
-  });
-
-  test('marks proxied session sandbox and owning session as active usage', async () => {
-    mockFetchResponses = [{ status: 200, body: 'OK' }];
-    const sandboxId = 'touch-sandbox-001';
-    const app = createProxyTestApp();
-    const res = await app.request(`/v1/p/${sandboxId}/${TEST_PORT}/kortix/health`, {
-      headers: { Authorization: 'Bearer test' },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(res.status).toBe(200);
-    expect(
-      mockDbUpdateCalls.some(
-        (call) => call.table === sessionSandboxes && call.updates.lastUsedAt instanceof Date,
-      ),
-    ).toBe(true);
-    expect(
-      mockDbUpdateCalls.some(
-        (call) => call.table === projectSessions && call.updates.status === 'running',
-      ),
-    ).toBe(true);
   });
 
   test('creates trace headers when caller does not provide traceparent', async () => {
@@ -1990,5 +2014,40 @@ describe('Preview proxy: per-session gate on every port', () => {
       headers: { Authorization: 'Bearer test', 'X-Test-Caller-Session': mockDbSandbox.sessionId },
     });
     expect(appPort.status).toBe(200);
+  });
+});
+
+describe('Preview proxy: dead daemon on a running box', () => {
+  // KRTX-4438: a dead daemon on a running Platinum box answers every daemon-port
+  // request with the edge's own 502. The first one starts the relaunch; it must
+  // not wait for the next `/start` or reaper tick.
+  const sendUpload = async (port: number) => {
+    const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/${port}/file/upload`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test' },
+      body: 'file-bytes',
+    });
+    // The relaunch request is fire-and-forget behind a dynamic import.
+    await new Promise((r) => setTimeout(r, 20));
+    return res;
+  };
+
+  test('an edge 502 on the daemon port asks for the dead-daemon relaunch', async () => {
+    mockFetchResponses = [{ status: 502, body: 'bad gateway', headers: { 'x-pt-edge-verdict': 'port-refused' } }];
+    await sendUpload(8000);
+    expect(mockDaemonRepairRequests).toContain(mockDbSandbox.sandboxId);
+  });
+
+  test('a 502 the box served itself does not ask for a relaunch', async () => {
+    mockFetchResponses = [{ status: 502, body: 'bad gateway', headers: { 'x-pt-edge-served': '1' } }];
+    const res = await sendUpload(8000);
+    expect(res.status).toBe(502);
+    expect(mockDaemonRepairRequests).toEqual([]);
+  });
+
+  test("an edge 502 on a user's own app port does not ask for a relaunch", async () => {
+    mockFetchResponses = [{ status: 502, body: 'bad gateway', headers: { 'x-pt-edge-verdict': 'port-refused' } }];
+    await sendUpload(TEST_PORT);
+    expect(mockDaemonRepairRequests).toEqual([]);
   });
 });

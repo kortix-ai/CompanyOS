@@ -134,7 +134,8 @@ describe('pi config releases: boot', () => {
     expect(releases.governanceOwned()).toBe(true)
     const notice = releases.notice()!
     expect(notice).toContain(one.descriptor.source_commit!.slice(0, 12))
-    expect(notice).toContain('`/workspace/kortix.yaml`')
+    expect(notice).toContain('`kortix.yaml`')
+    expect(notice).not.toContain('/workspace/kortix.yaml')
     expect(notice).not.toContain('kortix.yaml has issues')
     // A second call joins the first; nothing is fetched again.
     const requests = api.descriptorRequests.length
@@ -411,6 +412,34 @@ describe('pi config releases: convergence', () => {
     expect(runtime.state.reconfigures).toBe(0)
     expect(releases.inFlight()).toBe(false)
     expect(await readQuarantine(root)).toEqual({})
+  })
+
+  test('no await sits between the idle check and the swap: a prompt that lands after the check runs on the new config', async () => {
+    serveRelease(api, release('deploy', 'from release one'))
+    const { releases } = create()
+    await releases.boot()
+    serveRelease(api, release('review', 'from release two'))
+    const state = { idle: true, idleCalls: 0, idleAtSwap: [] as boolean[] }
+    const runtime = {
+      // A prompt is admitted right after the last idle check answers (a microtask later).
+      idle: () => {
+        state.idleCalls += 1
+        if (state.idleCalls === 2) queueMicrotask(() => (state.idle = false))
+        return state.idle
+      },
+      async reconfigure() {
+        state.idleAtSwap.push(state.idle)
+      },
+      async restart() {
+        state.idleAtSwap.push(state.idle)
+      },
+    }
+
+    const result = await releases.converge(runtime)
+
+    expect(result.outcome).toBe('applied')
+    // The swap started while the runtime was still idle: the prompt queues behind it.
+    expect(state.idleAtSwap).toEqual([true])
   })
 
   test('a runtime that refuses the config keeps the running one; the release is quarantined', async () => {

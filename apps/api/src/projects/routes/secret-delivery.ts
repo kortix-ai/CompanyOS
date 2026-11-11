@@ -30,17 +30,19 @@ import {
   connectorSecretBindings,
   summarizeDeliverySync,
 } from '../lib/secret-writes';
+import { workspaceIdParam } from '../../shared/route-params';
+import { SECRET_DELIVERY_NEEDS_PERSON } from '../lib/secret-write-input';
 
 export function registerSecretDeliveryRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/secrets/{identifier}/strategy',
+      path: '/{workspaceId}/secrets/{identifier}/strategy',
       tags: ['secrets'],
       summary: 'Set how a secret is delivered to sandboxes',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), identifier: z.string() }),
+        params: z.object({ workspaceId: z.string(), identifier: z.string() }),
         body: { content: { 'application/json': { schema: UpdateSecretStrategyInputSchema } } },
       },
       responses: {
@@ -49,7 +51,7 @@ export function registerSecretDeliveryRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const identifier = c.req.param('identifier')?.trim();
       const parsed = UpdateSecretStrategyInputSchema.safeParse(await readJsonObject(c));
       if (!identifier || !isValidIdentifier(identifier)) {
@@ -69,7 +71,7 @@ export function registerSecretDeliveryRoutes(): void {
         PROJECT_ACTIONS.PROJECT_SECRET_WRITE,
       );
       if (isBorrowedSessionPrincipal(c)) {
-        return c.json({ error: 'Agent sessions cannot change secret delivery policy' }, 403);
+        return c.json({ error: SECRET_DELIVERY_NEEDS_PERSON, code: 'secret_delivery_needs_person' }, 403);
       }
       if (isSystemProjectSecretName(identifier)) {
         return c.json({ error: `${identifier} is managed by Kortix` }, 403);

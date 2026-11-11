@@ -66,6 +66,7 @@ import { runCaptureHealthTick } from './health-alerts';
 import { latestCaptureVersion } from './update-manifest';
 import { enqueueLink, pollDevice } from './workers';
 import { isAccountMember, readWorkspace, setCaptureEnabled } from './workspace';
+import { accountIdParam } from '../shared/route-params';
 
 export type Ctx = Context<AppEnv>;
 
@@ -125,8 +126,8 @@ async function viewerOf(c: Ctx, accountId: string): Promise<{ viewer: string | n
 }
 
 /** What IAM lets this human (not an agent) do with other people's capture. */
-async function capturePowers(c: Ctx, accountId: string, sessionId: string | null) {
-  if (sessionId) return { readsAll: false, manages: false };
+/** The capture permissions of the caller: a person, or an agent session acting for one (their role ∩ its grant). */
+async function capturePowers(c: Ctx, accountId: string) {
   const actor = await actorOf(c, accountId);
   const [readAll, manage] = await Promise.all([
     authorize(actor, ACCOUNT_ACTIONS.CAPTURE_READ_ALL),
@@ -150,13 +151,13 @@ export async function captureAccessFor(
   bindAuditPrincipal({ accountId });
   if (!(await readWorkspace(accountId)).enabled) return c.json(CAPTURE_DISABLED, 403);
   let subject: Who | null = opts.accountWide ? null : (opts.userId ?? viewer);
-  let powers = subject === viewer ? { readsAll: false, manages: false } : await capturePowers(c, accountId, sessionId);
+  let powers = subject === viewer ? { readsAll: false, manages: false } : await capturePowers(c, accountId);
   // A device linked to no person (an IT rollout) is read as itself by capture.read_all;
   // anyone else asking for it reads their own rows of it.
   if (!opts.accountWide && !opts.userId && opts.deviceId) {
     const device = await deviceInAccount(accountId, opts.deviceId);
     if (device && device.userId === null) {
-      powers = await capturePowers(c, accountId, sessionId);
+      powers = await capturePowers(c, accountId);
       if (powers.readsAll) subject = { unlinkedDevice: device.deviceId };
     }
   }
@@ -182,12 +183,12 @@ export async function captureAccessFor(
 export async function captureAccessWithPowers(c: Ctx): Promise<Access | Response> {
   const access = await captureAccess(c);
   if (isResponse(access)) return access;
-  return { ...access, ...(await capturePowers(c, access.accountId, access.sessionId)) };
+  return { ...access, ...(await capturePowers(c, access.accountId)) };
 }
 
 /** Access for an account route: the account is the `:accountId` path segment. */
 export function captureAccess(c: Ctx, opts: { userId?: string | null; accountWide?: boolean; deviceId?: string | null } = {}) {
-  return captureAccessFor(c, c.req.param('accountId') ?? '', opts);
+  return captureAccessFor(c, accountIdParam(c) ?? '', opts);
 }
 
 export const isResponse = (value: unknown): value is Response => value instanceof Response;
@@ -221,7 +222,7 @@ async function loadDevice(access: Access, deviceId: string, opts: { write?: bool
   return device;
 }
 
-const params = z.object({ accountId: z.string().uuid() });
+const params = z.object({ workspaceId: z.string().uuid() });
 const ok = (description: string) => ({ 200: json(z.any(), description), ...errors(400, 403, 404) });
 const tags = ['capture'];
 const subjectQuery = z.object({
@@ -323,7 +324,7 @@ async function frameResponse(c: Ctx, access: Access, frameId: string) {
 
 /** The workspace as a person sees it. */
 async function workspaceView(c: Ctx, accountId: string, sessionId: string | null) {
-  const [workspace, powers] = await Promise.all([readWorkspace(accountId), capturePowers(c, accountId, sessionId)]);
+  const [workspace, powers] = await Promise.all([readWorkspace(accountId), capturePowers(c, accountId)]);
   return {
     account_id: accountId,
     enabled: workspace.enabled,
@@ -337,7 +338,7 @@ function registerCaptureWorkspaceRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture',
+    path: '/{workspaceId}/capture',
     tags,
     summary: 'The account’s Capture workspace: on or off, and whether you may read everyone (capture.read_all) and manage it (capture.manage)',
     ...auth,
@@ -345,7 +346,7 @@ accountsRouter.openapi(
     responses: { 200: json(C.CaptureWorkspaceSchema, 'The workspace'), ...errors(400, 403, 404) },
   }),
   async (c) => {
-    const { accountId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
     const who = await viewerOf(c, accountId);
     if (who === 'wrong_account' || !who.viewer) return c.json({ error: 'Not found', code: 'capture_not_found' }, 404);
     if (!(await isAccountMember(accountId, who.viewer))) return c.json({ error: 'Not found', code: 'capture_not_found' }, 404);
@@ -356,7 +357,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'patch',
-    path: '/{accountId}/capture',
+    path: '/{workspaceId}/capture',
     tags,
     summary: 'Turn Capture on or off for the account (capture.manage)',
     ...auth,
@@ -364,13 +365,12 @@ accountsRouter.openapi(
     responses: { 200: json(C.CaptureWorkspaceSchema, 'The workspace'), ...errors(400, 403, 404) },
   }),
   async (c) => {
-    const { accountId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
     const who = await viewerOf(c, accountId);
     if (who === 'wrong_account' || !who.viewer) return c.json({ error: 'Not found', code: 'capture_not_found' }, 404);
-    if (who.sessionId) return refuse(c, 403, 'capture_forbidden', 'An agent cannot turn Capture on or off');
     if (!(await isAccountMember(accountId, who.viewer))) return c.json({ error: 'Not found', code: 'capture_not_found' }, 404);
     bindAuditPrincipal({ accountId });
-    if (!(await capturePowers(c, accountId, null)).manages) {
+    if (!(await capturePowers(c, accountId)).manages) {
       return refuse(c, 403, 'capture_forbidden', 'Turning Capture on or off needs the capture.manage permission');
     }
     const { enabled } = c.req.valid('json');
@@ -395,7 +395,7 @@ function registerCaptureDevicesRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/devices',
+    path: '/{workspaceId}/capture/devices',
     tags,
     summary: 'Capture devices with live status: yours, a member’s, or the account’s (`scope=account`); another person’s need capture.read_all',
     ...auth,
@@ -413,7 +413,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'delete',
-    path: '/{accountId}/capture/devices/{deviceId}',
+    path: '/{workspaceId}/capture/devices/{deviceId}',
     tags,
     summary: 'Revoke a capture device: its token stops working and it can no longer get credentials',
     ...auth,
@@ -423,7 +423,6 @@ accountsRouter.openapi(
   async (c) => {
     const access = await captureAccessWithPowers(c);
     if (isResponse(access)) return access as never;
-    if (access.sessionId) return refuse(c, 403, 'capture_forbidden', 'An agent cannot revoke a capture device');
     const device = await loadDevice(access, c.req.valid('param').deviceId, { write: true });
     if (!device) return c.json({ error: 'Not found', code: 'capture_not_found' }, 404);
     return c.json(deviceView(await revokeDevice(device.deviceId, access.viewer), Date.now(), await latestCaptureVersion()), 200);
@@ -433,7 +432,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'put',
-    path: '/{accountId}/capture/devices/{deviceId}/link',
+    path: '/{workspaceId}/capture/devices/{deviceId}/link',
     tags,
     summary: 'Link a device to a member, or unlink it (`user_id: null`) (capture.manage)',
     description:
@@ -473,7 +472,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'post',
-    path: '/{accountId}/capture/devices/{deviceId}/sync',
+    path: '/{workspaceId}/capture/devices/{deviceId}/sync',
     tags,
     summary: 'Read a device’s status, description and index now, queue every new item for indexing, retract every item the device deleted, and raise or clear its not-recording alert',
     ...auth,
@@ -496,7 +495,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/devices/{deviceId}/assets/{name}',
+    path: '/{workspaceId}/capture/devices/{deviceId}/assets/{name}',
     tags,
     summary: 'A signed, short-lived URL of one content-addressed asset (action screenshot, icon)',
     ...auth,
@@ -523,7 +522,7 @@ function registerCapturePolicyRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/policy',
+    path: '/{workspaceId}/capture/policy',
     tags,
     summary: 'The account capture policy (layers, privacy, retention, pause, notice)',
     ...auth,
@@ -540,7 +539,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'put',
-    path: '/{accountId}/capture/policy',
+    path: '/{workspaceId}/capture/policy',
     tags,
     summary: 'Set the account capture policy (capture.manage); publishes orgs/<account_id>/policy.json',
     ...auth,
@@ -564,7 +563,7 @@ function registerCaptureStorageRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/storage',
+    path: '/{workspaceId}/capture/storage',
     tags,
     summary: 'The account’s Capture storage destination (capture.manage). The secret is never returned.',
     ...auth,
@@ -582,7 +581,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'put',
-    path: '/{accountId}/capture/storage',
+    path: '/{workspaceId}/capture/storage',
     tags,
     summary: 'Set where the account keeps its recordings: the managed store (mode "kortix") or its own S3 bucket (mode "s3") (capture.manage)',
     ...auth,
@@ -611,7 +610,7 @@ function registerCaptureTimelineRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/timeline',
+    path: '/{workspaceId}/capture/timeline',
     tags,
     summary: 'One person’s timeline for a day or window: activity runs (app + window) and indexed items',
     ...auth,
@@ -629,7 +628,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/days',
+    path: '/{workspaceId}/capture/days',
     tags,
     summary: 'The days of one person’s timeline with recorded items, newest first, grouped in a time zone',
     ...auth,
@@ -661,7 +660,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/timeline/items',
+    path: '/{workspaceId}/capture/timeline/items',
     tags,
     summary: 'Frames, actions and audio lines of one person in a window (at most 500 of each, oldest first)',
     ...auth,
@@ -685,7 +684,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/search',
+    path: '/{workspaceId}/capture/search',
     tags,
     summary: 'Full-text search of one person’s timeline, or the account’s (`scope=account`, capture.read_all): screen (app, window, URL, on-screen text; one hit per chunk and window), actions and audio',
     ...auth,
@@ -709,7 +708,7 @@ function registerCaptureMediaRoutes() {
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/frames/{frameId}',
+    path: '/{workspaceId}/capture/frames/{frameId}',
     tags,
     summary: 'One frame with its full on-screen text and a signed, short-lived URL of its video chunk',
     ...auth,
@@ -726,7 +725,7 @@ accountsRouter.openapi(
 accountsRouter.openapi(
   createRoute({
     method: 'get',
-    path: '/{accountId}/capture/chunks/{chunkId}/media',
+    path: '/{workspaceId}/capture/chunks/{chunkId}/media',
     tags,
     summary: 'Signed, short-lived URLs of an indexed item’s media (video or audio)',
     ...auth,

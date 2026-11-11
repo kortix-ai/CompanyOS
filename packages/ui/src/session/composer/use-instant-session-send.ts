@@ -333,8 +333,8 @@ function useFirstPromptSources({
     // `readStartStash` covers the canonical SDK stash (written under the route
     // session id by this shell, the project-home composer, and
     // `useConfigureThread` — all three producers now share the one canonical
-    // shape) plus its `opencode_pending_prompt` legacy fallback for any other
-    // as-yet-unconverted producer.
+    // shape) plus the legacy `opencode_pending_prompt` key an older tab may
+    // still hold.
     const text = readStartStash(sessionId)?.prompt;
     if (!text) return null;
     return {
@@ -425,8 +425,8 @@ function planSend({
   // through its delivery chain: a text-only send never overtakes an upload.
   //
   // The first send starts the session. A send typed while the first boots
-  // is an inbox row carrying its queue placement, drawn as a Quick Queue
-  // bubble or a Queue List row until the row lists it.
+  // is an inbox row carrying its placement, drawn as a transcript bubble or
+  // a waiting row above the composer until the row lists it.
   //
   // One exception: a first send that is not detached (no uploads, nothing
   // earlier still delivering) paints after its POST. The hero composer that

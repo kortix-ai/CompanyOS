@@ -40,9 +40,9 @@ flow("SYS-7", { domain: "system", tags: ["smoke"], routes: ["POST /v1/system/dem
     const r = await ctx.client.post("/v1/system/demo-request", { email: "not-an-email" });
     r.status(400);
   });
-  await ctx.step("POST /v1/system/demo-request (valid) → 200 accepted", async () => {
-    // Public lead capture. `emailed` is false when no email provider is configured on
-    // the target env — the request is still accepted (graceful skip).
+  await ctx.step("POST /v1/system/demo-request (valid) → 200 stored", async () => {
+    // Public lead capture: the row is stored in kortix.contact_forms (`persisted: true`) before
+    // the email. `emailed` is false when no email provider is configured on the target env.
     const r = await ctx.client.post("/v1/system/demo-request", {
       name: "ke2e probe",
       email: `probe-${Date.now()}@ke2e.kortix.test`,
@@ -50,7 +50,7 @@ flow("SYS-7", { domain: "system", tags: ["smoke"], routes: ["POST /v1/system/dem
       company_size: "51-200",
       source: "ke2e",
     });
-    r.status(200).body().has("$.ok", true).exists("$.emailed");
+    r.status(200).body().has("$.ok", true).has("$.persisted", true).exists("$.emailed");
   });
 });
 
@@ -98,9 +98,11 @@ flow("DOCS-1", { domain: "system", tags: ["smoke"], routes: ["GET /v1/openapi.js
     const spec = (await ctx.client.get("/v1/openapi.json")).json<{ paths: Record<string, { get?: Op }> }>();
     const wrong: string[] = [];
     for (const [path, names] of [
+      ["/v1/workspaces/{workspaceId}/change-requests", ["limit", "cursor"]],
+      ["/v1/workspaces/{workspaceId}/review/items", ["limit", "cursor"]],
+      ["/v1/workspaces/{workspaceId}/gateway/logs", ["limit", "offset"]],
+      // The legacy names stay in the spec, marked deprecated, with the same parameters.
       ["/v1/projects/{projectId}/change-requests", ["limit", "cursor"]],
-      ["/v1/projects/{projectId}/review/items", ["limit", "cursor"]],
-      ["/v1/projects/{projectId}/gateway/logs", ["limit", "offset"]],
     ] as const) {
       const query = (spec.paths[path]?.get?.parameters ?? []).filter((p) => p.in === "query");
       for (const name of names) {
@@ -148,13 +150,13 @@ flow("SYS-8", { domain: "system", tags: ["deployed", "smoke", "health"], routes:
   });
 });
 
-flow("SYS-5", { domain: "system", tags: ["deployed", "smoke"], routes: ["GET /v1/accounts/me"] }, async (ctx) => {
+flow("SYS-5", { domain: "system", tags: ["deployed", "smoke"], routes: ["GET /v1/me"] }, async (ctx) => {
   await ctx.step("404 shape on unknown route", async () => {
     const r = await ctx.client.get("/v1/this-route-does-not-exist");
     r.status(404).body().has("$.error", true).has("$.message", "Not found").has("$.status", 404);
   });
   await ctx.step("protected route without auth → 401", async () => {
-    const r = await ctx.client.get("/v1/accounts/me");
+    const r = await ctx.client.get("/v1/me");
     r.status(401);
   });
 });

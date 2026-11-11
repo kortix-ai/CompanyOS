@@ -22,7 +22,7 @@
 
 import { isDeepStrictEqual } from 'node:util';
 import { type Document, isMap, isScalar, isSeq, type Node, type Pair, parseDocument, Scalar, type YAMLMap } from 'yaml';
-import { DEPRECATED_KORTIX_PERMISSION_ALIASES, LEGACY_SANDBOX_KEYS, RETIRED_KORTIX_TOOLS } from './constants';
+import { DEPRECATED_KORTIX_PERMISSION_ALIASES, EVERY_GRANT, EVERY_GRANT_KEYS, isEveryGrant, LEGACY_SANDBOX_KEYS, RETIRED_KORTIX_TOOLS } from './constants';
 
 export interface Deprecation {
   /** Stable id, shown as `fix: <id>`. Never reused. */
@@ -97,6 +97,33 @@ function renameAgentKey(doc: Document, from: string, to: string, map: (value: un
   return paths;
 }
 
+/** `"*"`, the canonical "every name", as a double-quoted scalar: a bare `*` is a YAML alias. */
+export function everyScalar(): Scalar<string> {
+  const node = new Scalar('*');
+  node.type = Scalar.QUOTE_DOUBLE;
+  return node;
+}
+
+/** The kortix_permissions entry that lets a session clone and push its own branch. */
+const REPOSITORY_READ_GRANT = 'workspace.gitops.read';
+
+/** Add `workspace.gitops.read` to an agent's `kortix_permissions` unless it already holds it ("*" holds everything). */
+function grantRepositoryRead(doc: Document, block: YAMLMap): void {
+  const current = block.toJSON().kortix_permissions as unknown;
+  if (typeof current === 'string' && isEveryGrant(current)) return;
+  // Any other string but `none` is not a grant shape: leave it for the validator to name.
+  if (typeof current === 'string' && current.trim() !== 'none') return;
+  if (Array.isArray(current)) {
+    if (current.some((entry) => entry === REPOSITORY_READ_GRANT || entry === 'project.gitops.read')) return;
+    const node = block.get('kortix_permissions', true);
+    if (isSeq(node)) {
+      node.add(doc.createNode(REPOSITORY_READ_GRANT));
+      return;
+    }
+  }
+  block.set('kortix_permissions', doc.createNode([REPOSITORY_READ_GRANT]));
+}
+
 export const DEPRECATIONS: readonly Deprecation[] = [
   {
     id: 'drop-kortix-version',
@@ -111,11 +138,11 @@ export const DEPRECATIONS: readonly Deprecation[] = [
   {
     id: 'tools-explicit',
     since: '2026-10-27',
-    summary: 'an agent without `tools` gets every tool. Write `tools: all` (same meaning), or list the tools it needs.',
+    summary: 'an agent without `tools` gets every tool. Write `tools: "*"` (same meaning), or list the tools it needs.',
     apply: (doc) =>
       agentBlocks(doc).flatMap(([name, block]) => {
         if (block.has('tools')) return [];
-        block.set('tools', 'all');
+        block.set('tools', everyScalar());
         return [`agents.${name}.tools`];
       }),
   },
@@ -167,6 +194,49 @@ export const DEPRECATIONS: readonly Deprecation[] = [
         block.set('workspace', doc.createNode({ project_repository: mode === 'branch' }));
         return [`agents.${name}.workspace`];
       }),
+  },
+  {
+    id: 'agent-workspace',
+    since: '2026-11-08',
+    summary:
+      "`workspace: { project_repository }`, `workspace: branch | runtime | read` and `repository_access` are obsolete: a session never checks out the repository at boot. `project_repository: true` becomes `workspace.gitops.read` in `kortix_permissions`; clone explicitly with `workspace: { repos: [...] }` or `kortix workspaces clone`.",
+    apply: (doc) => {
+      // A kortix_version 1 or 2 file is the converter's (./legacy.ts): v2 cloned the
+      // repository when the key was omitted, so only the converter reads it right.
+      const version = doc.get('kortix_version');
+      if (version === 1 || version === 2) return [];
+      return agentBlocks(doc).flatMap(([name, block]) => {
+        const workspace = block.toJSON().workspace as unknown;
+        const access = block.toJSON().repository_access as unknown;
+        const legacyString = typeof workspace === 'string';
+        const legacyMap = typeof workspace === 'object' && workspace !== null && !Array.isArray(workspace) && 'project_repository' in workspace;
+        const hasAccess = block.has('repository_access');
+        if (!legacyString && !legacyMap && !hasAccess) return [];
+        // `project_repository: true` gave the agent the repository. Its meaning now is the
+        // grant that lets the agent clone it; false, `read` and an omitted value grant nothing.
+        const repository =
+          workspace === 'branch' ||
+          (legacyMap && (workspace as { project_repository?: unknown }).project_repository === true) ||
+          (!legacyString && !legacyMap && access === true);
+        if (repository) grantRepositoryRead(doc, block);
+        const paths: string[] = [];
+        if (hasAccess) {
+          deleteKeepingComments(block, 'repository_access');
+          paths.push(`agents.${name}.repository_access`);
+        }
+        if (legacyString) {
+          deleteKeepingComments(block, 'workspace');
+          paths.push(`agents.${name}.workspace`);
+        } else if (legacyMap) {
+          // The current `workspace` map ({ sandbox, repos, setup }) stays; only the old key goes.
+          const map = block.get('workspace', true);
+          if (isMap(map)) map.delete('project_repository');
+          if (!isMap(map) || map.items.length === 0) deleteKeepingComments(block, 'workspace');
+          paths.push(`agents.${name}.workspace`);
+        }
+        return paths;
+      });
+    },
   },
   {
     id: 'sandbox-templates',
@@ -263,20 +333,50 @@ export const DEPRECATIONS: readonly Deprecation[] = [
   },
 ];
 
+/**
+ * Rewrites of a valid shape to its canonical spelling. Only `--fix` and a
+ * legacy conversion apply them (`fixManifestText(text, { canonical: true })`);
+ * unlike `DEPRECATIONS`, validate does not warn, a reader keeps the file's
+ * value, and an ordinary write (CLI edit, API save) keeps the line, because
+ * the old spelling stays valid.
+ */
+export const CANONICAL_REWRITES: readonly Deprecation[] = [
+  {
+    id: 'every-grant-star',
+    since: '2026-11-05',
+    summary: 'every name is written `"*"`; `all` means the same.',
+    apply: (doc) =>
+      agentBlocks(doc).flatMap(([name, block]) =>
+        EVERY_GRANT_KEYS.flatMap((key) => {
+          const value = block.get(key, true);
+          if (!isScalar(value) || typeof value.value !== 'string' || value.value.trim().toLowerCase() !== 'all') return [];
+          // In place, so the line keeps its anchor and its trailing comment.
+          value.value = EVERY_GRANT;
+          value.type = Scalar.QUOTE_DOUBLE;
+          return [`agents.${name}.${key}`];
+        }),
+      ),
+  },
+];
+
 /** Apply every deprecation to `doc`, in place. */
 export function applyDeprecations(doc: Document): AppliedFix[] {
   return DEPRECATIONS.flatMap((deprecation) => deprecation.apply(doc).map((path) => ({ id: deprecation.id, path })));
 }
 
 /**
- * `text` rewritten to the latest shape, comments kept. Unchanged (the same
- * bytes) when nothing is deprecated or the YAML does not parse. Every line a
- * deprecation does not change keeps its bytes (`keepUnchangedLines`).
+ * `text` rewritten to the latest shape, comments kept. With `canonical`
+ * (`kortix validate --fix`, a legacy conversion) the canonical spellings
+ * (`CANONICAL_REWRITES`) are written too; every other writer leaves them
+ * alone. Unchanged (the same bytes) when nothing is deprecated or the YAML
+ * does not parse. Every line a deprecation does not change keeps its bytes
+ * (`keepUnchangedLines`).
  */
-export function fixManifestText(text: string): { text: string; fixed: AppliedFix[] } {
+export function fixManifestText(text: string, options: { canonical?: boolean } = {}): { text: string; fixed: AppliedFix[] } {
   const doc = parseDocument(text);
   if (doc.errors.length > 0) return { text, fixed: [] };
-  const fixed = applyDeprecations(doc);
+  const rewrites = options.canonical ? CANONICAL_REWRITES : [];
+  const fixed = [...applyDeprecations(doc), ...rewrites.flatMap((rewrite) => rewrite.apply(doc).map((path) => ({ id: rewrite.id, path })))];
   if (fixed.length === 0) return { text, fixed };
   // No folding of long lines, no padding inside `[a, b]`.
   const rendered = doc.toString({ lineWidth: 0, flowCollectionPadding: false });

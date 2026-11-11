@@ -40,14 +40,15 @@ export interface HarnessRefreshInput {
   skipRepo?: boolean
 }
 
-export interface HarnessRefreshResult {
+interface HarnessRefreshResult {
   ok: true
-  repo: { before: RepoInfo; after: RepoInfo }
+  /** `null` twice: the session has no checkout (a fresh boot), so the refresh was a no-op. */
+  repo: { before: RepoInfo | null; after: RepoInfo | null }
   runtime: string
   runtime_pid: number | null
 }
 
-export type HarnessAbortResult =
+type HarnessAbortResult =
   | { outcome: 'aborted'; body: { ok: true; runtime_session_id: string } }
   | { outcome: 'not-pinned'; body: { ok: false; error: string } }
   | { outcome: 'failed'; body: { ok: false; error: string; detail?: string } }
@@ -88,7 +89,7 @@ export interface HarnessConfigConvergeResult {
 export const MAX_SWAP_DELAY_MS = 30_000
 
 /** Test-only inputs on the convergence. See `ConvergeDeps.delayBeforeSwapMs`. */
-export interface HarnessConfigConvergeOptions {
+interface HarnessConfigConvergeOptions {
   delayBeforeSwapMs?: number
 }
 
@@ -104,7 +105,7 @@ export interface HarnessControlOperations {
   abort(): Promise<HarnessAbortResult>
 }
 
-export interface HarnessControlContext {
+interface HarnessControlContext {
   cfg: Config
   projectEnv?: ProjectEnvStore
   agentEnvFile?: string

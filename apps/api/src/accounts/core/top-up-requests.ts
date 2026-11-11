@@ -5,6 +5,7 @@ import { ACCOUNT_ACTIONS } from '../../iam/actions';
 import { actorOf } from '../../iam/actor';
 import { authorize } from '../../iam/authorize';
 import { AccountIdParam, accountsRouter, getMembership } from './app';
+import { accountIdParam } from '../../shared/route-params';
 
 /**
  * POST /v1/accounts/:accountId/top-up-requests — a member out of credits asks
@@ -15,7 +16,7 @@ export function registerTopUpRequestRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/{accountId}/top-up-requests',
+      path: '/{workspaceId}/top-up-requests',
       tags: ['accounts'],
       summary: 'Ask the account owners to add credits',
       description:
@@ -29,8 +30,8 @@ export function registerTopUpRequestRoutes(): void {
       },
     }),
     async (c) => {
-      const { accountId } = c.req.valid('param');
-      const userId = c.get('userId') as string;
+      const accountId = accountIdParam(c);
+      const userId = c.get('userId');
       if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
       if ((await authorize(await actorOf(c, accountId), ACCOUNT_ACTIONS.BILLING_WRITE)).allowed) {
         return c.json({ error: 'You can add credits yourself.', code: 'can_manage_billing' }, 409);
@@ -38,7 +39,7 @@ export function registerTopUpRequestRoutes(): void {
       const result = await requestTopUp({
         accountId,
         requesterUserId: userId,
-        requesterEmail: (c.get('userEmail') as string | undefined) ?? null,
+        requesterEmail: c.get('userEmail'),
       });
       if (!result) {
         return c.json({ error: 'You already asked the owners in the last 24 hours.', code: 'already_requested' }, 429);

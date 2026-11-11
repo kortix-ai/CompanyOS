@@ -1,3 +1,4 @@
+import { asLegacyWorkspaceRoute } from '@kortix/shared/workspace-routes';
 import type { Context, Next } from 'hono';
 import { timeout } from 'hono/timeout';
 import { HTTPException } from 'hono/http-exception';
@@ -94,8 +95,8 @@ const EXEMPT_FRAGMENTS = [
   // plus its GET .../updates drift-listing route
   '/snapshots', // sandbox template builds
   '/legacy-migration', // legacy VM → project migration runs
-  '/oauth/', // provider OAuth device flow — `start` spawns
-  // OpenCode + waits for the device challenge, which
+  '/oauth/', // provider OAuth device flow — `start` runs
+  // the provider's device grant + waits for the device challenge, which
   // can exceed the deadline on a cold replica
 ];
 
@@ -133,6 +134,16 @@ const EXEMPT_METHOD_PATH_PATTERNS: Array<{ method: string; path: RegExp }> = [
   // up to CONSENT_TIMEOUT_MS (chrome/logic.ts, 90 s, under Cloudflare's 100 s
   // proxy timeout). It bounds itself, and answers 408 on timeout.
   { method: 'POST', path: /^\/v1\/chrome\/attach$/ },
+  // The daemon's config-release descriptor tick (60 s poll): a git-bound
+  // cold build, every op self-bounded (git 30 s, gzip 60 s, db statement
+  // timeout), whose client aborts at 20 s and retries the tick — the 503 only
+  // paged work that finished and cached anyway (prod: ~100–230 503s/day).
+  // Anchored POST + path, NOT an `EXEMPT_FRAGMENTS` entry: `path.includes()`
+  // on `/config-release` would also un-bound `GET …/agents/config-release/config`
+  // (an agent named `config-release`) and every path merely containing the
+  // substring. The `/v1/workspaces` alias exempts identically
+  // (`asLegacyWorkspaceRoute`).
+  { method: 'POST', path: /\/sessions\/[^/]+\/config-release$/ },
   // The ws UPGRADE needs no entry — `isExempt` returns true for any request
   // carrying `Upgrade: websocket` before it reaches these lists.
 ];
@@ -144,7 +155,8 @@ export function isExempt(c: Context): boolean {
   // streaming endpoints not covered by the prefix/fragment lists.
   if (c.req.header('accept')?.includes('text/event-stream')) return true;
 
-  const path = c.req.path;
+  // A canonical `/v1/workspaces/…` request is exempt exactly when its legacy twin is.
+  const path = asLegacyWorkspaceRoute(c.req.path);
   for (const p of EXEMPT_PREFIXES) {
     if (path === p || path.startsWith(p + '/')) return true;
   }
@@ -180,7 +192,8 @@ const ATTACHMENT_COMPLETE_DEADLINE_MS = 95_000;
 /** This request's wall-clock deadline, or null when it is exempt or the guard is off. */
 export function requestDeadlineMs(c: Context): number | null {
   if (!ENABLED || isExempt(c)) return null;
-  if ((c.req.method === 'POST' && ATTACHMENT_COMPLETE.test(c.req.path)) || (c.req.method === 'PUT' && LOG_BLOB_UPLOAD.test(c.req.path)))
+  const path = asLegacyWorkspaceRoute(c.req.path);
+  if ((c.req.method === 'POST' && ATTACHMENT_COMPLETE.test(path)) || (c.req.method === 'PUT' && LOG_BLOB_UPLOAD.test(path)))
     return Math.max(DEADLINE_MS, ATTACHMENT_COMPLETE_DEADLINE_MS);
   return DEADLINE_MS;
 }

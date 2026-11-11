@@ -11,11 +11,18 @@ import {
   NATIVE_TOOLKITS,
   composioRestClient,
   customAuthConfigIds,
+  ownOAuthAppId,
   searchComposioCatalog,
   type ComposioCatalogClient,
 } from './composio-catalog-search';
 import { composioFileUpload, type ComposioFilesLike, uploadFileArgs } from './composio-files';
+import {
+  type ComposioProxyRequest,
+  type ComposioProxyResponse,
+  kortixComposioTool,
+} from './composio-youtube-upload';
 import type { ComposioToolLike } from './types';
+import { logger } from '../lib/logger';
 
 // Re-exported so `db-deps` reaches it through the lazily imported adapter module.
 export { composioCatalogSections } from './composio-catalog-search';
@@ -101,6 +108,8 @@ export interface ComposioSessionLike {
     args?: Record<string, unknown>,
     options?: { account?: string },
   ): Promise<ToolRouterSessionExecuteResponse>;
+  /** An API request on the session's connected account (`composio-youtube-upload.ts`). */
+  proxyExecute?(request: ComposioProxyRequest): Promise<ComposioProxyResponse>;
 }
 
 export interface ComposioExecuteInput {
@@ -244,6 +253,10 @@ function authConfigRequired(toolkit: string): HTTPException {
  * operator configured X. Every toolkit Composio accepts keeps its managed
  * defaults, exactly as before: no auth config is listed or selected for it.
  * The lookup is not cached, so a config created a moment ago applies.
+ *
+ * `ownApp` (connect only): the operator's own OAuth app wins over Composio's
+ * managed app (`ownOAuthAppId`). A session that already holds an account keeps
+ * the app that account signed in with, so this never applies to calls.
  */
 async function createDirectSession(input: {
   runtime: ComposioRuntime;
@@ -251,8 +264,26 @@ async function createDirectSession(input: {
   toolkit: string;
   connectedAccountId?: string | null;
   catalogClient?: ComposioCatalogClient;
+  ownApp?: boolean;
 }): Promise<ComposioSessionLike> {
   const config = directSessionConfig(input.toolkit, input.connectedAccountId);
+  const ownAppId = input.ownApp ? await lookupOwnOAuthApp(input.toolkit, input.catalogClient) : null;
+  if (ownAppId) {
+    try {
+      return await createToolkitSession(input.runtime, input.userId, input.toolkit, {
+        ...config,
+        authConfigs: { [input.toolkit]: ownAppId },
+      });
+    } catch (error) {
+      // An unknown slug is the same refusal on every path: answer its 422.
+      if (error instanceof HTTPException) throw error;
+      // Composio refused the own app (removed or disabled since the lookup):
+      // connect as if it did not exist, and say so in the log.
+      logger.warn(`[composio] own OAuth app ${ownAppId} refused for ${input.toolkit}, connecting without it`, {
+        error: error instanceof Error ? error.message.split('\n')[0] : String(error),
+      });
+    }
+  }
   try {
     return await createToolkitSession(input.runtime, input.userId, input.toolkit, config);
   } catch (error) {
@@ -267,6 +298,23 @@ async function createDirectSession(input: {
       ...config,
       authConfigs: { [input.toolkit]: authConfigId },
     });
+  }
+}
+
+/**
+ * The operator's own OAuth app for a toolkit, or null. A failed lookup
+ * connects with Composio's managed app, as before this lookup existed: a
+ * Composio listing error must not block every connect.
+ */
+async function lookupOwnOAuthApp(toolkit: string, catalogClient?: ComposioCatalogClient): Promise<string | null> {
+  if (!catalogClient && !composioConfigured()) return null;
+  try {
+    return await ownOAuthAppId({ catalogClient: catalogClient ?? composioRestClient(), toolkit });
+  } catch (error) {
+    logger.warn(`[composio] own OAuth app lookup failed for ${toolkit}, connecting with the managed app`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 
@@ -500,6 +548,13 @@ function cachedCatalogCall<T>(runtime: ComposioRuntime, key: string, load: () =>
   return value;
 }
 
+/** The provider's `400 Pagination Error: Failed to decode cursor` (code 10400). */
+function isComposioInvalidCursorError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const { status, error } = err as { status?: unknown; error?: { error?: { code?: unknown } } };
+  return status === 400 && error?.error?.code === 10400;
+}
+
 export async function composioCatalogPage(input: {
   projectId: string;
   q?: string;
@@ -618,18 +673,28 @@ export async function composioCatalogPage(input: {
   // The discovery identity never connects anything, so a page is the same for
   // every project and is cached deployment-wide (see `cachedCatalogCall`).
   // Only unsearched pages reach here; every query returned above.
-  const pageKey = `search\u0000\u0000${input.cursor ?? ''}\u0000${input.limit ?? ''}`;
-  const [page, meta, hidden] = await Promise.all([
-    cachedCatalogCall(runtime, pageKey, async () => {
+  const loadPage = (cursor: string | undefined) =>
+    cachedCatalogCall(runtime, `search\u0000\u0000${cursor ?? ''}\u0000${input.limit ?? ''}`, async () => {
       const session = await runtime.sessions.create(`kortix-discovery:${input.projectId}`, {
         manageConnections: false,
         sandbox: { enable: false },
       });
       return session.toolkits({
-        ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...(cursor ? { cursor } : {}),
         ...(input.limit != null ? { limit: input.limit } : {}),
       });
-    }),
+    });
+  // A client-supplied cursor the provider cannot decode (stale, truncated or
+  // from another catalogue) restarts at the first page, as the search branch
+  // does, instead of surfacing the provider's 400 as an API error.
+  const pageLoad = input.cursor
+    ? loadPage(input.cursor).catch((err: unknown) => {
+        if (!isComposioInvalidCursorError(err)) throw err;
+        return loadPage(undefined);
+      })
+    : loadPage(undefined);
+  const [page, meta, hidden] = await Promise.all([
+    pageLoad,
     toolkitMetaBySlug(runtime),
     hiddenToolkits,
   ]);
@@ -724,6 +789,11 @@ export async function executeComposio(
     }
   }
 
+  // A tool Kortix runs itself (`youtube.upload_video`) uses the same verified
+  // account through Composio's proxy. Composio's tool of that name never runs.
+  const kortixTool = kortixComposioTool(input.toolkit, input.toolSlug);
+  if (kortixTool) return kortixTool.run(session, input.args, input.toolkit);
+
   // The resumed Tool Router session already owns the toolkit → connected-account
   // binding, and the state check above proves it is the expected account. Passing
   // `options.account` again opts into Composio's multi-account selector, which is
@@ -750,7 +820,20 @@ export async function executeComposio(
     // Composio's own rate limit (`RateLimitError`, HTTP 429) is a retry-later
     // answer, not a fault: the gateway turns it into a 429 with Retry-After.
     const limited = error as { status?: unknown; headers?: { get?: (name: string) => string | null } };
-    if (limited?.status !== 429) throw error;
+    if (limited?.status !== 429) {
+      if (isHtmlPage(error)) {
+        // Keep the page's identity (`<title>`): the only clue to WHICH edge
+        // blocked the call. A Cloudflare WAF block page on Composio's edge
+        // hit the linear calls for a week before anyone could name it (KRTX-4512).
+        const page = htmlPageTitle(error);
+        return {
+          ok: false,
+          status: 502,
+          data: `composio_upstream_unavailable: Composio answered ${String(limited?.status ?? 502)} with an HTML error page${page ? ` (page: ${page})` : ''}`,
+        };
+      }
+      throw error;
+    }
     const retryAfterSeconds = parseRetryAfter(limited.headers?.get?.('retry-after'));
     return {
       ok: false,
@@ -770,15 +853,35 @@ export async function executeComposio(
     result: response.data,
     ...(response.error ? { error: response.error } : {}),
   };
-  // Linear rejects malformed GraphQL from the caller, not from an unavailable provider.
-  const callerError = input.toolkit === 'linear' && input.toolSlug === 'LINEAR_RUN_QUERY_OR_MUTATION' &&
-    typeof response.error === 'string' && /\bCode: (?:GRAPHQL_VALIDATION_FAILED|INPUT_ERROR)\b/.test(response.error);
+  // The caller's own input was rejected, not the provider: Composio's request
+  // validation answers a 400 in the execute payload (a required tool argument
+  // is missing), and a provider's argument validation surfaces in the error
+  // text (Linear's GraphQL validation codes). The caller fixes the args and
+  // retries, so this is a 400 the gateway logs at debug — an unavailable
+  // provider is the 502-warn path. Scoped matches leaked other shapes into the
+  // warn path: prod, 2026-11-07/08, one `linear.run_query_or_mutation` warn
+  // spike against a near-zero baseline (KRTX-678).
+  const errorText = typeof response.error === 'string' ? response.error : '';
+  const callerError = response.data.status_code === 400 ||
+    /\bCode: (?:GRAPHQL_VALIDATION_FAILED|INPUT_ERROR|INVALID_INPUT)\b/.test(errorText);
   // A provider's rate limit arrives inside Composio's error text.
-  // ponytail: text match, no structured provider status in the execute response; read it when Composio exposes one.
-  const rateLimited = typeof response.error === 'string' && COMPOSIO_RATE_LIMIT.test(response.error);
+  const rateLimited = COMPOSIO_RATE_LIMIT.test(errorText);
   return response.error
     ? { ok: false, status: callerError ? 400 : rateLimited ? 429 : 502, data }
     : { ok: true, status: 200, data };
+}
+
+/** An edge or proxy error page (Cloudflare 5xx) instead of Composio's JSON error. */
+function isHtmlPage(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /<!doctype html|<html[\s>]/i.test(message);
+}
+
+/** The page's `<title>`, truncated to 80 chars; absent when the page has none. */
+function htmlPageTitle(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const title = /<title>([^<]{1,200})<\/title>/i.exec(message)?.[1]?.trim();
+  return title ? title.slice(0, 80) : null;
 }
 
 const COMPOSIO_RATE_LIMIT = /\b429\b|rate[ _-]?limit|too many requests/i;
@@ -843,15 +946,18 @@ export async function composioConnectUrl(input: {
   catalogClient?: ComposioCatalogClient;
 }): Promise<ComposioConnectResult> {
   assertStableUserId(input.connectionId, input.stableUserId);
-  // Composio's managed app is the supported zero-setup path. Custom OAuth
-  // scopes require a verified app owned by the customer and must not be
-  // smuggled into the managed client. An operator's own auth config is used
-  // only for a toolkit Composio holds no app for (see createDirectSession).
+  // Composio's managed app is the zero-setup path. Custom OAuth scopes require
+  // a verified app owned by the operator and must not be smuggled into the
+  // managed client. The operator's own OAuth app (an enabled custom `OAUTH2`
+  // auth config) wins: the new account signs in with it and uses its quota
+  // (`ownOAuthAppId`). Other custom configs apply only to a toolkit Composio
+  // holds no app for (see createDirectSession).
   const session = await createDirectSession({
     runtime: input.runtime ?? getComposioRuntime(),
     userId: input.stableUserId,
     toolkit: input.app,
     catalogClient: input.catalogClient,
+    ownApp: true,
   });
   const state = await loadToolkitState(session, input.app);
   if (state.isNoAuth) {

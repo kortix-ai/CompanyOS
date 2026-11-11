@@ -23,7 +23,7 @@ export interface ChannelCommandSpec {
 export const CHANNEL_COMMANDS = [
   { name: 'new', aliases: ['reset'], usage: '/new', description: "Start a new conversation and stop this chat's run" },
   { name: 'stop', aliases: ['cancel'], usage: '/stop', description: "Stop the agent's current run in this chat" },
-  { name: 'status', aliases: [], usage: '/status', description: "Show this chat's project, agent, model and session" },
+  { name: 'status', aliases: [], usage: '/status', description: "Show this chat's workspace, agent, model and session" },
   { name: 'model', aliases: ['models'], usage: '/model [id]', description: 'List the models, or switch this chat to one' },
   { name: 'agent', aliases: ['agents'], usage: '/agent [name]', description: 'List the agents, or switch this chat to one' },
   { name: 'help', aliases: ['start'], usage: '/help', description: 'List the commands' },
@@ -57,4 +57,10 @@ export function parseChannelCommand(text: string, botUsername: string | null): P
 /** The entries a platform registers in its menu: names only, in this order. */
 export function commandMenu(): Array<{ command: string; description: string }> {
   return CHANNEL_COMMANDS.map((c) => ({ command: c.name, description: c.description }));
+}
+
+/** "/new, /stop, … and /help": the commands the agent never receives. */
+export function kortixCommandsSentence(): string {
+  const names = CHANNEL_COMMANDS.map((c) => `/${c.name}`);
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }

@@ -56,6 +56,8 @@ export interface QueueRow {
   clientMessageId: string;
   text: string;
   attachmentCount: number;
+  /** Platform-generated context, never text typed by a person. */
+  synthetic?: true;
   state: QueueRowState;
   lastError?: string;
   /** The server can still remove this prompt, and this viewer may. */
@@ -68,8 +70,7 @@ export interface QueueRow {
   steer?: true;
   /** Why a steer prompt waits for the turn to end instead. */
   steerFallback?: SessionPromptSteerFallback;
-  /** "Stop and send" can turn it into Quick Queue: it is still waiting and
-   *  not yet on the wire. */
+  /** "Send now" can send it next: it is still waiting and not yet on the wire. */
   interruptible: boolean;
   /** A `/` command held in this tab until the session can run it
    *  (`held-commands.ts`). Not an inbox row. */
@@ -182,6 +183,7 @@ export function projectQueueRows(input: {
       clientMessageId: prompt.client_message_id,
       text: rowText(draft ? cleanPromptText(draft.text) : cleaned),
       attachmentCount,
+      ...(prompt.synthetic ? { synthetic: true as const } : {}),
       state,
       ...(state === 'failed' && prompt.last_error ? { lastError: prompt.last_error } : {}),
       // A steered prompt on the wire is still unread: the server takes it back.

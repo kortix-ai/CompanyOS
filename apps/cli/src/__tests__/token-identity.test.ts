@@ -14,6 +14,7 @@ import {
 } from '../api/token-identity.ts';
 import {
   denialDetailFromBody,
+  grantHolds,
   printPermissionDenialIdentity,
   recordPermissionDenial,
   resetPermissionDenial,
@@ -252,17 +253,9 @@ describe('permission-denial identity footer', () => {
     expect(out).not.toContain('kortix_permissions');
   });
 
-  test('agent_human_only_action says a human must do it', async () => {
+  test('agent_human_only_action hands the step to the person, never to kortix.yaml', async () => {
     const out = await footerFor({ code: 'agent_human_only_action', action: 'project.delete' });
-    expect(out).toMatch(/a human must do this/i);
-    expect(out).not.toContain('kortix_permissions');
-  });
-
-  test('agent_session_forbidden (e.g. granting a secret) says a person must do it', async () => {
-    // No kortix_permissions entry unlocks these routes, so the manifest hint
-    // would send the agent to a fix that cannot work.
-    const out = await footerFor({ code: 'agent_session_forbidden' });
-    expect(out).toMatch(/a person with project access must do this/i);
+    expect(out).toMatch(/hand the person the link/i);
     expect(out).not.toContain('kortix_permissions');
   });
 
@@ -270,21 +263,49 @@ describe('permission-denial identity footer', () => {
     const out = await footerFor({ code: 'session_repository_access_denied' });
     expect(out).toContain('workspace repository access denied');
     expect(out).toContain('(not the cause)');
-    expect(out).toMatch(/start a session with repository access/);
-    expect(out).not.toContain('kortix_permissions');
+    // Decided at session start from the agent grant and the starting person.
+    expect(out).toMatch(/project\.gitops\.read in kortix_permissions, then start a new session/);
   });
 
   test('an older server\'s bare workspace message gets the same remedy', async () => {
     const out = await footerFor(denialDetailFromBody({ error: true, message: 'session workspace does not allow repository access', status: 403 }));
     expect(out).toContain('workspace repository access denied');
-    expect(out).not.toContain('kortix_permissions');
+    expect(out).toMatch(/start a new session/);
   });
 
   test('any other code names the code and never sends the agent to kortix.yaml', async () => {
-    const out = await footerFor({ code: 'project_role_insufficient', action: 'project.file.read' });
-    expect(out).toContain('project_role_insufficient');
+    const out = await footerFor({ code: 'no_project_membership', action: 'project.file.read' });
+    expect(out).toContain('no_project_membership');
     expect(out).toContain('kortix whoami --token-only');
     expect(out).not.toContain('kortix_permissions');
+  });
+
+  test('credential_fence_refused names the credential, never kortix_permissions', async () => {
+    const out = await footerFor({ code: 'credential_fence_refused' });
+    expect(out).toContain('bound to one workspace');
+    expect(out).not.toContain('kortix_permissions');
+  });
+
+  test('an older server\'s untyped fence message gets the fence remedy', async () => {
+    const out = await footerFor(
+      denialDetailFromBody({ message: 'Project-scoped token cannot list projects [check=token-project-scope:project-list]' }),
+    );
+    expect(out).toContain('bound to one workspace');
+    expect(out).not.toContain('kortix_permissions');
+  });
+
+  test('a 403 body names the action by its workspace name', () => {
+    expect(denialDetailFromBody({ code: 'agent_scope_insufficient', action: 'project.file.read' }).action).toBe('workspace.file.read');
+    expect(
+      denialDetailFromBody({ code: 'agent_scope_insufficient', action: 'project.file.read', workspace_action: 'workspace.file.read' }).action,
+    ).toBe('workspace.file.read');
+  });
+
+  test('a grant that already holds the action is never told to add it', async () => {
+    expect(grantHolds(['workspace.file.read'], 'project.file.read')).toBe(true);
+    expect(grantHolds(['project.file.read'], 'workspace.file.read')).toBe(true);
+    expect(grantHolds(['*'], 'workspace.members.manage')).toBe(true);
+    expect(grantHolds(['workspace.read'], 'workspace.members.manage')).toBe(false);
   });
 
   test('CR_AGENT_GOVERNANCE_CHANGE from an older server says a person must merge it', async () => {

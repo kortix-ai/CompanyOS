@@ -2,6 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import type { AccountStateResponse, AppEnv } from '../../types';
 import { buildAccountState, buildMinimalAccountState, buildLocalAccountState } from '../services/account-state';
+import { claimedFreeGrantWorkspace } from '../services/free-grant';
 import { hasDatabase } from '../../shared/db';
 import { config } from '../../config';
 import { resolveScopedAccountId } from '../../middleware/resolve-account';
@@ -9,6 +10,7 @@ import { authorize } from '../../iam/authorize';
 import { actorOf } from '../../iam/actor';
 import { ACCOUNT_ACTIONS } from '../../iam/actions';
 import { makeOpenApiApp, json, auth } from '../../openapi';
+import { OpaqueSchema } from './opaque-schema';
 
 export const accountStateRouter = makeOpenApiApp<AppEnv>();
 
@@ -55,13 +57,20 @@ function gatingView(state: AccountStateResponse) {
 
 async function viewFor(c: Context<AppEnv>, accountId: string, state: AccountStateResponse): Promise<Record<string, unknown>> {
   const { read, write } = await billingVerdicts(c, accountId);
-  return read ? { ...state, can_manage_billing: write } : { ...gatingView(state), can_manage_billing: false };
+  if (!read) return { ...gatingView(state), can_manage_billing: false };
+  // Per caller: where THIS person's free credits are, read only for a
+  // workspace that has none (the line the Plan tab and the modal show).
+  if (state.credits.free_grant && !state.credits.free_grant.eligible) {
+    const claimed = await claimedFreeGrantWorkspace(c.get('userId')).catch(() => null);
+    state.credits.free_grant = { eligible: false, claimed_workspace_id: claimed };
+  }
+  return { ...state, can_manage_billing: write };
 }
 
-// Opaque account-state payload (credits, tier, subscription, …). Permissive on
-// purpose — the real shape is large and varies by mode (live / minimal / local mock).
-const AccountStateSchema = z.record(z.string(), z.any());
-const AccountStateQuerySchema = z.object({ account_id: z.string().optional() });
+const AccountStateQuerySchema = z.object({
+  account_id: z.string().optional(),
+  workspace_id: z.string().optional().openapi({ description: 'The workspace to read (the canonical name of account_id; either id works).' }),
+});
 
 accountStateRouter.openapi(
   createRoute({
@@ -72,7 +81,9 @@ accountStateRouter.openapi(
     ...auth,
     request: { query: AccountStateQuerySchema },
     responses: {
-      200: json(AccountStateSchema, 'Account billing state'),
+      // Opaque account-state payload (credits, tier, subscription, …). Permissive on
+      // purpose — the real shape is large and varies by mode (live / minimal / local mock).
+      200: json(OpaqueSchema, 'Account billing state'),
     },
   }),
   async (c) => {
@@ -106,7 +117,7 @@ accountStateRouter.openapi(
     ...auth,
     request: { query: AccountStateQuerySchema },
     responses: {
-      200: json(AccountStateSchema, 'Minimal account billing state'),
+      200: json(OpaqueSchema, 'Minimal account billing state'),
     },
   }),
   async (c) => {

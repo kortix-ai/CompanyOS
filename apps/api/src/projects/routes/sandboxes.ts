@@ -16,7 +16,10 @@ import { classifySnapshotError, describeSnapshotError } from '../../snapshots/er
 import { withTimeout } from '../../shared/with-timeout';
 import { ttlMemo } from '../../shared/ttl-memo';
 import { templateSlugFromBuildSlug } from '../../snapshots/build-slug';
-import { TemplateNotFoundError } from '../../snapshots/templates';
+import { TemplateNotFoundError, resolveTemplateForBuildSlug } from '../../snapshots/templates';
+import { isPlatformAdmin } from '../../shared/platform-roles';
+import { isProjectSessionPrincipal } from '../../iam/agent-scope';
+import type { Context } from 'hono';
 import { createRoute, z } from '@hono/zod-openapi';
 import { loadProjectForUser, assertProjectCapability } from '../lib/access';
 import { AnyObject, SnapshotSchema, projectsApp } from '../lib/app';
@@ -36,6 +39,7 @@ import { readJsonObject } from '../../shared/http-body';
 import { logger } from '../../lib/logger';
 import { isRepositoryDisconnectedError } from '../../shared/repository-health';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 /**
  * Derive the ONE sandbox status every surface renders — sidebar alert, Customize
@@ -238,6 +242,19 @@ export function invalidateSandboxHealth(projectId: string): void {
   sandboxHealthMemo.invalidate(projectId);
 }
 
+async function loadSandboxWriter(
+  c: Context,
+  projectId: string,
+): Promise<Response | NonNullable<Awaited<ReturnType<typeof loadProjectForUser>>>> {
+  const loaded = await loadProjectForUser(c, projectId, 'read');
+  if (!loaded) return c.json({ error: 'Not found' }, 404);
+  // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
+  // project.sandbox.write so a custom role can withhold it (humans) AND the
+  // agent-grant fold applies (agent sessions). Managers hold it by default.
+  await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+  return loaded;
+}
+
 export function registerSandboxesRoutes(): void {
   // ─── Sandbox templates ─────────────────────────────────────────────────────
   // One platform-default image, optionally extended by `sandbox: templates:` entries
@@ -251,12 +268,12 @@ export function registerSandboxesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sandboxes',
+      path: '/{workspaceId}/sandboxes',
       tags: ['sandboxes'],
       summary: 'List project sandboxes',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -264,7 +281,7 @@ export function registerSandboxesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
 
@@ -289,12 +306,12 @@ export function registerSandboxesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/snapshots',
+      path: '/{workspaceId}/snapshots',
       tags: ['sandboxes'],
       summary: 'List project sandbox snapshots',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.array(SnapshotSchema), 'Snapshots'),
@@ -302,7 +319,7 @@ export function registerSandboxesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
 
@@ -351,12 +368,12 @@ export function registerSandboxesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sandbox-health',
+      path: '/{workspaceId}/sandbox-health',
       tags: ['sandboxes'],
       summary: 'Get project sandbox health',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -364,7 +381,7 @@ export function registerSandboxesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
 
@@ -393,27 +410,23 @@ export function registerSandboxesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/snapshots/rebuild',
+      path: '/{workspaceId}/snapshots/rebuild',
       tags: ['sandboxes'],
       summary: 'Rebuild the project sandbox snapshot',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: { content: { 'application/json': { schema: AnyObject } } },
         },
       responses: {
           202: json(z.any(), 'OK'),
-          ...errors(404, 409, 502, 503),
+          ...errors(403, 404, 409, 502, 503),
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
-    const loaded = await loadProjectForUser(c, projectId, 'read');
-    if (!loaded) return c.json({ error: 'Not found' }, 404);
-    // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
-    // project.sandbox.write so a custom role can withhold it (humans) AND the
-    // agent-grant fold applies (agent sessions). Managers hold it by default.
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+    const projectId = workspaceIdParam(c);
+    const loaded = await loadSandboxWriter(c, projectId);
+    if (loaded instanceof Response) return loaded;
 
     const body = await readJsonObject(c);
     const slugRaw = (typeof body.slug === 'string' && body.slug)
@@ -430,10 +443,34 @@ export function registerSandboxesRoutes(): void {
     // must show up on the very next poll, not up to a TTL later.
     invalidateSandboxHealth(projectId);
     try {
+      // A project-scoped caller must never reach the shared platform image: the
+      // default slug short-circuits to the project-independent shared row
+      // (resolveTemplateBySlug), so deleting it here would destroy the one
+      // image every tenant's next session boots from, and a provider that
+      // refuses while sandboxes are pinned answers a 409 disclosing the
+      // cross-tenant in-use count on the way. Only a PERSON acting as a
+      // platform admin owns the platform image: an agent session carries its
+      // launcher's userId, so the session-principal predicate rides next to
+      // isPlatformAdmin (the operator gate project-settings.ts uses).
+      // Project slugs are unaffected. (KRTX-4465)
+      const requested = await resolveTemplateForBuildSlug(project, slug);
+      if (
+        requested.isShared &&
+        (isProjectSessionPrincipal(c) || !(await isPlatformAdmin(c.get('userId'))))
+      ) {
+        return c.json(
+          { error: 'Shared platform templates cannot be rebuilt from a project.', code: 'TEMPLATE_SHARED' },
+          403,
+        );
+      }
       const attempts = await runProviderActions(
         providers,
         async (provider) => {
-          const deleted = await deleteSandboxImage(project, { slug, provider });
+          // Delete exactly the template the guard authorized — never re-resolve
+          // the raw slug inside the destructive call: a project row that
+          // disappears between the guard's resolve and the delete would fall
+          // back to the shared platform default (the check/use window).
+          const deleted = await deleteSandboxImage(project, { slug, provider, template: requested });
           kickPreBuild(project, {
             slug: deleted.slug,
             accountId: loaded.row.accountId,
@@ -494,12 +531,12 @@ export function registerSandboxesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/snapshots/fix-with-agent',
+      path: '/{workspaceId}/snapshots/fix-with-agent',
       tags: ['sandboxes'],
       summary: 'Ask an agent to fix a failing snapshot build',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           201: json(z.any(), 'OK'),
@@ -507,13 +544,9 @@ export function registerSandboxesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
-    const loaded = await loadProjectForUser(c, projectId, 'read');
-    if (!loaded) return c.json({ error: 'Not found' }, 404);
-    // Capability gate: rebuilding snapshots/templates re-provisions infra. Gated on
-    // project.sandbox.write so a custom role can withhold it (humans) AND the
-    // agent-grant fold applies (agent sessions). Managers hold it by default.
-    await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
+    const projectId = workspaceIdParam(c);
+    const loaded = await loadSandboxWriter(c, projectId);
+    if (loaded instanceof Response) return loaded;
     const userId = c.get('userId') as string;
 
     const builds = await listSnapshotBuilds(projectId, { limit: 50 }).catch(() => []);

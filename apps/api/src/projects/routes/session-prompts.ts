@@ -23,10 +23,10 @@ import { normalizeString } from '../lib/serializers';
 import { isUuid } from '../../shared/validate';
 import { readJsonObject } from '../../shared/http-body';
 import { annotateAuditEvent } from '../../shared/audit-scope';
-import { notificationsEnabled } from '../../notifications/enabled';
 import { autoWatchSession } from '../../notifications/watchers';
 import { logger } from '../../lib/logger';
 import { personUserId } from './session-watch';
+import { loadRunnableSession } from './lib/route-bindings';
 import { collectMessageLinksInBackground } from '../lib/project-space-links';
 import {
   deleteInboxPrompt,
@@ -61,6 +61,8 @@ import {
 } from '../lib/session-prompt-view';
 import { SessionPromptDeliverySchema } from '@kortix/api-contract';
 import { WIRE_MESSAGE_ID, isWireIdAheadOf, mintWireMessageId } from '../wire-message-id';
+import { capturePersonEvent } from './product-events';
+import { workspaceIdParam } from '../../shared/route-params';
 
 // ─── Prompt inbox ───────────────────────────────────────────────────────────
 //
@@ -72,7 +74,7 @@ import { WIRE_MESSAGE_ID, isWireIdAheadOf, mintWireMessageId } from '../wire-mes
 // their own idea of the queue.
 //
 // The client still mints the wire `messageID` and sends it here verbatim.
-// OpenCode decides "has this prompt already been answered?" by id ORDER, and
+// An OpenCode box decides "has this prompt already been answered?" by id ORDER, and
 // only the process holding the transcript can place an id correctly — see
 // `wire-message-id.ts` for the one exception (redelivery, which re-reads the
 // transcript first).
@@ -142,20 +144,20 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/prompts',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts',
       tags: ['sessions'],
       summary: 'Send a prompt (message) to a session',
       description:
         'Send a message to a session. The prompt queues and delivers in order.',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             client_message_id: z.string().openapi({ description: 'Caller-chosen id, 1-128 chars, unique per prompt. Reuse it to retry safely.' }),
             message_id: z.string().optional().openapi({ description: 'Wire message id (starts with msg_). Omit it and the server mints one and places it in order on delivery.' }),
             parts: z.array(z.object({ type: z.enum(['text', 'file', 'agent']).optional(), text: z.string().optional(), mime: z.string().optional(), url: z.string().optional(), filename: z.string().optional(), attachment_id: z.string().optional() }).passthrough()).openapi({ description: '1 or more parts. Text prompt: [{"type":"text","text":"..."}].' }),
             placement: z.enum(['transcript', 'composer']).optional().openapi({ description: 'transcript sends now; composer stages it as a draft.' }),
-            delivery: SessionPromptDeliverySchema.optional().openapi({ description: 'How the prompt reaches a running turn: steer (read at its next step), queue (after it ends), interrupt (ends it after the running tool; only for the member who prompted that turn, the session owner or a project manager, else 403 not_turn_prompter). Sets placement.' }),
+            delivery: SessionPromptDeliverySchema.optional().openapi({ description: 'Accepted for older clients and ignored for delivery: a prompt sent while a turn runs always steers it (read at its next step; the turn does not stop). steer, queue and interrupt are all served as steer.' }),
             overrides: z.object({ agent: z.string().optional(), model: z.object({ providerID: z.string(), modelID: z.string() }).optional(), variant: z.string().optional(), directory: z.string().optional() }).passthrough().optional().optional().openapi({ description: 'Per-prompt agent or model override.' }),
             remint_on_delivery: z.boolean().optional().openapi({ description: 'Assign a fresh wire id when the prompt is delivered.' }),
             client_sent_at_ms: z.number().optional().openapi({ description: 'Client send time, epoch milliseconds.' }),
@@ -169,7 +171,7 @@ export function registerSessionPromptsRoutes(): void {
     }),
     async (c) => {
       const receivedAtMs = Date.now();
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 
@@ -268,9 +270,9 @@ export function registerSessionPromptsRoutes(): void {
       }
       if (!messageId || !WIRE_MESSAGE_ID.test(messageId)) {
         // Rejected rather than repaired: an id this endpoint cannot verify the
-        // ordering of is one OpenCode may read as already answered, and a
+        // ordering of is one an OpenCode box may read as already answered, and a
         // dropped turn is worse than a refused request.
-        return c.json({ error: 'message_id must be an OpenCode wire message id' }, 400);
+        return c.json({ error: 'message_id must be a wire message id (msg_…)' }, 400);
       }
       const sanitized = sanitizeInboxPromptParts(rawParts);
       if ('error' in sanitized) return c.json({ error: sanitized.error }, 400);
@@ -285,9 +287,9 @@ export function registerSessionPromptsRoutes(): void {
 
       const overridesInput = (body.overrides ?? {}) as Record<string, unknown>;
       const model = overridesInput.model as { providerID?: unknown; modelID?: unknown } | null;
-      // A RE-POINTED pin travels ON THE PROMPT: OpenCode keeps its own
-      // per-session model, and `KORTIX_OPENCODE_MODEL` only seeds the default for
-      // a NEW OpenCode session. See `lib/prompt-model.ts` for the measurement.
+      // A RE-POINTED pin travels ON THE PROMPT: the runtime keeps its own
+      // per-session model, and `KORTIX_MODEL` only seeds the default for
+      // a NEW runtime session. See `lib/prompt-model.ts` for the measurement.
       const overrides = {
         agent: typeof overridesInput.agent === 'string' ? overridesInput.agent : null,
         model: promptModelOverride(model, visible.row.metadata as Record<string, unknown> | null),
@@ -322,7 +324,7 @@ export function registerSessionPromptsRoutes(): void {
           projectId,
           sessionId,
           userId: loaded.userId,
-          model: promptModelRef(overrides.model) ?? (typeof metadata.opencode_model === 'string' ? metadata.opencode_model : null),
+          model: promptModelRef(overrides.model) ?? (typeof metadata.model === 'string' ? metadata.model : null),
         });
         if (missing) return c.json(claudeSubscriptionRequiredBody(missing), 409);
       }
@@ -330,6 +332,11 @@ export function registerSessionPromptsRoutes(): void {
       // Same gate as start/wake: a prompt spends compute.
       const billing = await checkBillingAdmission(loaded.row.accountId);
       if (!billing.ok) {
+        capturePersonEvent(c, loaded, projectId, 'billing_gate_hit', {
+          reason: billing.reason,
+          where: 'prompt',
+          session_id: sessionId,
+        });
         return c.json(
           {
             error: billing.message,
@@ -405,21 +412,20 @@ export function registerSessionPromptsRoutes(): void {
         sendState.then((state) => state.held),
       );
       // This prompt runs on the pin the revert restored: drop the marker.
-      if ((visible.row.metadata as Record<string, unknown> | null)?.opencode_model_restored === true) {
+      if ((visible.row.metadata as Record<string, unknown> | null)?.model_restored === true) {
         void clearRestoredModelPin(sessionId);
       }
 
       // KRTX-1742: a person who prompts a session follows its notifications
-      // from now on. Never un-mutes; the creator follows without a row. Only
-      // with the `notification_center` flag on.
-      const prompter = notificationsEnabled(loaded.row.metadata) ? personUserId(c, loaded) : null;
+      // from now on. Never un-mutes; the creator follows without a row.
+      const prompter = personUserId(c, loaded);
       if (prompter && prompter !== visible.row.createdBy) {
         void autoWatchSession(projectId, sessionId, prompter).catch((err) =>
           logger.warn('[notify] auto-watch failed', { sessionId, error: err instanceof Error ? err.message : String(err) }),
         );
       }
 
-      // A person's links join the Links tab of the thread's channel (`project_channels`).
+      // A person's links join the Links tab of the thread's channel (`chat`).
       if (!enqueued.deduped) {
         collectMessageLinksInBackground({
           projectId,
@@ -451,6 +457,24 @@ export function registerSessionPromptsRoutes(): void {
       };
       if (enqueued.deduped) return c.json(response, 200);
 
+      // A person's prompt; an agent's session token or an API key is not a person.
+      capturePersonEvent(
+        c,
+        loaded,
+        projectId,
+        'prompt_sent',
+        {
+          session_id: sessionId,
+          model:
+            promptModelRef(overrides.model) ??
+            (typeof (visible.row.metadata as Record<string, unknown> | null)?.model === 'string'
+              ? ((visible.row.metadata as Record<string, unknown>).model as string)
+              : 'default'),
+          attachment_count: parts.filter((part) => (part as { type?: unknown }).type === 'file').length,
+        },
+        idempotencyKey,
+      );
+
       // Fire the targeted drain WITHOUT waiting on it: the response is "your
       // prompt is durable", not "your prompt has been delivered". The drain
       // claims by idempotency key so this row does not wait behind older work.
@@ -473,12 +497,12 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/prompts',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts',
       tags: ['sessions'],
       summary: 'List queued prompts of a session',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
       },
       responses: {
         200: json(SessionPromptListSchema, 'Pending prompts'),
@@ -486,7 +510,7 @@ export function registerSessionPromptsRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 
@@ -517,13 +541,13 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/sessions/{sessionId}/prompts/{promptId}',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}',
       tags: ['sessions'],
       summary: 'Cancel a queued prompt',
       ...auth,
       request: {
         params: z.object({
-          projectId: z.string(),
+          workspaceId: z.string(),
           sessionId: z.string(),
           promptId: z.string(),
         }),
@@ -534,7 +558,7 @@ export function registerSessionPromptsRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const promptId = c.req.param('promptId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
@@ -546,18 +570,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. Un-queuing your own
       // pending message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       // The session AND inbox scopes are in the DELETE's own predicate, so
       // neither a prompt id from another session nor an automation's
@@ -627,7 +642,7 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'patch',
-      path: '/{projectId}/sessions/{sessionId}/prompts/{promptId}',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}',
       tags: ['sessions'],
       summary: 'Edit a queued prompt',
       description:
@@ -635,7 +650,7 @@ export function registerSessionPromptsRoutes(): void {
       ...auth,
       request: {
         params: z.object({
-          projectId: z.string(),
+          workspaceId: z.string(),
           sessionId: z.string(),
           promptId: z.string(),
         }),
@@ -650,7 +665,7 @@ export function registerSessionPromptsRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const promptId = c.req.param('promptId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
@@ -658,18 +673,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. Editing your own
       // queued message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);
       if (body.delivery !== undefined && body.delivery !== 'interrupt') {
@@ -708,13 +714,13 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/prompts/{promptId}/retry',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts/{promptId}/retry',
       tags: ['sessions'],
       summary: 'Retry a failed prompt',
       ...auth,
       request: {
         params: z.object({
-          projectId: z.string(),
+          workspaceId: z.string(),
           sessionId: z.string(),
           promptId: z.string(),
         }),
@@ -725,7 +731,7 @@ export function registerSessionPromptsRoutes(): void {
       },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const promptId = c.req.param('promptId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
@@ -733,18 +739,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. "Retry"/"send now"
       // on your own queued message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       // ONE primitive for "retry" and for "send now": both are the user pointing
       // at a row and asking for THAT message. `retryInboxPrompt` promotes it past
@@ -766,14 +763,14 @@ export function registerSessionPromptsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/prompts/hold',
+      path: '/{workspaceId}/sessions/{sessionId}/prompts/hold',
       tags: ['sessions'],
       summary: 'Hold or release the prompt queue of a session',
       description:
         'A hold is the Stop button: it also stops the running turn. Only the member who prompted that turn, the session owner or a project manager may hold while a turn runs; anyone else gets `403` with `code: "not_turn_prompter"`. The hold lasts until the stop settles: then the API releases it, and the prompts that waited go out together as the next turn. Releasing is always open.',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             held: z.boolean().openapi({ description: 'true holds the prompt queue; false releases it.' }),
           }) } }, required: true },
@@ -794,24 +791,15 @@ export function registerSessionPromptsRoutes(): void {
     // stopped turn never read, the hold is released and those prompts go out
     // together as the next turn (2026-11-04).
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
 
       // Floor 'session' — see the POST /prompts gate comment. Stop/hold is the
       // counterpart of send; a member who can send must be able to hold.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);
       if (typeof body.held !== 'boolean') {
@@ -819,14 +807,14 @@ export function registerSessionPromptsRoutes(): void {
       }
 
       // A HOLD IS A STOP SOMEBODY ASKED FOR. Stamp it on the open turn before
-      // anything this Stop sends can reach OpenCode. The hold is the Stop's FIRST
+      // anything this Stop sends can reach the runtime. The hold is the Stop's FIRST
       // request, and its settle (below) can abort the box before the client's
       // own abort leaves the browser. That settle abort does not pass the
       // sandbox proxy that stamps `UserStop`, so without this stamp the turn
       // closed on a bare "Aborted" frame and the user's own Stop read as
       // "stopped before it finished" (prod 2026-09-25). The ledger keeps the
       // stamp only over an abort: a turn that completes drops it, and a named
-      // cause replaces it. Scoped to the session's root OpenCode session, like
+      // cause replaces it. Scoped to the session's root runtime session, like
       // the proxy stamp. The write never throws.
       //
       // A hold over a running turn stops it, so only the turn's prompter, the
@@ -845,7 +833,7 @@ export function registerSessionPromptsRoutes(): void {
         await markTurnStopRequested(
           sessionId,
           'UserStop',
-          { opencodeSessionId: visible.row.runtimeSessionId ?? null },
+          { runtimeSessionId: visible.row.runtimeSessionId ?? null },
           stopper,
         );
       }

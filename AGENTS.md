@@ -184,8 +184,9 @@ encrypted in `apps/api/.env` as `BLOCKED_COMMIT_TERMS`, comma-separated.
 - Add a customer the day they sign: `dotenvx set BLOCKED_COMMIT_TERMS
   "<existing>,<new>" -f apps/api/.env`. Read the current value first with
   `dotenvx get BLOCKED_COMMIT_TERMS -f apps/api/.env`.
-- In a worktree the guard decrypts with the primary checkout's
-  `apps/api/.env.keys`. Without a key it warns and allows.
+- The guard decrypts through the Armor login (`dotenvx armor login`, dotenvx
+  2.7.1+) or a checkout's `apps/api/.env.keys` (in a worktree, the primary's).
+  Without a key it warns and allows.
 - Deleting a line that contains a term is always allowed.
 - Never bypass the guard with `--no-verify`. If it fires, remove the term.
 - The hooks do not see PR titles, PR bodies, or comments. Those stay your
@@ -601,11 +602,13 @@ See `tests/e2e/helpers/session-auth.ts` for the exact calls.
   larger runner): Blacksmith billed ~$2.7k in September 2026 for minutes
   GitHub gives this repo for free. `tests/unit/image-build-speed-workflow.test.ts`
   enforces the free default.
-- `.github/workflows/tests.yml` holds the six contract lanes — `core-flows`,
+- `.github/workflows/tests.yml` holds the seven contract lanes — `core-flows`,
   `core-db`, `packages-api`, `packages-cli`, `packages-kortixd`,
-  `packages-rest` — one GitHub-hosted runner each (`CI_RUNNER_L`). `core-*`
-  split the core run (`--core-group=flows|db`); `packages-*` are slices of
-  package quality (`--packages-only --package-group=<g>`). The concurrency
+  `packages-publish`, `packages-rest` — one runner each (`CI_RUNNER_L`).
+  `core-*` split the core run (`--core-group=flows|db`); `packages-*` are
+  slices of package quality (`--packages-only --package-group=<g>`).
+  `publish` builds, packs and install-tests the npm packages; `rest` runs the
+  repo-wide checks and the tests of every other package. The concurrency
   settings in `tests/bin/package-quality.ts` must not be raised. Each lane is
   the unchanged root command at the exact requested SHA. Do not add CI-only
   test logic.

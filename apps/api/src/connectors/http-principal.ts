@@ -1,25 +1,26 @@
 /** The connector router's request authorizers: who is calling, read from the Hono request. */
-import { projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { authorize, PROJECT_ACTIONS } from '../iam';
+import { assertAuthorized } from '../iam/authorize';
 import { actorOf } from '../iam/actor';
 import { loadProjectForUser } from '../projects/lib/access';
 import { reconcileStoredSessionAgentGrant } from '../projects/lib/session-token-grant';
 import { db } from '../shared/db';
+import { isUuid } from '../shared/validate';
 import { getRequestOnBehalfOf } from '../projects/lib/on-behalf-of';
 import { tokenAgentPrincipalScope } from '../projects/lib/personal-resources';
 import type { ConnectorPrincipal } from './router-contract';
 import { resolveShareSubject } from './share';
-import { isUuid } from './db-deps-rows';
 import {
   projectSessionIdForProjectPrincipal,
   resolveTokenBoundSessionId,
   resolveTokenPrincipal,
-  sessionChannelConnectorSlugs,
+  sessionConnectorLineage,
 } from './db-deps-principal';
 import { bearerToken } from '../shared/bearer-token';
+import { projectsView } from '../workspaces/rows';
 
 /** The connector router's request authorizers: each reads who is calling from the Hono request. */
 export interface ConnectorRouterAuth {
@@ -111,13 +112,13 @@ export async function resolveProjectPrincipal(
     // freshness as the account_id this branch already read.
     const [project] = await db
       .select({
-        accountId: projects.accountId,
-        repoUrl: projects.repoUrl,
-        defaultBranch: projects.defaultBranch,
-        manifestPath: projects.manifestPath,
+        accountId: projectsView.accountId,
+        repoUrl: projectsView.repoUrl,
+        defaultBranch: projectsView.defaultBranch,
+        manifestPath: projectsView.manifestPath,
       })
-      .from(projects)
-      .where(eq(projects.projectId, projectId))
+      .from(projectsView)
+      .where(eq(projectsView.projectId, projectId))
       .limit(1);
     if (!project || !accountId || project.accountId !== accountId) return null;
     accountId = project.accountId;
@@ -153,7 +154,7 @@ export async function resolveProjectPrincipal(
   if (!sessionIdentity.ok) return null;
 
   const storedAgentGrant = (c.get('agentGrant') as ConnectorPrincipal['agentGrant']) ?? null;
-  const [agentGrant, channelConnectorSlugs] = await Promise.all([
+  const [agentGrant, lineage] = await Promise.all([
     sessionIdentity.sessionId
       ? reconcileStoredSessionAgentGrant({
           projectId,
@@ -167,7 +168,7 @@ export async function resolveProjectPrincipal(
           projectRow,
         })
       : Promise.resolve(storedAgentGrant),
-    sessionChannelConnectorSlugs(projectId, sessionIdentity.sessionId),
+    sessionConnectorLineage(projectId, sessionIdentity.sessionId),
   ]);
 
   const tokenId = (c.get('iamTokenId') as string | undefined) ?? null;
@@ -179,7 +180,8 @@ export async function resolveProjectPrincipal(
     tokenId,
     subject: await resolveShareSubject(userId),
     agentGrant,
-    channelConnectorSlugs,
+    channelConnectorSlugs: lineage.channelSlugs,
+    inheritedGrants: lineage.ancestorGrants,
     // Only a project-scoped (session) token can be an agent principal; a
     // human JWT/PAT keeps the legacy rule. The fresh on_behalf_of comes from
     // the auth middleware, so a clear by a foreign prompt applies at once.
@@ -208,9 +210,9 @@ async function resolveProjectUserWith(
   const userId = c.get('userId') as string | undefined;
   if (!userId) return null;
   const [proj] = await db
-    .select({ accountId: projects.accountId })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ accountId: projectsView.accountId })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!proj) return null;
   // The acting credential comes with the Actor, so the agent-grant fold and the
@@ -224,6 +226,32 @@ async function resolveProjectUserWith(
   return { accountId: proj.accountId, userId };
 }
 
+/**
+ * The gate form of `resolveProjectUserWith`: null only when the caller or the
+ * project is unknown; a denied caller gets the standard 403 that names the
+ * permission and which side lacks it (the person's role, or the agent's
+ * grant). A person and an agent session acting for that person get the same
+ * answer. Never a probe: a caller that only asks "may they?" uses
+ * `resolveProjectUserWith`.
+ */
+async function assertProjectUserWith(
+  c: Context,
+  projectId: string,
+  action: typeof PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE | typeof PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+): Promise<{ accountId: string; userId: string } | null> {
+  if (!isUuid(projectId)) return null;
+  const userId = c.get('userId') as string | undefined;
+  if (!userId) return null;
+  const [proj] = await db
+    .select({ accountId: projectsView.accountId })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
+    .limit(1);
+  if (!proj) return null;
+  await assertAuthorized(await actorOf(c, proj.accountId), action, { type: 'project', id: projectId });
+  return { accountId: proj.accountId, userId };
+}
+
 // Connector administration (create/delete connectors, write shared credentials,
 // grants/policies) is project.connector.write — NOT the coarse, fold-exempt
 // project.write.
@@ -231,7 +259,7 @@ export async function resolveAdmin(
   c: Context,
   projectId: string,
 ): Promise<{ accountId: string; userId: string } | null> {
-  return resolveProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
+  return assertProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
 }
 
 // Connecting an account the whole project can use is administration, and this
@@ -240,11 +268,7 @@ export async function resolveConnectionsManager(
   c: Context,
   projectId: string,
 ): Promise<{ accountId: string; userId: string } | null> {
-  return resolveProjectUserWith(
-    c,
-    projectId,
-    PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
-  );
+  return assertProjectUserWith(c, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE);
 }
 
 export async function resolveSecretBindingAdmin(

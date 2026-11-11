@@ -18,8 +18,8 @@ this page says.
 A layer is a set of folders, not a folder. The shared layer is `src/lib/` plus
 `src/types/`; `eslint.config.mjs` names that set `{sharedLayer}`.
 
-Why the harness is a layer of its own: it composes the services. It imports 10
-of them (`workspace-provider`, `config-provider`, `runtime-assets`,
+Why the harness is a layer of its own: it composes the services. It imports 9
+of them (`config-provider`, `runtime-assets`,
 `sandbox-env`, `event-bus`, `llm-proxy`, `egress-shim`, `resources`, `skills`,
 `tools`), and no service imports it. It sits above the services for the same
 reason the services sit above the shared layer. It is also where two services
@@ -36,7 +36,6 @@ provider, so neither service imports the other.
 | `src/routes/workspace/` | app | `/file`, `/find`, `/presentation`: daemon-owned access to `/workspace`, behind the user-context gate. |
 | `src/routes/proxy/` | app | `/proxy/:port`, `/web-proxy`, and the catch-all to the harness, behind the user-context gate. |
 | `src/harness/` | harness | `harness.ts` (resolver, `loadConfig`, boot context), `contract/` (ports app and routes call), `shared/` (boot and relay steps that are not pi-specific), `pi/` (the one adapter). See its [README](src/harness/README.md). |
-| `src/services/workspace-provider/` | services | Provides `/workspace` on a boot. `provideWorkspace` (`workspace-provider.ts`) adopts a baked checkout or calls `acquire` (`acquire.ts`), which takes the `git` or S3 transport by mode (`git`, `prefer-s3`, `require-s3`). `git.ts` is the git transport and the post-boot history backfill; `checkout.ts` is the session checkout every transport ends with. |
 | `src/services/config-provider/` | services | Provides the config release a boot needs: the store outside the repository, its descriptor, notice and API calls. `obtain.ts` builds a release from the store, the checkout, the project snapshot (`src/lib/project-snapshot/`) or the API archive. `compiled-agent-config.ts` reads and writes the compiled agent config in env, raw or gzip-encoded, for every harness and route. |
 | `src/services/runtime-assets/` | services | CLI, agent, skill-overlay and harness-asset convergence (self-update); the runtime-truth ledger. `port.ts` is the contract a harness implements. |
 | `src/services/chrome/` | services | Kortix in Chrome, sandbox side: the bridge socket the user's Chrome extension dials through the preview proxy, and the loopback CDP endpoint `127.0.0.1:9333` it serves to `agent-browser --cdp 9333`. Protocol: `.agents/skills/kortix-chrome/references/protocol.md`. |
@@ -68,7 +67,7 @@ provider, so neither service imports the other.
 | `src/lib/**` | the shared layer | none |
 | `src/services/<name>/**` | its own folder, the shared layer | `egress-shim`: `node-forge`, `@kortix/api-contract`. `config-provider`, `runtime-assets`, `tools`: `@kortix/api-contract` |
 | `src/harness/harness.ts` | the harness, all services, the shared layer | none |
-| `src/harness/pi/**` | its own folder, `harness.ts`, `contract/`, `shared/`, all services, the shared layer | `@kortix/api-contract`, `@earendil-works/*`, `typebox`, `quickjs-wasi`, `@silvia-odwyer/photon-node`, `@anthropic-ai/claude-agent-sdk` and `@modelcontextprotocol/sdk` (Claude subscription models, `pi/claude/`), `@kortix/sdk/wire-message-id`, `@kortix/shared/peer-message-prompt` and `@kortix/shared/room-prompt` (the prompt envelopes a turn's origin is read from) |
+| `src/harness/pi/**` | its own folder, `harness.ts`, `contract/`, `shared/`, all services, the shared layer | `@kortix/api-contract`, `@earendil-works/*`, `typebox`, `quickjs-wasi`, `@silvia-odwyer/photon-node`, `@anthropic-ai/claude-agent-sdk` and `@modelcontextprotocol/sdk` (Claude subscription models, `pi/claude/`), `@kortix/sdk/wire-message-id`, `@kortix/shared/peer-message-prompt` (the prompt envelope a turn's origin is read from) |
 | `src/harness/{contract,shared}/**` | `harness.ts`, `contract/`, `shared/`, all services, the shared layer | `@kortix/api-contract` (the daemon-to-API wire, `runtime-relay`), `@kortix/sdk/wire-message-id` (the session-log boot's restore note) |
 | `src/routes/**` | `src/routes/**`, `harness.ts`, `contract/`, `shared/`, all services, the shared layer | `hono`, `@kortix/api-contract` |
 | `src/app/**`, `src/main.ts` | everything above except adapter internals | `hono`, `@kortix/api-contract` |
@@ -98,7 +97,7 @@ Consequences:
 
 ```ts
 // src/harness/pi/boot.ts
-import { provideWorkspace } from '@/services/workspace-provider/workspace-provider' // another folder
+import { startEgressShim } from '@/services/egress-shim'                          // another folder
 import { runSandboxOnBoot } from '../shared/on-boot'                                 // same folder: harness/
 ```
 
@@ -112,8 +111,8 @@ No other package imports or reads `src/`, and `src/` imports no other app
 (`tests/unit/kortixd-package-boundary.test.ts`). A value the daemon shares with
 apps/api, the CLI or `@kortix/shared` lives in `packages/api-contract` and both
 sides import it. The daemon reaches those files, the SDK's import-free
-`wire-message-id.ts` and `@kortix/shared`'s import-free prompt envelopes
-(`peer-message-prompt.ts`, `room-prompt.ts`) through tsconfig paths. `KORTIXD_SHARED_SOURCES`
+`wire-message-id.ts` and `@kortix/shared`'s import-free prompt envelope
+(`peer-message-prompt.ts`) through tsconfig paths. `KORTIXD_SHARED_SOURCES`
 (`@kortix/api-contract/sandbox-layout`) lists them: apps/api fingerprints them
 with this source, and the Dockerfiles copy them (`src/__tests__/shared-sources.test.ts`).
 

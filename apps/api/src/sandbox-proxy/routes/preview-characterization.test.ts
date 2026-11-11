@@ -114,10 +114,13 @@ mock.module('../../projects/sandbox-turn-lifecycle', () => ({
   abandonSandboxTurn: async () => true,
 }));
 // A forwarded fork is recorded through projects/surface (#10421); the real
-// module loads the whole projects graph, so the record is counted here.
+// module loads the whole projects graph, so the record is counted here,
+// and the record's shape is captured for the fork-registration pins below.
+let lastFork: { sourceId?: unknown } | null = null;
 mock.module('../../projects/surface', () => ({
-  registerRuntimeFork: async () => {
+  registerRuntimeFork: async (input: { sourceId?: unknown }) => {
     counts.registerRuntimeFork += 1;
+    lastFork = input;
   },
   // Imported at load by modules this graph pulls in (memory/layers.ts); never called here.
   resolveUserIdentities: async () => new Map(),
@@ -126,16 +129,21 @@ mock.module('../../projects/surface', () => ({
   // module LINK error, not a null.
   missingClaudeSubscription: async () => null,
   sessionModelPin: async () => null,
+  // The turn's origin block ("## Where you are") reads the session row here; inert in this suite.
+  sessionWhereTurn: async () => null,
 }));
 // A wake claimed by `/start` or another request leaves the row `stopped` until
 // the provider confirms the box; tests flip this to model that window.
 let wakePending = false;
+const resumedProviderIds: string[] = [];
+const headerSandboxIds: string[] = [];
 mock.module('../../projects/session-open', () => ({
   // Spread the real module: a hand-listed stub deletes every other export —
   // the lifecycle graph imports `openSession` from it.
   ...realSessionOpen,
   resumeStoppedSandboxByExternalId: async (externalId: string) => {
     counts.resumeStopped += 1;
+    resumedProviderIds.push(externalId);
     return Boolean(externalId);
   },
   stoppedSandboxWakePending: async () => wakePending,
@@ -161,7 +169,10 @@ mock.module('../backend', () => ({
     effectivePort: request.port,
   }),
   resolveSandboxIngress: async () => ({ ...ingress }),
-  buildSandboxUpstreamHeaders: async () => ({ ...upstreamAuthHeaders }),
+  buildSandboxUpstreamHeaders: async (input: { sandboxId: string }) => {
+    headerSandboxIds.push(input.sandboxId);
+    return { ...upstreamAuthHeaders };
+  },
   invalidatePreviewLink: () => {
     counts.invalidatePreviewLink += 1;
   },
@@ -481,6 +492,7 @@ describe('forwardToSandbox on a stopped sandbox', () => {
     [8000, '/session/sess-1/fork'],
     [4096, '/session/sess-1/fork/'],
     [4097, '/proxy/4096/session/sess-1/fork'],
+    [8000, '/proxy/1/session/sess-1/fork/'],
     [8000, '/session/sess-1/%66ork'],
   ])('forking a stopped conversation on port %s at %s returns an actionable conflict', async (port, path) => {
     currentRecord = { ...ACTIVE_RECORD, status: 'stopped' };
@@ -502,6 +514,29 @@ describe('forwardToSandbox on a stopped sandbox', () => {
     expect(fetchCalls).toBe(1);
     expect(counts.registerRuntimeFork).toBe(1);
     expect(counts.resumeStopped).toBe(0);
+  });
+
+  // KRTX-4477: the fork-path parser is ONE thing now. The stopped gate above
+  // always accepted the in-box prefix and a trailing slash; the record a
+  // successful fork leaves behind used to accept only the bare
+  // `/session/:id/fork`, so a fork on a prefixed path was refused-if-stopped
+  // yet never registered its record. Both spellings must register.
+  test('a fork on an in-box prefixed path registers its record', async () => {
+    queueFetch(new Response('{"id":"fork-p"}', { status: 200 }));
+    const res = await forward({ method: 'POST', port: 8000, path: '/proxy/1/session/sess-1/fork', body: bodyOf({}), headers: jsonHeaders() });
+    expect(res.status).toBe(200);
+    expect(fetchCalls).toBe(1);
+    expect(counts.registerRuntimeFork).toBe(1);
+    expect(lastFork?.sourceId).toBe('sess-1');
+  });
+
+  test('a fork with a trailing slash registers its record', async () => {
+    queueFetch(new Response('{"id":"fork-s"}', { status: 200 }));
+    const res = await forward({ method: 'POST', port: 8000, path: '/session/sess-1/fork/', body: bodyOf({}), headers: jsonHeaders() });
+    expect(res.status).toBe(200);
+    expect(fetchCalls).toBe(1);
+    expect(counts.registerRuntimeFork).toBe(1);
+    expect(lastFork?.sourceId).toBe('sess-1');
   });
 
   test('an app route named fork retains the normal stopped-preview response', async () => {
@@ -717,27 +752,6 @@ describe('forwardToSandbox authentication failures', () => {
     expect(fetchCalls).toBe(1);
   });
 
-  test('an opencode not-ready 503 passes through and releases the dedupe claim', async () => {
-    const args = {
-      method: 'POST',
-      path: '/session/sess-1/message',
-      port: 8000,
-      body: bodyOf({ parts: [{ type: 'text', text: 'hi' }] }),
-      headers: jsonHeaders({ 'idempotency-key': 'nr-1' }),
-    } as const;
-    queueFetch(new Response('opencode not ready', { status: 503 }));
-    const first = await forward(args);
-    expect(first.status).toBe(503);
-    expect(await first.text()).toBe('opencode not ready');
-    expect(counts.markSandboxUsed).toBe(1);
-
-    // The claim was released: the client's retry delivers instead of deduping.
-    queueFetch(new Response('{"info":{},"parts":[]}', { status: 200 }));
-    const retry = await forward(args);
-    expect(retry.status).toBe(200);
-    expect(await retry.json()).not.toEqual({ status: 'duplicate', deduplicated: true });
-  });
-
   // pi (and OpenCode's boot steps) refuse with another text, a W6 daemon adds
   // `code: runtime_not_ready`, and every daemon names its boot phase in
   // `X-Kortix-Boot-Phase`. Each must release the claim on its own.
@@ -930,6 +944,19 @@ const wsArgs = (overrides?: Partial<Parameters<typeof resolvePreviewWsUpstream>[
 });
 
 describe('resolvePreviewWsUpstream', () => {
+  test('an internal UUID alias uses the canonical provider ID for wake and signed headers', async () => {
+    resumedProviderIds.length = 0;
+    headerSandboxIds.length = 0;
+    const sandboxId = '550e8400-e29b-41d4-a716-446655440000';
+    currentRecord = { ...ACTIVE_RECORD, status: 'stopped' };
+    const parked = await resolvePreviewWsUpstream(wsArgs({ sandboxId, wakeRequested: true }));
+    expect(parked).toEqual({ ok: false, status: 503, message: 'sandbox not ready (status: stopped)' });
+    expect(resumedProviderIds).toEqual([ACTIVE_RECORD.externalId]);
+    currentRecord = { ...ACTIVE_RECORD };
+    expect((await resolvePreviewWsUpstream(wsArgs({ sandboxId }))).ok).toBe(true);
+    expect(headerSandboxIds).toEqual([ACTIVE_RECORD.externalId]);
+  });
+
   test('an unknown sandbox is a 404', async () => {
     currentRecord = null as unknown as Record<string, unknown>;
     expect(await resolvePreviewWsUpstream(wsArgs())).toEqual({

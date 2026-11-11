@@ -12,14 +12,14 @@ Three things, one per question:
   Its slug is what `kortix connectors call <slug> <action>` takes. An app is
   installed once per way.
 - **Account**: WHO a call runs as. A sign-in on the profile, shared with the
-  project or private to one member. One profile holds several.
+  workspace or private to one member. One profile holds several.
 - **Rule set** (a policy set): WHAT one agent may do on the profile. Named
   tool rules, given to an agent in `agents.<name>.policy_sets`.
 
 Every call is decided in this order. The first layer with a matching rule
 decides:
 
-1. project `policies:` (nothing overrides them);
+1. workspace `policies:` (nothing overrides them);
 2. the calling agent's rule set on this profile;
 3. the profile's base `policies:`;
 4. `sensitive: true` → approval;
@@ -32,7 +32,7 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
 <fast-path>
 1. **See what exists.** `kortix connectors ls`: slugs, status, and an
    `ACCOUNTS` column.
-2. **Add an app the project lacks**, then hand the human the link:
+2. **Add an app the workspace lacks**, then hand the human the link:
    ```sh
    kortix connectors catalog <name>          # `installed as <slug>` = it is already here
    kortix connectors catalog install <id>    # e.g. kortix:linear, composio:gmail; live at once
@@ -41,6 +41,10 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
    Install prints the next step. `Ready` means no sign-in is needed: call it.
    Exit 3 means the app is already installed: use that slug. When the human
    finishes signing in, Kortix tells you; do not mint a second link.
+   For an account the whole workspace uses, `connect <slug> --owner workspace`.
+   You act with your person's rights: it works when they may manage the
+   workspace's connections (an owner, admin or manager) and your grant
+   includes it. A refusal names the missing permission and who holds it.
 3. **Pick the account** (see `<accounts>`). With 2 or more accounts, pass
    `--account "<label>"`.
 4. **Read the action before calling it.** `kortix connectors show <slug>.<action>`
@@ -159,6 +163,11 @@ it already has. `--new-profile` makes a second profile; use it only for a
 human who asks for one. Another way of connecting (Stripe over MCP and over
 REST) is its own profile: different tools, different sign-in.
 
+The catalog is an index, not a list of what may be connected. Prefer the
+vendor's own MCP server over Composio whenever it exists. A way marked
+`catalogue has no URL` installs with the server URL: get it from the human or
+the vendor's docs, then
+`kortix connectors catalog install <id> --way <way-id> --url <url>`.
 The catalog is large, not complete. When it lacks the app, search the web for
 the vendor's MCP server (its developer docs, registry.modelcontextprotocol.io)
 or OpenAPI spec, then add it:
@@ -168,9 +177,12 @@ kortix connectors add acme --provider mcp --url https://mcp.acme.com/mcp --trans
 kortix connectors add acme --provider openapi --spec https://acme.com/openapi.json --apply
 ```
 
-Without `--apply`, `add` edits only this session branch's `kortix.yaml`. In a
-governed agent, a URL that is not in the catalog returns
-`custom_connector_needs_human` with a `setup_url`: hand it to the human.
+Without `--apply`, `add` edits the `kortix.yaml` of the clone you are in
+(`kortix workspaces clone`; `/workspace` has none at boot), landed through a change request. A
+server URL that neither the catalog publishes nor the workspace already has
+needs a one-time approval of that exact URL: the answer is
+`custom_connector_needs_human` with a `setup_url`. Hand the human the link;
+it opens the server prefilled, and adding it is the approval. Do not retry.
 
 Credentials:
 - an API key the human gave you: `kortix secrets set NAME=- --scope connector`,
@@ -207,7 +219,7 @@ connectors:
             action: block
 agents:
   support:
-    tools: all
+    tools: "*"
     connectors: [gmail]
     policy_sets:
       gmail: read_only
@@ -232,8 +244,8 @@ kortix connectors rules                                                 # every 
   Check the result with `policy <slug> effective`.
 - A name is `[a-z0-9][a-z0-9_-]{0,63}`; `base` is reserved. Channel profiles
   and `computer` hold no sets.
-- Changing any agent's `policy_sets` needs `project.agent.write` AND
-  `project.connector.write`. Without both in your own grant you cannot change
+- Changing any agent's `policy_sets` needs `workspace.agent.write` AND
+  `workspace.connector.write`. Without both in your own grant you cannot change
   any entry, your own included (`403 agent_grant_escalation`): ask the human.
 - `list_connectors` (MCP) shows `policy_set` per profile: the set YOUR agent
   runs under, `null` for base rules.
@@ -277,18 +289,18 @@ decides which accounts a call reaches:
 | App, browser | `backendUrl: '/_kortix/api/v1'` + `kortixAppViewerToken()` (App set to `--viewer api`) | the viewer's shared and private accounts |
 | App, server | `createAppViewerKortix(request, { backendUrl })` | the same, per request |
 | Convex action, App job with no viewer | a service account bearer (`kortix_sa_…`) in an env var | shared accounts nobody narrowed; never a private one |
-| External program, CI | a personal access token, `kortix tokens new <name> --project <id>` | the token owner's shared and private accounts |
+| External program, CI | a personal access token, `kortix tokens new <name> --workspace <id>` | the token owner's shared and private accounts |
 
 A service account is a human step: ask the person to run
 `kortix tokens service-accounts new <name>` and
-`kortix access grant --service-account <id> --role member --project <id>`,
+`kortix access grant --service-account <id> --role member --workspace <id>`,
 and to store the bearer (`npx convex env set KORTIX_API_KEY …` for Convex; a
-project secret under `apps.<slug>.secrets` for an App, not named `KORTIX_*`).
+workspace secret under `apps.<slug>.secrets` for an App, not named `KORTIX_*`).
 Build the rest while you wait. Recipes: `references/sdk.md`.
 </from-apps-and-backends>
 
 <rules>
-- Decision order: project rules → your rule set → base rules → sensitive →
+- Decision order: workspace rules → your rule set → base rules → sensitive →
   default mode. A `policy_block` (with `policy_set` when your set decided)
   or `policy_set_missing` is final: tell the human which set blocked which
   action. Never route around it through another profile, account, or raw key.

@@ -416,7 +416,7 @@ describe('POST /v1/projects/:projectId/turn-stream — sleeve gates', () => {
 });
 
 describe('POST /v1/projects/:projectId/turn-stream — sandbox-credential walls', () => {
-  // Each of the four upward-lifecycle kinds refuses a project/session PAT
+  // Each of the daemon-reported kinds refuses a project/session PAT
   // before it validates its fields. The body is pinned to the byte.
   test('initial_turn_claim requires a sandbox token', async () => {
     const response = await post({ session_id: SESSION_ID, kind: 'initial_turn_claim' });
@@ -444,6 +444,17 @@ describe('POST /v1/projects/:projectId/turn-stream — sandbox-credential walls'
     expect(await response.json()).toEqual({ error: 'turn_begin requires a sandbox token' });
   });
 
+  // `end`/`turn_end` settle the turn: only the box that ran it may report it.
+  // A member's PAT can read the session but not stop another member's run —
+  // the dashboard's stop is `POST /sessions/:id/stop` with its own authority
+  // (Strix review of KRTX-4682).
+  test('end requires a sandbox token', async () => {
+    const response = await post({ session_id: SESSION_ID, kind: 'end' });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'turn_end requires a sandbox token' });
+    expect(completedMessageIds).toEqual([]);
+  });
+
   // The durable root pin is daemon-reported state about the caller's OWN
   // session. A project member without the session's sandbox credential is
   // refused before any validation, and no UPDATE reaches the database.
@@ -458,22 +469,11 @@ describe('POST /v1/projects/:projectId/turn-stream — sandbox-credential walls'
     expect(updateSets).toEqual([]);
   });
 
-  test('the pre-W3 runtime_session alias hits the same wall', async () => {
-    const response = await post({
-      session_id: SESSION_ID,
-      kind: 'opencode_session',
-      opencode_session_id: 'oc_member_chosen',
-    });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: 'runtime_session requires a sandbox token' });
-    expect(updateSets).toEqual([]);
-  });
-
   test('a sandbox credential not scoped to the project is refused', async () => {
     sandboxRow = null;
     const response = await post({ session_id: SESSION_ID, kind: 'step', text: 'hi' }, sandboxCtx);
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: 'sandbox token is not scoped to this project' });
+    expect(await response.json()).toEqual({ error: 'sandbox token is not scoped to this workspace' });
   });
 
   test('a sandbox credential not scoped to the session is refused', async () => {
@@ -521,7 +521,6 @@ describe('POST /v1/projects/:projectId/turn-stream — initial_turn_claim', () =
       ok: true,
       initial_turn: null,
       runtime_session_id: null,
-      opencode_session_id: null,
     });
   });
 
@@ -529,15 +528,14 @@ describe('POST /v1/projects/:projectId/turn-stream — initial_turn_claim', () =
   // must learn the durable pin here, or it adopts or creates a different root
   // and relays that over the pin (prod 2026-09-23: a session opened empty).
   test('returns the durable OpenCode root pin with or without a pending prompt', async () => {
-    sessionRow = { ...session({}), opencodeSessionId: 'ses_durable' };
+    sessionRow = { ...session({}), runtimeSessionId: 'ses_durable' };
     const response = await post({ session_id: SESSION_ID, kind: 'initial_turn_claim' }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ok: true,
       initial_turn: null,
-      // Both names: a W3 daemon reads runtime_session_id, an older one opencode_session_id.
+      // Both names: a W3 daemon reads runtime_session_id, an older one runtime_session_id.
       runtime_session_id: 'ses_durable',
-      opencode_session_id: 'ses_durable',
     });
   });
 
@@ -558,7 +556,6 @@ describe('POST /v1/projects/:projectId/turn-stream — initial_turn_claim', () =
       ok: true,
       initial_turn: { prompt: 'build it', turn_token: 'turn-token-1', message_id: 'msg_1' },
       runtime_session_id: null,
-      opencode_session_id: null,
     });
   });
 
@@ -575,7 +572,6 @@ describe('POST /v1/projects/:projectId/turn-stream — initial_turn_claim', () =
       ok: true,
       initial_turn: null,
       runtime_session_id: null,
-      opencode_session_id: null,
     });
   });
 
@@ -604,7 +600,6 @@ describe('POST /v1/projects/:projectId/turn-stream — initial_turn_claim', () =
         message_id: 'msg_1',
       },
       runtime_session_id: null,
-      opencode_session_id: null,
     });
   });
 });
@@ -641,7 +636,7 @@ describe('POST /v1/projects/:projectId/turn-stream — lifecycle acknowledgement
         session_id: SESSION_ID,
         kind: 'turn_accepted',
         turn_token: 't1',
-        opencode_session_id: 'oc1',
+        runtime_session_id: 'oc1',
         turn_message_id: 'msg1',
       },
       sandboxCtx,
@@ -663,7 +658,7 @@ describe('POST /v1/projects/:projectId/turn-stream — lifecycle acknowledgement
 
   test('turn_begin accepts the W3 name and the pre-W3 name of the runtime session', async () => {
     adoptResult = 'open_turn_exists';
-    for (const id of [{ runtime_session_id: 'oc1' }, { opencode_session_id: 'oc1' }]) {
+    for (const id of [{ runtime_session_id: 'oc1' }, { runtime_session_id: 'oc1' }]) {
       const response = await post(
         { session_id: SESSION_ID, kind: 'turn_begin', ...id, turn_message_id: 'msg1' },
         sandboxCtx,
@@ -679,7 +674,7 @@ describe('POST /v1/projects/:projectId/turn-stream — lifecycle acknowledgement
       {
         session_id: SESSION_ID,
         kind: 'turn_begin',
-        opencode_session_id: 'oc1',
+        runtime_session_id: 'oc1',
         turn_message_id: 'msg1',
       },
       sandboxCtx,
@@ -705,25 +700,11 @@ describe('POST /v1/projects/:projectId/turn-stream — lifecycle acknowledgement
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: false });
   });
-
-  test('a pre-W3 daemon pins with kind opencode_session and opencode_session_id', async () => {
-    updateRows = [];
-    const response = await post(
-      {
-        session_id: SESSION_ID,
-        kind: 'opencode_session',
-        opencode_session_id: 'oc_root',
-      },
-      sandboxCtx,
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: false });
-  });
 });
 
 describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement', () => {
   test('end reports the settlement response and promotes no prompt', async () => {
-    const response = await post({ session_id: SESSION_ID, kind: 'end' });
+    const response = await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ok: true,
@@ -744,7 +725,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
       error_status: 500,
       error_retryable: false,
       error_provider: 'anthropic',
-    });
+    }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ok: true,
@@ -767,10 +748,10 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
   });
 
   test('end forwards a valid error_code as the error code and drops an unknown one (W5 E11)', async () => {
-    await post({ session_id: SESSION_ID, kind: 'end', status: 'error', error_name: 'UnknownError', error_message: '402: pay', error_status: 402, error_code: 'credits' });
+    await post({ session_id: SESSION_ID, kind: 'end', status: 'error', error_name: 'UnknownError', error_message: '402: pay', error_status: 402, error_code: 'credits' }, sandboxCtx);
     expect((relayEndArgs[2] as { code?: string }).code).toBe('credits');
     relayEndArgs = [];
-    await post({ session_id: SESSION_ID, kind: 'end', status: 'error', error_name: 'UnknownError', error_message: 'x', error_code: 'bogus' });
+    await post({ session_id: SESSION_ID, kind: 'end', status: 'error', error_name: 'UnknownError', error_message: 'x', error_code: 'bogus' }, sandboxCtx);
     expect((relayEndArgs[2] as { code?: string }).code).toBeUndefined();
   });
 
@@ -785,7 +766,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
       status: 'error',
       error_name: 'APIError',
       error_message: 'Payment Required: Insufficient credits.',
-    });
+    }, sandboxCtx);
     expect(triggerRunEnds).toEqual([
       {
         projectId: PROJECT_ID,
@@ -808,7 +789,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
 
   test('end reports a promoted queued prompt', async () => {
     promotedId = 'prompt-9';
-    const response = await post({ session_id: SESSION_ID, kind: 'end' });
+    const response = await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       queue_promoted: true,
@@ -818,7 +799,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
 
   test('an identity mismatch skips the relay but still settles the ledger', async () => {
     completionResult = { outcome: 'identity_mismatch', activeTurnCount: 1, closedTurnCount: 0 };
-    const response = await post({ session_id: SESSION_ID, kind: 'end' });
+    const response = await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ok: false,
@@ -831,12 +812,12 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
 
   test('a coordinator-spawned session skips reconcile and promotion, and still saves its transcript', async () => {
     // A session another session's agent created runs in its own sandbox with
-    // its own OpenCode root. Nobody may ever open it, so this turn end is the
+    // its own runtime root. Nobody may ever open it, so this turn end is the
     // only moment its history is saved: skipping it served `available: false`
     // and a loading bar to the first person who looked.
     sessionRow = session({ spawned_by_session: 'parent-1' });
     pushType = 'completion';
-    const response = await post({ session_id: SESSION_ID, kind: 'end' });
+    const response = await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ queue_promoted: false });
     expect(order).toEqual(['complete', 'notify', 'relayEnd']);
@@ -899,7 +880,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
       error_name: 'APIError',
       error_status: 402,
       error_message: 'Payment Required: Insufficient credits.',
-    });
+    }, sandboxCtx);
     // The notice is sent after the prompt-source read, off the ack path.
     await Bun.sleep(0);
     expect(promptSourceLookups).toEqual(['msg_turn']);
@@ -938,20 +919,20 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
   test('no session-chat notice when a Slack or Teams turn carried the end, the end was no error, or it closed nothing', async () => {
     pushType = 'error';
     relayEndResult = true;
-    await post({ session_id: SESSION_ID, kind: 'turn_end', status: 'error', error_name: 'APIError', error_message: 'x' });
+    await post({ session_id: SESSION_ID, kind: 'turn_end', status: 'error', error_name: 'APIError', error_message: 'x' }, sandboxCtx);
     await Bun.sleep(0);
     expect(channelNotices).toEqual([]);
     expect(promptSourceLookups).toEqual([]);
 
     pushType = 'completion';
     relayEndResult = false;
-    await post({ session_id: SESSION_ID, kind: 'end' });
+    await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(channelNotices).toEqual([]);
 
     pushType = null;
     completionResult = { outcome: 'identity_mismatch', activeTurnCount: 1, closedTurnCount: 0 };
     relayEndArgs = [];
-    await post({ session_id: SESSION_ID, kind: 'turn_end', status: 'error', error_name: 'APIError', error_message: 'x' });
+    await post({ session_id: SESSION_ID, kind: 'turn_end', status: 'error', error_name: 'APIError', error_message: 'x' }, sandboxCtx);
     expect(channelNotices).toEqual([]);
     expect(relayEndArgs).toEqual([]);
   });
@@ -960,7 +941,7 @@ describe('POST /v1/projects/:projectId/turn-stream — end / turn_end settlement
     sessionRow = session({ title_source: 'first prompt' });
     promotedId = 'prompt-9';
     pushType = 'completion';
-    await post({ session_id: SESSION_ID, kind: 'end' });
+    await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx);
     expect(order).toEqual([
       'complete',
       'reconcile',
@@ -1082,10 +1063,10 @@ describe('POST /v1/projects/:projectId/turn-stream — the session list at turn 
     releaseProjection = null;
   });
 
-  test('the turn end forces a projection refresh as the session creator, and is answered only after it', async () => {
+  test('the turn end forces a projection refresh as the session creator, and answers before it lands', async () => {
     let answered = false;
     releaseProjection = () => {};
-    const pending = Promise.resolve(post({ session_id: SESSION_ID, kind: 'end' })).then((response) => {
+    const pending = Promise.resolve(post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx)).then((response) => {
       answered = true;
       return response;
     });
@@ -1094,15 +1075,17 @@ describe('POST /v1/projects/:projectId/turn-stream — the session list at turn 
       { target: { sessionId: SESSION_ID, projectId: PROJECT_ID, accountId: ACCOUNT_ID, userId: USER_ID }, options: { force: true } },
     ]);
     await Bun.sleep(20);
-    // The daemon re-sends an unanswered turn end: no answer while the refresh runs.
-    expect(answered).toBe(false);
-    releaseProjection!();
+    // The ack must not wait on the box read: a slow daemon held every turn end
+    // until the 25 s request deadline 503'd it (KRTX-4682).
+    expect(answered).toBe(true);
     expect((await pending).status).toBe(200);
+    releaseProjection!();
+    await Bun.sleep(5);
   });
 
   test('a session with no creator to sign the read refreshes nothing, and the turn end is still answered', async () => {
     sessionRow = session({}, null);
-    expect((await post({ session_id: SESSION_ID, kind: 'end' })).status).toBe(200);
+    expect((await post({ session_id: SESSION_ID, kind: 'end' }, sandboxCtx)).status).toBe(200);
     expect(projectionRefreshes).toEqual([]);
   });
 });

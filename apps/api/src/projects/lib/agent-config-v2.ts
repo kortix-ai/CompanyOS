@@ -15,8 +15,10 @@
  */
 import {
   defaultAgentFile,
+  EVERY_GRANT,
+  isEveryGrant,
+  normalizePermissionConfig,
   resolveGrantSet,
-  resolveProjectRepository,
   SLUG_RE,
   type ManifestIssue,
 } from '@kortix/manifest-schema';
@@ -74,7 +76,7 @@ function normalizeGovernanceAliases(block: Record<string, unknown>): NormalizeRe
   return normalizeKortixPermissionAliases(connectors.block);
 }
 
-/** One grant-set write: `all` writes the keyword, `[]` writes deny-by-default
+/** One grant-set write: `all` writes `"*"` (`writeEveryGrant`), `[]` writes deny-by-default
  *  by omitting the key (v2 is deny-by-default), a list writes verbatim. */
 function writeGrantSet(
   block: Record<string, unknown>,
@@ -82,10 +84,22 @@ function writeGrantSet(
   value: readonly string[] | 'all' | undefined,
 ): void {
   if (value === undefined) return;
-  if (value === 'all') block[key] = 'all';
+  if (value === 'all') writeEveryGrant(block, key);
   else if (value.length === 0) delete block[key];
   else block[key] = value;
 }
+
+/**
+ * Write "every name" on `block[key]`: `"*"`, the canonical spelling. A value
+ * that already means every name (`all`, `["*"]`) is kept, so a save never
+ * rewrites a line that says the same thing.
+ */
+function writeEveryGrant(block: Record<string, unknown>, key: string, current: unknown = block[key]): void {
+  block[key] = isEveryGrant(current) ? current : EVERY_GRANT;
+}
+
+/** The grant keys the editor's wire spells `all` for "every name" (`GrantSetV2`). The file spells it `"*"`. */
+const EVERY_GRANT_WIRE_KEYS: readonly string[] = ['tools', 'skills', 'subagents', 'commands', 'extensions', 'connectors', 'secrets', 'apps', 'kortix_permissions', 'kortix_cli'];
 
 function normalizeConnectorList(value: unknown, field: string): string[] | string {
   if (!Array.isArray(value)) return `${field} must be a list of connector slugs`;
@@ -166,31 +180,6 @@ function normalizeKortixPermissionAliases(
   return { ok: true, block };
 }
 
-/**
- * The agent's behavior draft from a PUT body that may name it `behavior` or,
- * before W4, `opencode`.
- *
- * GET answers both names with one value, so a round-trip client sends both
- * back and edits ONE: an older client edits `opencode`, a newer one
- * `behavior`. When they differ, the draft is the one that differs from what
- * GET served (`stored`). Two different edits are refused, never guessed.
- */
-export function resolveBehaviorDraft<T extends Record<string, unknown>>(
-  names: { behavior?: T; opencode?: T },
-  stored: Record<string, unknown>,
-): { ok: true; draft: T | undefined } | { ok: false; error: string } {
-  const { behavior, opencode } = names;
-  if (behavior === undefined || opencode === undefined || isDeepStrictEqual(behavior, opencode)) {
-    return { ok: true, draft: behavior ?? opencode };
-  }
-  if (isDeepStrictEqual(behavior, stored)) return { ok: true, draft: opencode };
-  if (isDeepStrictEqual(opencode, stored)) return { ok: true, draft: behavior };
-  return {
-    ok: false,
-    error: 'behavior and opencode differ; send the agent behavior once, as behavior (opencode is its deprecated name)',
-  };
-}
-
 function pruneRequiredConnectors(block: Record<string, unknown>): void {
   const required = block.connectors_required;
   if (!Array.isArray(required)) return;
@@ -237,30 +226,23 @@ export function readAgentBlockV2(manifest: ParsedManifest, agentName: string): R
 }
 
 /**
- * The wire block carries `repository_access`; kortix.yaml stores
- * `workspace: { project_repository }`. Reading maps every form to the wire key;
- * writing maps it back to the YAML form. Both always carry the value: an
- * omitted one is the default (`false`), so every editor save pins it. A legacy
- * `workspace: read` with no explicit choice is written back unchanged.
+ * `repository_access` and the legacy `workspace` shapes (`branch`/`runtime`/`read`, a map
+ * with `project_repository`) are obsolete (deprecation `agent-workspace`): a read drops them,
+ * and a write from an older client that still sends them drops them too. The current
+ * `workspace: { sandbox, repos, setup }` map is kept on both paths, so a round trip
+ * through the editor never loses it.
  */
 function normalizeRepositoryAccess(
   block: Record<string, unknown>,
-  reading = false,
+  _reading = false,
 ): NormalizeRequiredConnectorsResult {
-  // The wire key: the YAML has only `workspace` (`resolveProjectRepository`).
-  const access = block.repository_access;
-  if (access !== undefined && typeof access !== 'boolean') return { ok: false, error: 'repository_access must be a boolean.' };
-  const repository = resolveProjectRepository(block);
-  if (!repository.ok) return { ok: false, error: `${repository.path} ${repository.message}` };
-  if (access !== undefined && block.workspace !== undefined && access !== repository.value) {
-    return { ok: false, error: 'repository_access conflicts with workspace.' };
-  }
-  if (repository.legacyRead && access === undefined && !reading) return { ok: true, block: { ...block } };
-  const value = access ?? repository.value;
-  const { repository_access: _access, workspace: _workspace, ...next } = block;
-  if (reading) next.repository_access = value;
-  else next.workspace = { project_repository: value };
+  const { repository_access: _access, workspace, ...next } = block;
+  if (isCurrentWorkspace(workspace)) next.workspace = workspace;
   return { ok: true, block: next };
+}
+
+function isCurrentWorkspace(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !('project_repository' in value);
 }
 
 export type ApplyAgentBlockResult =
@@ -586,7 +568,6 @@ const BLOCK_ORDER_V3: readonly string[] = [
   'secrets',
   'apps',
   'kortix_permissions',
-  'workspace',
   'sandbox',
 ];
 
@@ -600,7 +581,7 @@ function orderBlockV3(block: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * The editor's view of a v3 agent block: `governance` is the wire `block`
- * (grants, `file` = the `prompt_file`, `repository_access`), `behavior` the
+ * (grants, `file` = the `prompt_file`), `behavior` the
  * behavior keys plus `prompt` (inline, or `promptText`, the prompt file's text).
  */
 export function agentConfigViewV3(
@@ -610,9 +591,11 @@ export function agentConfigViewV3(
   const behavior: Record<string, unknown> = {};
   const governance: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(block)) {
-    if (BEHAVIOR_KEYS_V3.includes(key) || key === 'prompt') behavior[key] = value;
+    // The wire has one spelling per meaning: `permission` holds only allow/ask/deny, "every name" is `all`.
+    if (key === 'permission') behavior[key] = normalizePermissionConfig(value);
+    else if (BEHAVIOR_KEYS_V3.includes(key) || key === 'prompt') behavior[key] = value;
     else if (key === 'prompt_file') governance.file = value;
-    else governance[key] = value;
+    else governance[key] = EVERY_GRANT_WIRE_KEYS.includes(key) && isEveryGrant(value) ? 'all' : value;
   }
   if (block.prompt_file !== undefined && promptText?.trim()) behavior.prompt = promptText;
   const repository = normalizeRepositoryAccess(governance, true);
@@ -657,7 +640,10 @@ export function applyAgentConfigV3(
   const next: Record<string, unknown> = { ...current };
   for (const key of GOVERNANCE_KEYS_V3) delete next[key];
   for (const [key, value] of Object.entries(governance)) {
-    if (value !== undefined) next[key] = value;
+    if (value === undefined) continue;
+    // The wire's `all` is written `"*"`, unless the file already says every name another way.
+    if (EVERY_GRANT_WIRE_KEYS.includes(key) && isEveryGrant(value)) writeEveryGrant(next, key, current[key]);
+    else next[key] = value;
   }
 
   let promptWrite: { path: string; content: string } | null = null;
@@ -665,7 +651,10 @@ export function applyAgentConfigV3(
     const { prompt, ...behavior } = input.behavior;
     for (const key of BEHAVIOR_KEYS_V3) delete next[key];
     for (const [key, value] of Object.entries(behavior)) {
-      if (value !== undefined) next[key] = value;
+      if (value === undefined) continue;
+      // The view served `permission: all` as `allow`: an unchanged rule keeps the file's spelling.
+      if (key === 'permission' && isDeepStrictEqual(normalizePermissionConfig(current.permission), normalizePermissionConfig(value))) next[key] = current.permission;
+      else next[key] = value;
     }
     const text = typeof prompt === 'string' ? prompt : '';
     if (currentFile) {

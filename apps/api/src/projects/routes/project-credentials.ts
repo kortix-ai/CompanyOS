@@ -1,10 +1,14 @@
 /** Project credentials: project-scoped CLI tokens and the BYO git credential. */
 import { PROJECT_ACTIONS } from '../../iam';
 import { isProjectSessionPrincipal } from '../../iam/agent-scope';
+import { buildDenialError } from '../../iam/denial-message';
+import { keyScopeWire, type KeyScopes } from '../../iam/key-scope';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import {
   PatPolicyError,
   checkTokenMintExpiry,
+  resolveMintExpiry,
+  clampDefaultToParentExpiry,
   createAccountToken,
   listAccountTokens,
   revokeAccountToken,
@@ -24,6 +28,7 @@ import {
 } from '../lib/git';
 import { normalizeString, serializeProjectGitConnection } from '../lib/serializers';
 import { readJsonObject } from '../../shared/http-body';
+import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerProjectCredentialsRoutes(): void {
   // ─── Project-scoped CLI tokens ─────────────────────────────────────────────
@@ -37,12 +42,12 @@ export function registerProjectCredentialsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/cli-token',
+      path: '/{workspaceId}/cli-token',
       tags: ['projects'],
       summary: 'List CLI tokens of a project',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -50,7 +55,7 @@ export function registerProjectCredentialsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     // The list names every member's project keys: it needs the leaf that
     // issues and revokes them (`project.credentials.issue`), not project.read.
     const loaded = await loadProjectForUser(c, projectId, 'credentials');
@@ -76,6 +81,7 @@ export function registerProjectCredentialsRoutes(): void {
         last_used_at: t.lastUsedAt?.toISOString() ?? null,
         created_at: t.createdAt.toISOString(),
         revoked_at: t.revokedAt?.toISOString() ?? null,
+        ...keyScopeWire(t.scopes),
       })),
     });
   },
@@ -84,17 +90,17 @@ export function registerProjectCredentialsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/cli-token',
+      path: '/{workspaceId}/cli-token',
       tags: ['projects'],
       summary: 'Create a project CLI token (API key)',
       description:
         'Create a project-scoped API key. The token value is returned once, in the response.',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               name: z.string().optional().openapi({ description: 'Token label. Default "cli - <project name>".' }),
-              expires_at: z.string().optional().openapi({ description: 'ISO-8601 expiry. Omit for a token that does not expire.' }),
+              expires_at: z.string().nullable().optional().openapi({ description: 'ISO-8601 expiry. Omitted: 90 days (or the workspace maximum, when shorter). `null`: no expiry, only when the workspace key policy allows it.' }),
             }) } } },
         },
       responses: {
@@ -107,7 +113,7 @@ export function registerProjectCredentialsRoutes(): void {
     if (c.get('authType') === 'oauth') {
       return c.json({ error: 'Connected apps cannot mint project tokens.' }, 403);
     }
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'credentials');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     // Authorization is enforced by loadProjectForUser(... 'credentials') above:
@@ -123,7 +129,7 @@ export function registerProjectCredentialsRoutes(): void {
     // session binding, not on the grant: a session of a project without
     // `[[agents]]` carries a NULL grant and is still a session credential.
     if (isProjectSessionPrincipal(c)) {
-      return c.json({ error: 'Agent-session tokens cannot mint project tokens' }, 403);
+      throw buildDenialError(PROJECT_ACTIONS.PROJECT_CREDENTIALS_ISSUE, 'agent_human_only_action');
     }
 
     // Body fields: `name` (defaults to "cli · <project name>") and an optional
@@ -134,11 +140,12 @@ export function registerProjectCredentialsRoutes(): void {
       typeof body.name === 'string' && body.name.trim()
         ? body.name.trim().slice(0, 255)
         : `cli · ${loaded.row.name}`;
-    const expiresAtRaw = typeof body.expires_at === 'string' ? body.expires_at.trim() : '';
-    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : undefined;
-    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
-      return c.json({ error: 'expires_at must be ISO-8601' }, 400);
-    }
+    const expiry = await resolveMintExpiry(loaded.row.accountId, Object.hasOwn(body, 'expires_at') ? body.expires_at : undefined);
+    if (!expiry.ok) return c.json({ error: expiry.error, code: expiry.code }, expiry.status);
+    const parentTokenId = c.get('tokenProjectId') ? (c.get('iamTokenId') as string | undefined) : undefined;
+    const expiresAt = Object.hasOwn(body, 'expires_at')
+      ? expiry.expiresAt
+      : await clampDefaultToParentExpiry(expiry.expiresAt, parentTokenId);
     // A project-scoped caller never mints a token that outlives itself.
     const expiryRefusal = await checkTokenMintExpiry(
       expiresAt,
@@ -157,6 +164,8 @@ export function registerProjectCredentialsRoutes(): void {
         projectId,
         name,
         expiresAt,
+        // A scoped key mints a key with its own scope, never a wider one.
+        scopes: (c.get('iamTokenBinding') as { scopes?: KeyScopes | null } | undefined)?.scopes ?? null,
       });
     } catch (err) {
       if (err instanceof PatPolicyError) {
@@ -175,6 +184,7 @@ export function registerProjectCredentialsRoutes(): void {
         project_id: created.projectId,
         expires_at: created.expiresAt?.toISOString() ?? null,
         created_at: created.createdAt.toISOString(),
+        ...keyScopeWire(created.scopes),
       },
       201,
     );
@@ -184,12 +194,12 @@ export function registerProjectCredentialsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'delete',
-      path: '/{projectId}/cli-token/{tokenId}',
+      path: '/{workspaceId}/cli-token/{tokenId}',
       tags: ['projects'],
       summary: 'Revoke a project CLI token',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), tokenId: z.string() }),
+          params: z.object({ workspaceId: z.string(), tokenId: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -197,7 +207,7 @@ export function registerProjectCredentialsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const tokenId = c.req.param('tokenId');
     const loaded = await loadProjectForUser(c, projectId, 'credentials');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -206,7 +216,7 @@ export function registerProjectCredentialsRoutes(): void {
     // not revoke project tokens (it could knock out its own siblings / the human
     // CLI token as a DoS). Symmetric with the mint guard above.
     if (isProjectSessionPrincipal(c)) {
-      return c.json({ error: 'Agent-session tokens cannot manage project tokens' }, 403);
+      throw buildDenialError(PROJECT_ACTIONS.PROJECT_CREDENTIALS_ISSUE, 'agent_human_only_action');
     }
     const ok = await revokeAccountToken(tokenId, loaded.row.accountId, projectId);
     if (!ok) return c.json({ error: 'token not found or already revoked' }, 404);
@@ -223,12 +233,12 @@ export function registerProjectCredentialsRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/git-credential',
+      path: '/{workspaceId}/git-credential',
       tags: ['github'],
       summary: 'Set the project Git credential',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           body: { content: { 'application/json': { schema: lenientBody({
               token: z.string().openapi({ description: 'Git access token for the repository. value is accepted as an alias.' }),
               provider: z.string().optional().openapi({ description: 'Git provider name. Defaults from the repository remote.' }),
@@ -240,7 +250,7 @@ export function registerProjectCredentialsRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -250,7 +260,7 @@ export function registerProjectCredentialsRoutes(): void {
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
 
     if (await hasServerManagedGitAuth(loaded.row)) {
-      return c.json({ error: 'Git auth is already managed by Kortix for this project' }, 409);
+      return c.json({ error: 'Git auth is already managed by Kortix for this workspace' }, 409);
     }
 
     const token =

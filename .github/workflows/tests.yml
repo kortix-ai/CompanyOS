@@ -1,8 +1,7 @@
 name: Tests
 
-# The contract lanes: six lanes (core-flows, core-db,
-# packages-api|cli|kortixd|rest) on GitHub-hosted runners (free on this public
-# repo). Each lane is the unchanged root command `pnpm test -- <args>`. The two
+# The contract lanes: seven lanes (core-flows, core-db,
+# packages-api|cli|kortixd|publish|rest) on the `CI_RUNNER_L` runner pool. Each lane is the unchanged root command `pnpm test -- <args>`. The two
 # `core-*` lanes split the core run (`--core-group=flows|db`); the `packages-*`
 # lanes run package quality. No browser journey runs here: they run once, in
 # the release suite, against deployed staging (tests-release.yml).
@@ -73,11 +72,14 @@ jobs:
           - lane: core-db
             mode: core
             args: --core-group=db
-          # Package quality in four slices on four runners since 2026-10-16.
-          # In one 4 vCPU lane the API, CLI and kortixd suites plus three
-          # `tsc` shared the CPU: 18.5 min, the CLI suite 7.7 min of it
-          # against 1.4 min alone (run 38777589705). `rest` holds the
-          # repo-wide checks and every other package.
+          # Package quality in five slices on five runners. Four since
+          # 2026-10-16: in one 4 vCPU lane the API, CLI and kortixd suites plus
+          # three `tsc` shared the CPU: 18.5 min, the CLI suite 7.7 min of it
+          # against 1.4 min alone (run 38777589705). `publish` since
+          # 2026-11-03: the npm packages' typecheck, lint, build, pack and
+          # install smokes ran in `rest` before its tests, 9.4 of its 16.9 min,
+          # and `rest` was the slowest lane (run 41627896638). `rest` holds the
+          # repo-wide checks and the tests of every other package.
           - lane: packages-api
             mode: packages
             args: --packages-only --package-group=api
@@ -87,6 +89,9 @@ jobs:
           - lane: packages-kortixd
             mode: packages
             args: --packages-only --package-group=kortixd
+          - lane: packages-publish
+            mode: packages
+            args: --packages-only --package-group=publish
           - lane: packages-rest
             mode: packages
             args: --packages-only --package-group=rest
@@ -96,6 +101,13 @@ jobs:
       TEST_LANE: ${{ matrix.lane }}
       TEST_ARGS: ${{ matrix.args }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      # The supabase CLI pulls storage-api from public.ecr.aws by default, and
+      # ECR Public's data quota is shared per runner IP: the core lane died
+      # twice on release gates 42696873451 and 42716922285 ("error from
+      # registry: Data limit exceeded" → supabase_rest_kortix-local 503, no
+      # shard signal) while the same lane's ghcr.io pulls answered. GHCR hosts
+      # the same official mirrors; pin every supabase image pull to it.
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -106,7 +118,7 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       # No node_modules cache: measured 2026-10-16 (runs
       # 38936414571 cold, 38937437360 warm), restoring the 1.33 GB node_modules
       # archive took 24-44 s plus a 4 s install, against a 41-49 s cold install.
@@ -132,7 +144,13 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y -qq --no-install-recommends software-properties-common
           fi
-          sudo add-apt-repository -y ppa:git-core/ppa
+          # Launchpad occasionally answers an add-apt-repository with its own
+          # HTTP 500 (OOPS ids) — one bad second kills a whole gate lane with
+          # zero test signal (release train 2026-11-09, run 42722612383).
+          for attempt in 1 2 3; do
+            if sudo add-apt-repository -y ppa:git-core/ppa; then break; fi
+            sleep 15
+          done
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends git
           git --version

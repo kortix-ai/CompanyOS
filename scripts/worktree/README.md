@@ -34,7 +34,7 @@ pnpm worktree create --name auth-config --full-supabase --yes
 | `pnpm worktree web <n> [--billing]` | Start only the UI (`next dev`) for a stack started with `--no-web`. Fails when no API listens on the worktree's API port. `Ctrl+C` stops the UI; the API keeps running. |
 | `pnpm worktree stop <n>` | Stop the dev servers — the whole process tree, verified dead before the registry records it. Isolated mode also stops that worktree's Supabase containers. **Data is preserved.** |
 | `pnpm worktree stop --all` | Stop every worktree in one pass. The end-of-day sweep, and the way back from stacks orphaned by an OOM kill. |
-| `pnpm worktree nuke <n> [--force]` | Tear down the app worktree: stop, `git worktree remove`, delete the slot's store, free the port slot. Isolated mode also drops its Supabase containers **and volumes**. Shared mode leaves primary Supabase untouched. |
+| `pnpm worktree nuke <n> [--force]` | Tear down the app worktree: stop, `git worktree remove`, delete the slot's store, free the port slot. `--force` also drops a branch with unmerged commits, but only when every commit is on a remote: a branch with unpushed commits is kept. Isolated mode also drops its Supabase containers **and volumes**. Shared mode leaves primary Supabase untouched. |
 | `pnpm worktree nuke --all [--older-than 2d] [--idle 12h] [--include-dirty] [--dry-run] [--yes]` | Bulk teardown. Always keeps running stacks; frees slots whose directory is gone; keeps dirty checkouts unless `--include-dirty`; time rules filter on `createdAt` / last activity. Prints keep/nuke reasons before acting. |
 | `pnpm worktree list` | Every worktree with its live status and web/api ports, running first then alphabetical. Status comes from a real listening-port scan, not the registry, so it cannot go stale. |
 | `pnpm worktree list <name>` | Filter by substring. A single match expands to full clickable URLs (web, api, studio) plus its path. |
@@ -42,6 +42,8 @@ pnpm worktree create --name auth-config --full-supabase --yes
 | `pnpm worktree status [n]` | Live health (🟢/⚪) of web/api/Supabase per worktree. |
 | `pnpm worktree doctor [--yes]` | Check (or `--yes` install) the toolchain + flag worktree/registry drift. |
 | `pnpm worktree sweep [--idle 60m] [--yes]` | Delete build output (`.next`, `.turbo`, `dist`, `target`, test reports) in every idle git worktree. Skips checkouts with a process or a write within `--idle`, and dirs with tracked files. Dry run without `--yes`. |
+| `pnpm worktree autoclean [--dry-run] [--yes]` | Automatic housekeeping; `create` and `start` run it first, and a schedule runs it every 15 min. Deletes build output over 3 GB in any stopped checkout; sweeps build output idle ≥ 24h; removes worktrees (registry slots and Claude Code isolation worktrees under `.claude/worktrees/`) that are not running, not busy, have no real changes, and are merged into dev (idle ≥ 24h) or fully pushed (idle ≥ 48h); deletes leftover `worktree-agent-*` branches that are pushed or merged. Below 15 GB free (pressure mode) it sweeps every stopped checkout, removes at 12h and trims the pnpm, go, bun and npm caches. Never touches the primary checkout or any other worktree. Dry run without `--yes`. Env: see the worktree skill. |
+| `pnpm worktree autoclean --install-cron \| --uninstall-cron` | `create`/`start` install the 15-min schedule on their own: a bundle at `$KORTIX_HOME/bin/worktree-autoclean.js` run by cron (when a cron daemon runs) or by a detached loop. `--install-cron` installs it now; `--uninstall-cron` removes it and stops the reinstall. Logs to `$KORTIX_HOME/worktrees/autoclean.log`. |
 
 `--yes` on `create`/`doctor` auto-installs anything missing for the selected
 mode (`bun`, Node 22, `pnpm`, and when needed Supabase CLI, Docker, `psql`, or
@@ -157,6 +159,34 @@ registry drift in both directions; `pnpm worktree stop --all` clears the lot.
   `KORTIX_API_PROXY_TARGET` (unset → `localhost:8008`). Without this, every
   worktree's browser would proxy to the **primary** API.
 - `apps/web/package.json` — `next dev … --port ${WEB_PORT:-3000}`.
+
+## Disk: what fills it and what reclaims it
+
+Measured 2026-11-10 on a 98 GB `/work` volume that reached 100% (46 MB free)
+three times in a week:
+
+- A worktree holds ~1.3 GB of unshared files. Its 5.6 GB `node_modules` is
+  mostly hardlinks into the pnpm store.
+- `apps/web/.next` grows without bound under `next dev`: 3.4 GB and 7.0 GB in
+  two checkouts.
+- Removing 30 idle worktrees moved the volume from 100% to 59% (41 GB free).
+
+- An active checkout is never idle, so idle rules never shrink it: the cap
+  (3 GB per build output dir, `KORTIX_WORKTREE_NEXT_CAP_GB`) does, whenever its
+  stack is stopped.
+- Claude Code isolation worktrees (`.claude/worktrees/agent-*`) and their
+  `worktree-agent-*` branches pile up outside the registry.
+- A squash-merged branch whose remote branch was deleted has commits on no
+  remote: merged-PR detection (`gh`, or file equality with `origin/dev`)
+  counts it as safe.
+
+`autoclean` reclaims all of it on every `create` and `start` and every 15
+minutes from `$KORTIX_HOME/bin/worktree-autoclean.js`. Activity is the newest
+of `createdAt`, `lastUsedAt` (written by `create`, `start`, `web`, `stop <n>`),
+the HEAD commit time and the mtime of each changed file. Reads do not count.
+The disk guard on `create`/`start` warns below 10 GB free
+(`KORTIX_WORKTREE_DISK_WARN_GB`) and `create` refuses with exit 2 below 4 GB
+(`KORTIX_WORKTREE_DISK_REFUSE_GB`).
 
 ## Notes
 

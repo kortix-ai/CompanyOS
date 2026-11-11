@@ -1,53 +1,17 @@
 import { encodeCompiledAgentConfigEnv } from '@kortix/api-contract/compiled-agent-config-env';
-import { agentConfigEtag } from './compile-agent-config';
+import { agentConfigEtag, type SessionWorkspaceSetup } from './compile-agent-config';
 
 export interface SessionRuntimeEnvInput {
   projectId: string;
   sessionId: string;
+  /** The project's Git proxy URL: where `kortix workspaces clone` and `git clone` fetch from. Never carries a credential. */
   repoUrl: string;
   baseRef: string;
   agentName: string;
   apiUrl: string;
   /** Frontend base URL (no /v1) the sandbox surfaces as user-facing links. */
   frontendUrl?: string;
-  opencodeModel?: string | null;
-  /** Project file delivery mode selected by the session's agent. */
-  repositoryAccess?: boolean;
-  /** True only for a newly-created session branch that still equals base. */
-  freshSession?: boolean;
-  /** Replacement runtime must fetch the existing remote session branch once. */
-  restoreSessionBranch?: boolean;
-  /** Server-resolved base tip used to validate the image-baked scaffold. */
-  baseSha?: string;
-  /** Bounded Git bundle containing the exact base-tip commit above the baked scaffold. */
-  gitDeltaBundleBase64?: string;
-  /** Exact parent commit required by the thin Git bundle. */
-  gitDeltaParentSha?: string;
-  /** Raw parent commit object. Its tree already exists in the baked scaffold. */
-  gitDeltaParentCommitBase64?: string;
-  /** Delta too large for the env: daemon downloads it with one authenticated GET. */
-  gitDeltaBundleRemote?: boolean;
-  /**
-   * S3 config provider rollout mode for THIS session (platform env, or the
-   * project's `metadata.project_snapshot_mode` canary override). `git`/absent
-   * emits nothing, so the daemon never attempts S3.
-   */
-  projectSnapshotMode?: 'git' | 'prefer-s3' | 'require-s3';
-  /**
-   * `<commit-sha>:<archive-sha256>:<archive-bytes>` for a prepared archive at
-   * `baseSha`. Identity only — never a URL or a credential. The daemon fetches
-   * the short-lived download descriptor from the Git proxy with KORTIX_TOKEN.
-   */
-  projectSnapshotPin?: string | null;
-  /**
-   * The download descriptor for that archive, presigned at session create
-   * (base64 JSON of the same body `GET …/project-snapshot` serves: object
-   * URLs, digests, sizes, expiry). Short-lived and read-only, like the
-   * KORTIX_TOKEN next to it. With it the daemon's first attempt is one direct
-   * GET from the object store; without it (or once it expires) the daemon
-   * fetches a fresh descriptor from the Git proxy.
-   */
-  projectSnapshotDescriptor?: string | null;
+  sessionModel?: string | null;
   /** Server-compiled agent config (JSON string) — see `compile-agent-config.ts`.
    *  `null`/omitted for a project with no manifest file: no key is emitted. */
   compiledAgentConfig?: string | null;
@@ -57,6 +21,10 @@ export interface SessionRuntimeEnvInput {
   piContext?: 'record' | 'summary' | null;
   /** The pi packages of the extensions the session agent enables; sent as `KORTIX_PI_PACKAGES` to a pi session only. */
   piPackages?: unknown[];
+  /** The session agent's `workspace: { repos, setup }` (`manifestWorkspaceSetup`); null declares nothing. */
+  workspaceSetup?: SessionWorkspaceSetup | null;
+  /** The session row's `repository_access`: `repos` reach the box only with it. */
+  repositoryAccess?: boolean;
   /** The prebuilt bundle of those packages (apps/api/src/pi-packages/bundle.ts); null when not built. */
   piPackagesBundle?: { digest: string; url: string; fallbackUrl: string } | null;
 }
@@ -92,68 +60,50 @@ export function auditRelayEnvPassthrough(
   return forwarded;
 }
 
+/**
+ * `KORTIX_WORKSPACE_SETUP`: what kortixd prepares in the background after the session
+ * starts (apps/kortix-sandbox-agent-server/src/harness/shared/workspace-setup.ts). Base64
+ * JSON, version 1. A session without repository access gets no clone; the box says why.
+ */
+function workspaceSetupEnv(input: SessionRuntimeEnvInput): Record<string, string> {
+  const spec = input.workspaceSetup;
+  if (!spec) return {};
+  const access = input.repositoryAccess ?? true;
+  const body = {
+    version: 1,
+    repos: access ? spec.repos : [],
+    ...(!access && spec.repos.length ? { repos_skipped: 'the agent has no project.gitops.read, or the person who started the session cannot read the files' } : {}),
+    setup: spec.setup,
+  };
+  return { KORTIX_WORKSPACE_SETUP: Buffer.from(JSON.stringify(body), 'utf8').toString('base64') };
+}
+
 export function buildSessionRuntimeEnv(input: SessionRuntimeEnvInput): Record<string, string> {
-  const allowsFullRepository = input.repositoryAccess ?? true;
-  const projectGitEnv: Record<string, string> = allowsFullRepository
-    ? {
-        KORTIX_REPO_URL: input.repoUrl,
-        KORTIX_DEFAULT_BRANCH: input.baseRef,
-        KORTIX_BASE_REF: input.baseRef,
-        KORTIX_BRANCH_NAME: input.sessionId,
-      }
-    : {};
-  // A brand-new session's branch IS the base tip: the daemon creates it
-  // locally and materializes from the baked scaffold + the API's delta, so no
-  // in-sandbox `git fetch` runs at all. The two proxied fetches it removes cost 5.4 s + 2.6 s of a 7.9 s
-  // `repo-materialized`, measured on dev 2026-08-27.
-  const fastGitBootEnv: Record<string, string> =
-    allowsFullRepository && input.freshSession
-      ? {
-          KORTIX_SESSION_FRESH: '1',
-          ...(input.baseSha ? { KORTIX_BASE_SHA: input.baseSha } : {}),
-          ...(input.gitDeltaBundleBase64
-            ? { KORTIX_GIT_DELTA_BUNDLE_BASE64: input.gitDeltaBundleBase64 }
-            : {}),
-          ...(input.gitDeltaBundleRemote ? { KORTIX_GIT_DELTA_BUNDLE_REMOTE: '1' } : {}),
-          ...(input.gitDeltaParentSha
-            ? { KORTIX_GIT_DELTA_PARENT_SHA: input.gitDeltaParentSha }
-            : {}),
-          ...(input.gitDeltaParentCommitBase64
-            ? { KORTIX_GIT_DELTA_PARENT_COMMIT_BASE64: input.gitDeltaParentCommitBase64 }
-            : {}),
-        }
-      : {};
-  const restoreGitEnv: Record<string, string> =
-    allowsFullRepository && input.restoreSessionBranch
-      ? { KORTIX_SESSION_BRANCH_RESTORE: '1' }
-      : {};
-  // Fresh, full-repository sessions only: a resumed session keeps its own
-  // workspace, and a restricted workspace mode receives no repository at all —
-  // the archive would disclose files that mode withholds.
-  const snapshotMode = input.projectSnapshotMode ?? 'git';
-  const projectSnapshotEnv: Record<string, string> =
-    allowsFullRepository && input.freshSession && snapshotMode !== 'git'
-      ? {
-          KORTIX_PROJECT_SNAPSHOT_MODE: snapshotMode,
-          ...(input.projectSnapshotPin ? { KORTIX_PROJECT_SNAPSHOT_PIN: input.projectSnapshotPin } : {}),
-          ...(input.projectSnapshotPin && input.projectSnapshotDescriptor
-            ? { KORTIX_PROJECT_SNAPSHOT_DESCRIPTOR: input.projectSnapshotDescriptor }
-            : {}),
-        }
-      : {};
+  // A session never checks out the project repository at boot: /workspace
+  // starts empty. The box still learns where the repository is and which branch
+  // it may push (the Git proxy's ref policy allows the session branch only), so
+  // `kortix workspaces clone` and `git clone "$KORTIX_REPO_URL"` work, and the
+  // daemon's credential helper is configured for that URL.
   return {
-    ...projectGitEnv,
-    ...fastGitBootEnv,
-    ...restoreGitEnv,
-    ...projectSnapshotEnv,
+    KORTIX_REPO_URL: input.repoUrl,
+    KORTIX_DEFAULT_BRANCH: input.baseRef,
+    KORTIX_BASE_REF: input.baseRef,
+    KORTIX_BRANCH_NAME: input.sessionId,
     ...auditRelayEnvPassthrough(),
+    // The workspace id is the project id. The box gets KORTIX_PROJECT_ID only:
+    // the CLI and kortixd read KORTIX_WORKSPACE_ID first, so an injected
+    // KORTIX_WORKSPACE_ID would outrank a script's own KORTIX_PROJECT_ID=<other>.
+    // KORTIX_WORKSPACE_ID is the name a person or a script sets.
     KORTIX_PROJECT_ID: input.projectId,
     KORTIX_SESSION_ID: input.sessionId,
     KORTIX_SERVICE_PORT: '8000',
     KORTIX_AGENT_NAME: input.agentName,
     KORTIX_API_URL: input.apiUrl,
-    KORTIX_PROJECT_AUTO_CLONE: allowsFullRepository ? '1' : '0',
-    KORTIX_REPOSITORY_ACCESS: allowsFullRepository ? '1' : '0',
+    // A daemon released before 2026-11-08 clones when this reads '1'. Keep it
+    // explicit until the runtime floor (session-open/runtime-floor-policy.ts)
+    // excludes those daemons.
+    KORTIX_PROJECT_AUTO_CLONE: '0',
+    ...workspaceSetupEnv(input),
     // Which harness kortixd boots: always pi (OpenCode is deleted). Never leave it
     // out: an unset KORTIX_HARNESS marks a box OpenCode booted before the sunset,
     // and kortixd restores the session log into pi on it.
@@ -171,21 +121,13 @@ export function buildSessionRuntimeEnv(input: SessionRuntimeEnvInput): Record<st
     // Frontend base for user-facing dashboard links — the agent/CLI must never
     // surface KORTIX_API_URL (the API host) to a human. See sandboxFrontendBaseUrl().
     ...(input.frontendUrl ? { KORTIX_FRONTEND_URL: input.frontendUrl } : {}),
-    // The sandbox daemon owns OpenCode root creation for every cold session.
-    // The API adopts/persists that root; it must not create a competing one.
+    // The sandbox daemon creates the runtime's root session for every cold
+    // session. The API adopts/persists that root; it must not create a competing one.
     KORTIX_BOOTSTRAP_RUNTIME_SESSION: '1',
-    // The pre-W3 name of the variable above, for a daemon built before W3.
-    KORTIX_BOOTSTRAP_OPENCODE_SESSION: '1',
-    ...(input.opencodeModel
-      ? {
-          KORTIX_MODEL: input.opencodeModel,
-          // The pre-W3 name of `KORTIX_MODEL`; the OpenCode adapter still falls back to it.
-          KORTIX_OPENCODE_MODEL: input.opencodeModel,
-        }
-      : {}),
+    ...(input.sessionModel ? { KORTIX_MODEL: input.sessionModel } : {}),
     // The sandbox daemon applies this as the BASE of the agent config it runs
     // (connector / gateway provider / Slack overlays still apply on top). Per-call
-    // The resolved session model (KORTIX_OPENCODE_MODEL above), or an explicit
+    // The resolved session model (`KORTIX_MODEL` above), or an explicit
     // model on a prompt request, still wins over this compiled fallback.
     ...(input.compiledAgentConfig
       ? {

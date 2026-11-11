@@ -6,6 +6,7 @@ import { actorOf } from '../../iam/actor';
 import { assertAuthorized, authorize } from '../../iam/authorize';
 import { readJsonObject } from '../../shared/http-body';
 import { AccountIdParam, accountsRouter } from './app';
+import { accountIdParam } from '../../shared/route-params';
 
 const AutomationsStatus = z.object({
   /** True while every automatic fire of every project of the account is stopped. */
@@ -36,7 +37,7 @@ export function registerAutomationRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/{accountId}/automations',
+      path: '/{workspaceId}/automations',
       tags: ['accounts'],
       summary: "Whether the account's automations are paused",
       ...auth,
@@ -47,7 +48,7 @@ export function registerAutomationRoutes(): void {
       },
     }),
     async (c) => {
-      const { accountId } = c.req.valid('param');
+      const accountId = accountIdParam(c);
       const actor = await actorOf(c, accountId);
       await assertAuthorized(actor, ACCOUNT_ACTIONS.ACCOUNT_READ);
       const canChange = (await authorize(actor, ACCOUNT_ACTIONS.ACCOUNT_WRITE)).allowed;
@@ -58,7 +59,7 @@ export function registerAutomationRoutes(): void {
   accountsRouter.openapi(
     createRoute({
       method: 'patch',
-      path: '/{accountId}/automations',
+      path: '/{workspaceId}/automations',
       tags: ['accounts'],
       summary: 'Pause or resume every automation of the account',
       description:
@@ -75,12 +76,12 @@ export function registerAutomationRoutes(): void {
       },
     }),
     async (c) => {
-      const { accountId } = c.req.valid('param');
+      const accountId = accountIdParam(c);
       await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
       // `paused` is required: `{}` must never flip the switch.
       const body = await readJsonObject(c);
       if (typeof body.paused !== 'boolean') return c.json({ error: 'paused (boolean) is required' }, 400);
-      const pause = await setAccountAutomationsPaused({ accountId, paused: body.paused, userId: c.get('userId') as string });
+      const pause = await setAccountAutomationsPaused({ accountId, paused: body.paused, userId: c.get('userId') });
       return c.json(status(pause, true), 200);
     },
   );

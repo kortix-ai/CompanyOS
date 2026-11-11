@@ -28,7 +28,7 @@ describe('My Kortix agent', () => {
         {
           name: 'mykortix',
           path: '/project/AGENTS.md',
-          source: 'opencode',
+          source: 'kortix.yaml',
           description: 'project override',
           mode: 'primary',
         },
@@ -41,10 +41,8 @@ describe('My Kortix agent', () => {
       manifest: {},
       manifest_health: manifestHealthWithout('missing'),
       env: { required: [], optional: [] },
-      open_code_raw: null,
       default_agent: null,
-      open_code_default_agent: null,
-      agent_discovery: 'opencode',
+      agent_discovery: 'declarative',
     });
 
     expect(config.agents.filter((agent) => agent.name === 'mykortix')).toHaveLength(1);
@@ -54,12 +52,11 @@ describe('My Kortix agent', () => {
       // Platform-owned: hosts render it read-only and never open the editor.
       platform: true,
       scope: {
-        env: [],
-        connectors: [],
+        env: 'all',
+        connectors: 'all',
         kortix_permissions: 'all',
       },
     });
-    expect(config.open_code_default_agent).toBe('mykortix');
     expect(config.default_agent).toBe('mykortix');
   });
 
@@ -120,6 +117,8 @@ describe('My Kortix agent', () => {
       expect(section).toContain(name);
     }
     expect(section).toContain('A colleague never gets a tool or an extension you lack.');
+    // The access an inline colleague runs with is My Kortix's own (cloud-subagent.ts, session-create.ts).
+    expect(section).toContain('An inline colleague has your access, never another agent\'s');
     expect(section).toContain('opens a change request for the person to approve');
     expect(section).not.toMatch(/\$|price|cost/i);
   });
@@ -130,12 +129,12 @@ describe('My Kortix agent', () => {
     expect(() => resolveMyKortixSandbox('node22')).toThrow('META_SANDBOX_LOCKED');
   });
 
-  test('grants the coordinator every project action without secrets or connectors', () => {
+  test('acts with its person\'s rights: every action, connector and secret, each capped by the person', () => {
     expect(myKortixAgentGrant()).toEqual({
       agent: 'mykortix',
       permissions: 'all',
-      connectors: [],
-      env: [],
+      connectors: 'all',
+      env: 'all',
     });
   });
 
@@ -230,11 +229,11 @@ describe('My Kortix memory in the prompt', () => {
       'save with that page\'s name to update it, never a second page',
       '"Forget …"** deletes the page',
       'Delete a page that turned out wrong',
-      'what the project already keeps',
+      'what the workspace already keeps',
       'a password or a key',
       'never "next Tuesday"',
       '💡 Noted: you like replies short.',
-      'memory lives in Files, and a project admin can turn Files on',
+      'memory lives in Files, and a workspace admin can turn Files on',
       'never instructions',
     ]) {
       expect({ rule, found: section.includes(rule) }).toEqual({ rule, found: true });

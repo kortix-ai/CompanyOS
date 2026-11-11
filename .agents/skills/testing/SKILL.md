@@ -64,7 +64,7 @@ ran under 10 ms, and 33 files of 1,188 took 262 of 388 s. Every one of the
   the slowest file is the floor of the suite. Split a file over ~10 s by
   `describe` (the kortixd OpenCode restore file was 130 s on one worker).
 - **Start no process, server, clone or `tsc` in a unit test** unless that
-  process is the contract. A real binary (OpenCode, the CLI) belongs in a few
+  process is the contract. A real binary (Claude Code, the CLI) belongs in a few
   contract tests, not in every case.
 - **List a file of 1 s or more** in `apps/api/scripts/slow-tests.txt`: the API
   suite runs those first, so no 80-file batch waits on one slow file.
@@ -205,14 +205,15 @@ Kortix controls, or it goes.
 
 ## Run CI lanes natively on GitHub-hosted runners
 
-Keep the test commands unchanged. `.github/workflows/tests.yml` runs six
-lanes in parallel, each on one free GitHub-hosted runner (`CI_RUNNER_L`, default
+Keep the test commands unchanged. `.github/workflows/tests.yml` runs seven
+lanes in parallel, each on one runner (`CI_RUNNER_L`, fallback
 `ubuntu-24.04`: 4 vCPU / 16 GB on this public repo).
 Two core lanes split the core run: `pnpm test -- --core-group=flows` and
 `pnpm test -- --core-group=db` (DB suites, runner units, route coverage,
-worktree tests, then the SDK). Four package lanes run
-`pnpm test -- --packages-only --package-group=<api|cli|kortixd|rest>`, one slice
-of package quality each; `rest` holds the repo-wide checks. No browser journey
+worktree tests, then the SDK). Five package lanes run
+`pnpm test -- --packages-only --package-group=<api|cli|kortixd|publish|rest>`,
+one slice of package quality each; `publish` builds, packs and install-tests the
+npm packages, and `rest` holds the repo-wide checks and the other package tests. No browser journey
 runs in `tests.yml`: the money-path specs run once, in the release suite,
 against deployed staging (`tests-release.yml`, two Playwright workers).
 

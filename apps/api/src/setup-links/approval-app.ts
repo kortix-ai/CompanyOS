@@ -1,4 +1,4 @@
-import { connectorHeldCalls, connectors, connectorCalls, projects } from '@kortix/db';
+import { connectorHeldCalls, connectors, connectorCalls } from '@kortix/db';
 import { composioToolkitLogo } from '../connectors/composio';
 /**
  * Approval links — the AUTHENTICATED half, mounted at /v1/approval-links.
@@ -41,6 +41,7 @@ import {
 import { db } from '../shared/db';
 import { resolveSetupLink } from './token';
 import type { AppEnv } from '../types';
+import { projectsView } from '../workspaces/rows';
 
 // AppEnv: every route here is authenticated and the project gate reads the
 // auth variables the middleware sets (authType, accountId, ...).
@@ -146,7 +147,7 @@ approvalLinksApp.openapi(createRoute({
     return c.json(
       verdict.reason === 'session_bound_caller'
         ? {
-            error: 'An agent cannot resolve its own approval — a human must approve or deny this',
+            error: "This approval waits for a person: the session's launcher or a project manager approves or denies it.",
             code: 'APPROVAL_REQUIRES_HUMAN',
           }
         : verdict.reason === 'non_human_caller'
@@ -154,15 +155,15 @@ approvalLinksApp.openapi(createRoute({
               error: 'Sign in with a Kortix account to review this approval',
               code: 'APPROVAL_REQUIRES_HUMAN',
             }
-          : { error: 'Only a project manager or the session launcher can resolve this' },
+          : { error: 'Only a workspace manager or the session launcher can resolve this' },
       403,
     );
   }
 
   const [project] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ name: projectsView.name })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
 
   // The connector's own name and logo, so the approval page can say WHICH

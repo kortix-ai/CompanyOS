@@ -103,7 +103,21 @@ that is locked, inactive or silent while idle is `idle`.
 | `paused` by a person | `attention` |
 | sync `error` | `attention`, `sync_error` |
 | items pending, no upload for 30 min of awake time | `attention`, `backlog` |
+| `update.status` `failed` (the newest release was rolled back or did not install) | `attention`, `update_failed` |
 | app older than the newest version in `capture-update.json` | `attention`, `behind_version` |
+
+Every device in `GET /v1/accounts/:id/capture/devices` carries `diagnostics`
+(`apps/api/src/capture/diagnostics.ts`, SDK type `CaptureDeviceDiagnostics`): `os`
+(`family`, `name` such as `Windows 11 Pro 24H2`, `version`, `build`, `arch`),
+`hostname` and `computer_name` (null when masked), `member_email`, `app_version`,
+`update` (status.json `update`, parsed: `status`, `installed`, `channel`, `latest`,
+`last_check_at`, `last_check`, `updating_to`, `last_result` with `detail`, `skipped`),
+`recording`, `sync`, `policy`, `machine` (device.json `machine`: CPU, cores, memory,
+free disk, GPUs, boot time, timezone, locale), `encrypted`, `managed`,
+`described_at`, `reported_at`, `last_credentials_at`, `created_at`. A field an older
+app did not send is null. **Device details** in the device's `...` menu (the list
+row and the device page) shows it in four sections and copies it as plain text
+(**Copy diagnostics**).
 
 A closed laptop cannot report. A computer that was recording when it went
 silent therefore shows `offline` after 30 min and clears when it wakes. The
@@ -148,13 +162,14 @@ agents ──> kortix-capture list|usage|query|now|link|grab-screen (read-only S
 | Path | Content |
 |---|---|
 | `memory.db` | SQLite: `frame`, `segment`, `application`, `domain`, `video`, `ocr`, `window_bound`, `ocr_fts` (FTS5, porter), `ax_blob`/`ax_snapshot`, `timezone`, `app_version`, `metadata`, `once_tasks` (one-shot data migrations already applied), `audio`, `audio_transcript`, `audio_fts` (FTS5, porter) |
+| `memory.db-wal` | SQLite write-ahead log. `journal_size_limit` is 64 MB. The finalize loop runs `PRAGMA optimize` and `wal_checkpoint(TRUNCATE)` every hour (`store::maintain`) |
 | `frames/` | Staged JPEG stills awaiting OCR and encoding |
 | `videos/` | 1 fps HEVC MP4 chunks, frame *i* at *t* = *i* s, ≤ 30 frames each |
 | `icons/` | App icons and website favicons |
 | `audio/` | Audio memory segments, `<start_ms>.m4a`; `audio/staging/` holds the raw PCM of the open segment. Created only once audio is turned on |
 | `audio.json` | Audio heartbeat: state, each source's state and device, the open segment. Written only once audio is turned on |
 | `settings.json` | User settings, hot-reloaded by the recorder |
-| `recorder.json` | Recorder heartbeat: state, `inactive_reason`, reason, last frame, OCR backlog, permissions |
+| `recorder.json` | Recorder heartbeat: state, `inactive_reason`, reason, last frame, OCR backlog, permissions. The tray reads it: in `low_disk`, `sync_backlog`, `permission_missing`, `error` and `privacy_model_unavailable` it does not say "Recording". The recorder's worker threads (OCR, finalize, sync, audio) restart after an error or a panic, 1 s doubling to 5 min |
 | `.kortix-storage-reserve` | Pre-allocated disk reserve, `storage.reserve_mb` (default 500). See "Disk reserve" |
 | `actions/` | Action segments, `<start_ms>-x<id>.actions.jsonl.zst`, and their screenshots in `actions/assets/sha256-<hex>.<ext>` (see "Action recording") |
 | `actions.json` | Action recorder heartbeat: recording or not, and why the policy blocks it |
@@ -169,11 +184,16 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
 
 ## Pipeline
 
-1. **Capture** every `interval_ms` (2000), and also right after the focus
+1. **Capture** every 500 ms while the person works (input in the last 5 s)
+   and every 2 s otherwise (`capture_interval`; no setting or policy changes
+   it; `paced` stretches it on a slow computer), and also right after the focus
    changes (see "Change-driven capture"). The engine returns the frontmost
    app, focused window, browser URL (AX `AXWebArea`/`AXURL`), the window
    stack, an optional AX tree of the focused window, and a JPEG still of the
-   display that holds the focused window. Excluded apps' windows are removed
+   display that holds the focused window. The AX tree (`ax_enabled`) is read on
+   the first capture, on a capture a focus change pulled forward, and at least
+   every 30 s; other frames carry none. Each read stops after 250 ms (partial
+   tree), because the focused app answers it on its own UI thread. Excluded apps' windows are removed
    from the image (ScreenCaptureKit filter).
 2. **Skip** instead of capture when: screen locked, no input for
    `inactivity_seconds`, excluded app or domain in front, private browsing
@@ -188,7 +208,17 @@ Default location: `~/Library/Application Support/ai.kortix.capture` (macOS),
    frames or when more than 45% changed. Text inside the focused window goes
    to `foreground`, the rest to `background`; box offsets index into
    `foreground || background`.
-4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted.
+   OCR stays out of the person's way: a still within 2 dhash bits of its
+   display's last read copies that text for up to 20 s; while the person works
+   (input in the last 5 s) a display is read at most every 30 s; after each
+   read OCR rests 4x as long as the read took (at most 20% of one core).
+   The policy's `recording.text_recognition` `off` reads no
+   screen text at all: frames finish with `ocr_status` 4 and search finds apps,
+   window titles, URLs and accessibility text only.
+4. **Finalize**: OCR'd stills are packed into HEVC chunks and deleted. While
+   the person works, encoding waits for a pause, at most 5 min. A capture that
+   takes longer than half its interval stretches the interval (at most half the
+   recorder's time capturing).
 
 5. **Retain**: every 10 min, `storage_cap` mode deletes (or downscales) the
    oldest chunks until the library is 5% under `limit_gb`; `retention` mode
@@ -363,7 +393,7 @@ every field):
 | `clock_skew` | The local clock is far off and the server gave no usable time | Same as `auth`. A 401/403 whose `Date` header is more than 5 min off is retried once with the server clock |
 | `transient` | 5xx, 408, 429, timeouts, connection loss | Backs off per chunk: jittered, 5 s doubling to 10 min |
 | `integrity` | Checksum or size mismatch | Same as `transient` |
-| `local` | The local file cannot be read | Same as `transient` |
+| `local` | The local file cannot be read | Same as `transient`. A chunk whose file is gone is marked deleted (`status = 2`): it leaves the queue and the pending bytes of the `sync_backlog` gate |
 
 - With sync on, the storage cap never removes a chunk that has not been
   uploaded unless it is older than 7 days; an uploaded chunk freed by the cap
@@ -429,6 +459,13 @@ depth), `audio_pending`, `actions_pending` (and `_uploaded`, `_remote_only`),
 (remote deletes queued), `multipart_in_progress`, `throughput_bps`,
 `bytes_uploaded`, `last_error`, `last_error_class`, `next_retry_ms`,
 `encrypted`, `key_id` and `clock_offset_ms`.
+
+The sync thread ticks every 5 s. It reads the queue counters again only when
+a new row, a new upload, a tombstone or its own write changes the queue, and
+at least every 60 s (`STATE_REFRESH_MS`). It writes `sync.json` only when the
+content changes (`updated_at_ms` does not count). With a queue,
+`oldest_unsent_ms` is at most 60 s old. A change from another process that
+adds no row and no upload (retention, `forget`) shows within 60 s.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -826,8 +863,9 @@ audio, actions and policy state, the action spool summary, device info) as
 ## Updates
 
 The machine service updates the app by itself (`src/memory/managed/update.rs`).
-It checks at start and every 6 hours (jittered), on the channel the build came
-from: `stable` for `X.Y.Z`, `dev` for `X.Y.Z-dev.N`. Every Kortix release
+It checks at start and every 6 hours (jittered), never within 10 minutes of a
+wake from sleep (a just-woken computer is often locked, and its recorder fails
+until the person is back), on the channel the build came from: `stable` for `X.Y.Z`, `dev` for `X.Y.Z-dev.N`. Every Kortix release
 carries `capture-update.json` (version, channel and per-OS installer URL,
 SHA-256 and size) and its Ed25519 signature `capture-update.json.sig`. The
 service installs only a newer version whose signature verifies and whose
@@ -930,7 +968,10 @@ a conversation is recorded. The settings window shows this next to the toggle.
 
 Audio follows the screen recorder: it stops while recording is off or paused
 (tray "Pause", `kortix-capture pause`), while the screen is locked, below
-`storage.min_free_gb`, and during a sync backlog. It keeps recording while there
+`storage.min_free_gb`, and during a sync backlog. The gate fails closed: a
+last known `locked`, `low_disk` or `sync_backlog` stops audio at any age, no
+`recorder.json` yet is `starting`, and a recorder heartbeat silent for 90 s
+(`RECORDER_SILENT_GATE_MS`, longer than a 60 s private capture) is `paused`. It keeps recording while there
 is no keyboard or mouse input (a call you only listen to) and while an excluded
 app is in front (on macOS that app's audio is left out; see below). Sleep stops
 the sources with the process; on wake the next block starts a new segment, so a
@@ -1042,19 +1083,41 @@ opens the microphone or asks for a permission.
 The recorder hot-reloads `settings.json`. The timeline settings API
 (`GET`/`POST /api/settings`) exposes the same keys.
 
+**Kortix Capture manages what recording costs the computer.** No person sets
+these, and nothing a person, the CLI or an older version wrote to
+`settings.json` applies: `Settings::self_manage` replaces them on every load
+(the recorder's hot reload included), and the next save writes the managed
+value back. `settings <key> <value>` and `POST /api/settings` answer "managed
+by Kortix Capture" (exit 1, `400`). Only the organization's policy
+(`recording.interval_ms`, `recording.max_height`, `recording.text_recognition`)
+changes the screenshot size and text recognition; the capture rate is never
+set by anyone. Development and test scripts set `KORTIX_CAPTURE_TUNING=1` to keep
+the file's values (then `interval_ms` is the capture tick).
+
+**Pauses on an organization's computer** (a policy applies): turning recording
+off, or a pause longer than that, ends at the next 06:00 local time, at most
+24 h away (`Settings::bound_org_pause`). The bound is written to
+`settings.json` once, so the end time stays fixed. The tray drops "Pause until
+I resume" there. A personal computer keeps the person's choice.
+
+| Managed key | Value | Meaning |
+|---|---|---|
+| `interval_ms` | 2000 | Not read by the recorder: it captures every 500 ms while the person works and every 2 s otherwise (see Pipeline) |
+| `capture_on_change` | true | Extra capture on app, window title or URL change (max 1 per second) |
+| `max_width`, `max_height` (`resolution`) | 2560, 1440 | Still size box; a still is scaled to fit and never enlarged |
+| `staging_quality`, `video_quality`, `chunk_max_frames` | 0.8, 0.5, 30 | Still JPEG, video quality, frames per chunk |
+| `inactivity_seconds` | 5 | Frames this long after the last input are marked inactive |
+| `ocr_level` | `accurate` | Text recognition; the policy can set `fast` or `off` |
+| `ax_enabled` | true | Accessibility tree on focus change and every 30 s |
+
 | Key | Default | Meaning |
 |---|---|---|
-| `interval_ms` | 2000 | Fixed capture tick |
-| `capture_on_change` | true | Extra capture on app, window title or URL change (max 1 per second) |
-| `resolution` (preset) | `1440p` | `720p` 1280x720, `1080p` 1920x1080, `1440p` 2560x1440, `4k` 3840x2160. Sets `max_width` and `max_height`; reads `custom` when they match no preset |
-| `max_width`, `max_height` | 2560, 1440 | Still size box; a still is scaled to fit and never enlarged. Custom values keep working |
 | `storage.archived_scale` | 0.75 | Scale for downscaled archived video (was 0.5). A library that saved the old default moves to 0.75 once |
 | `storage.reserve_mb` | 500 | Disk reserve size, 0 = off |
 | `storage.min_free_gb` | 5 | Recording stops below this much free disk |
 
-The settings API takes `{"resolution": "1080p"}` in `POST /api/settings`; an
-explicit `max_width`/`max_height` in the same request wins. `GET` returns
-`resolution` and `resolution_presets`.
+`GET /api/settings` returns `resolution` (the managed preset name) and
+`resolution_presets`.
 
 ### Settings window
 
@@ -1201,10 +1264,11 @@ Fail-safe rules:
   not in front.
 | | Windows | Linux (X11) |
 |---|---|---|
-| Screen | GDI `BitBlt` of the monitor with the focused window (per-monitor DPI aware) | X11 `GetImage` of the RandR monitor with the focused window |
+| Screen | DXGI Desktop Duplication of each monitor, GDI `BitBlt` as the fallback (per-monitor DPI aware). A monitor with no new desktop image since the last read and the same window layout is not read again (`reused: true`) | X11 `GetImage` of the RandR monitor with the focused window |
 | Excluded apps | Frame skipped when one is focused. Other excluded windows are painted black from the z-ordered window list (rectangular approximation, no rounded corners or transparency) | Same |
-| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others | None (needs AT-SPI) |
-| AX tree | UI Automation control view | None |
+| URL | UI Automation address bar of Chrome, Edge, Brave, Vivaldi, Opera, Firefox and others; read fresh on every probe from the address-bar element found once per window (a full search only when that element is gone) | None (needs AT-SPI) |
+| AX tree | UI Automation control view, one cached call per node, 250 ms budget | None |
+| Process | Engine and recorder: below-normal priority and EcoQoS (efficiency mode). `kortix-backend`: below-normal, its input-hook thread time-critical so pointer and keys never wait on it | nice 10 for every Capture process (macOS too); input recording is passive (XRecord, a listen-only event tap) |
 | Private windows | Title markers (InPrivate, Incognito, Private Browsing) | Same |
 | Idle / lock | `GetLastInputInfo`; lock = input desktop not openable | XScreenSaver idle; lock = screensaver active |
 | OCR | `Windows.Media.Ocr`. Needs an OCR language pack. No confidence (reports 1.0). Words are grouped into line boxes split at column gaps | `tesseract` CLI (`apt install tesseract-ocr`) |
@@ -1239,8 +1303,14 @@ Kortix Capture merges two recorders that share no capture code:
 
 Screen APIs of the action recorder (`screenshots` 0.8.10): macOS
 `CGWindowListCreateImage` (legacy; macOS 15+ re-asks for screen recording
-consent), Windows GDI `StretchBlt` (CPU scaling), Linux X11 `GetImage` and the
-Wayland portal.
+consent), Linux X11 `GetImage` and the Wayland portal. On every OS an action
+screenshot reads only the displays it keeps (the pointer's, and on macOS the
+focused window's); the other displays keep their layout and no image. No
+screenshot is taken while the window in front would be dropped (an excluded
+app, or one that is not included). Windows reads the display through the
+engine's DXGI Desktop Duplication (`capture_engine::grab_monitor`), so GPU-drawn
+content (a 3D canvas, video) is in the frame, and a display with no new desktop
+image reuses the last read.
 
 ### Stages
 

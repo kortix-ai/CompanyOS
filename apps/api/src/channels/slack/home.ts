@@ -1,28 +1,26 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { chatInstalls, chatThreads, projects } from '@kortix/db';
+import { chatThreads } from '@kortix/db';
 import { db } from '../../shared/db';
 import { loadSlackTokenForProject } from '../install-store';
 import { publishHomeView } from '../slack-api';
 import { config } from '../../config';
 import { escapeMrkdwn, formatRelativeTime } from './util';
 import { isKortixHostedRepo, repoDisplayLabel, repoPreviewImages } from '../repo-preview';
+import { slackInstalledProjectIds } from './inbound';
 import type { HomeProjectRow, HomeRecentRow } from './types';
+import { projectsView } from '../../workspaces/rows';
 
 export async function publishHomeForUser(teamId: string, userId: string): Promise<void> {
-  const installs = await db
-    .select({ projectId: chatInstalls.projectId })
-    .from(chatInstalls)
-    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.workspaceId, teamId)));
-  if (installs.length === 0) return;
+  const projectIds = await slackInstalledProjectIds(teamId);
+  if (projectIds.length === 0) return;
 
-  const token = await loadSlackTokenForProject(installs[0].projectId);
+  const token = await loadSlackTokenForProject(projectIds[0]);
   if (!token) return;
 
-  const projectIds = installs.map((i) => i.projectId);
   const projectRows = await db
-    .select({ projectId: projects.projectId, name: projects.name, repoUrl: projects.repoUrl })
-    .from(projects)
-    .where(inArray(projects.projectId, projectIds));
+    .select({ projectId: projectsView.projectId, name: projectsView.name, repoUrl: projectsView.repoUrl })
+    .from(projectsView)
+    .where(inArray(projectsView.projectId, projectIds));
 
   const recent = await db
     .select({
@@ -31,7 +29,7 @@ export async function publishHomeForUser(teamId: string, userId: string): Promis
       threadId: chatThreads.threadId,
     })
     .from(chatThreads)
-    .where(and(eq(chatThreads.platform, 'slack'), eq(chatThreads.workspaceId, teamId)))
+    .where(and(eq(chatThreads.platform, 'slack'), eq(chatThreads.platformTeamId, teamId)))
     .orderBy(desc(chatThreads.lastMessageAt))
     .limit(5);
 
@@ -107,7 +105,7 @@ function buildHomeView(input: { projects: HomeProjectRow[]; recent: HomeRecentRo
   if (input.projects.length === 0) {
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: '*No projects connected yet.*\nHead to your Kortix dashboard to link a project to this workspace.' },
+      text: { type: 'mrkdwn', text: '*No Kortix workspaces connected yet.*\nHead to your Kortix dashboard to link a Kortix workspace to this Slack workspace.' },
       accessory: {
         type: 'button',
         text: { type: 'plain_text', text: 'Open dashboard' },
@@ -119,7 +117,7 @@ function buildHomeView(input: { projects: HomeProjectRow[]; recent: HomeRecentRo
   } else {
     blocks.push({
       type: 'header',
-      text: { type: 'plain_text', text: `Connected projects · ${input.projects.length}`, emoji: true },
+      text: { type: 'plain_text', text: `Connected workspaces · ${input.projects.length}`, emoji: true },
     });
     for (const p of input.projects) {
       const label = repoDisplayLabel(p.repoUrl) ?? '';
@@ -144,7 +142,7 @@ function buildHomeView(input: { projects: HomeProjectRow[]; recent: HomeRecentRo
         type: 'context',
         elements: [
           { type: 'mrkdwn', text: '🟢  *Connected*' },
-          { type: 'mrkdwn', text: `🪐  <${dashboardBase}/projects/${p.projectId}|Dashboard>` },
+          { type: 'mrkdwn', text: `🪐  <${dashboardBase}/workspaces/${p.projectId}|Dashboard>` },
         ],
       });
       blocks.push({
@@ -152,9 +150,9 @@ function buildHomeView(input: { projects: HomeProjectRow[]; recent: HomeRecentRo
         elements: [
           {
             type: 'button',
-            text: { type: 'plain_text', text: 'Open project' },
+            text: { type: 'plain_text', text: 'Open workspace' },
             style: 'primary',
-            url: `${dashboardBase}/projects/${p.projectId}`,
+            url: `${dashboardBase}/workspaces/${p.projectId}`,
             action_id: `home_open_${p.projectId}`,
           },
           // A Kortix-hosted repository is private: the button would open a 404.

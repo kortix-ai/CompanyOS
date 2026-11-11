@@ -246,7 +246,7 @@ describe('the inbox row', () => {
     expect(await admitInboxPrompt(second)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
 
     await db.execute(sql`
@@ -354,7 +354,7 @@ describe('requeueForAdmission against real Postgres', () => {
     // The two markers exist separately for exactly this moment: the row must
     // stop reading `waiting`, and the drain must still know the client's wire
     // id has been overtaken. Collapsing them delivered the stale id, which
-    // OpenCode reads as already answered — the prompt is accepted and silently
+    // the runtime reads as already answered — the prompt is accepted and silently
     // never runs.
     const row = await enqueue('q_promote_marker');
     await requeueForAdmission(await hold(row), 'older_prompt_pending', new Date());
@@ -415,7 +415,7 @@ describe('admitInboxPrompt against real rows', () => {
     'turn-1': {
       token: 'turn-1',
       state: 'active',
-      opencodeSessionId: 'ses_root',
+      runtimeSessionId: 'ses_root',
       messageId: WIRE_ID,
       startedAtMs: 1,
     },
@@ -423,8 +423,8 @@ describe('admitInboxPrompt against real rows', () => {
 
   test('a live turn on a RUNNING box holds the prompt until the turn ends', async () => {
     // ONE QUEUED MESSAGE RUNS AT A TIME. Forwarding into a live turn was tried
-    // and reverted: OpenCode picks new user messages up at step boundaries
-    // inside the running turn and answers everything before the newest one in
+    // and reverted: OpenCode picked new user messages up at step boundaries
+    // inside the running turn and answered everything before the newest one in
     // that step, so a burst shared a single answer and the earlier messages
     // were never spoken (measured 2026-09-04). The daemon's `session.idle`
     // relay awaits `promoteNextInboxRow`, so this wait ends on an event.
@@ -520,7 +520,7 @@ describe('admitInboxPrompt against real rows', () => {
     expect(await admitInboxPrompt(younger)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
   });
 
@@ -674,7 +674,7 @@ describe('requeueAbandonedPrompt against real rows', () => {
   });
 
   test('giving up on a FORWARDED row stops it claiming to be on the wire', async () => {
-    // Every reader of "is this row at OpenCode" keys on `result.status`.
+    // Every reader of "is this row at the runtime" keys on `result.status`.
     // Leaving `forwarded` on a dead-lettered row made it read `delivering` for
     // ever: filtered out of the queue strip, counted as live work by the
     // composer, and invisible to the sweep — no retry, no remove, nothing that
@@ -1445,7 +1445,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
     expect(await admitInboxPrompt(claimedNewer)).toEqual({
       admit: false,
       reason: 'older_prompt_pending',
-      retryAfterMs: INBOX_ORDER_BACKOFF_MS,
+      retryAfterMs: INBOX_STALE_ORDER_BACKOFF_MS,
     });
     const refreshed = await readRow(stopped.commandId);
     expect(refreshed.status).toBe('queued');
@@ -1481,7 +1481,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
 
   test('a CONSUMED stop-paused row is never re-queued by the release', async () => {
     // The race the release predicate has to survive: Stop marks the row, and
-    // the turn in front of it ends before the abort lands, so OpenCode runs the
+    // the turn in front of it ends before the abort lands, so the runtime runs the
     // prompt anyway and the ledger confirms it. Re-queueing there spends a
     // SECOND real LLM turn on a message that was already answered.
     const row = await forward('q_stopped_consumed');
@@ -1501,7 +1501,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
   test('the release requeue reads FORWARDED, not the stop marker alone', async () => {
     // Belt and braces for the case above: even a row that somehow kept the
     // marker after being delivered must not go back on the queue. `forwarded`
-    // is what "OpenCode is still holding this, unanswered" means.
+    // is what "the runtime is still holding this, unanswered" means.
     const row = await forward('q_stopped_marker_only');
     await db.execute(sql`
       UPDATE kortix.session_lifecycle_commands
@@ -1629,7 +1629,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
 
   test('a delivery a turn ACCEPTED is not mislabelled as stop-paused', async () => {
     // Stop marks a `running` row it cannot recall, and the POST lands anyway.
-    // If OpenCode ACCEPTED it, the message is running in the transcript — the
+    // If the runtime ACCEPTED it, the message is running in the transcript — the
     // strip must not show it as a parked queue row with a "send now" button,
     // and the next release must not deliver it a second time.
     const row = await enqueue('q_accept_beats_stop');
@@ -1681,7 +1681,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
     // `forwardToSandbox` claims `idem:<sandbox>\0<session>\0<key>` for
     // DEDUPE_TTL_MS (10 min). Re-POSTing a stopped-then-released prompt under
     // the SAME key inside that window is answered `200 {"deduplicated":true}`,
-    // which `postPrompt` reads as delivered: OpenCode never receives the
+    // which `postPrompt` reads as delivered: the runtime never receives the
     // message and the row is force-closed 10 minutes later with no error.
     // `payload.deliveryAttempt` is what suffixes the key — see
     // `executeQueuedContinue`.
@@ -1719,7 +1719,7 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
       [token]: {
         token,
         state: 'delivering',
-        opencodeSessionId: 'ses_root',
+        runtimeSessionId: 'ses_root',
         messageId: WIRE_ID,
         startedAtMs: Date.now(),
       },
@@ -1990,7 +1990,7 @@ describe('every reader finds a row by any id it went out under', () => {
 });
 
 // The settle that runs after Stop takes the prompts the Stop paused back out
-// of OpenCode. It selects them with `stopPausedOnWireScope`. The settle reads
+// of the runtime. It selects them with `stopPausedOnWireScope`. The settle reads
 // the box only when that scope selected a row, and this session has no
 // runtime, so `unreadable` reports whether the scope selected anything.
 describe('the post-Stop settle selects exactly the prompts the Stop paused', () => {
@@ -2235,7 +2235,7 @@ describe('steering (R10)', () => {
   const TURN_ID = 'msg_000000000001SteerTurnPrompt';
   const STEER_ID = 'msg_000000000005SteerMessageAa';
   const activeTurn = {
-    'turn-s': { token: 'turn-s', state: 'active', opencodeSessionId: 'ses_root', messageId: TURN_ID, startedAtMs: 1 },
+    'turn-s': { token: 'turn-s', state: 'active', runtimeSessionId: 'ses_root', messageId: TURN_ID, startedAtMs: 1 },
   };
   let capabilities: string[] | null = ['runtime.turns.v1', 'session.steer'];
   // The live gate with one stub: the box's `/kortix/health` capabilities.

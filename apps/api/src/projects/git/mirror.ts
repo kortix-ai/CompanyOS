@@ -418,7 +418,13 @@ export function classifyGitError(error: unknown, args: readonly string[], timeou
   }
   // Never stdout: for `show` and `cat-file` it is repository content, and the
   // message reaches logs and error reports.
-  const cleaned = stripGitProgress(stderr) || `git ${subcommand} failed${typeof err.code === 'number' ? ` (exit ${err.code})` : ''}`;
+  // A STRING code with an empty stderr is Node failing to SPAWN the child at
+  // all (`EAGAIN` under process pressure, `ENOENT` for a missing binary) — its
+  // message carries the real cause, so keep it: laundering it into the bare
+  // `git clone failed` hid the fork exhaustion a retry then never retried on.
+  // A numeric exit code still renders the long-standing `(exit N)` form.
+  const cleaned = stripGitProgress(stderr) ||
+    `git ${subcommand} failed${typeof err.code === 'number' ? ` (exit ${err.code})` : typeof err.code === 'string' ? ` (spawn ${err.code})` : ''}`;
   return new GitOperationError({
     kind: 'failed',
     message: cleaned,
@@ -451,6 +457,17 @@ export function isGitOperationError(err: unknown): err is GitOperationError {
  * transient: the mirror retries the clone, and a persistent failure surfaces as
  * a retryable 503 + Retry-After instead of an unhandled 500.
  *
+ * The same container-level pressure can also make FORKING fail: git's https
+ * helper fails its own fork (`error: cannot fork() for remote-https: Resource
+ * temporarily unavailable`), or Node's `execFile` fails to spawn git itself
+ * (code `EAGAIN`, message `spawn git EAGAIN`, no stderr). KRTX-4016 burst
+ * windows (2026-11-03/04) produced hundreds of prompts refused per burst this
+ * way because the class was treated as permanent — no retry, fail closed per
+ * prompt. It is the same transient class: bounded retries and a retryable 503,
+ * while a sustained exhaustion still answers closed after the retries.
+ * Sibling family in the signature set: fd exhaustion (`EMFILE`/`ENFILE`,
+ * "too many open files").
+ *
  * Incident 2026-09-23 (`incident-20260923T100537Z-hbcr`): the KX-HOURLY
  * heartbeat probe's `sessions new` cold-cloned the private mirror of an
  * internal project, got `fatal: repository '…/private-mirror-….git/'
@@ -464,7 +481,10 @@ export function isGitOperationError(err: unknown): err is GitOperationError {
  * local repo (`not a git repository`) do NOT match.
  */
 const TRANSIENT_MIRROR_ERROR_PATTERN =
-  /repository '[^']*' not found|could not resolve host|temporary failure in name resolution|network is unreachable|couldn't connect to server|connection (?:reset|refused|timed out|closed)|remote end hung up unexpectedly|early eof|rpc failed|the requested url returned error: 5\d\d|operation timed out|timed out|ssl_error|gnutls_handshake|tls handshake/i;
+  /repository '[^']*' not found|could not resolve host|temporary failure in name resolution|network is unreachable|couldn't connect to server|connection (?:reset|refused|timed out|closed)|remote end hung up unexpectedly|early eof|rpc failed|the requested url returned error: 5\d\d|operation timed out|timed out|ssl_error|gnutls_handshake|tls handshake|cannot fork\(\) for|resource temporarily unavailable|spawn(?: \S+)? EAGAIN|\bEMFILE\b|\bENFILE\b|too many open files/i;
+
+/** "could not resolve host" for a .test, .invalid, .example or .localhost name. */
+const RESERVED_NAME_UNRESOLVED_PATTERN = /could not resolve host: [^\s'"]*\.(?:test|invalid|example|localhost)\b/i;
 
 /**
  * A push the REMOTE rejected with its own server-side 5xx reason (KRTX-1683,
@@ -491,6 +511,8 @@ export function isTransientGitMirrorError(err: unknown): err is GitOperationErro
   if (!isGitOperationError(err)) return false;
   if (err.kind === 'timeout' || err.kind === 'busy') return true;
   const text = `${err.message}\n${err.stderr}\n${err.stdout}`;
+  // A reserved name (RFC 2606 / RFC 6761) never resolves: not a DNS blip.
+  if (RESERVED_NAME_UNRESOLVED_PATTERN.test(text)) return false;
   if (err.gitArgs[0] === 'push' && REMOTE_PUSH_TRANSIENT_REJECTION_PATTERN.test(text)) return true;
   return TRANSIENT_MIRROR_ERROR_PATTERN.test(text);
 }
@@ -986,9 +1008,21 @@ const BARE_CLONE_TIMEOUT_MS = bareCloneTimeoutMs();
 /** A cold clone OR a warm fetch can transiently fail (timeout, network blip, or
  * GitHub's ambiguous `repository … not found` for a private mirror whose token
  * is momentarily unusable); retry a bounded number of times before surfacing —
- * most clear on a later attempt. See `isTransientGitMirrorError`. */
-const MIRROR_RETRY_MAX_ATTEMPTS = 3;
-const MIRROR_RETRY_DELAY_MS = 500;
+ * most clear on a later attempt. See `isTransientGitMirrorError`.
+ *
+ * The budget has to cover GitHub's visibility window for a BRAND-NEW repo:
+ * the first session of a freshly provisioned project clones a repo created
+ * ~2 s earlier, and GitHub kept answering `repository … not found` past the
+ * old budget (3 × 500 ms ≈ 1.6 s; release gate 42666114535, attempt 3 on
+ * staging, 2026-11-09). 5 × 2 s surfaces a genuinely dead upstream in ~10 s
+ * while surviving the propagation window. */
+const MIRROR_RETRY_MAX_ATTEMPTS = 5;
+const MIRROR_RETRY_DELAY_MS = 2000;
+/** The refresh-epoch cap is a CONCURRENCY budget, not a transient-network one:
+ * how many times a refresh may retry while a base move keeps invalidating the
+ * mirror under it (`kind: "busy"`). Its neighbor test pins the move count —
+ * deliberately unchanged, and not the transient budget above. */
+const MIRROR_EPOCH_MAX_ATTEMPTS = 3;
 
 function looksLikeBareMirror(repoPath: string): boolean {
   return (
@@ -1338,7 +1372,7 @@ async function refreshStore(
   // reader) is finishing. Dropping its proof is not enough: this reader must
   // not ground a new session on the checkout that the move invalidated.
   if (epoch !== (invalidations.get(project.projectId) ?? 0)) {
-    if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+    if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
     return refreshMirror(project, force, opts, epochRetries + 1);
   }
   return repoPath;
@@ -1395,7 +1429,7 @@ async function lockedRefreshMirror(
       // Timed as git: a request that waits out another caller's fetch shows the wait.
       const repoPath = await timeStage('git', () => current.promise);
       if (current.epoch === (invalidations.get(project.projectId) ?? 0)) return repoPath;
-      if (epochRetries >= MIRROR_RETRY_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
+      if (epochRetries >= MIRROR_EPOCH_MAX_ATTEMPTS) throw new GitOperationError({ kind: 'busy', message: 'Project mirror changed repeatedly during refresh', gitArgs: [] });
       return refreshMirror(project, force, opts, epochRetries + 1);
     }
     // The in-flight refresh belongs to another caller, often with another

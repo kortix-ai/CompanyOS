@@ -1,3 +1,4 @@
+import { asLegacyWorkspaceRoute } from '@kortix/shared/workspace-routes';
 import {
   isRepositoryDisconnectedError,
   repositoryDisconnectedBody,
@@ -25,11 +26,15 @@ import { resolvePrefixEscape } from './sandbox-proxy/prefix-escape';
 import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
-  deadCredentialLogDecision,
+  DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogKey,
+  isAccountMfaDenial,
+  isAgentGrantDenial,
   isDeadCredential,
+  isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
+import { logWindowDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -331,8 +336,8 @@ function handleHttpException(
   // Better Stack groups on the message string, so `-> 403 [HTTPException]`
   // collapsed every possible denial into one unactionable bucket: 2,338
   // boot-timeline 403s over 7 days never revealed that the rejecting branch
-  // was `enforceTokenProjectScope`'s default-deny (see
-  // SESSION_BOUND_PLATFORM_SINKS in middleware/auth.ts). Bounded at 200 chars
+  // was `enforceTokenProjectScope`'s default-deny (the route had no binding in
+  // middleware/workspace-binding.ts). Bounded at 200 chars
   // so a long upstream message cannot shard the grouping without limit.
   const reason = (err.message ?? '').slice(0, 200);
   // SEVERITY FOLLOWS THE CAUSE. A 4xx here is the gate working: an expired
@@ -360,15 +365,41 @@ function handleHttpException(
   // (first per window per normalized key, best-effort count in `suppressed`), never
   // the response; see shared/dead-credential-log.ts. Every other HTTPException
   // keeps its per-request line.
-  if (isDeadCredential(err)) {
+  // The invalid-or-expired-token 401 shares that treatment (KRTX-4442): one
+  // external client retrying an expired JWT put 78 warn lines on
+  // GET /v1/auth/user in one hour, every one a per-request line of the same
+  // signal. The credential CAN come back, so the response keeps its global
+  // body with no session_token_revoked code — only the line is throttled,
+  // first per window per normalized key, next line carrying `suppressed`.
+  // auth-audit's auditLoginFail at each throw site keeps exact accounting.
+  // The agent-grant denial family joins the same treatment (KRTX-4635): the
+  // typed body already names the permission and the remedy, and a caller that
+  // never acts on it — an in-sandbox agent looping a denied command — put 590
+  // warn lines in two hours on one prod route, 8.8k in eight days across ~10
+  // routes, all one reason (`agent_scope_insufficient`). Same line, same
+  // grouping; only the rate and the severity band change.
+  // The account-MFA step-up denial joins the same treatment (KRTX-4674): the
+  // typed body already tells the client to verify its second factor, and a
+  // caller that polls through it — the web app's workspace list panels —
+  // put 700+ warn lines in one hour across three routes, 0 in the 24 h
+  // before, until its people complete the step-up. Same line, same
+  // grouping; only the rate and the severity band change.
+  if (isDeadCredential(err) || isAgentGrantDenial(err) || isAccountMfaDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = deadCredentialLogDecision(
+    const { log, suppressed } = logWindowDecision(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );
-    if (log) appLogger.warn(line, { ...fields, suppressed });
+    // SEVERITY FOLLOWS THE VOLUME (KRTX-4454). The steady state of this class
+    // is designed churn — every session stop leaves its box probing with a
+    // dead credential, forever — so a flat warn level keeps a 0-baseline warn
+    // pattern alive that re-trips the infra-sweep's new-pattern detector every
+    // time. The pending count the decision just measured separates churn from
+    // a caller ignoring the typed stop code: under the band ships at info
+    // (still queryable, same grouping), above it the line stays warn.
+    if (log) appLogger[suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED ? 'warn' : 'info'](line, { ...fields, suppressed });
   } else {
     appLogger[level](line, fields);
   }
@@ -451,7 +482,7 @@ function handleDatabaseOrUnknownError(
     if (
       databaseError.pgCode === '57014'
       && method === 'GET'
-      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions)\/?$/.test(path)
+      && /^\/v1\/projects\/[^/]+\/gateway\/(overview|series|breakdown|sessions)\/?$/.test(asLegacyWorkspaceRoute(path))
     ) {
       appLogger.warn(`${method} ${path} -> 503 [gateway-analytics-timeout]`, {
         method, path, pgCode: databaseError.pgCode,
@@ -721,12 +752,22 @@ function handleUnhandledError(err: Error, c: Context): Response {
   return handleDatabaseOrUnknownError(err, c, errName, method, path);
 }
 
+// KRTX-3380: GET-only health endpoints. A write method on them answers 405 with
+// the Allow list RFC 9110 §15.5.6 requires instead of the generic 404.
+const HEALTH_PATHS = new Set(
+  ['/health', '/health/live', '/health/ready'].flatMap((p) => [p, `/v1${p}`]),
+);
+
 export function installHttpErrors(app: OpenAPIHono) {
   // === Error Handling ===
   app.onError(handleUnhandledError);
 
   // === 404 Handler ===
   app.notFound((c) => {
+    if (HEALTH_PATHS.has(c.req.path) && c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+      return c.body(null, 405, { Allow: 'GET, HEAD' });
+    }
+
     // A root-absolute link on a path-based preview (`<a href="/learn">` inside
     // /v1/p/{sandbox}/{port}/) resolves against THIS origin and lands here with
     // the prefix stripped. Put the navigation back where it belongs instead of

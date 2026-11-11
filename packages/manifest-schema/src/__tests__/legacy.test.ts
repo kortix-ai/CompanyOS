@@ -112,16 +112,14 @@ describe('a kortix_version 2 project', () => {
       prompt_file: 'agents/lead.md',
       permission: { bash: 'ask' },
       tools: { exclude: OFF },
-      skills: 'all',
-      subagents: 'all',
+      skills: '*',
+      subagents: '*',
       commands: ['standup'],
       extensions: ['pi-web-access'],
       codemode: 'only',
-      connectors: 'all',
+      connectors: '*',
       secrets: ['HELPDESK_TOKEN'],
-      kortix_permissions: 'all',
-      // v2 cloned the repository when the key was omitted.
-      workspace: { project_repository: true },
+      kortix_permissions: '*',
     });
     expect(agents.reviewer).toEqual({
       description: 'Reviews.',
@@ -132,7 +130,6 @@ describe('a kortix_version 2 project', () => {
       skills: ['triage', 'kortix-system'],
       commands: ['weekly-report'],
       codemode: 'only',
-      workspace: { project_repository: false },
     });
     expect(raw.triggers).toEqual([{ slug: 'nightly', type: 'cron', agent: 'reviewer', cron: '0 0 3 * * *', prompt: 'Review.' }]);
     // OpenCode plugins did nothing on pi: reported, not carried over.
@@ -166,7 +163,7 @@ describe('a kortix_version 2 project', () => {
     const files = { ...FILES, 'harnesses/opencode/agents/helper.md': '---\ndescription: Helps the lead.\nmode: subagent\nmodel: kortix/glm-5.3-flash\npermission: allow\n---\nYou help.\n' };
     const { raw, overlay, changes } = convertLegacyManifest(parseManifestText(V2), 2, 'kortix.yaml', repo(files));
     const agents = raw.agents as Record<string, Record<string, unknown>>;
-    expect(agents.helper).toMatchObject({ description: 'Helps the lead.', mode: 'subagent', prompt_file: 'agents/helper.md', skills: 'all' });
+    expect(agents.helper).toMatchObject({ description: 'Helps the lead.', mode: 'subagent', prompt_file: 'agents/helper.md', skills: '*' });
     expect(overlay['agents/helper.md']).toBe('You help.\n');
     expect(changes.some((c) => c.action === 'delete' && c.path === 'harnesses/opencode/agents/helper.md')).toBe(true);
   });
@@ -181,6 +178,29 @@ describe('a kortix_version 2 project', () => {
     expect(helper.env).toBeUndefined();
     expect(dropped).toEqual([]);
     expect(validateManifest(raw).issues).toEqual([expect.objectContaining({ path: 'agents.helper.descripton', severity: 'error', message: expect.stringContaining('Did you mean "description"?') })]);
+  });
+
+  test('an agent v2 gave the repository explicitly (true or branch) gets workspace.gitops.read; omitted, false and runtime get nothing', () => {
+    const text = [
+      'kortix_version: 2',
+      'agents:',
+      '  omitted:\n    prompt: a\n    kortix_cli: none',
+      '  yes:\n    prompt: b\n    repository_access: true\n    kortix_cli: [project.read]',
+      '  branch:\n    prompt: c\n    workspace: branch',
+      '  every:\n    prompt: d\n    kortix_cli: all',
+      '  no:\n    prompt: e\n    repository_access: false',
+      '  runtime:\n    prompt: f\n    workspace: runtime',
+      '',
+    ].join('\n');
+    const { raw } = convertLegacyManifest(parseManifestText(text), 2, 'kortix.yaml', repo({}));
+    const grant = (name: string) => (raw.agents as Record<string, Record<string, unknown>>)[name]!.kortix_permissions;
+    // Fail closed: an imported file's explicit `false` reaches the converter as omitted.
+    expect(grant('omitted')).toBe('none');
+    expect(grant('yes')).toEqual(['project.read', 'workspace.gitops.read']);
+    expect(grant('branch')).toEqual(['workspace.gitops.read']);
+    expect(grant('every')).toBe('*');
+    expect(grant('no')).toBeUndefined();
+    expect(grant('runtime')).toBeUndefined();
   });
 
   test('an unknown agent key is an error that leaves the agent on; a runtime table is dropped with a note', () => {
@@ -226,8 +246,12 @@ describe('a kortix.toml (kortix_version = 1) project', () => {
     expect(validateManifest(raw).issues.filter((i) => i.severity === 'error')).toEqual([]);
     expect(raw.default_agent).toBe('ops');
     const agents = raw.agents as Record<string, Record<string, unknown>>;
-    expect(agents.ops).toMatchObject({ mode: 'primary', description: 'Runs ops.', permission: { bash: 'ask' }, connectors: 'none', secrets: ['HELPDESK_TOKEN'], kortix_permissions: 'all', skills: 'all', workspace: { project_repository: true } });
-    expect(agents.helper).toMatchObject({ mode: 'subagent', connectors: 'all', secrets: 'all', kortix_permissions: 'all', skills: 'all' });
+    expect(agents.ops).toMatchObject({ mode: 'primary', description: 'Runs ops.', permission: { bash: 'ask' }, connectors: 'none', secrets: ['HELPDESK_TOKEN'], kortix_permissions: '*', skills: '*' });
+    expect(agents.helper).toMatchObject({ mode: 'subagent', connectors: '*', secrets: '*', kortix_permissions: '*', skills: '*', tools: '*' });
+    // The written kortix.yaml spells "every" as a double-quoted "*".
+    const written = changes.find((c) => c.path === 'kortix.yaml')!.content!;
+    expect(written).toContain('tools: "*"');
+    expect(written).not.toMatch(/: all$/m);
     expect(overlay[agents.ops!.prompt_file as string]).toBe('You run ops.\n');
     expect(changes[0]).toMatchObject({ path: 'kortix.yaml', action: 'rewrite' });
     expect(changes.some((c) => c.action === 'delete' && c.path === 'kortix.toml')).toBe(true);

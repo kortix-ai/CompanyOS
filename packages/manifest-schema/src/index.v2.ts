@@ -26,8 +26,10 @@ import {
   selectedKortixTools,
   TOOL_NAME_RE,
   V2_RUNTIME_VALUES,
-  WORKSPACE_MODES_V2,
+  isEveryGrant,
 } from './constants';
+
+export { EVERY_GRANT, isEveryGrant } from './constants';
 import { expectStringOrAbsent, isTable, type ManifestIssue, validateGrantList, validateKortixPermissionFields } from './index';
 import { safeAgentFile, safeToolFile } from './layout';
 import { isMyKortixAgentName } from '@kortix/shared/my-kortix-agent';
@@ -36,46 +38,6 @@ import { isMyKortixAgentName } from '@kortix/shared/my-kortix-agent';
 
 /** Full OpenCode `AgentConfig.mode` parity — https://opencode.ai/config.json `$defs.AgentConfig`. */
 export type AgentModeV2 = 'primary' | 'subagent' | 'all';
-
-/** What an agent's sessions get in `/workspace`. */
-export interface AgentWorkspaceV2 {
-  /** Check out the project repository. Default false. */
-  project_repository?: boolean;
-}
-
-export type ProjectRepositoryResult =
-  | { ok: true; value: boolean; legacyRead: boolean }
-  | { ok: false; path: string; message: string };
-
-/**
- * Resolve `agents.<name>.workspace.project_repository`. The legacy string form
- * `workspace: runtime|read|branch` still reads (`branch` = true). An omitted
- * value is false: an agent opts in to the checkout. `legacyRead` is the legacy
- * `workspace: read`.
- */
-export function resolveProjectRepository(entry: Record<string, unknown>): ProjectRepositoryResult {
-  const workspace = entry.workspace;
-  if (workspace === undefined) return { ok: true, value: false, legacyRead: false };
-  if (typeof workspace === 'string') {
-    const mode = workspace.trim();
-    if (!(WORKSPACE_MODES_V2 as readonly string[]).includes(mode)) {
-      return {
-        ok: false,
-        path: 'workspace',
-        message: `must be a map ({ project_repository: true|false }) or one of: ${WORKSPACE_MODES_V2.join(', ')} (got "${mode || 'unset'}").`,
-      };
-    }
-    return { ok: true, value: mode === 'branch', legacyRead: mode === 'read' };
-  }
-  if (!isTable(workspace)) return { ok: false, path: 'workspace', message: 'must be a map ({ project_repository: true|false }).' };
-  const extra = Object.keys(workspace).find((key) => key !== 'project_repository');
-  if (extra) return { ok: false, path: `workspace.${extra}`, message: 'is not a workspace key (allowed: project_repository).' };
-  const value = workspace.project_repository;
-  if (value !== undefined && typeof value !== 'boolean') {
-    return { ok: false, path: 'workspace.project_repository', message: 'must be a boolean.' };
-  }
-  return { ok: true, value: value ?? false, legacyRead: false };
-}
 
 /** The values `runtime:` accepts. It selects nothing since 2026-10-23: every new
  *  session runs pi. `opencode` validates with a deprecation warning. */
@@ -116,8 +78,9 @@ export type PermissionConfigV2 = PermissionActionV2 | PermissionConfigObjectV2;
 
 /**
  * A Kortix grant set as it appears on the wire: an allowlist, or the "all"/
- * "none" sentinels. Distinct from the *resolved default* when the key is
- * omitted entirely — see `resolveGrantSet`.
+ * "none" sentinels. kortix.yaml writes "every name" as `"*"` (`all` is its
+ * alias); `resolveGrantSet` reads both as `'all'`. Distinct from the
+ * *resolved default* when the key is omitted entirely — see `resolveGrantSet`.
  */
 export type GrantSetV2 = 'all' | 'none' | string[];
 
@@ -177,20 +140,36 @@ export interface AppBlockV2 {
  */
 export function resolveGrantSet(value: unknown, defaultWhenOmitted: 'all' | 'none'): GrantSetV2 {
   if (value === undefined || value === null) return defaultWhenOmitted;
-  if (typeof value === 'string') {
-    const v = value.trim().toLowerCase();
-    if (v === '' || v === 'none') return 'none';
-    if (v === 'all' || v === '*') return 'all';
-    return 'none';
-  }
+  if (isEveryGrant(value)) return 'all';
+  if (typeof value === 'string') return 'none';
   if (Array.isArray(value)) {
-    const items = value
+    return value
       .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
       .map((item) => item.trim());
-    // `*` is a synonym of `all`, alone or beside other entries.
-    return items.includes('*') ? 'all' : items;
   }
   return defaultWhenOmitted;
+}
+
+/** A permission action as written: `"*"` and `all` (any case) are `allow`. Anything else is returned unchanged. */
+export function normalizePermissionAction(value: unknown): unknown {
+  return typeof value === 'string' && isEveryGrant(value) ? 'allow' : value;
+}
+
+/**
+ * An agent's `permission` with every `"*"` / `all` action written as `allow`:
+ * the whole permission, each tool's rule, and each pattern's action. A
+ * harness only ever sees `allow`, `ask` or `deny`. Pure; shape errors are
+ * returned unchanged for `validatePermissionConfig` to report.
+ */
+export function normalizePermissionConfig(node: unknown): PermissionConfigV2 | undefined {
+  if (node === undefined || node === null) return undefined;
+  if (!isTable(node)) return normalizePermissionAction(node) as PermissionConfigV2;
+  return Object.fromEntries(
+    Object.entries(node).map(([key, rule]) => [
+      key,
+      isTable(rule) ? Object.fromEntries(Object.entries(rule).map(([pattern, action]) => [pattern, normalizePermissionAction(action)])) : normalizePermissionAction(rule),
+    ]),
+  ) as PermissionConfigV2;
 }
 
 function normalizeRequiredConnectorList(
@@ -332,10 +311,11 @@ export function validateRuntimeV2(node: unknown, path: string, issues: ManifestI
 }
 
 function validatePermissionAction(value: unknown, where: string, issues: ManifestIssue[]): void {
-  if (typeof value !== 'string' || !(PERMISSION_ACTIONS_V2 as readonly string[]).includes(value)) {
+  const action = normalizePermissionAction(value);
+  if (typeof action !== 'string' || !(PERMISSION_ACTIONS_V2 as readonly string[]).includes(action)) {
     issues.push({
       path: where,
-      message: `must be one of: ${PERMISSION_ACTIONS_V2.join(', ')} (got ${JSON.stringify(value)}).`,
+      message: `must be one of: ${PERMISSION_ACTIONS_V2.join(', ')}; \`"*"\` and \`all\` also mean allow (got ${JSON.stringify(value)}).`,
       severity: 'error',
     });
   }
@@ -355,7 +335,7 @@ function validatePermissionRule(value: unknown, where: string, issues: ManifestI
   }
   issues.push({
     path: where,
-    message: 'must be an action ("ask" | "allow" | "deny") or a map of glob-pattern to action.',
+    message: 'must be an action ("ask" | "allow" | "deny"; "*" and all also mean allow) or a map of glob-pattern to action.',
     severity: 'error',
   });
 }
@@ -375,7 +355,7 @@ export function validatePermissionConfig(node: unknown, path: string, issues: Ma
     issues.push({
       path,
       message:
-        'permission must be an action ("ask" | "allow" | "deny") or a permission object (read, edit, bash, …).',
+        'permission must be an action ("ask" | "allow" | "deny"; "*" and all also mean allow) or a permission object (read, edit, bash, …).',
       severity: 'error',
     });
     return;
@@ -586,26 +566,8 @@ function toolValueMessage(name: string): string {
 }
 
 /** An agent without `tools` gets every tool, unlike every other grant (omitted = none). */
-export const TOOLS_UNSET_WARNING = 'not set: this agent gets every tool. Write `tools: all`, or list the tools it needs.';
+export const TOOLS_UNSET_WARNING = 'not set: this agent gets every tool. Write `tools: "*"`, or list the tools it needs.';
 
-/** `agents.<name>.tools` — see `AgentToolsV2`. */
-function validateAgentToolsV2(value: unknown, where: string, issues: ManifestIssue[]): void {
-  if (value === undefined) {
-    issues.push({ path: where, message: TOOLS_UNSET_WARNING, severity: 'warning' });
-    return;
-  }
-  if (value === 'all' || value === 'none') return;
-  const names = (list: unknown, at: string) => {
-    if (!Array.isArray(list) || list.some((name) => typeof name !== 'string' || !name.trim())) {
-      issues.push({ path: at, message: 'must be a list of tool names.', severity: 'error' });
-    }
-  };
-  if (Array.isArray(value)) return names(value, where);
-  if (isTable(value) && 'exclude' in value && Object.keys(value).length === 1 && Array.isArray(value.exclude)) {
-    return names(value.exclude, `${where}.exclude`);
-  }
-  if (!isTable(value) || Object.values(value).some((enabled) => typeof enabled !== 'boolean')) {
-    issues.push({ path: where, message: 'tools must be `all`, `none`, a list of tool names, or `{ exclude: [names] }`.', severity: 'error' });
-  }
-}
+/** The message for a `tools` value of the wrong shape. */
+export const TOOLS_SHAPE_ERROR = 'tools must be `"*"` (every tool), `none`, a list of tool names, or `{ exclude: [names] }`.';
 

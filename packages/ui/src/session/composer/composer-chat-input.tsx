@@ -1,6 +1,7 @@
 'use client';
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ComposerAutoFocusContext } from './composer-focus-context';
 
 import { SessionOverridesComposer } from '../overrides/session-overrides-composer';
 import type { SessionOverrideSlot } from '../overrides/session-overrides-toolbar';
@@ -16,6 +17,7 @@ import type { ComposerSendReset } from './composer-reset';
 import { type Command, type ModelKey, useProjectConfig, useRuntimeAgents, useRuntimeCommands, useRuntimeConfig, useRuntimeProviders, useSessionModelSelection } from '@kortix/sdk/react';
 import { appendMentionRefs } from '../../internal/lib/project-preamble';
 import { resolveComposerAgent, withChannelAgents } from './composer-agent-access';
+import { inheritedModelFor } from './chat-input/chat-input-summary';
 import type { DraftScope } from './draft/composer-draft';
 
 export interface ComposerOptions {
@@ -28,8 +30,18 @@ export interface ComposerOptions {
 }
 
 /**
+ * The voice call this composer offers in Send's place while nothing is typed
+ * (`SessionChatInputProps.call`). `onCall` gets the composer's picks, as a send
+ * does, with the agent it shows: the call is offered only once one resolved.
+ */
+export interface ComposerChatCall {
+  onCall: (options: ComposerOptions & { agent: string }) => void;
+  inCall: boolean;
+}
+
+/**
  * The canonical "compose a first message" input: {@link SessionChatInput}
- * pre-wired with the OpenCode model / agent / variant / command selectors (the
+ * pre-wired with the model / agent / variant / command selectors (the
  * four catalog queries + per-session selection state). Used by the home composer
  * and the instant session shell so neither hand-rolls the selector wiring.
  *
@@ -60,6 +72,7 @@ export function ComposerChatInput({
   cardClassName,
   parentClassName,
   boundAgentName,
+  lockAgent = false,
   defaultAgentName,
   channelAgentNames,
   projectSession,
@@ -71,6 +84,7 @@ export function ComposerChatInput({
   promptAttachments,
   submitLabel,
   onArrowUpAtStart,
+  call,
 }: {
   onSend: (
     text: string,
@@ -123,6 +137,13 @@ export function ComposerChatInput({
   parentClassName?: string;
   /** Immutable project-session agent. When set, sends are locked to this agent. */
   boundAgentName?: string | null;
+  /**
+   * The agent is `boundAgentName` and nothing else (a DM: the space's agent).
+   * The picker names it and offers no other agent, a pick made elsewhere
+   * never outranks it, and every send runs it. Default false: a pick
+   * outranks the bound agent (KRTX-1290).
+   */
+  lockAgent?: boolean;
   /** The agent a new thread starts on here (a channel's default). Unset: the project's default. */
   defaultAgentName?: string | null;
   /** A channel's agents: anyone who posts here runs them, granted or not. */
@@ -142,13 +163,16 @@ export function ComposerChatInput({
   submitLabel?: SessionChatInputProps['submitLabel'];
   /** Up in an empty composer: open the latest queued message for editing. */
   onArrowUpAtStart?: SessionChatInputProps['onArrowUpAtStart'];
+  /** A voice call in Send's place while nothing is typed. See `ComposerChatCall`. */
+  call?: ComposerChatCall;
 }) {
+  const contextAutoFocus = useContext(ComposerAutoFocusContext);
   const { data: rosterAgents } = useRuntimeAgents({ projectId });
   const agents = useMemo(() => withChannelAgents(rosterAgents, channelAgentNames), [rosterAgents, channelAgentNames]);
   const { data: providers, isLoading: providersLoading } = useRuntimeProviders();
   const { data: config } = useRuntimeConfig();
   const projectConfig = useProjectConfig(projectId);
-  const startAgent = defaultAgentName || (projectConfig?.default_agent ?? projectConfig?.open_code_default_agent);
+  const startAgent = defaultAgentName || projectConfig?.default_agent;
   const local = useSessionModelSelection({
     agents,
     providers,
@@ -197,8 +221,9 @@ export function ComposerChatInput({
     agents,
     boundAgent: boundAgentName,
     defaultAgent: startAgent,
-    selectedAgent: local.agent.current?.name ?? null,
+    selectedAgent: lockAgent && boundAgentName ? null : (local.agent.current?.name ?? null),
   });
+  const agentLocked = lockAgent && !!boundAgentName;
   const selectedAgentName = agentResolution.selected;
   // An empty project roster refuses an unbound composer; the resolver answers
   // `disabled` for exactly that case.
@@ -309,7 +334,8 @@ export function ComposerChatInput({
       stopDisabled={stopDisabled}
       isSending={isSending}
       disabled={disabled}
-      autoFocus={autoFocus}
+      // A thread a space's chat opened by itself does not take the focus (`ComposerAutoFocusContext`).
+      autoFocus={autoFocus ?? (contextAutoFocus ? undefined : false)}
       placeholder={placeholder}
       hint={hint}
       prefill={deliveredPrefill}
@@ -327,10 +353,13 @@ export function ComposerChatInput({
       agents={local.agent.list}
       selectedAgent={selectedAgentName}
       noAccessibleAgents={noAccessibleAgents}
-      onAgentChange={(name) => local.agent.set(name ?? undefined)}
+      agentLocked={agentLocked}
+      // A locked agent has nothing to switch to: no handler is the composer's "fixed agent" signal.
+      onAgentChange={agentLocked ? undefined : (name) => local.agent.set(name ?? undefined)}
       models={local.model.list}
       selectedModel={local.model.currentKey ?? null}
       onModelChange={(m) => local.model.set(m ?? undefined, { recent: true })}
+      inheritedModel={inheritedModelFor(local.model, selectedAgentName)}
       modelRequired
       modelsLoading={providersLoading}
       variants={local.model.variant.list}
@@ -342,6 +371,11 @@ export function ComposerChatInput({
       draftActive={draftActive}
       submitLabel={submitLabel}
       onArrowUpAtStart={onArrowUpAtStart}
+      call={
+        call && selectedAgentName
+          ? { inCall: call.inCall, onCall: () => call.onCall({ ...options(), agent: selectedAgentName }) }
+          : undefined
+      }
     />
   );
 }

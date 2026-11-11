@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { LATE_ROW_MAX_AGE_DAYS } from './audit-archive/format';
 import { auditDb } from './audit-db';
 
 export interface AuditReconciliationResult {
@@ -13,7 +14,7 @@ const LOOKBACK = sql.raw(`interval '1 hour'`);
 // Every account's whole history is re-verified this often, not on every visit.
 export const FULL_RESCAN_DAYS = 7;
 // A pass covers about this many source rows, over every ledger together.
-// Prod 2026-10-03: an 80-day pass over a heavy account (~300k usage and gateway
+// Prod 2026-10-03 (then an 80-day window): an 80-day pass over a heavy account (~300k usage and gateway
 // rows, up to ~85k on one day) outran the audit pool's 10 s statement_timeout on
 // every visit. A cold probe of the partitioned audit table costs ~0.8–1.5 ms.
 export const BATCH_ROWS = 1_000;
@@ -61,9 +62,9 @@ export async function reconcileAuditEvents(
   const mark = await readReconciliationMark(accountId);
   // A full pass: no mark yet, the weekly rescan is due, or one is under way.
   const full = !mark || mark.fullDue;
-  // Never reconstruct a row older than the hot window (80 days; retention archives and
-  // drops partitions older than 90). After the legacy table and the old partitions are gone,
-  // an old source row has no audit row to find, and a full rescan would re-insert it.
+  // Never reconstruct a row older than LATE_ROW_MAX_AGE_DAYS (retention archives and drops
+  // partitions older than HOT_DAYS). After a week is archived and its partition is gone, an old
+  // source row has no audit row to find, and a full rescan would re-insert it.
   // A new full scan starts at that floor; a scan under way resumes at its mark.
   const start = full && !mark?.inProgress ? null : mark.since;
   const window = await readReconciliationWindow(accountId, start, batchRows);
@@ -116,7 +117,7 @@ export async function reconcileAuditEvents(
         SET checked_at = EXCLUDED.checked_at, full_scan_at = EXCLUDED.full_scan_at
     ), inserted AS (
     INSERT INTO kortix.audit_events(
-      account_id, project_id, session_id, opencode_session_id, actor_user_id, actor_type,
+      account_id, project_id, session_id, runtime_session_id, actor_user_id, actor_type,
       agent_name, initiator_actor_type, initiator_actor_id, delegation_depth,
       authoritative_source, client_reported_source, outcome, action, phase,
       resource_type, resource_id,
@@ -124,7 +125,7 @@ export async function reconcileAuditEvents(
       source_revision, input_summary, input_sha256, output_summary, output_sha256,
       duration_ms, occurred_at
     )
-    SELECT account_id, project_id, session_id, opencode_session_id, actor_user_id, actor_type,
+    SELECT account_id, project_id, session_id, runtime_session_id, actor_user_id, actor_type,
            agent_name, initiator_actor_type, initiator_actor_id, delegation_depth,
            authoritative_source, client_reported_source, outcome, action, phase,
            resource_type, resource_id,
@@ -162,7 +163,7 @@ async function readReconciliationWindow(accountId: string, start: string | null,
   const [window] = Array.from(
     (await auditDb().execute(sql`
       WITH w AS (
-        SELECT greatest(${start}::timestamptz, now() - interval '80 days') AS "from"
+        SELECT greatest(${start}::timestamptz, now() - make_interval(days => ${LATE_ROW_MAX_AGE_DAYS}::int)) AS "from"
       )
       SELECT w."from"::text AS "from",
              -- Rows sharing one timestamp must not stall the scan in place.
@@ -203,7 +204,7 @@ function newerWindowSql(from: string, until: string | null) {
 function auditCandidatesSql(accountId: string, newer: (...columns: string[]) => SQL) {
   return sql`
       SELECT c.account_id, c.project_id, c.session_id::text AS session_id,
-             NULL::text AS opencode_session_id, c.acting_user_id AS actor_user_id,
+             NULL::text AS runtime_session_id, c.acting_user_id AS actor_user_id,
              CASE WHEN c.session_id IS NULL THEN 'human' ELSE 'agent' END AS actor_type,
              NULL::text AS agent_name, NULL::text AS initiator_actor_type,
              NULL::text AS initiator_actor_id, 0::integer AS delegation_depth,
@@ -234,7 +235,7 @@ function auditCandidatesSql(accountId: string, newer: (...columns: string[]) => 
         FROM kortix.connector_calls c WHERE c.account_id = ${accountId}::uuid
          ${newer('c.created_at', 'c.resolved_at')}
       UNION ALL
-      SELECT s.account_id, s.project_id, s.session_id, s.opencode_session_id, s.created_by,
+      SELECT s.account_id, s.project_id, s.session_id, s.runtime_session_id, s.created_by,
              COALESCE(
                NULLIF(s.metadata #>> '{audit_v2,actor_type}', ''),
                CASE s.origin::text WHEN 'trigger' THEN 'system' WHEN 'schedule' THEN 'system'
@@ -294,6 +295,8 @@ function auditCandidatesSql(accountId: string, newer: (...columns: string[]) => 
                encode(extensions.digest(convert_to(COALESCE(l.result::text, l.last_error), 'UTF8'), 'sha256'), 'hex') END,
              NULL::integer, COALESCE(l.updated_at, l.created_at)
         FROM kortix.session_lifecycle_commands l WHERE l.account_id = ${accountId}::uuid
+         -- A claim is queue churn: the trigger records no 'running' phase.
+         AND l.status <> 'running'
          ${newer('l.created_at', 'l.updated_at')}
       UNION ALL
       SELECT p.account_id, ps.project_id, p.session_id, NULL::text, NULL::uuid, 'system',

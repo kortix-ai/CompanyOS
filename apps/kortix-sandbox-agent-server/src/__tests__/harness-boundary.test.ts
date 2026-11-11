@@ -19,17 +19,6 @@ describe('harness ownership boundary', () => {
     expect(() => loadConfig({ KORTIX_HARNESS: 'codex' })).toThrow('Unsupported harness: codex')
   })
 
-  test('a box OpenCode booted asks for the session-log restore; a pi box keeps what apps/api set', () => {
-    for (const harness of ['opencode', ' OpenCode ', '', undefined]) {
-      const env: NodeJS.ProcessEnv = { KORTIX_HARNESS: harness, KORTIX_PROJECT_AUTO_CLONE: '0' }
-      loadConfig(env)
-      expect(env.KORTIX_SESSION_LOG_RESTORE).toBe('1')
-    }
-    const pi: NodeJS.ProcessEnv = { KORTIX_HARNESS: 'pi', KORTIX_PROJECT_AUTO_CLONE: '0' }
-    loadConfig(pi)
-    expect(pi.KORTIX_SESSION_LOG_RESTORE).toBeUndefined()
-  })
-
   test("a box OpenCode booted keeps OpenCode's data directory and variables away from the agent", () => {
     expect(harnessProtectedPathSegments()).toContain('/.local/share/opencode/')
     expect(isHarnessInternalVariable('OPENCODE_SERVER_PASSWORD')).toBe(true)
@@ -74,7 +63,7 @@ describe('harness ownership boundary', () => {
         report: unexpected, logSources: () => [], readLog: unexpected,
       },
       queries: { bind: () => queries },
-      turns: { prompt: unexpected, steer: unexpected, abort: unexpected, readMessage: unexpected, removeMessage: unexpected, retractMessage: unexpected, agents: unexpected, replyPermission: unexpected, replyQuestion: unexpected, rejectQuestion: unexpected, compact: unexpected, command: unexpected, setGrants: unexpected, commands: unexpected, pending: unexpected, readLog: unexpected, readLogMessage: unexpected, readBlob: unexpected, workflows: unexpected, controlWorkflow: unexpected },
+      turns: { prompt: unexpected, steer: unexpected, abort: unexpected, retractMessage: unexpected, agents: unexpected, replyPermission: unexpected, replyQuestion: unexpected, rejectQuestion: unexpected, parkAsks: unexpected, compact: unexpected, command: unexpected, setGrants: unexpected, commands: unexpected, pending: unexpected, readLog: unexpected, readLogMessage: unexpected, readBlob: unexpected, workflows: unexpected, controlWorkflow: unexpected },
       background: { start: unexpected },
       assets: {
         harness: 'test', componentNames: [],          reconcile: async () => ({ components: {}, reasons: {}, state: {} }),
@@ -100,14 +89,14 @@ describe('harness ownership boundary', () => {
 
     // The transport controller preserves features that are not common methods.
     // The host auth gate above rejects unauthenticated requests before this call.
-    const transport = createRuntimeProxyRouter({ cfg, bootState: { repoMaterializationError: null, timeline: [] } }, service.proxy)
+    const transport = createRuntimeProxyRouter({ cfg, bootState: { timeline: [] } }, service.proxy)
     const native = await transport.request('/exclusive-feature', { method: 'POST', body: 'native input' })
     expect(native.status).toBe(201)
     expect(await native.json()).toEqual({ nativeFeature: '/exclusive-feature', input: 'native input' })
 
     // A runtime that cannot take a request answers one machine code beside the adapter's own details.
     const booting = createRuntimeProxyRouter(
-      { cfg, bootState: { repoMaterializationError: null, timeline: [] } },
+      { cfg, bootState: { timeline: [] } },
       { ...service.proxy, readiness: async () => ({ ready: false, phase: 'boot', details: { error: 'adapter wording' } }) },
     )
     const refused = await booting.request('/exclusive-feature')

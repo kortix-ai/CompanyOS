@@ -36,6 +36,7 @@ import { promptSecret } from '../prompts.ts';
 import { C, help, pad, status, trim } from '../style.ts';
 import { runConnector } from './connector-gateway.ts';
 import { renderConnectorTypes } from './connector-types.ts';
+import { fromWorkspaceAlias } from '../command-argv.ts';
 
 // ── Shapes (mirror apps/api/src/connectors) ───────────────────────────────────
 
@@ -212,14 +213,14 @@ Connectors. Three things, one per question:
   profile   ONE way to reach an app (Linear over MCP). Its slug is what
             \`call <slug> <action>\` takes. Install an app once.
   account   WHO a call runs as: a sign-in on the profile, shared with the
-            project or private to one member. Several per profile.
+            workspace or private to one member. Several per profile.
   rule set  WHAT an agent may do: named tool rules on the profile, given to an
             agent with \`kortix agents scope <agent> --policy-set <slug>=<set>\`.
-A call is decided in this order: project rules → the agent's rule set →
-the profile's base rules → sensitive tools ask → the project default mode.
+A call is decided in this order: workspace rules → the agent's rule set →
+the profile's base rules → sensitive tools ask → the workspace default mode.
 Which agents may call a profile at all: \`kortix agents scope\`, \`kortix grants\`.
 
-Everything below applies on the cloud project at once (a commit to kortix.yaml
+Everything below applies on the cloud workspace at once (a commit to kortix.yaml
 on main), except \`add\`/\`rm\`/\`policy set --default\` without --apply, which
 edit your LOCAL kortix.yaml for \`kortix ship\`.
 
@@ -237,7 +238,9 @@ Find and install:
           [--way <id>] [--name <n>] unless --way). Installing an app that is
           [--slug <s>] [--json]     already installed changes nothing and exits
           [--new-profile]           3; --new-profile makes a second profile
-                                    (only for another way or other base rules).
+          [--url <url>]             (only for another way or other base rules).
+                                    --url: the server URL of an MCP way the
+                                    catalogue lists without one.
   add <slug> --provider <p> [...]   Declare a profile by hand (an MCP URL, a
                                     spec). Add --apply to apply it now.
   rm <slug> [--apply]               Remove a profile.
@@ -246,8 +249,8 @@ Find and install:
 
 Accounts and sign-in:
   connect <slug>                    Start a sign-in and print the URL to hand
-       [--owner me|project]         the human. \`me\` (default): the account is
-       [--label <name>]             yours alone; \`project\`: shared with every
+       [--owner me|workspace]       the human. \`me\` (default): the account is
+       [--label <name>]             yours alone; \`workspace\`: shared with every
                                     member. --label names a NEW account (a
                                     second Gmail). A connector that needs no
                                     sign-in prints Ready.
@@ -266,7 +269,7 @@ Accounts and sign-in:
        [--client-secret-from -|<file>]   request fails. The secret comes from
        [--scope "<a b>"]            stdin (-), a file, or a prompt; it is
        [--audience <aud>]           never printed back.
-  secret <slug> <identifier>        Use a project secret as the credential.
+  secret <slug> <identifier>        Use a workspace secret as the credential.
        [--clear]                    --clear removes the binding.
 
 Call:
@@ -276,7 +279,7 @@ Call:
   call <slug> <action> [json]       Run one action. Prints JSON. Exit 1 when
                                     the tool reports an error (status
                                     tool_error) or the call is denied.
-       [--account <n|id|me|project>] Which account runs it (see \`accounts\`).
+       [--account <n|id|me|workspace>] Which account runs it (see \`accounts\`).
                                     With several and none named or pinned the
                                     call is denied (account_required).
        [--reason <text>]            Shown to the human if a rule asks for
@@ -306,16 +309,16 @@ Rules:
                                     rule set each one gets.
   rules [--json]                    Every agent × every profile: access and
                                     rule set, one table.
-  policy ls [--json]                Project rules: they gate every profile.
-  policy add <match> <action>       Add a project rule; --condition <k=v>
+  policy ls [--json]                Workspace rules: they gate every profile.
+  policy add <match> <action>       Add a workspace rule; --condition <k=v>
        [--condition <k=v>]…         narrows it to matching arguments.
-  policy rm <match>                 Remove a project rule.
-  policy set --default <risk|allow_all>   The project default mode.
+  policy rm <match>                 Remove a workspace rule.
+  policy set --default <risk|allow_all>   The workspace default mode.
   sensitive <slug> on|off           Every call on the profile needs approval.
 
 Advanced:
   connect-finalize <slug>           Confirm a sign-in started by \`connect\`
-       [--owner me|project]         completed. Pass the same --owner.
+       [--owner me|workspace]       completed. Pass the same --owner.
        [--connection-id <uuid>] [--request-id <id>]
   authorize <slug> [--device]       OAuth 2.1 a raw MCP server end to end:
        [--status] [--json]          discover, register a client (RFC 7591),
@@ -326,7 +329,7 @@ Advanced:
   move <slug> [--connection <id>]   that have a Kortix MCP app, and the move:
        [--no-open] [--device]       sign in once; slug and grants stay.
 
-\`policy ls|show|set|add|rm\` are the project surface: a profile named after one
+\`policy ls|show|set|add|rm\` are the workspace surface: a profile named after one
 of those verbs is \`policy <slug> ls\`.
 
 Add options (provider-specific):
@@ -356,7 +359,7 @@ Authorize options:
   --error-redirect <url>   Where the browser lands after a denial.
 
 Global:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 `;
@@ -365,7 +368,7 @@ const POLICY_HELP = help`Usage: kortix connectors policy <subcommand> [options]
 
 Show and change what connector calls may do without asking. Project-wide
 rules gate every connector; per-connector rules gate one connector's tool
-calls. Every form below applies on the cloud project at once — except
+calls. Every form below applies on the cloud workspace at once — except
 \`policy set --default\` without --apply, which edits the LOCAL kortix.yaml
 for \`kortix ship\` to apply.
 
@@ -395,7 +398,7 @@ Per-connector:
                                     base rules. Sets: \`policy-sets --help\`.
 
 Global:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   --json             Machine-readable output.
   -h, --help         Show this help.
@@ -407,7 +410,7 @@ A policy set is a named list of tool-call rules on one connector. Each agent
 uses the connector's one set of accounts, and an agent given a set (in
 kortix.yaml \`agents.<agent>.policy_sets\`) is checked against the set's rules
 first, then the connector's base rules. An agent without a set gets the base
-rules. Every form applies on the cloud project at once.
+rules. Every form applies on the cloud workspace at once.
 
 Subcommands:
   ls [--json]                       List the sets, their rules and the agents
@@ -427,7 +430,7 @@ Back to base:     kortix agents scope <agent> --policy-set <slug>=base
 Names: a-z, 0-9, - and _, at most 64 characters; \`base\` is reserved.
 
 Global:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   --json             Machine-readable output.
   -h, --help         Show this help.
@@ -454,15 +457,15 @@ Subcommands:
   share <id> [--group <id>]… [--user <email|id>]… [--everyone]
                                     Share YOUR private account: it becomes a
                                     shared account only they may use (--everyone:
-                                    the whole project). Needs the right to manage
-                                    the project's connections.
+                                    the whole workspace). Needs the right to manage
+                                    the workspace's connections.
   connect <id> [options]            Start a connection's sign-in (Composio,
                                     Pipedream, or an MCP server with one-click
                                     sign-in). Prints the URL to open.
   finalize <id> [--json]            Confirm the connection's sign-in completed.
 
 Add options:
-  --owner <type>       project|agent|member|subject|external (default: project).
+  --owner <type>       workspace|agent|member|subject|external (default: workspace).
   --owner-id <id>      Required for non-project owners.
   --mine               Derive a member owner from the current human token.
   --metadata <json>    Connection metadata as a JSON object.
@@ -472,7 +475,7 @@ Managed connector options:
   --error-redirect <url>     Redirect after a failed connection.
 
 Global:
-  --project <id>       Operate on this project id (default: linked).
+  --workspace <id>     Operate on this workspace id (default: linked).
   --host <name>        Operate against a non-default Kortix host.
   --json               Emit the API response as JSON.
   -h, --help           Show this help.
@@ -549,7 +552,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
     clearSecretBinding = takeFlagBool(rest, ['--clear']);
     allConnections = takeFlagBool(rest, ['--all']);
     mine = takeFlagBool(rest, ['--mine']);
-    f.project = takeFlagValue(rest, ['--project']);
+    f.project = takeFlagValue(rest, ['--project', '--workspace']);
     f.host = takeFlagValue(rest, ['--host']);
     f.name = takeFlagValue(rest, ['--name']);
     f.provider = takeFlagValue(rest, ['--provider']);
@@ -564,7 +567,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
     f.cursor = takeFlagValue(rest, ['--cursor']);
     f.default = takeFlagValue(rest, ['--default']);
     f.expires = takeFlagValue(rest, ['--expires']);
-    f.owner = takeFlagValue(rest, ['--owner']);
+    f.owner = fromWorkspaceAlias(takeFlagValue(rest, ['--owner']));
     f.label = takeFlagValue(rest, ['--label']);
     f.ownerId = takeFlagValue(rest, ['--owner-id']);
     f.connectionId = takeFlagValue(rest, ['--connection-id', '--connection']);
@@ -627,7 +630,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
     hostArg: f.host,
   });
   if (!ctx) return 1;
-  const ex = `/connectors/projects/${ctx.projectId}`;
+  const ex = `/connectors/workspaces/${ctx.projectId}`;
   // The OAuth 2.1 sign-in flags `authorize` and `move` share.
   const signInOptions: SignInOptions = {
     ...(f.scope ? { scopes: f.scope.split(/[\s,]+/).filter(Boolean) } : {}),
@@ -686,23 +689,16 @@ export async function runConnectors(argv: string[]): Promise<number> {
         try {
           resp = await ctx.client.post<AddResult>(`${ex}/connectors`, draft);
         } catch (err) {
-          // An agent session may not add a server the project does not have:
-          // a person confirms it on the page the API links to.
-          const body = (err as { details?: { code?: string; setup_url?: string } }).details;
-          if (body?.code !== 'custom_connector_needs_human') throw err;
-          if (json) emitJson({ ok: false, ...body });
-          else
-            process.stderr.write(
-              `${status.err('A person must confirm a connector the catalog does not list.')}\n  Hand them this link: ${C.cyan}${body.setup_url ?? ''}${C.reset}\n`,
-            );
-          return 1;
+          const handOff = connectorApprovalHandOff(err, json);
+          if (handOff === null) throw err;
+          return handOff;
         }
         if (json) {
           emitJson(resp);
           return 0;
         }
         process.stdout.write(
-          `${status.ok(`${C.bold}${slug}${C.reset} live on the project`)} ${C.dim}(committed to kortix.yaml on main + synced)${C.reset}\n` +
+          `${status.ok(`${C.bold}${slug}${C.reset} live on the workspace`)} ${C.dim}(committed to kortix.yaml on main + synced)${C.reset}\n` +
             (resp.authDiscovery?.recommended?.type
               ? `  ${C.dim}Authentication: ${C.reset}${resp.authDiscovery.recommended.type}${C.dim} (auto-detected; set the credential next)${C.reset}\n`
               : '') +
@@ -929,10 +925,10 @@ export async function runConnectors(argv: string[]): Promise<number> {
         const { connection_id: connectionId } = await ctx.client.post<{
           connection_id: string;
         }>(
-          `/projects/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/oauth2/connection`,
+          `/workspaces/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/oauth2/connection`,
           {},
         );
-        const oauth2 = `/projects/${ctx.projectId}/connections/${connectionId}/oauth2`;
+        const oauth2 = `/workspaces/${ctx.projectId}/connections/${connectionId}/oauth2`;
         if (statusOnly) {
           const state = await ctx.client.get<Record<string, unknown>>(`${oauth2}/status`);
           if (json) emitJson({ connection_id: connectionId, ...state });
@@ -1023,7 +1019,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         const owner: 'me' | 'project' | undefined =
           f.owner === 'me' || f.owner === 'project' ? f.owner : undefined;
         if (f.owner !== undefined && owner === undefined) {
-          return fail('--owner must be me or project');
+          return fail('--owner must be me or workspace');
         }
         // `--label` mints the same setup link as the MCP `connect` tool: a
         // dialog where the human names the new account and picks who can use it.
@@ -1031,7 +1027,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           const label = f.label.trim();
           if (!label) return missing('--label <account name>');
           const link = await ctx.client.post<{ url: string; app?: string | null; expires_at?: string; label?: string | null }>(
-            `/projects/${ctx.projectId}/connect-requests`,
+            `/workspaces/${ctx.projectId}/connect-requests`,
             {
               slug,
               label,
@@ -1080,8 +1076,8 @@ export async function runConnectors(argv: string[]): Promise<number> {
         }
         const ownerNote =
           output.owner === 'project'
-            ? 'The account is shared with every project member.'
-            : 'The account is yours alone — pass --owner project to share it.';
+            ? 'The account is shared with every workspace member.'
+            : 'The account is yours alone — pass --owner workspace to share it.';
         process.stdout.write(
           `\n  ${C.bold}Connect ${slug}${C.reset}\n` +
             (output.url
@@ -1100,7 +1096,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         const finalizeOwner: 'me' | 'project' | undefined =
           f.owner === 'me' || f.owner === 'project' ? f.owner : undefined;
         if (f.owner !== undefined && finalizeOwner === undefined) {
-          return fail('--owner must be me or project');
+          return fail('--owner must be me or workspace');
         }
         const resp = await ctx.client.post<{
           provider: string;
@@ -1175,7 +1171,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           }
           const target = matches[0]!;
           await ctx.client.put(
-            `/projects/${ctx.projectId}/connections/${encodeURIComponent(target.connection_id)}/default`,
+            `/workspaces/${ctx.projectId}/connections/${encodeURIComponent(target.connection_id)}/default`,
             {},
           );
           if (json) {
@@ -1217,7 +1213,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           process.stdout.write(
             `  ${C.dim}No connected accounts.${C.reset}\n` +
               `  ${C.dim}Connect one: ${C.reset}${C.cyan}kortix connectors connect ${slug} --owner me${C.reset}\n` +
-              `  ${C.dim}(shared with the whole project instead: ${C.reset}${C.cyan}kortix connectors connect ${slug} --owner project${C.reset}${C.dim})${C.reset}\n`,
+              `  ${C.dim}(shared with the whole workspace instead: ${C.reset}${C.cyan}kortix connectors connect ${slug} --owner workspace${C.reset}${C.dim})${C.reset}\n`,
           );
           return 0;
         }
@@ -1246,7 +1242,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         }
         process.stdout.write(
           `  ${C.dim}kortix connectors call ${slug} <action> --account me${C.reset}       ${C.faded}# your default private account${C.reset}\n` +
-            `  ${C.dim}kortix connectors call ${slug} <action> --account project${C.reset}  ${C.faded}# the project's shared account${C.reset}\n\n`,
+            `  ${C.dim}kortix connectors call ${slug} <action> --account workspace${C.reset}  ${C.faded}# the workspace's shared account${C.reset}\n\n`,
         );
         const hasPinned = accounts.some((a) => a.is_default);
         process.stdout.write(
@@ -1279,7 +1275,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         const mode = positional[1] ?? f.credential;
         if (mode === 'per_user') {
           process.stderr.write(
-            `${status.err('per_user credential mode was removed — a connector holds accounts now, each one shared with the project or private to one member (kortix connectors accounts <slug>)')}\n`,
+            `${status.err('per_user credential mode was removed — a connector holds accounts now, each one shared with the workspace or private to one member (kortix connectors accounts <slug>)')}\n`,
           );
           return 1;
         }
@@ -1414,7 +1410,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         if (!slug) return missing('a connector slug');
         process.stdout.write(
           `${status.ok(`${C.bold}${slug}${C.reset}: nothing to set — ownership is per account now`)} ` +
-            `${C.dim}— connect one with \`kortix connectors connect ${slug} --owner me|project\` ` +
+            `${C.dim}— connect one with \`kortix connectors connect ${slug} --owner me|workspace\` ` +
             `and list them with \`kortix connectors accounts ${slug}\`.${C.reset}\n`,
         );
         return 0;
@@ -1518,17 +1514,25 @@ export async function runConnectors(argv: string[]): Promise<number> {
             const marks = [
               v.recommended ? 'recommended' : '',
               v.oneClick ? '1-click' : '',
-              v.kind === 'kortix' ? 'built into Kortix, set up on its page' : !v.connector && v.kind !== 'composio' ? 'not installable' : '',
+              v.kind === 'kortix'
+                ? 'built into Kortix, set up on its page'
+                : v.kind === 'mcp' && !v.connector
+                  ? 'catalogue has no URL: install with --url <server url>'
+                  : !v.connector && v.kind !== 'composio'
+                    ? 'not installable'
+                    : '',
             ].filter(Boolean).join(', ');
             process.stdout.write(
               `  ${C.cyan}${pad(v.id, idW)}${C.reset}  ${pad(wayLabel(v.kind), 9)}  ${trim(v.name, 28)}${marks ? ` ${C.faded}(${marks})${C.reset}` : ''}${v.url ? `  ${C.dim}${v.url}${C.reset}` : ''}\n`,
             );
           }
+          if (detail.variants.some((v) => v.kind === 'composio')) {
+            process.stdout.write(
+              `\n  ${C.dim}Composio is a third-party partner that runs the sign-in for you (one click).${C.reset}\n`,
+            );
+          } else process.stdout.write('\n');
           process.stdout.write(
-            `\n  ${C.dim}Composio is a third-party partner that runs the sign-in for you (one click).${C.reset}\n`,
-          );
-          process.stdout.write(
-            `  ${C.dim}Install: kortix connectors catalog install ${detail.item.id} [--way <id>] [--name <name>]${C.reset}\n\n`,
+            `  ${C.dim}Install: kortix connectors catalog install ${detail.item.id} [--way <id>] [--name <name>] [--url <url>]${C.reset}\n\n`,
           );
           if (tools) printTools(id, tools, 25);
           return 0;
@@ -1575,7 +1579,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
         if (action === 'install' || action === 'add') {
           const id = positional[1];
           if (!id) return missing('a catalogue record id');
-          const done = await ctx.client.post<{
+          type Installed = {
             slug: string;
             name: string;
             provider: string;
@@ -1585,13 +1589,22 @@ export async function runConnectors(argv: string[]): Promise<number> {
             existing?: boolean;
             /** With `next: 'fix'`: why the install's sync failed. */
             error?: string;
-          }>(`${ex}/discover/install`, {
-            id,
-            ...(f.way ? { way: f.way } : {}),
-            ...(f.name ? { name: f.name } : {}),
-            ...(f.slug ? { slug: f.slug } : {}),
-            ...(f.newProfile === 'true' ? { as_new_profile: true } : {}),
-          });
+          };
+          let done: Installed;
+          try {
+            done = await ctx.client.post<Installed>(`${ex}/discover/install`, {
+              id,
+              ...(f.way ? { way: f.way } : {}),
+              ...(f.name ? { name: f.name } : {}),
+              ...(f.slug ? { slug: f.slug } : {}),
+              ...(f.url ? { url: f.url } : {}),
+              ...(f.newProfile === 'true' ? { as_new_profile: true } : {}),
+            });
+          } catch (err) {
+            const handOff = connectorApprovalHandOff(err, json);
+            if (handOff === null) throw err;
+            return handOff;
+          }
           const nextStep =
             done.next === 'connect'
               ? `kortix connectors connect ${done.slug}`
@@ -1705,7 +1718,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
             `\n  ${C.dim}default mode: ${C.reset}${C.bold}${resp.defaultMode}${C.reset}\n`,
           );
           if (resp.policies.length === 0 && !(resp.connectorRules?.length)) {
-            process.stdout.write(`  ${C.dim}No explicit project policies.${C.reset}\n\n`);
+            process.stdout.write(`  ${C.dim}No explicit workspace policies.${C.reset}\n\n`);
             return 0;
           }
           for (const p of resp.policies) {
@@ -1731,7 +1744,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
             defaultMode: mode,
           });
           process.stdout.write(
-            `${status.ok(`Project default mode → ${C.bold}${mode}${C.reset}`)} ${C.dim}(kortix.yaml on main + catalog)${C.reset}\n`,
+            `${status.ok(`Workspace default mode → ${C.bold}${mode}${C.reset}`)} ${C.dim}(kortix.yaml on main + catalog)${C.reset}\n`,
           );
           return 0;
         }
@@ -1760,7 +1773,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
             defaultMode: currentProject.defaultMode,
           });
           process.stdout.write(
-            `${status.ok(`project: ${match} → ${action}${conditionsLabel(parsedConditions.conditions)}`)}\n`,
+            `${status.ok(`workspace: ${match} → ${action}${conditionsLabel(parsedConditions.conditions)}`)}\n`,
           );
           return 0;
         }
@@ -1771,14 +1784,14 @@ export async function runConnectors(argv: string[]): Promise<number> {
           if (!match) return missing('the <match> to remove');
           const currentProject = await loadProject();
           if (!currentProject.policies.some((p) => p.match === match)) {
-            process.stderr.write(`${status.err(`No project rule matching "${match}".`)}\n`);
+            process.stderr.write(`${status.err(`No workspace rule matching "${match}".`)}\n`);
             return 1;
           }
           await ctx.client.put(projectPolicies, {
             policies: currentProject.policies.filter((p) => p.match !== match),
             defaultMode: currentProject.defaultMode,
           });
-          process.stdout.write(`${status.ok(`project: removed ${match}`)}\n`);
+          process.stdout.write(`${status.ok(`workspace: removed ${match}`)}\n`);
           return 0;
         }
 
@@ -1825,7 +1838,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
               : source === 'policy_set'
                 ? 'rule set'
                 : source === 'project'
-                  ? 'project rule'
+                  ? 'workspace rule'
                   : source === 'risk_default' && resp.sensitive
                     ? 'sensitive'
                     : 'default mode';
@@ -2016,7 +2029,7 @@ async function runPolicySets(
   if (templateKey !== undefined && templateKey !== 'read_only' && templateKey !== 'ask_before_writes') {
     return fail('--template must be read-only or ask-before-writes');
   }
-  const base = `/connectors/projects/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/policy-sets`;
+  const base = `/connectors/workspaces/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/policy-sets`;
   const setPath = (name: string) => `${base}/${encodeURIComponent(name)}`;
   const action = args[0] ?? 'ls';
   try {
@@ -2066,7 +2079,7 @@ async function runPolicySets(
       const written = templateKey
         ? (resp.policies ??
           (await ctx.client
-            .get<{ policies: PolicyRule[] }>(`/connectors/projects/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/policies?policy_set=${encodeURIComponent(name)}`)
+            .get<{ policies: PolicyRule[] }>(`/connectors/workspaces/${ctx.projectId}/connectors/${encodeURIComponent(slug)}/policies?policy_set=${encodeURIComponent(name)}`)
             .then((r) => r.policies)
             .catch(() => [])))
         : [];
@@ -2132,7 +2145,7 @@ async function runConnections(input: {
     return action ? 0 : 2;
   }
 
-  const base = `/projects/${ctx.projectId}/connections`;
+  const base = `/workspaces/${ctx.projectId}/connections`;
   switch (action) {
     case 'ls':
     case 'list': {
@@ -2222,13 +2235,13 @@ async function runConnections(input: {
       } else {
         const ownerType = flags.owner ?? 'project';
         if (!['project', 'agent', 'member', 'subject', 'external'].includes(ownerType)) {
-          return fail('--owner must be project, agent, member, subject, or external');
+          return fail('--owner must be workspace, agent, member, subject, or external');
         }
         if (ownerType === 'project' && flags.ownerId) {
-          return fail('--owner-id is not valid for a project connection');
+          return fail('--owner-id is not valid for a workspace connection');
         }
         if (ownerType !== 'project' && !flags.ownerId) {
-          return missing('--owner-id for a non-project connection');
+          return missing('--owner-id for a non-workspace connection');
         }
         body.owner_type = ownerType;
         if (flags.ownerId) body.owner_id = flags.ownerId;
@@ -2315,7 +2328,7 @@ async function runConnections(input: {
       const connectionId = positional[0];
       if (!connectionId) return missing('a connection id');
       if (share.everyone && share.groups.length + share.users.length > 0) {
-        return fail('--everyone shares it with the whole project; drop --group and --user');
+        return fail('--everyone shares it with the whole workspace; drop --group and --user');
       }
       if (!share.everyone && share.groups.length + share.users.length === 0) {
         return missing('who can use it: --group <id>, --user <email|id>, or --everyone');
@@ -2331,7 +2344,7 @@ async function runConnections(input: {
           continue;
         }
         // An email resolves against the account's member directory.
-        accountId ??= (await ctx.client.get<{ account_id: string }>(`/projects/${ctx.projectId}`))
+        accountId ??= (await ctx.client.get<{ account_id: string }>(`/workspaces/${ctx.projectId}`))
           .account_id;
         const userId = await resolveUserId(ctx.client, accountId, who);
         if (!userId) return 1;
@@ -2345,7 +2358,7 @@ async function runConnections(input: {
         return 0;
       }
       const audience = share.everyone
-        ? 'everyone in the project'
+        ? 'everyone in the workspace'
         : `${principals.length} ${principals.length === 1 ? 'person or group' : 'people and groups'}`;
       process.stdout.write(
         `${status.ok(`Shared ${C.bold}${response.label}${C.reset} with ${audience}`)}\n`,
@@ -2426,6 +2439,32 @@ function connectionActionPastTense(action: 'revoke' | 'activate' | 'default'): s
 
 // ── Local kortix.yaml config edits (source of truth; no cloud round-trip) ────
 
+/**
+ * The two answers that hand a step to a person instead of failing: a server
+ * nobody approved yet (`custom_connector_needs_human`, an agent session) and
+ * a catalogue way listed without its URL (`connector_needs_url`). Prints the
+ * link and returns the exit code (1), or null for any other error.
+ */
+function connectorApprovalHandOff(err: unknown, json: boolean): number | null {
+  const body = (err as { details?: { code?: string; error?: string; setup_url?: string | null; docs?: string | null } })
+    .details;
+  if (body?.code !== 'custom_connector_needs_human' && body?.code !== 'connector_needs_url') return null;
+  if (json) {
+    emitJson({ ok: false, ...body });
+    return 1;
+  }
+  const lead =
+    body.code === 'custom_connector_needs_human'
+      ? 'This connector needs a one-time approval from a person who manages connectors (an owner, admin or manager).'
+      : (body.error ?? 'The catalogue lists this way without its server URL. Pass it with --url <url>.');
+  process.stderr.write(
+    `${status.warn(lead)}\n` +
+      (body.setup_url ? `  ${C.dim}They approve it here:${C.reset} ${C.cyan}${body.setup_url}${C.reset}\n` : '') +
+      (body.docs ? `  ${C.dim}Where to find the URL:${C.reset} ${body.docs}\n` : ''),
+  );
+  return 1;
+}
+
 /** What a missing --provider usually means: a SaaS app, which the catalog installs. */
 const ADD_PROVIDER_HINT =
   '--provider. For a SaaS app, install it from the catalog instead: kortix connectors catalog <name>, ' +
@@ -2471,7 +2510,7 @@ function connectorAddLocal(
     // In a session the local file is the session branch: nothing goes live
     // until a change request merges. An agent almost always meant --apply.
     const sessionNote = process.env.KORTIX_SESSION_ID
-      ? `  ${C.dim}This edited the session branch only, not the live project. To make it live now: ${C.reset}${C.cyan}kortix connectors add ${slug} --provider ${f.provider}${f.app ? ` --app ${f.app}` : ''} --apply${C.reset}${C.dim} (undo this edit first: git checkout kortix.yaml).${C.reset}\n`
+      ? `  ${C.dim}This edited the session branch only, not the live workspace. To make it live now: ${C.reset}${C.cyan}kortix connectors add ${slug} --provider ${f.provider}${f.app ? ` --app ${f.app}` : ''} --apply${C.reset}${C.dim} (undo this edit first: git checkout kortix.yaml).${C.reset}\n`
       : '';
     process.stdout.write(
       `${status.ok(`Added connector ${C.bold}${slug}${C.reset} to kortix.yaml`)}\n` +
@@ -2826,7 +2865,7 @@ async function moveToKortix(
     return 1;
   }
   const to = first.to;
-  const oauth2 = `/projects/${ctx.projectId}/connections/${first.connection_id}/oauth2`;
+  const oauth2 = `/workspaces/${ctx.projectId}/connections/${first.connection_id}/oauth2`;
   const signIn = await startOAuth2SignIn(ctx.client, oauth2, opts.signIn);
   if ('error' in signIn) {
     process.stderr.write(`${status.err(signIn.error)}\n`);

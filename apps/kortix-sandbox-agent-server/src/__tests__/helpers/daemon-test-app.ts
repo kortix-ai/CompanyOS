@@ -15,20 +15,14 @@ export function testConfig(over: Partial<Config> = {}): Config {
     workspace: '/workspace',
     projectTarget: `/tmp/kortix-test-workspace-${process.pid}`,
     defaultBranch: 'main',
-    branchFetchAttempts: 60,
-    branchFetchDelaySec: 0.25,
-    autoClone: false,
     projectId: undefined,
     apiUrl: undefined,
     repoUrl: undefined,
     branchName: undefined,
-    sessionFresh: false,
     baseSha: undefined,
     sandboxToken: TEST_SANDBOX_TOKEN,
     gitUserName: 'Kortix Agent',
     gitUserEmail: 'agent@kortix.ai',
-    cloneFilter: '',
-    cloneDepth: 1,
     ...over,
   }
 }
@@ -74,9 +68,9 @@ export function fakeHarness(over: Partial<HarnessService> = {}): HarnessService 
     },
     turns: {
       prompt: unused('turns.prompt'), steer: unused('turns.steer'), abort: unused('turns.abort'),
-      readMessage: unused('turns.readMessage'), removeMessage: unused('turns.removeMessage'),
+      
       retractMessage: unused('turns.retractMessage'), agents: unused('turns.agents'),
-      replyPermission: unused('turns.replyPermission'), replyQuestion: unused('turns.replyQuestion'), rejectQuestion: unused('turns.rejectQuestion'), compact: unused('turns.compact'), command: unused('turns.command'), setGrants: unused('turns.setGrants'), commands: unused('turns.commands'), pending: unused('turns.pending'), readLog: unused('turns.readLog'), readLogMessage: unused('turns.readLogMessage'), readBlob: unused('turns.readBlob'), workflows: unused('turns.workflows'), controlWorkflow: unused('turns.controlWorkflow'),
+      replyPermission: unused('turns.replyPermission'), replyQuestion: unused('turns.replyQuestion'), rejectQuestion: unused('turns.rejectQuestion'), parkAsks: unused('turns.parkAsks'), compact: unused('turns.compact'), command: unused('turns.command'), setGrants: unused('turns.setGrants'), commands: unused('turns.commands'), pending: unused('turns.pending'), readLog: unused('turns.readLog'), readLogMessage: unused('turns.readLogMessage'), readBlob: unused('turns.readBlob'), workflows: unused('turns.workflows'), controlWorkflow: unused('turns.controlWorkflow'),
     },
     // `startProxy` starts it; an idle monitor that never ticks.
     background: { start: () => ({ stop: () => {}, latest: () => null, tick: unused('background.tick') }) },

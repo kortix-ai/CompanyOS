@@ -30,7 +30,7 @@ export const hero = {
   title: 'Compliance and control.',
   titleMuted: 'Your sign-in, your roles, your audit trail.',
   sub: 'What IT and compliance reviewers ask about: how people sign in, who may run which agent, which actions wait for a person, and what gets recorded.',
-  caption: 'One account for the whole company.',
+  caption: 'One workspace for the whole company.',
   captionMuted: 'Owners and admins set it up in Account settings.',
 } as const;
 
@@ -138,7 +138,7 @@ export const pillars = {
     {
       id: 'access',
       name: 'Your roles and groups',
-      line: 'Who opens which project, and runs which agent.',
+      line: 'Who opens which workspace, and runs which agent.',
       facts: [
         'Account and project roles',
         'Groups and custom roles',
@@ -193,7 +193,7 @@ export const topics = {
     {
       id: 'access',
       title: 'Roles, groups and agents',
-      description: 'Who opens which project, and runs which agent.',
+      description: 'Who opens which workspace, and runs which agent.',
       body: [
         'Each person holds an account role and a role in each project. Grant a project to a group, and everyone in it gets it.',
         'Each grant names the agents its people may run. Custom roles allow only the actions you pick.',
@@ -214,7 +214,7 @@ export const topics = {
       description: 'Read it, export it, stream it.',
       body: [
         'Kortix records who did what, when, how they signed in, and whether it was allowed. An agent’s row names the person it acted for.',
-        'Export CSV or JSONL, or stream each new event to a signed webhook. Events stay readable for 90 days, then sit in a locked archive to day 365.',
+        'Export CSV or JSONL, or stream each new event to a signed webhook. The log shows the last 14 days; older events sit in a locked archive to day 365, and the export reads them.',
       ],
     },
   ],
@@ -232,7 +232,7 @@ export const groupMappings = [
 /** guide.mdx "Teams": account and project roles. */
 export const roleTable = [
   { scope: 'Account', roles: ['Owner', 'Admin', 'Member'] },
-  { scope: 'Project', roles: ['Manager', 'Member'] },
+  { scope: 'Workspace', roles: ['Manager', 'Member'] },
   { scope: 'Custom', roles: ['Your own actions'] },
 ] as const;
 
@@ -240,7 +240,7 @@ export const roleTable = [
 export const policyYaml = {
   title: 'kortix.yaml',
   lines: [
-    '# project rules run first',
+    '# workspace rules run first',
     'policies:',
     '  - match: gmail.send_email',
     '    action: require_approval',
@@ -321,7 +321,7 @@ export const faqItems = [
     id: 'compliance-audit',
     question: 'How long is the audit log kept?',
     answer:
-      'Events stay readable for 90 days. Events from 90 to 365 days old sit in a locked archive that nobody can shorten or delete, and you can export them.',
+      'The log shows the last 14 days. Events from 14 to 365 days old sit in a locked archive that nobody can shorten or delete, and you can export them.',
   },
   {
     id: 'compliance-oversight',

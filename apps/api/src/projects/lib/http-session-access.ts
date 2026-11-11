@@ -18,7 +18,6 @@ import type { Context } from 'hono';
 import {
   PUBLIC_SHARE_OWNER_ONLY_ERROR,
   TURN_SHARE_AGENT_ERROR,
-  TURN_SHARE_AGENT_REVOKE_ERROR,
   TURN_SHARE_OWNER_OR_MANAGER_ERROR,
   isHumanCaller,
   mayPublishTurn,
@@ -36,16 +35,16 @@ type SharingSession = NonNullable<Awaited<ReturnType<typeof loadSessionForSharin
  * compute. The session owner and a project manager qualify. A session-bound
  * credential also qualifies for its OWN session, and never for another one.
  */
-export type SessionNeed = 'read' | 'lifecycle';
+type SessionNeed = 'read' | 'lifecycle';
 
 /**
  * `list` and `revoke` are manager-tier: revoking only removes access.
  * `mint` is owner-governed (see `mayManageSessionSharing`): a public link is
  * unauthenticated, so it is never a way around the visibility gate.
  */
-export type SessionShareNeed = 'list' | 'mint' | 'revoke';
+type SessionShareNeed = 'list' | 'mint' | 'revoke';
 
-export interface SessionAccessDenial {
+interface SessionAccessDenial {
   ok: false;
   status: 403 | 404;
   error: string;
@@ -66,7 +65,7 @@ export async function guardSession(
     return {
       ok: false,
       status: 403,
-      error: 'Only the session owner or a project manager can manage this session',
+      error: 'Only the session owner or a workspace manager can manage this session',
     };
   }
   return { ok: true, session };
@@ -136,9 +135,10 @@ export async function guardTurnPublish(
 }
 
 /**
- * May the caller turn off a response link (DELETE)? A human who is the owner
- * or a project manager. No read check: revoking only removes access, so a
- * manager can end a link on a session they cannot open.
+ * May the caller turn off a response link (DELETE)? The owner or a project
+ * manager, or an agent session acting for one: turning a link off only
+ * removes access. No read check: a manager can end a link on a session they
+ * cannot open.
  */
 export async function guardTurnRevoke(
   c: Context,
@@ -147,7 +147,6 @@ export async function guardTurnRevoke(
 ): Promise<{ ok: true } | SessionAccessDenial> {
   const guard = await guardSessionSharing(c, loaded, sessionId, 'revoke');
   if (!guard.ok) return guard;
-  if (!requestIsHuman(c, loaded)) return { ok: false, status: 403, error: TURN_SHARE_AGENT_REVOKE_ERROR };
   return { ok: true };
 }
 

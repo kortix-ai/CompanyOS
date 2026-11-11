@@ -24,7 +24,7 @@ import type { ProjectFixtureOptions,
 import type { RegisteredFlow } from '../core/flow';
 import { ResourceStack } from './registry';
 import { adminDeleteUser } from './supabase';
-import { provisionMatrix, synthUser, synthUserWithEmail, type Provisioned } from './principals';
+import { createAccountFor, provisionMatrix, synthUser, synthUserWithEmail, type Provisioned } from './principals';
 import { stopAllSessionRefresh, type SupabaseSessionAuth } from './supabase-session';
 import { provisionProject } from './provision';
 import { grantEphemeralPlatformAdmin } from './platform-admin';
@@ -33,11 +33,15 @@ import {
   createDatabaseProject,
   createDatabaseSession,
   deleteDatabaseProject,
+  fundDatabaseAccount,
   mergeDatabaseProjectMetadata,
 } from './database-project';
 import { mapWithConcurrency } from '../core/concurrency';
 import { createLocalGitRepository } from './local-git';
 import type { FixtureStats } from '../core/result';
+
+/** The Free plan's monthly credits (USD): what each team fixture workspace starts with. */
+const TEAM_FIXTURE_CREDITS_USD = 5;
 
 const PUBLIC_DOMAINS = new Set(['system', 'access']);
 
@@ -222,6 +226,40 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
   // Owns the run-scoped shared projects (see sharedProject below).
   const sharedStack = new ResourceStack(adminClient, deleteDatabaseProjectFixture);
 
+  /** A new account the run's owner holds: the home of one managed fixture project. */
+  async function createWorkspaceAccount(stack: ResourceStack, name: string): Promise<string> {
+    const res = await adminClient.post('/v1/accounts', { name });
+    throwIfEdgeLaundered(res, 'workspace account create');
+    const accountId = res.json<any>()?.account_id;
+    if (!accountId) throw new Error(`workspace account create returned no id: ${res.text()}`);
+    stack.push('account', accountId);
+    // The run's OWNER already has a first workspace, so this one starts on
+    // the free tier with 0 credits. Credits alone are not enough: on staging a
+    // free-tier account has no platform default model, so pi refuses to boot
+    // ("no KORTIX_MODEL and no live model catalog"; release suite 42678542534,
+    // after 42666114535 answered 402). Give it the OWNER's footing, a paid tier
+    // with credits, as the database-project fixture already does.
+    if (env.capabilities.database) await fundDatabaseAccount(env, accountId);
+    else await fundFixtureAccount(accountId, 'workspace');
+    return accountId;
+  }
+
+  /**
+   * A person's free credits go to their first workspace only. Every fixture
+   * account is another workspace of the same OWNER, so it starts at 0 credits.
+   * Fund it with the Free plan's monthly amount, through the admin grant a real
+   * operator uses; no billing rule is relaxed. Without a platform admin in the
+   * run there is no grant, as before.
+   */
+  async function fundFixtureAccount(accountId: string, kind: 'team' | 'workspace'): Promise<void> {
+    if (!env.adminToken) return;
+    const funded = await adminClient
+      .withBearer(env.adminToken, ADMIN_TOKEN_LABEL)
+      .post('/v1/admin/api/accounts/:id/credits', { amount: TEAM_FIXTURE_CREDITS_USD, description: `ke2e ${kind} fixture credits` }, { params: { id: accountId } });
+    throwIfEdgeLaundered(funded, `${kind} account credit grant`);
+    if (funded.statusCode !== 200) throw new Error(`${kind} credit grant failed: ${funded.statusCode} ${funded.text()}`);
+  }
+
   async function createProject(
     stack: ResourceStack,
     opts?: ProjectFixtureOptions,
@@ -253,11 +291,17 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
       return { ...project, accountId };
     }
 
+    // A managed project is created through the API, which refuses a second
+    // active project in one account (409 `workspace_has_project`, Workspaces
+    // 1:1). So a project with no explicit account gets its own: a fresh account
+    // the owner holds, one workspace per fixture project. An explicit account
+    // (a team's project) is used as given.
+    const managedAccountId = opts?.accountId ?? (await createWorkspaceAccount(stack, name));
     const id = await provisionProject(
       adminClient,
       {
         name,
-        ...(opts?.accountId ? { account_id: opts.accountId } : {}),
+        account_id: managedAccountId,
         ...(opts?.seed ? { seed_starter: true } : {}),
       },
       { signal },
@@ -265,7 +309,7 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
     managedProjectCount++;
     stack.push('project', id);
     if (opts?.metadata) await mergeDatabaseProjectMetadata(env, id, opts.metadata);
-    return { id, name, accountId } as CreatedProject;
+    return { id, name, accountId: managedAccountId } as CreatedProject;
   }
 
   // Run-scoped: no attempt signal. One flow's timeout must not abort the
@@ -298,6 +342,12 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
       const accountId = res.json<any>()?.account_id;
       if (!accountId) throw new Error(`team account create returned no id: ${res.text()}`);
       stack.push('account', accountId);
+      // A person's free credits go to their first workspace only, and every
+      // team is another workspace of the same OWNER: without this grant a team
+      // starts at 0 credits and its first session answers 402. The fixture
+      // funds it with the Free plan's monthly amount, through the admin grant
+      // a real operator uses; no billing rule is relaxed.
+      if (opts?.credits !== false) await fundFixtureAccount(accountId, 'team');
       if (opts?.enterprise) {
         // Enterprise is a feature layer: the fixture account gets the
         // Enterprise demo (fixtures/enterprise-access.ts), switched on by the
@@ -357,25 +407,19 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
     async user(opts) {
       const u = await synthUser(env, opts?.label ?? 'USER', runId);
       extraUserIds.push(u.user.id);
-      // Personal accounts are lazy. Minting a PAT forces the personal account
-      // and owner membership into existence without joining this user to any
-      // team, which is exactly what account-deletion flows require.
-      await mintAccountToken(
-        new Client(env.apiUrl).as(u.principal),
-        `e2e-${runId}-user-bootstrap${suffix}`,
-      );
+      // No account exists at sign-up (Workspaces D3). By default the user gets
+      // one account of its own, created explicitly, without joining any team:
+      // what account-deletion flows require. `noAccount` keeps it at zero.
+      if (!opts?.noAccount) await createAccountFor(env, u.principal, `e2e-${runId}-user-${rand()}${suffix}`);
       return u.principal;
     },
     async userWithEmail(email, opts) {
       const u = await synthUserWithEmail(env, email.toLowerCase(), opts?.label ?? 'ADDRESSEE');
       extraUserIds.push(u.user.id);
-      // Same lazy-personal-account bootstrap as `user()` — minting a PAT forces
-      // the personal account + owner membership into existence so subsequent
-      // account-scoped reads (e.g. /v1/accounts/me) work for this identity.
-      await mintAccountToken(
-        new Client(env.apiUrl).as(u.principal),
-        `e2e-${runId}-user-email-bootstrap${suffix}`,
-      );
+      // Same explicit account as `user()`, so account-scoped reads work for
+      // this identity; `noAccount` keeps it at zero (an invitee who has
+      // nothing but the invite).
+      if (!opts?.noAccount) await createAccountFor(env, u.principal, `e2e-${runId}-addressee-${rand()}${suffix}`);
       return u.principal;
     },
     async session(project, opts) {
@@ -395,7 +439,7 @@ export async function buildWorld(env: Env, flows: RegisteredFlow[]): Promise<Wor
         '/v1/projects/:projectId/sessions',
         {
           initial_prompt: opts?.prompt ?? 'noop',
-          ...(opts?.opencodeModel ? { opencode_model: opts.opencodeModel } : {}),
+          ...(opts?.sessionModel ? { model: opts.sessionModel } : {}),
           ...(opts?.agentName ? { agent_name: opts.agentName } : {}),
         },
         {

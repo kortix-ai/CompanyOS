@@ -26,7 +26,7 @@ import { MANIFEST } from './content';
 export const hero = {
   title: 'Company as code.',
   titleMuted: 'A backend framework and server for agents.',
-  sub: 'A project is a git repo. Every agent in it is a custom pi agent: a minimal open-source harness you extend with pi extensions. kortix.yaml declares the agents, connectors, triggers and rules. Kortix deploys them to the cloud and runs every session on its own computer. Build your own experience with @kortix/sdk and @kortix/ui.',
+  sub: 'A workspace is backed by a git repo. Every agent in it is a custom pi agent: a minimal open-source harness you extend with pi extensions. kortix.yaml declares the agents, connectors, triggers and rules. Kortix deploys them to the cloud and runs every session on its own computer. Build your own experience with @kortix/sdk and @kortix/ui.',
   caption: 'One file in one repo.',
   captionMuted: 'Kortix runs what it declares.',
 } as const;
@@ -42,7 +42,7 @@ export type Excerpt = {
 
 function excerpt(from: string, to: string, focus: readonly [string, string]): Excerpt {
   // `to` and `focus` are searched from `from` on: a line such as
-  // `workspace: ...` repeats in MANIFEST.
+  // `connectors: ...` repeats in MANIFEST.
   const at = (line: string, after = 0) => {
     const i = MANIFEST.indexOf(line as (typeof MANIFEST)[number], after);
     if (i < 0) throw new Error(`MANIFEST has no line "${line}" after line ${after}`);
@@ -60,7 +60,7 @@ function excerpt(from: string, to: string, focus: readonly [string, string]): Ex
 
 /* The hero walkthrough: a part of kortix.yaml, then what Kortix runs from it.
    Sources: developers.mdx "Agent keys" (description, prompt_file, tools,
-   connectors, skills, workspace.project_repository), "Registries and grants"
+   connectors, skills), "Registries and grants"
    (omitted means none); "Connector rules and approvals" (require_approval
    holds the call); guide.mdx "Connectors" (Kortix holds the login, makes and
    records each call), "Approving a held action" (24 h default);
@@ -99,9 +99,9 @@ export const walk: readonly WalkStep[] = [
 ];
 
 export const walkFiles = {
-  agents: excerpt('  # Engineering', '    workspace: { project_repository: true }', [
+  agents: excerpt('  # Engineering', '    extensions: [triage-policy]', [
     '  eng-triage:',
-    '    workspace: { project_repository: true }',
+    '    extensions: [triage-policy]',
   ]),
   connectors: excerpt('connectors:', '        action: require_approval', [
     '  - slug: linkedin',
@@ -388,7 +388,7 @@ export const architecture = {
     v: 'Decides who may run which agent, starts sessions, holds connector logins and change requests.',
   },
   repo: {
-    k: 'Project repository',
+    k: 'Workspace repository',
     v: 'kortix.yaml, agents, skills and memory. Kortix hosts it, or you link GitHub.',
   },
   computer: {

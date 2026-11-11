@@ -38,7 +38,7 @@
  * on the daemon's `reload.orphaned_message_id`.
  */
 
-import { projects, projectSessions } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { resolveDesiredRelease } from '../../config-releases/desired';
 import { ownerMayUseAgent } from '../../config-releases/repoint';
@@ -66,6 +66,8 @@ import { db } from '../../shared/db';
 import { ttlMemo } from '../../shared/ttl-memo';
 import { repositoryAccessFromSessionMetadata } from './session-sandbox-metadata';
 import type { SessionConfigConvergenceOutcome } from './session-config-convergence';
+import { projectsView } from '../../workspaces/rows';
+import { errorMessage } from '../../shared/error-message';
 
 /**
  * How long a resolved desired release stands for a `(project, base ref, agent,
@@ -124,18 +126,18 @@ const sessionMemo = ttlMemo({
   loader: async (sessionId: string): Promise<SessionTarget | null> => {
     const [row] = await db
       .select({
-        projectId: projects.projectId,
-        accountId: projects.accountId,
-        repoUrl: projects.repoUrl,
-        defaultBranch: projects.defaultBranch,
-        manifestPath: projects.manifestPath,
+        projectId: projectsView.projectId,
+        accountId: projectsView.accountId,
+        repoUrl: projectsView.repoUrl,
+        defaultBranch: projectsView.defaultBranch,
+        manifestPath: projectsView.manifestPath,
         baseRef: projectSessions.baseRef,
         agentName: projectSessions.agentName,
         sessionMetadata: projectSessions.metadata,
         createdBy: projectSessions.createdBy,
       })
       .from(projectSessions)
-      .innerJoin(projects, eq(projects.projectId, projectSessions.projectId))
+      .innerJoin(projectsView, eq(projectsView.projectId, projectSessions.projectId))
       .where(eq(projectSessions.sessionId, sessionId))
       .limit(1);
     if (!row) return null;
@@ -373,7 +375,7 @@ async function noteAssetsFromHealth(
   } catch (error) {
     logger.warn('[runtime-assets] could not record a box\'s asset verdict', {
       session_id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
   }
 }
@@ -416,7 +418,7 @@ export async function noteSandboxHealthBody(sessionId: string, body: unknown): P
   } catch (error) {
     logger.warn('[turn-start] could not record an admission health read', {
       session_id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
   }
 }
@@ -487,7 +489,7 @@ export async function convergeConfigIfBehind(
   } catch (error) {
     logger.warn('[projects] turn-start convergence threw', {
       session_id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return done('skipped', null);
   }
@@ -496,8 +498,9 @@ export async function convergeConfigIfBehind(
 // ── The runtime-asset lane ──────────────────────────────────────────────────
 //
 // NEITHER CONFIG NOR BINARIES BLOCK A TURN. Config converges after a turn
-// (`convergeConfigIfBehind` above). The daemon, the CLI, the managed-skill
-// overlay and OpenCode are ~96 MB, ~104 MB, ~373 KB and ~167 MB; a box one turn
+// (`convergeConfigIfBehind` above). The daemon, the CLI and the managed-skill
+// overlay are ~96 MB, ~104 MB and ~373 KB (an old OpenCode box also carries
+// OpenCode, ~167 MB); a box one turn
 // behind on them is the state that already exists today, and a box that makes
 // the user wait for those bytes is a regression. So everything below DETECTS
 // and SCHEDULES. It never applies, and it is never awaited on the send path.
@@ -652,7 +655,7 @@ export async function convergeModelCatalogForTurnStart(
   } catch (error) {
     logger.warn('[projects] turn-start model-catalog convergence threw', {
       session_id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return { decision: 'unknown' };
   }

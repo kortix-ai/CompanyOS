@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 
 // `config` (imported transitively by `./server`) reads required env vars at
 // module-load time — set them before the dynamic import below so this file
@@ -198,6 +198,71 @@ describe('standalone gateway inference routes', () => {
   }, 30_000);
 });
 
+// KRTX-4427: an OpenAI-compatible client picks its model from `GET /v1/models`.
+// Unscoped, that route served the whole discovery catalog as a `{models:{}}`
+// map, so a key with no plan and no provider got thousands of ids that all
+// answer 400. Unscoped now lists only what the key's project offers (the
+// `scope=picker` set) in the OpenAI list shape; `scope=all` keeps the catalog.
+describe('standalone model listing', () => {
+  const { app } = buildServer();
+  const PICKER = {
+    'kortix/callable': { name: 'Callable', provider: 'kortix', enabled: true },
+    'openai/turned-off': { name: 'Turned off', provider: 'openai', enabled: false },
+    'anthropic/not-connected': { name: 'Not connected', provider: 'anthropic', enabled: true, available: false },
+  };
+  const ALL = { ...PICKER, 'acme/needs-a-key': { name: 'Needs a key', availability: 'provider' } };
+
+  // Only the API's internal endpoints are faked; routes, gateway and API client run for real.
+  async function list(path: string) {
+    const asked: unknown[] = [];
+    const api = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/internal/gateway/authenticate')) {
+        return Response.json({ principal: { userId: 'u', accountId: 'a', projectId: 'p' } });
+      }
+      if (url.endsWith('/internal/gateway/models')) {
+        const body = JSON.parse(String(init?.body)) as { managedOnly: boolean; scope?: string };
+        asked.push({ managedOnly: body.managedOnly, scope: body.scope });
+        return Response.json({ models: body.scope === 'picker' ? PICKER : ALL });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }, { preconnect: globalThis.fetch.preconnect }));
+    try {
+      const res = await app.request(path, { headers: { authorization: 'Bearer kortix_gw_test' } });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown>, asked };
+    } finally {
+      api.mockRestore();
+    }
+  }
+
+  for (const path of ['/models', '/v1/models', '/v1/llm/models', '/v1/openai/models', '/v1/models?scope=unknown']) {
+    test(`${path} lists only the models the key can call, in the OpenAI list shape`, async () => {
+      const { status, body, asked } = await list(path);
+      expect(status).toBe(200);
+      expect(asked).toEqual([{ managedOnly: false, scope: 'picker' }]);
+      expect(body).toEqual({
+        object: 'list',
+        data: [{ id: 'kortix/callable', object: 'model', created: 0, owned_by: 'kortix', name: 'Callable', provider: 'kortix', enabled: true }],
+      });
+    });
+  }
+
+  test('scope=all keeps the full discovery catalog as the keyed map', async () => {
+    const { body, asked } = await list('/v1/models?scope=all');
+    expect(asked).toEqual([{ managedOnly: false, scope: undefined }]);
+    expect(body).toEqual({ models: ALL });
+  });
+
+  test('scope=picker and scope=managed keep the keyed map sandboxes read at boot', async () => {
+    const picker = await list('/v1/models?scope=picker');
+    expect(picker.asked).toEqual([{ managedOnly: false, scope: 'picker' }]);
+    expect(picker.body).toEqual({ models: PICKER });
+    const managed = await list('/v1/models?scope=managed');
+    expect(managed.asked).toEqual([{ managedOnly: true, scope: undefined }]);
+    expect(managed.body).toEqual({ models: ALL });
+  });
+});
+
 describe('cloudflareSafe', () => {
   test('maps a JSON 502 to 503, keeps the original status in header and body, sets retry-after', async () => {
     const res = await cloudflareSafe(
@@ -339,7 +404,7 @@ describe('standalone image routes', () => {
   function imageApp(inflight = new InflightBudget({ maxBytes: 1024 * 1024, perRequestMaxBytes: 1024 * 1024, amplification: 1 })) {
     const calls: { authorization: string | undefined; rawBody: string; operation: string }[] = [];
     const unused = async (): Promise<Response> => { throw new Error('not an image route'); };
-    const app = new Hono();
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
     registerRoutes(app, {
       chatCompletions: unused, messages: unused, responses: unused, listModels: unused, claudeCode: unused,
       audio: unused, voices: unused,
@@ -384,7 +449,7 @@ describe('standalone audio routes', () => {
     const calls: { operation: string; authorization: string | undefined; contentType: string; body: Uint8Array<ArrayBuffer> }[] = [];
     const voices: { authorization: string | undefined; model: string }[] = [];
     const unused = async (): Promise<Response> => { throw new Error('not an audio route'); };
-    const app = new Hono();
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
     registerRoutes(app, {
       chatCompletions: unused, messages: unused, responses: unused, listModels: unused, images: unused, claudeCode: unused,
       audio: async (request) => {
@@ -448,7 +513,7 @@ describe('standalone Claude Code passthrough routes', () => {
   function claudeApp() {
     const calls: Array<{ method: string; path: string; search: string; body: string | null; auth: string | null }> = [];
     const unused = async (): Promise<Response> => { throw new Error('not a Claude Code route'); };
-    const app = new Hono();
+    const app = new Hono<{ Bindings: { clientIp?: string | null } }>();
     registerRoutes(app, {
       chatCompletions: unused, messages: unused, responses: unused, listModels: unused, images: unused,
       audio: unused, voices: unused,

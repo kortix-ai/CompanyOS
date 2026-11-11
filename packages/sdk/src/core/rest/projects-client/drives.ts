@@ -5,7 +5,9 @@
 
 import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
+import { abortableDelay } from '../../http/abort';
 import { platformConfig } from '../../http/config';
+import { isReportedWriteFailure } from '../../http/response-error';
 import { platformRequestHeaders } from '../../http/transport';
 import { unwrap } from './shared';
 import { stripTrailingSlashes } from '../../../platform/strings';
@@ -90,7 +92,11 @@ export interface DriveUsage {
   folders: DriveFolderUsage[];
 }
 
-/** One project's Files in {@link AccountStorageUsage}. */
+/**
+ * One project's Files in {@link AccountStorageUsage}.
+ *
+ * @deprecated Use `AccountStorageWorkspace`. Kept permanently.
+ */
 export interface AccountStorageProject {
   projectId: string;
   name: string;
@@ -99,6 +105,9 @@ export interface AccountStorageProject {
   usedBytes: number | null;
   fileCount: number | null;
 }
+
+/** The workspace name of {@link AccountStorageProject}: the same type. */
+export type AccountStorageWorkspace = AccountStorageProject;
 
 /** What an account's Files hold, per project, against the plan's limits. */
 export interface AccountStorageUsage {
@@ -265,6 +274,11 @@ export interface SessionDrive {
   /** `me`: the session owner's own folder, their desktop. */
   role?: 'me' | 'drive';
   openConflicts?: number;
+  /**
+   * When the newest of `openConflicts` was detected (ISO 8601), null with none.
+   * Absent from an API older than 2026-11-04.
+   */
+  latestConflictAt?: string | null;
 }
 
 export interface SessionDrives {
@@ -294,7 +308,7 @@ export interface SessionDrives {
 const drivePath = (driveId: string) => `/drives/${encodeURIComponent(driveId)}`;
 
 /** The project's Files. Creates the drive and the caller's own folder on first use. */
-export async function getProjectDrive(projectId: string): Promise<Drive> {
+export async function getWorkspaceDrive(projectId: string): Promise<Drive> {
   const drives = unwrap(
     await backendApi.get<{ drives: Drive[] }>(`/drives?${new URLSearchParams({ projectId })}`),
     'Failed to load files',
@@ -302,6 +316,9 @@ export async function getProjectDrive(projectId: string): Promise<Drive> {
   if (!drives[0]) throw new ApiError('Files not found', { status: 404 });
   return drives[0];
 }
+
+/** @deprecated Use `getWorkspaceDrive`. Kept permanently. */
+export const getProjectDrive = getWorkspaceDrive;
 
 /**
  * Who has access to a folder: its own grants and the ones it inherits. A
@@ -502,7 +519,16 @@ interface ProgressRequest {
  * a time (a browser `File` or a Bun file never sits in memory whole). It
  * needs `crypto.subtle` to hash the blocks.
  *
- * `onProgress(sentBytes, totalBytes)` reports the body going up. `fetch` has
+ * A one-request body that fails transiently (408, 429, 5xx, a timeout or a
+ * dropped connection; never an abort) is sent again after 0.5, 1, 2, 4 and
+ * 8 s: at most 6 tries, 15.5 s of waits. With `ifMatch` only a 429 is sent
+ * again: a timed-out conditional write may have landed. On the `fetch` path
+ * (no `onProgress`) only the final failure reaches the app-wide `onError`;
+ * the `XMLHttpRequest` and block paths leave every failure to the caller. A
+ * caller adds no retry of its own.
+ *
+ * `onProgress(sentBytes, totalBytes)` reports the body going up. A resend
+ * reports from 0 again. `fetch` has
  * no upload progress, so with it a one-request body goes over
  * `XMLHttpRequest` (same auth and headers); a host without one uses `fetch`
  * and reports completion. The block upload reports each block.
@@ -523,15 +549,27 @@ export async function uploadDriveFile(
   if ((body instanceof Blob ? body.size : body.byteLength) > SINGLE_UPLOAD_MAX_BYTES) {
     return uploadInBlocks(driveId, path, body instanceof Blob ? body : new Blob([body]), headers, options);
   }
+  // A transient failure is sent again: a plain PUT overwrites, so a resend of
+  // one that landed is harmless. A conditional one (If-Match) that may have
+  // landed would refuse its own resend, so only its 429 (never ran) is resent.
+  const retry = { signal: options?.signal, onlyRefused: !!options?.ifMatch };
   const Xhr = (globalThis as { XMLHttpRequest?: new () => ProgressRequest }).XMLHttpRequest;
   if (onProgress && Xhr) {
     const blob = body instanceof Blob ? body : new Blob([body]);
-    return uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal);
+    return retryTransient(() => uploadWithProgress(Xhr, endpoint, blob, headers, onProgress, options?.signal), retry);
   }
-  const result = unwrap(
-    await backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers }),
-    'Failed to upload file',
-  );
+  let result: DriveUploadResult;
+  try {
+    // Each attempt is quiet: only the final outcome reaches the app-wide handler.
+    result = await withRetries(
+      () => backendApi.putRaw<DriveUploadResult>(endpoint, body, { signal: options?.signal, headers, showErrors: false }),
+      'Failed to upload file',
+      retry,
+    );
+  } catch (error) {
+    if (error instanceof ApiError && isReportedWriteFailure(error)) platformConfig().onError?.(error);
+    throw error;
+  }
   const size = body instanceof Blob ? body.size : body.byteLength;
   onProgress?.(size, size);
   return result;
@@ -555,14 +593,37 @@ function isTransient(error: Error | undefined): boolean {
   return e.status === undefined ? e.code !== 'NO_SESSION' : TRANSIENT_STATUSES.has(e.status);
 }
 
-async function withRetries<T>(send: () => Promise<ApiResult<T>>, fallbackMessage: string): Promise<T> {
+/**
+ * `send` again after each wait in `UPLOAD_RETRY_DELAYS_MS` while it fails
+ * transiently. `onlyRefused`: resend only a 429, which never ran (a
+ * conditional write that timed out may have landed). An abort during a wait
+ * stops at once.
+ */
+async function retryTransient<T>(
+  send: () => Promise<T>,
+  options: { signal?: AbortSignal; onlyRefused?: boolean } = {},
+): Promise<T> {
+  const { signal, onlyRefused } = options;
   for (let attempt = 0; ; attempt++) {
-    const result = await send();
-    if (result.success) return result.data as T;
-    const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
-    if (delay === undefined || !isTransient(result.error)) throw result.error ?? new Error(fallbackMessage);
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      return await send();
+    } catch (error) {
+      const delay = UPLOAD_RETRY_DELAYS_MS[attempt];
+      const retry = onlyRefused ? (error as ApiError).status === 429 : isTransient(error as Error);
+      if (delay === undefined || !retry) throw error;
+      await abortableDelay(delay, signal).catch(() => {
+        throw new ApiError('Request aborted', { name: 'AbortError', code: 'ABORTED' });
+      });
+    }
   }
+}
+
+function withRetries<T>(
+  send: () => Promise<ApiResult<T>>,
+  fallbackMessage: string,
+  options?: { signal?: AbortSignal; onlyRefused?: boolean },
+): Promise<T> {
+  return retryTransient(async () => unwrap(await send(), fallbackMessage), options);
 }
 
 const toHex = (digest: ArrayBuffer) => Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -683,13 +744,15 @@ async function uploadWithProgress(
   });
 }
 
-/*
- * Folder writes (mkdir, move, delete) raise no app-wide error: every caller
- * shows its own outcome, and the app-wide toast would say it a second time.
+/**
+ * Make a folder. A transient failure is sent again, as `uploadDriveFile`
+ * does (at most 6 tries); a folder that exists answers 409. Folder writes
+ * (mkdir, move, delete) raise no app-wide error: every caller shows its own
+ * outcome, and the app-wide toast would say it a second time.
  */
 export async function makeDriveFolder(driveId: string, path: string): Promise<{ path: string }> {
-  return unwrap(
-    await backendApi.post<{ path: string }>(`${drivePath(driveId)}/files/mkdir`, { path }, { showErrors: false }),
+  return withRetries(
+    () => backendApi.post<{ path: string }>(`${drivePath(driveId)}/files/mkdir`, { path }, { showErrors: false }),
     'Failed to create folder',
   );
 }
@@ -725,7 +788,7 @@ export async function restoreDriveVersion(driveId: string, versionId: string): P
 }
 
 const sessionDrivesPath = (projectId: string, sessionId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/drives`;
+  `/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/drives`;
 
 /** What the project's Files hold, their limits, and each folder sessions mount against the folder-mount cap. */
 export async function getDriveUsage(driveId: string): Promise<DriveUsage> {

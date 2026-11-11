@@ -7,7 +7,9 @@ name: Deploy Prod
 # The root VERSION on `prod` is the clean version `X.Y.Z`.
 #
 #   1. Retag the promoted staging images (kortix/kortix-*:staging-<sha8>)
-#      → :X.Y.Z + :latest (multi-arch manifest copy, zero rebuilds). The
+#      → :X.Y.Z (multi-arch manifest copy, zero rebuilds). ECS rolls :X.Y.Z.
+#      The moving channels `:latest` and `:prod` move only after
+#      verify-live-version proves prod serves X.Y.Z (promote-prod-channel). The
 #      self-host `:stable` channel is promoted SEPARATELY and manually via
 #      promote-self-host-stable.yml — a prod release is not auto-shipped to self-hosts.
 #   2. Deploy the production backend on ECS Fargate (the ACTIVE backend behind
@@ -297,17 +299,20 @@ jobs:
               echo "::error::$IMAGE: no image tagged for the exact release commit ${SOURCE_SHA} (looked for :$STAGING_TAG). Refusing to fall back to :dev-latest or any other tag — that has shipped a stale/unrelated image before. Build+push the staging image for this commit, then re-run this job."
               exit 1
             fi
-            # A prod release publishes :X.Y.Z + :latest only. The self-host
+            # This job publishes :X.Y.Z only: ECS rolls that immutable tag.
+            # :latest and :prod are moving channels that self-hosts pull; they
+            # move in promote-prod-channel, after verify-live-version proves
+            # prod serves X.Y.Z. Before 2026-11-06 :latest moved here, so a
+            # failed roll left :latest on a version that never served. The self-host
             # `:stable` channel — the tag self-hosted boxes auto-update to — is
             # CURATED, not automatic: a human promotes a proven version to
             # :stable via the "Promote Self-Host Stable" workflow (promote-self-host-stable.yml).
             # Released != auto-shipped to every self-hosted customer overnight.
             SRC_DIGEST="$(docker buildx imagetools inspect "$IMAGE:$SRC_TAG" --format '{{json .Manifest}}' | jq -r '.digest // empty')"
             [ -n "$SRC_DIGEST" ] || { echo "::error::$IMAGE:$SRC_TAG has no resolvable manifest digest."; exit 1; }
-            echo "Re-tagging $IMAGE:$SRC_TAG (digest $SRC_DIGEST) → $IMAGE:${VERSION} + :latest"
+            echo "Re-tagging $IMAGE:$SRC_TAG (digest $SRC_DIGEST) → $IMAGE:${VERSION}"
             docker buildx imagetools create \
               --tag "$IMAGE:${VERSION}" \
-              --tag "$IMAGE:latest" \
               "$IMAGE:$SRC_TAG"
             # Integrity check: the freshly-created :VERSION tag must be
             # byte-identical (same digest) to the exact-commit source tag we
@@ -431,7 +436,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -548,7 +553,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -585,7 +590,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -624,7 +629,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -661,7 +666,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -709,7 +714,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - name: Compare the desktop fingerprint with the latest release
         id: plan
         env:
@@ -755,7 +760,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     env:
-      DESKTOP_URL: https://kortix.com/projects
+      DESKTOP_URL: https://kortix.com/workspaces
     strategy:
       fail-fast: false
       matrix:
@@ -803,7 +808,7 @@ jobs:
       # bun by scripts/ensure-runtime.js before electron-builder runs.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter @kortix/desktop-electron --filter @kortix/agent-tunnel
@@ -1238,7 +1243,7 @@ jobs:
           persist-credentials: false
       - uses: ./.aws-env/.github/actions/prepare-migrate
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
           database-url: DATABASE_URL=kortix-prod-env:DATABASE_URL
           role-to-assume: arn:aws:iam::935064898258:role/kortix-gha-ecs-deploy-prod
       - name: Apply pending migrations (node-pg-migrate; halts on failure)
@@ -1318,7 +1323,14 @@ jobs:
       # infra/terraform/modules/project-snapshots-bucket): that role has NO
       # s3:DeleteObject, and expiry is safe because the archive is a cache the
       # API rebuilds from its Git mirror.
-      KORTIX_ECS_ENV_OVERRIDES: '{"KORTIX_PREVIEW_BASE_DOMAIN":"p.kortix.com","KORTIX_CAPTURE_S3_BUCKET":"kortix-prod-capture-store","KORTIX_CAPTURE_S3_REGION":"eu-west-2","KORTIX_CAPTURE_SQS_QUEUE_URL":"https://sqs.eu-west-2.amazonaws.com/935064898258/kortix-prod-capture-store-manifests","KORTIX_CAPTURE_STS_ROLE_ARN":"arn:aws:iam::935064898258:role/kortix-prod-capture-store-device","AUDIT_ARCHIVE_BUCKET":"kortix-prod-audit-archive","AUDIT_ARCHIVE_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_S3_BUCKET":"kortix-prod-project-snapshots","KORTIX_CONFIG_ARCHIVE_S3_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_RETAIN_PER_PROJECT":"0"}'
+      #
+      # KORTIX_WORKSPACE_VOLUMES=on turns `workspace_volume` (stateless
+      # sandboxes) on for every prod project that has made no choice: each new
+      # session keeps /workspace on its own Platinum volume, and a box stopped
+      # for KORTIX_SANDBOX_IDLE_DELETE_MINUTES is deleted. A project an
+      # operator set to `false` stays off. Rollback: remove the key and
+      # redeploy; sessions that already have a volume keep it.
+      KORTIX_ECS_ENV_OVERRIDES: '{"KORTIX_PREVIEW_BASE_DOMAIN":"p.kortix.com","KORTIX_CAPTURE_S3_BUCKET":"kortix-prod-capture-store","KORTIX_CAPTURE_S3_REGION":"eu-west-2","KORTIX_CAPTURE_SQS_QUEUE_URL":"https://sqs.eu-west-2.amazonaws.com/935064898258/kortix-prod-capture-store-manifests","KORTIX_CAPTURE_STS_ROLE_ARN":"arn:aws:iam::935064898258:role/kortix-prod-capture-store-device","AUDIT_ARCHIVE_BUCKET":"kortix-prod-audit-archive","AUDIT_ARCHIVE_REGION":"eu-west-2","AUDIT_ARCHIVE_ENABLED":"true","KORTIX_CONFIG_ARCHIVE_S3_BUCKET":"kortix-prod-project-snapshots","KORTIX_CONFIG_ARCHIVE_S3_REGION":"eu-west-2","KORTIX_CONFIG_ARCHIVE_RETAIN_PER_PROJECT":"0","KORTIX_WORKSPACE_VOLUMES":"on"}'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure AWS credentials (OIDC)
@@ -1774,8 +1786,8 @@ jobs:
           exit 1
 
   # Deploy kortix.com (Vercel) ONLY after the API provably serves the release.
-  # Vercel's git auto-deploy for `prod` is OFF (vercel.json deploymentEnabled +
-  # vercel-ignore.sh): during the 2026-08-10 v0.12.7 rollout the auto-deployed
+  # Vercel never deploys from a git push (the project has no Git connection, and
+  # vercel.json sets git.deploymentEnabled false): during the 2026-08-10 v0.12.7 rollout the auto-deployed
   # new frontend called routes the still-old API did not have, and every
   # project load failed. Ordering the frontend after `verify-live-version`
   # makes a mixed frontend/API pair impossible.
@@ -1783,7 +1795,8 @@ jobs:
     name: Deploy prod web to Vercel (after API is live)
     needs: [version, verify-live-version]
     runs-on: ${{ vars.CI_RUNNER_M || 'ubuntu-24.04' }}
-    timeout-minutes: 20
+    # This runner builds the web app; Vercel only hosts the output.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out the aws-env action
@@ -1813,17 +1826,22 @@ jobs:
             echo "::error::VERCEL_PROJECT_ID resolves to '$linked', not the suna project — refusing to deploy the wrong project."
             exit 1
           fi
-      - name: Deploy the release frontend to production
+      - run: corepack enable pnpm
+      - name: Build the release frontend on this runner and deploy it to production
+        env:
+          npm_config_engine_strict: "false"
         run: |
           set -euo pipefail
+          # Vercel runs no build: this runner builds, Vercel only hosts the
+          # output (infra/scripts/vercel-deploy-prebuilt.sh, the same script as
+          # staging, so a green staging deploy proves this path).
           # Bind the release version to this deployment at build time and runtime.
           # KORTIX_PUBLIC_VERSION is the server-only alias that public-env-server
           # exposes as VERSION. Vercel rejects NEXT_PUBLIC_* Production variables
           # because its CLI treats them as secrets by default.
-          # --archive=tgz: Vercel refuses a deploy of more than 15,000 files, and
-          # the tree passed that at v0.14.9 (15,077 files). The commit goes in
-          # explicitly because an archive deploy does not promise git metadata.
-          npx --yes vercel@latest deploy --prod --yes --archive=tgz --token="$VERCEL_TOKEN" \
+          # The commit goes in explicitly because an archive deploy does not
+          # promise git metadata.
+          bash infra/scripts/vercel-deploy-prebuilt.sh production \
             --env "KORTIX_PUBLIC_VERSION=${{ needs.version.outputs.version }}" \
             --build-env "NEXT_PUBLIC_KORTIX_VERSION=${{ needs.version.outputs.version }}" \
             --build-env "NEXT_PUBLIC_KORTIX_COMMIT=${{ github.sha }}"
@@ -2027,7 +2045,7 @@ jobs:
   # so there is nothing to re-tag it from. (This is a pre-existing gap: even
   # promote-self-host-stable.yml's `:stable` channel has never covered it.)
   promote-prod-channel:
-    name: Move :prod → v${{ needs.version.outputs.version }}
+    name: Move :prod + :latest → v${{ needs.version.outputs.version }}
     needs: [version, retag-images, verify-live-version]
     runs-on: ${{ vars.CI_RUNNER_S || 'ubuntu-24.04' }}
     timeout-minutes: 15
@@ -2050,14 +2068,17 @@ jobs:
         with:
           username: ${{ env.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN || secrets.DOCKERHUB_TOKEN }}
-      - name: Re-tag api/gateway/frontend → :prod
+      - name: Re-tag api/gateway/frontend → :prod + :latest
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
+          # needs verify-live-version: the public endpoints serve VERSION, so
+          # both moving channels name a version that runs in prod.
           for IMAGE in kortix/kortix-api kortix/kortix-gateway kortix/kortix-frontend; do
             docker buildx imagetools create \
               --tag "$IMAGE:prod" \
+              --tag "$IMAGE:latest" \
               "$IMAGE:${VERSION}"
-            echo "✓ $IMAGE:prod → ${VERSION}"
+            echo "✓ $IMAGE:prod + :latest → ${VERSION}"
           done

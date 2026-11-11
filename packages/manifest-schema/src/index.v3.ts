@@ -26,6 +26,7 @@ import {
   EXTENSION_HARNESSES,
   HARNESS_TOOL_NAMES,
   KORTIX_SKILL_NAMES,
+  RETIRED_KORTIX_SKILL_NAMES,
   KORTIX_SKILL_PREFIX,
   KORTIX_TOOL_NAMES,
   PI_PACKAGE_NPM_RE,
@@ -59,12 +60,12 @@ import {
   validateTriggers,
 } from './index';
 import {
-  type AgentWorkspaceV2,
   type GrantSetV2,
   type PermissionConfigV2,
   type PiPackageEntryV2,
+  isEveryGrant,
   resolveGrantSet,
-  resolveProjectRepository,
+  TOOLS_SHAPE_ERROR,
   TOOLS_UNSET_WARNING,
   validateAgentMdFrontmatter,
   validateAppGrantList,
@@ -80,8 +81,8 @@ import { BUILTIN_AGENT_KEYS, BUILTIN_AGENTS, LEGACY_MY_KORTIX_AGENT_NAME, type B
 export type CodemodeV3 = (typeof CODEMODE_VALUES)[number];
 export type ContextV3 = (typeof CONTEXT_VALUES)[number];
 
-/** `agents.<name>.tools`: `all` (default), `none`, a list, or `{ exclude: [...] }`. */
-export type AgentToolsV3 = 'all' | 'none' | string[] | { exclude: string[] };
+/** `agents.<name>.tools`: `"*"` (default; alias `all`), `none`, a list, or `{ exclude: [...] }`. Read it with `isEveryGrant`. */
+export type AgentToolsV3 = '*' | 'all' | 'none' | string[] | { exclude: string[] };
 
 /**
  * `agents.<name>.skills` and `.extensions`: a grant set, or `{ exclude: [...] }`,
@@ -100,7 +101,7 @@ export interface CommandV3 {
 export interface ExtensionV3 {
   /**
    * A repo module path, loaded as an OpenCode plugin.
-   * @deprecated OpenCode only. OpenCode is sunset (2026-10-23): no new code. See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode sunset".
+   * @deprecated OpenCode only: OpenCode is deleted (2026-10-30). See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted".
    */
   opencode?: string;
   /** `npm:<name>@<x.y.z>`, a repo path, or pi's `{ source, extensions, … }` form. */
@@ -115,7 +116,7 @@ export function excludedNamesV3(value: unknown): string[] | null {
 }
 
 /**
- * The names a v3 grant selects from `universe`: `all` is every name,
+ * The names a v3 grant selects from `universe`: `"*"` / `all` is every name,
  * `{ exclude }` every name but the listed ones, a list as written, and an
  * omitted or `none` grant none.
  */
@@ -158,19 +159,128 @@ export interface AgentBlockV3 {
   secrets?: GrantSetV2;
   apps?: GrantSetV2;
   kortix_permissions?: GrantSetV2;
-  workspace?: AgentWorkspaceV2;
   sandbox?: string;
+  /** What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. */
+  workspace?: AgentWorkspaceV3;
   /** The space the agent works in: a key of the top-level `spaces` map, or a bare slug. Grouping only, never a grant. */
   space?: string;
   network_egress?: { version: 1; default: 'deny'; rules: [] };
 }
 
-/** One block of a board tab: a grid card that shows a room, a file, an App,
- *  an embedded page or markdown text. Display only. */
+/** One repository a session clones into its workspace when it starts. */
+export interface AgentWorkspaceRepoV3 {
+  /** Where it goes: `/workspace` or a folder under it. Default `/workspace`. */
+  path?: string;
+  /** Monorepo subset: the folders a cone sparse-checkout keeps. */
+  sparse?: string[];
+}
+
+/**
+ * `agents.<name>.workspace`: what the agent's sessions get to work in.
+ * `sandbox` picks the machine (a `sandbox.templates` slug, same as `agents.<name>.sandbox`),
+ * `repos` are explicit clones of the workspace repository (none by default; a clone needs
+ * `workspace.gitops.read`), and `setup` runs after them. Both run in the background after
+ * the session starts: they never hold its first turn.
+ */
+export interface AgentWorkspaceV3 {
+  sandbox?: string;
+  repos?: AgentWorkspaceRepoV3[];
+  setup?: AgentWorkspaceStepV3[];
+}
+
+/**
+ * One setup step: a shell command, run in the first clone's folder (or `/workspace`), or
+ * `{ run, cwd }` with `cwd` relative to that folder or absolute under `/workspace`.
+ * Each step is its own shell: a `cd` in one does not carry to the next.
+ */
+export type AgentWorkspaceStepV3 = string | { run: string; cwd?: string };
+
+export const AGENT_WORKSPACE_KEYS_V3 = ['sandbox', 'repos', 'setup'] as const;
+const WORKSPACE_REPO_KEYS_V3 = ['path', 'sparse'];
+const WORKSPACE_ROOT = '/workspace';
+
+/** A `repos[].path`: `/workspace` itself or a folder under it, with no `..`. */
+export function workspaceRepoPathProblem(path: unknown): string | null {
+  if (path === undefined) return null;
+  if (typeof path !== 'string' || !path.trim()) return 'must be a path.';
+  const value = path.trim().replace(/\/+$/, '') || '/';
+  if (value !== WORKSPACE_ROOT && !value.startsWith(`${WORKSPACE_ROOT}/`)) return 'must be `/workspace` or a folder under it.';
+  if (value.split('/').some((part) => part === '..' || part === '.')) return 'must not contain `.` or `..`.';
+  return null;
+}
+
+/** A setup step's `cwd`: relative (no `..`), or absolute under `/workspace`. */
+export function workspaceStepCwdProblem(cwd: unknown): string | null {
+  if (cwd === undefined) return null;
+  if (typeof cwd !== 'string' || !cwd.trim()) return 'must be a folder.';
+  const value = cwd.trim();
+  if (value.startsWith('/')) return workspaceRepoPathProblem(value);
+  if (value.split('/').some((part) => part === '..')) return 'must not contain `..`.';
+  return null;
+}
+
+function validateAgentWorkspaceV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
+  const workspace = entry.workspace;
+  if (workspace === undefined) return;
+  const at = `${where}.workspace`;
+  const error = (path: string, message: string): void => void issues.push({ path, message, severity: 'error' });
+  if (!isTable(workspace)) return error(at, 'must be a map: { sandbox, repos, setup }.');
+  for (const key of Object.keys(workspace)) {
+    if (!(AGENT_WORKSPACE_KEYS_V3 as readonly string[]).includes(key)) error(`${at}.${key}`, `is not a workspace key (allowed: ${AGENT_WORKSPACE_KEYS_V3.join(', ')}).`);
+  }
+  const sandbox = workspace.sandbox;
+  if (sandbox !== undefined && !(typeof sandbox === 'string' && SLUG_RE.test(sandbox.trim()))) error(`${at}.sandbox`, 'must be a sandbox template slug.');
+  if (typeof sandbox === 'string' && typeof entry.sandbox === 'string' && sandbox.trim() !== entry.sandbox.trim()) {
+    error(`${at}.sandbox`, `conflicts with \`sandbox: ${entry.sandbox}\` on the agent. Keep one.`);
+  }
+  const repos = workspace.repos;
+  if (repos !== undefined) {
+    if (!Array.isArray(repos)) error(`${at}.repos`, 'must be a list.');
+    else {
+      const paths = new Set<string>();
+      repos.forEach((repo, index) => {
+        const here = `${at}.repos[${index}]`;
+        if (!isTable(repo)) return error(here, 'must be a map: { path, sparse }.');
+        for (const key of Object.keys(repo)) if (!WORKSPACE_REPO_KEYS_V3.includes(key)) error(`${here}.${key}`, `is not a repos key (allowed: ${WORKSPACE_REPO_KEYS_V3.join(', ')}).`);
+        const problem = workspaceRepoPathProblem(repo.path);
+        if (problem) error(`${here}.path`, problem);
+        const path = (typeof repo.path === 'string' ? repo.path.trim().replace(/\/+$/, '') : '') || WORKSPACE_ROOT;
+        if (paths.has(path)) error(`${here}.path`, `\`${path}\` is cloned twice.`);
+        paths.add(path);
+        const sparse = repo.sparse;
+        if (sparse !== undefined && !(Array.isArray(sparse) && sparse.length > 0 && sparse.every((dir) => typeof dir === 'string' && dir.trim() && !dir.includes('..') && !dir.startsWith('/')))) {
+          error(`${here}.sparse`, 'must be a list of repository folders, such as [apps/web].');
+        }
+      });
+    }
+  }
+  const setup = workspace.setup;
+  if (setup !== undefined) {
+    if (!Array.isArray(setup)) error(`${at}.setup`, 'must be a list of shell commands or { run, cwd } steps.');
+    else {
+      setup.forEach((step, index) => {
+        const here = `${at}.setup[${index}]`;
+        if (typeof step === 'string') {
+          if (!step.trim()) error(here, 'must be a shell command.');
+          return;
+        }
+        if (!isTable(step)) return error(here, 'must be a shell command or { run, cwd }.');
+        for (const key of Object.keys(step)) if (key !== 'run' && key !== 'cwd') error(`${here}.${key}`, 'is not a setup step key (allowed: run, cwd).');
+        if (typeof step.run !== 'string' || !step.run.trim()) error(`${here}.run`, 'must be a shell command.');
+        const problem = workspaceStepCwdProblem(step.cwd);
+        if (problem) error(`${here}.cwd`, problem);
+      });
+    }
+  }
+}
+
+/** One block of a board tab: a grid card that shows a file, an App, an
+ *  embedded page or markdown text. Display only. `chat` is retired with Rooms
+ *  (2026-11): it still validates, and hosts render nothing for it. */
 export interface SpaceBlockV3 {
   type: 'chat' | 'artifact' | 'app' | 'iframe' | 'text';
   label?: string;
-  /** chat: the name of a project room. */
+  /** @deprecated chat: the name of a removed Room. Ignored. */
   room?: string;
   /** artifact: a project file path. */
   path?: string;
@@ -205,7 +315,7 @@ export interface SpaceTabV3 {
 
 export type SpaceHeaderItem = (typeof SPACE_HEADER_ITEMS)[number];
 
-/** A space is a channel: a room (always the first tab) plus configured tabs.
+/** A space is a channel with configured tabs.
  *  Agents join it with `agents.<name>.space`. Display and config only: no
  *  behavior, no grants. */
 export interface SpaceV3 {
@@ -213,7 +323,7 @@ export interface SpaceV3 {
   description?: string;
   order?: number;
   header?: SpaceHeaderItem[];
-  /** The tabs after the room, in order. Absent = the host's default set. */
+  /** The tabs, in order. Absent = the host's default set. */
   tabs?: SpaceTabV3[];
 }
 
@@ -314,8 +424,8 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'secrets',
   'apps',
   'kortix_permissions',
-  'workspace',
   'sandbox',
+  'workspace',
   'space',
   'network_egress',
 ] as const;
@@ -330,7 +440,6 @@ const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
   env: 'use `secrets`.',
   kortix_cli: 'use `kortix_permissions`.',
   connectors_personal: 'use `connectors_required`.',
-  repository_access: 'use `workspace.project_repository`.',
 };
 
 const COMMAND_KEYS_V3 = ['description', 'prompt', 'prompt_file'];
@@ -719,6 +828,7 @@ function validateAgentBlockV3(
   if (entry.sandbox !== undefined && !(typeof entry.sandbox === 'string' && SLUG_RE.test(entry.sandbox.trim()))) {
     issues.push({ path: `${where}.sandbox`, message: 'must be a sandbox template slug.', severity: 'error' });
   }
+  validateAgentWorkspaceV3(entry, where, issues);
   if (entry.space !== undefined && !(typeof entry.space === 'string' && SPACE_SLUG_RE.test(entry.space.trim()))) {
     issues.push({ path: `${where}.space`, message: 'must be a space slug (lowercase letters, digits, "-" or "_", at most 63 characters).', severity: 'error' });
   }
@@ -738,21 +848,17 @@ function validateAgentBlockV3(
   validateGrantList(entry.secrets, `${where}.secrets`, 'secrets', issues, false);
   validateAppGrantList(entry.apps, `${where}.apps`, issues);
   validateKortixPermissionFields(entry, where, issues);
-  if (entry.workspace !== undefined) {
-    const repository = resolveProjectRepository({ workspace: entry.workspace });
-    if (!repository.ok) issues.push({ path: `${where}.${repository.path}`, message: repository.message, severity: 'error' });
-  }
 }
 
 /**
- * A grant of registered names: `all`, `none`, or a list where each name is
+ * A grant of registered names: `"*"` (alias `all`), `none`, or a list where each name is
  * registered. `excludable` also takes `{ exclude: [names] }`.
  */
 function validateNamedGrantV3(value: unknown, where: string, label: string, known: Set<string>, issues: ManifestIssue[], excludable = false): void {
   let names: unknown = value;
   if (excludable && isTable(value)) {
     if (Object.keys(value).length !== 1 || !Array.isArray(value.exclude) || value.exclude.some((name) => typeof name !== 'string' || !name.trim())) {
-      issues.push({ path: where, message: `${label} must be \`all\`, \`none\`, a list of names, or \`{ exclude: [names] }\`.`, severity: 'error' });
+      issues.push({ path: where, message: `${label} must be \`"*"\` (every name), \`none\`, a list of names, or \`{ exclude: [names] }\`.`, severity: 'error' });
       return;
     }
     names = value.exclude;
@@ -762,7 +868,15 @@ function validateNamedGrantV3(value: unknown, where: string, label: string, know
     if (issues.length !== before) return;
   }
   if (!Array.isArray(names)) return;
-  const unknown = names.map((item) => String(item).trim()).filter((item) => !known.has(item));
+  // A list that holds `"*"` grants every name (`resolveGrantSet`): nothing to look up.
+  if (names === value && isEveryGrant(names)) return warnRedundantNames(names, where, issues);
+  const trimmed = names.map((item) => String(item).trim());
+  // A retired Kortix skill (its feature is gone) grants nothing: a warning, never a failed parse.
+  const retired = label === 'skills' ? trimmed.filter((item) => RETIRED_KORTIX_SKILL_NAMES.includes(item)) : [];
+  if (retired.length > 0) {
+    issues.push({ path: where, message: `belongs to a removed feature and grants nothing: ${retired.join(', ')}. Remove it from the manifest.`, severity: 'warning' });
+  }
+  const unknown = trimmed.filter((item) => !known.has(item) && !retired.includes(item));
   if (unknown.length > 0) {
     issues.push({
       path: where,
@@ -774,23 +888,33 @@ function validateNamedGrantV3(value: unknown, where: string, label: string, know
   }
 }
 
-/** `tools`: `all` | `none` | a list | `{ exclude: [...] }`; each name a harness, Kortix or registered tool. */
+/** A list that holds `"*"` and other names: the other names grant nothing more. */
+function warnRedundantNames(value: unknown, where: string, issues: ManifestIssue[]): void {
+  if (!Array.isArray(value)) return;
+  const others = value.map((item) => String(item).trim()).filter((item) => item !== '*');
+  if (others.length > 0) {
+    issues.push({ path: where, message: `"*" grants every name, so the other entries do nothing: ${others.join(', ')}. Write \`"*"\` alone.`, severity: 'warning' });
+  }
+}
+
+/** `tools`: `"*"` (alias `all`) | `none` | a list | `{ exclude: [...] }`; each name a harness, Kortix or registered tool. */
 function validateToolGrantV3(value: unknown, where: string, known: Set<string>, issues: ManifestIssue[]): void {
   if (value === undefined) {
     issues.push({ path: where, message: TOOLS_UNSET_WARNING, severity: 'warning' });
     return;
   }
-  if (value === 'all' || value === 'none') return;
+  // `"*"`, `all` and a list that holds `"*"` are every tool.
+  if (value === 'none' || isEveryGrant(value)) return warnRedundantNames(value, where, issues);
   let names: unknown = value;
   if (isTable(value)) {
     if (Object.keys(value).length !== 1 || !Array.isArray(value.exclude)) {
-      issues.push({ path: where, message: 'tools must be `all`, `none`, a list of tool names, or `{ exclude: [names] }`.', severity: 'error' });
+      issues.push({ path: where, message: TOOLS_SHAPE_ERROR, severity: 'error' });
       return;
     }
     names = value.exclude;
   }
   if (!Array.isArray(names) || names.some((name) => typeof name !== 'string' || !name.trim())) {
-    issues.push({ path: where, message: 'tools must be `all`, `none`, a list of tool names, or `{ exclude: [names] }`.', severity: 'error' });
+    issues.push({ path: where, message: TOOLS_SHAPE_ERROR, severity: 'error' });
     return;
   }
   const missing = (names as string[]).map((name) => name.trim()).filter((name) => !known.has(name) && !name.startsWith('pty_'));

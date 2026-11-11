@@ -3,10 +3,9 @@
  * storage half of stateless sandboxes.
  *
  * One volume per session, `kws-<session_id>`, mounted at /workspace when the box
- * is created, so the mount exists before kortixd starts. kortixd fills the empty
- * volume on the first boot with its usual Git or S3 transports and adopts the
- * checkout on every later boot (KORTIX_WORKSPACE_VOLUME=1,
- * services/workspace-provider). The box is disposable: one stopped for
+ * is created, so the mount exists before kortixd starts. kortixd never fills it
+ * from the repository: it holds what the agent writes, including a checkout the
+ * agent made with `kortix workspaces clone` (KORTIX_WORKSPACE_VOLUME=1). The box is disposable: one stopped for
  * KORTIX_SANDBOX_IDLE_DELETE_MINUTES is removed (reaping/idle-volume-retire.ts)
  * and the next open boots a fresh box on the same volume. The conversation
  * comes back from the session log (projects/lib/session-sandbox-env-build.ts).
@@ -31,10 +30,10 @@ import { projectSessions } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 
 import { config } from '../../config';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
+import { resolveFeatureFlag, workspaceVolumesSwitch } from '../../feature-flags/registry';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
-import { platinumJson, platinumRegionControlPlane } from '../../shared/platinum';
+import { platinumJson, platinumRateLimitWaitMs, platinumRegionControlPlane } from '../../shared/platinum';
 import type { CreateSandboxOpts } from '../providers/contract';
 import { WORKSPACE_VOLUME_UNREACHABLE_MESSAGE } from './sandbox-provisioning-error';
 
@@ -56,11 +55,6 @@ const UNRECORDED_OPEN_TTL_MS = 120_000;
 
 export function workspaceVolumeName(sessionId: string): string {
   return `kws-${sessionId}`;
-}
-
-/** Operator switch: KORTIX_WORKSPACE_VOLUMES=off gives no new session a volume. */
-function workspaceVolumesKillSwitchOff(): boolean {
-  return /^(0|off|false|no)$/.test((config.KORTIX_WORKSPACE_VOLUMES ?? '').trim().toLowerCase());
 }
 
 /** The session's recorded volume, when the record names its own volume and a valid region. */
@@ -101,7 +95,7 @@ export function startWorkspaceVolume(input: {
   location: string | undefined;
 }): WorkspaceVolume | null {
   const { sessionId } = input;
-  if (!config.PLATINUM_API_KEY || workspaceVolumesKillSwitchOff() || !resolveFeatureFlag(input.projectMetadata, 'workspace_volume')) {
+  if (!config.PLATINUM_API_KEY || workspaceVolumesSwitch() === 'off' || !resolveFeatureFlag(input.projectMetadata, 'workspace_volume')) {
     return null;
   }
   const volume: WorkspaceVolume = { name: workspaceVolumeName(sessionId), location: input.location ?? null };
@@ -170,11 +164,21 @@ export function applyWorkspaceVolume(create: CreateSandboxOpts, volume: Workspac
   create.envVars = { ...env, [WORKSPACE_VOLUME_ENV]: '1' };
 }
 
-/** Open-or-create in its region, `git` sync (a single-writer working copy). Three tries over ~6 s. */
+/** A 5xx or a network failure: three tries over ~6 s. */
+const OPEN_TRIES = 3;
+/** A 429 (Platinum's org write budget): wait what Platinum asks, at most this many times (≤ 20 s). */
+const OPEN_RATE_LIMIT_WAITS = 4;
+
+/**
+ * Open-or-create in its region, `git` sync (a single-writer working copy). A 429
+ * is waited out as Platinum asks (`retry-after`); any other 4xx is final.
+ */
 async function openWorkspaceVolume(sessionId: string, volume: WorkspaceVolume): Promise<void> {
   const origin = volumeOrigin(volume);
   let lastErr: unknown;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  let tries = 0;
+  let waits = 0;
+  for (;;) {
     try {
       const body = await platinumJson<{ region?: string }>(
         `/v1/volumes/${encodeURIComponent(volume.name)}`,
@@ -188,10 +192,17 @@ async function openWorkspaceVolume(sessionId: string, volume: WorkspaceVolume): 
       return;
     } catch (err) {
       lastErr = err;
+      const rateLimitWait = platinumRateLimitWaitMs(err);
+      if (rateLimitWait !== null) {
+        if (++waits > OPEN_RATE_LIMIT_WAITS) break;
+        await Bun.sleep(rateLimitWait);
+        continue;
+      }
       // The PlatinumHttpError fields, read structurally.
       const status = Number((err as { status?: unknown } | null)?.status) || 0;
       if (status >= 400 && status < 500) break;
-      if (attempt < 3) await Bun.sleep(attempt * 2_000);
+      if (++tries >= OPEN_TRIES) break;
+      await Bun.sleep(tries * 2_000);
     }
   }
   const quota = (lastErr as { code?: unknown } | null)?.code === 'quota_exceeded';

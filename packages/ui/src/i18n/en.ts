@@ -2705,7 +2705,7 @@ const catalog = {
       "text0026c5053478": "Revert",
       "text004bad6bfbd7": "Patched the retry to back off",
       "text0059798b7f70": "(optional)",
-      "text005b4c1dad87": "Search workspaces, accounts, owners",
+      "text005b4c1dad87": "Search workspaces, accounts, owners or an ID",
       "text005c9bcbce1e": "Creating trigger...",
       "text008e94f6ea7c": "What you own",
       "text009e910ccb18": "enterpriseAccordionTokenBody",

@@ -1,8 +1,10 @@
 /**
- * Drives the real GET /:projectId/sessions/:sessionId/log handler to prove
- * KRTX-4696: the per-session read guard answers 429 (with `Retry-After`) once a
- * session's log polls pass `KORTIX_SESSION_LOG_READS_PER_MIN`, and other
- * sessions keep reading.
+ * Drives the real stored-log read handlers to prove KRTX-4696: the per-session
+ * read guard answers 429 (with `Retry-After`) once a session's log polls pass
+ * `KORTIX_SESSION_LOG_READS_PER_MIN`, other sessions keep reading, and the
+ * sibling stored-log reads (`GET …/transcript`, `GET …/snapshot` and its
+ * `/open-bundle` alias) share the same (caller, session) budget — a poller
+ * cannot escape the ceiling by switching routes.
  *
  * Prod 2026-11-10 23:38–23:42 UTC: one CLI client polled the stored log of one
  * session in waves that peaked near 24 requests/s (about 50k requests over one
@@ -38,13 +40,19 @@ mock.module('./lib/route-bindings', () => ({
   }),
 }));
 
+const realAccess = await import('../lib/access');
+
 mock.module('../lib/access', () => ({
+  ...realAccess,
   assertProjectCapability: async () => {},
   loadVisibleSession: async () => ({ row: {} }),
   sessionIsTombstoned: () => false,
 }));
 
+const realSessionLogRead = await import('../session-log-read');
+
 mock.module('../session-log-read', () => ({
+  ...realSessionLogRead,
   readSessionLogPage: async () => ({
     session: {},
     generation: 1,
@@ -65,6 +73,10 @@ projectsApp.use('*', async (c, next) => {
 });
 const { registerSessionLogRoutes } = await import('./session-log');
 registerSessionLogRoutes();
+const { registerSessionTranscriptsRoutes } = await import('./session-transcripts');
+registerSessionTranscriptsRoutes();
+const { registerSessionOpenBundleRoutes } = await import('./session-open-bundle');
+registerSessionOpenBundleRoutes();
 
 afterAll(() => {
   for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
@@ -91,7 +103,7 @@ describe('GET …/log under the per-session read guard', () => {
     // The ceiling is 3 reads/min for this test: the first 3 pass, the rest refuse.
     expect(statuses).toEqual([200, 200, 200, 429, 429]);
     expect(Number(retryAfter)).toBeGreaterThanOrEqual(1);
-    expect(body).toMatchObject({ error: 'rate_limit_exceeded' });
+    expect(body).toMatchObject({ error: 'rate_limit_exceeded', retry_after_seconds: expect.any(Number) });
   });
 
   test('another session of the same caller keeps reading', async () => {
@@ -112,5 +124,23 @@ describe('GET …/log under the per-session read guard', () => {
     });
     expect(callerB.status).toBe(200);
     await callerB.text();
+  });
+});
+
+describe('sibling stored-log reads share the same (caller, session) budget', () => {
+  // The default caller's bucket on SESSION_ID was drained by the first describe
+  // block through GET …/log alone — the transcript and snapshot routes 429 on
+  // the SAME key, so a poller cannot escape the ceiling by switching routes.
+  test('transcript and snapshot answer 429 on the drained bucket, with the same denial body', async () => {
+    for (const route of ['transcript', 'snapshot', 'open-bundle']) {
+      const res = await projectsApp.request(`/${PROJECT_ID}/sessions/${SESSION_ID}/${route}`);
+      expect(res.status).toBe(429);
+      expect(Number(res.headers.get('retry-after'))).toBeGreaterThanOrEqual(1);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        error: 'rate_limit_exceeded',
+        retry_after_seconds: expect.any(Number),
+      });
+    }
   });
 });

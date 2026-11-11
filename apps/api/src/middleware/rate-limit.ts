@@ -129,7 +129,7 @@ const sessionLogReadLimiter = new TokenBucketRateLimiter('session_log_read');
  * the routes declare for 429, and the SDK's log sync backs off on `Retry-After`.
  */
 export interface StoredLogReadDenial {
-  body: { error: string; message: string };
+  body: { error: string; message: string; retry_after_seconds: number };
   retryAfter: string;
 }
 
@@ -141,12 +141,14 @@ export function storedLogReadDenial(c: Context, sessionId: string): StoredLogRea
     windowMs: 60_000,
   });
   if (result.allowed) return null;
+  const retryAfterSeconds = Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000);
   return {
     body: {
       error: 'rate_limit_exceeded',
       message: 'This session is being read faster than the stored-log read limit. Slow the polling or honor Retry-After.',
+      retry_after_seconds: retryAfterSeconds,
     },
-    retryAfter: String(Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000)),
+    retryAfter: String(retryAfterSeconds),
   };
 }
 

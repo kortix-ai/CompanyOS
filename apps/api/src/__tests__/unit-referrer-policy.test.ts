@@ -11,12 +11,19 @@ const app = new OpenAPIHono();
 installHttpMiddleware(app);
 app.get('/', (c) => c.text('ok'));
 app.get('/denied', (c) => c.json({ error: 'unauthorized' }, 401));
-app.get('/failure', () => { throw new Error('synthetic failure'); });
+app.get('/failure', () => {
+  throw new Error('synthetic failure');
+});
 
 // Every response the API serves at its origin carries the same referrer
 // policy, so the header is uniform across edge-served paths whether or not a
 // request passed through a Cloudflare Worker (KRTX-4702).
-for (const [path, status] of [['/', 200], ['/denied', 401], ['/missing', 404], ['/failure', 500]] as const) {
+for (const [path, status] of [
+  ['/', 200],
+  ['/denied', 401],
+  ['/missing', 404],
+  ['/failure', 500],
+] as const) {
   test(`Referrer-Policy covers ${status} responses`, async () => {
     const response = await app.request(path);
     expect(response.status).toBe(status);

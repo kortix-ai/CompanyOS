@@ -132,19 +132,9 @@ exports[`shipped marketing route composition home retains its rendered sections,
       null,
     ],
     [
-      "/media/case-studies/asset-management.svg?v=54485925",
-      "An asset management symbol",
-      null,
-    ],
-    [
       null,
       null,
       "Platinum",
-    ],
-    [
-      "/media/case-studies/banking.svg?v=02ed3983",
-      "A banking mark",
-      null,
     ],
     [
       "/media/case-studies/executive-search.svg?v=ea5988cb",
@@ -159,6 +149,11 @@ exports[`shipped marketing route composition home retains its rendered sections,
     [
       "/media/case-studies/retail.svg?v=32ec4d76",
       "A retail symbol",
+      null,
+    ],
+    [
+      "/media/case-studies/asset-management.svg?v=54485925",
+      "An asset management symbol",
       null,
     ],
     [

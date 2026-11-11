@@ -234,7 +234,7 @@ export function HelpSubmenu({ onClose }: { onClose: () => void }) {
  * Log out, behind a confirmation.
  *
  * Returns the dialog as an element rather than rendering it inline, because it
- * MUST mount as a sibling of the dropdown, never inside its content: Radix
+ * MUST mount as a sibling of the dropdown, never inside its content: the menu
  * unmounts `DropdownMenuContent` on close, so a dialog living in there would be
  * torn down the instant the menu closed — which is the exact moment you click
  * "Log out".
@@ -253,7 +253,7 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
   // change. There is nothing to prefetch: a document load does not read the
   // segment cache.
   //
-  // `preventDefault` keeps the dialog UP. Radix closes it on click, which used
+  // `preventDefault` keeps the dialog UP. The alert dialog closes it on click, which used
   // to leave the user staring at the unchanged app for as long as the sign-out
   // took — up to the full step budget on a broken network — with nothing on
   // screen saying anything was happening. The predictable response is a second

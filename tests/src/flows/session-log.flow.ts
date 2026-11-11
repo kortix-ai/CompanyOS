@@ -505,8 +505,8 @@ flow(
         }
       });
 
-      await ctx.step("a user with no membership in the project's account → 404 workspace_not_found, no report", async () => {
-        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(404).body().has("$.code", "workspace_not_found");
+      await ctx.step("a user with no membership in the project's account → 403 workspace_access_denied, no report", async () => {
+        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(403).body().has("$.code", "workspace_access_denied");
       });
     } finally {
       await close();

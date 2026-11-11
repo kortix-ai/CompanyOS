@@ -640,9 +640,10 @@ function AccessGateScreen({
                   </Link>
                 )}
                 {/*
-                  403 only. Acting as the account cannot resurrect a deleted
-                  project or clear a 500 — offering it on those screens is a
-                  dead control.
+                  403 only: the API answers a live workspace the caller cannot
+                  read with 403 workspace_access_denied, and a 404 means the
+                  workspace is gone. Acting as the account cannot resurrect a
+                  deleted workspace or clear a 500.
                 */}
                 {showAdminBypass ? (
                   <Button

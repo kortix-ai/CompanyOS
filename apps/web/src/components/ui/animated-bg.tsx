@@ -1,7 +1,7 @@
 'use client';
 
-import { m, useMotionValue, useTransform } from 'motion/react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { m } from 'motion/react';
+import { useEffect, useId, useState } from 'react';
 
 type Tone = 'light' | 'medium' | 'dark';
 
@@ -48,7 +48,6 @@ export const ArcSvg = ({
   opacity,
   style,
   className,
-  blurAmount,
 }: {
   cfg: ArcDef;
   size: number;
@@ -56,7 +55,6 @@ export const ArcSvg = ({
   opacity: number; // 0.22–0.38
   style?: React.CSSProperties;
   className?: string;
-  blurAmount?: number;
 }) => {
   const uid = useId();
   const colors = ARC_TONES[tone];
@@ -122,15 +120,9 @@ export const ArcSvg = ({
       </defs>
 
       <g opacity={opacity}>
-        <g
-          style={{
-            filter: blurAmount && blurAmount > 0 ? `blur(${blurAmount}px)` : undefined,
-          }}
-        >
-          {cfg.gradients.map((_, i) => (
-            <path key={i} d={cfg.d} fill={`url(#${cfg.prefix}${i}_${tone}_${uid})`} />
-          ))}
-        </g>
+        {cfg.gradients.map((_, i) => (
+          <path key={i} d={cfg.d} fill={`url(#${cfg.prefix}${i}_${tone}_${uid})`} />
+        ))}
 
         <g
           mask={`url(#${cfg.prefix}mask_${uid})`}
@@ -154,7 +146,7 @@ type ArcCfg = {
   x: number[];
   y: number[];
   scale: number[];
-  blur: string[]; // DOF: more blur when smaller
+  blur: number[]; // DOF: more blur when smaller
 };
 
 const Arc = ({ left, cfg, duration = 4.6 }: { left?: boolean; cfg: ArcCfg; duration?: number }) => {
@@ -168,35 +160,6 @@ const Arc = ({ left, cfg, duration = 4.6 }: { left?: boolean; cfg: ArcCfg; durat
     WebkitBackfaceVisibility: 'hidden',
   };
 
-  // Convert blur strings to numbers for Safari compatibility
-  const blurValues = useMemo(() => cfg.blur.map((b) => parseFloat(b)), [cfg.blur]);
-
-  // Use motion value for better performance (no re-renders)
-  const animationProgress = useMotionValue(0);
-
-  // Transform animation progress to blur value
-  const blurAmount = useTransform(
-    animationProgress,
-    [0, 0.33, 0.66, 1],
-    [blurValues[0], blurValues[1], blurValues[2], blurValues[0]],
-  );
-
-  const [currentBlur, setCurrentBlur] = useState(blurValues[0]);
-
-  useEffect(() => {
-    // Only update blur at most 30 times per second (throttled) for better performance
-    let lastUpdate = 0;
-    const unsubscribe = blurAmount.on('change', (latest) => {
-      const now = Date.now();
-      if (now - lastUpdate > 33) {
-        // ~30fps max
-        setCurrentBlur(latest);
-        lastUpdate = now;
-      }
-    });
-    return unsubscribe;
-  }, [blurAmount]);
-
   return (
     <m.div
       className="absolute"
@@ -206,6 +169,7 @@ const Arc = ({ left, cfg, duration = 4.6 }: { left?: boolean; cfg: ArcCfg; durat
         x: cfg.x,
         y: cfg.y,
         scale: cfg.scale,
+        filter: cfg.blur.map((b) => `blur(${b}px)`),
       }}
       transition={{
         duration,
@@ -215,19 +179,12 @@ const Arc = ({ left, cfg, duration = 4.6 }: { left?: boolean; cfg: ArcCfg; durat
         repeatType: 'loop',
         times: [0, 0.33, 0.66, 1],
       }}
-      onUpdate={() => {
-        // Update animation progress for blur interpolation
-        const startTime = cfg.delay * 1000;
-        const elapsed = (Date.now() - startTime) % (duration * 1000);
-        animationProgress.set(elapsed / (duration * 1000));
-      }}
     >
       <ArcSvg
         cfg={left ? LEFT_ARC : RIGHT_ARC}
         size={cfg.size}
         tone={cfg.tone}
         opacity={cfg.opacity}
-        blurAmount={currentBlur}
       />
     </m.div>
   );
@@ -242,27 +199,6 @@ export function AnimatedBg({ duration = 4.6 }: AnimatedBgProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Show a static placeholder immediately to improve FCP
-  // The animated version will replace it after hydration
-  if (!mounted) {
-    return (
-      <div
-        className="pointer-events-none absolute inset-0 overflow-hidden -z-10"
-        aria-hidden="true"
-      >
-        {/* Static gradient placeholder matching the animated bg */}
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            background:
-              'radial-gradient(ellipse at 20% 30%, rgba(200, 200, 200, 0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 40%, rgba(180, 180, 180, 0.12) 0%, transparent 45%)',
-          }}
-        />
-        <div className="from-background pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t to-transparent" />
-      </div>
-    );
-  }
-
   // Hero variant - original full-page configuration
   const heroLeft: ArcCfg[] = [
     {
@@ -274,7 +210,7 @@ export function AnimatedBg({ duration = 4.6 }: AnimatedBgProps) {
       x: [0, 20, -10, 0],
       y: [0, 15, -8, 0],
       scale: [0.78, 1.1, 0.9, 0.78],
-      blur: ['19px', '500px', '50px', '500px'],
+      blur: [19, 500, 50, 500],
     },
     {
       pos: { left: -60, top: 240 },
@@ -285,7 +221,7 @@ export function AnimatedBg({ duration = 4.6 }: AnimatedBgProps) {
       x: [0, 22, -14, 0],
       y: [0, 16, -12, 0],
       scale: [0.82, 1.15, 0.95, 0.82],
-      blur: ['1px', '0px', '0', '1px'],
+      blur: [1, 0, 0, 1],
     },
   ];
 
@@ -299,7 +235,7 @@ export function AnimatedBg({ duration = 4.6 }: AnimatedBgProps) {
       x: [0, -25, 15, 0],
       y: [0, 18, -12, 0],
       scale: [0.84, 1.2, 1.0, 0.84],
-      blur: ['1px', '0px', '0px', '1px'],
+      blur: [1, 0, 0, 1],
     },
     {
       pos: { right: -0, top: 570 },
@@ -310,26 +246,40 @@ export function AnimatedBg({ duration = 4.6 }: AnimatedBgProps) {
       x: [0, -20, 10, 0],
       y: [0, 15, -8, 0],
       scale: [0.8, 1.1, 0.9, 0.8],
-      blur: ['500px', '500px', '500px', '500px'],
+      blur: [500, 500, 500, 500],
     },
   ];
 
+  // Show a static gradient placeholder immediately to improve FCP; it matches
+  // the animated bg and the animated version replaces it after hydration.
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-hidden -z-10"
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      aria-hidden="true"
       style={{
         transform: 'translateZ(0)',
         WebkitTransform: 'translateZ(0)',
       }}
     >
-      <div className="absolute inset-0">
-        {heroLeft.map((cfg, i) => (
-          <Arc key={`L${i}`} left cfg={cfg} duration={duration} />
-        ))}
-        {heroRight.map((cfg, i) => (
-          <Arc key={`R${i}`} cfg={cfg} duration={duration} />
-        ))}
-      </div>
+      {!mounted && (
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            background:
+              'radial-gradient(ellipse at 20% 30%, rgba(200, 200, 200, 0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 40%, rgba(180, 180, 180, 0.12) 0%, transparent 45%)',
+          }}
+        />
+      )}
+      {mounted && (
+        <div className="absolute inset-0">
+          {heroLeft.map((cfg, i) => (
+            <Arc key={`L${i}`} left cfg={cfg} duration={duration} />
+          ))}
+          {heroRight.map((cfg, i) => (
+            <Arc key={`R${i}`} cfg={cfg} duration={duration} />
+          ))}
+        </div>
+      )}
       {/* Bottom gradient fade overlay */}
       <div className="from-background pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t to-transparent" />
     </div>

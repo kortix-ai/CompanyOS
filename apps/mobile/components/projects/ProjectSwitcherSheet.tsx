@@ -45,6 +45,7 @@ import { Keyboard, Platform, View } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { GlassSearchField } from '@/components/kortix/bottom-search-bar';
+import { FadeEdges } from '@/components/kortix/fade-edges';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -352,35 +353,39 @@ export function ProjectSwitcherSheet({
         }}>
         <View style={{ flex: 1 }}>
 
-          <SheetScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, gap: 18 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
-            <WorkspaceInvitations invites={invites} onOpenInvite={openInvite} />
-            <WorkspaceList
-              workspaces={workspaces}
-              filtered={filtered}
-              query={query}
-              currentProjectId={currentProjectId}
-              openWorkspace={openWorkspace}
-            />
-            <SettingsGroup>
-              <SettingsRow
-                icon={PlusIcon}
-                label={createLabel}
-                right={null}
-                onPress={create.webCreate.pending ? undefined : create.openHandoff}
+          {/* The list fades out at its top and bottom edges (Jay, 2026-11-11):
+              an alpha mask, so it reads the same on the iOS 26 glass. */}
+          <FadeEdges>
+            <SheetScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24, gap: 18 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              <WorkspaceInvitations invites={invites} onOpenInvite={openInvite} />
+              <WorkspaceList
+                workspaces={workspaces}
+                filtered={filtered}
+                query={query}
+                currentProjectId={currentProjectId}
+                openWorkspace={openWorkspace}
               />
-              {onOpenWorkspaceSettings && currentProjectId ? (
+              <SettingsGroup>
                 <SettingsRow
-                  icon={GearSixIcon}
-                  label={t('workspace.settings', 'Workspace settings')}
-                  onPress={openSettings}
+                  icon={PlusIcon}
+                  label={createLabel}
+                  right={null}
+                  onPress={create.webCreate.pending ? undefined : create.openHandoff}
                 />
-              ) : null}
-            </SettingsGroup>
-          </SheetScrollView>
+                {onOpenWorkspaceSettings && currentProjectId ? (
+                  <SettingsRow
+                    icon={GearSixIcon}
+                    label={t('workspace.settings', 'Workspace settings')}
+                    onPress={openSettings}
+                  />
+                ) : null}
+              </SettingsGroup>
+            </SheetScrollView>
+          </FadeEdges>
 
           {/* Search at the bottom, as on the list pages (Jay, 2026-11-11): the
               glass field under the list. It does not ride the keyboard by

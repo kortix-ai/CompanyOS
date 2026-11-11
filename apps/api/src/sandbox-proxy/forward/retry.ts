@@ -1,6 +1,7 @@
 import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
+import { isPlatinumSandboxNotRunningError } from '../../shared/platinum';
 import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
 import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
 import {
@@ -562,6 +563,18 @@ async function recoverFromAttemptError(
     state.promptDeliveryMaybeAccepted = true;
     return 'stop';
   }
+
+  // The provider itself CONFIRMED the box is not running: Platinum's CP
+  // answers `409 {"code":"sandbox_not_running"}` on the expose call inside
+  // resolveIngress. Same confirmed-dead class as Daytona's "no IP address
+  // found" 400 (the response-path branch that sets this flag): mark it, so
+  // the give-up below flips the row to 'error' and later requests fast-fail
+  // with a retryable `sandbox not ready` instead of every one of them
+  // burning the full 50 s retry budget against a box the provider has
+  // already confirmed dead (KRTX-4751). The wake below still claims the
+  // start; a bare 409 (empty body, a CP mid-degradation) is NOT this class
+  // — only the typed, body-confirmed signal counts.
+  if (isPlatinumSandboxNotRunningError(err)) state.sawDeadSignal = true;
 
   if (!state.wakeTriggered) {
     await wakeSandbox(sandboxId);

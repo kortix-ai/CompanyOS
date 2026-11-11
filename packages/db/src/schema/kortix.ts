@@ -8362,6 +8362,31 @@ export const connectorCalls = kortixSchema.table(
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     /** When a `pending_approval` row stops being decidable; null = never. */
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    // ── The call log (every tool call, every surface). All nullable: rows
+    // written before these columns existed keep NULL.
+    /** The presented credential: a token id (`pat`, agent session) or a
+     *  service account id. The credential that made a gated call never decides it. */
+    credentialId: varchar('credential_id', { length: 64 }),
+    /** `user` | `agent` | `service_account` | `app`: who the call ran as. */
+    principalKind: varchar('principal_kind', { length: 32 }),
+    /** The agent the call ran as, when it ran as one (kortix.yaml slug). */
+    agentSlug: varchar('agent_slug', { length: 128 }),
+    /** Where the call came from: `session` | `mcp` | `execute` | `cli` | `api` | `app` | `held_run`. */
+    surface: varchar('surface', { length: 32 }),
+    /** How a gated call's approval is delivered: `model` | `native` | `browser`. */
+    approvalDelivery: varchar('approval_delivery', { length: 16 }),
+    /** The closed reason a call was refused (`@kortix/api-contract` CALL_REFUSAL_REASONS). */
+    refusalReason: varchar('refusal_reason', { length: 64 }),
+    /** The step the call stopped at: `grant` | `policy` | `account` | `credential` | `approval` | `upstream` | `done`. */
+    phase: varchar('phase', { length: 32 }),
+    /** The API request that made the call (`X-Request-Id`). */
+    requestId: varchar('request_id', { length: 64 }),
+    /** The W3C trace id of that request. */
+    traceId: varchar('trace_id', { length: 32 }),
+    /** Time Kortix spent on the call, upstream time excluded. */
+    kortixMs: integer('kortix_ms'),
+    /** Time the upstream took to answer; null when no upstream ran. */
+    upstreamMs: integer('upstream_ms'),
   },
   (table) => [
     index('idx_connector_calls_project').on(table.projectId),

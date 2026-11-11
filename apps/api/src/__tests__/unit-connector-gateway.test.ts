@@ -1186,3 +1186,62 @@ describe('handleCall — a channel call takes only the arguments its action decl
     expect(email.fetchCalls.map((c) => c.url)).toEqual(['https://api.resend.test/inboxes/inbox-1/threads/thread-1/emails']);
   });
 });
+
+describe('handleCall — a person denied this exact call', () => {
+  test('a repeat of a person-denied call is refused, not gated again', async () => {
+    const { deps, records, fetchCalls } = makeDeps({
+      policies: [{ match: '*', action: 'require_approval' }],
+      enforcePolicies: true,
+    });
+    const asked: unknown[] = [];
+    deps.findPersonDenial = async (q) => {
+      asked.push(q);
+      return true;
+    };
+    const res = await handleCall(deps, baseInput);
+    expect(res).toMatchObject({ status: 'denied', reason: 'previously_denied' });
+    expect(fetchCalls).toHaveLength(0);
+    expect(records.some((r) => r.status === 'pending_approval')).toBe(false);
+    expect(records.at(-1)).toMatchObject({ status: 'denied', resultSummary: { reason: 'previously_denied' } });
+    expect(records.at(-1)!.log).toMatchObject({ refusalReason: 'previously_denied', phase: 'approval' });
+    expect(asked[0]).toMatchObject({ sessionId: 'sess-1', actingUserId: ALICE, actionPath: 'stripe.charges.create' });
+  });
+
+  test('no recent denial: the call is gated as before', async () => {
+    const { deps } = makeDeps({ policies: [{ match: '*', action: 'require_approval' }], enforcePolicies: true });
+    deps.findPersonDenial = async () => false;
+    expect(await handleCall(deps, baseInput)).toMatchObject({ status: 'pending_approval' });
+  });
+});
+
+describe('handleCall — call log fields', () => {
+  test('an ok call records caller, phase done, and a Kortix/upstream time split', async () => {
+    const { deps, records } = makeDeps({
+      fetchImpl: async () => {
+        await new Promise((r) => setTimeout(r, 15));
+        return { status: 200, ok: true, text: async () => '{"id":"ch_1"}' };
+      },
+    });
+    await handleCall(deps, {
+      ...baseInput,
+      caller: { credentialId: 'tok-1', principalKind: 'agent', agentSlug: 'billing', surface: 'mcp', approvalDelivery: null },
+    });
+    const log = records.at(-1)!.log!;
+    expect(log).toMatchObject({
+      credentialId: 'tok-1',
+      principalKind: 'agent',
+      agentSlug: 'billing',
+      surface: 'mcp',
+      refusalReason: null,
+      phase: 'done',
+    });
+    expect(log.upstreamMs).toBeGreaterThanOrEqual(10);
+    expect(log.kortixMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('a refusal records its machine reason and the step it stopped at', async () => {
+    const { deps, records } = makeDeps({ connector: null });
+    await handleCall(deps, baseInput);
+    expect(records.at(-1)!.log).toMatchObject({ refusalReason: 'connector_not_found', phase: 'grant', upstreamMs: null });
+  });
+});

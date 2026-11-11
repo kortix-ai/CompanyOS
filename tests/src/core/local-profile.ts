@@ -1,5 +1,6 @@
 import { availableParallelism } from "node:os";
 import type { RegisteredFlow } from "./flow";
+import { targetSkipReason } from "./targets";
 import type { Capability } from "./types";
 
 export const EXTERNAL_CAPABILITIES = new Set<Capability>([
@@ -98,6 +99,12 @@ export function planLocalFlows(flows: RegisteredFlow[]): {
   const excluded: LocalFlowExclusion[] = [];
 
   for (const candidate of flows) {
+    // An explicit `targets.local = { skip }` wins over the inferred reasons.
+    const declared = targetSkipReason(candidate.meta, "local");
+    if (declared) {
+      excluded.push({ id: candidate.id, reason: `targets.local: ${declared}` });
+      continue;
+    }
     const external = (candidate.meta.requires ?? []).filter((capability) => EXTERNAL_CAPABILITIES.has(capability));
     if (external.length) {
       excluded.push({

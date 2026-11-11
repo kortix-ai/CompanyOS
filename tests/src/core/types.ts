@@ -4,6 +4,7 @@
  */
 import type { Client, Identity } from './client';
 import type { Capabilities, Env } from './env';
+import type { FlowTargets } from './targets';
 
 export type Capability = keyof Capabilities;
 
@@ -160,6 +161,14 @@ export interface FlowMeta {
   routes?: string[];
   /** Registers as a tracked skip (yellow in the report) instead of running. */
   todo?: string;
+  /**
+   * Per-target applicability (`src/core/targets.ts`). `true` declares the flow
+   * applicable on that target; `targets.deployed: true` puts it in the release
+   * gate's deployed set (the `deployed` tag is its alias). `{ skip: '<one
+   * sentence.>' }` declares it not applicable there: the runner never schedules
+   * it on that target and the report lists the reason.
+   */
+  targets?: FlowTargets;
   /**
    * The spec id this flow implements when it is a variant of another flow
    * (a variant `<id>-x` implements `<id>`). Absent: the flow id.

@@ -15,6 +15,7 @@ import { writeCatalog } from '../src/core/catalog';
 import { describeEnv, loadEnv } from '../src/core/env';
 import { exitOnceDecided } from '../src/core/exit-once-decided';
 import { parseFlags } from '../src/core/flags';
+import { parseGrepFlag, parseListFlag } from '../src/core/selection';
 import { allFlows } from '../src/core/flow';
 import { localEnvironmentOverrides, localRunExitCode } from '../src/core/local-profile';
 import {
@@ -23,10 +24,11 @@ import {
   ensureLocalMigrations,
   ensureLocalStack,
   ensureLocalSupabase,
+  ensureLoopbackTls,
   resolveLocalTopology,
 } from '../src/core/local-stack';
 import { log } from '../src/core/log';
-import { renderStepSummary, writeResults } from '../src/core/report';
+import { renderFailureLines, renderStepSummary, writeResults } from '../src/core/report';
 import { runExitCode } from '../src/core/result';
 import { runAttemptSuffix } from '../src/core/run-identity';
 import { discoverFlows, runSuite } from '../src/core/runner';
@@ -37,13 +39,9 @@ import { installPgConnectionGuard } from '../src/core/pg-connection-guard';
 
 installPgConnectionGuard();
 
-function list(v: string | boolean | undefined): string[] | undefined {
-  if (typeof v !== 'string') return undefined;
-  return v
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+// `--id=`, `--id` with no value, and `--id=,` are usage errors (exit 2), never
+// "every flow". Unknown ids, domains and tags fail in runSuite.
+const list = parseListFlag;
 
 function newRunId(): string {
   // KE2E_RUN_ID lets the caller PIN the id it will later sweep. The release
@@ -154,6 +152,13 @@ async function main(): Promise<number> {
   }
 
   const localCommand = cmd === 'local';
+  // Parse the filters before the local stack starts, so a usage error costs nothing.
+  const selector = {
+    ids: list('id', flags.id),
+    domains: list('domain', flags.domain),
+    tags: list('tag', flags.tag),
+    grep: parseGrepFlag(flags.grep),
+  };
   let localStack: LocalStackHandle | null = null;
   let localSupabase: LocalSupabaseHandle | null = null;
   try {
@@ -173,9 +178,12 @@ async function main(): Promise<number> {
         autoStart: !flags['no-start'],
         supabase,
       });
+      const loopbackTls = ensureLoopbackTls(root);
       Object.assign(
         process.env,
         localEnvironmentOverrides({ worktree: topology.marker, supabase }),
+        // The certificate the local API trusts for https fakes on 127.0.0.1.
+        loopbackTls ? { KE2E_LOOPBACK_TLS_DIR: loopbackTls.dir } : {},
       );
       log.info(
         log.dim(
@@ -195,7 +203,7 @@ async function main(): Promise<number> {
 
     const shardIds =
       typeof flags.shard === 'string'
-        ? await resolveShardIds(flags.shard, list(flags.tag) ?? [], [
+        ? await resolveShardIds(flags.shard, selector.tags ?? [], [
             ['id', flags.id],
             ['domain', flags.domain],
             ['grep', flags.grep],
@@ -210,10 +218,10 @@ async function main(): Promise<number> {
 
     const result = await runSuite({
       profile: localCommand ? 'local' : 'all',
-      ids: shardIds ?? list(flags.id),
-      domains: list(flags.domain),
-      tags: list(flags.tag),
-      grep: typeof flags.grep === 'string' ? flags.grep : undefined,
+      ids: shardIds ?? selector.ids,
+      domains: selector.domains,
+      tags: selector.tags,
+      grep: selector.grep,
       workers: flags.workers ? Number(flags.workers) : undefined,
       apiWorkers: flags['api-workers'] ? Number(flags['api-workers']) : undefined,
       sandboxWorkers: flags['sandbox-workers'] ? Number(flags['sandbox-workers']) : undefined,
@@ -224,13 +232,19 @@ async function main(): Promise<number> {
 
     const jsonPath = resolve(outDir, 'results.json');
     const htmlPath = resolve(outDir, 'report.html');
-    writeResults(result, jsonPath, htmlPath);
+    const written = writeResults(result, jsonPath, htmlPath);
 
     const s = result.summary;
+    for (const line of renderFailureLines(written, outDir)) log.info(line);
     log.info('');
     log.info(
       `${log.bold('results')}: ${s.passed}/${s.total} passed · ${s.failed} failed · ${s.skipped} skipped` +
         ` · ${s.todo} todo · ${(s.durationMs / 1000).toFixed(1)}s`,
+    );
+    log.info(
+      `executed ${result.flows.length - result.flows.filter((f) => f.attempts === 0 && f.status === 'fail').length}` +
+        `/${result.scheduled?.length ?? result.flows.length} scheduled flows · target ${result.targetKind ?? 'unknown'}` +
+        ` · ${result.excludedFlows?.length ?? 0} excluded with a reason`,
     );
     log.info(log.dim(`report → ${htmlPath}`));
 

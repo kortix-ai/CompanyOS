@@ -6,7 +6,8 @@
  *
  *   await client.as(P.OWNER).get("/v1/projects/:id", { params: { id } }).then(r => r.status(200))
  */
-import { currentRecorder } from './context';
+import { TEST_CASE_HEADER } from '@kortix/api-contract/test-case';
+import { currentRecorder, currentTestCase } from './context';
 import { assert, BodyAssert } from './expect';
 import { log } from './log';
 import type { Captured } from './result';
@@ -693,6 +694,7 @@ export class Client {
     if (auth.mode === 'bearer' && auth.ensureFresh) await auth.ensureFresh();
     this.applyAuth(headers, url);
     applyCiPassthrough(headers);
+    applyTestCase(headers);
 
     const routeTemplate = `${method} ${template}`;
     const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
@@ -821,6 +823,17 @@ export function applyCiPassthrough(
   const value = secret?.trim();
   if (!value) return;
   if (!headers.has(CI_PASSTHROUGH_HEADER)) headers.set(CI_PASSTHROUGH_HEADER, value);
+}
+
+/**
+ * Name the flow case this request belongs to (`<runId>/<flowId>/<attempt>/<step>`).
+ * An API on the local test profile with `KORTIX_TEST_LOG_DIR` writes its log
+ * lines, SQL and request line for the case to one JSONL file the report links
+ * (`@kortix/api-contract/test-case`). Every other API ignores the header.
+ * Exported for tests.
+ */
+export function applyTestCase(headers: Headers, caseId: string | undefined = currentTestCase()): void {
+  if (caseId && !headers.has(TEST_CASE_HEADER)) headers.set(TEST_CASE_HEADER, caseId);
 }
 
 function record(c: Captured): void {

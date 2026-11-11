@@ -4,6 +4,7 @@
  * Each command starts apps/cli/src/index.ts in an isolated process. The flows
  * assert exit status, JSON/stdout, local files, and API read-back state.
  */
+import { assert } from '../core/expect';
 import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { CliSandbox, throwIfCliInfraFailure, type CliResult } from '../fixtures/cli';
@@ -16,9 +17,14 @@ function requireExit(result: CliResult, expected: number, action: string): void 
   // It must reach the flow-level infra budget as a RETRYABLE error — CLI-SEC
   // (exit 143) and CLI-SESS (HTTP 503) both failed on their first attempt here.
   if (expected === 0) throwIfCliInfraFailure(result, action);
-  if (result.exitCode !== expected) {
-    throw new Error(`${action} exited ${result.exitCode}, expected ${expected}: ${result.all}`);
-  }
+  assert({
+    kind: 'exit',
+    description: `${action} exits ${expected}`,
+    expected,
+    actual: result.exitCode,
+    pass: result.exitCode === expected,
+    detail: result.all.slice(0, 1_200),
+  });
 }
 
 function parseJson<T>(result: CliResult, action: string): T {

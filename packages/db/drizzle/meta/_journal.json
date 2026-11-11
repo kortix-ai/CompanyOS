@@ -1674,6 +1674,13 @@
       "when": 1794403699181,
       "tag": "20261111132819_oauth_access_token_mfa_aal",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1794410631765,
+      "tag": "20261111152351_connector_calls_call_log",
+      "breakpoints": true
     }
   ]
 }

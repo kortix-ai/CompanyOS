@@ -10,6 +10,7 @@
 import type { Context } from 'hono';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { actorOf } from '../../middleware/actor';
+import { actingTokenId } from '../../iam/actor';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import {
   approvalResolvers,
@@ -50,6 +51,7 @@ export async function approvalCallerOf(
     callerAuthType: (c.get('authType') as string | undefined) ?? null,
     callerCredentialKind: actor.credential.kind,
     callerSessionId: callerKortixSessionId(c),
+    callerCredentialId: actingTokenId(actor) ?? null,
   };
 }
 

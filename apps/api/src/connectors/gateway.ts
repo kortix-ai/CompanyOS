@@ -57,6 +57,9 @@ import { invalidArgsReason } from './args-validate';
  */
 import { type DefaultMode, type Policy, resolveEffectiveAction } from './policy';
 import { connectorRequestDigest } from './request-digest';
+import { callPhaseOf } from './call-log';
+import type { ApprovalDelivery, CallPhase, CallPrincipalKind, CallSurface } from '@kortix/api-contract/tool-calls';
+import { getRequestContext } from '../lib/request-context';
 import type { ShareSubject } from './share';
 import type { ActionBinding, Risk } from './types';
 import type { ConnectionOwnerType } from '../projects/lib/connection-access';
@@ -139,6 +142,18 @@ export interface ExecutionRecord {
   /** Only on a new `pending_approval` row: the call input to hold, encrypted,
    *  for the approved run. Never part of `resultSummary`. */
   held?: HeldExecutionInput;
+  /** The call log columns. Absent on rows written by older callers. */
+  log?: CallLogFields;
+}
+
+/** The call log columns of one `connector_calls` row. */
+export interface CallLogFields extends CallCaller {
+  refusalReason: string | null;
+  phase: CallPhase | null;
+  requestId: string | null;
+  traceId: string | null;
+  kortixMs: number | null;
+  upstreamMs: number | null;
 }
 
 /** The call half of the held input. The caller half comes from the deps' principal. */
@@ -282,6 +297,16 @@ export interface GatewayDeps {
   /** `connection_credentials.kind` of the connection's stored credential, or
    *  null when it has none. Read only after an upstream 401, to name the fix. */
   credentialKind?(connectionId: string): Promise<string | null>;
+  /** True when a person denied this exact request recently (same session,
+   *  caller, connector, action, digest): the gate refuses it instead of asking again. */
+  findPersonDenial?(input: {
+    projectId: string;
+    sessionId: string | null;
+    actingUserId: string;
+    connectorId: string;
+    actionPath: string;
+    requestDigest: string;
+  }): Promise<boolean>;
   /** Approval carry-over: atomically claim a recent human approval for this
    *  exact request. The callback asks the session to continue, and its next
    *  attempt consumes the approval once instead of creating another gate. */
@@ -464,6 +489,40 @@ export interface CallInput {
   /** The approved held run (connectors/held-call-run.ts) only. The route
    *  builds `CallInput` field by field and never sets it. */
   heldApproval?: { executionId: string; approvedBy: string | null } | null;
+  /** Who made the call and from where, for the call log. Built by the route
+   *  from the resolved actor, never from the request body. */
+  caller?: CallCaller | null;
+  /** Timing of this call. `handleCall` creates it; spreads of `input` share it. */
+  clock?: CallClock;
+}
+
+/** The call log's caller half (`connector_calls.credential_id` … `approval_delivery`). */
+export interface CallCaller {
+  credentialId: string | null;
+  principalKind: CallPrincipalKind | null;
+  agentSlug: string | null;
+  surface: CallSurface | null;
+  approvalDelivery: ApprovalDelivery | null;
+}
+
+/** Wall-clock start and the upstream time measured inside it. */
+export interface CallClock {
+  startedAt: number;
+  upstreamMs: number | null;
+}
+
+function startClock(input: CallInput): CallInput {
+  return input.clock ? input : { ...input, clock: { startedAt: performance.now(), upstreamMs: null } };
+}
+
+/** Adds the time `work` takes to the call's upstream time. */
+async function timeUpstream<T>(input: CallInput, work: Promise<T>): Promise<T> {
+  const t0 = performance.now();
+  try {
+    return await work;
+  } finally {
+    if (input.clock) input.clock.upstreamMs = (input.clock.upstreamMs ?? 0) + Math.round(performance.now() - t0);
+  }
 }
 
 export type HeldApprovalVerdict =
@@ -893,6 +952,7 @@ export class CredentialNotSharedError extends Error {
 }
 
 export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<CallResult> {
+  input = startClock(input);
   const resolved = await resolveConnectorForCall(deps, input);
   const fullPath = `${resolved.slug}.${input.actionPath}`;
 
@@ -1266,6 +1326,36 @@ async function enforceCallPolicies(
         ...setDetails,
       });
     } else {
+      // A person already denied this exact call: refuse it, never ask again.
+      // Different arguments are a different digest and get a fresh gate.
+      if (
+        !contentChanged &&
+        deps.findPersonDenial &&
+        (await deps.findPersonDenial({
+          projectId: input.projectId,
+          sessionId: input.sessionId ?? null,
+          actingUserId: input.subject.userId,
+          connectorId: connector.connectorId,
+          actionPath: `${input.connectorSlug}.${input.actionPath}`,
+          requestDigest,
+        }))
+      ) {
+        await audit(
+          deps,
+          input,
+          connector,
+          'denied',
+          action.risk,
+          { reason: 'previously_denied', policy_source: decision.source, ...setDetails },
+          requestDigest,
+        );
+        return {
+          status: 'denied',
+          reason: 'previously_denied',
+          message:
+            'A person denied this exact call. Do not repeat it: change the arguments, or ask the person what to do instead.',
+        };
+      }
       // Older clients can pass an existing id. Preserve that row instead of
       // stacking another one, but never poll it. New clients make one request
       // and wait for the server-side session callback.
@@ -1445,7 +1535,7 @@ async function runConnectorAction(
     // the signal also closes the socket of an http-family request.
     const deadline = callTimeoutMs(deps);
     const signal = AbortSignal.timeout(deadline);
-    const withDeadline = <T>(work: Promise<T>) => withTimeout(work, deadline, UPSTREAM_TIMEOUT);
+    const withDeadline = <T>(work: Promise<T>) => timeUpstream(input, withTimeout(work, deadline, UPSTREAM_TIMEOUT));
     let result: ExecResult;
     if (connector.provider === 'pipedream') {
       result = await withDeadline(
@@ -2000,6 +2090,40 @@ function fallbackHint(connector: GatewayConnector, binding: ActionBinding): stri
   return ` — fallback: the \`${connector.slug}.request\` tool calls the app's API directly and is unaffected by component failures`;
 }
 
+/** The call log columns for one audit row: caller, refusal, phase, ids, timings. */
+export function callLogFields(
+  input: CallInput,
+  status: ExecutionRecord['status'],
+  summary: Record<string, unknown> | null,
+): CallLogFields {
+  const reason = status === 'denied' || status === 'error' ? reasonOf(summary) : null;
+  const ctx = getRequestContext();
+  const elapsed = input.clock ? Math.round(performance.now() - input.clock.startedAt) : null;
+  const upstreamMs = input.clock?.upstreamMs ?? null;
+  return {
+    credentialId: input.caller?.credentialId ?? null,
+    principalKind: input.caller?.principalKind ?? null,
+    agentSlug: input.caller?.agentSlug ?? null,
+    surface: input.heldApproval ? 'held_run' : (input.caller?.surface ?? null),
+    approvalDelivery: input.caller?.approvalDelivery ?? null,
+    refusalReason: reason,
+    phase: callPhaseOf(status, reason),
+    requestId: ctx?.requestId?.slice(0, 64) ?? null,
+    traceId: ctx?.traceId?.slice(0, 32) ?? null,
+    kortixMs: elapsed === null ? null : Math.max(0, elapsed - (upstreamMs ?? 0)),
+    upstreamMs,
+  };
+}
+
+/** The machine reason of a refusal or failure, at most 64 characters. */
+function reasonOf(summary: Record<string, unknown> | null): string | null {
+  const raw = typeof summary?.reason === 'string' ? summary.reason : null;
+  if (!raw) return null;
+  // Some reasons carry a sentence after a code (`code: detail`); keep the code.
+  const code = raw.split(/[:\s]/, 1)[0] ?? raw;
+  return code.slice(0, 64) || null;
+}
+
 async function audit(
   deps: GatewayDeps,
   input: CallInput,
@@ -2031,6 +2155,7 @@ async function audit(
           }
         : summary,
       ...(held ? { held } : {}),
+      log: callLogFields(input, status, summary),
     });
   } catch {
     /* auditing must never break the call path */

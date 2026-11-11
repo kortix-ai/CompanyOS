@@ -3,6 +3,7 @@
  * the row→API serializer. Pure logic only (the DB queries are exercised by the
  * ke2e review flow).
  */
+import { EMPTY_CALL_LOG } from '../connectors/call-log-fixture';
 import { describe, expect, test } from 'bun:test';
 import type { connectorCalls, reviewItems } from '@kortix/db';
 import {
@@ -111,6 +112,7 @@ describe('serializeReviewItem', () => {
 
 describe('collectInboxItems connector-call preview authorization', () => {
   const execution: ConnectorCallRow = {
+    ...EMPTY_CALL_LOG,
     executionId: 'exec-sensitive',
     accountId: 'acc-1',
     projectId: 'proj-1',

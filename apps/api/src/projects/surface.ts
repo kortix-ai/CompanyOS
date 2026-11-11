@@ -94,7 +94,7 @@ export { clearAppCrashAlerts, raiseAppCrashAlerts } from './lib/app-health-alert
 
 // Who may decide a gated connector call (consumed by ../setup-links/approval-app,
 // so the approval page refuses exactly whom the resolve route refuses).
-export { mayResolveApproval } from './lib/approval-authority';
+export { approvalRefusalBody, mayResolveApproval } from './lib/approval-authority';
 export { approvalCallerOf } from './lib/http-approval-caller';
 export { approvalTargetSession, expireDueApprovals } from './lib/connector-approval-decision';
 export { projectsApp } from './lib/app';

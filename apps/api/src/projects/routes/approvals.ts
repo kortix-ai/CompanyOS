@@ -10,7 +10,7 @@ import { inferAuditSource } from '../../shared/audit';
 import { createRoute, z } from '@hono/zod-openapi';
 import { connectorCalls, projectSessions, sessionPendingPermissions, sessionPendingQuestions } from '@kortix/db';
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
-import { maySeeSessionApprovals } from '../lib/approval-authority';
+import { approvalRefusalBody, maySeeSessionApprovals } from '../lib/approval-authority';
 import { loadProjectForUser, lookupEmailsByUserIds, assertProjectCapability } from '../lib/access';
 import { isUuid } from '../../shared/validate';
 import { AnyObject, OkSchema, projectsApp } from '../lib/app';
@@ -342,22 +342,7 @@ export function registerApprovalsRoutes(): void {
           markApprovalCardDecided({ projectId, row, decision, note, actorUserId: loaded.userId }),
       });
       if (result.outcome === 'not_found') return c.json({ error: 'Not found' }, 404);
-      if (result.outcome === 'forbidden') {
-        return c.json(
-          result.reason === 'session_bound_caller'
-            ? {
-                error: "This approval waits for a person: the session's launcher or a project manager approves or denies it.",
-                code: 'APPROVAL_REQUIRES_HUMAN',
-              }
-            : result.reason === 'non_human_caller'
-              ? {
-                  error: 'Sign in with a Kortix account to resolve this approval',
-                  code: 'APPROVAL_REQUIRES_HUMAN',
-                }
-              : { error: 'Only a workspace manager or the session launcher can resolve this' },
-          403,
-        );
-      }
+      if (result.outcome === 'forbidden') return c.json(approvalRefusalBody(result.reason), 403);
       if (result.outcome === 'preview_unavailable') {
         return c.json(
           {

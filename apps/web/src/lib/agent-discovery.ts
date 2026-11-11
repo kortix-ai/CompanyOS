@@ -9,6 +9,9 @@ export const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] 
 export const MCP_SERVER_VERSION = '1.0.0';
 /** The one Kortix MCP server: the API's hosted endpoint (apps/api/src/mcp). */
 export const KORTIX_MCP_URL = `${KORTIX_API_ORIGIN}/mcp`;
+/** The prompt a person pastes into a coding agent to connect it (src/lib/seo/setup-prompt.ts). */
+export const SETUP_PROMPT_PATH = '/setup-prompt.md';
+export const SETUP_PROMPT_URL = `${KORTIX_WEB_ORIGIN}${SETUP_PROMPT_PATH}`;
 
 export const API_CATALOG = {
   linkset: [
@@ -151,7 +154,8 @@ The response uses \`Content-Type: text/markdown; charset=utf-8\`.
 
 The Kortix MCP server is ${KORTIX_MCP_URL} (Streamable HTTP).
 It acts as a signed-in person: sign in with OAuth, or send a personal access token.
-Setup for each client: ${KORTIX_WEB_ORIGIN}/docs/connect/mcp.
+Setup for each client: ${KORTIX_WEB_ORIGIN}/docs/guide#other-ai-tools-mcp.
+A step-by-step prompt for a coding agent: ${SETUP_PROMPT_URL}.
 
 ## Authenticate
 
@@ -201,6 +205,13 @@ export const MCP_SERVER_CARD = {
   title: 'Kortix CompanyOS',
   description: 'Run Kortix as yourself: projects, sessions, sandbox files, connectors, and the full kortix CLI.',
   websiteUrl: KORTIX_WEB_ORIGIN,
+  // The schema's slot for publisher data: where a person or an agent starts.
+  _meta: {
+    'io.modelcontextprotocol.registry/publisher-provided': {
+      setupPrompt: SETUP_PROMPT_URL,
+      setupDocs: `${KORTIX_WEB_ORIGIN}/docs/guide#other-ai-tools-mcp`,
+    },
+  },
   repository: {
     url: 'https://github.com/kortix-ai/CompanyOS',
     source: 'github',

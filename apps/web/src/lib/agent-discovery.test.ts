@@ -11,6 +11,8 @@ import { GET as getAuthMd } from '@/app/(public)/auth.md/route';
 import { GET as getNegotiatedMarkdown } from '@/app/(public)/markdown-negotiation/route';
 import { GET as getAiCatalog } from '@/app/(public)/.well-known/ai-catalog.json/route';
 import { GET as getMcpServerCard } from '@/app/(public)/mcp/server-card/route';
+import { GET as getSetupPrompt } from '@/app/(public)/setup-prompt.md/route';
+import { MCP_INSTALL } from '@/lib/seo/setup-prompt';
 import { renderRobotsTxt } from '@/lib/seo/robots';
 import { middleware } from '@/middleware';
 import { NextRequest } from 'next/server';
@@ -96,6 +98,40 @@ describe('agent discovery documents', () => {
     const skill = await getAgentSkill().text();
     expect(skill).toContain('https://api.kortix.com/v1/mcp');
     expect(skill).not.toContain('https://kortix.com/mcp ');
+  });
+
+  test('serves the setup prompt a person pastes into a coding agent, and every index points at it', async () => {
+    const response = getSetupPrompt();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/markdown; charset=utf-8');
+    const prompt = await response.text();
+    expect(prompt).toStartWith('# Connect this coding agent to Kortix');
+    // The same commands the "Connect MCP" dialog copies.
+    expect(MCP_INSTALL.claudeCode).toBe(
+      'claude mcp add --transport http kortix https://api.kortix.com/v1/mcp',
+    );
+    expect(MCP_INSTALL.codex).toBe(
+      'codex mcp add kortix --url https://api.kortix.com/v1/mcp\ncodex mcp login kortix',
+    );
+    expect(JSON.parse(MCP_INSTALL.json)).toEqual({
+      mcpServers: { kortix: { url: 'https://api.kortix.com/v1/mcp' } },
+    });
+    for (const text of [MCP_INSTALL.claudeCode, MCP_INSTALL.codex, MCP_INSTALL.json]) {
+      expect(prompt).toContain(text);
+    }
+    for (const step of ['read_skill', '"kortix-system"', '"kortix-connectors"', 'list_projects', 'start_session']) {
+      expect(prompt).toContain(step);
+    }
+    expect(prompt).toContain('Never ask the person for a password, a token, an API key or any other secret');
+
+    const serverCard = (await getMcpServerCard().json()) as any;
+    expect(serverCard._meta['io.modelcontextprotocol.registry/publisher-provided'].setupPrompt).toBe(
+      'https://kortix.com/setup-prompt.md',
+    );
+    const skill = await getAgentSkill().text();
+    expect(skill).toContain('https://kortix.com/setup-prompt.md');
+    expect(skill).toContain('https://kortix.com/docs/guide#other-ai-tools-mcp');
+    expect(renderRobotsTxt('kortix.com')).toContain('Allow: /setup-prompt.md');
   });
 
   test('negotiates the homepage to a Markdown route before auth middleware', async () => {

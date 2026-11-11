@@ -202,6 +202,50 @@ describe('mayResolveApproval', () => {
   });
 });
 
+describe('mayResolveApproval: the credential that made a call never decides it', () => {
+  const pat = {
+    isManager: true,
+    targetSessionOrigin: null,
+    targetSessionCreatedBy: null,
+    callerUserId: HUMAN,
+    callerAuthType: 'pat',
+    callerCredentialKind: 'pat' as const,
+    callerSessionId: null,
+  };
+
+  test('a PAT cannot approve the session-less call it made itself', () => {
+    // An outside agent holding a person's PAT calls a gated action, then
+    // approves the 202 it got back with the same token.
+    const result = mayResolveApproval({ ...pat, callerCredentialId: 'tok-1', targetCredentialId: 'tok-1' });
+    expect(result).toEqual({ allowed: false, reason: 'own_call' });
+  });
+
+  test('the same person decides with another credential', () => {
+    const result = mayResolveApproval({ ...pat, callerCredentialId: 'tok-2', targetCredentialId: 'tok-1' });
+    expect(result).toEqual({ allowed: true });
+  });
+
+  test('a row with no recorded credential keeps the old rule', () => {
+    const result = mayResolveApproval({ ...pat, callerCredentialId: 'tok-1', targetCredentialId: null });
+    expect(result).toEqual({ allowed: true });
+  });
+
+  test('a browser-delivered approval refuses every bearer token', () => {
+    const result = mayResolveApproval({ ...pat, callerCredentialId: 'tok-2', targetApprovalDelivery: 'browser' });
+    expect(result).toEqual({ allowed: false, reason: 'browser_only' });
+  });
+
+  test('a browser-delivered approval accepts a signed-in browser session', () => {
+    const result = mayResolveApproval({
+      ...pat,
+      callerAuthType: 'supabase',
+      callerCredentialKind: 'jwt',
+      targetApprovalDelivery: 'browser',
+    });
+    expect(result).toEqual({ allowed: true });
+  });
+});
+
 // KRTX-1724: a viewer who may not decide is told who does. The class must be
 // the one the verdict enforces.
 describe('approvalResolvers', () => {

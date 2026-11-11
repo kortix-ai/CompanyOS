@@ -442,9 +442,6 @@
     "no-console": {
       "count": 1
     },
-    "no-restricted-imports": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -589,9 +586,6 @@
   },
   "src/channels/teams/identity-routes.ts": {
     "no-console": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -1191,16 +1185,6 @@
   "src/mcp/cli.ts": {
     "no-restricted-properties": {
       "count": 1
-    }
-  },
-  "src/mcp/connectors.ts": {
-    "kortix-api/layers": {
-      "count": 1
-    }
-  },
-  "src/mcp/index.ts": {
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "src/middleware/auth-actor.ts": {

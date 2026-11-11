@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { PRICING_PLANS } from '@/features/billing/pricing-plans';
+import { CHANNELS, VALUE_PROPS } from '@/features/contact/content';
+import { DESKTOP_ROWS, MOBILE_ROWS, TERMINAL } from '@/features/marketing/download/content';
+import { KORTIX_CLI_INSTALL_COMMAND } from '@kortix/ui/internal/lib/kortix-cli';
 import { CANONICAL_ORIGIN, siteMetadata } from '@kortix/ui/internal/lib/site-metadata';
 
 // The blog is not listed here: it is its own app (kortix-ai/marketing), served
@@ -62,6 +65,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     title: 'Contact sales and book a demo',
     description: 'Request a tailored Kortix walkthrough for cloud, VPC, or on-prem deployment.',
     htmlPath: '/contact',
+    markdownPath: '/markdown/contact.md',
   },
   {
     kind: 'marketing',
@@ -86,6 +90,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     description:
       'Browse skills, agents, and commands from every source. Add them to a Kortix workspace in one click.',
     htmlPath: '/marketplace',
+    markdownPath: '/markdown/marketplace.md',
   },
   {
     kind: 'marketing',
@@ -110,6 +115,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     title: 'Changelog',
     description: 'What shipped in Kortix each week, straight from our production releases.',
     htmlPath: '/changelog',
+    markdownPath: '/markdown/changelog.md',
   },
   {
     kind: 'marketing',
@@ -125,6 +131,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     title: 'Download the desktop app and CLI',
     description: 'Get Kortix for macOS, Windows, Linux, iOS, and Android.',
     htmlPath: '/download',
+    markdownPath: '/markdown/download.md',
   },
   {
     kind: 'marketing',
@@ -509,8 +516,24 @@ function renderMdxTagLine(line: string, stack: MdxRenderContext[]): string | nul
   return undefined;
 }
 
-function formatMdxContentLine(line: string, stack: MdxRenderContext[]): string {
-  const content = stack.length ? line.replace(/^\s{2,}/, '') : line;
+/**
+ * A line inside a component loses the indentation the MDX source gave it. A
+ * line inside a fenced code block loses only the fence's own indentation
+ * (`fenceIndent`): the code keeps its own, so a JSON block in a <Tab> stays
+ * the JSON a reader copies.
+ */
+function formatMdxContentLine(
+  line: string,
+  stack: MdxRenderContext[],
+  fenceIndent?: number,
+): string {
+  let content = line;
+  if (stack.length) {
+    content =
+      fenceIndent === undefined
+        ? line.replace(/^\s{2,}/, '')
+        : line.slice(Math.min(fenceIndent, /^\s*/.exec(line)![0].length));
+  }
   if (stack.some((item) => item.quote)) return content.trim() ? `> ${content}` : '>';
   return content;
 }
@@ -520,19 +543,21 @@ export function renderPlainMarkdownFromMdx(source: string): string {
   const rendered: string[] = [];
   const stack: MdxRenderContext[] = [];
   let inFence = false;
+  let fenceIndent = 0;
   let skippingModule = false;
 
   for (let index = 0; index < lines.length; index += 1) {
     let line = lines[index];
-    const fence = /^\s*(```|~~~)/.test(line);
+    const fence = /^(\s*)(```|~~~)/.exec(line);
     if (fence) {
       inFence = !inFence;
+      if (inFence) fenceIndent = fence[1].length;
       rendered.push(formatMdxContentLine(line, stack));
       continue;
     }
 
     if (inFence) {
-      rendered.push(formatMdxContentLine(line, stack));
+      rendered.push(formatMdxContentLine(line, stack, fenceIndent));
       continue;
     }
 
@@ -663,6 +688,85 @@ function documentHeader(record: PublicContentRecord): string {
     .join('\n\n');
 }
 
+const KORTIX_API = 'https://api.kortix.com/v1';
+const RELEASES_URL = 'https://github.com/kortix-ai/CompanyOS/releases';
+
+/**
+ * Pages whose content is fixed in code get their own Markdown body. Each reads
+ * the page's own copy module, so the twin and the page never differ. A page
+ * whose body is live data (the marketplace catalog, the changelog) names the
+ * public source an agent reads instead.
+ */
+const MARKETING_BODIES: Record<string, () => string> = {
+  contact: () =>
+    [
+      '## Reach us',
+      '',
+      ...CHANNELS.map((channel) =>
+        'href' in channel
+          ? `- ${channel.label}: [${channel.value}](${channel.href})`
+          : `- ${channel.label}: ${channel.value}`,
+      ),
+      '',
+      `Book a demo: ${CANONICAL_ORIGIN}/contact`,
+      '',
+      '## What a demo covers',
+      '',
+      ...VALUE_PROPS.map((prop) => `- **${prop.title}:** ${prop.desc}`),
+    ].join('\n'),
+  download: () => {
+    const row = (label: string, hint: string, href: string) =>
+      `- ${label} (${hint}): ${href.startsWith('/') ? `${CANONICAL_ORIGIN}${href}` : href}`;
+    return [
+      '## Desktop app',
+      '',
+      ...Object.values(DESKTOP_ROWS).map((r) => row(r.label, r.hint, r.href)),
+      '',
+      '## Mobile app',
+      '',
+      ...Object.values(MOBILE_ROWS).map((r) => row(r.label, r.hint, r.href)),
+      '',
+      `## ${TERMINAL.title}`,
+      '',
+      TERMINAL.description,
+      '',
+      `Platforms: ${TERMINAL.support}`,
+      '',
+      '```sh',
+      KORTIX_CLI_INSTALL_COMMAND,
+      'kortix login',
+      '```',
+    ].join('\n');
+  },
+  marketplace: () =>
+    [
+      'The catalog is live data. Read it from the public API, with no sign-in:',
+      '',
+      `- Search items: \`GET ${KORTIX_API}/marketplace/items?query=<words>&type=<type>&limit=<n>&offset=<n>\`. \`type\` filters by kind, for example \`registry:skill\` or \`registry:project\`.`,
+      `- One item, with its files: \`GET ${KORTIX_API}/marketplace/items/<id>\` (URL-encode the id).`,
+      `- One file of an item: \`GET ${KORTIX_API}/marketplace/items/<id>/file?path=<path>\`.`,
+      `- Every source: \`GET ${KORTIX_API}/marketplace/marketplaces\`.`,
+      '',
+      '## Install',
+      '',
+      'Installing an item starts a session in your workspace. The session adds the item and opens a change request you review.',
+      '',
+      '- Web: open the item on this page and install it into a workspace.',
+      '- CLI: `kortix marketplace --help` lists search, show, install and uninstall.',
+      `- MCP: the \`kortix\` tool runs \`["marketplace", "--help"]\`. Connect an agent first: ${CANONICAL_ORIGIN}/setup-prompt.md.`,
+    ].join('\n'),
+  changelog: () =>
+    [
+      'The changelog is built from the Kortix production releases. Each release has its own notes.',
+      '',
+      `- Release notes: ${RELEASES_URL}`,
+      `- Atom feed: ${RELEASES_URL}.atom`,
+      '- JSON: `GET https://api.github.com/repos/kortix-ai/CompanyOS/releases`',
+      `- Weekly summaries: ${CANONICAL_ORIGIN}/changelog`,
+      `- Every release, newest first: ${CANONICAL_ORIGIN}/changelog/releases`,
+    ].join('\n'),
+};
+
 function renderMarketingMarkdown(record: PublicContentRecord): string {
   const links = [
     `- [Documentation](${CANONICAL_ORIGIN}/docs)`,
@@ -683,6 +787,9 @@ function renderMarketingMarkdown(record: PublicContentRecord): string {
     }
     return `${documentHeader(record)}\n\n${plans.join('\n\n')}`;
   }
+
+  const body = MARKETING_BODIES[record.slug];
+  if (body) return `${documentHeader(record)}\n\n${body()}\n\n## Official resources\n\n${links.join('\n')}`;
 
   return `${documentHeader(record)}\n\n## Official resources\n\n${links.join('\n')}`;
 }

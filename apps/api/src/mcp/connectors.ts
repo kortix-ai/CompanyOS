@@ -7,7 +7,7 @@
  * shaping; `index.ts` hands it the in-process transport (`Host`) so there is no
  * import cycle.
  */
-import type { ApiReply, ToolResult } from './index';
+import type { ApiReply, ToolResult } from './runtime';
 
 /** What the agent does next when adding a connector hands a step to a person. */
 const CONNECTOR_HAND_OFF_NEXT = {

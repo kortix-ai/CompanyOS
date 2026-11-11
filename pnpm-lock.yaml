@@ -258,9 +258,15 @@ importers:
       '@daytonaio/sdk':
         specifier: ^0.184.0
         version: 0.184.0(ws@8.22.0)
+      '@earendil-works/pi-codemode':
+        specifier: 1.4.0
+        version: 1.4.0
       '@hono/zod-openapi':
         specifier: 1.6.2
         version: 1.6.2(hono@4.13.11)(zod@4.6.7)
+      '@kortix/agent-tools':
+        specifier: workspace:*
+        version: link:../../packages/agent-tools
       '@kortix/api-contract':
         specifier: workspace:*
         version: link:../../packages/api-contract
@@ -1726,6 +1732,18 @@ importers:
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)
+
+  packages/agent-tools:
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.1.0
+        version: 1.4.4
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260707.2
+        version: 7.0.0-dev.20260707.2
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
 
   packages/agent-tunnel:
     dependencies:

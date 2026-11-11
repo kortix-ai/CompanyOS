@@ -2122,7 +2122,7 @@ Exit `3` means the agent waits on a question or a permission. Answer it with `ko
 </Step>
 </Steps>
 
-An MCP client can use Kortix without the CLI. See [Other AI tools (MCP)](/docs/guide#other-ai-tools-mcp).
+An MCP client can use Kortix without the CLI. Add it with `claude mcp add --transport http kortix https://api.kortix.com/v1/mcp` (Claude Code) or `codex mcp add kortix --url https://api.kortix.com/v1/mcp` (Codex). Every client: [Other AI tools (MCP)](/docs/guide#other-ai-tools-mcp). To let a coding agent do the setup, send it [the setup prompt](https://kortix.com/setup-prompt.md).
 
 ### Inside a session sandbox
 
@@ -2484,7 +2484,7 @@ All four surfaces reach the same API with the same permissions.
 | REST API | Any language. Integrations, scripts, and servers that are not TypeScript. | A bearer token from [Authenticate](#authenticate) |
 | [SDK](/docs/developers#sdk) (`@kortix/sdk`) | TypeScript and React. Sessions with live streaming, typed errors, automatic retries, and the session runtime. | `getToken` returns a bearer token |
 | [CLI](/docs/developers#cli) (`kortix`) | Terminals, CI jobs, and agents inside a session sandbox. | `kortix login`, or a token in CI |
-| [Kortix MCP server](/docs/guide#other-ai-tools-mcp) | Claude, Cursor, ChatGPT, and other MCP clients that act as you. Its `search_api`, `describe_api`, and `call_api` tools read and call this API. | OAuth sign-in from the client |
+| [Kortix MCP server](/docs/guide#other-ai-tools-mcp) | Claude, Cursor, ChatGPT, and other MCP clients that act as you. Its six tools (`skills`, `search`, `describe`, `call`, `execute`, `resume`) reach every route of this API and every workspace connector. | OAuth sign-in from the client |
 
 Prefer the SDK for anything that drives a session. It owns the start, the
 readiness wait, the event stream, and the runtime routes. The REST reference

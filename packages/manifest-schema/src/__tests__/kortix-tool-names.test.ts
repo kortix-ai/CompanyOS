@@ -5,7 +5,7 @@ import { fixManifestText } from '../deprecations';
 import { validateManifest } from '../index';
 
 describe('KORTIX_TOOL_NAMES', () => {
-  test('no connector tool is a built-in: connectors are the kortix CLI', () => {
+  test('the retired connector meta-tools never return: connectors are reached through tool_call or the kortix CLI', () => {
     expect(KORTIX_TOOL_NAMES.filter((name) => name.includes('connector'))).toEqual([]);
   });
 });

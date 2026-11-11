@@ -23,6 +23,11 @@ import kortixUsage from './platform/kortix_usage'
 import scrapeWebpage from './kortix/scrape_webpage'
 import show from './kortix/show'
 import webSearch from './kortix/web_search'
+import skills from './kortix/skills'
+import toolCall from './kortix/tool_call'
+import toolDescribe from './kortix/tool_describe'
+import toolResume from './kortix/tool_resume'
+import toolSearch from './kortix/tool_search'
 import { asTool, toolText, type KortixTool, type ToolContext } from './tool'
 
 export type { KortixTool, ToolContext } from './tool'
@@ -41,6 +46,14 @@ export const KORTIX_TOOLS: Readonly<Record<string, KortixTool>> = {
   image_gen: imageGen,
   scrape_webpage: scrapeWebpage,
   show,
+  // The agent tool surface: the same tools every Kortix surface serves (pi's
+  // `codemode` is its `execute`). One namespace for connectors, the Kortix API,
+  // sessions and sandboxes, run as this session's agent.
+  skills,
+  tool_search: toolSearch,
+  tool_describe: toolDescribe,
+  tool_call: toolCall,
+  tool_resume: toolResume,
 }
 
 /**

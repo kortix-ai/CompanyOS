@@ -104,6 +104,11 @@ describe('kortix tools ls', () => {
         'image_gen       kortix               kortix:image_gen',
         'scrape_webpage  kortix               kortix:scrape_webpage',
         'show            kortix (overridden)  tools/show.ts',
+        'skills          kortix               kortix:skills',
+        'tool_search     kortix               kortix:tool_search',
+        'tool_describe   kortix               kortix:tool_describe',
+        'tool_call       kortix               kortix:tool_call',
+        'tool_resume     kortix               kortix:tool_resume',
         'lookup_order    workspace            team/tools/lookup_order.ts',
       ].join('\n'),
     );
@@ -175,7 +180,7 @@ describe('kortix tools eject', () => {
     const unknown = kortix(cwd, 'tools', 'eject', 'lookup_order');
     expect(unknown.code).toBe(2);
     expect(unknown.stderr).toContain('"lookup_order" is not a Kortix tool.');
-    expect(unknown.stderr).toContain('Eject one of: web_search, image_search, image_gen, scrape_webpage, show.');
+    expect(unknown.stderr).toContain('Eject one of: web_search, image_search, image_gen, scrape_webpage, show, skills, tool_search, tool_describe, tool_call, tool_resume.');
     expect(existsSync(join(cwd, 'tools/lookup_order.ts'))).toBe(false);
   }, SPAWN_TEST_MS);
 });

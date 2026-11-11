@@ -339,6 +339,7 @@ const TOOL_CAPABILITY: Record<string, RuntimePermissionCapability> = {
   web_search: 'websearch',
   image_search: 'websearch',
   scrape_webpage: 'webfetch',
+  skills: 'skill',
   ...Object.fromEntries(KORTIX_EDIT_TOOLS.map((tool) => [tool, 'edit' as const])),
 }
 

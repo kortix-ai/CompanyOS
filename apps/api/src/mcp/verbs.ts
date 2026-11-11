@@ -13,6 +13,7 @@ import { createToolCore, type ToolCallOutcome, type ToolCore } from '@kortix/age
 import type { CallSurface } from '@kortix/api-contract/tool-calls';
 import { callApi, runTool, text, ToolInputError, type ToolContext, type ToolResult } from './runtime';
 import { builtinSources, connectorSource, kortixApiSource, resultOutcome } from './tool-sources';
+import { fitData } from './connectors';
 
 /** `execute` limits. Time is also capped by the request budget (the 55 s MCP cut). */
 export const EXECUTE_MAX_SOURCE_CHARS = 65_536;
@@ -143,8 +144,13 @@ export function toolCoreFor(ctx: ToolContext, projectId: string | null, surface:
 
 const json = (value: unknown, isError = false): ToolResult => text(JSON.stringify(value, null, 2), isError);
 
+/**
+ * A call's result for a model. A big `data` is replaced by a parseable preview
+ * plus a note to narrow the request, never cut mid-JSON (learnings 2026-09-28:
+ * a truncated tool result makes models fail or improvise).
+ */
 function outcomeResult(outcome: ToolCallOutcome): ToolResult {
-  if (outcome.status === 'ok') return json({ status: 'ok', data: outcome.data });
+  if (outcome.status === 'ok') return text(fitData({ status: 'ok' }, 'data', outcome.data));
   if (outcome.status === 'pending_approval') {
     return json({
       status: 'pending_approval',
@@ -154,7 +160,7 @@ function outcomeResult(outcome: ToolCallOutcome): ToolResult {
       next: outcome.message,
     });
   }
-  return json({ status: outcome.status, reason: outcome.reason, message: outcome.message, ...(outcome.data !== undefined ? { data: outcome.data } : {}) }, true);
+  return text(fitData({ status: outcome.status, reason: outcome.reason, message: outcome.message }, 'data', outcome.data ?? null), true);
 }
 
 export async function runVerb(
@@ -165,7 +171,7 @@ export async function runVerb(
 ): Promise<ToolResult> {
   switch (name) {
     case 'skills':
-      return runTool(ctx, 'read_skill', input);
+      return runTool(ctx, 'read_skill', input.project_id === undefined && opts.projectId ? { ...input, project_id: opts.projectId } : input);
     case 'search': {
       if (typeof input.query !== 'string' || !input.query.trim()) throw new ToolInputError('query is required');
       const core = toolCoreFor(ctx, await projectFor(ctx, input, opts.projectId), opts.surface);
@@ -268,7 +274,8 @@ async function executeProgram(
         ? { pending_approvals: pending, next: 'A person approves each pending call at its approval_url. resume({execution_id}) reads its outcome. Do not repeat the calls.' }
         : {}),
     };
-    return json(summary, !result.ok);
+    const { value, ...head } = summary as Record<string, unknown>;
+    return text(result.ok ? fitData(head, 'value', value) : JSON.stringify(summary, null, 2), !result.ok);
   } finally {
     await sandbox.close();
   }

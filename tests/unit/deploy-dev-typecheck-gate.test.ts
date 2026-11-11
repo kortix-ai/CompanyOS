@@ -32,7 +32,7 @@ describe('deploy-dev typechecks the tree it boots', () => {
     // The exact commands the packages lanes run, so a lane and the deploy
     // cannot drift apart on what they consider type-clean.
     expect(job).toContain('pnpm --filter kortix-api typecheck');
-    expect(job).toContain('pnpm --filter llm-gateway typecheck');
+    expect(job).toContain('pnpm --filter @kortix/llm-gateway-server typecheck');
     expect(job).toContain('pnpm --filter Kortix-Computer-Frontend typecheck');
   });
 

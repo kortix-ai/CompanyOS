@@ -329,7 +329,7 @@ jobs:
       - name: Typecheck API
         run: pnpm --filter kortix-api typecheck
       - name: Typecheck gateway
-        run: pnpm --filter llm-gateway typecheck
+        run: pnpm --filter @kortix/llm-gateway-server typecheck
       - name: Typecheck web
         run: pnpm --filter Kortix-Computer-Frontend typecheck
 

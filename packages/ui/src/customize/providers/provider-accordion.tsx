@@ -89,7 +89,7 @@ import {
   useLlmProviderCatalogRevision,
 } from '../sections/llm-provider/use-live-catalog';
 import { orderProviderRows } from '../sections/llm-provider/utils';
-import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { AccountSecretResourcesPanel, PooledProvidersNote } from '../sections/view/account-secret-resources-panel';
 import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDERS, LLM_PROVIDER_BY_ID, type LlmProviderEntry } from '../../internal/lib/llm-providers';
@@ -665,6 +665,16 @@ function ExpandedBody({
           oauth={{ projectId, onConnected: () => undefined }}
         />
         <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
+        {/* OpenAI API keys below the ChatGPT accounts, as Anthropic lists its keys below Claude accounts. */}
+        <p className="text-foreground pt-3 text-xs font-medium">{tPooled('providerKeysFor', { provider: entry.label })}</p>
+        <AccountSecretResourcesPanel
+          accountId={pooled.accountId}
+          projectId={projectId}
+          providerId={entry.id}
+          providerName={entry.label}
+          envVar={entry.envVars[0]!}
+          canWrite
+        />
       </div>
     );
   } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'anthropic') {
@@ -990,9 +1000,11 @@ export function ProviderAccordion({
       ) : null}
 
       {pooled.pooledSecretsEnabled || !canWrite ? (
-        <p className="text-muted-foreground px-1 pb-2 text-xs text-pretty">
-          {pooled.pooledSecretsEnabled ? tPooled('sharedDescription') : t('readOnly')}
-        </p>
+        pooled.pooledSecretsEnabled ? (
+          <PooledProvidersNote projectId={projectId} className="text-muted-foreground px-1 pb-2 text-xs text-pretty" />
+        ) : (
+          <p className="text-muted-foreground px-1 pb-2 text-xs text-pretty">{t('readOnly')}</p>
+        )
       ) : null}
 
       {empty ? (

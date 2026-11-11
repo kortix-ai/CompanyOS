@@ -174,7 +174,10 @@
     "claudeConnectFailed": "Prijava preko Claude-a nije završena. Pokušaj ponovo.",
     "claudeReconnectDescription": "Ponovo se prijavi preko Claude-a. Nalog zadržava ime, pristup i izbore sesija.",
     "claudeAccountLabelPlaceholder": "npr. Moj Claude nalog",
-    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?"
+    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?",
+    "sharedOnlyYouDescription": "Dodaj API ključeve, ChatGPT naloge i Claude naloge. Samo ti možeš da koristiš one koje dodaš. Menadžer radnog prostora može da podeli jedan. Izaberi koje koristi svaka sesija.",
+    "oauthOnlyYouDescription": "Koristi svoj ChatGPT Plus ili Pro plan u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš.",
+    "claudeOauthOnlyYouDescription": "Koristi svoj Claude Pro ili Max plan za Claude modele u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš."
   },
   "secrets": {
     "undecryptable": {
@@ -26813,5 +26816,23 @@
   "gatewayBudgets": {
     "capWorkspace": "Ограничи потрошњу гејтвеја за овај радни простор.",
     "capMember": "Ограничи потрошњу гејтвеја за {who}."
+  },
+  "connectSignIn": {
+    "popupBlocked": "Pregledač je blokirao prozor za prijavu.",
+    "openSignIn": "Otvori prijavu za {app}",
+    "checkingTitle": "Završavanje prijave",
+    "checkingDescription": "Kortix proverava tvoju prijavu za {app}. Ova stranica se sama osvežava.",
+    "signInUnfinished": "Prijava nije završena",
+    "finishSignIn": "Završi prijavu",
+    "signInFinished": "Prijava je završena",
+    "cardHeadline": "Tvoj agent čeka da se prijaviš",
+    "cardTitle": "Poveži {app}",
+    "cardShared": "Deljeno sa radnim prostorom",
+    "cardPrivate": "Samo ti",
+    "signingIn": "Završi prijavu za {app} u prozoru koji se otvorio.",
+    "connectedAs": "Povezano kao {account}",
+    "connected": "Povezano",
+    "connect": "Poveži",
+    "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo."
   }
 }

@@ -183,6 +183,26 @@ function useClaudeAuthorization(projectId: string | undefined) {
 }
 
 /**
+ * The line above the provider list with pooled provider keys on: new keys and
+ * accounts are shared with the workspace, or, for a viewer who may not share,
+ * only theirs. A component, so the permission read runs only where it shows.
+ */
+export function PooledProvidersNote({ projectId, className }: { projectId: string; className?: string }) {
+  const t = useTranslations('pooledSecrets');
+  const canShare = useCanShareProviderAccounts(projectId);
+  return <p className={className}>{t(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')}</p>;
+}
+
+/**
+ * Whether a new provider key or account the viewer adds is shared with the
+ * workspace by default. A viewer without `project.secret.write` adds only
+ * private ones ("Only you"), so the copy above each list must say so.
+ */
+export function useCanShareProviderAccounts(projectId: string): boolean {
+  return useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE).allowed === true;
+}
+
+/**
  * Provider keys live beside the provider they configure. The secret value stays
  * write-only. With `oauth`, the panel manages ChatGPT or Claude accounts: any
  * project member can connect their own subscription ("Only you"); sharing one
@@ -207,7 +227,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
   const resources = useAccountSecretResources(accountId, projectId);
   // Hide share controls on anything but an explicit grant: an owner-only
   // connection is always allowed, so a slow probe never blocks the common case.
-  const canShare = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE).allowed === true;
+  const canShare = useCanShareProviderAccounts(projectId);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');

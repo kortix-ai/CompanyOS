@@ -6,6 +6,7 @@ import { uiRoutes } from '../../lib/routes';
 import { isQuestionTool } from '@kortix/sdk';
 import { SessionAccessPrompt } from '../prompts/session-access-prompt';
 import { SessionApprovalPrompt } from '../prompts/session-approval-prompt';
+import { SessionConnectPrompt } from '../prompts/session-connect-prompt';
 import { childSessionHref } from '../tool/tools/session-spawn-urls';
 import { SessionPermissionPrompt } from '../prompts/session-permission-prompt';
 import { useSessionWallpaperLayer } from '../panel/session-wallpaper-layer';
@@ -1944,6 +1945,8 @@ export function SessionChat({
   const [approvalDocked, setApprovalDocked] = useState(false);
   // My Kortix asking to give a colleague access docks the same way.
   const [accessDocked, setAccessDocked] = useState(false);
+  // A connector sign-in the agent started docks the same way (`SessionConnectPrompt`).
+  const [connectDocked, setConnectDocked] = useState(false);
   const questionPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const nextQuestion = activePendingQuestion;
@@ -4143,6 +4146,16 @@ export function SessionChat({
         {/* My Kortix asks to start a colleague with extra connectors or
             secrets. Self-hides when nothing's pending. */}
         <SessionAccessPrompt projectId={projectId ?? ''} asks={accessAsks} onDockedChange={setAccessDocked} />
+        {/* A connector sign-in the agent started: a Connect button that
+            finishes it. Self-hides when nothing's pending. */}
+        {projectId ? (
+          <SessionConnectPrompt
+            projectId={projectId}
+            sessionId={sessionId}
+            busy={effectiveBusy}
+            onDockedChange={setConnectDocked}
+          />
+        ) : null}
         {/* Runtime tool permissions (bash/edit/…) awaiting a decision —
             the turn is blocked inside the runtime and resumes the moment
             a reply lands. Self-hides when nothing's pending. */}
@@ -4176,6 +4189,7 @@ export function SessionChat({
     [
       projectId,
       accessAsks,
+      effectiveBusy,
       sessionId,
       sessionScopeAgentName,
       pendingPermissions,
@@ -5250,7 +5264,7 @@ export function SessionChat({
                 lockForApproval={runtimePermissionLocksComposer(livePermissions.length, isBusy)}
                 onCustomAnswer={handleCustomAnswer}
                 questionButtonLabel={renderedQuestion ? questionAction.label : null}
-                questionActive={!!renderedQuestion || approvalDocked || accessDocked}
+                questionActive={!!renderedQuestion || approvalDocked || accessDocked || connectDocked}
                 questionCanAct={questionAction.canAct}
                 onQuestionAction={handleQuestionAction}
                 aboveSlot={chatAboveSlot}

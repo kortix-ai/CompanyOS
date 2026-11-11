@@ -230,7 +230,7 @@ export function SubscriptionRowMeter({ text, percent, tone }: { text: string; pe
       <span className="bg-muted block h-1 w-10 overflow-hidden rounded-full" aria-hidden>
         <span className={cn('block h-full', TONE_BAR[tone])} style={{ width: `${Math.min(100, percent)}%` }} />
       </span>
-      <span className="max-w-48 truncate">{text}</span>
+      <span className="max-w-72 truncate">{text}</span>
     </span>
   );
 }

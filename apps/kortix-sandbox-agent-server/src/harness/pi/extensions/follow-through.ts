@@ -3,17 +3,19 @@
  * not own. A run that settled with an open wait goes back to the model once,
  * with a hidden note, before the person gets control back.
  *
- * A wait is open when either is true:
+ * A wait is open when any is true:
  *
  * - the reply offers a later check instead of setting one ("Want me to check
  *   the thread in a couple of hours?");
+ * - the reply promises a later check that nothing will run ("⏳ I'll check in
+ *   tomorrow morning", with no loop set: real runs on 2026-11-11 did this);
  * - the run acted on the outside world through a connector (sent or replied
  *   to an email, created a transfer, posted a message) and set no wake-up.
  *
- * Either way, the session's own wake-ups decide last: a session with an
- * active loop or wake-up (`GET …/sessions/:id/reminders`) is left alone. The
- * check reads what the run did, not the language it wrote in, except for the
- * offer, which it matches in English and German.
+ * A promise or an outward action is fine when the session has an active loop
+ * or wake-up (`GET …/sessions/:id/reminders`); an offer never is. The check
+ * reads what the run did, not the language it wrote in, except for the offer
+ * and the promise, which it matches in English and German.
  *
  * pi's `agent_before_settle` with `continue: true` runs one more model
  * request (docs/extensions.md "Guard continuation conditions"). The note goes
@@ -27,16 +29,21 @@ export const FOLLOW_THROUGH_NOTE_TYPE = 'kortix-follow-through'
 export const LOOPS_FLAG = 'reminders'
 
 /** Why the run must not settle yet. */
-export type OpenWait = { kind: 'offer'; offer: string } | { kind: 'acted'; actions: string[] }
+export type OpenWait = { kind: 'offer'; offer: string } | { kind: 'promise'; promise: string } | { kind: 'acted'; actions: string[] }
 
 /** The parts of a pi message the check reads. */
 type Block = { type: string; text?: string; name?: string; arguments?: Record<string, unknown> }
 type Message = { role: string; content?: string | Block[] }
 
 const ASK = String.raw`(?:want me to|do you want me to|should I|shall I|would you like me to|I can|I could|happy to|soll ich|willst du(?:, dass ich)?|möchtest du(?:, dass ich)?|sollen wir)`
-const LATER = String.raw`(?:check|watch|follow[ -]?up|remind|chase|ping|look again|keep an eye|monitor|nudge|circle back|let you know when|tell you when|nachschauen|nachsehen|prüfen|nachhaken|erinnern|im Auge|Bescheid)`
+const LATER = String.raw`(?:check|watch|follow[ -]?up|remind|chase|ping|look again|keep an eye|monitor|nudge|circle back|let you know when|tell you when|get back to you|check back|report back|nachschauen|nachsehen|prüfen|nachhaken|erinnern|im Auge|Bescheid|melde mich)`
 /** "Want me to check the thread for her answer in a couple of hours?": one sentence, ending in a question mark. */
 const OFFER = new RegExp(String.raw`[^.!?\n]*\b${ASK}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]{0,160}\?`, 'i')
+const WILL = String.raw`(?:I['’]ll|I will|I['’]m going to|ich)`
+const WHEN = String.raw`(?:tomorrow|tonight|morning|afternoon|evening|later|daily|hourly|every|in (?:a|an|\d+|a few|a couple)|at \d|after|until|once|by (?:mon|tue|wed|thu|fri|sat|sun|\d)|on (?:mon|tue|wed|thu|fri|sat|sun)|if (?:she|he|they|it|nothing)|morgen|später|täglich|in \d+|um \d|bis|sobald|falls)`
+/** "⏳ I'll check in tomorrow morning", "if she's still quiet after 2 days, I'll draft a chase": a check the reply says will happen. */
+const PROMISE = new RegExp(String.raw`(?:^|\n)\s*⏳[^\n]*|[^.!?\n]*\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]*|[^.!?\n]*\b${WHEN}\b[^.!?\n]{0,160}\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]*`, 'i')
+const HAS_WHEN = new RegExp(String.raw`\b${WHEN}\b|⏳`, 'i')
 
 /** A connector call the CLI runs: `kortix connectors call <slug> <action> …`. */
 const CONNECTOR_CALL = /\bkortix\s+connectors\s+call\s+([\w.-]+)\s+([\w.-]+)/g
@@ -44,6 +51,8 @@ const CONNECTOR_CALL = /\bkortix\s+connectors\s+call\s+([\w.-]+)\s+([\w.-]+)/g
 const OUTWARD = /(?:^|[_.-])(?:send|reply|forward|draft|post|message|mail|invite|transfer|pay|payment|fund|order|book|submit|request|quote|invoice)/i
 /** The tools and commands that set a wake-up. */
 const WAKE_ACTIONS = new Set(['follow_up', 'wake_on', 'create', 'automate'])
+/** The tools whose work reports back by itself: a promise to report it needs no wake-up. */
+const DELEGATING = new Set(['agent', 'task', 'workflow', 'send_message'])
 const WAKE_COMMAND = /\bkortix\s+(?:loops?\s+(?!ls\b|list\b|rm\b|delete\b|pause\b)|triggers\s+add\b|goals\s+new\b)/
 
 function blocks(message: Message): Block[] {
@@ -73,6 +82,11 @@ export function setWakeUp(run: readonly Message[]): boolean {
       return WAKE_COMMAND.test(callText(block))
     }),
   )
+}
+
+/** The run handed work to a colleague, a workflow or another session. */
+function delegated(run: readonly Message[]): boolean {
+  return run.some((message) => blocks(message).some((block) => block.type === 'toolCall' && DELEGATING.has(block.name ?? '')))
 }
 
 /** `gmail.reply_to_thread`: each outward connector call of the run, in order, once. */
@@ -106,12 +120,20 @@ function finalText(run: readonly Message[]): string {
 export async function openWait(messages: readonly Message[], hasWakeUp: () => Promise<boolean>): Promise<OpenWait | null> {
   const run = runMessages(messages)
   if (setWakeUp(run)) return null
-  const offer = finalText(run).match(OFFER)?.[0]?.trim()
+  const text = finalText(run)
+  const offer = text.match(OFFER)?.[0]?.trim()
+  const promise = text.match(PROMISE)?.[0]?.trim()
   const actions = outwardActions(run)
-  const wait: OpenWait | null = offer ? { kind: 'offer', offer } : actions.length ? { kind: 'acted', actions } : null
+  const wait: OpenWait | null = offer
+    ? { kind: 'offer', offer }
+    : promise && HAS_WHEN.test(promise) && !delegated(run)
+      ? { kind: 'promise', promise }
+      : actions.length
+        ? { kind: 'acted', actions }
+        : null
   if (!wait) return null
   // An offer still breaks the rule with a loop set: the person must not be asked for what is already running.
-  if (wait.kind === 'acted' && (await hasWakeUp())) return null
+  if (wait.kind !== 'offer' && (await hasWakeUp())) return null
   return wait
 }
 
@@ -120,12 +142,14 @@ export function followThroughNote(wait: OpenWait): string {
   const why =
     wait.kind === 'offer'
       ? `Your reply offers a later check instead of setting it: "${wait.offer}"`
-      : `This turn acted on the outside world (${wait.actions.join(', ')}) and no loop or wake-up is set for what comes back.`
+      : wait.kind === 'promise'
+        ? `Your reply promises a later check, and no loop or wake-up is set to run it: "${wait.promise}"`
+        : `This turn acted on the outside world (${wait.actions.join(', ')}) and no loop or wake-up is set for what comes back.`
   return [
     `[follow-through] ${why}`,
     'Never ask the person whether to follow up. Own the wait: set it now with `kortix_schedules` (`wake_on` when an event can wake you, else `follow_up`), with a `text` for the turn that wakes up: what is pending, what to check, what to do for each outcome, when to stop.',
     'Then tell the person in one line what you set: "⏳ I\'ll check the thread for her reply at 21:30 and tell you." Do not repeat the rest of your reply.',
-    'If nothing really comes back (the work is complete and verified), set nothing and reply with nothing.',
+    'Set nothing and reply with nothing when nothing really comes back: the work is complete and verified, or a running hand-off, workflow or team reports back by itself.',
   ].join('\n')
 }
 

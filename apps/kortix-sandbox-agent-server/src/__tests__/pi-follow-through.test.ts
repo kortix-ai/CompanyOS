@@ -56,6 +56,26 @@ describe('openWait', () => {
     expect(await openWait(run, noWakeUp)).toBeNull()
   })
 
+  // Two of 8 real-model runs on 2026-11-11 ended like this with no loop set.
+  test('a promised check with no wake-up is an open wait', async () => {
+    const promised = [user('pay this'), reply("Draft is ready.\n\n⏳ I'll check in tomorrow morning on whether a verified confirmation came through.")]
+    expect((await openWait(promised, noWakeUp))?.kind).toBe('promise')
+    const conditional = [user('pay this'), reply("If she's still quiet after 2 business days, I'll draft a chase email for you to send.")]
+    expect((await openWait(conditional, noWakeUp))?.kind).toBe('promise')
+    expect((await openWait([user('zahl das'), reply('Ich melde mich morgen früh, ob sie geantwortet hat.')], noWakeUp))?.kind).toBe('promise')
+  })
+
+  test('a promise is fine when a wake-up is active or a colleague reports back', async () => {
+    const promised = [user('pay this'), reply("⏳ I'll check the thread at 15:00 and tell you.")]
+    expect(await openWait(promised, wakeUp)).toBeNull()
+    const handOff = [user('write the post'), { role: 'assistant', content: [{ type: 'toolCall', name: 'agent', arguments: { name: 'post-writer' } }] }, reply("⏳ I've handed that to the post writer. I'll tell you when it's done.")]
+    expect(await openWait(handOff, noWakeUp)).toBeNull()
+  })
+
+  test('a plain answer with no time is not a promise', async () => {
+    expect(await openWait([user('hi'), reply("I'll keep it short: you have 3 sessions running.")], noWakeUp)).toBeNull()
+  })
+
   test('a German offer counts', async () => {
     const run = [user('zahl das'), reply('Erledigt. Soll ich morgen nachschauen, ob sie geantwortet hat?')]
     expect((await openWait(run, noWakeUp))?.kind).toBe('offer')

@@ -71,6 +71,8 @@ export interface ProjectSelectorViewProps {
   connectComputer?: boolean;
   email: string | null;
   name?: string | null;
+  /** `user_metadata.avatar_url` — the picture Settings → Profile stored (KRTX-4492). */
+  avatarUrl?: string | null;
   loading: boolean;
   loadFailed: boolean;
   workspaces: WorkspaceRow[];
@@ -113,7 +115,7 @@ export interface InlineCreateProps {
 
 export function ProjectSelectorView(props: ProjectSelectorViewProps) {
   const t = useTranslations('workspaces.chooser');
-  const { email, loading, loadFailed, workspaces, invites } = props;
+  const { email, loading, loadFailed, workspaces, invites, avatarUrl } = props;
   const createHref =
     props.createHref && props.connectComputer ? `${props.createHref}?connect=computer` : props.createHref;
   const [query, setQuery] = useState('');
@@ -139,7 +141,13 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-lg flex-col px-6 py-20">
-      <AccountTopBar email={email} name={props.name} signingOut={props.signingOut} onLogOut={props.onLogOut} />
+      <AccountTopBar
+        email={email}
+        name={props.name}
+        avatarUrl={avatarUrl}
+        signingOut={props.signingOut}
+        onLogOut={props.onLogOut}
+      />
 
       {/* `my-auto` centers the block in the viewport while it fits, and lets
           it start at the top and scroll once the list is taller. Blank while
@@ -529,6 +537,7 @@ export function ProjectSelector({ connectComputer }: { connectComputer?: boolean
       connectComputer={connectComputer}
       email={user?.email ?? null}
       name={user?.user_metadata?.name}
+      avatarUrl={user?.user_metadata?.avatar_url}
       loading={data.listsLoading || data.invitesQuery.isLoading}
       loadFailed={data.accountsQuery.isError || data.allListsFailed}
       workspaces={data.workspaces}

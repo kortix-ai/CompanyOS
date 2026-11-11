@@ -56,6 +56,7 @@ import {
   goalWakePrompt,
   heartbeatSeconds,
   isGoalManager,
+  isBoundGoal,
   isOpenState,
   sessionRoles,
   splitBrief,
@@ -200,7 +201,14 @@ export async function createGoal(
   // A chat session may turn its conversation into a goal for the person it works for ("Make this a goal").
   // A goal's own owner or verifier may not start another goal: no goal spawns goals.
   if (actor.kind === 'platform') forbidden('A person creates a goal.');
-  if (actor.kind === 'session' && (await goalOfSession(actor.sessionId))) forbidden("A goal's own session cannot start another goal.");
+  const here = input.here === true;
+  if (here) {
+    // Goal mode: the chat owns its goal. One open goal per chat; a done or stopped one leaves room for the next.
+    if (actor.kind !== 'session') forbidden('Only a chat session binds a goal to itself (`here`).');
+    const current = await goalOfSession(actor.sessionId);
+    if (current && isOpenState(current.state)) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);
+    if (!input.criteria?.length) invalid('A goal in a chat needs 1 to 8 done criteria.');
+  } else if (actor.kind === 'session' && (await goalOfSession(actor.sessionId))) forbidden("A goal's own session cannot start another goal.");
   const existing = await getGoal(project.projectId, input.goal_id);
   if (existing) {
     if (existing.createdByUserId !== actor.userId) throw new GoalError(409, 'goal_conflict', 'This goal id is taken.');
@@ -218,7 +226,8 @@ export async function createGoal(
   const personal = await ensurePersonalFolder(drive, actor.userId);
   const { title, context } = splitBrief(input.brief);
   // Session ids nobody can predict: a derived id would let another session create it first and be adopted.
-  const ownerId = randomUUID();
+  // In goal mode the owner is the calling chat: its session exists and its person is talking to it.
+  const ownerId = here && actor.kind === 'session' ? actor.sessionId : randomUUID();
   const now = ctx.now ?? new Date();
   for (let attempt = 0; attempt < 3; attempt++) {
     const { slug, folder } = await pickFolder(drive, personal, title, (f) => goalFolderTaken(project.projectId, drive.driveId, f));
@@ -230,7 +239,7 @@ export async function createGoal(
         accountId: project.accountId,
         title,
         brief: context.slice(0, GOAL_LIMITS.brief_chars),
-        state: 'draft',
+        state: here ? 'active' : 'draft',
         blockedReason: 'setup',
         assignedUserId: input.assigned_user_id ?? null,
         createdByUserId: actor.userId,
@@ -243,9 +252,10 @@ export async function createGoal(
         sessions: [{ id: ownerId, role: 'owner', since: now.toISOString() }],
         criteriaRevision: criteria.length ? 1 : 0,
         criteria,
-        setup: {},
+        // A bound goal skips the owner session and the first prompt: the chat is both.
+        setup: here ? { bound: true, session: true, prompt: true } : {},
       },
-      ev(actor, 'created', `Goal created: ${title}`),
+      ev(actor, 'created', here ? `Goal created in its chat: ${title}` : `Goal created: ${title}`),
     );
     if (row) return finishGoalSetup(project, row);
     const raced = await getGoal(project.projectId, input.goal_id);
@@ -336,6 +346,8 @@ export async function finishGoalSetup(project: ProjectRow, goal: GoalRow): Promi
       ? { patch: { blockedReason: null }, event: ev({ kind: 'platform' }, 'setup_finished', 'The owner session, files and heartbeat are ready.') }
       : { unchanged: true },
   );
+  // A bound goal starts active: its heartbeat goes on as soon as setup ends.
+  if (isBoundGoal(done.row)) await applyHeartbeat(done.row);
   return done.row;
 }
 
@@ -654,6 +666,7 @@ export async function handoverGoal(ctx: GoalContext, goalId: string, req: z.infe
   if (!goal) throw new GoalError(404, 'goal_not_found', 'Goal not found.');
   requireOwner(goal, ctx.actor);
   checkRevision(goal, req.revision);
+  if (isBoundGoal(goal)) conflict(goal, 'This goal belongs to its chat: it has no handover. Keep working it here.');
   if (goal.sessions.length >= goal.maxSessions) await blockSessionCap(goal, ctx);
   const newOwner = randomUUID();
   await ensureOwnerSession(ctx.project, goal, newOwner, ctx.actor.kind === 'session' ? ctx.actor.sessionId : null);

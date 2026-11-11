@@ -153,9 +153,12 @@ export function followThroughNote(wait: OpenWait): string {
   ].join('\n')
 }
 
-/** A session entry that is a follow-through note: the session log writes no message for it. */
-export function isFollowThroughNote(entry: { type?: string; customType?: string }): boolean {
-  return entry.type === 'custom_message' && entry.customType === FOLLOW_THROUGH_NOTE_TYPE
+/** The hidden notes the runtime adds before a run may settle: this one and goal mode's (`goal-mode.ts`). */
+const HIDDEN_NOTE_TYPES = new Set([FOLLOW_THROUGH_NOTE_TYPE, 'kortix-goal'])
+
+/** A session entry that is a hidden settle note: the session log writes no message for it. */
+export function isHiddenNote(entry: { type?: string; customType?: string }): boolean {
+  return entry.type === 'custom_message' && HIDDEN_NOTE_TYPES.has(entry.customType ?? '')
 }
 
 export interface FollowThroughOptions {
@@ -183,7 +186,7 @@ export function followThrough(options: FollowThroughOptions): InlineExtension {
         if (!wait) return undefined
         nudged = true
         options.onNudge?.(wait)
-        // The model reads the note; the session log leaves it out (`isFollowThroughNote`), so the person never sees it.
+        // The model reads the note; the session log leaves it out (`isHiddenNote`), so the person never sees it.
         return { entries: [{ type: 'custom_message' as const, customType: FOLLOW_THROUGH_NOTE_TYPE, content: followThroughNote(wait), display: false }], continue: true }
       })
     },

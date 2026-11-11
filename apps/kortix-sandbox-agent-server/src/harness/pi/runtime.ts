@@ -50,6 +50,7 @@ import { messaging, MESSAGING_TOOLS } from './extensions/messaging'
 import { TEAM_TASK_TOOLS, teamTasks } from './extensions/team-tasks'
 import { VOICE_CALL_FLAG, voice } from './extensions/voice'
 import { LOOPS_FLAG, followThrough } from './extensions/follow-through'
+import { GOAL_MODE_BOX_FLAG, goalMode, type ChatGoal } from './extensions/goal-mode'
 import { BUNDLED_WORKFLOWS } from './extensions/bundled-workflows'
 import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnswer } from './extensions/workflow'
 import { contextRecord } from './extensions/context-record'
@@ -880,7 +881,7 @@ export class PiRuntime {
         prebuilt: project.prebuilt,
         baseTools: this.baseTools,
         // The nested-call gate is first: pi runs `tool_call` handlers in load order and stops at the first block.
-        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
+        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.goalModeExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
         systemPrompt: () => this.systemPrompt(),
         skillAllowed: (name) => skillGranted(this.policy, name),
         // Every provider a turn may switch to: the gateway, and Claude subscription models.
@@ -1934,6 +1935,29 @@ export class PiRuntime {
     const session = this.controlPlane()?.sessionId
     if (!session || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(VOICE_CALL_FLAG)) return []
     return [voice(session, this.agentName)]
+  }
+
+  /**
+   * Goal mode (`extensions/goal-mode.ts`): a top-level chat that owns a goal
+   * keeps working it until the verifier passes it. The box lists `goal_mode`
+   * wherever a Drive can hold a goal (apps/api feature-flag-env.ts).
+   */
+  private goalModeExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    const flags = enabledFeatureFlags(this.env)
+    if (!plane || this.subagentContext.depth !== 0 || !(flags.has(GOAL_MODE_BOX_FLAG) || flags.has('goals'))) return []
+    return [
+      goalMode({
+        sessionId: plane.sessionId,
+        applies: () => promptOrigin(this.active?.input.text ?? '') !== 'peer',
+        listGoals: async () => {
+          const answer = await callApi(plane, 'GET', `/workspaces/${encodeURIComponent(plane.projectId)}/goals`)
+          const goals = (answer.body as { goals?: ChatGoal[] } | null)?.goals
+          return answer.status === 200 && Array.isArray(goals) ? goals : null
+        },
+        onNudge: (goal, nudges) => logger.info('[pi] goal-mode nudge', { rootId: this.rootId, goalId: goal.goal_id, nudges }),
+      }),
+    ]
   }
 
   /**

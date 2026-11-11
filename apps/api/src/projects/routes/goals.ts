@@ -34,6 +34,7 @@ import { HTTPException } from 'hono/http-exception';
 import { accessAt, getDrive, groupIdsOf, listFolderGrants } from '../../drives/service';
 import { folderAccessAtLeast } from '../../drives/folders';
 import { requireFeatureFlag } from '../../feature-flags/gate';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { PROJECT_ACTIONS } from '../../iam';
 import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
@@ -56,6 +57,8 @@ const GOAL_ERRORS = { 403: json(GoalErrorSchema, 'goal_forbidden or feature_disa
 interface Scope {
   loaded: NonNullable<Awaited<ReturnType<typeof loadProjectForUser>>>;
   actor: GoalActor;
+  /** The project's `goals` flag. Off, only a chat session reaches the routes, for its own goal (goal mode). */
+  flagOn: boolean;
 }
 
 async function isProjectAdmin(c: GoalContextC, projectId: string): Promise<boolean> {
@@ -72,14 +75,15 @@ async function scopeOf(c: GoalContextC): Promise<Scope | Response> {
   const projectId = workspaceIdParam(c) ?? '';
   const loaded = await loadProjectForUser(c, projectId, 'read');
   if (!loaded) return c.json({ error: 'goal_not_found', message: 'Not found.' }, 404);
-  const gate = requireFeatureFlag(c, loaded.row.metadata, 'goals');
-  if (gate) return gate;
   const bound = callerKortixSessionId(c);
-  const actor: GoalActor =
-    isProjectSessionPrincipal(c) && bound
-      ? { kind: 'session', sessionId: bound, userId: loaded.userId }
-      : { kind: 'user', userId: loaded.userId, isAdmin: await isProjectAdmin(c, projectId) };
-  return { loaded, actor };
+  const session = isProjectSessionPrincipal(c) && bound ? bound : null;
+  // Goal mode needs no flag: a chat session always reaches the routes for the goal it owns.
+  const gate = session ? null : requireFeatureFlag(c, loaded.row.metadata, 'goals');
+  if (gate) return gate;
+  const actor: GoalActor = session
+    ? { kind: 'session', sessionId: session, userId: loaded.userId }
+    : { kind: 'user', userId: loaded.userId, isAdmin: await isProjectAdmin(c, projectId) };
+  return { loaded, actor, flagOn: resolveFeatureFlag(loaded.row.metadata, 'goals') };
 }
 
 /** May this caller read the goal? A session: it is or was its owner or verifier. A person: a manager, or read access to its folder in Files. */
@@ -227,6 +231,8 @@ export function registerGoalRoutes(): void {
       const body = await parseBody(c, CreateGoalRequestSchema);
       if (body instanceof Response) return body;
       const { loaded } = scope;
+      // A goal with its own owner session (the Goals page kind) needs the flag; one bound to its chat does not.
+      if (!scope.flagOn && !body.here) return requireFeatureFlag(c, loaded.row.metadata, 'goals')!;
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SESSION_START);
       let resolved = await resolveAndAuthorizeAgent(c, loaded, loaded.row.projectId, body.agent ?? null);
       // No agent named and the default has no Files (My Kortix): the first agent the caller may run that has them.

@@ -15,7 +15,7 @@ import { logger } from '../../lib/logger';
 import type { ProjectRow } from '../lib/serializers';
 import { rescheduleHeartbeat, setHeartbeatEnabled } from './effects';
 import { notifyGoal } from './notify';
-import { decideWake, nextUtcMidnight, type WakeDecision } from './rules';
+import { decideWake, isBoundGoal, nextUtcMidnight, type WakeDecision } from './rules';
 import { GoalError, goalByHeartbeat, goalFlagOn, goalOfSession, setGoalRuntimeFields, writeGoal, type GoalRow } from './store';
 
 export type GoalWakeVerdict =
@@ -38,7 +38,8 @@ export async function admitGoalWake(input: {
   now?: Date;
 }): Promise<Exclude<GoalWakeVerdict, { goal: null }>> {
   const { project, goal } = input;
-  const flagOn = resolveFeatureFlag(project.metadata, 'goals');
+  // A goal its chat owns (goal mode) needs no flag; every other goal follows the project's `goals` flag.
+  const flagOn = isBoundGoal(goal) || resolveFeatureFlag(project.metadata, 'goals');
   let decision: WakeDecision | null = null;
   let billingRefusal: string | null = null;
   if (flagOn) {
@@ -197,7 +198,8 @@ export async function goalHeartbeatEditRefusal(projectId: string, reminderId: st
  */
 export async function goalPromptRefusal(sessionId: string): Promise<string | null> {
   const goal = await goalOfSession(sessionId);
-  if (!goal) return null;
+  // The chat that owns its goal stays a chat: its person's messages always run. The heartbeat is gated at fire time.
+  if (!goal || isBoundGoal(goal)) return null;
   if (goal.state === 'done' || goal.state === 'stopped') return `The goal is ${goal.state}: its queued prompt does not run.`;
   if (goal.pausedAt) return 'A person paused the goal: its queued prompt does not run.';
   if (!(await goalFlagOn(goal.projectId))) return 'Goals is turned off for this project: its queued prompt does not run.';

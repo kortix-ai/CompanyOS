@@ -57,8 +57,8 @@ or raise its caps. A person does those from the Goals page.
 | `kortix goals check` | owner | prints what the goal needs from you |
 
 Add `--json` for machine-readable output and `--goal <goal_id>` when the CLI
-cannot tell which goal you mean. `kortix goals new` is for a person: in a
-session the API refuses it.
+cannot tell which goal you mean. `kortix goals new` is for a person; in a chat
+only `kortix goals new … --here` (goal mode), which binds the goal to that chat.
 </commands>
 
 <start>
@@ -74,9 +74,14 @@ The goal, its folder and its heartbeat exist; you are its owner and it is a
 4. `kortix goals transition active --reason "criteria written"`.
 5. Act on the first step in this turn. Append it to `log.md`.
 
-**A person asks for a goal in chat.** You cannot create it. Agree the outcome
-and the done criteria with them, then ask them to create it from the Goals
-page. The API starts an owner session for it.
+**A person states an outcome in a chat (goal mode).** The chat owns the goal
+itself: `kortix goals new "<outcome>" --criterion "<check>" --here` (1 to 8
+criteria). It starts `active` with its heartbeat on; no owner session, no
+first prompt, and no `goals` flag is needed. One open goal per chat; it has no
+handover. Each turn the goal leads the chat's instructions, and the turn may
+not end until you record where it stands (`progress`, `verify`, or
+`transition waiting_on_user`). A goal with its own owner session is created by
+a person on the Goals page.
 </start>
 
 <wake>

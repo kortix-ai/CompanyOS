@@ -85,6 +85,10 @@ Anyone:
   new "<goal>" [--criterion "<text>"]... [--user <user_id>] [--agent <name>]
                       Create a goal. A person only: inside a session the API
                       refuses it; ask the person to create it on the Goals page.
+  new "<goal>" --criterion "<text>"... --here
+                      Goal mode, in a chat: this chat owns the goal and works it
+                      until the verifier passes it. Starts active, heartbeat on.
+                      1 to 8 criteria. One open goal per chat; no flag needed.
   bind [<slug|goal_id>] --space <slug> | --agent <name> | --clear
                       Group the goal under a space or an agent. A person only.
 
@@ -240,6 +244,7 @@ interface Flags {
   space?: string;
   turn?: string;
   clear: boolean;
+  here: boolean;
   enforce: boolean;
   quiet: boolean;
   json: boolean;
@@ -268,6 +273,7 @@ function parseFlags(rest: string[]): Flags {
     clear: takeFlagBool(rest, ['--clear']),
     enforce: takeFlagBool(rest, ['--enforce']),
     quiet: takeFlagBool(rest, ['--quiet']),
+    here: takeFlagBool(rest, ['--here']),
     json: takeFlagBool(rest, ['--json']),
   };
 }
@@ -730,6 +736,8 @@ async function checkGoals(ctx: Ctx, flags: Flags): Promise<number> {
 
 async function newGoal(ctx: Ctx, brief: string, flags: Flags): Promise<number> {
   if (!brief) return missing('the goal, e.g. kortix goals new "EU billing live: invoices in EUR with VAT"');
+  if (flags.here && !ctx.sessionId) return missing('a chat: --here binds the goal to the session it runs in');
+  if (flags.here && !flags.criterion.length) return missing('the done criteria: --criterion "<what someone else can check>" (1 to 8)');
   try {
     const goal = await api(ctx, () => createWorkspaceGoalRecord(ctx.projectId, {
       goal_id: randomUUID(),
@@ -737,6 +745,7 @@ async function newGoal(ctx: Ctx, brief: string, flags: Flags): Promise<number> {
       ...(flags.criterion.length ? { criteria: flags.criterion } : {}),
       ...(flags.agent ? { agent: flags.agent } : {}),
       ...(flags.user ? { assigned_user_id: flags.user } : {}),
+      ...(flags.here ? { here: true } : {}),
     }));
     if (flags.json) emitJson({ ok: true, goal });
     else {

@@ -1,0 +1,69 @@
+import { describe, expect, test } from 'bun:test'
+import { MAX_NUDGES, goalSection, goalSettle, ownGoal, type ChatGoal } from '@/harness/pi/extensions/goal-mode'
+
+const goal = (patch: Partial<ChatGoal> = {}): ChatGoal => ({
+  goal_id: 'g1',
+  title: 'Invoice paid and confirmed',
+  state: 'active',
+  slug: 'invoice-paid',
+  folder: '/Users/u1/Goals/invoice-paid',
+  owner_session_id: 's1',
+  paused_at: null,
+  waiting_on: null,
+  next_wake_at: null,
+  criteria: [{ id: 'c1', text: 'The transfer shows as sent', reported_met: true }, { id: 'c2', text: 'The vendor confirmed the IBAN' }],
+  ...patch,
+})
+const user = (text: string) => ({ role: 'user', content: text })
+const reply = (text: string) => ({ role: 'assistant', content: [{ type: 'text', text }] })
+const bash = (command: string) => ({ role: 'assistant', content: [{ type: 'toolCall', name: 'bash', arguments: { command } }] })
+
+describe('ownGoal', () => {
+  test("the chat's own open goal; another session's goal or a closed one is not", () => {
+    expect(ownGoal([goal({ owner_session_id: 's2' }), goal({ goal_id: 'g0', state: 'done' }), goal()], 's1')?.goal_id).toBe('g1')
+    expect(ownGoal([goal({ state: 'stopped' })], 's1')).toBeNull()
+  })
+})
+
+describe('goalSettle', () => {
+  const run = [user('pay this'), reply('I emailed the vendor.')]
+
+  test('an active goal with nothing recorded goes back to the model', () => {
+    expect(goalSettle(goal(), run, 0, [])).toMatchObject({ continue: true })
+  })
+
+  test('a run that recorded progress, verify or a wait settles', () => {
+    for (const command of ['kortix goals progress --summary "emailed"', 'kortix goals verify', 'kortix goals transition waiting_on_user --reason "which IBAN?"']) {
+      expect(goalSettle(goal(), [...run, bash(command)], 0, [])).toEqual({ continue: false })
+    }
+  })
+
+  test('creating the goal is not recording: the creating turn starts the work', () => {
+    expect(goalSettle(goal(), [...run, bash('kortix goals new "Invoice paid" --criterion "sent" --here')], 0, [])).toMatchObject({ continue: true })
+  })
+
+  test('no goal, a waiting, verifying or paused goal settles', () => {
+    expect(goalSettle(null, run, 0, [])).toEqual({ continue: false })
+    for (const patch of [{ state: 'waiting_on_user' }, { state: 'verifying' }, { paused_at: '2026-11-11T00:00:00Z' }]) {
+      expect(goalSettle(goal(patch), run, 0, [])).toEqual({ continue: false })
+    }
+  })
+
+  test(`at most ${MAX_NUDGES} notes per run, and none after a nudged step that used no tool`, () => {
+    const worked = [bash('ls')]
+    expect(goalSettle(goal(), run, MAX_NUDGES - 1, worked)).toMatchObject({ continue: true })
+    expect(goalSettle(goal(), run, MAX_NUDGES, worked)).toEqual({ continue: false })
+    expect(goalSettle(goal(), run, 1, [reply('Still waiting.')])).toEqual({ continue: false })
+  })
+})
+
+describe('goalSection', () => {
+  test('names the goal, each criterion with its status, the evidence folder and the three ways to record', () => {
+    const text = goalSection(goal())
+    expect(text).toContain('"Invoice paid and confirmed" (active)')
+    expect(text).toContain('- c1: The transfer shows as sent (reported met)')
+    expect(text).toContain('- c2: The vendor confirmed the IBAN (open)')
+    expect(text).toContain('/Users/u1/Goals/invoice-paid/evidence/')
+    for (const command of ['kortix goals progress', 'kortix goals verify', 'kortix goals transition waiting_on_user']) expect(text).toContain(command)
+  })
+})

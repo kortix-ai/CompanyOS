@@ -178,6 +178,48 @@ describe('create', () => {
   });
 });
 
+// Goal mode: a chat binds its goal to itself (`here`) and keeps working it; no owner session, no first prompt, no flag.
+describe('goal mode: a goal bound to its chat', () => {
+  async function chat(): Promise<string> {
+    const sessionId = crypto.randomUUID();
+    await db.insert(projectSessions).values({ sessionId, accountId: ACCOUNT, projectId: PROJECT, branchName: sessionId, createdBy: ANA, agentName: 'mykortix', visibility: 'private', metadata: {} });
+    return sessionId;
+  }
+  const boundInput = () => ({ goal_id: crypto.randomUUID(), brief: `Synthetic invoice paid ${crypto.randomUUID().slice(0, 6)}`, criteria: ['The transfer shows as sent'], agent: 'kortix', here: true });
+
+  test('the chat owns it: active at once, heartbeat on, no new session, no first prompt', async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(goal).toMatchObject({ state: 'active', ownerSessionId: sessionId, blockedReason: null });
+    expect(goal.setup).toMatchObject({ bound: true });
+    expect(goal.sessions).toEqual([expect.objectContaining({ id: sessionId, role: 'owner' })]);
+    expect((await heartbeat(goal.goalId))?.enabled).toBe(true);
+    expect(prompts).toEqual([]);
+    const sessionsOfProject = await db.select({ id: projectSessions.sessionId }).from(projectSessions).where(eq(projectSessions.projectId, PROJECT));
+    expect(sessionsOfProject.filter((row) => row.id === goal.goalId)).toEqual([]);
+  });
+
+  test('one open goal per chat; a person or a goal without criteria is refused; a done goal leaves room for the next', async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(await refusal(goals.createGoal(ctx(asSession(sessionId)), boundInput()))).toMatchObject({ status: 403 });
+    expect(await refusal(goals.createGoal(ctx(ana), boundInput()))).toMatchObject({ status: 403 });
+    expect(await refusal(goals.createGoal(ctx(asSession(await chat())), { ...boundInput(), criteria: [] }))).toMatchObject({ status: 422 });
+    await db.update(projectGoals).set({ state: 'done' }).where(eq(projectGoals.goalId, goal.goalId));
+    expect((await goals.createGoal(ctx(asSession(sessionId)), boundInput())).ownerSessionId).toBe(sessionId);
+  });
+
+  test('the chat keeps running: no handover, its prompts are never refused, its heartbeat needs no goals flag', async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(await refusal(goals.handoverGoal(ctx(asSession(sessionId)), goal.goalId, { revision: goal.revision, note: 'moving on' }))).toMatchObject({ status: 409 });
+    const flagOff = { ...project, metadata: { experimental: { goals: false, reminders: true } } } as ProjectRow;
+    expect(await admitGoalWake({ project: flagOff, goal, idempotencyKey: `bound-${goal.goalId}`, source: 'reminder' })).toMatchObject({ admitted: true });
+    await db.update(projectGoals).set({ state: 'stopped' }).where(eq(projectGoals.goalId, goal.goalId));
+    expect(await goalPromptRefusal(sessionId)).toBeNull();
+  });
+});
+
 describe('forged done is impossible', () => {
   test('the owner session cannot verify, stop, pause, edit or give a verdict; GOAL.md edits change no state', async () => {
     const goal = await activeGoal();

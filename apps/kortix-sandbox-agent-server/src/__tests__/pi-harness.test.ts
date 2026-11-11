@@ -1906,6 +1906,40 @@ export default function (pi) {
     }
   })
 
+  // extensions/goal-mode.ts in the real runtime: a chat that owns an active goal does not settle until it records where the goal stands.
+  test('goal mode: the goal leads the system prompt; a run that recorded nothing goes back to the model until it records', async () => {
+    const goal = { goal_id: 'g1', title: 'Synthetic invoice paid', state: 'active', slug: 'invoice', folder: '/Users/u1/Goals/invoice', owner_session_id: 'sess-pi-test', paused_at: null, waiting_on: null, next_wake_at: null, criteria: [{ id: 'c1', text: 'The transfer shows as sent' }] }
+    let goals: unknown[] = [goal]
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => (new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/goals' ? Response.json({ goals }) : new Response('not found', { status: 404 })),
+    })
+    try {
+      const run = async () => {
+        const r = await boot({
+          script: [{ text: 'I emailed the vendor.' }, { tool: 'bash', args: { command: 'echo kortix goals progress --summary emailed' } }, { text: '⏳ Recorded.' }],
+          env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`, KORTIX_FEATURE_FLAGS: 'goal_mode' },
+        })
+        const before = gateway.sent.length
+        await promptAndSettle(r, 'pay this invoice')
+        return gateway.sent.slice(before)
+      }
+      const worked = await run()
+      expect(worked).toHaveLength(3)
+      expect(JSON.stringify(worked[0])).toContain('## Goal mode')
+      expect(JSON.stringify(worked[1])).toContain('[goal] Goal \\"Synthetic invoice paid\\" is active and this turn recorded nothing on it.')
+      const { log } = piSessionLog(rigs.at(-1)!.service.runtime()!.sessionLogSnapshot()!)
+      expect(JSON.stringify(log.threads[0]!.messages)).not.toContain('[goal]')
+      // No goal: one request, no section.
+      goals = []
+      const plain = await run()
+      expect(plain).toHaveLength(1)
+      expect(JSON.stringify(plain[0])).not.toContain('## Goal mode')
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('the provider hooks route through the current runner, and pass through without one', async () => {
     const ref: { current?: any } = {}
     const hooks = extensionAgentHooks(ref)

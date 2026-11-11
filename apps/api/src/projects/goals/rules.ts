@@ -25,6 +25,15 @@ export function actorIdOf(actor: GoalActor): string | null {
   return null;
 }
 
+/**
+ * Goal mode: a goal its chat created with `here` and owns itself
+ * (`setup.bound`). It needs no `goals` flag, has no handover, and never
+ * refuses a prompt into that chat.
+ */
+export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
+  return goal.setup?.bound === true;
+}
+
 export function isOpenState(state: string): boolean {
   return (GOAL_OPEN_STATES as readonly string[]).includes(state);
 }

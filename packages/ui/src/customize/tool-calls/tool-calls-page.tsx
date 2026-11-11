@@ -58,9 +58,10 @@ const OUTCOME_VARIANT: Record<ToolCallStatus, 'success' | 'warning' | 'destructi
 
 /* The columns that fold away first in a narrow pane (720 px window, rail open). */
 const NARROW_HIDE = {
-  surface: '@max-3xl/calls:hidden',
-  timing: '@max-2xl/calls:hidden',
-  reason: '@max-xl/calls:hidden',
+  surface: '@max-5xl/calls:hidden',
+  reason: '@max-3xl/calls:hidden',
+  timing: '@max-3xl/calls:hidden',
+  by: '@max-md/calls:hidden',
 } as const;
 
 function useTimeFormat() {
@@ -128,7 +129,7 @@ function ToolCallRow({ projectId, row, time }: { projectId: string; row: ToolCal
       <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
         {time.format(new Date(row.created_at))}
       </TableCell>
-      <TableCell className="max-w-40 truncate text-sm">
+      <TableCell className={cn('max-w-40 truncate text-sm', NARROW_HIDE.by)}>
         <span className={cn(row.agent_slug ? 'font-mono' : null)} title={row.agent_slug ? t('byAgent') : t('byPerson')}>
           {by}
         </span>
@@ -157,11 +158,8 @@ function ToolCallRow({ projectId, row, time }: { projectId: string; row: ToolCal
         {row.refusal_reason ?? '—'}
       </TableCell>
       <TableCell className={cn('text-muted-foreground text-xs', NARROW_HIDE.surface)}>{row.surface ?? '—'}</TableCell>
-      <TableCell className={cn('text-muted-foreground text-right text-xs tabular-nums', NARROW_HIDE.timing)}>
-        {ms(row.kortix_ms)}
-      </TableCell>
-      <TableCell className={cn('text-muted-foreground text-right text-xs tabular-nums', NARROW_HIDE.timing)}>
-        {ms(row.upstream_ms)}
+      <TableCell className={cn('text-muted-foreground whitespace-nowrap text-right text-xs tabular-nums', NARROW_HIDE.timing)}>
+        {ms(row.kortix_ms)} / {ms(row.upstream_ms)}
       </TableCell>
     </TableRow>
   );
@@ -292,13 +290,14 @@ export function ToolCallsPage({ projectId }: { projectId: string }) {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>{t('columnTime')}</TableHead>
-                  <TableHead>{t('columnBy')}</TableHead>
+                  <TableHead className={NARROW_HIDE.by}>{t('columnBy')}</TableHead>
                   <TableHead>{t('columnAction')}</TableHead>
                   <TableHead>{t('columnOutcome')}</TableHead>
                   <TableHead className={NARROW_HIDE.reason}>{t('columnReason')}</TableHead>
                   <TableHead className={NARROW_HIDE.surface}>{t('columnSurface')}</TableHead>
-                  <TableHead className={cn('text-right', NARROW_HIDE.timing)}>{t('columnKortixMs')}</TableHead>
-                  <TableHead className={cn('text-right', NARROW_HIDE.timing)}>{t('columnUpstreamMs')}</TableHead>
+                  <TableHead className={cn('whitespace-nowrap text-right', NARROW_HIDE.timing)}>
+                    {t('columnKortixMs')} / {t('columnUpstreamMs')}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

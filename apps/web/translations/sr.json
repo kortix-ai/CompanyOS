@@ -21699,7 +21699,7 @@
     "outcomeOk": "Извршен",
     "outcomeDenied": "Одбијен",
     "outcomeError": "Неуспешан",
-    "outcomePending": "Чека одобрење",
+    "outcomePending": "Чека",
     "outcomeExpired": "Истекао",
     "outcomeApproved": "Одобрен",
     "stoppedAt": "Заустављен на: {phase}",

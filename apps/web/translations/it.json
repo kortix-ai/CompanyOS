@@ -21699,7 +21699,7 @@
     "outcomeOk": "Eseguita",
     "outcomeDenied": "Rifiutata",
     "outcomeError": "Non riuscita",
-    "outcomePending": "In attesa di approvazione",
+    "outcomePending": "In attesa",
     "outcomeExpired": "Scaduta",
     "outcomeApproved": "Approvata",
     "stoppedAt": "Fermata a: {phase}",

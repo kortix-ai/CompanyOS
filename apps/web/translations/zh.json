@@ -21699,7 +21699,7 @@
     "outcomeOk": "已运行",
     "outcomeDenied": "已拒绝",
     "outcomeError": "失败",
-    "outcomePending": "等待批准",
+    "outcomePending": "等待中",
     "outcomeExpired": "已过期",
     "outcomeApproved": "已批准",
     "stoppedAt": "停止于：{phase}",

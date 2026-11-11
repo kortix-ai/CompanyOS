@@ -21699,7 +21699,7 @@
     "outcomeOk": "Ausgeführt",
     "outcomeDenied": "Abgelehnt",
     "outcomeError": "Fehlgeschlagen",
-    "outcomePending": "Wartet auf Freigabe",
+    "outcomePending": "Wartet",
     "outcomeExpired": "Abgelaufen",
     "outcomeApproved": "Freigegeben",
     "stoppedAt": "Beendet bei: {phase}",

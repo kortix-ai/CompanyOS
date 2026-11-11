@@ -6550,7 +6550,7 @@ const catalog = {
     "outcomeOk": "Ran",
     "outcomeDenied": "Refused",
     "outcomeError": "Failed",
-    "outcomePending": "Waiting on approval",
+    "outcomePending": "Waiting",
     "outcomeExpired": "Expired",
     "outcomeApproved": "Approved",
     "stoppedAt": "Stopped at: {phase}",

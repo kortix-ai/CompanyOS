@@ -25,9 +25,9 @@ import {
 import { useCreateWorkspace } from '@kortix/ui/workspace/new/use-create-workspace';
 import { WorkspaceHandoff } from '@kortix/ui/workspace/new/workspace-handoff';
 import {
-  WORKSPACE_NAME_MAX_LENGTH,
   suggestWorkspaceName,
   validateWorkspaceName,
+  workspaceNameMessage,
 } from '@kortix/ui/workspace/new/workspace-name';
 import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
 import { canCreateWorkspace } from '@kortix/ui/workspace/project-selector/project-selector-model';
@@ -165,23 +165,17 @@ export function NewWorkspacePage() {
   });
   const submitting = status === 'creating';
 
-  // The too-long message fires LIVE, before the field is ever left: the input
-  // no longer truncates typed or pasted names at the limit (there is no
-  // `maxLength` — the browser used to clip silently at 120, which made this
-  // message and the submit gate both unreachable for typing). The remaining
-  // name errors wait for the field to be left once: validating on the first
-  // keystroke would tell the user "Name is required" while they are still
-  // typing the name.
-  const nameError = useMemo(() => {
-    const result = validateWorkspaceName(state.name);
-    if (!result.ok && result.error.startsWith('Name must be')) {
-      return t('validation.nameTooLong', { max: WORKSPACE_NAME_MAX_LENGTH });
-    }
-    if (!touched) return null;
-    if (result.ok) return null;
-    if (result.error === 'Name is required') return t('validation.nameRequired');
-    return t('validation.nameCharacters');
-  }, [state.name, t, touched]);
+  // Every name error the form model refuses live reports itself live
+  // (`workspaceNameMessage`): the too-long and illegal-character errors
+  // disable Create the moment they exist, so the message must be there when
+  // the button goes dark. Only "required" waits for the field to be left
+  // once: it is also true before the first keystroke, and validating it on
+  // the first keystroke would tell the user "Name is required" while they
+  // are still typing the name.
+  const nameError = useMemo(
+    () => workspaceNameMessage(validateWorkspaceName(state.name), touched, t),
+    [state.name, t, touched],
+  );
 
   // The account whose GitHub connection the GitHub sources use, if any
   // (`AdvancedFields`). The managed source names no account.

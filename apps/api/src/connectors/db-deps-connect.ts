@@ -108,6 +108,18 @@ export async function loadMcpConnector(projectId: string, slug: string) {
   return { connectorId: row.connectorId, accountId: row.accountId, url, needsSignIn };
 }
 
+/**
+ * Whether a hosted connect link for this provider type needs a managed
+ * provider (Composio or Pipedream) configured on the deployment. An `mcp`
+ * connector's hosted page is Kortix's own OAuth sign-in (`startConnectionSignIn`):
+ * it needs neither (KRTX-4640). The `/connect-requests` route applies the same
+ * exception; the gateway's denial link must not refuse a custom MCP connector
+ * on a deployment with no managed provider.
+ */
+export function connectLinkNeedsManagedProvider(providerType: 'pipedream' | 'composio' | 'mcp'): boolean {
+  return providerType !== 'mcp';
+}
+
 /** Load a Composio connector's toolkit slug + id (verifies provider). */
 export async function loadComposioConnector(projectId: string, slug: string) {
   const [row] = await db

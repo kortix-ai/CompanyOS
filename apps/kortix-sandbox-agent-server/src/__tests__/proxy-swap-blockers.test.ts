@@ -48,20 +48,14 @@ function baseConfig(over: Partial<Config> = {}): Config {
     workspace: '/tmp',
     projectTarget: '/tmp',
     defaultBranch: 'main',
-    branchFetchAttempts: 60,
-    branchFetchDelaySec: 0.25,
-    autoClone: false,
     projectId: undefined,
     apiUrl: undefined,
     repoUrl: undefined,
     branchName: undefined,
-    sessionFresh: false,
     baseSha: undefined,
     sandboxToken: TEST_TOKEN,
     gitUserName: 'Kortix Agent',
     gitUserEmail: 'agent@kortix.ai',
-    cloneFilter: '',
-    cloneDepth: 1,
     ...over,
   }
 }
@@ -88,7 +82,6 @@ function fakeHarness(convergenceInFlight: () => boolean): HarnessService {
       convergenceInFlight,
       bind: () => ({
         applyEnvironment: unexpected, refresh: unexpected, abort: unexpected,
-        armAbortAfterTool: unexpected, disarmAbortAfterTool: unexpected,
       }),
     },
     diagnostics: { capabilities: async () => [], health: unexpected, report: unexpected, logSources: () => [], readLog: unexpected },

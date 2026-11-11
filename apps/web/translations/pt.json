@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Chamadas de voz",
-          "description": "Ligue para um agente a partir da página dele (Personalizar → Agentes) e converse com ele. Uma chamada é uma sessão própria desse agente: ele ouve você, responde por voz e vê a tela que você compartilha, e a conversa é o chat dessa sessão."
+          "description": "Ligue para um agente a partir de uma caixa de mensagem vazia, onde o botão de enviar vira um botão de chamada, ou da página dele (Personalizar → Agentes), e converse com ele. Em uma sessão, a chamada vai para o agente dessa sessão; no início do espaço de trabalho, ela inicia uma nova sessão. O agente ouve você, responde por voz e vê a tela que você compartilha, e a conversa é o chat da sessão."
         },
         "shared_drives": {
           "name": "Drives compartilhados",
@@ -1393,7 +1393,15 @@
       "history": "Histórico",
       "historyDescription": "O custo de cada sessão e todos os créditos adicionados ou gastos.",
       "openLedger": "Abrir extrato",
-      "unit": "{count, plural, one {crédito} other {créditos}}"
+      "unit": "{count, plural, one {crédito} other {créditos}}",
+      "dailySpend": "Gasto diário",
+      "heatLess": "Menos",
+      "heatMore": "Mais",
+      "busiestDay": "{name}: {amount} em {day}, o dia de maior gasto",
+      "noSpendInRange": "{name}: sem gastos neste período",
+      "idleWorkspaces": "{count, plural, one {# espaço de trabalho} other {# espaços de trabalho}} sem gastos neste período",
+      "showIdle": "Mostrar",
+      "hideIdle": "Ocultar"
     },
     "tokens": {
       "keyRevoked": "Chave de API revogada",
@@ -2047,7 +2055,13 @@
       "title": "Nenhum modelo disponível",
       "description": "Conecte seu próprio provedor para começar a usar esta sessão.",
       "upgradeDescription": "Faça upgrade ou conecte seu próprio provedor para começar a usar esta sessão."
-    }
+    },
+    "favorites": "Favoritos",
+    "favoritesEmpty": "Marque um modelo com estrela para mantê-lo aqui.",
+    "addFavorite": "Adicionar {model} aos favoritos",
+    "removeFavorite": "Remover {model} dos favoritos",
+    "groups": "Grupos de modelos",
+    "thinking": "Raciocínio"
   },
   "sessionScope": {
     "resetDefault": "Redefinir para o padrão",
@@ -2075,8 +2089,12 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Fazer upgrade",
-      "barTitle": "Nenhum modelo conectado",
-      "barDescription": "conecte um para começar a conversar",
+      "offerTitle": "Use seu plano do ChatGPT ou Claude",
+      "connectChatGpt": "Conectar o ChatGPT",
+      "connectClaude": "Conectar o Claude",
+      "hidePlan": "Não mostrar {name}",
+      "chatGptPlan": "Plano Plus ou Pro",
+      "claudePlan": "Plano Pro ou Max",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} não consegue ler imagens",
       "imagesUnsupportedHint": "remova-as ou escolha outro modelo"
@@ -2324,15 +2342,15 @@
     "hintNewLine": "Pressione Shift+Enter para uma nova linha",
     "hintSettings": "Pressione {modifier}, para abrir as configurações",
     "hintCompact": "Peça para compactar a sessão quando ela ficar longa",
-    "queueList": "Queue List",
+    "queueList": "Mensagens em espera",
     "quoteCount": "{count, plural, one {# citação} other {# citações}}",
     "expandQuotes": "Expandir citações",
     "collapseQuotes": "Recolher citações",
     "stopUnconfirmed": "Não foi possível confirmar a parada. O agente pode continuar em execução. Tente parar novamente.",
     "stoppedBy": "Parado por {name}",
-    "queued": "Na fila",
+    "queued": "Em espera",
     "queuedFiles": "{count, plural, one {# arquivo} other {# arquivos}}",
-    "queuedCount": "{count} na fila",
+    "queuedCount": "{count} em espera",
     "editingQueued": "Editando",
     "queuedActions": "Ações da mensagem",
     "steerNextStep": "Lido no próximo passo",
@@ -2341,11 +2359,11 @@
     "steerFallbackUnsupported": "Aguarda este turno. Esta sessão não aceita mensagens durante um turno.",
     "steerFallbackNotPrompter": "Aguarda este turno. Outro membro o iniciou.",
     "steerFallbackTurnEnded": "Executa como um turno próprio. O turno terminou antes.",
-    "stopAndSend": "Parar e enviar",
-    "stopAndSendFailed": "Não foi possível parar e enviar essa mensagem",
+    "stopAndSend": "Enviar agora",
+    "stopAndSendFailed": "Não foi possível enviar essa mensagem agora",
     "submitEdit": "Enviar",
-    "collapseQueue": "Recolher fila",
-    "expandQueue": "Expandir fila",
+    "collapseQueue": "Recolher mensagens em espera",
+    "expandQueue": "Expandir mensagens em espera",
     "myKortixRoutes": "Envia cada tarefa ao agente certo",
     "chatInputReset": "Reset"
   },
@@ -2495,7 +2513,23 @@
         "askOwnerBody": "Somente os proprietários e administradores do espaço de trabalho podem gerenciar o faturamento. Peça a um deles que escolha um nível de créditos para o espaço de trabalho.",
         "planTitle": "Plano e créditos",
         "planDescription": "Altere seu plano mensal ou adicione créditos para este mês.",
-        "topupSecondary": "Precisa de mais este mês? Adicione créditos"
+        "paymentFailedHint": "Atualize o cartão e a Stripe tentará a cobrança novamente.",
+        "updatePaymentMethod": "Atualizar forma de pagamento",
+        "topUpInstead": "Adicionar créditos em vez disso",
+        "memberBody": "Somente proprietários e administradores podem adicionar créditos. Peça a eles por aqui ou envie a um deles o link de cobrança deste workspace.",
+        "memberCopyLink": "Copiar link de cobrança",
+        "memberLinkCopied": "Link copiado",
+        "memberLinkCopyFailed": "Não foi possível copiar o link",
+        "roleOwner": "Proprietário",
+        "roleAdmin": "Administrador",
+        "newBalance": "Novo saldo",
+        "continue": "Continuar",
+        "balanceRetry": "Tentar novamente",
+        "addLine": "Adicione créditos para manter seus agentes funcionando.",
+        "raiseLine": "Aumente seu plano para manter seus agentes funcionando.",
+        "subscribeLine": "Assine para manter seus agentes funcionando.",
+        "switchToMonthly": "Prefere créditos mensais? Trocar de plano",
+        "autoTopupRetired": "A recarga automática não se aplica mais a este plano."
       },
       "admin": {
         "plan": "Plano",
@@ -2518,7 +2552,9 @@
           "growing": "Equipes em crescimento",
           "scale": "Scale",
           "large": "Grandes organizações"
-        }
+        },
+        "once": "uma vez",
+        "onceLabel": "Valor único de créditos"
       }
     },
     "popular": "Popular",
@@ -3383,6 +3419,9 @@
     },
     "inbox": {
       "title": "Caixa de entrada",
+      "viewReview": "Review",
+      "viewNotifications": "Notificações",
+      "viewLabel": "Visualização da caixa de entrada",
       "description": "Atualizações das sessões, gatilhos e artefatos que envolvem você, de todos os espaços de trabalho.",
       "unreadLabel": "Caixa de entrada: {count} não lidas",
       "unreadCount": "{count} não lidas",
@@ -17434,7 +17473,7 @@
       "textcdd7efcb7e2c": "política resolvida",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Soluções Kortix por função",
-      "textce0c20c05842": "Seu último pagamento não foi processado. Atualize sua forma de pagamento em Gerenciar cobrança ou adicione créditos para continuar enquanto isso.",
+      "textce0c20c05842": "Seu último pagamento não foi processado. Atualize sua forma de pagamento para manter seu plano ativo.",
       "textce0faee27592": "faturamento pagamento cartão de crédito assinatura gerenciar carteira nível plano limites visão geral gastos",
       "textce18e358bf01": "Experimente um termo diferente.",
       "textce1e609b7bf5": "Somente portas do sandbox",
@@ -20392,7 +20431,7 @@
       "text2b2c3ec032a6": "Espaço de trabalho transferido",
       "text44f9fff8bdae": "Alterou o plano de créditos",
       "text3fa17bba73e1": "Este espaço de trabalho ainda não tem um plano. Escolha um valor mensal de créditos para executar sessões. Todos os membros compartilham um único pool.",
-      "text6821e42be2c1": "Sua carteira está vazia, então as sessões não podem ser executadas. Recarregue para manter a computação e os modelos de IA mais recentes funcionando — seu plano não é afetado.",
+      "text6821e42be2c1": "Sua carteira está vazia, então as sessões não podem ser executadas. Adicione créditos para manter a computação e os modelos de IA mais recentes funcionando — seu plano não é afetado.",
       "text146aaf3c71fa": "Mantém SSO, SCIM, RBAC e auditoria habilitados para um espaço de trabalho Enterprise contratado que também é cobrado por um plano pago, para que a reconciliação do Stripe não os remova.",
       "text517105fd13ce": "Os créditos financiam a computação em sandbox — até um teste BYOK precisa de saldo na carteira para executar sessões. O crédito de boas-vindas gratuito é de US$ 2.",
       "text2f1d17f50af8": "O Enterprise libera SAML SSO, sincronização de diretório SCIM, RBAC e acesso à auditoria para este espaço de trabalho. O plano cobrado não muda.",
@@ -21402,7 +21441,8 @@
         "question": "Pergunta",
         "permission": "Permissão",
         "approval": "Aprovação de conector"
-      }
+      },
+      "allowed": "Permitido"
     },
     "reviewBulk": {
       "approve": "Aprovar",
@@ -21473,7 +21513,21 @@
       "senderUnavailable": "Não foi possível carregar a conta de envio. Verifique a linha De.",
       "quoted": "“{text}”"
     },
-    "promptHistory": "Histórico {index}/{total}"
+    "promptHistory": "Histórico {index}/{total}",
+    "colleagueAccess": {
+      "headline": "O My Kortix pede para dar acesso a um colega",
+      "task": "Tarefa",
+      "connector": "Conector",
+      "secret": "Segredo",
+      "onlyThis": "O colega recebe só isto, apenas para esta tarefa.",
+      "deny": "Negar",
+      "allow": "Permitir",
+      "allowed": "Acesso permitido",
+      "allowedDescription": "O My Kortix inicia o colega.",
+      "denied": "Acesso negado",
+      "deniedDescription": "O My Kortix recebe a sua resposta.",
+      "failed": "Não foi possível enviar a sua decisão. Tente novamente."
+    }
   },
   "commandPalette": {
     "title": "Paleta de comandos",
@@ -21495,11 +21549,6 @@
   "personalWelcome": {
     "dismiss": "Fechar",
     "emailCopied": "Endereço de e-mail copiado"
-  },
-  "repositoryAccess": {
-    "label": "Acesso ao repositório do espaço de trabalho",
-    "enabled": "As novas sessões recebem o repositório do espaço de trabalho. As permissões do Git continuam em vigor. As sessões existentes mantêm a sua configuração de acesso.",
-    "disabled": "As novas sessões são executadas sem o repositório do espaço de trabalho. Podem criar arquivos e usar ferramentas autorizadas. As sessões existentes mantêm a sua configuração de acesso."
   },
   "customProvider": {
     "intro": "Endpoints que o catálogo não inclui.",
@@ -22968,7 +23017,11 @@
     "folderTree": "Pastas",
     "treeYou": "{name} (você)",
     "treeExpand": "Expandir {name}",
-    "treeCollapse": "Recolher {name}"
+    "treeCollapse": "Recolher {name}",
+    "emptyWorkspaces": "{count, plural, one {# espaço de trabalho não tem} other {# espaços de trabalho não têm}} arquivos",
+    "storageMoreWorkspaces": "{count, plural, one {Mais # espaço de trabalho} other {Mais # espaços de trabalho}}",
+    "storageWorkspaceLimit": "Cada espaço de trabalho comporta até {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar dados",
@@ -23261,6 +23314,16 @@
         "booted": "Iniciado",
         "timezone": "Fuso horário",
         "locale": "Localidade",
+        "usage": "Uso de recursos do Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} em média · {peak} no pico",
+        "usageCpuHint": "De um núcleo, {minutes, plural, one {último minuto} other {últimos # minutos}}",
+        "usageMemory": "Memória",
+        "usageMemoryPeak": "{now} · {peak} no pico",
+        "usageProcesses": "Processos",
+        "usageProcessCount": "{count, plural, one {# processo} other {# processos}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Não informado: uma versão anterior do app, ou o app iniciou há menos de um minuto",
         "recordingSync": "Gravação e sincronização",
         "status": "Status",
         "lastFrame": "Último quadro",
@@ -23377,12 +23440,16 @@
       "privacyControlsHint": "Mostrar o mascaramento de dados pessoais. Desativar oculta; o que está definido continua valendo.",
       "maskingTitle": "Mascaramento",
       "framesTitle": "Quadros da tela",
-      "interval": "Um quadro a cada",
-      "intervalHint": "Intervalos menores guardam mais detalhes e usam mais CPU e armazenamento.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Resolução",
       "resolutionHint": "Telas maiores são reduzidas a esta altura. 4K mantém detalhes finos, como desenhos CAD.",
-      "framesHint": "Sem valor, cada computador usa o seu (uma imagem a cada 2 s em 1440p). Com valor, todos os computadores o usam e ninguém pode alterá-lo. Cliques, digitação e rolagem são gravados com capturas próprias em qualquer intervalo.",
+      "textRecognition": "Reconhecimento de texto",
+      "textRecognitionHint": "Lê o texto da tela para que possa ser pesquisado. Desativado usa menos CPU: a pesquisa encontra então apps, títulos de janela e URLs.",
+      "textRecognitionOption": {
+        "accurate": "Preciso",
+        "fast": "Rápido",
+        "off": "Desativado"
+      },
+      "framesHint": "O Kortix Capture define a própria taxa de quadros: até 2 imagens por segundo enquanto alguém trabalha, uma a cada 2 s nos demais casos, e menos em um computador ocupado. Sem valor, cada computador usa 1440p e reconhecimento de texto preciso. Com valor, todos os computadores o usam e ninguém pode alterá-lo. Cliques, digitação e rolagem são gravados com capturas próprias.",
       "computerDecides": "Cada computador decide",
       "included": {
         "title": "Apps e sites",
@@ -24771,8 +24838,6 @@
       "models": "Modelos",
       "tabCapabilities": "Capacidades",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "Fixar na barra lateral",
-      "unpinFromSidebar": "Desafixar da barra lateral",
       "spaceHelp": "O espaço em que este agente trabalha: um identificador como engineering ou sales. Vazio: todo o espaço de trabalho.",
       "spacePlaceholder": "por exemplo, engineering"
     },
@@ -25215,6 +25280,7 @@
     "replacedBy": "Substituída por {path}.",
     "projectTool": "Módulo {path}",
     "loadError": "Não foi possível carregar as ferramentas, skills e extensões deste agente.",
+    "skillsLoadError": "Não foi possível carregar as skills.",
     "retry": "Tentar novamente",
     "emptyProjectSkills": "Nenhum skill do espaço de trabalho. Registre um em skills no kortix.yaml.",
     "emptyProjectExtensions": "Nenhuma extensão do espaço de trabalho. Registre uma em extensions no kortix.yaml.",
@@ -26015,6 +26081,7 @@
     "call": "Ligar",
     "calling": "Chamando…",
     "start": "Iniciar uma chamada de voz",
+    "inCall": "Você está em uma chamada",
     "end": "Encerrar chamada",
     "connecting": "Conectando…",
     "listening": "Ouvindo",
@@ -26038,7 +26105,6 @@
   "agentMounts": {
     "lead": "Pastas de Arquivos montadas pelas sessões deste agente. Uma mudança vale de imediato para cada nova sessão.",
     "mount": "Mount folder",
-    "repository": "Repositório do espaço de trabalho",
     "viaAgent": "compartilhado com este agente",
     "viaProject": "compartilhado com todos neste espaço de trabalho",
     "from": "{path} · {who}",
@@ -26052,6 +26118,7 @@
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "Monte uma pasta de Arquivos para fornecer seus arquivos às sessões deste agente.",
+    "projectEmptyDescription": "Monte uma pasta de Arquivos para fornecer seus arquivos a cada nova sessão.",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -26062,6 +26129,7 @@
     "alreadyMounted": "Mounted",
     "changeFailed": "Não foi possível alterar esta montagem.",
     "loadError": "Não foi possível carregar as montagens deste agente.",
+    "projectLoadError": "Não foi possível carregar as pastas montadas.",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "Pastas do Files que cada nova sessão monta.",
@@ -26544,6 +26612,7 @@
         "help": "Ajuda",
         "plan": "Plano",
         "usage": "Uso",
+        "agents": "Agentes",
         "connectors": "Conectores",
         "skills": "Habilidades",
         "triggers": "Gatilhos",

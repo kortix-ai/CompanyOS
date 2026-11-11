@@ -464,6 +464,41 @@ export function manifestPiCodemode(raw: unknown, agentName?: string | null): 'of
   return manifestAgentBlock(raw as Record<string, unknown>, agentName)?.codemode ?? null;
 }
 
+/** What an agent's `workspace` asks the box to prepare after it starts: explicit clones and setup commands. */
+export interface SessionWorkspaceSetup {
+  repos: Array<{ path: string; sparse?: string[] }>;
+  /** Every step as `{ run, cwd? }`; a plain string step becomes `{ run }`. */
+  setup: Array<{ run: string; cwd?: string }>;
+}
+
+/**
+ * The session agent's `workspace: { repos, setup }`, normalized (a repo's path defaults to
+ * `/workspace`). Null when it declares neither: nothing is cloned and nothing runs. The
+ * validator already refused a bad shape; anything it let through that is not a string is
+ * dropped here rather than sent to the box.
+ */
+export function manifestWorkspaceSetup(raw: unknown, agentName?: string | null): SessionWorkspaceSetup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const workspace = (manifestAgentBlock(raw as Record<string, unknown>, agentName) as { workspace?: unknown } | undefined)?.workspace;
+  if (!workspace || typeof workspace !== 'object' || Array.isArray(workspace)) return null;
+  const { repos, setup } = workspace as { repos?: unknown; setup?: unknown };
+  const normalizedRepos = (Array.isArray(repos) ? repos : []).flatMap((repo) => {
+    if (!repo || typeof repo !== 'object') return [];
+    const { path, sparse } = repo as { path?: unknown; sparse?: unknown };
+    const at = (typeof path === 'string' && path.trim() ? path.trim().replace(/\/+$/, '') : '') || '/workspace';
+    const dirs = Array.isArray(sparse) ? sparse.filter((dir): dir is string => typeof dir === 'string' && dir.trim() !== '') : [];
+    return [{ path: at, ...(dirs.length ? { sparse: dirs } : {}) }];
+  });
+  const commands = (Array.isArray(setup) ? setup : []).flatMap((step): Array<{ run: string; cwd?: string }> => {
+    if (typeof step === 'string') return step.trim() ? [{ run: step }] : [];
+    if (!step || typeof step !== 'object') return [];
+    const { run, cwd } = step as { run?: unknown; cwd?: unknown };
+    if (typeof run !== 'string' || !run.trim()) return [];
+    return [{ run, ...(typeof cwd === 'string' && cwd.trim() ? { cwd: cwd.trim() } : {}) }];
+  });
+  return normalizedRepos.length || commands.length ? { repos: normalizedRepos, setup: commands } : null;
+}
+
 /** Every distinct non-empty package list the manifest's agents resolve to: what a merge builds. */
 export function manifestPiPackageLists(raw: unknown): unknown[][] {
   if (!raw || typeof raw !== 'object') return [];

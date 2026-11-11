@@ -206,6 +206,19 @@ const ignoredPathParts = [
   '/src/features/marketing/surfaces/stages.tsx',
   '/src/features/marketing/surfaces/surface-page.tsx',
   '/src/lib/seo/public-content.ts',
+  // The settings deep-search index is English by design: its labels must equal
+  // the English card text the landing scrolls to, like the command palette
+  // registry (see the file's header, #12077).
+  '/packages/ui/src/workspace/admin/settings-search.ts',
+  // English-only copy of the design-system guidance rebuild (#12031): demo
+  // fixtures and section titles of the /design-system catalog. Exact files, so
+  // the rest of the tree stays audited. Move the copy into design-system keys
+  // and delete each line when the sections are translated.
+  '/src/app/[locale]/(public)/(marketing)/design-system/page.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/states-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/interaction-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/card-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/token-map-section.tsx',
 ];
 
 const ignoredFilePattern = /\.(?:test|spec)\.[cm]?[jt]sx?$/;

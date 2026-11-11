@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "音声通話",
-          "description": "エージェントのページ（カスタマイズ → エージェント）から電話して話せます。通話はそのエージェントの独立したセッションで、あなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
+          "description": "空のメッセージ欄（送信ボタンが通話ボタンに変わります）またはエージェントのページ（カスタマイズ → エージェント）から電話して話せます。セッション内ではそのセッションのエージェントに、ワークスペースのホームからは新しいセッションでつながります。エージェントはあなたの声を聞き、音声で答え、共有した画面を見ます。会話はそのセッションのチャットになります。"
         },
         "shared_drives": {
           "name": "共有ドライブ",
@@ -1393,7 +1393,15 @@
       "history": "履歴",
       "historyDescription": "各セッションの費用と、追加または使用されたすべてのクレジット。",
       "openLedger": "台帳を開く",
-      "unit": "{count, plural, other {クレジット}}"
+      "unit": "{count, plural, other {クレジット}}",
+      "dailySpend": "日別の利用額",
+      "heatLess": "少",
+      "heatMore": "多",
+      "busiestDay": "{name}: {day} に {amount}（最も多い日）",
+      "noSpendInRange": "{name}: この期間の利用はありません",
+      "idleWorkspaces": "この期間に利用のないワークスペース {count, plural, other {# 件}}",
+      "showIdle": "表示",
+      "hideIdle": "非表示"
     },
     "tokens": {
       "keyRevoked": "API キーを取り消しました",
@@ -2047,7 +2055,13 @@
       "title": "利用できるモデルがありません",
       "description": "自分のプロバイダーに接続すると、このセッションを利用できます。",
       "upgradeDescription": "アップグレードするか、自分のプロバイダーに接続すると、このセッションを利用できます。"
-    }
+    },
+    "favorites": "お気に入り",
+    "favoritesEmpty": "モデルにスターを付けるとここに表示されます。",
+    "addFavorite": "{model} をお気に入りに追加",
+    "removeFavorite": "{model} をお気に入りから削除",
+    "groups": "モデルグループ",
+    "thinking": "思考"
   },
   "sessionScope": {
     "resetDefault": "デフォルトに戻す",
@@ -2075,8 +2089,12 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "アップグレード",
-      "barTitle": "モデル未接続",
-      "barDescription": "接続してチャットを開始",
+      "offerTitle": "ChatGPT または Claude のプランを使う",
+      "connectChatGpt": "ChatGPT を接続",
+      "connectClaude": "Claude を接続",
+      "hidePlan": "{name} を表示しない",
+      "chatGptPlan": "Plus または Pro プラン",
+      "claudePlan": "Pro または Max プラン",
       "connectModel": "モデルを接続",
       "imagesUnsupported": "{model} は画像を読み取れません",
       "imagesUnsupportedHint": "画像を削除するか、別のモデルを選択してください"
@@ -2324,7 +2342,7 @@
     "hintNewLine": "Shift+Enter を押して改行",
     "hintSettings": "{modifier}, を押して設定を開く",
     "hintCompact": "長くなったセッションの圧縮を依頼",
-    "queueList": "Queue List",
+    "queueList": "待機中のメッセージ",
     "quoteCount": "{count, plural, other {#件の引用}}",
     "expandQuotes": "引用を展開",
     "collapseQuotes": "引用を折りたたむ",
@@ -2332,7 +2350,7 @@
     "stoppedBy": "{name}が停止",
     "queued": "待機中",
     "queuedFiles": "{count, plural, other {#個のファイル}}",
-    "queuedCount": "{count} 件キュー中",
+    "queuedCount": "{count} 件待機中",
     "editingQueued": "編集中",
     "queuedActions": "メッセージの操作",
     "steerNextStep": "次のステップで読み取り",
@@ -2341,11 +2359,11 @@
     "steerFallbackUnsupported": "このターンの終了を待ちます。このセッションはターン中にメッセージを受け取れません。",
     "steerFallbackNotPrompter": "このターンの終了を待ちます。別のメンバーが開始したターンです。",
     "steerFallbackTurnEnded": "独立したターンとして実行します。先にターンが終了しました。",
-    "stopAndSend": "停止して送信",
-    "stopAndSendFailed": "停止して送信できませんでした",
+    "stopAndSend": "今すぐ送信",
+    "stopAndSendFailed": "今すぐ送信できませんでした",
     "submitEdit": "送信",
-    "collapseQueue": "キューを折りたたむ",
-    "expandQueue": "キューを展開",
+    "collapseQueue": "待機中のメッセージを折りたたむ",
+    "expandQueue": "待機中のメッセージを展開",
     "myKortixRoutes": "各タスクを適したエージェントへ",
     "chatInputReset": "Reset"
   },
@@ -2495,7 +2513,23 @@
         "askOwnerBody": "請求を管理できるのはワークスペースのオーナーと管理者だけです。どちらかにワークスペースのクレジットのティアを選んでもらってください。",
         "planTitle": "プランとクレジット",
         "planDescription": "月額プランを変更するか、今月分のクレジットを追加します。",
-        "topupSecondary": "今月はもっと必要ですか？クレジットを追加"
+        "paymentFailedHint": "カードを更新すると、Stripe が請求を再試行します。",
+        "updatePaymentMethod": "支払い方法を更新",
+        "topUpInstead": "代わりにクレジットを追加",
+        "memberBody": "クレジットを追加できるのはオーナーと管理者のみです。ここから依頼するか、このワークスペースの請求リンクをいずれかに送ってください。",
+        "memberCopyLink": "請求リンクをコピー",
+        "memberLinkCopied": "リンクをコピーしました",
+        "memberLinkCopyFailed": "リンクをコピーできませんでした",
+        "roleOwner": "オーナー",
+        "roleAdmin": "管理者",
+        "newBalance": "新しい残高",
+        "continue": "続ける",
+        "balanceRetry": "再試行",
+        "addLine": "クレジットを追加して、エージェントの実行を続けましょう。",
+        "raiseLine": "プランを上げて、エージェントの実行を続けましょう。",
+        "subscribeLine": "サブスクライブして、エージェントの実行を続けましょう。",
+        "switchToMonthly": "月額クレジットをご希望ですか？プランを変更",
+        "autoTopupRetired": "このプランでは自動チャージは適用されなくなりました。"
       },
       "admin": {
         "plan": "プラン",
@@ -2518,7 +2552,9 @@
           "growing": "成長中のチーム",
           "scale": "スケール",
           "large": "大規模組織"
-        }
+        },
+        "once": "1回",
+        "onceLabel": "1回分のクレジット額"
       }
     },
     "popular": "人気",
@@ -3383,6 +3419,9 @@
     },
     "inbox": {
       "title": "受信トレイ",
+      "viewReview": "Review",
+      "viewNotifications": "通知",
+      "viewLabel": "受信トレイの表示",
       "description": "あなたに関係するセッション、トリガー、アーティファクトの最新情報を、すべてのワークスペースから表示します。",
       "unreadLabel": "受信トレイ：未読 {count} 件",
       "unreadCount": "未読 {count} 件",
@@ -13564,7 +13603,7 @@
       "text5ebe32e1b916": "コネクタの認証情報がサンドボックスに入ることはありません",
       "text5ec6ae29f4b6": "追加でインストール：",
       "text5ec9729027c3": "ユーザーの声を、出荷できる形に変えます。",
-      "text5ecbbab0d8d8": "ウォレットが空のため、セッションを開始できません。計算リソースと最新のAIモデルを使い続けるにはチャージしてください — {value0}には影響ありません。",
+      "text5ecbbab0d8d8": "ウォレットが空のため、セッションを開始できません。計算リソースと最新のAIモデルを使い続けるにはクレジットを追加してください — {value0}には影響ありません。",
       "text5ecf97e61ad9": "このコードをコピーし、認証ページを開いて入力するとChatGPTに接続できます。",
       "text5ed9bd98de1b": "ワークスペースの既定値を更新できませんでした",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17434,7 +17473,7 @@
       "textcdd7efcb7e2c": "ポリシーを解決済み",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "役割別Kortixソリューション",
-      "textce0c20c05842": "前回のお支払いが完了しませんでした。「請求を管理」で支払い方法を更新するか、当面の利用を続けるためにチャージしてください。",
+      "textce0c20c05842": "前回のお支払いが完了しませんでした。プランを継続するには支払い方法を更新してください。",
       "textce0faee27592": "請求 支払い クレジットカード サブスクリプション 管理 ウォレット ティア プラン 制限 概要 支出",
       "textce18e358bf01": "別の用語を試してください。",
       "textce1e609b7bf5": "サンドボックスのポートのみ",
@@ -20392,7 +20431,7 @@
       "text2b2c3ec032a6": "ワークスペースを移管しました",
       "text44f9fff8bdae": "クレジットプランを変更しました",
       "text3fa17bba73e1": "このワークスペースにはまだプランがありません。セッションを実行するには、月間クレジットの金額を選んでください。すべてのメンバーが 1 つのプールを共有します。",
-      "text6821e42be2c1": "ウォレットが空のため、セッションを実行できません。チャージして計算と最新の AI モデルを使い続けてください。プランには影響ありません。",
+      "text6821e42be2c1": "ウォレットが空のため、セッションを実行できません。クレジットを追加して計算と最新の AI モデルを使い続けてください。プランには影響ありません。",
       "text146aaf3c71fa": "契約済みで有料プランでも請求されているエンタープライズワークスペースについて、SSO、SCIM、RBAC、監査の権限を維持し、Stripe の突合で外されないようにします。",
       "text517105fd13ce": "クレジットはサンドボックスの計算に使われます。BYOK のトライアルでも、セッションの実行にはウォレット残高が必要です。無料のウェルカム付与は 2 ドルです。",
       "text2f1d17f50af8": "エンタープライズにより、このワークスペースで SAML SSO、SCIM ディレクトリ同期、RBAC、監査アクセスが有効になります。請求プランは変わりません。",
@@ -21402,7 +21441,8 @@
         "question": "質問",
         "permission": "権限",
         "approval": "コネクタ承認"
-      }
+      },
+      "allowed": "許可しました"
     },
     "reviewBulk": {
       "approve": "承認",
@@ -21473,7 +21513,21 @@
       "senderUnavailable": "送信アカウントを読み込めませんでした。差出人の行を確認してください。",
       "quoted": "「{text}」"
     },
-    "promptHistory": "履歴 {index}/{total}"
+    "promptHistory": "履歴 {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix が同僚へのアクセスを求めています",
+      "task": "タスク",
+      "connector": "コネクター",
+      "secret": "シークレット",
+      "onlyThis": "同僚が受け取るのはこれだけで、このタスク限りです。",
+      "deny": "拒否",
+      "allow": "許可",
+      "allowed": "アクセスを許可しました",
+      "allowedDescription": "My Kortix が同僚を開始します。",
+      "denied": "アクセスを拒否しました",
+      "deniedDescription": "My Kortix にあなたの回答が届きます。",
+      "failed": "決定を送信できませんでした。もう一度お試しください。"
+    }
   },
   "commandPalette": {
     "title": "コマンドパレット",
@@ -21495,11 +21549,6 @@
   "personalWelcome": {
     "dismiss": "閉じる",
     "emailCopied": "メールアドレスをコピーしました"
-  },
-  "repositoryAccess": {
-    "label": "ワークスペースリポジトリへのアクセス",
-    "enabled": "新しいセッションにワークスペースリポジトリを提供します。Git の権限は引き続き適用されます。既存のセッションのアクセス設定は変わりません。",
-    "disabled": "新しいセッションはワークスペースリポジトリなしで実行されます。ファイルの作成と許可されたツールの使用は可能です。既存のセッションのアクセス設定は変わりません。"
   },
   "customProvider": {
     "intro": "カタログにないエンドポイント。",
@@ -22968,7 +23017,11 @@
     "folderTree": "フォルダー",
     "treeYou": "{name}（あなた）",
     "treeExpand": "{name} を開く",
-    "treeCollapse": "{name} を閉じる"
+    "treeCollapse": "{name} を閉じる",
+    "emptyWorkspaces": "ファイルのないワークスペース {count, plural, other {# 件}}",
+    "storageMoreWorkspaces": "他 {count, plural, other {# 件のワークスペース}}",
+    "storageWorkspaceLimit": "各ワークスペースの上限は {limit} です",
+    "storageShowFewer": "表示を減らす"
   },
   "genui": {
     "showData": "データを表示",
@@ -23261,6 +23314,16 @@
         "booted": "起動",
         "timezone": "タイムゾーン",
         "locale": "ロケール",
+        "usage": "Kortix Capture のリソース使用量",
+        "usageCpu": "CPU",
+        "usageCpuValue": "平均 {avg} · ピーク {peak}",
+        "usageCpuHint": "1 コアあたり、直近 {minutes, plural, other {# 分}}",
+        "usageMemory": "メモリ",
+        "usageMemoryPeak": "{now} · ピーク {peak}",
+        "usageProcesses": "プロセス",
+        "usageProcessCount": "{count, plural, other {# 個のプロセス}}",
+        "usageProcessValue": "CPU {cpu} · {memory}",
+        "usageNotReported": "未報告: 古いアプリのバージョンか、アプリの起動から 1 分未満です",
         "recordingSync": "記録と同期",
         "status": "状態",
         "lastFrame": "最後のフレーム",
@@ -23377,12 +23440,16 @@
       "privacyControlsHint": "個人データのマスキングを表示します。オフにすると非表示になりますが、設定内容は引き続き適用されます。",
       "maskingTitle": "マスキング",
       "framesTitle": "画面フレーム",
-      "interval": "フレーム間隔",
-      "intervalHint": "間隔を短くすると詳細が増え、CPUとストレージの使用量も増えます。",
-      "intervalOption": "{seconds, number} 秒",
       "resolution": "解像度",
       "resolutionHint": "大きな画面はこの高さに縮小されます。4KはCAD図面などの細部を保ちます。",
-      "framesHint": "未設定の場合、各コンピューターが独自の設定を使います（1440p で 2 秒ごとに 1 枚）。設定すると、すべてのコンピューターがその値を使い、ユーザーは変更できません。クリック、入力、スクロールは間隔に関係なく専用のスクリーンショット付きで記録されます。",
+      "textRecognition": "テキスト認識",
+      "textRecognitionHint": "画面上のテキストを読み取り、検索できるようにします。オフにすると CPU 使用量が最も少なくなり、検索ではアプリ、ウィンドウタイトル、URL が見つかります。",
+      "textRecognitionOption": {
+        "accurate": "高精度",
+        "fast": "高速",
+        "off": "オフ"
+      },
+      "framesHint": "Kortix Capture はフレームレートを自動で決めます。作業中は最大で毎秒 2 枚、それ以外は 2 秒ごとに 1 枚で、負荷の高いコンピューターではさらに減らします。未設定の場合、各コンピューターは 1440p と高精度のテキスト認識を使います。設定すると、すべてのコンピューターがその値を使い、ユーザーは変更できません。クリック、入力、スクロールは専用のスクリーンショット付きで記録されます。",
       "computerDecides": "各コンピューターに任せる",
       "included": {
         "title": "アプリとウェブサイト",
@@ -24771,8 +24838,6 @@
       "models": "モデル",
       "tabCapabilities": "機能",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "サイドバーに固定",
-      "unpinFromSidebar": "サイドバーから固定解除",
       "spaceHelp": "このエージェントが作業するスペース。engineeringやsalesなどの識別子を指定します。空欄の場合はワークスペース全体です。",
       "spacePlaceholder": "例: engineering"
     },
@@ -25215,6 +25280,7 @@
     "replacedBy": "{path} に置き換えられています。",
     "projectTool": "モジュール {path}",
     "loadError": "このエージェントのツール、スキル、拡張機能を読み込めませんでした。",
+    "skillsLoadError": "スキルを読み込めませんでした。",
     "retry": "再試行",
     "emptyProjectSkills": "ワークスペースのスキルはありません。kortix.yaml の skills に登録してください。",
     "emptyProjectExtensions": "ワークスペースの拡張機能はありません。kortix.yaml の extensions に登録してください。",
@@ -26015,6 +26081,7 @@
     "call": "通話",
     "calling": "呼び出し中…",
     "start": "音声通話を開始",
+    "inCall": "通話中です",
     "end": "通話を終了",
     "connecting": "接続中…",
     "listening": "聞いています",
@@ -26038,7 +26105,6 @@
   "agentMounts": {
     "lead": "このエージェントのセッションが「ファイル」からマウントするフォルダーです。変更は直ちに適用され、すべての新しいセッションに反映されます。",
     "mount": "Mount folder",
-    "repository": "ワークスペースのリポジトリ",
     "viaAgent": "このエージェントと共有",
     "viaProject": "このワークスペース全員と共有",
     "from": "{path} · {who}",
@@ -26052,6 +26118,7 @@
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "「ファイル」からフォルダーをマウントして、このエージェントのセッションにファイルを渡します。",
+    "projectEmptyDescription": "「ファイル」からフォルダーをマウントして、新しいセッションごとにファイルを渡します。",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -26062,6 +26129,7 @@
     "alreadyMounted": "Mounted",
     "changeFailed": "このマウントを変更できませんでした。",
     "loadError": "このエージェントのマウントを読み込めませんでした。",
+    "projectLoadError": "マウントしたフォルダーを読み込めませんでした。",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "新しいセッションがマウントする Files のフォルダー。",
@@ -26544,6 +26612,7 @@
         "help": "ヘルプ",
         "plan": "プラン",
         "usage": "使用量",
+        "agents": "エージェント",
         "connectors": "コネクター",
         "skills": "スキル",
         "triggers": "トリガー",

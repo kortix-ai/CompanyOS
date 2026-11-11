@@ -28,6 +28,11 @@ import { isPtyWebSocketPath } from '../platform/providers/pty-ingress';
 import * as realProviders from '../platform/providers';
 import * as realPreviewOwnership from '../shared/preview-ownership';
 import { __resetPromptModelSignatureCacheForTests } from '../projects/lib/sandbox-env-sync';
+import {
+  __resetProxyRetryDelaysForTests,
+  __setProxyRetryDelaysForTests,
+  PROXY_RETRY_DELAYS_MS,
+} from '../sandbox-proxy/preview-retry-budget';
 
 // ─── Mock state ──────────────────────────────────────────────────────────────
 
@@ -544,6 +549,7 @@ function createProxyTestApp() {
 
 beforeEach(() => {
   __resetPromptDedupe();
+  __resetProxyRetryDelaysForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
   invalidateSandbox('daytona-oc-http');
@@ -825,14 +831,13 @@ describe('Preview proxy: forwarding', () => {
     expect(mockFetchReturned[0]!.bodyUsed).toBe(true);
   });
 
-  // A user's own dev server that is down answers 502 on every poll, and each
-  // retry used to log a `warn` that the log sweep filed as a new pattern
-  // (KRTX-4365: one client polling a dead app port, 60 lines in an hour). Only
-  // the runtime's ports (the session-data ports) keep the warn.
-  test.each([
-    [TEST_PORT, 'warn', 'info'],
-    [8000, 'info', 'warn'],
-  ] as const)('a not-ready 502 on port %p retries at the right log level', async (port, quiet, loud) => {
+  // A transient 502 the very next attempt recovers from is not a page: the
+  // per-attempt line is `info` on EVERY port. A provider blip (2026-11-10,
+  // KRTX-4673) answered 28 sandboxes' daemon port with transient 503s for half
+  // an hour while every client poll logged 1-3 warns and paged the log sweep
+  // at 186x baseline — the affected requests all recovered to 200. The settled
+  // give-up below is the one warn a failed request leaves behind.
+  test.each([TEST_PORT, 8000] as const)('a recovered not-ready 502 on port %p retries at info, never warn', async (port) => {
     mockFetchResponses = [
       { status: 502, body: 'bad gateway' },
       { status: 200, body: 'ok' },
@@ -850,8 +855,36 @@ describe('Preview proxy: forwarding', () => {
       for (const spy of spies) spy.mockRestore();
     }
     const notReady = (l: string[]) => l.filter((x) => x.includes('port not ready'));
-    expect(notReady(lines[quiet])).toHaveLength(0);
-    expect(notReady(lines[loud])).toHaveLength(1);
+    expect(notReady(lines.warn)).toHaveLength(0);
+    expect(notReady(lines.info)).toHaveLength(1);
+  });
+
+  // Retries exhausted on the runtime's own port: exactly ONE warn — the settled
+  // outcome of the request, not one per attempt. The old per-attempt warn
+  // (KRTX-4673) multiplied with the client's poll rate during a transient.
+  test('a give-up on the daemon port logs one warn, not one per attempt', async () => {
+    __setProxyRetryDelaysForTests([1, 1, 1]);
+    mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
+    const lines: Record<'warn' | 'info', string[]> = { warn: [], info: [] };
+    const spies = (['warn', 'info'] as const).map((level) =>
+      spyOn(logger, level).mockImplementation((message: string) => void lines[level].push(message)),
+    );
+    try {
+      // No `Accept: text/html` → not a browser navigation → the upstream 502
+      // passes through to the programmatic client after the last attempt.
+      const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/8000/page`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(502);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    const notReady = (l: string[]) => l.filter((x) => x.includes('port not ready'));
+    const giveUp = (l: string[]) => l.filter((x) => x.includes('not answering after'));
+    expect(giveUp(lines.warn)).toHaveLength(1);
+    expect(giveUp(lines.info)).toHaveLength(0);
+    expect(notReady(lines.info)).toHaveLength(PROXY_RETRY_DELAYS_MS.length);
+    expect(notReady(lines.warn)).toHaveLength(0);
   });
 
   // A port the API exposed a moment ago: Platinum's routes lag the expose by up
@@ -886,6 +919,7 @@ describe('Preview proxy: forwarding', () => {
   });
 
   test('a browser that gets the port-unreachable page leaves no upstream body unreleased', async () => {
+    __setProxyRetryDelaysForTests([1, 1, 1]);
     mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
     const app = createProxyTestApp();
     const res = await app.request(`/v1/p/${TEST_SANDBOX_ID}/${TEST_PORT}/`, {
@@ -896,7 +930,7 @@ describe('Preview proxy: forwarding', () => {
     // MAX_RETRIES = 3 → four attempts, every answer dropped.
     expect(mockFetchReturned).toHaveLength(4);
     expect(mockFetchReturned.every((r) => r.bodyUsed)).toBe(true);
-  }, 15_000);
+  });
 
   test('proxies POST request with body', async () => {
     mockFetchResponses = [{ status: 201, body: '{"id":"created"}' }];
@@ -1174,7 +1208,8 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 401');
+    // The 502 body is stable and termless: the upstream status stays server-side.
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');
   });
@@ -1195,7 +1230,7 @@ describe('Preview proxy: forwarding', () => {
 
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toContain('env sync failed: 500');
+    expect(body.error).toContain('Project env sync failed. Retry the request or check the sandbox logs.');
     expect(mockWakeCalls).toEqual([]);
     expect(mockFetchCalls).toHaveLength(1);
     expect(mockFetchCalls[0].url).toBe('https://preview.daytona.io/proxy-url/kortix/env');

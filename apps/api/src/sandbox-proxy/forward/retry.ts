@@ -383,17 +383,27 @@ async function handleUpstreamFailureStatus(
     }
     if ((!nonReplayableWrite || edgeRefused) && attempt < MAX_RETRIES) {
       // Port not ready yet — sandbox is booting (container running, port down).
-      // Only the runtime's own ports are ours to flag: a user's dev server that
-      // is down answers 502 on every client poll, and the log sweep filed each
-      // retry as a new warn pattern (KRTX-4365). The give-up 502 still logs.
-      const logNotReady = portFailureHop(upstreamPort) === 'daemon' ? logger.warn : logger.info;
-      logNotReady(
+      // Always `info`: the loop is actively recovering from this attempt, so a
+      // settled request must not page. A per-attempt `warn` makes the log rate
+      // polls x attempts during a transient — a half-hour provider blip turned
+      // every daemon-port poll into warns and paged the sweep at 186x baseline
+      // (KRTX-4673; same amplification class as KRTX-4365's user-port warns).
+      // The give-up warn below is the one warn a failed request leaves.
+      logger.info(
         `[PREVIEW] Sandbox ${sandboxId}:${port} returned ${upstream.status} (port not ready, attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
       );
       invalidatePreviewLink(sandboxId, port);
       await upstream.body?.cancel().catch(() => {});
       await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
       return 'retry';
+    }
+    // The port never answered within the retry budget. The one `warn` for this
+    // request: only a genuinely failed request (every attempt answered
+    // 502/503) lands here, so the warn rate tracks failed requests, not polls.
+    if (attempt >= MAX_RETRIES) {
+      logger.warn(
+        `[PREVIEW] Sandbox ${sandboxId}:${port} still not answering after ${MAX_RETRIES + 1} attempts (status ${upstream.status})`,
+      );
     }
     // Retries exhausted and the port still isn't answering. Show the friendly
     // "port unreachable" page to browsers instead of the upstream's bare 5xx;

@@ -1315,7 +1315,7 @@
         },
         "voice_call": {
           "name": "Sprachanrufe",
-          "description": "Ruf einen Agenten von seiner Seite aus an (Anpassen → Agenten) und sprich mit ihm. Ein Anruf ist eine eigene Session dieses Agenten: Er hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat dieser Session."
+          "description": "Ruf einen Agenten aus einem leeren Nachrichtenfeld an, in dem der Senden-Button zum Anruf-Button wird, oder von seiner Seite aus (Anpassen → Agenten), und sprich mit ihm. In einer Session geht der Anruf an den Agenten dieser Session; auf der Startseite des Workspace startet er eine neue Session. Der Agent hört dich, antwortet mit Stimme und sieht einen geteilten Bildschirm, und das Gespräch ist der Chat der Session."
         },
         "shared_drives": {
           "name": "Geteilte Drives",
@@ -1393,7 +1393,15 @@
       "history": "Verlauf",
       "historyDescription": "Kosten jeder Sitzung sowie alle hinzugefügten oder verbrauchten Credits.",
       "openLedger": "Kontobuch öffnen",
-      "unit": "{count, plural, one {Credit} other {Credits}}"
+      "unit": "{count, plural, one {Credit} other {Credits}}",
+      "dailySpend": "Tägliche Ausgaben",
+      "heatLess": "Weniger",
+      "heatMore": "Mehr",
+      "busiestDay": "{name}: {amount} am {day}, dem Tag mit den höchsten Ausgaben",
+      "noSpendInRange": "{name}: keine Ausgaben in diesem Zeitraum",
+      "idleWorkspaces": "{count, plural, one {# Workspace} other {# Workspaces}} ohne Ausgaben in diesem Zeitraum",
+      "showIdle": "Anzeigen",
+      "hideIdle": "Ausblenden"
     },
     "tokens": {
       "keyRevoked": "API-Schlüssel widerrufen",
@@ -2047,7 +2055,13 @@
       "title": "Keine Modelle verfügbar",
       "description": "Verbinde deinen eigenen Anbieter, um diese Sitzung zu starten.",
       "upgradeDescription": "Führe ein Upgrade durch oder verbinde deinen eigenen Anbieter, um diese Sitzung zu starten."
-    }
+    },
+    "favorites": "Favoriten",
+    "favoritesEmpty": "Markiere ein Modell mit einem Stern, um es hier zu behalten.",
+    "addFavorite": "{model} zu Favoriten hinzufügen",
+    "removeFavorite": "{model} aus Favoriten entfernen",
+    "groups": "Modellgruppen",
+    "thinking": "Denken"
   },
   "sessionScope": {
     "resetDefault": "Auf Standard zurücksetzen",
@@ -2075,8 +2089,12 @@
   "sessionUi": {
     "modelGate": {
       "upgrade": "Upgrade",
-      "barTitle": "Kein Modell verbunden",
-      "barDescription": "Verbinde eines, um den Chat zu starten",
+      "offerTitle": "Nutze dein ChatGPT- oder Claude-Abo",
+      "connectChatGpt": "ChatGPT verbinden",
+      "connectClaude": "Claude verbinden",
+      "hidePlan": "{name} nicht mehr anzeigen",
+      "chatGptPlan": "Plus- oder Pro-Abo",
+      "claudePlan": "Pro- oder Max-Abo",
       "connectModel": "Modell verbinden",
       "imagesUnsupported": "{model} kann keine Bilder lesen",
       "imagesUnsupportedHint": "entferne sie oder wähle ein anderes Modell"
@@ -2324,15 +2342,15 @@
     "hintNewLine": "Drücke Shift+Enter für eine neue Zeile",
     "hintSettings": "Drücke {modifier}, um die Einstellungen zu öffnen",
     "hintCompact": "Bitte darum, die Sitzung zu komprimieren, wenn sie lang wird",
-    "queueList": "Queue List",
+    "queueList": "Wartende Nachrichten",
     "quoteCount": "{count, plural, one {# Zitat} other {# Zitate}}",
     "expandQuotes": "Zitate ausklappen",
     "collapseQuotes": "Zitate einklappen",
     "stopUnconfirmed": "Stopp konnte nicht bestätigt werden. Der Agent läuft möglicherweise noch. Versuche es erneut.",
     "stoppedBy": "Gestoppt von {name}",
-    "queued": "In Warteschlange",
+    "queued": "Wartet",
     "queuedFiles": "{count, plural, one {# Datei} other {# Dateien}}",
-    "queuedCount": "{count} in Warteschlange",
+    "queuedCount": "{count} wartend",
     "editingQueued": "Wird bearbeitet",
     "queuedActions": "Nachrichtenaktionen",
     "steerNextStep": "Wird beim nächsten Schritt gelesen",
@@ -2341,11 +2359,11 @@
     "steerFallbackUnsupported": "Wartet auf diesen Durchlauf. Diese Sitzung nimmt während eines Durchlaufs keine Nachrichten an.",
     "steerFallbackNotPrompter": "Wartet auf diesen Durchlauf. Ein anderes Mitglied hat ihn gestartet.",
     "steerFallbackTurnEnded": "Läuft als eigener Durchlauf. Der Durchlauf war zuerst beendet.",
-    "stopAndSend": "Stoppen und senden",
-    "stopAndSendFailed": "Diese Nachricht konnte nicht gestoppt und gesendet werden",
+    "stopAndSend": "Jetzt senden",
+    "stopAndSendFailed": "Diese Nachricht konnte nicht sofort gesendet werden",
     "submitEdit": "Absenden",
-    "collapseQueue": "Warteschlange einklappen",
-    "expandQueue": "Warteschlange ausklappen",
+    "collapseQueue": "Wartende Nachrichten einklappen",
+    "expandQueue": "Wartende Nachrichten ausklappen",
     "myKortixRoutes": "Leitet jede Aufgabe an den passenden Agenten",
     "chatInputReset": "Reset"
   },
@@ -2495,7 +2513,23 @@
         "askOwnerBody": "Nur Inhaber und Administratoren des Workspace können die Abrechnung verwalten. Bitte einen von ihnen, eine Credit-Stufe für den Workspace zu wählen.",
         "planTitle": "Tarif und Credits",
         "planDescription": "Ändere deinen Monatstarif oder füge Credits für diesen Monat hinzu.",
-        "topupSecondary": "Diesen Monat mehr nötig? Credits hinzufügen"
+        "paymentFailedHint": "Aktualisiere die Karte, dann versucht Stripe die Abbuchung erneut.",
+        "updatePaymentMethod": "Zahlungsmethode aktualisieren",
+        "topUpInstead": "Stattdessen Credits hinzufügen",
+        "memberBody": "Nur Owner und Admins können Credits hinzufügen. Frag sie direkt von hier oder schick einer dieser Personen den Billing-Link dieses Workspaces.",
+        "memberCopyLink": "Billing-Link kopieren",
+        "memberLinkCopied": "Link kopiert",
+        "memberLinkCopyFailed": "Link konnte nicht kopiert werden",
+        "roleOwner": "Owner",
+        "roleAdmin": "Admin",
+        "newBalance": "Neues Guthaben",
+        "continue": "Weiter",
+        "balanceRetry": "Erneut versuchen",
+        "addLine": "Füge Credits hinzu, damit deine Agents weiterlaufen.",
+        "raiseLine": "Erhöhe deinen Plan, damit deine Agents weiterlaufen.",
+        "subscribeLine": "Abonniere, damit deine Agents weiterlaufen.",
+        "switchToMonthly": "Lieber monatliche Credits? Plan wechseln",
+        "autoTopupRetired": "Automatisches Aufladen gilt für diesen Plan nicht mehr."
       },
       "admin": {
         "plan": "Plan",
@@ -2518,7 +2552,9 @@
           "growing": "Wachsende Teams",
           "scale": "Scale",
           "large": "Große Organisationen"
-        }
+        },
+        "once": "einmalig",
+        "onceLabel": "Einmaliger Credit-Betrag"
       }
     },
     "popular": "Beliebt",
@@ -3383,6 +3419,9 @@
     },
     "inbox": {
       "title": "Posteingang",
+      "viewReview": "Review",
+      "viewNotifications": "Benachrichtigungen",
+      "viewLabel": "Posteingangsansicht",
       "description": "Neuigkeiten zu den Sitzungen, Triggern und Artefakten, die dich betreffen, aus allen Workspaces.",
       "unreadLabel": "Posteingang: {count} ungelesen",
       "unreadCount": "{count} ungelesen",
@@ -13564,7 +13603,7 @@
       "text5ebe32e1b916": "Connector-Zugangsdaten gelangen nie in eine Sandbox",
       "text5ec6ae29f4b6": "Wird ebenfalls installiert:",
       "text5ec9729027c3": "Macht aus Nutzerfeedback umsetzbare Änderungen.",
-      "text5ecbbab0d8d8": "Deine Wallet ist leer, daher können Sitzungen nicht gestartet werden. Lade Guthaben auf, damit Compute und die neuesten KI-Modelle weiterlaufen — {value0} nicht betroffen.",
+      "text5ecbbab0d8d8": "Deine Wallet ist leer, daher können Sitzungen nicht gestartet werden. Füge Credits hinzu, damit Compute und die neuesten KI-Modelle weiterlaufen — {value0} nicht betroffen.",
       "text5ecf97e61ad9": "Kopiere diesen Code. Öffne dann die Authentifizierungsseite und gib ihn ein, um ChatGPT zu verbinden.",
       "text5ed9bd98de1b": "Workspace-Standard konnte nicht aktualisiert werden",
       "text5eeb1e6ce9d5": "⌘P",
@@ -17434,7 +17473,7 @@
       "textcdd7efcb7e2c": "Richtlinie aufgelöst",
       "textcdef3f586a58": "text-kortix-yellow",
       "textce08e2abb642": "Kortix-Lösungen nach Rolle",
-      "textce0c20c05842": "Deine letzte Zahlung konnte nicht verarbeitet werden. Aktualisiere deine Zahlungsmethode unter „Abrechnung verwalten“ oder lade Guthaben auf, um vorerst weiterzuarbeiten.",
+      "textce0c20c05842": "Deine letzte Zahlung konnte nicht verarbeitet werden. Aktualisiere deine Zahlungsmethode, damit dein Plan weiterläuft.",
       "textce0faee27592": "Abrechnung Zahlung Kreditkarte Abonnement verwalten Wallet Tarif Plan Limits Übersicht Ausgaben",
       "textce18e358bf01": "Versuchen Sie es mit einem anderen Begriff.",
       "textce1e609b7bf5": "Nur Sandbox-Ports",
@@ -20392,7 +20431,7 @@
       "text2b2c3ec032a6": "Workspace übertragen",
       "text44f9fff8bdae": "Credits-Plan geändert",
       "text3fa17bba73e1": "Dieser Workspace hat noch keinen Plan. Wähle einen monatlichen Credit-Betrag, um Sitzungen auszuführen. Alle Mitglieder teilen sich einen Pool.",
-      "text6821e42be2c1": "Dein Guthaben ist leer, daher können Sitzungen nicht laufen. Lade auf, damit Rechenleistung und die neuesten KI-Modelle weiterlaufen – dein Plan bleibt unberührt.",
+      "text6821e42be2c1": "Dein Guthaben ist leer, daher können Sitzungen nicht laufen. Füge Credits hinzu, damit Rechenleistung und die neuesten KI-Modelle weiterlaufen – dein Plan bleibt unberührt.",
       "text146aaf3c71fa": "Hält SSO, SCIM, RBAC und Audit für einen unterzeichneten Enterprise-Workspace freigeschaltet, der zusätzlich über einen kostenpflichtigen Plan abgerechnet wird, damit der Stripe-Abgleich sie nicht entziehen kann.",
       "text517105fd13ce": "Credits finanzieren Sandbox-Rechenzeit – auch eine BYOK-Testphase braucht Guthaben, um Sitzungen auszuführen. Das kostenlose Willkommensguthaben beträgt 2 $.",
       "text2f1d17f50af8": "Enterprise schaltet SAML-SSO, SCIM-Verzeichnissynchronisierung, RBAC und Audit-Zugriff für diesen Workspace frei. Der abgerechnete Plan bleibt unverändert.",
@@ -21402,7 +21441,8 @@
         "question": "Frage",
         "permission": "Berechtigung",
         "approval": "Connector-Freigabe"
-      }
+      },
+      "allowed": "Erlaubt"
     },
     "reviewBulk": {
       "approve": "Genehmigen",
@@ -21473,7 +21513,21 @@
       "senderUnavailable": "Das sendende Konto konnte nicht geladen werden. Prüfe die Zeile „Von“.",
       "quoted": "„{text}“"
     },
-    "promptHistory": "Verlauf {index}/{total}"
+    "promptHistory": "Verlauf {index}/{total}",
+    "colleagueAccess": {
+      "headline": "My Kortix möchte einem Kollegen Zugriff geben",
+      "task": "Aufgabe",
+      "connector": "Connector",
+      "secret": "Secret",
+      "onlyThis": "Der Kollege bekommt nur diese, nur für diese eine Aufgabe.",
+      "deny": "Ablehnen",
+      "allow": "Erlauben",
+      "allowed": "Zugriff erlaubt",
+      "allowedDescription": "My Kortix startet den Kollegen.",
+      "denied": "Zugriff abgelehnt",
+      "deniedDescription": "My Kortix erhält deine Antwort.",
+      "failed": "Deine Entscheidung konnte nicht gesendet werden. Versuch es erneut."
+    }
   },
   "commandPalette": {
     "title": "Befehlspalette",
@@ -21495,11 +21549,6 @@
   "personalWelcome": {
     "dismiss": "Schließen",
     "emailCopied": "E-Mail-Adresse kopiert"
-  },
-  "repositoryAccess": {
-    "label": "Zugriff auf das Workspace-Repository",
-    "enabled": "Neue Sitzungen erhalten das Workspace-Repository. Git-Berechtigungen gelten weiterhin. Bestehende Sitzungen behalten ihre Zugriffseinstellung.",
-    "disabled": "Neue Sitzungen laufen ohne Workspace-Repository. Sie können weiterhin Dateien erstellen und freigegebene Werkzeuge nutzen. Bestehende Sitzungen behalten ihre Zugriffseinstellung."
   },
   "customProvider": {
     "intro": "Endpunkte, die der Katalog nicht enthält.",
@@ -22968,7 +23017,11 @@
     "folderTree": "Ordner",
     "treeYou": "{name} (Du)",
     "treeExpand": "{name} aufklappen",
-    "treeCollapse": "{name} zuklappen"
+    "treeCollapse": "{name} zuklappen",
+    "emptyWorkspaces": "{count, plural, one {# Workspace enthält} other {# Workspaces enthalten}} keine Dateien",
+    "storageMoreWorkspaces": "{count, plural, one {# weiterer Workspace} other {# weitere Workspaces}}",
+    "storageWorkspaceLimit": "Jeder Workspace fasst bis zu {limit}",
+    "storageShowFewer": "Weniger anzeigen"
   },
   "genui": {
     "showData": "Daten anzeigen",
@@ -23261,6 +23314,16 @@
         "booted": "Gestartet",
         "timezone": "Zeitzone",
         "locale": "Gebietsschema",
+        "usage": "Ressourcenverbrauch von Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} im Mittel · {peak} Spitze",
+        "usageCpuHint": "Eines Kerns, letzte {minutes, plural, one {# Minute} other {# Minuten}}",
+        "usageMemory": "Arbeitsspeicher",
+        "usageMemoryPeak": "{now} · {peak} Spitze",
+        "usageProcesses": "Prozesse",
+        "usageProcessCount": "{count, plural, one {# Prozess} other {# Prozesse}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Nicht gemeldet: eine ältere App-Version, oder die App läuft seit weniger als einer Minute",
         "recordingSync": "Aufnahme und Synchronisierung",
         "status": "Status",
         "lastFrame": "Letztes Bild",
@@ -23377,12 +23440,16 @@
       "privacyControlsHint": "Maskierung personenbezogener Daten anzeigen. Ausschalten blendet sie aus; was eingestellt ist, gilt weiter.",
       "maskingTitle": "Maskieren",
       "framesTitle": "Bildschirmbilder",
-      "interval": "Ein Bild alle",
-      "intervalHint": "Kürzere Abstände halten mehr Details fest und brauchen mehr CPU und Speicher.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Auflösung",
       "resolutionHint": "Größere Bildschirme werden auf diese Höhe verkleinert. 4K erhält feine Details, etwa in CAD-Zeichnungen.",
-      "framesHint": "Ohne Vorgabe nutzt jeder Computer seine eigene Einstellung (alle 2 s ein Bild in 1440p). Mit Vorgabe gilt sie für jeden Computer und lässt sich dort nicht ändern. Klicks, Tippen und Scrollen werden bei jedem Abstand mit eigenen Screenshots aufgezeichnet.",
+      "textRecognition": "Texterkennung",
+      "textRecognitionHint": "Liest den Text auf dem Bildschirm, damit er durchsuchbar ist. Aus braucht am wenigsten CPU: Die Suche findet dann Apps, Fenstertitel und URLs.",
+      "textRecognitionOption": {
+        "accurate": "Genau",
+        "fast": "Schnell",
+        "off": "Aus"
+      },
+      "framesHint": "Kortix Capture wählt die Bildrate selbst: bis zu 2 Bilder pro Sekunde, während jemand arbeitet, sonst alle 2 s eines, langsamer auf einem ausgelasteten Computer. Ohne Vorgabe nutzt jeder Computer 1440p und genaue Texterkennung. Mit Vorgabe gilt sie für jeden Computer und lässt sich dort nicht ändern. Klicks, Tippen und Scrollen werden mit eigenen Screenshots aufgezeichnet.",
       "computerDecides": "Jeder Computer entscheidet",
       "included": {
         "title": "Apps und Websites",
@@ -24771,8 +24838,6 @@
       "models": "Modelle",
       "tabCapabilities": "Fähigkeiten",
       "summaryExcept": "{all} except {list}",
-      "pinToSidebar": "An Seitenleiste anheften",
-      "unpinFromSidebar": "Von Seitenleiste lösen",
       "spaceHelp": "Der Bereich dieses Agenten: ein Bezeichner wie engineering oder sales. Leer: workspaceweit.",
       "spacePlaceholder": "z. B. engineering"
     },
@@ -25215,6 +25280,7 @@
     "replacedBy": "Ersetzt durch {path}.",
     "projectTool": "Modul {path}",
     "loadError": "Tools, Skills und Erweiterungen dieses Agents konnten nicht geladen werden.",
+    "skillsLoadError": "Die Skills konnten nicht geladen werden.",
     "retry": "Erneut versuchen",
     "emptyProjectSkills": "Keine Workspace-Skills. Registriere einen unter skills in kortix.yaml.",
     "emptyProjectExtensions": "Keine Workspace-Erweiterungen. Registriere eine unter extensions in kortix.yaml.",
@@ -26015,6 +26081,7 @@
     "call": "Anrufen",
     "calling": "Ruft an…",
     "start": "Sprachanruf starten",
+    "inCall": "Du bist in einem Anruf",
     "end": "Anruf beenden",
     "connecting": "Verbinden…",
     "listening": "Hört zu",
@@ -26038,7 +26105,6 @@
   "agentMounts": {
     "lead": "Ordner aus Dateien, die Sitzungen dieses Agenten einbinden. Änderungen gelten sofort für jede neue Sitzung.",
     "mount": "Mount folder",
-    "repository": "Workspace-Repository",
     "viaAgent": "mit diesem Agenten geteilt",
     "viaProject": "mit allen in diesem Workspace geteilt",
     "from": "{path} · {who}",
@@ -26052,6 +26118,7 @@
     "skipped": "Not mounted, past the {slots} mount slots: {list}",
     "emptyTitle": "No folders mounted",
     "emptyDescription": "Binde einen Ordner aus Dateien ein, um seinen Inhalt den Sitzungen dieses Agenten bereitzustellen.",
+    "projectEmptyDescription": "Binde einen Ordner aus Dateien ein, um seinen Inhalt jeder neuen Sitzung bereitzustellen.",
     "pickerTitle": "Mount a folder",
     "pickerDescription": "Pick a folder in Files. Sessions of {agent} see it under /drives.",
     "pickerPath": "Folder path",
@@ -26062,6 +26129,7 @@
     "alreadyMounted": "Mounted",
     "changeFailed": "Diese Einbindung konnte nicht geändert werden.",
     "loadError": "Die Einbindungen dieses Agenten konnten nicht geladen werden.",
+    "projectLoadError": "Die eingebundenen Ordner konnten nicht geladen werden.",
     "retry": "Try again",
     "title": "Drives",
     "projectLead": "Files-Ordner, die jede neue Sitzung einbindet.",
@@ -26544,6 +26612,7 @@
         "help": "Hilfe",
         "plan": "Plan",
         "usage": "Nutzung",
+        "agents": "Agenten",
         "connectors": "Konnektoren",
         "skills": "Fähigkeiten",
         "triggers": "Trigger",

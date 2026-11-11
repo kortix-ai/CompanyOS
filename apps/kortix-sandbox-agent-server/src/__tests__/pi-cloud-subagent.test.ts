@@ -214,6 +214,38 @@ describe('cloudSpawnSession — create', () => {
     expect(parent.live.count).toBe(0)
   })
 
+  test('a colleague with its own access sends the list on the create', async () => {
+    const { impl, calls } = fakeApi({ rows: [IDLE], transcript: report('done') })
+    await cloudSpawnSession(
+      api(impl, { parentAgent: 'mykortix', coordinator: true }),
+      { title: 'x', agent: 'inline', systemPrompt: 'You check invoices.', ownPrompt: true, access: { connectors: ['gmail'], secrets: ['STRIPE_KEY'] }, prompt: 'go' },
+      fast,
+    )
+    const body = calls.find((c) => c.method === 'POST')!.body
+    expect(body.colleague_access).toEqual({ connectors: ['gmail'], secrets: ['STRIPE_KEY'] })
+    expect(body.agent_name).toBe('mykortix')
+  })
+
+  test('a colleague whose access waits for the person: no child, the API text, not an error', async () => {
+    const pending = { error: 'The person must allow this colleague access first (connector gmail).', code: 'COLLEAGUE_ACCESS_APPROVAL_REQUIRED', ask_id: 'access:a1' }
+    const { impl, calls } = fakeApi({ create: { status: 409, body: pending } })
+    const result = await cloudSpawnSession(
+      api(impl, { parentAgent: 'mykortix', coordinator: true }),
+      { title: 'x', agent: 'inline', systemPrompt: 'You check invoices.', ownPrompt: true, access: { connectors: ['gmail'], secrets: [] }, prompt: 'go' },
+      fast,
+    )
+    expect(result).toMatchObject({ sessionId: '', status: 'awaiting_approval', text: pending.error, askId: 'access:a1' })
+    // Nothing was polled: no child exists.
+    expect(calls.filter((c) => c.method === 'GET' && !new URL(c.url).pathname.endsWith('/sessions'))).toEqual([])
+  })
+
+  test('any other 409 on the create is still an error', async () => {
+    const { impl } = fakeApi({ create: { status: 409, body: { error: 'My Kortix is off in this project.', code: 'builtin_agent_disabled' } } })
+    const result = await cloudSpawnSession(api(impl), { title: 'x', agent: 'general', systemPrompt: '', prompt: 'go' }, fast)
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('builtin_agent_disabled')
+  })
+
   test('a failed child session returns error', async () => {
     const { impl } = fakeApi({ rows: [{ status: 'failed', working: { state: 'idle' } }] })
     const result = await cloudSpawnSession(api(impl), { title: 'x', agent: 'general', systemPrompt: '', prompt: 'go' }, fast)

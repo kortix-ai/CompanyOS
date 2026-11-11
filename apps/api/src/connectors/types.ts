@@ -91,7 +91,7 @@ export interface ComposioToolLike {
   };
 }
 
-/** The `inputSchema` of a hand-curated action: `null` when it takes no input. */
+/** The `inputSchema` of a hand-curated action, or `null` when it takes no input. */
 export function actionInputSchema(
   properties: Record<string, unknown>,
   required: readonly string[],

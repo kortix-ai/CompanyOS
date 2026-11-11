@@ -1,5 +1,5 @@
 {
-  "id": "103e55b1-68c5-4f9f-8873-8677e027ea0a",
+  "id": "b2888186-cba3-4acd-b8e3-0e989dd94f92",
   "prevId": "9d08a21e-69f1-4b09-9b46-d1c3942a469e",
   "version": "7",
   "dialect": "postgresql",
@@ -17844,6 +17844,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "mfa_aal": {
+          "name": "mfa_aal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -22703,44 +22709,6 @@
           ],
           "isUnique": false,
           "where": "(\"kortix\".\"project_sessions\".\"metadata\" ->> 'trigger_slug') is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_project_sessions_project_agent_handle": {
-          "name": "idx_project_sessions_project_agent_handle",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "(\"metadata\" ->> 'agent_handle')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "(\"kortix\".\"project_sessions\".\"metadata\" ->> 'agent_handle') is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_project_sessions_team_lead": {
-          "name": "idx_project_sessions_team_lead",
-          "columns": [
-            {
-              "expression": "(\"metadata\" ->> 'team_lead')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "(\"kortix\".\"project_sessions\".\"metadata\" ->> 'team_lead') is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

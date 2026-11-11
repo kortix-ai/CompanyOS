@@ -64,7 +64,7 @@ import {
   type Actor,
   type PrincipalRef,
 } from './actor';
-import { accountsView, projectsView } from '../workspaces/rows';
+import { accountsView, accountKeyOfWorkspace } from '../workspaces/rows';
 
 // ─── Public surface ─────────────────────────────────────────────────────────
 
@@ -1143,12 +1143,7 @@ const workspaceAccountMemo = ttlMemo({
   keyFn: (workspaceId: string) => `${workspaceId}|account`,
   loader: async (workspaceId: string): Promise<string | null> => {
     if (!isUuid(workspaceId)) return null;
-    const [row] = await db
-      .select({ accountId: projectsView.accountId })
-      .from(projectsView)
-      .where(eq(projectsView.projectId, workspaceId))
-      .limit(1);
-    return row?.accountId ?? null;
+    return accountKeyOfWorkspace(workspaceId);
   },
   shouldCache: (accountId) => accountId !== null,
 });

@@ -4488,6 +4488,10 @@ export const oauthAccessTokens = kortixSchema.table(
      *  the token acts as the person in every workspace (every token issued
      *  before 2026-11-06). */
     boundWorkspaceId: uuid('bound_workspace_id'),
+    /** The second factor the minting session passed: 'aal2', or NULL for none.
+     *  Set by the Apps gate for a viewer whose App cookie a browser session at
+     *  aal2 opened. The API honors it in `account_id` only. */
+    mfaAal: text('mfa_aal'),
   },
   (table) => [
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),

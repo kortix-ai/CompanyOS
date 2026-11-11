@@ -88,10 +88,10 @@ const fakes: Record<string, Record<string, unknown>> = {
   },
   '@/components/kortix/kortix-loader': { KortixLoader: host('KortixLoader') },
   '@/components/kortix/settings-list': { SettingsGroup: host('Group'), SettingsRow: host('Row') },
-  '@/components/kortix/SheetInput': {
-    SheetTextInput: (props: any) => {
+  '@/components/kortix/bottom-search-bar': {
+    GlassSearchField: (props: any) => {
       searchInput = props.onChangeText;
-      return React.createElement('SheetTextInput', null);
+      return React.createElement('GlassSearchField', null);
     },
   },
   '@/components/projects/useWebCreateHandoff': {

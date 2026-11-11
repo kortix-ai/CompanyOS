@@ -263,3 +263,72 @@ export function BottomSearchBar({
     </StickyView>
   );
 }
+
+/**
+ * GlassSearchField — the bottom bar's expanded field on its own, for a search
+ * that stays at the top of its surface (the workspace switcher sheet; Jay,
+ * 2026-11-11): a 44pt Liquid Glass search pill, and a 44pt glass X beside it
+ * while the field is focused or holds text. X clears and closes the keyboard.
+ * iOS before 26: the same on the opaque fallbacks. Elsewhere (Android) the
+ * standard filled `SearchPill` with its inline clear button.
+ */
+export function GlassSearchField({
+  value,
+  onChangeText,
+  placeholder = 'Search',
+  searchLabel = 'Search',
+}: {
+  value: string;
+  onChangeText: (next: string) => void;
+  placeholder?: string;
+  searchLabel?: string;
+}) {
+  const [focused, setFocused] = React.useState(false);
+  if (!usesBottomSearch()) {
+    return <SearchPill value={value} onChangeText={onChangeText} placeholder={placeholder} inputProps={{ accessibilityLabel: searchLabel }} />;
+  }
+  const glassy = LIQUID_GLASS_AVAILABLE;
+  const field = (
+    <SearchPill
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      size="lg"
+      filled={!glassy}
+      clearable={false}
+      inputProps={{
+        accessibilityLabel: searchLabel,
+        returnKeyType: 'search',
+        onFocus: () => setFocused(true),
+        onBlur: () => setFocused(false),
+      }}
+    />
+  );
+  return (
+    <View className="flex-row items-center gap-2">
+      {glassy ? (
+        <LiquidGlass interactive={false} style={{ flex: 1, flexDirection: 'row' }}>
+          {field}
+        </LiquidGlass>
+      ) : (
+        field
+      )}
+      {focused || value.length > 0 ? (
+        <GlassButtons>
+          <Button
+            variant={glassy ? 'ghost' : 'secondary'}
+            size={HEADER_BUTTON_SIZE}
+            className="rounded-full"
+            onPress={() => {
+              haptics.tap();
+              onChangeText('');
+              Keyboard.dismiss();
+            }}
+            accessibilityLabel="Close search">
+            <Icon as={XIcon} size={HEADER_ICON_SIZE} className="text-foreground" />
+          </Button>
+        </GlassButtons>
+      ) : null}
+    </View>
+  );
+}

@@ -45,9 +45,10 @@ mock.module('@/lib/ui/font-scale', () => ({ BUTTON_LABEL_MAX_FONT_SCALE: { lg: 1
 mock.module('@/lib/utils/theme', () => ({ THEME: { light: { primary: 'black' }, dark: { primary: 'white' } } }));
 
 let BottomSearchBar: typeof import('./bottom-search-bar').BottomSearchBar;
+let GlassSearchField: typeof import('./bottom-search-bar').GlassSearchField;
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  ({ BottomSearchBar } = await import('./bottom-search-bar'));
+  ({ BottomSearchBar, GlassSearchField } = await import('./bottom-search-bar'));
 });
 
 let tree: ReactTestRenderer | undefined;
@@ -182,3 +183,22 @@ describe('BottomSearchBar', () => {
   });
 });
 
+
+describe('GlassSearchField (the switcher sheet)', () => {
+  function Field() {
+    const [value, setValue] = React.useState('');
+    return <GlassSearchField value={value} onChangeText={setValue} placeholder="Search workspaces" />;
+  }
+
+  test('the field alone at rest; focus adds the X; X clears the text', () => {
+    render(<Field />);
+    expect(pill()).toHaveLength(1);
+    expect(button('Close search')).toHaveLength(0);
+    act(() => (pill()[0]!.props.inputProps.onFocus as () => void)());
+    expect(button('Close search')).toHaveLength(1);
+    act(() => (pill()[0]!.props.onChangeText as (t: string) => void)('acme'));
+    expect(pill()[0]!.props.value).toBe('acme');
+    act(() => (button('Close search')[0]!.props.onPress as () => void)());
+    expect(pill()[0]!.props.value).toBe('');
+  });
+});

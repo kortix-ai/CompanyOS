@@ -1,6 +1,7 @@
 /**
  * ProjectSwitcherSheet — the one workspace switcher (COR-124, Workspaces
- * ux.md §3): a `KortixBottomSheetModal` titled "Workspaces", a search field,
+ * ux.md §3): a `KortixBottomSheetModal` titled "Workspaces", a search field
+ * (`GlassSearchField`: Liquid Glass on iOS 26, with an X while focused),
  * the pending invitations first, then ONE flat list of every workspace the
  * user belongs to, the current one checked. No account headings, no account
  * tab, no "New account": a workspace is a project and its account, and a
@@ -42,6 +43,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
+import { GlassSearchField } from '@/components/kortix/bottom-search-bar';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -53,7 +55,6 @@ import { Avatar } from '@/components/kortix/avatar';
 import { KortixBottomSheetModal, useSheetOpenMove, type SheetRef } from '@/components/kortix/sheet';
 import { KortixLoader } from '@/components/kortix/kortix-loader';
 import { SettingsGroup, SettingsRow } from '@/components/kortix/settings-list';
-import { SheetTextInput } from '@/components/kortix/SheetInput';
 import { WorkspaceInvitations } from '@/components/projects/WorkspaceInvitations';
 import { useWebCreateHandoff } from '@/components/projects/useWebCreateHandoff';
 import { WebHandoffSheet } from '@/components/session/WebHandoffSheet';
@@ -349,14 +350,14 @@ export function ProjectSwitcherSheet({
         }}>
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-            <SheetTextInput
+            {/* The glass search field of the list pages (`GlassSearchField`), kept
+                at the top here: in a full-height sheet the sheet itself owns the
+                keyboard, so a bar riding the keyboard would be moved twice. */}
+            <GlassSearchField
               value={query}
               onChangeText={setQuery}
               placeholder={t('workspace.search', 'Search workspaces')}
-              accessibilityLabel={t('workspace.search', 'Search workspaces')}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
+              searchLabel={t('workspace.search', 'Search workspaces')}
             />
           </View>
 

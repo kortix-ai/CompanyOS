@@ -1093,45 +1093,79 @@ describe('handleCall — Slack moves through public channels on its own', () => 
     risk: 'read',
     binding: { kind: 'http', method: 'GET', path: '/conversations.history' },
   };
+  const JOIN: GatewayAction = {
+    path: 'slack.join_channel',
+    relPath: 'join_channel',
+    inputSchema: { type: 'object', properties: { channel: {} }, required: ['channel'] },
+    risk: 'write',
+    binding: { kind: 'http', method: 'POST', path: '/conversations.join' },
+  };
 
   function slackAnswers(answers: unknown[]) {
     const { deps } = makeDeps('{}');
     const urls: string[] = [];
+    const audits: Array<{ action: string; status: string }> = [];
     deps.loadConnectorBySlug = async () => SLACK_WITH_PLATFORM;
-    deps.loadAction = async () => HISTORY;
+    deps.loadAction = async (_id, relPath) => (relPath === 'join_channel' ? JOIN : HISTORY);
+    deps.recordExecution = async (rec) => {
+      audits.push({ action: rec.actionPath, status: rec.status });
+      return `exec-${audits.length}`;
+    };
     deps.fetchImpl = async (url) => {
-      urls.push(url.replace('https://slack.com/api', ''));
+      urls.push(url.replace('https://slack.com/api', '').split('?')[0]!);
       const body = JSON.stringify(answers[urls.length - 1] ?? { ok: false, error: 'unexpected_call' });
       return { status: 200, ok: true, text: async () => body };
     };
-    return { deps, urls };
+    return { deps, urls, audits };
   }
+  const read = { ...input, actionPath: 'get_history', args: { channel: 'C123' } };
 
-  test('a read of a public channel the bot is not in joins it and reads again, once', async () => {
-    const { deps, urls } = slackAnswers([
+  test('a read of a public channel the bot is not in joins it as its own audited call, then reads again once', async () => {
+    const { deps, urls, audits } = slackAnswers([
       { ok: false, error: 'not_in_channel' },
       { ok: true, channel: { id: 'C123' } },
       { ok: true, messages: [{ ts: '1.0', text: 'hello' }] },
     ]);
-    const res = await handleCall(deps, { ...input, actionPath: 'get_history', args: { channel: 'C123' } });
-    expect(res.status).toBe('ok');
-    expect(urls.map((u) => u.split('?')[0])).toEqual(['/conversations.history', '/conversations.join', '/conversations.history']);
+    expect((await handleCall(deps, read)).status).toBe('ok');
+    expect(urls).toEqual(['/conversations.history', '/conversations.join', '/conversations.history']);
+    expect(audits).toContainEqual({ action: 'slack.join_channel', status: 'ok' });
+  });
+
+  test('the write gate decides the join: a channel it refuses is not joined', async () => {
+    const { deps, urls, audits } = slackAnswers([{ ok: false, error: 'not_in_channel' }]);
+    deps.gateChannelWrite = async (i) =>
+      i.actionPath === 'join_channel'
+        ? { refusal: { reason: 'conversation_not_in_project', message: 'Slack conversation C123 belongs to another workspace.' } }
+        : { refusal: null };
+    expect((await handleCall(deps, read)).status).toBe('error');
+    expect(urls).toEqual(['/conversations.history']);
+    expect(audits).toContainEqual({ action: 'slack.join_channel', status: 'denied' });
+  });
+
+  test("the agent's rules decide the join: ask returns the approval, block refuses; neither joins", async () => {
+    const ask = slackAnswers([{ ok: false, error: 'not_in_channel' }]);
+    ask.deps.loadPolicies = async () => [{ match: 'join_channel', action: 'require_approval' }];
+    expect((await handleCall(ask.deps, read)).status).toBe('pending_approval');
+    expect(ask.urls).toEqual(['/conversations.history']);
+
+    const block = slackAnswers([{ ok: false, error: 'not_in_channel' }]);
+    block.deps.loadPolicies = async () => [{ match: 'join_channel', action: 'block' }];
+    expect((await handleCall(block.deps, read)).status).toBe('error');
+    expect(block.urls).toEqual(['/conversations.history']);
   });
 
   test('a private channel is not joined: its error reaches the agent', async () => {
     const { deps, urls } = slackAnswers([{ ok: false, error: 'channel_not_found' }]);
-    const res = await handleCall(deps, { ...input, actionPath: 'get_history', args: { channel: 'G123' } });
-    expect(res.status).toBe('error');
-    expect(urls).toHaveLength(1);
+    expect((await handleCall(deps, { ...read, args: { channel: 'G123' } })).status).toBe('error');
+    expect(urls).toEqual(['/conversations.history']);
   });
 
-  test('a refused join does not read again', async () => {
+  test('a join Slack refuses does not read again', async () => {
     const { deps, urls } = slackAnswers([
       { ok: false, error: 'not_in_channel' },
       { ok: false, error: 'is_archived' },
     ]);
-    const res = await handleCall(deps, { ...input, actionPath: 'get_history', args: { channel: 'C123' } });
-    expect(res.status).toBe('error');
-    expect(urls.map((u) => u.split('?')[0])).toEqual(['/conversations.history', '/conversations.join']);
+    expect((await handleCall(deps, read)).status).toBe('error');
+    expect(urls).toEqual(['/conversations.history', '/conversations.join']);
   });
 });

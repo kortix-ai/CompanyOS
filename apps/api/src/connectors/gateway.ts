@@ -1534,10 +1534,12 @@ async function runConnectorAction(
           }),
         );
       result = await runAction();
-      // A read of a public channel the bot is not in: join it and read again,
-      // once, with no approval in between. The read gate already allowed this
-      // channel (this workspace's or nobody's), and any member may join a
-      // public one. A private channel answers `channel_not_found` and stays
+      // A read of a public channel the bot is not in: join it, then read
+      // again, once. The join is its own call through this whole gateway: the
+      // write gate (never another workspace's channel), this agent's rules for
+      // `join_channel` (allow runs it, ask returns the approval, block
+      // refuses) and its own audit row. The read repeats only after a join
+      // that ran. A private channel answers `channel_not_found` and stays
       // closed until a person invites the bot.
       if (
         connector.provider === 'channel' &&
@@ -1546,18 +1548,17 @@ async function runConnectorAction(
         slackError(result.data) === 'not_in_channel' &&
         typeof providerArgs.channel === 'string'
       ) {
-        const joined = await withDeadline(
-          executeCall({
-            binding: { kind: 'http', method: 'POST', path: '/conversations.join' },
-            baseUrl: connector.baseUrl,
-            auth: connector.auth,
-            headers: connector.headers,
-            secret: executionSecret,
-            args: { channel: providerArgs.channel },
-            fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
-          }),
-        );
-        if (joined.ok && slackError(joined.data) === null) result = await runAction();
+        const joined = await handleCall(deps, {
+          ...input,
+          actionPath: 'join_channel',
+          args: { channel: providerArgs.channel },
+          // The read's own approval and held run name the read, not the join.
+          approvalExecutionId: null,
+          heldApproval: null,
+          approvalContext: `Join the channel to read it (${input.actionPath}).`,
+        });
+        if (joined.status === 'ok') result = await runAction();
+        else if (joined.status === 'pending_approval') return joined;
       }
       // Email `send_message` created a draft: send it now, as one action.
       const draftId =

@@ -49,3 +49,4 @@ src/sandbox-proxy/routes/preview-characterization.test.ts
 src/sandbox-proxy/routes/forward.test.ts
 src/sandbox-proxy/routes/preview-env-sync-ports.test.ts
 src/sandbox-proxy/routes/preview-agent-authz.test.ts
+src/__tests__/unit-compile-governance-read-amplification.test.ts

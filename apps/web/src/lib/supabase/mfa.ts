@@ -132,6 +132,64 @@ function isPhoneVerificationMandatory(): boolean {
   return envVal.toLowerCase() === 'true';
 }
 
+/**
+ * Create a challenge for an enrolled phone factor (sends the SMS code). Both
+ * `createChallenge` and `resendSMS` run this same call; only their error
+ * labels differ.
+ */
+async function challenge(factorId: string): Promise<ChallengeResponse> {
+  const supabase = createClient();
+
+  const response = await supabase.auth.mfa.challenge({
+    factorId: factorId,
+  });
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  if (!response.data) {
+    throw new Error('No data returned from challenge');
+  }
+
+  return {
+    id: response.data.id,
+    expires_at: response.data.expires_at
+      ? new Date(response.data.expires_at * 1000).toISOString()
+      : undefined,
+  };
+}
+
+function toFactorInfo(factor: {
+  id: string;
+  friendly_name?: string;
+  factor_type?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}): FactorInfo {
+  return {
+    id: factor.id,
+    friendly_name: factor.friendly_name,
+    factor_type: factor.factor_type,
+    status: factor.status,
+    phone: (factor as { phone?: string }).phone, // Phone property may not be in the type definition
+    created_at: factor.created_at,
+    updated_at: factor.updated_at,
+  };
+}
+
+/** The verdict per `current -> next` AAL combination, as the AAL gate reports it. */
+const AAL_VERDICTS: Record<string, { actionRequired: string; message: string }> = {
+  'aal1 -> aal1': { actionRequired: 'none', message: 'MFA is not enrolled for this account' },
+  'aal1 -> aal2': {
+    actionRequired: 'verify_mfa',
+    message: 'MFA verification required to access full features',
+  },
+  'aal2 -> aal2': { actionRequired: 'none', message: 'MFA is verified and active' },
+  'aal2 -> aal1': { actionRequired: 'reauthenticate', message: 'Session needs refresh due to MFA changes' },
+};
+
 export const supabaseMFAService = {
   /**
    * Enroll phone number for SMS-based 2FA
@@ -171,27 +229,8 @@ export const supabaseMFAService = {
    * Create a challenge for an enrolled phone factor (sends SMS)
    */
   async createChallenge(data: PhoneVerificationChallenge): Promise<ChallengeResponse> {
-    const supabase = createClient();
-
     try {
-      const response = await supabase.auth.mfa.challenge({
-        factorId: data.factor_id,
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      if (!response.data) {
-        throw new Error('No data returned from challenge');
-      }
-
-      return {
-        id: response.data.id,
-        expires_at: response.data.expires_at
-          ? new Date(response.data.expires_at * 1000).toISOString()
-          : undefined,
-      };
+      return await challenge(data.factor_id);
     } catch (error: unknown) {
       console.error('❌ Create SMS challenge failed:', error);
       throw new Error(`Failed to create SMS challenge: ${toErrorMessage(error)}`);
@@ -255,27 +294,8 @@ export const supabaseMFAService = {
    * Resend SMS code (create new challenge for existing factor)
    */
   async resendSMS(factorId: string): Promise<ChallengeResponse> {
-    const supabase = createClient();
-
     try {
-      const response = await supabase.auth.mfa.challenge({
-        factorId: factorId,
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      if (!response.data) {
-        throw new Error('No data returned from challenge');
-      }
-
-      return {
-        id: response.data.id,
-        expires_at: response.data.expires_at
-          ? new Date(response.data.expires_at * 1000).toISOString()
-          : undefined,
-      };
+      return await challenge(factorId);
     } catch (error: unknown) {
       console.error('❌ Resend SMS failed:', error);
       throw new Error(`Failed to resend SMS: ${toErrorMessage(error)}`);
@@ -306,15 +326,7 @@ export const supabaseMFAService = {
 
       if (user.factors) {
         for (const factor of user.factors) {
-          factors.push({
-            id: factor.id,
-            friendly_name: factor.friendly_name,
-            factor_type: factor.factor_type,
-            status: factor.status,
-            phone: (factor as { phone?: string }).phone, // Phone property may not be in the type definition
-            created_at: factor.created_at,
-            updated_at: factor.updated_at,
-          });
+          factors.push(toFactorInfo(factor));
         }
       }
 
@@ -412,16 +424,7 @@ export const supabaseMFAService = {
 
       if (user.factors) {
         for (const factor of user.factors) {
-          const factorInfo = {
-            id: factor.id,
-            friendly_name: factor.friendly_name,
-            factor_type: factor.factor_type,
-            status: factor.status,
-            phone: (factor as { phone?: string }).phone,
-            created_at: factor.created_at,
-            updated_at: factor.updated_at,
-          };
-          factors.push(factorInfo);
+          factors.push(toFactorInfo(factor));
 
           if (factor.factor_type === 'phone') {
             if (factor.status === 'verified') {
@@ -434,41 +437,21 @@ export const supabaseMFAService = {
       const current = aalResponse.data?.currentLevel;
       const nextLevel = aalResponse.data?.nextLevel;
 
-      let actionRequired: string;
-      let message: string;
+      const { actionRequired, message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
+        actionRequired: 'unknown',
+        message: `Unknown AAL combination: ${current} -> ${nextLevel}`,
+      };
 
-      if (current === 'aal1' && nextLevel === 'aal1') {
-        actionRequired = 'none';
-        message = 'MFA is not enrolled for this account';
-      } else if (current === 'aal1' && nextLevel === 'aal2') {
-        actionRequired = 'verify_mfa';
-        message = 'MFA verification required to access full features';
-      } else if (current === 'aal2' && nextLevel === 'aal2') {
-        actionRequired = 'none';
-        message = 'MFA is verified and active';
-      } else if (current === 'aal2' && nextLevel === 'aal1') {
-        actionRequired = 'reauthenticate';
-        message = 'Session needs refresh due to MFA changes';
-      } else {
-        actionRequired = 'unknown';
-        message = `Unknown AAL combination: ${current} -> ${nextLevel}`;
-      }
-
-      let verificationRequired = false;
-      if (isNewUser) {
-        if (current === 'aal1' && nextLevel === 'aal1') {
-          verificationRequired = true;
-        } else if (actionRequired === 'verify_mfa') {
-          verificationRequired = true;
-        }
-      } else {
-        verificationRequired = actionRequired === 'verify_mfa';
-      }
-
+      // A new user whose first session starts below aal2, or any session the
+      // AAL gate sends to verify_mfa, owes verification; the mandatory flag
+      // then decides both answers.
+      const aalGateVerificationRequired =
+        (isNewUser && current === 'aal1' && nextLevel === 'aal1') ||
+        actionRequired === 'verify_mfa';
       const phoneVerificationRequired = isNewUser && isPhoneVerificationMandatory();
-      verificationRequired = !!(
+      const verificationRequired = !!(
         isNewUser &&
-        verificationRequired &&
+        aalGateVerificationRequired &&
         isPhoneVerificationMandatory()
       );
 

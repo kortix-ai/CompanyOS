@@ -26,7 +26,7 @@ globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
 globals.getComputedStyle = win.getComputedStyle.bind(win);
 globals.customElements = win.customElements; // the markdown diff viewer registers a web component at import
 for (const key of Object.getOwnPropertyNames(win)) {
-  // Radix dispatches happy-dom's own event classes, not Bun's.
+  // Base UI dispatches happy-dom's own event classes, not Bun's.
   if (/^[A-Z]/.test(key) && (!(key in globals) || key.endsWith('Event'))) {
     globals[key] = Reflect.get(win, key);
   }

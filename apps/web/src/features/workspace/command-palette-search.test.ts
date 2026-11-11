@@ -144,7 +144,7 @@ const themeHits = (query: string) =>
 //    Enter always fires the first, so a duplicate is worse than the bug this
 //    file exists to fix. `item.id` used to guarantee uniqueness; removing it
 //    moves the guarantee onto the curated text, which is safe only while this
-//    passes. cmdk 0.2.1 has no `keywords` prop to separate the two concerns.
+//    passes. The command core (a cmdk 0.2.1 port) has no `keywords` prop to separate the two concerns.
 // ============================================================================
 
 describe('cmdk value uniqueness', () => {

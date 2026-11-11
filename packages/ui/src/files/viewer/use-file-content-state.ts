@@ -16,7 +16,7 @@ import { useContentRevision } from './use-content-revision';
 import type { FileContentRendererProps } from './file-content-renderer';
 
 /** Categories that need a blob fetched via readFileAsBlob */
-const BLOB_CATEGORIES = ['docx', 'video', 'audio', 'pptx', 'zip'] as const;
+const BLOB_CATEGORIES = ['docx', 'video', 'audio', 'pptx', 'zip', 'xlsx'] as const;
 type BlobCategory = (typeof BLOB_CATEGORIES)[number];
 
 function isImageMime(mimeType?: string): boolean {
@@ -182,12 +182,12 @@ export function useFileContentState({
     [fileDiagnostics],
   );
 
-  // Binary blob for DOCX, video, audio, PPTX — AND HEIC images.
+  // Binary blob for DOCX, video, audio, PPTX, XLSX — AND HEIC images.
   // PDFs intentionally use /file/content base64 so PdfRenderer can create a Blob URL from the string.
-  // A bytes-only source (the project's Files) also serves the spreadsheet and
-  // SQLite bytes: those renderers would otherwise read a sandbox path, and
-  // there is no sandbox behind Files.
-  const readsOwnBytes = fileCategory === 'xlsx' || fileCategory === 'sqlite';
+  // A bytes-only source (the project's Files) also serves the SQLite bytes:
+  // that renderer would otherwise read a sandbox path, and there is no
+  // sandbox behind Files.
+  const readsOwnBytes = fileCategory === 'sqlite';
   const blobPath =
     isBlobCategory(fileCategory) || isHeicImage || (source.bytesOnly && readsOwnBytes) ? filePath : null;
   const {

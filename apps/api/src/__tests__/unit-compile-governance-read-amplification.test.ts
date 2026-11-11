@@ -63,7 +63,7 @@ mock.module('../projects/git/object-store', () => ({
   fetchObjects: async (
     repoPath: string,
     oids: readonly string[],
-    options?: Parameters<typeof realFetchObjects>[2],
+    options: Parameters<typeof realFetchObjects>[2],
   ) => {
     objectFetches.push([...oids]);
     return realFetchObjects(repoPath, oids, options);

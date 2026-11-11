@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { peerMessagePromptText } from '@kortix/shared';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { sessionLogOfV1Rows, sessionLogTurns, type SessionLogTurn } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogTurns, type SessionLogTurn, type V1MessageRow } from '@kortix/sdk';
 
 import { TranscriptTurnRow } from '../index';
 
@@ -26,7 +28,7 @@ const peerPrompt = peerMessagePromptText({
 });
 
 /** A report turn that did work: a tool call, then the parent's answer text. */
-const reportTurnRows = [
+const reportTurnRows: V1MessageRow[] = [
   {
     info: { id: 'peer-prompt', sessionID: 'rs', role: 'user', agent: 'build', model: { providerID: 'test', modelID: 'test' }, time: { created: 1 } },
     parts: [{ id: 'peer-text', sessionID: 'rs', messageID: 'peer-prompt', type: 'text', synthetic: true, text: peerPrompt }],
@@ -34,11 +36,11 @@ const reportTurnRows = [
   {
     info: { id: 'peer-answer', sessionID: 'rs', role: 'assistant', agent: 'build', modelID: 'test', providerID: 'test', mode: 'build', path: { cwd: '/', root: '/' }, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, parentID: 'peer-prompt', time: { created: 2, completed: 9_000 } },
     parts: [
-      { id: 'peer-bash', sessionID: 'rs', messageID: 'peer-answer', type: 'tool', callID: 'call-peer-bash', tool: 'bash', state: { status: 'completed', input: { command: 'echo synthetic' }, output: 'synthetic' } },
+      { id: 'peer-bash', sessionID: 'rs', messageID: 'peer-answer', type: 'tool', callID: 'call-peer-bash', tool: 'bash', state: { status: 'completed', input: { command: 'echo synthetic' }, output: 'synthetic', title: 'Run the synthetic check', metadata: {}, time: { start: 2_000, end: 5_000 } } },
       { id: 'peer-final', sessionID: 'rs', messageID: 'peer-answer', type: 'text', text: 'Run is done: 2 of 3 checks passed.' },
     ],
   },
-] as never[];
+];
 
 const reportTurn: SessionLogTurn = sessionLogTurns(sessionLogOfV1Rows('p', 'rs', reportTurnRows).threads[0]!)[0]!;
 
@@ -75,6 +77,58 @@ function renderRow(turn: SessionLogTurn, working = false): string {
   );
 }
 
+// ─── The live → settled transition, rendered statefully (react-test-renderer) ──
+const browser = new Window();
+Object.defineProperty(globalThis, 'window', { value: browser, configurable: true });
+Object.defineProperty(globalThis, 'document', { value: browser.document, configurable: true });
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
+let mounted: ReactTestRenderer | undefined;
+afterEach(async () => { await act(async () => mounted?.unmount()); });
+const client = new QueryClient();
+function renderTurn(working: boolean) {
+  return (
+    <QueryClientProvider client={client}>
+      <TranscriptTurnRow
+        turnId={reportTurn.id}
+        viewportClassName=""
+        suppressed={false}
+        showBusyRow={false}
+        turn={reportTurn}
+        turnOutcome={{}}
+        isLast
+        ownsPlan={false}
+        sessionId="s"
+        sessionStatus={undefined}
+        permissions={[]}
+        questions={[]}
+        sessionWorking={working}
+        isWorkingTurn={working}
+        suppressBusyIndicator={false}
+        awaitingUser={false}
+        pending={false}
+        isFirstTurn={false}
+        onPermissionReply={() => Promise.resolve()}
+        onRewind={() => undefined}
+        rewindDisabled
+        fullTextState="idle"
+        onLoadFullText={() => undefined}
+        modelOptions={2}
+      />
+    </QueryClientProvider>
+  );
+}
+const peerRow = () => mounted!.root.find((node) => node.props['data-testid'] === 'peer-message-turn');
+/** The keyed wrapper around a node: its `hidden` is the fold. */
+const wrapperOf = (node: ReactTestRenderer['root'] extends never ? never : ReturnType<typeof peerRow>) => {
+  let current = node.parent;
+  while (current && !(current.type === 'div' && 'hidden' in current.props)) current = current.parent;
+  if (!current) throw new Error('Missing notice wrapper');
+  return current;
+};
+const workRow = () => mounted!.root.find((node) => node.type === 'button' && node.props['aria-expanded'] !== undefined && String(node.props.children?.[0]?.props?.children ?? '').startsWith('Worked'));
+
+
+
 describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
   test('a settled report turn folds the peer message behind its Worked row', () => {
     const html = renderRow(reportTurn);
@@ -88,13 +142,21 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
     expect(html).toContain('Run is done: 2 of 3 checks passed.');
   });
 
-  test('a report turn that mounted live keeps its row in the fold, hidden while closed', () => {
-    // A turn the reader watched settle keeps its work mounted (the fold's
-    // no-remount rule), so the settled render carries the row hidden in the
-    // fold — opening the row shows it.
-    const live = renderRow(reportTurn, true);
-    expect(live).toContain('data-testid="peer-message-turn"');
-    expect(live).not.toContain('Worked for');
+  test('a report turn that mounted live folds its row at settle, hidden while closed, without a remount', async () => {
+    await act(async () => { mounted = create(renderTurn(true)); });
+    const row = peerRow();
+    expect(row).toBeDefined();
+    // No fold while the turn works: the row renders visible.
+    expect(mounted!.root.findAll((node) => node.type === 'button' && node.props['aria-expanded'] !== undefined && String(node.props.children?.[0]?.props?.children ?? '').startsWith('Worked'))).toHaveLength(0);
+    await act(async () => mounted?.update(renderTurn(false)));
+    // The row kept its DOM identity (the fold's no-remount rule), hidden
+    // behind the closed "Worked for" row; opening the row shows the exchange.
+    expect(peerRow()).toBe(row);
+    expect(workRow().props['aria-expanded']).toBe(false);
+    expect(wrapperOf(row).props.hidden).toBe(true);
+    await act(async () => workRow().props.onClick());
+    expect(workRow().props['aria-expanded']).toBe(true);
+    expect(wrapperOf(row).props.hidden).toBe(false);
   });
 
   test('a live report turn shows the peer message until the turn settles', () => {
@@ -107,13 +169,13 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
   });
 
   test('a report turn with no answer keeps the row at the top level', () => {
-    const thread = sessionLogOfV1Rows('p', 'rs', [
+    const promptRows: V1MessageRow[] = [
       {
         info: { id: 'peer-prompt', sessionID: 'rs', role: 'user', agent: 'build', model: { providerID: 'test', modelID: 'test' }, time: { created: 1 } },
         parts: [{ id: 'peer-text', sessionID: 'rs', messageID: 'peer-prompt', type: 'text', synthetic: true, text: peerPrompt }],
       },
-    ] as never[]).threads[0]!;
-    const turn = sessionLogTurns(thread)[0]!;
+    ];
+    const turn = sessionLogTurns(sessionLogOfV1Rows('p', 'rs', promptRows).threads[0]!)[0]!;
     const html = renderRow(turn);
     const row = html.indexOf('data-testid="peer-message-turn"');
     expect(row).toBeGreaterThan(-1);

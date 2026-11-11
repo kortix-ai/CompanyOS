@@ -167,8 +167,8 @@ const CHILD_ROWS: Record<string, V1Row[]> = Object.fromEntries(
 
 function seed() {
   const store = useSessionStateStore.getState();
-  store.hydrate(SESSION_ID, ROWS as never);
-  for (const [childId, rows] of Object.entries(CHILD_ROWS)) store.hydrate(childId, rows as never);
+  store.hydrate(SESSION_ID, ROWS);
+  for (const [childId, rows] of Object.entries(CHILD_ROWS)) store.hydrate(childId, rows);
   store.setStatus(SESSION_ID, { type: 'idle' });
   for (const childId of Object.keys(CHILD_ROWS)) store.setStatus(childId, { type: 'idle' });
   return () => {
@@ -184,7 +184,7 @@ const noopAsync = async () => {};
 export default function NoticeFoldPage() {
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false } } }));
   useEffect(() => seed(), []);
-  const turns = useMemo(() => sessionLogTurns(sessionLogOfV1Rows(SESSION_ID, SESSION_ID, ROWS as never).threads[0]!), []);
+  const turns = useMemo(() => sessionLogTurns(sessionLogOfV1Rows(SESSION_ID, SESSION_ID, ROWS).threads[0]!), []);
 
   return (
     <QueryClientProvider client={queryClient}>

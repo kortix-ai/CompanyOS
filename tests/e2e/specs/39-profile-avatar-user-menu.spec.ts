@@ -58,7 +58,9 @@ test.describe('39 — The profile picture shows where the person sees themselves
   test('the uploaded avatar renders in the Logged in as trigger and in the shell menu', async ({
     page,
   }) => {
-    test.setTimeout(420_000);
+    // Recorded local run: 419.5s (tests/e2e/shard-durations.json); gotoStable
+    // can add ~50s more. Cap 420s left 0.5s of headroom — 600s covers a slow lane.
+    test.setTimeout(600_000);
     const env = loadEnv();
     if (!env.databaseUrl) throw new Error('KE2E_DATABASE_URL is required');
     const runId = Date.now().toString(36);

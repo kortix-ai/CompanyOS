@@ -47,7 +47,13 @@ describe('resolveTurbopackFileSystemCacheForBuild', () => {
 });
 
 describe('next.config.ts wiring', () => {
+  // A source-level contract, like turbopack-gc.test.ts: next.config.ts's default
+  // export runs the blume docs build, so a unit test cannot call it and assert
+  // the resolved value. Both lines are pinned so deleting either fails.
   test('build cache goes through the resolver', () => {
+    expect(nextConfig).toMatch(
+      /^import \{ resolveTurbopackFileSystemCacheForBuild \} from '\.\/src\/config\/turbopack-build-cache';$/m,
+    );
     expect(nextConfig).toMatch(/^\s*turbopackFileSystemCacheForBuild: resolveTurbopackFileSystemCacheForBuild\(\),$/m);
   });
 });

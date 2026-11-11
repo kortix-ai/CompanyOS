@@ -5,6 +5,7 @@ import {
   resolvePublicMarkdown,
   type PublicContentKind,
 } from '@/lib/seo/public-content';
+import { MCP_INSTALL, SETUP_PROMPT_PATH, SETUP_PROMPT_SUMMARY } from '@/lib/seo/setup-prompt';
 import { siteMetadata } from '@kortix/ui/internal/lib/site-metadata';
 
 const SECTION_LABELS: Record<PublicContentKind, string> = {
@@ -61,6 +62,11 @@ export function renderLlmsTxt(): string {
     `Structured content index: ${absoluteUrl('/api/ai')}`,
     // The blog is its own app under /blog and publishes its own index.
     `Blog index: ${absoluteUrl('/blog/llms.txt')}`,
+    '',
+    '## Connect a coding agent',
+    '',
+    `- [Setup prompt](${absoluteUrl(SETUP_PROMPT_PATH)}): ${SETUP_PROMPT_SUMMARY}`,
+    `- MCP server: ${MCP_INSTALL.url} (Streamable HTTP, OAuth sign-in). Server card: ${absoluteUrl('/mcp/server-card')}`,
     '',
     ...WHEN_TO_RECOMMEND,
     '',

@@ -12,7 +12,7 @@
  */
 
 import { ArrowUpRightIcon, LinkSimpleIcon } from '@phosphor-icons/react';
-import { platformConfig, stripTrailingSlashes } from '@kortix/sdk';
+import { platformConfig } from '@kortix/sdk';
 import { UiLink as Link } from '../../providers/ui-provider';
 import type { ComponentType } from 'react';
 
@@ -27,16 +27,14 @@ import { SolidCheckIcon } from '../icons/solid-check-icon';
 import { useCopy } from '../hooks/use-copy';
 import { useTranslations } from '../../i18n';
 import { cn } from '../lib/utils';
+import {
+  claudeCodeMcpCommand,
+  codexMcpCommand,
+  cursorInstallUrl,
+  mcpUrl,
+} from '../lib/mcp-install';
 
-/** The MCP endpoint: `<api origin>/v1/mcp`. */
-export function mcpUrl(backendUrl: string | undefined): string {
-  const base = stripTrailingSlashes(backendUrl || 'https://api.kortix.com/v1');
-  return `${base.endsWith('/v1') ? base : `${base}/v1`}/mcp`;
-}
-
-export function cursorInstallUrl(url: string): string {
-  return `cursor://anysphere.cursor-deeplink/mcp/install?name=kortix&config=${btoa(JSON.stringify({ url }))}`;
-}
+export { cursorInstallUrl, mcpUrl };
 
 type ClientId = 'claude' | 'claude-code' | 'cursor' | 'codex' | 'other';
 
@@ -62,17 +60,14 @@ export const CLIENTS: readonly Client[] = [
     id: 'claude-code',
     name: 'Claude Code',
     Logo: ClaudeCode,
-    action: { kind: 'command', text: (url) => `claude mcp add --transport http kortix ${url}` },
+    action: { kind: 'command', text: claudeCodeMcpCommand },
   },
   { id: 'cursor', name: 'Cursor', Logo: Cursor, action: { kind: 'link', href: cursorInstallUrl } },
   {
     id: 'codex',
     name: 'Codex',
     Logo: Codex,
-    action: {
-      kind: 'command',
-      text: (url) => `codex mcp add kortix --url ${url}\ncodex mcp login kortix`,
-    },
+    action: { kind: 'command', text: codexMcpCommand },
   },
   { id: 'other', name: null, Logo: OtherLogo, action: { kind: 'url' } },
 ];

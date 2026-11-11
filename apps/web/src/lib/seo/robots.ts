@@ -43,6 +43,7 @@ Allow: /llms-full.txt
 Allow: /markdown/
 Allow: /.well-known/
 Allow: /auth.md
+Allow: /setup-prompt.md
 Allow: /mcp
 `;
 

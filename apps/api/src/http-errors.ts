@@ -34,6 +34,7 @@ import {
   deadCredentialLogKey,
   isAccountMfaDenial,
   isAgentGrantDenial,
+  isCredentialFenceDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
@@ -388,7 +389,19 @@ function handleHttpException(
   // put 700+ warn lines in one hour across three routes, 0 in the 24 h
   // before, until its people complete the step-up. Same line, same
   // grouping; only the rate and the severity band change.
-  if (isDeadCredential(err) || isAgentGrantDenial(err) || isAccountMfaDenial(err) || isInvalidExpiredTokenRefusal(err.status, reason)) {
+  // The credential-fence denial joins the same treatment (KRTX-4731): the
+  // fence is fail closed by design and its typed body names the remedy
+  // (use a personal key or sign in), but a workspace-bound token looping a
+  // person route — POST /v1/mcp with an OAuth workspace token — put 31 warn
+  // lines in one hour, 0 in the 24 h before. Same line, same grouping; only
+  // the rate and the severity band change.
+  if (
+    isDeadCredential(err)
+    || isAgentGrantDenial(err)
+    || isAccountMfaDenial(err)
+    || isCredentialFenceDenial(err)
+    || isInvalidExpiredTokenRefusal(err.status, reason)
+  ) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.

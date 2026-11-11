@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { SessionTurn, TurnViewport } from '@kortix/ui/session';
 import { SESSION_TRANSCRIPT_CLASS } from '@kortix/ui/session/thread/session-body';
 import { peerMessagePromptText } from '@kortix/shared';
-import { sessionLogOfV1Rows, sessionLogTurns } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogTurns, type SessionLogTurn } from '@kortix/sdk';
 import { useSessionStateStore } from '@kortix/sdk/react';
 
 const SESSION_ID = 'ses_krtx4732_parent';

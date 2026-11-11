@@ -1552,7 +1552,8 @@ hands it a token that acts as that person. An anonymous `GET /_kortix/viewer`
 link (`POST …/:appId/access-session`, then the link → **303** with the App
 cookie) gets **200** from `/_kortix/viewer`: their `user_id`, scopes
 `profile email kortix`, a `kortix_oat_` token that expires in one hour. The
-token acts as the viewer: `GET /accounts/me` answers their `user_id` with
+token cannot approve another OAuth grant (`POST /oauth/authorize/consent` →
+**403**). The token acts as the viewer: `GET /accounts/me` answers their `user_id` with
 `token_context.auth_type: oauth`, so what it creates is theirs, never the App
 author's. The viewer's own role is the ceiling: as a project `member` with no
 agent grant, the token's `POST /projects/:projectId/sessions` → **403**
@@ -1563,7 +1564,17 @@ with the App cookie and `Sec-Fetch-Site: same-origin`,
 `GET /_kortix/api/v1/accounts/me` → **200** as the viewer (`auth_type: oauth`),
 `GET /_kortix/api/v1/projects/:projectId` → **200**, and no `Set-Cookie`
 reaches the App origin. `Sec-Fetch-Site: cross-site` → **403**
-`cross_site_request`; `/_kortix/api/v1/oauth/*` → **404**. The real CLI process `kortix apps access <app>
+`cross_site_request`; `/_kortix/api/v1/oauth/*` → **404**. In a workspace that
+requires MFA (`PATCH /accounts/:accountId/iam/mfa-required`), an App opened
+from a session without a second factor does not act as its viewer: the
+viewer's own session, `GET /_kortix/api/v1/projects/:projectId` and the viewer
+token each get **403** `account_mfa_required`, and `POST …/access-session` →
+**403**. A viewer token counts as the second factor only when `access-session`
+was asked by a browser session at aal2; the cookie records it, the token row
+keeps it (`mfa_aal`), and the API honors it in the App's own account only
+(`apps/api/src/apps/viewer-session-aal.test.ts`,
+`apps/api/src/__tests__/unit-app-viewer-token-mfa.test.ts`).
+The real CLI process `kortix apps access <app>
 --viewer identity` switches the scope and keeps `restricted` and the members;
 `--viewer everything` exits non-zero. `identity` scope yields `profile email` only, and
 that token gets **403** on a project route, and `/_kortix/api/v1/*` →
@@ -1821,7 +1832,7 @@ Changing the agent policy does not widen the existing restricted session.
 
 ChatGPT usage regression: `GW-5` asserts published model rates remain visible in ChatGPT picker rows.
 
-`SESS-32` Every session saves its transcript; there is no feature flag. `GET /projects/:projectId/sessions/:sessionId/transcript?shape=sync&history=true` returns completed, ordered messages from PostgreSQL while the sandbox is stopped, in the `@kortix/api-contract` `SessionTranscriptSyncEnvelope` shape. `GET /projects/:projectId/sessions/:sessionId/snapshot` answers the same stopped session in one read without waking it: `transcript.known` with the same saved messages, `turn.known` and `queue.known`, every leg in the contract `SessionSnapshot` shape. `PATCH /projects/:projectId/features {feature:"session_transcript_history"}` answers 400 (`Unknown feature flag`), and a `session_transcript_history: false` override an older server stored in project metadata changes nothing: the read still answers 200 with the saved messages. `&child=<ses_…>` returns a sub-agent's saved transcript as its own window; the conversation window never includes it. A malformed child id → 400; a child with nothing saved → `available:false`. Anonymous and nonmember callers are denied. A replaced runtime root returns unavailable with zero messages. The saved history is in the session log, journaled through `POST …/log/journal` as `fromV1` records, and every read answers from the log. `kortix sessions digest` reads it for a stopped session and reports `source: "log"` plus `complete`. `kortix sessions log <id> --json` reads the same stopped session's conversation without waking it: stdout is the `kortix.session/2` JSON with `"source": "log"`, the root and the sub-agent's thread, stderr names the stored session log, and the session stays `stopped`. `--schema v1` exits 2 and names the invalid schema; only `kortix.session/2` (v2) output is supported. A stopped session with nothing saved exits 1 and names `kortix sessions start` as the way to read it live. The CLI reads no v1 transcript route (P8). Browser journey 34 renders the saved conversation while reads remain pending.
+`SESS-32` Every session saves its transcript; there is no feature flag. `GET /projects/:projectId/sessions/:sessionId/transcript?shape=sync&history=true` returns completed, ordered messages from PostgreSQL while the sandbox is stopped, in the `@kortix/api-contract` `SessionTranscriptSyncEnvelope` shape. The route is deprecated (session-log plan P8.3): every answer carries `Deprecation: @1794355200` (RFC 9745) and `Link: </v1/workspaces/:projectId/sessions/:sessionId/log>; rel="successor-version"`. `GET /projects/:projectId/sessions/:sessionId/snapshot` answers the same stopped session in one read without waking it: `transcript.known` with the same saved messages, `turn.known` and `queue.known`, every leg in the contract `SessionSnapshot` shape. `PATCH /projects/:projectId/features {feature:"session_transcript_history"}` answers 400 (`Unknown feature flag`), and a `session_transcript_history: false` override an older server stored in project metadata changes nothing: the read still answers 200 with the saved messages. `&child=<ses_…>` returns a sub-agent's saved transcript as its own window; the conversation window never includes it. A malformed child id → 400; a child with nothing saved → `available:false`. Anonymous and nonmember callers are denied. A replaced runtime root returns unavailable with zero messages. The saved history is in the session log, journaled through `POST …/log/journal` as `fromV1` records, and every read answers from the log. `kortix sessions digest` reads it for a stopped session and reports `source: "log"` plus `complete`. `kortix sessions log <id> --json` reads the same stopped session's conversation without waking it: stdout is the `kortix.session/2` JSON with `"source": "log"`, the root and the sub-agent's thread, stderr names the stored session log, and the session stays `stopped`. `--schema v1` exits 2 and names the invalid schema; only `kortix.session/2` (v2) output is supported. A stopped session with nothing saved exits 1 and names `kortix sessions start` as the way to read it live. The CLI reads no v1 transcript route (P8). Browser journey 34 renders the saved conversation while reads remain pending.
 
 `SESS-33` A session pinned to an earlier `repository_generation` follows the ordinary `POST /projects/:projectId/sessions/:sessionId/start` lifecycle without a bypass. The web renders persisted transcript history immediately and shows a compact repository-change notice. The stable project Git proxy origin resolves the current upstream repository and accepts the session credential under its existing branch policy. The legacy `repository_mode=previous` query remains accepted for rolling-client compatibility. A missing previous runtime uses the ordinary stopped-session restart path. Such a session also receives the project's CURRENT config release, exactly like a session of the current generation (`CFG-7`).
 

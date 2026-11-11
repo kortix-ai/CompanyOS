@@ -118,6 +118,15 @@ export function PwaClient() {
 
     const register = () => {
       navigator.serviceWorker.register('/sw.js').then(watch).catch(() => undefined);
+      // A signed-out surface is the one place the previous identity's cached
+      // route HTML must not survive: the shell cache holds the server-rendered
+      // session title of every route that user visited, and the sign-out reset
+      // cannot reach the Cache API. `/offline.html` is kept by the worker.
+      if (/(?:^|\/)(?:[a-z]{2}\/)?auth\/?$/.test(window.location.pathname)) {
+        navigator.serviceWorker.ready
+          .then((registration) => registration.active?.postMessage({ type: 'PURGE_SHELL' }))
+          .catch(() => undefined);
+      }
     };
     // A dynamic chunk mounts after hydration, when `load` has usually fired.
     if (document.readyState === 'complete') {

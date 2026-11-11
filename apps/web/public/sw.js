@@ -166,6 +166,23 @@ self.addEventListener('install', (event) => {
 // and posts SKIP_WAITING, and the swap lands only on the reload it triggers.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  // The page asks for this on a signed-out surface. The shell cache is keyed by
+  // URL only, so it holds the previous identity's route HTML — including the
+  // server-rendered session title — and nothing in the sign-out path can reach
+  // the Cache API. `/offline.html` stays: it is the fallback the dead network
+  // needs, and it is only precached at install.
+  if (event.data && event.data.type === 'PURGE_SHELL') {
+    event.waitUntil(
+      caches.open(SHELL_CACHE).then(async (cache) => {
+        const keys = await cache.keys();
+        await Promise.all(
+          keys
+            .filter((key) => new URL(key.url).pathname !== OFFLINE_URL)
+            .map((key) => cache.delete(key)),
+        );
+      }),
+    );
+  }
 });
 
 // Old versions' caches die here. `claim` lets `navigate` reach tabs that

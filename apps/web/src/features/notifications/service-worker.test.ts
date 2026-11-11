@@ -431,6 +431,18 @@ describe('sw.js app shell (KRTX-4719)', () => {
     expect(skipWaitingCalls).toHaveLength(1);
   });
 
+  test('PURGE_SHELL on a signed-out surface clears the route HTML and keeps offline.html', async () => {
+    const installWaits: Promise<unknown>[] = [];
+    handlers.install({ waitUntil: (promise: Promise<unknown>) => installWaits.push(promise) });
+    await Promise.all(installWaits);
+    await fetchEvent(navigate('/workspaces/p1/sessions/s1'));
+    const waits: Promise<unknown>[] = [];
+    handlers.message({ data: { type: 'PURGE_SHELL' }, waitUntil: (promise: Promise<unknown>) => waits.push(promise) });
+    await Promise.all(waits);
+    const paths = (await cachesApi.stores.get(SHELL)!.keys()).map((key) => new URL(key.url).pathname);
+    expect(paths).toEqual(['/offline.html']);
+  });
+
   test('a navigation goes to the network and caches its HTML', async () => {
     const { response, responded } = await fetchEvent(navigate('/workspaces/p1/sessions/s1'));
     expect(responded).toBe(true);

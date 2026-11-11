@@ -1326,11 +1326,12 @@ effective tool list (the tools that pass `rootToolAllowed`), intersected with
 the spec's list, in `runtime_context` `kortix.subagent.tools`. The child's
 runtime narrows its tools to that list, so a child never has a tool its parent
 lacks, as on the in-process path. `variant` and the spec `permission` are not
-sent: the child applies its own agent's. The result text comes from
-`GET …/sessions/:child/transcript?detail=full`, read only from the messages
-after the last user message (the turn this call started): a failed last
-assistant message is an error, and an earlier turn's report is never
-returned. `task_id` sends a follow-up through `POST …/sessions/:child/prompts`
+sent: the child applies its own agent's. The result text comes from the
+child's stored session log, `GET …/sessions/:child/log?limit=20`, read only
+from the conversation messages after the last user message (the turn this
+call started; compaction and context records do not count): a failed last
+assistant message is an error, an earlier turn's report is never returned,
+and an answer over 16,000 characters is cut with a `[truncated: …]` marker. `task_id` sends a follow-up through `POST …/sessions/:child/prompts`
 to a child of this session only. An aborted call, and a wait past the 30 min
 ceiling, stop the child. Guardrails: at most
 `KORTIX_PI_CLOUD_SUBAGENTS_MAX` (4) children wait at once per parent, and a
@@ -1361,7 +1362,7 @@ provisioning or working.
 
 **Workflows.** The `workflow` tool (`pi/extensions/workflow.ts`) starts each
 `agent()` through the same spawn, with three more inputs: `stallMs` (a child
-whose transcript tail, `GET …/transcript?limit=3`, shows no change and no
+whose session-log tail, `GET …/log?limit=3`, shows no change and no
 running tool for that long is stopped; the result carries `stalled: true` and
 the tool starts a new session), `waitMs` (the run's 2 h deadline replaces the
 30 min ceiling), and `runtimeContext` (the runner's marks:
@@ -1402,8 +1403,8 @@ failed or was interrupted; `fresh: true` opts out) reuses every completed
 run id, and starts a NEW runner session. Its hand-off carries the finished
 agents' saved results: from this box's record of a run that ran here, or, for a
 background run, from the last runner's final run document (`details.records`
-of its last `workflow` call, read from its saved transcript,
-`GET …/transcript?shape=sync`). A runner whose transcript holds no such
+of its last `workflow` call, read from its stored session log,
+`GET …/log?limit=40`). A runner whose log holds no such
 document (its box died mid-run) leaves nothing to reuse, and the resume says
 so. The parent's record then names the new runner. A runner that still works
 refuses the resume. A structured agent whose

@@ -106,6 +106,9 @@ mock.module('@/lib/supabase/mfa', () => ({
     },
     getAAL: async () => ({}),
   },
+  // use-mfa.ts (now imported by the page) reads this pure helper from the
+  // same module.
+  mfaChallengeRequired: () => false,
 }));
 mock.module('@/lib/auth/perform-sign-out', () => ({ performSignOut: async () => {} }));
 mock.module('@kortix/ui/internal/lib/onboarding/use-app-home', () => ({ useAppHome: () => '/projects' }));

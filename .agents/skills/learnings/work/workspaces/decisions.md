@@ -135,3 +135,21 @@ operator command per account; on prod, 2026-11-10, 90 paying accounts
 (277 moves, the Kortix team's own account among them) were held, so the
 Release 2 gate "0 `split_pending`" could not be reached.
 
+
+## 2026-11-11
+
+**D13 (decided, Marko 2026-11-11, "no owner notices").** The split notifies
+no owner, before or after a move, on prod, staging and dev. There is no notice
+period before `apply`, no owner email and no other message: the
+`workspace_split_emails` outbox and its sender are removed from the split
+worker (the table stays, empty). Supersedes the owner email of D11 and K4, C9's
+"Owner email", the open decision on the email text (README, 2026-11-10), the
+confirmation-window schedules, and the runbook step "tell the owners of
+accounts with staying tokens, keys or OAuth clients first". Switching an
+environment to `apply` still needs Marko's explicit go. Not covered by the
+quote and unchanged, open with Marko: the in-product split banner. For 30
+days after the account's last move, `GET /v1/workspaces/:id` carries
+`split_notice` (C9), and `SplitNoticeBanner`
+(`packages/ui/src/workspace/settings/split-notice-banner.tsx`) shows it on the
+workspace home and in Settings › General to everyone who can read the
+workspace. It sends nothing.

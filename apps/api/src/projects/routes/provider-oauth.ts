@@ -1,6 +1,6 @@
 /** LLM provider OAuth device flow (ChatGPT via Codex, OpenCode Zen and Go via the OpenCode Console): start, poll, status, disconnect. */
 import { parseSharingIntent } from '../../connectors/share';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PROJECT_ACTIONS } from '../../iam';
 import { auth, errors, json, lenientBody } from '../../openapi';
 import { recordAuditEvent, runAuditedTransaction } from '../../shared/audit';
@@ -109,117 +109,10 @@ const DEVICE_AUTH_TTL_MS = 15 * 60 * 1000;
 // Floor for the client poll cadence (OpenAI returns its own suggested interval).
 const OAUTH_POLL_INTERVAL_MS = 3000;
 
-// Persists the login as the provider's project secret (CODEX_AUTH_JSON, or the
-// OpenCode key secret) — private (the caller's own per-user OAuth login,
-// ownerUserId-scoped) when `sharing` says so, else the project-wide shared
-// row — then returns the caller's view of it. `sharing` only ever chooses private-vs-shared
-// here — member/group secret sharing was retired (see projects/secrets.ts).
-async function writeOAuthLoginSecret(input: {
-  projectId: string;
-  accountId: string;
-  userId: string;
-  secretName: string;
-  value: string;
-  sharing?: ReturnType<typeof parseSharingIntent>;
-}) {
-  const { projectId, accountId, userId, secretName, value, sharing } = input;
-  const now = new Date();
-  let secretId: string;
-
-  if (sharing?.mode === 'private') {
-    const [written] = await db
-      .insert(projectSecrets)
-      .values({
-        projectId,
-        identifier: secretName,
-        name: secretName,
-        valueEnc: encryptProjectSecret(projectId, value),
-        ownerUserId: userId,
-        active: true,
-        strategy: 'broker',
-        consumer: 'llm_gateway',
-        strategyLocked: true,
-        rotatedAt: now,
-        createdBy: userId,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [projectSecrets.projectId, projectSecrets.name, projectSecrets.ownerUserId],
-        targetWhere: sql`${projectSecrets.ownerUserId} is not null`,
-        set: {
-          valueEnc: encryptProjectSecret(projectId, value),
-          active: true,
-          strategy: 'broker',
-          consumer: 'llm_gateway',
-          egressPolicy: null,
-          handlePrefix: null,
-          strategyLocked: true,
-          rotatedAt: now,
-          updatedAt: now,
-        },
-      })
-      .returning({ secretId: projectSecrets.secretId });
-    if (!written) throw new Error('Failed to store the private login');
-    secretId = written.secretId;
-  } else {
-    const [written] = await db
-      .insert(projectSecrets)
-      .values({
-        projectId,
-        identifier: secretName,
-        name: secretName,
-        valueEnc: encryptProjectSecret(projectId, value),
-        strategy: 'broker',
-        consumer: 'llm_gateway',
-        strategyLocked: true,
-        rotatedAt: now,
-        createdBy: userId,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [projectSecrets.projectId, projectSecrets.identifier],
-        targetWhere: isNull(projectSecrets.ownerUserId),
-        set: {
-          valueEnc: encryptProjectSecret(projectId, value),
-          strategy: 'broker',
-          consumer: 'llm_gateway',
-          egressPolicy: null,
-          handlePrefix: null,
-          strategyLocked: true,
-          rotatedAt: now,
-          updatedAt: now,
-        },
-      })
-      .returning({ secretId: projectSecrets.secretId });
-    if (!written) throw new Error('Failed to store the shared login');
-    secretId = written.secretId;
-  }
-
-  await recordAuditEvent({
-    accountId,
-    projectId,
-    actorUserId: userId,
-    actorType: 'human',
-    source: 'api',
-    action: 'secret.oauth.connected',
-    resourceType: 'project_secret',
-    resourceId: secretId,
-    metadata: {
-      identifier: secretName,
-      consumer: 'llm_gateway',
-      sharing: sharing?.mode === 'private' ? 'private' : 'project',
-    },
-  });
-
-  void propagateProjectSecretsToActiveSandboxes(projectId, { refreshModels: true });
-
-  const views = await loadSecretViewsForUser({
-    projectId,
-    userId,
-    canManageShared: true,
-  });
-  return views.find((v) => v.identifier === secretName)
-    ?? { identifier: secretName, name: secretName };
+/** A stable named-account id for one device flow (its device code), as a UUID. */
+function flowSecretId(deviceCode: string): string {
+  const hex = createHash('sha256').update(`provider-oauth-flow:${deviceCode}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /** A named connection only its owner can use: private, or restricted to the owner
@@ -446,15 +339,15 @@ export function registerProviderOauthRoutes(): void {
       } });
     }
 
-    // Legacy project login remains available when no resource label was sent.
+    // No label sent (an older client): the login is still a named account,
+    // the one store of provider credentials (secrets/llm-credential-move.ts),
+    // with the product's name as its label. `sharing` keeps its old meaning:
+    // none or `project` is the whole workspace, `private` only the caller.
     const sharing = state.s ? (parseSharingIntent(state.s, loaded.userId) ?? undefined) : undefined;
-    await writeOAuthLoginSecret({
-      projectId,
-      accountId: loaded.row.accountId,
-      userId: loaded.userId,
-      secretName: cfg.secretName,
-      value: result.authJson,
-      sharing,
+    await writeProviderAccount({
+      // One id per device flow, so a repeated completion writes one row.
+      secretId: flowSecretId(state.d), accountId: loaded.row.accountId, userId: loaded.userId,
+      label: cfg.label, value: result.authJson, projectId, kind: accountKind(cfg), sharing,
     });
 
     capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: String(provider), method: 'oauth' });

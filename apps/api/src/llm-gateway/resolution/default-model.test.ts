@@ -6,6 +6,7 @@ import * as secretsModule from '../../projects/secrets';
 import { runtimeModelCatalog } from '../models/runtime-catalog';
 import * as claudeAccountsModule from '../../claude-subscription/accounts';
 import * as projectModelAccessModule from '../../repositories/project-model-access';
+import * as accountResourceModule from '../../secrets/account-resource';
 import {
   invalidateAccountModelDefaults,
   isModelServableForAccount,
@@ -187,6 +188,44 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(result.source).toBe('platform');
   });
 
+  // The Models panel stores keys as account secret resources. The fallback
+  // read only project secrets, so a workspace whose only key was added there
+  // had no default at all (2026-11-11).
+  test('a key added in the Models panel is a connected provider for the fallback, with the session`s own grants', async () => {
+    accountDefaults = { account: null, agents: {}, projects: { p1: 'openrouter/some-model' } };
+    resolveCandidatesImpl = async (model) => {
+      if (model === 'openrouter/some-model') throw new GatewayResolutionError('provider_not_connected', 'nope', 'connect it');
+      return [{ provider: 'x' }];
+    };
+    spyOn(projectModelAccessModule, 'getProjectGatewayResolution').mockImplementation(
+      async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: true, customProviders: [] }) as never,
+    );
+    const granted = spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => ['OPENAI_API_KEY']);
+
+    const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false, personalUserId: null });
+    expect(result.model?.startsWith('openai/')).toBe(true);
+    expect(result.source).toBe('platform');
+    // A shared session counts no member grant.
+    expect(granted).toHaveBeenCalledWith('a1', 'p1', 'u1', null);
+  });
+
+  // One store (2026-11-11): every writer writes named keys, so the flag no longer hides them.
+  test('with the flag off, a Models-panel key is still a connected provider', async () => {
+    accountDefaults = { account: null, agents: {}, projects: { p1: 'openrouter/some-model' } };
+    resolveCandidatesImpl = async (model) => {
+      if (model === 'openrouter/some-model') throw new GatewayResolutionError('provider_not_connected', 'nope', 'connect it');
+      return [{ provider: 'x' }];
+    };
+    spyOn(projectModelAccessModule, 'getProjectGatewayResolution').mockImplementation(
+      async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: false, customProviders: [] }) as never,
+    );
+    const granted = spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => ['OPENAI_API_KEY']);
+
+    const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });
+    expect(result.model?.startsWith('openai/')).toBe(true);
+    expect(granted).toHaveBeenCalled();
+  });
+
   test('stale configured default AND nothing connected → degrades to plain platform default (unchanged pre-existing behavior), still no throw', async () => {
     accountDefaults = { account: null, agents: {}, projects: { p1: 'openrouter/some-model' } };
     resolveCandidatesImpl = async () => {
@@ -220,7 +259,7 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(principals[0]).toMatchObject({ userId: 'u1', personalUserId: null });
     // Only shared project keys count for the fallback provider as well.
     expect(secretsModule.listProjectSecretNamesForConsumer).toHaveBeenCalledWith(
-      expect.objectContaining({ principalUserId: undefined }),
+      expect.objectContaining({ principalUserId: null }),
     );
 
     const own = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });

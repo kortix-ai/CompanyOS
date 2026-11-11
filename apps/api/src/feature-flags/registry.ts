@@ -243,11 +243,16 @@ const FLAGS: readonly FeatureFlagDef[] = [
     description: 'Members connect their own ChatGPT and Claude subscriptions and provider keys, share them when needed, and choose which ones each session uses.',
     stability: 'experimental',
     available: () => true,
-    // On by default since 2026-10-31: every project gets private-by-default
-    // provider accounts. A project that turned it off keeps it off.
+    // On by default since 2026-10-31: every project gets named provider
+    // accounts, shared with the workspace by default for a person who may
+    // share (2026-11-11). A project that turned it off keeps it off.
+    // Since the one-store change (llm-credential-move.ts) named accounts are
+    // where every provider key lives: the flag no longer decides where a key
+    // is saved or whether the gateway reads it. It gates per-session key
+    // selection and the named ChatGPT/Claude sign-in only.
     platformDefault: () => true,
     enforcement: 'behavioral',
-    enforcementNote: 'Session selection and provider credential resolution reject or ignore resource secrets while disabled.',
+    enforcementNote: 'Session key selection and named ChatGPT/Claude sign-ins are refused while disabled. Provider keys are saved and read as named accounts either way.',
   },
   // `pi_harness` graduated (2026-10-23): every new session runs pi; OpenCode is
   // sunset (kortixd has no OpenCode harness since 2026-10-30). No flag, no

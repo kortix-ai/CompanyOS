@@ -11,7 +11,7 @@
  * - the check runs at commit: a project created and referenced in one
  *   transaction commits; a workspaces row deleted under a live reference fails
  *   the commit; a project delete still cascades through the old key.
- * - 20261111225019147_workspaces_reconcile_missing_rows restores the row of an
+ * - 20261111225900000_workspaces_reconcile_missing_rows restores the row of an
  *   account that has none (invariants I9 and I12).
  *
  * Every row is synthetic and lives in a transaction that rolls back, or is
@@ -20,7 +20,7 @@
 import { describe, expect, test } from 'bun:test';
 import pg from 'pg';
 
-import { up as reconcileMissingRows } from '../migrations/20261111225019147_workspaces_reconcile_missing_rows.concurrent.ts';
+import { up as reconcileMissingRows } from '../migrations/20261111225900000_workspaces_reconcile_missing_rows.concurrent.ts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;

@@ -208,9 +208,11 @@ flow(
       }, { params: { projectId: project.id } });
       refused.status(400).body().has('$.code', 'INVALID_SESSION_MODEL');
     });
-    await ctx.step('a model on pooled keys needs no key list: create and model change select every usable key', async () => {
-      // The CLI, the SDK and chat channels name only a model. This used to
-      // answer 400 INVALID_SESSION_MODEL; an explicit empty list above still does.
+    await ctx.step('a model on pooled keys needs no key list: create and model change accept it and store no selection', async () => {
+      // The CLI, the SDK and chat channels name only a model. The gateway
+      // serves it with every key the session may use, so nothing is stored:
+      // a key added or deleted later counts on the next call. An explicit
+      // empty list (below) still refuses it.
       const created = await owner.post('/v1/projects/:projectId/sessions', {
         model: 'anthropic/claude-sonnet-4.6', agent_name: 'worker',
       }, { params: { projectId: project.id } });
@@ -220,13 +222,13 @@ flow(
         created.status(201);
         const createdId = created.json<any>().session_id;
         ctx.track('session', createdId, { projectId: project.id });
-        (await owner.get(poolPath, { params: { ...poolParams, sessionId: createdId } })).status(200).body().has('$.secret_ids', ids);
+        (await owner.get(poolPath, { params: { ...poolParams, sessionId: createdId } })).status(200).body().has('$.configured', false);
       }
       (await owner.put(poolPath, { secret_ids: null }, { params: poolParams })).status(200).body().has('$.configured', false);
       (await owner.put('/v1/projects/:projectId/sessions/:sessionId/model', {
         model: 'anthropic/claude-sonnet-4.6',
       }, { params: poolParams })).status(200).body().has('$.model', 'kortix/anthropic/claude-sonnet-4.6');
-      (await owner.get(poolPath, { params: poolParams })).status(200).body().has('$.configured', true).has('$.secret_ids', ids);
+      (await owner.get(poolPath, { params: poolParams })).status(200).body().has('$.configured', false);
     });
     await ctx.step('an explicit empty selection stays: a model change refuses the model and keeps it', async () => {
       (await owner.put(poolPath, { secret_ids: [] }, { params: poolParams })).status(200).body().has('$.configured', true);
@@ -280,7 +282,8 @@ flow(
         (await sa.put('/v1/projects/:projectId/sessions/:sessionId/model', {
           model: 'anthropic/claude-sonnet-4.6',
         }, { params })).status(200).body().has('$.model', 'kortix/anthropic/claude-sonnet-4.6');
-        (await owner.get(poolPath, { params })).status(200).body().has('$.configured', true).has('$.secret_ids', [projectKeyId]);
+        // The project's key serves the shared session with no selection stored.
+        (await owner.get(poolPath, { params })).status(200).body().has('$.configured', false);
       } finally {
         (await owner.del('/v1/accounts/:accountId/iam/service-accounts/:saId', {
           params: { ...resourceParams, saId },
@@ -434,11 +437,13 @@ flow('SEC-POOL-4', {
   const listPath = `${path}?project_id=${project.id}`;
   const input = { project_id: project.id, label: 'Project key', provider_id: 'anthropic',
     name: 'ANTHROPIC_API_KEY', value: 'project-key-test-value', consumer: 'llm_gateway', strategy: 'broker' };
-  await ctx.step('flag off rejects a project-scoped credential', async () => {
+  await ctx.step('flag off still saves a project-scoped key: named accounts are the one store of provider keys', async () => {
     // The flag is on by default since 2026-10-31 (#11335): turn it off first.
     (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false },
       { params: { projectId: project.id } })).status(200);
-    (await owner.post(path, input, { params })).status(403);
+    const saved = await owner.post(path, { ...input, label: 'Saved with the flag off' }, { params });
+    saved.status(201);
+    (await owner.del(`${path}/:secretId`, { params: { ...params, secretId: saved.json<{ secret_id: string }>().secret_id } })).status(200);
   });
   (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true },
     { params: { projectId: project.id } })).status(200);
@@ -780,6 +785,177 @@ flow('SEC-POOL-3', {
     });
     result.status(400).body().has('$.error.code', 'provider_not_connected');
   });
+}));
+
+/** A gateway answer that is not "no key": resolution found a key and called the provider. */
+function reachedProvider(result: { statusCode: number; text(): string }, label: string): void {
+  const body = result.text();
+  if (result.statusCode === 400 && /provider_not_connected/.test(body)) {
+    throw new Error(`${label}: the gateway found no key: ${body.slice(0, 300)}`);
+  }
+  if (/No anthropic API key is connected/.test(body)) throw new Error(`${label}: ${body.slice(0, 300)}`);
+}
+
+flow('SEC-POOL-7', {
+  domain: 'secrets', requires: ['database'],
+  routes: [
+    'POST /v1/accounts/:accountId/secret-resources',
+    'PUT /v1/accounts/:accountId/secret-resources/:secretId/access',
+    'DELETE /v1/accounts/:accountId/secret-resources/:secretId',
+    'POST /v1/workspaces/:projectId/gateway/playground',
+    'POST /v1/workspaces/:projectId/gateway/keys',
+    'DELETE /v1/workspaces/:projectId/gateway/keys/:keyId',
+    'POST /v1/accounts/tokens',
+    'POST /v1/llm/chat/completions',
+  ],
+}, deletingSandboxRows(async (ctx, track) => {
+  const { Client: PgClient } = await import('pg');
+  const team = await ctx.fixtures.team();
+  track(team.id);
+  const project = await team.project({ seed: true, allowAllSecrets: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: project.id };
+  const resourceParams = { accountId: team.id };
+  const model = 'anthropic/claude-sonnet-4.6';
+  const chat = { model, max_tokens: 8, messages: [{ role: 'user', content: 'Reply with: pong' }] };
+  (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true }, { params })).status(200);
+  // The Models panel's "Add key", shared with everyone in the workspace. The
+  // value is not a real key: Anthropic refuses it, which proves a key was sent.
+  const created = await owner.post('/v1/accounts/:accountId/secret-resources', {
+    project_id: project.id, access_mode: 'project', label: 'Workspace key', provider_id: 'anthropic',
+    name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key', consumer: 'llm_gateway', strategy: 'broker',
+  }, { params: resourceParams });
+  created.status(201).body().has('$.access_mode', 'project');
+  const secretId = created.json<{ secret_id: string }>().secret_id;
+  const gatewayKey = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: ctx.fixtures.name('gw') }, { params });
+  gatewayKey.status(200);
+  const { key_id: keyId, secret_key: gatewaySecret } = gatewayKey.json<{ key_id: string; secret_key: string }>();
+  const viaGatewayKey = ctx.client.withBearer(gatewaySecret, 'GATEWAY_KEY');
+  try {
+    await ctx.step('the playground, outside any session, sends the request with the Models-panel key', async () => {
+      const run = await owner.post('/v1/workspaces/:projectId/gateway/playground', { prompt: 'Reply with: pong', models: [model] }, { params });
+      run.status(200);
+      const [result] = run.json<{ results: Array<{ model: string; ok: boolean; error?: string }> }>().results;
+      if (!result || result.model !== model) throw new Error(`playground answered ${run.text().slice(0, 300)}`);
+      if (/not connected/i.test(result.error ?? '')) throw new Error(`playground found no key: ${result.error}`);
+    });
+    await ctx.step('a gateway API key uses a key shared with everyone in the workspace', async () => {
+      reachedProvider(await viaGatewayKey.post('/v1/llm/chat/completions', chat), 'gateway API key');
+    });
+    await ctx.step('a session with no key selection uses the Models-panel key', async () => {
+      const sessionId = await createDatabaseSession(ctx.env, { projectId: project.id, accountId: team.id, userId: ctx.P.OWNER.userId! });
+      const minted = await owner.post('/v1/accounts/tokens', { name: 'No selection', account_id: team.id });
+      minted.status(201);
+      const credential = minted.json<{ token_id: string; secret_key: string }>();
+      const databaseUrl = ctx.env.databaseUrl!;
+      const database = new PgClient({ connectionString: databaseUrl,
+        ssl: /localhost|127\.0\.0\.1/.test(databaseUrl) ? false : { rejectUnauthorized: false } });
+      await database.connect();
+      try {
+        await database.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
+        await database.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
+          credential.token_id, project.id, sessionId,
+          JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
+        ]);
+      } finally { await database.end(); }
+      const session = ctx.client.withBearer(credential.secret_key, 'BOUND_SESSION');
+      (await session.get('/v1/projects/:projectId/sessions/:sessionId/provider-secret-pools/:providerId', {
+        params: { ...params, sessionId, providerId: 'anthropic' },
+      })).status(200).body().has('$.configured', false);
+      reachedProvider(await session.post('/v1/llm/chat/completions', chat), 'session without a selection');
+    });
+    await ctx.step('a key made private to its owner: a gateway API key is refused, and the error says why', async () => {
+      (await owner.put('/v1/accounts/:accountId/secret-resources/:secretId/access', { mode: 'members', user_ids: [] }, {
+        params: { ...resourceParams, secretId },
+      })).status(200);
+      const refused = await viaGatewayKey.post('/v1/llm/chat/completions', chat);
+      refused.status(400).body().has('$.error.code', 'provider_not_connected');
+      if (!/private/.test(refused.text()) || !/gateway API key/.test(refused.text())) {
+        throw new Error(`the refusal does not say why: ${refused.text().slice(0, 300)}`);
+      }
+      // Its owner still runs the model on it.
+      const run = await owner.post('/v1/workspaces/:projectId/gateway/playground', { prompt: 'Reply with: pong', models: [model] }, { params });
+      run.status(200);
+      const [result] = run.json<{ results: Array<{ error?: string }> }>().results;
+      if (/not connected|private/i.test(result?.error ?? '')) throw new Error(`the owner lost their own key: ${result?.error}`);
+    });
+  } finally {
+    (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
+    (await owner.del('/v1/accounts/:accountId/secret-resources/:secretId', { params: { ...resourceParams, secretId } })).status([200, 404]);
+  }
+}));
+
+flow('SEC-POOL-8', {
+  domain: 'secrets', requires: ['database'],
+  routes: [
+    'PATCH /v1/projects/:projectId/features',
+    'POST /v1/projects/:projectId/secrets',
+    'GET /v1/projects/:projectId/secrets',
+    'DELETE /v1/projects/:projectId/secrets/:name',
+    'PUT /v1/projects/:projectId/secrets/:identifier/strategy',
+    'GET /v1/accounts/:accountId/secret-resources',
+    'POST /v1/workspaces/:projectId/gateway/keys',
+    'DELETE /v1/workspaces/:projectId/gateway/keys/:keyId',
+    'POST /v1/llm/chat/completions',
+  ],
+}, deletingSandboxRows(async (ctx, track) => {
+  const team = await ctx.fixtures.team();
+  track(team.id);
+  const project = await team.project({ seed: true, allowAllSecrets: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: project.id };
+  const model = 'anthropic/claude-sonnet-4.6';
+  const chat = { model, max_tokens: 8, messages: [{ role: 'user', content: 'Reply with: pong' }] };
+  type Resource = { secret_id: string; label: string; provider_id: string | null; name: string; access_mode: string };
+  const workspaceKeys = async () => (await owner.get('/v1/accounts/:accountId/secret-resources', {
+    params: { accountId: team.id }, query: { project_id: project.id },
+  })).status(200).json<{ secrets: Resource[] }>().secrets
+    .filter((row) => row.name === 'ANTHROPIC_API_KEY' && row.label === 'Workspace key');
+  const gatewayKey = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: ctx.fixtures.name('gw') }, { params });
+  gatewayKey.status(200);
+  const { key_id: keyId, secret_key: gatewaySecret } = gatewayKey.json<{ key_id: string; secret_key: string }>();
+  const viaGatewayKey = ctx.client.withBearer(gatewaySecret, 'GATEWAY_KEY');
+  try {
+    let secretId = '';
+    await ctx.step('an old-style provider key write lands as a named workspace key, not a project secret', async () => {
+      const saved = await owner.post('/v1/projects/:projectId/secrets', {
+        name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key-1', strategy: 'broker', consumer: 'llm_gateway',
+      }, { params });
+      saved.status(200).body().has('$.stored_in', 'provider_account').has('$.provider_id', 'anthropic');
+      const keys = await workspaceKeys();
+      if (keys.length !== 1 || keys[0]!.access_mode !== 'project' || keys[0]!.provider_id !== 'anthropic') {
+        throw new Error(`expected one workspace key, got ${JSON.stringify(keys)}`);
+      }
+      secretId = keys[0]!.secret_id;
+      const legacy = (await owner.get('/v1/projects/:projectId/secrets', { params })).status(200).text();
+      if (legacy.includes('"ANTHROPIC_API_KEY"')) throw new Error('a project secret was written for the provider key');
+    });
+    await ctx.step('a second write replaces the value of the same named key', async () => {
+      (await owner.post('/v1/projects/:projectId/secrets', {
+        name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key-2', strategy: 'broker', consumer: 'llm_gateway',
+      }, { params })).status(200).body().has('$.secret_resource_id', secretId);
+      const keys = await workspaceKeys();
+      if (keys.length !== 1) throw new Error(`expected one workspace key, got ${keys.length}`);
+    });
+    await ctx.step('the gateway sends that key with pooled_provider_secrets off too', async () => {
+      (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: false }, { params })).status(200);
+      reachedProvider(await viaGatewayKey.post('/v1/llm/chat/completions', chat), 'gateway API key, flag off');
+    });
+    await ctx.step('moving another secret into the gateway delivery is refused with where to add the key', async () => {
+      (await owner.post('/v1/projects/:projectId/secrets', { name: 'SOME_TOKEN', value: 'plain', strategy: 'runtime' }, { params })).status(200);
+      const refused = await owner.put('/v1/projects/:projectId/secrets/:identifier/strategy', { strategy: 'broker', consumer: 'llm_gateway' }, {
+        params: { ...params, identifier: 'SOME_TOKEN' },
+      });
+      refused.status(409).body().has('$.code', 'provider_key_store');
+    });
+    await ctx.step('an old-style delete removes the named workspace key, and the gateway then has none', async () => {
+      (await owner.del('/v1/projects/:projectId/secrets/:name', { params: { ...params, name: 'ANTHROPIC_API_KEY' } })).status(200);
+      if ((await workspaceKeys()).length !== 0) throw new Error('the workspace key survived the delete');
+      (await viaGatewayKey.post('/v1/llm/chat/completions', chat)).status(400).body().has('$.error.code', 'provider_not_connected');
+    });
+  } finally {
+    (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
+  }
 }));
 
 flow('SEC-9', {

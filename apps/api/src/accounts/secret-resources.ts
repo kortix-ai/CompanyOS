@@ -8,9 +8,12 @@ import { auth, errors, json } from '../openapi';
 import { db } from '../shared/db';
 import { accountMemberRow } from '../iam/membership-read';
 import { clearAccountSecretCooldown, encryptAccountSecret, memberMayReadProject, probeAccountSecret, secretUsableInProject } from '../secrets/account-resource';
-import { resolveFeatureFlag } from '../feature-flags/registry';
 import { ACCOUNT_ACTIONS, actorOf, authorize, PROJECT_ACTIONS } from '../iam';
 import { resolveCatalogUpstream } from '../llm-gateway/models/provider-registry';
+import { customProviderSecretName, readCustomProviders } from '../llm-gateway/custom-providers';
+import { isAwsRegion } from '../llm-gateway/resolution/aws-region';
+import { seedProjectDefaultModelOnConnect } from '../llm-gateway/models/seed-default';
+import { BEDROCK_PROVIDER_ID, BEDROCK_REGION_NAME } from '../secrets/llm-credential-names';
 import { SUBSCRIPTION_PROVIDERS, SubscriptionAccountSchema, SubscriptionUsageSchema, refreshSubscriptionUsage, storedSubscriptionUsage, subscriptionAccount } from '../llm-gateway/subscription-usage';
 import { AccountIdParam, accountsRouter, getMembership } from './core/app';
 import { readJsonObject } from '../shared/http-body';
@@ -192,8 +195,16 @@ export function registerSecretResourceRoutes() {
     const parsed = Create.safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid secret resource' }, 400);
     const body = parsed.data;
-    if (resolveCatalogUpstream(body.provider_id)?.envVar !== body.name) {
+    // A key's name is the one the gateway reads for its provider: the catalog
+    // key name, Bedrock's region next to its key, or a custom provider's key.
+    const nameMatches = resolveCatalogUpstream(body.provider_id)?.envVar === body.name ||
+      (body.provider_id === BEDROCK_PROVIDER_ID && body.name === BEDROCK_REGION_NAME) ||
+      (customProviderSecretName(body.provider_id) === body.name && body.project_id !== undefined);
+    if (!nameMatches) {
       return c.json({ error: 'Provider and environment name do not match' }, 400);
+    }
+    if (body.name === BEDROCK_REGION_NAME && !isAwsRegion(body.value.trim())) {
+      return c.json({ error: 'AWS_REGION must be an AWS region name, such as us-east-1' }, 400);
     }
     if (body.project_id) {
       const [project] = await db.select({ accountId: projectsView.accountId, metadata: projectsView.metadata }).from(projectsView)
@@ -207,7 +218,12 @@ export function registerSecretResourceRoutes() {
       ) {
         return c.json({ error: 'Workspace unavailable' }, 403);
       }
-      if (!resolveFeatureFlag(project.metadata, 'pooled_provider_secrets')) return c.json({ error: 'Pooled provider secrets are disabled' }, 403);
+      // Named accounts are the one store of provider keys: the flag no longer
+      // decides where a key is saved (secrets/llm-credential-move.ts).
+      if (customProviderSecretName(body.provider_id) === body.name &&
+        !readCustomProviders(project.metadata).some((provider) => provider.id === body.provider_id)) {
+        return c.json({ error: 'Provider and environment name do not match' }, 400);
+      }
       if (body.access_mode !== 'members' || (body.user_ids ?? []).some((id) => id !== userId)) {
         const verdict = await authorize(await actorOf(c, accountId), PROJECT_ACTIONS.PROJECT_SECRET_WRITE, { type: 'project', id: body.project_id });
         if (!verdict.allowed) return c.json({ error: 'Workspace secret write access required' }, 403);
@@ -234,6 +250,10 @@ export function registerSecretResourceRoutes() {
       await tx.insert(accountSecretGrants).values(userIds.map((grantee) => ({ accountId, secretId: row!.secretId, userId: grantee, grantedBy: userId })));
       return row!;
     });
+    // The first provider key of a workspace with no default model seeds one.
+    if (resource.projectId) {
+      void seedProjectDefaultModelOnConnect({ projectId: resource.projectId, accountId, userId, secretName: resource.name });
+    }
     return c.json(await view(resource, userId), 201);
   });
 

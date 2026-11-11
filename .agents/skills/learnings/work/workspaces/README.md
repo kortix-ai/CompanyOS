@@ -153,7 +153,7 @@ R2a-0 migration ran at 18:14 UTC. Step 1 of the order below is done.
 What the invariant failures are:
 
 - I10 57: rows of accounts the deletion sweep erased after the fill stamped them. A false positive, fixed on branch `workspaces-r2a`.
-- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261111225019147` reconciles it.
+- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261111225900000` reconciles it.
 - I4 9: project-scope grants held by users who are not members of the account (7 Manager grants from 2026-11-03, 2 "Folder: manage" from 2026-10-30 to 2026-11-11). Not a split artifact. Open: which write path grants a project role to a non-member.
 - I6 1: one 1:1 account whose name differs from its project's (the project was created 2026-11-10). Open.
 - I11 1: the known shared Stripe subscription id (design.md §3.3). It needs the owner-confirmed billing review before the gate can be met.
@@ -181,9 +181,10 @@ Order from here (each prod step needs Dimitrije's go):
 3. Build R2a (design.md §4) while the split runs; then R2b; R3 after a
    rehearsal on a restored snapshot (§5).
 
-Of the decisions below, 2 (the confirmation window) is closed by D12. Still
-open: 1, the owner email text (reviewed before `apply`, which sends it), and
-3, the soak length (decided when R2b ships).
+Of the decisions below, 2 (the confirmation window) is closed by D12, and 1
+(the owner email text) by D13 (2026-11-11, "no owner notices": the split
+sends no email and has no notice period). Still open: 3, the soak length.
+`apply` itself still needs Marko's go.
 
 ## Status (2026-11-10)
 

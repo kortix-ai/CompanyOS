@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 // Characterization for the public share chrome: the h-12 bar (logo, title,
@@ -54,8 +55,8 @@ afterEach(() => {
 });
 
 /** Render the async server page component and hand its markup to happy-dom. */
-async function renderPage<P>(Page: (props: P) => unknown, props: P) {
-  const html = renderToStaticMarkup((await Page(props)) as never);
+async function renderPage<P>(Page: (props: P) => Promise<ReactElement>, props: P) {
+  const html = renderToStaticMarkup(await Page(props));
   lastHtml = html;
   const document = new Window().document;
   document.body.innerHTML = html;

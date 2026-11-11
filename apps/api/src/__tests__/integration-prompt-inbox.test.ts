@@ -2245,11 +2245,15 @@ describe('steering (R10)', () => {
       steer: { ...liveInboxAdmissionDeps.steer!, capabilities: async () => capabilities },
     });
 
-  /** The running turn: the prompter's prompt, forwarded, and its active record. */
+  /** The running turn: the prompter's prompt, forwarded, its active record, and the session token bound to the prompter. */
   async function runningTurn() {
     const prompt = await enqueue('s_turn', { wireMessageId: TURN_ID, actorUserId: PROMPTER, clientSentAtMs: Date.now() - 60_000 });
     await markCommandForwarded(await hold(prompt), SESSION_ID, TURN_ID);
     await setBox('active', activeTurn);
+    await db.execute(sql`DELETE FROM kortix.account_tokens WHERE session_id = ${SESSION_ID}`);
+    await db.execute(sql`
+      INSERT INTO kortix.account_tokens (account_id, user_id, name, public_key, secret_key_hash, session_id)
+      VALUES (${ACCOUNT_ID}::uuid, ${PROMPTER}::uuid, 'session', ${`pk_${crypto.randomUUID().slice(0, 8)}`}, 'hash', ${SESSION_ID})`);
   }
   /** A steer row, claimed the way the drain claims it. */
   async function claimedSteer(clientMessageId: string, actorUserId: string, wireMessageId = STEER_ID, sentAt = Date.now()) {
@@ -2295,10 +2299,11 @@ describe('steering (R10)', () => {
     expect((await readRow(second.commandId)).payload).toMatchObject({ delivery: 'steer' });
   });
 
-  test("another member's prompt steers the live turn: there is no prompter rule", async () => {
+  test("another member's prompt never runs inside the prompter's turn: it waits and starts the next turn", async () => {
+    // The turn's session token acts as PROMPTER: OTHER's words would run with PROMPTER's connectors and secrets.
     await runningTurn();
     const steer = await claimedSteer('s_other', OTHER);
-    expect(await admit(steer)).toEqual({ admit: true, steerInto: TURN_ID });
+    expect(await admit(steer)).toMatchObject({ admit: false, reason: 'turn_active' });
     expect((await readRow(steer.commandId)).payload).not.toHaveProperty('steerFallback');
   });
 

@@ -281,7 +281,7 @@ describe('one delivery mode: every row steers a live turn', () => {
     older?: boolean;
     inFlight?: boolean;
     sandbox?: typeof liveBox;
-    mayAddressUnprompted?: boolean;
+    turnIdentity?: string | null;
   } = {}) {
     const fallbacks: string[] = [];
     const deps = {
@@ -293,7 +293,7 @@ describe('one delivery mode: every row steers a live turn', () => {
         recordFallback: async (_r: SessionLifecycleCommandRow, reason: string) => {
           fallbacks.push(reason);
         },
-        mayAddressUnpromptedTurn: async () => over.mayAddressUnprompted ?? false,
+        turnIdentity: async () => (over.turnIdentity === undefined ? ACTOR : over.turnIdentity),
       },
     };
     return { deps, fallbacks };
@@ -308,12 +308,22 @@ describe('one delivery mode: every row steers a live turn', () => {
     }
   });
 
-  test("a row from another member or from the session's own subagent steers: there is no prompter rule", async () => {
+  test("a row from the session's own subagent or another session of the turn's identity steers", async () => {
     // Prod 2026-11-04: three subagent results waited `not_prompter` behind the turn that started the subagent.
+    // Dev 2026-11-10: a parent's message into its child's first turn (no prompt row) waited the whole turn.
     const { deps, fallbacks } = steerDeps();
-    expect(await admitInboxPrompt(liveRow({ authorSessionId: 'sess-child' }, { actorUserId: 'user-b' }), deps))
+    expect(await admitInboxPrompt(liveRow({ authorSessionId: 'sess-child' }), deps))
       .toEqual({ admit: true, steerInto: 'msg_1' });
     expect(fallbacks).toEqual([]);
+  });
+
+  test("another member's row never runs inside this turn: it starts the next turn under its own identity", async () => {
+    // The turn holds user-a's connectors and secrets (the session token acts as user-a).
+    const { deps, fallbacks } = steerDeps();
+    expect(await admitInboxPrompt(liveRow({}, { actorUserId: 'user-b' }), deps)).toMatchObject({ admit: false, reason: 'turn_active' });
+    const noToken = steerDeps({ turnIdentity: null });
+    expect(await admitInboxPrompt(liveRow(), noToken.deps)).toMatchObject({ admit: false, reason: 'turn_active' });
+    expect([...fallbacks, ...noToken.fallbacks]).toEqual([]);
   });
 
   test('a row with no wire id steers too: delivery mints one', async () => {

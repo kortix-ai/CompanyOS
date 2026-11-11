@@ -1,6 +1,6 @@
-import { sessionLifecycleCommands, sessionSandboxes } from '@kortix/db';
+import { accountTokens, sessionLifecycleCommands, sessionSandboxes } from '@kortix/db';
 import { RUNTIME_STABLE_MESSAGE_ID_CAPABILITY, type RuntimeCapability } from '@kortix/api-contract/runtime-relay';
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { RUNNING_SANDBOX_STATUSES, storedSandboxTurns, type StoredSandboxTurn } from '../session-turn-ledger';
@@ -29,6 +29,15 @@ import { wireMessageIdMatches } from './wire-id-match';
  * - The prompter rule (`not_prompter`) turned a steer from anyone but the
  *   turn's prompter into a queue row. It also caught the agent's own subagent
  *   results, which then waited behind the turn that was waiting for them.
+ *
+ * What stays: a turn runs as ONE identity, the session token's `user_id`
+ * (`bindSessionTurnIdentity`). A row steers only when its sender is that
+ * identity: the person who prompted the turn, or for a turn no person
+ * prompted (a first prompt at boot, a child's hand-off) the identity it was
+ * minted for. That covers the agent's own messages and subagent results. A
+ * row from anyone else starts the next turn under its own identity: steering
+ * it in would run one member's words with another member's connectors and
+ * secrets (CWE-863).
  * - "Quick Queue" ended the turn after its running tool. Steer reaches the
  *   same step boundary without ending the turn.
  *
@@ -189,6 +198,8 @@ export function newestStoredTurn(turns: StoredSandboxTurn[]): StoredSandboxTurn 
 export interface SteerAdmissionDeps {
   /** `/kortix/health` `capabilities` of the box; null when the read failed. */
   capabilities: (externalId: string | null | undefined, actorUserId: string | null) => Promise<string[] | null>;
+  /** The user the session's active token acts as: the identity the running turn holds. Null: none. */
+  turnIdentity: (sessionId: string) => Promise<string | null>;
   recordFallback: (row: SessionLifecycleCommandRow, reason: 'unsupported') => Promise<void>;
 }
 
@@ -308,13 +319,24 @@ export const liveInboxAdmissionDeps: InboxAdmissionDeps = {
   },
   steer: {
     capabilities: readRuntimeCapabilities,
+    async turnIdentity(sessionId) {
+      const [token] = await db
+        .select({ userId: accountTokens.userId })
+        .from(accountTokens)
+        .where(and(eq(accountTokens.sessionId, sessionId), eq(accountTokens.status, 'active'), isNull(accountTokens.revokedAt)))
+        .orderBy(desc(accountTokens.createdAt))
+        .limit(1);
+      return token?.userId ?? null;
+    },
     recordFallback: (row, reason) => recordSteerFallback(row, reason),
   },
 };
 
 /**
  * Any row and a running turn. Admitted as a steer into the newest active turn
- * when the runtime lists `session.steer`.
+ * when the runtime lists `session.steer` and the row's sender is the identity
+ * the turn runs as (`turnIdentity`). Another sender returns `fallback`: the
+ * row starts the next turn, nothing is recorded.
  *
  * - A runtime without `session.steer` records `unsupported` once and returns
  *   `fallback`: the caller holds the row for the turn's end.
@@ -336,7 +358,12 @@ async function admitSteer(
   }
   const refusedTurn = (row.payload as { steerRefusedTurn?: unknown } | null)?.steerRefusedTurn;
   if (refusedTurn === active.messageId) return 'fallback';
-  const capabilities = await steer.capabilities(sandbox?.externalId, row.actorUserId);
+  const [capabilities, identity] = await Promise.all([
+    steer.capabilities(sandbox?.externalId, row.actorUserId),
+    steer.turnIdentity(row.sessionId!),
+  ]);
+  // Another identity's words never run inside this turn: the row starts the next one.
+  if (!identity || identity !== row.actorUserId) return 'fallback';
   if (capabilities === null) return { admit: false, reason: 'turn_active', retryAfterMs };
   if (!capabilities.includes(STEER_CAPABILITY)) {
     await steer.recordFallback(row, 'unsupported');

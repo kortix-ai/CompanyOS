@@ -146,7 +146,7 @@ function unbounded<T>(work: Promise<T>, ms: number): Promise<T> {
   const sentry = new Promise<never>((_, reject) => {
     giveUp = setTimeout(() => reject(new Error(`unbounded: not settled within ${ms}ms`)), ms);
   });
-  return Promise.race([work, sentry]).finally(() => clearTimeout(giveUp!));
+  return Promise.race([work, sentry]).finally(() => clearTimeout(giveUp));
 }
 
 /**

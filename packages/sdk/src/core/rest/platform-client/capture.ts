@@ -295,7 +295,7 @@ export interface CaptureDeviceResources {
   window_ms: number;
   samples: number;
   cpu_percent_avg: number;
-  /** The busiest minute of the window. */
+  /** The busiest minute of that span. */
   cpu_percent_peak: number;
   /** Working set (Windows) or resident size (macOS, Linux) of all processes at the last sample. */
   memory_bytes: number;

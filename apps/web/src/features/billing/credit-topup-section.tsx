@@ -7,7 +7,7 @@ import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from 
 import Loading from '@kortix/ui/loading';
 import { errorToast } from '@kortix/ui/toast';
 import { useBillingReturnUrl } from '@/features/billing/billing-return';
-import { topUpBonusCredits } from '@kortix/ui/internal/billing/compute-pricing';
+import { formatWholeUsd, topUpBonusCredits } from '@kortix/ui/internal/billing/compute-pricing';
 import { spring, cn } from '@kortix/ui';
 import { useBillingAccountId } from '@kortix/ui/internal/stores/billing-account-context';
 import { purchaseCredits } from '@kortix/sdk';
@@ -121,15 +121,6 @@ const DEFAULT_TOPUP_COPY: TopupCopy = {
   addCredits: 'Add credits',
   locale: 'en-US',
 };
-
-function formatWholeUsd(amount: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 interface CreditTopupSectionProps {
   /** Where Stripe returns on success. Defaults to /dashboard?credit_purchase=success. */

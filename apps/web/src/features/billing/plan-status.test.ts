@@ -1,14 +1,15 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 
-import { formatIsoDate, formatShortDate } from './account-overview';
+import { formatIsoDate, formatShortDate } from './plan-status';
 
 /**
  * Characterization: the two ISO date formatters of the plan-status
- * vocabulary, pinned before they move into `plan-status.ts`. Empty and
- * invalid input return null — the caller decides the fallback — and a real
- * date renders month-short/day-numeric, with the year only in
- * `formatIsoDate`. Expected strings are computed with the same Intl call the
- * formatter makes so the pin does not depend on the test run's timezone.
+ * vocabulary, pinned before they moved here from `plan-card.tsx` and
+ * `account-overview.tsx`. Empty and invalid input return null — the caller
+ * decides the fallback — and a real date renders month-short/day-numeric,
+ * with the year only in `formatIsoDate`. Expected strings are computed with
+ * the same Intl call the formatter makes so the pin does not depend on the
+ * test run's timezone.
  */
 describe('formatShortDate / formatIsoDate', () => {
   test('empty input renders null, for both formatters', () => {
@@ -46,6 +47,31 @@ describe('formatShortDate / formatIsoDate', () => {
         day: 'numeric',
         year: 'numeric',
       }),
+    );
+  });
+});
+
+/**
+ * The `statuses.<status>` fallback of the shared copy hook: a status the
+ * catalog translates reads the catalog key; an unknown Stripe status falls
+ * back to the `status` template with the snake_case read as words.
+ */
+describe('usePlanStatusCopy', () => {
+  test('a translated status reads the catalog, an unknown one falls back to words', async () => {
+    const t = Object.assign(
+      (key: string, params?: Record<string, unknown>) =>
+        params ? `${key}[${JSON.stringify(params)}]` : key,
+      { has: (key: string) => key === 'statuses.past_due' },
+    );
+    mock.module('@/i18n/use-translations', () => ({
+      useTranslations: () => t,
+      useLocale: () => 'en-US',
+    }));
+    const { usePlanStatusCopy } = await import('./plan-status');
+    const copy = usePlanStatusCopy();
+    expect(copy.status('past_due')).toBe('statuses.past_due');
+    expect(copy.status('incomplete_expired')).toBe(
+      'status[{"status":"incomplete expired"}]',
     );
   });
 });

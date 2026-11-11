@@ -47,6 +47,14 @@ import { CreditExpiry } from '@/features/billing/credit-expiry';
 import { FreeGrantNotice } from '@/features/billing/free-grant-notice';
 import { resolvedPlan, type AccountState } from '@kortix/sdk';
 import { formatUsdAsCredits } from '@kortix/shared';
+import {
+  DEFAULT_PLAN_STATUS_COPY,
+  PlanStatusDot,
+  formatIsoDate,
+  formatShortDate,
+  usePlanStatusCopy,
+  type PlanStatusCopy,
+} from './plan-status';
 
 type LimitRow = {
   id: string;
@@ -255,52 +263,26 @@ export interface PlanStatus {
   scheduled: string | null;
 }
 
-export interface PlanStatusCopy {
-  locale: string;
-  /** `$100/mo` — a whole-dollar amount in, the monthly form out. */
-  perMonth: (amount: string) => string;
-  cancels: (date: string) => string;
-  cancelsAtPeriodEnd: string;
-  renews: (date: string) => string;
-  active: string;
-  noSubscription: string;
-  status: (status: string) => string;
-  /** `SSO stays on until Nov 28` — the grace after Enterprise access ended. */
-  graceUntil?: (date: string) => string;
-  /** `→ $3,000/mo from Nov 14` — the amount is a monthly price, in dollars. */
-  scheduledFrom?: (amount: string, date: string) => string;
-  /** `No charge until Nov 28, then Free` — a split-off workspace's comped plan. */
-  compedUntil?: (date: string) => string;
-}
-
-const DEFAULT_PLAN_STATUS_COPY: PlanStatusCopy = {
-  locale: 'en-US',
-  perMonth: (amount) => `${amount}/mo`,
-  cancels: (date) => `Cancels ${date}`,
-  cancelsAtPeriodEnd: 'Cancels at period end',
-  renews: (date) => `Renews ${date}`,
-  active: 'Active',
-  noSubscription: 'No subscription',
-  status: (status) => status.replace(/_/g, ' '),
-  graceUntil: (date) => `SSO stays on until ${date}`,
-  scheduledFrom: (amount, date) => `→ ${amount}/mo from ${date}`,
-  compedUntil: (date) => `No charge until ${date}, then Free`,
-};
-
-/** `Nov 14` — a renewal-side date from an ISO timestamp, no year. */
-export function formatShortDate(iso: string | null | undefined, locale?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-}
-
-/** `Nov 14, 2026` — a calendar date from an ISO timestamp. */
-export function formatIsoDate(iso: string | null | undefined, locale?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+/** Where the plan stands, in one line — one early return per case, in the
+ *  precedence order the old nested ternary read: grace → cancel-at-period-end
+ *  → renews → active → raw status → no subscription. */
+function planStatusDetail(
+  sub: AccountState['subscription'],
+  text: PlanStatusCopy,
+  periodEnd: string | null,
+  graceEnds: string | null,
+): string {
+  if (graceEnds) return text.graceUntil!(graceEnds);
+  if (sub?.cancel_at_period_end) {
+    return periodEnd ? text.cancels(periodEnd) : text.cancelsAtPeriodEnd;
+  }
+  if (sub?.status === 'active') {
+    return periodEnd ? text.renews(periodEnd) : text.active;
+  }
+  // Raw Stripe statuses are snake_case ('past_due', 'incomplete_expired').
+  // Shown to a person, so they read as words.
+  if (sub?.status) return text.status(sub.status);
+  return text.noSubscription;
 }
 
 export function describePlanStatus(
@@ -339,21 +321,7 @@ export function describePlanStatus(
       plan.monthlyUsd != null
         ? text.perMonth(formatWholeUsd(plan.monthlyUsd, text.locale))
         : plan.sublabel,
-    detail: graceEnds
-      ? text.graceUntil!(graceEnds)
-      : sub?.cancel_at_period_end
-        ? periodEnd
-          ? text.cancels(periodEnd)
-          : text.cancelsAtPeriodEnd
-        : isActive && periodEnd
-          ? text.renews(periodEnd)
-          : isActive
-            ? text.active
-            : // Raw Stripe statuses are snake_case ('past_due', 'incomplete_expired').
-              // Shown to a person, so they read as words.
-              sub?.status
-              ? text.status(sub.status)
-              : text.noSubscription,
+    detail: planStatusDetail(sub, text, periodEnd, graceEnds),
     isActive,
     isWindingDown: Boolean(sub?.cancel_at_period_end),
     scheduled:
@@ -367,26 +335,10 @@ export function describePlanStatus(
  *  that says where that plan stands — renewal date when there is a live
  *  subscription, status otherwise. */
 function PlanSummary({ state }: { state: AccountState }) {
-  const t = useTranslations('billing.plan');
-  const locale = useLocale();
+  const planCopy = usePlanStatusCopy();
   const { name, sublabel, detail, isActive, isWindingDown, scheduled } = describePlanStatus(
     state,
-    {
-      locale,
-      perMonth: (amount) => t('perMonth', { amount }),
-      cancels: (date) => t('cancels', { date }),
-      cancelsAtPeriodEnd: t('cancelsAtPeriodEnd'),
-      renews: (date) => t('renews', { date }),
-      active: t('active'),
-      noSubscription: t('noSubscription'),
-      graceUntil: (date) => t('graceUntil', { date }),
-      scheduledFrom: (amount, date) => t('scheduledFrom', { amount, date }),
-      compedUntil: (date) => t('compedUntil', { date }),
-      status: (status) =>
-        t.has(`statuses.${status}`)
-          ? t(`statuses.${status}`)
-          : t('status', { status: status.replace(/_/g, ' ') }),
-    },
+    planCopy,
   );
 
   return (
@@ -395,17 +347,7 @@ function PlanSummary({ state }: { state: AccountState }) {
     // one has nothing to align to.
     <div className="flex min-w-0 shrink-0 flex-col items-start gap-0.5 text-left sm:items-end sm:text-right">
       <span className="flex items-center gap-1.5">
-        {isActive ? (
-          // Optical, not geometric: a 6px dot centred on a 20px line box sits
-          // a hair high against the x-height of the text beside it.
-          <span
-            aria-hidden
-            className={cn(
-              'mt-px size-1.5 shrink-0 rounded-full',
-              isWindingDown ? 'bg-kortix-orange' : 'bg-kortix-green',
-            )}
-          />
-        ) : null}
+        <PlanStatusDot isActive={isActive} isWindingDown={isWindingDown} />
         <span className="text-foreground truncate text-sm leading-5 font-medium">{name}</span>
       </span>
       {sublabel ? <span className="text-muted-foreground text-xs">{sublabel}</span> : null}
@@ -522,5 +464,5 @@ function formatDate(unixSeconds: number, locale?: string): string | null {
   if (!Number.isFinite(ms)) return null;
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  return formatShortDate(date.toISOString(), locale);
 }

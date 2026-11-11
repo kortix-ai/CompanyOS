@@ -3,6 +3,7 @@ import { createDb, type Database } from '@kortix/db';
 import { config } from '../config';
 import { contextualDatabase } from './db-context';
 import { beginStage } from '../lib/server-timing';
+import { appendCurrentTestCaseLog } from '../lib/test-case-log';
 
 const globalForDb = globalThis as typeof globalThis & {
   __kortixApiDb?: Database;
@@ -15,9 +16,18 @@ const globalForDb = globalThis as typeof globalThis & {
  */
 export const hasDatabase: boolean = !!config.DATABASE_URL;
 
-/** postgres.js `debug` hook for `KORTIX_SQL_TRACE`: one whitespace-normalized statement per line. */
-function sqlTraceTo(file: string) {
-  return (_connection: number, query: string) => appendFileSync(file, `${query.replace(/\s+/g, ' ').trim()}\n`);
+/**
+ * postgres.js `debug` hook. `KORTIX_SQL_TRACE`: one whitespace-normalized
+ * statement per line in that file. The local test stack's case log
+ * (`KORTIX_TEST_LOG_DIR`): the same statement, without parameters, in the
+ * current flow case's JSONL (lib/test-case-log.ts).
+ */
+function sqlDebugHook(traceFile: string, caseLog: boolean) {
+  return (_connection: number, query: string) => {
+    const statement = query.replace(/\s+/g, ' ').trim();
+    if (traceFile) appendFileSync(traceFile, `${statement}\n`);
+    if (caseLog) appendCurrentTestCaseLog({ kind: 'sql', statement });
+  };
 }
 
 /**
@@ -49,9 +59,15 @@ function getDb(): Database {
   // Every statement on the request pool feeds `Server-Timing: db;dur=…;desc="n=…"`
   // (lib/server-timing.ts). Outside a request the hook is a no-op.
   const trace = config.KORTIX_SQL_TRACE;
-  globalForDb.__kortixApiDb = createDb(config.DATABASE_URL, trace ? { debug: sqlTraceTo(trace) } : undefined, {
-    onQuery: () => beginStage('db'),
-  });
+  // Off unless the local test profile set a case-log directory: no hook at all.
+  const caseLog = config.KORTIX_TEST_LOG_DIR !== '';
+  globalForDb.__kortixApiDb = createDb(
+    config.DATABASE_URL,
+    trace || caseLog ? { debug: sqlDebugHook(trace, caseLog) } : undefined,
+    {
+      onQuery: () => beginStage('db'),
+    },
+  );
   globalForDb.__kortixApiDbUrl = config.DATABASE_URL;
   return globalForDb.__kortixApiDb;
 }

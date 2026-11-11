@@ -34,3 +34,4 @@ planned, in flight, or parked, so another person or agent can pick it up.
 | [`workspaces/`](workspaces/README.md) | planning: Project → Workspace, 1 account = 1 project (the Slack model); D2–D4 open |
 | [`prompt-identity/`](prompt-identity/README.md) | building (`prompt-identity`): one id per prompt, visible from accept to answer |
 | [`my-kortix-account-actions/`](my-kortix-account-actions/README.md) | planned: account-level My Kortix actions as server-side held approvals |
+| [`oauth-mfa-level/`](oauth-mfa-level/README.md) | parked: "Sign in with Kortix" tokens get `403 account_mfa_required` in MFA workspaces; record the consent's MFA level on the token. App viewer tokens fixed on branch `app-viewer-mfa` |

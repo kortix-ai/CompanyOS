@@ -2706,8 +2706,8 @@
           "note": "Start with real sandbox credits.",
           "f1": "500 credits / month on your first workspace",
           "f2": "No card needed",
-          "f3": "Bring your own API key for any premium model",
-          "f4": "Connect your ChatGPT subscription"
+          "f3": "Models run on your own API key or ChatGPT subscription",
+          "f4": "Managed models are on the Credits plan only"
         },
         "credits": {
           "name": "Credits",
@@ -21352,7 +21352,12 @@
       "text4b892277843c": "Create workspace",
       "text41018e566b60": "new workspace create add team",
       "texta99ac8f9050b": "Workspace · Access",
-      "textfd8b8dae4421": "Danger zone"
+      "textfd8b8dae4421": "Danger zone",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM Hold Refund",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Storage",
+      "textab3aff8f7642": "Top-up Bonus"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -21559,6 +21564,10 @@
       "denied": "Access denied",
       "deniedDescription": "My Kortix gets your answer.",
       "failed": "Could not send your decision. Try again."
+    },
+    "reviewPane": {
+      "emptyTitle": "Select an item",
+      "emptyDescription": "Its details open here. Press J and K to move through the list."
     }
   },
   "commandPalette": {

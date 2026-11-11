@@ -2706,8 +2706,8 @@
           "note": "从真实的沙盒积分开始。",
           "f1": "首个工作区每月 500 积分",
           "f2": "无需银行卡",
-          "f3": "可自带 API 密钥使用任何高级模型",
-          "f4": "连接你的 ChatGPT 订阅"
+          "f3": "模型可使用你自己的 API 密钥或 ChatGPT 订阅",
+          "f4": "Kortix 托管模型需要 Credits 套餐"
         },
         "credits": {
           "name": "积分版",
@@ -21307,7 +21307,12 @@
       "text4b892277843c": "创建工作区",
       "text41018e566b60": "新建 工作区 创建 添加 团队",
       "texta99ac8f9050b": "工作区 · 访问权限",
-      "textfd8b8dae4421": "危险区域"
+      "textfd8b8dae4421": "危险区域",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM 预留退款",
+      "texta68ee4167406": "代理",
+      "texta69c4dece144": "存储",
+      "textab3aff8f7642": "充值奖励"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -21514,6 +21519,10 @@
       "denied": "已拒绝访问",
       "deniedDescription": "My Kortix 会收到你的答复。",
       "failed": "无法发送你的决定。请重试。"
+    },
+    "reviewPane": {
+      "emptyTitle": "选择一个项目",
+      "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
     }
   },
   "commandPalette": {

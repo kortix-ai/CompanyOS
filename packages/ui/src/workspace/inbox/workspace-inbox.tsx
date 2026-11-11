@@ -13,6 +13,9 @@ import { useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } from '..
 
 export type WorkspaceInboxView = 'review' | 'notifications';
 
+/** One underline tab: hugs its label and count, full title-bar height. */
+const INBOX_TAB_CLASS = 'h-full w-fit flex-none gap-1.5 px-1';
+
 /**
  * The tab a visit opens: the one `?view=` names; else Review when it holds an
  * item (`?id=`) or something waits there; else Notifications.
@@ -65,22 +68,35 @@ export function WorkspaceInbox({ projectId }: { projectId: string }) {
       <ProjectPageHeader
         title={t('inbox.title')}
         titleAccessory={
-          <Tabs value={view} onValueChange={select} className="ml-2">
-            <TabsList size="xs" aria-label={t('inbox.viewLabel')}>
-              <TabsTrigger value="review" className="gap-1.5" data-testid="inbox-view-review">
-                {t('inbox.viewReview')}
-                {reviewNeedsYou > 0 ? <CountBadge count={reviewNeedsYou} tone="waiting" /> : null}
-              </TabsTrigger>
-              <TabsTrigger value="notifications" className="gap-1.5" data-testid="inbox-view-notifications">
-                {t('inbox.viewNotifications')}
-                {unread > 0 ? <CountBadge count={unread} /> : null}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          // "Inbox", a rule, then the underline tabs: the same title-bar
+          // grammar as the capability tab bar (customize-tab-bar.tsx). Never
+          // the segmented control here.
+          <>
+            <span aria-hidden className="bg-border mx-1.5 h-4 w-px shrink-0" />
+            <Tabs value={view} onValueChange={select} className="h-full gap-0">
+              <TabsList
+                type="underline"
+                underlineSize="md"
+                className="h-10 justify-start gap-4 border-b-0"
+                aria-label={t('inbox.viewLabel')}
+              >
+                <TabsTrigger value="review" className={INBOX_TAB_CLASS} data-testid="inbox-view-review">
+                  {t('inbox.viewReview')}
+                  {reviewNeedsYou > 0 ? <CountBadge count={reviewNeedsYou} tone="waiting" /> : null}
+                </TabsTrigger>
+                <TabsTrigger value="notifications" className={INBOX_TAB_CLASS} data-testid="inbox-view-notifications">
+                  {t('inbox.viewNotifications')}
+                  {unread > 0 ? <CountBadge count={unread} /> : null}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </>
         }
       />
       {view === 'review' ? (
-        <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
+        // Full width: the list and the open item sit side by side, so no
+        // reading-width cap here.
+        <div className="flex min-h-0 w-full flex-1 flex-col">
           <ReviewView projectId={projectId} />
         </div>
       ) : (

@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 
 
 
-import { config } from '../../config';
+import { config, RELEASE_COMMIT, RELEASE_VERSION } from '../../config';
 
 
 
@@ -486,6 +486,7 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
       baseRef: input.baseRef,
       agentName: input.agentName,
       apiUrl: deriveKortixApiBase(),
+      release: { version: RELEASE_VERSION, commit: RELEASE_COMMIT },
       frontendUrl: sandboxFrontendBaseUrl(),
       // Concrete session model after explicit → agent → project → account →
       // platform resolution — re-pointed above when the runtime lineup

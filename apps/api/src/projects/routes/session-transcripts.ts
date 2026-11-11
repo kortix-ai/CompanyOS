@@ -8,6 +8,7 @@ import { auth, errors, json } from '../../openapi';
 import { createRoute, z } from '@hono/zod-openapi';
 import { loadVisibleSession, loadVisibleSessionsForList, assertProjectCapability, sessionIsTombstoned } from '../lib/access';
 import { callerKortixSessionId } from '../../middleware/caller-session';
+import { storedLogReadDenial } from '../../middleware/rate-limit';
 import { AnyObject, projectsApp, SessionTranscriptReadSchema } from '../lib/app';
 import { parseBoundedPositiveInt } from '../lib/serializers';
 import { isUuid } from '../../shared/validate';
@@ -98,13 +99,18 @@ export function registerSessionTranscriptsRoutes(): void {
       },
       responses: {
         200: json(SessionTranscriptReadSchema, 'The transcript: compact digest, or the sync window with `shape=sync`'),
-        ...errors(400, 403, 404),
+        ...errors(400, 403, 404, 429),
       },
     }),
     async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
+      // The same stored-log read ceiling as `GET …/log` (KRTX-4696): the transcript
+      // serves the same log, heavier per request, and must not become the uncapped
+      // way around the log route's guard.
+      const denied = storedLogReadDenial(c, sessionId);
+      if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
 
       const limit = parseBoundedPositiveInt(c.req.query('limit'), 40, 1, 500, 'limit');
       if (!limit.ok) return c.json({ error: limit.error }, 400);

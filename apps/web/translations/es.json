@@ -2706,8 +2706,8 @@
           "note": "Empieza con créditos reales de sandbox.",
           "f1": "500 créditos / mes en tu primer espacio de trabajo",
           "f2": "Sin tarjeta",
-          "f3": "Usa tu propia clave de API para cualquier modelo premium",
-          "f4": "Conecta tu suscripción de ChatGPT"
+          "f3": "Los modelos funcionan con tu propia clave de API o tu suscripción de ChatGPT",
+          "f4": "Los modelos gestionados por Kortix requieren Credits"
         },
         "credits": {
           "name": "Créditos",
@@ -21307,7 +21307,12 @@
       "text4b892277843c": "Crear espacio de trabajo",
       "text41018e566b60": "nuevo espacio de trabajo crear añadir equipo",
       "texta99ac8f9050b": "Espacio de trabajo · Acceso",
-      "textfd8b8dae4421": "Zona de peligro"
+      "textfd8b8dae4421": "Zona de peligro",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Reembolso de retención de LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Almacenamiento",
+      "textab3aff8f7642": "Bono de recarga"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",
@@ -21514,6 +21519,10 @@
       "denied": "Acceso denegado",
       "deniedDescription": "My Kortix recibe tu respuesta.",
       "failed": "No se pudo enviar tu decisión. Inténtalo de nuevo."
+    },
+    "reviewPane": {
+      "emptyTitle": "Selecciona un elemento",
+      "emptyDescription": "Sus detalles se abren aquí. Pulsa J y K para recorrer la lista."
     }
   },
   "commandPalette": {

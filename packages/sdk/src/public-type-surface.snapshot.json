@@ -3081,6 +3081,7 @@
     "mintWireMessageIdAbove",
     "mkdir",
     "modelInDefaultView",
+    "modelKeyToWire",
     "modelRefToKey",
     "moveConnector",
     "moveDriveFile",

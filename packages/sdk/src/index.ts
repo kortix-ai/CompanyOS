@@ -608,7 +608,7 @@ export {
   type ComposerAgentResolution,
 } from './core/agents/composer-agents';
 export { flattenModels, isOfferedModel, type FlatModel, type ModelOption } from './core/models/model-flatten';
-export { modelRefToKey, type ModelKey } from './core/models/model-key';
+export { modelRefToKey, modelKeyToWire, type ModelKey } from './core/models/model-key';
 export {
   createModelVisibility,
   modelInDefaultView,

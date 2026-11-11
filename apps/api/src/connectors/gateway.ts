@@ -36,6 +36,7 @@ import {
   missingPathArg,
 } from './call';
 import { configuredTimeoutMs, withTimeout } from '../shared/with-timeout';
+import { invalidArgsReason } from './args-validate';
 /**
  * Connector gateway — the chokepoint every tool call goes through. Resolves the
  * connector + action, resolves the credential SERVER-SIDE, runs the call,
@@ -942,6 +943,17 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
     const message = `The required argument ${emptyPathArg} is missing or empty. Call ${fullPath} again with a non-empty ${emptyPathArg}.`;
     await audit(deps, input, connector, 'denied', action.risk, { reason: INVALID_ARGS, message });
     return { status: 'denied', reason: INVALID_ARGS, message };
+  }
+
+  // A missing required argument or a wrong JSON type is the caller's mistake:
+  // answer it here, naming the argument, instead of letting the provider
+  // answer a misleading `upstream_404`. Channel calls are filled from the
+  // session context later, so they are exempt like the path check above.
+  const schemaMismatch =
+    connector.provider !== 'channel' ? invalidArgsReason(action.inputSchema, input.args, fullPath) : null;
+  if (schemaMismatch !== null) {
+    await audit(deps, input, connector, 'denied', action.risk, { reason: INVALID_ARGS, message: schemaMismatch });
+    return { status: 'denied', reason: INVALID_ARGS, message: schemaMismatch };
   }
 
   // Before any credential, approval or provider call: a read of another

@@ -551,6 +551,8 @@ Every action follows one of three rules:
 
 You can also mark a whole connector as sensitive. Then every action without its own rule needs approval, reads included. A workspace can also use a careful default: reads run, and writes or deletions wait for approval.
 
+The source of each action says whether it is a read: the HTTP method, the GraphQL operation, or the MCP server's own annotation. Composio and Pipedream apps say nothing, so Kortix counts an action as a read only when its name starts with a read verb (`list_`, `get_`, `fetch_`, `search_`) and neither its name nor its description names a change (send, create, update, delete, modify, move). Every other action counts as a write.
+
 #### Approving a held action
 
 <Steps>

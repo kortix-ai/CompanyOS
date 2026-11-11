@@ -18,6 +18,16 @@ hydrateEnvironmentSecret();
 export const SANDBOX_VERSION = process.env.SANDBOX_VERSION || 'unknown';
 
 /**
+ * The release this API serves, as /health reports it, and the commit it was
+ * built from. Prod overrides KORTIX_VERSION on the task to the clean `X.Y.Z`;
+ * the image itself is the staging build, so the sandbox CLI inside it was
+ * stamped `X.Y.Z-staging.<sha8>`. Sessions receive both values so that CLI can
+ * report the release it is part of (apps/cli/src/cli-version.ts).
+ */
+export const RELEASE_VERSION = process.env.KORTIX_VERSION || 'dev';
+export const RELEASE_COMMIT = process.env.KORTIX_COMMIT || '';
+
+/**
  * The environment of a child process: this process's environment plus
  * `extra`. A child process is the one reader of the raw environment outside
  * this file.

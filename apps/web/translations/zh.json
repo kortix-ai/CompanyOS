@@ -23440,9 +23440,6 @@
       "privacyControlsHint": "显示个人数据遮盖。关闭后会隐藏此项；已设置的内容继续生效。",
       "maskingTitle": "遮盖",
       "framesTitle": "屏幕帧",
-      "interval": "帧间隔",
-      "intervalHint": "间隔越短，细节越多，占用的 CPU 和存储也越多。",
-      "intervalOption": "{seconds, number} 秒",
       "resolution": "分辨率",
       "resolutionHint": "更大的屏幕会缩小到此高度。4K 可保留 CAD 图纸等细节。",
       "textRecognition": "文字识别",
@@ -23452,7 +23449,7 @@
         "fast": "快速",
         "off": "关闭"
       },
-      "framesHint": "未设置时，每台电脑使用自己的设置（1440p，每 2 秒一帧）。设置后，所有电脑都使用该值，用户无法更改。无论间隔多长，点击、输入和滚动都会连同各自的截图一起记录。",
+      "framesHint": "Kortix Capture 自动决定帧率：有人操作时最多每秒 2 帧，否则每 2 秒一帧，电脑繁忙时更少。未设置时，每台电脑使用 1440p 和精确文字识别。设置后，所有电脑都使用该值，用户无法更改。点击、输入和滚动会连同各自的截图一起记录。",
       "computerDecides": "由每台电脑决定",
       "included": {
         "title": "应用和网站",

@@ -47,8 +47,9 @@ export type SecretCapability =
       /** The value is not in the sandbox in any form. */
       readable_in_sandbox: false;
       /** An upstream that echoes the credential back gets it replaced with
-       *  `[REDACTED]` on the way in. One mechanism, one symptom. */
-      on_echo: 'redact';
+       *  the HANDLE on the way in, so the agent can send it again. One
+       *  mechanism, one symptom. */
+      on_echo: 'reseal';
     };
 
 /**
@@ -56,7 +57,7 @@ export type SecretCapability =
  *
  * ONE list, because there is now ONE mechanism on every provider. The env var holds a handle,
  * Kortix substitutes the real value outside the sandbox on an approved host,
- * and an echoed credential comes back as `[REDACTED]`.
+ * and an echoed credential comes back as its handle.
  *
  * The last line matters as much as the first: without it, an agent whose
  * request could not be intercepted has no next move and starts asking a human
@@ -71,7 +72,8 @@ export const NETWORK_BOUNDARY_NOTES: readonly string[] = [
   'The value is not in this sandbox: no environment variable, no file, no alias. Do not search for it and do not ask the user for it.',
   'Send the handle as-is. Do NOT base64-encode it yourself first — for example HTTP Basic auth (`curl -u $VAR:` / `Authorization: Basic <base64>`) hides the handle inside a base64 blob Kortix cannot find, so the swap does not happen. Put the handle in a Bearer/token header, a query parameter or a body field instead.',
   'The swap happens only on the `hosts` this capability lists, over HTTPS. Sent anywhere else the handle arrives as a literal string and the request fails.',
-  'If a response reflects the credential straight back, Kortix scrubs the obvious copies to `[REDACTED]`. This is best-effort reflection-scrubbing, not proof of success: a `[REDACTED]` is a hint the substitution ran, not a guarantee, and a host can still transform the value past the scrub.',
+  'If a response reflects the credential straight back, Kortix re-seals the obvious copies: the value becomes the handle again, so you can send it back unchanged. This is best-effort, not proof of success: a host can still transform the value past the scan.',
+  'A refused request carries an `x-kortix-refused` header naming why: `credential_host`, `credential_placement`, `credential_transport`, `credential_method`, `credential_expired`, `credential_forged`, `private_address` or `policy_denied`. Fix that cause; do not retry unchanged.',
   'An empty reply or a connection error on a listed host is a REAL failure. Do not read it as the substitution working.',
   'Requests to a listed host are relayed through Kortix, so responses are not streamed: no SSE, no websockets, and large bodies are capped (1 MiB request, 5 MiB response).',
   'A listed host that answers 401 means the swap did not happen. Report that; do not invent a credential.',
@@ -179,7 +181,7 @@ export function buildSecretCapabilities(
         hosts: networkHosts(row.egressPolicy),
         scheme: 'https',
         readable_in_sandbox: false,
-        on_echo: 'redact',
+        on_echo: 'reseal',
       });
       continue;
     }

@@ -62,6 +62,8 @@ function handleFor(overrides: Record<string, unknown> = {}) {
 }
 
 let handleRows: Array<Record<string, unknown>> = [];
+/** `projects.secret_default_strategy` the relay reads. */
+let projectFloor: string | null = "runtime";
 let secretRows: Array<Record<string, unknown>> = [];
 const audits: Array<Record<string, unknown>> = [];
 const decrypted: string[] = [];
@@ -126,6 +128,7 @@ mock.module('../projects/lib/access', () => ({
 }));
 mock.module('../projects/secrets', () => ({
   ...realProjectSecrets,
+  loadProjectSecretDefaultStrategy: async () => projectFloor,
   decryptProjectSecret: (_projectId: string, value: string) => {
     decrypted.push(value);
     if (value === 'personal-encrypted-value') return 'personal-secret-value';
@@ -144,6 +147,7 @@ class MockSecretBrokerError extends Error {
     readonly code: string,
     message: string,
     readonly status: number,
+    readonly refused?: string,
   ) {
     super(message);
   }
@@ -501,7 +505,7 @@ describe('POST /v1/projects/:projectId/secrets/:identifier/broker', () => {
       expect(decrypted).not.toContain('second-encrypted-value');
     });
 
-    test('a FORGED handle in the request is audited as forged', async () => {
+    test('a FORGED handle refuses the request (credential_forged) and is audited as forged', async () => {
       const real = handleString(SECOND_LOOKUP_ID);
       const forged = `${real.slice(0, -1)}${real.endsWith('a') ? 'b' : 'a'}`;
 
@@ -509,10 +513,18 @@ describe('POST /v1/projects/:projectId/secrets/:identifier/broker', () => {
         body_base64: Buffer.from(JSON.stringify({ key: forged })).toString('base64'),
       });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(403);
+      expect(response.headers.get('x-kortix-refused')).toBe('credential_forged');
+      expect(await response.json()).toMatchObject({ code: 'policy_denied' });
+      // The request never left.
+      expect(brokerCalls).toHaveLength(0);
       const refused = audits.find((event) => event.action === 'secret.handle.refused');
       expect(refused?.outcome).toBe('denied');
       expect(refused?.after).toMatchObject({ refusals: { forged: 1, stolen: 0, host_denied: 0 } });
+      expect(audits.find((event) => event.action === 'secret.broker.failed')?.after).toMatchObject({
+        reason: 'policy_denied',
+        refused: 'credential_forged',
+      });
     });
 
     test("a VALID handle minted for another session is audited as stolen, not forged", async () => {
@@ -525,7 +537,9 @@ describe('POST /v1/projects/:projectId/secrets/:identifier/broker', () => {
         headers: { 'x-carried': otherSession },
       });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(403);
+      expect(response.headers.get('x-kortix-refused')).toBe('credential_forged');
+      expect(brokerCalls).toHaveLength(0);
       const refused = audits.find((event) => event.action === 'secret.handle.refused');
       expect(refused?.after).toMatchObject({ refusals: { forged: 0, stolen: 1, host_denied: 0 } });
       expect(JSON.stringify(refused?.after)).not.toContain('second-secret-value');

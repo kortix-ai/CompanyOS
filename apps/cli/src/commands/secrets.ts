@@ -42,8 +42,8 @@ Each secret has one EXPOSURE — can agent code read the value?
   enforced     EXPERIMENTAL — requires the workspace's \`secrets_egress\` feature
                flag (Settings → Feature flags), on by default. The env var
                holds a HANDLE, not the value. Kortix substitutes the real value
-               outside the sandbox, only on the approved hosts, and rewrites any
-               echo of it to [REDACTED].
+               outside the sandbox, only on the approved hosts, and turns any
+               echo of it back into the handle.
   none         No sandbox presence. A Kortix service spends the value (LLM
                gateway, connector, Git), or the secret is stored and disabled.
 
@@ -123,7 +123,7 @@ Subcommands:
                                     that validates the credential's format.
   call IDENTIFIER URL               Send one policy-bound HTTPS request through
                                     Kortix — same hosts, same policy, same
-                                    [REDACTED] on an echoed value. The explicit
+                                    handle back for an echoed value. The explicit
                                     fallback for a request the sandbox cannot
                                     intercept, not a second way to configure a
                                     secret. Applies to enforced exposure, which

@@ -7,6 +7,7 @@ import { config } from '../../config';
 import {
   type PresentedHandleRefusal,
   classifyPresentedHandles,
+  presentedHandleRefusalReason,
   requestSurfaceText,
   summarizeHandleRefusals,
 } from '../../secrets/handle-substitution';
@@ -25,8 +26,8 @@ import {
   RELAY_CLASSIFY_PREFIX_MAX,
   RELAY_EXACT_LENGTH_MAX,
   createRelayDisposables,
+  bodyStreamPairs,
   readAtMost,
-  requestPairs,
   responsePairs,
   safeResponseHeaders,
   substituteStream,
@@ -50,6 +51,22 @@ interface RelayHopRequest {
   disposeAll: () => void;
   auditBase: Omit<AuditEventInput, 'action' | 'outcome' | 'after' | 'httpStatus'>;
   refusals: PresentedHandleRefusal[];
+  /** Filled when a STREAMED request body carried a refused handle; the body
+   *  stream is errored at that point and the hop loop's catch reports it. */
+  streamRefusal: StreamRefusalState;
+}
+
+/**
+ * A refusal found INSIDE a streamed request body. `abort` destroys the body
+ * Readable handed to the transport, so the upstream request never completes.
+ * Destroying the node Readable, not erroring a web stream stage: measured on
+ * bun 1.3.14, an error raised inside a `pipeThrough` stage feeding
+ * `Readable.fromWeb` is an unhandled rejection and the consumer hangs.
+ */
+interface StreamRefusalState {
+  reason: relayContract.RelayRefusalReason | null;
+  abort: () => void;
+  body: Readable | null;
 }
 
 interface HopState {
@@ -62,12 +79,32 @@ interface HopState {
 
 type HopFrame = RelayHopRequest & { hop: broker.PreparedRelayHead; upstream: RelayUpstream };
 
-/** The relay's refusal envelope: the wire code rides in x-kortix-relay-error. */
-export function refuse(c: Context, code: string, message: string, status: number): Response {
+/**
+ * The relay's refusal envelope. The legacy wire code rides in
+ * `x-kortix-relay-error`; the closed-set reason in `x-kortix-refused` when
+ * Kortix refused (absent on an upstream failure).
+ */
+export function refuse(
+  c: Context,
+  code: string,
+  message: string,
+  status: number,
+  refused?: relayContract.RelayRefusalReason | null,
+): Response {
   c.header(relayContract.RELAY_ERROR_HEADER, code);
   c.header(relayContract.RELAY_VERSION_HEADER, String(relayContract.RELAY_VERSION));
+  const reason = broker.refusalReasonFor(code, status, refused);
+  if (reason) c.header(relayContract.REFUSED_HEADER, reason);
   return c.json({ error: message, code }, status as ContentfulStatusCode);
 }
+
+/** `refuse` for a thrown broker error, carrying its explicit reason. */
+function refuseError(c: Context, error: SecretBrokerError): Response {
+  return refuse(c, error.code, error.message, error.status, error.refused);
+}
+
+const PRESENTED_HANDLE_MESSAGE =
+  'the request carries a secret handle this session may not spend on this destination; it was not sent';
 
 export async function auditBrokerFailure(base: RelayAuditBase, error: SecretBrokerError) {
   await recordAuditEvent({
@@ -75,7 +112,12 @@ export async function auditBrokerFailure(base: RelayAuditBase, error: SecretBrok
     action: 'secret.broker.failed',
     outcome: error.status === 403 ? 'denied' : 'failure',
     httpStatus: error.status,
-    after: { reason: error.code },
+    after: {
+      reason: error.code,
+      ...(broker.refusalReasonFor(error.code, error.status, error.refused) && {
+        refused: broker.refusalReasonFor(error.code, error.status, error.refused),
+      }),
+    },
   });
 }
 
@@ -121,6 +163,7 @@ interface RelayFrameArgs extends RelayFrameContext {
   disposables: RelayHopRequest['disposables'];
   disposeAll: RelayHopRequest['disposeAll'];
   classifyBodyPrefix: (prefix: Buffer) => void;
+  streamRefusal: StreamRefusalState;
 }
 
 /** The prepared request body plus its substituter lifecycle and refusals. */
@@ -133,6 +176,7 @@ type RelayBodyFrame = Pick<
   | 'disposables'
   | 'disposeAll'
   | 'refusals'
+  | 'streamRefusal'
 >;
 
 /** The audit base every relay row shares: who spent which secret row, on which authorized shape. */
@@ -181,7 +225,8 @@ export async function prepareRelayRequest(
   } catch (error) {
     const code = error instanceof relayContract.RelayCodecError ? error.code : 'relay_meta_invalid';
     const message = error instanceof Error ? error.message : 'relay metadata is invalid';
-    return refuse(c, code, message, 400);
+    const refused = error instanceof relayContract.RelayCodecError ? error.refused : undefined;
+    return refuse(c, code, message, 400, refused);
   }
 
   const destination = new URL(meta.url);
@@ -205,6 +250,8 @@ export async function prepareRelayRequest(
   if (!auditContext) {
     if (authz.ok) throw new Error('unreachable: an authorized relay always has an audit context');
     c.header(relayContract.RELAY_ERROR_HEADER, authz.code);
+    const reason = broker.refusalReasonFor(authz.code, authz.status);
+    if (reason) c.header(relayContract.REFUSED_HEADER, reason);
     return authz.code === 'secret_not_found'
       ? c.json({ error: authz.message }, 404)
       : c.json({ error: authz.message, code: authz.code }, 403);
@@ -251,7 +298,7 @@ async function prepareRelayRequestHead(
         ? error
         : new SecretBrokerError('invalid_request', 'relay request is invalid', 400);
     await auditBrokerFailure(ctx.auditBase, brokerError);
-    return refuse(c, brokerError.code, brokerError.message, brokerError.status);
+    return refuseError(c, brokerError);
   }
 
   // A legacy `json` body-injection slot needs the whole body parsed as JSON.
@@ -290,14 +337,27 @@ async function frameRelayRequest(
 
   const primaryEncoding = broker.bodyEncoding(ctx.head.headers['content-type']);
   const requestSubstituter = new StreamSubstituter(
-    requestPairs(ctx.head.admitted, primaryEncoding),
+    bodyStreamPairs(ctx.head.admitted, primaryEncoding),
   );
 
   const { disposables, disposeAll } = createRelayDisposables(requestSubstituter, c.req.raw.signal);
 
+  /** Set when a streamed body turns out to carry a refused handle. */
+  const streamRefusal: StreamRefusalState = {
+    reason: null,
+    body: null,
+    abort() {
+      // Next microtask: the stage that found it is still inside its own call.
+      queueMicrotask(() =>
+        streamRefusal.body?.destroy(
+          new SecretBrokerError('policy_denied', PRESENTED_HANDLE_MESSAGE, 403, streamRefusal.reason ?? undefined),
+        ),
+      );
+    },
+  };
   /** Classify a streamed body's prefix for presented-but-refused handles. */
   const classifyBodyPrefix = (prefix: Buffer) =>
-    classifyRequestBodyPrefix(prefix, ctx.authz.facts, ctx.auditBase);
+    classifyRequestBodyPrefix(prefix, ctx.authz.facts, ctx.auditBase, streamRefusal);
 
   const rawBody: ReadableStream<Uint8Array> | null = c.req.raw.body ?? null;
 
@@ -313,6 +373,7 @@ async function frameRelayRequest(
       disposables,
       disposeAll,
       classifyBodyPrefix,
+      streamRefusal,
     });
   } catch (error) {
     disposeAll();
@@ -321,7 +382,7 @@ async function frameRelayRequest(
         ? error
         : new SecretBrokerError('invalid_request', 'relay request is invalid', 400);
     await auditBrokerFailure(ctx.auditBase, brokerError);
-    return refuse(c, brokerError.code, brokerError.message, brokerError.status);
+    return refuseError(c, brokerError);
   }
 
   // Evidence, on the request as the guest sent it. On a streamed body the
@@ -334,9 +395,20 @@ async function frameRelayRequest(
     body: framing.bufferedBody,
   });
   const refusals = classifyPresentedHandles(surface, ctx.authz.facts, config.API_KEY_SECRET);
-  if (refusals.length > 0) await auditRefusals(ctx.auditBase, refusals);
+  if (refusals.length > 0) {
+    // The audit row stays: it is the forensic line an operator reads. The
+    // request no longer leaves — a handle that cannot be spent here is either
+    // an attack (forged, carried in from another session) or a misdirected
+    // call, and the agent must learn which instead of reading an upstream 401.
+    await auditRefusals(ctx.auditBase, refusals);
+    disposeAll();
+    const reason = presentedHandleRefusalReason(refusals)!;
+    const refusal = new SecretBrokerError('policy_denied', PRESENTED_HANDLE_MESSAGE, 403, reason);
+    await auditBrokerFailure(ctx.auditBase, refusal);
+    return refuseError(c, refusal);
+  }
 
-  return { ...framing, requestSubstituter, disposables, disposeAll, refusals };
+  return { ...framing, requestSubstituter, disposables, disposeAll, refusals, streamRefusal };
 }
 
 /**
@@ -348,12 +420,15 @@ function classifyRequestBodyPrefix(
   prefix: Buffer,
   facts: SecretRelayAuthzOk['facts'],
   auditBase: RelayAuditBase,
+  streamRefusal: RelayHopRequest['streamRefusal'],
 ) {
   if (prefix.byteLength === 0) return;
   const surface = requestSurfaceText({ url: '', headers: {}, body: prefix });
   const found = classifyPresentedHandles(surface, facts, config.API_KEY_SECRET);
   if (found.length === 0) return;
   void auditRefusals(auditBase, found, 'request_body');
+  streamRefusal.reason = presentedHandleRefusalReason(found);
+  streamRefusal.abort();
 }
 
 /** Pick the body's framing: none, pass-through, buffered, or streamed. */
@@ -390,6 +465,7 @@ async function frameUpstreamBody(
     upstreamBody = Readable.fromWeb(
       rawBody.pipeThrough(tapPrefix(RELAY_CLASSIFY_PREFIX_MAX, args.classifyBodyPrefix)) as never,
     );
+    args.streamRefusal.body = upstreamBody;
     bodyWasStreamed = true;
   } else if (declaredLength !== null && declaredLength <= RELAY_EXACT_LENGTH_MAX) {
     // CASE 3 — small and of known length. Buffer it (BOUNDED BY THE READ
@@ -401,7 +477,7 @@ async function frameUpstreamBody(
     const original = await readAtMost(rawBody, declaredLength);
     const substituted =
       head.admitted.length > 0
-        ? broker.substituteBuffer(original, head.admitted, primaryEncoding, applied)
+        ? broker.substitutePlaced(original, head.admitted, 'body', primaryEncoding, applied)
         : original;
     for (const identifier of applied) head.applied.add(identifier);
     bufferedBody = original;
@@ -421,8 +497,14 @@ async function frameUpstreamBody(
     upstreamBody = Readable.fromWeb(
       rawBody
         .pipeThrough(tapPrefix(RELAY_CLASSIFY_PREFIX_MAX, args.classifyBodyPrefix))
-        .pipeThrough(substituteStream(requestSubstituter)) as never,
+        .pipeThrough(
+          substituteStream(requestSubstituter, undefined, undefined, () => {
+            args.streamRefusal.reason = 'credential_placement';
+            args.streamRefusal.abort();
+          }),
+        ) as never,
     );
+    args.streamRefusal.body = upstreamBody;
     bodyWasStreamed = true;
   }
 
@@ -436,7 +518,11 @@ export async function runRelayHops(input: RelayHopRequest): Promise<Response> {
   const { c, meta, authz, head, upstreamBody, disposeAll, auditBase } = input;
   // Every value that could be echoed back: the route's own secret plus every
   // handle admitted on this hop.
-  let redactable = [authz.secret, ...head.admitted.map((entry) => entry.value)];
+  const sealable = (hop: broker.PreparedRelayHead): broker.ResealPair[] => [
+    { value: authz.secret, handle: authz.secretHandle },
+    ...hop.admitted.map((entry) => ({ value: entry.value, handle: entry.handle })),
+  ];
+  let redactable = sealable(head);
 
   try {
     // ── The hop loop ────────────────────────────────────────────────────
@@ -476,26 +562,42 @@ export async function runRelayHops(input: RelayHopRequest): Promise<Response> {
 
       const refused = await prepareRedirect(input, state, upstream);
       if (refused) return refused;
-      redactable = [authz.secret, ...state.hop.admitted.map((entry) => entry.value)];
+      redactable = sealable(state.hop);
     }
   } catch (error) {
     // Anything that threw between building a substituter and handing it off
     // leaves decrypted bytes in it. Zero them here rather than waiting for GC.
     disposeAll();
-    const brokerError =
-      error instanceof SecretBrokerError
+    // A refusal raised INSIDE the streamed request body (a refused handle the
+    // classifier found, or a handle outside its allowed placement) reaches here
+    // wrapped by the transport. Report the refusal, not a transport failure.
+    const streamReason =
+      input.streamRefusal.reason ??
+      (input.requestSubstituter.refusedLabel !== null ? 'credential_placement' : null);
+    const brokerError = streamReason
+      ? new SecretBrokerError(
+          'policy_denied',
+          'the streamed request body carried a secret handle that may not be sent; the upstream request was aborted before it completed',
+          403,
+          streamReason,
+        )
+      : error instanceof SecretBrokerError
         ? error
         : new SecretBrokerError('upstream_failed', 'Secret relay request failed', 502);
     await auditBrokerFailure(auditBase, brokerError);
-    return refuse(c, brokerError.code, brokerError.message, brokerError.status);
+    return refuseError(c, brokerError);
   }
 }
 
 async function refuseRedirect(input: RelayHopRequest, hop: broker.PreparedRelayHead) {
   const { c, requestSubstituter, bodyWasStreamed, auditBase } = input;
-  const deny = async (code: SecretBrokerError['code'], message: string) => {
-    await auditBrokerFailure(auditBase, new SecretBrokerError(code, message, 502));
-    return refuse(c, code, message, 502);
+  const deny = async (
+    code: SecretBrokerError['code'],
+    message: string,
+    refused?: relayContract.RelayRefusalReason,
+  ) => {
+    await auditBrokerFailure(auditBase, new SecretBrokerError(code, message, 502, refused));
+    return refuse(c, code, message, 502, refused);
   };
   // A redirect only matters BEFORE any real credential is on the wire.
   // Once this hop carried one, the value is already delivered and
@@ -510,7 +612,7 @@ async function refuseRedirect(input: RelayHopRequest, hop: broker.PreparedRelayH
   // `bodyWasStreamed` check below — i.e. by ordering, not by the check
   // that is meant to enforce the invariant.
   if (hop.carriesSecret || hop.applied.size > 0 || requestSubstituter.applied.length > 0) {
-    return deny('upstream_failed', 'redirect after secret substitution is not followed');
+    return deny('upstream_failed', 'redirect after secret substitution is not followed', 'credential_host');
   }
   // No secret rode out — but the BODY may already be gone. A streamed
   // request body cannot be replayed onto the next hop, and buffering it
@@ -546,9 +648,9 @@ async function prepareRedirect(input: RelayHopRequest, state: HopState, upstream
     const brokerError =
       error instanceof SecretBrokerError
         ? error
-        : new SecretBrokerError('policy_denied', 'redirect target is not admitted', 403);
+        : new SecretBrokerError('policy_denied', 'redirect target is not admitted', 403, 'credential_host');
     await auditBrokerFailure(auditBase, brokerError);
-    return refuse(c, brokerError.code, brokerError.message, brokerError.status);
+    return refuseError(c, brokerError);
   }
   const msg = 'this secret uses a JSON body injection slot, which the streaming relay cannot serve';
   if (state.hop.bodyInject) return refuse(c, 'invalid_request', msg, 400);
@@ -562,9 +664,10 @@ async function prepareRedirect(input: RelayHopRequest, state: HopState, upstream
     Reflect.deleteProperty(state.hop.headers, 'content-length');
   } else {
     const applied = new Set<string>();
-    const substituted = broker.substituteBuffer(
+    const substituted = broker.substitutePlaced(
       state.bufferedBody,
       state.hop.admitted,
+      'body',
       broker.bodyEncoding(state.hop.headers['content-type']),
       applied,
     );
@@ -617,7 +720,7 @@ function auditRelayCompletion(frame: HopFrame, responseBytes: number) {
   );
 }
 
-async function buildRelayResponse(frame: HopFrame & { redactable: string[] }): Promise<Response> {
+async function buildRelayResponse(frame: HopFrame & { redactable: broker.ResealPair[] }): Promise<Response> {
   const { meta, upstream, redactable, disposables, disposeAll } = frame;
   // ── FAIL CLOSED on a compressed body ────────────────────────────
   //

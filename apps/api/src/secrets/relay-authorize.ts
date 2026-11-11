@@ -217,6 +217,10 @@ export interface SecretRelayAuthzOk {
   policy: SecretEgressPolicy;
   /** The decrypted value for the route's OWN secret. */
   secret: string;
+  /** The handle that stands in for `secret` in the sandbox, when this request's
+   *  destination admits it. An echo of `secret` is re-sealed to it; null =
+   *  `[REDACTED]`. */
+  secretHandle: string | null;
   substitutions: SecretSubstitution[];
   facts: Map<string, SessionHandleFacts>;
   isBoundarySecret: boolean;
@@ -494,6 +498,7 @@ export async function authorizeSecretRelay(
     audit,
     policy: handle.policySnapshot,
     secret,
+    secretHandle: primary?.handle ?? null,
     substitutions: spendable.substitutions,
     facts: spendable.facts,
     isBoundarySecret,

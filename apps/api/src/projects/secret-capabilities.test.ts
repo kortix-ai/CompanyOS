@@ -215,7 +215,7 @@ describe('buildSecretCapabilities describes egress-enforced delivery', () => {
         hosts: ['api.stripe.test', 'uploads.stripe.test'],
         scheme: 'https',
         readable_in_sandbox: false,
-        on_echo: 'redact',
+        on_echo: 'reseal',
       },
     ]);
   });
@@ -238,11 +238,12 @@ describe('buildSecretCapabilities describes egress-enforced delivery', () => {
     expect(capabilities).not.toContain('{{secret}}');
   });
 
-  test('states the handle, the substitution, the [REDACTED] echo and the fallback', () => {
+  test('states the handle, the substitution, the re-sealed echo and the fallback', () => {
     const notes = built().notes?.network ?? [];
     const text = notes.join('\n');
     expect(text).toContain('holds a HANDLE, not the value');
-    expect(text).toContain('[REDACTED]');
+    expect(text).toContain('re-seals');
+    expect(text).toContain('x-kortix-refused');
     expect(text).toContain('is a REAL failure');
     expect(text).toContain('over HTTPS');
     expect(text).toContain('do not ask the user for it');
@@ -297,7 +298,7 @@ describe('buildSecretCapabilities describes egress-enforced delivery', () => {
         hosts: ['api.stripe.test', 'uploads.stripe.test'],
         scheme: 'https',
         readable_in_sandbox: false,
-        on_echo: 'redact',
+        on_echo: 'reseal',
       },
     ]);
   });
@@ -379,11 +380,11 @@ describe('echo guidance has one story and no mode to choose', () => {
       sessionId: 'session-1',
     });
 
-  test('says [REDACTED] is success and an empty reply is NOT', () => {
+  test('says an echo comes back as the handle and an empty reply is NOT success', () => {
     const catalog = build();
-    expect(catalog.capabilities[0]).toMatchObject({ delivery: 'network', on_echo: 'redact' });
+    expect(catalog.capabilities[0]).toMatchObject({ delivery: 'network', on_echo: 'reseal' });
     const notes = (catalog.notes?.network ?? []).join(' ');
-    expect(notes).toContain('[REDACTED]');
+    expect(notes).toContain('the value becomes the handle again');
     expect(notes).toContain('is a REAL failure');
     // The exact inversion that would mislead an agent.
     expect(notes).not.toContain('Empty reply from server');

@@ -40,7 +40,10 @@ import {
   BLOCKED_REQUEST_HEADERS,
   decodeRelayStatus,
   encodeRelayMeta,
+  REFUSED_HEADER,
   RELAY_ERROR_HEADER,
+  isRelayRefusalReason,
+  type RelayRefusalReason,
   RELAY_META_HEADER,
   RELAY_PROBE_HEADER,
   RELAY_STATUS_HEADER,
@@ -180,6 +183,8 @@ export class RelayRefusedError extends Error {
      * buffered `/broker` transport.
      */
     readonly downgrade: boolean = false,
+    /** `x-kortix-refused` from Kortix, when it refused (not on a failure). */
+    readonly refused: string | null = null,
   ) {
     super(`kortix relay refused: ${code ?? status}`)
     this.name = 'RelayRefusedError'
@@ -198,6 +203,12 @@ export class RelayRefusedError extends Error {
  * working the whole time. So the verdict is revisable, in exactly these cases
  * and no others — a 403 policy denial must never downgrade the transport.
  */
+/** `x-kortix-refused`, only when it names a reason from the closed set. */
+export function refusedReason(headers: Headers): RelayRefusalReason | null {
+  const value = headers.get(REFUSED_HEADER)
+  return isRelayRefusalReason(value) ? value : null
+}
+
 function isTransportGone(status: number, code: string | null): boolean {
   return status === 404 || status === 501 || code === 'relay_disabled'
 }
@@ -274,6 +285,7 @@ export async function relayStreaming(
       code,
       detail || JSON.stringify({ error: 'kortix relay refused the request' }),
       isTransportGone(response.status, code),
+      refusedReason(response.headers),
     )
   }
 

@@ -1180,7 +1180,22 @@ export interface SecretEgressRule {
   path?: string;
   /** Where the credential is attached. Absent = the policy-level default. */
   inject?: SecretInjectionSlot;
+  /**
+   * The request surfaces a HANDLE may be substituted in on this rule. Absent =
+   * all four, which is every row written before this field existed. A handle
+   * found in a surface not listed refuses the whole request
+   * (`x-kortix-refused: credential_placement`); it is never sent.
+   */
+  placements?: SecretHandlePlacement[];
+  /**
+   * The one header name (lowercase) the handle may ride in. Requires
+   * `placements` to list `header`. Absent = any header.
+   */
+  header?: string;
 }
+
+/** A request surface a handle can travel in. */
+export type SecretHandlePlacement = 'header' | 'query' | 'path' | 'body';
 
 export type SecretInjectionSlot =
   | { kind: 'header'; name: string; template?: string }

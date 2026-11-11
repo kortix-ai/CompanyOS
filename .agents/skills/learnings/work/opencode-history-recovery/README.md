@@ -196,7 +196,13 @@ are stamped and skipped.
   to the key in `.env.prod` and `.env.dev` (unchanged in git; it worked on dev
   on 11-05). The prod plan counted 8,453 Daytona candidates; the owner decided
   not to recover them.
-- Open: the rerun of the 10 after the release that ships the todo fix:
-  `runbig` with `--apply --max-store-mb 8192 --concurrency 1`. pi sessions with
-  no log (146 Platinum since 08-19, `ses_pi…` roots) need a pi reader and are not
-  covered.
+- 2026-11-10 23:51Z, rerun after v0.15.4 shipped the todo fix (td `:14`,
+  2 vCPU / 16 GB, `--apply --max-store-mb 8192 --concurrency 1`, 12 sessions in
+  2.3 min): the 9 `invalid` sessions `written` (11 to 238 messages each; every
+  count matches `session_log_messages`), 1 more `no_store`. The 4,213 MB store
+  failed with `No space left on device`: the copy splits the whole store into the
+  box's `/tmp` before the download, and that box's disk cannot hold it. The owner
+  wrote it off. Final prod Platinum total: 6,267 `written`, 148 `empty_store`,
+  2 `no_store`, 9 not recovered.
+- Not covered: pi sessions with no log (146 Platinum since 08-19, `ses_pi…`
+  roots) need a pi reader.

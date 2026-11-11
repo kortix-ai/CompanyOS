@@ -463,8 +463,9 @@ export interface ListProjectSessionsOptions {
   /** `'root'` = top-level sessions only (each row carries `child_count`); a
    *  session id = that session's children. Omit for the legacy flat list. */
   parent?: 'root' | string;
-  /** Filter by who started the run, relative to the viewer. */
-  startedBy?: 'me' | 'others' | 'automated';
+  /** Filter by who started the run, relative to the viewer. `humans` = every
+   *  person-started session (the viewer's and other members'), no machine run. */
+  startedBy?: 'me' | 'others' | 'automated' | 'humans';
   /** Server-side search over every session the viewer may see (1..200 chars). */
   q?: string;
   /** Only sessions that carry EVERY one of these labels (exact match). */

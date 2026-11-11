@@ -1,6 +1,8 @@
 import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
+import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
+import { logWindowDecision } from '../../shared/log-window';
 import {
   buildSandboxUpstreamHeaders,
   invalidatePreviewLink,
@@ -142,6 +144,36 @@ export async function forwardWithRetry(
   }
 
   return giveUpForward(req, state);
+}
+
+/**
+ * Ship the give-up line of an exhausted forward (every attempt answered
+ * 502/503) through the shared log-noise throttle
+ * (shared/log-window.ts); the client response is never throttled —
+ * every exhausted request still gets the port-unreachable page or the
+ * passthrough 502, and lands in the request-completion logs. The line fired
+ * once per failed request, and the failed-request rate IS the caller's poll
+ * rate: one browser preview pane polling a stopped dev server emitted 49
+ * warns in 15 min from ONE sandbox (KRTX-4695). First line per (sandbox,
+ * port) window ships; the next window's line carries `suppressed`; severity
+ * follows the window's volume (KRTX-4454) so a one-off dead port ships info
+ * and a hammered one stays warn. Keyed per sandbox and port — not on the
+ * message — so one dead port cannot mask another's first line.
+ */
+export function reportPortNotAnswering(
+  message: string,
+  sandboxId: string,
+  port: number,
+  now = Date.now(),
+): void {
+  const { log, suppressed } = logWindowDecision(
+    `preview port still not answering ${sandboxId}:${port}`,
+    now,
+  );
+  if (!log) return;
+  const fields = { sandboxId, port, suppressed };
+  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED) logger.warn(message, fields);
+  else logger.info(message, fields);
 }
 
 /** One attempt: resolve ingress, prepare the turn, send, and classify the answer. */
@@ -388,7 +420,8 @@ async function handleUpstreamFailureStatus(
       // polls x attempts during a transient — a half-hour provider blip turned
       // every daemon-port poll into warns and paged the sweep at 186x baseline
       // (KRTX-4673; same amplification class as KRTX-4365's user-port warns).
-      // The give-up warn below is the one warn a failed request leaves.
+      // The give-up line below is the one a failed request leaves, throttled
+      // (KRTX-4695).
       logger.info(
         `[PREVIEW] Sandbox ${sandboxId}:${port} returned ${upstream.status} (port not ready, attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
       );
@@ -397,12 +430,14 @@ async function handleUpstreamFailureStatus(
       await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
       return 'retry';
     }
-    // The port never answered within the retry budget. The one `warn` for this
-    // request: only a genuinely failed request (every attempt answered
-    // 502/503) lands here, so the warn rate tracks failed requests, not polls.
+    // The port never answered within the retry budget. Only a genuinely failed
+    // request (every attempt answered 502/503) reaches the emit below; through
+    // the throttle its rate tracks hammered (sandbox, port) pairs, not polls.
     if (attempt >= MAX_RETRIES) {
-      logger.warn(
+      reportPortNotAnswering(
         `[PREVIEW] Sandbox ${sandboxId}:${port} still not answering after ${MAX_RETRIES + 1} attempts (status ${upstream.status})`,
+        sandboxId,
+        port,
       );
     }
     // Retries exhausted and the port still isn't answering. Show the friendly

@@ -33,7 +33,7 @@ for (const key of installedKeys) {
           : Reflect.get(win, key));
 }
 for (const key of Object.getOwnPropertyNames(win)) {
-  // Event classes too: Radix dispatches a `CustomEvent` on a happy-dom node,
+  // Event classes too: the overlay layer dispatches a `CustomEvent` on a happy-dom node,
   // which accepts only happy-dom's own events, not Bun's.
   if (/^[A-Z]/.test(key) && (!(key in globals) || key.endsWith('Event'))) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));

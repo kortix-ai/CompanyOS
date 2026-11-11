@@ -52,6 +52,7 @@ A new primitive is the last step: tokens only, a small API, and a section on `/d
 | `SectionCard`, `List` / `ListRow`                             | `Card`, `<ul className="space-y-2">` rows                                                               |
 | `lucide-react` or another icon set                            | `@phosphor-icons/react`, `*Icon` names, no `weight` prop (only `weight="fill"` for solid status glyphs) |
 | A fork or a restyled copy of a component                      | the component as it ships; theme with tokens (section 6)                                                |
+| `@base-ui/react`, `@radix-ui/*`, `cmdk` or `vaul` imported in a host | the `@kortix/ui` primitive (Base UI runs underneath); `asChild` on its parts, `Slot` from `@kortix/ui/slot` |
 
 ## 4. Tokens only
 

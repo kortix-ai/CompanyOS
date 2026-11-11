@@ -413,7 +413,7 @@ export function ChatInputControl({
     The panel opens from the composer card, not from the trigger: its left
     edge is the card's left edge and its bottom edge sits just above the
     card's top (or the top of the strip stacked on it: the queue, a notice).
-    Radix still anchors to the trigger; the offsets below move the panel from
+    The positioner still anchors to the trigger; the offsets below move the panel from
     the trigger to the card. Measured on open and on resize. A composer
     without a card (none found) keeps the trigger's position.
   */
@@ -810,7 +810,7 @@ export function ChatInputControl({
           }
         }}
         // The editors' selects open in their own portals, and a dialog opened
-        // from inside is outside too. Radix would close this panel under the cursor.
+        // from inside is outside too. The popover would close this panel under the cursor.
         onInteractOutside={(event) => {
           const target = event.target as HTMLElement | null;
           if (

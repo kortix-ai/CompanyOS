@@ -286,7 +286,7 @@ const CARD_EDGE_PX = 8;
  * row renders its brief into this host's slot (`SessionBriefCard`), and the
  * host lines up with that row. Moving to the next row therefore moves the same
  * card, with a 150ms glide, instead of unmounting one card and mounting another
- * at a new place. Radix HoverCard cannot do this: it exports no `Anchor`, so a
+ * at a new place. `HoverCard` cannot do this: it has no anchor part, so a
  * single instance cannot follow the pointer between triggers.
  *
  * The first open fades in over 100ms and does not move: the card opens to the
@@ -433,7 +433,7 @@ function SessionBriefCard({
 
   return (
     <>
-      {/* data-state as the Radix trigger set it: the row hides its markers while the card is open. */}
+      {/* data-state as the hover card trigger sets it: the row hides its markers while the card is open. */}
       <Slot data-state={open ? 'open' : 'closed'} {...sessionRowHoverHandlers(id)}>
         {children}
       </Slot>

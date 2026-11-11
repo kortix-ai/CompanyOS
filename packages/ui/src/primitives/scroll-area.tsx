@@ -31,7 +31,7 @@ function ScrollArea({
 
 /**
  * The bar shows while the pointer is over the area or it scrolls, and only
- * when the content overflows: the same as the old Radix `type="hover"` default.
+ * when the content overflows (the `type="hover"` behavior).
  */
 const SCROLLBAR =
   'flex touch-none p-px select-none opacity-0 transition-opacity duration-moderate data-hovering:opacity-100 data-scrolling:opacity-100 data-scrolling:duration-0';

@@ -420,7 +420,7 @@ export interface ModelSelectorProps {
    * so effort is the right-hand pane of this popover.
    *
    * Controlled/uncontrolled is decided by whether `open` is `undefined`, the
-   * same rule Radix itself uses — so every existing call site keeps its
+   * same rule the Base UI roots use — so every existing call site keeps its
    * internal state untouched.
    */
   open?: boolean;
@@ -455,8 +455,8 @@ export function ModelSelector({
   const tDefault = useTranslations('workspaces.models');
   const t = useTranslations('threads');
 
-  // Controlled when `open` is supplied, uncontrolled otherwise — Radix's own
-  // rule. `setOpen` below is the single write path every internal caller
+  // Controlled when `open` is supplied, uncontrolled otherwise — the Base UI
+  // roots' rule. `setOpen` below is the single write path every internal caller
   // already goes through (`setOpen(false)` after picking a model or a
   // default), so a controlled parent hears about those closes too rather than
   // being silently desynced from a popover that shut itself.

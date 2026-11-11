@@ -153,7 +153,7 @@ describe('ProjectIconField trigger', () => {
     // The field renders inside the create modal's <form>. A <button> with no
     // type submits it, so opening the picker would create the project.
     //
-    // Radix's PopoverTrigger merges its own type="button" into the asChild
+    // The PopoverTrigger merges its own type="button" into the asChild
     // element, so the rendered assertion alone cannot fail — verified by
     // deleting the prop and watching it stay green. Both layers are pinned:
     // the markup, which is what actually protects the form, and the source,
@@ -230,28 +230,17 @@ describe('ProjectIconField trigger', () => {
     expect(code).toMatch(/<Popover\s+open=\{[^}]*\}\s+onOpenChange=\{setOpen\}/);
   });
 
-  test('the popover takes its own scroll lock so the picker can be wheeled', () => {
-    // The field renders inside the create-project Modal, a Radix Dialog. Radix
-    // wraps the dialog OVERLAY in react-remove-scroll, which installs a
-    // non-passive `wheel` listener on `document` and preventDefault()s every
-    // wheel that is neither in the overlay's React subtree nor in the content
-    // shard. A popover portals to document.body, so it is in neither, and the
-    // picker's overflow-y-auto viewport got no scroll at all. Measured in
-    // Chromium against the real modal: scrollTop 0 -> 0 for a trusted
-    // +400 wheel, defaultPrevented true. The same picker on /design-system,
-    // outside any dialog, moved 0 -> 400.
-    //
-    // `modal` gives this popover its own RemoveScroll, which becomes the last
-    // entry in react-remove-scroll's lockStack and therefore the only one that
-    // acts. Nothing rendered can show this: with the popover closed there is no
+  test('the popover is modal inside the create-project Modal', () => {
+    // The field renders inside the create-project Modal. `modal` traps focus
+    // in the picker and blocks pointer input outside it while it is open.
+    // Nothing rendered can show this: with the popover closed there is no
     // markup, and renderToStaticMarkup cannot open it.
     expect(code).toMatch(/<Popover\b[^>]*\bmodal\b/);
   });
 
   test('disabling the field closes an open popover AND resets the state', () => {
-    // Radix drives `open` through useControllableState: a controlled prop that
-    // changes value on re-render is recomputed and fires nothing, because
-    // onOpenChange only runs from setValue. So the guard alone closes the
+    // The popover root fires `onOpenChange` only for changes it makes itself:
+    // a controlled `open` that changes value on re-render fires nothing. So the guard alone closes the
     // popover when `disabled` goes true WITHOUT telling us, and local `open`
     // stays true — then `disabled` going false re-evaluates the guard to true
     // and the picker reopens on its own. Task 7 wires `disabled={submitting}`,
@@ -327,7 +316,7 @@ describe('ProjectIconField popover geometry', () => {
   });
 
   test('the popover dialog has an accessible name', () => {
-    // Radix gives PopoverContent role="dialog". Unlabelled, a screen reader
+    // The popover gives PopoverContent role="dialog". Unlabelled, a screen reader
     // announces "dialog" and nothing else.
     expect(code).toMatch(/<PopoverContent[\s\S]*?raw\('text39a1c11af6d3'\)/);
   });

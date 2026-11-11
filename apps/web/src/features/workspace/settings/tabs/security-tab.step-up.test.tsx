@@ -129,7 +129,7 @@ const uiToastMock = () => ({
 });
 mock.module('@kortix/ui/toast', uiToastMock);
 
-// The real ConfirmDialog is a Radix portal; the wiring under test is what
+// The real ConfirmDialog renders through a portal; the wiring under test is what
 // SecurityTab passes as onConfirm. A bare button keeps the tree assertable.
 const uiConfirmDialogMock = () => ({
   ConfirmDialog: ({

@@ -1,7 +1,7 @@
 /**
  * ProjectSwitcherSheet — the one workspace switcher (COR-124, Workspaces
  * ux.md §3): a `KortixBottomSheetModal` titled "Workspaces", a search field
- * at its foot (`GlassSearchField`: Liquid Glass on iOS 26, with an X while
+ * under the title (`GlassSearchField`: Liquid Glass on iOS 26, with an X while
  * focused),
  * the pending invitations first, then ONE flat list of every workspace the
  * user belongs to, the current one checked. No account headings, no account
@@ -41,7 +41,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Platform, View } from 'react-native';
+import { View } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { GlassSearchField } from '@/components/kortix/bottom-search-bar';
@@ -248,7 +248,6 @@ export function ProjectSwitcherSheet({
   const router = useRouter();
   const { t } = useLanguage();
   const listBottomInset = useSafeAreaInsets().bottom + 24;
-  const keyboardUp = useKeyboardUp();
   const setSelectedAccountId = useCurrentAccountStore((s) => s.setSelectedAccountId);
   const goToProject = useCallback(
     (projectId: string) => {
@@ -353,12 +352,22 @@ export function ProjectSwitcherSheet({
         }}>
         <View style={{ flex: 1 }}>
 
+          {/* Search at the top, under the title (Jay, 2026-11-11). */}
+          <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+            <GlassSearchField
+              value={query}
+              onChangeText={setQuery}
+              placeholder={t('workspace.search', 'Search workspaces')}
+              searchLabel={t('workspace.search', 'Search workspaces')}
+            />
+          </View>
+
           {/* The list fades out at its top and bottom edges (Jay, 2026-11-11):
               an alpha mask, so it reads the same on the iOS 26 glass. */}
           <FadeEdges>
             <SheetScrollView
               style={{ flex: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24, gap: 18 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: listBottomInset, gap: 18 }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}>
               <WorkspaceInvitations invites={invites} onOpenInvite={openInvite} />
@@ -387,19 +396,6 @@ export function ProjectSwitcherSheet({
             </SheetScrollView>
           </FadeEdges>
 
-          {/* Search at the bottom, as on the list pages (Jay, 2026-11-11): the
-              glass field under the list. It does not ride the keyboard by
-              itself: the full-height sheet's box shrinks above the keyboard
-              (native sheet) or the sheet lifts (gorhom), so the field ends up
-              just above it. With the keyboard up, the home-indicator gap goes. */}
-          <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: keyboardUp ? 12 : listBottomInset - 12 }}>
-            <GlassSearchField
-              value={query}
-              onChangeText={setQuery}
-              placeholder={t('workspace.search', 'Search workspaces')}
-              searchLabel={t('workspace.search', 'Search workspaces')}
-            />
-          </View>
         </View>
       </KortixBottomSheetModal>
 
@@ -414,17 +410,3 @@ export function ProjectSwitcherSheet({
   );
 }
 
-/** True while the keyboard is up (iOS: from the will-show event, so the field moves with it). */
-function useKeyboardUp(): boolean {
-  const [up, setUp] = useState(false);
-  useEffect(() => {
-    const ios = Platform.OS === 'ios';
-    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setUp(true));
-    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setUp(false));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return up;
-}

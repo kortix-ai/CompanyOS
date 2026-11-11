@@ -1,12 +1,27 @@
-import { FrameworkBand } from '@/features/marketing/landing-sections/framework-band';
 import { CaseStudies } from '@/features/marketing/case-studies/case-studies';
+import { PageFrame } from '@/features/marketing/kit/page-frame';
+import { SandBandHero } from '@/features/marketing/landing-hero/sand-band-hero';
+import { LandingFaqSection } from '@/features/marketing/landing-sections/faq-section';
+import { FrameworkBand } from '@/features/marketing/landing-sections/framework-band';
 import { HowItWorksTabs } from '@/features/marketing/landing-sections/how-it-works-tabs';
+import { PillarsBand } from '@/features/marketing/landing-sections/pillars-band';
 import { TrustBand } from '@/features/marketing/landing-sections/trust-band';
 import { UseCasesBand } from '@/features/marketing/landing-sections/use-cases-band';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
-import { LandingFaqSection } from '@/features/marketing/landing-sections/faq-section';
-import { PillarsBand } from '@/features/marketing/landing-sections/pillars-band';
-import { SandBandHero } from '@/features/marketing/landing-hero/sand-band-hero';
+import { marketingMetadataLayout } from '@/lib/seo/metadata';
+
+const { generateMetadata } = marketingMetadataLayout('/');
+
+export { generateMetadata };
+
+// The home route is `/[locale]`, so it is the one route a one-segment path such
+// as `/security.txt` reaches: the middleware keeps dotted paths off the locale
+// rewrite. Every locale is prerendered (the marketing layout's
+// `generateStaticParams`), and rendering an unknown one on demand failed with
+// "Page changed from static to dynamic at runtime": a 500 on kortix.com
+// (KRTX-3255). An unknown value is a 404 without a render, as in
+// `solutions/[role]`.
+export const dynamicParams = false;
 
 /**
  * The landing page is being rebuilt section by section from the Paper board
@@ -16,10 +31,7 @@ import { SandBandHero } from '@/features/marketing/landing-hero/sand-band-hero';
  */
 export default function Home() {
   return (
-    <main className="bg-background relative mx-auto w-full max-w-[1440px]">
-      {/* Rails: 62px in from each edge on the board. z-10 keeps them above the band fill. */}
-      <div aria-hidden className="bg-border pointer-events-none absolute inset-y-0 left-4 z-10 w-px lg:left-17" />
-      <div aria-hidden className="bg-border pointer-events-none absolute inset-y-0 right-4 z-10 w-px lg:right-17" />
+    <PageFrame>
       <SandBandHero />
       <WorksWithStrip />
       <CaseStudies />
@@ -31,6 +43,6 @@ export default function Home() {
       <UseCasesBand />
       <TrustBand />
       <LandingFaqSection />
-    </main>
+    </PageFrame>
   );
 }

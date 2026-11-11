@@ -187,3 +187,29 @@ test('a paid account keeps its default as the boot model; the first prompt still
   expect(result.error).toBeUndefined();
   expect(inserted?.metadata).toMatchObject({ model: 'kortix/deepseek-v4.1-flash', model_source: 'platform' });
 });
+
+// KRTX-4724: the web's launch pick now rides the same top-level `model` the CLI
+// and mobile send. The pin lands on the row at create, so the starting
+// session's selector shows the launch model from the first read — before the
+// runtime is up — instead of the project default.
+test('a top-level create model pins the row with source explicit before the runtime starts', async () => {
+  const result = await createProjectSession({
+    project, userId: 'synthetic-user', requestingPrincipalType: 'human',
+    body: {
+      model: 'deepseek-v4.1-flash',
+      pending_prompt: { text: '', model: { providerID: 'kortix', modelID: 'deepseek-v4.1-flash' } },
+    },
+  });
+  expect(result.error).toBeUndefined();
+  expect(inserted?.metadata).toMatchObject({ model: 'kortix/deepseek-v4.1-flash', model_source: 'explicit' });
+});
+
+test('an unservable top-level create model refuses the create instead of pinning a dead model', async () => {
+  servable = (model) => model !== 'openrouter/x';
+  const result = await createProjectSession({
+    project, userId: 'synthetic-user', requestingPrincipalType: 'human',
+    body: { model: 'openrouter/x' },
+  });
+  expect(result.error).toMatchObject({ status: 400, body: { code: 'INVALID_SESSION_MODEL' } });
+  expect(((inserted as { metadata?: Record<string, unknown> } | undefined)?.metadata)?.model).toBeUndefined();
+});

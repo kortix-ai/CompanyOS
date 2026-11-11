@@ -90,6 +90,7 @@ import {
 } from '../sections/llm-provider/use-live-catalog';
 import { orderProviderRows } from '../sections/llm-provider/utils';
 import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDERS, LLM_PROVIDER_BY_ID, type LlmProviderEntry } from '../../internal/lib/llm-providers';
 import { cn } from '../../internal/lib/utils';
@@ -652,6 +653,7 @@ function ExpandedBody({
   } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'openai') {
     content = (
       <div className="border-border space-y-3 border-t py-3">
+        <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="codex" compact />
         <p className="text-foreground text-xs font-medium">{tPooled('chatGptAccounts')}</p>
         <AccountSecretResourcesPanel
           accountId={pooled.accountId}
@@ -662,7 +664,7 @@ function ExpandedBody({
           canWrite
           oauth={{ projectId, onConnected: () => undefined }}
         />
-        <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly />
+        <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
       </div>
     );
   } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'anthropic') {
@@ -670,6 +672,7 @@ function ExpandedBody({
     content = (
       <>
         <div className="border-border space-y-3 border-t py-3">
+          <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="claude-agent" compact />
           <p className="text-foreground text-xs font-medium">{tPooled('claudeAccounts')}</p>
           <AccountSecretResourcesPanel
             accountId={pooled.accountId}

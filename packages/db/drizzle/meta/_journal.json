@@ -1660,6 +1660,20 @@
       "when": 1794319131206,
       "tag": "20261110135851_add_kortix_contact_forms",
       "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1794359760048,
+      "tag": "20261111011600_access_requests_email_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1794403699181,
+      "tag": "20261111132819_oauth_access_token_mfa_aal",
+      "breakpoints": true
     }
   ]
 }

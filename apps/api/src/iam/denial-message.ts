@@ -80,6 +80,10 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
       return `This key's scope does not include "${action}". Mint a key with that permission, or use a full key.`;
     case 'token_out_of_scope':
       return 'This key is bound to one workspace and cannot be used for this request.';
+    case 'token_account_shared':
+      // The token's own workspace, but its legacy account still holds other
+      // workspaces: the account rows are theirs too. No grant or flag lifts it.
+      return `"${action}" reads or changes account-wide data that this workspace still shares with other workspaces of the same legacy account, so a workspace key or session token cannot use it. Use a personal key: run \`kortix login\` on your own machine, or open the web app.`;
     case 'workspace_closed':
       return 'This workspace is being deleted. Only its owners can open it, to restore it.';
     case 'resource_scope_insufficient':

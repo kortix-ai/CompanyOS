@@ -354,7 +354,12 @@ the table row (shadow). A difference logs `[workspaces] shadow_mismatch` with
   `person-route`, `foreign-sandbox`, `default-deny`.
 - `tokenScopeAllows` and `agentPrincipalDecision`: an account-scope action is in scope for
   a bound credential when the actor's account is the credential workspace's account and
-  that workspace is not `split_pending`.
+  that workspace is not `split_pending`. On its own `split_pending` account the denial
+  reason is `token_account_shared` (not `token_out_of_scope`), and the fence's
+  account-family refusal says the same: both name the working credential (a personal
+  key, `kortix login`), never "name the workspace". Usage reads (`/v1/usage/cost-summary`,
+  `cost-by-project`, `session-costs[/:id]`) serve a bound credential its own workspace's
+  slice, with or without `project_id`/`account_id` naming it.
 - Mint and list: Workspace settings mints workspace keys only. `GET /v1/workspaces/:id/tokens`
   lists W's keys. `GET /v1/me/tokens` lists the caller's personal keys across workspaces;
   `DELETE /v1/me/tokens/:tokenId` revokes one. Minting is `HUMAN_ONLY`.
@@ -966,6 +971,20 @@ file asks the orchestrator):
 Gate: §2. Two deploys, because rewiring writers and turning their table into a view must
 be two releases (learning `2026-08-19T182307Z`), and `ON CONFLICT (cols)` cannot run
 against a view (learning `2026-08-19T163833Z`).
+
+**R2a build order (Dimitrije, 2026-11-11).** `dev` rides every release, so a PR that lands on
+`dev` must be safe to release before the split has finished on prod. A migration cannot wait for
+the gate at runtime: one that skips itself is recorded as applied and never runs again.
+
+| PR | Steps | When it can land on `dev` |
+|---|---|---|
+| R2a-0 | The reconcile keeps rows in place (`20261111135934314_workspaces_reconcile_in_place.sql`). The R1 body deleted and re-inserted a row on every change (a rename, an open, a settings write, an archive) and deleted a moved project's row when the source was reconciled first; with step 4's foreign keys that cascades into, or is refused by, every referencing row. Proof: `reconcile-in-place.integration.test.ts` (a canary table references each row `ON DELETE CASCADE`). | any time |
+| R2a-1 | 8a: the account-of-project lookups through one store function | any time |
+| R2a-2 | 7: the engine reads `scope_type = 'workspace'` and the `workspace.*` names | any time |
+| R2a-3 | 1 (unique index), 2–3 (the store writes `workspaces` first, the mirror trigger), 4–5 (twin foreign keys, validate), 6 (fill), 8 (flip) | on branch `workspaces-r2a`; merged into `dev` once prod has 0 `split_pending` rows (step 1 fails to build before) |
+
+Step 9 (the Drizzle property codemod) leaves R2a: §5 "API-internal names follow the column"
+(decided 2026-11-06) renames the internal names in the R3 image, with the columns.
 
 **R2a (deploy 1, safe with R1 pods running):**
 

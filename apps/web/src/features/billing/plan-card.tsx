@@ -41,6 +41,7 @@ import { formatCredits } from '@kortix/shared';
 import { useState } from 'react';
 
 import { describePlanStatus } from './account-overview';
+import { PlanStatusDot, formatShortDate, usePlanStatusCopy } from './plan-status';
 
 export type PlanChangeKind = 'subscribe' | 'raise' | 'cut' | 'keep' | 'unchanged' | 'invalid';
 
@@ -77,12 +78,6 @@ export function scheduledDowngrade(
   return { monthlyUsd, effectiveAt: change.effective_date };
 }
 
-function formatShortDate(iso: string | null | undefined, locale: string): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-}
-
 /** A charge due now: cents matter here, unlike the whole-dollar plan prices. */
 function formatChargeUsd(amount: number, locale: string): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(amount);
@@ -101,21 +96,7 @@ export function PlanCard({ state }: { state: AccountState }) {
   const t = useTranslations('billing.plan');
   const tCredits = useTranslations('billing.credits');
   const locale = useLocale();
-  const planCopy = {
-    locale,
-    perMonth: (amount: string) => t('perMonth', { amount }),
-    cancels: (date: string) => t('cancels', { date }),
-    cancelsAtPeriodEnd: t('cancelsAtPeriodEnd'),
-    renews: (date: string) => t('renews', { date }),
-    active: t('active'),
-    noSubscription: t('noSubscription'),
-    graceUntil: (date: string) => t('graceUntil', { date }),
-    compedUntil: (date: string) => t('compedUntil', { date }),
-    status: (status: string) =>
-      t.has(`statuses.${status}`)
-        ? t(`statuses.${status}`)
-        : t('status', { status: status.replace(/_/g, ' ') }),
-  };
+  const planCopy = usePlanStatusCopy();
   const { name, sublabel, detail, isActive, isWindingDown } = describePlanStatus(state, planCopy);
   const credits = currentPlanCredits(state);
 
@@ -149,23 +130,13 @@ export function PlanCard({ state }: { state: AccountState }) {
           {state.credits.monthly > 0 && <CreditExpiry expiresAt={state.credits.expires_at} />}
           {state.plan_comp ? (
             <p className="text-muted-foreground mt-1.5 max-w-md text-xs text-pretty" data-testid="plan-comp-note">
-              {t('compedNote', { date: formatShortDate(state.plan_comp.until, locale) })}
+              {t('compedNote', { date: formatShortDate(state.plan_comp.until, locale) ?? '' })}
             </p>
           ) : null}
           <FreeGrantNotice state={state} className="mt-1.5 max-w-md" />
         </div>
         <span className="flex min-w-0 shrink-0 items-center gap-1.5">
-          {isActive ? (
-            // Optical, not geometric: a 6px dot centred on a 20px line box
-            // sits a hair high against the x-height of the text beside it.
-            <span
-              aria-hidden
-              className={cn(
-                'mt-px size-1.5 shrink-0 rounded-full',
-                isWindingDown ? 'bg-kortix-orange' : 'bg-kortix-green',
-              )}
-            />
-          ) : null}
+          <PlanStatusDot isActive={isActive} isWindingDown={isWindingDown} />
           <span className="text-muted-foreground truncate text-xs leading-5 first-letter:capitalize">
             {detail}
           </span>
@@ -257,13 +228,14 @@ export function PlanChanger({
   }
 
   const amount = monthlyUsd !== null ? formatWholeUsd(monthlyUsd, locale) : '';
-  const renewal = formatShortDate(
-    scheduled?.effectiveAt ??
-      (state.subscription?.current_period_end
-        ? new Date(state.subscription.current_period_end * 1000).toISOString()
-        : null),
-    locale,
-  );
+  const renewal =
+    formatShortDate(
+      scheduled?.effectiveAt ??
+        (state.subscription?.current_period_end
+          ? new Date(state.subscription.current_period_end * 1000).toISOString()
+          : null),
+      locale,
+    ) ?? '';
   const due = preview.data ? formatChargeUsd(preview.data.due_now_usd, locale) : null;
   const actionDisabled =
     isPending || kind === 'invalid' || kind === 'unchanged' || (kind === 'raise' && preview.isLoading);
@@ -339,7 +311,7 @@ export function PlanChanger({
           <p className="text-foreground min-w-0 flex-1 text-xs">
             {t('scheduledNotice', {
               amount: formatWholeUsd(scheduled.monthlyUsd, locale),
-              date: formatShortDate(scheduled.effectiveAt, locale),
+              date: formatShortDate(scheduled.effectiveAt, locale) ?? '',
             })}
           </p>
           <Button

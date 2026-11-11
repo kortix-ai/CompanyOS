@@ -79,9 +79,8 @@ export interface UpgradePlansModalProps {
    *  `reason` (the lossy 402 code) so the modal and the gate that opened it can
    *  never disagree about the same account. */
   billingState?: BillingState;
-  balance?: number;
-  /** True while account state is doing its first load — the credit view shows a
-   *  balance skeleton instead of a misleading 0 until the real value lands. */
+  /** True while account state is doing its first load — the credit view shows
+   *  a skeleton instead of a misleading 0 until the real value lands. */
   accountLoading?: boolean;
 }
 
@@ -609,12 +608,12 @@ export function GlobalUpgradeModal() {
 }
 
 function GlobalUpgradeModalContent() {
-  const { isOpen, closeUpgradeDialog, accountId, reason, hasSubscription, billingState, balance } =
+  const { isOpen, closeUpgradeDialog, accountId, reason, hasSubscription, billingState } =
     useUpgradeDialogStore();
   const { data: accountState, isLoading: accountLoading } = useAccountState({ accountId });
   const queryClient = useQueryClient();
 
-  // Pull the freshest wallet balance every time the modal opens (skip the
+  // Pull the freshest account state every time the modal opens (skip the
   // server cache) so it always matches the Plan page — never a stale/zero value
   // left over from an earlier read, and it reflects a top-up the moment it lands.
   useEffect(() => {
@@ -630,7 +629,6 @@ function GlobalUpgradeModalContent() {
         reason={reason}
         hasSubscription={hasSubscription}
         billingState={billingState}
-        balance={balance}
         accountLoading={accountLoading}
       />
     </BillingAccountProvider>

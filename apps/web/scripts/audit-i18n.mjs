@@ -195,6 +195,8 @@ const ignoredPathParts = [
   '/src/features/marketing/landing-sections/trust-band.tsx',
   '/src/features/marketing/landing-sections/use-case-teams.ts',
   '/src/features/marketing/landing-sections/works-with-strip.tsx',
+  // The /pricing compare table, moved out of pricing/page.tsx (#12072); it renders for `en` alone.
+  '/src/features/marketing/pricing/compare-table.tsx',
   '/src/features/marketing/security-page/approval-tabs.tsx',
   '/src/features/marketing/security-page/summary.ts',
   '/src/features/marketing/self-hosted/summary.ts',
@@ -975,7 +977,7 @@ function scanFile(file) {
         /^shadow-/.test(node.text);
       const coveredLocalizedSourceCatalog =
         (file === path.join(srcDir, 'features/marketplace/marketplace-meta.tsx') &&
-          ['TYPE_META', 'TYPE_FILTERS', 'TYPE_SECTIONS'].includes(catalogRoot)) ||
+          ['TYPE_META', 'TYPE_FILTERS'].includes(catalogRoot)) ||
         (file === path.join(uiSrcDir, 'session/composer/menus/slash-actions.ts') &&
           catalogRoot === 'SLASH_ACTIONS') ||
         (file === path.join(uiSrcDir, 'session/actions/session-label.ts') &&
@@ -1112,6 +1114,10 @@ function scanFile(file) {
       const coveredLocalizedLeafCatalog =
         (file === path.join(srcDir, 'features/billing/billing-return.tsx') &&
           catalogRoot === 'RETURNS') ||
+        // Ledger badge labels, localized through
+        // localizeUiCatalog(TRANSACTION_BADGES, …, APP_REGISTRY_TRANSLATION_KEYS).
+        (file === path.join(srcDir, 'features/billing/transactions-table.tsx') &&
+          catalogRoot === 'TRANSACTION_BADGES') ||
         // Message keys of spaces.view.tabEdit, read through t(copy.title) and friends.
         (file === path.join(uiSrcDir, 'workspace/spaces/space-tabs.tsx') &&
           catalogRoot === 'TARGET_COPY') ||

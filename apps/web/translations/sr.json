@@ -106,16 +106,6 @@
     "access": "Приступ",
     "actions": "Радње",
     "coolingDown": "Период хлађења",
-    "usageFiveHour": "5 sati",
-    "usageWeekly": "Nedeljno",
-    "usageWeeklyModel": "Nedeljno · {model}",
-    "usagePercent": "{percent}% iskorišćeno",
-    "usagePercentResets": "{percent}% · resetuje se {time}",
-    "usageLimitReached": "Limit dostignut",
-    "usageLimitResets": "Limit dostignut · resetuje se {time}",
-    "usageNotSeen": "Potrošnja se prikazuje posle prvog zahteva",
-    "usageObserved": "Ažurirano {time}",
-    "usageAriaLabel": "{window}: {percent}% iskorišćeno",
     "member": "члан",
     "members": "чланова",
     "actionsFor": "Радње за {label}",
@@ -801,14 +791,8 @@
         "noResults": "Нема пронађених тема"
       },
       "densities": {
-        "normal": {
-          "label": "Нормално",
-          "description": "Кораци и размишљање се приказују уживо док Kortix ради."
-        },
-        "minimal": {
-          "label": "Минимално",
-          "description": "Један ред статуса док га не проширите."
-        }
+        "normal": "Нормално",
+        "minimal": "Минимално"
       },
       "wallpapers": {
         "dither": "Дитеринг",
@@ -2722,8 +2706,8 @@
           "note": "Почните са стварним sandbox кредитима.",
           "f1": "500 кредита месечно у твом првом радном простору",
           "f2": "Није потребна картица",
-          "f3": "Користите сопствени API кључ за било који премијум модел",
-          "f4": "Повежите своју ChatGPT претплату"
+          "f3": "Модели раде са сопственим API кључем или ChatGPT претплатом",
+          "f4": "Моделима којима управља Kortix потребан је Credits"
         },
         "credits": {
           "name": "Кредити",
@@ -3016,6 +3000,8 @@
         "title": "Проверите имејл",
         "description": "Послали смо линк на <address>{email}</address>. Отворите га да наставите.",
         "confirmDescription": "Послали смо имејл за потврду на <address>{email}</address>. Потврдите свој имејл да наставите.",
+        "unknownDescription": "Poslali smo e-mail na <address>{email}</address> — link za prijavu ili link za potvrdu novog naloga.",
+        "closedDescription": "Ako <address>{email}</address> ima nalog, link za prijavu je na putu.",
         "notReceived": "Нисте добили линк?",
         "confirmNotReceived": "Нисте добили имејл за потврду?",
         "resendIn": "Поново пошаљи за {seconds}",
@@ -12605,6 +12591,7 @@
       "text41ffc5e14073": "Поставите на {value0}",
       "text420962cdca94": "Исти радни простор, исти конектори, иста меморија — и осам различитих послова у позадини. Сваки тим пише вештине за свој посао, а нико не поставља други систем да би то обавио.",
       "text420aaa63cba7": "Укупно на страници",
+      "textbe57ff2d7907": "Није приписано ниједној сесији",
       "text42113e7bf6fc": "Kortix support",
       "text42117ed2a1f5": "Уобичајени начин",
       "text421c4b1fed48": "Производ / контролни слој",
@@ -20890,7 +20877,7 @@
       "text633f72787367": "$ kortix self-host init --domain kortix.arcadia.example --admin-email ops@arcadia.example",
       "text71734a05b815": "✓ Конфигурација за самостално хостовање је креирана",
       "texteaabf51b312c": "Контролна табла https://kortix.arcadia.example",
-      "text313f92aeb061": "Сваки посао који стигне добија потпуну анализу. Агенти га проверавају у односу на мандат, читају финансијске извештаје и тржишне податке, стрес-тестирају тезу и негативни сценарио и пишу инвестициони меморандум. Одлуку доноси инвестициони комитет.",
+      "text4c72429d7a38": "Агенти проверавају сваки посао у односу на мандат, подвргавају тезу стрес тесту и пишу инвестициони меморандум. Инвестициони комитет одлучује.",
       "textdc7f8ac95166": "Аутономно истраживање кандидата.",
       "textb5947f5f79c9": "Агенти истражују кандидате за сваку потрагу и пишу профил сваког од њих. Консултанти бирају ужи избор.",
       "textc81f1483737e": "Платформа за корпоративну вештачку интелигенцију, изграђена од Kortix-овог отвореног кода.",
@@ -21055,7 +21042,7 @@
       "text2eb1d24bcc04": "Агенти пројектују оптичке трасе из ГИС података и снимака и праве спецификацију материјала за сваку трасу.",
       "textf2d996d89263": "Kortix, покренут на Kortix-у.",
       "text34ff4020f800": "Наша компанија је један Kortix радни простор. Агенти тријажирају и исправљају задатке, одржавају SOC 2 доказе ажурним и воде продају и подршку. Људи одобравају.",
-      "textdd57f275a118": "Сваки посао, оцењен од стране агената.",
+      "textccf34f95f6b5": "Аутономна анализа послова.",
       "textacf058bd8604": "Управљање имовином",
       "textf95db4c9e815": "# ваша компанија као код",
       "text1e8058334a6e": "$ kortix init arcadia",
@@ -21320,7 +21307,12 @@
       "text4b892277843c": "Направи радни простор",
       "text41018e566b60": "нови радни простор направи додај тим",
       "texta99ac8f9050b": "Радни простор · Приступ",
-      "textfd8b8dae4421": "Опасна зона"
+      "textfd8b8dae4421": "Опасна зона",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Повраћај за LLM резервацију",
+      "texta68ee4167406": "Прокси",
+      "texta69c4dece144": "Складиште",
+      "textab3aff8f7642": "Бонус за допуну"
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -21527,6 +21519,10 @@
       "denied": "Приступ одбијен",
       "deniedDescription": "My Kortix добија ваш одговор.",
       "failed": "Ваша одлука није послата. Покушајте поново."
+    },
+    "reviewPane": {
+      "emptyTitle": "Izaberi stavku",
+      "emptyDescription": "Detalji se otvaraju ovde. Pritisni J i K da se krećeš kroz listu."
     }
   },
   "commandPalette": {
@@ -26454,48 +26450,37 @@
     "issue": "Проблем #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 sati",
+    "weekly": "Nedeljno",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "Потрошња претплате није доступна",
-    "disabledDescription": "Везе са претплатама нису омогућене за овај радни простор.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Време ресетовања је прошло · освежите за тренутну потрошњу",
-    "text10": "Време ресетовања није пријављено",
-    "text11": "Checking provider usage…",
-    "text12": "Још нема пријављене потрошње. Освежите након коришћења ове претплате.",
-    "text13": "Ажурирање није успело. Приказани су последњи познати подаци.",
-    "text14": "Чека се на податке провајдера",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Пратите ограничења својих повезаних ChatGPT и Claude претплата.",
-    "text19": "Потрошњу није могуће учитати",
-    "text20": "Покушајте поново да учитате повезане претплате.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Повежите ChatGPT или Claude у одељку Провајдери да бисте видели пријављену потрошњу и времена ресетовања.",
-    "text24": "Connect a subscription",
-    "text25": "Потрошња се дели између апликација које користе исту претплату. Аутоматски се проверава сваког минута док је ова картица отворена.",
-    "text26": "Ограничења зависе од пакета. Овде се приказују само периоди које пријави ваша веза; подаци који недостају не значе неограничену потрошњу. Ограничења за фајлове се не пријављују. Потрошња на API приказана је у одељку Трошкови.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Ова веза не пријављује петочасовни период.",
-    "fableIncluded": "Потрошња Fable се такође рачуна у ваше укупно недељно ограничење.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Dodatna upotreba",
+    "apps": "Aplikacije",
+    "codeReview": "Pregled koda",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · resetuje se {time}",
+    "percentBack": "{percent}% · ponovo {time}",
+    "resetPassed": "Resetovano · ažuriranje",
+    "notStarted": "Nije započeto",
+    "reconnectToSee": "Ponovo povežite da biste videli upotrebu",
+    "availableNow": "Dostupno sada",
+    "availableCount": "{available} od {total, plural, one {# naloga} other {# naloga}}",
+    "nextBack": "Sledeće ponovo",
+    "rowPeak": "{window} · {percent}% iskorišćeno",
+    "rowSomeLimited": "{limited} od {total} na limitu",
+    "rowAllLimited": "Na limitu",
+    "rowAllLimitedBack": "Na limitu · ponovo {time}",
+    "noUsageYet": "Upotreba još nije prijavljena.",
+    "refreshFailed": "Osvežavanje nije uspelo · prikazuje se poslednja poznata upotreba.",
+    "loadFailed": "Upotreba nije mogla da se učita.",
+    "rowSomeLimitedBack": "{limited} od {total} na limitu · sledeće ponovo {time}",
+    "weeklyAll": "Nedeljno · svi modeli",
+    "notReported": "Nije prijavljeno"
   },
   "gatewayRouting": {
     "exceptions": "Izuzeci",
@@ -26731,8 +26716,7 @@
     "menu": {
       "invite": "Позови људе у {name}",
       "leave": "Напусти {name}",
-      "invitePeople": "Позови људе",
-      "more": "Више"
+      "invitePeople": "Позови људе"
     },
     "roles": {
       "owner": {

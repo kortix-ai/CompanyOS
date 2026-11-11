@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { appRuntimes, projectMonitorBoxes, projectSessions, sandboxComputeSessions, sessionSandboxes } from '@kortix/db';
+import { PlatinumExecOutcomeUnknownError } from '../shared/platinum';
 import * as realComputeMetering from '../billing/services/compute-metering';
 import * as realProviders from '../platform/providers';
 import * as realSandboxProxyBackend from '../sandbox-proxy/backend';
@@ -2869,6 +2870,54 @@ describe('reapAndReconcileSandboxes — the one rule: deadline_at <= now', () =>
     lifecycleRenewErrorByExternal['ext-1'] = new Error(
       'Platinum lifecycle renewal failed for ext-1: exit unknown: guest vsock unreachable after 5s: EOF',
     );
+    const logged: string[] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => { logged.push(String(args[0])); };
+    try {
+      const result = await reapAndReconcileSandboxes(NOW);
+      expect(result.transient).toBe(1);
+      expect(result.errors).toBe(0);
+      expect(result.stopped).toBe(0);
+      expect(stops).toEqual([]);
+      expect(logged).toEqual([]);
+    } finally {
+      console.error = realError;
+    }
+  });
+
+  // KRTX-4718: the guest can also time out WITH an answer — the control plane
+  // returns the exec result `exit -1: timeout` when the guest never completes
+  // the `true` no-op inside its 10s budget. Same provider condition as the
+  // vsock case above (no usable renewal this pass; the next pass re-decides),
+  // so one wedged box must not emit an error line per 30s pass.
+  test('a Platinum guest exec timeout during renewal retries without paging each pass', async () => {
+    candidates = [candidate({ provider: 'platinum', deadlineAt: new Date(NOW.getTime() + HOUR) })];
+    statusByExternal['ext-1'] = 'running';
+    lifecycleRenewErrorByExternal['ext-1'] = new Error(
+      'Platinum lifecycle renewal failed for ext-1: exit -1: timeout',
+    );
+    const logged: string[] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => { logged.push(String(args[0])); };
+    try {
+      const result = await reapAndReconcileSandboxes(NOW);
+      expect(result.transient).toBe(1);
+      expect(result.errors).toBe(0);
+      expect(result.stopped).toBe(0);
+      expect(stops).toEqual([]);
+      expect(logged).toEqual([]);
+    } finally {
+      console.error = realError;
+    }
+  });
+
+  // KRTX-4718: Platinum answering 504 for the renewal exec is the third shape
+  // of the same condition. The typed error says the outcome is unknown — the
+  // idempotent no-op makes that safe to retry next pass, never a per-box error.
+  test('a Platinum outcome-unknown exec timeout during renewal retries without paging each pass', async () => {
+    candidates = [candidate({ provider: 'platinum', deadlineAt: new Date(NOW.getTime() + HOUR) })];
+    statusByExternal['ext-1'] = 'running';
+    lifecycleRenewErrorByExternal['ext-1'] = new PlatinumExecOutcomeUnknownError();
     const logged: string[] = [];
     const realError = console.error;
     console.error = (...args: unknown[]) => { logged.push(String(args[0])); };

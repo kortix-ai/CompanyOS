@@ -23,14 +23,27 @@
 --      environment, and the web build that writes leads through
 --      POST /v1/system/demo-request is live everywhere: prod
 --      public.contact_forms has no row newer than that release.
+--      DONE 2026-11-11: applied on dev, staging and prod (prod 2026-11-10
+--      21:35Z, release v0.15.5). The newest prod public.contact_forms row is
+--      older than that release.
 --   1. Backup. `packages/db/scripts/backup-legacy-schemas.sh` wrote one full
 --      pg_dump of `public` + `basejump` + `kortix_yolo` + `drizzle` (no expiry: the bucket has no
---      lifecycle rule) for EACH environment that still has data, its
---      `pg_restore --list` shows every table, and the restore test
---      (`backup-legacy-schemas.sh verify`) passed: every archive decodes, basejump
---      restores into a scratch database, and the row counts of public.messages,
---      public.documents and basejump.account_user match. Record the object keys
---      and sizes in the PR that moves this file.
+--      lifecycle rule) for prod, its `pg_restore --list` shows every table,
+--      and the restore test (`backup-legacy-schemas.sh verify`) passed: every
+--      archive decodes, basejump restores into a scratch database, and the row
+--      counts of public.messages, public.documents and basejump.account_user
+--      match. Dev and staging get no backup (decided 2026-11-11).
+--      DONE 2026-11-11 for prod. s3://kortix-prod-legacy-suna-backup/20261110/,
+--      dumped 2026-11-10 17:11–19:27Z, before the freeze ran:
+--        messages.dump.zst   23,213,868,576 bytes   1 of 1 tables
+--        documents.dump.zst  16,000,287,218 bytes   1 of 1 tables
+--        rest.dump.zst        3,361,379,370 bytes  62 of 62 tables
+--        extra.dump.zst              29,445 bytes  13 of 13 tables
+--      The restore test passed: 77 tables and 80,467,825 rows decode, and
+--      every basejump, kortix_yolo and drizzle table restores with its archived
+--      row count. public.messages, public.documents and basejump.account_user
+--      match prod. The bucket has versioning on and SSE-KMS. Public access is
+--      blocked, and its policy refuses requests without TLS.
 --   2. Suna-era Stripe subscriptions. DONE: decided 2026-11-10, no action.
 --      Prod has 147 kortix.credit_accounts rows with an active Stripe
 --      subscription and no kortix.accounts row. Their owners have no kortix

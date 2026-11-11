@@ -41,12 +41,10 @@ import { openExternalRoute } from '@kortix/ui/internal/lib/desktop';
 import { isInterfaceThemeId } from '@/lib/interface-themes';
 import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel-store';
 import {
-  ArticleIcon,
   BookOpenIcon,
   LifebuoyIcon,
   Moon,
   PaintBrushIcon,
-  PaperPlaneTiltIcon,
   QuestionIcon,
   ScrollIcon,
   ShieldCheckIcon,
@@ -58,7 +56,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { INTERFACE_THEME_OPTIONS, ThemeSwatch, useInterfaceTheme } from './interface-theme';
 
-export type MenuLink = {
+type MenuLink = {
   label: string;
   href: string;
   Icon: React.ComponentType<{ className?: string }>;
@@ -79,13 +77,11 @@ export type MenuLink = {
  * the sidebar and the header, so this render path is not rare.
  */
 export const HELP_LINKS: MenuLink[] = [
-  // One support row, not two. The /help and /support pages are gone; support
-  // requests go to the contact page.
-  { label: 'Support', href: '/contact', Icon: LifebuoyIcon },
+  // Things a person opens to get unstuck. Contact was a second row to the
+  // same /contact page as Support, and Blog is marketing, not help.
   { label: 'Docs', href: '/docs', Icon: BookOpenIcon },
-  { label: 'Blog', href: '/blog', Icon: ArticleIcon },
+  { label: 'Support', href: '/contact', Icon: LifebuoyIcon },
   { label: 'Marketplace', href: '/marketplace', Icon: StorefrontIcon, internal: true },
-  { label: 'Contact', href: '/contact', Icon: PaperPlaneTiltIcon },
 ];
 
 /** Kept separate so a divider can hold the legal pages apart from the rest. */

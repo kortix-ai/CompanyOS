@@ -23440,9 +23440,6 @@
       "privacyControlsHint": "Mostra il mascheramento dei dati personali. Disattivarlo lo nasconde; ciò che è impostato continua ad applicarsi.",
       "maskingTitle": "Mascheramento",
       "framesTitle": "Fotogrammi dello schermo",
-      "interval": "Un fotogramma ogni",
-      "intervalHint": "Intervalli più brevi conservano più dettagli e usano più CPU e spazio.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Risoluzione",
       "resolutionHint": "Gli schermi più grandi vengono ridotti a questa altezza. Il 4K conserva i dettagli fini, come i disegni CAD.",
       "textRecognition": "Riconoscimento del testo",
@@ -23452,7 +23449,7 @@
         "fast": "Veloce",
         "off": "Disattivato"
       },
-      "framesHint": "Senza valore, ogni computer usa il proprio (un'immagine ogni 2 s a 1440p). Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate a qualsiasi intervallo.",
+      "framesHint": "Kortix Capture sceglie da solo la frequenza: fino a 2 immagini al secondo mentre qualcuno lavora, una ogni 2 s altrimenti, meno su un computer occupato. Senza valore, ogni computer usa 1440p e il riconoscimento del testo accurato. Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate.",
       "computerDecides": "Decide ogni computer",
       "included": {
         "title": "App e siti web",

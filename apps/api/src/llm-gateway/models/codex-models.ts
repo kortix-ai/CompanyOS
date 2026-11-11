@@ -9,9 +9,8 @@ export const CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON';
 export const CODEX_MODELS_URL =
   'https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json';
 
-// The offline seed itself lives in @kortix/llm-catalog, beside the models.dev
-// snapshot (packages/llm-catalog/src/codex-models.seed.json): the sandbox agent
-// server's local gateway reads it too, and an app must not import across apps.
+// The seed lives in @kortix/llm-catalog, beside the models.dev snapshot: the
+// sandbox agent server's local gateway reads it too, and apps must not import across apps.
 export { CODEX_SEED_MODEL_IDS } from '@kortix/llm-catalog/codex-seed';
 
 const CODEX_SLUG = /^[a-z0-9][a-z0-9._-]{0,63}$/;

@@ -576,7 +576,6 @@ export class PiRuntime {
   private readonly steerReads = new Set<string>()
   /** The user message the next assistant message answers: the turn's, then the newest steered one read. */
   private turnParent: string | null = null
-  private abortAfterTool: { promptId: string; messageId: string } | null = null
   /**
    * The work admitted on the root and not finished: each queued or running turn and each
    * `/summarize`, one token per item. The one source of "is a turn running" ({@link busy}):
@@ -1122,7 +1121,7 @@ export class PiRuntime {
     if (!this.agent || this.state !== 'ok') throw new PromptRejected('pi runtime is not ready')
     const messageId = input.messageID
     if (this.knows(messageId) || this.loadingSteers.has(messageId)) return 'duplicate'
-    if (!this.active || this.active.stopRequested || this.abortAfterTool) return 'no_turn'
+    if (!this.active || this.active.stopRequested) return 'no_turn'
     const slot: { retracted?: boolean } = {}
     this.loadingSteers.set(messageId, slot)
     const steered = this.steerChain.then(async () => {
@@ -1131,7 +1130,7 @@ export class PiRuntime {
       // the caller it is handled; `no_turn` would make apps/api run it as a new prompt.
       if (slot.retracted || this.knows(messageId)) return 'duplicate' as const
       // The turn may have ended while the images loaded.
-      if (!this.agent || !this.active || this.active.stopRequested || this.abortAfterTool) return 'no_turn' as const
+      if (!this.agent || !this.active || this.active.stopRequested) return 'no_turn' as const
       this.clock.observe(messageId)
       const message: AgentMessage = {
         role: 'user',
@@ -1377,7 +1376,6 @@ export class PiRuntime {
     this.active = null
     this.turnParent = null
     this.runningTools = 0
-    this.abortAfterTool = null
   }
 
   /**
@@ -1408,35 +1406,6 @@ export class PiRuntime {
     // A stopped turn reads no steered message; the turn's end drops what is unread.
     this.agent?.clearSteeringQueue()
     this.pi?.session.abort().catch((err) => logger.warn('[pi] abort failed', { err: err instanceof Error ? err.message : String(err) }))
-  }
-
-  /**
-   * Quick Queue: end the named turn once no tool is running. A tool in flight
-   * is never killed; the model's own streaming may be cut.
-   */
-  armAbortAfterTool(input: { promptId: string; runtimeSessionId: string; messageId: string }): void {
-    if (input.runtimeSessionId !== this.rootId) return
-    this.abortAfterTool = { promptId: input.promptId, messageId: input.messageId }
-    this.checkAbortAfterTool()
-  }
-
-  /** Without a prompt id, disarm whatever is pending. */
-  disarmAbortAfterTool(promptId?: string): void {
-    if (promptId && this.abortAfterTool?.promptId !== promptId) return
-    this.abortAfterTool = null
-  }
-
-  private checkAbortAfterTool(): void {
-    const armed = this.abortAfterTool
-    if (!armed) return
-    // Idle, or another turn is running: a late arm must not stop its successor.
-    if (this.active?.messageId !== armed.messageId) {
-      this.abortAfterTool = null
-      return
-    }
-    if (this.runningTools > 0) return
-    this.abortAfterTool = null
-    void this.abort()
   }
 
   private async runTurn(turn: Turn): Promise<void> {
@@ -1736,8 +1705,6 @@ export class PiRuntime {
     if (event.type === 'tool_execution_end') this.runningTools = Math.max(0, this.runningTools - 1)
     if (event.type === 'tool_execution_start' || event.type === 'tool_execution_end' || event.type === 'message_update') this.resetProgressWatchdog?.()
     this.translateAndPublish(event)
-    // After the frames: the finished tool part is on the transcript before the turn is cut.
-    if (event.type === 'tool_execution_end') this.checkAbortAfterTool()
   }
 
   /** The root agent's rule for a call: its tool access, then the permission policy. */

@@ -137,6 +137,11 @@ export function bindProjectOperationsReview(projectId: string) {
         P.listSessionsNeedingInput(projectId, options),
     },
 
+    /** The tool call log: every connector call of the workspace, newest first, never its arguments or result. */
+    toolCalls: {
+      list: (options?: Parameters<typeof P.listToolCalls>[1]) => P.listToolCalls(projectId, options),
+    },
+
     /** Gateway observability — LLM request logs, cost/latency rollups, budgets, gateway API keys. */
   };
 }

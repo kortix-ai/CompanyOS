@@ -293,7 +293,7 @@ app.route('/v1/runtime-assets', runtimeAssetsApp); // GET /manifest, /cli, /agen
 {
   app.use('/v1/connectors/projects/*', combinedAuth);
   app.use('/v1/connectors/workspaces/*', combinedAuth);
-  // Canonical id rule: an account id, an unknown id or an unreadable workspace → 404 workspace_not_found.
+  // Canonical id rule: an account id or an unknown id → 404 workspace_not_found; an unreadable workspace → 403 workspace_access_denied.
   app.use('/v1/connectors/workspaces/*', canonicalWorkspaceGate());
   app.use('/v1/connectors/connect-status', combinedAuth); // deployment capability flag (authed)
   app.route('/v1/connectors', connectorApp);

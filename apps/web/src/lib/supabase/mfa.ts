@@ -54,6 +54,12 @@ export interface ListFactorsResponse {
   factors: FactorInfo[];
 }
 
+export interface EnrollingFactor {
+  factorId: string;
+  qr: string;
+  secret?: string;
+}
+
 export interface AALResponse {
   current_level?: string;
   next_level?: string;
@@ -223,6 +229,30 @@ export const supabaseMFAService = {
       console.error('❌ Enroll phone factor failed:', error);
       throw new Error(`Failed to enroll phone factor: ${toErrorMessage(error)}`);
     }
+  },
+
+  /**
+   * Enroll a new TOTP factor: the one place a TOTP factor is created.
+   */
+  async enrollTotp(): Promise<EnrollingFactor> {
+    const supabase = createClient();
+
+    // An unverified factor is an enrollment someone walked away from (a
+    // closed tab, a reload). It can never sign anyone in, and it holds the
+    // friendly name the new one wants, so clear it before starting over.
+    const { data: listed } = await supabase.auth.mfa.listFactors();
+    for (const stale of listed?.all ?? []) {
+      if (stale.factor_type === 'totp' && stale.status === 'unverified') {
+        await supabase.auth.mfa.unenroll({ factorId: stale.id });
+      }
+    }
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: `Authenticator (${new Date().toISOString().slice(0, 10)})`,
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.totp?.qr_code) throw new Error('Enrollment returned no QR code');
+    return { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
   },
 
   /**

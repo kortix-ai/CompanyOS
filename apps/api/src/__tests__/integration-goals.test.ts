@@ -199,6 +199,19 @@ describe('goal mode: a goal bound to its chat', () => {
     expect(sessionsOfProject.filter((row) => row.id === goal.goalId)).toEqual([]);
   });
 
+  test('a Drive outage at create does not hold a bound goal: active, heartbeat on, no GOAL.md', async () => {
+    const sessionId = await chat();
+    const failing = Object.create(volume, { write: { value: async () => { throw new Error('Drive storage is unavailable, try again shortly'); } } });
+    setVolumeOpsForTests(failing);
+    try {
+      const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+      expect(goal).toMatchObject({ state: 'active', blockedReason: null });
+      expect((await heartbeat(goal.goalId))?.enabled).toBe(true);
+    } finally {
+      setVolumeOpsForTests(volume);
+    }
+  });
+
   test('one open goal per chat; a person or a goal without criteria is refused; a done goal leaves room for the next', async () => {
     const sessionId = await chat();
     const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());

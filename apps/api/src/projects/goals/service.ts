@@ -317,14 +317,21 @@ export async function finishGoalSetup(project: ProjectRow, goal: GoalRow): Promi
     }
     if (!setup.files) {
       const ops = volumeOps();
-      if (ops.available()) {
-        const drive = await driveOf(goal);
-        await ops.write(drive, `${goal.folder}/GOAL.md`, goalFileText(goal), { overwrite: true });
-        if (!(await ops.stat(drive, `${goal.folder}/log.md`).catch(() => null))) {
-          await ops.write(drive, `${goal.folder}/log.md`, `# Log\n\n- ${goal.createdAt.toISOString()} Goal created: ${goal.title}\n`, { overwrite: true });
+      try {
+        if (ops.available()) {
+          const drive = await driveOf(goal);
+          await ops.write(drive, `${goal.folder}/GOAL.md`, goalFileText(goal), { overwrite: true });
+          if (!(await ops.stat(drive, `${goal.folder}/log.md`).catch(() => null))) {
+            await ops.write(drive, `${goal.folder}/log.md`, `# Log\n\n- ${goal.createdAt.toISOString()} Goal created: ${goal.title}\n`, { overwrite: true });
+          }
         }
+        await mark('files');
+      } catch (error) {
+        // A chat-bound goal keeps its brief in the chat (goal mode puts it in every turn): a Drive
+        // outage must not hold its heartbeat. Evidence still needs Drive, and `verify` says so.
+        if (!isBoundGoal(goal)) throw error;
+        logger.warn('[goals] brief not written; the chat works its goal without GOAL.md', { goal_id: goal.goalId, error: error instanceof Error ? error.message : String(error) });
       }
-      await mark('files');
     }
     if (!setup.prompt) {
       const queued = await goalEffects().queuePrompt({

@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  CAPTURE_FRAME_INTERVALS_MS,
   CAPTURE_LAYERS,
   CAPTURE_MAX_HEIGHTS,
   CAPTURE_RETENTION_LIMITS,
@@ -286,22 +285,11 @@ export function IncludedSection({
   );
 }
 
-/** Frame rate, resolution and text recognition: null leaves each computer its own. */
+/** Resolution and text recognition: null leaves each computer its own. The app sets its own frame rate, so no interval row (PR #12365). */
 export function FramesSection({ draft, patch }: Draft) {
   const t = useTranslations('capture.settings');
   return (
     <Group title={t('framesTitle')} description={t('framesHint')}>
-      <SelectRow
-        title={t('interval')}
-        description={t('intervalHint')}
-        value={draft.recording.interval_ms ?? null}
-        noneLabel={t('computerDecides')}
-        options={CAPTURE_FRAME_INTERVALS_MS.map((ms) => ({
-          value: ms,
-          label: t('intervalOption', { seconds: ms / 1000 }),
-        }))}
-        onChange={(interval_ms) => patch('recording', { interval_ms })}
-      />
       <SelectRow<CaptureMaxHeight>
         title={t('resolution')}
         description={t('resolutionHint')}

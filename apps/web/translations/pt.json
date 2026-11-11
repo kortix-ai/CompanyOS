@@ -23440,9 +23440,6 @@
       "privacyControlsHint": "Mostrar o mascaramento de dados pessoais. Desativar oculta; o que está definido continua valendo.",
       "maskingTitle": "Mascaramento",
       "framesTitle": "Quadros da tela",
-      "interval": "Um quadro a cada",
-      "intervalHint": "Intervalos menores guardam mais detalhes e usam mais CPU e armazenamento.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Resolução",
       "resolutionHint": "Telas maiores são reduzidas a esta altura. 4K mantém detalhes finos, como desenhos CAD.",
       "textRecognition": "Reconhecimento de texto",
@@ -23452,7 +23449,7 @@
         "fast": "Rápido",
         "off": "Desativado"
       },
-      "framesHint": "Sem valor, cada computador usa o seu (uma imagem a cada 2 s em 1440p). Com valor, todos os computadores o usam e ninguém pode alterá-lo. Cliques, digitação e rolagem são gravados com capturas próprias em qualquer intervalo.",
+      "framesHint": "O Kortix Capture define a própria taxa de quadros: até 2 imagens por segundo enquanto alguém trabalha, uma a cada 2 s nos demais casos, e menos em um computador ocupado. Sem valor, cada computador usa 1440p e reconhecimento de texto preciso. Com valor, todos os computadores o usam e ninguém pode alterá-lo. Cliques, digitação e rolagem são gravados com capturas próprias.",
       "computerDecides": "Cada computador decide",
       "included": {
         "title": "Apps e sites",

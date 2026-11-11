@@ -23443,9 +23443,6 @@
       "privacyControlsHint": "Show personal-data masking. Turning this off hides it; what is set keeps applying.",
       "maskingTitle": "Masking",
       "framesTitle": "Screen frames",
-      "interval": "One frame every",
-      "intervalHint": "Shorter intervals keep more detail and use more CPU and storage.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Resolution",
       "resolutionHint": "Larger screens are scaled down to this height. 4K keeps fine detail, such as CAD drawings.",
       "textRecognition": "Text recognition",
@@ -23455,7 +23452,7 @@
         "fast": "Fast",
         "off": "Off"
       },
-      "framesHint": "Unset, each computer uses its own (one frame every 2 s at 1440p). Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots at any interval.",
+      "framesHint": "Kortix Capture sets its own frame rate: up to 2 frames a second while someone works, one every 2 s otherwise, slower on a busy computer. Unset, each computer uses 1440p and accurate text recognition. Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots.",
       "computerDecides": "Each computer decides",
       "included": {
         "title": "Apps and websites",

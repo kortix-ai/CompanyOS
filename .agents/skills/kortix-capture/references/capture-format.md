@@ -277,10 +277,10 @@ exclusions or pause. A device never widens what the policy allows.
   items stay in the bucket (`sync.remote_retention_days`).
 - `recording.paused` pauses every layer, until `paused_until_ms` or, when null,
   until the operator lifts it.
-- `recording.interval_ms` (500..10000, clamped) and `recording.max_height`
-  (720, 1080, 1440 or 2160; the width follows: 1280, 1920, 2560, 3840) set the
-  screen capture rate and size on every device, higher or lower than the
-  device's own value. Absent or null keeps the device's own setting.
+- `recording.max_height` (720, 1080, 1440 or 2160; the width follows: 1280,
+  1920, 2560, 3840) sets the screenshot size on every device. Absent or null
+  keeps the device's own setting. `recording.interval_ms` is read and ignored
+  by Capture 0.15.5 and later: the app sets its own frame rate.
   `status.json` `capture` reports the values in force.
 - `recording.text_recognition` (`accurate`, `fast` or `off`) sets screen text
   recognition on every device. `off` reads no screen text, the least CPU per

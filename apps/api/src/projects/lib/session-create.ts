@@ -805,6 +805,13 @@ export function firstPromptModelRef(pendingPrompt: unknown): string | null {
   return claude.kind === 'valid' ? claude.ref : ref;
 }
 
+/** The parent turn's model a child's create carries in `runtime_context` (kortixd `cloud-subagent.ts`). */
+function parentTurnModel(runtimeContext: unknown): string | null {
+  if (!runtimeContext || typeof runtimeContext !== 'object') return null;
+  const value = (runtimeContext as Record<string, unknown>)['kortix.parent_model'];
+  return typeof value === 'string' && value.trim() && !/\s/.test(value.trim()) ? value.trim() : null;
+}
+
 /**
  * Resolve and validate the session model, and the provider key selection a
  * pooled-key model needs. Runs before the billing hold.
@@ -941,6 +948,20 @@ async function resolveSessionModel(params: {
         freeModelsOnly,
         providerSecretPools,
       });
+      // A child session (another session called create) whose agent pins no
+      // model runs on the model its parent's turn runs, not the project
+      // default: a hand-off from a chat on model A must not quietly switch to
+      // model B. The parent's box sends it as `kortix.parent_model`. An agent's
+      // own pin still wins, and an unservable parent model falls through.
+      const parentModel = input.callerSessionId && resolved.source !== 'agent' ? parentTurnModel(body.runtime_context) : null;
+      if (
+        parentModel &&
+        (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: parentModel, providerSecretPools }))
+      ) {
+        sessionModel = toSessionModelRef(parentModel);
+        sessionModelSource = 'explicit';
+        return { providerSecretPools, sessionModel, sessionModelSource };
+      }
       // An account without managed models gets no platform default: it runs
       // its own connected model (already in `resolved`) or none.
       const concreteModel = resolved.model ?? (freeModelsOnly ? null : platformDefaultModelId() || null);

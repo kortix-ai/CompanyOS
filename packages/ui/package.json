@@ -486,6 +486,7 @@
     "./slider": "./src/primitives/slider.tsx",
     "./slider-native": "./src/primitives/slider-native.tsx",
     "./sliding-tab-indicator": "./src/primitives/sliding-tab-indicator.tsx",
+    "./slot": "./src/primitives/slot.tsx",
     "./split-sheet": "./src/primitives/split-sheet.tsx",
     "./spotlight-card": "./src/primitives/spotlight-card.tsx",
     "./status": "./src/primitives/status.tsx",
@@ -2404,6 +2405,10 @@
       "./sliding-tab-indicator": {
         "types": "./dist/primitives/sliding-tab-indicator.d.ts",
         "import": "./dist/primitives/sliding-tab-indicator.js"
+      },
+      "./slot": {
+        "types": "./dist/primitives/slot.d.ts",
+        "import": "./dist/primitives/slot.js"
       },
       "./split-sheet": {
         "types": "./dist/primitives/split-sheet.d.ts",

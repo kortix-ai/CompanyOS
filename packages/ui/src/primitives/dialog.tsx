@@ -6,7 +6,9 @@ import * as React from 'react';
 import { Close } from '../icons/close';
 import {
   asChildRender,
+  composeRefs,
   DismissProvider,
+  nativeButtonFor,
   focusProps,
   openState,
   stateRender,
@@ -43,7 +45,7 @@ const Dialog = ({ open, defaultOpen, onOpenChange, modal, children }: DialogProp
 
   return (
     <DialogDepthProvider depth={layer.depth}>
-      <DismissProvider registry={dismiss.registry}>
+      <DismissProvider kind="dialog" registry={dismiss.registry}>
         <DialogPrimitive.Root open={layer.open} onOpenChange={dismiss.onOpenChange} modal={modal}>
           {children}
         </DialogPrimitive.Root>
@@ -66,7 +68,7 @@ const DialogTrigger = React.forwardRef<HTMLButtonElement, ButtonLikeProps & Trig
         // With `asChild` the child owns its styling — merging ours would double it.
         className={asChild ? className : cn(triggerVariants({ variant, size }), className)}
         render={stateRender('button', openState, slot.render)}
-        nativeButton={!asChild}
+        nativeButton={nativeButtonFor(asChild, children)}
       >
         {slot.children}
       </DialogPrimitive.Trigger>
@@ -81,7 +83,12 @@ const DialogClose = React.forwardRef<HTMLButtonElement, ButtonLikeProps>(
   ({ asChild, children, ...props }, ref) => {
     const slot = asChildRender(asChild, children);
     return (
-      <DialogPrimitive.Close ref={ref} {...props} render={slot.render} nativeButton={!asChild}>
+      <DialogPrimitive.Close
+        ref={ref}
+        {...props}
+        render={slot.render}
+        nativeButton={nativeButtonFor(asChild, children)}
+      >
         {slot.children}
       </DialogPrimitive.Close>
     );
@@ -156,13 +163,14 @@ const DialogPopup = React.forwardRef<HTMLDivElement, DialogContentBaseProps>(
     },
     ref,
   ) => {
-    useDismissContent({ onEscapeKeyDown, onPointerDownOutside, onFocusOutside, onInteractOutside });
+    useDismissContent('dialog', { onEscapeKeyDown, onPointerDownOutside, onFocusOutside, onInteractOutside });
     const slot = asChildRender(asChild, children);
+    const popupRef = React.useRef<HTMLDivElement | null>(null);
     return (
       <DialogPrimitive.Popup
-        ref={ref}
+        ref={composeRefs(ref, popupRef)}
         {...props}
-        {...focusProps(onOpenAutoFocus, onCloseAutoFocus)}
+        {...focusProps(() => popupRef.current, onOpenAutoFocus, onCloseAutoFocus)}
         render={stateRender('div', openState, slot.render)}
       >
         {slot.children}

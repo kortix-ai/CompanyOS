@@ -157,7 +157,7 @@ export function floatingZ(depth: number): number {
 
 /** Portaled popovers/menus/selects rendered outside dialog DOM. */
 export const FLOATING_LAYER_SELECTOR =
-  '[role="menu"],[role="listbox"],[role="tooltip"],[data-radix-popper-content-wrapper]';
+  '[role="menu"],[role="listbox"],[role="tooltip"],[data-kortix-floating]';
 
 export function isFloatingLayerTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(FLOATING_LAYER_SELECTOR));
@@ -166,13 +166,13 @@ export function isFloatingLayerTarget(target: EventTarget | null): boolean {
 export function hasOpenFloatingLayer(): boolean {
   return Boolean(
     document.querySelector(
-      '[role="menu"][data-state="open"],[role="listbox"][data-state="open"],[data-radix-popper-content-wrapper] [data-state="open"]',
+      '[role="menu"][data-state="open"],[role="listbox"][data-state="open"],[data-kortix-floating] [data-state="open"]',
     ),
   );
 }
 
 /** Nested modals/sheets opened above the customize panel (or any parent dialog).
- *  Radix gives alerts `role="alertdialog"`, so confirm dialogs only count here
+ *  The alert dialog has `role="alertdialog"`, so confirm dialogs only count here
  *  if that role is matched too — miss it and Escape aimed at a confirm tears
  *  down the panel behind it. */
 export function hasOpenNestedDialog(): boolean {

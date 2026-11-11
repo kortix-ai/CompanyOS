@@ -816,7 +816,7 @@ export function ChatInputControl({
           if (
             saving ||
             foreignDialogOpen(contentRef.current) ||
-            target?.closest('[data-radix-popper-content-wrapper], [role="dialog"]')
+            target?.closest('[data-kortix-floating], [role="dialog"]')
           )
             event.preventDefault();
         }}

@@ -21,8 +21,8 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
+  useCommandState,
 } from '@kortix/ui/command';
-import { useCommandState } from 'cmdk';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
 import { FadedScrollArea } from '@kortix/ui/faded-scroll-area';

@@ -5,7 +5,7 @@ import 'lenis/dist/lenis.css';
 import { useEffect } from 'react';
 
 /** Floating layers that scroll on their own: a modal, a popover, a select. */
-const OWN_SCROLLER = '[role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]';
+const OWN_SCROLLER = '[role="dialog"], [role="alertdialog"], [data-kortix-floating]';
 
 /**
  * Buio's smooth wheel scroll (Lenis, lerp 0.1), mounted once by the marketing

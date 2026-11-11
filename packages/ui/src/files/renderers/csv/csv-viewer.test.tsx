@@ -10,6 +10,9 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { CsvViewer } from './csv-viewer';
 
+/** React always passes an event; Base UI's tooltip trigger reads `nativeEvent`. */
+const clickEvent = () => ({ nativeEvent: new Event('click'), preventDefault() {}, stopPropagation() {} });
+
 const originalActEnvironment = Object.getOwnPropertyDescriptor(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
@@ -84,7 +87,7 @@ async function downloadFromViewer(props: { data: string; fileName?: string }) {
   if (!renderer) throw new Error('CsvViewer did not mount');
   const button = renderer.root.findByProps({ 'data-viewer-download': '' });
   await act(async () => {
-    button.props.onClick();
+    button.props.onClick(clickEvent());
   });
   expect(downloads).toHaveLength(1);
   return downloads[downloads.length - 1];

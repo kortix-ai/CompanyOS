@@ -45,7 +45,7 @@ export function stateRender<S = any>(
   extra?: (state: S) => AnyProps,
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (props: any, state: S): React.ReactElement => {
+  return function renderWithState(props: any, state: S): React.ReactElement {
     const attrs = { ...props, 'data-state': toState(state), ...extra?.(state) };
     if (element) {
       // `render` with an element merges into it; a function must merge itself.
@@ -61,6 +61,19 @@ export const openState = (s: any) => (s.open ? 'open' : 'closed');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const checkedState = (s: any) =>
   s.indeterminate ? 'indeterminate' : s.checked ? 'checked' : 'unchecked';
+
+/**
+ * A Base UI `render` for a form control: a native `<button>` that writes
+ * `data-state` and `disabled` last, in Radix's attribute order.
+ * Switch, radio and tab items use it too.
+ */
+export function controlRender<S extends { disabled?: boolean }>(toState: (state: S) => string) {
+  function renderControl(props: React.ComponentProps<'button'>, state: S) {
+    const { disabled: _disabled, ...rest } = props;
+    return <button {...rest} data-state={toState(state)} disabled={state.disabled || undefined} />;
+  }
+  return renderControl;
+}
 
 /** Merges props the way Radix `Slot` did: handlers chain, classes join, styles merge. */
 export function mergeElementProps(own: AnyProps, slot: AnyProps): AnyProps {
@@ -143,7 +156,9 @@ export interface ChangeDetails {
 }
 
 type DismissRegistry = React.MutableRefObject<DismissHandlers>;
-const DismissContext = React.createContext<DismissRegistry | null>(null);
+/** The nearest root of each kind, so a popover inside a hover card registers with the popover. */
+type DismissScope = Readonly<Record<string, DismissRegistry>>;
+const DismissContext = React.createContext<DismissScope>({});
 
 /**
  * The root half: wraps `onOpenChange` so a close that a content-level Radix
@@ -184,39 +199,77 @@ function runDismissHandlers(h: DismissHandlers, details: ChangeDetails): boolean
 }
 
 export function DismissProvider({
+  kind,
   registry,
   children,
 }: {
+  /** The component family: `dialog`, `menu`, `select`, ... */
+  kind: string;
   registry: DismissRegistry;
   children: React.ReactNode;
 }) {
-  return <DismissContext.Provider value={registry}>{children}</DismissContext.Provider>;
+  const parent = React.useContext(DismissContext);
+  const value = React.useMemo(() => ({ ...parent, [kind]: registry }), [parent, kind, registry]);
+  return <DismissContext.Provider value={value}>{children}</DismissContext.Provider>;
 }
 
-/** The content half: registers this content's Radix dismiss handlers with its root. */
-export function useDismissContent(handlers: DismissHandlers) {
-  const registry = React.useContext(DismissContext);
+/** The content half: registers this content's Radix dismiss handlers with the nearest root of `kind`. */
+export function useDismissContent(kind: string, handlers: DismissHandlers) {
+  const registry = React.useContext(DismissContext)[kind];
   if (registry) registry.current = handlers;
 }
 
 /**
  * Radix `onOpenAutoFocus` / `onCloseAutoFocus` → Base UI `initialFocus` /
- * `finalFocus`. A handler that calls `preventDefault()` keeps focus where it is.
+ * `finalFocus`. As in Radix, the handler gets a cancelable event dispatched on
+ * the popup, so `event.currentTarget` is the popup; `preventDefault()` keeps
+ * focus where the handler put it.
  */
 export function focusProps(
+  getPopup: () => HTMLElement | null,
   onOpenAutoFocus?: (event: Event) => void,
   onCloseAutoFocus?: (event: Event) => void,
 ) {
-  const run = (handler: (event: Event) => void) => {
-    const event = new Event('focus', { cancelable: true });
-    handler(event);
+  const run = (type: string, handler: (event: Event) => void) => {
+    const event = new CustomEvent(type, { cancelable: true });
+    const node = getPopup();
+    if (!node) {
+      handler(event);
+      return !event.defaultPrevented;
+    }
+    node.addEventListener(type, handler, { once: true });
+    node.dispatchEvent(event);
     return !event.defaultPrevented;
   };
   return {
-    ...(onOpenAutoFocus ? { initialFocus: () => run(onOpenAutoFocus) } : {}),
-    ...(onCloseAutoFocus ? { finalFocus: () => run(onCloseAutoFocus) } : {}),
+    ...(onOpenAutoFocus
+      ? { initialFocus: () => run('focusScope.autoFocusOnMount', onOpenAutoFocus) }
+      : {}),
+    ...(onCloseAutoFocus
+      ? { finalFocus: () => run('focusScope.autoFocusOnUnmount', onCloseAutoFocus) }
+      : {}),
   };
 }
+
+/**
+ * Base UI `nativeButton` for a trigger: true when it renders a real `<button>`,
+ * which is the default and an `asChild` child that is `<button>` or `Button`.
+ */
+export function nativeButtonFor(asChild: boolean | undefined, children: React.ReactNode): boolean {
+  if (!asChild) return true;
+  if (!React.isValidElement(children)) return false;
+  const type = children.type as string | { name?: string; displayName?: string };
+  if (typeof type === 'string') return type === 'button';
+  const name = type.displayName ?? type.name;
+  return name === 'Button' && !(children.props as { asChild?: boolean }).asChild;
+}
+
+/**
+ * Marks a Base UI `Positioner` as a floating layer (the role Radix's
+ * `data-radix-popper-content-wrapper` played). `lib/z-stack.tsx`, the desktop
+ * titlebar CSS and outside-click guards match `[data-kortix-floating]`.
+ */
+export const FLOATING_LAYER_ATTR = { 'data-kortix-floating': '' } as const;
 
 /* ---------- positioning ---------- */
 
@@ -290,7 +343,36 @@ export const VisuallyHidden = React.forwardRef<
   HTMLSpanElement,
   React.HTMLAttributes<HTMLSpanElement> & { asChild?: boolean }
 >(({ asChild, className, ...props }, ref) => {
-  const Comp = (asChild ? Slot : 'span') as React.ElementType;
-  return <Comp ref={ref} className={className ? `sr-only ${className}` : 'sr-only'} {...props} />;
+  const cls = className ? `sr-only ${className}` : 'sr-only';
+  if (asChild) return <Slot ref={ref} className={cls} {...props} />;
+  return <span ref={ref} className={cls} {...props} />;
 });
 VisuallyHidden.displayName = 'VisuallyHidden';
+
+/* ---------- label re-entry ---------- */
+
+/**
+ * An `onClick` for a Base UI checkbox or radio root. Base UI forwards a
+ * press to its hidden `<input>`; inside a consumer's `<label>`, that click
+ * bubbles to the label. Browsers ignore it (the target is interactive
+ * content), but happy-dom re-dispatches it to the button and loops. This
+ * drops the re-entrant click; in a browser it never fires.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useLabelReentryGuard(onClick?: (event: any) => void) {
+  const inClick = React.useRef(false);
+  return React.useCallback(
+    (event: React.MouseEvent<HTMLElement> & { preventBaseUIHandler?: () => void }) => {
+      if (inClick.current) {
+        event.preventBaseUIHandler?.();
+        return;
+      }
+      inClick.current = true;
+      queueMicrotask(() => {
+        inClick.current = false;
+      });
+      onClick?.(event);
+    },
+    [onClick],
+  );
+}

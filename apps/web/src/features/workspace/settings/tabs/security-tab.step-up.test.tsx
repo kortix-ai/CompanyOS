@@ -224,7 +224,14 @@ const record = (name: string) => () => events.push(name);
 // `{ once: true }` step-up listener between cases.
 const originalWindow = globalThis.window;
 beforeEach(() => {
-  globalThis.window = new EventTarget() as unknown as Window & typeof globalThis;
+  // Floating UI (behind Base UI's tooltip) checks `node instanceof window.Element`;
+  // this window has no DOM, so nothing is an element.
+  globalThis.window = Object.assign(new EventTarget(), {
+    Element: class {},
+    HTMLElement: class {},
+    Node: class {},
+    ShadowRoot: class {},
+  }) as unknown as Window & typeof globalThis;
 });
 afterEach(() => {
   globalThis.window = originalWindow;

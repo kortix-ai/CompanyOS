@@ -239,7 +239,7 @@ export function SessionOverridesControl({ onSave, ...contentProps }: SessionOver
         // unguarded interaction there closes THIS panel under the user's cursor.
         onInteractOutside={(event) => {
           const target = event.target as HTMLElement | null;
-          if (contentProps.saving || target?.closest('[data-radix-popper-content-wrapper]')) event.preventDefault();
+          if (contentProps.saving || target?.closest('[data-kortix-floating]')) event.preventDefault();
         }}
       >
         <SessionOverridesControlContent {...contentProps} onSave={saveAndClose} />

@@ -91,7 +91,7 @@ describe('modalDismissesOnOutsideInteraction', () => {
     ['listbox (Select)', { role: 'listbox' }],
     ['menu (DropdownMenu)', { role: 'menu' }],
     ['tooltip', { role: 'tooltip' }],
-    ['popper wrapper', { 'data-radix-popper-content-wrapper': '' }],
+    ['popper wrapper', { 'data-kortix-floating': '' }],
   ];
 
   for (const [label, attrs] of floatingPanels) {

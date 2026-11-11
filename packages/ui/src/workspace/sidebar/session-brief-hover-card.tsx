@@ -4,7 +4,7 @@ import type { ChangeRequest, ChangeRequestStatus } from '@kortix/sdk';
 import { useFeatureFlag, useSessionGoal } from '@kortix/sdk/react';
 import { ArrowsSplitIcon, GitDiffIcon, RobotIcon, TargetIcon } from '@phosphor-icons/react';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { Slot } from 'radix-ui';
+import { Slot } from '../../lib/base-ui-compat';
 import { useEffect, useLayoutEffect, useRef, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from '../../i18n';
@@ -434,9 +434,9 @@ function SessionBriefCard({
   return (
     <>
       {/* data-state as the Radix trigger set it: the row hides its markers while the card is open. */}
-      <Slot.Root data-state={open ? 'open' : 'closed'} {...sessionRowHoverHandlers(id)}>
+      <Slot data-state={open ? 'open' : 'closed'} {...sessionRowHoverHandlers(id)}>
         {children}
-      </Slot.Root>
+      </Slot>
       {open && slot ? createPortal(content, slot) : null}
     </>
   );

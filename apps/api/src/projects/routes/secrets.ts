@@ -23,6 +23,7 @@ import { requestPersonalOwner } from '../lib/personal-resources';
 import {
   encryptProjectSecret,
   identifierKeyConflicts,
+  projectSecretAad,
   isValidIdentifier,
   isValidSecretName,
   recordProjectSecretTombstone,
@@ -32,7 +33,7 @@ import { isGatewayManagedEnv, secretApiHostsForName } from '../../llm-gateway/sa
 import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-default';
 import { createRoute, z } from '@hono/zod-openapi';
 import { featureDisabledBody } from '../../feature-flags/gate';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
+import { featureFlagExplicitlyOn, resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
@@ -390,15 +391,18 @@ export function registerSecretsRoutes(): void {
       return c.json(featureDisabledBody('secrets_egress'), 403);
     }
     // A NEW secret with no requested delivery whose name belongs to a known API
-    // host is network-delivered when the project has `secrets_egress` on. The
-    // value stays server-side and the box gets a handle spendable only on that
-    // host. Flag off, an update, or an unknown name: the runtime default.
+    // host is network-delivered when the project itself switched
+    // `secrets_egress` on. The value stays server-side and the box gets a handle
+    // spendable only on that host. An inherited platform default of on is NOT
+    // enough: `secrets_egress` defaults on for every project (it offers the
+    // option), and this changes where a value goes without anyone choosing it.
+    // Flag not explicitly on, an update, or an unknown name: the runtime default.
     const createDefault = existing
       ? null
       : chooseSecretCreateDefault({
           body,
           value,
-          egressEnabled,
+          egressEnabled: egressEnabled && featureFlagExplicitlyOn(loaded.row.metadata, 'secrets_egress'),
           hosts: secretApiHostsForName(name),
         });
     const insertStrategy = explicitStrategy ?? createDefault?.strategy;
@@ -458,7 +462,7 @@ export function registerSecretsRoutes(): void {
                 projectId,
                 identifier,
                 name,
-                valueEnc: encryptProjectSecret(projectId, value),
+                valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(identifier)),
                 ...(insertStrategy ? { strategy: insertStrategy } : {}),
                 ...(insertConsumer !== undefined ? { consumer: insertConsumer } : {}),
                 ...(insertPolicy ? { egressPolicy: insertPolicy } : {}),
@@ -471,7 +475,7 @@ export function registerSecretsRoutes(): void {
                 target: [projectSecrets.projectId, projectSecrets.identifier],
                 targetWhere: isNull(projectSecrets.ownerUserId),
                 set: {
-                  valueEnc: encryptProjectSecret(projectId, value),
+                  valueEnc: encryptProjectSecret(projectId, value, projectSecretAad(identifier)),
                   ...(explicitStrategy ? { strategy: explicitStrategy } : {}),
                   ...(explicitConsumer !== undefined ? { consumer: explicitConsumer } : {}),
                   ...(explicitConsumer !== undefined ? { egressPolicy: explicitPolicy } : {}),

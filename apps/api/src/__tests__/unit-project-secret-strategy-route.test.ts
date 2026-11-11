@@ -29,7 +29,7 @@ mock.module('../iam', () => ({ ...realIam, PROJECT_ACTIONS }));
 let agentGrant: Record<string, unknown> | null = null;
 /** The project's `secrets_egress` flag. On for the policy tests; the create
  *  default tests flip it. */
-let egressFlagOn = true;
+let egressFlagOn: boolean | null = true;
 let authType: 'service_account' | 'supabase' | 'pat' = 'supabase';
 
 let row: ReturnType<typeof secretRow> | null = secretRow();
@@ -230,7 +230,7 @@ mock.module('../projects/lib/access', () => ({
     row: {
       accountId: ACCOUNT_ID,
       projectId: PROJECT_ID,
-      metadata: { experimental: { secrets_egress: egressFlagOn } },
+      metadata: egressFlagOn === null ? {} : { experimental: { secrets_egress: egressFlagOn } },
     },
     userId: USER_ID,
     accountRole: 'owner',
@@ -1268,6 +1268,19 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
     });
     expect(audits[0]).toMatchObject({ after: { strategy: 'egress', delivery_reason: 'known_api_host' } });
     expect(JSON.stringify(body)).not.toContain('plaintext-test-value');
+  });
+
+  test('flag only inherited from the platform default: a known name keeps the runtime default', async () => {
+    egressFlagOn = null;
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'ANTHROPIC_API_KEY', value: 'plaintext-test-value' }),
+    });
+    egressFlagOn = true;
+    expect(response.status).toBe(200);
+    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'default' });
+    expect(row).toMatchObject({ consumer: 'sandbox' });
   });
 
   test('flag on: an unknown name keeps the runtime default and says so', async () => {

@@ -283,11 +283,27 @@ Run the install script.
       if (record.markdownPath) expect(llms).toContain(absoluteUrl(record.markdownPath));
     }
 
+    expect(llms).toContain(`[Setup prompt](${absoluteUrl('/setup-prompt.md')})`);
+    expect(llms).toContain('https://api.kortix.com/v1/mcp');
+
     for (const response of [getLlmsTxt(), getLlmsFullTxt()]) {
       expect(response.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
       expect(response.headers.get('Content-Disposition')).toBe('inline');
       expect((await response.text()).length).toBeGreaterThan(1_000);
     }
+  });
+});
+
+describe('Markdown twins of pages without MDX source', () => {
+  const twin = (slug: string) => resolvePublicMarkdown([`${slug}.md`])?.markdown ?? '';
+
+  test('contact, download, marketplace and changelog print their own content', () => {
+    expect(twin('contact')).toContain('- Support: support@kortix.com');
+    expect(twin('contact')).toContain('- **Deploy your way:**');
+    expect(twin('download')).toContain(`- macOS (Universal): ${absoluteUrl('/download/macos')}`);
+    expect(twin('download')).toContain('curl -fsSL https://kortix.com/install | bash');
+    expect(twin('marketplace')).toContain('GET https://api.kortix.com/v1/marketplace/items?query=');
+    expect(twin('changelog')).toContain('https://github.com/kortix-ai/CompanyOS/releases.atom');
   });
 });
 

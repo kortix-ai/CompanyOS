@@ -10,11 +10,7 @@ import { CopyRow, LinkRow } from '@/features/marketing/kit/copy-row';
 import { Band, PageFrame, PageHero } from '@/features/marketing/kit/page-frame';
 import { CONTACT_TRANSLATION_KEYS } from '@/i18n/contact-translation-keys.generated';
 import { localizeUiCatalog } from '@kortix/ui/i18n';
-
-const CONTACT_EMAIL = 'hey@kortix.ai';
-const SUPPORT_EMAIL = 'support@kortix.com';
-const SECURITY_EMAIL = 'security@kortix.com';
-const DISCORD_URL = 'https://discord.com/invite/RvFhXUdZ9H';
+import { CHANNELS, CONTACT_EMAIL, VALUE_PROPS } from '@/features/contact/content';
 
 // Public demo event (cal.com/team/kortix/demo) + a namespace unique to it.
 const CAL_LINK = 'team/kortix/demo';
@@ -27,42 +23,6 @@ const HEADING = {
   title: 'Talk to the team.',
   titleMuted: "See Kortix run your company's work.",
 } as const;
-
-/* Every line traces to a row in kortix-brand `claims.md`, word for word. No
-   number: the star count is the only sanctioned one, and it is not here. */
-const VALUE_PROPS = [
-  {
-    title: 'A tailored walkthrough',
-    desc: 'See agents run your actual workflows end to end, not a generic demo.',
-  },
-  {
-    title: 'Deploy your way',
-    // ACCURACY: not "air-gapped" — `self-host start` pulls images from
-    // docker.io. Isolated topologies get scoped with us, not self-served.
-    desc: 'Run it on Kortix Cloud, in your VPC, or on your own on-prem network.',
-  },
-  {
-    title: 'Access and audit',
-    desc: 'Per-resource permissions for people and agents. Roles, groups, and an audit trail. SAML 2.0 single sign-on and SCIM 2.0.',
-  },
-  {
-    title: 'Compliance',
-    desc: 'SOC 2 Type I verified.',
-  },
-  {
-    title: 'Yours to own',
-    desc: 'Open source. Read it, fork it, audit it. Any model provider with your own keys.',
-  },
-];
-
-// The email rows copy their address on click (`CopyRow`); Community opens
-// the Discord invite in a new tab (`LinkRow`), like the careers page's links.
-const CHANNELS = [
-  { label: 'General', value: CONTACT_EMAIL },
-  { label: 'Support', value: SUPPORT_EMAIL },
-  { label: 'Security', value: SECURITY_EMAIL },
-  { label: 'Community', value: 'Discord', href: DISCORD_URL },
-] as const;
 
 /**
  * `/contact`, in the landing page's frame (`kit/page-frame.tsx`) like

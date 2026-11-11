@@ -80,6 +80,15 @@ const RETRY_SLOW = { retryOnTimeout: true } as const;
 /** How long an API that answered 404 for `/admit` is not asked again. */
 const ADMIT_MISSING_MS = 60_000;
 
+/** How long a model's typed resolution refusal is remembered. Re-asking per request re-ran the API's resolution for the
+ * same answer: a box's voice call resolves its TTS model once per spoken line, so one session against a deployment that
+ * cannot serve the model re-failed every line (KRTX-4665: 27 warns in 8 h, one per line, one session). A refusal is a
+ * persistent state (a lineup without the model, a plan gate, a disconnected provider); the TTL picks a changed state up
+ * without a gateway restart. */
+const REFUSAL_MEMO_MS = 5 * 60 * 1000;
+/** The refusal memo holds one entry per (account, project, model id): bounded, oldest evicted. */
+const REFUSAL_MEMO_MAX = 1_000;
+
 /** How long a private URL that did not answer is skipped for the public one. */
 const INTERNAL_DOWN_MS = 60_000;
 
@@ -218,6 +227,11 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
   // ponytail: per-process memo; a mixed fleet mid-rollout can flip it once per minute.
   let admitMissingUntil = 0;
 
+  // ponytail: per-process memo, like admitMissingUntil; each gateway task learns a refusal on its own first failure
+  // (shared state only if that cost is measured). The key caps the model at the same 200 a model field is capped at
+  // elsewhere (/claude-credentials), so an absurd id cannot pin its bytes in the process.
+  const refusalMemo = new Map<string, { error: GatewayResolutionError; until: number }>();
+
   return {
     authenticate: async (token) => {
       const result = await post<{ principal: AuthedPrincipal | null }>(
@@ -279,6 +293,16 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       return result.route ?? null;
     },
     resolveUpstream: async (principal, model) => {
+      // A remembered refusal answers the same typed error the API would, without the round trip — and without re-arming
+      // the API's per-replica warn gate for a deployment state that has not changed. A served answer is never remembered:
+      // candidates change with plan and billing state. The key carries the project too: resolution is project-grained
+      // (a provider connects per project), like routeMemoryKey's.
+      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${model.slice(0, 200)}`;
+      const remembered = refusalMemo.get(key);
+      if (remembered) {
+        if (Date.now() >= remembered.until) refusalMemo.delete(key);
+        else throw remembered.error;
+      }
       const result = await post<{
         candidates?: UpstreamDescriptor[];
         resolutionError?: ResolutionErrorBody;
@@ -291,7 +315,16 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       // resolveCandidates) — a thrown GatewayResolutionError it can surface as
       // a clean 400 with the actionable suggestion, rather than a generic
       // ApiUnavailableError 5xx.
-      if (result.resolutionError) throw resolutionError(result.resolutionError);
+      if (result.resolutionError) {
+        const error = resolutionError(result.resolutionError);
+        // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
+        if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
+          const oldest = refusalMemo.keys().next().value;
+          if (oldest !== undefined) refusalMemo.delete(oldest);
+        }
+        refusalMemo.set(key, { error, until: Date.now() + REFUSAL_MEMO_MS });
+        throw error;
+      }
       return result.candidates ?? [];
     },
     notePoolRateLimit: async (principal, secretId, seconds) => {

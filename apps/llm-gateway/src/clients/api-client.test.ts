@@ -534,3 +534,94 @@ describe('ApiClient private path', () => {
     ]);
   });
 });
+
+// A box's voice call speaks one line per `POST /audio/speech`, and every line
+// resolves its TTS model through `resolveUpstream` → `POST
+// /internal/gateway/resolve-upstream`. A resolution refusal is a PERSISTENT
+// state (the deployment's managed lineup lists no model of that id:
+// model_not_found; a plan gate; a disconnected provider), so re-asking per
+// line re-ran the API's resolution — and its warn log's first-occurrence
+// gate — for the same answer: one session logged 27 warns in 8 h, one per
+// line (KRTX-4665). The refusal is remembered per account, project and model.
+describe('ApiClient.resolveUpstream remembers a typed refusal', () => {
+  afterEach(() => setSystemTime());
+
+  const refused = () =>
+    jsonResponse({
+      candidates: [],
+      resolutionError: {
+        code: 'model_not_found',
+        message: '"inworld-tts-2" is not a recognized model.',
+        suggestion: 'Choose a Kortix audio model.',
+      },
+    });
+
+  test('a spoken line after the first does not re-ask the API', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    for (let line = 0; line < 5; line++) {
+      await expect(c.resolveUpstream(principal, 'inworld-tts-2')).rejects.toMatchObject({
+        name: 'GatewayResolutionError',
+        code: 'model_not_found',
+      });
+    }
+    expect(calls).toBe(1);
+  });
+
+  test('the memory expires: after the TTL the API is asked again', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    await expect(c.resolveUpstream(principal, 'inworld-tts-2')).rejects.toBeInstanceOf(GatewayResolutionError);
+    // The memo holds minutes, never forever: a changed deployment state (audio
+    // models enabled) must be picked up without a gateway restart.
+    setSystemTime(new Date(Date.now() + 60 * 60 * 1000));
+    await expect(c.resolveUpstream(principal, 'inworld-tts-2')).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(2);
+  });
+
+  test('the memory is per account, project and model', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    await expect(c.resolveUpstream(principal, 'inworld-tts-2')).rejects.toBeInstanceOf(GatewayResolutionError);
+    await expect(c.resolveUpstream({ ...principal, accountId: 'a-other' }, 'inworld-tts-2')).rejects.toBeInstanceOf(GatewayResolutionError);
+    await expect(c.resolveUpstream({ ...principal, projectId: 'p-other' }, 'inworld-tts-2')).rejects.toBeInstanceOf(GatewayResolutionError);
+    await expect(c.resolveUpstream(principal, 'whisper-large-v3')).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(4);
+  });
+
+  test('the memo is bounded: the oldest entry is evicted and asks the API again', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    // Fill the memo past its bound (1 000) with distinct models; the first
+    // (oldest) entry is evicted, so its model is asked again.
+    for (let m = 0; m <= 1000; m++) {
+      await expect(c.resolveUpstream(principal, `model-${m}`)).rejects.toBeInstanceOf(GatewayResolutionError);
+    }
+    expect(calls).toBe(1001);
+    await expect(c.resolveUpstream(principal, 'model-0')).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(1002);
+  });
+
+  test('a served resolution is never remembered: every call asks the API', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return jsonResponse({ candidates: [{ provider: 'platinum' }] });
+    });
+    await c.resolveUpstream(principal, 'inworld-tts-2');
+    await c.resolveUpstream(principal, 'inworld-tts-2');
+    expect(calls).toBe(2);
+  });
+});

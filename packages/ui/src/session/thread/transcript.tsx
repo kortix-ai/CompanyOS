@@ -1870,7 +1870,7 @@ function TurnToolBlocks(
           {workNotice && (!noticeFold || workMounted) && (
             <div
               key="turn-notice"
-              id={workNotice ? workContentId : undefined}
+              id={workContentId}
               hidden={!!(split || noticeFold) && !workOpen}
               className="min-w-0"
             >

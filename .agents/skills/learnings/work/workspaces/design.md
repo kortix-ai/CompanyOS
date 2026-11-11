@@ -135,7 +135,7 @@ the repo).
 | 13 | The `/v1/workspaces` IAM wire shows one scope: `/iam/roles` returns the four ladder roles plus custom roles (one `member` row, no `agent-user`); `/iam/permissions` emits `workspace_action` and `scope_type: 'workspace'`; `/iam/assignments` rows add `scope_type: 'workspace'` and `workspace_id` next to the legacy fields. `GET /v1/workspaces/:id/secret-resources` defaults `project_id` to the path workspace. | auth · api (secret-resources default) |
 | 14 | Impersonation refuses every state-changing method under `/v1/accounts/:id/iam/**` (one subtree rule; only `iam/members/:id/effective(:batch)` stays open), and `DELETE` on the workspace. `assignRole` refuses an impersonating writer (`impersonation_invalid`). An account-scope assignment to a non-member also writes the membership, so the holder shows in Members. | auth |
 | 15 | Fixed by K1: a person's workspace key manages its own workspace per the person's role. The SDK no longer lists `createAccountToken → createWorkspaceToken` as an exact equivalent (different reach). Fence refusals carry `code: 'credential_fence_refused'` and workspace wording. | auth · api (SDK) |
-| 16 | Canonical paths take workspace ids only (C5). An account id, an unknown id, a tombstone or a workspace the caller cannot read answers `404 workspace_not_found` on every sub-path, so existence cannot be probed. Legacy paths keep the either-id tolerance. SDK workspace helpers pass workspace ids. | api |
+| 16 | Canonical paths take workspace ids only (C5). An account id, an unknown id or a tombstone answers `404 workspace_not_found` on every sub-path. A live workspace the caller cannot read answers `403 workspace_access_denied` (2026-11-11, #12460 follow-up: the 404 made the ask-for-access screen unreachable; ids are random uuids, so the 403 confirms only an id the caller holds). Legacy paths keep the either-id tolerance. SDK workspace helpers pass workspace ids. | api |
 | 17 | OpenAPI: a `Workspace` schema from the route's own zod object; one alias source (`workspaceAliasOf` in `packages/shared/src/workspace-routes.ts`) for the spec and the route manifest; `WORKSPACE_MERGED_LEGACY_ROUTES` respected; whole-segment param regex (custom verbs survive); a `workspaces` tag and canonical summaries; a unit test compares the spec's alias set with `tests/spec/routes.generated.json`. | api |
 | 18 | `developers.mdx` and the SDK README get one canonical route table (canonical ↔ legacy), the error table (`workspace_has_project` with `workspace_id`, `workspace_not_found`, `workspace_setup_required`, `workspace_deleting`, `workspace_setting_read_only`), and the corrected provision row. The SDK exports `WORKSPACE_HAS_PROJECT_CODE`, `isWorkspaceHasProjectError` and the new codes. | api |
 | 19 | The invite dialog is "Invite people to {workspace}": email chips, one role select (Member / Manager / Admin; Owner by transfer only), optional expiry. The per-project rows show only on a `split_pending` workspace. Members and Access merge into one Members table with one role column. | web |
@@ -520,9 +520,9 @@ this table; a wave-2 stream adds the row for a route it adds).
 
 - Id rules: canonical paths (`/v1/workspaces/**`, `/v1/connectors/workspaces/**`,
   `/scim/v2/workspaces/**`) take workspace ids only. Input uuids are case-insensitive;
-  output is lowercase. An account id, unknown id, tombstone, dormant non-paying workspace or
-  a workspace the caller cannot read → `404 { code: 'workspace_not_found' }` on every
-  sub-path. A `setup_required` workspace → `409 workspace_setup_required` on project-backed
+  output is lowercase. An account id, unknown id, tombstone or dormant non-paying workspace
+  → `404 { code: 'workspace_not_found' }` on every sub-path. A live workspace the caller
+  cannot read → `403 { code: 'workspace_access_denied' }`. A `setup_required` workspace → `409 workspace_setup_required` on project-backed
   sub-paths (sessions, agents, files, …); account families answer. Legacy paths keep
   either-id tolerance and their old status codes.
 - Every record that names a workspace carries `workspace_id` (= `project_id`). `account_id`

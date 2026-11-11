@@ -21520,6 +21520,9 @@
       "deniedDescription": "My Kortix recibe tu respuesta.",
       "failed": "No se pudo enviar tu decisión. Inténtalo de nuevo."
     },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Añade Kortix a tu pantalla de inicio para una experiencia de app a pantalla completa.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "En iPhone y iPad: toca Compartir y luego Añadir a pantalla de inicio.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix se actualizó. Actualiza para obtener la nueva versión.",
     "reviewPane": {
       "emptyTitle": "Selecciona un elemento",
       "emptyDescription": "Sus detalles se abren aquí. Pulsa J y K para recorrer la lista."

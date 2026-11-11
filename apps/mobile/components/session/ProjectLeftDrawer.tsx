@@ -859,7 +859,12 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     // the sidebar's edge instead of being cut off by it (an opaque sidebar
     // drew a darker band with a hard seam between it and the card).
     <View className="flex-1" style={{ paddingTop: insets.top, paddingLeft: insets.left }}>
-      <SwitcherRow projectName={project?.name ?? ''} onPress={openSwitcher} />
+      <SwitcherRow
+        projectName={project?.name ?? ''}
+        projectIcon={project?.icon}
+        projectGlyph={project?.icon_glyph}
+        onPress={openSwitcher}
+      />
 
       <View className="flex-1">
         <DrawerOpenContext.Provider value={open}>

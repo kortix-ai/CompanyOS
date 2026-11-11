@@ -211,7 +211,7 @@ export default function ProjectsPage() {
             accessibilityRole="button"
             style={({ pressed }) => (pressed ? { transform: [{ scale: 0.99 }] } : undefined)}
             className="mx-4 mb-2.5 flex-row items-center gap-3 rounded-xl bg-secondary/70 px-4 py-3.5 active:bg-secondary">
-            <Avatar chalk fallbackText={item.project.name} size={42} />
+            <Avatar chalk fallbackText={item.project.name} size={42} emoji={item.project.icon} glyph={item.project.icon_glyph} />
             <View className="min-w-0 flex-1">
               <Text variant="small" className="leading-5 text-muted-foreground" numberOfLines={1}>
                 {row.title}
@@ -243,7 +243,7 @@ export default function ProjectsPage() {
           }}
           style={({ pressed }) => (pressed ? { transform: [{ scale: 0.99 }] } : undefined)}
           className="mx-4 mb-2.5 flex-row items-center gap-3 rounded-xl bg-secondary/70 px-4 py-3.5 active:bg-secondary">
-          <Avatar chalk fallbackText={item.project.name} size={42} />
+          <Avatar chalk fallbackText={item.project.name} size={42} emoji={item.project.icon} glyph={item.project.icon_glyph} />
           <View className="min-w-0 flex-1">
             <Text variant="small" className="leading-5 text-foreground" numberOfLines={1}>
               {row.title}

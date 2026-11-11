@@ -203,7 +203,7 @@ function WorkspaceList({
         isOpenableWorkspaceRow(row) ? (
           <SettingsRow
             key={row.project.project_id}
-            leading={<Avatar chalk size={28} fallbackText={row.project.name} />}
+            leading={<Avatar chalk size={28} fallbackText={row.project.name} emoji={row.project.icon} glyph={row.project.icon_glyph} />}
             label={row.project.name}
             checked={row.project.project_id === currentProjectId}
             right={null}
@@ -213,7 +213,7 @@ function WorkspaceList({
           // Set up or Restore first; the workspace opens after.
           <SettingsRow
             key={row.project.project_id}
-            leading={<Avatar chalk size={28} fallbackText={row.project.name} />}
+            leading={<Avatar chalk size={28} fallbackText={row.project.name} emoji={row.project.icon} glyph={row.project.icon_glyph} />}
             label={row.project.name}
             value={row.state === 'deleting' ? t('workspace.restore', 'Restore') : t('workspace.setUp', 'Set up')}
             disabled={stateAction.isPending}

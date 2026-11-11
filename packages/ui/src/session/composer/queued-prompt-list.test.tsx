@@ -225,7 +225,10 @@ describe('QueuedPromptList', () => {
 test('waiting rows carry no waiting or sending caption of their own', () => {
   const markup = render({ rows: [row({ id: 'waiting' }), row({ id: 'sending', state: 'delivering', removable: false, takeBackEligible: false })] });
   expect(markup).toContain('aria-label="Waiting messages"');
-  expect(markup).not.toContain('>Waiting<');
+  // The list's own title reads "Waiting"; the rows under it carry no caption.
+  const rows = markup.match(/<li[\s\S]*?<\/li>/g) ?? [];
+  expect(rows).toHaveLength(2);
+  for (const li of rows) expect(li).not.toContain('Waiting');
   expect(markup).not.toContain('Sending');
   expect(markup).not.toContain('role="status"');
 });

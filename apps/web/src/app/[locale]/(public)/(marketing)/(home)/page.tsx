@@ -10,6 +10,8 @@ import { UseCasesBand } from '@/features/marketing/landing-sections/use-cases-ba
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
 import { marketingMetadataLayout } from '@/lib/seo/metadata';
 
+import { LandingAuthGate } from './landing-auth-gate';
+
 const { generateMetadata } = marketingMetadataLayout('/');
 
 export { generateMetadata };
@@ -31,18 +33,20 @@ export const dynamicParams = false;
  */
 export default function Home() {
   return (
-    <PageFrame>
-      <SandBandHero />
-      <WorksWithStrip />
-      <CaseStudies />
-      <PillarsBand />
-      {/* ProblemSolution ("Your know-how is everywhere.") is stashed: hidden
-          from the home page by founder call, 2026-10-27; the component stays. */}
-      <HowItWorksTabs />
-      <FrameworkBand />
-      <UseCasesBand />
-      <TrustBand />
-      <LandingFaqSection />
-    </PageFrame>
+    <LandingAuthGate>
+      <PageFrame>
+        <SandBandHero />
+        <WorksWithStrip />
+        <CaseStudies />
+        <PillarsBand />
+        {/* ProblemSolution ("Your know-how is everywhere.") is stashed: hidden
+            from the home page by founder call, 2026-10-27; the component stays. */}
+        <HowItWorksTabs />
+        <FrameworkBand />
+        <UseCasesBand />
+        <TrustBand />
+        <LandingFaqSection />
+      </PageFrame>
+    </LandingAuthGate>
   );
 }

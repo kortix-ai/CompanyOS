@@ -1,11 +1,23 @@
 ---
 title: "Sign in with Kortix" tokens in workspaces that require MFA
-status: parked (not built). The App viewer token half is on branch app-viewer-mfa (column `mfa_aal` exists).
+status: closed, not needed (2026-11-11). Reproduced on dev: only OAuth grants made before v0.15.3 are affected; reconnecting fixes them. The App viewer half shipped in #12423.
 owner: unassigned
 updated: 2026-11-11
 ---
 
 # "Sign in with Kortix" tokens carry no MFA level
+
+## Closed: what the dev reproduction showed (2026-11-11)
+
+Driven on dev with a real TOTP aal2 session and the real MCP sign-in (register, PKCE authorize, consent, token):
+
+- **A workspace-bound token passes the MFA gate.** Since #11857 (v0.15.3) the consent page binds every grant except the Chrome extension's to one workspace, and binding runs the workspace's MFA gate (`consentWorkspace` → `authorize`): a session without the second factor gets `403 workspace_not_found`. The bound token then gets a synthetic token id (`oauth-workspace:<id>`, `actingTokenBinding` in `apps/api/src/iam/actor.ts`), so `mfaGateBlocks` skips it like a workspace key. `GET /v1/workspaces/:id` → `200` with MFA on.
+- **The Kortix in Chrome extension is not affected.** Its token is unbound, but it calls only `/v1/chrome/*`, which runs no account gate: `GET /v1/chrome/connections` → `200` with MFA on.
+- **Only unbound grants made before v0.15.3 get `403 account_mfa_required`** in an MFA workspace. Reconnecting the client binds a new grant to a workspace.
+
+The design below is kept for reference; build it only if old unbound grants must keep working without a reconnect.
+
+The same reproduction found the real bug: `/v1/mcp` refused every workspace-bound token (`403 credential_fence_refused`, `person-route`), so no MCP client that signed in since v0.15.3 could use Kortix MCP. Fixed by binding `/v1/mcp` to the credential's own workspace (ledger: "Drive an OAuth consent in a flow exactly as the consent page does").
 
 ## The problem
 

@@ -21519,6 +21519,10 @@
       "denied": "Accesso negato",
       "deniedDescription": "My Kortix riceve la tua risposta.",
       "failed": "Impossibile inviare la tua decisione. Riprova."
+    },
+    "reviewPane": {
+      "emptyTitle": "Seleziona un elemento",
+      "emptyDescription": "I dettagli si aprono qui. Premi J e K per scorrere l’elenco."
     }
   },
   "commandPalette": {

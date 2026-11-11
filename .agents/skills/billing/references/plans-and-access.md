@@ -86,6 +86,12 @@ the first workspace a person creates (Workspaces, 2026-11-05).
   only when the caller is a member of it. The Plan card, the billing pane and
   the billing modal print the line; the modal opens on the top-up for a Free
   workspace below the run floor (`billingModalNeedsTopUp`).
+- The modal's TRIGGER follows the same rule (KRTX-4713): opening a workspace
+  never auto-opens the Out-of-credits modal while the person's free credits
+  are unspent elsewhere (`freeGrantUnspentElsewhere` — the claimed
+  workspace's wallet still covers a run; unknown until its state loads).
+  The modal opens on an actual blocked turn (the send gate, a 402) or at a
+  true zero balance (the claimed wallet dry).
 - Code: `billing/services/free-credit-claims.ts`, called by
   `createOwnedAccount` (`accounts/core/create-account.ts`);
   `billing/services/free-grant.ts` (the claimed workspace).

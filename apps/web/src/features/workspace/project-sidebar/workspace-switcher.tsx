@@ -10,17 +10,15 @@ import { useTranslations as useI18nTranslations } from '@/i18n/use-translations'
  * The trigger shows the workspace, not you: its icon (an emoji if one is set,
  * otherwise the initials `EntityAvatar` derives from the name) and its name, the
  * same treatment the rows inside the switcher use, so the thing you are in looks
- * like the things you can move to. You are one menu open away, though: the menu
- * opens on the signed-in identity (KRTX-1810) — the shell's only
- * "who am I" surface since the old footer user menu was folded into this
- * control — and keeps the account rows below it.
+ * like the things you can move to. The account rows (Preferences, Log out) sit
+ * below the workspace rows.
  *
  * The menu, top to bottom (`workspaceMenuGroups`): "Switch workspace" (the
  * list, with the pending-invitation count, and "Create workspace" at its
  * foot) → "Workspace settings" (`/workspaces/<id>/admin`) → "Invite people"
  * (`project.members.manage`) → Inbox → "Preferences" (the person's own
  * settings overlay; it keeps Mod+,) → "Apps and extensions" → Help → Log out,
- * with the signed-in identity under it. Rename lives in Workspace settings ›
+ * as a plain row. Rename lives in Workspace settings ›
  * General and Leave in its Danger zone; a person who cannot open Workspace
  * settings gets "Leave {name}" here instead. Appearance lives in Preferences;
  * Download app is a dismissible row at the foot of the sidebar.
@@ -59,7 +57,6 @@ import {
   SidebarMenuItem,
 } from '@kortix/ui/sidebar';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { useAuth } from '@/features/providers/auth-provider';
 import { HelpSubmenu, useLogoutFlow } from '@/features/layout/user-menu-shared';
 import { COMPUTER_SETUP_EVENT } from '@kortix/ui/internal/tunnel/computer-connect';
 import { LocalComputerModal } from '@/features/tunnel/local-computer-modal';
@@ -117,11 +114,6 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   const inbox = useInboxSummary(projectId);
   const sidebar = React.useContext(SidebarContext);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user } = useAuth();
-  // The identity line the account top bar shows on /workspaces and /new — same
-  // precedence, same fallback — so the shell's menu says who is signed in the
-  // same way those pages do (KRTX-1810).
-  const identity = user?.user_metadata?.name?.trim() || user?.email || null;
 
   // Seeds `selectedAccountId` for a brand-new sign-in. Pre-merge this ran here
   // by way of a `UserMenu` in the project sidebar's FOOTER. That footer menu no
@@ -307,11 +299,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
         return (
           <DropdownMenuItem onClick={openLogoutConfirm} size="sm">
             <LogOut />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span>{t('workspace.logOut')}</span>
-              {/* Which session Log out ends (KRTX-1810). */}
-              {identity ? <span className="text-muted-foreground truncate text-xs">{identity}</span> : null}
-            </span>
+            {t('workspace.logOut')}
           </DropdownMenuItem>
         );
     }

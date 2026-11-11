@@ -98,8 +98,9 @@ test.describe('38 — The project shell knows who you are', () => {
         for (const gone of ['More', 'Leave', 'Appearance', 'Download app']) {
           expect(rows.some((row) => row.startsWith(gone))).toBe(false);
         }
-        // Log out names the session it ends; no row is a bare "Settings".
-        await expect(menu.getByRole('menuitem', { name: /Log out/ })).toContainText(email);
+        // Log out is a plain row: no name or email under it. No row is a bare "Settings".
+        await expect(menu.getByRole('menuitem', { name: 'Log out', exact: true })).toBeVisible();
+        await expect(menu.getByRole('menuitem', { name: /Log out/ })).not.toContainText(email);
         expect(rows.some((row) => row.trim() === 'Settings')).toBe(false);
       });
 

@@ -90,6 +90,7 @@ const fakes: Record<string, Record<string, unknown>> = {
   '@/components/kortix/kortix-loader': { KortixLoader: host('KortixLoader') },
   '@/components/kortix/settings-list': { SettingsGroup: host('Group'), SettingsRow: host('Row') },
   // The edge fade is a native mask: here it passes its children through.
+  '@/components/kortix/liquid-glass': { GlassButtons: ({ children }: { children: React.ReactNode }) => children },
   '@/components/kortix/fade-edges': { FadeEdges: ({ children }: { children: React.ReactNode }) => children },
   '@/components/kortix/bottom-search-bar': {
     GlassSearchField: (props: any) => {

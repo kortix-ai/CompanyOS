@@ -46,6 +46,7 @@ import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { GlassSearchField } from '@/components/kortix/bottom-search-bar';
 import { FadeEdges } from '@/components/kortix/fade-edges';
+import { GlassButtons } from '@/components/kortix/liquid-glass';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -331,17 +332,33 @@ export function ProjectSwitcherSheet({
       <KortixBottomSheetModal
         ref={sheetRef}
         title={t('workspace.switcherTitle', 'Workspaces')}
+        // [gear | plus] on one Liquid Glass capsule (Jay, 2026-11-11): Workspace
+        // settings (inside a workspace) and Create workspace.
+        titleTrailingGlass={false}
         titleTrailing={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full"
-            onPress={create.openHandoff}
-            disabled={create.webCreate.pending}
-            accessibilityLabel={createLabel}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Icon as={PlusIcon} size={20} className="text-foreground" />
-          </Button>
+          <GlassButtons shared>
+            {onOpenWorkspaceSettings && currentProjectId ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onPress={openSettings}
+                accessibilityLabel={t('workspace.settings', 'Workspace settings')}
+                hitSlop={{ top: 10, bottom: 10 }}>
+                <Icon as={GearSixIcon} size={20} className="text-foreground" />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onPress={create.openHandoff}
+              disabled={create.webCreate.pending}
+              accessibilityLabel={createLabel}
+              hitSlop={{ top: 10, bottom: 10 }}>
+              <Icon as={PlusIcon} size={20} className="text-foreground" />
+            </Button>
+          </GlassButtons>
         }
         snapPoints={['100%']}
         enableDynamicSizing={false}

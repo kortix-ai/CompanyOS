@@ -50,6 +50,7 @@ async function gotoStable(page: Page, path: string): Promise<void> {
       const retryable =
         !(error instanceof Error) ||
         error.message.includes('ERR_CONNECTION_REFUSED') ||
+        error.message.includes('ERR_SOCKET_NOT_CONNECTED') ||
         error.message.includes('Timeout 120000ms exceeded');
       if (!retryable || attempt >= 5) throw error;
       await page.waitForTimeout(10_000);

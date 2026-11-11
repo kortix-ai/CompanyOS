@@ -581,6 +581,8 @@ export const ConnectionSchema = z.object({
   owner_type: z.enum(['project', 'agent', 'member', 'subject', 'external']),
   owner_id: z.string().nullable(),
   label: z.string(),
+  /** What this account is for, written for agents. Absent on older servers. */
+  description: z.string().nullable().optional(),
   status: ConnectionStatusSchema,
   is_default: z.boolean(),
   metadata: ConnectionMetadataSchema,
@@ -624,8 +626,13 @@ export type Connection = z.infer<typeof ConnectionSchema>;
  * those before labels.
  */
 export const RenameConnectionInputSchema = z
-  .object({ label: z.string().trim().min(1).max(255) })
-  .strict();
+  .object({
+    label: z.string().trim().min(1).max(255).optional(),
+    /** What the account is for, written for agents; `null` or `""` clears it. */
+    description: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => v.label !== undefined || v.description !== undefined, { message: 'label or description is required' });
 export type RenameConnectionInput = z.infer<typeof RenameConnectionInputSchema>;
 
 export const ReconcileConnectionInputSchema = z

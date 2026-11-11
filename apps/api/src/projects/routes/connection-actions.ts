@@ -57,16 +57,37 @@ const ShareConnectionInput = z
   })
   .strict();
 
+/** A connection description from a request body: trimmed, at most 500 characters, `null`/`""` clears it. */
+function connectionDescriptionOf(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (raw === null) return { ok: true, value: null };
+  if (typeof raw !== 'string') return { ok: false, error: 'description must be a string or null' };
+  const value = raw.trim();
+  if (value.length > 500) return { ok: false, error: 'description is at most 500 characters' };
+  return { ok: true, value: value || null };
+}
+
 async function renameConnectionHandler(c: any) {
   const projectId = workspaceIdParam(c);
   const connectionId = c.req.param('connectionId');
   const body = await readJsonObject(c);
-  const validated = validateConnectionLabel(body.label);
-  if (!validated.ok) return c.json({ error: validated.error }, 400);
+  if (body.label === undefined && body.description === undefined) {
+    return c.json({ error: 'label or description is required' }, 400);
+  }
+  const description = body.description === undefined ? undefined : connectionDescriptionOf(body.description);
+  if (description && !description.ok) return c.json({ error: description.error }, 400);
+  const validated = body.label === undefined ? null : validateConnectionLabel(body.label);
+  if (validated && !validated.ok) return c.json({ error: validated.error }, 400);
   const mutable = await loadMutableConnection(c, projectId, connectionId);
   if (!mutable) return c.json({ error: 'Not found' }, 404);
   const { connection } = mutable;
-  const label = validated.label;
+  if (description) {
+    await db
+      .update(connectorConnections)
+      .set({ description: description.value })
+      .where(eq(connectorConnections.connectionId, connectionId));
+    connection.description = description.value;
+  }
+  const label = validated ? validated.label : connection.label;
   if (label === connection.label) {
     return c.json(serializeConnection(connection), 200);
   }
@@ -295,9 +316,9 @@ export function registerConnectionActionsRoutes(): void {
         method,
         path,
         tags: ['connectors'],
-        summary: 'Rename connection',
+        summary: 'Rename or describe a connection',
         description:
-          'Change the label only. The authorized account, owner, default flag, and provider state stay as they are.',
+          'Change the label and/or the description agents read. The authorized account, owner, default flag, and provider state stay as they are.',
         ...auth,
         request: {
           params: z.object({ workspaceId: z.string(), connectionId: z.string().uuid() }),

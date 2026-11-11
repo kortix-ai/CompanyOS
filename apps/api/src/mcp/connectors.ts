@@ -254,7 +254,7 @@ export const isConnectorTool = (name: string) => NAMES.has(name);
 // ─── Pure shaping (unit-tested in connectors.test.ts) ───────────────────────
 
 interface CatalogAction { path: string; name?: string; description?: string; risk: string; inputSchema?: unknown }
-interface CatalogAccount { connection_id: string; label: string; owner_type: string; is_default: boolean; connected_as?: string | null }
+interface CatalogAccount { connection_id: string; label: string; description?: string | null; owner_type: string; is_default: boolean; connected_as?: string | null }
 interface CatalogEntry { slug: string; name: string; provider: string; status: string; actions: CatalogAction[]; accounts?: CatalogAccount[]; default_account?: string | null; policy_set?: string }
 
 /** `<connector>.<action>`: the slug has no dot, the action may. */
@@ -291,6 +291,7 @@ export function searchActions(catalog: CatalogEntry[], query: string, limit: num
 
 export const accountRow = (a: CatalogAccount) => ({
   label: a.label,
+  description: a.description ?? null,
   owner: a.owner_type === 'member' ? 'private' : 'shared',
   default: a.is_default,
   connected_as: a.connected_as ?? null,

@@ -6866,3 +6866,58 @@ flow(
     }
   },
 );
+
+// CONN-DESC-1: an account carries a description written for agents, set with
+// PATCH /connections/{id} and returned wherever an agent picks an account.
+flow(
+  'CONN-DESC-1',
+  {
+    domain: 'connectors',
+    requires: ['database'],
+    routes: [
+      'PATCH /v1/workspaces/:workspaceId/connections/:connectionId',
+      'GET /v1/connectors/workspaces/:projectId/connectors/:slug/accounts',
+    ],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const p = await team.project();
+    const { Client: PgClient } = await import('pg');
+    const databaseUrl = ctx.env.databaseUrl as string;
+    const local = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+    const db = new PgClient({ connectionString: databaseUrl, ssl: local ? false : { rejectUnauthorized: false } });
+    const slug = `ke2e-desc-${Date.now().toString(36)}`;
+    let connectionId = '';
+    try {
+      await db.connect();
+      await ctx.step('seed a connector with one shared account', async () => {
+        const c = await db.query<{ connector_id: string }>(
+          `INSERT INTO kortix.connectors (account_id, project_id, slug, name, provider_type, config, status)
+           VALUES ($1, $2, $3, 'KE2E Describe', 'openapi', $4::jsonb, 'active') RETURNING connector_id`,
+          [team.id, p.id, slug, JSON.stringify({ auth: { type: 'none' } })],
+        );
+        const row = await db.query<{ connection_id: string }>(
+          `INSERT INTO kortix.connector_connections (account_id, project_id, connector_id, owner_type, label, status, is_default, metadata)
+           VALUES ($1, $2, $3, 'project', 'Team', 'active', true, $4::jsonb) RETURNING connection_id`,
+          [team.id, p.id, c.rows[0]!.connector_id, JSON.stringify({ provider: 'openapi', connector_slug: slug })],
+        );
+        connectionId = row.rows[0]!.connection_id;
+      });
+      await ctx.step('PATCH description → 200 with it, the label unchanged; the accounts list carries it', async () => {
+        const r = await ctx.client.as(ctx.P.OWNER).patch(`/v1/workspaces/${p.id}/connections/${connectionId}`, { description: '  Read-only: use the sandbox account for writes.  ' });
+        r.status(200).body().has('$.description', 'Read-only: use the sandbox account for writes.').has('$.label', 'Team');
+        const accounts = await ctx.client.as(ctx.P.OWNER).get(`/v1/connectors/workspaces/${p.id}/connectors/${slug}/accounts`);
+        accounts.status(200).body().has('$.accounts[0].description', 'Read-only: use the sandbox account for writes.');
+      });
+      await ctx.step('an empty body and a description over 500 characters → 400; null clears it', async () => {
+        (await ctx.client.as(ctx.P.OWNER).patch(`/v1/workspaces/${p.id}/connections/${connectionId}`, {})).status(400);
+        (await ctx.client.as(ctx.P.OWNER).patch(`/v1/workspaces/${p.id}/connections/${connectionId}`, { description: 'x'.repeat(501) })).status(400);
+        const cleared = await ctx.client.as(ctx.P.OWNER).patch(`/v1/workspaces/${p.id}/connections/${connectionId}`, { description: null });
+        cleared.status(200).body().has('$.description', null);
+      });
+    } finally {
+      await db.query('DELETE FROM kortix.connectors WHERE project_id = $1 AND slug = $2', [p.id, slug]).catch(() => {});
+      await db.end().catch(() => {});
+    }
+  },
+);

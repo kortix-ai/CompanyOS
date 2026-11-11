@@ -75,6 +75,7 @@ import {
   type ConnectorConnectOptions,
   type ConnectorConnectOwner,
   renameConnection,
+  updateConnection,
   shareConnection,
   connectionSharedWithEveryone,
   describeConnectorTool,
@@ -1829,4 +1830,17 @@ test('installDiscoverConnector passes as_new_profile and reads an existing profi
   const result = await installDiscoverConnector('P1', { id: 'kortix:deepwiki', as_new_profile: true });
   expect(last().body).toEqual({ id: 'kortix:deepwiki', as_new_profile: true });
   expect(result.existing).toBe(true);
+});
+
+test('updateConnection sends a label and/or the description agents read on PATCH', async () => {
+  nextResponse = {
+    status: 200,
+    body: { connection_id: 'connection-1', connector_alias: 'gmail', owner_type: 'project', owner_id: null, label: 'Support inbox', description: 'Read-only: use the sandbox account for writes.', status: 'active', is_default: true, metadata: {} },
+  };
+  const updated = await updateConnection('P1', 'connection-1', { description: 'Read-only: use the sandbox account for writes.' });
+  expect(last()).toMatchObject({ method: 'PATCH', body: { description: 'Read-only: use the sandbox account for writes.' } });
+  expect(last().url).toContain('/workspaces/P1/connections/connection-1');
+  expect(updated.description).toBe('Read-only: use the sandbox account for writes.');
+  await updateConnection('P1', 'connection-1', { label: 'Support', description: null });
+  expect(last()).toMatchObject({ method: 'PATCH', body: { label: 'Support', description: null } });
 });

@@ -17,6 +17,8 @@ export function projectConnections(projectId: string) {
       P.activateConnection(projectId, ...a),
     setDefault: (...a: DropFirst<Parameters<typeof P.setDefaultConnection>>) =>
       P.setDefaultConnection(projectId, ...a),
+    update: (...a: DropFirst<Parameters<typeof P.updateConnection>>) =>
+      P.updateConnection(projectId, ...a),
     rename: (...a: DropFirst<Parameters<typeof P.renameConnection>>) =>
       P.renameConnection(projectId, ...a),
     share: (...a: DropFirst<Parameters<typeof P.shareConnection>>) =>

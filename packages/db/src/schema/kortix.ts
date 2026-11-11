@@ -7891,6 +7891,9 @@ export const connectorConnections = kortixSchema.table(
     ownerType: connectorConnectionOwnerTypeEnum('owner_type').default('project').notNull(),
     ownerId: text('owner_id'),
     label: varchar('label', { length: 255 }).notNull(),
+    /** What this account is for, written for agents ("read-only: use the sandbox
+     *  account for writes"). Shown with the account wherever an agent picks one. */
+    description: varchar('description', { length: 500 }),
     status: connectorConnectionStatusEnum('status').default('active').notNull(),
     isDefault: boolean('is_default').default(false).notNull(),
     metadata: jsonb('metadata').default({}).$type<Record<string, unknown>>().notNull(),

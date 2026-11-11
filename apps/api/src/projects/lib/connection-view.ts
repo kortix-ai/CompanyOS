@@ -17,6 +17,7 @@ export function serializeConnection(row: {
   ownerType: string;
   ownerId: string | null;
   label: string;
+  description?: string | null;
   status: string;
   isDefault: boolean;
   metadata: Record<string, unknown>;
@@ -27,6 +28,7 @@ export function serializeConnection(row: {
     owner_type: row.ownerType,
     owner_id: row.ownerId,
     label: row.label,
+    description: row.description ?? null,
     status: row.status,
     is_default: row.isDefault,
     metadata: row.metadata ?? {},

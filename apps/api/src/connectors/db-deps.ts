@@ -390,6 +390,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
     return entitled.map((connection) => ({
       connection_id: connection.connectionId,
       label: connection.label,
+      description: connection.description ?? null,
       owner_type: connection.ownerType,
       is_default: connection.isDefault,
       connected_as: connectedAsOf(connection.metadata),

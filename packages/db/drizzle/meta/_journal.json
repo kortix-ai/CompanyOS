@@ -1681,6 +1681,13 @@
       "when": 1794410631765,
       "tag": "20261111152351_connector_calls_call_log",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1794415716855,
+      "tag": "20261111164836_connector_connections_description",
+      "breakpoints": true
     }
   ]
 }

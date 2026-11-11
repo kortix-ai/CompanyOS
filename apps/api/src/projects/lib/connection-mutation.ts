@@ -54,6 +54,7 @@ export async function loadConnectionForMutation(projectId: string, connectionId:
       ownerId: connectorConnections.ownerId,
       isDefault: connectorConnections.isDefault,
       label: connectorConnections.label,
+      description: connectorConnections.description,
       status: connectorConnections.status,
       metadata: connectorConnections.metadata,
       providerType: connectors.providerType,

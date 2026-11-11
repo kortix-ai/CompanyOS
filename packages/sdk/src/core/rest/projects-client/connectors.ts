@@ -604,6 +604,8 @@ interface ConnectionFields {
   owner_type: 'project' | 'agent' | 'member' | 'subject' | 'external';
   owner_id: string | null;
   label: string;
+  /** What the account is for, written for agents. Absent on older servers. */
+  description?: string | null;
   status: 'active' | 'revoked' | 'error';
   is_default: boolean;
   metadata: Record<string, unknown>;
@@ -1119,6 +1121,22 @@ export async function renameConnection(projectId: string, connectionId: string, 
     await backendApi.put<Connection>(`/workspaces/${projectId}/connections/${connectionId}/label`, {
       label,
     }),
+  );
+}
+
+/**
+ * Change a connection's label and/or its description: what the account is for,
+ * written for agents ("read-only: use the sandbox account for writes"), shown
+ * wherever an agent picks an account. `description: null` (or `""`) clears it.
+ * The authorized account, owner, default flag and provider state stay as they are.
+ */
+export async function updateConnection(
+  projectId: string,
+  connectionId: string,
+  changes: { label?: string; description?: string | null },
+) {
+  return unwrap(
+    await backendApi.patch<Connection>(`/workspaces/${projectId}/connections/${connectionId}`, changes),
   );
 }
 

@@ -91,6 +91,7 @@ async function catalogAccountsFor(
   return entitled.map((connection) => ({
     connection_id: connection.connectionId,
     label: connection.label,
+    description: connection.description ?? null,
     owner_type: connection.ownerType,
     is_default: connection.isDefault,
   }));
@@ -452,6 +453,7 @@ export async function listConnectors(
       (entitledByConnector.get(row.connectorId) ?? []).map((connection) => ({
         connection_id: connection.connectionId,
         label: connection.label,
+        description: connection.description ?? null,
         owner_type: connection.ownerType,
         is_default: connection.isDefault,
       })),

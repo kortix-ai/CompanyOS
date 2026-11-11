@@ -57,8 +57,10 @@ or raise its caps. A person does those from the Goals page.
 | `kortix goals check` | owner | prints what the goal needs from you |
 
 Add `--json` for machine-readable output and `--goal <goal_id>` when the CLI
-cannot tell which goal you mean. `kortix goals new` is for a person; in a chat
-only `kortix goals new … --here` (goal mode), which binds the goal to that chat.
+cannot tell which goal you mean. `kortix goals new` works for a person and for
+a chat session creating the goal for the person it works for; a goal's own
+owner or verifier session cannot start another goal. In a chat, prefer
+`kortix goals new … --here` (goal mode): the chat itself owns the goal.
 </commands>
 
 <start>
@@ -76,12 +78,14 @@ The goal, its folder and its heartbeat exist; you are its owner and it is a
 
 **A person states an outcome in a chat (goal mode).** The chat owns the goal
 itself: `kortix goals new "<outcome>" --criterion "<check>" --here` (1 to 8
-criteria). It starts `active` with its heartbeat on; no owner session, no
-first prompt, and no `goals` flag is needed. One open goal per chat; it has no
-handover. Each turn the goal leads the chat's instructions, and the turn may
-not end until you record where it stands (`progress`, `verify`, or
-`transition waiting_on_user`). A goal with its own owner session is created by
-a person on the Goals page.
+criteria). Never ask permission to track what they just asked for. It starts
+`active` with its heartbeat on; no owner session, no first prompt, and no
+`goals` flag is needed. One open goal per chat; it has no handover. Each turn
+the goal leads the chat's instructions, and the turn may not end until you
+record where it stands (`progress`, `verify`, or `transition waiting_on_user`).
+Without `--here` the API starts a separate owner session and the goal is
+tracked on the Goals page (needs the `goals` flag). A goal's own owner or
+verifier session cannot start another goal: note the follow-up in `log.md`.
 </start>
 
 <wake>

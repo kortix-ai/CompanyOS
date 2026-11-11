@@ -114,6 +114,29 @@ describe('My Kortix agent', () => {
     for (const name of ['`agent`', '`workflow`', '`kortix-goals`', '`task_stop`']) expect(section).toContain(name);
   });
 
+  // KRTX-4746: the reported session ended with "want me to check the thread for her answer in a
+  // couple of hours?" — a question where an action is available. The prompt bans the check-back
+  // offer by name, and a plainly stated outcome becomes a Goal the agent creates itself.
+  test('the prompt bans the check-back question and creates a plainly stated goal itself', () => {
+    const section = MY_KORTIX_PROMPT.slice(
+      MY_KORTIX_PROMPT.indexOf('## Follow through: never wait blind'),
+      MY_KORTIX_PROMPT.indexOf('## What you remember about this person'),
+    );
+    expect(section.length).toBeGreaterThan(0);
+    // The check-back question is banned by name; the check is set, not offered.
+    expect(section).toContain('Never ask whether you should check back');
+    expect(section).toContain('Set it instead of offering it');
+    expect(section).toContain('say when the answer will arrive');
+    // A missing trigger is said once and noted, never a fallback question.
+    expect(section).toContain('never fall back to asking');
+    // A plainly stated outcome ("get her answer") is a goal this chat owns (goal mode), created unasked.
+    expect(MY_KORTIX_PROMPT).toContain('A clear outcome that outlives this turn is a goal');
+    expect(MY_KORTIX_PROMPT).toContain('--here');
+    expect(MY_KORTIX_PROMPT).toContain('Never ask permission to track what they just asked for');
+    // The voice rule cannot reintroduce the check-back offer through its ending rule.
+    expect(MY_KORTIX_PROMPT).toContain('Never end with "Want me to check later?"');
+  });
+
   // The section names the kortixd `agent` inline spec, the workflow `agent()` options and the
   // kortix_agents `models` action: a rename there leaves My Kortix calling what does not exist.
   test('the prompt shapes colleagues on the fly: inline spec, workflow options, models, narrow tools, new tools through a change request', () => {

@@ -187,15 +187,15 @@ flow(
     });
 
     await ctx.step(
-      "cross-project principal cannot inspect the App (404 workspace_not_found)",
+      "cross-project principal cannot inspect the App (403 workspace_access_denied)",
       async () => {
         const response = await ctx.client
           .as(ctx.P.NONMEMBER)
           .get("/v1/workspaces/:projectId/apps/:appId", {
             params: { ...projectParams, appId },
           });
-        // Canonical paths answer an unreadable workspace with 404 workspace_not_found.
-        response.status(404).body().has("$.code", "workspace_not_found");
+        // Canonical paths answer an unreadable workspace with 403 workspace_access_denied.
+        response.status(403).body().has("$.code", "workspace_access_denied");
       },
     );
 
@@ -757,7 +757,7 @@ flow(
       const response = await ctx.client
         .as(ctx.P.NONMEMBER)
         .get("/v1/workspaces/:projectId/apps", { params: projectParams });
-      response.status(404).body().has("$.code", "workspace_not_found");
+      response.status(403).body().has("$.code", "workspace_access_denied");
     });
 
     await ctx.step("delete the test App", async () => {
@@ -1371,7 +1371,7 @@ flow(
         if (!IN_PROGRESS.includes(status)) throw new Error(`409 named a finished status: ${status}`);
       });
 
-      await ctx.step("an unknown deployment answers 404; a cross-project principal gets 404 workspace_not_found", async () => {
+      await ctx.step("an unknown deployment answers 404; a cross-project principal gets 403 workspace_access_denied", async () => {
         (await owner.del(
           "/v1/workspaces/:projectId/apps/:appId/deployments/:deploymentId",
           { params: { ...projectParams, appId, deploymentId: UNKNOWN_ID } },
@@ -1379,7 +1379,7 @@ flow(
         (await ctx.client.as(ctx.P.NONMEMBER).del(
           "/v1/workspaces/:projectId/apps/:appId/deployments/:deploymentId",
           { params: deploymentParams() },
-        )).status(404).body().has("$.code", "workspace_not_found");
+        )).status(403).body().has("$.code", "workspace_access_denied");
       });
 
       await ctx.step("kortix apps delete --deployment requires --yes, names the deployments that exist, and relays the 409", async () => {

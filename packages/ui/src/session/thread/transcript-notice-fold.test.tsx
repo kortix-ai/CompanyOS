@@ -47,6 +47,26 @@ const reportTurnRows: V1MessageRow[] = [
 
 const reportTurn: SessionLogTurn = sessionLogTurns(sessionLogOfV1Rows('p', 'rs', reportTurnRows).threads[0]!)[0]!;
 
+/** A notice turn the person answered inline: the reply is text plus an
+ *  answered `question` call — no tool steps, so the turn renders in the
+ *  inline content mode (no fold row of its own). The notice row must still
+ *  render, visible above the answer, so the exchange stays reachable. */
+const inlineAnswerRows: V1MessageRow[] = [
+  {
+    info: { id: 'inline-prompt', sessionID: 'rs', role: 'user', agent: 'build', model: { providerID: 'test', modelID: 'test' }, time: { created: 1 } },
+    parts: [{ id: 'inline-text', sessionID: 'rs', messageID: 'inline-prompt', type: 'text', synthetic: true, text: peerPrompt }],
+  },
+  {
+    info: { id: 'inline-answer', sessionID: 'rs', role: 'assistant', agent: 'build', modelID: 'test', providerID: 'test', mode: 'build', path: { cwd: '/', root: '/' }, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, parentID: 'inline-prompt', time: { created: 2, completed: 9_000 } },
+    parts: [
+      { id: 'inline-q', sessionID: 'rs', messageID: 'inline-answer', type: 'tool', callID: 'call-inline-q', tool: 'question', state: { status: 'completed', title: 'Ask which plan to quote', input: { questions: [{ question: 'Which plan should we quote?' }] }, output: 'Answered', metadata: { answers: [['Plan-based']] }, time: { start: 2_000, end: 5_000 } } },
+      { id: 'inline-final', sessionID: 'rs', messageID: 'inline-answer', type: 'text', text: 'Going with the plan-based quote.' },
+    ],
+  },
+];
+
+const inlineAnswerTurn: SessionLogTurn = sessionLogTurns(sessionLogOfV1Rows('p', 'rs', inlineAnswerRows).threads[0]!)[0]!;
+
 function renderRow(turn: SessionLogTurn, working = false): string {
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client: new QueryClient() },
@@ -185,5 +205,16 @@ describe('a notice turn folds its row into the work fold (KRTX-4732)', () => {
     // No answer row to fold into: the row renders visible at the top level.
     expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden');
     expect(html).not.toContain('Worked for');
+  });
+
+  test('a settled notice turn answered inline keeps the row visible above the answer', () => {
+    // Inline mode (text + an answered question, no tool steps) turns the
+    // fold off: there is no Worked row. The notice row must still render,
+    // visible above the inline answer, or the exchange is unreachable.
+    const html = renderRow(inlineAnswerTurn);
+    const row = html.indexOf('data-testid="peer-message-turn"');
+    expect(row).toBeGreaterThan(-1);
+    expect(html.slice(Math.max(0, row - 300), row)).not.toContain('hidden');
+    expect(html).toContain('Going with the plan-based quote.');
   });
 });

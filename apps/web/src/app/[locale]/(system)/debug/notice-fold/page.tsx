@@ -6,10 +6,13 @@
  * A run of several sub-agents must read as ONE top-level answer: each report
  * turn folds its peer-message row into its own "Worked for" fold, and the
  * last turn's consolidated reply is the only message at the default level.
- * This page seeds the parent transcript of a three-colleague run — the peer
- * message shapes `peerMessagePromptText` writes, the `agent` dispatches and
- * the `send_message` steering calls — and renders it through the real
- * `SessionTurn`, exactly as a live session would. No network, no runtime.
+ * The one exception renders too: a report that needs a decision answers
+ * inline (text plus an answered question, no fold row), and its notice row
+ * stays visible above that answer. This page seeds the parent transcript of
+ * a three-colleague run — the peer message shapes `peerMessagePromptText`
+ * writes, the `agent` dispatches and the `send_message` steering calls — and
+ * renders it through the real `SessionTurn`, exactly as a live session
+ * would. No network, no runtime.
  *
  * Open a turn's "Worked for" row to see that child's report and the work it
  * led to. Synthetic values only.
@@ -137,6 +140,17 @@ const ROWS: V1Row[] = [
     ],
   ),
   ...report(
+    'msg_report_anchor',
+    'post-reviewer',
+    'The CTA needs a pricing anchor decision',
+    'Mid-review: the CTA can anchor on either the plan-based or the usage-based price. Which one should the post quote?',
+    T0 + 300_000,
+    [
+      { id: 'msg_report_anchor-reply-q', sessionID: SESSION_ID, messageID: 'msg_report_anchor-reply', type: 'tool' as const, callID: 'call-msg_report_anchor-reply-q', tool: 'question', state: { status: 'completed' as const, title: 'Ask which anchor to quote', input: { questions: [{ question: 'Which pricing anchor should the post quote?' }] }, output: 'Answered', metadata: { answers: [['Plan-based']] }, time: { start: T0 + 301_000, end: T0 + 304_000 } } },
+      textPart('msg_report_anchor-reply', 'Plan-based it is — the CTA quotes the plan price and links the pricing page.'),
+    ],
+  ),
+  ...report(
     'msg_report_review',
     'post-reviewer',
     'Review done, 2 comments, both resolved',
@@ -194,7 +208,8 @@ export default function NoticeFoldPage() {
           <p className="text-muted-foreground text-xs">
             One run of three colleagues: every report folds into its turn&apos;s
             &quot;Worked for&quot; row; the consolidated answer is the only top-level message.
-            Seeded in-store; no runtime attached.
+            The one report that needed a decision answers inline, and its row
+            stays visible above the answer. Seeded in-store; no runtime attached.
           </p>
         </header>
         <div className="mx-auto w-full max-w-3xl px-4 py-6">

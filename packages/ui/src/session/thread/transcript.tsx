@@ -1743,7 +1743,9 @@ function TurnToolBlocks(
   // row into this work fold with the work it led to (KRTX-4732): the parent's
   // answer below is the only top-level message, and the row stays reachable
   // by opening the row. A turn with no work of its own still gets the fold,
-  // so the exchange never becomes unreachable.
+  // so the exchange never becomes unreachable. In the inline mode (text plus
+  // an answered question, no fold row) the row renders visible above the
+  // answer instead — the gate below keeps the block mounted for it.
   const noticeFold = !!workNotice && fold && !working;
   const workSegments = useMemo(() => new Set<TurnSegments[number]>(split?.work ?? []), [split]);
   const touchedLive = useRef(false);
@@ -1831,7 +1833,7 @@ function TurnToolBlocks(
 			      questions are dropped entirely. Additionally, answered
 			      questions are dropped when rendering inline content (below),
 			      since that mode shows them already, in natural order. */}
-    {(working || hasSteps || hasReasoning || noticeFold) && (turn.assistant.length > 0 || !!workNotice) && (
+    {(working || hasSteps || hasReasoning || noticeFold || !!workNotice) && (turn.assistant.length > 0 || !!workNotice) && (
       // Every tool row below — the bursts' rows and the standalone ones —
       // reads this to tell a call that has not spoken YET from one that never
       // will. Provided here rather than per-row because `working` is a fact

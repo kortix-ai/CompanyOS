@@ -791,14 +791,8 @@
         "noResults": "Nessun tema trovato"
       },
       "densities": {
-        "normal": {
-          "label": "Normale",
-          "description": "I passaggi e il ragionamento vengono mostrati in tempo reale mentre Kortix lavora."
-        },
-        "minimal": {
-          "label": "Minima",
-          "description": "Una sola riga di stato finché non la espandi."
-        }
+        "normal": "Normale",
+        "minimal": "Minima"
       },
       "wallpapers": {
         "dither": "Retino",

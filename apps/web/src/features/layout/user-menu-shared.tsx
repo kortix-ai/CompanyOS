@@ -56,7 +56,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { INTERFACE_THEME_OPTIONS, ThemeSwatch, useInterfaceTheme } from './interface-theme';
 
-export type MenuLink = {
+type MenuLink = {
   label: string;
   href: string;
   Icon: React.ComponentType<{ className?: string }>;

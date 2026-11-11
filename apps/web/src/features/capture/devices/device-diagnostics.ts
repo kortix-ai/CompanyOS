@@ -8,7 +8,7 @@ import type { CaptureDevice, CaptureUpdateStatus } from '@kortix/sdk';
 
 export type VersionState = 'current' | 'behind' | 'failed' | 'updating' | 'disabled' | null;
 
-export interface VersionView {
+interface VersionView {
   /** The version the device runs; null before it reports one. */
   version: string | null;
   /** null: the device reports no update state (no machine service) and is not behind. */

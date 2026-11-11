@@ -791,14 +791,8 @@
         "noResults": "Нема пронађених тема"
       },
       "densities": {
-        "normal": {
-          "label": "Нормално",
-          "description": "Кораци и размишљање се приказују уживо док Kortix ради."
-        },
-        "minimal": {
-          "label": "Минимално",
-          "description": "Један ред статуса док га не проширите."
-        }
+        "normal": "Нормално",
+        "minimal": "Минимално"
       },
       "wallpapers": {
         "dither": "Дитеринг",

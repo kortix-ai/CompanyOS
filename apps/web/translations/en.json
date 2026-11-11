@@ -613,14 +613,8 @@
         "noResults": "No themes found"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Steps and thinking stream live while Kortix works."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "One status line until you expand it."
-        }
+        "normal": "Normal",
+        "minimal": "Minimal"
       },
       "wallpapers": {
         "dither": "Dither",

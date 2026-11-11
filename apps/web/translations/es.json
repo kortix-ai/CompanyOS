@@ -791,14 +791,8 @@
         "noResults": "No se encontraron temas"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Los pasos y el razonamiento se muestran en tiempo real mientras Kortix trabaja."
-        },
-        "minimal": {
-          "label": "Mínima",
-          "description": "Una línea de estado hasta que la expanda."
-        }
+        "normal": "Normal",
+        "minimal": "Mínima"
       },
       "wallpapers": {
         "dither": "Tramado",

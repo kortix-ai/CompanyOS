@@ -222,7 +222,8 @@ export function useDismissContent(kind: string, handlers: DismissHandlers) {
 
 /**
  * Radix `onOpenAutoFocus` / `onCloseAutoFocus` → Base UI `initialFocus` /
- * `finalFocus`. As in Radix, the handler gets a cancelable event dispatched on
+ * `finalFocus`, plus Radix's rule that an `autoFocus` field inside the popup
+ * keeps focus on open. As in Radix, the handler gets a cancelable event dispatched on
  * the popup, so `event.currentTarget` is the popup; `preventDefault()` keeps
  * focus where the handler put it.
  */
@@ -243,14 +244,36 @@ export function focusProps(
     return !event.defaultPrevented;
   };
   return {
-    ...(onOpenAutoFocus
-      ? { initialFocus: () => run('focusScope.autoFocusOnMount', onOpenAutoFocus) }
-      : {}),
-    ...(onCloseAutoFocus
-      ? { finalFocus: () => run('focusScope.autoFocusOnUnmount', onCloseAutoFocus) }
-      : {}),
+    // As in Radix, focus that is already inside the popup when it opens (an
+    // `autoFocus` field) stays there; Base UI would move it to its own pick.
+    initialFocus: () => {
+      const node = getPopup();
+      if (node) returnFocusTo.set(node, document.activeElement);
+      if (node && node.contains(document.activeElement)) return false;
+      return onOpenAutoFocus ? run('focusScope.autoFocusOnMount', onOpenAutoFocus) : true;
+    },
+    // Focus returns to where it was before the popup opened, a task after the
+    // close, and only when nothing else took it meanwhile: a menu item that
+    // opens a dialog leaves focus in the dialog's `autoFocus` field. Base UI
+    // would move focus back to the trigger after its exit, over the dialog.
+    finalFocus: () => {
+      const node = getPopup();
+      if (onCloseAutoFocus && !run('focusScope.autoFocusOnUnmount', onCloseAutoFocus)) return false;
+      const target = node ? returnFocusTo.get(node) : null;
+      // Nothing was focused at open (a click that does not focus): Base UI's default, the trigger.
+      if (!(target instanceof HTMLElement) || target === document.body) return true;
+      setTimeout(() => {
+        const active = document.activeElement;
+        const lost = !active || active === document.body || (node?.contains(active) ?? false);
+        if (lost && target.isConnected) target.focus({ preventScroll: true });
+      }, 0);
+      return false;
+    },
   };
 }
+
+/** The element that had focus when each popup opened. */
+const returnFocusTo = new WeakMap<HTMLElement, Element | null>();
 
 /**
  * Base UI `nativeButton` for a trigger: true when it renders a real `<button>`.

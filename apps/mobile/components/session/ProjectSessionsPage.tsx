@@ -11,6 +11,9 @@
  *            session the viewer may see: title, starter, session id. A parent
  *            that matched only through a child opens on that child.
  *   scope    All / Mine / Shared / Automated chips: `started_by` (KRTX-639).
+ *            All is every person-started session (KRTX-4705): the machine's
+ *            runs — factory passes, triggers, API keys — keep the Automated
+ *            chip, so they never flood the default list.
  *   filter   Filter sheet (`SettingsGroup` of toggleable status rows: Needs
  *            you / Running / Stopped / Failed; Running covers starting
  *            sessions). Empty selection shows every status; toggling narrows

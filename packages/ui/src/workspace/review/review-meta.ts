@@ -108,17 +108,17 @@ export const APPROVAL_ACTION_ICON: Record<ApprovalActionIcon, IconCmp> = {
 };
 
 /**
- * The inbox row's leading tile: the glyph names the kind, the
+ * The inbox row's leading tile: a filled glyph names the kind, the
  * tint says it waits on you. A decided or waiting row goes neutral, so the
  * colored tiles in the list are exactly the rows that need you. Purple stays
  * reserved for the owner role (kortix-brand color law), so no kind uses it.
  */
 export const ROW_TILE: Record<ReviewKind, { icon: IconCmp; tint: string }> = {
-  change: { icon: GitPullRequest, tint: 'bg-kortix-blue/15 text-kortix-blue' },
+  change: { icon: filled(GitPullRequest), tint: 'bg-kortix-blue/15 text-kortix-blue' },
   approval: { icon: filled(ShieldCheckSolid), tint: 'bg-kortix-orange/15 text-kortix-orange' },
-  output: { icon: FileText, tint: 'bg-kortix-blue/15 text-kortix-blue' },
+  output: { icon: filled(FileText), tint: 'bg-kortix-blue/15 text-kortix-blue' },
   decision: { icon: filled(ChatCircleDots), tint: 'bg-kortix-yellow/15 text-kortix-yellow' },
-  batch: { icon: ListChecks, tint: 'bg-kortix-green/15 text-kortix-green' },
+  batch: { icon: filled(ListChecks), tint: 'bg-kortix-green/15 text-kortix-green' },
 };
 
 /** The neutral tile of a row that no longer needs you. */

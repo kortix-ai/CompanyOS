@@ -27,6 +27,7 @@ import { runWithContext } from '../lib/request-context';
 import { isPtyWebSocketPath } from '../platform/providers/pty-ingress';
 import * as realProviders from '../platform/providers';
 import * as realPreviewOwnership from '../shared/preview-ownership';
+import { resetLogWindowsForTests } from '../shared/log-window';
 import { __resetPromptModelSignatureCacheForTests } from '../projects/lib/sandbox-env-sync';
 import {
   __resetProxyRetryDelaysForTests,
@@ -550,6 +551,7 @@ function createProxyTestApp() {
 beforeEach(() => {
   __resetPromptDedupe();
   __resetProxyRetryDelaysForTests();
+  resetLogWindowsForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
   invalidateSandbox('daytona-oc-http');
@@ -859,10 +861,14 @@ describe('Preview proxy: forwarding', () => {
     expect(notReady(lines.info)).toHaveLength(1);
   });
 
-  // Retries exhausted on the runtime's own port: exactly ONE warn — the settled
-  // outcome of the request, not one per attempt. The old per-attempt warn
-  // (KRTX-4673) multiplied with the client's poll rate during a transient.
-  test('a give-up on the daemon port logs one warn, not one per attempt', async () => {
+  // Retries exhausted on the runtime's own port: exactly ONE line per (sandbox,
+  // port) window — the settled outcome of the request, not one per attempt
+  // (KRTX-4673), and not one per re-failing poll either: a browser preview
+  // pane polling a stopped dev server re-failed the request every ~5 s and
+  // turned the per-request warn into 49 lines in 15 min from ONE sandbox
+  // (KRTX-4695). The line ships through the shared log-noise throttle; every
+  // response is still the real 502.
+  test('a give-up on the daemon port logs one line per window, not one per attempt or per re-failing poll', async () => {
     __setProxyRetryDelaysForTests([1, 1, 1]);
     mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
     const lines: Record<'warn' | 'info', string[]> = { warn: [], info: [] };
@@ -872,19 +878,80 @@ describe('Preview proxy: forwarding', () => {
     try {
       // No `Accept: text/html` → not a browser navigation → the upstream 502
       // passes through to the programmatic client after the last attempt.
-      const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/8000/page`, {
-        headers: { Authorization: 'Bearer test' },
-      });
-      expect(res.status).toBe(502);
+      for (let i = 0; i < 3; i += 1) {
+        const res = await createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/8000/page`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res.status).toBe(502);
+      }
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
     const notReady = (l: string[]) => l.filter((x) => x.includes('port not ready'));
     const giveUp = (l: string[]) => l.filter((x) => x.includes('not answering after'));
-    expect(giveUp(lines.warn)).toHaveLength(1);
-    expect(giveUp(lines.info)).toHaveLength(0);
-    expect(notReady(lines.info)).toHaveLength(PROXY_RETRY_DELAYS_MS.length);
+    // Three exhausted requests inside one window ship ONE line, at info: the
+    // window's first, in the churn band (KRTX-4454). The per-request accounting
+    // stays in these request-completion lines and the 502 passthroughs.
+    expect(giveUp(lines.info)).toHaveLength(1);
+    expect(giveUp(lines.warn)).toHaveLength(0);
+    expect(notReady(lines.info)).toHaveLength(PROXY_RETRY_DELAYS_MS.length * 3);
     expect(notReady(lines.warn)).toHaveLength(0);
+  });
+
+  // The window rollover and the severity band through the real app: the first
+  // line after the window carries `suppressed`, and a window whose volume sat
+  // above the burst band (KRTX-4454) ships its next line at warn — a preview
+  // pane polling a dead port every ~5 s stays warn, a one-off give-up does not.
+  test('the throttled give-up line rolls over its window with a suppressed count, severity by volume', async () => {
+    __setProxyRetryDelaysForTests([1, 1, 1]);
+    mockFetchResponses = [{ status: 502, body: 'bad gateway' }];
+    const realNow = Date.now;
+    const realSetTimeout = globalThis.setTimeout;
+    let now = 1_700_000_000_000;
+    Date.now = () => now;
+    // Every retry delay advances the fake clock and fires at once. A timer
+    // longer than a test delay is an app-internal TTL (an ingress cache, a
+    // queue flush): on the real clock, detached — firing it synchronously
+    // would roll the throttle's 10-minute window mid-test.
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      if (Number(ms ?? 0) > 10) return realSetTimeout(fn, ms);
+      now += Number(ms ?? 0);
+      fn();
+      return 0;
+    }) as any;
+    const shipped: Array<{ level: 'warn' | 'info'; args: unknown[] }> = [];
+    const spies = (['warn', 'info'] as const).map((level) =>
+      spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+        shipped.push({ level, args });
+      }),
+    );
+    const poll = () =>
+      createProxyTestApp().request(`/v1/p/${TEST_SANDBOX_ID}/8000/page`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+    try {
+      // One exhausted request: the window's first line, churn band → info.
+      expect((await poll()).status).toBe(502);
+      // Twelve more inside the window push the suppressed count past the
+      // burst band; each still answers the real 502.
+      for (let i = 0; i < 12; i += 1) {
+        expect((await poll()).status).toBe(502);
+      }
+      // Eleven minutes later: the window has rolled, the line ships again.
+      now += 11 * 60_000;
+      expect((await poll()).status).toBe(502);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+      Date.now = realNow;
+      globalThis.setTimeout = realSetTimeout;
+    }
+    const giveUp = shipped.filter(
+      (line) => typeof line.args[0] === 'string' && (line.args[0] as string).includes('not answering after'),
+    );
+    expect(giveUp).toHaveLength(2);
+    expect(giveUp[0]?.level).toBe('info');
+    expect(giveUp[1]?.level).toBe('warn');
+    expect((giveUp[1]?.args[1] as Record<string, unknown>).suppressed).toBe(12);
   });
 
   // A port the API exposed a moment ago: Platinum's routes lag the expose by up

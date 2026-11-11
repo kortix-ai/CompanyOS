@@ -50,7 +50,6 @@ describe('harness ownership boundary', () => {
       control: {
         bind: () => ({
           applyEnvironment: unexpected, refresh: unexpected, abort: unexpected,
-          armAbortAfterTool: unexpected, disarmAbortAfterTool: unexpected,
         }),
       },
       diagnostics: {

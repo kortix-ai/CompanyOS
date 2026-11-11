@@ -243,8 +243,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
     description: 'Members connect their own ChatGPT and Claude subscriptions and provider keys, share them when needed, and choose which ones each session uses.',
     stability: 'experimental',
     available: () => true,
-    // On by default since 2026-10-31: every project gets private-by-default
-    // provider accounts. A project that turned it off keeps it off.
+    // On by default since 2026-10-31: every project gets named provider
+    // accounts, shared with the workspace by default for a person who may
+    // share (2026-11-11). A project that turned it off keeps it off.
     platformDefault: () => true,
     enforcement: 'behavioral',
     enforcementNote: 'Session selection and provider credential resolution reject or ignore resource secrets while disabled.',

@@ -3595,7 +3595,7 @@ export function SessionChat({
       const active = document.activeElement;
       const focusInOverlay =
         active?.closest(
-          '[role="dialog"],[role="alertdialog"],[role="menu"],[data-radix-popper-content-wrapper]',
+          '[role="dialog"],[role="alertdialog"],[role="menu"],[data-kortix-floating]',
         ) != null;
       const fromComposerEditor =
         e.target instanceof Element && e.target.closest(COMPOSER_EDITOR_SELECTOR) !== null;
@@ -4498,6 +4498,7 @@ export function SessionChat({
       <ComposerDropZone
         className={cn(
           'relative flex h-full flex-col',
+          'pb-[env(safe-area-inset-bottom)]', // audit:allow device safe-area inset, not a spacing step — the composer column lifts above the home indicator in the installed PWA; desktop reports a 0px inset
           // Transparent in the welcome state so the root-level full-bleed wallpaper
           // (portaled into SessionLayout) reads through; solid once real content
           // takes over. Same base color either way, so non-welcome is unchanged.

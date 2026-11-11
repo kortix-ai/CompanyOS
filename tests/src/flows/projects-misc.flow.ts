@@ -578,20 +578,20 @@ flow(
     });
 
     await ctx.step(
-      'a person outside the workspace cannot read the config: canonical 404 workspace_not_found, legacy 403',
+      'a person outside the workspace cannot read the config: canonical 403 workspace_access_denied, legacy 403',
       async () => {
         // Membership is access (design.md C3): the outsider is a non-member.
         const params = { params: { projectId: project.id, agentName: 'worker' } };
         (await ctx.client.as(ctx.P.NONMEMBER).get('/v1/workspaces/:projectId/agents/:agentName/config', params))
-          .status(404)
+          .status(403)
           .body()
-          .has('$.code', 'workspace_not_found');
+          .has('$.code', 'workspace_access_denied');
         (await ctx.client.as(ctx.P.NONMEMBER).get('/v1/projects/:projectId/agents/:agentName/config', params)).status(403);
       },
     );
 
     await ctx.step(
-      'GET capabilities lists every tool, built-in skill and platform extension; an undeclared agent → 404; a non-member → 404 workspace_not_found',
+      'GET capabilities lists every tool, built-in skill and platform extension; an undeclared agent → 404; a non-member → 403 workspace_access_denied',
       async () => {
         const projectCatalog = (await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId/capabilities', {
           params: { projectId: project.id },
@@ -614,7 +614,7 @@ flow(
         if (required !== 'kortix-nested-calls,kortix-presentation,kortix-turn') throw new Error(`required extensions: ${required}`);
         (await ctx.client.as(ctx.P.OWNER).get(path, { params: { projectId: project.id, agentName: 'ghost' } }))
           .status(404).body().has('$.code', 'agent_not_found');
-        (await ctx.client.as(ctx.P.NONMEMBER).get(path, { params: { projectId: project.id, agentName: 'worker' } })).status(404);
+        (await ctx.client.as(ctx.P.NONMEMBER).get(path, { params: { projectId: project.id, agentName: 'worker' } })).status(403).body().has('$.code', 'workspace_access_denied');
       },
     );
   },
@@ -862,9 +862,9 @@ flow(
       (await put(user, project.id)).status(403);
       (await del(user, project.id)).status(403);
     });
-    await ctx.step('NONMEMBER → PUT and DELETE both 404 workspace_not_found', async () => {
-      (await put(ctx.P.NONMEMBER, project.id)).status(404).body().has('$.code', 'workspace_not_found');
-      (await del(ctx.P.NONMEMBER, project.id)).status(404).body().has('$.code', 'workspace_not_found');
+    await ctx.step('NONMEMBER → PUT and DELETE both 403 workspace_access_denied', async () => {
+      (await put(ctx.P.NONMEMBER, project.id)).status(403).body().has('$.code', 'workspace_access_denied');
+      (await del(ctx.P.NONMEMBER, project.id)).status(403).body().has('$.code', 'workspace_access_denied');
     });
     await ctx.step('project manager reaches model validation and deletion', async () => {
       (await put(manager, project.id)).status(409)
@@ -1241,11 +1241,11 @@ flow(
         });
       r.status(404);
     });
-    await ctx.step('NONMEMBER → 404 workspace_not_found', async () => {
+    await ctx.step('NONMEMBER → 403 workspace_access_denied', async () => {
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
         .get('/v1/workspaces/:projectId/llm-catalog/providers', { params: { projectId: p.id } });
-      r.status(404).body().has('$.code', 'workspace_not_found');
+      r.status(403).body().has('$.code', 'workspace_access_denied');
     });
     await ctx.step('ANON → 401', async () => {
       const r = await ctx.client

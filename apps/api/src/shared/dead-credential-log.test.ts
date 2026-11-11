@@ -42,7 +42,7 @@ const {
   markDeadCredential,
   markAgentGrantDenial,
 } = await import('./dead-credential-log');
-const { logWindowDecision, resetLogWindowsForTests } = await import('./log-window');
+const { logWindowDecision, logWindowWarnDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
 const { buildDenialError } = await import('../iam/denial-message');
 const { enforceTokenProjectScope } = await import('../middleware/auth-scope');
@@ -66,6 +66,17 @@ function deadCredential401Like(message = 'PAT not found or revoked'): HTTPExcept
   });
   markDeadCredential(err);
   return err;
+}
+
+// What denyProjectAccess throws when an account's "Require MFA" policy
+// denies an aal1 browser session: buildDenialError's typed 403, marked.
+function appWithMfaDenial(): OpenAPIHono {
+  const app = new OpenAPIHono();
+  installHttpErrors(app);
+  app.get('/v1/projects/:workspaceId/sessions', () => {
+    throw buildDenialError('project.session.read', 'account_mfa_required');
+  });
+  return app;
 }
 
 
@@ -344,14 +355,6 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   // hour across three list routes, 0 in the 24 h before). The mark routes
   // the LINE through the shared window throttle; the typed 403 response,
   // which the web app's step-up dialog keys on, ships untouched every time.
-  function appWithMfaDenial(): OpenAPIHono {
-    const app = new OpenAPIHono();
-    installHttpErrors(app);
-    app.get('/v1/projects/:workspaceId/sessions', () => {
-      throw buildDenialError('project.session.read', 'account_mfa_required');
-    });
-    return app;
-  }
 
   test('five identical denials log one info line; the typed 403 body ships every time', async () => {
     resetLogWindowsForTests();
@@ -419,10 +422,45 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
   });
 });
 
+describe('the escalation is capped at one warn per key per hour (KRTX-4674 residual)', () => {
+  // The severity escalation is evaluated per ten-minute window and is
+  // replica-local, so a caller grinding past the burst band through a whole
+  // hour made EVERY window's line ship at warn: 16/15/15 lines per route
+  // across three replicas in the 2026-11-11 09:00 UTC hour — above the
+  // infra-sweep's new-warn-pattern bar (10/h per normalized pattern), which
+  // re-filed this issue. The engine now caps the escalation: the hour's
+  // first escalated line stays warn (the grind signal), the hour's other
+  // windows drop to info carrying the suppressed count.
+
+  test("the handler's second escalated window of the hour ships at info, suppressed carried", async () => {
+    resetLogWindowsForTests();
+    const path = '/v1/projects/p/sessions';
+    const reason = buildDenialError('project.session.read', 'account_mfa_required').message ?? '';
+    const key = deadCredentialLogKey('GET', path, 403, reason);
+    // The hour's warn is already spent: one escalated line shipped this hour.
+    expect(logWindowWarnDecision(key, Date.now())).toBe(true);
+    // An expired window holds the burst band pending (the trick the tests
+    // above use): the handler must open the next window and ship its pending
+    // volume — at info now, the hourly warn budget spent.
+    const past = Date.now() - 601_000;
+    logWindowDecision(key, past);
+    for (let i = 0; i < DEAD_CREDENTIAL_BURST_SUPPRESSED; i += 1) logWindowDecision(key, past + 1_000);
+    const app = appWithMfaDenial();
+    const before = logged.length;
+    const res = await app.request(path);
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.context?.suppressed).toBe(DEAD_CREDENTIAL_BURST_SUPPRESSED);
+  });
+});
+
 describe('credential-fence refusals are throttled at the error handler (KRTX-4731)', () => {
   // The route throws what enforceTokenProjectScope throws for a
-  // workspace-bound credential on a person route: the real fence verdict for
-  // POST /v1/mcp (middleware/workspace-binding.ts binds it PERSON). The typed
+  // workspace-bound credential on a person route (here /v1/notifications; the
+  // prod loop was POST /v1/mcp, rebound to the credential's own workspace on
+  // 2026-11-11). The typed
   // 403 body already names the remedy (code credential_fence_refused, the
   // check, "use a personal key or sign in"), so a caller that cannot or will
   // not act on it — an OAuth workspace token looping the MCP endpoint —
@@ -434,7 +472,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
   function appWithFenceThrow(): OpenAPIHono {
     const app = new OpenAPIHono();
     installHttpErrors(app);
-    app.post('/v1/mcp', async (c) => {
+    app.post('/v1/notifications', async (c) => {
       await enforceTokenProjectScope(c, '00000000-0000-4000-8000-000000000001', {
         principal: 'oauth-workspace-token',
       });
@@ -449,7 +487,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     const before = logged.length;
     let lastBody = '';
     for (let i = 0; i < 5; i += 1) {
-      const res = await app.request('/v1/mcp', { method: 'POST' });
+      const res = await app.request('/v1/notifications', { method: 'POST' });
       expect(res.status).toBe(403);
       lastBody = await res.text();
     }
@@ -471,10 +509,10 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
   test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
     const app = appWithFenceThrow();
     // The reason the handler keys on: the thrown message, bounded at 200.
-    const probe = await app.request('/v1/mcp', { method: 'POST' });
+    const probe = await app.request('/v1/notifications', { method: 'POST' });
     expect(probe.status).toBe(403);
     const reason = ((await probe.json()) as { message: string }).message.slice(0, 200);
-    const key = deadCredentialLogKey('POST', '/v1/mcp', 403, reason);
+    const key = deadCredentialLogKey('POST', '/v1/notifications', 403, reason);
     // Drop the probe's window, then stage the burst.
     resetLogWindowsForTests();
     // A burst in a window that already expired: one decision opens it, the
@@ -488,7 +526,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     // warn — a caller grinding on a refusal it never acts on is not the
     // designed churn (KRTX-4454's severity follows the volume).
     const before = logged.length;
-    const res = await app.request('/v1/mcp', { method: 'POST' });
+    const res = await app.request('/v1/notifications', { method: 'POST' });
     expect(res.status).toBe(403);
     expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(0);
     const warns = logged.slice(before).filter((l) => l.level === 'warn');

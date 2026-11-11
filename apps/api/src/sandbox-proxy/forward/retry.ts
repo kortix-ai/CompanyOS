@@ -2,7 +2,8 @@ import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
 import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
-import { logWindowDecision } from '../../shared/log-window';
+import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import {
   buildSandboxUpstreamHeaders,
   invalidatePreviewLink,
@@ -166,13 +167,14 @@ export function reportPortNotAnswering(
   port: number,
   now = Date.now(),
 ): void {
-  const { log, suppressed } = logWindowDecision(
-    `preview port still not answering ${sandboxId}:${port}`,
-    now,
-  );
+  const key = `preview port still not answering ${sandboxId}:${port}`;
+  const { log, suppressed } = logWindowDecision(key, now);
   if (!log) return;
   const fields = { sandboxId, port, suppressed };
-  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED) logger.warn(message, fields);
+  // The escalation shares the hourly warn cap of the other burst-band sites
+  // (logWindowWarnDecision): a grind hour cannot ship every window's line at
+  // warn and re-trip the infra-sweep's 10/h new-warn-pattern bar (KRTX-4674).
+  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED && logWindowWarnDecision(key, now)) logger.warn(message, fields);
   else logger.info(message, fields);
 }
 
@@ -562,8 +564,15 @@ async function recoverFromAttemptError(
     return 'stop';
   }
 
-  if (!state.wakeTriggered) {
-    await wakeSandbox(sandboxId);
+  // One wake per request — EXCEPT a provider control-plane not-running
+  // verdict (shared/platinum.ts's typed 409 sandbox_not_running — the
+  // name is the contract its expose tests pin), which is the one error
+  // that changes the box's world: the provider itself just refused the
+  // box. It justifies a (re)start even after an earlier wake's status read
+  // came back stale — the provider can answer its GET `running` for a box
+  // its own expose/exec refuse (observed in prod for over an hour).
+  if (!state.wakeTriggered || isPlatinumNotRunningVerdict(err)) {
+    await wakeSandbox(sandboxId, err);
     state.wakeTriggered = true;
   }
   if (attempt < MAX_RETRIES) {

@@ -460,8 +460,9 @@ export const TURN_INSTRUCTIONS = [
   '  divider, context, image, actions). Plain text via `slack send "..."` is fine',
   '  for one-liners, but prefer blocks when there\'s real structure to convey.',
   '- One `slack send` per turn. It finalizes the live stream and can\'t be undone.',
-  '- In a channel thread only a message that @mentions you reaches you. When you ask an',
-  '  open-ended question with `slack send`, ask the person to @mention you in the reply.',
+  '- In a channel thread, the person who started it reaches you with a plain reply;',
+  '  anyone else @mentions you. When you ask someone else an open-ended question with',
+  '  `slack send`, ask them to @mention you in the reply.',
   '  (Button questions are unaffected: clicks arrive through interactivity.)',
 ].join('\n');
 

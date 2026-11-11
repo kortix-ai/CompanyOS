@@ -3649,6 +3649,14 @@ describe('pi compaction', () => {
     return { seen, hooks }
   }
 
+  test("a turn's end carries the text of its last assistant message: a chat thread the agent did not answer gets it", async () => {
+    const { seen, hooks } = compactionRelays()
+    const r = await boot({ script: [{ tool: 'bash', args: { command: 'echo working' } }, { text: 'The deploy is green.' }], hooks })
+    await promptAndSettle(r, 'is the deploy green?')
+    await waitFor(() => seen.ends.length === 1)
+    expect(seen.ends[0]).toMatchObject({ status: 'idle', finalText: 'The deploy is green.' })
+  })
+
   test('a /summarize is a turn named by its compaction marker: begin and end relay its id, and the log stores the compaction under it', async () => {
     const { seen, hooks } = compactionRelays()
     const r = await boot({ script: [{ text: 'first answer' }, { text: 'second answer' }, ...SUMMARY], prepare: compactEverything, env: SUMMARY_CONTEXT, hooks })

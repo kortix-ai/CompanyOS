@@ -1151,6 +1151,82 @@ test('gateway executes Composio with selected-row metadata and never exposes a s
   expect(JSON.stringify(executions)).not.toContain('COMPOSIO_API_KEY');
 });
 
+test('gateway fails closed with needs_auth when it cannot record a started Composio sign-in', async () => {
+  // A started sign-in holds a Composio `session_id` and no account. The DB
+  // contract (composio-unrecorded-sign-in.integration.test.ts) records a
+  // finished one. Here the lookup fails, or there is nothing to look up.
+  const lookups: Array<string | null | undefined> = [];
+  const connectorWith = (metadata: Record<string, unknown>): GatewayConnector => ({
+    connectorId: 'connector-1',
+    connectionId: 'connection-1',
+    connectionIsDefault: false,
+    connectionMetadata: metadata,
+    slug: 'gmail',
+    provider: 'composio',
+    platform: 'gmail',
+    baseUrl: null,
+    auth: { type: 'none', in: 'header', name: null, prefix: null },
+    hasAuth: true,
+    credentialMode: 'shared',
+    enabled: true,
+  });
+  const run = async (connector: GatewayConnector) => {
+    let executed = false;
+    const deps: GatewayDeps = {
+      async loadConnectorBySlug() {
+        return connector;
+      },
+      async loadAction() {
+        return {
+          path: 'gmail.get_profile',
+          relPath: 'get_profile',
+          inputSchema: null,
+          risk: 'read',
+          binding: { kind: 'composio', toolkit: 'gmail', toolSlug: 'GMAIL_GET_PROFILE' },
+        };
+      },
+      async resolveCredential() {
+        throw new Error('Composio must not use connector credentials');
+      },
+      async loadPolicies() {
+        return [];
+      },
+      async recordExecution() {
+        return 'exec-1';
+      },
+      async completeComposioAuthorization({ connector: selected }) {
+        lookups.push(selected.connectionId);
+        throw new Error('Composio is unreachable');
+      },
+      fetchImpl: async () => new Response('{}'),
+      enforcePolicies: false,
+      async executeComposio() {
+        executed = true;
+        throw new Error('an unrecorded account must never execute');
+      },
+    };
+    const result = await handleCall(deps, {
+      projectId: 'project-1',
+      accountId: 'account-1',
+      subject: { userId: 'user-1', groupIds: [] },
+      sessionId: 'kortix-session-1',
+      connectorSlug: 'gmail',
+      actionPath: 'get_profile',
+      args: {},
+    });
+    return { result, executed };
+  };
+
+  const started = await run(connectorWith({ session_id: 'trs_started', toolkit: 'gmail', connected_account_id: null }));
+  expect(started).toEqual({ result: { status: 'denied', reason: 'needs_auth' }, executed: false });
+  expect(lookups).toEqual(['connection-1']);
+
+  // No Composio session: the sign-in never started, so Composio is not asked.
+  const unstarted = await run(connectorWith({ toolkit: 'gmail', connected_account_id: null }));
+  expect(unstarted).toEqual({ result: { status: 'denied', reason: 'needs_auth' }, executed: false });
+  expect(lookups).toEqual(['connection-1']);
+});
+
 test('composioCatalogPage enriches the paged catalogue with the metadata that page omits', async () => {
   // `session.toolkits()` returns no description and no categories, so every card
   // fell into the client's synthetic "Other" bucket and opening it asked for

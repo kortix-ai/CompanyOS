@@ -3,6 +3,7 @@ import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
 import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
 import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import {
   buildSandboxUpstreamHeaders,
   invalidatePreviewLink,
@@ -639,8 +640,15 @@ async function recoverFromAttemptError(
     recordDialTimeout(plan.sseStallKey);
   }
 
-  if (!state.wakeTriggered) {
-    await wakeSandbox(sandboxId);
+  // One wake per request — EXCEPT a provider control-plane not-running
+  // verdict (shared/platinum.ts's typed 409 sandbox_not_running — the
+  // name is the contract its expose tests pin), which is the one error
+  // that changes the box's world: the provider itself just refused the
+  // box. It justifies a (re)start even after an earlier wake's status read
+  // came back stale — the provider can answer its GET `running` for a box
+  // its own expose/exec refuse (observed in prod for over an hour).
+  if (!state.wakeTriggered || isPlatinumNotRunningVerdict(err)) {
+    await wakeSandbox(sandboxId, err);
     state.wakeTriggered = true;
   }
   if (attempt < MAX_RETRIES) {

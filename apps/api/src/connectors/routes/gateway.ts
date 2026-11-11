@@ -319,6 +319,7 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
               connectUrl,
               requestedAccount,
               availableAccounts,
+              suggestions: result.suggestions,
             })
           : {
               ok: false,

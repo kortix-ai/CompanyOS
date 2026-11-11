@@ -6,12 +6,12 @@ description: How to CONNECT Slack (one command — `kortix channels connect`, pr
 <skill name="slack">
 
 <overview>
-Your sandbox is wired into Slack. When a teammate `@`-mentions the bot or replies in a thread the bot owns, the platform spins up this session and hands you the message; your turn IS the Slack reply.
+Your sandbox is wired into Slack. When a teammate `@`-mentions the bot, or the person who started your thread replies in it, the platform spins up this session and hands you the message; your turn IS the Slack reply. Your posts show your agent's name and face, set by the platform: never sign them "Kortix".
 
 The `slack` CLI is on `$PATH` and **just works** — every call runs through the Kortix connector gateway, which resolves the Slack bot token **server-side**. There is no token in your sandbox and nothing to configure: don't look for `$SLACK_BOT_TOKEN`, don't reach for an MCP/HTTP workaround, just run the commands below. They are the full, supported surface (posting, **file upload**, history, reactions, search, edit/delete — all of it). Two patterns matter most:
 
 - **`slack step "..."`** — narrate progress. Updates the live plan block in the Slack thread *as you go*.
-- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply.
+- **`slack send "..."`** — finalize the turn with your answer. This closes the plan block and posts the reply. A turn that ends without it still answers: the platform posts your last message as the reply. Use `slack send` when the answer needs Block Kit or a file; plain prose may simply be your last message.
 
 Everything else (`slack history`, `slack react`, `slack send --file`, `slack search`, …) is for when the task explicitly asks for it.
 </overview>
@@ -417,6 +417,8 @@ Each message carries `user`, the author's id, and `user_name`, the author's disp
 Every Kortix workspace in a Slack workspace shares one bot, so reads reach only this workspace's conversations: the channels and DMs connected to it, and the threads its sessions started or joined. `slack history`, `slack thread`, `slack channel-info`, `slack file-info` and `slack search` refuse anything else with `conversation_not_in_project`, and `slack channels` lists public channels plus this workspace's private ones.
 
 Writes never act inside another workspace's channel or thread: `slack send` (text or `--file`), `slack edit`, `slack delete`, `slack react`, `slack unreact`, `slack join` and `slack bind-thread` refuse them with the same `conversation_not_in_project`. A channel no workspace is connected to and a DM with a person are fine. Pass `--channel` as the id (`C0123ABCD`, or a user id `U0123ABCD` for a DM), never a channel name.
+
+A read of a public channel the bot is not in joins it and reads again, by itself: you do not need `slack join` first. A private channel answers `channel_not_found` until a person invites the bot; tell the user that and ask them to invite it.
 
 On that error, do not retry with another id. Tell the user what the error message says: the conversation belongs to another workspace, or they can connect it by running `/kortix switch` in it.
 

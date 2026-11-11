@@ -1,3 +1,5 @@
+import { logger } from '../lib/logger';
+
 const SLACK_API_BASE = 'https://slack.com/api';
 
 interface SlackApiResult {
@@ -132,6 +134,8 @@ export async function getFileInfo(token: string, fileId: string): Promise<SlackA
  */
 export interface SlackPersona {
   username: string;
+  /** The agent's face (`agentMarkUrl`). None: Slack shows the app's picture. */
+  icon_url?: string;
 }
 
 /**
@@ -146,7 +150,12 @@ async function createWithPersona(
   persona: SlackPersona | null | undefined,
 ): Promise<SlackApiResult> {
   if (!persona) return slackApiCall(token, method, args, { idempotent: false });
-  const r = await slackApiCall(token, method, { ...args, username: persona.username }, { idempotent: false });
+  const r = await slackApiCall(
+    token,
+    method,
+    { ...args, username: persona.username, ...(persona.icon_url ? { icon_url: persona.icon_url } : {}) },
+    { idempotent: false },
+  );
   if (!r.ok && r.error === 'missing_scope') return slackApiCall(token, method, args, { idempotent: false });
   return r;
 }
@@ -352,6 +361,26 @@ export async function addReaction(
     }
   } catch (err) {
     console.warn('[slack-api] reactions.add error', err);
+  }
+}
+
+/**
+ * The assistant pane's own "is working…" line under the app's name
+ * (`assistant.threads.setStatus`, scope `assistant:write`). Slack clears it
+ * when the app posts in the thread; an empty `status` clears it at once.
+ * Cosmetic: one attempt, a refusal is logged and dropped.
+ */
+export async function setAssistantStatus(token: string, channel: string, threadTs: string, status: string): Promise<void> {
+  try {
+    const r = await slackApiCall(
+      token,
+      'assistant.threads.setStatus',
+      { channel_id: channel, thread_ts: threadTs, status: status.slice(0, 120) },
+      { retries: 0 },
+    );
+    if (!r.ok) logger.warn('[slack-api] assistant.threads.setStatus failed', { error: r.error });
+  } catch (err) {
+    logger.warn('[slack-api] assistant.threads.setStatus error', { err: (err as Error)?.message });
   }
 }
 

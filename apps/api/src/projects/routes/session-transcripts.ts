@@ -55,6 +55,9 @@ const SessionUsageTreeSchema = z
   })
   .openapi('SessionUsageTree');
 
+/** `GET …/transcript` is deprecated since 2026-11-11 00:00 UTC: an RFC 9745 `Deprecation` date (`@` unix seconds). */
+export const TRANSCRIPT_DEPRECATED_AT = '@1794355200';
+
 export function registerSessionTranscriptsRoutes(): void {
   // GET /v1/projects/:projectId/sessions/:sessionId/transcript
   // Server-side transcript read for project automation. Unlike the raw /v1/p
@@ -83,7 +86,12 @@ export function registerSessionTranscriptsRoutes(): void {
       method: 'get',
       path: '/{workspaceId}/sessions/{sessionId}/transcript',
       tags: ['sessions'],
-      summary: 'Read the transcript of a session',
+      summary: 'Read the transcript of a session (deprecated: read the session log)',
+      description:
+        'Deprecated since 2026-11-11 and scheduled for removal: read `GET /v1/workspaces/{workspaceId}/sessions/{sessionId}/log` ' +
+        '(`SessionLogPage`) instead. Every answer carries `Deprecation: @1794355200` (RFC 9745) and ' +
+        '`Link: <…/log>; rel="successor-version"`.',
+      deprecated: true,
       ...auth,
       request: {
         params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
@@ -105,6 +113,10 @@ export function registerSessionTranscriptsRoutes(): void {
     async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
+      // Deprecated (session-log plan P8.3): every answer says so (RFC 9745) and names the
+      // successor, the session log. No Kortix client or box reads this route any more.
+      c.header('Deprecation', TRANSCRIPT_DEPRECATED_AT);
+      c.header('Link', `</v1/workspaces/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/log>; rel="successor-version"`);
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
       // The same stored-log read ceiling as `GET …/log` (KRTX-4696): the transcript
       // serves the same log, heavier per request, and must not become the uncapped

@@ -174,6 +174,12 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   { pattern: '/v1/workspaces', methods: ['POST'], binding: OWN_WORKSPACE },
   { pattern: '/v1/projects', binding: PERSON },
   { pattern: '/v1/workspaces', binding: PERSON },
+  // The hosted MCP server dispatches every tool call back into the API routes,
+  // in-process, with the same credential (mcp/index.ts `callApi`), so each call
+  // meets this fence again: a bound credential reaches its own workspace only.
+  // Bound PERSON, it refused every MCP client that signed in through the
+  // consent screen, which binds the grant to one workspace (2026-11-11).
+  ...both('/v1/mcp', OWN_WORKSPACE),
 
   // ── resource: drives (keyed by drive id; the handler checks the workspace) ─
   ...both('/v1/drives', { kind: 'resource', resource: 'drive' }),
@@ -222,10 +228,6 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   // The agent tool surface: `project_id` (query or body) names the workspace;
   // each tool call inside runs through the fence again as its own request.
   ...both('/v1/agent-tools', PARAM),
-  // The MCP server: a person's credential reaches every workspace it may; an
-  // agent key or a workspace key reaches its own workspace only. Every tool
-  // call inside is its own request and passes this fence again.
-  ...both('/v1/mcp', OWN_WORKSPACE),
 
   // ── the person's own surfaces ──────────────────────────────────────────
   ...[

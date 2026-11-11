@@ -139,6 +139,10 @@ describe('the fence decides each credential × route class', () => {
     // the person's own surfaces
     ['GET', '/v1/accounts', projectPat, 'person-route'],
     ['POST', '/v1/accounts', projectPat, 'person-route'],
+    // The MCP server: every tool call re-enters the fence with the same credential.
+    ['POST', '/v1/mcp', projectPat, true],
+    ['POST', '/v1/mcp', sessionPat, true],
+    ['GET', '/v1/notifications', projectPat, 'person-route'],
     ['GET', '/v1/accounts/me/devices', projectPat, 'person-route'],
     ['POST', '/v1/accounts/tokens', sessionPat, 'person-route'],
     ['GET', '/v1/me/tokens', projectPat, 'person-route'],

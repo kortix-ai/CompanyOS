@@ -2121,6 +2121,19 @@ describe('pi packages', () => {
 
 describe('pi subagents extension', () => {
   const TASK = (args: Record<string, unknown>) => ({ tool: 'task', args: { description: 'Write the note', prompt: 'write sub.txt', subagent_type: 'general', ...args } })
+  /** A settled child's stored session log (`GET …/sessions/:id/log`): the prompt, then the report the box reads back. */
+  const cloudReportLog = (path: string) => {
+    const id = path.split('/').at(-2)!
+    const message = (seq: number, role: 'user' | 'assistant', text: string) => ({
+      message_id: `msg-${seq}`, thread_id: id, seq, role, kind: 'turn', status: 'complete', in_context: true, model: null, usage: null,
+      finish: role === 'assistant' ? 'stop' : null, error: null, created_at: '2026-10-24T10:00:00.000Z', completed_at: '2026-10-24T10:00:00.000Z',
+      producer: { harness: 'pi', version: '1.4.0' }, blocks: [{ id: `blk_${seq}`, type: 'text', text }],
+    })
+    return {
+      session: { title: null, created_at: '2026-10-24T10:00:00.000Z' }, generation: 1, threads: [{ thread_id: id, parent_thread_id: null }], thread_id: id,
+      messages: [message(1, 'user', 'go'), message(2, 'assistant', 'cloud report')], has_more: false,
+    }
+  }
 
   test('separate sessions (the default, no `session` arg): every child carries the narrowed parent tools and the resolved parent agent, never `default`', async () => {
     // A fake Kortix API: it records each create and answers an already-settled child with a report.
@@ -2133,7 +2146,7 @@ describe('pi subagents extension', () => {
           creates.push((await req.json()) as Record<string, any>)
           return Response.json({ session_id: `cloud-child-${creates.length}` }, { status: 201 })
         }
-        if (path.endsWith('/transcript')) return Response.json({ messages: [{ role: 'user', text: 'go' }, { role: 'assistant', text: 'cloud report' }] })
+        if (path.endsWith('/log')) return Response.json(cloudReportLog(path))
         if (req.method === 'GET' && path.startsWith('/v1/workspaces/proj-pi-test/sessions/cloud-child-')) {
           return Response.json({ status: 'running', working: { state: 'idle', since: '2026-10-24T10:00:00.000Z', pending_delivery: false } })
         }
@@ -2185,7 +2198,7 @@ describe('pi subagents extension', () => {
           creates.push((await req.json()) as Record<string, any>)
           return Response.json({ session_id: `cloud-child-${creates.length}` }, { status: 201 })
         }
-        if (path.endsWith('/transcript')) return Response.json({ messages: [{ role: 'user', text: 'go' }, { role: 'assistant', text: 'cloud report' }] })
+        if (path.endsWith('/log')) return Response.json(cloudReportLog(path))
         if (req.method === 'GET' && path.startsWith('/v1/workspaces/proj-pi-test/sessions/cloud-child-')) {
           return Response.json({ status: 'running', working: { state: 'idle', since: '2026-10-24T10:00:00.000Z', pending_delivery: false } })
         }

@@ -421,8 +421,9 @@ describe('account-MFA step-up denials are throttled at the error handler (KRTX-4
 
 describe('credential-fence refusals are throttled at the error handler (KRTX-4731)', () => {
   // The route throws what enforceTokenProjectScope throws for a
-  // workspace-bound credential on a person route: the real fence verdict for
-  // POST /v1/mcp (middleware/workspace-binding.ts binds it PERSON). The typed
+  // workspace-bound credential on a person route (here /v1/notifications; the
+  // prod loop was POST /v1/mcp, rebound to the credential's own workspace on
+  // 2026-11-11). The typed
   // 403 body already names the remedy (code credential_fence_refused, the
   // check, "use a personal key or sign in"), so a caller that cannot or will
   // not act on it — an OAuth workspace token looping the MCP endpoint —

@@ -21519,6 +21519,10 @@
       "denied": "アクセスを拒否しました",
       "deniedDescription": "My Kortix にあなたの回答が届きます。",
       "failed": "決定を送信できませんでした。もう一度お試しください。"
+    },
+    "reviewPane": {
+      "emptyTitle": "項目を選択してください",
+      "emptyDescription": "詳細はここに表示されます。J と K でリストを移動できます。"
     }
   },
   "commandPalette": {

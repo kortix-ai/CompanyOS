@@ -21,7 +21,7 @@ import { resolveApproval, type SessionAsk } from '@kortix/sdk';
 import { qk, useAnswerSessionAsk, useSessionAsks } from '@kortix/sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUpIcon, CheckIcon, ShieldWarningIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslations } from '../../i18n';
 import { cn } from '../../internal/lib/utils';
 import { Button } from '../../primitives/button';
@@ -43,7 +43,7 @@ const SWIPE_PX = 96;
  * The kinds a deck card draws. A connector approval stays in the inbox list.
  * A kind this build does not know is left out, never drawn as an empty card.
  */
-const DECK_KINDS: ReadonlySet<SessionAsk['kind']> = new Set(['question', 'permission', 'access']);
+export const DECK_KINDS: ReadonlySet<SessionAsk['kind']> = new Set(['question', 'permission', 'access']);
 
 type Verdict = 'yes' | 'no' | 'always';
 
@@ -75,7 +75,21 @@ export function deckOrder(asks: readonly SessionAsk[], skipped: readonly string[
   });
 }
 
-export function AskDeck({ projectId, onOpenSession }: { projectId: string; onOpenSession?: (sessionId: string) => void }) {
+export function AskDeck({
+  projectId,
+  onOpenSession,
+  empty,
+  paused = false,
+}: {
+  projectId: string;
+  /** The host shows something else over the deck: it draws nothing and its
+   *  keys answer nothing, but stays mounted so staged answers keep Undo. */
+  paused?: boolean;
+  onOpenSession?: (sessionId: string) => void;
+  /** Drawn once no card is left, in place of the deck's own "Nothing waits on
+   *  you" (a host that shows other waiting items beside the deck). */
+  empty?: ReactNode;
+}) {
   const t = useTranslations('hardcodedUi.askDeck');
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useSessionAsks(projectId);
@@ -176,6 +190,7 @@ export function AskDeck({ projectId, onOpenSession }: { projectId: string; onOpe
 
   const skip = useCallback((ask: SessionAsk) => setSkipped((prev) => [...prev.filter((id) => id !== ask.id), ask.id]), []);
 
+  if (paused) return null;
   if (isLoading) return <Skeleton className="h-64 w-full rounded-lg" />;
   if (isError) {
     return (
@@ -191,6 +206,7 @@ export function AskDeck({ projectId, onOpenSession }: { projectId: string; onOpe
     );
   }
   if (!current) {
+    if (empty !== undefined) return empty;
     return <EmptyState icon={CheckIcon} title={t('emptyTitle')} description={t('emptyDescription')} />;
   }
   return (

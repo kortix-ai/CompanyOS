@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  CAPTURE_FRAME_INTERVALS_MS,
   CAPTURE_LAYERS,
   CAPTURE_MAX_HEIGHTS,
   CAPTURE_RETENTION_LIMITS,
@@ -341,17 +340,6 @@ function PolicyForm({
       </section>
 
       <Group title={t('framesTitle')} description={t('framesHint')}>
-        <SelectRow
-          title={t('interval')}
-          description={t('intervalHint')}
-          value={draft.recording.interval_ms ?? null}
-          noneLabel={t('computerDecides')}
-          options={CAPTURE_FRAME_INTERVALS_MS.map((ms) => ({
-            value: ms,
-            label: t('intervalOption', { seconds: ms / 1000 }),
-          }))}
-          onChange={(interval_ms) => patch('recording', { interval_ms })}
-        />
         <SelectRow<CaptureMaxHeight>
           title={t('resolution')}
           description={t('resolutionHint')}

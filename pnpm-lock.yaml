@@ -34,7 +34,7 @@ overrides:
   icu-minify@>=4.0.0 <4.9.2: 4.9.2
   zod@>=4.0.0 <4.6.6: 4.6.7
   nodemailer@>=10.0.0 <10.1.4: 10.2.1
-  node-forge@<1.4.1: 1.4.1
+  node-forge@<1.4.3: 1.4.3
   body-parser@>=2.0.0 <2.4.0: 2.4.0
   qs@>=6.7.0 <6.16.1: 6.16.1
   postcss-selector-parser@>=6.0.0 <6.1.5: 6.1.5
@@ -513,8 +513,8 @@ importers:
         specifier: ^4.13.11
         version: 4.13.11
       node-forge:
-        specifier: ^1.4.1
-        version: 1.4.1
+        specifier: ^1.4.3
+        version: 1.4.3
       quickjs-wasi:
         specifier: 3.6.2
         version: 3.6.2
@@ -6824,7 +6824,7 @@ packages:
       glob: 14.0.2
       lan-network: 0.2.1
       multitars: 1.0.2
-      node-forge: 1.4.1
+      node-forge: 1.4.3
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 4.0.7
@@ -6860,7 +6860,7 @@ packages:
     resolution: {integrity: sha512-zP0tnfqrFFRL8INtOaQ6XwEYfdIpIH9vrEo7y0bHQGQa50z4/QWXE5CI4nRUHxqFW4MVWOwXFg1hom1aAZHNkQ==}
     engines: {node: '>=22.13.0'}
     dependencies:
-      node-forge: 1.4.1
+      node-forge: 1.4.3
 
   /@expo/config-plugins@58.0.12(typescript@6.0.3):
     resolution: {integrity: sha512-nqnoPBARpKdKLY8+c+N2mizJgiWjlQGWeDhEOqMOZnQcpMmU79H1Svc9QOzcE1yX7obzw0Hf2YVlfW67g58Ucg==}
@@ -26100,8 +26100,8 @@ packages:
       formdata-polyfill: 4.0.10
     dev: false
 
-  /node-forge@1.4.1:
-    resolution: {integrity: sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==}
+  /node-forge@1.4.3:
+    resolution: {integrity: sha512-P6wzfh6t70avmV8FrVEAd/36sOPJQ+hkaJVX1Laap9J/77m7M0eyozDvc8SwnDf4P7MP94gwbAAo0rg3YVXT+g==}
     engines: {node: '>= 6.13.0'}
 
   /node-gyp-build@4.8.4:

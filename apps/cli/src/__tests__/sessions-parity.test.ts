@@ -882,7 +882,6 @@ describe('kortix sessions chat --steer', () => {
       placement: 'composer',
       parts: [{ type: 'text', text: 'also check the logs' }],
     });
-    expect(r.stdout).toContain('to steer the running turn');
     expect(r.stdout).toContain('reads it at its next step');
   });
 

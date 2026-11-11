@@ -1613,7 +1613,7 @@ export class PlatinumProvider implements SandboxProvider {
     // and the verdict is the authoritative half. Start without re-trusting
     // the GET.
     if (isPlatinumNotRunningVerdict(wakeReason)) {
-      console.warn(`[PLATINUM] Sandbox ${externalId} is stopped (control-plane verdict), waking up...`);
+      logger.warn(`[PLATINUM] Sandbox ${externalId} is stopped (control-plane verdict), waking up...`);
       await this.start(externalId);
       return;
     }

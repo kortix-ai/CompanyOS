@@ -42,6 +42,8 @@ import type { ProjectSession, ProjectSummary } from '../api/types.ts';
 import { runGit } from '../git-run.ts';
 import { type SessionStartPayload, startPollIntervalMs, startProgressTracker } from '../session-boot.ts';
 import { C, help, pad, status } from '../style.ts';
+import { agentChoiceHintFor } from './session-agent-choice.ts';
+import { machineErrors } from '../token-denial.ts';
 import { sessionWebUrl } from '../web-url.ts';
 import { openInBrowser } from '../browser.ts';
 import { runSessionsDigest } from './sessions-digest.ts';
@@ -718,7 +720,11 @@ async function sessionsNew(
   try {
     created = await ctx.client.post<ProjectSession>(`/workspaces/${ctx.projectId}/sessions`, body);
   } catch (err) {
-    return surfaceApiError(err);
+    const code = surfaceApiError(err);
+    // My Kortix names its agent: say which flag fixes it (session-agent-choice.ts).
+    const hint = agentChoiceHintFor(err);
+    if (hint && !machineErrors()) process.stderr.write(`  ${hint}\n`);
+    return code;
   }
 
   // Drive the same canonical /start lifecycle endpoint the dashboard polls.

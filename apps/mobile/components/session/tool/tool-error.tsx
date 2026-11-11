@@ -26,7 +26,7 @@ import { webSpace } from '@/lib/session/user-message';
 import { disclosureKey, useDisclosureState } from '@/lib/session/disclosure-store';
 import { DisclosureCaret } from '@/components/session/chain-of-thought';
 import { FONT_MEDIUM, TURN_SPACE, TURN_TYPE, monoFont, useTurnPalette } from './shared/styles';
-import { ToolCardFrame } from './shared/surface';
+import { ToolResultCard } from './shared/result-card';
 
 function ValidationErrorCard({ errorType, toolName, validationIssues }: {
   errorType: string | null;
@@ -35,7 +35,7 @@ function ValidationErrorCard({ errorType, toolName, validationIssues }: {
 }) {
   const palette = useTurnPalette();
   return (
-    <ToolCardFrame padded={false} framePad={TURN_SPACE.resultFramePad}>
+    <ToolResultCard>
       <View
         style={{
           flexDirection: 'row',
@@ -99,7 +99,7 @@ function ValidationErrorCard({ errorType, toolName, validationIssues }: {
           </View>
         ))}
       </View>
-    </ToolCardFrame>
+    </ToolResultCard>
   );
 }
 
@@ -126,7 +126,7 @@ function ToolErrorImpl({
   }
 
   return (
-    <ToolCardFrame padded={false} framePad={TURN_SPACE.resultFramePad}>
+    <ToolResultCard>
       <Text variant="muted"
         selectable
         style={[
@@ -180,7 +180,7 @@ function ToolErrorImpl({
           ) : null}
         </>
       ) : null}
-    </ToolCardFrame>
+    </ToolResultCard>
   );
 }
 

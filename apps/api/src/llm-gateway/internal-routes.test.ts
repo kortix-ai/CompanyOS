@@ -4,7 +4,7 @@ import { GatewayResolutionError } from '@kortix/llm-gateway';
 // The internal routes the standalone gateway pod calls, through the real Hono
 // app and the real model catalog. Mocked: resolveCandidates, the servable
 // project catalog (it reads the database), and the hooks' persistence.
-const loggerWarn = mock(() => {});
+const loggerWarn = mock((..._line: unknown[]) => {});
 // Swapped per-test so a test can hold the trace write open and prove the route
 // does not wait for it.
 const persistGatewayTraceMock = mock<(trace: unknown) => Promise<void>>(async () => {});
@@ -612,6 +612,28 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
       const second = await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
       expect(second.status).toBe(200);
       expect(loggerWarn).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
+
+  test('the logged line neutralizes control characters in the caller-controlled model (no forged lines)', async () => {
+    // Strix review of this PR (CWE-117): the warn line embeds the caller's
+    // model id. A newline in it would forge an extra log line under the
+    // [gateway-internal] prefix. The logged form is JSON-escaped and the
+    // dedupe key keeps the raw (non-whitespace) shape.
+    resolveCandidatesMock.mockReset();
+    resolveCandidatesMock.mockRejectedValue(
+      new GatewayResolutionError('model_not_found', '"bad\nmodel" is not a recognized model.', 'Check the model id.'),
+    );
+    loggerWarn.mockClear();
+    try {
+      const res = await app().request(authedRequest({ principal: { userId: 'u' }, model: 'bad\nmodel' }));
+      expect(res.status).toBe(200);
+      expect(loggerWarn).toHaveBeenCalledTimes(1);
+      const line = String(loggerWarn.mock.calls[0][0]);
+      expect(line.startsWith('[gateway-internal] resolution failed for "bad\\nmodel":')).toBe(true);
+      expect(line).not.toContain('"bad\nmodel" is not');
     } finally {
       resolveCandidatesMock.mockReset();
     }

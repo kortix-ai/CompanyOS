@@ -122,7 +122,15 @@ export function createInternalGatewayRoutes() {
         // (Strix review of this PR).
         const keyModel = typeof model === 'string' ? model.slice(0, 200) : '';
         if (logFirstResolutionFailure(`${keyModel}:${err.code}`)) {
-          logger.warn(`[gateway-internal] resolution failed for "${model}": ${err.code} — ${err.message}`);
+          // The model id (and the error text that embeds it) are
+          // caller-influenced and reach this line unescaped: a CR/LF in the id
+          // forges extra log lines (Strix review, CWE-117). JSON.stringify
+          // neutralizes the id while keeping the quoted form normal ids
+          // already render as; the message loses control characters and is
+          // bounded like the key.
+          const loggedModel = JSON.stringify(keyModel);
+          const loggedMessage = err.message.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
+          logger.warn(`[gateway-internal] resolution failed for ${loggedModel}: ${err.code} — ${loggedMessage}`);
         }
         return c.json({
           candidates: [],

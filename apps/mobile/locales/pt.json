@@ -1206,6 +1206,7 @@
     "call": "Ligar",
     "chartTapHint": "Toque para ver um valor",
     "checklistReady": "{{done}}/{{total}} prontos",
+    "closeMap": "Fechar mapa",
     "directions": "Rotas",
     "imageCount_one": "{{count}} imagem",
     "imageCount_other": "{{count}} imagens",
@@ -1216,7 +1217,9 @@
     "pick": "Recomendado",
     "pieFocus": "{{label}} é {{percent}}% do total",
     "pieOfTotal": "{{value}} de {{total}}",
+    "showAllPlaces": "Mostrar todos os lugares",
     "showData": "Mostrar dados",
+    "showOnMap": "Mostrar no mapa",
     "unavailable": "Não foi possível exibir este conteúdo.",
     "website": "Site"
   },
@@ -1297,6 +1300,7 @@
   "workspace": {
     "switcherTitle": "Espaços de trabalho",
     "create": "Criar espaço de trabalho",
+    "newWorkspace": "Novo espaço de trabalho",
     "createTitle": "Crie um espaço de trabalho",
     "createBody": "Um espaço de trabalho é onde sua empresa trabalha com o Kortix: pessoas, agentes e tudo o que eles criam.",
     "createOnWebTitle": "Criar um espaço de trabalho na web",

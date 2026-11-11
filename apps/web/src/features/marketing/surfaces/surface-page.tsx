@@ -1,4 +1,5 @@
 import Link from '@/components/site-link';
+import { localizedMarketingMetadata } from '@/lib/seo/metadata';
 import { cn } from '@kortix/ui';
 import { ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
 import { Fragment } from 'react';
@@ -45,6 +46,15 @@ export function SurfacePage({ id }: { id: SurfaceId }) {
       <FaqSection title="Questions." titleMuted="Answered from the code." items={content.faq} />
     </PageFrame>
   );
+}
+
+/** A `/desktop`-style route: the surface's localized metadata plus its page.
+ *  Each route file re-exports both. */
+export function surfaceRoute(id: SurfaceId, pathname: string) {
+  return {
+    generateMetadata: () => localizedMarketingMetadata(pathname),
+    Page: () => <SurfacePage id={id} />,
+  };
 }
 
 function Hero({ content }: { content: SurfaceContent }) {

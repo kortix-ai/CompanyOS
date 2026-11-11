@@ -20,7 +20,6 @@ import { ArrowRightIcon as ArrowRightGlyph } from 'phosphor-react-native/src/ico
 import { ArrowSquareOutIcon as ArrowSquareOutGlyph } from 'phosphor-react-native/src/icons/ArrowSquareOut';
 import { ArrowUpIcon as ArrowUpGlyph } from 'phosphor-react-native/src/icons/ArrowUp';
 import { ArrowUpRightIcon as ArrowUpRightGlyph } from 'phosphor-react-native/src/icons/ArrowUpRight';
-import { ArrowsDownUpIcon as ArrowsDownUpGlyph } from 'phosphor-react-native/src/icons/ArrowsDownUp';
 import { ArrowsInSimpleIcon as ArrowsInSimpleGlyph } from 'phosphor-react-native/src/icons/ArrowsInSimple';
 import { ArrowsOutSimpleIcon as ArrowsOutSimpleGlyph } from 'phosphor-react-native/src/icons/ArrowsOutSimple';
 import { BellIcon as BellGlyph } from 'phosphor-react-native/src/icons/Bell';
@@ -207,7 +206,6 @@ export const ArrowRightIcon = withAppWeight(ArrowRightGlyph, 'ArrowRightIcon');
 export const ArrowSquareOutIcon = withAppWeight(ArrowSquareOutGlyph, 'ArrowSquareOutIcon');
 export const ArrowUpIcon = withAppWeight(ArrowUpGlyph, 'ArrowUpIcon');
 export const ArrowUpRightIcon = withAppWeight(ArrowUpRightGlyph, 'ArrowUpRightIcon');
-export const ArrowsDownUpIcon = withAppWeight(ArrowsDownUpGlyph, 'ArrowsDownUpIcon');
 export const ArrowsInSimpleIcon = withAppWeight(ArrowsInSimpleGlyph, 'ArrowsInSimpleIcon');
 export const ArrowsOutSimpleIcon = withAppWeight(ArrowsOutSimpleGlyph, 'ArrowsOutSimpleIcon');
 export const BellIcon = withAppWeight(BellGlyph, 'BellIcon');

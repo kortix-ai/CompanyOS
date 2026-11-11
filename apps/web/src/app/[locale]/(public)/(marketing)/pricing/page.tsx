@@ -6,6 +6,7 @@ import { usePricingPlans } from '@/features/billing/use-pricing-plans';
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { useEnglishOnly } from '@/features/marketing/kit/english-only';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+import { Band, PageFrame } from '@/features/marketing/kit/page-frame';
 import { WorksWithStrip } from '@/features/marketing/landing-sections/works-with-strip';
 import { CreditLadder } from '@/features/marketing/pricing/credit-ladder';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
@@ -131,31 +132,6 @@ function formatRateUsd(amount: number, locale: string): string {
 /** A catalog sentence with no full stop gets one, so both title lines end alike. */
 function sentence(text: string): string {
   return /[.!?。！？]$/.test(text) ? text : `${text}.`;
-}
-
-/** Hairline rails 62px in from each edge, the same pair the landing page draws. */
-function Rails() {
-  return (
-    <>
-      <div
-        aria-hidden
-        className="bg-border pointer-events-none absolute inset-y-0 left-4 z-10 w-px lg:left-17"
-      />
-      <div
-        aria-hidden
-        className="bg-border pointer-events-none absolute inset-y-0 right-4 z-10 w-px lg:right-17"
-      />
-    </>
-  );
-}
-
-/** A band row (landing `kx-rail-fade`): hairlines top and bottom across the page, content between the rails. */
-function Band({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className="kx-rail-fade border-y px-4 lg:px-17">
-      <div className={className}>{children}</div>
-    </div>
-  );
 }
 
 /** The landing section heading: the two-tone title and an optional line under it, inside the text gutter. */
@@ -394,9 +370,7 @@ export default function PricingPage() {
   }));
 
   return (
-    <main className="bg-background relative mx-auto w-full max-w-[1440px]">
-      <Rails />
-
+    <PageFrame>
       {/* ── Hero and plans: the free offer first, as the reader's first question ── */}
       <section id="plans" className="relative">
         <div className="flex flex-col gap-7.5 px-8 pt-40 pb-16 lg:px-28 lg:pt-48 lg:pb-20">
@@ -562,6 +536,6 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
-    </main>
+    </PageFrame>
   );
 }

@@ -50,6 +50,10 @@
  *            the project drawer's bottom bar (`PinnedBar`). The list scrolls
  *            under it. It returns to project home, whose composer starts the
  *            session.
+ *   iOS      Search and New session share the bottom bar (`BottomSearchBar`):
+ *            the search circle bottom left, the New session pill bottom
+ *            right; no search field under the header. `autoFocusSearch`
+ *            opens it expanded and focused.
  *
  * Tap a row → the session opens in the view route, which replaces this page
  * (useCoveringRoute), so the stack stays one screen over project home.
@@ -72,8 +76,9 @@ import { useColorScheme } from 'nativewind';
 import { useIsFocused } from 'expo-router/react-navigation';
 import { directSubsessions } from '@kortix/sdk';
 import { useSessionsNeedingInput } from '@kortix/sdk/react';
-import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
-import { ArchiveIcon, FunnelIcon as Funnel, NavigationArrowIcon, XIcon } from '@/lib/icons';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
+import { ArchiveIcon, FunnelIcon as Funnel, NavigationArrowIcon, PlusIcon, XIcon } from '@/lib/icons';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -84,6 +89,7 @@ import { PageContent } from '@/components/kortix/page-content';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PinnedBar, usePinnedBarInset } from '@/components/kortix/pinned-bar';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroup, SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { KortixBottomSheetModal } from '@/components/kortix/sheet';
 import { useCoveringRoute, useProjectRoute } from '@/components/session/ProjectRoutes';
@@ -110,7 +116,7 @@ import {
 } from '@/lib/session/session-tree';
 import { useAuthContext } from '@/contexts';
 import { parentKey, useSessionTreeStore } from '@/stores/session-tree-store';
-import { needsYouBySession } from '@/lib/session/needs-you';
+import { needsYouBySession, type NeedsYouWaitingOn } from '@/lib/session/needs-you';
 import { useReviewNeedsYou } from '@/lib/review/use-review';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import type { SessionStarter } from '@/lib/session/session-tree';
@@ -172,6 +178,8 @@ interface SessionRowProps {
   /** What waits on the user in this session: review-inbox items, open agent
    *  questions, approvals (`needsYouBySession`). > 0 marks it `needs-you`. */
   needsYouCount: number;
+  /** What the wait blocks: picks the needs-you glyph (question or diff). */
+  needsYouWaitingOn?: NeedsYouWaitingOn;
   /** Who started the run (`initiator`), after the title. */
   starter?: SessionStarter;
   /** The parent's children show under it (KRTX-639); `undefined` = no children. */
@@ -204,6 +212,7 @@ const SessionRow = React.memo(function SessionRow({
   now,
   nested = false,
   needsYouCount,
+  needsYouWaitingOn,
   starter,
   childRows,
   expanded = false,
@@ -250,10 +259,10 @@ const SessionRow = React.memo(function SessionRow({
                 borderBottomWidth: CONNECTOR_STROKE,
               }}
             />
-            <SessionStatusMark status={status} />
+            <SessionStatusMark status={status} waitingOn={needsYouWaitingOn} />
           </View>
         ) : (
-          <SessionStatusMark status={status} />
+          <SessionStatusMark status={status} waitingOn={needsYouWaitingOn} />
         )
       }
       label={title}
@@ -528,6 +537,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
         now={now}
         nested
         needsYouCount={needsYou.get(child.session_id)?.count ?? 0}
+        needsYouWaitingOn={needsYou.get(child.session_id)?.waitingOn}
         onOpen={openSession}
         onActions={openSessionActions}
       />
@@ -554,6 +564,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
               session={session}
               now={now}
               needsYouCount={needsYou.get(session.session_id)?.count ?? 0}
+              needsYouWaitingOn={needsYou.get(session.session_id)?.waitingOn}
               starter={showStarter ? starterOf(session) : undefined}
               expanded={expanded}
               onToggleChildren={toggleParent}
@@ -592,7 +603,11 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
   );
 
   // ── New session: the project drawer's pinned button, at the bottom right ──
-  const listBottomInset = usePinnedBarInset(NEW_SESSION_BUTTON_HEIGHT);
+  // iOS: search and New session share the bottom bar (`BottomSearchBar`, 44pt).
+  const bottomSearch = usesBottomSearch();
+  const pinnedBarInset = usePinnedBarInset(NEW_SESSION_BUTTON_HEIGHT);
+  const bottomSearchInset = useBottomSearchInset();
+  const listBottomInset = bottomSearch ? bottomSearchInset : pinnedBarInset;
   const pageBackground = isDark ? THEME.dark.background : THEME.light.background;
   const mutedColor = isDark ? THEME.dark.mutedForeground : THEME.light.mutedForeground;
   const handleNewSession = React.useCallback(() => {
@@ -664,7 +679,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
           </View>
         ) : (
           <>
-            {hasSessions || filterActive || noRowYet ? (
+            {!bottomSearch && (hasSessions || filterActive || noRowYet) ? (
               <SearchListHeader
                 value={query}
                 onChangeText={setQuery}
@@ -788,7 +803,19 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
 
       {/* The project drawer's pinned bar (`PinnedBar`), its New session button at
           the bottom right. Hidden while the page loads. */}
-      {loading ? null : (
+      {loading ? null : bottomSearch ? (
+        <BottomSearchBar
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search sessions"
+          searchLabel="Search sessions"
+          searchEnabled={hasSessions || filterActive || noRowYet}
+          autoFocusOnMount={autoFocusSearch}
+          // The bar's own haptic stands in for `handleNewSession`'s.
+          action={{ label: 'New session', icon: PlusIcon, onPress: newSession }}
+          background={pageBackground}
+        />
+      ) : (
         <PinnedBar
           controlHeight={NEW_SESSION_BUTTON_HEIGHT}
           background={pageBackground}
@@ -807,7 +834,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
           screens' gap), Archived: the viewer's archived sessions instead of
           the list (KRTX-2418). */}
       <KortixBottomSheetModal ref={filterSheetRef} title="Filter sessions" enableDynamicSizing enablePanDownToClose>
-        <BottomSheetScrollView
+        <SheetScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
           <View style={{ gap: GROUP_GAP }}>
@@ -838,7 +865,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
               <Text>Reset</Text>
             </Button>
           ) : null}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
     </View>
   );

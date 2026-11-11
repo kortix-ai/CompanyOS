@@ -4,7 +4,8 @@
  *
  * Layout (the Sessions page's): `PageHeader` with the hamburger, the search
  * field (server-side `q`, debounced 250 ms: the list returns at most 100 rows,
- * so search is the way past them), the scope chips All · Yours · Shared with
+ * so search is the way past them; on iOS at the bottom, `BottomSearchBar
+ * fieldAtRest` as on Apps: the full field at rest, an X while it is focused), the scope chips All · Yours · Shared with
  * you · Pinned, then one plain row per artifact: type glyph · title · how long
  * ago it changed. No live thumbnails: one WebView only, in the viewer.
  *
@@ -24,6 +25,7 @@ import { PageContent } from '@/components/kortix/page-content';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PageList } from '@/components/kortix/page-list';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
@@ -46,6 +48,8 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
   const { t } = useTranslation();
   const background = THEME[useTone()].background;
   const actionsRef = React.useRef<ArtifactActionsSheetRef>(null);
+  const bottomSearch = usesBottomSearch();
+  const bottomInset = useBottomSearchInset();
 
   const [query, setQuery] = React.useState('');
   const [scope, setScope] = React.useState<ArtifactListScope>('all');
@@ -89,12 +93,14 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
       <PageContent>
         {available ? (
           <>
-            <SearchListHeader
-              value={query}
-              onChangeText={setQuery}
-              placeholder={t('artifacts.search')}
-              inputProps={{ accessibilityLabel: t('artifacts.search'), returnKeyType: 'search' }}
-            />
+            {bottomSearch ? null : (
+              <SearchListHeader
+                value={query}
+                onChangeText={setQuery}
+                placeholder={t('artifacts.search')}
+                inputProps={{ accessibilityLabel: t('artifacts.search'), returnKeyType: 'search' }}
+              />
+            )}
             {/* Scrolls sideways: "Shared with you" is long in fr, es and pt. */}
             <ScrollView
               horizontal
@@ -129,6 +135,7 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
           onRefresh={available ? () => list.refetch() : undefined}
           emptyLabel={emptyLabel}
           header={<View className="h-1" />}
+          bottomInset={bottomSearch && available ? bottomInset : undefined}
           data={available ? rows : []}
           keyExtractor={(artifact) => artifact.artifact_id}
           renderItem={(artifact, index) => (
@@ -148,6 +155,17 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
           )}
         />
       </PageContent>
+
+      {available ? (
+        <BottomSearchBar
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('artifacts.search')}
+          searchLabel={t('artifacts.search')}
+          fieldAtRest
+          background={background}
+        />
+      ) : null}
 
       <ArtifactActionsSheet ref={actionsRef} projectId={projectId} />
     </View>

@@ -65,6 +65,10 @@ function installBlock(target: SetupTarget): string {
     `kortix hosts use ${host}`,
     'kortix hosts current   # must print ' + host,
     '```',
+    '',
+    'A test deployment may have no Kortix GitHub App. When step 6 asks the person',
+    'to install the App and the link does not work, use their own token instead,',
+    'with their yes: `gh auth token | kortix onboard --yes --json --github-token -`.',
   ].join('\n');
 }
 

@@ -10,7 +10,7 @@
  */
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SheetTextInput } from '@/components/kortix/SheetInput';
@@ -95,7 +95,7 @@ export function PromptEditView({
           />
         }
       />
-      <BottomSheetScrollView
+      <SheetScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }}
         keyboardShouldPersistTaps="handled"
@@ -119,7 +119,7 @@ export function PromptEditView({
         <Text variant="muted" className="px-1">
           Placeholders: {placeholders}
         </Text>
-      </BottomSheetScrollView>
+      </SheetScrollView>
       <View className="px-4 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
         <Button size="lg" className="rounded-full" disabled={!changed || saving} onPress={() => onSave(draft)}>
           <Text>{saving ? 'Saving…' : 'Save prompt'}</Text>

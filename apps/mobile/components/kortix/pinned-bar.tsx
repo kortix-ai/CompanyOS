@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { withAlpha } from '@/lib/utils/theme';
 import { cn } from '@/lib/utils/utils';
+import { useNativeSheet } from '@/components/kortix/native-sheet-context';
 
 /** Gap between the controls and the safe-area edge. */
 const PINNED_BAR_BOTTOM_GAP = 16;
@@ -70,8 +71,12 @@ function ShiftedRoot({ shift, style, children }: { shift: SharedValue<number>; s
   );
 }
 
-export function PinnedBar({ controlHeight, background, className, fade = true, children }: PinnedBarProps) {
+export function PinnedBar({ controlHeight, background, className, fade: fadeProp = true, children }: PinnedBarProps) {
   const insets = useSafeAreaInsets();
+  // On the iOS 26 native sheet glass there is no colour to fade to: a fade in
+  // the popover colour would draw an opaque band over the glass.
+  const nativeSheet = useNativeSheet();
+  const fade = fadeProp && !(nativeSheet && nativeSheet.surface === null);
   const shift = React.useContext(PinnedBarShiftContext);
   const barBottom = insets.bottom + PINNED_BAR_BOTTOM_GAP;
   const rootStyle = { height: barBottom + controlHeight + PINNED_BAR_FADE_ABOVE };

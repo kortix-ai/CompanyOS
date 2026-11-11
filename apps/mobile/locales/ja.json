@@ -1206,6 +1206,7 @@
     "call": "電話",
     "chartTapHint": "タップして値を表示",
     "checklistReady": "{{done}}/{{total}} 完了",
+    "closeMap": "地図を閉じる",
     "directions": "経路",
     "imageCount_one": "{{count}}枚の画像",
     "imageCount_other": "{{count}}枚の画像",
@@ -1216,7 +1217,9 @@
     "pick": "おすすめ",
     "pieFocus": "{{label}}は合計の{{percent}}%",
     "pieOfTotal": "{{total}}のうち{{value}}",
+    "showAllPlaces": "すべての場所を表示",
     "showData": "データを表示",
+    "showOnMap": "地図で表示",
     "unavailable": "このコンテンツを表示できませんでした。",
     "website": "ウェブサイト"
   },

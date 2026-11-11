@@ -51,8 +51,10 @@ const fakes: Record<string, Record<string, unknown>> = {
       }));
       return React.createElement('BottomSheetModal', null, props.children);
     }),
-    BottomSheetScrollView: host('Scroll'),
   },
+  // The sheet's content parts (`sheet-parts.tsx`): the gorhom part in a gorhom
+  // sheet, the plain one in the iOS native sheet. A host stands in for both.
+  '@/components/kortix/sheet-parts': { SheetScrollView: host('Scroll') },
   'expo-router': { useRouter: () => ({ push: (href: string) => pushCalls.push(href), replace: () => {} }) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   'react-native-reanimated': { useDerivedValue: (v: unknown) => v },

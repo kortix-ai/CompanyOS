@@ -19,7 +19,7 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { TRIGGER_CONTROL_ACTIONS, triggerControlsFrom } from '@kortix/sdk';
 import { useCans } from '@kortix/sdk/react';
 import { CaretRightIcon as ChevronRight, WarningIcon as TriangleAlert } from '@/lib/icons';

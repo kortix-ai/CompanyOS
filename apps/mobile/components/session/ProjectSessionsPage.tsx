@@ -72,7 +72,8 @@ import { useColorScheme } from 'nativewind';
 import { useIsFocused } from 'expo-router/react-navigation';
 import { directSubsessions } from '@kortix/sdk';
 import { useSessionsNeedingInput } from '@kortix/sdk/react';
-import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { ArchiveIcon, FunnelIcon as Funnel, NavigationArrowIcon, XIcon } from '@/lib/icons';
 
 import { Button } from '@/components/ui/button';
@@ -110,7 +111,7 @@ import {
 } from '@/lib/session/session-tree';
 import { useAuthContext } from '@/contexts';
 import { parentKey, useSessionTreeStore } from '@/stores/session-tree-store';
-import { needsYouBySession } from '@/lib/session/needs-you';
+import { needsYouBySession, type NeedsYouWaitingOn } from '@/lib/session/needs-you';
 import { useReviewNeedsYou } from '@/lib/review/use-review';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import type { SessionStarter } from '@/lib/session/session-tree';
@@ -172,6 +173,8 @@ interface SessionRowProps {
   /** What waits on the user in this session: review-inbox items, open agent
    *  questions, approvals (`needsYouBySession`). > 0 marks it `needs-you`. */
   needsYouCount: number;
+  /** What the wait blocks: picks the needs-you glyph (question or diff). */
+  needsYouWaitingOn?: NeedsYouWaitingOn;
   /** Who started the run (`initiator`), after the title. */
   starter?: SessionStarter;
   /** The parent's children show under it (KRTX-639); `undefined` = no children. */
@@ -204,6 +207,7 @@ const SessionRow = React.memo(function SessionRow({
   now,
   nested = false,
   needsYouCount,
+  needsYouWaitingOn,
   starter,
   childRows,
   expanded = false,
@@ -250,10 +254,10 @@ const SessionRow = React.memo(function SessionRow({
                 borderBottomWidth: CONNECTOR_STROKE,
               }}
             />
-            <SessionStatusMark status={status} />
+            <SessionStatusMark status={status} waitingOn={needsYouWaitingOn} />
           </View>
         ) : (
-          <SessionStatusMark status={status} />
+          <SessionStatusMark status={status} waitingOn={needsYouWaitingOn} />
         )
       }
       label={title}
@@ -528,6 +532,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
         now={now}
         nested
         needsYouCount={needsYou.get(child.session_id)?.count ?? 0}
+        needsYouWaitingOn={needsYou.get(child.session_id)?.waitingOn}
         onOpen={openSession}
         onActions={openSessionActions}
       />
@@ -554,6 +559,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
               session={session}
               now={now}
               needsYouCount={needsYou.get(session.session_id)?.count ?? 0}
+              needsYouWaitingOn={needsYou.get(session.session_id)?.waitingOn}
               starter={showStarter ? starterOf(session) : undefined}
               expanded={expanded}
               onToggleChildren={toggleParent}
@@ -807,7 +813,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
           screens' gap), Archived: the viewer's archived sessions instead of
           the list (KRTX-2418). */}
       <KortixBottomSheetModal ref={filterSheetRef} title="Filter sessions" enableDynamicSizing enablePanDownToClose>
-        <BottomSheetScrollView
+        <SheetScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
           <View style={{ gap: GROUP_GAP }}>
@@ -838,7 +844,7 @@ export function ProjectSessionsPage({ autoFocusSearch = false }: ProjectSessions
               <Text>Reset</Text>
             </Button>
           ) : null}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
     </View>
   );

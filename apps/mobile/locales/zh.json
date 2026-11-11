@@ -1206,6 +1206,7 @@
     "call": "致电",
     "chartTapHint": "点按查看数值",
     "checklistReady": "已完成 {{done}}/{{total}}",
+    "closeMap": "关闭地图",
     "directions": "路线",
     "imageCount_one": "{{count}} 张图片",
     "imageCount_other": "{{count}} 张图片",
@@ -1216,7 +1217,9 @@
     "pick": "推荐",
     "pieFocus": "{{label}} 占总数的 {{percent}}%",
     "pieOfTotal": "{{total}} 中的 {{value}}",
+    "showAllPlaces": "显示所有地点",
     "showData": "显示数据",
+    "showOnMap": "在地图上显示",
     "unavailable": "无法显示此内容。",
     "website": "网站"
   },

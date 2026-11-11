@@ -1206,6 +1206,7 @@
     "call": "Llamar",
     "chartTapHint": "Toca para ver un valor",
     "checklistReady": "{{done}}/{{total}} listos",
+    "closeMap": "Cerrar mapa",
     "directions": "Cómo llegar",
     "imageCount_one": "{{count}} imagen",
     "imageCount_other": "{{count}} imágenes",
@@ -1216,7 +1217,9 @@
     "pick": "Recomendado",
     "pieFocus": "{{label}} es el {{percent}} % del total",
     "pieOfTotal": "{{value}} de {{total}}",
+    "showAllPlaces": "Mostrar todos los lugares",
     "showData": "Mostrar datos",
+    "showOnMap": "Mostrar en el mapa",
     "unavailable": "No se pudo mostrar este contenido.",
     "website": "Sitio web"
   },

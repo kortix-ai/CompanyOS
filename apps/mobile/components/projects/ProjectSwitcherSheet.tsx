@@ -40,7 +40,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -359,7 +360,7 @@ export function ProjectSwitcherSheet({
             />
           </View>
 
-          <BottomSheetScrollView
+          <SheetScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: listBottomInset, gap: 18 }}
             keyboardShouldPersistTaps="handled"
@@ -387,7 +388,7 @@ export function ProjectSwitcherSheet({
                 />
               ) : null}
             </SettingsGroup>
-          </BottomSheetScrollView>
+          </SheetScrollView>
         </View>
       </KortixBottomSheetModal>
 

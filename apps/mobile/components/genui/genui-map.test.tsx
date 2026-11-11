@@ -23,7 +23,9 @@ mock.module('@/lib/utils/open-link', () => ({
   },
 }));
 
+let mockScreen = { width: 375, height: 812, fontScale: 1, scale: 3 };
 mock.module('react-native', () => ({
+  AccessibilityInfo: { announceForAccessibility: () => {} },
   StyleSheet: { flatten: (s: unknown) => s, create: (s: unknown) => s },
   View: host('view'),
   Text: host('rntext'),
@@ -31,6 +33,8 @@ mock.module('react-native', () => ({
   ScrollView: host('scroll'),
   Image: host('image'),
   Platform: { OS: 'ios', select: (o: Record<string, unknown>) => o.ios },
+  // A 375pt phone at the default text size; a test sets mockScreen to change it.
+  useWindowDimensions: () => mockScreen,
 }));
 mock.module('react-native-reanimated', () => ({
   default: { View: host('animated-view') },

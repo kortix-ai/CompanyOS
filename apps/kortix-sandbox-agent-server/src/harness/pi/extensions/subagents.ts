@@ -675,15 +675,26 @@ function inlineAccess(inline: InlineAgent, params: SubagentParams, host: KortixH
   return { connectors, secrets }
 }
 
+/** An inline spec says something: instructions, a model, tools, a description, connectors or secrets. */
+function inlineSpecHasContent(spec: InlineAgent): boolean {
+  const filled = (value: unknown) =>
+    Array.isArray(value) ? value.some((item) => typeof item === 'string' && item.trim() !== '') : typeof value === 'string' && value.trim() !== ''
+  return [spec.instructions, spec.model, spec.description, spec.tools, spec.connectors, spec.secrets].some(filled)
+}
+
 /** The spawn input for a call: an inline ephemeral agent, else the named subagent type. */
 function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessionInput, 'prompt' | 'signal' | 'onSession' | 'sessionId' | 'session' | 'background'> {
   // A fork continues this conversation as this session's own agent.
   if (params.fork === true && !params.subagent_type && !params.agent) {
     return { title: `${params.description} (fork)`, agent: INLINE_AGENT, systemPrompt: FORK_PROMPT }
   }
-  const inline = params.agent
-  // One call names the child's agent one way. A previous release let an inline spec — even an
-  // empty one — silently displace subagent_type and spawn an unnamed, tool-less child.
+  // A strict-schema model (OpenAI strict function calling) fills every optional field, so it
+  // sends `agent` with every field empty beside its subagent_type. An empty spec names nothing:
+  // it is absent. Refusing it made every named hand-off impossible for such a model, which then
+  // retried the identical call (160 times in one prod session, 2026-11-10).
+  const inline = params.agent && inlineSpecHasContent(params.agent) ? params.agent : undefined
+  // One call names the child's agent one way. A previous release let an inline spec silently
+  // displace subagent_type and spawn an unnamed, tool-less child.
   if (inline && params.subagent_type && !params.task_id) {
     throw new Error(
       `subagent_type "${params.subagent_type}" and an inline \`agent\` spec cannot combine: the inline spec displaces the named agent. Pass one: omit agent to run the named type, or omit subagent_type and fill the inline spec.`,

@@ -204,7 +204,15 @@ export async function mintSessionToken(opts: {
   // or standing service account.
   // A My Kortix colleague also holds the connectors and secrets a person allowed it.
   const [agentGrant, serviceAccountId] = platformMetaAgent
-    ? [await myKortixSessionGrant(opts.sandboxId), null]
+    ? [
+        await myKortixSessionGrant(opts.sandboxId, {
+          projectId: opts.projectId,
+          repoUrl: opts.gitProject.repoUrl,
+          defaultBranch: opts.gitProject.defaultBranch,
+          manifestPath: opts.gitProject.manifestPath,
+        }),
+        null,
+      ]
     : await Promise.all([
         // Resolve the per-session grant AND the agent's standing-identity
         // service account in parallel. Grant resolution must throw on failure.

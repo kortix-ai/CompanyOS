@@ -1635,8 +1635,8 @@ export function SessionChat({
     [promptInbox.retry],
   );
 
-  // "Stop and send": the waiting row becomes Quick Queue. The running turn
-  // ends after its running tool, then this row runs.
+  // "Send now": the waiting row goes next, ahead of older waiting rows, and
+  // steers the running turn. The turn does not stop.
   const handleStopAndSendQueuedMessage = useCallback(
     (id: string) => {
       void promptInbox
@@ -1989,7 +1989,7 @@ export function SessionChat({
       parkedAskIdByRequest.has(renderedQuestion.id)
     );
   }, [renderedQuestion, liveQuestions, parkedAskIdByRequest]);
-  // Quick Queue entries share the turn renderer. The inbox marks their IDs as
+  // Transcript-placed waiting entries share the turn renderer. The inbox marks their IDs as
   // pending until delivery; a client-minted wire ID does not place a message.
   // Each is the user message `sessionLogPromptMessage` mints for its prompt.
   const queuedSyntheticMessages = useMemo(() => {
@@ -2814,7 +2814,7 @@ export function SessionChat({
          * at once and never waits behind an earlier Send of this session.
          */
         commitsRewind?: boolean;
-        /** Quick Queue paints a transcript bubble; Queue List adds a row above the composer. */
+        /** `transcript` paints a bubble now; `composer` adds a waiting row above the composer. */
         placement?: 'transcript' | 'composer';
         /** How the prompt reaches a running turn (`composerSendDelivery`). */
         delivery?: SessionPromptDelivery;
@@ -2932,8 +2932,9 @@ export function SessionChat({
       }
       const placement = overrides?.placement ?? 'transcript';
       const delivery = overrides?.delivery;
-      // Placement decides WHERE the send waits: Quick Queue paints its bubble in
-      // the transcript now, Queue List draws a row above the composer. Busy
+      // Placement decides WHERE the send waits: an idle send paints its bubble
+      // in the transcript now, a send into a running turn draws a row above the
+      // composer until the turn reads it. Busy
       // state or earlier live rows decide only whether it waits at all.
       const willQueue =
         isBusyRef.current || promptInbox.prompts.some((prompt) => prompt.state !== 'failed');
@@ -5168,7 +5169,7 @@ export function SessionChat({
                 autoFocus={deferComposerFocus || !composerAutoFocus ? false : undefined}
                 onSend={async (text, files, mentions, attachments, placement) => {
                   if (await queueEdit.save(text)) return;
-                  // Enter while a turn runs steers it (D9.1); Cmd/Ctrl+Enter is Queue List.
+                  // Enter or Cmd/Ctrl+Enter while a turn runs steers it (one delivery mode).
                   await handleSend(
                     text,
                     files,

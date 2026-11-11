@@ -15,7 +15,7 @@ import { writeCatalog } from '../src/core/catalog';
 import { describeEnv, loadEnv } from '../src/core/env';
 import { exitOnceDecided } from '../src/core/exit-once-decided';
 import { parseFlags } from '../src/core/flags';
-import { parseGrepFlag, parseListFlag } from '../src/core/selection';
+import { SelectionError, parseGrepFlag, parseListFlag } from '../src/core/selection';
 import { allFlows } from '../src/core/flow';
 import { localEnvironmentOverrides, localRunExitCode } from '../src/core/local-profile';
 import {
@@ -325,6 +325,7 @@ main()
     exitOnceDecided(code);
   })
   .catch((err) => {
-    log.error(String(err?.stack ?? err));
+    // A usage error names its cause in one line; anything else keeps its stack.
+    log.error(err instanceof SelectionError ? `usage: ${err.message}` : String(err?.stack ?? err));
     exitOnceDecided(2);
   });

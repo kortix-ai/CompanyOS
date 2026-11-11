@@ -52,6 +52,8 @@ mock.module('@/components/ui/icon', () => ({ Icon: host('icon') }));
 mock.module('@/components/ui/text', () => ({ Text: host('text') }));
 mock.module('@/components/ui/separator', () => ({ Separator: host('separator') }));
 mock.module('@/components/kortix/kortix-loader', () => ({ KortixLoader: host('loader') }));
+// The place photo (`place-list.tsx`): the GenUI image view, without the markdown renderer's graph.
+mock.module('../components/inline', () => ({ GenuiImageView: host('genui-image') }));
 mock.module('@/lib/icons', () => ({ XIcon: 'x', CaretLeftIcon: 'caret-left' }));
 mock.module('@/lib/utils/open-link', () => ({
   openExternalLink: (href: string) => opened.push(href),

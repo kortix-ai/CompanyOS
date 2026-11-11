@@ -348,8 +348,8 @@ export function MapSheet({ title, data, onClose }: { title: string; data: MapShe
                   <View
                     key={place.id}
                     style={{ width: cardWidth }}
-                    // The selected place is a fill change, not a border: no layout shift, and tiles carry no border (design.md).
-                    className={`overflow-hidden rounded-2xl ${selected === index ? 'bg-accent' : 'bg-card'}`}
+                    // A hairline border sets each card off the map tiles behind it; the selected place is a fill change.
+                    className={`overflow-hidden rounded-2xl border border-border ${selected === index ? 'bg-accent' : 'bg-card'}`}
                   >
                     <PlaceRow place={place} compact onSelect={() => showPlace(index)} />
                   </View>

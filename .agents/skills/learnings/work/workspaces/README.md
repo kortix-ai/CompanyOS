@@ -153,7 +153,7 @@ R2a-0 migration ran at 18:14 UTC. Step 1 of the order below is done.
 What the invariant failures are:
 
 - I10 57: rows of accounts the deletion sweep erased after the fill stamped them. A false positive, fixed on branch `workspaces-r2a`.
-- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261111225019147` reconciles it.
+- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261111225900000` reconciles it.
 - I4 9: project-scope grants held by users who are not members of the account (7 Manager grants from 2026-11-03, 2 "Folder: manage" from 2026-10-30 to 2026-11-11). Not a split artifact. Open: which write path grants a project role to a non-member.
 - I6 1: one 1:1 account whose name differs from its project's (the project was created 2026-11-10). Open.
 - I11 1: the known shared Stripe subscription id (design.md §3.3). It needs the owner-confirmed billing review before the gate can be met.

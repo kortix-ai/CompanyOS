@@ -1218,9 +1218,11 @@ The Kortix MCP server lets another AI tool, such as Claude, ChatGPT, Cursor or C
 - start sessions and send them messages;
 - read a session's progress;
 - run commands on a session's cloud computer;
-- call your connectors.
+- call your connectors and any Kortix API route.
 
-The tool acts as you, with your permissions, and reaches every workspace you can open.
+The server gives the tool six tools, whatever your workspace holds: `search` finds a tool by intent, `describe` reads its input, `call` runs it, `execute` runs a short program that calls tools, `resume` reads a call that waits for your approval, and `skills` reads the Kortix guides. Your agents in Kortix sessions use the same tools.
+
+Signed in, the tool acts as you, with your permissions, and reaches every workspace you can open. To make it act as one of your agents instead, connect it with that agent's key (see below).
 
 <Steps>
 <Step title="Copy the URL">
@@ -1285,6 +1287,19 @@ npx add-mcp https://api.kortix.com/v1/mcp --name kortix -g
 
 </Tab>
 </Tabs>
+
+#### Connect a tool as one of your agents
+
+A tool can act as an agent of your workspace instead of as you. It then has exactly that agent's access: the Kortix permissions, connectors and approvals its `kortix.yaml` entry gives it, in this workspace only.
+
+1. Open **Workspace settings** → **API keys** and create a key that acts as the agent.
+2. Add the server with that key as the bearer token instead of the browser sign-in, for example:
+
+```sh
+claude mcp add --transport http kortix-scout https://api.kortix.com/v1/mcp --header "Authorization: Bearer <the agent's key>"
+```
+
+Every call the tool makes is recorded as that agent. Revoke the key in **API keys** to stop it.
 
 #### Let your coding agent set it up
 

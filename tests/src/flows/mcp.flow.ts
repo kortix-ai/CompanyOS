@@ -1102,3 +1102,66 @@ flow(
     });
   },
 );
+
+// MCP-8: an outside client that should act as an agent connects with that
+// agent's key. The key authorizes as the agent's service account: its own
+// workspace only, within its kortix.yaml grant, never the person who minted it.
+flow(
+  "MCP-8",
+  {
+    domain: "mcp",
+    requires: ["database"],
+    timeoutMs: 180_000,
+    routes: ["POST /v1/workspaces/:workspaceId/keys", "POST /v1/mcp", "GET /v1/workspaces/:projectId/secrets"],
+  },
+  async (ctx) => {
+    const team = await ctx.fixtures.team();
+    const project = await team.project({ managedGit: true });
+    const other = await team.project();
+    const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
+    try {
+      let agentKey = "";
+      let personKey = "";
+      const rpcAs = async (token: string, id: number, name: string, args: Record<string, unknown>, query = "") => {
+        const r = await ctx.client.as(ctx.P.ANON).post(`/v1/mcp${query}`, rpc(id, "tools/call", { name, arguments: args }), { headers: { Authorization: `Bearer ${token}` } });
+        r.status(200);
+        const result = r.json<any>().result;
+        return { isError: result.isError === true, body: JSON.parse(result.content[0].text) };
+      };
+      await ctx.step("the project declares a narrow agent `scout` (files only); the owner mints its key and a personal key", async () => {
+        await world.writeManifest(
+          `project:\n  name: ke2e-mcp8\ndefault_agent: kortix\nagents:\n  kortix:\n    kortix_permissions: all\n  scout:\n    kortix_permissions: [project.file.read]\n    connectors: []\n`,
+          "ke2e: MCP-8 scout agent",
+        );
+        const minted = await world.owner.post(`/v1/workspaces/${project.id}/keys`, { name: "MCP-8 scout", acts_as: "agent", agent: "scout" });
+        minted.status(201);
+        agentKey = minted.json<{ secret_key: string }>().secret_key;
+        const personal = await ctx.client.as(ctx.P.OWNER).post("/v1/accounts/tokens", { name: "MCP-8 owner" });
+        personal.status(201);
+        personKey = personal.json<{ secret_key: string }>().secret_key;
+      });
+      await ctx.step("the agent key reaches /v1/mcp (not refused as a person route) and its own workspace is the default project", async () => {
+        const list = await ctx.client.as(ctx.P.ANON).post("/v1/mcp", rpc(1, "tools/list"), { headers: { Authorization: `Bearer ${agentKey}` } });
+        list.status(200);
+        const projects = await rpcAs(agentKey, 2, "call", { id: "projects.list" });
+        const ids = (projects.body.data as Array<{ project_id: string }>).map((x) => x.project_id);
+        if (JSON.stringify(ids) !== JSON.stringify([project.id])) throw new Error(`agent key sees: ${JSON.stringify(projects.body).slice(0, 300)}`);
+      });
+      await ctx.step("as `scout` the secrets route is denied (not in its grant); the owner's personal key reads it", async () => {
+        const asAgent = await rpcAs(agentKey, 3, "call", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets" });
+        if (!asAgent.isError || asAgent.body.status !== "denied" || asAgent.body.reason !== "http_403") throw new Error(`scout read secrets: ${JSON.stringify(asAgent.body).slice(0, 300)}`);
+        const asPerson = await rpcAs(personKey, 4, "call", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets", input: { project_id: project.id } });
+        if (asPerson.isError || asPerson.body.status !== "ok") throw new Error(`owner read secrets: ${JSON.stringify(asPerson.body).slice(0, 300)}`);
+      });
+      await ctx.step("the agent key never reaches another workspace, even when a call names it", async () => {
+        const named = await rpcAs(agentKey, 5, "call", { id: "kortix.GET /v1/workspaces/{workspaceId}/secrets", input: { project_id: other.id } });
+        if (!named.isError) throw new Error(`agent key reached another workspace: ${JSON.stringify(named.body).slice(0, 300)}`);
+        const scoped = await ctx.client.as(ctx.P.ANON).post(`/v1/mcp?project=${other.id}`, rpc(6, "tools/call", { name: "call", arguments: { id: "projects.list" } }), { headers: { Authorization: `Bearer ${agentKey}` } });
+        const text: string = scoped.json<any>().result?.content?.[0]?.text ?? "";
+        if (text.includes(other.id)) throw new Error("the MCP URL's project widened the agent key");
+      });
+    } finally {
+      await world.close();
+    }
+  },
+);

@@ -434,7 +434,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
   function appWithFenceThrow(): OpenAPIHono {
     const app = new OpenAPIHono();
     installHttpErrors(app);
-    app.post('/v1/mcp', async (c) => {
+    app.post('/v1/notifications', async (c) => {
       await enforceTokenProjectScope(c, '00000000-0000-4000-8000-000000000001', {
         principal: 'oauth-workspace-token',
       });
@@ -449,7 +449,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     const before = logged.length;
     let lastBody = '';
     for (let i = 0; i < 5; i += 1) {
-      const res = await app.request('/v1/mcp', { method: 'POST' });
+      const res = await app.request('/v1/notifications', { method: 'POST' });
       expect(res.status).toBe(403);
       lastBody = await res.text();
     }
@@ -471,10 +471,10 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
   test('a window whose suppressed count left the churn band ships the next line at warn', async () => {
     const app = appWithFenceThrow();
     // The reason the handler keys on: the thrown message, bounded at 200.
-    const probe = await app.request('/v1/mcp', { method: 'POST' });
+    const probe = await app.request('/v1/notifications', { method: 'POST' });
     expect(probe.status).toBe(403);
     const reason = ((await probe.json()) as { message: string }).message.slice(0, 200);
-    const key = deadCredentialLogKey('POST', '/v1/mcp', 403, reason);
+    const key = deadCredentialLogKey('POST', '/v1/notifications', 403, reason);
     // Drop the probe's window, then stage the burst.
     resetLogWindowsForTests();
     // A burst in a window that already expired: one decision opens it, the
@@ -488,7 +488,7 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     // warn — a caller grinding on a refusal it never acts on is not the
     // designed churn (KRTX-4454's severity follows the volume).
     const before = logged.length;
-    const res = await app.request('/v1/mcp', { method: 'POST' });
+    const res = await app.request('/v1/notifications', { method: 'POST' });
     expect(res.status).toBe(403);
     expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(0);
     const warns = logged.slice(before).filter((l) => l.level === 'warn');

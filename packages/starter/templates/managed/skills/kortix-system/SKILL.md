@@ -110,6 +110,7 @@ state. Use `git` and the file tools for files and commits.
 | Connect Slack or Teams | `kortix channels connect` (the `kortix-slack` skill) |
 | Agents and models | `kortix agents ls\|default\|config\|scope`, `kortix models ls\|default <model-id>` |
 | Tools, feature flags | `kortix tools ls\|eject <name>`, `kortix workspaces features [enable <flag>]` |
+| Find and run any tool from a shell (connectors, Kortix API, sessions) | `kortix tools search "<intent>"`, `tools describe <id>`, `tools call <id> --input '<json>'` (exit 3 = waits for approval: give the person the URL, never repeat), `tools execute --file <p>`, `tools resume <execution_id>`, `tools skills [name]` |
 | The manifest | `kortix validate [--scopes]`, `kortix schema` |
 | Kortix itself is broken, confusing or missing something | `kortix feedback "<what happened, what you expected>" --kind bug\|friction\|idea`: it reaches the Kortix team with this session's id. File it when it happens, once per problem, then continue with a workaround |
 </cli>

@@ -6432,6 +6432,36 @@ await p.connectors.policies.set('gmail', [
 
 How workspace rules, policy sets and base rules combine is in [Connectors](/docs/guide#connectors).
 
+### Search and call any tool
+
+`p.agentTools()` gives a program the six tools every Kortix agent gets: `skills`, `search`, `describe`, `call`, `execute` and `resume` (`POST /v1/agent-tools/{verb}?project_id=<project_id>`). One search covers the workspace's connectors (`connectors.<slug>.<action>`), the Kortix API (`kortix.<METHOD> <path>`), sessions, sandboxes and connector setup. A call runs as the caller, through the same access rules, connector policies, approvals and call log as a call from a session.
+
+```ts
+const tools = p.agentTools(); // sent as surface `api`; pass { surface: 'cli' } or { surface: 'app' }
+
+const { results } = await tools.search({ query: 'send email', family: 'connectors', limit: 5 });
+const schema = await tools.describe(results[0].id); // input_schema, output_schema
+
+const result = await tools.call(results[0].id, { to: 'ops@example.test', subject: 'Report', body: 'Attached.' });
+if (result.status === 'pending_approval') {
+  // A person approves at result.approval_url. Never repeat the call.
+  const state = await tools.resume(result.execution_id!); // state: 'pending', then the decision and outcome
+}
+```
+
+| Method | Resolves |
+| --- | --- |
+| `search({ query, family?, limit? })` | `{ results: [{ id, title, risk, description, input }], truncated, next }`. `limit` defaults to 10, at most 50. |
+| `describe(id)` | `{ id, title, description, risk, input_schema, output_schema }`, or `{ error, suggestions }` for an unknown id. |
+| `call(id, input?)` | `{ status: 'ok', data }` · `{ status: 'pending_approval', execution_id, approval_url, runs_on_approval, next }` · `{ status: 'denied' \| 'error', reason, message, data? }`. A result over the size limit has `data_preview` and `note` in place of `data`. |
+| `execute(code)` | Runs `code`, an async JavaScript function body, on the server. The program calls `search`, `describe`, `call` and `skills` as functions. Resolves `{ ok, value \| error, output?, calls, pending_approvals?, next? }`. Limits: 65,536 characters, 100 tool calls, 50 s. |
+| `resume(executionId)` | `{ execution_id, state, action, decision, decided_by, decided_at, note, outcome, expires_at, next }`. It reads; it never approves. |
+| `skills({ name?, file? })` | `{ text }`: the skill list, one skill, or one of its reference files, as Markdown. |
+
+A tool that reports a failure answers HTTP `422` with the shapes above, and the method resolves them. Invalid input (`400`, `invalid_input`), a refused token (`401`) and any other `422` reject with `ApiError`. `kortix.agentTools({ projectId?, surface? })` is the same client with no bound workspace: the server then uses the caller's only workspace.
+
+From a shell, the same verbs are `kortix tools search <query>`, `kortix tools describe <id>`, `kortix tools call <id> --input '<json>'`, `kortix tools execute --file <path>`, `kortix tools resume <execution_id>` and `kortix tools skills [name]`. Each takes `--json` and `--workspace <id>`. `call` exits `0` on `ok`, `3` when the call waits for an approval (it prints the approval URL), `1` on `denied` or `error`, and `2` on a usage error. `describe` of an unknown id prints the closest ids and exits `1`. Quote an id that has spaces: `kortix tools describe 'kortix.GET /v1/projects'`.
+
 ### Store secrets
 
 `p.secrets.upsert(input)` creates or updates a workspace secret. The value is write-only: no call returns it. With the `runtime` strategy, a session reads the secret as an environment variable named `name`.
@@ -8410,6 +8440,7 @@ Stable entry points follow semver. A deep path into `dist/` has no semver.
 | `project(projectId)` | The [workspace handle](#the-workspace-handle) without the workspace-level members. | `/projects/{projectId}/…` |
 | `session(projectId, sessionId)` | The [session handle](#the-session-handle). | `/projects/{projectId}/sessions/{sessionId}/…` |
 | `connectors` · `connector(slug)` | Connector calls with a token that carries its workspace, such as a session token. Same methods as the data-plane half of `p.connectors` and as `p.connector(slug)`. | `/connectors/…` |
+| `agentTools(options?)` | The six agent tools: `skills` · `search` · `describe` · `call` · `execute` · `resume`. `options`: `projectId`, `surface` (`api`, `cli` or `app`; default `api`). `p.agentTools({ surface? })` binds the workspace. See [Search and call any tool](#search-and-call-any-tool). | `/agent-tools/{verb}` |
 | `github` | GitHub App installations and repository links, per account. | `/projects/github/…` |
 | `gitBackend` | The instance git backend that holds Kortix-managed repositories. | `/projects/git/backend` |
 | `billing` | Plan, credit balance, transactions, usage, per-session usage, subscription. | `/billing/…` |

@@ -707,7 +707,9 @@ flow(
     await ctx.step('a local MCP server URL is refused by the egress guard', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .post(path, { url: 'https://127.0.0.1/mcp' }, { params: { projectId: p.id } });
+        // A private address no allowlist names (the local stack allowlists
+        // 127.0.0.1 for its loopback fakes, so that one is reachable there).
+        .post(path, { url: 'https://10.255.255.1/mcp' }, { params: { projectId: p.id } });
       r.status(400).body().has('$.code', 'invalid_source_address');
     });
 
@@ -3588,7 +3590,8 @@ flow(
     const hits: string[] = [];
     let redirectTo = '';
     const upstream = createServer((req, res) => {
-      hits.push(req.url ?? '');
+      // A background auth probe of the root (HEAD / or GET /) can land at any time; count only real calls.
+      if (req.url !== '/') hits.push(req.url ?? '');
       if (redirectTo) {
         res.writeHead(302, { location: redirectTo });
         res.end();
@@ -4925,7 +4928,8 @@ flow(
     const db = await connectFlowDb(ctx);
     const hits: string[] = [];
     const upstream = createServer((req, res) => {
-      hits.push(`${req.method} ${req.url}`);
+      // A background auth probe of the root (HEAD / or GET /) can land at any time; count only real calls.
+      if (req.url !== '/') hits.push(`${req.method} ${req.url}`);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end('{"done":true}');
     });
@@ -5087,7 +5091,8 @@ flow(
     for (let i = 9; i < pdf.length; i++) pdf[i] = (i * 31) % 256;
     // Echoes every request as JSON ({ method, path, url, query, headers, body }) and records it.
     const upstream = await startOpenApiUpstream();
-    const received = () => upstream.echoed();
+    // A background auth probe of the root can land at any time; count only the calls.
+    const received = () => upstream.echoed().filter((r) => r.path !== '/');
     const slug = `ke2e-cli-${Date.now().toString(36)}`;
     const pat = await ctx.fixtures.pat({ name: ctx.fixtures.name('connectors-cli') });
     const cli = new CliSandbox('connectors-cli');
@@ -6787,7 +6792,8 @@ flow(
     const db = await connectFlowDb(ctx);
     const hits: string[] = [];
     const upstream = createServer((req, res) => {
-      hits.push(`${req.method} ${req.url}`);
+      // A background auth probe of the root (HEAD / or GET /) can land at any time; count only real calls.
+      if (req.url !== '/') hits.push(`${req.method} ${req.url}`);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end('{"charge":"ch_synthetic","done":true}');
     });

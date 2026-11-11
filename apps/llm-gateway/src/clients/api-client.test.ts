@@ -542,7 +542,8 @@ describe('ApiClient private path', () => {
 // model_not_found; a plan gate; a disconnected provider), so re-asking per
 // line re-ran the API's resolution — and its warn log's first-occurrence
 // gate — for the same answer: one session logged 27 warns in 8 h, one per
-// line (KRTX-4665). The refusal is remembered per account, project and model.
+// line (KRTX-4665). The refusal is remembered per account, project and model,
+// when it carries no retry hint (a transient refusal is re-asked).
 describe('ApiClient.resolveUpstream remembers a typed refusal', () => {
   afterEach(() => setSystemTime());
 
@@ -612,6 +613,31 @@ describe('ApiClient.resolveUpstream remembers a typed refusal', () => {
     expect(calls).toBe(1001);
     await expect(c.resolveUpstream(principal, 'model-0')).rejects.toBeInstanceOf(GatewayResolutionError);
     expect(calls).toBe(1002);
+  });
+
+  test('a refusal with a retry hint is transient: never remembered, the API is asked every time', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return jsonResponse({
+        candidates: [],
+        resolutionError: {
+          code: 'provider_pool_rate_limited',
+          message: 'The provider pool is cooling down.',
+          suggestion: 'Retry when the cooldown ends.',
+          retryAfterSeconds: 30,
+        },
+      });
+    });
+    // The pool cooldown is 30 s: a memo would serve the refusal (and its stale
+    // retry-after) for the full 5 min, past the pool's stated recovery.
+    for (let call = 0; call < 3; call++) {
+      await expect(c.resolveUpstream(principal, 'inworld-tts-2')).rejects.toMatchObject({
+        code: 'provider_pool_rate_limited',
+        retryAfterSeconds: 30,
+      });
+    }
+    expect(calls).toBe(3);
   });
 
   test('a served resolution is never remembered: every call asks the API', async () => {

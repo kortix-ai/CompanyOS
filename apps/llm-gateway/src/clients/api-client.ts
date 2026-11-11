@@ -82,8 +82,9 @@ const ADMIT_MISSING_MS = 60_000;
 
 /** How long a model's typed resolution refusal is remembered. Re-asking per request re-ran the API's resolution for the
  * same answer: a box's voice call resolves its TTS model once per spoken line, so one session against a deployment that
- * cannot serve the model re-failed every line (KRTX-4665: 27 warns in 8 h, one per line, one session). A refusal is a
- * persistent state (a lineup without the model, a plan gate, a disconnected provider); the TTL picks a changed state up
+ * cannot serve the model re-failed every line (KRTX-4665: 27 warns in 8 h, one per line, one session). A refusal
+ * without a retry hint is a persistent state (a lineup without the model, a plan gate, a disconnected provider, a
+ * usage-limit rest); one with a retryAfterSeconds is transient and never memoized. The TTL picks a changed state up
  * without a gateway restart. */
 const REFUSAL_MEMO_MS = 5 * 60 * 1000;
 /** The refusal memo holds one entry per (account, project, model id): bounded, oldest evicted. */
@@ -317,12 +318,24 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       // ApiUnavailableError 5xx.
       if (result.resolutionError) {
         const error = resolutionError(result.resolutionError);
-        // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
-        if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
-          const oldest = refusalMemo.keys().next().value;
-          if (oldest !== undefined) refusalMemo.delete(oldest);
+        // A refusal carrying retryAfterSeconds is TRANSIENT — a client-facing
+        // retry hint that states when the refusal clears (a provider-pool
+        // cooldown): never memoized, so the stated recovery is honored and no
+        // stale retry-after is served past it. restSeconds is NOT a hint (the
+        // client never receives it; a usage limit rests for days, outliving
+        // this TTL): a restSeconds-only refusal stays memoized, the 5-min
+        // re-ask being this fix's bound on per-line resolution. The memo keeps
+        // the persistent codes (a lineup without the model, a plan gate, a
+        // disconnected provider) the issue's signal needs.
+        const transient = error.retryAfterSeconds !== undefined;
+        if (!transient) {
+          // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
+          if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
+            const oldest = refusalMemo.keys().next().value;
+            if (oldest !== undefined) refusalMemo.delete(oldest);
+          }
+          refusalMemo.set(key, { error, until: Date.now() + REFUSAL_MEMO_MS });
         }
-        refusalMemo.set(key, { error, until: Date.now() + REFUSAL_MEMO_MS });
         throw error;
       }
       return result.candidates ?? [];

@@ -11,6 +11,8 @@ type CapabilitySource = {
   strategy?: SecretStrategy;
   consumer?: SecretConsumer | null;
   egressPolicy?: SecretEgressPolicy | null;
+  /** The project's delivery floor; see `ResolvedProjectSecret`. */
+  projectDefaultStrategy?: SecretStrategy | null;
 };
 
 export type SecretCapability =
@@ -126,6 +128,7 @@ export function buildSecretCapabilities(
     const delivery = resolveSecretDelivery({
       identifier: row.identifier,
       strategy: row.strategy,
+      projectDefaultStrategy: row.projectDefaultStrategy,
       agentGrantEnv: input.grantEnv ?? null,
       sessionAllowlist: input.sessionAllowlist ?? null,
       sessionId: input.sessionId ?? null,

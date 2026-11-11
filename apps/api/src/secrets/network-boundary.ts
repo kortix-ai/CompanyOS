@@ -194,11 +194,19 @@ export function resolveNetworkBoundaryBindings(
     const delivery = resolveSecretDelivery({
       identifier: row.identifier,
       strategy: row.strategy,
+      projectDefaultStrategy: row.projectDefaultStrategy,
       agentGrantEnv: input.agentGrantEnv,
       sessionAllowlist: input.sessionAllowlist,
       sessionId: input.sessionId,
     });
     if (delivery.emit !== 'handle' || delivery.strategy !== 'egress') continue;
+    // Raised to egress by the PROJECT floor, not by the row itself. Such a row
+    // was never configured for the network boundary (no `network` consumer, no
+    // host list), so `materializeSecretDelivery` withholds it from the box. It
+    // must not throw here: a throw fails provisioning for EVERY new session of
+    // the project, and the row is already safe — withheld is stricter than
+    // anything it could have been.
+    if (row.strategy !== 'egress' && (row.consumer !== 'network' || !row.egressPolicy)) continue;
     if (row.consumer !== 'network') {
       throw new Error(`Network-boundary secret ${row.identifier} has an invalid consumer`);
     }

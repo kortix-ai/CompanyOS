@@ -379,3 +379,38 @@ describe('findBoundaryDestinationConflict', () => {
     ).toThrow('billing-api and billing-backup both target api.example.com header authorization');
   });
 });
+
+describe('resolveNetworkBoundaryBindings — the project delivery floor', () => {
+  test('a runtime row raised to egress by the project floor is skipped, not thrown', () => {
+    // A plain sandbox secret carries no `network` consumer and no host list.
+    // Throwing here would fail provisioning for every new session of the
+    // project; the materializer already withholds the row.
+    const plain = secret({ strategy: 'runtime', consumer: 'sandbox', egressPolicy: null, projectDefaultStrategy: 'egress' });
+    expect(
+      resolveNetworkBoundaryBindings([plain], {
+        sessionId: 'session-1',
+        agentGrantEnv: ['billing-api'],
+        sessionAllowlist: null,
+      }),
+    ).toEqual([]);
+  });
+
+  test('a floor of denied withholds an egress row from the boundary', () => {
+    expect(
+      resolveNetworkBoundaryBindings([secret({ projectDefaultStrategy: 'denied' })], {
+        sessionId: 'session-1',
+        agentGrantEnv: ['billing-api'],
+        sessionAllowlist: null,
+      }),
+    ).toEqual([]);
+  });
+
+  test('a runtime floor never weakens an egress row', () => {
+    const result = resolveNetworkBoundaryBindings([secret({ projectDefaultStrategy: 'runtime' })], {
+      sessionId: 'session-1',
+      agentGrantEnv: ['billing-api'],
+      sessionAllowlist: null,
+    });
+    expect(result.map((binding) => binding.identifier)).toEqual(['billing-api']);
+  });
+});

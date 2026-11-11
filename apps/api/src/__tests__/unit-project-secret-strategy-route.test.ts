@@ -27,6 +27,9 @@ const realIam = await import('../iam');
 mock.module('../iam', () => ({ ...realIam, PROJECT_ACTIONS }));
 
 let agentGrant: Record<string, unknown> | null = null;
+/** The project's `secrets_egress` flag. On for the policy tests; the create
+ *  default tests flip it. */
+let egressFlagOn = true;
 let authType: 'service_account' | 'supabase' | 'pat' = 'supabase';
 
 let row: ReturnType<typeof secretRow> | null = secretRow();
@@ -227,7 +230,7 @@ mock.module('../projects/lib/access', () => ({
     row: {
       accountId: ACCOUNT_ID,
       projectId: PROJECT_ID,
-      metadata: { experimental: { secrets_egress: true } },
+      metadata: { experimental: { secrets_egress: egressFlagOn } },
     },
     userId: USER_ID,
     accountRole: 'owner',
@@ -1226,7 +1229,8 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
   // The web secrets manager already sent `runtime`/`sandbox` outright, so the old
   // default also produced a split brain where the same name landed differently
   // depending on which surface created it.
-  test('does not infer a delivery policy from the secret name', async () => {
+  test('flag off: does not infer a delivery policy from the secret name', async () => {
+    egressFlagOn = false;
     const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1240,6 +1244,52 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
     // for anything else.
     expect(row).toMatchObject({ consumer: 'sandbox' });
     expect(audits[0]).toMatchObject({ after: { configured: true, rotated: true } });
+    egressFlagOn = true;
+  });
+
+  test('flag on: a known API host name with no strategy is created network-delivered', async () => {
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'ANTHROPIC_API_KEY', value: 'plaintext-test-value' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.delivery_choice).toEqual({
+      strategy: 'egress',
+      reason: 'known_api_host',
+      hosts: ['api.anthropic.com'],
+    });
+    expect(row).toMatchObject({
+      strategy: 'egress',
+      consumer: 'network',
+      egressPolicy: { rules: [{ host: 'api.anthropic.com' }], on_no_match: 'deny', tls: 'terminate' },
+    });
+    expect(audits[0]).toMatchObject({ after: { strategy: 'egress', delivery_reason: 'known_api_host' } });
+    expect(JSON.stringify(body)).not.toContain('plaintext-test-value');
+  });
+
+  test('flag on: an unknown name keeps the runtime default and says so', async () => {
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'SERVICE_API_KEY', value: 'plaintext-test-value' }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'default' });
+    expect(row).toMatchObject({ consumer: 'sandbox' });
+  });
+
+  test('flag on: a multi-use name such as GITHUB_TOKEN keeps the runtime default', async () => {
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'GITHUB_TOKEN', value: 'plaintext-test-value' }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'default' });
+    expect(row).toMatchObject({ consumer: 'sandbox' });
   });
 
   test('an explicit gateway choice is still honored for the same name', async () => {
@@ -1280,6 +1330,16 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
       consumer: 'sandbox',
     });
     expect(row).toMatchObject({ strategy: 'runtime', consumer: 'sandbox' });
+  });
+
+  test('an explicit runtime choice reports reason requested', async () => {
+    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'ANTHROPIC_API_KEY', value: 'plaintext-test-value', strategy: 'runtime' }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).delivery_choice).toEqual({ strategy: 'runtime', reason: 'requested' });
   });
 
   test('creates a connector secret without a runtime delivery transition', async () => {

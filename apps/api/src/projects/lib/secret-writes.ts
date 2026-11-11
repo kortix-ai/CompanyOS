@@ -37,8 +37,22 @@ const SecretDeliverySyncSchema = z
 
 export type SecretDeliverySync = NonNullable<z.infer<typeof SecretDeliverySyncSchema>>;
 
+/**
+ * Which delivery the write got, and why. `known_api_host` names the hosts the
+ * handle is spendable on. See `SecretDeliveryChoiceReason`.
+ */
+export const SecretDeliveryChoiceSchema = z
+  .object({
+    strategy: z.enum(['runtime', 'egress', 'broker', 'denied']),
+    reason: z.enum(['requested', 'existing', 'known_api_host', 'default']),
+    hosts: z.array(z.string()).optional(),
+  })
+  .openapi('SecretDeliveryChoice');
+export type SecretDeliveryChoice = z.infer<typeof SecretDeliveryChoiceSchema>;
+
 export const SecretWriteResultSchema = ContractSecretSchema.extend({
   delivery_sync: SecretDeliverySyncSchema,
+  delivery_choice: SecretDeliveryChoiceSchema.optional(),
 }).openapi('SecretWriteResult');
 
 /** Keep the per-sandbox reasons; drop the rows that succeeded. */

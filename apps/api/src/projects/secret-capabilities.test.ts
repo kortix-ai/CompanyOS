@@ -397,3 +397,23 @@ describe('echo guidance has one story and no mode to choose', () => {
     expect(notes).toContain('kortix secrets call <identifier> <https-url>');
   });
 });
+
+describe('buildSecretCapabilities — the project delivery floor', () => {
+  test('a denied floor removes a runtime capability', () => {
+    const catalog = buildSecretCapabilities(
+      [{ identifier: 'PLAIN', key: 'PLAIN', strategy: 'runtime', consumer: 'sandbox', projectDefaultStrategy: 'denied' }],
+      { grantEnv: 'all', sessionId: 'session-1' },
+    );
+    expect(catalog.capabilities).toEqual([]);
+  });
+
+  test('a runtime floor keeps a runtime capability', () => {
+    const catalog = buildSecretCapabilities(
+      [{ identifier: 'PLAIN', key: 'PLAIN', strategy: 'runtime', consumer: 'sandbox', projectDefaultStrategy: 'runtime' }],
+      { grantEnv: 'all', sessionId: 'session-1' },
+    );
+    expect(catalog.capabilities).toEqual([
+      { identifier: 'PLAIN', delivery: 'sandbox', environment_variable: 'PLAIN' },
+    ]);
+  });
+});

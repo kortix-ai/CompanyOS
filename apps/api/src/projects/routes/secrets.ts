@@ -28,7 +28,7 @@ import {
   recordProjectSecretTombstone,
 } from '../secrets';
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
-import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
+import { isGatewayManagedEnv, secretApiHostsForName } from '../../llm-gateway/sandbox-credentials';
 import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-default';
 import { createRoute, z } from '@hono/zod-openapi';
 import { featureDisabledBody } from '../../feature-flags/gate';
@@ -53,13 +53,18 @@ import {
 import { readJsonObject } from '../../shared/http-body';
 import {
   SecretWriteResultSchema,
+  type SecretDeliveryChoice,
   type SecretDeliverySync,
   boundaryConflictBody,
   boundaryDestinationConflict,
   connectorSecretBindings,
   summarizeDeliverySync,
 } from '../lib/secret-writes';
-import { SECRET_DELIVERY_NEEDS_PERSON, resolveSecretWriteInput } from '../lib/secret-write-input';
+import {
+  SECRET_DELIVERY_NEEDS_PERSON,
+  chooseSecretCreateDefault,
+  resolveSecretWriteInput,
+} from '../lib/secret-write-input';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { loadConnectionSharing } from '../lib/connection-sharing';
 import {
@@ -380,13 +385,36 @@ export function registerSecretsRoutes(): void {
     // new egress secret, or an existing non-egress one switched to it. A secret
     // that is already egress keeps serving and stays editable, so turning the
     // flag off never strands one. Runtime/broker/denied are unaffected.
-    if (
-      explicitStrategy === 'egress' &&
-      existing?.strategy !== 'egress' &&
-      !resolveFeatureFlag(loaded.row.metadata, 'secrets_egress')
-    ) {
+    const egressEnabled = resolveFeatureFlag(loaded.row.metadata, 'secrets_egress');
+    if (explicitStrategy === 'egress' && existing?.strategy !== 'egress' && !egressEnabled) {
       return c.json(featureDisabledBody('secrets_egress'), 403);
     }
+    // A NEW secret with no requested delivery whose name belongs to a known API
+    // host is network-delivered when the project has `secrets_egress` on. The
+    // value stays server-side and the box gets a handle spendable only on that
+    // host. Flag off, an update, or an unknown name: the runtime default.
+    const createDefault = existing
+      ? null
+      : chooseSecretCreateDefault({
+          body,
+          value,
+          egressEnabled,
+          hosts: secretApiHostsForName(name),
+        });
+    const insertStrategy = explicitStrategy ?? createDefault?.strategy;
+    const insertConsumer = explicitConsumer !== undefined ? explicitConsumer : createDefault?.consumer;
+    const insertPolicy = explicitPolicy ?? createDefault?.policy ?? null;
+    const deliveryChoice: SecretDeliveryChoice = {
+      strategy: insertStrategy ?? existing?.strategy ?? 'runtime',
+      reason: explicitStrategy
+        ? 'requested'
+        : createDefault
+          ? 'known_api_host'
+          : existing
+            ? 'existing'
+            : 'default',
+      ...(createDefault ? { hosts: createDefault.hosts } : {}),
+    };
     // An identifier is a stable handle to ONE secret — redefining its underlying
     // KEY via upsert would silently retarget every agent grant that references
     // it. Reject instead of a surprising in-place key swap.
@@ -431,9 +459,9 @@ export function registerSecretsRoutes(): void {
                 identifier,
                 name,
                 valueEnc: encryptProjectSecret(projectId, value),
-                ...(explicitStrategy ? { strategy: explicitStrategy } : {}),
-                ...(explicitConsumer !== undefined ? { consumer: explicitConsumer } : {}),
-                ...(explicitPolicy ? { egressPolicy: explicitPolicy } : {}),
+                ...(insertStrategy ? { strategy: insertStrategy } : {}),
+                ...(insertConsumer !== undefined ? { consumer: insertConsumer } : {}),
+                ...(insertPolicy ? { egressPolicy: insertPolicy } : {}),
                 ...(explicitHandlePrefix ? { handlePrefix: explicitHandlePrefix } : {}),
                 createdBy: loaded.userId,
                 rotatedAt: now,
@@ -476,10 +504,11 @@ export function registerSecretsRoutes(): void {
             : null,
           after: {
             configured: true,
-            strategy: explicitStrategy ?? existing?.strategy ?? 'runtime',
+            strategy: insertStrategy ?? existing?.strategy ?? 'runtime',
             consumer:
-              explicitConsumer !== undefined ? explicitConsumer : (existing?.consumer ?? 'sandbox'),
-            egress_policy: explicitPolicy,
+              insertConsumer !== undefined ? insertConsumer : (existing?.consumer ?? 'sandbox'),
+            egress_policy: insertPolicy,
+            delivery_reason: deliveryChoice.reason,
             rotated: value !== null,
           },
           metadata: { identifier, name },
@@ -510,7 +539,7 @@ export function registerSecretsRoutes(): void {
     // can call that host" and "it cannot" — the author has to see it. Awaiting is
     // up to 15s per live sandbox, which no ordinary secret save should pay, so
     // every other strategy keeps the detached push.
-    const boundaryDelivery = explicitStrategy === 'egress' || existing?.strategy === 'egress';
+    const boundaryDelivery = insertStrategy === 'egress' || existing?.strategy === 'egress';
     let deliverySync: SecretDeliverySync | null = null;
     if (boundaryDelivery) {
       deliverySync = summarizeDeliverySync(
@@ -539,7 +568,8 @@ export function registerSecretsRoutes(): void {
       const providerKey = isGatewayManagedEnv(name);
       capturePersonEvent(c, loaded, projectId, 'secret_created', {
         name_kind: providerKey ? 'provider' : 'other',
-        strategy: explicitStrategy ?? 'runtime',
+        strategy: insertStrategy ?? 'runtime',
+        delivery_reason: deliveryChoice.reason,
       });
       if (providerKey) {
         // A gateway-managed env var is one of our provider keys (ANTHROPIC_API_KEY → anthropic).
@@ -559,7 +589,7 @@ export function registerSecretsRoutes(): void {
     if (!view) {
       throw new Error(`Secret view not found after upsert: ${identifier}`);
     }
-    return c.json({ ...view, delivery_sync: deliverySync }, 200);
+    return c.json({ ...view, delivery_sync: deliverySync, delivery_choice: deliveryChoice }, 200);
   },
   );
 

@@ -48,6 +48,10 @@ describe('gatewayStripsRow', () => {
     expect(gatewayStripsRow({ nameIsGatewayManaged: true, consumer: 'sandbox' })).toBe(false);
   });
 
+  test('a network-delivered model key reaches the box as its handle', () => {
+    expect(gatewayStripsRow({ nameIsGatewayManaged: true, consumer: 'network' })).toBe(false);
+  });
+
   test('a real gateway credential is still stripped', () => {
     expect(gatewayStripsRow({ nameIsGatewayManaged: true, consumer: 'llm_gateway' })).toBe(true);
   });

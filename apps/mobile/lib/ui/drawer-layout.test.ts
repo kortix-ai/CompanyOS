@@ -3,8 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_PEEK,
-  PEEK_CARD_DIM,
-  PEEK_CARD_SCALE,
+  PEEK_CARD_VEIL,
   drawerSwipeEdgeWidth,
   peekCardFrame,
   projectDrawerWidth,
@@ -34,28 +33,26 @@ describe('projectDrawerWidth', () => {
 
 describe('peekCardFrame', () => {
   test('closed: a plain page', () => {
-    expect(peekCardFrame(0, 44, false)).toEqual({ borderRadius: 0, scale: 1, dim: 0 });
+    expect(peekCardFrame(0, 44, false)).toEqual({ borderRadius: 0, veil: 0 });
   });
 
-  test('open: the rounded, slightly smaller, dimmed card', () => {
+  test('open: the rounded card, its content faded toward the page colour, full size', () => {
     const open = peekCardFrame(1, 44, false);
     expect(open.borderRadius).toBe(44);
-    expect(open.scale).toBeCloseTo(PEEK_CARD_SCALE, 6);
-    expect(open.dim).toBeCloseTo(PEEK_CARD_DIM, 6);
+    expect(open.veil).toBeCloseTo(PEEK_CARD_VEIL, 6);
   });
 
   test('half way: linear in progress, so it tracks the finger', () => {
     const half = peekCardFrame(0.5, 44, false);
     expect(half.borderRadius).toBe(22);
-    expect(half.scale).toBeCloseTo(1 - (1 - PEEK_CARD_SCALE) / 2, 6);
+    expect(half.veil).toBeCloseTo(PEEK_CARD_VEIL / 2, 6);
   });
 
-  test('Reduce Motion: no scale, the radius snaps on, the dim stays', () => {
-    expect(peekCardFrame(0, 44, true)).toEqual({ borderRadius: 0, scale: 1, dim: 0 });
+  test('Reduce Motion: the radius snaps on, the veil stays', () => {
+    expect(peekCardFrame(0, 44, true)).toEqual({ borderRadius: 0, veil: 0 });
     const moving = peekCardFrame(0.3, 44, true);
     expect(moving.borderRadius).toBe(44);
-    expect(moving.scale).toBe(1);
-    expect(moving.dim).toBeCloseTo(0.3 * PEEK_CARD_DIM, 6);
+    expect(moving.veil).toBeCloseTo(0.3 * PEEK_CARD_VEIL, 6);
   });
 
   test('progress outside 0…1 (a spring) is clamped', () => {

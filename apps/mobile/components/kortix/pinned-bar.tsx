@@ -13,9 +13,15 @@
  *
  * `background` is the surface the bar sits on; the fade ends on it. Never fade
  * to `transparent` (black at zero alpha: a grey band on Android).
+ *
+ * `blur` (iOS, where the binary has `ExpoBlur`) adds a progressive blur under
+ * the fade: the system blur masked clear → full from the top of the bar
+ * down, so the rows sliding under the controls soften before they fade (the
+ * Claude iOS sidebar; Jay, 2026-11-11). The fade is lighter over the blur.
+ * Android and older binaries keep the plain fade.
  */
 import * as React from 'react';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,10 +30,38 @@ import { withAlpha } from '@/lib/utils/theme';
 import { cn } from '@/lib/utils/utils';
 import { useNativeSheet } from '@/components/kortix/native-sheet-context';
 
+type MaskedViewType = React.ComponentType<{
+  maskElement: React.ReactElement;
+  pointerEvents?: 'none';
+  style?: ViewStyle;
+  children: React.ReactNode;
+}>;
+
+/**
+ * The system blur and its mask, only on iOS where the binary has `ExpoBlur`
+ * (an OTA can reach an older build). Required here, not imported: the
+ * Android path and bun tests never load them.
+ */
+const BLUR: { BlurView: typeof import('expo-blur').BlurView; MaskedView: MaskedViewType } | null = (() => {
+  if (Platform?.OS !== 'ios') return null;
+  try {
+    const { requireOptionalNativeModule } = require('expo') as typeof import('expo');
+    if (requireOptionalNativeModule('ExpoBlur') == null) return null;
+    return {
+      BlurView: (require('expo-blur') as typeof import('expo-blur')).BlurView,
+      MaskedView: (require('@react-native-masked-view/masked-view') as { default: unknown }).default as MaskedViewType,
+    };
+  } catch {
+    return null;
+  }
+})();
+
 /** Gap between the controls and the safe-area edge. */
 const PINNED_BAR_BOTTOM_GAP = 16;
 /** How far the fade reaches above the controls. */
 const PINNED_BAR_FADE_ABOVE = 36;
+/** How far the progressive blur reaches above the controls (`blur`). */
+const PINNED_BAR_BLUR_ABOVE = 64;
 /** Space between the content's last row and the controls. */
 const PINNED_BAR_CONTENT_GAP = 16;
 
@@ -50,6 +84,10 @@ interface PinnedBarProps {
    * opaque, the site shows to the edge; Jay, 2026-09-23).
    */
   fade?: boolean;
+  /** A progressive blur under the fade (iOS). See the file comment. */
+  blur?: boolean;
+  /** The blur's tint: the app's theme. */
+  dark?: boolean;
   children: React.ReactNode;
 }
 
@@ -71,7 +109,7 @@ function ShiftedRoot({ shift, style, children }: { shift: SharedValue<number>; s
   );
 }
 
-export function PinnedBar({ controlHeight, background, className, fade: fadeProp = true, children }: PinnedBarProps) {
+export function PinnedBar({ controlHeight, background, className, fade: fadeProp = true, blur = false, dark = false, children }: PinnedBarProps) {
   const insets = useSafeAreaInsets();
   // On the iOS 26 native sheet glass there is no colour to fade to: a fade in
   // the popover colour would draw an opaque band over the glass.
@@ -79,14 +117,35 @@ export function PinnedBar({ controlHeight, background, className, fade: fadeProp
   const fade = fadeProp && !(nativeSheet && nativeSheet.surface === null);
   const shift = React.useContext(PinnedBarShiftContext);
   const barBottom = insets.bottom + PINNED_BAR_BOTTOM_GAP;
-  const rootStyle = { height: barBottom + controlHeight + PINNED_BAR_FADE_ABOVE };
+  const blurred = blur && fade && BLUR != null;
+  // The blur starts higher than the fade: rows soften before they fade.
+  const rootStyle = { height: barBottom + controlHeight + (blurred ? PINNED_BAR_BLUR_ABOVE : PINNED_BAR_FADE_ABOVE) };
 
   const content = (
     <>
+      {blurred && BLUR ? (
+        <BLUR.MaskedView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          maskElement={
+            <LinearGradient
+              // Only the mask's alpha counts: clear at the top, full blur from 55% down.
+              colors={[withAlpha(background, 0), withAlpha(background, 1), withAlpha(background, 1)]}
+              locations={[0, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          }>
+          <BLUR.BlurView intensity={24} tint={dark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+        </BLUR.MaskedView>
+      ) : null}
       {fade ? (
         <LinearGradient
           pointerEvents="none"
-          colors={[withAlpha(background, 0), withAlpha(background, 0.85), withAlpha(background, 1)]}
+          colors={
+            blurred
+              ? [withAlpha(background, 0), withAlpha(background, 0.5), withAlpha(background, 0.92)]
+              : [withAlpha(background, 0), withAlpha(background, 0.85), withAlpha(background, 1)]
+          }
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFill}
         />

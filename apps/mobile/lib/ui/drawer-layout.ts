@@ -41,33 +41,33 @@ export function projectDrawerWidth(windowWidth: number): number {
  * screen itself moved aside. Android displays vary; 28 stays inside them.
  */
 export const PEEK_CARD_RADIUS = { ios: 44, android: 28 } as const;
-/** The card's scale when open. Very slight: the card stays the page, not a thumbnail. */
-export const PEEK_CARD_SCALE = 0.98;
-/** The dim over the card when open (alpha of the foreground ink). */
-export const PEEK_CARD_DIM = 0.08;
+/**
+ * The veil over the open card: the page's own colour at this alpha, so the
+ * page's content fades toward the surface (Claude iOS; Jay, 2026-11-11). Not
+ * an ink dim: a dark overlay turned the card grey beside the sidebar. The
+ * card does not scale either: a smaller card left a gap that showed its
+ * shadow as a band.
+ */
+export const PEEK_CARD_VEIL = 0.5;
 
 export interface PeekCardFrame {
   borderRadius: number;
-  scale: number;
-  dim: number;
+  /** Alpha of the page-colour veil over the card's content. */
+  veil: number;
 }
 
 /**
  * The card's frame at drawer `progress` (0 closed, 1 open). Linear in
  * progress, so it tracks the finger during a swipe and the timed curve during
- * a tap. Under Reduce Motion the card does not scale or round in motion: it
- * takes its open radius as soon as it moves and keeps scale 1; only the
- * library's translate moves it.
+ * a tap. Under Reduce Motion the card does not round in motion: it takes its
+ * open radius as soon as it moves; only the library's translate moves it.
  *
  * A worklet: `DrawerPeekCard` calls it on the UI thread every frame.
  */
 export function peekCardFrame(progress: number, radius: number, reducedMotion: boolean): PeekCardFrame {
   'worklet';
   const p = Math.min(1, Math.max(0, progress));
-  if (reducedMotion) {
-    return { borderRadius: p > 0 ? radius : 0, scale: 1, dim: p * PEEK_CARD_DIM };
-  }
-  return { borderRadius: p * radius, scale: 1 - p * (1 - PEEK_CARD_SCALE), dim: p * PEEK_CARD_DIM };
+  return { borderRadius: reducedMotion ? (p > 0 ? radius : 0) : p * radius, veil: p * PEEK_CARD_VEIL };
 }
 
 /**

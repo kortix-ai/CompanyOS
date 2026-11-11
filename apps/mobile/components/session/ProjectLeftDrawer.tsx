@@ -79,7 +79,7 @@ import {
   CaretRightIcon,
   MagnifyingGlassIcon,
   SquaresFourIcon,
-  NavigationArrowIcon,
+  PlusIcon,
   SealCheckIcon,
 } from '@/lib/icons';
 import { useDrawerProgress } from 'react-native-drawer-layout';
@@ -898,7 +898,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
           with white text in light mode, inverted in dark (Jay, 2026-11-11);
           on iOS 26 that is glass tinted in the primary colour, elsewhere the
           solid primary fill. */}
-      <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} className="justify-between px-5">
+      <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} blur dark={isDark} className="justify-between px-5">
         <GlassButtons>
           <Button
             variant="ghost"
@@ -927,8 +927,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
             // On glass the tint is the fill: the solid primary would hide the glass.
             className={glassy ? 'rounded-full bg-transparent dark:bg-transparent' : 'rounded-full'}
             onPress={handleNewSession}>
-            {/* Web's New session glyph (project-sidebar.tsx), flipped horizontally: tip up-right. */}
-            <Icon as={NavigationArrowIcon} size={20} style={{ transform: [{ scaleX: -1 }] }} />
+            {/* A plus, as the Claude iOS sidebar's New session (Jay, 2026-11-11). */}
+            <Icon as={PlusIcon} size={20} />
             <Text maxFontSizeMultiplier={BUTTON_LABEL_MAX_FONT_SCALE.lg}>New session</Text>
           </Button>
         </GlassButtons>

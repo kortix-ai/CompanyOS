@@ -50,10 +50,8 @@ describe('deviceLabel', () => {
   // The label rule the settings container renders: both parts, one part, or
   // the unknown-device fallback. Pinned before the container and the debug
   // harness share it, so the dedupe cannot change a single label.
-  const t = ((key, values) =>
-    key === 'deviceName' ? `${values?.browser}!${values?.os}` : `unknown:${key}`) as Parameters<
-    typeof deviceLabel
-  >[1];
+  const t: Parameters<typeof deviceLabel>[1] = (key, values) =>
+    key === 'deviceName' ? `${values?.browser}!${values?.os}` : `unknown:${key}`;
 
   test('browser and os: the translated "<browser> on <os>"', () => {
     const { browser, os } = describeUserAgent(

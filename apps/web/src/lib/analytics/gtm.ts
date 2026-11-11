@@ -11,7 +11,7 @@
 // RouteChangeTracker), so an unguarded access would crash analytics on the
 // marketing site for those browsers.
 import { locales } from '@/i18n/catalog.mjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   safeSessionGetItem,
   safeSessionSetItem,
@@ -105,17 +105,20 @@ export function isAnalyticsExcludedPath(pathname: string): boolean {
  * navigates into the app in the same tab keeps the container that page loaded.
  *
  * `extra` is the caller's own guard, evaluated once on mount with
- * `window.location`; pass a module-level function so the effect runs once.
+ * `window.location`; it lives in a ref, so the effect runs exactly once no
+ * matter how the caller builds its callback.
  */
 export function useAnalyticsPageEnabled(extra?: (location: Location) => boolean): boolean {
   const [enabled, setEnabled] = useState(false);
+  const guardRef = useRef(extra);
+  guardRef.current = extra;
   useEffect(() => {
     setEnabled(
       !isDesktop() &&
         !isAnalyticsExcludedPath(window.location.pathname) &&
-        (extra?.(window.location) ?? true),
+        (guardRef.current?.(window.location) ?? true),
     );
-  }, [extra]);
+  }, []);
   return enabled;
 }
 

@@ -13,9 +13,6 @@ function isKortixSiteHost(hostname: string): boolean {
   return host === 'kortix.com' || host.endsWith('.kortix.com');
 }
 
-// Module-level, so the page gate's effect runs once for the document.
-const isVisitorHost = (location: Location) => isKortixSiteHost(location.hostname);
-
 /**
  * Visitor-identification pixel (domain integration, script tag verification).
  *
@@ -28,7 +25,7 @@ const isVisitorHost = (location: Location) => isKortixSiteHost(location.hostname
  * run in the browser, so the root layout needs no request headers for it.
  */
 export function VisitorPixel() {
-  const enabled = useAnalyticsPageEnabled(isVisitorHost);
+  const enabled = useAnalyticsPageEnabled((location) => isKortixSiteHost(location.hostname));
   if (!enabled) return null;
   return (
     <Script

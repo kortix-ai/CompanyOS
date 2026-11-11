@@ -217,6 +217,17 @@ export interface GatewayDeps {
    * install token) without re-querying.
    */
   resolveCredential(connector: GatewayConnector, userId: string | null): Promise<string | null>;
+  /**
+   * A Composio account whose sign-in started (its row holds a Composio
+   * `session_id`) but whose account no finalize recorded. Asks Composio once
+   * and records the account when Composio reports it active. Returns the
+   * row's new metadata, or null when the account is not usable yet. Absent:
+   * such an account answers `needs_auth` without asking.
+   */
+  completeComposioAuthorization?(input: {
+    projectId: string;
+    connector: GatewayConnector;
+  }): Promise<Record<string, unknown> | null>;
   /** Email-originated sessions pin native Email channel calls to the inbound inbox/thread. */
   loadEmailSessionContext?(
     projectId: string,
@@ -741,7 +752,7 @@ function gatewayConnectorAccount(connector: GatewayConnector): CallResultAccount
 async function connectorUsable(
   deps: GatewayDeps,
   connector: GatewayConnector,
-  _input: CallInput,
+  input: CallInput,
   credentialOverride?: string | null,
 ): Promise<{ ok: true; secret: string | null } | { ok: false; reason: string }> {
   // Composio never uses connector credentials. Its account binding and session
@@ -752,9 +763,15 @@ async function connectorUsable(
     if (!connector.hasAuth || connector.connectionMetadata?.is_no_auth === true) {
       return { ok: true, secret: null };
     }
-    return typeof connector.connectionMetadata?.connected_account_id === 'string'
-      ? { ok: true, secret: null }
-      : { ok: false, reason: 'needs_auth' };
+    if (typeof connector.connectionMetadata?.connected_account_id === 'string') {
+      return { ok: true, secret: null };
+    }
+    // The person may have finished the sign-in at Composio with no finalize
+    // to record it. The execution below reads the recorded account.
+    const recorded = await finishedComposioAuthorization(deps, connector, input.projectId);
+    if (!recorded) return { ok: false, reason: 'needs_auth' };
+    connector.connectionMetadata = recorded;
+    return { ok: true, secret: null };
   }
   // Credential — none needed (public), or the one shared project credential.
   // (`per_user` — each member's own — was removed 2026-07-05; every connector
@@ -764,6 +781,28 @@ async function connectorUsable(
   const secret = await deps.resolveCredential(connector, null);
   if (secret == null) return { ok: false, reason: 'needs_auth' };
   return { ok: true, secret };
+}
+
+/**
+ * The account a started Composio sign-in landed, recorded now, or null. Only a
+ * row that holds a Composio `session_id` is asked about. A failed lookup is
+ * not a verdict: the call fails closed with `needs_auth`, as it did before
+ * the lookup existed.
+ */
+async function finishedComposioAuthorization(
+  deps: GatewayDeps,
+  connector: GatewayConnector,
+  projectId: string,
+): Promise<Record<string, unknown> | null> {
+  if (!deps.completeComposioAuthorization) return null;
+  if (typeof connector.connectionMetadata?.session_id !== 'string') return null;
+  try {
+    const metadata = await deps.completeComposioAuthorization({ projectId, connector });
+    if (!metadata) return null;
+    return typeof metadata.connected_account_id === 'string' || metadata.is_no_auth === true ? metadata : null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveEmailExecutionContext(

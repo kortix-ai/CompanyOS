@@ -46,6 +46,7 @@ import { connectorAttachmentStore } from './attachments';
 import { gateChannelRead } from './channel-read-scope';
 import { gateChannelWrite } from './channel-write-scope';
 import { resolveCredentialValue, resolveConnectionCredentialValue } from './credentials';
+import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
 import { CredentialNotSharedError } from './gateway';
 import type { ExecutionRecord, GatewayAction, GatewayConnector, GatewayDeps, HeldApprovalVerdict } from './gateway';
@@ -577,6 +578,23 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
         }),
         binding: a.binding as unknown as ActionBinding,
       } satisfies GatewayAction;
+    },
+    completeComposioAuthorization: async ({ projectId, connector }) => {
+      if (!connector.connectionId) return null;
+      try {
+        return await recordFinishedComposioAuthorization({
+          projectId,
+          slug: connector.slug,
+          connectionId: connector.connectionId,
+          metadata: connector.connectionMetadata ?? {},
+        });
+      } catch (error) {
+        logger.warn('[composio] recording a finished sign-in failed; the call answers needs_auth', {
+          connectionId: connector.connectionId,
+          error: error instanceof Error ? error.message.split('\n')[0] : String(error),
+        });
+        return null;
+      }
     },
     resolveCredential: async (connector, userId) => {
       // Channel connectors resolve to their platform install token (server-side);

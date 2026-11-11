@@ -168,10 +168,15 @@ async function load(stream: PollStream, now: number): Promise<Loaded | null> {
   }
   // The reconciler owns the account check (revoked, narrowed to people, another default):
   // when the account no longer resolves to this stream, it re-decides every trigger on it.
+  // Every trigger is checked as its own agent: an account shared with one agent feeds only that agent's triggers.
   const specs = await triggerSpecs(stream.projectId, consumers.map((r) => r.slug));
-  const spec = specs[0];
-  const resolved = spec?.event ? await resolveSource(stream.projectId, stream.accountId, spec.event) : null;
-  if (!resolved || resolved.kind !== 'ok' || resolved.connection.connectionId !== stream.connectionId) {
+  const resolutions = await Promise.all(
+    specs.map((s) => resolveSource(stream.projectId, stream.accountId, s.event!, s.agent)),
+  );
+  if (
+    resolutions.length === 0 ||
+    resolutions.some((resolved) => resolved.kind !== 'ok' || resolved.connection.connectionId !== stream.connectionId)
+  ) {
     // Same resolveSource as the reconciler: it moves the triggers and drops or replaces this stream.
     await skip(stream, now, false);
     await reconcileEventSubscriptionsFromCatalog(stream.projectId, stream.accountId);

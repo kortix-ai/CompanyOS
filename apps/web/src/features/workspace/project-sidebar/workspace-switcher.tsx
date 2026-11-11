@@ -20,9 +20,10 @@ import { useTranslations as useI18nTranslations } from '@/i18n/use-translations'
  * foot) → "Workspace settings" (`/workspaces/<id>/admin`) → "Invite people"
  * (`project.members.manage`) → Inbox → "Preferences" (the person's own
  * settings overlay; it keeps Mod+,) → "Apps and extensions" → Help → Log out,
- * with the signed-in identity under it. Rename and Leave live in Workspace
- * settings › General; Appearance lives in Preferences; Download app is a
- * dismissible row at the foot of the sidebar.
+ * with the signed-in identity under it. Rename lives in Workspace settings ›
+ * General and Leave in its Danger zone; a person who cannot open Workspace
+ * settings gets "Leave {name}" here instead. Appearance lives in Preferences;
+ * Download app is a dismissible row at the foot of the sidebar.
  *
  * Preferences pokes `useSettingsPanelStore.openSettings('profile')`: this
  * control only renders under `ProjectShell`, which mounts `SettingsPanel` as a
@@ -67,6 +68,7 @@ import { useProjectCan } from '@kortix/ui/internal/lib/use-project-can';
 import { WorkspaceMenuSection } from '@kortix/ui/workspace/sidebar/workspace-menu-section';
 import { workspaceMenuGroups, type WorkspaceMenuRow } from '@kortix/ui/workspace/sidebar/workspace-menu-model';
 import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
+import { useLeaveWorkspace } from '@kortix/ui/workspace/settings/use-leave-workspace';
 import { useCapabilityAccess } from '@kortix/ui/internal/layout/project-settings-nav';
 import { useMyInvites } from '@kortix/ui/internal/hooks/account/use-my-invites';
 import { CountBadge } from '@kortix/ui/count-badge';
@@ -88,6 +90,7 @@ import {
   BellIcon,
   CaretUpDownIcon,
   GearSixIcon as CogOne,
+  DoorOpenIcon,
   SignOutIcon as LogOut,
   PlusIcon,
   PuzzlePieceIcon,
@@ -107,6 +110,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   // Customize › Workspace settings (`config`).
   const canInvite = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE).allowed === true;
   const canOpenSettings = useCapabilityAccess(projectId).tabs.includes('config');
+  const leave = useLeaveWorkspace(projectId);
   const inviteCount = useMyInvites().data?.length ?? 0;
   const directory = useWorkspaceDirectory();
   const tNotifications = useI18nTranslations('notifications');
@@ -186,6 +190,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
   const menuGroups = workspaceMenuGroups({
     canInvite,
     canOpenSettings,
+    canLeave: leave.canLeave,
     hasInbox: inbox.href !== null,
   });
   const renderRow = (row: WorkspaceMenuRow): React.ReactNode => {
@@ -272,6 +277,15 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
             <SlidersHorizontalIcon />
             {t('workspace.preferences')}
             <DropdownMenuShortcut>{settingsShortcutLabel()}</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        );
+      case 'leave':
+        // Only for a person without Workspace settings, whose Danger zone
+        // holds Leave for everyone else. It confirms first.
+        return (
+          <DropdownMenuItem onSelect={() => deferAfterClose(leave.open)} size="sm">
+            <DoorOpenIcon />
+            <span className="min-w-0 flex-1 truncate">{tWorkspaceMenu('leave', { name: project?.name ?? '' })}</span>
           </DropdownMenuItem>
         );
       case 'apps':
@@ -393,6 +407,7 @@ export function WorkspaceSwitcher({ projectId }: { projectId: string }) {
 
       {/* Siblings of the dropdown, never children — see `useLogoutFlow`. */}
       {logoutDialog}
+      {leave.dialog}
 
       <LocalComputerModal
         projectId={projectId}

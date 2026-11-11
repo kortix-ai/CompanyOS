@@ -92,8 +92,9 @@ test.describe('38 — The project shell knows who you are', () => {
         ].map((label) => rows.findIndex((row) => row.startsWith(label)));
         expect(order.every((index) => index >= 0)).toBe(true);
         expect([...order].sort((x, y) => x - y)).toEqual(order);
-        // Rows with a better home are gone: Leave (Workspace settings ›
-        // General), Appearance (Preferences), Download app (sidebar footer).
+        // Rows with a better home are gone for an owner: Leave (Workspace
+        // settings › Danger zone), Appearance (Preferences), Download app
+        // (sidebar footer).
         for (const gone of ['More', 'Leave', 'Appearance', 'Download app']) {
           expect(rows.some((row) => row.startsWith(gone))).toBe(false);
         }

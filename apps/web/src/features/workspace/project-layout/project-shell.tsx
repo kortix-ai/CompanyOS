@@ -199,12 +199,13 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     }
   }, []);
 
-  // New-session navigation opens the project composer. The first send creates
-  // the durable session.
   // The sidebar's Download app row opens this; a stable callback keeps the
   // sidebar from re-rendering on every shell render.
   const [downloadOpen, setDownloadOpen] = useState(false);
   const openDownloadApp = useCallback(() => setDownloadOpen(true), []);
+
+  // New-session navigation opens the project composer. The first send creates
+  // the durable session.
   const newSession = useNewProjectSession(projectId);
   const handleNewSession = useCallback(() => {
     newSession();

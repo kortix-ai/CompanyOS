@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "邀请成员加入 {name}",
       "leave": "离开 {name}",
-      "invitePeople": "邀请成员",
-      "more": "更多"
+      "invitePeople": "邀请成员"
     },
     "roles": {
       "owner": {

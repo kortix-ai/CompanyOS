@@ -26712,8 +26712,7 @@
     "menu": {
       "invite": "Invita persone in {name}",
       "leave": "Lascia {name}",
-      "invitePeople": "Invita persone",
-      "more": "Altro"
+      "invitePeople": "Invita persone"
     },
     "roles": {
       "owner": {

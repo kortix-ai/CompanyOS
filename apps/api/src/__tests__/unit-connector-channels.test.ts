@@ -1133,10 +1133,13 @@ describe('handleCall — Slack moves through public channels on its own', () => 
 
   test('the write gate decides the join: a channel it refuses is not joined', async () => {
     const { deps, urls, audits } = slackAnswers([{ ok: false, error: 'not_in_channel' }]);
-    deps.gateChannelWrite = async (i) =>
-      i.actionPath === 'join_channel'
-        ? { refusal: { reason: 'conversation_not_in_project', message: 'Slack conversation C123 belongs to another workspace.' } }
-        : { refusal: null };
+    deps.gateChannelWrite = async (i) => ({
+      refusal:
+        i.actionPath === 'join_channel'
+          ? { reason: 'conversation_not_in_project', message: 'Slack conversation C123 belongs to another workspace.' }
+          : null,
+      misfire: () => null,
+    });
     expect((await handleCall(deps, read)).status).toBe('error');
     expect(urls).toEqual(['/conversations.history']);
     expect(audits).toContainEqual({ action: 'slack.join_channel', status: 'denied' });

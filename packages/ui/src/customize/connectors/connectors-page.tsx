@@ -815,8 +815,7 @@ export function ConnectorsPage({
           own, so unlike the `AddAppPanel` this replaced it gets a real visible
           `ModalHeader` rather than a `VisuallyHidden` title — the dialog needs
           an accessible name and the user needs to know what the form is for.
-          That is why `@radix-ui/react-visually-hidden` is no longer imported
-          on this page. */}
+          That is why no visually hidden title is needed on this page. */}
           <Modal open={panel === 'custom'} onOpenChange={(open) => !open && setPanel(null)}>
             <ModalContent className="lg:max-w-3xl">
               <ModalHeader>

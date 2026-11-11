@@ -176,7 +176,7 @@ export function SessionSiteHeader({
   // The name edits in place: the name button swaps for a field. The menu's
   // Rename item opens the same field, so there is one rename surface.
   const [isRenaming, setIsRenaming] = useState(false);
-  // Set by the menu's Rename item. Radix returns focus to the caret trigger
+  // Set by the menu's Rename item. The menu returns focus to the caret trigger
   // when the menu closes, which would blur, and so save, the field that just
   // opened; `onCloseAutoFocus` reads this and keeps focus in the field.
   const renameFromMenu = useRef(false);

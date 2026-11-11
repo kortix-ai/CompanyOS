@@ -10450,7 +10450,7 @@
       "text004bad6bfbd7": "Patched the retry to back off",
       "text0050aeb4cf77": "Add the group claim",
       "text0059798b7f70": "(optional)",
-      "text005b4c1dad87": "Search workspaces, accounts, owners",
+      "text005b4c1dad87": "Search workspaces, accounts, owners or an ID",
       "text005c9bcbce1e": "Creating trigger...",
       "text005dc222581c": "It has read the codebase too",
       "text005ff7fe0036": "Copy link to this release",

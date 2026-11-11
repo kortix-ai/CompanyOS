@@ -3595,7 +3595,7 @@ export function SessionChat({
       const active = document.activeElement;
       const focusInOverlay =
         active?.closest(
-          '[role="dialog"],[role="alertdialog"],[role="menu"],[data-radix-popper-content-wrapper]',
+          '[role="dialog"],[role="alertdialog"],[role="menu"],[data-kortix-floating]',
         ) != null;
       const fromComposerEditor =
         e.target instanceof Element && e.target.closest(COMPOSER_EDITOR_SELECTOR) !== null;

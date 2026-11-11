@@ -1,15 +1,17 @@
 // Migration: workspaces_reconcile_missing_rows  (NON-TRANSACTIONAL -- batched data pass)
 //
-// Workspaces Release 2a, before step 1 (design: .agents/skills/learnings/work/workspaces/design.md
-// §4). Reconciles every account that holds NO row of kortix.workspaces at all
-// (legacy_account_id = the account): invariants I9 and I12 report each one. The
-// next files build the unique index on workspaces(legacy_account_id) and the twin
-// foreign keys into it; their VALIDATE fails on a row whose account has no row
-// here. Reconcile first, validate after (learning 2026-08-19T182307Z).
+// Workspaces Release 2a (design: .agents/skills/learnings/work/workspaces/design.md §4).
+// Reconciles every account that holds NO row of kortix.workspaces at all
+// (legacy_account_id = the account), and every account with a project row that
+// has no row of its own (workspace_id = project_id). Invariants I9 and I12 report
+// each one. The next files add twin foreign keys into kortix.workspaces: a new row
+// that references a project with no workspaces row would fail its commit, and a
+// later VALIDATE would fail on the old ones. Reconcile first (learning
+// 2026-08-19T182307Z).
 //
-// Prod read-only, 2026-11-11: 1 account (created 2026-04, no project row, no
-// member). Every other account has its row. The R1 reconcile body that could
-// drop a row (delete-then-insert) was replaced by 20261111135934314.
+// Read-only, 2026-11-11: prod 1 account (created 2026-04, no project row, no
+// member); dev 1 account with 4 project rows and no row at all; staging 0. The
+// R1 reconcile body that could drop a row was replaced by 20261111135934314.
 //
 // batched-dml: each statement reconciles at most 500 accounts and commits on
 // its own (pgm.noTransaction). Row locks only: the reconcile takes FOR NO KEY
@@ -46,7 +48,12 @@ export const up = async (pgm) => {
         select a.account_id
           from kortix.accounts a
          where a.account_id > '${after}'::uuid
-           and not exists (select 1 from kortix.workspaces w where w.legacy_account_id = a.account_id)
+           and (not exists (select 1 from kortix.workspaces w where w.legacy_account_id = a.account_id)
+                -- or a project row of the account has no row of its own: the
+                -- project-side twin keys would refuse every new reference to it.
+                or exists (select 1 from kortix.projects p
+                            where p.account_id = a.account_id
+                              and not exists (select 1 from kortix.workspaces w where w.workspace_id = p.project_id)))
          order by a.account_id
          limit ${BATCH}
       ),

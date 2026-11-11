@@ -887,8 +887,10 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
       </View>
 
       {/* Avatar left, New session right (Jay, 2026-09-23), over the drawer
-          surface's fade. On iOS 26 each is its own Liquid Glass button: the
-          Button draws inside the glass, so a press lands on the glass. */}
+          surface's fade. On iOS 26 the avatar is a Liquid Glass button (the
+          Button draws inside the glass). New session is the solid primary
+          pill on every platform: black with white text in light mode,
+          inverted in dark (Jay, 2026-11-11), so it stays outside the glass. */}
       <PinnedBar controlHeight={BAR_CONTROL_HEIGHT} background={chrome} className="justify-between px-5">
         <GlassButtons>
           <Button
@@ -910,12 +912,12 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
               />
             </View>
           </Button>
-          <Button size="lg" variant={glassy ? 'ghost' : 'default'} className="rounded-full" onPress={handleNewSession}>
-            {/* Web's New session glyph (project-sidebar.tsx), flipped horizontally: tip up-right. */}
-            <Icon as={NavigationArrowIcon} size={20} style={{ transform: [{ scaleX: -1 }] }} />
-            <Text maxFontSizeMultiplier={BUTTON_LABEL_MAX_FONT_SCALE.lg}>New session</Text>
-          </Button>
         </GlassButtons>
+        <Button size="lg" variant="default" className="rounded-full" onPress={handleNewSession}>
+          {/* Web's New session glyph (project-sidebar.tsx), flipped horizontally: tip up-right. */}
+          <Icon as={NavigationArrowIcon} size={20} style={{ transform: [{ scaleX: -1 }] }} />
+          <Text maxFontSizeMultiplier={BUTTON_LABEL_MAX_FONT_SCALE.lg}>New session</Text>
+        </Button>
       </PinnedBar>
     </View>
   );

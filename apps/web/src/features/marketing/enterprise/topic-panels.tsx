@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 
 import { TopicTabs } from '@/features/marketing/kit/topic-tabs';
 import { localizeMarketingContent as localizeContent, type TopicId } from './content';
-import { Window } from './parts';
+import { Window } from '@/features/marketing/kit/window';
 
 /*
  * One focused visual per buyer topic. Each fits the tab's panel at 390 px:

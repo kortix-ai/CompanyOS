@@ -2706,8 +2706,8 @@
           "note": "Démarrez avec de vrais crédits sandbox.",
           "f1": "500 crédits / mois sur votre premier espace de travail",
           "f2": "Aucune carte requise",
-          "f3": "Apportez votre propre clé API pour n'importe quel modèle premium",
-          "f4": "Connectez votre abonnement ChatGPT"
+          "f3": "Les modèles fonctionnent avec votre propre clé API ou votre abonnement ChatGPT",
+          "f4": "Les modèles gérés par Kortix nécessitent Credits"
         },
         "credits": {
           "name": "Crédits",
@@ -21307,7 +21307,12 @@
       "text4b892277843c": "Créer un espace de travail",
       "text41018e566b60": "nouvel espace de travail créer ajouter équipe",
       "texta99ac8f9050b": "Espace de travail · Accès",
-      "textfd8b8dae4421": "Zone de danger"
+      "textfd8b8dae4421": "Zone de danger",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Remboursement de réserve LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Stockage",
+      "textab3aff8f7642": "Bonus de recharge"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",
@@ -21517,8 +21522,11 @@
     },
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Ajoutez Kortix à votre écran d'accueil pour une expérience plein écran, comme une app.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Sur iPhone et iPad : touchez Partager, puis Sur l'écran d'accueil.",
-    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix a été mis à jour. Actualisez pour obtenir la nouvelle version."
-  },
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix a été mis à jour. Actualisez pour obtenir la nouvelle version.",
+"reviewPane": {
+      "emptyTitle": "Sélectionnez un élément",
+      "emptyDescription": "Ses détails s’ouvrent ici. Appuyez sur J et K pour parcourir la liste."
+    }  },
   "commandPalette": {
     "title": "Palette de commandes",
     "description": "Rechercher une commande à exécuter...",

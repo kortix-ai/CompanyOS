@@ -2706,8 +2706,8 @@
           "note": "実際のサンドボックスクレジットで始めましょう。",
           "f1": "最初のワークスペースで月 500 クレジット",
           "f2": "カード不要",
-          "f3": "任意のプレミアムモデルに自分の API キーを利用可能",
-          "f4": "ChatGPT のサブスクリプションを接続"
+          "f3": "モデルは自分の API キーか ChatGPT のサブスクリプションで利用できます",
+          "f4": "Kortix のマネージドモデルには Credits が必要です"
         },
         "credits": {
           "name": "クレジット",
@@ -21307,7 +21307,12 @@
       "text4b892277843c": "ワークスペースを作成",
       "text41018e566b60": "新規 ワークスペース 作成 追加 チーム",
       "texta99ac8f9050b": "ワークスペース · アクセス",
-      "textfd8b8dae4421": "危険な操作"
+      "textfd8b8dae4421": "危険な操作",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM保留返金",
+      "texta68ee4167406": "プロキシ",
+      "texta69c4dece144": "ストレージ",
+      "textab3aff8f7642": "トップアップボーナス"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21517,8 +21522,11 @@
     },
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Kortixをホーム画面に追加して、全画面のアプリらしい操作性をお試しください。",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "iPhone・iPadの場合：共有をタップし、「ホーム画面に追加」を選択してください。",
-    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortixが更新されました。再読み込みして新しいバージョンを入手してください。"
-  },
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortixが更新されました。再読み込みして新しいバージョンを入手してください。",
+"reviewPane": {
+      "emptyTitle": "項目を選択してください",
+      "emptyDescription": "詳細はここに表示されます。J と K でリストを移動できます。"
+    }  },
   "commandPalette": {
     "title": "コマンドパレット",
     "description": "実行するコマンドを検索...",

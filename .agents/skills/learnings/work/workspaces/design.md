@@ -354,7 +354,12 @@ the table row (shadow). A difference logs `[workspaces] shadow_mismatch` with
   `person-route`, `foreign-sandbox`, `default-deny`.
 - `tokenScopeAllows` and `agentPrincipalDecision`: an account-scope action is in scope for
   a bound credential when the actor's account is the credential workspace's account and
-  that workspace is not `split_pending`.
+  that workspace is not `split_pending`. On its own `split_pending` account the denial
+  reason is `token_account_shared` (not `token_out_of_scope`), and the fence's
+  account-family refusal says the same: both name the working credential (a personal
+  key, `kortix login`), never "name the workspace". Usage reads (`/v1/usage/cost-summary`,
+  `cost-by-project`, `session-costs[/:id]`) serve a bound credential its own workspace's
+  slice, with or without `project_id`/`account_id` naming it.
 - Mint and list: Workspace settings mints workspace keys only. `GET /v1/workspaces/:id/tokens`
   lists W's keys. `GET /v1/me/tokens` lists the caller's personal keys across workspaces;
   `DELETE /v1/me/tokens/:tokenId` revokes one. Minting is `HUMAN_ONLY`.

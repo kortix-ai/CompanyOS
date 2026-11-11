@@ -8,7 +8,7 @@ import { useTranslations } from '@/i18n/use-translations';
 import type { ReactNode } from 'react';
 
 import { localizeMarketingContent as localizeContent, type TopicId } from './content';
-import { Terminal, Window } from './parts';
+import { Terminal, Window } from '@/features/marketing/kit/window';
 
 /*
  * One focused visual per topic tab. Each fits the tab's panel at 390 px: one
@@ -102,7 +102,7 @@ const terminal = (title: string, lines: readonly string[]) => (
   </Window>
 );
 
-const TOPIC_PANELS: Record<TopicId, () => ReactNode> = {
+export const TOPIC_PANELS: Record<TopicId, () => ReactNode> = {
   where: () => <WherePanel />,
   install: function InstallPanel() {
     const tMarketing = useTranslations('hardcodedUi.i18nComplete');

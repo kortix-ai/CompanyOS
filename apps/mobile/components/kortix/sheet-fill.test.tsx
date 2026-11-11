@@ -167,7 +167,7 @@ mock.module('react-native-reanimated', () => ({
     return style;
   },
 }));
-mock.module('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 20 }) }));
+mock.module('react-native-safe-area-context', () => ({ SafeAreaInsetsContext: React.createContext(null), useSafeAreaInsets: () => ({ top: 0, bottom: 20 }) }));
 mock.module('expo-linear-gradient', () => ({ LinearGradient: host('linear-gradient') }));
 mock.module('nativewind', () => ({ useColorScheme: () => ({ colorScheme: 'light' }) }));
 mock.module('@/lib/theme-colors', () => ({ getSheetBg: () => 'sheet-bg' }));

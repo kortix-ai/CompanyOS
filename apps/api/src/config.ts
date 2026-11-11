@@ -18,6 +18,16 @@ hydrateEnvironmentSecret();
 export const SANDBOX_VERSION = process.env.SANDBOX_VERSION || 'unknown';
 
 /**
+ * The release this API serves, as /health reports it, and the commit it was
+ * built from. Prod overrides KORTIX_VERSION on the task to the clean `X.Y.Z`;
+ * the image itself is the staging build, so the sandbox CLI inside it was
+ * stamped `X.Y.Z-staging.<sha8>`. Sessions receive both values so that CLI can
+ * report the release it is part of (apps/cli/src/cli-version.ts).
+ */
+export const RELEASE_VERSION = process.env.KORTIX_VERSION || 'dev';
+export const RELEASE_COMMIT = process.env.KORTIX_COMMIT || '';
+
+/**
  * The environment of a child process: this process's environment plus
  * `extra`. A child process is the one reader of the raw environment outside
  * this file.
@@ -987,6 +997,9 @@ const envSchema = z.object({
   // directly (LLM_GATEWAY_BASE_URL) are bound too.
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: optInt(600),
   KORTIX_PROXY_REQS_PER_MIN: optInt(600),
+  // Per-session ceiling on stored-log reads (GET /v1/workspaces/:id/sessions/:id/log);
+  // why and how it sits: the sessionLogReadLimiter in middleware/rate-limit.ts (KRTX-4696).
+  KORTIX_SESSION_LOG_READS_PER_MIN: optInt(300),
   // Proxies in front of the API that APPEND to X-Forwarded-For. The client is
   // the entry this many places from the right; everything to its left was
   // written by the client. Cloud: Cloudflare + ALB = 2. Self-host Caddy
@@ -1778,6 +1791,7 @@ export const config = {
   KORTIX_LLM_ROUTER_REQS_PER_MIN_PAID: env.KORTIX_LLM_ROUTER_REQS_PER_MIN_PAID,
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: env.KORTIX_LLM_GATEWAY_REQS_PER_MIN,
   KORTIX_PROXY_REQS_PER_MIN: env.KORTIX_PROXY_REQS_PER_MIN,
+  KORTIX_SESSION_LOG_READS_PER_MIN: env.KORTIX_SESSION_LOG_READS_PER_MIN,
   KORTIX_TRUSTED_PROXY_HOPS: env.KORTIX_TRUSTED_PROXY_HOPS,
   KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN: env.KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN,
   KORTIX_TRIGGER_MAX_PROVISIONING_SESSIONS_PER_PROJECT:

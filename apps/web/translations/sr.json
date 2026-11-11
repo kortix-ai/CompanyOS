@@ -2706,8 +2706,8 @@
           "note": "Почните са стварним sandbox кредитима.",
           "f1": "500 кредита месечно у твом првом радном простору",
           "f2": "Није потребна картица",
-          "f3": "Користите сопствени API кључ за било који премијум модел",
-          "f4": "Повежите своју ChatGPT претплату"
+          "f3": "Модели раде са сопственим API кључем или ChatGPT претплатом",
+          "f4": "Моделима којима управља Kortix потребан је Credits"
         },
         "credits": {
           "name": "Кредити",
@@ -21307,7 +21307,12 @@
       "text4b892277843c": "Направи радни простор",
       "text41018e566b60": "нови радни простор направи додај тим",
       "texta99ac8f9050b": "Радни простор · Приступ",
-      "textfd8b8dae4421": "Опасна зона"
+      "textfd8b8dae4421": "Опасна зона",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Повраћај за LLM резервацију",
+      "texta68ee4167406": "Прокси",
+      "texta69c4dece144": "Складиште",
+      "textab3aff8f7642": "Бонус за допуну"
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -21517,8 +21522,11 @@
     },
     "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Dodajte Kortix na početni ekran za iskustvo preko celog ekrana, kao aplikacija.",
     "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Na iPhone-u i iPad-u: dodirnite Deli, a zatim Dodaj na početni ekran.",
-    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix je ažuriran. Osvežite stranicu da biste dobili novu verziju."
-  },
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix je ažuriran. Osvežite stranicu da biste dobili novu verziju.",
+"reviewPane": {
+      "emptyTitle": "Izaberi stavku",
+      "emptyDescription": "Detalji se otvaraju ovde. Pritisni J i K da se krećeš kroz listu."
+    }  },
   "commandPalette": {
     "title": "Палета команди",
     "description": "Потражите команду за покретање...",

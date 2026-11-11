@@ -21,7 +21,8 @@
  */
 import * as React from 'react';
 import { BackHandler, Keyboard, Platform, Share, View } from 'react-native';
-import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -257,7 +258,7 @@ export const ArtifactActionsSheet = React.forwardRef<ArtifactActionsSheetRef, Ar
             setView('options');
             takeAfterClose()?.();
           }}>
-          <BottomSheetScrollView
+          <SheetScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
@@ -321,7 +322,7 @@ export const ArtifactActionsSheet = React.forwardRef<ArtifactActionsSheetRef, Ar
                 </View>
               </Animated.View>
             )}
-          </BottomSheetScrollView>
+          </SheetScrollView>
         </KortixBottomSheetModal>
         {dialog}
       </>

@@ -27,7 +27,7 @@ import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
  * handling is route-independent now (mounted once in the `(app)` layout), so a
  * return can land wherever the user actually belongs.
  */
-export type BillingReturn = {
+type BillingReturn = {
   /** Query param Stripe echoes back. */
   param: string;
   /** Value that marks success. Anything else is ignored. */
@@ -76,7 +76,7 @@ const RETURNS = [
 export const BILLING_RETURNS: readonly BillingReturn[] = RETURNS;
 
 /** The marker params this module owns — a closed set, not an open string. */
-export type BillingReturnParam = (typeof RETURNS)[number]['param'];
+type BillingReturnParam = (typeof RETURNS)[number]['param'];
 
 /** For callers that must carry a return across their own redirect. */
 export const BILLING_RETURN_PARAMS: readonly string[] = RETURNS.map((r) => r.param);

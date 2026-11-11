@@ -374,8 +374,9 @@ export function classifyTurnError(
     return {
       title: 'Provider rejected the request',
       text:
-        `:warning: *${capitalize(who)} rejected this request* — its API key or model config in Kortix` +
-        ` may be invalid or expired. Ask a workspace admin to check the provider settings, then mention me again.`,
+        `:warning: *${capitalize(who)} rejected this request* — its API key in Kortix may be missing, invalid` +
+        ` or expired, or the provider account may be out of funds. Ask a workspace admin to check the provider` +
+        ` in Models, then mention me again.`,
       aborted: false,
     };
   }

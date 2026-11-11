@@ -58,6 +58,7 @@ import { isClaudeSubscriptionModel, isSubscriptionModel, pickerModelName, should
 import { useModelConnectionGate } from './use-model-connection-gate';
 import { ModelPickerPanel } from './model-picker-panel';
 import { effortLabel, reasoningEffortChoices } from '../composer/reasoning-effort-selector';
+import { SubscriptionSwitcher, subscriptionProviderOf } from './subscription-switcher';
 
 // Re-export for consumers
 export { Tag };
@@ -517,6 +518,12 @@ export function ModelSelector({
   // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
   const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
 
+  // A subscription model names the login that pays for it: the picker grows a
+  // subscription pane under the list (both appearances), so switching the
+  // ChatGPT or Claude plan a turn runs on needs no trip to Customize.
+  const subscriptionProvider = current ? subscriptionProviderOf(current) : null;
+  const subscriptionNode = subscriptionProvider ? <SubscriptionSwitcher providerId={subscriptionProvider} /> : null;
+
   const effortChoices =
     appearance === 'chip'
       ? reasoningEffortChoices(reasoning?.variants, !!reasoning?.onVariantChange)
@@ -951,6 +958,7 @@ export function ModelSelector({
     return (
       <>
         {modals}
+        <div className="flex min-h-0 flex-1 flex-col">
         {/* The popover's own list rhythm (`CommandPopoverContent`), on the host's surface. */}
         <Command
           shouldFilter={false}
@@ -965,6 +973,8 @@ export function ModelSelector({
         >
           {listBody}
         </Command>
+        {subscriptionNode}
+        </div>
       </>
     );
   }
@@ -1024,33 +1034,36 @@ export function ModelSelector({
               : 'w-[min(28rem,calc(100vw-1.5rem))]'
           }
         >
-          <ModelPickerPanel
-            browseModels={browseModels}
-            pickableModels={pickableModels}
-            searchModels={visibleModels}
-            search={search}
-            onSearchChange={setSearch}
-            searchRight={searchRight}
-            selected={availableSelectedModel ?? null}
-            onPick={handleSelect}
-            isFavorite={pickerModelStore.isFavorite}
-            setFavorite={pickerModelStore.setFavorite}
-            loading={modelsLoading || entitlementsPending}
-            emptyState={noModelsState}
-            searchEmpty={searchEmptyState}
-            onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
-            onForeignDialog={closePicker}
-            connectLabel={tPooled('connect')}
-            effort={
-              showEffort
-                ? {
-                    choices: effortChoices,
-                    selectedVariant: reasoning?.selectedVariant,
-                    onChange: handleEffortChange,
-                  }
-                : undefined
-            }
-          />
+          <div className="flex min-w-0 flex-col">
+            <ModelPickerPanel
+              browseModels={browseModels}
+              pickableModels={pickableModels}
+              searchModels={visibleModels}
+              search={search}
+              onSearchChange={setSearch}
+              searchRight={searchRight}
+              selected={availableSelectedModel ?? null}
+              onPick={handleSelect}
+              isFavorite={pickerModelStore.isFavorite}
+              setFavorite={pickerModelStore.setFavorite}
+              loading={modelsLoading || entitlementsPending}
+              emptyState={noModelsState}
+              searchEmpty={searchEmptyState}
+              onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
+              onForeignDialog={closePicker}
+              connectLabel={tPooled('connect')}
+              effort={
+                showEffort
+                  ? {
+                      choices: effortChoices,
+                      selectedVariant: reasoning?.selectedVariant,
+                      onChange: handleEffortChange,
+                    }
+                  : undefined
+              }
+            />
+            {subscriptionNode}
+          </div>
         </CommandPopoverContent>
       </CommandPopover>
     </>

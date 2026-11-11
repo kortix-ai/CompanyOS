@@ -21,8 +21,8 @@ export type { QuestionInfo } from './types';
 const QUESTION_SENTINEL =
   '(Posted to the Slack thread. In Slack, questions are async — the user answers by ' +
   'replying in the thread, which reaches you as a NEW turn with full context. In a channel, ' +
-  'the reply reaches you only when it @mentions you; a DM reply needs no mention. Do not wait ' +
-  'for an answer here; finish this turn now.)';
+  'the person who started the thread reaches you with a plain reply and anyone else @mentions ' +
+  'you; a DM reply needs no mention. Do not wait for an answer here; finish this turn now.)';
 
 // Renders the agent's question(s) into the live Slack thread. The sandbox owns
 // the "is this Slack / auto-answer the tool" decision (via its env = the session

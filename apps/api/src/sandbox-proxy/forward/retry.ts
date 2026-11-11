@@ -1,9 +1,9 @@
 import { HTTPException } from 'hono/http-exception';
 import { logger } from '../../lib/logger';
 import { ingressTargetUrl } from '../../platform/providers/ingress-url';
-import { isPlatinumSandboxNotRunningError } from '../../shared/platinum';
 import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
 import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import {
   buildSandboxUpstreamHeaders,
   invalidatePreviewLink,
@@ -564,20 +564,25 @@ async function recoverFromAttemptError(
     return 'stop';
   }
 
-  // The provider itself CONFIRMED the box is not running: Platinum's CP
-  // answers `409 {"code":"sandbox_not_running"}` on the expose call inside
-  // resolveIngress. Same confirmed-dead class as Daytona's "no IP address
-  // found" 400 (the response-path branch that sets this flag): mark it, so
-  // the give-up below flips the row to 'error' and later requests fast-fail
-  // with a retryable `sandbox not ready` instead of every one of them
-  // burning the full 50 s retry budget against a box the provider has
-  // already confirmed dead (KRTX-4751). The wake below still claims the
-  // start; a bare 409 (empty body, a CP mid-degradation) is NOT this class
-  // — only the typed, body-confirmed signal counts.
-  if (isPlatinumSandboxNotRunningError(err)) state.sawDeadSignal = true;
+  // A provider control-plane not-running verdict (the typed 409
+  // `sandbox_not_running` the expose throws — matched by name, the contract
+  // its expose tests pin) is the provider CONFIRMING the box is dead: mark
+  // it, so the give-up below flips the row to 'error' and later requests
+  // fast-fail with a retryable `sandbox not ready` instead of every one of
+  // them burning the full 50 s retry budget against a confirmed-dead box
+  // (KRTX-4751) — the same confirmed-dead class as Daytona's "no IP address
+  // found" 400 in the response path. A bare 409 (empty body, a CP
+  // mid-degradation) is NOT this class — only the typed, body-confirmed
+  // signal counts.
+  if (isPlatinumNotRunningVerdict(err)) state.sawDeadSignal = true;
 
-  if (!state.wakeTriggered) {
-    await wakeSandbox(sandboxId);
+  // One wake per request — EXCEPT a not-running verdict, which is the one
+  // error that changes the box's world: the provider itself just refused
+  // the box. It justifies a (re)start even after an earlier wake's status
+  // read came back stale — the provider can answer its GET `running` for a
+  // box its own expose/exec refuse (observed in prod for over an hour).
+  if (!state.wakeTriggered || isPlatinumNotRunningVerdict(err)) {
+    await wakeSandbox(sandboxId, err);
     state.wakeTriggered = true;
   }
   if (attempt < MAX_RETRIES) {

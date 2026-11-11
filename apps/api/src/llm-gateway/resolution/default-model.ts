@@ -19,6 +19,7 @@ import { resolveCandidates } from './resolve-candidates';
 import { checkClaudeAgentRef, isClaudeAgentModelRef } from './claude-agent';
 import { CLAUDE_AGENT_DEFAULT_MODEL, CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent';
 import { hasClaudeCredential } from '../../claude-subscription/accounts';
+import { listGrantedGatewaySecretNames } from '../../secrets/account-resource';
 import { getProjectGatewayResolution } from '../../repositories/project-model-access';
 import { modelAccessAllows } from '../model-access';
 import { runtimeModelCatalog } from '../models/runtime-catalog';
@@ -109,19 +110,37 @@ export function invalidateAccountModelDefaults(accountId: string): void {
 async function connectedByokFallback(
   projectId: string | undefined,
   principalUserId?: string,
+  member?: KeyMember,
 ): Promise<string | null> {
   if (!projectId) return null;
   try {
-    const names = await listProjectSecretNamesForConsumer({
-      projectId,
-      principalUserId,
-      consumer: 'llm_gateway',
-    });
-    const connected = new Set(names);
+    const [names, panelNames] = await Promise.all([
+      listProjectSecretNamesForConsumer({
+        projectId,
+        principalUserId,
+        consumer: 'llm_gateway',
+      }),
+      // Its own catch: a failed read of the panel's keys never hides the project's.
+      member ? modelsPanelKeyNames(projectId, member).catch(() => [] as string[]) : [],
+    ]);
+    const connected = new Set([...names, ...panelNames]);
     return connectedByokPickerModels(connected)[0]?.id ?? null;
   } catch {
     return null; // never let a secrets-read hiccup break default resolution
   }
+}
+
+/** The member a default is resolved for, and whose grants count (null: keys shared with the whole project only). */
+type KeyMember = { accountId: string; userId: string; grantUserId: string | null };
+
+/**
+ * The key names of the Models panel's keys `member` may use, as the picker
+ * counts them (servable-catalog.ts). A project that turned
+ * `pooled_provider_secrets` off has none.
+ */
+async function modelsPanelKeyNames(projectId: string, member: KeyMember): Promise<string[]> {
+  if (!(await getProjectGatewayResolution(projectId)).pooledEnabled) return [];
+  return listGrantedGatewaySecretNames(member.accountId, projectId, member.userId, member.grantUserId);
 }
 
 /**
@@ -134,13 +153,14 @@ async function unservableDefaultFallback(
   probe: (candidate: string) => Promise<boolean>,
   projectId: string | undefined,
   principalUserId?: string,
+  member?: KeyMember,
 ): Promise<string | null> {
   const flagship = runtimeModelCatalog.codexModelIds()[0];
   const successor = flagship ? `codex/${flagship}` : null;
   if (successor && toWireModel(model).startsWith('codex/') && toWireModel(model) !== successor && (await probe(successor))) {
     return successor;
   }
-  return connectedByokFallback(projectId, principalUserId);
+  return connectedByokFallback(projectId, principalUserId, member);
 }
 
 /**
@@ -157,10 +177,11 @@ async function ownModelDefault(
   projectId: string | undefined,
   principalUserId?: string,
   hasClaudeAccount?: () => Promise<boolean>,
+  member?: KeyMember,
 ): Promise<string | null> {
   const flagship = runtimeModelCatalog.codexModelIds()[0];
   if (flagship && projectId && (await probe(`codex/${flagship}`))) return `codex/${flagship}`;
-  const byok = await connectedByokFallback(projectId, principalUserId);
+  const byok = await connectedByokFallback(projectId, principalUserId, member);
   if (byok) return byok;
   const claude = `${CLAUDE_AGENT_PROVIDER_ID}/${CLAUDE_AGENT_DEFAULT_MODEL}`;
   if (projectId && hasClaudeAccount && (await probe(claude)) && (await hasClaudeAccount().catch(() => false))) return claude;
@@ -186,8 +207,10 @@ export async function resolveDefaultModelForPrincipal(
     });
   // Spec 2026-09-22 §2.3: personal overrides of the on-behalf-of human only.
   const personalUserId = (principal.personalUserId === undefined ? principal.userId : principal.personalUserId) ?? undefined;
+  // A gateway API key acts for no member: keys shared with the whole project only.
+  const member = { accountId: principal.accountId, userId: principal.userId, grantUserId: principal.keyId ? null : (personalUserId ?? null) };
   const platform = async () =>
-    principal.freeModelsOnly ? ((await ownModelDefault(probe, principal.projectId, personalUserId)) ?? undefined) : undefined;
+    principal.freeModelsOnly ? ((await ownModelDefault(probe, principal.projectId, personalUserId, undefined, member)) ?? undefined) : undefined;
   // Fast path: nothing configured for this account/project → the platform default
   // applies (no session read needed).
   if (!defaults.account && !hasAgentDefaults && !projectDefault) return platform();
@@ -209,7 +232,7 @@ export async function resolveDefaultModelForPrincipal(
     chosen,
     { hasProject: !!principal.projectId },
     () => probe(chosen as string),
-    () => unservableDefaultFallback(chosen as string, probe, principal.projectId, personalUserId),
+    () => unservableDefaultFallback(chosen as string, probe, principal.projectId, personalUserId, member),
   );
   return kept ?? platform();
 }
@@ -358,6 +381,8 @@ export async function resolveEffectiveModel(params: {
       providerSecretPools: params.providerSecretPools,
       ...(params.personalUserId !== undefined ? { personalUserId: params.personalUserId } : {}),
     });
+  const personalUserId = params.personalUserId === undefined ? params.userId : params.personalUserId;
+  const member = { accountId: params.accountId, userId: params.userId, grantUserId: personalUserId };
   const kept = await degradeUnservableDefault(
     chain.model,
     { hasProject: true },
@@ -367,11 +392,11 @@ export async function resolveEffectiveModel(params: {
         chain.model as string,
         probe,
         params.projectId,
-        (params.personalUserId === undefined ? params.userId : params.personalUserId) ?? undefined,
+        personalUserId ?? undefined,
+        member,
       ),
   );
   if (!kept) {
-    const personalUserId = params.personalUserId === undefined ? params.userId : params.personalUserId;
     const own = params.freeModelsOnly
       ? await ownModelDefault(probe, params.projectId, personalUserId ?? undefined, () =>
           hasClaudeCredential({
@@ -381,7 +406,7 @@ export async function resolveEffectiveModel(params: {
             sessionId: params.sessionId ?? null,
             personalUserId,
           }),
-        )
+        member)
       : null;
     return { model: own, source: 'platform' };
   }

@@ -61,6 +61,10 @@ const DELEGATED_WRITE_DENIED: readonly RegExp[] = [
   /^\/v1\/(billing\/)?account\/(request|cancel)-deletion$/,
   /^\/v1\/tunnel\/connections\/[^/]+\/rotate-token$/,
   /^\/v1\/platform\/github-app\/pat$/,
+  // Approving another OAuth grant: an App holding its viewer's token could
+  // register a client, approve it, and hold a 30-day refresh token that App
+  // deletion and access-policy changes never revoke (Strix, 2026-11-11).
+  /^\/v1\/oauth\/authorize\/consent(\/|$)/,
 ];
 
 export function oauthScopeAllowsPath(scopes: readonly string[], path: string, method = 'GET'): boolean {

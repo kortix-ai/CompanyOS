@@ -1082,6 +1082,7 @@ flow(
       "GET /v1/me",
       "GET /v1/workspaces/:projectId",
       "PATCH /v1/accounts/:accountId/iam/mfa-required",
+      "POST /v1/oauth/authorize/consent",
       "DELETE /v1/workspaces/:projectId/apps/:appId",
     ],
   },
@@ -1171,6 +1172,14 @@ flow(
         const refused = await asToken(firstToken).post("/v1/workspaces/:projectId/sessions",
           { agent_name: "worker", metadata: { repository_access: false, workspace_mode: "runtime" } }, { params: projectParams });
         refused.status(403).body().has("$.code", "no_agent_access");
+      });
+
+      await ctx.step("the token cannot approve another OAuth grant: POST /v1/oauth/authorize/consent → 403", async () => {
+        // Otherwise an App could register a client, approve it with its
+        // viewer's token, and keep a 30-day refresh token that App deletion
+        // never revokes.
+        (await asToken(firstToken).post("/v1/oauth/authorize/consent", { request_id: crypto.randomUUID(), approve: true }))
+          .status(403);
       });
 
       await ctx.step("the token acts as the viewer: /v1/accounts/me answers as them, not as the App's author", async () => {

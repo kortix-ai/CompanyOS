@@ -1552,7 +1552,8 @@ hands it a token that acts as that person. An anonymous `GET /_kortix/viewer`
 link (`POST …/:appId/access-session`, then the link → **303** with the App
 cookie) gets **200** from `/_kortix/viewer`: their `user_id`, scopes
 `profile email kortix`, a `kortix_oat_` token that expires in one hour. The
-token acts as the viewer: `GET /accounts/me` answers their `user_id` with
+token cannot approve another OAuth grant (`POST /oauth/authorize/consent` →
+**403**). The token acts as the viewer: `GET /accounts/me` answers their `user_id` with
 `token_context.auth_type: oauth`, so what it creates is theirs, never the App
 author's. The viewer's own role is the ceiling: as a project `member` with no
 agent grant, the token's `POST /projects/:projectId/sessions` → **403**

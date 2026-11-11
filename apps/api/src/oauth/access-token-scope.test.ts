@@ -18,6 +18,7 @@ describe('oauthScopeAllowsPath', () => {
     ['POST', '/v1/platform/github-app/pat'],
     ['POST', '/v1/auth/mfa/factors'],
     ['PATCH', '/v1/auth/user/'],
+    ['POST', '/v1/oauth/authorize/consent'],
   ])('a kortix token may not %s %s', (method, path) => {
     expect(oauthScopeAllowsPath(KORTIX, path, method)).toBe(false);
   });

@@ -38,10 +38,6 @@ export async function applyOAuthAccessTokenPrincipal(c: Context, token: string):
   c.set('userEmail', '');
   c.set('authType', 'oauth');
   if (result.accountId) c.set('accountId', result.accountId);
-  // An App viewer token: the Apps gate minted it for a viewer it admitted
-  // under this account's MFA rule. `buildActor` counts that as the second
-  // factor in this account only.
-  if (result.appId && result.accountId) c.set('oauthAppAccountId', result.accountId);
   c.set('oauthClientId', result.clientId);
   // The token's row: an Artifact live socket re-checks it while it is open.
   if (result.tokenId) c.set('oauthTokenId', result.tokenId);

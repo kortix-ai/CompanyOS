@@ -154,25 +154,15 @@ function requireOAuthScope(c: Context, scopes: string[]): Response | null {
 
 type ClientRow = typeof oauthClients.$inferSelect;
 
-/**
- * A client_id is a uuid column; gate junk before it reaches Postgres (22P02 → 500).
- *
- * An active client, for the authorization-code and refresh grants unless
- * `appClients` is set. An App's implicit client (`app_id` set) runs no grant:
- * its tokens come only from the Apps gate (`mintAppViewerToken`), and the API
- * counts them as MFA-verified in the App's account (`middleware/actor.ts`).
- * Its empty redirect list is not the guard: an account admin can edit it.
- */
-async function loadActiveClient(clientId: string, opts: { appClients?: boolean } = {}): Promise<ClientRow | null> {
+/** A client_id is a uuid column; gate junk before it reaches Postgres (22P02 → 500). */
+async function loadActiveClient(clientId: string): Promise<ClientRow | null> {
   if (!isUuid(clientId)) return null;
   const [client] = await db
     .select()
     .from(oauthClients)
     .where(and(eq(oauthClients.clientId, clientId), eq(oauthClients.active, true)))
     .limit(1);
-  if (!client) return null;
-  if (client.appId && !opts.appClients) return null;
-  return client;
+  return client ?? null;
 }
 
 function isPublicClient(client: ClientRow): boolean {
@@ -1178,8 +1168,7 @@ oauthApp.openapi(
         400,
       );
     }
-    // An App's token can be revoked like any other.
-    const client = await loadActiveClient(clientId, { appClients: true });
+    const client = await loadActiveClient(clientId);
     if (!client || !authenticateClient(client, clientSecret))
       return c.json({ error: 'invalid_client' }, 401);
 

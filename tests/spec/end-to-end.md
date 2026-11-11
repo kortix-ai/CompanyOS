@@ -1563,15 +1563,7 @@ with the App cookie and `Sec-Fetch-Site: same-origin`,
 `GET /_kortix/api/v1/accounts/me` → **200** as the viewer (`auth_type: oauth`),
 `GET /_kortix/api/v1/projects/:projectId` → **200**, and no `Set-Cookie`
 reaches the App origin. `Sec-Fetch-Site: cross-site` → **403**
-`cross_site_request`; `/_kortix/api/v1/oauth/*` → **404**. In a workspace that
-requires MFA (`PATCH /accounts/:accountId/iam/mfa-required`), the viewer's own
-session without a second factor gets **403** `account_mfa_required` on
-`GET /projects/:projectId`, while the App still acts as them:
-`GET /_kortix/api/v1/projects/:projectId` → **200** and the viewer token →
-**200**. The gate admitted the viewer only through `access-session`, which the
-MFA gate passes first, so the token counts as the second factor in the App's
-own account and in no other (`apps/api/src/__tests__/unit-app-viewer-token-mfa.test.ts`).
-The real CLI process `kortix apps access <app>
+`cross_site_request`; `/_kortix/api/v1/oauth/*` → **404**. The real CLI process `kortix apps access <app>
 --viewer identity` switches the scope and keeps `restricted` and the members;
 `--viewer everything` exits non-zero. `identity` scope yields `profile email` only, and
 that token gets **403** on a project route, and `/_kortix/api/v1/*` →

@@ -82,9 +82,6 @@ export interface OAuthAccessTokenValidation {
   /** The workspace the consent bound the token to (the fence judges it like a
    *  workspace key). Null = unbound: it acts as the person everywhere. */
   boundWorkspaceId?: string | null;
-  /** The App whose implicit client minted the token (an App viewer token from
-   *  the Apps gate), or null for a "Sign in with Kortix" client. */
-  appId?: string | null;
   error?: string;
 }
 
@@ -118,7 +115,6 @@ export async function validateOAuthAccessToken(token: string): Promise<OAuthAcce
       expiresAt: oauthAccessTokens.expiresAt,
       clientActive: oauthClients.active,
       boundWorkspaceId: oauthAccessTokens.boundWorkspaceId,
-      appId: oauthClients.appId,
     })
     .from(oauthAccessTokens)
     .innerJoin(oauthClients, eq(oauthClients.clientId, oauthAccessTokens.clientId))
@@ -136,6 +132,5 @@ export async function validateOAuthAccessToken(token: string): Promise<OAuthAcce
     clientId: row.clientId,
     scopes: (row.scopes as string[] | null) ?? [],
     boundWorkspaceId: row.boundWorkspaceId ?? null,
-    appId: row.appId ?? null,
   };
 }

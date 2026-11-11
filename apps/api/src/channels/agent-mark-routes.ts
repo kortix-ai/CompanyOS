@@ -23,8 +23,8 @@ export function registerAgentMarkRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
-      const file: string = c.req.param('file') ?? '';
+    async (c) => {
+      const { file } = c.req.valid('param');
       const slug = file.endsWith('.png') ? file.slice(0, -4) : '';
       if (!isAgentMarkSlug(slug)) return c.json({ error: 'Not found' }, 404);
       const png = await agentMarkPng(slug);

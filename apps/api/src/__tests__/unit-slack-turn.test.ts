@@ -409,6 +409,31 @@ describe('relayTurnEnd', () => {
     expect(calls('removeReaction').length).toBe(1);
   });
 
+  test('idle with the final text posts it when the agent sent no reply, and marks the message ✅', async () => {
+    dbResults = [
+      [streamRow({ messageTs: null, steps: [] })], // loadTurn
+      [{ sessionId: 'sess-1' }], // claimFinalize
+      [], // deleteTurn
+    ];
+
+    const ok = await relayTurnEnd('sess-1', 'idle', undefined, { finalText: 'The **deploy** is green.' });
+    expect(ok).toBe(true);
+    expect(calls('postMessage').map((c) => c.args[2])).toEqual(['The *deploy* is green.']);
+    expect(calls('addReaction').map((c) => c.args[3])).toEqual(['white_check_mark']);
+    expect(calls('removeReaction').length).toBe(1);
+  });
+
+  test('idle with the final text on a fresh turn posts at once, not after the replay window', async () => {
+    dbResults = [
+      [streamRow({ messageTs: null, steps: [], expiresAt: new Date(Date.now() + 15 * 60 * 1000) })], // loadTurn: active now
+      [{ sessionId: 'sess-1' }], // claimFinalize
+      [], // deleteTurn
+    ];
+
+    expect(await relayTurnEnd('sess-1', 'idle', undefined, { finalText: 'hi' })).toBe(true);
+    expect(calls('postMessage').map((c) => c.args[2])).toEqual(['hi']);
+  });
+
   test('error close on a turn with no plan message posts failure copy + session footer', async () => {
     dbResults = [
       [streamRow({ messageTs: null, steps: [] })], // loadTurn

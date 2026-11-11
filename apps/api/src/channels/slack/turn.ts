@@ -771,7 +771,7 @@ export async function relayTurnEnd(
   sessionId: string,
   status: 'idle' | 'error' = 'idle',
   errorInfo?: TurnErrorInfo,
-  opts: { deferred?: boolean } = {},
+  opts: { deferred?: boolean; finalText?: string } = {},
 ): Promise<boolean> {
   const handle = await loadTurn(sessionId);
   if (!handle) {
@@ -785,14 +785,17 @@ export async function relayTurnEnd(
   }
   if (handle.finalized) return false;
   const sinceActivity = Date.now() - turnLastActivityAt(handle);
-  if (status === 'idle' && sinceActivity < IDLE_END_GRACE_MS) {
+  // An end with the turn's answer is that turn's own end: the route already
+  // dropped a replay of another turn (`identity_mismatch`), and waiting would
+  // hold a fast reply back for the whole window.
+  if (status === 'idle' && !opts.finalText?.trim() && sinceActivity < IDLE_END_GRACE_MS) {
     console.info('[slack-webhook] turn-end deferred — turn is younger than the idle grace window', {
       sessionId,
       sinceActivityMs: sinceActivity,
       deferred: opts.deferred === true,
     });
     setTimeout(() => {
-      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true }).catch((err) =>
+      void relayTurnEnd(sessionId, status, errorInfo, { deferred: true, finalText: opts.finalText }).catch((err) =>
         console.warn('[slack-webhook] deferred turn-end failed', { sessionId, err }),
       );
     }, IDLE_END_GRACE_MS - sinceActivity + 250).unref();
@@ -812,7 +815,11 @@ export async function relayTurnEnd(
         : { error: classified.text, title: classified.title },
     );
   } else {
-    await finalizeTurn(handle, {});
+    // The agent ended its turn without `slack send`. Its last message is
+    // still its answer: post it, so the thread never loses a reply the
+    // session page shows. No text (a turn that only acted): close quietly.
+    const answer = opts.finalText?.trim();
+    await finalizeTurn(handle, answer ? { answer: markdownToMrkdwn(answer) } : {});
   }
   await deleteTurn(sessionId);
   return true;

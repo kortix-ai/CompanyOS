@@ -240,6 +240,8 @@ export interface TurnEndFrame {
     /** Set by an adapter that knows better than `turnErrorCode` (pi's context overflow). */
     code?: TurnErrorCode
   }
+  /** The turn's last assistant text. apps/api posts it into a chat thread the agent did not answer. */
+  finalText?: string
 }
 
 /**
@@ -264,6 +266,9 @@ export function turnErrorCode(error: { name?: string; statusCode?: number }): Tu
   return 'unknown'
 }
 
+/** apps/api posts at most ~11k characters into a thread; the rest stays in the session. */
+const FINAL_TEXT_MAX = 16_000
+
 function turnEndBody(frame: TurnEndFrame): TurnStreamFrame {
   const { error } = frame
   return {
@@ -271,6 +276,7 @@ function turnEndBody(frame: TurnEndFrame): TurnStreamFrame {
     status: frame.status,
     runtime_session_id: frame.runtimeSessionId,
     turn_message_id: frame.messageId ?? undefined,
+    ...(frame.finalText ? { text: frame.finalText.slice(0, FINAL_TEXT_MAX) } : {}),
     ...(error
       ? {
           error_name: error.name,

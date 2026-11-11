@@ -6,6 +6,7 @@ import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing
 import { contract, qk } from '@kortix/sdk/react';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import {
+  adminBypassAvailable,
   errorStatus,
   gateAction,
   gateCopyKeys,
@@ -162,19 +163,22 @@ describe('isForbiddenState', () => {
   });
 
   test('a 404 or a transient failure is not a permission problem', () => {
-    // This gates the account/project facts, the approval note, and the admin
-    // escape hatch. Admin bypass re-fetches with a bypass header — it cannot
-    // resurrect a deleted project or clear a 500, so offering it there is a
-    // dead control.
+    // This gates the account/project facts and the approval note.
     expect(isForbiddenState('notFound')).toBe(false);
     expect(isForbiddenState('unavailable')).toBe(false);
   });
+});
 
-  test('the admin escape hatch is gated on the 403 states, not just on the role', () => {
-    expect(componentSource).toContain('const showAdminBypass = forbidden && !!adminRole?.isAdmin');
-    expect(componentSource).toContain('{showAdminBypass ? (');
-    // The bare role check was what leaked the control onto 404 and 500.
-    expect(componentSource).not.toMatch(/\{adminRole\?\.isAdmin \? \(/);
+describe('adminBypassAvailable', () => {
+  test('offers "Open as admin" behind a 403 and a 404, never behind a transient failure', () => {
+    // A non-member gets 404 from GET /v1/workspaces/:id, so the 404 screen is
+    // where a platform admin lands on a customer workspace link.
+    expect(ALL_STATES.filter(adminBypassAvailable)).toEqual([
+      'request',
+      'sent',
+      'alreadyRequested',
+      'notFound',
+    ]);
   });
 });
 

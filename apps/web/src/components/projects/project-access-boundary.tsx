@@ -122,6 +122,17 @@ export function isForbiddenState(state: AccessGateState): boolean {
   return state === 'request' || shouldPollForApproval(state);
 }
 
+/**
+ * True when a platform admin gets "Open as admin" on this screen: the three
+ * 403 faces and the 404. `GET /v1/workspaces/:id` answers a non-member 404,
+ * not 403 (`canonicalWorkspaceDecision`), so a 404 is also "exists, but not
+ * yours". On a project that is really gone the act-as call fails and the
+ * screen shows that error. A transient failure never offers it.
+ */
+export function adminBypassAvailable(state: AccessGateState): boolean {
+  return isForbiddenState(state) || state === 'notFound';
+}
+
 /** What the primary button on a given screen does. */
 export type GateAction = 'request' | 'recheck' | 'retry' | 'leave';
 
@@ -524,7 +535,7 @@ function AccessGateScreen({
   const copy = gateCopyKeys(state);
   const forbidden = isForbiddenState(state);
   const action = gateAction(state);
-  const showAdminBypass = forbidden && !!adminRole?.isAdmin;
+  const showAdminBypass = adminBypassAvailable(state) && !!adminRole?.isAdmin;
 
   return (
     <AuthFrame>
@@ -640,9 +651,8 @@ function AccessGateScreen({
                   </Link>
                 )}
                 {/*
-                  403 only. Acting as the account cannot resurrect a deleted
-                  project or clear a 500 — offering it on those screens is a
-                  dead control.
+                  403 and 404 only (adminBypassAvailable). Acting as the
+                  account cannot clear a 500.
                 */}
                 {showAdminBypass ? (
                   <Button

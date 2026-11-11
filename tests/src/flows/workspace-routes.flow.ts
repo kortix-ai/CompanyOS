@@ -542,7 +542,10 @@ flow(
       for (const path of ['/v1/workspaces/quota', '/v1/workspaces/provision']) {
         (await ctx.client.as(ctx.P.OWNER).get(path)).status(404);
       }
-      (await ctx.client.as(ctx.P.OWNER).post('/v1/workspaces/provision', { name: ctx.fixtures.name('p') })).status(404);
+      // POST /v1/workspaces/provision matches the workspace-detail pattern
+      // (GET/PATCH/DELETE) with a wrong method: KRTX-4704 answers 405 at the
+      // router — the legacy name still creates nothing.
+      (await ctx.client.as(ctx.P.OWNER).post('/v1/workspaces/provision', { name: ctx.fixtures.name('p') })).status(405);
       (await ctx.client.as(ctx.P.OWNER).get('/v1/projects/quota')).status(200).body().has('$.limit', 1);
     });
   },

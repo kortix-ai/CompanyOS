@@ -791,14 +791,8 @@
         "noResults": "No se encontraron temas"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Los pasos y el razonamiento se muestran en tiempo real mientras Kortix trabaja."
-        },
-        "minimal": {
-          "label": "Mínima",
-          "description": "Una línea de estado hasta que la expanda."
-        }
+        "normal": "Normal",
+        "minimal": "Mínima"
       },
       "wallpapers": {
         "dither": "Tramado",
@@ -12597,6 +12591,7 @@
       "text41ffc5e14073": "Establecer en {value0}",
       "text420962cdca94": "El mismo espacio de trabajo, los mismos conectores, la misma memoria — y ocho trabajos distintos por debajo. Cada equipo escribe las habilidades para su propio trabajo y nadie crea un segundo sistema para hacerlo.",
       "text420aaa63cba7": "Total de la página",
+      "textbe57ff2d7907": "No atribuido a ninguna sesión",
       "text42113e7bf6fc": "Soporte de Kortix",
       "text42117ed2a1f5": "La forma habitual",
       "text421c4b1fed48": "Producto / plano de control",
@@ -26712,8 +26707,7 @@
     "menu": {
       "invite": "Invitar personas a {name}",
       "leave": "Salir de {name}",
-      "invitePeople": "Invitar personas",
-      "more": "Más"
+      "invitePeople": "Invitar personas"
     },
     "roles": {
       "owner": {

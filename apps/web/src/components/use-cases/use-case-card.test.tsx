@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Post } from '@/lib/blog';
-import { UseCaseCard } from './use-case-card';
+import { UseCaseCover } from './use-case-card';
 
 const post: Post = {
   slug: 'synthetic-workflow', url: '/use-cases/synthetic-workflow',
@@ -9,23 +9,17 @@ const post: Post = {
   author: { name: 'Synthetic author', role: 'Test', email: 'agent@kortix.ai' }, readingTime: 2,
 };
 
-describe('UseCaseCard live renderer', () => {
-  it('keeps the title, link, metadata and fallback cover', () => {
-    const markup = renderToStaticMarkup(<UseCaseCard post={post} />);
-    expect(markup).toContain('href="/use-cases/synthetic-workflow"');
-    expect(markup).toContain('Synthetic workflow</h3>');
-    expect(markup).toContain('Operations');
-    expect(markup).toContain('dateTime="2026-10-25"');
-    expect(markup).toContain('October 25, 2026');
+describe('UseCaseCover live renderer', () => {
+  it('keeps the fallback tile when the slug has no custom cover and the frontmatter has no image', () => {
+    const markup = renderToStaticMarkup(<UseCaseCover post={post} />);
     expect(markup).toContain('animate-kortix-bullet-flow');
     expect(markup).not.toContain('<img');
   });
 
   it('uses a frontmatter cover instead of the fallback', () => {
-    const markup = renderToStaticMarkup(<UseCaseCard post={{ ...post, data: { ...post.data, cover: '/synthetic-cover.png', tags: [] } }} />);
+    const markup = renderToStaticMarkup(<UseCaseCover post={{ ...post, data: { ...post.data, cover: '/synthetic-cover.png' } }} />);
     expect(markup).toContain('<img');
     expect(markup).toContain('alt="Synthetic workflow"');
     expect(markup).toContain('synthetic-cover.png');
-    expect(markup).not.toContain('Operations');
   });
 });

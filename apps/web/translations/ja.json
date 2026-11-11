@@ -791,14 +791,8 @@
         "noResults": "テーマが見つかりません"
       },
       "densities": {
-        "normal": {
-          "label": "標準",
-          "description": "Kortix の作業中に手順と思考をリアルタイムで表示します。"
-        },
-        "minimal": {
-          "label": "最小",
-          "description": "展開するまで 1 行のステータスだけを表示します。"
-        }
+        "normal": "標準",
+        "minimal": "最小"
       },
       "wallpapers": {
         "dither": "ディザー",
@@ -12597,6 +12591,7 @@
       "text41ffc5e14073": "{value0} に設定します",
       "text420962cdca94": "同じワークスペース、同じコネクタ、同じメモリ。その下で8つの異なる仕事が動きます。各チームが自分の仕事に必要なスキルを書き、別のシステムを立ち上げる必要はありません。",
       "text420aaa63cba7": "ページ合計",
+      "textbe57ff2d7907": "セッションに紐付いていない",
       "text42113e7bf6fc": "Kortixサポート",
       "text42117ed2a1f5": "従来の方法",
       "text421c4b1fed48": "プロダクト／コントロールプレーン",
@@ -26712,8 +26707,7 @@
     "menu": {
       "invite": "{name} にメンバーを招待",
       "leave": "{name} から退出",
-      "invitePeople": "メンバーを招待",
-      "more": "その他"
+      "invitePeople": "メンバーを招待"
     },
     "roles": {
       "owner": {

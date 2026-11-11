@@ -1,0 +1,13 @@
+---
+recorded: 2026-11-11T21:57:28Z
+incident_date: 2026-11-11
+---
+# Check a Kortix deployment's Platinum org grant and each voice model's Platinum upstream before debugging voice code
+
+**Rule:** Kortix voice (`packages/voice`) reaches every model through the Kortix gateway, and the gateway serves audio and the voice's fast models only from Platinum Inference, with that deployment's own `PLATINUM_INFERENCE_API_KEY`. Each deployment's Platinum org needs the private-model grant (`limits.org_overrides[<org>].inferenceModels`: `qwen3.8-27b`, `gpt-oss-20b`, `gemini-3.5-flash-lite`, `whisper-large-v3`, `whisper-large-v3-turbo`, `inworld-tts-2`, `inworld-tts-2-flash`), and each of those models needs a live upstream on Platinum. When voice works on one deployment and not another, diff the gateway, not the code: `kortix gateway logs --failed` and `kortix gateway usage --days 7` on each host. `model_not_found` on a voice model means the grant is missing; `model_unavailable` means the Platinum upstream is down.
+
+**Trigger surface:** Adding a Kortix deployment or a Platinum org; rotating, dropping or revoking a vendor key on Platinum (`PT_INFERENCE_*_API_KEY`) or in Kortix env profiles; a report that a voice call connects but the agent says nothing or never hears the caller.
+
+**Incident:** 2026-11-11, Kortix prod (v0.15.7) and dev. Prod's Platinum org "Kortix" never got the grant (only "Kortix Dev" did, 2026-11-03): every voice model answered `400 model_not_found`, 254 failed transcriptions in 7 days at 0 credits, 100 of them in 23 s from one call. Both envs: Platinum's Groq key started answering `401` (Groq served 5,736 requests in 7 days, 0 in the last 24 h), and Groq was the only upstream for Whisper and the two fast models; Groq is not a vendor any more. A call connected, the agent never heard the caller, and nothing told the caller why. Fixed without a Kortix release: the grant on the prod org (Platinum admin, 18:46 UTC), then kortix-ai/platinum#3251 (Whisper ids served by Inworld STT 1 in Whisper's verbose_json shape; `qwen3.8-27b` and `gpt-oss-20b` served by DeepSeek V4.1 Flash on Morph, reasoning pinned off), live on Platinum prod 21:54 UTC. A real call on Kortix prod and on dev then heard "What is twelve times eleven?" and answered "One hundred and thirty-two."
+
+**Enforcement:** Platinum: `apps/api/src/api/inference.private.test.ts` fails if any chat or audio model names Groq, and pins the Inworld STT request and the verbose_json mapping. Kortix: none yet. Enforcers to build: a deploy check that the deployment's Platinum `/models` lists every voice model while `voice_call` is available, and a voice relay that tells the caller when speech-to-text is refused instead of staying silent.

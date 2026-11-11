@@ -4,7 +4,7 @@ incident_date: 2026-11-11
 ---
 # Give every credential that acts as a person an explicit MFA rule: a token the API mints after the MFA gate passed counts as aal2 in that account and no other
 
-**Rule:** When you add or change a credential that acts as a person (an OAuth token, a gate-minted token, a delegated session), decide how `mfaGateBlocks` (`apps/api/src/iam/authorize.ts`) judges it, and test it in an account with `mfa_required`. A token the API mints only after the MFA gate passed carries that pass into the account it was minted for, never into another account: set the level per account in `buildActor` (`apps/api/src/middleware/actor.ts`), never request-wide through `c.set('mfaAal')`, which six routes read with no account check.
+**Rule:** When you add or change a credential that acts as a person (an OAuth token, a gate-minted token, a delegated session), decide how `mfaGateBlocks` (`apps/api/src/iam/authorize.ts`) judges it, and test it in an account with `mfa_required`. A token the API mints only after the MFA gate passed carries that pass into the account it was minted for, never into another account: set the level per account in `buildActor` (`apps/api/src/middleware/actor.ts`), never request-wide through `c.set('mfaAal')`, which account secrets, notifications and the Slack and Teams identity bind read with no account check.
 
 **Trigger surface:** Minting a token in `apps/api/src/apps/viewer.ts`, `apps/api/src/oauth/`, or any new `kortix_*` credential; changing `applyOAuthAccessTokenPrincipal`, `buildActor`, or the MFA gate.
 

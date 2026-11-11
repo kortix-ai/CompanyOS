@@ -155,20 +155,13 @@ function VerdictBlock({
 
 /* ── compare matrix (reuses the comparison-page look) ────────────────────── */
 
+const LEAN_OFF_CLASS = { them: 'text-muted-foreground/30', kortix: 'text-background/40' } as const;
+
 function LeanMark({ side, lean }: { side: 'them' | 'kortix'; lean: RowLean }) {
-  const on = lean === side || lean === 'both';
-  if (side === 'kortix') {
-    return on ? (
-      <Check className="text-ring mt-0.5 size-4 shrink-0" />
-    ) : (
-      <Minus className="text-background/40 mt-0.5 size-4 shrink-0" />
-    );
+  if (lean === side || lean === 'both') {
+    return <Check className="text-ring mt-0.5 size-4 shrink-0" />;
   }
-  return on ? (
-    <Check className="text-ring mt-0.5 size-4 shrink-0" />
-  ) : (
-    <Minus className="text-muted-foreground/30 mt-0.5 size-4 shrink-0" />
-  );
+  return <Minus className={cn(LEAN_OFF_CLASS[side], 'mt-0.5 size-4 shrink-0')} />;
 }
 
 function CompareBlock({ them, rows }: { them: string; rows: CompareRow[] }) {

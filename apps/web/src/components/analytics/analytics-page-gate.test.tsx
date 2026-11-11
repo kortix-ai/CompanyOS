@@ -21,6 +21,7 @@ mock.module('next/script', () => ({
 
 const { GoogleTagManager } = await import('./google-tag-manager');
 const { VisitorPixel } = await import('./visitor-pixel');
+const { useAnalyticsPageEnabled } = await import('@/lib/analytics/gtm');
 
 let win: InstanceType<typeof Window> | null = null;
 
@@ -39,10 +40,14 @@ afterEach(() => {
   win = null;
 });
 
-/** Mounts the element inside act() so the mount effect decides the gate. */
+/**
+ * happy-dom implements the lib.dom surfaces; its own classes carry extra
+ * members, so the crossing of that library boundary is one explicit cast.
+ */
 async function mount(element: React.ReactElement): Promise<{ container: HTMLElement; unmount: () => void }> {
-  const container = win!.document.createElement('div');
-  win!.document.body.appendChild(container);
+  const raw = win!.document.createElement('div');
+  const container = raw as unknown as HTMLElement;
+  win!.document.body.appendChild(raw);
   let root: Root | null = null;
   await act(async () => {
     root = createRoot(container);
@@ -99,4 +104,44 @@ test('VisitorPixel never loads on an excluded path of the production host', asyn
   const { container, unmount } = await mount(<VisitorPixel />);
   expect(container.querySelector('#visitor-pixel')).toBeNull();
   unmount();
+});
+
+/** A probe that exposes the hook's boolean as a DOM attribute. */
+function GateProbe({ extra }: { extra?: (location: Location) => boolean }) {
+  const enabled = useAnalyticsPageEnabled(extra);
+  return <div data-enabled={enabled ? 'true' : 'false'} />;
+}
+
+async function gateEnabled(extra?: (location: Location) => boolean): Promise<boolean> {
+  const { container, unmount } = await mount(<GateProbe extra={extra} />);
+  const enabled = container.firstElementChild!.getAttribute('data-enabled') === 'true';
+  unmount();
+  return enabled;
+}
+
+test('useAnalyticsPageEnabled is false in the desktop app', async () => {
+  desktop = true;
+  installWindow('https://kortix.com/pricing');
+  expect(await gateEnabled()).toBe(false);
+  desktop = false;
+});
+
+test('useAnalyticsPageEnabled is false on an excluded path', async () => {
+  installWindow('https://kortix.com/en/workspaces');
+  expect(await gateEnabled()).toBe(false);
+});
+
+test('useAnalyticsPageEnabled is true on a public page', async () => {
+  installWindow('https://kortix.com/pricing');
+  expect(await gateEnabled()).toBe(true);
+});
+
+test('useAnalyticsPageEnabled is false when the extra guard refuses', async () => {
+  installWindow('https://kortix.com/pricing');
+  expect(await gateEnabled(() => false)).toBe(false);
+});
+
+test('useAnalyticsPageEnabled is true when the extra guard allows', async () => {
+  installWindow('https://kortix.com/pricing');
+  expect(await gateEnabled(() => true)).toBe(true);
 });

@@ -22,14 +22,15 @@ export const SESSION_SCOPES: readonly { value: SessionScope; label: string }[] =
   { value: 'automated', label: 'Automated' },
 ];
 
-export type SessionStartedBy = 'me' | 'others' | 'automated';
+export type SessionStartedBy = 'me' | 'others' | 'automated' | 'humans';
 
-/** The `started_by` query param a scope maps to. `all` sends none. */
-export function startedByForScope(scope: SessionScope): SessionStartedBy | undefined {
+/** The `started_by` query param a scope maps to. All = every person-started
+ *  session (KRTX-4705): the machine runs keep the Automated chip. */
+export function startedByForScope(scope: SessionScope): SessionStartedBy {
   if (scope === 'mine') return 'me';
   if (scope === 'shared') return 'others';
   if (scope === 'automated') return 'automated';
-  return undefined;
+  return 'humans';
 }
 
 /** The viewer's own pinned or archived sessions (KRTX-2418): `pinned=only` / `archived=only`. */

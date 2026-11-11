@@ -1233,7 +1233,13 @@ function mergedPrs(root: string): Map<string, MergedPr[]> | null {
   if (!which('gh')) return (mergedIdx = null);
   const r = sh(['gh', 'pr', 'list', '--state', 'merged', '--limit', '500', '--json', 'number,headRefName,headRefOid'], { cwd: root });
   if (!r.ok) return (mergedIdx = null);
-  try { writeFileSync(MERGED_CACHE, r.stdout); } catch {}
+  // Write aside and rename into place: a reader never sees a half-written
+  // cache, and the write never races the read above (CodeQL js/file-system-race).
+  try {
+    const tmp = `${MERGED_CACHE}.${process.pid}.tmp`;
+    writeFileSync(tmp, r.stdout);
+    renameSync(tmp, MERGED_CACHE);
+  } catch {}
   return (mergedIdx = mergedPrIndex(r.stdout));
 }
 

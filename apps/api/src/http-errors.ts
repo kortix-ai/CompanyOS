@@ -4,6 +4,10 @@ import {
   repositoryDisconnectedBody,
 } from './shared/repository-health';
 import type { Context } from 'hono';
+import type { Router } from 'hono/router';
+import type { RouterRoute } from 'hono/types';
+import { RegExpRouter } from 'hono/router/reg-exp-router';
+import { TrieRouter } from 'hono/router/trie-router';
 import { HTTPException } from 'hono/http-exception';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { isManifestSyntaxError } from '@kortix/manifest-schema';
@@ -27,7 +31,6 @@ import { previewBaseDomain } from './sandbox-proxy/preview-hosts';
 import { SecretUndecryptableError } from './secrets/undecryptable';
 import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
-  deadCredentialLogDecision,
   deadCredentialLogKey,
   isAccountMfaDenial,
   isAgentGrantDenial,
@@ -35,6 +38,7 @@ import {
   isInvalidExpiredTokenRefusal,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
+import { logWindowDecision } from './shared/log-window';
 import { isDaytonaRateLimitError } from './shared/daytona-rate-limit';
 import {
   SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE,
@@ -388,7 +392,7 @@ function handleHttpException(
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the
     // window one bucket per token. The line itself keeps the id.
-    const { log, suppressed } = deadCredentialLogDecision(
+    const { log, suppressed } = logWindowDecision(
       deadCredentialLogKey(method, path, err.status, reason),
       Date.now(),
     );
@@ -752,20 +756,49 @@ function handleUnhandledError(err: Error, c: Context): Response {
   return handleDatabaseOrUnknownError(err, c, errName, method, path);
 }
 
-// KRTX-3380: GET-only health endpoints. A write method on them answers 405 with
-// the Allow list RFC 9110 §15.5.6 requires instead of the generic 404.
-const HEALTH_PATHS = new Set(
-  ['/health', '/health/live', '/health/ready'].flatMap((p) => [p, `/v1${p}`]),
-);
+// KRTX-4704: a wrong method on a path that matches a registered route answers
+// 405 with the Allow list RFC 9110 §15.5.5 requires; 404 stays for unmatched
+// paths. Hono answers a bare 404 for both, and its router.match folds the
+// middleware (registered as ALL) into every match result, so the allow list is
+// computed from a fresh router over the registered route table only. ALL
+// entries are middleware or catch-alls that serve every method, so a request
+// matching one never lands in this handler.
+const ALLOW_PROBE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
+
+function buildAllowRouter(routes: readonly RouterRoute[]): Router<null> {
+  const wire = (router: RegExpRouter<null> | TrieRouter<null>): Router<null> => {
+    for (const route of routes) {
+      if (route.method === 'ALL') continue;
+      router.add(route.method, route.path, null);
+    }
+    return router;
+  };
+  try {
+    const regExp = wire(new RegExpRouter<null>());
+    regExp.match('GET', '/__allow_router_warmup__'); // builds the matchers; UnsupportedPathError falls back below
+    return regExp;
+  } catch {
+    return wire(new TrieRouter<null>());
+  }
+}
+
+function allowedMethods(router: Router<null>, path: string): string[] {
+  const allow: string[] = ALLOW_PROBE_METHODS.filter((method) => router.match(method, path)[0].length > 0);
+  if (allow.includes('GET')) allow.push('HEAD'); // Hono serves HEAD by dispatching it as GET
+  return allow;
+}
 
 export function installHttpErrors(app: OpenAPIHono) {
   // === Error Handling ===
   app.onError(handleUnhandledError);
 
   // === 404 Handler ===
+  let allowRouter: Router<null> | null = null;
   app.notFound((c) => {
-    if (HEALTH_PATHS.has(c.req.path) && c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-      return c.body(null, 405, { Allow: 'GET, HEAD' });
+    allowRouter ??= buildAllowRouter(app.routes);
+    const allow = allowedMethods(allowRouter, c.req.path);
+    if (allow.length && !allow.includes(c.req.method)) {
+      return c.body(null, 405, { Allow: allow.join(', ') });
     }
 
     // A root-absolute link on a path-based preview (`<a href="/learn">` inside

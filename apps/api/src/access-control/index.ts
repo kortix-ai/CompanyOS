@@ -146,11 +146,16 @@ accessControlApp.openapi(
     if (!body || typeof body.email !== 'string') {
       return c.json({ error: true, message: 'Validation failed', status: 400 }, 400);
     }
-    await db.insert(accessRequests).values({
-      email: body.email.trim().toLowerCase(),
-      company: body.company || null,
-      useCase: body.useCase || null,
-    });
+    // Idempotent (KRTX-4699): a replayed identical submission collapses into
+    // the existing row (unique index on email) and answers the same 200.
+    await db
+      .insert(accessRequests)
+      .values({
+        email: body.email.trim().toLowerCase(),
+        company: body.company || null,
+        useCase: body.useCase || null,
+      })
+      .onConflictDoNothing();
     return c.json({ success: true, message: 'Access request submitted' });
   },
 );

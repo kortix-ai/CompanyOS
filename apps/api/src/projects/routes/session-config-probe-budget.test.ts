@@ -79,6 +79,22 @@ describe('readSandboxConfigState', () => {
     const state = await readSandboxConfigState({ sessionId: SESSION_ID }, deps);
     expect(state.reachable).toBe(false);
   });
+
+  test('a hung endpoint resolution cannot outwait the probe budget', async () => {
+    // The endpoint step resolves the sandbox ingress through a provider API
+    // call before any fetch exists to abort. The budget must cap the WHOLE
+    // probe, or a degraded provider holds the poller past the fetch's own
+    // abort (KRTX-629 follow-up: 9.7-11.8 s `sandbox_state` stages).
+    const deps: SessionReloadDeps = {
+      ...depsWith(async () => Response.json({ agent_config_etag: 'etag-1' })),
+      endpoint: () => new Promise(() => {}),
+    };
+    const startedAt = Date.now();
+    const state = await readSandboxConfigState({ sessionId: SESSION_ID, timeoutMs: 50 }, deps);
+    expect(state.reachable).toBe(false);
+    expect(state.etag).toBeNull();
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+  });
 });
 
 describe('GET /config box-health probe budget', () => {
@@ -89,5 +105,18 @@ describe('GET /config box-health probe budget', () => {
 
   test('the shared default stays 10 s for reloads and convergences', () => {
     expect(reloadSource).toContain('AbortSignal.timeout(input.timeoutMs ?? 10_000)');
+  });
+});
+
+describe('GET /config mirror budget', () => {
+  test('the poll spends a poll-sized budget, not the 20 s reload budget', () => {
+    expect(routeSource).toContain('const SANDBOX_CONFIG_MIRROR_BUDGET_MS = 5_000');
+    expect(routeSource).toContain(
+      'Math.max(1_000, SANDBOX_CONFIG_MIRROR_BUDGET_MS - (Date.now() - spendFrom))',
+    );
+  });
+
+  test('reloads and convergences keep the full 20 s budget', () => {
+    expect(reloadSource).toContain('export const LATEST_ETAG_BUDGET_MS = 20_000');
   });
 });

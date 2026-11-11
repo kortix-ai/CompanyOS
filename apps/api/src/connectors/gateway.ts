@@ -1519,19 +1519,46 @@ async function runConnectorAction(
         );
       }
       const appAuthorization = await appAuthorizationForCall(deps, input, connector, action.binding);
-      result = await withDeadline(
-        executeCall({
-          binding: action.binding,
-          baseUrl: connector.baseUrl,
-          auth: connector.auth,
-          headers: connector.headers,
-          secret: executionSecret,
-          args: providerArgs,
-          paramHints: paramHintsFromSchema(action.inputSchema),
-          appAuthorization,
-          fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
-        }),
-      );
+      const runAction = () =>
+        withDeadline(
+          executeCall({
+            binding: action.binding,
+            baseUrl: connector.baseUrl,
+            auth: connector.auth,
+            headers: connector.headers,
+            secret: executionSecret,
+            args: providerArgs,
+            paramHints: paramHintsFromSchema(action.inputSchema),
+            appAuthorization,
+            fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
+          }),
+        );
+      result = await runAction();
+      // A read of a public channel the bot is not in: join it and read again,
+      // once, with no approval in between. The read gate already allowed this
+      // channel (this workspace's or nobody's), and any member may join a
+      // public one. A private channel answers `channel_not_found` and stays
+      // closed until a person invites the bot.
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        action.risk === 'read' &&
+        slackError(result.data) === 'not_in_channel' &&
+        typeof providerArgs.channel === 'string'
+      ) {
+        const joined = await withDeadline(
+          executeCall({
+            binding: { kind: 'http', method: 'POST', path: '/conversations.join' },
+            baseUrl: connector.baseUrl,
+            auth: connector.auth,
+            headers: connector.headers,
+            secret: executionSecret,
+            args: { channel: providerArgs.channel },
+            fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
+          }),
+        );
+        if (joined.ok && slackError(joined.data) === null) result = await runAction();
+      }
       // Email `send_message` created a draft: send it now, as one action.
       const draftId =
         result.ok && isEmailChannel && input.actionPath === 'send_message' ? createdDraftId(result.data) : null;
@@ -1914,6 +1941,14 @@ async function withSlackAuthorNames(
  * real outcome in `{ ok: boolean, error? }`. Map `ok:false` to a failed
  * ExecResult so the gateway's normal error path surfaces the cause.
  */
+/** A Slack `{ ok:false, error }` answer's error code; null for a success or another shape. */
+function slackError(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const body = data as { ok?: unknown; error?: unknown };
+  if (body.ok !== false) return null;
+  return typeof body.error === 'string' ? body.error : 'unknown_error';
+}
+
 function mapChannelEnvelope(result: ExecResult): ExecResult {
   const data = result.data as { ok?: unknown } | null;
   if (result.ok && data && typeof data === 'object' && data.ok === false) {

@@ -46,7 +46,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { FactorInfo } from '@/lib/supabase/mfa';
 import { cn } from '@kortix/ui';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
-import { type DeviceBrand, describeUserAgent } from './device-label';
+import { deviceLabel, type DeviceBrand, describeUserAgent } from './device-label';
 
 const BRAND_MARK: Record<DeviceBrand, (props: { className?: string }) => React.JSX.Element> = {
   chrome: Chrome,
@@ -707,8 +707,7 @@ export function SecurityTab() {
   );
   const devices: DeviceRow[] = (deviceQuery.data ?? []).map((device) => {
     const { browser, os, mobile, brand } = describeUserAgent(device.user_agent);
-    const label =
-      browser && os ? t('deviceName', { browser, os }) : (browser ?? os ?? t('unknownDevice'));
+    const label = deviceLabel({ browser, os }, t);
     const when = device.current
       ? t('deviceSignedInAt', { date: dateFormat.format(new Date(device.signed_in_at)) })
       : t('deviceLastActive', { date: dateTimeFormat.format(new Date(device.last_active_at)) });

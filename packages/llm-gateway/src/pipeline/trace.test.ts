@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { GatewayTrace } from '../domain';
+import type { GatewayHooks, GatewayTrace } from '../domain';
 import { createTraceEmitter, withFailureDetail } from './trace';
 
 const silent = { info() {}, warn() {}, error() {}, debug() {} };
@@ -38,7 +38,7 @@ describe('createTraceEmitter', () => {
   test('every failed trace it records carries an error code and message', () => {
     const recorded: GatewayTrace[] = [];
     const emit = createTraceEmitter(
-      { recordTrace: async (trace) => void recorded.push(trace) },
+      { recordTrace: async (trace: GatewayTrace) => void recorded.push(trace) } as unknown as GatewayHooks,
       silent,
       'req_1',
       new Date(0).toISOString(),

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from '../../../i18n';
 import {
   ApiError, type AccountSecretResource, createAccountSecretResource, deleteAccountSecretResource,
-  listAccountMembers, setAccountSecretResourceAccess, rotateAccountSecretResource,
+  listAccountMembers, setAccountSecretResourceAccess, rotateAccountSecretResource, verifyAccountSecretResource,
   pollProjectProviderOAuth, startProjectProviderOAuth,
   completeClaudeSubscriptionLogin, startClaudeSubscriptionLogin,
 } from '@kortix/sdk';
@@ -300,13 +300,29 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
         value, consumer: 'llm_gateway', strategy: 'broker',
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await refresh();
       setCreating(false); setRotating(null); setLabel(''); setValue('');
-      successToast(t('saved'));
+      // The server checked the key with one call to the provider. A refusal
+      // keeps the key saved; it says so instead of a plain "saved".
+      const verification = (saved as AccountSecretResource | undefined)?.verification;
+      if (verification?.status === 'invalid') errorToast(t('savedInvalid', { provider: providerName, message: verification.message }));
+      else successToast(verification?.status === 'verified' ? t('savedVerified') : t('saved'));
     },
     onError: (error) => errorToast(error instanceof Error ? error.message : t('saveError')),
   });
+  const verify = useMutation({
+    mutationFn: (secretId: string) => verifyAccountSecretResource(accountId, secretId),
+    onSettled: async () => { await refresh(); },
+    onError: (error) => errorToast(error instanceof Error ? error.message : t('checkError')),
+  });
+  const verificationLine = (secret: AccountSecretResource) => {
+    const verification = secret.verification;
+    if (oauth || !verification) return null;
+    if (verification.status === 'verified') return <span className="text-muted-foreground block text-xs font-normal">{t('keyVerified', { provider: providerName })}</span>;
+    if (verification.status === 'invalid') return <span className="text-destructive block text-xs font-normal break-words">{t('keyInvalid', { provider: providerName, message: verification.message })}</span>;
+    return <span className="text-muted-foreground block text-xs font-normal break-words">{t('keyUnchecked', { message: verification.message })}</span>;
+  };
   const remove = useMutation({
     mutationFn: (secretId: string) => deleteAccountSecretResource(accountId, secretId),
     onSuccess: async () => { await refresh(); setDeleting(null); successToast(t('deleted')); },
@@ -378,6 +394,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
                 <span className="block break-words">{secret.label}</span>
                 {usageShown && oauth && <SubscriptionAccountLine accountId={accountId} projectId={oauth.projectId} secret={secret} />}
                 <span className="text-muted-foreground block text-xs font-normal">{accessLine(secret)}</span>
+                {verificationLine(secret)}
                 {stale && (
                   <span className="text-muted-foreground block text-xs font-normal">{t('needsReconnection')}</span>
                 )}
@@ -402,6 +419,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
                 <DropdownMenuContent align="end">
                   {canReconnect && <DropdownMenuItem onSelect={() => openReconnect(secret)}>{t('reconnectAccount')}</DropdownMenuItem>}
                   {canChangeAccess && <DropdownMenuItem onSelect={() => { changeGrant.reset(); setSharingMode(secret.access_mode); setSelectedMembers({ memberIds: secret.granted_user_ids, groupIds: [], inviteEmails: [] }); setSharing(secret); }}>{t('manageAccess')}</DropdownMenuItem>}
+                  {canManage && !oauth && secret.project_id && <DropdownMenuItem disabled={verify.isPending} onSelect={() => verify.mutate(secret.secret_id)}>{t('checkKey')}</DropdownMenuItem>}
                   {canManage && !oauth && <DropdownMenuItem onSelect={() => { setValue(''); save.reset(); setRotating(secret); }}>{t('rotateKey')}</DropdownMenuItem>}
                   {canManage && <DropdownMenuItem onSelect={() => setDeleting(secret)}>{oauth ? t('deleteAccount') : t('deleteKey')}</DropdownMenuItem>}
                 </DropdownMenuContent>

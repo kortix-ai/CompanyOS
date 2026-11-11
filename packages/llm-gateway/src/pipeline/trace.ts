@@ -75,7 +75,7 @@ const STATUS_FAILURES: Record<number, { code: string; reason: string }> = {
  */
 export function withFailureDetail<T extends { ok: boolean; status: number; errorCode?: string; errorMessage?: string }>(
   fields: T,
-): T {
+): T & { errorCode?: string; errorMessage?: string } {
   if (fields.ok || (fields.errorCode && fields.errorMessage)) return fields;
   const { status } = fields;
   const known = STATUS_FAILURES[status];

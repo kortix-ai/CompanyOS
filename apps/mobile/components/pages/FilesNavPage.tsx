@@ -12,9 +12,12 @@
  *
  * Layout (Jay, 2026-09-22):
  * - `PageHeader` with the large title and one right button, View options
- *   (sliders; a glass circle on iOS 26+, the Schedules page's `+` slot). It
- *   opens the View options sheet: Sort (four rows, the active one checked),
- *   View (Grid · List) and Download (this folder, or every file).
+ *   (sliders; a glass circle on iOS 26+, the Schedules page's `+` slot). On
+ *   iOS it is the system pull-down menu (`NativeMenuButton`; Jay,
+ *   2026-11-11): a Sort submenu and a View submenu (the active choice
+ *   checked), then Download. Elsewhere it opens the View options sheet with
+ *   the same three groups: Sort (four rows), View (Grid · List) and Download
+ *   (this folder, or every file).
  * - Search (the Schedules page's `SearchListHeader`), then the breadcrumb
  *   (chips, never clipped). On iOS the search sits at the bottom instead
  *   (`BottomSearchBar`): the search circle sits bottom left, the version
@@ -67,6 +70,7 @@ import { SearchListHeader } from '@/components/kortix/search-list-header';
 import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
 import { SettingsGroup, SettingsGroupItem, SettingsRow } from '@/components/kortix/settings-list';
 import { CopyContentButton, KortixBottomSheetModal, SheetTitleRow, useContentSheetBottomInset } from '@/components/kortix/sheet';
+import { NATIVE_MENU_AVAILABLE, NativeMenuButton } from '@/components/kortix/native-menu-button';
 import { POP_IN, PUSH_IN, SheetBackButton } from '@/components/kortix/sheet-push';
 import { useToast } from '@/components/kortix/toast-provider';
 import { Button } from '@/components/ui/button';
@@ -740,6 +744,50 @@ export function FilesNavPage({
         onBack={onBack}
         onOpenDrawer={onBack ? undefined : onOpenDrawer}
         rightActions={
+          NATIVE_MENU_AVAILABLE ? (
+            // iOS: the system pull-down menu (Jay, 2026-11-11), Sort and View as
+            // submenus with the active choice checked, then Download.
+            <NativeMenuButton
+              systemImage="slider.horizontal.3"
+              accessibilityLabel="View options"
+              items={[
+                {
+                  type: 'submenu',
+                  title: 'Sort',
+                  systemImage: 'arrow.up.arrow.down',
+                  disabled: sortDisabled,
+                  items: SORT_OPTIONS.map((option) => ({
+                    type: 'action' as const,
+                    title: option.label,
+                    checked: option.by === sortBy && option.order === sortOrder,
+                    onPress: () => chooseSort(option.by, option.order),
+                  })),
+                },
+                {
+                  type: 'submenu',
+                  title: 'View',
+                  systemImage: viewMode === 'grid' ? 'square.grid.2x2' : 'list.bullet',
+                  items: VIEW_OPTIONS.map((option) => ({
+                    type: 'action' as const,
+                    title: option.label,
+                    systemImage: option.mode === 'grid' ? 'square.grid.2x2' : 'list.bullet',
+                    checked: viewMode === option.mode,
+                    onPress: () => {
+                      haptics.selection();
+                      setViewMode(option.mode);
+                    },
+                  })),
+                },
+                {
+                  type: 'action',
+                  title: downloadingDir ? 'Downloading…' : path ? 'Download this folder' : 'Download all files',
+                  systemImage: 'arrow.down.circle',
+                  disabled: downloadingDir || !ref_,
+                  onPress: () => void downloadDir(),
+                },
+              ]}
+            />
+          ) : (
           <Button
             variant="ghost"
             size={HEADER_BUTTON_SIZE}
@@ -753,6 +801,7 @@ export function FilesNavPage({
             hitSlop={{ top: 10, bottom: 10 }}>
             <Icon as={SlidersHorizontalIcon} size={HEADER_ICON_SIZE} className="text-foreground" />
           </Button>
+          )
         }
       />
 

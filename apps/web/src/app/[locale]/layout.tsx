@@ -54,6 +54,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // The keyboard resizes the viewport instead of sliding over it, so the
+  // composer rides above the keyboard on phones (KRTX-4719).
+  interactiveWidget: 'resizes-content',
 };
 
 const ROOT_METADATA: Metadata = {

@@ -21514,7 +21514,10 @@
       "denied": "アクセスを拒否しました",
       "deniedDescription": "My Kortix にあなたの回答が届きます。",
       "failed": "決定を送信できませんでした。もう一度お試しください。"
-    }
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Kortixをホーム画面に追加して、全画面のアプリらしい操作性をお試しください。",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "iPhone・iPadの場合：共有をタップし、「ホーム画面に追加」を選択してください。",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortixが更新されました。再読み込みして新しいバージョンを入手してください。"
   },
   "commandPalette": {
     "title": "コマンドパレット",

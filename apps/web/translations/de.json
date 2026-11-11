@@ -21514,7 +21514,10 @@
       "denied": "Zugriff abgelehnt",
       "deniedDescription": "My Kortix erhält deine Antwort.",
       "failed": "Deine Entscheidung konnte nicht gesendet werden. Versuch es erneut."
-    }
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Füge Kortix zu deinem Home-Bildschirm hinzu – für ein Vollbild-App-Erlebnis.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Auf iPhone und iPad: auf „Teilen“ tippen, dann „Zum Home-Bildschirm“.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix wurde aktualisiert. Lade neu, um die neue Version zu erhalten."
   },
   "commandPalette": {
     "title": "Befehlspalette",

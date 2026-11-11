@@ -21514,7 +21514,10 @@
       "denied": "Acesso negado",
       "deniedDescription": "O My Kortix recebe a sua resposta.",
       "failed": "Não foi possível enviar a sua decisão. Tente novamente."
-    }
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Adicione o Kortix à sua tela de início para uma experiência de app em tela cheia.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "No iPhone e iPad: toque em Compartilhar e depois em Adicionar à Tela de Início.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "O Kortix foi atualizado. Recarregue para obter a nova versão."
   },
   "commandPalette": {
     "title": "Paleta de comandos",

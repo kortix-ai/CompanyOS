@@ -21514,7 +21514,10 @@
       "denied": "Приступ одбијен",
       "deniedDescription": "My Kortix добија ваш одговор.",
       "failed": "Ваша одлука није послата. Покушајте поново."
-    }
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Dodajte Kortix na početni ekran za iskustvo preko celog ekrana, kao aplikacija.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Na iPhone-u i iPad-u: dodirnite Deli, a zatim Dodaj na početni ekran.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix je ažuriran. Osvežite stranicu da biste dobili novu verziju."
   },
   "commandPalette": {
     "title": "Палета команди",

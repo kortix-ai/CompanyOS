@@ -368,7 +368,7 @@ export async function buildSandboxUpstreamHeaders(opts: {
 
 // ── Lifecycle side-effects ─────────────────────────────────────────────────
 
-export async function wakeSandbox(externalId: string): Promise<void> {
+export async function wakeSandbox(externalId: string, wakeReason?: unknown): Promise<void> {
   try {
     const record = await loadSandbox(externalId);
     if (!record) return;
@@ -396,7 +396,7 @@ export async function wakeSandbox(externalId: string): Promise<void> {
       typeof provider.getStatus === 'function'
         ? await provider.getStatus(externalId).catch(() => 'unknown' as const)
         : ('unknown' as const);
-    await provider.ensureRunning(externalId);
+    await provider.ensureRunning(externalId, wakeReason);
     console.log(`[PREVIEW] Wake-up triggered for sandbox ${externalId}`);
     if (before === 'stopped') {
       await recoverTurnsAfterRuntimeRestart({

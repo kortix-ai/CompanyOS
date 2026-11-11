@@ -513,6 +513,17 @@ async function handleUpstreamFailureStatus(
 }
 
 /**
+ * The provider's control-plane not-running verdict (shared/platinum.ts's
+ * typed 409 `sandbox_not_running`; the class NAME is the contract the
+ * expose-not-running tests pin). Name-matched like the TimeoutError check
+ * above, and without a new import edge: the provider tests mock
+ * shared/platinum wholesale, so every consumer of it cannot add exports.
+ */
+function isNotRunningVerdict(err: unknown): boolean {
+  return err instanceof Error && err.name === 'PlatinumSandboxNotRunningError';
+}
+
+/**
  * An attempt threw (refused, reset, connect timeout). Returns `'stop'` to end
  * the loop now, or `'next'` after waking the box and backing off.
  */
@@ -563,8 +574,15 @@ async function recoverFromAttemptError(
     return 'stop';
   }
 
-  if (!state.wakeTriggered) {
-    await wakeSandbox(sandboxId);
+  // One wake per request — EXCEPT a provider control-plane not-running
+  // verdict (shared/platinum.ts's typed 409 sandbox_not_running — the
+  // name is the contract its expose tests pin), which is the one error
+  // that changes the box's world: the provider itself just refused the
+  // box. It justifies a (re)start even after an earlier wake's status read
+  // came back stale — the provider can answer its GET `running` for a box
+  // its own expose/exec refuse (observed in prod for over an hour).
+  if (!state.wakeTriggered || isNotRunningVerdict(err)) {
+    await wakeSandbox(sandboxId, err);
     state.wakeTriggered = true;
   }
   if (attempt < MAX_RETRIES) {

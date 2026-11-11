@@ -1,5 +1,5 @@
 // A caller without `billing.read` gets the gating view of the account state.
-// The credit amounts are not zero, so they are explicit nulls, and `hidden`
+// The credit amounts are absent (never zero), and `hidden`
 // names the constraint and the remedy. Before, the view sent only `can_run`
 // and the CLI decorated it with a units map for fields that were not there.
 import { describe, expect, test } from 'bun:test';
@@ -23,7 +23,8 @@ const STATE = {
 describe('gatingView', () => {
   test('credit amounts are explicit nulls with the reason; no balance leaks', () => {
     const view = gatingView(STATE, 'token_account_shared');
-    expect(view.credits).toMatchObject({ can_run: true, total: null, daily: null, monthly: null, extra: null });
+    expect(view.credits.can_run).toBe(true);
+    for (const key of ['total', 'daily', 'monthly', 'extra']) expect(key in view.credits).toBe(false);
     expect(view.credits.hidden.reason).toBe('token_account_shared');
     expect(view.credits.hidden.message).toContain('kortix login');
     expect(JSON.stringify(view)).not.toContain('42.5');

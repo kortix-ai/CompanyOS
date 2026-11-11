@@ -9,7 +9,8 @@
  * Deliberately shallow and lenient, so a call that works today keeps
  * working: only the top level is checked; a required argument with a
  * `default` may be omitted; a value the upstream reads the same way passes
- * (a number for a `string`, `"42"` for a `number`, `"true"` for a `boolean`);
+ * (a number for a `string`, `"42"` for a `number`, `"true"` for a `boolean`,
+ * a JSON string for an `object` or `array`);
  * `anyOf`, `oneOf`, `$ref` and unknown types are not checked.
  */
 
@@ -28,6 +29,17 @@ function typeName(value: unknown): string {
   return typeof value;
 }
 
+// A JSON-string request body is sent upstream as the object it encodes
+// (`call.ts`), so a string that parses to the declared kind passes.
+function parsedJson(value: unknown): unknown {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function matchesType(value: unknown, type: JsonType): boolean {
   switch (type) {
     case 'string':
@@ -39,9 +51,9 @@ function matchesType(value: unknown, type: JsonType): boolean {
     case 'boolean':
       return typeof value === 'boolean' || value === 'true' || value === 'false';
     case 'object':
-      return isPlainObject(value);
+      return isPlainObject(value) || isPlainObject(parsedJson(value));
     case 'array':
-      return Array.isArray(value);
+      return Array.isArray(value) || Array.isArray(parsedJson(value));
     case 'null':
       return value === null;
   }

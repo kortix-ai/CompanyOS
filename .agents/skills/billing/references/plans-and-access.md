@@ -413,7 +413,7 @@ A caller without `billing.read` (a custom role without it, or a workspace key
 or session token of a `split_pending` legacy account) gets the gating view
 (`gatingView` in `billing/routes/account-state.ts`): plan, `billing_state`,
 `credits.can_run` and entitlements. `credits.total`, `daily`, `monthly` and
-`extra` are explicit `null`, never absent and never `0`. `credits.hidden
+`extra` are absent, never `0` (flow BILL-21 asserts the absence). `credits.hidden
 { reason, message }` names the verdict reason and the remedy. The CLI's
 `billing status` prints `credits hidden — <message>`.
 

@@ -43,6 +43,9 @@ describe('invalidArgsReason', () => {
     expect(invalidArgsReason(SCHEMA, { profileId: '101', types: 7, limit: '2.5', expand: 'true', filter: {}, ids: [] }, TOOL)).toBeNull();
     // `region` is required but has a default; an optional null means "not set".
     expect(invalidArgsReason(SCHEMA, { profileId: 1, types: null }, TOOL)).toBeNull();
+    // A JSON-string body is sent upstream as the object it encodes.
+    expect(invalidArgsReason(SCHEMA, { profileId: 1, filter: '{"a":1}', ids: '[1,2]' }, TOOL)).toBeNull();
+    expect(invalidArgsReason(SCHEMA, { profileId: 1, filter: '[1]' }, TOOL)).toContain('filter must be object, not string');
     // An undeclared argument and an unchecked schema are left to the upstream.
     expect(invalidArgsReason(SCHEMA, { profileId: 1, extra: { a: 1 } }, TOOL)).toBeNull();
     expect(invalidArgsReason(null, {}, TOOL)).toBeNull();

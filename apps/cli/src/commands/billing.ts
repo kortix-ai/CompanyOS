@@ -38,7 +38,7 @@ top-ups and payment methods are dashboard flows.
 Credit balances and transaction amounts use 100 credits per USD, including --json.
 Prices, fields named *_usd, and costs JSON/CSV remain in USD.
 JSON credit objects include a units map for the monetary fields they carry.
-Without billing.read the credit amounts are null and credits.hidden says why.
+Without billing.read the credit amounts are absent and credits.hidden says why.
 
 Subcommands:
   status                            Plan, credits, subscription. --json.

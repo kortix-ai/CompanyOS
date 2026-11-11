@@ -39,21 +39,17 @@ async function billingVerdicts(
 
 /**
  * Why the credit amounts are absent, for a caller without `billing.read`. The
- * amounts are not zero, so they are never sent as numbers: each one is an
- * explicit `null`, and `hidden` names the constraint and the remedy.
+ * amount keys stay out of the response (the allowlist below), and `hidden`
+ * names the constraint and the remedy, so the absence is never read as zero.
  */
 export function hiddenCredits(readReason: string | undefined): {
-  total: null;
-  daily: null;
-  monthly: null;
-  extra: null;
   hidden: { reason: string; message: string };
 } {
   const reason = readReason ?? 'billing_read_required';
   const message =
     denialReasonMessage(ACCOUNT_ACTIONS.BILLING_READ, reason) ??
     'Credit balances need the billing.read permission in this workspace. A workspace owner or admin grants it in Settings → People.';
-  return { total: null, daily: null, monthly: null, extra: null, hidden: { reason, message } };
+  return { hidden: { reason, message } };
 }
 
 // What a caller without `billing.read` sees: only the fields that gate the
@@ -62,7 +58,7 @@ export function hiddenCredits(readReason: string | undefined): {
 // project-bound token, an agent session or a custom role without
 // `billing.read` reached them before (pentest 2026-07 finding 1, BOLA).
 // An allowlist, so a field added to the state later stays hidden here.
-// The credit amounts are explicit nulls with the reason (`hiddenCredits`).
+// The credit amounts are absent; `credits.hidden` says why (`hiddenCredits`).
 export function gatingView(state: AccountStateResponse, readReason?: string) {
   return {
     model_access: state.model_access,

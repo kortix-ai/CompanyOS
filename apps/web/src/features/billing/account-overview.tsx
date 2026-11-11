@@ -288,7 +288,7 @@ const DEFAULT_PLAN_STATUS_COPY: PlanStatusCopy = {
 };
 
 /** `Nov 14` — a renewal-side date from an ISO timestamp, no year. */
-function formatShortIsoDate(iso: string | null | undefined, locale?: string): string | null {
+export function formatShortDate(iso: string | null | undefined, locale?: string): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
@@ -296,7 +296,7 @@ function formatShortIsoDate(iso: string | null | undefined, locale?: string): st
 }
 
 /** `Nov 14, 2026` — a calendar date from an ISO timestamp. */
-function formatIsoDate(iso: string | null | undefined, locale?: string): string | null {
+export function formatIsoDate(iso: string | null | undefined, locale?: string): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
@@ -319,7 +319,7 @@ export function describePlanStatus(
   // A cut waits for the renewal (an upgrade is instant), so the plan line
   // names what it changes to and when. The amount is a price: dollars.
   const scheduledUsd = sub?.scheduled_change?.target_tier.monthly_usd;
-  const scheduledOn = formatShortIsoDate(sub?.scheduled_change?.effective_date, text.locale);
+  const scheduledOn = formatShortDate(sub?.scheduled_change?.effective_date, text.locale);
   // A split-off workspace's comped plan: no subscription, it ends on a date.
   const compedUntil = formatIsoDate(state.plan_comp?.until, text.locale);
   if (compedUntil) {

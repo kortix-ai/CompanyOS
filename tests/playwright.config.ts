@@ -129,7 +129,23 @@ const deployedTarget = Boolean(process.env.KE2E_TARGET);
 // (10-billing 300s, 13-sdk-only 12m, 01-account-auth 180s), which overrides this.
 // Local and non-deployed CI keep the old 300s/2-retry budget.
 const deployedTimeoutMs = Number(process.env.E2E_DEPLOYED_TIMEOUT_MS ?? 120_000);
-const deployedRetries = Number(process.env.E2E_DEPLOYED_RETRIES ?? 1);
+
+/**
+ * Retries stay, so a flaky journey shows as `flaky` in the report with both
+ * attempts' traces. On CI and on a deployed target a flaky result FAILS the
+ * run (`failOnFlakyTests`): a journey that needed a retry to pass is a defect
+ * to fix or delete the same day, not a green. Local runs keep 0 retries.
+ */
+export function resolveFlakePolicy(env: NodeJS.ProcessEnv): { retries: number; failOnFlakyTests: boolean } {
+  const deployed = Boolean(env.KE2E_TARGET);
+  const ci = Boolean(env.CI);
+  return {
+    retries: deployed ? Number(env.E2E_DEPLOYED_RETRIES ?? 1) : ci ? 2 : 0,
+    failOnFlakyTests: deployed || ci,
+  };
+}
+
+const flakePolicy = resolveFlakePolicy(process.env);
 
 export default defineConfig({
   testDir: './e2e/specs',
@@ -145,7 +161,8 @@ export default defineConfig({
   fullyParallel: true,
   // A committed `test.only` would silently drop every other journey from the run.
   forbidOnly: true,
-  retries: deployedTarget ? deployedRetries : process.env.CI ? 2 : 0,
+  retries: flakePolicy.retries,
+  failOnFlakyTests: flakePolicy.failOnFlakyTests,
   workers,
   reporter: [
     ['list'],

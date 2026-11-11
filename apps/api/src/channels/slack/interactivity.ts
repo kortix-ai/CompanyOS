@@ -1,16 +1,16 @@
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { and, eq } from 'drizzle-orm';
-import { chatChannelBindings, chatInstalls, projectSessions } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { config } from '../../config';
 import { loadSlackTokenForProject } from '../install-store';
-import { openModal, updateMessage } from '../slack-api';
-import { dispatchSlackEvent, spawnAgentTurn } from './dispatch';
+import { openModal } from '../slack-api';
+import { spawnAgentTurn } from './dispatch';
 import { parseQuestionButton } from '../core/question-token';
 import { QUESTION_EARLIER } from './questions';
-import { backfillSlackBindingLabel } from './binding-label';
 import { notifyAdminsOfAccessRequest } from './identity';
-import { chatUser, createChatAccessRequest, resolveChatActor } from '../core/identity';
+import { chatUser, createChatAccessRequest } from '../core/identity';
+import { resolveSlackActor } from './auto-link';
 import { parseReviewActionId, reviewVerbToVerdict, type ReviewVerb } from './review-cards';
 import {
   REVIEW_FEEDBACK_CALLBACK,
@@ -29,14 +29,14 @@ import { SLACK_STOP_ACTION, stopSlackTurn } from './stop';
 import { SLACK_SWITCH_AGENT_ACTION } from './stop-action';
 import { isAdaptedId } from '../../projects/review-adapters';
 import { decideSlackThreadJoin } from './participants';
-import { attachPendingSlackAuthResponseUrl, consumePendingSlackPickerMessage } from './auth-resume';
+import { attachPendingSlackAuthResponseUrl } from './auth-resume';
 import { buildSlackLoginUrl, verifyLoginState } from './login';
-import { escapeMrkdwn, respondViaUrl, sessionWebUrl, slackChannelIsDm } from './util';
+import { escapeMrkdwn, respondViaUrl, sessionWebUrl } from './util';
 import { handleSlashCommand } from './commands';
-import { agentChangeText, currentChannelProjectId } from './settings-commands';
-import { settingsRefusalText, slackSettingsChannel, slackUserOf } from './settings-text';
+import { NO_LINK_TEXT, agentChangeText, currentChannelProjectId } from './settings-commands';
+import { slackSettingsChannel, slackUserOf } from './settings-text';
 import { applySlackModelChoice } from './model-choice';
-import { changeChannelAgent, switchChannelProject } from '../core/settings';
+import { changeChannelAgent } from '../core/settings';
 import type { SlashCtx, SlashResponse } from './types';
 import {
   CANONICAL_SLACK_INBOUND,
@@ -47,7 +47,6 @@ import {
   type SlackInbound,
 } from './inbound';
 import type { SlackEnvelope, SlackEvent, SlackInteractionPayload } from './types';
-import { projectsView } from '../../workspaces/rows';
 
 const OTHER_PROJECT_NOTICE = 'This Slack app is tied to a different Kortix workspace.';
 
@@ -276,7 +275,7 @@ async function handleReviewAction(
   // The actor must be a linked Kortix user with write access to this project.
   // Self-approve is allowed (launcher or any manager) — there's no separation-of-
   // duties gate. No live mapping → nudge to connect / request access.
-  const actor = await resolveChatActor(chatUser('slack', teamId, slackUserId), { projectId: thread.projectId, accountId: item.accountId }, PROJECT_ACTIONS.PROJECT_REVIEW_ACT);
+  const actor = await resolveSlackActor(chatUser('slack', teamId, slackUserId), { projectId: thread.projectId, accountId: item.accountId }, PROJECT_ACTIONS.PROJECT_REVIEW_ACT);
   if ('reason' in actor) {
     await respondViaUrl(payload.response_url, {
       response_type: 'ephemeral',
@@ -338,56 +337,6 @@ async function handleReviewAction(
   await spawnAgentTurn(thread.projectId, envelope, event, { ...turnScope(inbound), authorizedResume: true });
 }
 
-async function handleSwitchProject(
-  payload: SlackInteractionPayload,
-  rawValue: string,
-  inbound: SlackInbound,
-): Promise<void> {
-  let value: { p?: string; c?: string };
-  try {
-    value = JSON.parse(rawValue || '{}') as { p?: string; c?: string };
-  } catch {
-    return;
-  }
-  const projectId = value.p;
-  const channelId = value.c ?? payload.channel?.id;
-  const teamId = payload.team?.id ?? '';
-  if (!projectId || !channelId || !teamId) return;
-  if (!inboundAllowsProject(inbound, projectId)) {
-    await respondViaUrl(payload.response_url, { response_type: 'ephemeral', text: OTHER_PROJECT_NOTICE });
-    return;
-  }
-
-  const result = await switchChannelProject(
-    slackUserOf({ teamId, slackUserId: payload.user?.id ?? '' }),
-    slackSettingsChannel({ teamId, channelId }),
-    projectId,
-  );
-  if (!result.ok) {
-    await respondViaUrl(payload.response_url, {
-      response_type: 'ephemeral',
-      replace_original: true,
-      text: result.reason === 'not_installed'
-        ? 'That Kortix workspace is no longer connected to this Slack workspace.'
-        : settingsRefusalText(result.reason, '/kortix', ''),
-    });
-    return;
-  }
-  await backfillSlackBindingLabel(teamId, channelId, projectId);
-
-  const [p] = await db
-    .select({ name: projectsView.name })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-
-  await respondViaUrl(payload.response_url, {
-    response_type: 'ephemeral',
-    replace_original: true,
-    text: `Switched this channel to *${p?.name ?? 'project'}*.`,
-  });
-}
-
 // Pick an agent/model from the `/kortix agents` or `/kortix models` picker.
 // The value carries the channel + selection ('' = clear → project default).
 async function handleSetSelection(
@@ -422,7 +371,7 @@ async function handleSetSelection(
   }
   const requested = value.a || null;
   const result = await changeChannelAgent(slackUserOf({ teamId, slackUserId }), slackSettingsChannel(ctx), requested);
-  const text = agentChangeText(result, requested ?? '', '/kortix', 'That channel is no longer bound to a Kortix workspace — run `/kortix switch` first.');
+  const text = agentChangeText(result, requested ?? '', '/kortix', NO_LINK_TEXT);
   await reply(`${result.ok ? '✓' : '⚠️'} ${text}`);
 }
 
@@ -431,13 +380,13 @@ async function handleSetSelection(
 // the whole config flow lives behind one command + inline buttons.
 async function handleConfigOpen(
   payload: SlackInteractionPayload,
-  actionId: 'cfg_open_models' | 'cfg_open_agents' | 'cfg_open_projects',
+  actionId: 'cfg_open_models' | 'cfg_open_agents',
   inbound: SlackInbound,
 ): Promise<void> {
   const teamId = payload.team?.id ?? '';
   const channelId = payload.channel?.id ?? '';
   if (!teamId || !channelId || !payload.response_url) return;
-  const sub = actionId === 'cfg_open_models' ? 'models' : actionId === 'cfg_open_agents' ? 'agents' : 'switch';
+  const sub = actionId === 'cfg_open_models' ? 'models' : 'agents';
   const ctx: SlashCtx = {
     teamId,
     channelId,
@@ -447,7 +396,7 @@ async function handleConfigOpen(
     projectScopedProjectId: inboundProjectId(inbound),
   };
   // `agents` defers internally (git) and posts the real picker via responseUrl;
-  // its sync return is a "Loading…" ack. `models`/`switch` return full blocks.
+  // its sync return is a "Loading…" ack. `models` returns full blocks.
   const resp = await handleSlashCommand(sub, '', ctx);
   await respondViaUrl(payload.response_url, { ...resp, replace_original: true });
 }
@@ -780,7 +729,7 @@ export async function handleViewSubmission(
     return;
   }
 
-  const actor = await resolveChatActor(chatUser('slack', meta.teamId, slackUserId), { projectId: meta.projectId, accountId: item.accountId }, PROJECT_ACTIONS.PROJECT_REVIEW_ACT);
+  const actor = await resolveSlackActor(chatUser('slack', meta.teamId, slackUserId), { projectId: meta.projectId, accountId: item.accountId }, PROJECT_ACTIONS.PROJECT_REVIEW_ACT);
   if ('reason' in actor) {
     await notify(
       actor.reason === 'unlinked'
@@ -878,8 +827,7 @@ export async function handleBlockAction(
   // `/kortix` panel "Change …" buttons re-render the focused picker in place.
   if (
     action.action_id === 'cfg_open_models' ||
-    action.action_id === 'cfg_open_agents' ||
-    action.action_id === 'cfg_open_projects'
+    action.action_id === 'cfg_open_agents'
   ) {
     await handleConfigOpen(payload, action.action_id, inbound);
     return;
@@ -922,87 +870,19 @@ export async function handleBlockAction(
     return;
   }
 
-  if (action.action_id.startsWith('switch_project_')) {
-    await handleSwitchProject(payload, action.value ?? '', inbound);
+  // The workspace picker and "Switch workspace" of the per-channel model. Their
+  // messages stay in Slack; a click on one answers instead of reaching the
+  // agent: every channel now runs in the Slack workspace's linked one.
+  if (action.action_id.startsWith('pick_project') || action.action_id.startsWith('switch_project_')) {
+    await respondViaUrl(payload.response_url, {
+      response_type: 'ephemeral',
+      text: 'This Slack workspace now runs in one Kortix workspace, so there is nothing to pick. Mention me with a task.',
+    });
     return;
   }
 
   // Anything else is an agent-emitted button (typically inside a carousel card
   // or actions block from `slack send --blocks-file ...`). Route the click back
   // into the thread as a synthesized follow-up so the agent can continue.
-  if (!action.action_id.startsWith('pick_project') && !action.action_id.startsWith('switch_project_')) {
-    await handleAgentClick(payload, action, inbound);
-    return;
-  }
-
-  if (!action.action_id.startsWith('pick_project')) return;
-  let value: { k?: string; p?: string };
-  try {
-    value = JSON.parse(action.value ?? '{}') as { k?: string; p?: string };
-  } catch {
-    return;
-  }
-  const pickerId = value.k;
-  const projectId = value.p;
-  const teamId = payload.team?.id ?? '';
-  const channelId = payload.channel?.id ?? '';
-  const pickerTs = payload.message?.ts ?? '';
-  if (!pickerId || !projectId || !teamId || !channelId) return;
-  if (!inboundAllowsProject(inbound, projectId)) return;
-
-  const token = await loadSlackTokenForProject(projectId);
-
-  const stillInstalled = await db
-    .select({ id: chatInstalls.installId })
-    .from(chatInstalls)
-    .where(
-      and(
-        eq(chatInstalls.platform, 'slack'),
-        eq(chatInstalls.platformTeamId, teamId),
-        eq(chatInstalls.projectId, projectId),
-      ),
-    )
-    .limit(1);
-  if (stillInstalled.length === 0) {
-    if (token && pickerTs) {
-      await updateMessage(
-        token,
-        channelId,
-        pickerTs,
-        'That Kortix workspace is no longer connected here — @mention me again to pick another.',
-      );
-    }
-    return;
-  }
-
-  await db
-    .update(chatChannelBindings)
-    .set({ projectId, pickerTs: null })
-    .where(
-      and(
-        eq(chatChannelBindings.platform, 'slack'),
-        eq(chatChannelBindings.platformTeamId, teamId),
-        eq(chatChannelBindings.channelId, channelId),
-      ),
-    );
-
-  const [proj] = await db
-    .select({ name: projectsView.name })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  if (token && pickerTs) {
-    // DM channel ids start with 'D' — a <#D…> mention renders as a dead link
-    // there, so phrase it as "this DM" instead of a channel mention.
-    const target = slackChannelIsDm(channelId) ? 'this DM' : `<#${channelId}>`;
-    await updateMessage(
-      token,
-      channelId,
-      pickerTs,
-      `✓ Linked ${target} to *${proj?.name ?? 'project'}*.`,
-    );
-  }
-
-  const pending = await consumePendingSlackPickerMessage({ pendingId: pickerId, teamId, channelId });
-  if (pending) await dispatchSlackEvent(projectId, pending, turnScope(inbound));
+  await handleAgentClick(payload, action, inbound);
 }

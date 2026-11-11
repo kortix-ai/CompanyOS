@@ -20,14 +20,12 @@ import { listVisibleChatSessions } from '../core/sessions';
 import { slackUserOf } from './settings-text';
 import {
   slashAgents,
+  slashLinkInfo,
   slashModels,
   slashPanel,
   slashPolicy,
-  slashProjects,
   slashSetAgent,
   slashSetModel,
-  slashSwitch,
-  slashUnbind,
 } from './settings-commands';
 import type { SlashCtx, SlashResponse } from './types';
 import { projectsView } from '../../workspaces/rows';
@@ -45,16 +43,11 @@ export async function handleSlashCommand(
     case 'projects':
     case 'workspaces':
     case 'list':
-      if (ctx.projectScopedProjectId) return slashProjectScopedInfo(ctx);
-      return slashProjects(ctx);
     case 'switch':
     case 'use':
     case 'rebind':
-      if (ctx.projectScopedProjectId) return slashProjectScopedInfo(ctx);
-      return slashSwitch(ctx);
     case 'unbind':
-      if (ctx.projectScopedProjectId) return slashProjectScopedInfo(ctx);
-      return slashUnbind(ctx);
+      return ctx.projectScopedProjectId ? slashProjectScopedInfo(ctx) : slashLinkInfo(ctx);
     case 'sessions':
       return slashSessions(ctx);
     case 'session':
@@ -112,7 +105,7 @@ function slashHelp(ctx: SlashCtx): SlashResponse {
   const advanced: Array<{ cmd: string; desc: string }> = [
     { cmd: `${command} model <id>`, desc: 'Set the channel model directly, e.g. `kortix/deepseek-v4.1-flash` or `anthropic/claude-sonnet-4.6` (`default` to reset).' },
     { cmd: `${command} agent <name>`, desc: 'Set the channel agent directly (`default` to reset).' },
-    ...(isProjectScoped ? [] : [{ cmd: `${command} switch`, desc: 'Connect this channel to a different Kortix workspace.' }]),
+    ...(isProjectScoped ? [] : [{ cmd: `${command} workspaces`, desc: 'Which Kortix workspace this Slack workspace runs in, and how to move it.' }]),
     { cmd: `${command} policy`,   desc: 'Show or change who can join Slack-started sessions here.' },
     { cmd: `${command} sessions`, desc: 'Recent sessions started in this Slack workspace.' },
     ...(config.SLACK_REQUIRE_USER_IDENTITY
@@ -233,7 +226,7 @@ async function slashSessions(ctx: SlashCtx): Promise<SlashResponse> {
 async function slashLinkBot(ctx: SlashCtx, arg: string): Promise<SlashResponse> {
   const selection = await currentChannelSelection(ctx);
   if (!selection?.projectId) {
-    return { response_type: 'ephemeral', text: `No Kortix workspace bound to this channel. Run \`${ctx.command} switch\` first.` };
+    return slashLinkInfo(ctx);
   }
   const me = await lookupChatIdentity(slackUserOf(ctx));
   if (!me) {
@@ -393,7 +386,7 @@ async function slashSession(ctx: SlashCtx): Promise<SlashResponse> {
   if (!selection) {
     return {
       response_type: 'ephemeral',
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*No Kortix workspace bound to this channel.*\nRun \`${ctx.command} switch\` to pick one, then \`@\`-mention me to start a session.` } }],
+      blocks: (await slashLinkInfo(ctx)).blocks,
     };
   }
   const [s] = await db

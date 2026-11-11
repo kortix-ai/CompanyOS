@@ -49,7 +49,13 @@ export async function authorizeChannelSettings(
   opts: { oneToOne?: boolean } = {},
 ): Promise<{ ok: true; userId: string } | { ok: false; reason: 'unlinked' | 'forbidden' }> {
   const action = opts.oneToOne ? PROJECT_ACTIONS.PROJECT_SESSION_START : PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE;
-  const actor = await resolveProjectChatActor(user, projectId, action);
+  let actor = await resolveProjectChatActor(user, projectId, action);
+  // An unlinked Slack person whose confirmed email is a member's is linked
+  // here, with no `/kortix login` (slack/auto-link.ts).
+  if ('reason' in actor && actor.reason === 'unlinked' && user.platform === 'slack') {
+    const { linkSlackPersonByEmail } = await import('../slack/auto-link');
+    if (await linkSlackPersonByEmail(user, projectId)) actor = await resolveProjectChatActor(user, projectId, action);
+  }
   if ('userId' in actor) return { ok: true, userId: actor.userId };
   return { ok: false, reason: actor.reason === 'unlinked' ? 'unlinked' : 'forbidden' };
 }

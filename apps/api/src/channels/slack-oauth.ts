@@ -4,6 +4,8 @@ import { db } from '../shared/db';
 import { config } from '../config';
 import { slackOauthMode } from './slack-oauth-mode';
 import { saveSlackOauthInstall } from './install-store';
+import { moveSlackLink } from './slack/link';
+import { logger } from '../lib/logger';
 import { chatUser, linkChatIdentity } from './core/identity';
 import {
   frontendBase,
@@ -170,6 +172,20 @@ export async function completeSlackOauthInstall(input: {
       error: (err as Error).message,
     });
     return done({ error: 'slack_install_save_failed' });
+  }
+  // One Slack workspace, one Kortix workspace: installing here moves the link
+  // here. The Kortix workspaces that held it lose their Slack connector; a
+  // Slack admin consented to this install, which is the decision.
+  try {
+    await moveSlackLink(tokenJson.team.id, payload.projectId);
+  } catch (err) {
+    // The connector gate still refuses the old workspaces, so a failed detach
+    // never shares the token; the next event heals it (`linkedSlackProject`).
+    logger.error('[slack-oauth] moving the Slack link failed', {
+      projectId: payload.projectId,
+      workspaceId: tokenJson.team.id,
+      error: (err as Error).message,
+    });
   }
 
   // Seed the installer's identity so the admin who just connected is linked

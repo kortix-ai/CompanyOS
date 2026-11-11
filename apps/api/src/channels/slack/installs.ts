@@ -3,7 +3,6 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import {
   deleteProjectSecrets,
-  listProjectsForWorkspace,
   readSecret,
   upsertSecret,
 } from '../install-store';
@@ -79,11 +78,12 @@ export async function deleteSlackInstall(projectId: string): Promise<void> {
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.projectId, projectId)));
 }
 
-// Universal Kortix Slack App install. Records this project's membership of the
-// workspace, then fans the bot token + workspace metadata out to every project
-// on the workspace — Slack issues one token per (app, workspace) and a re-auth
-// rotates it, so all sharing projects must be kept current. The signing secret
-// is the master Kortix one and stays server-side; it is never persisted here.
+// Universal Kortix Slack App install. Records this project's install of the
+// Slack workspace and stores the bot token and workspace metadata for it. One
+// Slack workspace has one linked Kortix workspace on the shared app
+// (slack/link.ts): the OAuth completion moves the link here, which detaches
+// the others, so the token is never fanned out to another project. The
+// signing secret is the master Kortix one and stays server-side.
 export async function saveSlackOauthInstall(
   input: SlackOauthInstallInput,
 ): Promise<SlackInstallSummary> {
@@ -95,16 +95,10 @@ export async function saveSlackOauthInstall(
       projectId: input.projectId,
     })
     .onConflictDoNothing();
-
-  const projectIds = await listProjectsForWorkspace('slack', input.workspaceId);
-  if (!projectIds.includes(input.projectId)) projectIds.push(input.projectId);
-  for (const projectId of projectIds) {
-    await upsertSecret(projectId, SLACK_BOT_TOKEN, input.botToken);
-    await upsertSecret(projectId, SLACK_TEAM_ID, input.workspaceId);
-    await upsertSecret(projectId, SLACK_BOT_USER_ID, input.botUserId);
-    await upsertSecret(projectId, SLACK_TEAM_NAME, input.teamName ?? '');
-  }
-
+  await upsertSecret(input.projectId, SLACK_BOT_TOKEN, input.botToken);
+  await upsertSecret(input.projectId, SLACK_TEAM_ID, input.workspaceId);
+  await upsertSecret(input.projectId, SLACK_BOT_USER_ID, input.botUserId);
+  await upsertSecret(input.projectId, SLACK_TEAM_NAME, input.teamName ?? '');
   return {
     workspaceId: input.workspaceId,
     workspaceName: input.teamName,

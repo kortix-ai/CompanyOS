@@ -10,21 +10,18 @@ import { EVENT_DEDUPE_TTL_MS } from './app';
 import { parseEnvelope, verifySlackSignature } from './util';
 import {
   dispatchSlackEvent,
-  ensureProjectChannelBinding,
-  handleAssistantThreadStarted,
   maybeHandleDmCommand,
   maybePostChannelIntro,
-  maybePostPicker,
   resolveOauthProject,
 } from './dispatch';
 import { publishHomeForUser } from './home';
+import { recordSlackChannel } from './link';
 import { handleBlockAction, handleMessageShortcut, handleViewSubmission } from './interactivity';
 import { handleSlashCommand } from './commands';
 import {
   CANONICAL_SLACK_INBOUND,
   inboundProjectId,
   scopeProjectSlackRequest,
-  slackInstalledProjectIds,
   type ProjectSlackInbound,
   type SlackInbound,
 } from './inbound';
@@ -119,7 +116,7 @@ async function runSlashCommandBody(
   const responseUrl = params.get('response_url') ?? undefined;
 
   if (projectScopedProjectId && teamId && channelId) {
-    await ensureProjectChannelBinding(projectScopedProjectId, teamId, channelId);
+    await recordSlackChannel(projectScopedProjectId, teamId, channelId);
   }
 
   const [sub, ...rest] = text.split(/\s+/);
@@ -198,33 +195,16 @@ async function processOauthEventCallback(envelope: SlackEnvelope): Promise<void>
     await publishHomeForUser(teamId, envelope.event.user);
     return;
   }
-  // Opening the Kortix DM (AI-Assistant pane) → greet with the project picker.
-  // The channel/thread live on event.assistant_thread, NOT the top-level event,
-  // so resolveOauthProject can't see it — handle it before that branch.
-  if (envelope.event?.type === 'assistant_thread_started') {
-    await handleAssistantThreadStarted(teamId, envelope.event);
-    return;
-  }
+  // Opening the Kortix DM (AI-Assistant pane) starts no turn: the next message
+  // does, in the Kortix workspace this Slack workspace is linked to.
+  if (envelope.event?.type === 'assistant_thread_started') return;
   // A `/kortix …` typed in a DM (the Assistant pane can't run real slash
   // commands) arrives as a plain message — run it as the command it is.
   if (envelope.event && (await maybeHandleDmCommand(teamId, envelope.event))) {
     return;
   }
-  const resolution = await resolveOauthProject(
-    teamId,
-    envelope.event?.channel,
-    envelope.event?.thread_ts,
-  );
-  if (resolution.kind === 'project') {
-    await dispatchSlackEvent(resolution.projectId, envelope);
-  } else if (resolution.kind === 'ambiguous') {
-    await maybePostPicker(teamId, resolution.projectIds, envelope);
-  } else if (resolution.kind === 'pending') {
-    const installs = await slackInstalledProjectIds(teamId);
-    if (installs.length > 0) {
-      await maybePostPicker(teamId, installs, envelope);
-    }
-  }
+  const resolution = await resolveOauthProject(teamId);
+  if (resolution.kind === 'project') await dispatchSlackEvent(resolution.projectId, envelope);
 }
 
 /** A per-project (BYO) app's event-callback work (`POST /v1/webhooks/slack/:workspaceId`). */

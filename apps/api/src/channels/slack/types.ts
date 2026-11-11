@@ -18,11 +18,7 @@ export interface LiveTurn {
   originatingEvent: SlackEvent;
 }
 
-export type ProjectResolution =
-  | { kind: 'project'; projectId: string }
-  | { kind: 'ambiguous'; projectIds: string[] }
-  | { kind: 'pending' }
-  | { kind: 'none' };
+export type ProjectResolution = { kind: 'project'; projectId: string } | { kind: 'none' };
 
 export type SlashResponse = { response_type: 'ephemeral' | 'in_channel'; text?: string; blocks?: unknown[] };
 

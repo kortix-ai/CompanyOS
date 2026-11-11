@@ -1019,6 +1019,8 @@ Channels connect a workspace to Slack, Microsoft Teams, Telegram and Discord. Pe
 - **In Slack, one thread is one session.** The first message in a thread starts the session, and later messages in the thread continue it.
 - **In a Slack channel, a mention starts the agent.** In the agent's thread, the person who started it keeps talking with plain replies. Anyone else mentions the bot to reach it; their other replies stay between people, and the agent reads them the next time it runs.
 - **In a direct message with the bot, every message reaches the agent.** That session is private to you. The bot's status line shows what the agent is doing.
+- **People link automatically.** A Slack member whose confirmed email matches a member of the Kortix workspace needs no `/kortix login`. A workspace that requires two-factor sign-in still asks for `/kortix login` from a session that passed it.
+- **Private content follows the person.** The agent reads a private channel or DM only for someone who is in it. Public channels are open to every agent, as to every member.
 - **Each reply is signed by the agent.** The author is the agent's name and face, as in Kortix, not "Kortix". The first reply in a thread says which agent the channel selected. Every reply has **Switch agent**, which changes the agent for the channel's next threads, and **Open in Kortix**, which opens the session.
 - **The agent moves through public channels on its own.** It joins a public channel when it needs to read one. A private channel needs a person to invite the bot.
 - **In Teams, each channel post is its own session.** A personal or group chat keeps one session until someone sends `/new`.
@@ -1079,9 +1081,11 @@ The agent replies in the thread, with live progress.
 </Step>
 </Steps>
 
-When one Slack workspace or Teams tenant serves several workspaces, the first message in a new channel shows a workspace picker. The choice binds the channel to that workspace.
+One Slack workspace runs in one Kortix workspace: every channel and DM there. Adding Kortix to Slack from another Kortix workspace moves the connection there, and the first workspace loses its Slack connector. `/kortix workspaces` in Slack says which workspace it runs in. A workspace that needs a separate bot in the same Slack workspace runs its own Slack app.
 
-Deleting a workspace disconnects Slack and Teams from it. Its channels move to the one workspace that is still connected, or show the picker again. A reply in one of the deleted workspace's Slack threads gets no answer.
+When one Teams tenant serves several workspaces, the first message in a new channel shows a workspace picker. The choice binds the channel to that workspace.
+
+Deleting a workspace disconnects Slack and Teams from it. A reply in one of its Slack threads starts over in the workspace that holds Slack now, without the earlier context.
 
 ### Telegram
 

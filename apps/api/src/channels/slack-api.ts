@@ -629,6 +629,83 @@ export async function isBotUser(token: string, userId: string): Promise<boolean 
   }
 }
 
+/** A Slack person's email, when Slack confirmed it. Null for a bot, a deleted user, or any failure. */
+export async function slackConfirmedEmail(token: string, userId: string): Promise<string | null> {
+  try {
+    const r = await slackApiCall(token, 'users.info', { user: userId }, { form: true });
+    const u = r.ok ? (r.user as SlackPerson | undefined) : undefined;
+    return u && isConfirmedPerson(u) ? u.profile!.email!.trim().toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The Slack person with this confirmed email, or null. */
+export async function slackPersonByEmail(token: string, email: string): Promise<string | null> {
+  try {
+    const r = await slackApiCall(token, 'users.lookupByEmail', { email }, { form: true });
+    const u = r.ok ? (r.user as SlackPerson | undefined) : undefined;
+    return u && isConfirmedPerson(u) && typeof u.id === 'string' ? u.id : null;
+  } catch {
+    return null;
+  }
+}
+
+interface SlackPerson {
+  id?: string;
+  deleted?: boolean;
+  is_bot?: boolean;
+  is_app_user?: boolean;
+  is_email_confirmed?: boolean;
+  profile?: { email?: string };
+}
+
+function isConfirmedPerson(u: SlackPerson): boolean {
+  return !u.deleted && !u.is_bot && !u.is_app_user && u.is_email_confirmed === true && Boolean(u.profile?.email?.trim());
+}
+
+/** One conversation `users.conversations` lists: its id and, for a DM, the other person. */
+export interface SlackMembership {
+  id: string;
+  isIm: boolean;
+  /** The person a DM is with. */
+  user: string | null;
+}
+
+/**
+ * The conversations of `types` the token's bot is in, or with `user`, the ones
+ * that person is in among those the bot can see (`users.conversations`). Null
+ * on any failure, so the caller fails closed. At most 10 pages of 1000.
+ */
+export async function slackMemberships(
+  token: string,
+  types: string,
+  user?: string,
+): Promise<SlackMembership[] | null> {
+  const out: SlackMembership[] = [];
+  let cursor = '';
+  try {
+    for (let page = 0; page < 10; page++) {
+      const r = await slackApiCall(
+        token,
+        'users.conversations',
+        { types, limit: 1000, exclude_archived: false, ...(user ? { user } : {}), ...(cursor ? { cursor } : {}) },
+        { form: true },
+      );
+      if (!r.ok) return null;
+      for (const c of (r.channels as Array<{ id?: unknown; is_im?: unknown; user?: unknown }> | undefined) ?? []) {
+        if (typeof c.id !== 'string') continue;
+        out.push({ id: c.id.toUpperCase(), isIm: c.is_im === true, user: typeof c.user === 'string' ? c.user : null });
+      }
+      cursor = (r.response_metadata as { next_cursor?: string } | undefined)?.next_cursor ?? '';
+      if (!cursor) return out;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A Slack user's display name (`display_name`, else `real_name`, else the
  * handle), for showing a person which Slack account they are about to link.

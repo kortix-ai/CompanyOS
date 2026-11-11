@@ -23,7 +23,8 @@ import {
   describeKeys,
   listChannelModels,
 } from '../model-access';
-import { chatUser, resolveChatActor } from '../core/identity';
+import { chatUser } from '../core/identity';
+import { resolveSlackActor } from './auto-link';
 import { authorizeChannelChange } from '../core/settings';
 import { settingsRefusalText, slackSettingsChannel, slackUserOf } from './settings-text';
 import { slackChannelIsDm } from './util';
@@ -64,7 +65,7 @@ export async function slackModelScope(ctx: SlackModelCtx): Promise<ChannelModelS
   if (!gate) return null;
   const sender = config.SLACK_REQUIRE_USER_IDENTITY ? ctx.slackUserId : '';
   const actor = sender
-    ? await resolveChatActor(chatUser('slack', ctx.teamId, sender), gate).catch(() => null)
+    ? await resolveSlackActor(chatUser('slack', ctx.teamId, sender), gate).catch(() => null)
     : null;
   const pooledEnabled = await projectFeatureFlagEnabled(gate.projectId, 'pooled_provider_secrets').catch(() => false);
   return channelModelScope({

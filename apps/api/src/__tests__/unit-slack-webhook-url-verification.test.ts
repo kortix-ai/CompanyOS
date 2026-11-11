@@ -51,6 +51,7 @@ let slowDispatchMs = 0;
 let dispatchFails = false;
 const slashCalls: unknown[] = [];
 const realDispatch = await import('../channels/slack/dispatch');
+const realLink = await import('../channels/slack/link');
 mock.module('../channels/slack/dispatch', () => ({
   ...realDispatch,
   maybeHandleDmCommand: async () => false,
@@ -59,7 +60,10 @@ mock.module('../channels/slack/dispatch', () => ({
     if (dispatchFails) throw new Error('dispatch failed');
     dispatchedEvents.push({ projectId, envelope, opts });
   },
-  ensureProjectChannelBinding: async () => {},
+}));
+mock.module('../channels/slack/link', () => ({
+  ...realLink,
+  recordSlackChannel: async () => {},
 }));
 // The durable redelivery inbox: a post-ack failure must enqueue the event here
 // (the job queue retries it), a pre-ack failure must not (Slack retries a 5xx).

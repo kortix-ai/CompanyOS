@@ -6,9 +6,10 @@ import { listRepoFiles, loadProjectConfig } from '../../projects/git';
 import { savedProjectConfig } from '../../projects/surface';
 import { projectsView } from '../../workspaces/rows';
 
-// Per-channel agent + model selection. A Slack channel is bound to a project
-// (chat_channel_bindings); these helpers read/write the optional agent + model
-// overrides on that binding. A session started from the channel inherits them
+// Per-channel agent + model selection. A Slack channel's settings row
+// (chat_channel_bindings) belongs to the Kortix workspace its Slack workspace
+// is linked to; these helpers read/write the optional agent + model overrides
+// on that row. A session started from the channel inherits them
 // (see session.ts) — null means "use the project/platform default".
 
 export interface ChannelSelection {
@@ -27,9 +28,20 @@ export interface ChannelCtx {
   platform?: string;
 }
 
-/** The channel's bound project + its agent/model overrides, or null if unbound. */
+/**
+ * The channel's Kortix workspace and its agent/model overrides, or null when
+ * the channel runs in none. A Slack channel runs in the Kortix workspace its
+ * Slack workspace is linked to: its settings row is recorded for that
+ * workspace first (slack/link.ts), so every channel has settings, with no
+ * binding step.
+ */
 export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelSelection | null> {
   if (!ctx.channelId) return null;
+  if ((ctx.platform ?? 'slack') === 'slack') {
+    const { linkedSlackProject, recordSlackChannel } = await import('./link');
+    const linked = await linkedSlackProject(ctx.teamId);
+    if (linked) await recordSlackChannel(linked, ctx.teamId, ctx.channelId);
+  }
   let binding: { projectId: string | null; agentName: string | null; sessionModel: string | null; conversationPolicy: string | null } | undefined;
   try {
     [binding] = await db

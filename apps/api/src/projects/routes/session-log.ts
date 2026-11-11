@@ -393,9 +393,9 @@ export function registerSessionLogRoutes(): void {
       const { workspaceId: projectId, sessionId } = c.req.valid('param');
       // In front of the gate: a hot poller costs one in-memory check per poll, not
       // the IAM stack. The guard is keyed on (caller, session), so a caller can only
-      // spend their own bucket. In front of the gate: the request deadline may have
-      // answered this request already, so the 429 headers are inline (KRTX-2737);
-      // the body shape is the one the SDK's log sync already backs off on.
+      // spend their own bucket. The request deadline may have answered this request
+      // already, so the 429 headers are inline (KRTX-2737); the body shape is the one
+      // the SDK's log sync already backs off on.
       const denied = storedLogReadDenial(c, sessionId);
       if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
       const query = c.req.valid('query');

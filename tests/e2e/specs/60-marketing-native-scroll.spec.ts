@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 // KRTX-4744: marketing pages must scroll like the browser scrolls. The
 // marketing, SEO and services shells used to mount a Lenis smooth-scroll
@@ -6,9 +6,12 @@ import { expect, test } from '@playwright/test';
 // a lerp. Lenis keeps a `lenis` class on <html> for as long as it drives the
 // scroll, so a native page never carries it.
 
-// One route per shell: the marketing shell ('/', '/pricing'), the SEO shell
-// ('/use-cases') and the services sales shell ('/services').
-const SHELL_ROUTES = ['/', '/pricing', '/use-cases', '/services'] as const;
+// One route per shell: the marketing shell ('/'), the SEO shell
+// ('/use-cases') and the services sales shell ('/services'). Three cold
+// `next dev` compiles per journey, not four: the deterministic lane's dev
+// server (fs cache off) exceeds its memory on a fourth compile on a small
+// box and restarts, which no journey survives.
+const SHELL_ROUTES = ['/', '/use-cases', '/services'] as const;
 
 test('marketing pages scroll natively: no scroll hijack on the wheel', async ({ page }) => {
   for (const route of SHELL_ROUTES) {
@@ -18,7 +21,7 @@ test('marketing pages scroll natively: no scroll hijack on the wheel', async ({ 
     // <html> in its mount effect, the same effect pass that (before this
     // change) built the scroll hijack next to it. Wait for it, so the class
     // check below can no longer race a page that has not hydrated yet.
-    await expect(page.locator('html')).toHaveClass(/consent-enabled/, { timeout: 15_000 });
+    await expect(page.locator('html')).toHaveClass(/consent-enabled/, { timeout: 30_000 });
 
     // No hijack at rest: the document root carries no Lenis classes.
     await expect(page.locator('html')).not.toHaveClass(/lenis/);

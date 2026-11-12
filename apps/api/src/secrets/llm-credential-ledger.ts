@@ -18,3 +18,12 @@ export const LLM_CREDENTIAL_MOVED_OUTCOMES = ['copied', 'already_present', 'supe
 export function legacySecretNotMoved(secretId: SQL | typeof projectSecrets.secretId = projectSecrets.secretId): SQL {
   return sql`not exists (select 1 from ${llmCredentialBackfill} where ${llmCredentialBackfill.legacySecretId} = ${secretId} and ${llmCredentialBackfill.outcome} in (${sql.join(LLM_CREDENTIAL_MOVED_OUTCOMES.map((o) => sql`${o}`), sql`, `)}))`;
 }
+
+/**
+ * SQL for a reader of `project_secrets` rows of every consumer (session env,
+ * the secrets list): keep a row unless it is an `llm_gateway` row that has
+ * moved to the named store. A moved row is never decrypted or listed again.
+ */
+export function projectSecretRowNotMoved(): SQL {
+  return sql`(${projectSecrets.consumer} is distinct from 'llm_gateway' or ${legacySecretNotMoved(projectSecrets.secretId)})`;
+}

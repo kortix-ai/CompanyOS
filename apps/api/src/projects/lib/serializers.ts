@@ -11,6 +11,7 @@ import { normalizeDefaultReasoningEffort } from './effort-default';
 import { type accountGithubInstallations, type projectGitConnections, type projectGitCredentials, projectSecrets, type projectSessions } from '@kortix/db';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { sessionInitiatorLabel } from './session-initiator';
+import { projectSecretRowNotMoved } from '../../secrets/llm-credential-ledger';
 import { sessionRestoreUntil } from '../session-log-purge';
 import { type SandboxProviderName, config } from '../../config';
 import { mayManageSessionSharing, type SecretGrant, visibilityToIntent } from '../../connectors/share';
@@ -705,6 +706,9 @@ export async function loadSecretViewsForUser(input: {
         userId
           ? or(isNull(projectSecrets.ownerUserId), eq(projectSecrets.ownerUserId, userId))
           : isNull(projectSecrets.ownerUserId),
+        // A provider key that moved to the named store is listed there
+        // (Models → Providers), not here.
+        projectSecretRowNotMoved(),
       ),
     )
     .orderBy(desc(projectSecrets.updatedAt));

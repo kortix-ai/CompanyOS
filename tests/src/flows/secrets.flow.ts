@@ -1102,7 +1102,6 @@ flow('SEC-POOL-10', {
   }
 });
 
-||||||| b36f4b0e85
 flow('SEC-9', {
   domain: 'secrets', requires: ['database'],
   routes: ['POST /v1/accounts/tokens', 'POST /v1/projects/:projectId/secrets', 'GET /v1/projects/:projectId/secrets'],

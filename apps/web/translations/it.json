@@ -1267,10 +1267,6 @@
           "name": "Segreti protetti dalla rete",
           "description": "Controlla quali strumenti e destinazioni possono ricevere i segreti del workspace."
         },
-        "pooled_provider_secrets": {
-          "name": "Segreti del provider condivisi",
-          "description": "I membri collegano i propri abbonamenti ChatGPT e chiavi dei provider, li condividono quando serve e scelgono quali usa ogni sessione."
-        },
         "reminders": {
           "name": "Cicli",
           "description": "Consente ad agenti e persone di programmare controlli su una sessione, una volta o in modo ricorrente. Ogni attivazione richiama quella sessione. Aggiunge i cicli all’elenco dei Trigger, l’indicatore dei cicli della sessione e `kortix loop`."

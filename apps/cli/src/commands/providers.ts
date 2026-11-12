@@ -213,12 +213,10 @@ type CtxOpts = { projectArg?: string; hostArg?: string };
 type ProjectCtx = { client: ApiClient; projectId: string };
 
 // ── provider keys (named accounts) ────────────────────────────────────────
-// With the workspace flag `pooled_provider_secrets` on (the default since
-// 2026-10-31), the web Models panel (Models → Providers) lists only named
-// provider accounts, `kortix.account_secret_resources`. `set` and `rm` use
-// them then, as the web and the TUI do; with the flag off they keep the
-// legacy workspace secrets (`/workspaces/:id/secrets`). `ls` lists both,
-// always: the web dialog adds a named account whatever the flag says.
+// The web Models panel (Models → Providers) lists named provider accounts,
+// `kortix.account_secret_resources`. `set`, `rm` and `ls` use them, as the web
+// and the TUI do. `ls` and `rm` also read the legacy workspace secrets
+// (`/workspaces/:id/secrets`) a server older than the one store may hold.
 
 /** The server's limit on a provider key's label (`secret-resources.ts` Create). */
 const LABEL_MAX = 100;
@@ -235,22 +233,7 @@ interface NamedAccounts {
   viewerId: string;
 }
 
-/**
- * The workspace's provider keys and the caller, or null while the flag is off.
- * Fail-closed like the SDK's `resolveFeatureFlag`: only `true` turns it on, so
- * a server that predates the flag keeps the legacy secrets.
- */
-async function namedAccounts(ctx: ProjectCtx): Promise<NamedAccounts | null> {
-  const project = await ctx.client.get<{ experimental?: Record<string, unknown> }>(`/workspaces/${ctx.projectId}`);
-  if (project.experimental?.pooled_provider_secrets !== true) return null;
-  return listNamedAccounts(ctx);
-}
-
-/**
- * Every provider key and login the web Models panel lists, whatever the flag
- * says: a key added in the web dialog is always a named account, so `ls`
- * reads them with no flag check.
- */
+/** Every provider key and login the web Models panel lists, and the caller. */
 async function listNamedAccounts(ctx: ProjectCtx): Promise<NamedAccounts> {
   const [me, list] = await Promise.all([
     ctx.client.get<{ user_id: string }>('/me'),
@@ -859,24 +842,14 @@ async function providersSet(
   if (!ctx) return 1;
 
   if (single) {
-    let named: NamedAccounts | null;
+    let named: NamedAccounts;
     try {
-      named = await namedAccounts(ctx);
+      named = await listNamedAccounts(ctx);
     } catch (err) {
       return surfaceApiError(err);
     }
-    if (named) {
-      const [envVar, value] = Object.entries(values)[0]!;
-      return saveProviderKey(ctx, named, { provider, envVar, value, label: flags.label, private: flags.private });
-    }
-    // The flag is off: a legacy secret is shared with the whole workspace, so
-    // saving one would quietly widen what the caller asked for.
-    if (flags.private || flags.label !== undefined) {
-      return fail(
-        'Provider keys (pooled_provider_secrets) are off for this workspace, so --private and --label do not apply. ' +
-          'Without them the key is saved as a workspace secret, shared with everyone in this workspace.',
-      );
-    }
+    const [envVar, value] = Object.entries(values)[0]!;
+    return saveProviderKey(ctx, named, { provider, envVar, value, label: flags.label, private: flags.private });
   }
 
   try {
@@ -1009,16 +982,15 @@ async function providersRm(provider: string | undefined, label: string | undefin
     return 0;
   }
 
-  let named: NamedAccounts | null;
+  let named: NamedAccounts;
   try {
-    named = await namedAccounts(ctx);
+    named = await listNamedAccounts(ctx);
   } catch (err) {
     return surfaceApiError(err);
   }
   const providerId = PROVIDER_CATALOG_ID[provider];
-  const keys = named && providerId ? named.accounts.filter((a) => a.provider_id === providerId) : [];
+  const keys = providerId ? named.accounts.filter((a) => a.provider_id === providerId) : [];
   if (label !== undefined) {
-    if (!named) return fail('Provider keys (pooled_provider_secrets) are off for this workspace, so --label does not apply.');
     const matches = keys.filter((a) => a.label === label);
     if (!matches.length) {
       process.stderr.write(
@@ -1033,7 +1005,7 @@ async function providersRm(provider: string | undefined, label: string | undefin
     return 0;
   }
   // Without --label: the caller's own keys. A key someone else added stays theirs to remove.
-  const mine = named ? keys.filter((a) => a.created_by === named.viewerId) : [];
+  const mine = keys.filter((a) => a.created_by === named.viewerId);
   const othersKeys = keys.filter((a) => !mine.includes(a));
 
   let removedOauth = false;
@@ -1051,17 +1023,15 @@ async function providersRm(provider: string | undefined, label: string | undefin
   }
 
   let envVars = PROVIDER_ENV_VARS[provider] ?? [];
-  if (named) {
-    // Only the legacy secrets that exist. Deleting one needs project.secret.write
-    // even when it is missing, and a member who added only a private provider
-    // key may lack it; that 403 would stop the removal of their own key.
-    try {
-      const { items } = await ctx.client.get<{ items: ProjectSecret[] }>(`/workspaces/${ctx.projectId}/secrets`);
-      const stored = new Set(items.map((s) => s.name));
-      envVars = envVars.filter((envVar) => stored.has(envVar));
-    } catch (err) {
-      return surfaceApiError(err);
-    }
+  // Only the legacy secrets that exist. Deleting one needs project.secret.write
+  // even when it is missing, and a member who added only a private provider
+  // key may lack it; that 403 would stop the removal of their own key.
+  try {
+    const { items } = await ctx.client.get<{ items: ProjectSecret[] }>(`/workspaces/${ctx.projectId}/secrets`);
+    const stored = new Set(items.map((s) => s.name));
+    envVars = envVars.filter((envVar) => stored.has(envVar));
+  } catch (err) {
+    return surfaceApiError(err);
   }
   for (const envVar of envVars) {
     try {

@@ -875,10 +875,6 @@ async function resolveSessionModel(params: {
   const { input, accountId, projectId, agentName, loadedAgents, visibility, origin } = params;
   const { project, userId, body } = input;
   const freeModelsOnly = !(await accountMayUseManagedModels(accountId));
-  const pooledProviderSecrets = resolveFeatureFlag(project.metadata, 'pooled_provider_secrets');
-  if (body.provider_secret_pools !== undefined && !pooledProviderSecrets) {
-    return { error: { status: 403, body: { error: 'Provider secret pools are unavailable' } } };
-  }
   // The key selection this session starts with: the caller's, else none, and
   // the gateway uses every key the session may use when it runs.
   const providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;

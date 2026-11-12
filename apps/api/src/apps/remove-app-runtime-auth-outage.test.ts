@@ -71,7 +71,7 @@ function providerStub(io: {
     routeIngress: unused,
     resolveIngress: unused,
     ensureRunning: unused,
-    getProvisioningStatus: async (): Promise<null> => null,
+    getProvisioningStatus: unused,
   };
 }
 

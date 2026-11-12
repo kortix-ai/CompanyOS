@@ -47,6 +47,8 @@ export interface InvariantResult {
   ok: boolean;
   violations: number;
   sample: string[];
+  /** Set when the check itself threw (e.g. a statement timeout): it counted nothing. */
+  error?: string;
 }
 
 export type WorkspaceInvariantReport = Record<InvariantId, InvariantResult>;
@@ -259,7 +261,10 @@ async function i10(accountIds?: string[]): Promise<InvariantResult> {
                       AND a.attname = 'workspace_id' AND NOT a.attisdropped)
      ORDER BY 1`);
   const filter = accountIds
-    ? sql`AND t.account_id::text IN (SELECT jsonb_array_elements_text(${JSON.stringify(accountIds)}::jsonb))`
+    ? // Compare uuid to uuid: casting the column to text (`account_id::text IN (...)`)
+      // defeats idx_credit_ledger_account_id and turns the pass over prod's ~8.6M-row
+      // credit_ledger into a full scan that hits the statement timeout (57014).
+      sql`AND t.account_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(accountIds)}::jsonb)::uuid)`
     : sql``;
   const violations: string[] = [];
   for (const { name } of tables) {
@@ -307,18 +312,27 @@ export async function checkWorkspaceInvariants(
   options: { runIds?: string[]; accountIds?: string[] } = {},
 ): Promise<WorkspaceInvariantReport> {
   const runs = await doneRuns(options.runIds);
+  // One check's throw (a statement timeout on a prod-sized table) marks that
+  // invariant errored instead of killing the report: the run continues and
+  // exits 1 with the rest of the findings, never as an unhandled rejection.
+  const errored = (e: unknown): InvariantResult => ({
+    ok: false,
+    violations: 0,
+    sample: [],
+    error: (e instanceof Error ? e.message : String(e)).slice(0, 300),
+  });
   return {
-    I1: await i1(),
-    I2: await i2(runs),
-    I3: await i3(runs),
-    I4: await i4(),
-    I5: await i5(runs),
-    I6: await i6(),
-    I7: await i7(runs),
-    I8: await i8(runs),
-    I9: await i9(options.accountIds),
-    I10: await i10(options.accountIds),
-    I11: await i11(),
-    I12: await i12(options.accountIds),
+    I1: await i1().catch(errored),
+    I2: await i2(runs).catch(errored),
+    I3: await i3(runs).catch(errored),
+    I4: await i4().catch(errored),
+    I5: await i5(runs).catch(errored),
+    I6: await i6().catch(errored),
+    I7: await i7(runs).catch(errored),
+    I8: await i8(runs).catch(errored),
+    I9: await i9(options.accountIds).catch(errored),
+    I10: await i10(options.accountIds).catch(errored),
+    I11: await i11().catch(errored),
+    I12: await i12(options.accountIds).catch(errored),
   };
 }

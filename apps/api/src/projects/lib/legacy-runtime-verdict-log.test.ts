@@ -136,4 +136,41 @@ describe('the repair run names its verdict when it never runs the script', () =>
     // The claim and the terminal record keep their own lines.
     expect(lines.map((l) => l.message)).toContain('legacy runtime bootstrap converged');
   });
+
+  test('a repair the box defers mid-script logs the verdict once, not twice', async () => {
+    const calls: Calls = { execs: [], patches: [] };
+    const lines: Array<{ message: string; context: unknown }> = [];
+    const deps = verdictDeps(
+      {
+        exec: async (cmd) => {
+          if (cmd.join(' ').includes('127.0.0.1:8000/kortix/health')) {
+            return { exitCode: 7, stdout: '', stderr: '' };
+          }
+          calls.execs.push(cmd);
+          return { exitCode: 0, stdout: '{"ok":true,"stage":"deferred_busy","token_rotated":false}\n', stderr: '' };
+        },
+      },
+      calls,
+      lines,
+    );
+    const r = await bootstrapLegacyRuntime(input(), deps);
+    expect(r.outcome).toBe('skipped-busy');
+    // The claim line ('legacy runtime bootstrap starting') stays; the verdict
+    // is the only line about the deferral itself.
+    expect(lines.map((l) => l.message).filter((m) => m !== 'legacy runtime bootstrap starting')).toEqual(['skipped: skipped-busy']);
+  });
+
+  test('a pinned daemon ships exactly one blocked line', async () => {
+    const calls: Calls = { execs: [], patches: [] };
+    const lines: Array<{ message: string; context: unknown }> = [];
+    const pinned = {
+      ...CURRENT_HEALTH,
+      runtime: { ...CURRENT_HEALTH.runtime, pinned: true },
+    };
+    const r = await bootstrapLegacyRuntime(input(), verdictDeps({ health: [pinned] }, calls, lines));
+    expect(r.outcome).toBe('skipped-blocked');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].message).toBe('skipped: skipped-blocked');
+    expect(String((lines[0].context as { detail?: string }).detail)).toContain('daemon has latched runtime updates off after a supervisor rollback');
+  });
 });

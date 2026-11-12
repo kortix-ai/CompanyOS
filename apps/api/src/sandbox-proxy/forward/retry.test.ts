@@ -14,6 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { logger } from '../../lib/logger';
+import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
 import { resetLogWindowsForTests } from '../../shared/log-window';
 import { reportPortNotAnswering } from './retry';
 
@@ -106,5 +107,41 @@ describe('reportPortNotAnswering — the give-up line is throttled', () => {
     const warns = shippedGiveUpLines().filter((line) => line.channel === 'logger.warn');
     expect(warns.length).toBe(1);
     expect((warns[0]?.args[1] as Record<string, unknown>).suppressed).toBe(11);
+  });
+});
+
+describe('the escalation shares the hourly warn cap (KRTX-4674)', () => {
+  // The severity escalation is evaluated per ten-minute window and is
+  // replica-local: a caller grinding past the burst band through a whole hour
+  // made every window's line ship at warn. The escalation asks the shared
+  // hourly warn budget (logWindowWarnDecision) before it ships warn: the
+  // hour's first escalated line stays warn, the second drops to info carrying
+  // the suppressed count, and the slot renews after the hour.
+  test('first escalated window warns, the second ships info with the suppressed count, the slot renews after the hour', () => {
+    const band = DEAD_CREDENTIAL_BURST_SUPPRESSED;
+    const start = Date.now();
+    // Window 1 opens and fills past the burst band (the first call ships the
+    // line, the rest swell the pending count).
+    for (let i = 0; i <= band; i += 1) {
+      reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + i * 1_000);
+    }
+    // The hour's first escalated line ships at warn.
+    reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + 11 * 60_000);
+    // Window 2 fills past the band again, inside the same warn hour.
+    for (let i = 0; i < band; i += 1) {
+      reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + 11 * 60_000 + 1_000 + i * 1_000);
+    }
+    // The second escalated window of the hour drops to info, suppressed kept.
+    reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + 22 * 60_000);
+    // Window 3 fills past the band; past the warn hour the slot renews.
+    for (let i = 0; i < band; i += 1) {
+      reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + 22 * 60_000 + 1_000 + i * 1_000);
+    }
+    reportPortNotAnswering(giveUpMessage('sbx-cap'), 'sbx-cap', 3000, start + 73 * 60_000);
+
+    const lines = shippedGiveUpLines();
+    expect(lines.map((line) => line.channel)).toEqual(['logger.info', 'logger.warn', 'logger.info', 'logger.warn']);
+    expect((lines[1]?.args[1] as Record<string, unknown>).suppressed).toBe(band);
+    expect((lines[2]?.args[1] as Record<string, unknown>).suppressed).toBe(band);
   });
 });

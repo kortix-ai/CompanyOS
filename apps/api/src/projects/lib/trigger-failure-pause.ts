@@ -37,6 +37,8 @@ const OWNER_FIXABLE_SOURCES = [
   'is not available for this account',
   // no_usable_model: 'No usable model for this account. Connect a provider key …'
   'no usable model for this account',
+  // no_usable_model, only private keys: 'Automations run without a person, so they use only …'
+  'automations run without a person',
   // The gateway's plan_upgrade_required: '"deepseek-v4.1-flash" requires a paid plan.'
   'requires a paid plan',
   // The manifest: 'workspace mode "read" requires restricted workspace artifacts'

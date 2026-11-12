@@ -52,6 +52,7 @@ import {
   type MirrorRefresh,
 } from '../git';
 import { manifestIssueSummary } from '../manifest-io';
+import { prefetchRepoFiles } from '../git/files';
 import { reportedManifestIssues } from './manifest-health';
 
 /**
@@ -552,10 +553,17 @@ interface CompileReadOptions {
  * ~380 KB from ~40 files (2026-10-30).
  */
 // replica-local: a cache of immutable per-commit output; a miss recompiles.
-const compiledAtCommit = new Map<string, { raw: Record<string, unknown>; compiled: string | null }>();
-const COMPILED_AT_COMMIT_MAX = 32;
+const compiledAtCommit = new Map<string, { raw: Record<string, unknown>; compiled: string | null; bytes: number }>();
+let compiledAtBytes = 0;
+/** Holds the ACTIVE fleet's (project x selection) keys — prod 2026-11-11 ticks
+ *  ~30 projects an hour; at 32 every tick evicted and recompiled. Byte-bounded
+ *  like the read cache (`MAX_CACHE_BYTES`): 64 MiB of compiled-config strings
+ *  per process, so even a working set over 1,000 entries evicts, never grows.
+ *  The count bound is the same ladder rung: a working set the fleet fits. */
+const COMPILED_AT_COMMIT_MAX = 1_000;
+let COMPILED_AT_COMMIT_MAX_BYTES = 64 * 1024 * 1024;
 
-function compiledAt(key: string | null): { raw: Record<string, unknown>; compiled: string | null } | undefined {
+function compiledAt(key: string | null): { raw: Record<string, unknown>; compiled: string | null; bytes: number } | undefined {
   const hit = key ? compiledAtCommit.get(key) : undefined;
   if (hit) {
     // Re-insert: the Map's insertion order is the eviction order.
@@ -567,9 +575,19 @@ function compiledAt(key: string | null): { raw: Record<string, unknown>; compile
 
 function rememberCompiled(key: string | null, entry: { raw: Record<string, unknown>; compiled: string | null }): void {
   if (!key) return;
-  compiledAtCommit.set(key, entry);
-  while (compiledAtCommit.size > COMPILED_AT_COMMIT_MAX) {
-    compiledAtCommit.delete(compiledAtCommit.keys().next().value!);
+  // Byte-accounted like the read cache (UTF-16 strings, 2 bytes/char): the
+  // cached strings are tenant-controlled, so the budget, not the count, is
+  // the bound that cannot grow with a tenant's config.
+  const bytes = (JSON.stringify(entry.raw)?.length + (entry.compiled?.length ?? 0)) * 2;
+  const previous = compiledAtCommit.get(key);
+  if (previous) compiledAtBytes -= previous.bytes;
+  const stored = { ...entry, bytes };
+  compiledAtCommit.set(key, stored);
+  compiledAtBytes += bytes;
+  while (compiledAtCommit.size > COMPILED_AT_COMMIT_MAX || compiledAtBytes > COMPILED_AT_COMMIT_MAX_BYTES) {
+    const oldest = compiledAtCommit.keys().next().value!;
+    compiledAtBytes -= compiledAtCommit.get(oldest)!.bytes;
+    compiledAtCommit.delete(oldest);
   }
 }
 
@@ -581,6 +599,12 @@ function commitKey(project: GitBackedProject, found: { commit: string | null; pa
 /** Test seam: start from a cold cache. */
 export function __resetCompiledAtCommitForTests(): void {
   compiledAtCommit.clear();
+  compiledAtBytes = 0;
+}
+
+/** Test seam: size the byte budget. */
+export function __setCompiledAtCommitBudgetForTests(bytes: number): void {
+  COMPILED_AT_COMMIT_MAX_BYTES = bytes;
 }
 
 /**
@@ -593,6 +617,12 @@ async function readPromptFiles(project: GitBackedProject, raw: Record<string, un
   for (const block of [...Object.values(mapOf<{ prompt_file?: unknown }>(raw.agents)), ...Object.values(mapOf<{ prompt_file?: unknown }>(raw.commands))]) {
     if (typeof block?.prompt_file === 'string' && safeAgentFile(block.prompt_file)) paths.add(block.prompt_file);
   }
+  // One batched object fetch for every prompt file, before the reads: a
+  // partial store faults blobs one `git fetch` at a time, and the fetches of
+  // one store run serially — the per-file reads would pay one fetch per file
+  // (KRTX-4740: a prompt-heavy project's tick paid 40-260 of them, p95 7.9 s).
+  // A converted legacy file (in the overlay) reads without the repo.
+  await prefetchRepoFiles(project, [...paths].filter((path) => overlay[path] === undefined), ref);
   const files: Record<string, string> = {};
   await Promise.all([...paths].map(async (path) => {
     // A converted legacy file: the prompt without its frontmatter, or a command moved out of the harness folder.

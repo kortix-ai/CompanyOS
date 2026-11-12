@@ -162,19 +162,18 @@ describe('isForbiddenState', () => {
   });
 
   test('a 404 or a transient failure is not a permission problem', () => {
-    // This gates the account/project facts, the approval note, and the admin
-    // escape hatch. Admin bypass re-fetches with a bypass header — it cannot
-    // resurrect a deleted project or clear a 500, so offering it there is a
-    // dead control.
+    // This gates the account/project facts and the approval note.
     expect(isForbiddenState('notFound')).toBe(false);
     expect(isForbiddenState('unavailable')).toBe(false);
   });
+});
 
-  test('the admin escape hatch is gated on the 403 states, not just on the role', () => {
-    expect(componentSource).toContain('const showAdminBypass = forbidden && !!adminRole?.isAdmin');
-    expect(componentSource).toContain('{showAdminBypass ? (');
-    // The bare role check was what leaked the control onto 404 and 500.
-    expect(componentSource).not.toMatch(/\{adminRole\?\.isAdmin \? \(/);
+describe('admin escape hatch', () => {
+  test('shows behind the three 403 faces only', () => {
+    // The API answers a live workspace the caller cannot read with 403
+    // workspace_access_denied; a 404 is a workspace that is gone, where acting
+    // as the account opens nothing.
+    expect(ALL_STATES.filter(isForbiddenState)).toEqual(['request', 'sent', 'alreadyRequested']);
   });
 });
 

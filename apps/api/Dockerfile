@@ -233,7 +233,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     docker.io \
     git \
-    openssh-client && \
+    openssh-client \
+    tini && \
     apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/*
 
@@ -386,4 +387,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 # Non-root user (bun image ships with 'bun' user)
 USER bun
 
+# tini is PID 1 and reaps orphaned processes; Bun as PID 1 does not. git
+# detaches its auto-maintenance after every fetch and commit, and each orphan
+# stayed as a zombie. From 2026-11-03 the prod worker aborted every ~90 min,
+# when no PID was left for a new thread. ECS and the self-host compose file
+# override only the command, so every process of this image runs under tini.
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bun", "run", "src/index.ts"]

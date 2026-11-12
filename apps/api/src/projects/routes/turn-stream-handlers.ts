@@ -494,7 +494,10 @@ async function publishTurnEnd(
       activeTurnCount: turnCompletion.activeTurnCount,
     });
   }
-  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo) : false;
+  // The turn's last assistant text (kortixd sends it on `end`): the reply a
+  // chat thread gets when the agent ran no `slack send` of its own.
+  const finalText = status === 'idle' && typeof body.text === 'string' ? body.text : undefined;
+  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText) : false;
   // A Telegram chat has no live turn that shows the error. Tell it when no Slack
   // or Teams turn carried the end. The gate is the push's own (turnEndPushType):
   // an end that closed a root turn in THIS call with a non-abort error, so once

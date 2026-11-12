@@ -249,6 +249,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'PUT /v1/admin/api/provider-fallback': { action: 'admin.sandbox_provider.fallback.update', title: 'Updated sandbox provider fallback' },
   'GET /v1/admin/api/sandboxes': { action: 'admin.sandbox.list', title: 'Listed all platform sandboxes' },
   'POST /v1/admin/api/sandboxes/:sessionId/migrate': { action: 'admin.sandbox.migrate', title: 'Migrated sandbox to another provider' },
+  'GET /v1/agent-marks/:file': { action: 'channel.agent_mark.read', title: "Read an agent's face picture" },
   'GET /v1/approval-links/:token': { action: 'approval.link.read', title: 'Viewed approval link' },
   'GET /v1/apps/edge/tls-check': 'GET /v1/edge/tls-check',
   'GET /v1/artifacts/meta/:artifactId': { action: 'artifact.public.meta.read', title: 'Viewed public artifact details' },

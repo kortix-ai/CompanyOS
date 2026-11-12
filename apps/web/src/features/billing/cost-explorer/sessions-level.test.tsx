@@ -1067,7 +1067,7 @@ describe('SessionsLevel', () => {
     expect(html).not.toContain('Sort sessions');
   });
 
-  // Counted rather than matched on absent text: a Radix `Select` renders its
+  // Counted rather than matched on absent text: a `Select` renders its
   // items in a portal, so "Highest spend" was never in the static markup even
   // when the control existed — asserting its absence would have passed before
   // the removal too. The TRIGGER does render, so counting triggers is what

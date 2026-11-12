@@ -18,6 +18,8 @@ Object.defineProperties(globalThis, {
   CustomEvent: { value: win.CustomEvent, configurable: true },
   NodeFilter: { value: win.NodeFilter, configurable: true },
   Node: { value: win.Node, configurable: true },
+  requestAnimationFrame: { value: win.requestAnimationFrame.bind(win), configurable: true },
+  cancelAnimationFrame: { value: win.cancelAnimationFrame.bind(win), configurable: true },
   IS_REACT_ACT_ENVIRONMENT: { value: true, configurable: true },
 });
 

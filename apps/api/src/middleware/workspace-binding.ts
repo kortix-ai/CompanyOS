@@ -174,6 +174,12 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   { pattern: '/v1/workspaces', methods: ['POST'], binding: OWN_WORKSPACE },
   { pattern: '/v1/projects', binding: PERSON },
   { pattern: '/v1/workspaces', binding: PERSON },
+  // The hosted MCP server dispatches every tool call back into the API routes,
+  // in-process, with the same credential (mcp/index.ts `callApi`), so each call
+  // meets this fence again: a bound credential reaches its own workspace only.
+  // Bound PERSON, it refused every MCP client that signed in through the
+  // consent screen, which binds the grant to one workspace (2026-11-11).
+  ...both('/v1/mcp', OWN_WORKSPACE),
 
   // ── resource: drives (keyed by drive id; the handler checks the workspace) ─
   ...both('/v1/drives', { kind: 'resource', resource: 'drive' }),
@@ -224,13 +230,13 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   ...[
     '/v1/access', '/v1/account', '/v1/account-invites', '/v1/approval-links', '/v1/apps',
     '/v1/artifacts', '/v1/auth', '/v1/capture', '/v1/channels', '/v1/chrome', '/v1/cli',
-    '/v1/clients', '/v1/feedback', '/v1/invites', '/v1/mcp', '/v1/notifications', '/v1/oauth',
+    '/v1/clients', '/v1/feedback', '/v1/invites', '/v1/notifications', '/v1/oauth',
     '/v1/sessions', '/v1/setup-links', '/v1/tunnel', '/v1/usage',
   ].flatMap((prefix) => both(prefix, PERSON)),
 
   // ── platform and machine surfaces ──────────────────────────────────────
   ...[
-    '/v1/admin', '/v1/connectors', '/v1/docs', '/v1/edge', '/v1/generation', '/v1/git',
+    '/v1/admin', '/v1/agent-marks', '/v1/connectors', '/v1/docs', '/v1/edge', '/v1/generation', '/v1/git',
     '/v1/health', '/v1/llm', '/v1/llm-gateway', '/v1/marketplace', '/v1/openapi.json', '/v1/ops',
     '/v1/platform', '/v1/prewarm', '/v1/public', '/v1/router', '/v1/runtime-assets', '/v1/system',
     '/v1/user-roles', '/v1/webhooks',

@@ -23,8 +23,8 @@ export function useDialogDepth(): number {
 // toast or the palette) resolves depth 1 however many modals are open, so its
 // overlay lands UNDER the open modal's content. This registry sees every open
 // layer regardless of tree position: opening one takes the next level above
-// the highest open layer. Radix's DismissableLayer already stacks Escape and
-// outside-click this way (one global list), so only z-index needed it.
+// the highest open layer. Base UI already closes only the topmost layer on
+// Escape and outside-click, so only z-index needed it.
 
 type DialogLayer = { level: number; open: boolean };
 
@@ -116,8 +116,8 @@ type DialogRootOpenProps = {
 };
 
 /**
- * `useDialogLayerDepth` for a Radix dialog root. The stack needs the open state
- * of uncontrolled roots too, so this owns it and hands Radix a controlled
+ * `useDialogLayerDepth` for a dialog root. The stack needs the open state
+ * of uncontrolled roots too, so this owns it and hands the Base UI root a controlled
  * `open` / `onOpenChange` pair — observable behaviour is unchanged.
  */
 export function useDialogRootLayer({ open, defaultOpen, onOpenChange }: DialogRootOpenProps) {
@@ -157,7 +157,7 @@ export function floatingZ(depth: number): number {
 
 /** Portaled popovers/menus/selects rendered outside dialog DOM. */
 export const FLOATING_LAYER_SELECTOR =
-  '[role="menu"],[role="listbox"],[role="tooltip"],[data-radix-popper-content-wrapper]';
+  '[role="menu"],[role="listbox"],[role="tooltip"],[data-kortix-floating]';
 
 export function isFloatingLayerTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(FLOATING_LAYER_SELECTOR));
@@ -166,13 +166,13 @@ export function isFloatingLayerTarget(target: EventTarget | null): boolean {
 export function hasOpenFloatingLayer(): boolean {
   return Boolean(
     document.querySelector(
-      '[role="menu"][data-state="open"],[role="listbox"][data-state="open"],[data-radix-popper-content-wrapper] [data-state="open"]',
+      '[role="menu"][data-state="open"],[role="listbox"][data-state="open"],[data-kortix-floating] [data-state="open"]',
     ),
   );
 }
 
 /** Nested modals/sheets opened above the customize panel (or any parent dialog).
- *  Radix gives alerts `role="alertdialog"`, so confirm dialogs only count here
+ *  The alert dialog has `role="alertdialog"`, so confirm dialogs only count here
  *  if that role is matched too — miss it and Escape aimed at a confirm tears
  *  down the panel behind it. */
 export function hasOpenNestedDialog(): boolean {

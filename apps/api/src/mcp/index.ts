@@ -853,27 +853,23 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
   }
 }
 
-async function listProjectsTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
-  const accounts = await callApi(ctx, 'GET', '/v1/accounts');
-  if (accounts.status >= 400) return apiResult(accounts);
-  const parsed = JSON.parse(accounts.body);
-  const list = (Array.isArray(parsed) ? parsed : (parsed.accounts ?? [])) as { account_id: string; name?: string }[];
-  const perAccount = await Promise.all(
-    list.map(async (account) => {
-      const r = await callApi(ctx, 'GET', '/v1/projects', { query: { account_id: account.account_id } });
-      const rows = r.status < 400 ? (JSON.parse(r.body) as any[]) : [];
-      return rows.map((p) => ({
-        project_id: p.project_id,
-        name: p.name,
-        account: account.name ?? account.account_id,
-        account_id: account.account_id,
-        repository: p.repo_url ?? null,
-        default_branch: p.default_branch ?? null,
-        role: p.effective_project_role ?? null,
-      }));
-    }),
-  );
-  const projects = perAccount.flat();
+async function listProjectsTool(ctx: ToolContext, _input: Record<string, unknown>): Promise<ToolResult> {
+  // One read: every workspace the caller may open, across accounts. A token
+  // bound to one workspace (what the consent screen issues) lists that one;
+  // `GET /v1/accounts` is a person's route and refuses it.
+  const r = await callApi(ctx, 'GET', '/v1/workspaces');
+  if (r.status >= 400) return apiResult(r);
+  const rows = JSON.parse(r.body) as Array<Record<string, any>>;
+  const projects = rows.map((p) => ({
+    project_id: p.project_id,
+    name: p.name,
+    // One account per workspace: the workspace name is the account's.
+    account: p.name ?? p.account_id,
+    account_id: p.account_id,
+    repository: p.repo_url ?? null,
+    default_branch: p.default_branch ?? null,
+    role: p.effective_project_role ?? null,
+  }));
   return text(JSON.stringify(projects, null, 2));
 }
 

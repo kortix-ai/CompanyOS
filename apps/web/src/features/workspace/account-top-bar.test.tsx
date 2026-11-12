@@ -20,7 +20,7 @@ const BAR_SOURCE = './account-top-bar.tsx';
 /**
  * What is NOT covered here, and why.
  *
- * The menu's rows live inside a Radix `DropdownMenuContent`, which renders
+ * The menu's rows live inside a `DropdownMenuContent`, which renders
  * nothing until the menu is open and then renders through a portal.
  * `apps/web` has no DOM harness — no jsdom, no testing-library — and
  * `renderToStaticMarkup` returns an empty string for portalled content
@@ -105,7 +105,7 @@ describe('AccountTopBar Inbox button', () => {
  * KRTX-4492: the profile picture did not reach the identity trigger — the bar
  * rendered text-only on `/workspaces` and `/workspaces/new` even after an
  * upload on /settings/profile. The trigger (unlike the menu rows) is NOT
- * portalled, so a static render reaches it. Radix's Avatar draws the bitmap
+ * portalled, so a static render reaches it. The Avatar draws the bitmap
  * `<img>` client-side only (fingerprinted after load), which a static render
  * cannot observe; the browser journey (39-profile-avatar-user-menu.spec.ts)
  * asserts the rendered `<img>` with the stored URL.

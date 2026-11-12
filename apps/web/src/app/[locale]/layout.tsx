@@ -20,6 +20,7 @@ import { CHUNK_BOOT_RECOVERY_SCRIPT } from '@/lib/chunk-boot-recovery';
 import { DESKTOP_INIT_SCRIPT } from '@kortix/ui/internal/lib/desktop';
 import { DESKTOP_LEGACY_PATH_SCRIPT } from '@/lib/workspace-redirects';
 import { INTERFACE_THEME_INIT_SCRIPT } from '@/lib/interface-themes';
+import { ENTRY_HYDRATION_GUARD_SCRIPT } from '@/lib/auth/entry-hydration-guard';
 import { LANDING_HOLD_SCRIPT } from '@/lib/auth/landing-hold';
 import { RouterBridge } from '@/lib/navigation/router-bridge-mount';
 import '@/lib/polyfills';
@@ -287,6 +288,12 @@ export default async function RootLayout({
             document until the route's LandingAuthGate resolves — a signed-in
             visitor never sees the marketing home, not even for a frame. */}
         <script dangerouslySetInnerHTML={{ __html: LANDING_HOLD_SCRIPT }} />
+
+        {/* The /auth entry form's pre-hydration submit guard
+            (lib/auth/entry-hydration-guard.ts): an Enter before React
+            hydrates records the intent instead of reloading the page. Inert
+            on every page without a guarded form. */}
+        <script dangerouslySetInnerHTML={{ __html: ENTRY_HYDRATION_GUARD_SCRIPT }} />
 
         {/* Font preloading is handled automatically by next/font/local in fonts/roobert.ts */}
 

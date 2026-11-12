@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Crea un espacio de trabajo para iniciar sesión en la CLI",
       "noWorkspaceBody": "La CLI inicia sesión en un espacio de trabajo. Crea uno y luego aprueba este inicio de sesión.",
       "createAction": "Crear espacio de trabajo",
-      "workspaceLabel": "Espacio de trabajo"
+      "workspaceLabel": "Espacio de trabajo",
+      "loadFailedTitle": "No se pudieron cargar tus espacios de trabajo",
+      "loadFailedBody": "Este inicio de sesión necesita tu lista de espacios de trabajo. Tu cuenta está bien: inténtalo de nuevo para continuar."
     },
     "models": {
       "yourDefault": "Predeterminado del espacio de trabajo",

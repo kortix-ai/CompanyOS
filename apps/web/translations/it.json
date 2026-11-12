@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Crea un workspace per accedere con la CLI",
       "noWorkspaceBody": "La CLI accede a un workspace. Creane uno, poi approva questo accesso.",
       "createAction": "Crea workspace",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Impossibile caricare i tuoi workspace",
+      "loadFailedBody": "Questo accesso richiede l'elenco dei tuoi workspace. L'account è a posto: riprova per continuare."
     },
     "models": {
       "yourDefault": "Predefinito del workspace",

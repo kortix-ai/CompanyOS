@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Crie um espaço de trabalho para entrar na CLI",
       "noWorkspaceBody": "A CLI entra em um espaço de trabalho. Crie um e depois aprove este acesso.",
       "createAction": "Criar espaço de trabalho",
-      "workspaceLabel": "Espaço de trabalho"
+      "workspaceLabel": "Espaço de trabalho",
+      "loadFailedTitle": "Não foi possível carregar seus espaços de trabalho",
+      "loadFailedBody": "Este login precisa da sua lista de espaços de trabalho. Sua conta está bem — tente novamente para continuar."
     },
     "models": {
       "yourDefault": "Padrão do espaço de trabalho",

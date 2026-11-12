@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Create a workspace to sign in the CLI",
       "noWorkspaceBody": "The CLI signs in to a workspace. Create one, then approve this sign-in.",
       "createAction": "Create workspace",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Couldn't load your workspaces",
+      "loadFailedBody": "This sign-in needs your workspace list. Nothing is wrong with your account — try again to continue."
     },
     "models": {
       "yourDefault": "Workspace default",

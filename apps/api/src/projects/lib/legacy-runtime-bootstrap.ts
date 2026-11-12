@@ -1034,7 +1034,9 @@ async function probeRuntimeForBootstrap(
       });
     } else {
       classification = second;
-      if (classification.klass === 'not-ok') return { result: { outcome: 'unreachable', classification } };
+      if (classification.klass === 'not-ok') {
+        return { result: { outcome: 'unreachable', classification, detail: 'the second health read answered a body that does not say ok' } };
+      }
     }
   }
   if (!input.force && updatesItself(health, classification)) {
@@ -1055,10 +1057,6 @@ async function probeRuntimeForBootstrap(
         manifestBuild,
         externalId: input.externalId,
       } satisfies LegacyCheckRecord,
-    });
-    deps.log('daemon is pinned after a rollback — blocked, not repaired', {
-      sandboxId: input.sandboxId,
-      detail: classification.detail,
     });
     return { result: { outcome: 'skipped-blocked', detail: classification.detail.join('; '), classification } };
   }
@@ -1289,7 +1287,6 @@ async function settleBootstrapReport(
     // ran, so this was not an attempt: put the prior record back and the next
     // idle pass retries with no cooldown and no budget spent.
     await deps.patchMetadata({ [LEGACY_BOOTSTRAP_METADATA_KEY]: input.metadata?.[LEGACY_BOOTSTRAP_METADATA_KEY] ?? null });
-    deps.log('legacy runtime bootstrap deferred: a turn started during the repair', { sandboxId: input.sandboxId });
     return { outcome: 'skipped-busy', detail: 'a turn started during the repair; relaunch deferred', classification };
   }
   const to = { agentSha256: report.agent_sha256, entrypointSha256: report.entrypoint_sha256 };

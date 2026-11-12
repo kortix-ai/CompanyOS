@@ -43,6 +43,13 @@
  * awaiting confirmation shares the first caller's probe instead of dialling
  * the box N times.
  *
+ * A probe's silence proves the death of exactly the EPISODE it was asked
+ * about (its mark object, captured at start): a successful dial may clear the
+ * episode while the probe flies, and a later single timeout may open a fresh
+ * one — the stale probe's silence says nothing about that replacement, whose
+ * single timeout must never confirm (review finding on the fifth cut,
+ * 2026-11-12).
+ *
  * After confirmation:
  *   • every request fast-fails (give-up 502, zero dials) — no wake either;
  *     liveness stays owned by the wake the failing attempt already fired,
@@ -105,6 +112,10 @@ export interface DialProbeTarget {
 }
 
 interface DialDead {
+  /** The episode this mark belongs to: a streak's timeouts extend the same
+   *  episode; a clear or a stale window starts a new one. A probe's verdict
+   *  settles only the episode it was asked about. */
+  episodeId: number;
   /** Consecutive connect timeouts inside the streak window. */
   timeouts: number;
   /** When the last timeout was seen (streak freshness + prune age). */
@@ -143,6 +154,10 @@ export function dialDeadKey(sandboxId: string, port: number): string {
   return `${sandboxId}:${port}`;
 }
 
+/** Monotone episode counter: every fresh streak (no mark, or past the streak
+ *  window) opens the next one; a continuing streak keeps its mark's id. */
+let episodeCounter = 0;
+
 /** Record one connect timeout for `key`. The second inside the streak window
  *  makes the box a candidate; only the HTTP probe confirms it. A timeout of an
  *  already-confirmed box does not un-confirm it: the mark and its probe window
@@ -154,6 +169,7 @@ export function recordDialTimeout(key: string, nowMs = Date.now()): void {
   const fresh = !previous || nowMs - previous.lastAtMs > DIAL_DEAD_STREAK_WINDOW_MS;
   const confirmed = !fresh && previous.confirmed;
   dialDeadMarks.set(key, {
+    episodeId: fresh ? ++episodeCounter : previous.episodeId,
     timeouts: (fresh ? 0 : previous.timeouts) + 1,
     lastAtMs: nowMs,
     confirmed,
@@ -211,6 +227,13 @@ export function maybeProbeDialDeadCandidate(
   if (inFlight) return inFlight;
   const mark = dialDeadMarks.get(key);
   if (!mark || (!mark.confirmed && mark.timeouts < DIAL_DEAD_AFTER_TIMEOUTS)) return Promise.resolve();
+  // The verdict belongs to THIS episode (its id, captured at start). The
+  // ladder's own attempts extend the same episode — a third timeout keeps the
+  // id — so the probe still settles it. A successful dial may clear the
+  // episode and a fresh window may open a new one: the stale probe's silence
+  // must never confirm the replacement's single timeout (review finding on
+  // the fifth cut, 2026-11-12).
+  const episodeId = mark.episodeId;
   const probe = probeTarget(target)
     .then((answered) => {
       if (answered) {
@@ -221,11 +244,13 @@ export function maybeProbeDialDeadCandidate(
         dialDeadMarks.delete(key);
         return;
       }
+      // Silence proves the path dead only for the episode this probe was
+      // asked about. The key may hold a NEWER mark now — let its own probe
+      // settle it. An already-confirmed episode keeps its confirmation and
+      // window (recordDialTimeout preserved them for the re-probe) — never
+      // extend, never re-mark a cleared key.
       const current = dialDeadMarks.get(key);
-      // Silence confirms an unconfirmed candidate. A confirmed mark keeps its
-      // existing confirmation and window (recordDialTimeout preserved them for
-      // this re-probe) — never extend, never re-mark a cleared key.
-      if (!current || current.confirmed) return;
+      if (!current || current.episodeId !== episodeId || current.confirmed) return;
       current.confirmed = true;
       current.probeAtMs = probeSettledAtMs + DIAL_DEAD_PROBE_SPACING_MS;
     })

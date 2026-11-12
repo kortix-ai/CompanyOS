@@ -111,6 +111,47 @@ describe('the dial-dead streak', () => {
     await Promise.all([first, second]);
     expect(shouldFailFast(key, T0 + 1_002)).toBe(true);
   });
+
+  // The reviewer's regression (2026-11-12, sixth cut): a probe in flight
+  // settles against the EPISODE it asked about. A successful dial clears that
+  // episode and a single new timeout opens a fresh one — one timeout alone
+  // must never confirm, so the stale probe's silence must NOT confirm the
+  // replacement (before the fence, it read the fresh mark and confirmed it:
+  // shouldFailFast false -> true).
+  test('a stale probe never confirms a replacement one-timeout episode', async () => {
+    __resetDialDeadForTests();
+    const releases: Array<(answered: boolean) => void> = [];
+    __setDialProbeForTests(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    recordDialTimeout(key, T0);
+    recordDialTimeout(key, T0 + 1_000);
+    // The probe flies, unsettled, against the two-timeout episode.
+    const stale = maybeProbeDialDeadCandidate(key, target);
+    expect(shouldFailFast(key, T0 + 1_001)).toBe(false);
+    // A concurrent dial succeeds (the box answered): the episode clears...
+    clearDialDead(key);
+    // ...and the box degrades again: ONE new timeout, a fresh one-timeout
+    // episode that must wait for a probe of its own.
+    recordDialTimeout(key, T0 + 2_000);
+    expect(shouldFailFast(key, T0 + 2_001)).toBe(false);
+    // The stale probe settles with silence. Fenced: it says nothing about the
+    // replacement episode.
+    releases[0]!(false);
+    await stale;
+    expect(shouldFailFast(key, T0 + 2_002)).toBe(false);
+    // The replacement episode needs a second timeout (one never spawns a
+    // probe) and then confirms only when its OWN probe settles silent.
+    recordDialTimeout(key, T0 + 2_500);
+    expect(shouldFailFast(key, T0 + 2_501)).toBe(false);
+    const own = maybeProbeDialDeadCandidate(key, target, T0 + 2_501);
+    releases[1]!(false);
+    await own;
+    expect(shouldFailFast(key, T0 + 2_502)).toBe(true);
+  });
 });
 
 describe('the probe slot of a confirmed mark', () => {

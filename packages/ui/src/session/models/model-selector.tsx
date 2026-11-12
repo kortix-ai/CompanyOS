@@ -13,6 +13,7 @@ import {
   CommandSeparator,
 } from '../../primitives/command';
 import Loading from '../../primitives/loading';
+import { Skeleton } from '../../primitives/skeleton';
 import { MODEL_SELECTOR_PROVIDER_IDS, ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
 import { TRIGGER_CARET_CLASS, triggerVariants } from '../../primitives/trigger-variants';
@@ -515,6 +516,9 @@ export function ModelSelector({
   );
   // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
   const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
+  const triggerLabel = !current && (modelsLoading || entitlementsPending)
+    ? <Skeleton className="h-3.5 w-20 py-0" role="status" aria-label={tModel('loading')} />
+    : displayName;
 
   // A subscription model names the login that pays for it: the picker grows a
   // subscription pane under the list (both appearances), so switching the
@@ -991,7 +995,7 @@ export function ModelSelector({
               disabled={disabled}
               className={cn(triggerVariants(), 'h-9 w-full')}
             >
-              <span className="truncate">{displayName}</span>
+              <span className="truncate">{triggerLabel}</span>
               {disabled ? null : <ChevronDown className={cn(TRIGGER_CARET_CLASS, 'size-4')} />}
             </button>
           ) : (
@@ -1003,7 +1007,7 @@ export function ModelSelector({
             // model name truncates; the controls beside it keep their width.
             className={cn('min-w-0 shrink rounded-lg hit-area-y-3', triggerVariant === 'ghost' && 'text-muted-foreground')}
           >
-            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
+            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{triggerLabel}</span>
             {showEffort && (
               <span className="shrink-0">
                 {currentEffort ? effortLabel(currentEffort) : t('auto')}

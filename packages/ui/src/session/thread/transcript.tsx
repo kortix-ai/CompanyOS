@@ -1729,7 +1729,7 @@ function TurnUserBubble(
           onEditSend={onEditSend}
           onOpenPastedContent={onOpenPastedContent}
           deliveryStatus={
-            projectId && pendingPrompt?.last_error === STALE_RUNTIME_DELIVERY_ERROR ? (
+            pendingPrompt?.last_error === STALE_RUNTIME_DELIVERY_ERROR ? (
               <QueuedPromptRecovery projectId={projectId} onRemove={onRemoveQueued && promptActions.removable ? () => onRemoveQueued(pendingPrompt.prompt_id) : undefined} />
             ) : queuedStatus === 'failed' ? (
               <QueuedPromptFailure

@@ -8,6 +8,8 @@ import {
 } from '../../connectors/composio';
 import { connectedAsOf, relabelToIdentity, resolveConnectedAs } from '../../connectors/connection-identity';
 import { composioConnectionMetadata } from '../../connectors/db-deps';
+import { readRequestingSessionId } from '../../connectors/db-deps-connect';
+import { notifyConnectorSession } from '../../connectors/notify-session';
 import { finalizePipedreamConnectionAuthorization, pipedreamConnectUrl } from '../../connectors/pipedream';
 import { db } from '../../shared/db';
 import { completeConnection, connectConnection } from '../../connectors/connection-status';
@@ -45,7 +47,7 @@ export async function startComposioConnect(projectId: string, connectionId: stri
   return { app, connectUrl: result.connectUrl, connected: result.connected, isNoAuth: result.isNoAuth };
 }
 
-export async function finalizeComposioConnect(projectId: string, connectionId: string, connection: Connection, app: string) {
+export async function finalizeComposioConnect(projectId: string, connectionId: string, connection: Connection, app: string, actorUserId: string | null = null) {
   const stableUserId = composioUserId(connectionId);
   const metadata = (connection.metadata ?? {}) as Record<string, unknown>;
   const sessionId = typeof metadata.session_id === 'string' ? metadata.session_id : '';
@@ -70,6 +72,14 @@ export async function finalizeComposioConnect(projectId: string, connectionId: s
   });
   if (!live) return { connected: false };
   const label = connectedAs ? await relabelToIdentity({ connectionId, identity: connectedAs }) : null;
+  // The session whose agent asked for this account waits on it (its Connect
+  // card finishes through this route). Same rule as the connector-scoped
+  // finalize: told once (`notifyConnectorSession` is idempotent), and a failed
+  // notification never fails the connect.
+  const waiting = readRequestingSessionId(metadata);
+  if (result.connected && waiting) {
+    void notifyConnectorSession(waiting, projectId, actorUserId, connection.connectorAlias, app);
+  }
   return {
     connected: result.connected, accountId: result.connectedAccountId,
     connected_as: connectedAs, ...(label ? { label } : {}),

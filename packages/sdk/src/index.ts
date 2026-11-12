@@ -678,6 +678,7 @@ export {
   emptyWorkspaceConnectionSlot, emptyProjectConnectionSlot,
   grantConnectionAccess,
   listedConnectorAccounts,
+  connectorAccountSignInStarted,
   newConnectorAccountAudienceFor,
   newConnectorAccountGrantees,
   newConnectorAccountLabelTaken,
@@ -704,6 +705,8 @@ export {
   type ConnectLinkPollOptions,
   type ProjectConnectRoute, type WorkspaceConnectRoute,
   type ProjectConnectionConnectDeps, type WorkspaceConnectionConnectDeps,
+  connectionSignInSteps, connectionSignInRestDeps,
+  type ConnectionSignInDeps,
 } from './core/connectors/connect-link';
 export {
   buildOAuth2ClientRegistrationInput,

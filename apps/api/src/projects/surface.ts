@@ -153,6 +153,10 @@ export const reconcileEventSubscriptionsFromCatalog: typeof import('./trigger-ev
   async (...args) => (await eventSubscriptions()).reconcileEventSubscriptionsFromCatalog(...args);
 export const releaseProjectEventSubscriptions: typeof import('./trigger-events/subscriptions').releaseProjectEventSubscriptions =
   async (...args) => (await eventSubscriptions()).releaseProjectEventSubscriptions(...args);
+// The save-time model check of triggers (consumed by connector sync, which
+// reconciles kortix.yaml triggers). Lazy for the same cycle as above.
+export const gateTriggerSetup: typeof import('./lib/trigger-setup-pause').gateTriggerSetup =
+  async (...args) => (await import('./lib/trigger-setup-pause')).gateTriggerSetup(...args);
 // Kortix-polled app events (consumed by replica/trigger-event-poll.ts). Loading the
 // module registers the delivery queue's job handler. Lazy for the same cycle as above.
 export const runDueEventPolls = async (onSlotFree?: () => void): Promise<number> =>

@@ -13,6 +13,7 @@ import {
   expandSessionIdPrefix,
   locateSessionAnywhere,
   resolveProjectContext,
+  sessionIdArgs,
   surfaceApiError,
   takeFlagBool,
   takeFlagValue,
@@ -1292,7 +1293,7 @@ async function sessionsRm(
   opts: CtxOpts,
   json = false,
 ): Promise<number> {
-  const ids = sessionIds.filter((a) => !a.startsWith('-'));
+  const ids = sessionIdArgs(sessionIds);
   if (ids.length === 0) {
     process.stderr.write(`${status.err('Pass a session id.')}\n`);
     return 2;

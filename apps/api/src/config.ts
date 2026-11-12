@@ -289,6 +289,16 @@ const envSchema = z.object({
     (value) => (typeof value === 'string' ? value.trim().toLowerCase().replace('-', '_') : value),
     z.enum(['off', 'dry_run', 'apply']).optional(),
   ),
+  // The legacy credential backfills (secrets/legacy-credential-boot.ts) on the
+  // leader at boot and then daily: `apply` moves legacy LLM keys and connector
+  // rows to their canonical stores, `dry_run` logs what it would move, `off`
+  // skips. Unset: `apply` locally and on self-host (no operator runs the
+  // scripts there), `off` on a cloud deployment (INTERNAL_KORTIX_ENV set), where
+  // an operator runs apps/api/scripts/*-backfill.ts.
+  LEGACY_CREDENTIAL_BACKFILL_MODE: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim().toLowerCase().replace('-', '_') : value),
+    z.enum(['off', 'dry_run', 'apply']).optional(),
+  ),
   RETENTION_ERASURE_AFTER_DAYS: optInt(80).refine((days) => days >= 0, {
     message: 'Must be 0 or more days: the retention backstop never erases an account before its date',
   }),
@@ -1495,6 +1505,8 @@ export const config = {
   RETENTION_ERASURE_AFTER_DAYS: env.RETENTION_ERASURE_AFTER_DAYS,
   WORKSPACE_SPLIT_MODE: (env.WORKSPACE_SPLIT_MODE
     ?? (process.env.INTERNAL_KORTIX_ENV ? 'dry_run' : 'off')) as 'off' | 'dry_run' | 'apply',
+  LEGACY_CREDENTIAL_BACKFILL_MODE: (env.LEGACY_CREDENTIAL_BACKFILL_MODE
+    ?? (process.env.INTERNAL_KORTIX_ENV ? 'off' : 'apply')) as 'off' | 'dry_run' | 'apply',
   KORTIX_SANDBOX_EGRESS_PIN_ENFORCED: env.KORTIX_SANDBOX_EGRESS_PIN_ENFORCED,
   KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS: env.KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS.split(',')
     .map((host) => host.trim())

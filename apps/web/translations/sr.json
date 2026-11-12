@@ -106,6 +106,14 @@
     "access": "Приступ",
     "actions": "Радње",
     "coolingDown": "Период хлађења",
+    "keyVerified": "Provereno: {provider} je prihvatio ovaj ključ",
+    "keyInvalid": "{provider} je odbio ovaj ključ: {message}",
+    "keyUnchecked": "Nije provereno: {message}",
+    "checkKey": "Proveri ponovo",
+    "savedVerified": "Ključ je sačuvan i proveren",
+    "savedInvalid": "Ključ je sačuvan, ali ga je {provider} odbio: {message}",
+    "checkError": "Ključ nije mogao da se proveri",
+    "openProviderInModels": "Otvori {provider} u Modelima",
     "member": "члан",
     "members": "чланова",
     "actionsFor": "Радње за {label}",
@@ -177,7 +185,10 @@
     "claudeConnectFailed": "Prijava preko Claude-a nije završena. Pokušaj ponovo.",
     "claudeReconnectDescription": "Ponovo se prijavi preko Claude-a. Nalog zadržava ime, pristup i izbore sesija.",
     "claudeAccountLabelPlaceholder": "npr. Moj Claude nalog",
-    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?"
+    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?",
+    "sharedOnlyYouDescription": "Dodaj API ključeve, ChatGPT naloge i Claude naloge. Samo ti možeš da koristiš one koje dodaš. Menadžer radnog prostora može da podeli jedan. Izaberi koje koristi svaka sesija.",
+    "oauthOnlyYouDescription": "Koristi svoj ChatGPT Plus ili Pro plan u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš.",
+    "claudeOauthOnlyYouDescription": "Koristi svoj Claude Pro ili Max plan za Claude modele u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš."
   },
   "secrets": {
     "undecryptable": {
@@ -2084,7 +2095,11 @@
       "claudePlan": "Pro ili Max plan",
       "connectModel": "Повежи модел",
       "imagesUnsupported": "{model} не може да чита слике",
-      "imagesUnsupportedHint": "уклони их или изабери други модел"
+      "imagesUnsupportedHint": "уклони их или изабери други модел",
+      "noModelUpgradeReason": "Нема модела: пређи на Credits план или додај свој кључ провајдера.",
+      "noModelKeyReason": "Нема модела: додај свој кључ провајдера.",
+      "noModelUpgradePlan": "Надогради план",
+      "noModelAddProviderKey": "Додај кључ провајдера"
     },
     "providerRecovery": {
       "savedPrompt": "Сачуван упит",
@@ -10381,6 +10396,8 @@
       "checkConnection": "Проверите везу, па покушајте поново."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Dodaj ključ provajdera",
+      "noModelUpgradePlan": "Nadogradi plan",
       "authEmailRateLimit": "Е-порука није послата. Покушај поново за око сат времена.",
       "authRequestRateLimit": "Превише захтева. Покушај поново за неколико минута.",
       "text03217276a5f1": "Стање {value0} кредита",
@@ -22078,6 +22095,12 @@
     "noticeSignInTitle": "Prijavi se na {name}",
     "noticeSignInBody": "Kortix je dodao {name}. Završi prijavu da bi agenti mogli da koriste njegove alate.",
     "noticeSignInAction": "Prijavi se",
+    "noticeSignInAgainTitle": "Ponovo se prijavi na {name}",
+    "noticeSignInAgainBody": "Prijava je istekla ili je opozvana. Agenti ne mogu da koriste {name} dok se ponovo ne prijaviš.",
+    "noticeNoToolsTitle": "{name} nema alate",
+    "noticeNoToolsBody": "Nema rute, pa agenti nemaju šta da pozovu. Dodaj rute u specifikaciju ruta u Podešavanjima.",
+    "noticeAddRoutesAction": "Dodaj rute",
+    "statusNoTools": "Nema alata",
     "connectAccount": "Poveži",
     "notSignedIn": "Nije prijavljeno",
     "credentialRejected": "Akreditiv je odbijen: zamenite ga",
@@ -23716,7 +23739,13 @@
   },
   "triggerAutoPause": {
     "title": "Аутоматски паузиран",
-    "description": "Престао је да покреће извршавања из разлога наведеног испод. Отклони узрок, па га настави."
+    "description": "Престао је да покреће извршавања из разлога наведеног испод. Отклони узрок, па га настави.",
+    "billingTitle": "Паузирано: нема кредита",
+    "billingDescription": "Ниједно извршавање не може да се плати, па је престао да их покреће. Наставља сам неколико минута после допуне салда.",
+    "modelTitle": "Паузирано: нема доступног модела",
+    "modelDescription": "Аутоматизације користе само кључеве модела и налоге дељене са целим радним простором, а ниједан није доступан. Наставља сам неколико минута пошто додаш један у Моделима.",
+    "listBilling": "Нема кредита",
+    "listModel": "Нема модела"
   },
   "featureGate": {
     "enable": "Омогући {name}",
@@ -26816,5 +26845,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Ограничи потрошњу гејтвеја за овај радни простор.",
     "capMember": "Ограничи потрошњу гејтвеја за {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Otvori prijavu za {app}",
+    "checkingTitle": "Završavanje prijave",
+    "checkingDescription": "Kortix proverava tvoju prijavu za {app}. Ova stranica se sama osvežava.",
+    "signInUnfinished": "Prijava nije završena",
+    "finishSignIn": "Završi prijavu",
+    "signInFinished": "Prijava je završena",
+    "cardHeadline": "Tvoj agent čeka da se prijaviš",
+    "cardTitle": "Poveži {app}",
+    "cardShared": "Deljeno sa radnim prostorom",
+    "cardPrivate": "Samo ti",
+    "signingIn": "Završi prijavu za {app} u prozoru koji se otvorio.",
+    "connectedAs": "Povezano kao {account}",
+    "connected": "Povezano",
+    "connect": "Poveži",
+    "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo.",
+    "blockedTitle": "Otvori {app} za prijavu",
+    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava."
   }
 }

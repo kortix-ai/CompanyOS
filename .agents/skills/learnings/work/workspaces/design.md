@@ -120,7 +120,7 @@ the repo).
 | **K1** | One auth model. Delete `WORKSPACE_ADMIN_PROJECT_ACTIONS`, `isWorkspaceAdministration` and `authorize` step 4b. Delete the fence's `admin` flag. A workspace-bound credential reaches every route of its own workspace (C4). The person's grants decide for a person and for an inherited (ungoverned) agent session; `grant ∩ ceiling − HUMAN_ONLY` decides for a governed agent. `HUMAN_ONLY` (C8) is the only agent wall: minting credentials and moving money. `kortix access invite` from the onboarding skill and the kortixd `kortix_people` tool work in a session. | auth |
 | **K2** | Workspace lifecycle = account lifecycle. `DELETE /v1/workspaces/:id` (and `DELETE /v1/projects/:id` on a 1:1 workspace) closes the account in the same transaction as the project archive: an `account_deletion_requests` row with the 14-day grace (the existing closure model, D6b), every credential of the account revoked, channels and event subscriptions released, automations stopped. After commit: `cancelSubscription(accountId, 'workspace_deleted')` (cancel at period end). Members lose access at once (engine rule, C3). Owners see the workspace as `deleting` and can restore it until `deletion_scheduled_for` (`POST /v1/workspaces/:id/restore`: cancel the request, un-archive, `reactivateSubscription`). The existing sweep erases it at `scheduled_for` (repo, sandboxes, Stripe, wallet, rows). A `split_pending` workspace keeps the old behavior: archive its project row only. Nothing billable is invisible: a project-less account that pays is listed as `setup_required` (C1, C5). | identity |
 | **K3** | `GET /v1/workspaces` lists every workspace the caller may see, across all accounts, in one request (C5). A workspace-bound credential gets its one workspace. `POST /v1/workspaces` creates a workspace with no flag (C5). The old `GET /v1/projects` keeps its single-account meaning. `new_workspace` stays on `POST /v1/projects/provision` only. `/provision`, `/provision-stream`, root `POST /` and `/quota` are not mounted under `/v1/workspaces`. Naming stage (2026-11-06): `/:id/transfer`, root `/link-repository` and `/create-repo` are aliases (`/v1/workspaces/…`); the project audit slice is `GET /v1/workspaces/:id/audit/events`; the trigger fire is `POST /v1/webhooks/workspaces/:id/:slug` (the shown `webhook_url`); every legacy route with its own meaning is `deprecated` in OpenAPI with `x-kortix-replaced-by` (`WORKSPACE_LEGACY_REPLACEMENTS`); `unit-workspace-route-aliases.test.ts` fails on a new route with a `projects`/`accounts` segment that is none of alias, deprecated legacy, retired or allowlisted. | api |
-| **K4** | The paying rule is `kortix.account_is_paying` (C6): paid tier, purchased credits or an active enterprise contract; a bare `stripe_subscription_id` never counts (149 legacy accounts carry a stale one on Free). Split-off billing (C6): a free source's split-off keeps free-credit eligibility and gets one Free grant (a one-time exception, no `free_credit_claims` row); a paying source's split-off gets the keeper's plan comped until the keeper's current period ends, with pro-rated plan credits, then falls to Free with eligibility. Each affected workspace shows a split notice for 30 days (C9). Each OWNER of an affected account gets one email when the account's moves finish, in `apply` mode only. Never a bulk email. | billing (functions) · split (calls, notice, email) |
+| **K4** | The paying rule is `kortix.account_is_paying` (C6): paid tier, purchased credits or an active enterprise contract; a bare `stripe_subscription_id` never counts (149 legacy accounts carry a stale one on Free). Split-off billing (C6): a free source's split-off keeps free-credit eligibility and gets one Free grant (a one-time exception, no `free_credit_claims` row); a paying source's split-off gets the keeper's plan comped until the keeper's current period ends, with pro-rated plan credits, then falls to Free with eligibility. Each affected workspace shows a split notice for 30 days (C9). No owner email or any other owner message (D13, 2026-11-11; this cell said one email per owner). | billing (functions) · split (calls, notice, email) |
 | 1 | No reuse. "Create workspace" always creates a new account; only an idempotent replay (same `idempotency_key`) returns an existing one. Delete `reusableOwnedAccount`'s empty-account branch. A deleted workspace's account is closing and can never come back. | identity |
 | 2 | "Delete account" deletes the PERSON, never `resolveAccountId`'s earliest workspace. Plan per membership: sole owner and only member → delete that workspace; sole owner with other members → `409 sole_owner_of_shared_workspace` with `workspaces: [{workspace_id, name, member_count}]`; otherwise leave. `deleteLogin(userId)` runs last. `DELETE /v1/account/delete-immediately` runs the plan now. `POST /v1/account/request-deletion` writes `kortix.person_deletion_requests` (14 days); the account-deletion worker runs the plan when it is due. | identity |
 | 3, 4 | Membership is access. Engine rule (C3): an account-scope `member` reaches its account's workspace at the `member` tier when the workspace is not `split_pending`. Existing members without a project grant gain access with no data migration. Invites default to role `member` and need no `project_grants` on a 1:1 workspace. `split_pending` accounts keep per-project grants. | auth |
@@ -665,13 +665,15 @@ export function parseWorkspaceSettingsSection(raw: string | null | undefined): W
 - Denial reasons added: `workspace_closed` (mapped to 404/409, C3), and
   `agent_human_only_action` now covers every agent session.
 
-#### C9. Split notice and owner email
+#### C9. Split notice (no owner email, D13)
 
 - `GET /v1/workspaces/:id` adds `split_notice: { role: 'keeper' | 'moved'; source_name:
   string; completed_at: string; billing: 'free' | 'comped' | null; comped_until: string |
   null } | null`, for 30 days after the account's last move (derived from
   `workspace_split_runs`).
-- Owner email: one per (owner, source account) when the account's last move is `done`;
+- **Removed 2026-11-11 (D13, "no owner notices"): the split sends no email.** The outbox
+  table `kortix.workspace_split_emails` stays, empty. What R1 built, for history:
+  one per (owner, source account) when the account's last move is `done`;
   owners only. The outbox is `kortix.workspace_split_emails`
   (`20261106183012059_workspace_split_emails.sql`): one row per owner, unique on
   `idempotency_key` = `workspace-split-email:<from_account_id>:<user_id>`. The tick
@@ -853,8 +855,8 @@ stop at the keeper. Confirming the keeper does not release it; the split
 carrying identity is a follow-up. The move transaction re-checks the hold
 under the run lock. Every split-off grant is keyed by run AND target account
 (`split_off_grant:<run>:<account>`), so a reopened run never replays the
-dormant account's grant. The owner email waits until every done run has
-`plan.billing`.
+dormant account's grant. The account finish (`plan.account_finished_at`, no email
+since D13) waits until every done run has `plan.billing`.
 
 **Paying holds, D3 (Billing + split stage, 2026-11-06; superseded by D12, 2026-11-10: a
 paying account is no longer held, the keeper rule picks the project that keeps the billing,

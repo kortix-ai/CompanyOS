@@ -445,7 +445,13 @@ describe('GoalDetail — one control channel', () => {
     expect(headerButton('goal-pause').disabled).toBe(true);
     expect(headerButton('goal-stop').disabled).toBe(true);
 
-    await act(async () => controlDeferred?.resolve(null));
+    // react-query notifies its observers on a scheduler tick, not synchronously:
+    // give it one, or the settled mutation's disabled=false re-render races this
+    // assertion (it lost that race on a loaded CI runner).
+    await act(async () => {
+      controlDeferred?.resolve(null);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
     expect(headerButton('goal-pause').disabled).toBe(false);
     expect(headerButton('goal-stop').disabled).toBe(false);
     expect((document.querySelector('[data-testid="goal-message"]') as HTMLTextAreaElement).value).toBe('');

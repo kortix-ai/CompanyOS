@@ -57,6 +57,7 @@ mock.module('../../secrets/account-resource', () => ({
   readAccountSecret: () => null,
   resolveDefaultProviderAccountSecret: async () => null,
   listUsableGatewaySecrets: async () => [],
+  listGrantedGatewaySecretNames: async () => [],
 }));
 const getProjectSecretValueForConsumer = mock(async (input: { name: string }) => {
   const name = input.name;
@@ -71,6 +72,8 @@ const resolveProjectSecretsForConsumer = mock(async (input: { name: string }) =>
 mock.module('../../projects/secrets', () => ({
   getProjectSecretValueForConsumer,
   resolveProjectSecretsForConsumer,
+  // Read by the one key reader (credentials/gateway-keys.ts) for key names.
+  listProjectSecretNamesForConsumer: async () => [],
 }));
 
 class CodexRefreshError extends Error {}
@@ -338,13 +341,15 @@ describe('resolveCandidates — Models-panel keys without a session selection', 
     expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
   });
 
-  test('with the flag off, only the legacy project key is read', async () => {
+  // One store (2026-11-11): every writer writes named keys, so the flag no
+  // longer hides them. With it off, a named key still serves first.
+  test('with the flag off, a named key still serves ahead of the legacy key', async () => {
     anthropic();
     resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
     sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'id-a', label: 'A', value: 'key-a' }] };
     const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
-    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
-    expect(resolveProjectSharedProviderSecrets).not.toHaveBeenCalled();
+    expect(candidates.map((c) => c.apiKey)).toEqual(['key-a']);
+    expect(resolveProjectSecretsForConsumer).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -615,6 +620,29 @@ describe('resolveCandidates — BYOK billing', () => {
     expect(getProjectSecretValueForConsumer).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 'p1', name: 'AWS_REGION', consumer: 'llm_gateway' }),
     );
+  });
+
+  // The backfill moves the legacy AWS_REGION secret to a named row of provider
+  // `amazon-bedrock`; the legacy secret is then unread (llm-credential-move.ts).
+  test('BYOK Bedrock: the region of a named AWS_REGION row serves ahead of the legacy secret', async () => {
+    catalogUpstream = { envVar: 'AWS_BEARER_TOKEN_BEDROCK', kind: 'bedrock' };
+    secretsByName = { AWS_BEARER_TOKEN_BEDROCK: 'bedrock-bearer-key', AWS_REGION: 'us-west-2' };
+    resolveProjectSharedProviderSecrets.mockImplementation(async (input: unknown) => {
+      const { name } = input as { name: string };
+      return name === 'AWS_REGION'
+        ? { coolingDown: false, secrets: [{ secretId: 'region-row', label: 'Bedrock region', value: 'eu-central-1' }] }
+        : { coolingDown: false, secrets: [] };
+    });
+    try {
+      const p = principal();
+      tierByAccount[p.accountId] = 'pro';
+      const candidates = await resolveCandidates(p, 'amazon-bedrock/us.anthropic.claude-opus-4-8');
+      expect(candidates[0]).toMatchObject({ baseUrl: 'https://bedrock-runtime.eu-central-1.amazonaws.com', region: 'eu-central-1' });
+      // The region read is a probe: it never moves the session's account pin.
+      expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'amazon-bedrock', name: 'AWS_REGION', probe: true }));
+    } finally {
+      resolveProjectSharedProviderSecrets.mockImplementation(async () => sharedSecrets);
+    }
   });
 
   test('BYOK Bedrock with no AWS_REGION set: falls back to us-east-1', async () => {
@@ -1293,13 +1321,25 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
     expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-token']);
   });
 
-  test('flag off: shared accounts are never read', async () => {
+  test('a gateway API key whose workspace has only private ChatGPT accounts: the refusal names the rule and the way out', async () => {
+    pooledEnabled = true;
+    codexCredential = null;
+    sharedSecrets = { coolingDown: false, withheld: 1, secrets: [] };
+    const refusal = await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6').catch((err) => err);
+    expect(refusal).toMatchObject({ code: 'provider_not_connected' });
+    expect(refusal.message).toContain('a gateway API key uses only ChatGPT accounts shared with everyone');
+    expect(refusal.suggestion).toContain('personal access token');
+    // The legacy project connection still serves first when there is one.
+    codexCredential = { access: 'legacy-token' };
+    expect((await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6')).map((c) => c.apiKey)).toEqual(['legacy-token']);
+  });
+
+  test('flag off: a shared named account still serves ahead of the legacy login', async () => {
     pooledEnabled = false;
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's' }), 'codex/gpt-6');
-    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-token']);
-    expect(resolveProjectSharedProviderSecrets).not.toHaveBeenCalled();
+    expect(candidates.map((c) => c.apiKey)).toEqual(['team-token']);
   });
 });
 

@@ -83,11 +83,13 @@ export function AskDeck({
   selectedAskId,
   onClearSelection,
   onHiddenAskIdsChange,
+  onCurrentAskChange,
 }: {
   projectId: string;
   selectedAskId?: string | null;
   onClearSelection?: () => void;
   onHiddenAskIdsChange?: (ids: ReadonlySet<string>) => void;
+  onCurrentAskChange?: (id: string | null) => void;
   /** The host shows something else over the deck: it draws nothing and its
    *  keys answer nothing, but stays mounted so staged answers keep Undo. */
   paused?: boolean;
@@ -114,6 +116,9 @@ export function AskDeck({
     [data, skipped, hidden],
   );
   const current = deck.find((ask) => ask.id === selectedAskId) ?? deck[0] ?? null;
+  useEffect(() => {
+    onCurrentAskChange?.(paused ? null : current?.id ?? null);
+  }, [current?.id, paused, onCurrentAskChange]);
 
   const send = useCallback(
     async (entry: Staged) => {

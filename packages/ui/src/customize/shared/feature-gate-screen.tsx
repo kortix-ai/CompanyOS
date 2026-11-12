@@ -104,7 +104,7 @@ export function FeatureGateScreen({
           <div className="flex shrink-0 items-center gap-2">
             <Button
               size="sm"
-              disabled={permission.isLoading || permission.allowed !== true || enable.isPending}
+              disabled={enable.isPending}
               onClick={() => {
                 setError('');
                 // Channels changes the sidebar for everyone: it asks first.

@@ -83,6 +83,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   // Same query as the deck's own: a cache hit, not a second request.
   const asks = useSessionAsks(projectId, { enabled: Boolean(projectId) });
   const [selectedAskId, setSelectedAskId] = useState<string | null>(null);
+  const [currentAskId, setCurrentAskId] = useState<string | null>(null);
   const [hiddenAskIds, setHiddenAskIds] = useState<ReadonlySet<string>>(() => new Set());
   const deckAsks = (asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind) && !hiddenAskIds.has(ask.id));
   const deckShows =
@@ -355,7 +356,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   return (
     <ReviewCenter
       sessionAsks={deckAsks}
-      selectedAskId={selectedAskId}
+      selectedAskId={currentAskId}
       onSelectAsk={setSelectedAskId}
       needsYouDeck={
         projectId && deckShows
@@ -368,6 +369,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
                 onOpenSession={openSession}
                 empty={null}
                 paused={paused}
+                onCurrentAskChange={setCurrentAskId}
                 onHiddenAskIdsChange={setHiddenAskIds}
                 selectedAskId={selectedAskId}
                 onClearSelection={() => setSelectedAskId(null)}

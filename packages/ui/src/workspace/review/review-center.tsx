@@ -854,7 +854,7 @@ export function ReviewCenter({
     if (segment === 'needs_you') {
       for (const ask of sessionAsks) {
         if (!options.some((option) => option.sessionId === ask.surface_session_id)) {
-          options.push({ sessionId: ask.surface_session_id, label: ask.session_title ?? labelFor(ask.surface_session_id) ?? ask.title });
+          options.push({ sessionId: ask.surface_session_id, label: ask.session_title ?? labelFor(ask.surface_session_id) ?? `Session ${ask.surface_session_id.slice(0, 8)}` });
         }
       }
     }
@@ -1508,12 +1508,13 @@ export function ReviewCenter({
   };
   const back = () => setSelectedId(null);
 
-  const visibleAsks = segment === 'needs_you' && kindFilter === 'all'
+  const matchingAsksFor = (session: string) => segment === 'needs_you' && kindFilter === 'all'
     ? sessionAsks.filter((ask) =>
-        (sessionFilter === 'all' || ask.surface_session_id === sessionFilter) &&
+        (session === 'all' || ask.surface_session_id === session) &&
         `${ask.title} ${ask.session_title ?? ''}`.toLowerCase().includes(query.toLowerCase()),
       )
     : [];
+  const visibleAsks = matchingAsksFor(sessionFilter);
 
   const listBody =
     isError && items.length === 0 ? (
@@ -1789,7 +1790,7 @@ export function ReviewCenter({
                         <DropdownMenuRadioItem value="all" side="left">
                           {tI18nComplete.raw('text78648d4d6649')}
                           <CountBadge
-                            count={filterItems(items, segment, kindFilter, query, 'all').length}
+                            count={filterItems(items, segment, kindFilter, query, 'all').length + matchingAsksFor('all').length}
                             className="ml-auto"
                           />
                         </DropdownMenuRadioItem>
@@ -1797,7 +1798,7 @@ export function ReviewCenter({
                           <DropdownMenuRadioItem key={s.sessionId} value={s.sessionId} side="left">
                             <span className="truncate">{s.label}</span>
                             <CountBadge
-                              count={filterItems(items, segment, kindFilter, query, s.sessionId).length}
+                              count={filterItems(items, segment, kindFilter, query, s.sessionId).length + matchingAsksFor(s.sessionId).length}
                               className="ml-auto"
                             />
                           </DropdownMenuRadioItem>

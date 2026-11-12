@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import type { SessionAsk, SessionAskAnswer } from '@kortix/sdk';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -56,12 +57,12 @@ function text(node: ReactTestInstance | string): string {
   return typeof node === 'string' ? node : node.children.map(text).join('');
 }
 
-async function mountDeck(selectedAskId?: string, onHiddenAskIdsChange?: (ids: ReadonlySet<string>) => void): Promise<ReactTestRenderer> {
+async function mountDeck(props: Omit<ComponentProps<typeof AskDeck>, 'projectId'> = {}): Promise<ReactTestRenderer> {
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = create(
       <QueryClientProvider client={new QueryClient()}>
-        <AskDeck projectId="project-1" selectedAskId={selectedAskId} onHiddenAskIdsChange={onHiddenAskIdsChange} />
+        <AskDeck projectId="project-1" {...props} />
       </QueryClientProvider>,
     );
   });
@@ -115,7 +116,7 @@ test('selecting an inbox ask opens its card instead of the oldest card', async (
     asked_at: '2026-11-09T11:00:00.000Z',
     access: { colleague: 'Report check', connectors: [], secrets: [] },
   }];
-  const renderer = await mountDeck('access:a2');
+  const renderer = await mountDeck({ selectedAskId: 'access:a2' });
   try {
     expect(text(renderer.root)).toContain('Report check');
     expect(text(renderer.root)).not.toContain('Invoice check');
@@ -127,7 +128,7 @@ test('selecting an inbox ask opens its card instead of the oldest card', async (
 test('a staged answer hides its inbox row until Undo restores it', async () => {
   asks = [accessAsk];
   let hidden: ReadonlySet<string> = new Set();
-  const renderer = await mountDeck(undefined, (ids) => { hidden = ids; });
+  const renderer = await mountDeck({ onHiddenAskIdsChange: (ids) => { hidden = ids; } });
   try {
     const allow = renderer.root.findAllByType('button').find((node) => text(node) === 'Allow');
     if (!allow) throw new Error('Missing Allow');
@@ -138,6 +139,25 @@ test('a staged answer hides its inbox row until Undo restores it', async () => {
     expect(hidden.has(accessAsk.id)).toBe(false);
     expect(text(renderer.root)).toContain('Invoice check');
     expect(sent).toEqual([]);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test('the inbox highlight follows the default card and Skip', async () => {
+  asks = [accessAsk, {
+    ...accessAsk, id: 'access:a2', asked_at: '2026-11-09T11:00:00.000Z',
+    access: { colleague: 'Report check', connectors: [], secrets: [] },
+  }];
+  const current: { id?: string | null } = {};
+  const renderer = await mountDeck({ onCurrentAskChange: (id) => { current.id = id; } });
+  try {
+    expect(current.id).toBe(accessAsk.id);
+    const skip = renderer.root.findAllByType('button').find((node) => text(node).startsWith('Skip'));
+    if (!skip) throw new Error('Missing Skip');
+    await act(async () => skip.props.onClick());
+    expect(current.id).toBe('access:a2');
+    expect(text(renderer.root)).toContain('Report check');
   } finally {
     await act(async () => renderer.unmount());
   }

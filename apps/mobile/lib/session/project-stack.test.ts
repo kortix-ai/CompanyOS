@@ -30,6 +30,7 @@ import {
   DRAWER_SWAP_PARAMS,
   drawerPageViewKey,
   drawerSessionViewKey,
+  drawerRowSwapKey,
   drawerSwapApplies,
   projectRouteAnimation,
 } from './project-stack';
@@ -455,5 +456,19 @@ describe('drawerSwapApplies', () => {
     expect(drawerSwapApplies(drawerPageViewKey('page:review'), view({ activePageId: 'page:apps' }))).toBe(false);
     expect(drawerSwapApplies(drawerSessionViewKey('s-1'), view({ connectingSessionId: 's-2' }))).toBe(false);
     expect(drawerSwapApplies(drawerSessionViewKey('s-1'), null)).toBe(false);
+  });
+});
+
+describe('drawerRowSwapKey', () => {
+  test('a row that opens a session records that session', () => {
+    expect(drawerRowSwapKey('open', 's-1')).toBe(drawerSessionViewKey('s-1'));
+  });
+
+  test('the row of the session on screen records nothing: a later open of it slides', () => {
+    for (const move of ['focus', 'queue', 'close'] as const) {
+      const recorded = drawerRowSwapKey(move, 's-1');
+      expect(recorded).toBeNull();
+      expect(drawerSwapApplies(recorded, drawerSessionViewKey('s-1'))).toBe(false);
+    }
   });
 });

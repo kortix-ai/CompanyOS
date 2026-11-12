@@ -341,6 +341,18 @@ export function drawerSessionViewKey(sessionId: string): string {
 }
 
 /**
+ * The drawer swap a session row records (`drawerThreadMove`): the view it
+ * opens for `open`, else none. A focus, queue or close moves no route, and a
+ * key left behind would match a later, non-drawer open of the same session.
+ */
+export function drawerRowSwapKey(
+  move: ReturnType<typeof drawerThreadMove>,
+  sessionId: string
+): string | null {
+  return move === 'open' ? drawerSessionViewKey(sessionId) : null;
+}
+
+/**
  * A push of the view swaps in with no slide only when the store shows the
  * exact view a drawer tap recorded. Any other push — a composer send, a
  * Sessions row, a notification, or a tap that moved no route — slides.

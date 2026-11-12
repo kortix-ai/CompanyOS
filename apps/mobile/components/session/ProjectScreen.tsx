@@ -56,7 +56,7 @@ import { FloatingMenuButton } from '@/components/session/FloatingMenuButton';
 import {
   DRAWER_SWAP_PARAMS,
   drawerPageViewKey,
-  drawerSessionViewKey,
+  drawerRowSwapKey,
   drawerSwapApplies,
   pageBackMove,
   projectRouteAnimation,
@@ -553,6 +553,9 @@ export function ProjectScreen() {
         shownSessionId: shownSessionIdRef.current,
         activeRuntimeId: shownRuntimeIdRef.current,
       });
+      // Only an open moves a route: a focus, queue or close swaps nothing, so
+      // it records no drawer swap for a later, non-drawer push to match.
+      drawerSwapRef.current = drawerRowSwapKey(move, ps.session_id);
       if (move === 'open') {
         // A sub-session row: open its parent, then show the sub-session.
         const rootId = ps.runtime_session_id;
@@ -571,14 +574,12 @@ export function ProjectScreen() {
   );
   const openSessionFromDrawer = useCallback(
     (ps: ProjectSession) => {
-      drawerSwapRef.current = drawerSessionViewKey(ps.session_id);
       openThreadFromDrawer(ps, ps.runtime_session_id ?? null);
     },
     [openThreadFromDrawer]
   );
   const openSubsessionFromDrawer = useCallback(
     (ps: ProjectSession, childId: string) => {
-      drawerSwapRef.current = drawerSessionViewKey(ps.session_id);
       openThreadFromDrawer(ps, childId);
     },
     [openThreadFromDrawer]

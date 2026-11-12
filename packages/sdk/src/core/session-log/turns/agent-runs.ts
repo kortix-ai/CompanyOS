@@ -91,11 +91,20 @@ export function isSessionLogAgentNotice(message: SessionLogMessage): boolean {
   return reportersOf(message) !== null;
 }
 
-const childIds = (turn: SessionLogTurn): string[] =>
-  turn.blocks.flatMap((b) => {
+/** An agent a turn started: its session, and the handles a peer message may name it by (`name`, `subagent_type`). */
+interface Child {
+  id: string;
+  handles: string[];
+}
+
+const childrenOf = (turn: SessionLogTurn): Child[] =>
+  turn.blocks.flatMap((b): Child[] => {
     if (b.type !== 'tool_call') return [];
     const id = getChildSessionId(b);
-    return id ? [id] : [];
+    if (!id) return [];
+    const input = (b.input ?? {}) as { name?: unknown; subagent_type?: unknown };
+    const handles = [input.name, input.subagent_type].filter((h): h is string => typeof h === 'string' && !!h);
+    return [{ id, handles }];
   });
 
 /** The turn asks the person something, hands over a deliverable, or renders a card before its answer. */
@@ -104,6 +113,12 @@ function needsPerson(turn: SessionLogTurn): boolean {
     if (b.type === 'tool_call') return isQuestionTool(b.name) || isNoGroupActivityTool((b as ToolCallBlock).name);
     return b.type === 'text' && b !== turn.response && textRendersCard(b.text);
   });
+}
+
+/** The latest agent started under `handle` (no `findLast`: the core runs on older engines too). */
+function lastNamed(children: readonly Child[], handle: string): Child | undefined {
+  for (let i = children.length - 1; i >= 0; i--) if (children[i]!.handles.includes(handle)) return children[i];
+  return undefined;
 }
 
 const ended = (turn: SessionLogTurn): string | null => turn.assistant.at(-1)?.completed_at ?? null;
@@ -123,8 +138,8 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
   const runs = new Map<string, SessionLogAgentRun>();
   const absorbed = new Set<string>();
   const anchorOf = new Map<string, string>();
-  /** Every child id ever started, so a peer's short id resolves to its session. */
-  const launched: string[] = [];
+  /** Every agent ever started, so a peer resolves to its session by short id, else by handle. */
+  const launched: Child[] = [];
   /** Child id → the index of the turn that carried its report. */
   const reportedAt = new Map<string, number>();
   const launches: Array<{ id: string; children: string[] }> = [];
@@ -161,20 +176,25 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
   turns.forEach((turn, index) => {
     // A notice arrives as synthetic text, so its turn is `internal`: read the prompt, not the flag.
     const reporters = turn.compaction ? null : reportersOf(turn.user);
-    const children = childIds(turn);
+    const children = childrenOf(turn);
+    const ids = children.map((c) => c.id);
     if (!reporters) {
       close(false);
-      stretchStarted = new Set(children);
+      stretchStarted = new Set(ids);
       stretchReported = new Set();
-      if (children.length) launches.push({ id: turn.id, children });
+      if (ids.length) launches.push({ id: turn.id, children: ids });
       launched.push(...children);
       previousEnd = ended(turn);
       return;
     }
-    for (const id of children) stretchStarted.add(id);
+    for (const id of ids) stretchStarted.add(id);
     launched.push(...children);
     const keys = reporters.map((r) => {
-      const id = 'sessionId' in r ? r.sessionId : launched.find((c) => c.startsWith(r.shortId));
+      // The latest agent of that name wins: a name is reused once its agent ended.
+      const id =
+        'sessionId' in r
+          ? r.sessionId
+          : (launched.find((c) => c.id.startsWith(r.shortId)) ?? lastNamed(launched, r.handle))?.id;
       if (!id) return `peer:${'handle' in r ? r.handle : ''}`;
       reportedAt.set(id, index);
       if (stretchStarted.has(id)) stretchReported.add(id);

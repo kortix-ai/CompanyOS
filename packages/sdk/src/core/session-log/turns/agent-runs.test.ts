@@ -246,6 +246,33 @@ describe('sessionLogAgentRuns', () => {
     expect(run.reported).toBe(3);
   });
 
+  test('a peer resolves to the agent it is by its handle when its short id names no launched session', () => {
+    const named = turn({
+      id: 'launch',
+      prompt: 'Ship the launch post.',
+      start: 0,
+      end: 0.1,
+      blocks: [
+        { ...call('a1', 'agent', { sessionId: 'ses_writer' }), input: { name: 'draft-writer', subagent_type: 'writer' } } as ToolCallBlock,
+        { ...call('a2', 'agent', { sessionId: 'ses_checker' }), input: { subagent_type: 'metrics-checker' } } as ToolCallBlock,
+        text('ack', 'On it.'),
+      ],
+    });
+    const turns = [
+      named,
+      // The writer messages mid-work, then its finish notice arrives: one agent, not two.
+      report('r1', peerMessage('draft-writer', 91), 2),
+      report('r2', peerMessage('metrics-checker', 92), 3),
+      report('r3', subagentNotice(1).replace(child(1), 'ses_writer'), 5, [text('f', 'Done.')]),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    const run = layout.runs.get('r3')!;
+    expect(run.agents).toBe(2);
+    expect(run.reported).toBe(2);
+    expect(run.started).toBe(2);
+    expect([...layout.settledLaunches]).toEqual(['launch']);
+  });
+
   test('no launch in sight: the run starts at its first report, and the label has no total', () => {
     const turns = [report('r1', peerMessage('writer', 7), 2), report('r2', peerMessage('checker', 8), 4, [text('f', 'Done.')])];
     const run = sessionLogAgentRuns(turns).runs.get('r2')!;

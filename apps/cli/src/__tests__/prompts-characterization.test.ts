@@ -122,6 +122,14 @@ describe('prompt', () => {
     expect(await settlesWithin(answer)).toBe('settled');
     expect(await answer).toBe('us-east-1');
   });
+
+  test('end of input with a whitespace-padded default returns that default untrimmed', async () => {
+    const { stdin } = attachTty();
+    const answer = prompt('region', '  us-east-1  ');
+    stdin.end();
+    expect(await settlesWithin(answer)).toBe('settled');
+    expect(await answer).toBe('  us-east-1  ');
+  });
 });
 
 describe('selectFrom', () => {

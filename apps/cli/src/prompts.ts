@@ -55,10 +55,15 @@ export async function prompt(label: string, defaultValue?: string): Promise<stri
   ensureTTY();
   const suffix = defaultValue !== undefined ? ` (${defaultValue})` : '';
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const raw = await askOnce(rl, `${label}${suffix}: `).catch((error: unknown) => {
+  let raw: string;
+  try {
+    raw = await askOnce(rl, `${label}${suffix}: `);
+  } catch (error) {
     if (defaultValue === undefined) throw error;
-    return defaultValue; // stdin ended before an answer: the default is the answer
-  });
+    // stdin ended before an answer: the default is the answer, as-is —
+    // the same untrimmed default a blank Enter already returns.
+    return defaultValue;
+  }
   const trimmed = raw.trim();
   return trimmed !== '' ? trimmed : defaultValue ?? '';
 }

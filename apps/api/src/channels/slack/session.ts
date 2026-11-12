@@ -292,7 +292,7 @@ async function planSlackLaunch(
 ) {
   const projectId = project.projectId;
   const selection = event.channel
-    ? await currentChannelSelection({ teamId, channelId: event.channel })
+    ? await currentChannelSelection({ teamId, channelId: event.channel, projectId })
     : null;
   const conversationPolicy = normalizeConversationPolicy(selection?.conversationPolicy);
 

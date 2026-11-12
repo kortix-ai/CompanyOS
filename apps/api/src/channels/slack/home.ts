@@ -6,15 +6,18 @@ import { publishHomeView } from '../slack-api';
 import { config } from '../../config';
 import { escapeMrkdwn, formatRelativeTime } from './util';
 import { isKortixHostedRepo, repoDisplayLabel, repoPreviewImages } from '../repo-preview';
-import { slackInstalledProjectIds } from './inbound';
+import { linkedSlackProject } from './link';
 import type { HomeProjectRow, HomeRecentRow } from './types';
 import { projectsView } from '../../workspaces/rows';
 
 export async function publishHomeForUser(teamId: string, userId: string): Promise<void> {
-  const projectIds = await slackInstalledProjectIds(teamId);
-  if (projectIds.length === 0) return;
+  // Only the Kortix workspace this Slack workspace is linked to: a detached
+  // or archived one shows nothing here, and its token publishes nothing.
+  const linked = await linkedSlackProject(teamId);
+  if (!linked) return;
+  const projectIds = [linked];
 
-  const token = await loadSlackTokenForProject(projectIds[0]);
+  const token = await loadSlackTokenForProject(linked);
   if (!token) return;
 
   const projectRows = await db
@@ -29,7 +32,7 @@ export async function publishHomeForUser(teamId: string, userId: string): Promis
       threadId: chatThreads.threadId,
     })
     .from(chatThreads)
-    .where(and(eq(chatThreads.platform, 'slack'), eq(chatThreads.platformTeamId, teamId)))
+    .where(and(eq(chatThreads.platform, 'slack'), eq(chatThreads.platformTeamId, teamId), eq(chatThreads.projectId, linked)))
     .orderBy(desc(chatThreads.lastMessageAt))
     .limit(5);
 

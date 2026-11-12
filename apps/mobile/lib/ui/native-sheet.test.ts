@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   detentFraction,
   hasNativeComponent,
+  nativeSheetHiddenBottom,
   nativeSheetMaxHeight,
   resolveNativeDetents,
   supportsNativeSheet,
@@ -150,5 +151,36 @@ describe('resolveNativeDetents', () => {
       detents: [1],
       initialIndex: 0,
     });
+  });
+});
+
+describe('nativeSheetHiddenBottom', () => {
+  // iPhone 17: 874pt window, 62pt top, 34pt bottom → 762pt maximum detent.
+  const maxHeight = nativeSheetMaxHeight(874, 62, 34);
+  const bottomInset = 34;
+
+  test('a box laid out at the full detent hides (1 − fraction) of the detent height below the screen', () => {
+    const boxHeight = maxHeight + bottomInset;
+    expect(nativeSheetHiddenBottom({ boxHeight, fraction: 0.85, maxHeight, bottomInset })).toBe(Math.round(0.15 * maxHeight));
+  });
+
+  test('UIKit measured a slightly different maximum: the hidden part follows the real box', () => {
+    const boxHeight = maxHeight + bottomInset + 6;
+    expect(nativeSheetHiddenBottom({ boxHeight, fraction: 0.85, maxHeight, bottomInset })).toBe(
+      Math.round(0.15 * (boxHeight - bottomInset)),
+    );
+  });
+
+  test('a box UIKit already sized to the detent hides nothing', () => {
+    const boxHeight = 0.85 * maxHeight + bottomInset;
+    expect(nativeSheetHiddenBottom({ boxHeight, fraction: 0.85, maxHeight, bottomInset })).toBe(0);
+  });
+
+  test('the full detent hides nothing', () => {
+    expect(nativeSheetHiddenBottom({ boxHeight: maxHeight + bottomInset, fraction: 1, maxHeight, bottomInset })).toBe(0);
+  });
+
+  test('before the first layout nothing is hidden', () => {
+    expect(nativeSheetHiddenBottom({ boxHeight: 0, fraction: 0.5, maxHeight, bottomInset })).toBe(0);
   });
 });

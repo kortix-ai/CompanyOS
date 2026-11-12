@@ -171,7 +171,11 @@ function CliAuthorizeInner() {
 
   if (userCode) {
     // The URL carries the code, so a link from someone else could too. The
-    // person types the code their own terminal shows; only a match approves.
+    // field starts from the link's code (KRTX-4802, the issue's accepted
+    // anti-phishing tradeoff — see the PR's Security & data review); the
+    // warning copy stays on the page, and only a value matching the URL's
+    // code approves. A person who types their own terminal's code over a
+    // phished link can never approve it.
     const confirmed = typedCode.trim().length > 0 && normalizeCliCode(typedCode) === normalizeCliCode(userCode);
     if (phase === 'success') {
       return (

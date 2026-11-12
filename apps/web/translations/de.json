@@ -340,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Repository-Optionen werden geladen …",
       "managedUnavailable": "Von Kortix verwaltete Repositories sind auf dieser Instanz nicht verfügbar. Ein Plattform-Administrator richtet das in der Admin-Konsole ein.",
+      "githubAfterCreate": "Um dein eigenes GitHub für weitere Workspaces zu nutzen, verbinde es unter Workspace-Einstellungen › Git, sobald dieser Workspace existiert.",
       "installationUnreachable": "Diese GitHub-Verbindung funktioniert nicht mehr. Stellen Sie sie wieder her, um Repositories aufzulisten.",
       "reconnect": "In den Git-Einstellungen neu verbinden",
       "managedImportLabel": "Ein vorhandenes verwaltetes Repository importieren",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "Netzwerkerzwungene Geheimnisse",
           "description": "Steuern Sie, welche Werkzeuge und Ziele Workspace-Geheimnisse empfangen dürfen."
-        },
-        "pooled_provider_secrets": {
-          "name": "Gemeinsam genutzte Anbieter-Schlüssel",
-          "description": "Mitglieder verbinden ihre eigenen ChatGPT-Abos und Anbieter-Schlüssel, teilen sie bei Bedarf und wählen pro Sitzung, welche genutzt werden."
         },
         "reminders": {
           "name": "Schleifen",

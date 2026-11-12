@@ -340,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Caricamento delle opzioni del repository…",
       "managedUnavailable": "I repository gestiti da Kortix non sono disponibili in questa istanza. Un amministratore della piattaforma lo configura nella console di amministrazione.",
+      "githubAfterCreate": "Per usare il tuo GitHub nei prossimi workspace, collegalo in Impostazioni workspace › Git quando questo esiste.",
       "installationUnreachable": "Questa connessione GitHub non funziona più. Ricollegala per elencare i repository.",
       "reconnect": "Ricollega nelle impostazioni Git",
       "managedImportLabel": "Importa un repository gestito esistente",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "Segreti protetti dalla rete",
           "description": "Controlla quali strumenti e destinazioni possono ricevere i segreti del workspace."
-        },
-        "pooled_provider_secrets": {
-          "name": "Segreti del provider condivisi",
-          "description": "I membri collegano i propri abbonamenti ChatGPT e chiavi dei provider, li condividono quando serve e scelgono quali usa ogni sessione."
         },
         "reminders": {
           "name": "Cicli",

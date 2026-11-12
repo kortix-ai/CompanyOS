@@ -340,6 +340,7 @@
       "repositoryLabel": "Dépôt",
       "loadingOptions": "Chargement des options de dépôt…",
       "managedUnavailable": "Les dépôts gérés par Kortix ne sont pas disponibles sur cette instance. Un administrateur de la plateforme les configure dans la console d'administration.",
+      "githubAfterCreate": "Pour utiliser votre propre GitHub pour vos prochains espaces de travail, connectez-le dans Paramètres de l'espace de travail › Git une fois celui-ci créé.",
       "installationUnreachable": "Cette connexion GitHub ne fonctionne plus. Reconnectez-la pour lister les dépôts.",
       "reconnect": "Reconnecter dans les réglages Git",
       "managedImportLabel": "Importer un dépôt géré existant",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "Secrets protégés par le réseau",
           "description": "Contrôlez les outils et destinations autorisés à recevoir les secrets de l’espace de travail."
-        },
-        "pooled_provider_secrets": {
-          "name": "Secrets de fournisseur partagés",
-          "description": "Les membres connectent leurs propres abonnements ChatGPT et clés de fournisseur, les partagent si besoin et choisissent ceux que chaque session utilise."
         },
         "reminders": {
           "name": "Boucles",

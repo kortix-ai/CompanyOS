@@ -340,6 +340,7 @@
       "repositoryLabel": "Repositório",
       "loadingOptions": "A carregar opções de repositório…",
       "managedUnavailable": "Os repositórios geridos pelo Kortix não estão disponíveis nesta instância. Um administrador da plataforma configura isto na consola de administração.",
+      "githubAfterCreate": "Para usar o seu próprio GitHub nos próximos espaços de trabalho, ligue-o em Definições do espaço de trabalho › Git quando este existir.",
       "installationUnreachable": "Esta ligação do GitHub já não funciona. Volte a ligá-la para listar repositórios.",
       "reconnect": "Voltar a ligar nas definições de Git",
       "managedImportLabel": "Importar um repositório gerido existente",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "Segredos protegidos pela rede",
           "description": "Controle quais ferramentas e destinos podem receber os segredos do espaço de trabalho."
-        },
-        "pooled_provider_secrets": {
-          "name": "Segredos de provedor compartilhados",
-          "description": "Os membros conectam as próprias assinaturas do ChatGPT e chaves de provedor, compartilham quando necessário e escolhem quais cada sessão usa."
         },
         "reminders": {
           "name": "Ciclos",

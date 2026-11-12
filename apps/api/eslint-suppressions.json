@@ -2480,11 +2480,6 @@
       "count": 3
     }
   },
-  "src/router/services/reservation.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/routes/platform-endpoints.ts": {
     "no-restricted-syntax": {
       "count": 4
@@ -2730,11 +2725,6 @@
   },
   "src/shared/account-limits.ts": {
     "kortix-api/layers": {
-      "count": 2
-    }
-  },
-  "src/shared/actor-context.ts": {
-    "no-console": {
       "count": 2
     }
   },
@@ -3085,11 +3075,6 @@
   "src/worker/jobs/app-idle-reaper.ts": {
     "no-restricted-properties": {
       "count": 2
-    }
-  },
-  "src/worker/jobs/audit-archive.ts": {
-    "no-console": {
-      "count": 3
     }
   },
   "src/worker/jobs/audit-partition.ts": {

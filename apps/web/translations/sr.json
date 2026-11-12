@@ -340,6 +340,7 @@
       "repositoryLabel": "Repozitorijum",
       "loadingOptions": "Učitavanje opcija repozitorijuma…",
       "managedUnavailable": "Repozitorijumi kojima upravlja Kortix nisu dostupni na ovoj instanci. Administrator platforme to podešava u administratorskoj konzoli.",
+      "githubAfterCreate": "Da biste koristili svoj GitHub za sledeće radne prostore, povežite ga u Podešavanja radnog prostora › Git kada ovaj bude napravljen.",
       "installationUnreachable": "Ova GitHub veza više ne radi. Povežite je ponovo da biste izlistali repozitorijume.",
       "reconnect": "Ponovo poveži u Git podešavanjima",
       "managedImportLabel": "Uvezi postojeći upravljani repozitorijum",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "Тајне заштићене на мрежи",
           "description": "Контролишите који алати и одредишта могу да приме тајне радног простора."
-        },
-        "pooled_provider_secrets": {
-          "name": "Дељени тајни кључеви провајдера",
-          "description": "Чланови повезују своје ChatGPT претплате и кључеве провајдера, деле их по потреби и бирају које користи свака сесија."
         },
         "reminders": {
           "name": "Петље",

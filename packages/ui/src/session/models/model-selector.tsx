@@ -21,7 +21,6 @@ import { useProviderModalStore } from '../../internal/stores/provider-modal-stor
 import {
   type FlatModel,
   type ProviderListResponse,
-  useFeatureFlag,
   useModelAccess,
   useModelStore,
 } from '@kortix/sdk/react';
@@ -401,7 +400,7 @@ export interface ModelSelectorProps {
   projectId?: string;
 
   /**
-   * Offer the member's own ChatGPT subscription (pooled provider secrets) at
+   * Offer the member's own ChatGPT subscription at
    * the end of the list. Only an interactive session can use a personal
    * account; a scheduled or background run cannot, so its pickers leave this off.
    */
@@ -485,14 +484,13 @@ export function ModelSelector({
   } = useModelConnectionGate(models);
 
   const projectId = useSessionIds().projectId ?? null;
-  // Bring your own ChatGPT subscription (pooled provider secrets). Any member
+  // Bring your own ChatGPT subscription. Any member
   // connects their own account from here; Customize is not needed. Hidden when
   // a manager disabled the ChatGPT provider for the project.
   const tPooled = useTranslations('pooledSecrets');
-  const pooledSecrets = useFeatureFlag(projectId, 'pooled_provider_secrets');
   const { ProviderAccountsModal } = useUiComponents();
   const chatGptPossible =
-    !!ProviderAccountsModal && offerProviderAccounts && !!projectId && pooledSecrets.enabled;
+    !!ProviderAccountsModal && offerProviderAccounts && !!projectId;
   const modelAccess = useModelAccess(chatGptPossible ? projectId : null);
   const chatGptAvailable =
     chatGptPossible && !(modelAccess.data?.disabledProviders ?? []).includes('codex');

@@ -340,6 +340,7 @@
       "repositoryLabel": "仓库",
       "loadingOptions": "正在加载仓库选项…",
       "managedUnavailable": "此实例无法使用由 Kortix 托管的仓库。平台管理员可在管理控制台中完成设置。",
+      "githubAfterCreate": "如需在之后的工作区中使用你自己的 GitHub，请在此工作区创建后前往「工作区设置 › Git」连接。",
       "installationUnreachable": "此 GitHub 连接已失效。请重新连接以列出仓库。",
       "reconnect": "在 Git 设置中重新连接",
       "managedImportLabel": "导入现有的托管仓库",
@@ -1266,10 +1267,6 @@
         "secrets_egress": {
           "name": "网络强制保护的机密",
           "description": "控制哪些工具和目标可以接收工作区机密。"
-        },
-        "pooled_provider_secrets": {
-          "name": "共享提供商密钥",
-          "description": "成员连接自己的 ChatGPT 订阅和提供商密钥，按需共享，并为每个会话选择要使用的连接。"
         },
         "reminders": {
           "name": "循环",

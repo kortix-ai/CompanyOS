@@ -62,6 +62,7 @@ import { getSheetBg } from '@/lib/theme-colors';
 import { detentsKey } from '@/lib/ui/sheet-detents';
 import {
   hasNativeComponent,
+  nativeSheetBoxBelowScreen,
   nativeSheetHiddenBottom,
   nativeSheetMaxHeight,
   resolveNativeDetents,
@@ -314,6 +315,8 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
                 maxHeight={maxHeight}
                 bottomInset={insets.bottom}
                 windowHeight={windowHeight}
+                settled={settled}
+                reducedMotion={reducedMotion}
                 style={boxStyle}>
                 {header}
                 {body}
@@ -334,6 +337,12 @@ const styles = { fill: { flex: 1 } } satisfies Record<string, ViewStyle>;
 
 /** 200 ms ease-out: the content's end moving to a new detent (SHEET_MOTION's close length, shortened for a settle). */
 const DETENT_LAYOUT = { duration: 200, update: { type: 'easeOut' as const } };
+
+/** Frames the box waits for its window position to hold still (~1 s at 60 Hz). */
+const MEASURE_MAX_FRAMES = 60;
+
+/** A host view's `measureInWindow` (optional: a test renderer has none). */
+type MeasurableNode = { measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void };
 
 /** The screen's real safe-area insets, carried past a content-sized sheet's bottom-0 override. */
 const ScreenInsetsContext = React.createContext<ReturnType<typeof useSafeAreaInsets> | null>(null);
@@ -356,6 +365,11 @@ let keyboardAvoidingView: typeof import('react-native-keyboard-controller').Keyb
  * much above the box's bottom, so `flex: 1`, a `PinnedBar` and a list's last
  * row end at the visible edge, as in gorhom's `SheetFill`. Without it the
  * picker's Agent · Model tabs sat below the screen on iOS.
+ *
+ * Once the sheet rests, the box measures its frame in the window
+ * (`measureInWindow`, polled each frame until it holds still) and the part
+ * below the screen replaces the estimate (`nativeSheetBoxBelowScreen`). A
+ * detent change drops the measurement until the sheet rests again.
  */
 function SheetBox({
   fit,
@@ -364,6 +378,8 @@ function SheetBox({
   maxHeight,
   bottomInset,
   windowHeight,
+  settled,
+  reducedMotion,
   style,
   children,
 }: {
@@ -374,17 +390,63 @@ function SheetBox({
   maxHeight: number;
   bottomInset: number;
   windowHeight: number;
+  /** The sheet finished presenting (`onDidAppear`): its frame can be measured. */
+  settled: boolean;
+  reducedMotion: boolean;
   style: ViewStyle;
   children: React.ReactNode;
 }) {
   const [boxHeight, setBoxHeight] = React.useState<number | null>(null);
+  /** The content view: its top is the box's top (the box has no padding). */
+  const contentRef = React.useRef<React.ComponentRef<typeof RN.View> | null>(null);
+  /** The measured part below the screen, for the detent `fraction` it was taken at. */
+  const [measured, setMeasured] = React.useState<{ fraction: number; below: number } | null>(null);
+  const estimate = nativeSheetHiddenBottom({ boxHeight: boxHeight ?? 0, fraction, maxHeight, bottomInset });
+  const hidden = measured && measured.fraction === fraction ? measured.below : estimate;
+  const hiddenRef = React.useRef(hidden);
+  hiddenRef.current = hidden;
+  const reducedRef = React.useRef(reducedMotion);
+  reducedRef.current = reducedMotion;
+
+  React.useEffect(() => {
+    const node = contentRef.current as MeasurableNode | null;
+    const measureInWindow = node?.measureInWindow?.bind(node);
+    if (fit || !settled || boxHeight === null || !measureInWindow) return;
+    const raf = globalThis.requestAnimationFrame;
+    const cancel = globalThis.cancelAnimationFrame;
+    let live = true;
+    let handle: number | undefined;
+    let frames = 0;
+    let still = 0;
+    let lastY = Number.NaN;
+    const tick = () => {
+      measureInWindow((_x, y) => {
+        if (!live) return;
+        still = Math.abs(y - lastY) < 0.5 ? still + 1 : 0;
+        lastY = y;
+        frames += 1;
+        if (still < 2 && frames < MEASURE_MAX_FRAMES && raf) {
+          handle = raf(tick);
+          return;
+        }
+        const below = nativeSheetBoxBelowScreen({ y, height: boxHeight, windowHeight });
+        if (below !== hiddenRef.current && !reducedRef.current) RN.LayoutAnimation?.configureNext(DETENT_LAYOUT);
+        setMeasured({ fraction, below });
+      });
+    };
+    tick();
+    return () => {
+      live = false;
+      if (handle !== undefined) cancel?.(handle);
+    };
+  }, [fit, settled, fraction, boxHeight, windowHeight]);
+
   // One element type per sheet (a detent change must not remount the form):
   // a fixed-detent sheet always renders the avoider and switches it with `enabled`.
   if (fit) return <RN.View style={style}>{children}</RN.View>;
   keyboardAvoidingView ??= (require('react-native-keyboard-controller') as typeof import('react-native-keyboard-controller'))
     .KeyboardAvoidingView;
   const Avoiding = keyboardAvoidingView;
-  const hidden = nativeSheetHiddenBottom({ boxHeight: boxHeight ?? 0, fraction, maxHeight, bottomInset });
   return (
     <Avoiding
       behavior="padding"
@@ -392,7 +454,9 @@ function SheetBox({
       keyboardVerticalOffset={boxHeight === null ? 0 : Math.max(0, windowHeight - boxHeight)}
       onLayout={(e) => setBoxHeight(e.nativeEvent.layout.height)}
       style={style}>
-      <RN.View style={[styles.fill, { marginBottom: hidden }]}>{children}</RN.View>
+      <RN.View ref={contentRef} style={[styles.fill, { marginBottom: hidden }]}>
+        {children}
+      </RN.View>
     </Avoiding>
   );
 }

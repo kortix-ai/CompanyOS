@@ -289,6 +289,7 @@ const catalog = {
       "repositoryLabel": "Repository",
       "loadingOptions": "Loading repository options…",
       "managedUnavailable": "Kortix-managed repositories are not available on this instance. A platform admin sets this up in the admin console.",
+      "githubAfterCreate": "To use your own GitHub for later workspaces, connect it in Workspace settings › Git once this one exists.",
       "installationUnreachable": "This GitHub connection no longer works. Reconnect it to list repositories.",
       "reconnect": "Reconnect in Git settings",
       "managedImportLabel": "Import an existing managed repository",
@@ -795,10 +796,6 @@ const catalog = {
         "secrets_egress": {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
-        },
-        "pooled_provider_secrets": {
-          "name": "Pooled Provider Secrets",
-          "description": "Members connect their own ChatGPT subscriptions and provider keys, share them when needed, and choose which ones each session uses."
         },
         "reminders": {
           "name": "Loops",

@@ -1902,16 +1902,18 @@ export function ReviewCenter({
               aria-pressed={!selected && selectedAskId === ask.id}
               className={cn(
                 'h-auto w-full justify-start gap-2 px-2.5 py-3 text-left whitespace-normal',
-                !selected && selectedAskId === ask.id && 'bg-hover',
+                !selected && selectedAskId === ask.id && 'bg-active',
               )}
               onClick={() => {
                 setSelectedId(null);
                 onSelectAsk?.(ask.id);
               }}
             >
-              <Chats className="text-muted-foreground size-4 shrink-0" />
+              <span className="flex size-8 shrink-0 items-center justify-center">
+                <Chats className="text-muted-foreground size-4" />
+              </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{ask.title}</span>
+                <span className="line-clamp-2 text-sm font-medium">{ask.title}</span>
                 {ask.session_title ? <span className="text-muted-foreground block truncate text-xs">{ask.session_title}</span> : null}
               </span>
             </Button>

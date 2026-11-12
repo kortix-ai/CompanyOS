@@ -52,7 +52,7 @@ import {
   isApprovalExpiredError,
   itemDeepLink,
 } from '../../../workspace/review/review-actions';
-import { AskDeck, DECK_KINDS } from '../../../session/prompts/ask-deck';
+import { AskDeck, DECK_KINDS, deckOrder } from '../../../session/prompts/ask-deck';
 import { ReviewCenter } from '../../../workspace/review/review-center';
 import { REVIEW_VERDICT_ANNOUNCED } from '../../../workspace/review/review-reducer';
 
@@ -85,7 +85,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   const [selectedAskId, setSelectedAskId] = useState<string | null>(null);
   const [currentAskId, setCurrentAskId] = useState<string | null>(null);
   const [hiddenAskIds, setHiddenAskIds] = useState<ReadonlySet<string>>(() => new Set());
-  const deckAsks = (asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind) && !hiddenAskIds.has(ask.id));
+  const deckAsks = deckOrder((asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind)), [], hiddenAskIds);
   const deckShows =
     asks.isLoading || asks.isError || (asks.data?.asks ?? []).some((ask) => DECK_KINDS.has(ask.kind));
   const qc = useQueryClient();

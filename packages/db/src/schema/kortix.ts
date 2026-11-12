@@ -1366,6 +1366,13 @@ export const accountSecretResources = kortixSchema.table('account_secret_resourc
   /** Who the stored login signs in as, when the provider says: `{ email, plan }`.
    *  Claude's profile API fills it on a usage refresh; a ChatGPT login carries it in its token. */
   providerAccount: jsonb('provider_account'),
+  /** The last check of a provider API key against its provider, run when the
+   *  key is saved or rotated and on request: `verified`, `invalid` (the
+   *  provider refused it) or `unknown` (no clean answer). NULL: never checked. */
+  verifyStatus: varchar('verify_status', { length: 16 }),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  /** The provider's words for `invalid`, or why the check had no answer. */
+  verifyMessage: varchar('verify_message', { length: 500 }),
   createdBy: uuid('created_by').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

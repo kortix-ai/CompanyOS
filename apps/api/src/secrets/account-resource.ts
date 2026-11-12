@@ -117,6 +117,17 @@ export async function clearAccountSecretCooldown(secretId: string, accountId: st
   return cleared.length > 0;
 }
 
+/** Store the outcome of a provider key check on its row (`verify_status`). Never changes the value. */
+export async function recordAccountKeyVerification(
+  secretId: string,
+  accountId: string,
+  result: { status: 'verified' | 'invalid' | 'unknown'; message: string; checkedAt: Date },
+): Promise<void> {
+  await db.update(accountSecretResources)
+    .set({ verifyStatus: result.status, verifyMessage: result.message.slice(0, 500), verifiedAt: result.checkedAt })
+    .where(and(eq(accountSecretResources.secretId, secretId), eq(accountSecretResources.accountId, accountId)));
+}
+
 /** Provider names visible to a member for model discovery. Never reads secret values. */
 export function secretUsableInProject(row: { projectId: string | null; accessMode: string }, projectId: string, granted: boolean): boolean {
   return (row.projectId === null || row.projectId === projectId) && (row.accessMode === 'project' || granted);

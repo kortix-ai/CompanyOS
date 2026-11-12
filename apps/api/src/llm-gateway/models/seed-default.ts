@@ -25,7 +25,10 @@ import { platformDefaultModelId } from './served-managed-models';
 //   3. no model of the workspace's own (a ChatGPT login, another provider
 //      key, a Claude account) already serves a shared session;
 //   4. the provider's flagship serves EVERY session of the workspace: a key
-//      only its owner may use is not a workspace default.
+//      only its owner may use is not a workspace default;
+//   5. the key passed its provider check (`keyCheck`, `provider-verify.ts`)
+//      wherever the writer runs one: a refused or unchecked key never becomes
+//      the default (a fake Groq key once failed every new session with 401).
 // Idempotent: a concurrent save never overwrites (onlyIfAbsent).
 
 export async function seedProjectDefaultModelOnConnect(params: {
@@ -33,8 +36,11 @@ export async function seedProjectDefaultModelOnConnect(params: {
   accountId: string;
   userId: string;
   secretName: string;
+  /** The saved key's provider check; omitted where the writer runs none. */
+  keyCheck?: 'verified' | 'invalid' | 'unknown';
 }): Promise<void> {
   try {
+    if (params.keyCheck !== undefined && params.keyCheck !== 'verified') return;
     const flagshipRef = flagshipRefForEnvVar(params.secretName);
     if (!flagshipRef) return; // not a known provider credential (e.g. codex auth)
 

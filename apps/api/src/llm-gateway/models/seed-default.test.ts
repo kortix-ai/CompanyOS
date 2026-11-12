@@ -113,6 +113,15 @@ describe('seedProjectDefaultModelOnConnect', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  test('a key its provider refused, or that could not be checked, never becomes the default', async () => {
+    for (const keyCheck of ['invalid', 'unknown'] as const) {
+      await seedProjectDefaultModelOnConnect({ ...params, keyCheck });
+    }
+    expect(upsert).not.toHaveBeenCalled();
+    await seedProjectDefaultModelOnConnect({ ...params, keyCheck: 'verified' });
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
+
   test('skips when the flagship is not servable', async () => {
     servable = false;
     await seedProjectDefaultModelOnConnect(params);

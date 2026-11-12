@@ -67,7 +67,10 @@ Subcommands:
                                     keeps it to you. --label names it
                                     (default "<Provider> key"). Your key
                                     with the same label gets the new value
-                                    and keeps its access.
+                                    and keeps its access. Kortix checks
+                                    the key with one small request to the
+                                    provider and says if it was refused;
+                                    a refused key stays saved.
                                     Provider → env-var mapping below.
                                     With no <key>, reads from stdin.
                                     bedrock also needs --region <region>;
@@ -223,7 +226,7 @@ const LABEL_MAX = 100;
 /** A provider key or login as `GET /workspaces/:id/secret-resources` lists it (never its value). */
 type NamedAccount = Pick<
   AccountSecretResource,
-  'secret_id' | 'label' | 'provider_id' | 'name' | 'access_mode' | 'created_by' | 'granted_user_ids'
+  'secret_id' | 'label' | 'provider_id' | 'name' | 'access_mode' | 'created_by' | 'granted_user_ids' | 'verification'
 >;
 
 interface NamedAccounts {
@@ -964,10 +967,22 @@ async function saveProviderKey(ctx: ProjectCtx, named: NamedAccounts, input: Pro
       ? 'Only you can use it.'
       : `Shared with ${accessText(saved, named.viewerId)}.`;
   const others = mine.filter((a) => a.secret_id !== saved.secret_id);
+  // The API checked the key with one cheap call to the provider. A refused key
+  // stays saved: the line says what the provider said.
+  const check = saved.verification;
+  const checked = !check
+    ? ''
+    : check.status === 'verified'
+      ? `${status.ok(`${input.provider} accepted the key.`)}\n`
+      : check.status === 'invalid'
+        ? `${status.warn(`${input.provider} refused the key: ${check.message}`)}\n` +
+          `  ${C.dim}Replace it with: printf %s "$KEY" | kortix providers set ${input.provider}${input.label ? ` --label ${quoted(input.label)}` : ''}${C.reset}\n`
+        : `${status.info(`Not verified: ${check.message}`)}\n`;
   process.stdout.write(
     `\n${status.ok(`${existing ? 'Replaced the value of' : 'Saved'} ${C.bold}${quoted(saved.label)}${C.reset} (${input.envVar}) for ${C.bold}${input.provider}${C.reset}`)}\n` +
       `  ${C.dim}${who} Listed in the web under Models → Providers.${C.reset}\n` +
       `  ${C.dim}The LLM gateway uses it; the key never enters a sandbox.${C.reset}\n` +
+      checked +
       (!existing && others.length
         ? `  ${C.dim}Your other ${input.provider} key${others.length === 1 ? '' : 's'}: ${others.map((a) => quoted(a.label)).join(', ')}. ` +
           `To replace one, pass its --label.${C.reset}\n`

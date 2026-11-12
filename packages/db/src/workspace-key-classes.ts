@@ -150,6 +150,9 @@ export const WORKSPACE_KEY_CLASSES = {
   ],
   ledger: [
     'audit_activity_daily',
+    // The audit of what moved at boot (dev, 2026-11-12): a completed ops
+    // migration run record, never rewritten.
+    'llm_credential_backfill',
     'audit_events',
     'claude_subscription_login_flows',
     'gateway_request_logs',
@@ -164,6 +167,9 @@ export const WORKSPACE_KEY_CLASSES = {
   project_only: [
     // A goal's event log carries project_id only (dev, 2026-11-06).
     'project_goal_events',
+    // The audit of what moved at boot for non-LLM legacy objects
+    // (dev, 2026-11-12): project-scoped history, no account copy.
+    'legacy_credential_backfill',
     'artifact_comment_screenshot_objects',
     'artifact_comment_threads',
     'artifact_events',

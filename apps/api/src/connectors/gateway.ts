@@ -1722,12 +1722,19 @@ async function runConnectorAction(
       ...(credentialRejected ? { error_code: CREDENTIAL_REJECTED } : {}),
       reason: reason.slice(0, 500),
     });
-    const message = `[connector] ${fullPath} failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
-    if (connector.provider === 'composio' && result.status === 400) logger.debug(message);
-    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message);
+    // The message carries no per-call identifier: the sweep's `infra:log` key
+    // hashes the normalized message, so an action path in the text split one
+    // provider-side failure class (a Composio-edge WAF block) into one key —
+    // and one Linear issue — per action variant (KRTX-4512/KRTX-4722/KRTX-4759).
+    // The path rides in the `connector_action` field instead, still queryable
+    // in Better Stack (`JSONExtractString(raw,'connector_action')`).
+    const message = `[connector] call failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
+    const logContext = { connector_action: fullPath };
+    if (connector.provider === 'composio' && result.status === 400) logger.debug(message, logContext);
+    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message, logContext);
     // A suppressed repeat still lands at debug: prod (LOG_LEVEL=info) never
     // ships it, a developer debugging the retry path still sees every failure.
-    else logger.debug(message);
+    else logger.debug(message, logContext);
     return {
       status: 'error',
       reason,

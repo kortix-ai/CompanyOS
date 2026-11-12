@@ -174,7 +174,10 @@
     "claudeConnectFailed": "Claude 登录未完成。请重试。",
     "claudeReconnectDescription": "重新使用 Claude 登录。账号会保留名称、访问权限和会话选择。",
     "claudeAccountLabelPlaceholder": "例如：我的 Claude 账号",
-    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？"
+    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？",
+    "sharedOnlyYouDescription": "添加 API 密钥、ChatGPT 账户和 Claude 账户。你添加的只有你能使用。工作区管理员可以共享其中一个。选择每个会话使用哪些。",
+    "oauthOnlyYouDescription": "在此工作区使用你的 ChatGPT Plus 或 Pro 套餐。你添加的账户只有你能使用。",
+    "claudeOauthOnlyYouDescription": "在此工作区为 Claude 模型使用你的 Claude Pro 或 Max 套餐。你添加的账户只有你能使用。"
   },
   "secrets": {
     "undecryptable": {
@@ -26819,5 +26822,24 @@
   "gatewayBudgets": {
     "capWorkspace": "为此工作区的网关支出设置上限。",
     "capMember": "为 {who} 的网关支出设置上限。"
+  },
+  "connectSignIn": {
+    "openSignIn": "打开 {app} 登录",
+    "checkingTitle": "正在完成登录",
+    "checkingDescription": "Kortix 正在检查你的 {app} 登录。此页面会自动更新。",
+    "signInUnfinished": "登录未完成",
+    "finishSignIn": "完成登录",
+    "signInFinished": "登录已完成",
+    "cardHeadline": "你的代理需要你登录",
+    "cardTitle": "连接 {app}",
+    "cardShared": "与工作区共享",
+    "cardPrivate": "仅你自己",
+    "signingIn": "在打开的窗口中完成 {app} 登录。",
+    "connectedAs": "已连接为 {account}",
+    "connected": "已连接",
+    "connect": "连接",
+    "cardFailed": "无法连接 {app}。请重试。",
+    "blockedTitle": "打开 {app} 登录",
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
   }
 }

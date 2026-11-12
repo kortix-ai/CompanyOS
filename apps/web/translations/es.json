@@ -174,7 +174,10 @@
     "claudeConnectFailed": "El inicio de sesión con Claude no terminó. Inténtalo de nuevo.",
     "claudeReconnectDescription": "Vuelve a iniciar sesión con Claude. La cuenta conserva su nombre, su acceso y las selecciones de sesión.",
     "claudeAccountLabelPlaceholder": "p. ej., Mi cuenta de Claude",
-    "claudeDeleteAccountConfirmTitle": "¿Eliminar esta cuenta de Claude para todos?"
+    "claudeDeleteAccountConfirmTitle": "¿Eliminar esta cuenta de Claude para todos?",
+    "sharedOnlyYouDescription": "Añade claves de API, cuentas de ChatGPT y cuentas de Claude. Solo tú puedes usar las que añades. Un administrador del espacio de trabajo puede compartir una. Elige cuáles usa cada sesión.",
+    "oauthOnlyYouDescription": "Usa tu plan ChatGPT Plus o Pro en este espacio de trabajo. Solo tú puedes usar las cuentas que añades.",
+    "claudeOauthOnlyYouDescription": "Usa tu plan Claude Pro o Max para los modelos Claude en este espacio de trabajo. Solo tú puedes usar las cuentas que añades."
   },
   "secrets": {
     "undecryptable": {
@@ -26819,5 +26822,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limita el gasto del gateway de este espacio de trabajo.",
     "capMember": "Limita el gasto del gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Abrir el inicio de sesión de {app}",
+    "checkingTitle": "Finalizando el inicio de sesión",
+    "checkingDescription": "Kortix comprueba tu inicio de sesión en {app}. Esta página se actualiza sola.",
+    "signInUnfinished": "Inicio de sesión sin terminar",
+    "finishSignIn": "Terminar inicio de sesión",
+    "signInFinished": "Inicio de sesión terminado",
+    "cardHeadline": "Tu agente necesita que inicies sesión",
+    "cardTitle": "Conectar {app}",
+    "cardShared": "Compartida con el espacio de trabajo",
+    "cardPrivate": "Solo tú",
+    "signingIn": "Termina de iniciar sesión en {app} en la ventana que se abrió.",
+    "connectedAs": "Conectado como {account}",
+    "connected": "Conectado",
+    "connect": "Conectar",
+    "cardFailed": "No se pudo conectar {app}. Inténtalo de nuevo.",
+    "blockedTitle": "Abre {app} para iniciar sesión",
+    "blockedDescription": "Tu navegador bloqueó la ventana de inicio de sesión. Ábrela con el botón de abajo. Esta página se actualiza sola."
   }
 }

@@ -182,7 +182,10 @@
     "claudeConnectFailed": "Die Claude-Anmeldung wurde nicht abgeschlossen. Versuche es erneut.",
     "claudeReconnectDescription": "Melde dich erneut mit Claude an. Das Konto behält Namen, Zugriff und Sitzungsauswahl.",
     "claudeAccountLabelPlaceholder": "z. B. Mein Claude-Konto",
-    "claudeDeleteAccountConfirmTitle": "Dieses Claude-Konto für alle löschen?"
+    "claudeDeleteAccountConfirmTitle": "Dieses Claude-Konto für alle löschen?",
+    "sharedOnlyYouDescription": "Füge API-Schlüssel, ChatGPT-Konten und Claude-Konten hinzu. Nur du kannst die verwenden, die du hinzufügst. Ein Workspace-Manager kann eines teilen. Wähle, welche jede Sitzung verwendet.",
+    "oauthOnlyYouDescription": "Nutze deinen ChatGPT-Plus- oder -Pro-Plan in diesem Workspace. Nur du kannst die Konten verwenden, die du hinzufügst.",
+    "claudeOauthOnlyYouDescription": "Nutze deinen Claude-Pro- oder -Max-Plan für Claude-Modelle in diesem Workspace. Nur du kannst die Konten verwenden, die du hinzufügst."
   },
   "secrets": {
     "undecryptable": {
@@ -23721,7 +23724,13 @@
   },
   "triggerAutoPause": {
     "title": "Automatisch pausiert",
-    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort."
+    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort.",
+    "billingTitle": "Pausiert: kein Guthaben",
+    "billingDescription": "Keine Ausführung kann bezahlt werden, deshalb startet er keine mehr. Er setzt sich einige Minuten nach dem Aufladen des Guthabens selbst fort.",
+    "modelTitle": "Pausiert: kein Modell verfügbar",
+    "modelDescription": "Automationen nutzen nur Modellschlüssel und Konten, die mit dem ganzen Workspace geteilt sind, und keiner ist nutzbar. Er setzt sich einige Minuten, nachdem du unter Modelle einen hinzufügst, selbst fort.",
+    "listBilling": "Kein Guthaben",
+    "listModel": "Kein Modell"
   },
   "featureGate": {
     "enable": "{name} aktivieren",
@@ -26821,5 +26830,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Begrenze die Gateway-Ausgaben für diesen Workspace.",
     "capMember": "Begrenze die Gateway-Ausgaben für {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "{app}-Anmeldung öffnen",
+    "checkingTitle": "Anmeldung wird abgeschlossen",
+    "checkingDescription": "Kortix prüft deine {app}-Anmeldung. Diese Seite aktualisiert sich selbst.",
+    "signInUnfinished": "Anmeldung nicht abgeschlossen",
+    "finishSignIn": "Anmeldung abschließen",
+    "signInFinished": "Anmeldung abgeschlossen",
+    "cardHeadline": "Dein Agent braucht deine Anmeldung",
+    "cardTitle": "{app} verbinden",
+    "cardShared": "Mit dem Workspace geteilt",
+    "cardPrivate": "Nur du",
+    "signingIn": "Schließe die Anmeldung bei {app} im geöffneten Fenster ab.",
+    "connectedAs": "Verbunden als {account}",
+    "connected": "Verbunden",
+    "connect": "Verbinden",
+    "cardFailed": "{app} konnte nicht verbunden werden. Versuche es erneut.",
+    "blockedTitle": "{app} zur Anmeldung öffnen",
+    "blockedDescription": "Dein Browser hat das Anmeldefenster blockiert. Öffne es mit der Schaltfläche unten. Diese Seite aktualisiert sich selbst."
   }
 }

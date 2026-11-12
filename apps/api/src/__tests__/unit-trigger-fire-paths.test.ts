@@ -367,6 +367,16 @@ mock.module('../platform/services/provider-balancer', () => ({
 // than served by the db shim: the gate's contract is the catalog's `enabled`
 // stamps, not the read models beneath them.
 const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+// The fire's model gate also asks for a Claude subscription account
+// (trigger-model-gate.ts). No trigger here has one, and the hermetic db shim
+// cannot run that query.
+const realClaudeAccounts = await import('../claude-subscription/accounts');
+mock.module('../claude-subscription/accounts', () => ({
+  ...realClaudeAccounts,
+  hasClaudeCredential: async () => false,
+  countUsableClaudeAccounts: async () => 0,
+}));
+
 mock.module('../llm-gateway/models/servable-catalog', () => ({
   ...realServableCatalog,
   servableProjectCatalog: async (input: Record<string, unknown>) => {

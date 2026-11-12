@@ -1,6 +1,7 @@
 import type { ProjectTrigger } from '@kortix/sdk';
 import { describe, expect, test } from 'bun:test';
 
+import { createTranslator, defaultUiMessages } from '../../../i18n';
 import { testUiTranslator } from '../../../test-utils/intl';
 
 import { lastRunLabel, nextRunIn } from '../../../internal/lib/trigger-clock';
@@ -49,6 +50,19 @@ describe('nextRunLabel (C09 trailing, line one)', () => {
     expect(nextRunLabel({ ...cron(new Date(2026, 9, 19, 9, 0)), ...autoPaused }, t, 'en', now)).toBe('Paused');
     expect(nextRunLabel({ type: 'webhook', enabled: true, next_fire_at: null, ...autoPaused }, t, 'en', now)).toBe('Paused');
     expect(nextRunLabel(cron(null), t, 'en', now)).toBe('—');
+  });
+  test('a pause the account state caused names its cause; a plain pause and an off trigger still read Paused', () => {
+    const tAutoPause = createTranslator({ locale: 'en', messages: defaultUiMessages, namespace: 'triggerAutoPause' });
+    const next = new Date(2026, 9, 19, 9, 0);
+    const paused = (code: 'billing' | 'no_usable_model' | null) => ({
+      ...cron(next),
+      auto_paused_at: '2026-10-19T08:00:00.000Z',
+      auto_paused_code: code,
+    });
+    expect(nextRunLabel(paused('billing'), t, 'en', now, tAutoPause)).toBe('No credits');
+    expect(nextRunLabel(paused('no_usable_model'), t, 'en', now, tAutoPause)).toBe('No model');
+    expect(nextRunLabel(paused(null), t, 'en', now, tAutoPause)).toBe('Paused');
+    expect(nextRunLabel({ ...paused('billing'), enabled: false }, t, 'en', now, tAutoPause)).toBe('Paused');
   });
 });
 

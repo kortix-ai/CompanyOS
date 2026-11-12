@@ -178,7 +178,10 @@ const catalog = {
     "claudeConnectFailed": "The Claude sign-in did not finish. Try again.",
     "claudeReconnectDescription": "Sign in with Claude again. The account keeps its name, access, and session selections.",
     "claudeAccountLabelPlaceholder": "e.g. My Claude account",
-    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?"
+    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?",
+    "sharedOnlyYouDescription": "Add API keys, ChatGPT accounts and Claude accounts. Only you can use the ones you add. A workspace manager can share one. Choose which ones each session uses.",
+    "oauthOnlyYouDescription": "Use your ChatGPT Plus or Pro plan in this workspace. Only you can use the accounts you add.",
+    "claudeOauthOnlyYouDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. Only you can use the accounts you add."
   },
   "secrets": {
     "undecryptable": {
@@ -7859,7 +7862,13 @@ const catalog = {
   },
   "triggerAutoPause": {
     "title": "Paused automatically",
-    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it."
+    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it.",
+    "billingTitle": "Paused: out of credits",
+    "billingDescription": "No run can be paid for, so it stopped starting runs. It resumes by itself a few minutes after the wallet is topped up.",
+    "modelTitle": "Paused: no model to run on",
+    "modelDescription": "Automations use only model keys and accounts shared with the whole workspace, and none is usable. It resumes by itself a few minutes after you add one in Models.",
+    "listBilling": "No credits",
+    "listModel": "No model"
   },
   "featureGate": {
     "enable": "Enable {name}",
@@ -10091,6 +10100,25 @@ const catalog = {
   "gatewayBudgets": {
     "capWorkspace": "Cap gateway spend for this workspace.",
     "capMember": "Cap gateway spend for {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Open {app} sign-in",
+    "checkingTitle": "Finishing sign-in",
+    "checkingDescription": "Kortix checks your {app} sign-in. This page updates by itself.",
+    "signInUnfinished": "Sign-in not finished",
+    "finishSignIn": "Finish sign-in",
+    "signInFinished": "Sign-in finished",
+    "cardHeadline": "Your agent needs you to sign in",
+    "cardTitle": "Connect {app}",
+    "cardShared": "Shared with the workspace",
+    "cardPrivate": "Only you",
+    "signingIn": "Finish signing in to {app} in the window that opened.",
+    "connectedAs": "Connected as {account}",
+    "connected": "Connected",
+    "connect": "Connect",
+    "cardFailed": "Could not connect {app}. Try again.",
+    "blockedTitle": "Open {app} to sign in",
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
   }
 };
 

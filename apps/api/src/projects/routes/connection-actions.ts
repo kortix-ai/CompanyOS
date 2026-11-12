@@ -584,7 +584,7 @@ export function registerConnectionActionsRoutes(): void {
               ),
             );
           }
-          return c.json(await finalizeComposioConnect(projectId, connectionId, connection, app));
+          return c.json(await finalizeComposioConnect(projectId, connectionId, connection, app, loaded.userId));
         }
         if (!pipedreamConfigured()) {
           return c.json({ error: 'pipedream not configured' }, 501);

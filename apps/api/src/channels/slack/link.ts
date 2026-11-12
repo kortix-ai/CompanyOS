@@ -93,7 +93,10 @@ async function detach(teamId: string, projectId: string, reason: string): Promis
   // go when their token is this Slack workspace's. Slack says whose it is
   // (`auth.test`), never a secret a member can write. When Slack does not
   // answer, the newest install decides: it wrote the token, as far as the rows
-  // know, and a wrong guess only asks for a reinstall.
+  // know. A wrong guess deletes the other Slack workspace's token, and its
+  // admin reinstalls. Keeping it instead could leave this Slack workspace's
+  // token behind, and the connector would then post here under the other
+  // workspace's link.
   const tokenTeam = await slackTokenTeam(projectId);
   const [newest] = await db
     .select({ teamId: chatInstalls.platformTeamId })
@@ -105,8 +108,13 @@ async function detach(teamId: string, projectId: string, reason: string): Promis
     .delete(chatInstalls)
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId), eq(chatInstalls.projectId, projectId)));
   if ((tokenTeam ?? newest?.teamId) === teamId) {
+    const [ownApp] = await db
+      .select({ installId: chatInstalls.installId })
+      .from(chatInstalls)
+      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.projectId, projectId), eq(chatInstalls.ownApp, true)))
+      .limit(1);
     const { deleteSlackSecrets } = await import('./installs');
-    await deleteSlackSecrets(projectId);
+    await deleteSlackSecrets(projectId, { keepSigningSecret: Boolean(ownApp) });
   }
   await db
     .delete(chatChannelBindings)

@@ -165,6 +165,30 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await tokenSecret()).toEqual([]);
   });
 
+  test("a detach of the shared app keeps the signing secret of the Kortix workspace's own app in another Slack workspace", async () => {
+    const x = team('OWNAPPX');
+    const y = team('SHAREDY');
+    const secret = (name: string) =>
+      db
+        .select({ name: projectSecrets.name })
+        .from(projectSecrets)
+        .where(and(eq(projectSecrets.projectId, byo.project_id), eq(projectSecrets.name, name)));
+    await saveSlackInstall({ projectId: byo.project_id, teamId: x, teamName: 'synthetic', botToken: 'xoxb-own', signingSecret: 'own', botUserId: 'U0OWN' });
+    await shared(byo.project_id, y);
+    await moveSlackLink(y, byo.project_id);
+    // Slack says the stored token is y's: the shared install wrote it last.
+    globalThis.fetch = (async (input: string | URL) =>
+      String(input).endsWith('/auth.test')
+        ? Response.json({ ok: true, team_id: y })
+        : Response.json({ ok: false, error: 'not_faked' })) as unknown as typeof fetch;
+    await shared(b.project_id, y);
+    await moveSlackLink(y, b.project_id);
+    expect(await installsOf(y)).toEqual([b.project_id]);
+    expect(await installsOf(x)).toEqual([byo.project_id]);
+    expect(await secret('SLACK_BOT_TOKEN')).toEqual([]);
+    expect(await secret('SLACK_SIGNING_SECRET')).toHaveLength(1);
+  });
+
   test('several installs from before the move heal on first use: the one Slack used stays, the others are detached once', async () => {
     const ws = team('HEAL');
     await db.insert(chatInstalls).values([

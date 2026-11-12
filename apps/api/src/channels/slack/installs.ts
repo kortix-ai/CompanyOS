@@ -78,8 +78,13 @@ export async function saveSlackInstall(input: SlackInstallInput): Promise<SlackI
 }
 
 /** The Kortix workspace's Slack secrets (bot token, team, bot ids), without its install rows. */
-export async function deleteSlackSecrets(projectId: string): Promise<void> {
-  await deleteProjectSecrets(projectId, SLACK_KEYS);
+/**
+ * Delete a Kortix workspace's Slack secrets. `keepSigningSecret`: its own
+ * Slack app is still installed in another Slack workspace, and only that
+ * app's install writes `SLACK_SIGNING_SECRET`.
+ */
+export async function deleteSlackSecrets(projectId: string, opts: { keepSigningSecret?: boolean } = {}): Promise<void> {
+  await deleteProjectSecrets(projectId, opts.keepSigningSecret ? SLACK_KEYS.filter((k) => k !== SLACK_SIGNING_SECRET) : SLACK_KEYS);
 }
 
 export async function deleteSlackInstall(projectId: string): Promise<void> {

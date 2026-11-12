@@ -958,6 +958,92 @@ flow('SEC-POOL-8', {
   }
 }));
 
+flow('SEC-POOL-9', {
+  domain: 'secrets', requires: ['database'],
+  routes: [
+    'POST /v1/accounts/:accountId/secret-resources',
+    'GET /v1/accounts/:accountId/secret-resources',
+    'POST /v1/accounts/:accountId/secret-resources/:secretId/verify',
+    'PUT /v1/accounts/:accountId/secret-resources/:secretId/value',
+    'DELETE /v1/accounts/:accountId/secret-resources/:secretId',
+    'POST /v1/workspaces/:projectId/gateway/keys',
+    'DELETE /v1/workspaces/:projectId/gateway/keys/:keyId',
+    'POST /v1/llm/chat/completions',
+  ],
+}, async (ctx) => {
+  const team = await ctx.fixtures.team();
+  const project = await team.project({ seed: true, allowAllSecrets: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: project.id };
+  const resourceParams = { accountId: team.id };
+  (await owner.patch('/v1/projects/:projectId/features', { feature: 'pooled_provider_secrets', enabled: true }, { params })).status(200);
+  type Verification = { status: 'verified' | 'invalid' | 'unknown'; message: string; checked_at: string } | null;
+  // Not a real key: Anthropic refuses it. Without a network the check has no
+  // answer (`unknown`); it is never `verified`, and the save never fails.
+  const created = await owner.post('/v1/accounts/:accountId/secret-resources', {
+    project_id: project.id, access_mode: 'project', label: 'Checked key', provider_id: 'anthropic',
+    name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key', consumer: 'llm_gateway', strategy: 'broker',
+  }, { params: resourceParams });
+  const secretId = created.json<{ secret_id: string }>().secret_id;
+  try {
+    let first: NonNullable<Verification>;
+    await ctx.step('saving a key that the provider refuses: 201, and the row says the provider refused it', async () => {
+      created.status(201);
+      const verification = created.json<{ verification: Verification }>().verification;
+      if (!verification || !['invalid', 'unknown'].includes(verification.status) || !verification.message || !verification.checked_at) {
+        throw new Error(`the saved key carries no check: ${created.text().slice(0, 300)}`);
+      }
+      first = verification;
+      const listed = await owner.get('/v1/accounts/:accountId/secret-resources', { params: resourceParams, query: { project_id: project.id } });
+      listed.status(200);
+      const row = listed.json<{ secrets: Array<{ secret_id: string; verification: Verification }> }>().secrets.find((r) => r.secret_id === secretId);
+      if (JSON.stringify(row?.verification) !== JSON.stringify(verification)) {
+        throw new Error(`the list does not carry the check: ${JSON.stringify(row?.verification)}`);
+      }
+    });
+    await ctx.step('"Check again" runs the check again and records a new time', async () => {
+      const again = await owner.post('/v1/accounts/:accountId/secret-resources/:secretId/verify', {}, { params: { ...resourceParams, secretId } });
+      again.status(200);
+      const verification = again.json<{ verification: Verification }>().verification;
+      if (!verification || verification.status === 'verified' || verification.checked_at < first.checked_at) {
+        throw new Error(`the check did not run again: ${again.text().slice(0, 300)}`);
+      }
+    });
+    await ctx.step('rotating the value checks the new value', async () => {
+      const rotated = await owner.put('/v1/accounts/:accountId/secret-resources/:secretId/value', { value: 'sk-ant-api03-kortix-e2e-still-not-a-key' }, {
+        params: { ...resourceParams, secretId },
+      });
+      rotated.status(200);
+      if (!rotated.json<{ verification: Verification }>().verification) throw new Error(`rotate ran no check: ${rotated.text().slice(0, 300)}`);
+    });
+    await ctx.step('a model call on the refused key names provider_key_rejected and the provider', async () => {
+      const gatewayKey = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: ctx.fixtures.name('gw') }, { params });
+      gatewayKey.status(200);
+      const { key_id: keyId, secret_key: gatewaySecret } = gatewayKey.json<{ key_id: string; secret_key: string }>();
+      try {
+        const call = await ctx.client.withBearer(gatewaySecret, 'GATEWAY_KEY').post('/v1/llm/chat/completions', {
+          model: 'anthropic/claude-sonnet-4.6', max_tokens: 8, messages: [{ role: 'user', content: 'Reply with: pong' }],
+        });
+        // 401 when Anthropic answered; a network failure is a 5xx with its own code.
+        if (call.statusCode === 401) {
+          call.body().has('$.error.code', 'provider_key_rejected').has('$.error.provider', 'anthropic');
+        } else if (call.statusCode < 500) {
+          throw new Error(`the refused key answered ${call.statusCode}: ${call.text().slice(0, 300)}`);
+        }
+      } finally {
+        (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
+      }
+    });
+    await ctx.step('checking a key that does not exist: 404', async () => {
+      (await owner.post('/v1/accounts/:accountId/secret-resources/:secretId/verify', {}, {
+        params: { ...resourceParams, secretId: '00000000-0000-4000-8000-000000000000' },
+      })).status(404);
+    });
+  } finally {
+    (await owner.del('/v1/accounts/:accountId/secret-resources/:secretId', { params: { ...resourceParams, secretId } })).status([200, 404]);
+  }
+});
+
 flow('SEC-9', {
   domain: 'secrets', requires: ['database'],
   routes: ['POST /v1/accounts/tokens', 'POST /v1/projects/:projectId/secrets', 'GET /v1/projects/:projectId/secrets'],

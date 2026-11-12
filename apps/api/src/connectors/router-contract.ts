@@ -477,11 +477,13 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
     label?: string;
   } | null>;
   /** Connectors this session's agent asked a human to authorize, and whether
-   *  each is connected yet. Drives the in-session Connect button. */
+   *  each is connected yet. Drives the in-session Connect card. `userId` is
+   *  the caller: another member's private account is not listed. */
   listSessionConnectRequests?(
     projectId: string,
     sessionId: string,
-  ): Promise<Array<{ slug: string; app: string; provider: string; connected: boolean }>>;
+    userId: string,
+  ): Promise<SessionConnectRequestRow[]>;
   connectStatus?(): Promise<{ configured: boolean; provider: string | null; providers?: string[] }>;
   /** API/MCP catalogue id by app join key, for the managed listings' `directId`. */
   catalogDirectIds?(): Promise<ReadonlyMap<string, string>>;
@@ -591,4 +593,21 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
     policies: ProjectPolicyView[],
     defaultMode: DefaultMode,
   ): Promise<CrudOutcome>;
+}
+
+/** One account a session's agent asked a person to sign in (`GET .../sessions/:id/connect-requests`). */
+export interface SessionConnectRequestRow {
+  slug: string;
+  /** The connector's display name ("Gmail"). */
+  name: string;
+  app: string;
+  provider: string;
+  connected: boolean;
+  /** The account row the sign-in lands on. */
+  connection_id: string;
+  /** `project`: shared; `member`: the caller's own. */
+  owner_type: string;
+  label: string;
+  /** Who the account was signed in as, once known. */
+  connected_as: string | null;
 }

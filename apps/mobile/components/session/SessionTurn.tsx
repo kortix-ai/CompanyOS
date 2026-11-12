@@ -164,6 +164,8 @@ interface SessionTurnProps {
   changeRequests?: readonly ChangeItem[];
   /** Opens the review sheet for one change request. Must be stable. */
   onOpenChangeRequest?: (id: string) => void;
+  /** A run member's own change requests, by turn id: `changeRequests` above is this turn's. */
+  changeRequestsOf?: (turnId: string) => readonly ChangeItem[] | undefined;
   /**
    * This turn answers an agent run (KRTX-4732): its row reads the run's label and folds the
    * reports and work of the run's turns (`runTurns`, then its own). Every answer of the run stays
@@ -209,6 +211,7 @@ function SessionTurnImpl({
   onScreen = true,
   changeRequests,
   onOpenChangeRequest,
+  changeRequestsOf,
   runLabel,
   runTurns,
   foldStartedWork = false,
@@ -610,7 +613,7 @@ function SessionTurnImpl({
 
   // 6. Change requests — what this turn left behind (web `TurnOutcomes`).
   // Gated on `!working` as on web: an outcome is a settled fact.
-  if (!runMember && !working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
+  if (runMember !== 'work' && !working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
     body.push(<SessionChangeRequests key="change-requests" items={changeRequests} onOpen={onOpenChangeRequest} />);
   }
 
@@ -649,6 +652,8 @@ function SessionTurnImpl({
             key={member.id}
             turn={member}
             runMember={part}
+            changeRequests={part === 'answer' ? changeRequestsOf?.(member.id) : undefined}
+            onOpenChangeRequest={onOpenChangeRequest}
             sessionId={sessionId}
             permissions={permissions}
             pendingQuestions={pendingQuestions}

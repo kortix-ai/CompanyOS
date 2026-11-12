@@ -1156,6 +1156,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => sessionChanges.find((item) => item.id === selectedChangeId) ?? null,
     [sessionChanges, selectedChangeId],
   );
+  // A run's anchor draws its members' change requests too (KRTX-4732).
+  const changeRequestsOf = useCallback((turnId: string) => changesByTurn.get(turnId), [changesByTurn]);
   const openChangeRequest = useCallback((id: string) => {
     setSelectedChangeId(id);
     changeSheetRef.current?.open();
@@ -2059,13 +2061,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
             stoppedBy={stoppedByOf(id)}
             onScreen={isWorkingTurn ? workingTurnOnScreen : true}
             changeRequests={changesByTurn.get(id)}
+            changeRequestsOf={agentRunLayout.propsOf(id).runTurns ? changeRequestsOf : undefined}
             onOpenChangeRequest={openChangeRequest}
           />
           )}
         </View>
       );
     },
-    [agentRunLayout, lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, openChangeRequest, sessionAuthorOf, stoppedByOf],
+    [agentRunLayout, lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, changeRequestsOf, openChangeRequest, sessionAuthorOf, stoppedByOf],
   );
 
   const keyExtractor = useCallback((item: SessionLogTurn) => item.id, []);

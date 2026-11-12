@@ -2836,9 +2836,10 @@ function SessionTurnImpl(props: SessionTurnProps) {
       </div>
     );
   }
-  // ...and its answer, with its error or stop row, under the run row. A silent report draws nothing.
+  // ...and its answer, with its error or stop row and its outcomes, under the run row. A silent
+  // report draws only the outcomes it left (a change request), which hide themselves when none.
   if (props.runMember === 'answer') {
-    if (!turn.response && !turn.error && turn.status !== 'aborted') return null;
+    if (!turn.response && !turn.error && turn.status !== 'aborted') return <TurnOutcomes turnKey={turn.id} />;
     return (
       <div data-testid="agent-run-answer" className="space-y-2.5">
         <GenuiTelemetryContext.Provider value={genuiTelemetry}>

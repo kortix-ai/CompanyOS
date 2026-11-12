@@ -628,7 +628,7 @@ describe('bootstrapLegacyRuntime', () => {
     const script = Buffer.from(calls.execs[0][2].split("'")[3], 'base64').toString('utf8');
     expect(script).toContain("RELAUNCH='next-start'");
     const again = await bootstrapLegacyRuntime(input(calls.patches.at(-1)!, 'daytona'), deps);
-    expect(again.outcome).toBe('staged');
+    expect(again.outcome).toBe('skipped-staged');
     expect(calls.execs).toHaveLength(1);
   });
 

@@ -558,6 +558,8 @@ export type LegacyBootstrapOutcome =
   | 'skipped-unsupported'
   /** The daemon itself says it needs a human (pinned after a rollback). Never repaired, never looped — surfaced instead. */
   | 'skipped-blocked'
+  /** A staged record for this build is already waiting on the provider's next start (Daytona): the script must not run, and the record must not be touched. */
+  | 'skipped-staged'
   | 'staged'
   | 'converged'
   | 'failed';
@@ -830,6 +832,9 @@ export function describeLegacyBootstrapRetry(
 /** Outcomes `finishBootstrap` already logged; every other outcome needs the verdict line. */
 const SCRIPT_RAN_OUTCOMES: ReadonlySet<LegacyBootstrapOutcome> = new Set(['converged', 'failed', 'staged']);
 
+/** Every outcome that reaches the verdict line is a skip; the message drops the redundant `skipped-` prefix. */
+const VERDICT_OUTCOME = (outcome: LegacyBootstrapOutcome): string => outcome.replace(/^skipped-/, '');
+
 /**
  * Decide, and when warranted do, the bootstrap for one sandbox. Pure over
  * `deps`; every side effect is injected so the policy is unit-testable and the
@@ -847,7 +852,7 @@ export async function bootstrapLegacyRuntime(
   // not one `[legacy-bootstrap]` line shipped, and the box recovered on its
   // own — nobody could say why nothing was repaired. Name the verdict.
   if (!SCRIPT_RAN_OUTCOMES.has(result.outcome)) {
-    deps.log(`skipped: ${result.outcome}`, {
+    deps.log(`skipped: ${VERDICT_OUTCOME(result.outcome)}`, {
       sandboxId: input.sandboxId,
       externalId: input.externalId,
       provider: input.provider,
@@ -1122,7 +1127,7 @@ async function checkBootstrapBudget(
     // to redo until a current daemon proves it or the build moves on. A box
     // with no daemon is the exception: nothing will start it again, so
     // "converges at next start" is a promise that can never be kept.
-    return { result: { outcome: 'staged', detail: 'already staged; converges at next start', classification } };
+    return { result: { outcome: 'skipped-staged', detail: 'already staged; converges at next start', classification } };
   }
 
   // Never under a running turn. The daemon's own turn state is the authority —

@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   type ExpectedRunningAssets,
   type LegacyBootstrapDeps,
+  LEGACY_BOOTSTRAP_METADATA_KEY,
   REQUIRED_RUNTIME_CAPABILITIES,
   bootstrapLegacyRuntime,
 } from './legacy-runtime-bootstrap';
@@ -99,8 +100,31 @@ describe('the repair run names its verdict when it never runs the script', () =>
     const r = await bootstrapLegacyRuntime(input(), verdictDeps({ turn: true }, calls, lines));
     expect(r.outcome).toBe('skipped-busy');
     expect(lines).toHaveLength(1);
-    expect(lines[0].message).toBe('skipped: skipped-busy');
+    expect(lines[0].message).toBe('skipped: busy');
     expect(lines[0].context).toMatchObject({ sandboxId: 'sb1', externalId: 'sbx_1', reason: 'test' });
+  });
+
+  test('an already-staged gate ships its own verdict and touches nothing', async () => {
+    const calls: Calls = { execs: [], patches: [] };
+    const lines: Array<{ message: string; context: unknown }> = [];
+    const stagedRecord = {
+      state: 'staged',
+      attempts: 1,
+      manifestBuild: 1788044234,
+      lastAttemptAt: new Date(0).toISOString(),
+    };
+    const r = await bootstrapLegacyRuntime(
+      input({ [LEGACY_BOOTSTRAP_METADATA_KEY]: stagedRecord }),
+      verdictDeps({ health: [LEGACY_HEALTH] }, calls, lines),
+    );
+    expect(r.outcome).toBe('skipped-staged');
+    expect(r.detail).toBe('already staged; converges at next start');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].message).toBe('skipped: staged');
+    expect(lines[0].context).toMatchObject({ detail: r.detail });
+    // The gate runs before the script: nothing claimed, nothing written, nothing executed.
+    expect(calls.execs).toEqual([]);
+    expect(calls.patches).toEqual([]);
   });
 
   test('a provider the control plane cannot ask names that fact', async () => {
@@ -157,7 +181,7 @@ describe('the repair run names its verdict when it never runs the script', () =>
     expect(r.outcome).toBe('skipped-busy');
     // The claim line ('legacy runtime bootstrap starting') stays; the verdict
     // is the only line about the deferral itself.
-    expect(lines.map((l) => l.message).filter((m) => m !== 'legacy runtime bootstrap starting')).toEqual(['skipped: skipped-busy']);
+    expect(lines.map((l) => l.message).filter((m) => m !== 'legacy runtime bootstrap starting')).toEqual(['skipped: busy']);
   });
 
   test('a pinned daemon ships exactly one blocked line', async () => {
@@ -170,7 +194,7 @@ describe('the repair run names its verdict when it never runs the script', () =>
     const r = await bootstrapLegacyRuntime(input(), verdictDeps({ health: [pinned] }, calls, lines));
     expect(r.outcome).toBe('skipped-blocked');
     expect(lines).toHaveLength(1);
-    expect(lines[0].message).toBe('skipped: skipped-blocked');
+    expect(lines[0].message).toBe('skipped: blocked');
     expect(String((lines[0].context as { detail?: string }).detail)).toContain('daemon has latched runtime updates off after a supervisor rollback');
   });
 });

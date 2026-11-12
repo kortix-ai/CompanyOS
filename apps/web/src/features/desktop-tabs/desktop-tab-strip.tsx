@@ -851,9 +851,12 @@ function Label({
   const body = (
     <span
       className={cn(
-        'flex min-w-0 flex-1 items-center gap-1.5',
+        // The hover target is the whole chip, not just its text: full height,
+        // and pulled over the tab's left padding (`-ml-2 pl-2` cancels the
+        // tab's `pl-2`), so a card opens flush with the tab's own left edge.
+        'flex min-w-0 flex-1 items-center gap-1.5 self-stretch',
         // Icon only (pinned, or too narrow for text): centre it in the chip.
-        pinned ? 'justify-center' : '@max-[2.75rem]:justify-center',
+        pinned ? 'justify-center' : '-ml-2 pl-2 @max-[2.75rem]:justify-center',
       )}
     >
       <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
@@ -879,7 +882,7 @@ function Label({
         <HoverCardContent
           side="bottom"
           align="start"
-          sideOffset={8}
+          sideOffset={6}
           className="w-72 overflow-hidden p-0"
         >
           {card}

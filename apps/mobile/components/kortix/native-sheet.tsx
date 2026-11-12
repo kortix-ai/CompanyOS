@@ -138,6 +138,8 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   const [data, setData] = React.useState<unknown>(undefined);
   /** A content-sized sheet's measured body height: null until it has laid out, and it presents only then. */
   const [contentHeight, setContentHeight] = React.useState<number | null>(null);
+  /** The body's latest laid-out height, also while the sheet presents: applied once it rests. */
+  const latestHeightRef = React.useRef<number | null>(null);
   // Set by `onWillAppear`: the sheet reached the screen. A dismiss before it
   // ends the sheet at once (there is no native dismissal to wait for).
   const appearedRef = React.useRef(false);
@@ -194,6 +196,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
       setSettled(false);
       setExpanded(false);
       setContentHeight(null);
+      latestHeightRef.current = null;
     }
     onChangeRef.current?.(-1, 0, 0 as never);
     onDismissRef.current?.();
@@ -282,6 +285,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   const onContentLayout = fit
     ? (event: RN.LayoutChangeEvent) => {
         const height = Math.ceil(event.nativeEvent.layout.height);
+        latestHeightRef.current = height;
         // The first layout is the measurement. After it, only a sheet at rest
         // follows its content: while UIKit presents it the box can lay out at
         // a width that is not yet the sheet's (the host has no size yet).
@@ -323,6 +327,9 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
       }}
       onDidAppear={() => {
         setSettled(true);
+        // A body that changed height while the sheet presented (a list that
+        // loaded) sends no new layout once it rests: apply the latest one.
+        if (fit && latestHeightRef.current !== null) setContentHeight(latestHeightRef.current);
         onChangeRef.current?.(fit ? 0 : initialIndex, 0, 0 as never);
       }}
       onDetentChanged={(event) => {

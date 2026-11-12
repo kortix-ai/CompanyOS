@@ -246,6 +246,18 @@ describe('NativeSheet', () => {
     expect(sheet().props.detents).toEqual([1]);
   });
 
+  test('a height laid out while the sheet presents applies once it rests', () => {
+    mount();
+    call((r) => r.present());
+    layout(280);
+    fire('onWillAppear');
+    // The list loads more rows during the present.
+    layout(420);
+    expect(sheet().props.detents).toEqual([0.4]);
+    fire('onDidAppear');
+    expect(sheet().props.detents).toEqual([0.6]);
+  });
+
   test('a body that never lays out still opens, at the full detent, after 400 ms', async () => {
     mount();
     call((r) => r.present());

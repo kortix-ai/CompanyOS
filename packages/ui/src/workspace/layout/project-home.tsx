@@ -461,7 +461,7 @@ function ProjectHomeView({
     // A file dropped anywhere on the page attaches to the composer, as on a
     // session page.
     <ComposerDropZone className="bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden lg:px-4.5">
-      {firstChat ? null : <ProjectHomeWallpaper />}
+      <ProjectHomeWallpaper />
       <SidebarToggle placement="floating" />
       <AccessRequestsBell
         requests={accessRequests.data?.requests ?? []}

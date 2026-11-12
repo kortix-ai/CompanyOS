@@ -1,10 +1,4 @@
 {
-  "compactHome": {
-    "recentSessions": "Recent sessions",
-    "viewAll": "View all",
-    "loadError": "Could not load recent sessions.",
-    "retry": "Try again"
-  },
   "agentNavPrototype": {
     "variantRail": "Left rail (today)",
     "variantTabs": "Grouped underline tabs",

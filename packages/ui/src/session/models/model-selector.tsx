@@ -13,7 +13,6 @@ import {
   CommandSeparator,
 } from '../../primitives/command';
 import Loading from '../../primitives/loading';
-import { Skeleton } from '../../primitives/skeleton';
 import { MODEL_SELECTOR_PROVIDER_IDS, ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
 import { TRIGGER_CARET_CLASS, triggerVariants } from '../../primitives/trigger-variants';
@@ -516,8 +515,9 @@ export function ModelSelector({
   );
   // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
   const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
-  const triggerLabel = !current && (modelsLoading || entitlementsPending)
-    ? <Skeleton className="h-3.5 w-20 py-0" role="status" aria-label={tModel('loading')} />
+  const triggerLoading = !current && (modelsLoading || entitlementsPending);
+  const triggerLabel = triggerLoading
+    ? <span className="bg-primary/10 inline-block h-3.5 w-20 animate-pulse rounded-md" aria-hidden="true" />
     : displayName;
 
   // A subscription model names the login that pays for it: the picker grows a
@@ -993,6 +993,7 @@ export function ModelSelector({
             <button
               type="button"
               disabled={disabled}
+              aria-label={triggerLoading ? tModel('loading') : undefined}
               className={cn(triggerVariants(), 'h-9 w-full')}
             >
               <span className="truncate">{triggerLabel}</span>
@@ -1001,6 +1002,7 @@ export function ModelSelector({
           ) : (
           <Button
             type="button"
+            aria-label={triggerLoading ? tModel('loading') : undefined}
             variant={triggerVariant}
             size="sm"
             // `min-w-0 shrink`: in a narrow toolbar (a channel's thread panel) the

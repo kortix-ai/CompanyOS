@@ -432,7 +432,6 @@ export function useSessionLogSync(
         // A missed final record converges through the page at turn end (F-012).
         onControl: (frame) => {
           if (endedTurn(frame)) reloadAfterTurnEnd();
-
         },
         onConnectionChange: onReconnect(() => void reload()),
         onRuntimeResync: () => void reload(),

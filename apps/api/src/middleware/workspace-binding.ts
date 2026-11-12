@@ -137,6 +137,9 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
   { pattern: '/v1/me', binding: NONE },
   // Kortix-managed system skills: static template text, identical for everyone.
   ...both('/v1/skills', NONE),
+  // An agent's face is a pure function of the slug (channels/agent-mark-routes.ts):
+  // a static public asset that reads nothing and carries no workspace data.
+  ...both('/v1/agent-marks', NONE),
   // The deploy's own build artifacts (daemon, CLI, managed skills).
   { pattern: '/v1/runtime-assets/*', binding: NONE },
   // `kortix feedback`: one row for the token's own user, nothing read back.

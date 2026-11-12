@@ -1402,7 +1402,7 @@ flow(
         .json<{ triggers: Array<{ slug: string; next_fire_at?: string | null; last_status?: string | null; last_error?: string | null }> }>()
         .triggers.find((t) => t.slug === 'digest');
 
-    await ctx.step('a daily cron trigger lists its next run, within a day of now', async () => {
+    await ctx.step('a daily cron trigger is saved → 201; the local profile serves no model, so it lists model-paused with no next run (TRG-42)', async () => {
       (
         await owner.post(
           '/v1/workspaces/:projectId/triggers',
@@ -1410,11 +1410,10 @@ flow(
           { params },
         )
       ).status(201);
-      const next = Date.parse(String((await digest())?.next_fire_at ?? ''));
-      const now = Date.now();
-      if (!(next > now - 60_000 && next < now + 25 * 60 * 60 * 1000)) {
-        throw new Error(`next_fire_at is ${String((await digest())?.next_fire_at)}`);
-      }
+      // The slot itself (jitter included) is covered by trigger-schedule.test.ts;
+      // a deployed target with a default model lists it here.
+      const t = await digest();
+      if (t?.next_fire_at !== null) throw new Error(`next_fire_at is ${String(t?.next_fire_at)} on a model-paused trigger`);
     });
 
     await ctx.step('a manual fire that fails is recorded on the trigger: last_status failed, with the error', async () => {

@@ -558,10 +558,10 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     hasMore: hasNextPage,
   });
   // Shared and Automated still loading or reading past empty pages: no flower
-  // yet, or it would show and then give way to their header. A first read
-  // paused offline counts as settled: it may wait for a network for good.
+  // yet, or it would show and then give way to their header. A read paused
+  // offline counts as settled: it may wait for a network for good.
   const sideSettled = (query: typeof shared) =>
-    !(query.isPending && query.fetchStatus !== 'paused') && !query.isScanning;
+    query.fetchStatus === 'paused' || (!query.isPending && !query.isScanning);
   const sidesSettled = sideSettled(shared) && sideSettled(automated);
   // The viewer's own list is reading a next page: the footer loader shows.
   const mineLoadingMore = isFetchingNextPage || mineScanning;

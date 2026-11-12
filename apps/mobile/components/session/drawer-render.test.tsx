@@ -510,6 +510,16 @@ describe('ProjectLeftDrawer past page one', () => {
     paged = { me: page([]), others: { ...page([]), hasNextPage: true, isScanning: true }, automated: page([]), pinned: page([]) };
     await mount();
     expect(emptyFlower()).toHaveLength(0);
+    // The scan ends with no row: the flower shows.
+    await act(async () => tree.unmount());
+    paged.others = page([]);
+    await mount();
+    expect(emptyFlower()).toHaveLength(1);
+    // A scan paused offline does not hold it.
+    await act(async () => tree.unmount());
+    paged.others = { ...page([]), hasNextPage: true, isScanning: true, fetchStatus: 'paused' };
+    await mount();
+    expect(emptyFlower()).toHaveLength(1);
   });
 
   test('no own row: an Automated first read paused offline does not hold the flower', async () => {

@@ -666,7 +666,7 @@ const TabItem = memo(function TabItem({
                 className={cn(
                   // `bg-hover` is translucent, so it reads one step above the
                   // tab's own hover fill underneath.
-                  'text-muted-foreground hover:text-foreground hover:bg-hover flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm',
+                  'text-muted-foreground hover:text-foreground hover:bg-hover flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[calc(var(--radius)-6px)]',
                   'duration-fast transition-[opacity,color,background-color] ease-out',
                   // Hidden (not removed) when idle: hover never shifts the title.
                   active ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100',

@@ -2,6 +2,26 @@ import { describe, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+// The home route now carries the landing's signed-in gate
+// (LandingAuthGate), a client component that requires the app's providers.
+// SSR renders the gate's signed-out output (the landing, unchanged); supply
+// the provider boundary the same way `home-auth-redirect.test.tsx` does.
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    supabase: {},
+    bootstrapError: null,
+    retryAuth: () => undefined,
+    signOut: () => Promise.resolve(),
+  }),
+}));
+mock.module('next/navigation', () => ({
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Under bun test there is no react-server bundler condition; neutralize the
 // guard package. The rendered markup below stays the real thing.
 mock.module('server-only', () => ({}));
@@ -25,19 +45,6 @@ mock.module('@/lib/use-cases-source', () => ({
       },
     ],
   },
-}));
-
-// The home route's signed-in guard (`(home)/landing-auth-gate.tsx`) reads the
-// auth provider the root layout mounts and the app router. Supply both
-// boundaries as a signed-out visitor, the landing's audience, so the real gate
-// renders the shipped composition (its redirect is `home-auth-redirect.test.tsx`).
-mock.module('@/features/providers/auth-provider', () => ({
-  useAuth: () => ({ user: null, isLoading: false, supabase: {}, bootstrapError: null, retryAuth: () => undefined }),
-}));
-const realNavigation = await import('next/navigation');
-mock.module('next/navigation', () => ({
-  ...realNavigation,
-  useRouter: () => ({ replace: () => undefined, push: () => undefined, prefetch: () => undefined, back: () => undefined, forward: () => undefined, refresh: () => undefined }),
 }));
 
 // bun hoists static imports above the mocks, so every page loads dynamically.

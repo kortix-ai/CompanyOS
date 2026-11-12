@@ -85,7 +85,7 @@ import {
   prettyFieldLabel,
   providerDisconnectPlan,
 } from '../sections/llm-provider/utils';
-import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { AccountSecretResourcesPanel, useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
 import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDER_BY_ID, type LlmProviderEntry, type LlmProviderModel } from '../../internal/lib/llm-providers';
@@ -899,6 +899,7 @@ export function ProviderSheet({
   const access = useModelAccess(enabled ? projectId : null);
   const managed = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   const { connectedProviders } = useConnectedProviders(projectId, enabled);
 
   const entry = providerId === 'kortix' ? managed : LLM_PROVIDER_BY_ID.get(providerId);
@@ -941,7 +942,11 @@ export function ProviderSheet({
     </>
   );
 
-  const bodyProps: BodyProps = { projectId, entry, connected: keyConnected, canWrite, models };
+  // A key form writes the named store now (the API files it as a "Workspace
+  // key"), so a key saved there counts as this provider's saved key too.
+  const bodyProps: BodyProps = {
+    projectId, entry, connected: keyConnected || pooled.pooledProviderIds.has(entry.id), canWrite, models,
+  };
   let content: ReactNode;
   if (method === 'included') {
     content = (
@@ -956,7 +961,9 @@ export function ProviderSheet({
         <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="codex" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('chatGptAccounts')}</p>
-          <p className="text-muted-foreground text-xs text-pretty">{tPooled('oauthPrivateDescription')}</p>
+          <p className="text-muted-foreground text-xs text-pretty">
+            {tPooled(canShare ? 'oauthPrivateDescription' : 'oauthOnlyYouDescription')}
+          </p>
           <AccountSecretResourcesPanel
             accountId={pooled.accountId}
             projectId={projectId}
@@ -968,6 +975,18 @@ export function ProviderSheet({
           />
           <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
         </div>
+        {/* OpenAI API keys below the ChatGPT accounts, exactly as Anthropic lists its keys below Claude accounts. */}
+        <div className="space-y-3">
+          <p className="text-foreground text-sm font-medium">{tPooled('providerKeysFor', { provider: entry.label })}</p>
+          <AccountSecretResourcesPanel
+            accountId={pooled.accountId}
+            projectId={projectId}
+            providerId={entry.id}
+            providerName={entry.label}
+            envVar={entry.envVars[0]!}
+            canWrite
+          />
+        </div>
         {models}
       </SplitSheetBody>
     );
@@ -978,7 +997,9 @@ export function ProviderSheet({
         <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="claude-agent" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('claudeAccounts')}</p>
-          <p className="text-muted-foreground text-xs text-pretty">{tPooled('claudeOauthPrivateDescription')}</p>
+          <p className="text-muted-foreground text-xs text-pretty">
+            {tPooled(canShare ? 'claudeOauthPrivateDescription' : 'claudeOauthOnlyYouDescription')}
+          </p>
           <AccountSecretResourcesPanel
             accountId={pooled.accountId}
             projectId={projectId}

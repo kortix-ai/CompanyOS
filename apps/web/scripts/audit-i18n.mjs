@@ -301,6 +301,8 @@ const allowedLiteralValues = new Set([
   // the API sends when none is set (channel-email.ts), shown verbatim.
   're_…',
   'support',
+  // The managed inbox username example: `support` is reserved since #12504.
+  'orders',
   'support@example.com',
   'mail.example.com',
   '&lt;',

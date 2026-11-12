@@ -43,9 +43,9 @@
  *                     move's own idempotent UPDATEs again, for rows a request
  *                     that started before the move wrote with the old account,
  *                     then I2 for the run (design.md §3.1 row 32)
- *   owner emails      once the account's last move is done: one outbox row
- *                     per owner (`kortix.workspace_split_emails`), sent in
- *                     `apply` mode only (`owner-email.ts`)
+ *   no owner email    the split sends no email and no notice of any kind
+ *                     (decisions.md D13, Marko 2026-11-11: "no owner notices");
+ *                     an account's last move records plan.account_finished_at
  */
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
@@ -71,7 +71,6 @@ import {
   reverseSplitOffBilling,
 } from '../../billing/services/split-off-billing';
 import { checkSplitRunsMoved } from './invariants';
-import { deliverSplitOwnerEmails, sendSplitOwnerEmails, type SendEmail } from './owner-email';
 
 export type WorkspaceSplitMode = 'off' | 'dry_run' | 'apply';
 export type WorkspaceSplitPhase = 'planned' | 'held' | 'storage_copied' | 'done' | 'failed' | 'skipped' | 'reversed';
@@ -281,13 +280,6 @@ async function clearStaleSplitPending(filter: ReturnType<typeof sql>): Promise<n
 
 export interface ApplyDeps {
   siteStorage?: SiteStorage;
-  /** The owner email transport (test seam). Default: lib/email/transport. */
-  sendEmail?: SendEmail;
-  /**
-   * The split mode the owner emails obey: they go out in `apply` only.
-   * Default: `workspaceSplitMode()` (the platform setting, else the env).
-   */
-  mode?: WorkspaceSplitMode;
 }
 
 export type ApplyOutcome = 'done' | 'busy' | 'skipped' | 'error' | 'failed';
@@ -361,7 +353,7 @@ export async function applyWorkspaceSplitRun(runId: string, deps: ApplyDeps = {}
     if (error instanceof Error && error.message === 'lease_lost') return 'busy';
     return recordFailure(run, error);
   }
-  await afterMoveCommitted({ runId, projectId: run.projectId, fromAccountId: run.fromAccountId, toAccountId }, deps);
+  await afterMoveCommitted({ runId, projectId: run.projectId, fromAccountId: run.fromAccountId, toAccountId });
   return 'done';
 }
 
@@ -373,15 +365,15 @@ type MovedRun = { runId: string; projectId: string; fromAccountId: string; toAcc
  *   1. the caches keyed by the old account (IAM on every replica, model defaults);
  *   2. the new account's workspace ids (C1);
  *   3. its billing (C6), recorded in plan.billing;
- *   4. when this was the account's last move: the keeper's workspace ids and
- *      the owner emails.
+ *   4. when this was the account's last move: the keeper's workspace ids
+ *      (no email: decisions.md D13).
  */
-async function afterMoveCommitted(run: MovedRun, deps: ApplyDeps): Promise<void> {
+async function afterMoveCommitted(run: MovedRun): Promise<void> {
   await afterProjectMoved(run);
   await bustAccounts([run.fromAccountId, run.toAccountId]);
   await fillWorkspaceIds([run.toAccountId]);
   await applyRunBilling(run);
-  await finishAccountIfLast(run.fromAccountId, deps);
+  await finishAccountIfLast(run.fromAccountId);
 }
 
 /**
@@ -417,12 +409,14 @@ async function applyRunBilling(run: MovedRun): Promise<boolean> {
 
 /**
  * When no move of `fromAccountId` is open any more and it holds one project:
- * the keeper's and every split-off's workspace ids (C1), then the owner
- * emails (C9). Only after an apply: a dry run never reaches here.
+ * the keeper's and every split-off's workspace ids (C1), then
+ * plan.account_finished_at on every done run of the account, so the tick does
+ * not fill the keeper again. No email and no notice (decisions.md D13). Only
+ * after an apply: a dry run never reaches here.
  */
-async function finishAccountIfLast(fromAccountId: string, deps: ApplyDeps): Promise<void> {
-  // The email states each split-off's plan, so it waits until every done run
-  // has its billing recorded (finishDoneRuns retries both).
+async function finishAccountIfLast(fromAccountId: string): Promise<void> {
+  // It waits until every done run has its billing recorded (finishDoneRuns
+  // retries both).
   const [state] = await db.execute<{ open: number; active: number; targets: string[] }>(sql`
     SELECT (SELECT count(*)::int FROM kortix.workspace_split_runs
              WHERE from_account_id = ${fromAccountId}
@@ -432,7 +426,9 @@ async function finishAccountIfLast(fromAccountId: string, deps: ApplyDeps): Prom
              WHERE from_account_id = ${fromAccountId} AND phase = 'done'), '[]'::jsonb) AS targets`);
   if (!state || state.open > 0 || state.active > 1 || !state.targets.length) return;
   await fillWorkspaceIds([fromAccountId, ...state.targets]);
-  await sendSplitOwnerEmails(fromAccountId, deps.mode ?? (await workspaceSplitMode()), deps.sendEmail);
+  await db.execute(sql`UPDATE kortix.workspace_split_runs
+     SET plan = plan || jsonb_build_object('account_finished_at', now()), updated_at = now()
+   WHERE from_account_id = ${fromAccountId} AND phase = 'done' AND NOT (plan ? 'account_finished_at')`);
 }
 
 export const REPAIR_AFTER_MS = 120_000;
@@ -479,10 +475,10 @@ const BILLING_MAX_ATTEMPTS = 5;
 
 /**
  * The done-run follow-ups the tick owns: the billing that did not apply, the
- * repair pass when it is due, and the accounts whose owner emails are not all
- * sent. Returns when the next repair is due (ms from now), or null.
+ * repair pass when it is due, and the accounts whose finish did not run to the
+ * end. Returns when the next repair is due (ms from now), or null.
  */
-async function finishDoneRuns(deps: ApplyDeps): Promise<number | null> {
+async function finishDoneRuns(): Promise<number | null> {
   const unbilled = await db.execute<{ run_id: string; project_id: string; from_account_id: string; to_account_id: string }>(sql`
     SELECT run_id::text, project_id::text, from_account_id::text, to_account_id::text FROM kortix.workspace_split_runs
      WHERE phase = 'done' AND NOT (plan ? 'billing') AND COALESCE((plan->>'billing_attempts')::int, 0) < ${BILLING_MAX_ATTEMPTS}
@@ -496,18 +492,15 @@ async function finishDoneRuns(deps: ApplyDeps): Promise<number | null> {
        AND completed_at <= now() - make_interval(secs => ${REPAIR_AFTER_MS / 1000})
      ORDER BY completed_at LIMIT 20`);
   for (const { run_id } of due) await repairWorkspaceSplitRun(run_id);
-  // Accounts whose last move is done and whose owner emails are not
-  // enqueued yet (the finish after the move did not run to the end).
+  // Accounts whose last move is done and whose finish did not run to the end.
   const unfinished = await db.execute<{ from_account_id: string }>(sql`
     SELECT DISTINCT r.from_account_id::text FROM kortix.workspace_split_runs r
      WHERE r.phase = 'done' AND r.updated_at > now() - interval '7 days'
        AND NOT EXISTS (SELECT 1 FROM kortix.workspace_split_runs o
                         WHERE o.from_account_id = r.from_account_id AND o.phase IN ('planned', 'held', 'storage_copied'))
-       AND NOT EXISTS (SELECT 1 FROM kortix.workspace_split_emails e WHERE e.from_account_id = r.from_account_id)
+       AND NOT (r.plan ? 'account_finished_at')
      LIMIT 20`);
-  for (const { from_account_id } of unfinished) await finishAccountIfLast(from_account_id, deps);
-  // The outbox: due rows, failed rows past their backoff, expired leases.
-  await deliverSplitOwnerEmails(deps.mode ?? (await workspaceSplitMode()), { send: deps.sendEmail });
+  for (const { from_account_id } of unfinished) await finishAccountIfLast(from_account_id);
   const [next] = await db.execute<{ ms: number | null }>(sql`
     SELECT (extract(epoch FROM min(completed_at) + make_interval(secs => ${REPAIR_AFTER_MS / 1000}) - now()) * 1000)::bigint AS ms
       FROM kortix.workspace_split_runs WHERE phase = 'done' AND NOT (plan ? 'repaired_at')`);
@@ -578,7 +571,7 @@ export async function reopenWorkspaceSplitRun(runId: string): Promise<void> {
        SET phase = 'planned', mode = 'dry_run', to_account_id = NULL, copied_ids = '{}'::jsonb, attempts = 0,
            heartbeat_at = NULL, error = NULL, completed_at = NULL, updated_at = now(),
            -- The reversed move's billing record names the dormant account: drop it,
-           -- so the billing retry and the owner-email gate wait for the new one.
+           -- so the billing retry and the account finish wait for the new one.
            plan = (plan - 'billing' - 'billing_attempts') || jsonb_build_object('reversed_to_account_ids',
              COALESCE(plan->'reversed_to_account_ids', '[]'::jsonb) || to_jsonb(ARRAY[to_account_id::text]))
      WHERE run_id = ${runId} AND phase = 'reversed'
@@ -676,8 +669,8 @@ export async function processWorkspaceSplits(options: { mode?: WorkspaceSplitMod
     logger.info('[workspace-split] plan pass', { mode, ...totals });
   }
   if (mode === 'dry_run') return { mode, planned, outcomes, nextDelayMs: DRY_RUN_EVERY_MS };
-  const deps: ApplyDeps = { ...options.deps, mode };
-  const nextRepairMs = await finishDoneRuns(deps);
+  const deps: ApplyDeps = { ...options.deps };
+  const nextRepairMs = await finishDoneRuns();
   const batch = options.batch ?? APPLY_BATCH;
   const runnable = await db.execute<{ run_id: string }>(sql`
     SELECT run_id::text FROM kortix.workspace_split_runs

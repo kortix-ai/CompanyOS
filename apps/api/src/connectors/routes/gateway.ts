@@ -98,6 +98,7 @@ const CONNECTOR_DENIAL_REASONS: ReadonlySet<string> = new Set<ConnectorDenialRea
   'connector_not_assigned',
   'connector_not_found',
   'connector_not_connected',
+  'connector_not_shared',
   'connector_disabled',
   'action_not_found',
   'account_required',
@@ -307,7 +308,8 @@ const callResponse = async (deps: ConnectorRouterDeps, c: any, p: ConnectorPrinc
                 sessionId: p.sessionId,
                 agentPrincipal: p.agentPrincipal ?? null,
               })
-              .then((rows) => rows.map((row) => row.label))
+              // Only accounts a call can run as: a retry must name one of these.
+              .then((rows) => rows.filter((row) => row.status !== 'sign_in_not_finished').map((row) => row.label))
               .catch(() => [])
           : [];
       return c.json(
@@ -695,8 +697,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
   // One connector can hold the project's shared account and each member's own.
   // Resolution picks the first entitled one unless a call names another, so this
   // is how a human (or an agent) finds out WHICH names `--account` accepts.
-  // Same principal as `/call`, so what it lists is exactly what a call can use —
-  // never an account the gateway would then refuse.
+  // Same principal as `/call`. It lists what Settings → Connectors lists
+  // (`listedConnectorAccounts` in @kortix/sdk): every account with `status`
+  // `connected` is one a call can use; `sign_in_not_finished` is one to finish.
   app.openapi(
     createRoute({
       method: 'get',
@@ -737,7 +740,9 @@ export function registerGatewayCallRoutes(app: OpenAPIHono, deps: ConnectorRoute
       // default reachable" question an unnamed `/call` answers. Two or more
       // pinned accounts (a member's own pin + the project's, both entitled)
       // is not reported as a single default here either.
-      const pinned = accounts.filter((account) => account.is_default);
+      const pinned = accounts.filter(
+        (account) => account.is_default && account.status !== 'sign_in_not_finished',
+      );
       return c.json({
         connector: slug,
         default_account: pinned.length === 1 ? pinned[0]!.label : null,

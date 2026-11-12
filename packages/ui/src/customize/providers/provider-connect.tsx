@@ -64,6 +64,7 @@ import {
   useProjectModelPickerCatalog,
 } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
+import { useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
 import {
   SUBSCRIPTION_ROW,
   SubscriptionRowMeter,
@@ -452,6 +453,7 @@ export function ProviderConnect({
   const access = useModelAccess(enabled ? projectId : null);
   const managedProvider = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   useLiveLlmProviderCatalog(projectId, enabled);
   const catalogRevision = useLlmProviderCatalogRevision();
   const { connectedProviders, providerStateLoading } = useConnectedProviders(projectId, enabled);
@@ -570,7 +572,7 @@ export function ProviderConnect({
       onSelect={onSelect}
       note={
         pooled.pooledSecretsEnabled
-          ? tPooled('sharedDescription')
+          ? tPooled(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')
           : canWrite
             ? undefined
             : t('readOnly')

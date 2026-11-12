@@ -68,6 +68,8 @@ export {
   accountSecretResources,
   accountSecretGrants,
   sessionProviderSecretPools,
+  llmCredentialBackfill,
+  legacyCredentialBackfill,
   projectSessionSecretHandles,
   projectSecretHandleStatusEnum,
   projectSecretConsumerEnum,

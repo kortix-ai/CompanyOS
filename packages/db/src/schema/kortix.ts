@@ -1366,6 +1366,13 @@ export const accountSecretResources = kortixSchema.table('account_secret_resourc
   /** Who the stored login signs in as, when the provider says: `{ email, plan }`.
    *  Claude's profile API fills it on a usage refresh; a ChatGPT login carries it in its token. */
   providerAccount: jsonb('provider_account'),
+  /** The last check of a provider API key against its provider, run when the
+   *  key is saved or rotated and on request: `verified`, `invalid` (the
+   *  provider refused it) or `unknown` (no clean answer). NULL: never checked. */
+  verifyStatus: varchar('verify_status', { length: 16 }),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  /** The provider's words for `invalid`, or why the check had no answer. */
+  verifyMessage: varchar('verify_message', { length: 500 }),
   createdBy: uuid('created_by').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1407,6 +1414,66 @@ export const sessionProviderSecretPools = kortixSchema.table('session_provider_s
 }, (table) => [
   primaryKey({ columns: [table.sessionId, table.providerId] }),
   foreignKey({ columns: [table.sessionId], foreignColumns: [projectSessions.sessionId], name: 'session_provider_pools_session_fk' }).onDelete('cascade'),
+]);
+
+/**
+ * The audit ledger of the move of LLM provider credentials from
+ * `project_secrets` (consumer `llm_gateway`) into `account_secret_resources`:
+ * one row per legacy secret the backfill (`apps/api/scripts/llm-credential-backfill.ts`)
+ * or a legacy write path looked at. `outcome` says what happened to it.
+ *
+ * A legacy secret with a `copied`, `already_present` or `superseded` row is
+ * never read again (`LLM_CREDENTIAL_MOVED_OUTCOMES`): its named account serves,
+ * and deleting that account in the Models panel does not bring the old value
+ * back. Any other outcome (or no row) keeps the legacy value readable.
+ *
+ * No FK on the two secret ids: the ledger outlives a deleted account or a
+ * deleted legacy row, so an audit can still say what moved where.
+ */
+export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill', {
+  legacySecretId: uuid('legacy_secret_id').primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** Null only for `skipped_no_account`: the project has no account. */
+  accountId: uuid('account_id'),
+  name: varchar('name', { length: 64 }).notNull(),
+  /** copied | already_present | superseded | skipped_* | failed_* (see llm-credential-move.ts). */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  accountSecretId: uuid('account_secret_id'),
+  /** The legacy row's `updated_at` when it was copied: a later legacy write re-copies it. */
+  legacyUpdatedAt: timestamp('legacy_updated_at', { withTimezone: true }).notNull(),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_llm_credential_backfill_project').on(table.projectId),
+]);
+
+/**
+ * The audit ledger of the legacy credential moves that are not LLM keys
+ * (`apps/api/src/secrets/legacy-credential-backfill.ts`): one row per moved
+ * object and concept, with the columns it had before, so an operator can
+ * reverse one move by hand. `concept`:
+ *   - `connector_secret_strategy`: a connector secret stored with the
+ *     pre-2026-08-05 strategy `runtime`; it moves to `broker`.
+ *   - `connector_secret_consumer`: a connector-scope secret stamped consumer
+ *     `sandbox`; it moves to consumer `connector`, strategy `broker`.
+ *   - `external_connection`: a connection owned by the retired `external`
+ *     owner type; nobody can reach it, so it is revoked.
+ */
+export const legacyCredentialBackfill = kortixSchema.table('legacy_credential_backfill', {
+  concept: varchar('concept', { length: 48 }).notNull(),
+  objectId: uuid('object_id').notNull(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** `moved` (the object now has its canonical form) or `skipped_*`. */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  /** The changed columns before the move. */
+  before: jsonb('before').notNull().default({}),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.concept, table.objectId] }),
+  index('idx_legacy_credential_backfill_project').on(table.projectId),
 ]);
 
 /**

@@ -25,7 +25,7 @@ import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { createRoute, z } from '@hono/zod-openapi';
 import { accountSecretGrants } from '@kortix/db';
 import { reconnectProviderAccount, writeProviderAccount } from '../../secrets/provider-accounts';
-import { deleteNamedCopiesOfLegacySecrets } from '../../secrets/llm-credential-move';
+import { deleteNamedCopiesOfLegacySecrets } from '../../secrets/llm-credential-ledger';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';

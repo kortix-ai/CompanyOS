@@ -29,10 +29,12 @@ import { backfillLegacyCredentials } from '../secrets/legacy-credential-backfill
 import { resolveGatewayKeyValues } from '../llm-gateway/credentials/gateway-keys';
 import { refreshRefusedOpencodeLogin } from '../llm-gateway/credentials/opencode-console';
 import { resolveCodexCredential } from '../llm-gateway/credentials/codex';
+import { mintSetupLink } from '../setup-links/token';
 import { insertIntoView } from './helpers/compat-views';
 import { removeSeeded, seedProject, type SeededProject } from './helpers/integration-fixtures';
 
 const { projectsApp } = await import('../projects/lib/app');
+const { setupLinksPublicApp } = await import('../setup-links/public-app');
 (await import('../projects/routes/secrets')).registerSecretsRoutes();
 (await import('../projects/routes/provider-oauth')).registerProviderOauthRoutes();
 
@@ -174,7 +176,21 @@ describe('old write and disconnect routes reach the named store', () => {
     expect((await res.json() as Record<string, unknown>).stored_in).toBeUndefined();
   });
 
-  test('DELETE /oauth/codex disconnects the named copy the backfill made, and leaves a key a person added', async () => {
+  test('a setup link that asks for an existing provider key writes its named account', async () => {
+    const legacyId = await legacy('XAI_API_KEY', 'xai-legacy');
+    const { token } = mintSetupLink(projectId, { kind: 'secret', fields: [{ name: 'XAI_API_KEY' }], scope: 'runtime', uid: OWNER, sid: null });
+    const res = await setupLinksPublicApp.request(`/secret/${token}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ values: { XAI_API_KEY: 'xai-new' } }),
+    });
+    expect(res.status).toBe(200);
+    const keys = await resolveGatewayKeyValues({ ...scope(), providerId: 'xai', name: 'XAI_API_KEY', probe: true });
+    expect(keys).toMatchObject({ store: 'named', keys: [{ value: 'xai-new' }] });
+    const [ledger] = await db.select().from(llmCredentialBackfill).where(eq(llmCredentialBackfill.legacySecretId, legacyId));
+    expect(ledger?.outcome).toBe('superseded');
+  });
+
+  test('DELETE /oauth/openai disconnects the named copy the backfill made, and leaves a key a person added', async () => {
     const id = await legacy('CODEX_AUTH_JSON', login('codex-shared-access'));
     const moved = await moveLegacyLlmCredential(id, { apply: true });
     expect(moved?.outcome).toBe('copied');
@@ -184,7 +200,7 @@ describe('old write and disconnect routes reach the named store', () => {
       consumer: 'llm_gateway', strategy: 'broker', createdBy: OWNER,
     }).returning({ secretId: accountSecretResources.secretId });
 
-    const res = await app.request(`/v1/projects/${projectId}/oauth/codex`, { method: 'DELETE' });
+    const res = await app.request(`/v1/projects/${projectId}/oauth/openai`, { method: 'DELETE' });
     expect(res.status).toBe(200);
     expect(await db.select().from(accountSecretResources).where(eq(accountSecretResources.secretId, moved!.accountSecretId!))).toEqual([]);
     expect(await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, id))).toEqual([]);

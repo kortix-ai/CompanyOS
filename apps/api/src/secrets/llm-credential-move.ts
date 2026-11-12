@@ -432,24 +432,3 @@ export async function moveLegacyProviderKeysNamed(projectId: string, name: strin
 }
 
 
-/**
- * The legacy rows `legacySecretIds` were deleted (the old `DELETE /oauth`):
- * delete the named accounts the backfill created from them (`copied`), so a
- * disconnect from an old client disconnects the login it sees. A named
- * account that existed before (`already_present`) or that a person made
- * stays. Runs in the caller's transaction. Returns how many were deleted.
- */
-export async function deleteNamedCopiesOfLegacySecrets(tx: Tx, accountId: string, legacySecretIds: string[]): Promise<number> {
-  if (!legacySecretIds.length) return 0;
-  const copies = await tx.select({ accountSecretId: llmCredentialBackfill.accountSecretId }).from(llmCredentialBackfill).where(and(
-    inArray(llmCredentialBackfill.legacySecretId, legacySecretIds),
-    eq(llmCredentialBackfill.outcome, 'copied'),
-    eq(llmCredentialBackfill.accountId, accountId),
-  ));
-  const ids = copies.flatMap((row) => (row.accountSecretId ? [row.accountSecretId] : []));
-  if (!ids.length) return 0;
-  const removed = await tx.delete(accountSecretResources)
-    .where(and(eq(accountSecretResources.accountId, accountId), inArray(accountSecretResources.secretId, ids)))
-    .returning({ secretId: accountSecretResources.secretId });
-  return removed.length;
-}

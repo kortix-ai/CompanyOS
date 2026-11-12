@@ -47,7 +47,10 @@ import {
   useGatewayCatalogSync,
 } from '@kortix/sdk/react';
 import { SidebarGlyph as PanelLeft } from '@kortix/ui/icons';
-import { DesktopTabStrip } from '@/features/desktop-tabs/desktop-tab-strip';
+import {
+  DesktopTabStrip,
+  useDesktopTabsVisible,
+} from '@/features/desktop-tabs/desktop-tab-strip';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -316,10 +319,12 @@ const ProjectSheelLayout = ({
   // The desktop window's tab strip owns the title-bar band; every project view
   // renders below it. Every window width, down to the 720 × 480 minimum (where
   // the sidebar is a sheet and the shell's toggle still opens it).
+  const tabsVisible = useDesktopTabsVisible(projectId);
   const tabs = !!desktopShell;
   return (
     <div
-      data-kx-desktop-tabs-on={tabs ? '' : undefined}
+      // The page's own header moves below the strip only while the strip shows.
+      data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',

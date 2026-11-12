@@ -20,10 +20,12 @@ function hrefForTab(projectId: string, id: string) {
 /**
  * The desktop window draws its own tab strip (features/desktop-tabs), which
  * handles Mod+T, Mod+W, Mod+Shift+T, Mod+1…9 and tab cycling itself. These
- * session-tab shortcuts are the web's, and step aside while it is mounted.
+ * session-tab shortcuts are the web's, and step aside on the desktop shell.
  */
 function desktopStripOwnsTabs(): boolean {
-  return typeof document !== 'undefined' && !!document.querySelector('[data-kx-desktop-tabs]');
+  // The strip is mounted on every desktop project page, also while it draws
+  // nothing (a fresh start), so the desktop shell itself is the signal.
+  return isDesktop();
 }
 
 /**

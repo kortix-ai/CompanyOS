@@ -106,6 +106,68 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
   }
 }
 
+/**
+ * The destination a path belongs to, which decides the tab it opens in. Each
+ * session is its own destination; every other page belongs to its section, so
+ * moving inside a section (Customize → Triggers, Goals → one goal) stays in
+ * one tab, and leaving it (a session → Goals) keeps the tab you left.
+ */
+export function tabGroup(route: TabRoute): string {
+  switch (route.kind) {
+    case 'home':
+      return HOME_GROUP;
+    case 'session':
+      return `${SESSION_GROUP}${route.sessionId}`;
+    case 'artifact':
+    case 'artifacts':
+      return 'artifacts';
+    case 'agent':
+    case 'admin':
+    case 'customize':
+    case 'settings':
+      return 'customize';
+    case 'goal':
+      return 'goals';
+    case 'channel':
+    case 'dm':
+      return 'chat';
+    case 'space':
+      return `space:${route.slug}`;
+    case 'sessions':
+      return 'sessions';
+    case 'page':
+      return route.page;
+  }
+}
+
+/** The project's home: a blank New session, which the next destination replaces. */
+export const HOME_GROUP = 'home';
+const SESSION_GROUP = 'session:';
+
+/** `tabGroup` for a path, or null when the path is not a page of the project. */
+export function pathGroup(path: string, projectId: string): string | null {
+  const route = tabRoute(path, projectId);
+  return route ? tabGroup(route) : null;
+}
+
+/**
+ * Whether the strip shows. A fresh start (one tab that is not a session) has
+ * nothing to switch between, so the title bar stays as it was. A session open,
+ * or a second tab, earns the strip. `currentPath` counts too: the window can
+ * be on a session before the store has caught up, and reading it here keeps
+ * the strip from appearing a frame late.
+ */
+export function stripVisible(
+  tabs: readonly { path: string }[],
+  currentPath: string,
+  projectId: string,
+): boolean {
+  if (tabs.length > 1) return true;
+  const isSession = (path: string) =>
+    pathGroup(path, projectId)?.startsWith(SESSION_GROUP) ?? false;
+  return isSession(currentPath) || tabs.some((tab) => isSession(tab.path));
+}
+
 /** The path a new tab opens on: the project's home, where a new session starts. */
 export function newTabPath(projectId: string): string {
   return `/workspaces/${projectId}`;

@@ -12,7 +12,7 @@ import {
   syncPath,
   type ProjectTabs,
 } from './desktop-tabs-store';
-import { isPrototypeKey, ownEntry, tabRoute } from './tab-route';
+import { isPrototypeKey, ownEntry, pathGroup, stripVisible, tabRoute } from './tab-route';
 
 const P = 'project-1';
 const home = `/workspaces/${P}`;
@@ -20,40 +20,96 @@ const s1 = `/workspaces/${P}/sessions/s1`;
 const s2 = `/workspaces/${P}/sessions/s2`;
 const models = `/workspaces/${P}/admin/models`;
 
+const g = (path: string) => pathGroup(path, P);
 const empty: ProjectTabs = { tabs: [], activeId: null, closed: [] };
 const s1Path = (i: number) => `${home}/sessions/x${i}`;
 const paths = (s: ProjectTabs) => s.tabs.map((t) => t.path);
 const activePath = (s: ProjectTabs) => s.tabs.find((t) => t.id === s.activeId)?.path;
 
 describe('desktop tabs: navigation', () => {
+  const goals = `/workspaces/${P}/goals`;
+  const goal = `/workspaces/${P}/goals/g1`;
+  const triggers = `/workspaces/${P}/admin/triggers`;
+
   test('the first navigation opens the first tab', () => {
-    const s = syncPath(empty, s1);
+    const s = syncPath(empty, s1, g);
     expect(paths(s)).toEqual([s1]);
     expect(activePath(s)).toBe(s1);
   });
 
-  test('navigating moves the active tab instead of opening another', () => {
-    const s = syncPath(syncPath(empty, s1), models);
-    expect(paths(s)).toEqual([models]);
+  test('a page opened from a session gets its own tab; the session stays', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, goals, g);
+    expect(paths(s)).toEqual([s1, goals]);
+    expect(activePath(s)).toBe(goals);
   });
 
-  test('navigating to a path another tab holds focuses that tab', () => {
-    let s = syncPath(empty, s1);
-    s = openTab(s, s2);
-    s = syncPath(s, s1);
-    expect(paths(s)).toEqual([s1, s2]);
+  test('moving inside a section stays in its tab (Customize → Triggers)', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, models, g);
+    s = syncPath(s, triggers, g);
+    expect(paths(s)).toEqual([s1, triggers]);
+  });
+
+  test("leaving Customize for a session focuses the session's tab and keeps Customize", () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, triggers, g);
+    s = syncPath(s, s1, g);
+    expect(paths(s)).toEqual([s1, triggers]);
     expect(activePath(s)).toBe(s1);
   });
 
+  test('a destination with a tab focuses that tab and moves it there', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, goals, g);
+    s = syncPath(s, s1, g);
+    s = syncPath(s, goal, g);
+    expect(paths(s)).toEqual([s1, goal]);
+    expect(activePath(s)).toBe(goal);
+  });
+
+  test('every session gets its own tab', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, s2, g);
+    expect(paths(s)).toEqual([s1, s2]);
+  });
+
+  test('a blank New session tab is replaced by wherever you go next', () => {
+    let s = syncPath(empty, home, g);
+    s = syncPath(s, goals, g);
+    expect(paths(s)).toEqual([goals]);
+    s = openTab(s, home);
+    s = syncPath(s, s2, g);
+    expect(paths(s)).toEqual([goals, s2]);
+  });
+
   test('the same path twice is a no-op (same object)', () => {
-    const s = syncPath(empty, s1);
-    expect(syncPath(s, s1)).toBe(s);
+    const s = syncPath(empty, s1, g);
+    expect(syncPath(s, s1, g)).toBe(s);
+  });
+
+  test('a path outside the project changes nothing', () => {
+    const s = syncPath(empty, s1, g);
+    expect(syncPath(s, '/settings', g)).toBe(s);
+  });
+});
+
+describe('desktop tabs: when the strip shows', () => {
+  const tab = (path: string) => ({ id: path, path });
+  test('a fresh start (one New session or one page tab) shows no strip', () => {
+    expect(stripVisible([tab(home)], home, P)).toBe(false);
+    expect(stripVisible([tab(models)], models, P)).toBe(false);
+  });
+  test('a session, or a second tab, shows it', () => {
+    expect(stripVisible([tab(s1)], s1, P)).toBe(true);
+    expect(stripVisible([tab(home)], s1, P)).toBe(true);
+    expect(stripVisible([tab(home), tab(models)], models, P)).toBe(true);
   });
 });
 
 describe('desktop tabs: open and close', () => {
   test('a new tab opens right of the active one and takes focus', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     s = { ...s, activeId: s.tabs[0].id };
     s = openTab(s, home);
@@ -62,7 +118,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('closing the active tab focuses the right neighbour, then the left', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     s = openTab(s, models);
     s = { ...s, activeId: s.tabs[1].id };
@@ -73,7 +129,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('closing a background tab does not navigate', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     const r = closeTab(s, s.tabs[0].id);
     expect(r.navigateTo).toBeNull();
@@ -81,7 +137,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('reopen brings the last closed tab back to its place and focuses it', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     s = openTab(s, models);
     s = closeTab(s, s.tabs[1].id).state;
@@ -93,7 +149,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('close others and close to the right keep pinned tabs', () => {
-    let s = syncPath(empty, home);
+    let s = syncPath(empty, home, g);
     s = setPinned(s, s.tabs[0].id, true);
     s = openTab(s, s1);
     s = openTab(s, s2);
@@ -106,7 +162,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('the cap drops the oldest unpinned inactive tab', () => {
-    let s = syncPath(empty, home);
+    let s = syncPath(empty, home, g);
     s = setPinned(s, s.tabs[0].id, true);
     for (let i = 0; i < MAX_TABS + 3; i++) s = openTab(s, `${home}/sessions/x${i}`);
     expect(s.tabs.length).toBe(MAX_TABS);
@@ -116,7 +172,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('reopening at the cap keeps the tab it pushes out reopenable', () => {
-    let s = syncPath(empty, home);
+    let s = syncPath(empty, home, g);
     for (let i = 0; i < MAX_TABS; i++) s = openTab(s, s1Path(i));
     const before = new Set(s.tabs.map((t) => t.path));
     s = reopenClosed(s);
@@ -127,7 +183,7 @@ describe('desktop tabs: open and close', () => {
   });
 
   test('reopen restores a closed tab even when another tab shows the same page', () => {
-    let s = syncPath(empty, home);
+    let s = syncPath(empty, home, g);
     s = openTab(s, home);
     s = openTab(s, s1);
     s = closeTab(s, s.tabs[1].id).state;
@@ -139,7 +195,7 @@ describe('desktop tabs: open and close', () => {
 
 describe('desktop tabs: pin and reorder', () => {
   test('pinned tabs stay first through a reorder', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     s = setPinned(s, s.tabs[1].id, true);
     expect(paths(s)).toEqual([s2, s1]);
@@ -148,7 +204,7 @@ describe('desktop tabs: pin and reorder', () => {
   });
 
   test('a new tab never lands inside the pinned group', () => {
-    let s = syncPath(empty, s1);
+    let s = syncPath(empty, s1, g);
     s = openTab(s, s2);
     s = setPinned(s, s.tabs[0].id, true);
     s = setPinned(s, s.tabs[1].id, true);

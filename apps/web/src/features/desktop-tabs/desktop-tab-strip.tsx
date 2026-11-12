@@ -108,7 +108,15 @@ import {
   useDesktopTabsStore,
   type DesktopTab,
 } from './desktop-tabs-store';
-import { isPrototypeKey, newTabPath, ownEntry, tabRoute, type TabRoute } from './tab-route';
+import {
+  isPrototypeKey,
+  newTabPath,
+  ownEntry,
+  pathGroup,
+  stripVisible,
+  tabRoute,
+  type TabRoute,
+} from './tab-route';
 
 /* ─── Strip ───────────────────────────────────────────────────────────────── */
 
@@ -154,6 +162,17 @@ const isMac = () => typeof navigator !== 'undefined' && /Mac/.test(navigator.pla
  * no subscriber inside the page tree. A tab switch re-renders the strip and
  * the route, nothing else.
  */
+/**
+ * Whether the strip shows, for the shell: the same synchronous rule the strip
+ * uses (`stripVisible`), from the store and the current path, so the shell's
+ * title-band layout and the strip switch in the same render and never flicker.
+ */
+export function useDesktopTabsVisible(projectId: string): boolean {
+  const path = usePathname() ?? '';
+  const tabs = useDesktopTabsStore((s) => s.byProject[projectId]?.tabs ?? EMPTY_PROJECT_TABS.tabs);
+  return stripVisible(tabs, path, projectId);
+}
+
 export function DesktopTabStrip({ projectId }: { projectId: string }) {
   const t = useTranslations('desktopTabs');
   const router = useRouter();
@@ -240,7 +259,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     // Any arrival settles the pending link: it landed, or a newer one won.
     inFlight.current = null;
     if (!tabRoute(pathname, projectId)) return;
-    update(projectId, (s) => syncPath(s, pathname));
+    update(projectId, (s) => syncPath(s, pathname, (p) => pathGroup(p, projectId)));
   }, [pathname, projectId, router, update]);
 
   // Warm every background tab's route: a click is a client transition, never a
@@ -445,6 +464,10 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
 
   const mod = isMac() ? '⌘' : 'Ctrl+';
 
+  // Hidden (a fresh start): stays mounted, so the tabs keep following the
+  // window, but draws nothing and leaves the title band to the page.
+  if (!stripVisible(project.tabs, pathname, projectId)) return null;
+
   return (
     <div
       data-kx-desktop-tabs=""
@@ -469,7 +492,9 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
           // Never scrolls: every tab shrinks to share the width, down to its
           // icon and then less, the way a browser's tabs do. The active tab
           // keeps room for its title and close button.
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden py-1"
+          // `px-px`: room for the active tab's 1px ring, which `overflow-hidden`
+          // would otherwise clip at the strip's first and last tab.
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden px-px py-1"
         >
           <SessionSignalsContext.Provider value={signals}>
             {/* `custom` reaches a tab after it leaves the list, so its exit uses
@@ -610,7 +635,7 @@ const TabItem = memo(function TabItem({
               }
             }}
             className={cn(
-              'group/tab @container flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-md text-xs select-none',
+              'group/tab @container flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-sm text-xs select-none',
               'outline-none',
               // Only hover fades: losing or gaining selection is one step.
               instant || active
@@ -637,7 +662,7 @@ const TabItem = memo(function TabItem({
                 className={cn(
                   // `bg-hover` is translucent, so it reads one step above the
                   // tab's own hover fill underneath.
-                  'text-muted-foreground hover:text-foreground hover:bg-hover flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm',
+                  'text-muted-foreground hover:text-foreground hover:bg-hover flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[calc(var(--radius)-8px)]',
                   'duration-fast transition-[opacity,color,background-color] ease-out',
                   // Hidden (not removed) when idle: hover never shifts the title.
                   active ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100',
@@ -879,7 +904,7 @@ function Label({
   );
   if (card) {
     return (
-      <HoverCard openDelay={400} closeDelay={150}>
+      <HoverCard openDelay={1000} closeDelay={150}>
         <HoverCardTrigger asChild>{body}</HoverCardTrigger>
         <HoverCardContent
           side="bottom"
@@ -892,7 +917,9 @@ function Label({
       </HoverCard>
     );
   }
-  // Every other page: its full title, for a pinned tab (icon only) and a truncated one.
+  // No tooltip: the title is on the tab. Only a pinned tab, which shows its
+  // icon alone, names itself on hover.
+  if (!pinned) return body;
   return (
     <Hint side="bottom" label={title}>
       {body}

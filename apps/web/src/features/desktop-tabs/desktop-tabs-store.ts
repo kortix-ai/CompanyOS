@@ -7,6 +7,7 @@ import {
 } from '@kortix/ui/internal/stores/persisted-store-registry';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { HOME_GROUP } from './tab-route';
 
 /**
  * The desktop window's tab strip, per project.
@@ -83,26 +84,44 @@ function capTabs(tabs: DesktopTab[], activeId: string | null): DesktopTab[] {
 /* ─── Pure transitions ──────────────────────────────────────────────────── */
 
 /**
- * The window moved to `path`. Three cases, in order:
+ * The window moved to `path`. Where it lands, in order:
  *  1. The active tab is already there: nothing changes.
- *  2. Another tab is already exactly there (Back across a tab switch, a link
- *     to a page that has its own tab): that tab becomes active.
- *  3. Otherwise the active tab navigates: its path becomes `path`. With no
- *     tabs yet, the first tab opens on `path`.
+ *  2. Another tab holds the same destination (`groupOf`): that tab takes focus
+ *     and moves to `path`. A session that has a tab, Back across a tab switch,
+ *     the Customize rail's Back link to a session: none of them closes or
+ *     rewrites the tab you came from.
+ *  3. The active tab is the same destination, or a blank New session tab: it
+ *     navigates. This is how a new session starts in place.
+ *  4. Anything else opens in a new tab beside the active one.
+ * A path outside the project (`groupOf` returns null) changes nothing.
  */
-export function syncPath(state: ProjectTabs, path: string): ProjectTabs {
+export function syncPath(
+  state: ProjectTabs,
+  path: string,
+  groupOf: (path: string) => string | null,
+): ProjectTabs {
+  const group = groupOf(path);
+  if (group === null) return state;
   const active = state.tabs.find((t) => t.id === state.activeId);
   if (active?.path === path) return state;
-  const existing = state.tabs.find((t) => t.path === path);
-  if (existing) return { ...state, activeId: existing.id };
-  if (!active) {
-    const tab = { id: newTabId(), path };
-    return { ...state, tabs: capTabs([...state.tabs, tab], tab.id), activeId: tab.id };
+  const owner = state.tabs.find((t) => t.id !== active?.id && groupOf(t.path) === group);
+  if (owner) {
+    return {
+      ...state,
+      activeId: owner.id,
+      tabs:
+        owner.path === path
+          ? state.tabs
+          : state.tabs.map((t) => (t.id === owner.id ? { ...t, path } : t)),
+    };
   }
-  return {
-    ...state,
-    tabs: state.tabs.map((t) => (t.id === active.id ? { ...t, path } : t)),
-  };
+  if (active) {
+    const activeGroup = groupOf(active.path);
+    if (activeGroup === group || activeGroup === HOME_GROUP) {
+      return { ...state, tabs: state.tabs.map((t) => (t.id === active.id ? { ...t, path } : t)) };
+    }
+  }
+  return openTab(state, path);
 }
 
 /** Open `path` in a new tab after `afterId` (default: the active tab), and focus it. */

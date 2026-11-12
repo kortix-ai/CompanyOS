@@ -885,14 +885,16 @@ withDb('workspace split', () => {
     // fill matches the row again (the trigger fires on INSERT or UPDATE OF
     // account_id only, so this UPDATE keeps the parked id).
     await db.execute(sql`UPDATE kortix.credit_purchases SET workspace_id = gen_random_uuid() WHERE id = ${purchase.id}`);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
+    const gate = Promise.withResolvers<void>();
+    const lockReady = Promise.withResolvers<void>();
     const lock = db
       .transaction(async (tx) => {
         await tx.execute(sql`SELECT id FROM kortix.credit_purchases WHERE id = ${purchase.id} FOR UPDATE`);
-        await gate;
+        lockReady.resolve(); // the row lock is held
+        await gate.promise;
       })
-      .catch(() => undefined); // rolled back
+      .catch(() => lockReady.resolve()); // a lock that never held resolves the handshake; the assertions see the unblocked fill
+    await lockReady.promise; // the fill must queue on a held row lock, never race one
     let sqlstate = '';
     try {
       const outcome = await Promise.race([
@@ -909,7 +911,7 @@ withDb('workspace split', () => {
       expect(outcome).toBe('failed');
       expect(sqlstate).toBe('57014');
     } finally {
-      release();
+      gate.resolve();
       await lock;
     }
     // The fill still completes and stamps the row with the live workspace id.

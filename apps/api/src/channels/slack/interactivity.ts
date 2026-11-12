@@ -455,7 +455,7 @@ async function handleAnswerSwitchAgent(payload: SlackInteractionPayload, inbound
   const viewId = (await openModal(token, payload.trigger_id, switchAgentModal(channelId, modalText('Loading agents…'))))?.viewId;
   if (!viewId) return;
   try {
-    const selection = await currentChannelSelection({ teamId, channelId });
+    const selection = await currentChannelSelection({ teamId, channelId, projectId: inboundProjectId(inbound) ?? undefined });
     if (!selection) {
       await updateModal(token, viewId, switchAgentModal(channelId, modalText(NO_LINK_TEXT)));
       return;

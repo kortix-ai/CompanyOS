@@ -107,7 +107,7 @@ export async function buildSlackModelsResponse(ctx: SlackModelCtx): Promise<Slas
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*No Kortix workspace is connected to this channel yet.*\nRun \`${ctx.command}\` to connect one, then pick a model.` } }],
     };
   }
-  const selection = await currentChannelSelection({ teamId: ctx.teamId, channelId: ctx.channelId });
+  const selection = await currentChannelSelection({ teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId });
   const current = selection?.sessionModel ?? null;
 
   const { models, defaultModel } = await listChannelModels(scope);

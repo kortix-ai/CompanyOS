@@ -10,7 +10,7 @@ import { lookupChatIdentity } from '../core/identity';
 import { changeChannelAgent, changeChannelPolicy } from '../core/settings';
 import { applySlackModelChoice, buildSlackModelsResponse } from './model-choice';
 import { linkedSlackProject } from './link';
-import { settingsRefusalText, slackSettingsChannel, slackUserOf } from './settings-text';
+import { settingsRefusalText, slackSettingsChannel, slackUserOf, slashChannel } from './settings-text';
 import { buildAgentPickerBlocks, loadScopedChannelAgents } from './agent-picker';
 import { channelModelContext } from './model-gate';
 import { conversationPolicyLabel, normalizeConversationPolicy } from './participants';
@@ -118,7 +118,7 @@ function sourceLabel(source: string): string {
 // demand, is the only git-touching path.
 export async function slashPanel(ctx: SlashCtx): Promise<SlashResponse> {
   const identityBlocks = config.SLACK_REQUIRE_USER_IDENTITY ? [await buildIdentityContext(ctx)] : [];
-  const selection = await currentChannelSelection(ctx);
+  const selection = await currentChannelSelection(slashChannel(ctx));
   const currentId = selection?.projectId ?? null;
   const [p] = currentId
     ? await db
@@ -218,7 +218,7 @@ export async function slashPanel(ctx: SlashCtx): Promise<SlashResponse> {
 // ── Policy ───────────────────────────────────────────────────────────────────
 
 export async function slashPolicy(ctx: SlashCtx, arg: string): Promise<SlashResponse> {
-  const selection = await currentChannelSelection(ctx);
+  const selection = await currentChannelSelection(slashChannel(ctx));
   if (!selection) {
     return {
       response_type: 'ephemeral',
@@ -271,7 +271,7 @@ export async function slashAgents(ctx: SlashCtx, arg: string): Promise<SlashResp
   // `/kortix agents <name>` is a convenient alias for setting the agent.
   if (arg.trim()) return slashSetAgent(ctx, arg);
 
-  const selection = await currentChannelSelection(ctx);
+  const selection = await currentChannelSelection(slashChannel(ctx));
   if (!selection) {
     return {
       response_type: 'ephemeral',

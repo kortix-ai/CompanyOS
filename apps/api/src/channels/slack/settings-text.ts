@@ -2,6 +2,7 @@ import { config } from '../../config';
 import { type ChatUser, chatUser } from '../core/identity';
 import { slackChannelIsDm } from './util';
 import type { SettingsChannel, SettingsRefusal } from '../core/settings';
+import type { ChannelCtx } from './selection';
 
 // The Slack side of channel settings that every setter shares: who is asking,
 // which channel it is, and the wording of a refusal (core/settings.ts decides
@@ -12,6 +13,15 @@ export function slackUserOf(ctx: { teamId: string; slackUserId: string }): ChatU
 }
 
 /** A Slack channel for settings. DM channel ids start with `D`. */
+/**
+ * A slash command's channel, as the settings read it: with the Kortix
+ * workspace whose own Slack app received the command, so that workspace reads
+ * its own settings, not the shared app's linked one.
+ */
+export function slashChannel(ctx: { teamId: string; channelId: string; projectScopedProjectId?: string }): ChannelCtx {
+  return { teamId: ctx.teamId, channelId: ctx.channelId, ...(ctx.projectScopedProjectId ? { projectId: ctx.projectScopedProjectId } : {}) };
+}
+
 /** `projectScopedProjectId`: the Kortix workspace whose own Slack app received the request. */
 export function slackSettingsChannel(ctx: { teamId: string; channelId: string; projectScopedProjectId?: string }): SettingsChannel {
   return {

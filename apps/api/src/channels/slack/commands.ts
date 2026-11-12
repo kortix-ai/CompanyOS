@@ -17,7 +17,7 @@ import {
   revokeChatIdentity,
 } from '../core/identity';
 import { listVisibleChatSessions } from '../core/sessions';
-import { slackUserOf } from './settings-text';
+import { slashChannel, slackUserOf } from './settings-text';
 import {
   slashAgents,
   slashLinkInfo,
@@ -224,7 +224,7 @@ async function slashSessions(ctx: SlashCtx): Promise<SlashResponse> {
 // non-member. Turning that off by default would reintroduce exactly the
 // impersonation SLACK_REQUIRE_USER_IDENTITY was added to prevent.
 async function slashLinkBot(ctx: SlashCtx, arg: string): Promise<SlashResponse> {
-  const selection = await currentChannelSelection(ctx);
+  const selection = await currentChannelSelection(slashChannel(ctx));
   if (!selection?.projectId) {
     return slashLinkInfo(ctx);
   }
@@ -382,7 +382,7 @@ const SESSION_STATUS_EMOJI: Record<string, string> = {
 };
 
 async function slashSession(ctx: SlashCtx): Promise<SlashResponse> {
-  const selection = await currentChannelSelection(ctx);
+  const selection = await currentChannelSelection(slashChannel(ctx));
   if (!selection) {
     return {
       response_type: 'ephemeral',

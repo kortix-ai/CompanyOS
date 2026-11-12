@@ -2,6 +2,26 @@ import { describe, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+// The home route now carries the landing's signed-in gate
+// (LandingAuthGate), a client component that requires the app's providers.
+// SSR renders the gate's signed-out output (the landing, unchanged); supply
+// the provider boundary the same way `home-auth-redirect.test.tsx` does.
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    supabase: {},
+    bootstrapError: null,
+    retryAuth: () => undefined,
+    signOut: () => Promise.resolve(),
+  }),
+}));
+mock.module('next/navigation', () => ({
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Under bun test there is no react-server bundler condition; neutralize the
 // guard package. The rendered markup below stays the real thing.
 mock.module('server-only', () => ({}));

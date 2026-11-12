@@ -25,6 +25,7 @@ import { decryptNamedProjectSecret, encryptProjectSecret } from './secrets/envel
 import { projectSecretsRevision, resolveGrantedSecretSelection } from './secrets/grant-policy';
 import { mintSessionSecretHandle } from './secrets/handles';
 import { projectsView } from '../workspaces/rows';
+import { projectSecretRowNotMoved } from '../secrets/llm-credential-ledger';
 
 /**
  * Upsert the SHARED (owner_user_id IS NULL) row for a project secret to a new
@@ -288,6 +289,10 @@ export async function listResolvedProjectSecrets(
         userId
           ? or(isNull(projectSecrets.ownerUserId), eq(projectSecrets.ownerUserId, userId))
           : isNull(projectSecrets.ownerUserId),
+        // A provider key that moved to the named store is never decrypted
+        // here again: the gateway strips it anyway, and an undecryptable
+        // moved row must not fail session start.
+        projectSecretRowNotMoved(),
       ),
     );
 

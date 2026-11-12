@@ -206,8 +206,10 @@ const databaseMock = {
     if (table === projectSecretTombstones) return { where: async () => undefined };
     if (table !== projectSecrets) throw new Error('unexpected table');
     return {
-      where: async () => {
+      where: () => {
         row = null;
+        // `DELETE /oauth` reads back the deleted ids to remove their named copies.
+        return Object.assign(Promise.resolve(), { returning: async () => [] });
       },
     };
   },

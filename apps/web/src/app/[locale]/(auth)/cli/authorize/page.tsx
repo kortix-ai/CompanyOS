@@ -71,7 +71,7 @@ function CliAuthorizeInner() {
   const [error, setError] = useState<string | null>(null);
   // The link's `user_code` is the code the CLI printed: start the field from
   // it (still editable), so pressing Authorize is the only step left.
-  const [typedCode, setTypedCode] = useState(() => params.get('user_code') ?? '');
+  const [typedCode, setTypedCode] = useState(() => userCode ?? '');
   const [noWorkspace, setNoWorkspace] = useState(false);
   const tCli = useTranslations('workspaces.cli');
   // A CLI login acts in a workspace: with none, the API answers 409

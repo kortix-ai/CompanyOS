@@ -30,12 +30,12 @@ export function registerEventIngressRoutes(): void {
     tags: ['triggers'],
     summary: 'Receive a connector event',
     description:
-      'Authenticated by the event provider signature, not a bearer token. Fans each delivery out to the event triggers subscribed to it. Answers 500 when any fire failed, so the provider retries; the idempotency key dedupes the fires that succeeded.',
+      'Authenticated by the event provider signature, not a bearer token. Fans each delivery out to the event triggers subscribed to it. Answers 500 when any fire failed, so the provider retries; the idempotency key dedupes the fires that succeeded. An account-state refusal (no usable model, no credits — billing gate) answers 402 with its code instead: the provider cannot fix it by retrying.',
     // No body schema: the provider signs the raw bytes, so nothing may parse them first.
     request: { params: z.object({ provider: z.string() }) },
     responses: {
       200: json(IngressResultSchema, 'Every delivery fired, skipped or ignored'),
-      ...errors(401, 404, 413, 500, 503),
+      ...errors(401, 402, 404, 413, 500, 503),
     },
   }), async (c) => {
     const provider = eventSourceFor(c.req.param('provider'));
@@ -54,6 +54,12 @@ export function registerEventIngressRoutes(): void {
 
     await applyNotices(provider.id, received.notices);
     const tally = await deliverEvents(provider.id, received.deliveries);
+    // Account state (billing gate) is not a server fault: answer the 402
+    // convention (trigger-webhooks.ts, KRTX-1505) so the provider stops
+    // retrying an event no retry can fix.
+    if (tally.accountState) {
+      return c.json({ error: tally.accountState.error, code: tally.accountState.code }, 402);
+    }
     if (tally.failed > 0) return c.json({ error: 'Failed to fire an event trigger' }, 500);
     return c.json({
       accepted: received.deliveries.length,

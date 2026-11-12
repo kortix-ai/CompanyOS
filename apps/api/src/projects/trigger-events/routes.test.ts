@@ -82,6 +82,16 @@ describe('POST /v1/webhooks/events/:provider', () => {
     expect((await post('composio')).status).toBe(500);
   });
 
+  test('402 with the code when a fire hit account state the provider cannot fix (KRTX-4771)', async () => {
+    tally = { fired: 0, skipped: 1, ignored: 0, failed: 1, accountState: { error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.', code: 'no_usable_model' } };
+    const res = await post('composio');
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
+      code: 'no_usable_model',
+    });
+  });
+
   test('413 for a body over the cap, before the provider reads it', async () => {
     let read = false;
     setEventSourceForTest('composio', { ...fake, receive: async () => { read = true; return { deliveries: [], notices: [] }; } });

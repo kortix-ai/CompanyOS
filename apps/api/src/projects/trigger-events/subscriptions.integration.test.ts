@@ -17,7 +17,7 @@ import { clearAuthorizeCaches } from '../../iam/authorize';
 import type { GitTriggerSpec } from '../trigger-types';
 
 const fires: Array<Record<string, any>> = [];
-let fireStatus: 'fired' | 'failed' | 'retryable' | 'deduped' | 'throws' = 'fired';
+let fireStatus: 'fired' | 'failed' | 'retryable' | 'account_state' | 'deduped' | 'throws' = 'fired';
 /** The create command a fire leaves under its key, as `createSession` does. */
 let leftCommand: 'dead_lettered' | 'queued' | null = null;
 const actualTriggers = await import('../lib/triggers');
@@ -37,6 +37,8 @@ mock.module('../lib/triggers', () => ({
     }
     if (fireStatus === 'failed') return { status: 'failed', error: 'boom', retryable: false };
     if (fireStatus === 'retryable') return { status: 'failed', error: 'The sandbox provider is busy', retryable: true };
+    if (fireStatus === 'account_state')
+      return { status: 'failed', error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.', errorCode: 'no_usable_model', retryable: false };
     if (fireStatus === 'throws') throw new Error('sandbox unavailable');
     return { status: 'fired', sessionId: 'sess_synthetic', deduped: fireStatus === 'deduped' };
   },
@@ -827,6 +829,18 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
       // A failure no redelivery can fix opens an alert on its first attempt (KRTX-1742).
       expect(await runtime('a')).toMatchObject({ alertSource: 'fire' });
       expect((await runtime('a'))?.alertFailingSince).toBeInstanceOf(Date);
+      await settleTriggerAlerts();
+    });
+
+    test('an account-state refusal counts as failed and carries the billing-gate code (KRTX-4771)', async () => {
+      await armed();
+      fireStatus = 'account_state';
+      const tally = await deliverEvents('composio', [delivery()]);
+      expect(tally.failed).toBe(1);
+      expect(tally.accountState).toEqual({
+        error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
+        code: 'no_usable_model',
+      });
       await settleTriggerAlerts();
     });
 

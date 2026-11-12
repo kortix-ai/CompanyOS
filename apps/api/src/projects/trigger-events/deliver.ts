@@ -16,6 +16,7 @@ import { takeThrottledRunSlot } from '../lib/trigger-run-caps';
 import { recordTriggerRun, triggerRunFromFire } from '../trigger-execution-store';
 import type { GitTriggerSpec } from '../trigger-types';
 import { db } from '../../shared/db';
+import { ACCOUNT_STATE_FIRE_CODES } from '../lib/trigger-fire';
 import * as store from './store';
 import { eventTriggersEnabled } from './flag';
 import { connectorEventApp } from './mcp-source';
@@ -29,7 +30,18 @@ export interface DeliveryTally {
   /** No subscription row references the delivery's external id. */
   ignored: number;
   failed: number;
+  /** An account-state refusal (billing gate, KRTX-1505): no retry can fix it, the
+   *  owner can. The first one's error and code; the ingress answers 402 for it. */
+  accountState?: { error: string; code: string };
 }
+
+/** The outcome of one delivery. `account_state` is a failure no retry can fix (the billing gate),
+ *  carrying the refusal the sender would see, so the ingress can answer the 402 convention. */
+export type DeliveryOutcome =
+  | 'fired'
+  | 'skipped'
+  | 'failed'
+  | { status: 'account_state'; error: string; code: string };
 
 /** Third-party event content is untrusted data, never an instruction from a person. */
 /** The first line also becomes the session's title until the agent names it, so it names the trigger. */
@@ -120,7 +132,7 @@ async function deliverToRow(
   provider: string,
   row: store.EventSubscriptionRow,
   delivery: EventDelivery,
-): Promise<'fired' | 'skipped' | 'failed'> {
+): Promise<DeliveryOutcome> {
   // Only a live subscription fires: an errored or parked row (revoked or narrowed
   // account) must not feed sessions while its provider instance winds down.
   if (row.status !== 'active') return 'skipped';
@@ -190,6 +202,11 @@ async function deliverToRow(
       if (alerts) {
         await raiseTriggerAlert({ projectId: row.projectId, accountId: project.accountId, slug: row.slug, source: 'fire', error });
       }
+      // Account state, not a server fault: the billing gate's convention. The
+      // provider retries a 5xx forever, so the ingress must not answer one.
+      if (result.errorCode && ACCOUNT_STATE_FIRE_CODES.has(result.errorCode)) {
+        return { status: 'account_state', error, code: result.errorCode };
+      }
       return 'failed';
     }
     // A duplicate, or a fire a run cap held (KRTX-1721), ran nothing: it
@@ -217,7 +234,15 @@ export async function deliverEvents(provider: string, deliveries: readonly Event
     // Zero rows: an instance of another environment sharing the provider project. Never unsubscribe it.
     const rows = await store.rowsByExternalId(provider, delivery.externalId);
     if (rows.length === 0) tally.ignored += 1;
-    for (const row of rows) tally[await deliverToRow(provider, row, delivery)] += 1;
+    for (const row of rows) {
+      const outcome = await deliverToRow(provider, row, delivery);
+      if (typeof outcome === 'string') {
+        tally[outcome] += 1;
+      } else {
+        tally.failed += 1;
+        if (!tally.accountState) tally.accountState = { error: outcome.error, code: outcome.code };
+      }
+    }
   }
   return tally;
 }

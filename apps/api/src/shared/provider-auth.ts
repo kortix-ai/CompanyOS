@@ -7,15 +7,17 @@ import { logger } from '../lib/logger';
 import { captureException } from '../lib/sentry';
 
 /**
- * True iff `err` carries an HTTP 401/403 status — a dead or revoked provider
- * credential — whichever provider threw it: the Daytona SDK's own 401 error
- * ("DaytonaAuthenticationError: Invalid credentials", statusCode 401) and the
- * Platinum adapter's `PlatinumHttpError` (`.status`) both carry one of these
- * fields. Never a transient provider hiccup, and a message that merely
- * mentions credentials never misclassifies: any unclear error keeps the
- * caller's existing behavior.
+ * The matched HTTP 401/403 status of a provider auth failure — a dead or
+ * revoked provider credential — whichever provider threw it: the Daytona SDK's
+ * own 401 error ("DaytonaAuthenticationError: Invalid credentials",
+ * statusCode 401) and the Platinum adapter's `PlatinumHttpError` (`.status`)
+ * both carry one of these fields. Undefined when the error carries none, so
+ * the number is safe to emit in telemetry while the message text (which embeds
+ * sandbox paths and upstream bodies) never is. Never a transient provider
+ * hiccup, and a message that merely mentions credentials never misclassifies:
+ * any unclear error keeps the caller's existing behavior.
  */
-export function isProviderAuthFailure(err: unknown): boolean {
+export function providerAuthFailureStatus(err: unknown): 401 | 403 | undefined {
   const value = err as
     | {
         status?: unknown;
@@ -25,7 +27,11 @@ export function isProviderAuthFailure(err: unknown): boolean {
     | null
     | undefined;
   const statuses = [value?.statusCode, value?.response?.status, value?.status];
-  return statuses.some((status) => status === 401 || status === 403);
+  return statuses.find((status): status is 401 | 403 => status === 401 || status === 403);
+}
+
+export function isProviderAuthFailure(err: unknown): boolean {
+  return providerAuthFailureStatus(err) !== undefined;
 }
 
 /**
@@ -74,7 +80,8 @@ export function escalateProviderAuthOutage(
   now = Date.now(),
 ): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  const isAuthOutage = isProviderAuthFailure(error)
+  const status = providerAuthFailureStatus(error);
+  const isAuthOutage = status !== undefined
     || message.toLowerCase().includes(ORG_OUT_OF_CREDITS_SUBSTRING);
   if (!isAuthOutage) return false;
   const lastAt = lastAuthOutageEscalationAt.get(provider) ?? 0;
@@ -82,15 +89,18 @@ export function escalateProviderAuthOutage(
   lastAuthOutageEscalationAt.set(provider, now);
   const remediation = PROVIDER_REMEDIATION[provider]
     ?? `check the ${provider} provider credential`;
-  logger.error(`[${provider}] auth outage: every ${provider} API call is rejected; ${remediation}`, {
-    action,
-    error: message.slice(0, 200),
-  });
-  captureException(new Error(`[${provider}] API rejects every call — ${remediation}`), {
+  // The upstream error text (a PlatinumHttpError's message embeds the sandbox
+  // path and the response body) never enters telemetry: provider/action/name
+  // and the matched numeric status identify the outage and its remediation
+  // (the G9 privacy review on PR #12557). The raw message classifies above,
+  // then dies here.
+  const context: Record<string, unknown> = {
     action,
     errorName: error instanceof Error ? error.name : 'Error',
-    errorMessage: message.slice(0, 200),
-  });
+    ...(status !== undefined && { status }),
+  };
+  logger.error(`[${provider}] auth outage: every ${provider} API call is rejected; ${remediation}`, context);
+  captureException(new Error(`[${provider}] API rejects every call — ${remediation}`), context);
   return true;
 }
 

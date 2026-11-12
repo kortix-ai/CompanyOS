@@ -93,6 +93,26 @@ function platinum401(): Error {
   });
 }
 
+/** A synthetic leaky 401: the real PlatinumHttpError message embeds the sandbox
+ * path AND the upstream response body (shared/platinum.ts throws
+ * `platinum <method> <path> -> <status> <body>`) — exactly the two fields that
+ * must never reach the escalation telemetry (the G9 privacy review, PR #12557). */
+function leakyPlatinum401(): Error {
+  const body = '{"code":"unauthorized","detail":"upstream response body"}';
+  return Object.assign(
+    new Error(`platinum DELETE /v1/sandboxes/sbx-leaky-9876 -> 401 ${body}`),
+    { name: 'PlatinumHttpError', status: 401, body },
+  );
+}
+
+/** The escalated page and the log line, flattened to text for leak assertions. */
+function telemetryText(event: { error: unknown; context?: Record<string, unknown> } | { message: string; context?: Record<string, unknown> }): string {
+  const head = 'error' in event
+    ? (event.error instanceof Error ? event.error.message : String(event.error))
+    : event.message;
+  return `${head} ${JSON.stringify(event.context ?? {})}`;
+}
+
 beforeEach(() => {
   captured.length = 0;
   errorLogs.length = 0;
@@ -172,6 +192,36 @@ describe('escalateProviderAuthOutage', () => {
     const err = new Error('Out of credits. Pick a plan or top up to continue.');
     expect(escalateProviderAuthOutage('daytona', 'snapshot quota GC', err, T0)).toBe(true);
     expect(captured.length).toBe(1);
+  });
+
+  test('the escalated telemetry carries provider/action/status only — no sandbox id, no response body (the G9 privacy review)', () => {
+    const escalated = escalateProviderAuthOutage('platinum', 'app runtime removal', leakyPlatinum401(), T0);
+    expect(escalated).toBe(true);
+    expect(captured.length).toBe(1);
+    expect(errorLogs.length).toBe(1);
+    for (const text of [telemetryText(captured[0]!), telemetryText(errorLogs[0]!)]) {
+      expect(text).not.toContain('sbx-leaky-9876');
+      expect(text).not.toContain('upstream response body');
+      expect(text).not.toContain('DELETE /v1/sandboxes');
+      expect(text).not.toContain('unauthorized');
+    }
+    expect(captured[0]!.context).toMatchObject({ action: 'app runtime removal', status: 401 });
+    expect(errorLogs[0]!.context).toMatchObject({ action: 'app runtime removal', status: 401 });
+  });
+
+  test('the org out-of-credits escalation is classified from the message but never copies it', () => {
+    const escalated = escalateProviderAuthOutage(
+      'daytona',
+      'snapshot quota GC',
+      new Error('Out of credits for org org-leaky-4321. Pick a plan or top up to continue.'),
+      T0,
+    );
+    expect(escalated).toBe(true);
+    expect(captured.length).toBe(1);
+    for (const text of [telemetryText(captured[0]!), telemetryText(errorLogs[0]!)]) {
+      expect(text).not.toContain('org-leaky-4321');
+      expect(text).not.toContain('Out of credits');
+    }
   });
 
   test('an error that merely mentions credentials without an auth status never escalates', () => {

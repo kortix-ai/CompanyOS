@@ -68,6 +68,9 @@ kortix secrets request BILLING_API_TOKEN --scope connector                  # on
      or service account), never their own login.
    - `--owner me` (default): private to this user, used only in their own
      sessions. Use it for a person's own account.
+   - A trigger or automation (a wake-up on a new email, a scheduled run) uses
+     only shared accounts: mint the `--owner project` link for it, once. A
+     private link cannot serve it, so never mint one first.
    - Unclear? Ask. Never put a personal login in the shared slot.
 3. `kortix connectors connect <slug> [--owner project] --label "<name>"`.
    The label names the account ("Support inbox"), never `me` or an id.

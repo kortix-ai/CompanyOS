@@ -2202,3 +2202,21 @@ flow(
     });
   },
 );
+
+// CHN-35 — an agent's face as a PNG, public: Slack fetches it as the message icon (`icon_url`).
+flow(
+  "CHN-35",
+  { domain: "channels", tags: ["smoke"], routes: ["GET /v1/agent-marks/:file"] },
+  async (ctx) => {
+    await ctx.step("ANON GET /v1/agent-marks/mykortix.png → 200 image/png, PNG bytes", async () => {
+      const r = await ctx.client.as(ctx.P.ANON).get("/v1/agent-marks/mykortix.png");
+      r.status(200).headerEquals("content-type", "image/png");
+      // The PNG signature is \x89 P N G; a text decode keeps the three letters.
+      if (r.text().slice(1, 4) !== "PNG") throw new Error("agent mark body is not a PNG");
+    });
+    await ctx.step("a file that is not <slug>.png, or a slug outside [a-z0-9_-], → 404", async () => {
+      (await ctx.client.as(ctx.P.ANON).get("/v1/agent-marks/mykortix.jpg")).status(404);
+      (await ctx.client.as(ctx.P.ANON).get("/v1/agent-marks/My%20Agent.png")).status(404);
+    });
+  },
+);

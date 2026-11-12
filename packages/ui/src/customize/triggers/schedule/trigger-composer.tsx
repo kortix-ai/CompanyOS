@@ -530,6 +530,7 @@ function ComposerForm({
           <section data-block="then" className="space-y-3">
             <SectionTitle>{tI18nComplete.raw('text0597f441dcca')}</SectionTitle>
             <ThenFields
+              projectId={projectId}
               agents={agents}
               draft={draft}
               patch={patch}

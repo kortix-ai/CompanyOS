@@ -57,6 +57,20 @@ export type WorkspaceInvariantReport = Record<InvariantId, InvariantResult>;
 const SAMPLE = 10;
 const result = (violations: string[]): InvariantResult => ({ ok: violations.length === 0, violations: violations.length, sample: violations.slice(0, SAMPLE) });
 
+/** One check's throw (a statement timeout on a prod-sized table) marks that
+ * invariant errored instead of failing its caller: the report still exits 1
+ * with the rest of the findings, and the split runner's repair pass keeps its
+ * tick alive (2026-11-12). Drizzle wraps every driver failure in a
+ * DrizzleQueryError whose own message is the whole statement plus its params;
+ * the caller wants the driver's cause, so a database error is summarized
+ * without its SQL. */
+const errored = (e: unknown): InvariantResult => ({
+  ok: false,
+  violations: 0,
+  sample: [],
+  error: (databaseErrorSummary(e) ?? (e instanceof Error ? e.message : String(e))).slice(0, 300),
+});
+
 interface DoneRun extends Record<string, unknown> {
   run_id: string;
   project_id: string;
@@ -305,7 +319,11 @@ async function i12(accountIds?: string[]): Promise<InvariantResult> {
 
 /** I2 alone for the given done runs: the split runner's repair pass checks its run with it. */
 export async function checkSplitRunsMoved(runIds: string[]): Promise<InvariantResult> {
-  return i2(await doneRuns(runIds));
+  try {
+    return await i2(await doneRuns(runIds));
+  } catch (e) {
+    return errored(e);
+  }
 }
 
 /** Every invariant, read-only. `runIds` narrows I2, I3, I5, I7 and I8; `accountIds` narrows I9, I10 and I12. */
@@ -313,18 +331,6 @@ export async function checkWorkspaceInvariants(
   options: { runIds?: string[]; accountIds?: string[] } = {},
 ): Promise<WorkspaceInvariantReport> {
   const runs = await doneRuns(options.runIds);
-  // One check's throw (a statement timeout on a prod-sized table) marks that
-  // invariant errored instead of killing the report: the run continues and
-  // exits 1 with the rest of the findings, never as an unhandled rejection.
-  const errored = (e: unknown): InvariantResult => ({
-    ok: false,
-    violations: 0,
-    sample: [],
-    // Drizzle wraps every driver failure in a DrizzleQueryError whose own
-    // message is the whole statement plus its params; the report wants the
-    // driver's cause, so a database error is summarized without its SQL.
-    error: (databaseErrorSummary(e) ?? (e instanceof Error ? e.message : String(e))).slice(0, 300),
-  });
   return {
     I1: await i1().catch(errored),
     I2: await i2(runs).catch(errored),

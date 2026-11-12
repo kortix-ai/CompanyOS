@@ -10,7 +10,7 @@ import { accountMembers, auditEvents, creditAccounts } from '@kortix/db';
 import type { Subprocessor } from '@kortix/shared/subprocessors';
 import { and, eq, sql } from 'drizzle-orm';
 import { setOwnerAlertSenderForTest } from '../billing/services/owner-alerts';
-import { openSubprocessorNotices, runSubprocessorNoticeSweep } from '../billing/services/subprocessor-notices';
+import { openSubprocessorNotices, runSubprocessorNoticeSweep, workspaceScope } from '../billing/services/subprocessor-notices';
 import { config } from '../config';
 import type { EmailMessage } from '../lib/email/types';
 import { db } from '../shared/db';
@@ -94,6 +94,16 @@ describe('open subprocessor notices', () => {
   });
 });
 
+describe('the workspace scope of a recipient', () => {
+  test('one workspace keeps the old copy, several are listed, and every paid account reads all workspaces', () => {
+    expect(workspaceScope(['subproc-paid-account'], 4)).toBe('subproc-paid-account');
+    expect(workspaceScope(['a-account', 'b-account', 'c-account'], 7)).toBe('a-account, b-account, and c-account');
+    expect(workspaceScope(['a-account', 'b-account'], 2)).toBe('all workspaces');
+    // Two memberships in workspaces that share a name list once.
+    expect(workspaceScope(['a-account', 'a-account'], 3)).toBe('a-account');
+  });
+});
+
 describe('the subprocessor notice sweep', () => {
   test('emails the owner and the admin of a paid account (not the member, not a free account), once, with evidence', async () => {
     const now = new Date('2026-10-20T09:00:00Z');
@@ -142,6 +152,50 @@ describe('the subprocessor notice sweep', () => {
       expect(customerEmails().flatMap((message) => message.to)).toEqual([email(owner, 'late-owner')]);
     } finally {
       await deleteFromView(db, accountMembers, eq(accountMembers.userId, owner));
+      await db.execute(sql`delete from auth.users where id = ${owner}::uuid`);
+    }
+  });
+
+  test('a person who manages several paid accounts gets one email listing them, not one per project', async () => {
+    const owner = crypto.randomUUID();
+    await db.execute(sql`
+      insert into auth.users (id, email, instance_id, aud, role)
+      values (${owner}::uuid, ${email(owner, 'batch-owner')}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated')`);
+    const batchA = await seedProject('subproc-batch-a');
+    const batchB = await seedProject('subproc-batch-b');
+    await insertIntoView(db, accountMembers, { userId: owner, accountId: batchA.account_id, accountRole: 'owner' });
+    await insertIntoView(db, accountMembers, { userId: owner, accountId: batchB.account_id, accountRole: 'admin' });
+    await db.insert(creditAccounts).values([
+      { accountId: batchA.account_id, tier: 'credits' },
+      { accountId: batchB.account_id, tier: 'tier_2_20' },
+    ]);
+    try {
+      expect(await runSubprocessorNoticeSweep(new Date('2026-10-20T12:00:00Z'), ROWS)).toEqual({ accountsNotified: 2 });
+
+      const mine = customerEmails().filter((m) => m.to[0] === email(owner, 'batch-owner'));
+      expect(mine).toHaveLength(1);
+      expect(mine[0]!.text).toContain('subproc-batch-a-account and subproc-batch-b-account');
+      expect(mine[0]!.subject).toBe('Kortix subprocessor update, effective November 24, 2026');
+
+      for (const batched of [batchA, batchB]) {
+        const [audit] = await db
+          .select({ outputSummary: auditEvents.outputSummary })
+          .from(auditEvents)
+          .where(and(eq(auditEvents.accountId, batched.account_id), eq(auditEvents.action, 'legal.subprocessor_notice.sent')));
+        expect(audit!.outputSummary).toMatchObject({ recipients: 1, effective_date: '2026-11-24', subprocessors: ['Example Inference, Inc.'] });
+      }
+
+      // A retry of the same send does not duplicate it.
+      sent = [];
+      expect(await runSubprocessorNoticeSweep(new Date('2026-10-20T13:00:00Z'), ROWS)).toEqual({ accountsNotified: 0 });
+      expect(customerEmails()).toEqual([]);
+    } finally {
+      await deleteFromView(db, accountMembers, eq(accountMembers.userId, owner));
+      for (const accountId of [batchA.account_id, batchB.account_id]) {
+        await db.delete(creditAccounts).where(eq(creditAccounts.accountId, accountId));
+      }
+      await db.execute(sql`delete from kortix.chat_event_dedup where event_id like ${`%${batchA.account_id}%`} or event_id like ${`%${batchB.account_id}%`}`);
+      await removeSeeded([batchA, batchB]);
       await db.execute(sql`delete from auth.users where id = ${owner}::uuid`);
     }
   });

@@ -87,9 +87,6 @@ mock.module('./shared/styles', () => ({
   TURN_TYPE: { xs: {} },
   useTurnPalette: () => PALETTE,
 }));
-mock.module('./shared/surface', () => ({
-  ToolCardFrame: ({ children }: { children?: React.ReactNode }) => <view>{children}</view>,
-}));
 mock.module('./shared/tool-icons', () => ({ getToolIconByName: () => null }));
 mock.module('./tool-error', () => ({
   ToolError: ({ error }: { error: unknown }) => <text>{`ERROR·${String(error)}`}</text>,

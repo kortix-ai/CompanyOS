@@ -327,6 +327,8 @@ export interface ProjectTrigger {
   name: string;
   type: 'cron' | 'webhook' | 'event' | 'app';
   agent: string;
+  /** Model for the trigger's runs (`provider/model` or a managed id); null = the workspace default. Absent on older APIs. */
+  model?: string | null;
   enabled: boolean;
   cron: string | null;
   /** One-off run instant (ISO); exclusive with cron. */

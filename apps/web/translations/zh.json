@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "收件箱",
-      "viewReview": "Review",
-      "viewNotifications": "通知",
-      "viewLabel": "收件箱视图",
       "description": "来自所有工作区、与你相关的会话、触发器和工件的动态。",
       "unreadLabel": "收件箱：{count} 条未读",
       "unreadCount": "{count} 条未读",

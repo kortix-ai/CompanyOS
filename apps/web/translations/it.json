@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "Posta in arrivo",
-      "viewReview": "Review",
-      "viewNotifications": "Notifiche",
-      "viewLabel": "Vista della posta in arrivo",
       "description": "Aggiornamenti su sessioni, trigger e artefatti che ti riguardano, da tutti i workspace.",
       "unreadLabel": "Posta in arrivo: {count} non lette",
       "unreadCount": "{count} non lette",

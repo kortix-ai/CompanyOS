@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "Caixa de entrada",
-      "viewReview": "Review",
-      "viewNotifications": "Notificações",
-      "viewLabel": "Visualização da caixa de entrada",
       "description": "Atualizações das sessões, gatilhos e artefatos que envolvem você, de todos os espaços de trabalho.",
       "unreadLabel": "Caixa de entrada: {count} não lidas",
       "unreadCount": "{count} não lidas",

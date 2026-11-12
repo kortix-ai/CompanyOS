@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "Boîte de réception",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Vue de la boîte de réception",
       "description": "Les nouvelles des sessions, déclencheurs et artefacts qui vous concernent, dans tous les espaces de travail.",
       "unreadLabel": "Boîte de réception : {count} non lues",
       "unreadCount": "{count} non lues",

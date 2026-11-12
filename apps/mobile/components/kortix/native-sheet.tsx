@@ -153,7 +153,6 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   // site's `onChange`, the keyboard avoider turning on) eases with it.
   const reducedMotion = useReducedMotion();
   const layoutRef = React.useRef({ fit, baseDetents, detentAt, expanded, reducedMotion });
-  layoutRef.current = { fit, baseDetents, detentAt, expanded, reducedMotion };
   const easeDetentChange = React.useCallback((next: { expanded: boolean; detentAt: number }) => {
     const now = layoutRef.current;
     if (now.fit || now.reducedMotion) return;
@@ -168,6 +167,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   const onDismissRef = React.useRef(onDismiss);
   React.useLayoutEffect(() => {
     onChangeRef.current = onChange;
+    layoutRef.current = { fit, baseDetents, detentAt, expanded, reducedMotion };
     onDismissRef.current = onDismiss;
   });
 

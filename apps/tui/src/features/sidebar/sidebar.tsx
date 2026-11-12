@@ -15,6 +15,7 @@ import { kortix } from '../../kortix.ts';
 import { filterSessionsByTitle, groupSessionsByDay } from '../../lib/session-groups.ts';
 import { NO_WORKSPACE_TEXT, useWorkspaces } from '../../lib/workspaces.ts';
 import { ColumnPicker } from './column-picker.tsx';
+import { useScreenAction } from '../../ui/index.ts';
 import { type SidebarNavItem, type SidebarScreen, SidebarView } from './sidebar-view.tsx';
 
 export interface SidebarProps {
@@ -84,8 +85,8 @@ export function Sidebar({
 }: SidebarProps) {
   const [picker, setPicker] = useState(false);
   const [filter, setFilter] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const { busy, run } = useScreenAction(onToast);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
@@ -157,52 +158,49 @@ export function Sidebar({
       onToast?.(noWorkspace ? NO_WORKSPACE_TEXT : 'No workspace open. Pick one first.', 'error');
       return;
     }
-    setBusy('creating session…');
-    try {
-      // No title: session titles are server-owned (memory
-      // `session-titles-kortix-owned`), so the create body stays empty.
-      const session = await kortix().projects.createSession(projectId);
-      await sessionsQuery.refetch();
-      onNewSession(session.session_id);
-    } catch (error) {
-      onToast?.(`Create failed: ${errorText(error)}`, 'error');
-    } finally {
-      setBusy(null);
-    }
-  }, [projectId, noWorkspace, onNewSession, onToast, sessionsQuery.refetch]);
+    run('creating session…', async () => {
+      try {
+        // No title: session titles are server-owned (memory
+        // `session-titles-kortix-owned`), so the create body stays empty.
+        const session = await kortix().projects.createSession(projectId);
+        await sessionsQuery.refetch();
+        onNewSession(session.session_id);
+      } catch (error) {
+        throw new Error(`Create failed: ${errorText(error)}`);
+      }
+    });
+  }, [projectId, noWorkspace, onNewSession, run, sessionsQuery.refetch]);
 
   const renameSession = useCallback(
-    async (sessionId: string, name: string) => {
+    (sessionId: string, name: string) => {
       if (!projectId) return;
-      setBusy('renaming…');
-      try {
-        await kortix().session(projectId, sessionId).update({ name });
-        await sessionsQuery.refetch();
-        onToast?.(`Renamed to ${name}`);
-      } catch (error) {
-        onToast?.(`Rename failed: ${errorText(error)}`, 'error');
-      } finally {
-        setBusy(null);
-      }
+      run('renaming…', async () => {
+        try {
+          await kortix().session(projectId, sessionId).update({ name });
+          await sessionsQuery.refetch();
+          return `Renamed to ${name}`;
+        } catch (error) {
+          throw new Error(`Rename failed: ${errorText(error)}`);
+        }
+      });
     },
-    [projectId, onToast, sessionsQuery.refetch],
+    [projectId, run, sessionsQuery.refetch],
   );
 
   const deleteSession = useCallback(
-    async (sessionId: string) => {
+    (sessionId: string) => {
       if (!projectId) return;
-      setBusy('deleting…');
-      try {
-        await kortix().session(projectId, sessionId).delete();
-        await sessionsQuery.refetch();
-        onToast?.('Session deleted.');
-      } catch (error) {
-        onToast?.(`Delete failed: ${errorText(error)}`, 'error');
-      } finally {
-        setBusy(null);
-      }
+      run('deleting…', async () => {
+        try {
+          await kortix().session(projectId, sessionId).delete();
+          await sessionsQuery.refetch();
+          return 'Session deleted.';
+        } catch (error) {
+          throw new Error(`Delete failed: ${errorText(error)}`);
+        }
+      });
     },
-    [projectId, onToast, sessionsQuery.refetch],
+    [projectId, run, sessionsQuery.refetch],
   );
 
   const pickerItems = useMemo(

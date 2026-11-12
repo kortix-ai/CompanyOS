@@ -183,9 +183,6 @@ export {
 } from './lib/pending-questions';
 export { releaseRuntimeQuestion } from './session-lifecycle/release-runtime-question';
 
-// The stored transcript (`toV1` of the session log), consumed by the public share route.
-export { readStoredTranscriptWindow } from './session-log-read';
-
 // Abort a session's running turn (consumed by chrome/, on a user's Stop in Chrome, and by
 // channels/core/commands.ts, on a chat's /stop and /new).
 export { abortRuntimeTurn } from './session-lifecycle/abort-runtime-turn';

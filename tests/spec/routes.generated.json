@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1755,
-  "aliases": 676,
+  "count": 1753,
+  "aliases": 675,
   "routes": [
     {
       "method": "GET",
@@ -4540,11 +4540,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/projects/:workspaceId/sessions/:sessionId/transcript",
-      "aliasOf": "/v1/workspaces/:workspaceId/sessions/:sessionId/transcript"
-    },
-    {
-      "method": "GET",
       "path": "/v1/projects/:workspaceId/sessions/:sessionId/turn",
       "aliasOf": "/v1/workspaces/:workspaceId/sessions/:sessionId/turn"
     },
@@ -7402,10 +7397,6 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/sessions/:sessionId/tasks/:seq"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/sessions/:sessionId/transcript"
     },
     {
       "method": "GET",

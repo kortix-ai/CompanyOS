@@ -3,16 +3,14 @@
  * reads over the session log (P4.2, P8.2).
  *
  * One synthetic OpenCode session is stored as the journal ingest of `fromV1` of its v1 rows
- * under producer `opencode`, as the deleted OpenCode adapter journaled them. Every v1 read
- * (`transcript?shape=sync` paged to the end, the child read, `shape=compact`, the open bundle)
- * answers from the log, `captured_at` is the log's last write, and a native (pi) thread is
- * served through `toV1`. A session with no log answers nothing saved.
+ * under producer `opencode`, as the deleted OpenCode adapter journaled them, and `GET …/log`
+ * serves it. The v1 reads (`GET …/transcript`, the open bundle's v1 window) are gone (P8.3):
+ * the route answers 404 and the bundle's transcript part is the pointer only.
  * One tool output is 150,000 three-byte characters (450 kB): the log stores it by
- * reference (F3, P2.3), and the v1 reads put it back. The Storage bucket is
- * `helpers/fake-session-storage.ts`.
+ * reference (F3, P2.3). The Storage bucket is `helpers/fake-session-storage.ts`.
  */
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
-import { fromV1, toV1, type SessionLog, type SessionLogJournalRequest, type V1Row } from '@kortix/api-contract/session-log';
+import { fromV1, type SessionLogJournalRequest, type V1Row } from '@kortix/api-contract/session-log';
 import { accountMembers, projectMembers, projectSessions, projects, sessionLogs, sessionSandboxes } from '@kortix/db';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
@@ -81,36 +79,6 @@ async function storeInLog(sessionId: string, turns: number, options: { nativeThr
   return { rows: rows.length, messages: batch.puts.length };
 }
 
-/** Every v1 read of the session, flag state as it is. `captured_at` is set aside and returned apart. */
-async function v1Bodies(sessionId = session) {
-  const captured: string[] = [];
-  const strip = (body: Record<string, unknown>) => {
-    captured.push(String(body.captured_at));
-    const { captured_at: _c, ...rest } = body;
-    return rest;
-  };
-  const pages: unknown[] = [];
-  let cursor: string | null = null;
-  do {
-    const res = await get(`${base(sessionId)}/transcript?shape=sync&limit=40${cursor ? `&before=${cursor}` : ''}`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    pages.push(strip(body));
-    cursor = body.next_cursor as string | null;
-  } while (cursor);
-  const childRes = await get(`${base(sessionId)}/transcript?shape=sync&child=${CHILD}`);
-  const compact = await get(`${base(sessionId)}/transcript?limit=60&chars=1500&detail=full`);
-  const bundle = (await (await get(`${base(sessionId)}/open-bundle`)).json()) as Record<string, Record<string, unknown>>;
-  return {
-    pages,
-    child: strip((await childRes.json()) as Record<string, unknown>),
-    compact: strip((await compact.json()) as Record<string, unknown>),
-    bundle: strip(bundle.transcript!),
-    bundleLog: bundle.log,
-    captured,
-  };
-}
-
 beforeAll(async () => {
   project = await seedProject('session-log-read');
   await insertIntoView(db, accountMembers, { userId: OWNER, accountId: project.account_id, accountRole: 'owner' });
@@ -127,71 +95,48 @@ afterAll(async () => {
   await removeSeeded([project]);
 });
 
-const logOf = (sessionId: string) => db.select().from(sessionLogs).where(eq(sessionLogs.sessionId, sessionId));
-
-describe('the v1 reads answer from the log', () => {
-  test('sync pages, the child, compact and the open bundle answer from the log; captured_at is its last write', async () => {
-    const stored = await storeInLog(session, 70);
-    const journaled = await v1Bodies(session);
-
-    expect(journaled.pages.length).toBe(4); // 140+ messages in windows of 40
-    expect((journaled.pages[0] as { total: number }).total).toBe(stored.messages - 1); // the root read leaves out the child's 2 messages; a compaction summary is a second row
-    expect(JSON.stringify(journaled.pages)).toContain(WIDE_OUTPUT);
-    expect((journaled.child as { message_count: number }).message_count).toBe(2);
-    expect(journaled.compact).toMatchObject({ available: true });
-    expect(journaled.bundle).toMatchObject({ available: true });
-
-    // captured_at is the log's last write.
-    const [written] = await db.select({ updatedAt: sql<Date>`greatest(${sessionLogs.updatedAt}, (select max(m.updated_at) from kortix.session_log_messages m where m.session_id = ${session}))` }).from(sessionLogs).where(eq(sessionLogs.sessionId, session));
-    expect(new Set(journaled.captured)).toEqual(new Set([new Date(written!.updatedAt).toISOString()]));
-
+describe('the stored log is the only stored read (P8.3)', () => {
+  test('the open bundle serves the log page and a pointer-only transcript part; GET …/transcript is gone', async () => {
+    await storeInLog(session, 70);
+    const bundle = (await (await get(`${base()}/open-bundle`)).json()) as Record<string, Record<string, unknown>>;
+    expect(bundle.transcript).toEqual({ known: true, requested: false });
     // The open bundle's log leg: the first page of the root thread.
-    const leg = journaled.bundleLog as { known: boolean; page: { thread_id: string; messages: Array<{ seq: number }>; has_more: boolean } };
+    const leg = bundle.log as { known: boolean; page: { thread_id: string; messages: Array<{ seq: number }>; has_more: boolean } };
     expect(leg.known).toBe(true);
     expect(leg.page.thread_id).toBe(ROOT);
     expect(leg.page.messages).toHaveLength(40);
     expect(leg.page.has_more).toBe(true);
+    // F3: the log page serves the over-256 kB output as a preview with its reference.
+    const all = (await (await get(`${base()}/log?limit=500`)).json()) as { messages: unknown[] };
+    expect(JSON.stringify(all.messages)).toContain('kortix-attachment://');
+    for (const path of ['transcript', 'transcript?shape=sync', `transcript?shape=sync&child=${CHILD}`]) {
+      expect((await get(`${base()}/${path}`)).status).toBe(404);
+    }
+    expect((await get(`/v1/workspaces/${project.project_id}/sessions/${session}/transcript`)).status).toBe(404);
   });
 
-  test('a tombstoned message leaves the v1 read', async () => {
-    const page = (await (await get(`${base()}/transcript?shape=sync&limit=5`)).json()) as { messages: Array<{ info: { id: string } }>; total: number };
-    const victim = page.messages[0]!.info.id;
+  test('a tombstoned message leaves the log', async () => {
+    const page = (await (await get(`${base()}/log?limit=5`)).json()) as { messages: Array<{ message_id: string }> };
+    const victim = page.messages[0]!.message_id;
     const outcome = await ingestSessionLogJournal(
       { sessionId: session, projectId: project.project_id, accountId: project.account_id },
       { generation: 0, puts: [], threads: [], tombstones: [{ message_id: victim, rev: REV + 10_000 }] },
     );
     expect(outcome.status).toBe(200);
-    const after = (await (await get(`${base()}/transcript?shape=sync&limit=5`)).json()) as typeof page;
-    expect(after.messages.map((m) => m.info.id)).not.toContain(victim);
-    expect(after.total).toBe(page.total - 1);
+    const after = (await (await get(`${base()}/log?limit=500`)).json()) as typeof page;
+    expect(after.messages.map((m) => m.message_id)).not.toContain(victim);
   });
 
-  test('an unknown cursor answers 400', async () => {
-    expect((await get(`${base()}/transcript?shape=sync&before=msg_nope`)).status).toBe(400);
-  });
-
-  test('a session whose threads fromV1 did not build (the pi adapter writes them natively) is served from the log through toV1', async () => {
+  test('a session whose threads fromV1 did not build (the pi adapter writes them natively) is served from the log', async () => {
     await storeInLog(nativeSession, 6, { nativeThreads: true });
-    type Window = { available: boolean; captured_at: string; total: number; message_count: number; runtime_session_id: string; messages: Array<{ info: { id: string; role: string; sessionID: string } }> };
-    const body = (await (await get(`${base(nativeSession)}/transcript?shape=sync`)).json()) as Window;
-    const [log] = await db.select({ updatedAt: sql<Date>`greatest(${sessionLogs.updatedAt}, (select max(m.updated_at) from kortix.session_log_messages m where m.session_id = ${nativeSession}))` }).from(sessionLogs).where(eq(sessionLogs.sessionId, nativeSession));
-    expect(body.available).toBe(true);
-    expect(body.captured_at).toBe(new Date(log!.updatedAt).toISOString());
-    expect(body.runtime_session_id).toBe(ROOT);
-    // The rows the SDK renders for the native root thread: `toV1` of its stored records.
-    const page = (await (await get(`${base(nativeSession)}/log?limit=500`)).json()) as { session: object; threads: Array<{ thread_id: string }>; messages: unknown[] };
-    const thread = page.threads.find((t) => t.thread_id === ROOT)!;
-    const expected = toV1({ ...page.session, session_id: nativeSession, threads: [{ ...thread, messages: page.messages }] } as unknown as SessionLog).rows;
-    expect(body.total).toBe(expected.length);
-    expect(body.messages.map((m) => [m.info.id, m.info.role, m.info.sessionID])).toEqual(
-      expected.slice(-40).map((r) => [String((r.info as { id: string }).id), String((r.info as { role: string }).role), ROOT]),
-    );
-    const child = (await (await get(`${base(nativeSession)}/transcript?shape=sync&child=${CHILD}`)).json()) as Window;
-    expect(child.available).toBe(true);
-    expect(child.message_count).toBe(2);
-    expect(child.messages.every((m) => m.info.sessionID === CHILD)).toBe(true);
+    const page = (await (await get(`${base(nativeSession)}/log?limit=500`)).json()) as { thread_id: string; threads: Array<{ thread_id: string }>; messages: Array<{ thread_id: string }> };
+    expect(page.thread_id).toBe(ROOT);
+    expect(page.threads.map((t) => t.thread_id).sort()).toEqual([CHILD, ROOT].sort());
+    expect(page.messages.length).toBeGreaterThan(0);
+    expect(page.messages.every((m) => m.thread_id === ROOT)).toBe(true);
+    const child = (await (await get(`${base(nativeSession)}/log?thread=${CHILD}`)).json()) as typeof page;
+    expect(child.messages).toHaveLength(2);
   });
-
 });
 
 describe('GET .../log', () => {
@@ -230,18 +175,15 @@ describe('GET .../log', () => {
     expect(page.has_more).toBe(false);
   });
 
-  test('a session-bound token reads the log wherever the v1 transcript route serves it, and nowhere else', async () => {
+  test('a session-bound token reads the log of its own session and its project siblings, and nowhere else', async () => {
     const other = await seedProject('session-log-read-other', { accountId: project.account_id });
     const otherSession = await seedSession(other, OWNER);
     try {
-      const statuses = async (path: string) => [
-        (await get(`${path}/transcript?shape=sync`, sandboxToken)).status,
-        (await get(`${path}/log`, sandboxToken)).status,
-      ];
+      const status = async (path: string) => (await get(`${path}/log`, sandboxToken)).status;
       // (a) its own session, (b) a sibling session of its project, (c) a session of another project.
-      expect(await statuses(base())).toEqual([200, 200]);
-      expect(await statuses(base(nativeSession))).toEqual([200, 200]);
-      expect(await statuses(`/v1/projects/${other.project_id}/sessions/${otherSession}`)).toEqual([403, 403]);
+      expect(await status(base())).toBe(200);
+      expect(await status(base(nativeSession))).toBe(200);
+      expect(await status(`/v1/projects/${other.project_id}/sessions/${otherSession}`)).toBe(403);
       const own = (await (await get(`${base()}/log?limit=500`, sandboxToken)).json()) as Page;
       const owner = (await (await get(`${base()}/log?limit=500`)).json()) as Page;
       expect(own).toEqual(owner);
@@ -250,7 +192,7 @@ describe('GET .../log', () => {
     }
   });
 
-  test('a KaaB backend-origin sibling and another user\'s private session: the log refuses them where the transcript does', async () => {
+  test('a KaaB backend-origin sibling and another user\'s private session: the log refuses them', async () => {
     const MEMBER = crypto.randomUUID();
     await insertIntoView(db, accountMembers, { userId: MEMBER, accountId: project.account_id, accountRole: 'member' });
     await insertIntoView(db, projectMembers, { accountId: project.account_id, projectId: project.project_id, userId: MEMBER, projectRole: 'member' });
@@ -268,19 +210,16 @@ describe('GET .../log', () => {
     const backendBox = await boxToken(backendA, OWNER);
     const memberBox = await boxToken(memberSession, MEMBER);
     const memberToken = (await createAccountToken({ accountId: project.account_id, userId: MEMBER, name: 'session-log-read-member' })).secretKey;
-    const statuses = async (sessionId: string, token: string) => [
-      (await get(`${base(sessionId)}/transcript?shape=sync`, token)).status,
-      (await get(`${base(sessionId)}/log`, token)).status,
-    ];
+    const status = async (sessionId: string, token: string) => (await get(`${base(sessionId)}/log`, token)).status;
     // The backend box reads its own session, never its sibling; the signed-in human reads both.
-    expect(await statuses(backendA, backendBox)).toEqual([200, 200]);
-    expect(await statuses(backendB, backendBox)).toEqual([404, 404]);
-    expect(await statuses(backendB, ownerToken)).toEqual([200, 200]);
+    expect(await status(backendA, backendBox)).toBe(200);
+    expect(await status(backendB, backendBox)).toBe(404);
+    expect(await status(backendB, ownerToken)).toBe(200);
     // Another user's private session: refused to the member and to the member's box; the owner reads it.
-    expect(await statuses(session, memberToken)).toEqual([404, 404]);
-    expect(await statuses(session, memberBox)).toEqual([404, 404]);
-    expect(await statuses(memberSession, memberBox)).toEqual([200, 200]);
-    expect(await statuses(session, ownerToken)).toEqual([200, 200]);
+    expect(await status(session, memberToken)).toBe(404);
+    expect(await status(session, memberBox)).toBe(404);
+    expect(await status(memberSession, memberBox)).toBe(200);
+    expect(await status(session, ownerToken)).toBe(200);
   });
 
   test('refuses a bad before_seq and limit; 404 for an unknown thread and without a log', async () => {
@@ -290,13 +229,10 @@ describe('GET .../log', () => {
     expect(unknownThread.status).toBe(404);
     expect(((await unknownThread.json()) as { code?: string }).code).toBeUndefined();
     const empty = await seedSession(project, OWNER);
-    // A session with no stored log yet (a new one) says so by code: a client stays on the log
-    // instead of reading v1, which only an API without this route answers with a bare 404.
+    // A session with no stored log yet (a new one) says so by code; an unknown thread does not.
     const missing = await get(`${base(empty)}/log`);
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'No session log for this session', code: 'session_log_missing' });
-    // The v1 read of the same session: nothing saved.
-    expect(await (await get(`${base(empty)}/transcript?shape=sync`)).json()).toMatchObject({ available: false, source: 'none' });
     expect((await get(`${base()}/log`, null)).status).toBe(401);
   });
 });

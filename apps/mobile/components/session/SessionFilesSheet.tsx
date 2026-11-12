@@ -152,8 +152,10 @@ function SessionFilesBody({
         gap: 16,
         minHeight: query ? (restHeight ?? undefined) : undefined,
       }}
-      onContentSizeChange={(_width, height) => {
-        if (!query) setRestHeight(height);
+      // The visible height (the list up to the sheet's cap), so a list taller
+      // than the sheet leaves no blank scroll area under a short result.
+      onLayout={(event) => {
+        if (!query) setRestHeight(event.nativeEvent.layout.height);
       }}>
       {files.length > 0 ? (
         <SheetTextInput

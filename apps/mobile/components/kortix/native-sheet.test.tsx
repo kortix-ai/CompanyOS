@@ -262,10 +262,12 @@ describe('NativeSheet', () => {
     // A captured timer, not the real clock.
     const timers: { fn: () => void; ms: number }[] = [];
     const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
     globalThis.setTimeout = ((fn: () => void, ms: number) => {
       timers.push({ fn, ms });
-      return timers.length as never;
+      return Symbol('timer') as never;
     }) as unknown as typeof setTimeout;
+    globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
     try {
       mount();
       call((r) => r.present());
@@ -276,7 +278,9 @@ describe('NativeSheet', () => {
       expect(sheet().props.isOpen).toBe(true);
       expect(sheet().props.detents).toEqual([1]);
     } finally {
+      act(() => tree.unmount());
       globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
     }
   });
 

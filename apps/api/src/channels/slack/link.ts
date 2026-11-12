@@ -154,8 +154,24 @@ export async function slackProjectLink(projectId: string): Promise<{ teamId: str
     .orderBy(desc(chatInstalls.connectedAt))
     .limit(1);
   if (!row?.teamId) return null;
-  if (await hasOwnSlackApp(projectId)) return { teamId: row.teamId };
-  return (await linkedSlackProject(row.teamId)) === projectId ? { teamId: row.teamId } : null;
+  const linked = await linkedSlackProject(row.teamId);
+  if (linked === projectId) return { teamId: row.teamId };
+  return (await ownAppHolds(projectId, linked)) ? { teamId: row.teamId } : null;
+}
+
+/**
+ * Does this Kortix workspace's own Slack app hold its Slack workspace beside
+ * the shared app's linked install? An own app stores its signing secret, but
+ * a workspace admin can write a secret of that name too, so the secret alone
+ * proves nothing. An own app also has its own bot token; a shared-app install
+ * holds the linked workspace's token. Only a different token counts.
+ */
+async function ownAppHolds(projectId: string, linked: string | null): Promise<boolean> {
+  if (!(await hasOwnSlackApp(projectId))) return false;
+  if (!linked) return true;
+  const { readSecret } = await import('../install-store');
+  const [mine, theirs] = await Promise.all([readSecret(projectId, 'SLACK_BOT_TOKEN'), readSecret(linked, 'SLACK_BOT_TOKEN')]);
+  return Boolean(mine) && mine !== theirs;
 }
 
 /**
@@ -169,7 +185,8 @@ export async function holdsSlackWorkspace(projectId: string, teamId: string): Pr
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.projectId, projectId), eq(chatInstalls.platformTeamId, teamId)))
     .limit(1);
   if (!row) return false;
-  return (await hasOwnSlackApp(projectId)) || (await linkedSlackProject(teamId)) === projectId;
+  const linked = await linkedSlackProject(teamId);
+  return linked === projectId || (await ownAppHolds(projectId, linked));
 }
 
 // Records the channel for its settings (the agent and model new threads there

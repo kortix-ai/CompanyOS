@@ -451,9 +451,20 @@ function SheetPanel({
       <SheetBody className="flex-none items-stretch gap-0 space-y-6 !overflow-visible px-4 pt-5 pb-0">
         {trigger.auto_paused_at ? (
           <Alert variant="warning">
-            <AlertTitle>{tAutoPause('title')}</AlertTitle>
+            {/* A pause the account state caused ends by itself: say so, and what ends it. */}
+            <AlertTitle>
+              {tAutoPause(trigger.auto_paused_code === 'billing' ? 'billingTitle' : trigger.auto_paused_code === 'no_usable_model' ? 'modelTitle' : 'title')}
+            </AlertTitle>
             <AlertDescription>
-              <p>{tAutoPause('description')}</p>
+              <p>
+                {tAutoPause(
+                  trigger.auto_paused_code === 'billing'
+                    ? 'billingDescription'
+                    : trigger.auto_paused_code === 'no_usable_model'
+                      ? 'modelDescription'
+                      : 'description',
+                )}
+              </p>
               {trigger.auto_paused_reason ? <p className="font-mono text-xs">{trigger.auto_paused_reason}</p> : null}
             </AlertDescription>
           </Alert>

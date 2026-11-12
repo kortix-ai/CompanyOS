@@ -55,6 +55,7 @@ import { HELD_RUN_CEILING_MS, sealHeldInput } from './held-call-store';
 import { graphToken } from '../channels/teams-auth';
 import { runPipedreamAction, runPipedreamProxy } from './pipedream';
 import type { ConnectorPrincipal } from './router-contract';
+import { closestActionPaths } from './action-suggest';
 import { COMPUTER_SLUG, withComputerCatalog } from './computers';
 import { ensureProjectComputer } from './sync';
 import { isUuid } from '../shared/validate';
@@ -579,6 +580,18 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
         }),
         binding: a.binding as unknown as ActionBinding,
       } satisfies GatewayAction;
+    },
+    suggestActions: async (connectorId, relPath, providerType) => {
+      const paths =
+        providerType === 'computer'
+          ? withComputerCatalog(connectorId, 'computer', []).map((row) => row.path)
+          : (
+              await db
+                .select({ path: connectorActions.path })
+                .from(connectorActions)
+                .where(eq(connectorActions.connectorId, connectorId))
+            ).map((row) => row.path);
+      return closestActionPaths(relPath, paths);
     },
     completeComposioAuthorization: async ({ projectId, connector }) => {
       if (!connector.connectionId) return null;

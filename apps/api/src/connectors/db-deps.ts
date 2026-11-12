@@ -64,7 +64,7 @@ import {
   pipedreamConnectUrl,
   verifyWebhookSig,
 } from './pipedream';
-import type { ConnectorRouterDeps } from './router-contract';
+import type { ConnectorRouterDeps, SessionConnectRequestRow } from './router-contract';
 import {
   connectorCatalogDirectIds,
   connectorCatalogDirectMcpUrls,
@@ -331,13 +331,17 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
     // Same rule as `/connect/toolkits`: no silent Pipedream fallback.
     return null;
   },
-  listSessionConnectRequests: async (projectId, sessionId) => {
+  listSessionConnectRequests: async (projectId, sessionId, userId) => {
     const rows = await db
       .select({
         connector: connectors,
         connectionId: connectorConnections.connectionId,
         isDefault: connectorConnections.isDefault,
         metadata: connectorConnections.metadata,
+        ownerType: connectorConnections.ownerType,
+        ownerId: connectorConnections.ownerId,
+        label: connectorConnections.label,
+        status: connectorConnections.status,
       })
       .from(connectorConnections)
       .innerJoin(connectors, eq(connectors.connectorId, connectorConnections.connectorId))
@@ -347,8 +351,13 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
           sql`${connectorConnections.metadata}->>'requesting_session_id' = ${sessionId}`,
         ),
       );
-    const out: Array<{ slug: string; app: string; provider: string; connected: boolean }> = [];
+    const out: SessionConnectRequestRow[] = [];
     for (const row of rows) {
+      // Another member's private account is theirs to sign in: it is not
+      // listed to anyone else watching the session. A shared account is.
+      if (row.ownerType === 'member' && row.ownerId !== userId) continue;
+      if (row.ownerType !== 'member' && row.ownerType !== 'project') continue;
+      if (row.status === 'revoked') continue;
       const metadata = (row.metadata ?? {}) as Record<string, unknown>;
       const connected = await connectorConnected(row.connector, null, {
         connectionId: row.connectionId,
@@ -357,6 +366,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       });
       out.push({
         slug: row.connector.slug,
+        name: row.connector.name?.trim() || row.connector.slug,
         app:
           typeof metadata.toolkit === 'string'
             ? metadata.toolkit
@@ -364,6 +374,10 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
               row.connector.slug,
         provider: row.connector.providerType,
         connected,
+        connection_id: row.connectionId,
+        owner_type: row.ownerType,
+        label: row.label,
+        connected_as: connectedAsOf(metadata),
       });
     }
     return out;
@@ -478,19 +492,50 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
           ...rowMetadata(previous),
           provider: 'composio',
           toolkit: conn.app,
-          requesting_session_id: requestingSessionId ?? null,
+          requesting_session_id: requestingSessionId ?? readRequestingSessionId(previous),
         },
         updatedAt: sql`now()`,
       });
       const stableUserId = composioStableUserId(connectionId);
+      // An agent's raw link (`kortix connectors connect`) opens no Kortix
+      // page, so nothing finished the sign-in when the person came back
+      // (2026-11-11 audit: 33% of Composio connects completed). The person now
+      // returns to the setup-link page, which finalizes on load, and a
+      // bounded server poll finishes it even when they close the tab.
+      const agentStarted = Boolean(requestingSessionId) && Boolean(userId);
+      const returnRedirects =
+        agentStarted && !redirects?.success
+          ? {
+              ...redirects,
+              success: await agentConnectReturnUrl({
+                projectId,
+                slug: canonicalConnectorAlias(slug),
+                app: conn.app,
+                userId,
+                sessionId: requestingSessionId!,
+                owner: connectOwner,
+              }),
+            }
+          : redirects;
       const result = await composio.composioConnectUrl({
         projectId,
         slug,
         app: conn.app,
         connectionId,
         stableUserId,
-        redirects,
+        redirects: returnRedirects,
       });
+      if (agentStarted && result.connectUrl) {
+        const { watchConnectorCompletion } = await import('../setup-links/connector-completion-watch');
+        watchConnectorCompletion({
+          projectId,
+          slug,
+          app: conn.app,
+          sid: requestingSessionId ?? null,
+          uid: userId,
+          owner: connectOwner,
+        });
+      }
       await connectConnection(connectionId, {
         metadata: composioConnectionMetadata({
           toolkit: conn.app,
@@ -786,3 +831,28 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
   setProjectPolicies: (projectId, accountId, policies, defaultMode) =>
     setProjectPoliciesInManifest(projectId, accountId, policies, defaultMode),
 };
+
+/**
+ * Where the provider sends the person after an agent-started sign-in: the
+ * setup-link page for the same connector and session, which finalizes on load
+ * (`?returned=1`) and says who the account is. 7-day token, as every link.
+ */
+async function agentConnectReturnUrl(input: {
+  projectId: string;
+  slug: string;
+  app: string;
+  userId: string;
+  sessionId: string;
+  owner: ConnectorConnectOwner;
+}): Promise<string> {
+  const { mintSetupLink } = await import('../setup-links/token');
+  const { token } = mintSetupLink(input.projectId, {
+    kind: 'connector',
+    slug: input.slug,
+    app: input.app,
+    uid: input.userId,
+    sid: input.sessionId,
+    owner: input.owner,
+  });
+  return `${(config.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '')}/connect/${token}?returned=1`;
+}

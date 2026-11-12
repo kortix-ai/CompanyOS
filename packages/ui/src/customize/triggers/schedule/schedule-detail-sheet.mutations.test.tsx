@@ -751,6 +751,16 @@ describe('an auto-paused trigger', () => {
     expectPatch({ enabled: true });
   });
 
+  test('a pause the account state caused says what ends it, and that it resumes by itself', () => {
+    const billing = mountSheet({ enabled: true, auto_paused_at: '2026-10-19T12:00:00.000Z', auto_paused_code: 'billing', auto_paused_reason: 'auto-paused: billing: Out of credits.' });
+    const billingText = JSON.stringify(billing.renderer.toJSON());
+    expect(billingText).toContain('Paused: out of credits');
+    expect(billingText).toContain('resumes by itself');
+    expect(billingText).toContain('auto-paused: billing: Out of credits.');
+    const model = mountSheet({ enabled: true, auto_paused_at: '2026-10-19T12:00:00.000Z', auto_paused_code: 'no_usable_model', auto_paused_reason: 'auto-paused: no usable model: none' });
+    expect(JSON.stringify(model.renderer.toJSON())).toContain('Paused: no model to run on');
+  });
+
   test('a trigger that is not auto-paused shows no such notice', () => {
     const sheet = mountSheet();
     expect(JSON.stringify(sheet.renderer.toJSON())).not.toContain('auto-paused');

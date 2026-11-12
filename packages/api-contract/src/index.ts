@@ -2085,6 +2085,8 @@ export const TriggerSchema = z.object({
   auto_paused_at: z.string().nullable().optional(),
   /** Why it paused, e.g. `auto-paused: ran at max_runs_per_hour 60 for 2 hours in a row`. */
   auto_paused_reason: z.string().nullable().optional(),
+  // A pause that ends by itself once the account can run the trigger (trigger-setup-pause.ts).
+  auto_paused_code: z.enum(['billing', 'no_usable_model']).nullable().optional(),
   /**
    * (KRTX-1721) `skip` holds a fire while the trigger's previous run is still
    * active; in reuse, pinned and keyed mode, while its previous prompt still

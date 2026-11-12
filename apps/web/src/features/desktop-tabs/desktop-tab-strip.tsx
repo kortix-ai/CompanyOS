@@ -246,8 +246,10 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   // Warm every background tab's route: a click is a client transition, never a
   // cold load. Keyed on the inactive tabs, so a navigation in the active tab
   // does not re-run it.
+  // Same guard as `go`: a stored path is prefetched only when it is a page of
+  // this project.
   const pathsKey = project.tabs
-    .filter((tab) => tab.id !== project.activeId)
+    .filter((tab) => tab.id !== project.activeId && tabRoute(tab.path, projectId))
     .map((tab) => tab.path)
     .join('\n');
   useEffect(() => {

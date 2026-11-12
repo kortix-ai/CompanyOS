@@ -389,7 +389,8 @@ export function useSessionLogSync(
     // ended and answers a snapshot without the finished reply: read again once it settles.
     const reloadAfterTurnEnd = () => {
       const stale = liveRead;
-      void (stale ? stale.then(reload, reload) : reload());
+      // A box read that failed reads the API's page: a wedged box must not cost two proxy budgets.
+      void (stale ? stale.then(async (ok) => void (ok ? await reload() : await load())) : reload());
     };
     // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
     // frame of a connection names the last end at join, which is not news.

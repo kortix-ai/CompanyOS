@@ -831,16 +831,19 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     const turn = (token: string) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: { turn_token: token } } });
     let boxReads = 0;
     let releaseStale: (value: unknown) => void = () => {};
+    // The pages before the turn end predate the reply.
+    const before = () => ({ ...page(), messages: page().messages.filter((m) => m.message_id !== finished.message_id) });
     const livePage = () => {
       boxReads++;
-      if (boxReads === 1) return Promise.resolve(page());
+      if (boxReads === 1) return Promise.resolve(before());
       if (boxReads === 2) return new Promise((resolve) => { releaseStale = resolve; });
       return Promise.resolve(page());
     };
-    mount({ loader: async () => page(), livePage });
+    mount({ loader: async () => before(), livePage });
     await flush();
     const v2 = joined.at(-1)!.options;
     act(() => useSyncStore.getState().applySessionLogEvent(SESSION, { type: 'log.message', properties: { rev: 5, message: streamingCopy } }));
+    expect(reply().status).toBe('streaming');
     act(() => v2.onControl(turn('t1')));
     // A resync starts a box read; the turn ends while it is on the wire.
     act(() => v2.onRuntimeResync());

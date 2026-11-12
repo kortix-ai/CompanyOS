@@ -258,6 +258,9 @@ describe('applySessionLogEvent', () => {
     // A finished message never streams again (pi streams a message once): a delayed streaming put,
     // even at a higher rev, changes nothing.
     expect(applySessionLogEvent(state, ev('log.message', { rev: 3, message: streaming }))).toBe(state);
+    // A delta sent before the turn end can land after the page (runtime frames are coalesced,
+    // control frames are not): the finished record already holds its text.
+    expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: (reply!.blocks[0] as TextBlock).id, delta: 'e' }))).toBe(state);
     // A finished correction and a tombstone still apply.
     const corrected = { ...reply!, blocks: [{ type: 'text', id: 'b1', text: 'corrected' } as TextBlock] };
     const after = applySessionLogEvent(state, ev('log.message', { rev: 4, message: corrected }));

@@ -505,9 +505,16 @@ const { verifyKortixUserContext, KORTIX_USER_CONTEXT_HEADER } = await import(
 );
 const { resolvePreviewWsUpstream } = await import('../sandbox-proxy/routes/preview');
 const { invalidateSandbox } = await import('../sandbox-proxy/backend');
-const { __resetDialDeadForTests, __setDialProbeForTests, recordDialTimeout, clearDialDead, dialDeadKey } = await import(
-  '../sandbox-proxy/forward/dial-dead'
-);
+const {
+  __resetDialDeadForTests,
+  __setDialProbeBudgetForTests,
+  __setDialProbeForTests,
+  recordDialTimeout,
+  clearDialDead,
+  dialDeadKey,
+  maybeProbeDialDeadCandidate,
+  DIAL_LIVENESS_PATH,
+} = await import('../sandbox-proxy/forward/dial-dead');
 const { preparePreviewWsUpgrade } = await import('../sandbox-proxy/ws-proxy');
 const { __resetPromptDedupe } = await import('../sandbox-proxy/prompt-dedupe');
 
@@ -569,9 +576,9 @@ function stubHangingUpstreamAndSyncClock(): () => void {
       signal?.addEventListener('abort', abortWith);
     });
   }) as typeof globalThis.fetch;
-  globalThis.setTimeout = ((fn: () => void) => {
-    fn();
-    return 0 as unknown as ReturnType<typeof setTimeout>;
+  globalThis.setTimeout = ((callback: TimerHandler) => {
+    if (typeof callback === 'function') callback();
+    return 0;
   }) as typeof globalThis.setTimeout;
   return () => {
     globalThis.fetch = savedFetch;
@@ -1982,7 +1989,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
       const signal = init?.signal;
       return new Promise((_resolve, reject) => {
         const abortWith = () =>
-          reject((signal as any)?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
+          reject(signal?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
         if (signal?.aborted) {
           abortWith();
           return;
@@ -2148,6 +2155,70 @@ describe('Preview proxy: long-turn completion timeout', () => {
       } finally {
         restoreClock();
         __setDialProbeForTests(async () => false);
+      }
+    });
+
+    // The reviewer's regression (2026-11-12): the probe must not dial the
+    // request's own route. Probing a hung route hangs WITH it, confirms the
+    // mark, and every later read on the port — healthy or not — fails fast
+    // with zero dials (a real server hung only /slow; /health served 200;
+    // reads were still suppressed). The wiring dials the LIVENESS path with
+    // the REAL probe, so a live box answers it (a fast 404 is an answer) and
+    // its siblings keep being served; a box whose whole HTTP path is dead
+    // hangs there too and still confirms (dial-dead.test.ts pins that one).
+    test('one hung route never marks the port: the real probe dials the liveness path, siblings keep being served', async () => {
+      __setDialProbeForTests(null); // the REAL probe — its target wiring is what's under test
+      __setDialProbeBudgetForTests(1_000);
+      const savedFetch = globalThis.fetch;
+      const savedSetTimeout = globalThis.setTimeout;
+      const answeredPaths: string[] = [];
+      // The box's HTTP layer: /slow hangs forever; every other path — a
+      // healthy sibling AND the liveness probe — answers from the same server.
+      globalThis.fetch = ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        mockFetchCallCount += 1;
+        const pathname = new URL(String(url)).pathname;
+        if (pathname.endsWith('/slow')) {
+          const signal = init?.signal;
+          return new Promise<Response>((_resolve, reject) => {
+            const abortWith = () =>
+              reject(signal?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
+            if (signal?.aborted) {
+              abortWith();
+              return;
+            }
+            signal?.addEventListener('abort', abortWith);
+          });
+        }
+        answeredPaths.push(pathname);
+        return Promise.resolve(new Response('ok', { status: 200 }));
+      }) as typeof globalThis.fetch;
+      globalThis.setTimeout = ((callback: TimerHandler) => {
+        if (typeof callback === 'function') callback();
+        return 0;
+      }) as typeof globalThis.setTimeout;
+      try {
+        const app = createProxyTestApp();
+        // Two /slow connect timeouts form the candidate; the detached probe
+        // settles while the ladder runs, then the give-up 502 arrives.
+        const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/slow`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res.status).toBe(502);
+        // Await the detached probe's verdict through the shared in-flight
+        // handle (a no-op once settled): the confirmation must be in before
+        // the sibling request reads the mark.
+        await maybeProbeDialDeadCandidate(dialDeadKey(deadSandbox, TEST_PORT), { url: '', headers: {} });
+        // The probe asked the liveness path — never the hung route.
+        expect(answeredPaths.some((p) => p.endsWith(DIAL_LIVENESS_PATH))).toBe(true);
+        // The healthy sibling is served: dialled, answered, no fast-fail mark.
+        const healthy = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/health`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(healthy.status).toBe(200);
+      } finally {
+        globalThis.fetch = savedFetch;
+        globalThis.setTimeout = savedSetTimeout;
+        __resetDialDeadForTests();
       }
     });
   });

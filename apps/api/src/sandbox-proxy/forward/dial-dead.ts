@@ -23,14 +23,19 @@
  *   TCP probe of exactly the cases the streak holds is always "reachable".
  *
  * So a streak of two timeouts is only a CANDIDATE, and the mark confirms when
- * a bounded HTTP probe through the ingress — the same URL and auth headers a
- * real attempt sends — also gets no answer. The HTTP response is the one
- * observable the edge passes through from the box: any response (any status,
- * even the edge's own fast error) proves the path answers and clears the
- * streak; nothing within the probe budget proves the path answers no request,
- * which is the dead-box shape. The budget is longer than one attempt timer so
- * a handler that answers late is served by the probe even though the attempts
- * timed out.
+ * a bounded HTTP probe through the ingress — the same origin and auth headers
+ * a real attempt sends, but a LIVENESS path, never the request's own route —
+ * also gets no answer. The HTTP response is the one observable the edge passes
+ * through from the box: any response (any status — for an unknown path usually
+ * the box's own 404) proves the box's HTTP layer answers requests and clears
+ * the streak; nothing within the probe budget proves it answers no request,
+ * which is the dead-box shape. The path must be independent of the request's
+ * route because the connect timer bounds the header phase: a probe of the
+ * hung route itself would hang with it and confirm the mark against a box
+ * whose other routes are healthy — one slow route would poison the whole port
+ * (review finding on the third cut, 2026-11-12). The budget is longer than
+ * one attempt timer so a handler that answers late is served by the probe
+ * even though the attempts timed out.
  *
  * The probe runs DETACHED from the request: the confirming request keeps
  * today's ladder and its give-up, the probe settles on its own budget, and the
@@ -73,6 +78,13 @@ export const DIAL_DEAD_PROBE_SPACING_MS = 2 * 60 * 1000;
  *  (`PROXY_ATTEMPT_TIMEOUT_MS`, 15 s) so a handler that answers late is served
  *  by the probe; a path that answers nothing within it is dial-dead. */
 export const DIAL_PROBE_TIMEOUT_MS = 30_000;
+
+/** The path every dial-dead probe dials instead of the request's route. No
+ *  real server routes it, so the answer (almost always a fast 404) is the
+ *  box's own HTTP layer — one hung route can never answer for its healthy
+ *  siblings, and a box whose whole HTTP path is dead hangs here exactly as it
+ *  hung on the request. */
+export const DIAL_LIVENESS_PATH = '/__kortix/dial-liveness';
 
 /** Registry bound — marks are per sandbox:port, so this is far above any
  *  honest concurrent-sandbox count and exists only as a leak backstop. */
@@ -206,10 +218,12 @@ export function maybeProbeDialDeadCandidate(
   return probe;
 }
 
-/** The real probe: one bounded GET through the ingress. The request goes out
- *  with the attempt's auth headers, so a settled response (any status, even
- *  the edge's own error) comes from the path the attempts failed on. Anything
- *  else — a refusal, an abort at the budget, no headers — is "no answer". */
+/** The real probe: one bounded GET through the ingress, on the liveness path —
+ *  never the request's URL. The request goes out with the attempt's auth
+ *  headers, so a settled response (any status, even the edge's own error)
+ *  comes from the box's HTTP layer behind the same edge the attempts failed
+ *  on. Anything else — a refusal, an abort at the budget, no headers — is "no
+ *  answer". */
 export let probeTarget: (target: DialProbeTarget) => Promise<boolean> = async (target) => {
   try {
     const response = await fetch(target.url, {

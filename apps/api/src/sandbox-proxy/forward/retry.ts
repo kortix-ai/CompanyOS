@@ -35,7 +35,7 @@ import { isProviderIngressAuthFailure } from '../provider-auth';
 import { portFailureHop } from '../proxy-hop';
 import { shouldBypassIngressCache } from '../sse-stall';
 import type { ForwardRequest, ForwardState } from './context';
-import { clearDialDead, dialDeadKey, isDialDeadCandidate, maybeProbeDialDeadCandidate, recordDialTimeout, shouldFailFast } from './dial-dead';
+import { clearDialDead, dialDeadKey, DIAL_LIVENESS_PATH, isDialDeadCandidate, maybeProbeDialDeadCandidate, recordDialTimeout, shouldFailFast } from './dial-dead';
 import { placePromptWireId, syncEnvBeforeTurnStart } from './turn-start';
 import {
   buildUpstreamRequestHeaders,
@@ -267,15 +267,23 @@ async function forwardAttempt(
   const previewUrl = ingress.url;
   const targetUrl = ingressTargetUrl(ingress, remainingPath + queryString);
 
-  // A candidate streak (two connect timeouts, not yet confirmed) asks the path's
-  // HTTP layer directly — the one observable the HTTPS provider edge passes
-  // through from the box (a TCP connect proves only the edge, and the streak
-  // only ever forms on header timeouts, so TCP is reachable for exactly the
-  // cases it holds). The probe is detached: the request keeps today's ladder,
-  // and the probe's verdict fast-fails the requests AFTER it. Writes skip it;
-  // the probe is shared per key, so a concurrent burst spawns one probe.
+  // A candidate streak (two connect timeouts, not yet confirmed) asks the
+  // box's HTTP layer directly — the one observable the HTTPS provider edge
+  // passes through from the box (a TCP connect proves only the edge, and the
+  // streak only ever forms on header timeouts, so TCP is reachable for exactly
+  // the cases it holds). The probe dials the LIVENESS path, never the request's
+  // route: the connect timer bounds the header phase, so a probe of a hung
+  // route would hang with it and confirm the mark against a box whose other
+  // routes are healthy — an unknown path is the one request every real server
+  // answers from its own layer (typically a fast 404). The probe is detached:
+  // the request keeps today's ladder, and the probe's verdict fast-fails the
+  // requests after it. Writes skip it; the probe is shared per key, so a
+  // concurrent burst spawns one probe.
   if (!plan.nonReplayableWrite) {
-    void maybeProbeDialDeadCandidate(dialKey, { url: targetUrl, headers: ingress.headers });
+    void maybeProbeDialDeadCandidate(dialKey, {
+      url: ingressTargetUrl(ingress, DIAL_LIVENESS_PATH),
+      headers: ingress.headers,
+    });
     // The ladder also stops on the unconfirmed candidate: a third dial against
     // a box that timed out twice buys another 15 s hang, and the probe settles
     // the mark for the requests that follow.

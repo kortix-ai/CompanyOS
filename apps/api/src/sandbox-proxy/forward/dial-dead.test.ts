@@ -4,9 +4,11 @@
  * that receives NO answer confirms it — the proxy's connect timer bounds the
  * header phase too, so a healthy-but-slow handler must never mark, and an
  * HTTPS provider edge accepts TCP whatever the box behind it does, so only a
- * settled HTTP response (any status) proves the path alive. After
- * confirmation every request fails fast without dialling, one request per
- * probe window dials again, and any answered dial clears the mark.
+ * settled HTTP response (any status) proves the path alive. The probe dials a
+ * liveness path, never the request's own route: one hung route must never be
+ * able to answer the probe for its healthy siblings. After confirmation every
+ * request fails fast without dialling, one request per probe window dials
+ * again, and any answered dial clears the mark.
  *
  * KRTX-4459: a session box whose daemon died on a running box answered no
  * request, and every client poll walked the proxy's full ~50 s retry ladder
@@ -18,6 +20,7 @@ import {
   DIAL_DEAD_AFTER_TIMEOUTS,
   DIAL_DEAD_PROBE_SPACING_MS,
   DIAL_DEAD_STREAK_WINDOW_MS,
+  DIAL_LIVENESS_PATH,
   DIAL_PROBE_TIMEOUT_MS,
   __resetDialDeadForTests,
   __setDialProbeBudgetForTests,
@@ -148,6 +151,10 @@ describe('the probe slot of a confirmed mark', () => {
 });
 
 describe('the real HTTP probe against real servers', () => {
+  // The probe URL exactly as the retry wiring builds it: the ingress base plus
+  // the liveness path, never the request's route.
+  const probeUrlOn = (serverUrl: string | URL) => `${serverUrl}`.replace(/\/$/, '') + DIAL_LIVENESS_PATH;
+
   // The reviewer's topology (2026-11-11): the ingress is a live edge, so a TCP
   // connect always succeeds even when the box behind it answers nothing. The
   // REAL probe — no stub — must read the topology through the HTTP response.
@@ -161,8 +168,36 @@ describe('the real HTTP probe against real servers', () => {
     try {
       recordDialTimeout(key, T0);
       recordDialTimeout(key, T0 + 1_000);
-      await maybeProbeDialDeadCandidate(key, { url: `${server.url}kortix/runtime/pending`, headers: {} });
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} });
       expect(shouldFailFast(key, T0 + 2_000)).toBe(true);
+    } finally {
+      server.stop(true);
+      __resetDialDeadForTests();
+    }
+  });
+
+  // The reviewer's regression (2026-11-12): one hung route must never poison
+  // the port. A probe of the hung route's own URL hangs WITH it and confirms
+  // the mark against a box whose other routes answer fine — every later read
+  // on the port then fails fast while /health serves 200. The probe asks the
+  // liveness path instead: the live server answers it (a fast 404 is an
+  // answer), so the streak clears and the hung route keeps today's ladder
+  // alone.
+  test('one hung route never marks the port: the probe is path-independent', async () => {
+    __resetDialDeadForTests();
+    __setDialProbeBudgetForTests(1_000);
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        if (new URL(req.url).pathname === '/slow') return new Promise<Response>(() => {}); // hangs forever
+        return new Response('ok'); // /health and the liveness path answer from the same server
+      },
+    });
+    try {
+      recordDialTimeout(key, T0);
+      recordDialTimeout(key, T0 + 1_000);
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} });
+      expect(shouldFailFast(key, T0 + 2_000)).toBe(false);
     } finally {
       server.stop(true);
       __resetDialDeadForTests();
@@ -182,7 +217,7 @@ describe('the real HTTP probe against real servers', () => {
     try {
       recordDialTimeout(key, T0);
       recordDialTimeout(key, T0 + 1_000);
-      await maybeProbeDialDeadCandidate(key, { url: `${server.url}kortix/runtime/pending`, headers: {} });
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} });
       expect(shouldFailFast(key, T0 + 2_000)).toBe(false);
     } finally {
       server.stop(true);
@@ -198,7 +233,7 @@ describe('the real HTTP probe against real servers', () => {
     server.stop(true); // nothing listens there any more
     recordDialTimeout(key, T0);
     recordDialTimeout(key, T0 + 1_000);
-    await maybeProbeDialDeadCandidate(key, { url: `${url}kortix/runtime/pending`, headers: {} });
+    await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(url), headers: {} });
     expect(shouldFailFast(key, T0 + 2_000)).toBe(true);
   });
 

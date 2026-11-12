@@ -1399,7 +1399,7 @@ flow(
     const digest = async () =>
       (await owner.get('/v1/workspaces/:projectId/triggers', { params }))
         .status(200)
-        .json<{ triggers: Array<{ slug: string; next_fire_at?: string | null; last_status?: string | null; last_error?: string | null }> }>()
+        .json<{ triggers: Array<{ slug: string; next_fire_at?: string | null; last_status?: string | null; last_error?: string | null; auto_paused_at?: string | null; auto_paused_code?: string | null }> }>()
         .triggers.find((t) => t.slug === 'digest');
 
     await ctx.step('a daily cron trigger lists its next run, within a day of now', async () => {
@@ -1410,7 +1410,21 @@ flow(
           { params },
         )
       ).status(201);
-      const next = Date.parse(String((await digest())?.next_fire_at ?? ''));
+      const row = await digest();
+      // #12507/#12498: a trigger the account cannot run auto-pauses itself, and
+      // a paused trigger has no next run — the scheduler skips its slot, so
+      // next_fire_at is null by design. Locally the profile serves no model,
+      // so the fresh cron trigger pauses before it ever had a slot.
+      if (row?.auto_paused_at) {
+        if (row.next_fire_at !== null) {
+          throw new Error(`a paused trigger still lists next_fire_at ${String(row.next_fire_at)}`);
+        }
+        if (!row.auto_paused_code) {
+          throw new Error(`the pause does not say why it ends (auto_paused_code is null)`);
+        }
+        return;
+      }
+      const next = Date.parse(String(row?.next_fire_at ?? ''));
       const now = Date.now();
       if (!(next > now - 60_000 && next < now + 25 * 60 * 60 * 1000)) {
         throw new Error(`next_fire_at is ${String((await digest())?.next_fire_at)}`);

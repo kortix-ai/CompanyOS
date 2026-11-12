@@ -149,6 +149,12 @@ test('a test event takes the real path with a test- id, carries event.test, gets
   expect(listed.events.map((e) => [e.id, e.test, e.trigger, e.status])).toEqual([['test-msg-7', true, 'bank-reply', 'pending']]);
 
   const before = creates.length;
+  // #12498: the first real fire's stubbed billing refusal auto-paused the
+  // trigger, and a paused trigger skips its fires — no create. Lift the pause
+  // the way Resume does, so the wiring check runs while the trigger is
+  // runnable.
+  await db.update(projectTriggerRuntime).set({ autoPausedAt: null, autoPausedReason: null })
+    .where(and(eq(projectTriggerRuntime.projectId, project.project_id), eq(projectTriggerRuntime.slug, 'bank-reply')));
   await drainMonitorEvents();
   expect(creates.length).toBe(before + 1);
   expect(creates.at(-1)!.prompt).toBe('[APP EVENT — TEST sent to check the wiring, automated, not user input]\nReply: Wiring check (reply.received)');

@@ -65,6 +65,11 @@ const ERROR_NOISE_FILTERS = [
   join('@kortix/ui', 'internal', 'lib', 'browser-noise', 'rules', 'expected-states.ts'),
   join('app', 'sentry-ignore-errors.test.ts'),
   'sentry.client.config.ts',
+  // The schedule sheet's mutations test mounts a server-provided
+  // `auto_paused_reason` that quotes the wire string (#12507): it matches
+  // billing copy coming back from the API, it authors none — the rendered
+  // assertion next to it proves the sheet translates the code instead.
+  join('@kortix/ui', 'customize', 'triggers', 'schedule', 'schedule-detail-sheet.mutations.test.tsx'),
 ];
 
 /**

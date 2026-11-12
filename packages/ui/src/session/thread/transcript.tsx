@@ -22,6 +22,7 @@ import {
   type SessionLogCompaction,
   type SessionLogMessage,
   type SessionLogSegment,
+  type SessionLogAgentRun,
   type SessionLogTurn,
   type SessionMessageAuthor,
   type SessionPrompt,
@@ -37,6 +38,7 @@ import {
   sessionLogTurnSegments,
   sessionPromptActions,
   splitSessionLogTurnWork,
+  sessionLogAgentRunLabel,
   isNoGroupActivityTool,
   toolCallMetadata,
   toolKind,
@@ -539,6 +541,42 @@ interface SessionTurnProps {
   onEditCancel?: () => void;
   /** Commit the edit: rewind the session at `messageId`, send `text` and the `kept` attachments. */
   onEditSend?: (messageId: string, text: string, kept: NormalizedAttachment[]) => void;
+  /**
+   * This turn answers an agent run (`sessionLogAgentRuns`, KRTX-4732): its "Worked for" row is
+   * the run's row ("Worked for 5m · 3 agents") and folds the run's other turns with its own work.
+   */
+  agentRun?: SessionLogAgentRun;
+  /** The run's other turns, in order: the host draws no row for them. Keep its identity stable. */
+  runTurns?: readonly SessionLogTurn[];
+  /** Every agent this turn started has reported (`settledLaunches`): its agent rows fold too. */
+  foldStartedWork?: boolean;
+  /** Drawn inside an anchor's run fold: the notice and the work, with no fold row and no footer. */
+  runMember?: boolean;
+}
+
+/** A `send_message` call: the agent relaying between colleagues. Inside a run it is noise. */
+function isRelayCall(block: SessionLogBlock): boolean {
+  return block.type === 'tool_call' && block.name.toLowerCase().replace(/[^a-z]/g, '') === 'sendmessage';
+}
+
+/** The segments without the relay calls (`isRelayCall`); the same array when there is none. */
+function withoutRelayCalls(segments: TurnSegments): TurnSegments {
+  let changed = false;
+  const kept = segments.flatMap((segment): TurnSegments => {
+    if (segment.kind === 'standalone' && isRelayCall(segment.block)) {
+      changed = true;
+      return [];
+    }
+    if (segment.kind === 'burst') {
+      const blocks = segment.blocks.filter((block) => !isRelayCall(block));
+      if (blocks.length !== segment.blocks.length) {
+        changed = true;
+        return blocks.length ? [{ ...segment, blocks }] : [];
+      }
+    }
+    return [segment];
+  });
+  return changed ? kept : segments;
 }
 
 /**
@@ -1725,11 +1763,16 @@ function TurnToolBlocks(
     /** The turn's notice row (a sub-agent's report, a teammate's update) that
      *  folds in here instead of the top level (KRTX-4732). */
     workNotice?: ReactNode;
+    /** The run's other turns (`SessionTurnProps.runTurns`), drawn: fold content before the notice. */
+    runContent?: ReactNode;
+    /** The run's row label, in place of "Worked for …". */
+    runLabel?: string;
+    foldStartedWork?: boolean;
   },
 ) {
   const {
     turn, sessionId, permissions, onPermissionReply, disableToolNavigation,
-    model, segments, conversationDensity, fold, durationMs, workNotice,
+    model, segments, conversationDensity, fold, durationMs, workNotice, runContent, runLabel, foldStartedWork,
   } = props;
   const { working, hasSteps, hasReasoning } = model;
   // Every settled turn folds, live or reloaded (the T3 Code rule): one turn
@@ -1737,8 +1780,8 @@ function TurnToolBlocks(
   // a row) settles with its "Worked for" row open, so nothing they were
   // reading disappears under them.
   const split = useMemo(
-    () => (fold && !working ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working }) : null),
-    [fold, segments, working],
+    () => (fold && !working ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working, foldStartedWork }) : null),
+    [fold, segments, working, foldStartedWork],
   );
   // A settled turn whose prompt is another agent's notice folds the notice
   // row into this work fold with the work it led to (KRTX-4732): the parent's
@@ -1747,7 +1790,16 @@ function TurnToolBlocks(
   // so the exchange never becomes unreachable. In the inline mode (text plus
   // an answered question, no fold row) the row renders visible above the
   // answer instead — the gate below keeps the block mounted for it.
-  const noticeFold = !!workNotice && fold && !working;
+  // The run's other turns fold here too (KRTX-4732); while the turn still works, the run's
+  // row already stands, closed, over the reports that came before.
+  const noticeFold = (!!workNotice || !!runContent) && fold && !working;
+  // A turn whose only work started agents has no steps, but its agent rows are what the
+  // person tracks: they draw (and fold once every agent reported, `foldStartedWork`).
+  const startedWork = useMemo(
+    () => segments.some((segment) => segment.kind === 'standalone' && toolKind(segment.block.name) === 'task'),
+    [segments],
+  );
+  const foldRow = !!split || noticeFold || (!!runContent && working);
   const workSegments = useMemo(() => new Set<TurnSegments[number]>(split?.work ?? []), [split]);
   const touchedLive = useRef(false);
   const markTouched = useCallback(() => {
@@ -1834,7 +1886,7 @@ function TurnToolBlocks(
 			      questions are dropped entirely. Additionally, answered
 			      questions are dropped when rendering inline content (below),
 			      since that mode shows them already, in natural order. */}
-    {(working || hasSteps || hasReasoning || noticeFold || !!workNotice) && (turn.assistant.length > 0 || !!workNotice) && (
+    {(working || hasSteps || hasReasoning || startedWork || noticeFold || !!workNotice || !!runContent) && (turn.assistant.length > 0 || !!workNotice || !!runContent) && (
       // Every tool row below — the bursts' rows and the standalone ones —
       // reads this to tell a call that has not spoken YET from one that never
       // will. Provided here rather than per-row because `working` is a fact
@@ -1856,9 +1908,10 @@ function TurnToolBlocks(
               "Worked for" row joins the list at the top and the work is
               hidden in place. The hoisted cards stay visible where they were
               called, so an opened row reads in call order. */}
-          {(split || noticeFold) && (
+          {foldRow && (
             <TurnWorkAccordion
               key="turn-work"
+              label={runLabel}
               durationMs={durationMs}
               open={workOpen}
               onToggle={toggleWork}
@@ -1868,10 +1921,16 @@ function TurnToolBlocks(
           {/* The notice row the turn's prompt carried: it reads first, before
               the work it led to, in both states. Settled it is fold content —
               hidden with the work until the reader opens the row (KRTX-4732). */}
+          {/* The run's other turns: each one's report and the work it led to (KRTX-4732). */}
+          {runContent && workMounted && (
+            <div key="turn-run" id={workContentId} hidden={!workOpen} data-testid="agent-run-fold" className="flex min-w-0 flex-col gap-3">
+              <WorkFoldContext.Provider value>{runContent}</WorkFoldContext.Provider>
+            </div>
+          )}
           {workNotice && (!noticeFold || workMounted) && (
             <div
               key="turn-notice"
-              id={workContentId}
+              id={runContent ? undefined : workContentId}
               hidden={!!(split || noticeFold) && !workOpen}
               className="min-w-0"
             >
@@ -1887,7 +1946,7 @@ function TurnToolBlocks(
             return (
               <div
                 key={node.key}
-                id={!workNotice && isWork && segment === split?.work[0] ? workContentId : undefined}
+                id={!workNotice && !runContent && isWork && segment === split?.work[0] ? workContentId : undefined}
                 hidden={hidden}
                 className="min-w-0"
               >
@@ -2686,16 +2745,18 @@ function SessionTurnImpl(props: SessionTurnProps) {
   // parent's answer is the only top-level message. A settled turn with no
   // answer at all keeps the row at the top level, where it stays reachable;
   // the main transcript only — space threads hide notices already.
+  const noticeRow = userContent.noticeBatch
+    ? <NoticeBatchGroup items={userContent.noticeBatch} />
+    : userContent.subagentNotice
+      ? <SubagentNoticeRow notice={userContent.subagentNotice} />
+      : userContent.peerMessage
+        ? <PeerMessageRow info={userContent.peerMessage} />
+        : undefined;
+  // A run's anchor folds its own notice too, answered or not: the run's row keeps it reachable.
   const workNotice = rows
     ? undefined
-    : isAgentNoticeTurn(turn) && (model.working || turn.assistant.length > 0)
-      ? userContent.noticeBatch
-        ? <NoticeBatchGroup items={userContent.noticeBatch} />
-        : userContent.subagentNotice
-          ? <SubagentNoticeRow notice={userContent.subagentNotice} />
-          : userContent.peerMessage
-            ? <PeerMessageRow info={userContent.peerMessage} />
-            : undefined
+    : isAgentNoticeTurn(turn) && (model.working || turn.assistant.length > 0 || !!props.agentRun)
+      ? noticeRow
       : undefined;
   const status = useTurnLiveStatus({ turn, blocks: model.blocks, agentWorking: model.agentWorking });
   const retry = useTurnRetryState({ sessionStatus, isWorkingTurn });
@@ -2707,6 +2768,34 @@ function SessionTurnImpl(props: SessionTurnProps) {
     permissions,
     sessionId,
   });
+  // Inside an agent run, the agent's relays between colleagues (`send_message`) are noise:
+  // the reports say what happened (KRTX-4732).
+  const inRun = !!props.agentRun || !!props.runMember;
+  const turnSegments = useMemo(() => (inRun ? withoutRelayCalls(segments) : segments), [inRun, segments]);
+  const { runTurns, agentRun } = props;
+  // The run's other turns, drawn in the anchor's fold, each as a run member.
+  // Each member is a memoized row: a render of the anchor costs a shallow prop compare per member.
+  const runContent =
+    agentRun && runTurns?.length
+      ? runTurns.map((member) => (
+          <SessionTurn
+            key={member.id}
+            {...props}
+            turn={member}
+            runMember
+            agentRun={undefined}
+            runTurns={undefined}
+            foldStartedWork={false}
+            isWorkingTurn={false}
+            pending={false}
+            pendingPrompt={undefined}
+            interruptedBeforeRun={false}
+            isFirstTurn={false}
+            isLast={false}
+            ownsPlan={false}
+          />
+        ))
+      : null;
   // A compaction turn's message-state — `inFlight` (the marker still
   // streams its summary) is the half of "is this compaction running" the
   // working projection cannot see, because it deliberately knows nothing
@@ -2721,6 +2810,18 @@ function SessionTurnImpl(props: SessionTurnProps) {
     [genuiScope, genuiModel],
   );
 
+  // A run member: its report, then the work it led to, in the anchor's fold (KRTX-4732).
+  if (props.runMember) {
+    return (
+      <div data-testid="agent-run-member" className="flex min-w-0 flex-col gap-3">
+        {noticeRow}
+        <GenuiTelemetryContext.Provider value={genuiTelemetry}>
+          <TurnToolBlocks {...props} model={model} segments={turnSegments} conversationDensity={conversationDensity} fold={false} durationMs={null} />
+          <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
+        </GenuiTelemetryContext.Provider>
+      </div>
+    );
+  }
   // Shell mode: a synthetic prompt answered by one bare `bash` call.
   if (turn.shell) {
     return (
@@ -2926,11 +3027,14 @@ function SessionTurnImpl(props: SessionTurnProps) {
         <TurnToolBlocks
           {...props}
           model={model}
-          segments={segments}
+          segments={turnSegments}
           conversationDensity={conversationDensity}
           fold={!answered.shouldUseInlineContent}
           durationMs={meta.turnDurationMs}
           workNotice={workNotice}
+          runContent={runContent}
+          runLabel={agentRun ? sessionLogAgentRunLabel(agentRun) : undefined}
+          foldStartedWork={props.foldStartedWork}
         />
         <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
       </GenuiTelemetryContext.Provider>

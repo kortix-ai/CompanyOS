@@ -26706,7 +26706,7 @@
       "apiKeysDescription": "用于脚本、CI 和集成的密钥。密钥以你、某个智能体或某个机器人的身份运行。所有密钥遵循的规则见“安全”。",
       "keys": {
         "title": "API 密钥",
-        "description": "用于脚本、CI 和集成的密钥。密钥只在此工作区内有效，以你、某个智能体或某个机器人的身份运行。",
+        "description": "用于脚本、CI 和集成的密钥。密钥以你、代理或机器人身份行动；“作用范围”决定它能触及哪些工作区。",
         "newKey": "新建密钥",
         "count": "{count, plural, other {# 个密钥}}",
         "emptyTitle": "没有 API 密钥",

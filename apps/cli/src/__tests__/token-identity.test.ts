@@ -348,6 +348,38 @@ describe('permission-denial identity footer', () => {
     expect(out).not.toContain('kortix_permissions');
   });
 
+  test('a workspace name carrying escape sequences or control characters prints scrubbed', async () => {
+    const hostile = personMe();
+    hostile.accounts = [
+      {
+        account_id: 'acc_123',
+        workspace_id: '5a1e0c0a-0000-4000-8000-00000000000a',
+        slug: 'acc123',
+        // Tenant-settable via a rename: an escape sequence that recolors or
+        // moves the cursor, a cursor-report CSI, and a raw control byte.
+        name: 'Evil\u001b[31mWorkspace\u001b[6n\u0007',
+        role: 'owner',
+      },
+    ];
+    rememberTokenIdentity('kortix_pat_hostile', hostile);
+    recordPermissionDenial(403, { code: 'credential_fence_refused' }, {
+      host: 'http://127.0.0.1:9',
+      token: 'kortix_pat_hostile',
+    });
+    const cap = captureStderr();
+    try {
+      await printPermissionDenialIdentity();
+    } finally {
+      cap.restore();
+    }
+    const out = cap.output();
+    // The name still reads as text; nothing in it may act on the terminal:
+    // the escape sequences are gone and the control byte is replaced.
+    expect(out).toContain('EvilWorkspace?');
+    expect(out).not.toContain('\u001b');
+    expect(out).not.toContain('\u0007');
+  });
+
   test('a fence refusal without a workspace name keeps the generic remedy', async () => {
     const stale = personMe();
     stale.accounts = [];

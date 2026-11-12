@@ -26706,7 +26706,7 @@
       "apiKeysDescription": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel handelt als Sie, als Agent oder als Bot. Die Regeln für jeden Schlüssel stehen unter Sicherheit.",
       "keys": {
         "title": "API-Schlüssel",
-        "description": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel gilt nur in diesem Workspace und handelt als Sie, als Agent oder als Bot.",
+        "description": "Keys für Scripts, CI und Integrationen. Ein Key wirkt wie du, ein Agent oder ein Bot; „Gilt für“ legt fest, welche Workspaces er erreicht.",
         "newKey": "Neuer Schlüssel",
         "count": "{count, plural, one {# Schlüssel} other {# Schlüssel}}",
         "emptyTitle": "Keine API-Schlüssel",

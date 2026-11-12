@@ -26706,7 +26706,7 @@
       "apiKeysDescription": "Des clés pour les scripts, la CI et les intégrations. Une clé agit en votre nom, au nom d'un agent ou d'un bot. Les règles de chaque clé sont dans Sécurité.",
       "keys": {
         "title": "Clés d'API",
-        "description": "Des clés pour les scripts, la CI et les intégrations. Une clé fonctionne uniquement dans cet espace de travail et agit en votre nom, au nom d'un agent ou d'un bot.",
+        "description": "Clés pour scripts, CI et intégrations. Une clé agit comme vous, un agent ou un bot ; « S'applique à » définit les espaces de travail qu'elle atteint.",
         "newKey": "Nouvelle clé",
         "count": "{count, plural, one {# clé} other {# clés}}",
         "emptyTitle": "Aucune clé d'API",

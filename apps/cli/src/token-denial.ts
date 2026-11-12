@@ -137,10 +137,20 @@ const FENCE_FIX_LINE =
   'this credential is bound to one workspace and this route is outside it; no grant changes that. ' +
   'Run it in that workspace, or ask a person with access to do it';
 
+/** Terminal-safe rendering of a NAME A TENANT CAN SET (a workspace rename
+ *  carries no character validation): drop well-formed escape sequences and
+ *  replace remaining control characters (C0/C1) and bidi overrides with '?',
+ *  so nothing in the name can recolor output or move the cursor. */
+function terminalSafe(s: string): string {
+  return s
+    .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, '')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '?');
+}
+
 function fenceFixLine(workspaceName: string | null | undefined): string {
   if (!workspaceName) return FENCE_FIX_LINE;
   return (
-    `this credential is bound to workspace "${workspaceName}" and this route is outside it; no grant changes that. ` +
+    `this credential is bound to workspace "${terminalSafe(workspaceName)}" and this route is outside it; no grant changes that. ` +
     'Mint a personal key instead — it acts as you in every workspace of yours ' +
     '(Settings → API keys, Works in: All my workspaces — or run kortix login)'
   );

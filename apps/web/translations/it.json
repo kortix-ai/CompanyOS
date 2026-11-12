@@ -26706,7 +26706,7 @@
       "apiKeysDescription": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, come un agente o come un bot. Le regole di ogni chiave sono in Sicurezza.",
       "keys": {
         "title": "Chiavi API",
-        "description": "Chiavi per script, CI e integrazioni. Una chiave funziona solo in questo workspace e agisce come te, come un agente o come un bot.",
+        "description": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, un agente o un bot; «Funziona in» definisce quali spazi di lavoro raggiunge.",
         "newKey": "Nuova chiave",
         "count": "{count, plural, one {# chiave} other {# chiavi}}",
         "emptyTitle": "Nessuna chiave API",

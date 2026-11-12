@@ -26706,7 +26706,7 @@
       "apiKeysDescription": "Кључеви за скрипте, CI и интеграције. Кључ делује као ви, као агент или као бот. Правила за сваки кључ су у Безбедности.",
       "keys": {
         "title": "API кључеви",
-        "description": "Кључеви за скрипте, CI и интеграције. Кључ ради само у овом радном простору и делује као ви, као агент или као бот.",
+        "description": "Ključevi za skripte, CI i integracije. Ključ deluje kao ti, agent ili bot; „Važi za“ određuje koje radne prostore doseže.",
         "newKey": "Нови кључ",
         "count": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
         "emptyTitle": "Нема API кључева",

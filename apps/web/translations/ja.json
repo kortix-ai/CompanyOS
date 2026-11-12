@@ -340,6 +340,7 @@
       "repositoryLabel": "リポジトリ",
       "loadingOptions": "リポジトリの選択肢を読み込んでいます…",
       "managedUnavailable": "このインスタンスでは Kortix 管理リポジトリを利用できません。プラットフォーム管理者が管理コンソールで設定します。",
+      "githubAfterCreate": "今後のワークスペースで自分の GitHub を使うには、このワークスペースの作成後に「ワークスペース設定 › Git」で接続してください。",
       "installationUnreachable": "この GitHub 接続は使えなくなりました。リポジトリを一覧表示するには接続し直してください。",
       "reconnect": "Git 設定で接続し直す",
       "managedImportLabel": "既存の管理リポジトリをインポート",

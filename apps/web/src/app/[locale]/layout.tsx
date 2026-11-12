@@ -46,7 +46,6 @@ import { roobertMono } from '../(system)/fonts/roobert-mono';
 import '../globals.css';
 import { ReactQueryProvider } from '../react-query-provider';
 import { GoogleTagManager } from '@/components/analytics/google-tag-manager';
-import { VisitorPixel } from '@/components/analytics/visitor-pixel';
 
 export const viewport: Viewport = {
   themeColor: [
@@ -430,9 +429,6 @@ export default async function RootLayout({
                     {process.env.NEXT_PUBLIC_GTM_ID && (
                       <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} />
                     )}
-                    {/* Visitor pixel: production host only, never in the desktop
-                    app, after window.load — gating lives in the component. */}
-                    <VisitorPixel />
                     {/* Desktop URL prompt, analytics, trackers, localhost link
                     interceptor — each a post-hydration dynamic chunk. */}
                     <RootClientHosts vercel={process.env.VERCEL === '1'} />

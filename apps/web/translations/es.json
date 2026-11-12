@@ -340,6 +340,7 @@
       "repositoryLabel": "Repositorio",
       "loadingOptions": "Cargando opciones de repositorio…",
       "managedUnavailable": "Los repositorios gestionados por Kortix no están disponibles en esta instancia. Un administrador de la plataforma lo configura en la consola de administración.",
+      "githubAfterCreate": "Para usar tu propio GitHub en próximos espacios de trabajo, conéctalo en Ajustes del espacio de trabajo › Git cuando este exista.",
       "installationUnreachable": "Esta conexión de GitHub ya no funciona. Vuelve a conectarla para ver los repositorios.",
       "reconnect": "Volver a conectar en los ajustes de Git",
       "managedImportLabel": "Importar un repositorio gestionado existente",

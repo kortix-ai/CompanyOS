@@ -136,9 +136,9 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
  * platform / historical migrations now archived), so this is gated on a FRESH
  * database: basejump ABSENT and the managed schema (`kortix.accounts`) ABSENT.
  * It is a no-op on every provisioned DB and idempotent on re-run. The second
- * check matters once the legacy schemas are dropped
- * (packages/db/migrations-pending/drop_legacy_suna_schemas.sql.pending): a
- * migrated database without basejump must not get the bootstrap again.
+ * check matters since the legacy schemas are dropped
+ * (20261112124223964_drop_legacy_suna_schemas): a migrated database without
+ * basejump must not get the bootstrap again.
  *
  * Sequencing: the bootstrap installs a trigger ON auth.users (welcome email),
  * so it must run AFTER Supabase Auth (GoTrue) has created the auth schema. We

@@ -1267,10 +1267,6 @@
           "name": "Netzwerkerzwungene Geheimnisse",
           "description": "Steuern Sie, welche Werkzeuge und Ziele Workspace-Geheimnisse empfangen dürfen."
         },
-        "pooled_provider_secrets": {
-          "name": "Gemeinsam genutzte Anbieter-Schlüssel",
-          "description": "Mitglieder verbinden ihre eigenen ChatGPT-Abos und Anbieter-Schlüssel, teilen sie bei Bedarf und wählen pro Sitzung, welche genutzt werden."
-        },
         "reminders": {
           "name": "Schleifen",
           "description": "Agenten und Personen können Check-ins für eine Sitzung planen, einmalig oder wiederkehrend. Jede Auslösung spricht diese Sitzung erneut an. Fügt Schleifen zur Trigger-Liste, den Schleifen-Chip der Sitzung und `kortix loop` hinzu."

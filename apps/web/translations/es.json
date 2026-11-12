@@ -1267,10 +1267,6 @@
           "name": "Secretos protegidos por la red",
           "description": "Controla qué herramientas y destinos pueden recibir los secretos del espacio de trabajo."
         },
-        "pooled_provider_secrets": {
-          "name": "Secretos de proveedor compartidos",
-          "description": "Los miembros conectan sus propias suscripciones de ChatGPT y claves de proveedor, las comparten cuando hace falta y eligen cuáles usa cada sesión."
-        },
         "reminders": {
           "name": "Bucles",
           "description": "Permite que agentes y personas programen revisiones en una sesión, una vez o de forma recurrente. Cada activación vuelve a avisar a esa sesión. Añade los bucles a la lista de Activadores, el indicador de bucles de la sesión y `kortix loop`."

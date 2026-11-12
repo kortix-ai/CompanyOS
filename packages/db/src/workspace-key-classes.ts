@@ -100,7 +100,8 @@ export const WORKSPACE_KEY_CLASSES = {
     'app_artifacts',
     'apps',
     'artifacts',
-    // The LLM credential move ledger (project-scoped, both keys NOT NULL).
+    // The LLM credential move ledger: project-scoped; account_id nullable for
+    // `skipped_no_account` (a legacy row whose project has no account).
     'llm_credential_backfill',
     'change_requests',
     'connection_oauth_applications',

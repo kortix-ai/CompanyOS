@@ -5,6 +5,7 @@ import {
 } from '@kortix/sdk';
 import { formatRelative } from '@kortix/shared';
 
+import { splitHelp } from '../command-argv.ts';
 import type { Auth } from '../api/auth.ts';
 import type { ApiClient } from '../api/client.ts';
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
@@ -103,11 +104,11 @@ interface SessionDigest {
 }
 
 export async function runSessionsDigest(argv: string[]): Promise<number> {
+  // A bare `sessions digest` digests the workspace's recent activity; only a
+  // help FLAG shows help.
+  const helped = argv.length > 0 ? splitHelp(argv, DIGEST_HELP) : null;
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(`${DIGEST_HELP}\n`);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;

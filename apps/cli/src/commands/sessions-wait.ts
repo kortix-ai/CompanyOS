@@ -9,6 +9,7 @@ import {
   takeFlagBool,
   takeFlagValue,
 } from '../command-helpers.ts';
+import { splitHelp } from '../command-argv.ts';
 import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix sessions wait-for <session-id> [options]
@@ -107,11 +108,9 @@ export function isAuthoritativelySettled(status: string): boolean {
 }
 
 export async function runSessionsWaitFor(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.length === 0 || rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return rest.length === 0 ? 2 : 0;
-  }
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   let timeoutRaw: string | undefined;

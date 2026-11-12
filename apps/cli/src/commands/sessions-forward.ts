@@ -6,6 +6,7 @@ import {
   takeFlagValue,
   takeFlagValues,
 } from '../command-helpers.ts';
+import { splitHelp } from '../command-argv.ts';
 import { type ForwardRequest, PortForwardError, startPortForward } from '../port-forward.ts';
 import { SessionRuntimeError } from '../session-runtime.ts';
 import { C, help, status } from '../style.ts';
@@ -42,11 +43,9 @@ Examples:
   kortix sessions forward <session-id> --port 3000 --port 5173:0`;
 
 export async function runSessionsForward(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, FORWARD_HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(`${FORWARD_HELP}\n`);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;

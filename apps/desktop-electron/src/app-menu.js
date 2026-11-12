@@ -225,6 +225,8 @@ function buildAppMenuTemplate({ platform, appName, shortcuts, frontendMenu, quic
         // rows would crowd the menu, and the keys are the convention.
         ...Array.from({ length: 9 }, (_, index) => ({
           id: `kx-go-tab-${index + 1}`,
+          // Electron rejects an item with no label, role or type (hidden or not).
+          label: index === 8 ? 'Show Last Tab' : `Show Tab ${index + 1}`,
           accelerator: `CommandOrControl+${index + 1}`,
           visible: false,
           acceleratorWorksWhenHidden: true,

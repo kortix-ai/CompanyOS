@@ -111,17 +111,30 @@ describe('application menu: macOS', () => {
       '  -',
       '  Show Next Tab',
       '  Show Previous Tab',
-      '  kx-go-tab-1',
-      '  kx-go-tab-2',
-      '  kx-go-tab-3',
-      '  kx-go-tab-4',
-      '  kx-go-tab-5',
-      '  kx-go-tab-6',
-      '  kx-go-tab-7',
-      '  kx-go-tab-8',
-      '  kx-go-tab-9',
+      '  Show Tab 1',
+      '  Show Tab 2',
+      '  Show Tab 3',
+      '  Show Tab 4',
+      '  Show Tab 5',
+      '  Show Tab 6',
+      '  Show Tab 7',
+      '  Show Tab 8',
+      '  Show Last Tab',
       'windowMenu',
     ]);
+  });
+
+  test('every menu item carries a label, role or type, as Electron requires', () => {
+    const missing = [];
+    const walk = (items) => {
+      for (const item of items) {
+        if (!item.label && !item.role && !item.type) missing.push(item.id ?? '?');
+        if (Array.isArray(item.submenu)) walk(item.submenu);
+      }
+    };
+    walk(template('darwin').menu);
+    walk(template('win32').menu);
+    expect(missing).toEqual([]);
   });
 
   test('the tab items are native accelerators that hand a command to the page', () => {

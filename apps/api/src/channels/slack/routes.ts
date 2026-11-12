@@ -15,7 +15,7 @@ import {
   resolveOauthProject,
 } from './dispatch';
 import { publishHomeForUser } from './home';
-import { recordSlackChannel } from './link';
+import { holdsSlackWorkspace, recordSlackChannel } from './link';
 import { handleBlockAction, handleMessageShortcut, handleViewSubmission } from './interactivity';
 import { handleSlashCommand } from './commands';
 import {
@@ -38,6 +38,7 @@ import { logger } from '../../lib/logger';
 // request may reach (see `SlackInbound`). Each route does its own signature
 // check, then hands the verified raw body and its inbound scope to these.
 
+const NOT_HOLDING = { error: 'This Kortix workspace does not hold this Slack workspace' };
 const WORKSPACE_MISMATCH = { error: 'This Slack workspace is not connected to this workspace' };
 
 /**
@@ -62,6 +63,9 @@ async function verifyProjectSlackRequest(
   // the install's bot token proved.
   const inbound = await scopeProjectSlackRequest(projectId, bodyTeamId);
   if (!inbound) return { refusal: c.json(WORKSPACE_MISMATCH, 403) };
+  // One Slack workspace, one Kortix workspace: an own app acts only while its
+  // Kortix workspace holds this Slack workspace (slack/link.ts).
+  if (!(await holdsSlackWorkspace(projectId, inbound.teamId))) return { refusal: c.json(NOT_HOLDING, 403) };
   return { inbound };
 }
 

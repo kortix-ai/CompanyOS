@@ -124,14 +124,20 @@ export async function linkedSlackProject(teamId: string): Promise<string | null>
   if (!teamId) return null;
   const installs = await sharedInstalls(teamId);
   if (installs.length <= 1) return installs[0] ?? null;
-  const primary = await primaryOf(teamId, installs);
+  // A possible own app from before `own_app` never takes the link from a
+  // plain shared install: it is not one, and keeping it would detach the
+  // real holder.
+  const flagged = new Set<string>();
+  for (const id of installs) if (await mayPredateOwnAppFlag(id)) flagged.add(id);
+  const candidates = installs.filter((id) => !flagged.has(id));
+  const primary = await primaryOf(teamId, candidates.length > 0 ? candidates : installs);
   for (const other of installs) {
     if (other === primary) continue;
     // An own-app install from before `own_app` existed reads as a shared one.
     // It may store its own token, so it is never erased here: the gate
     // refuses it until its own-app install runs again and marks it. A
     // workspace that plants the secret gains nothing: it stays refused.
-    if (await mayPredateOwnAppFlag(other)) continue;
+    if (flagged.has(other)) continue;
     await detach(teamId, other, 'one Slack workspace, one Kortix workspace');
   }
   return primary;

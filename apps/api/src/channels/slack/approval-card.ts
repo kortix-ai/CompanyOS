@@ -8,6 +8,7 @@
  * receive, and Approve / Deny / Reply… buttons. Every decision goes through
  * `decideConnectorApproval` — the same implementation as the web cards.
  */
+import { holdsSlackWorkspace } from './link';
 import {
   type ApprovalDecision,
   approvalResumeText,
@@ -385,6 +386,11 @@ export async function handleApprovalCardAction(
   const thread = await findSlackThread(inbound, teamId, threadTs);
   if (!thread) {
     await respond('That approval is no longer available.');
+    return;
+  }
+  // A Kortix workspace that no longer holds this Slack workspace decides nothing here.
+  if (!(await holdsSlackWorkspace(thread.projectId, teamId))) {
+    await respond('That approval belongs to a Kortix workspace that is no longer connected to this Slack workspace.');
     return;
   }
 

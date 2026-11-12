@@ -40,7 +40,7 @@ import { changeChannelAgent } from '../core/settings';
 import type { SlashCtx } from './types';
 import { buildAgentPickerBlocks, loadScopedChannelAgents } from './agent-picker';
 import { currentChannelSelection } from './selection';
-import { linkedSlackProject } from './link';
+import { holdsSlackWorkspace, linkedSlackProject } from './link';
 import { logger } from '../../lib/logger';
 import {
   CANONICAL_SLACK_INBOUND,
@@ -231,6 +231,8 @@ async function handleReviewAction(
   // Resolve the thread → its project so we can scope the item + the actor.
   const thread = await findSlackThread(inbound, teamId, threadTs);
   if (!thread) return;
+  // A Kortix workspace that no longer holds this Slack workspace decides nothing here.
+  if (!(await holdsSlackWorkspace(thread.projectId, teamId))) return;
 
   // "Request changes" is useless without saying what to change, and Slack has
   // no way to put a box on the posted message — only a modal. Open it here and

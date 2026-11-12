@@ -181,10 +181,11 @@ export async function gateSlackRead(
         const file = isRecord(data.file) ? data.file : null;
         if (!file) return { data };
         // Public channels in `channels`, private ones in `groups`, DMs in `ims`.
-        const closed = [file.groups, file.ims]
+        const sharedPrivately = isRecord(file.shares) && isRecord(file.shares.private) ? Object.keys(file.shares.private) : [];
+        const closed = [...new Set([file.groups, file.ims, sharedPrivately]
           .flatMap((v) => (Array.isArray(v) ? v : []))
           .map(normalized)
-          .filter((id): id is string => !!id);
+          .filter((id): id is string => !!id))];
         if (closed.length === 0) return { data };
         const v = await view();
         const open = Array.isArray(file.channels) && file.channels.length > 0;

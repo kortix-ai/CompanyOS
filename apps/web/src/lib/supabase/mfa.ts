@@ -65,7 +65,6 @@ export interface AALResponse {
   next_level?: string;
   current_authentication_methods?: string[];
   action_required?: string;
-  message?: string;
   phone_verification_required?: boolean;
   user_created_at?: string;
   cutoff_date?: string;
@@ -185,15 +184,12 @@ function toFactorInfo(factor: {
   };
 }
 
-/** The verdict per `current -> next` AAL combination, as the AAL gate reports it. */
-const AAL_VERDICTS: Record<string, { actionRequired: string; message: string }> = {
-  'aal1 -> aal1': { actionRequired: 'none', message: 'MFA is not enrolled for this account' },
-  'aal1 -> aal2': {
-    actionRequired: 'verify_mfa',
-    message: 'MFA verification required to access full features',
-  },
-  'aal2 -> aal2': { actionRequired: 'none', message: 'MFA is verified and active' },
-  'aal2 -> aal1': { actionRequired: 'reauthenticate', message: 'Session needs refresh due to MFA changes' },
+/** The action per `current -> next` AAL combination, as the AAL gate reports it. */
+const AAL_VERDICTS: Record<string, { actionRequired: string }> = {
+  'aal1 -> aal1': { actionRequired: 'none' },
+  'aal1 -> aal2': { actionRequired: 'verify_mfa' },
+  'aal2 -> aal2': { actionRequired: 'none' },
+  'aal2 -> aal1': { actionRequired: 'reauthenticate' },
 };
 
 export const supabaseMFAService = {
@@ -467,10 +463,7 @@ export const supabaseMFAService = {
       const current = aalResponse.data?.currentLevel;
       const nextLevel = aalResponse.data?.nextLevel;
 
-      const { actionRequired, message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
-        actionRequired: 'unknown',
-        message: `Unknown AAL combination: ${current} -> ${nextLevel}`,
-      };
+      const { actionRequired } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? { actionRequired: 'unknown' };
 
       // A new user whose first session starts below aal2, or any session the
       // AAL gate sends to verify_mfa, owes verification; the mandatory flag
@@ -493,7 +486,6 @@ export const supabaseMFAService = {
         current_authentication_methods:
           aalResponse.data?.currentAuthenticationMethods?.map((m: any) => m.method) || [],
         action_required: actionRequired,
-        message: message,
         phone_verification_required: phoneVerificationRequired ?? false,
         user_created_at: userCreatedAt?.toISOString(),
         cutoff_date: PHONE_VERIFICATION_CUTOFF_DATE.toISOString(),

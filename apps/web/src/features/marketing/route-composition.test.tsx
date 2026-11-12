@@ -2,6 +2,24 @@ import { describe, expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Window } from 'happy-dom';
 import type { Element as HappyElement, HTMLPreElement } from 'happy-dom';
+// The home route renders inside `LandingAuthGate` (#12462): a client
+// component that reads the auth provider and the router. The composition
+// test renders a signed-out visitor, the gate's own default.
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    supabase: {},
+    bootstrapError: null,
+    retryAuth: () => undefined,
+    signOut: () => Promise.resolve(),
+  }),
+}));
+mock.module('next/navigation', () => ({
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
 // Bun does not compile MDX frontmatter. Supply the content boundary, not a page
 // or section mock, so the actual shipped composition still renders end to end.
 mock.module('@/lib/use-cases-source', () => ({

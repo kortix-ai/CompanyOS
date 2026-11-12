@@ -72,16 +72,16 @@ describe('getAAL with no session', () => {
 
 describe('getAAL AAL combinations', () => {
   // A user created before the cutoff, phone verification not mandatory: the
-  // AAL pair alone decides `action_required` and `message`.
-  const COMBOS: Array<[string | null, string | null, string, string]> = [
-    ['aal1', 'aal1', 'none', 'MFA is not enrolled for this account'],
-    ['aal1', 'aal2', 'verify_mfa', 'MFA verification required to access full features'],
-    ['aal2', 'aal2', 'none', 'MFA is verified and active'],
-    ['aal2', 'aal1', 'reauthenticate', 'Session needs refresh due to MFA changes'],
-    [null, null, 'unknown', 'Unknown AAL combination: null -> null'],
+  // AAL pair alone decides `action_required`.
+  const COMBOS: Array<[string | null, string | null, string]> = [
+    ['aal1', 'aal1', 'none'],
+    ['aal1', 'aal2', 'verify_mfa'],
+    ['aal2', 'aal2', 'none'],
+    ['aal2', 'aal1', 'reauthenticate'],
+    [null, null, 'unknown'],
   ];
 
-  for (const [current, next, actionRequired, message] of COMBOS) {
+  for (const [current, next, actionRequired] of COMBOS) {
     test(`${current}→${next} reports "${actionRequired}"`, async () => {
       signIn('2025-01-01T00:00:00.000Z');
       aal = { data: { currentLevel: current, nextLevel: next }, error: null };
@@ -89,7 +89,6 @@ describe('getAAL AAL combinations', () => {
       const result: AALResponse = await supabaseMFAService.getAAL();
 
       expect(result.action_required).toBe(actionRequired);
-      expect(result.message).toBe(message);
       expect(result.current_level).toBe(current ?? undefined);
       expect(result.next_level).toBe(next ?? undefined);
     });

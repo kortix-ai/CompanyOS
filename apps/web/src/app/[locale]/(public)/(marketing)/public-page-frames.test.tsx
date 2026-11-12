@@ -1,6 +1,24 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
+// The home route renders inside `LandingAuthGate` (#12462): a client
+// component that reads the auth provider and the router. The frame test
+// renders a signed-out visitor, the gate's own default.
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    supabase: {},
+    bootstrapError: null,
+    retryAuth: () => undefined,
+    signOut: () => Promise.resolve(),
+  }),
+}));
+mock.module('next/navigation', () => ({
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 // Under bun test there is no react-server bundler condition; neutralize the
 // guard package. The rendered markup below stays the real thing.

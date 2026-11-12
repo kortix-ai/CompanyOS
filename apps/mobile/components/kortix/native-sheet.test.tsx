@@ -265,7 +265,7 @@ describe('NativeSheet', () => {
     globalThis.setTimeout = ((fn: () => void, ms: number) => {
       timers.push({ fn, ms });
       return timers.length as never;
-    }) as typeof setTimeout;
+    }) as unknown as typeof setTimeout;
     try {
       mount();
       call((r) => r.present());

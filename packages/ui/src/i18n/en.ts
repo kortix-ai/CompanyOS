@@ -796,10 +796,6 @@ const catalog = {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
         },
-        "pooled_provider_secrets": {
-          "name": "Pooled Provider Secrets",
-          "description": "Members connect their own ChatGPT subscriptions and provider keys, share them when needed, and choose which ones each session uses."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."

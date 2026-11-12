@@ -244,7 +244,12 @@ a binary built without it: that binary keeps gorhom. Android keeps gorhom.
   `prefersScrollingExpandsWhenScrolledToEdge`.
 - **Layout.** At a partial detent the sheet's view can keep the full
   detent's height with its bottom below the screen. `NativeSheet`'s box ends
-  the content that far up (`nativeSheetHiddenBottom`, `lib/ui/native-sheet.ts`),
+  the content that far up: once the sheet rests it measures its frame in the
+  window (`measureInWindow`, polled until it holds still) and trims the part
+  below the screen (`nativeSheetBoxBelowScreen`); until then, and right after
+  a detent change, it uses an estimate (`nativeSheetHiddenBottom`; both in
+  `lib/ui/native-sheet.ts`; the estimate alone left the tabs off screen in
+  TestFlight 1.6.2 (171)),
   so `flex: 1`, a `PinnedBar` (the model sheet's Agent · Model tabs) and a
   list's last row end at the visible edge once the sheet rests (the end eases
   there in 200 ms after a drag to a new detent; during the drag it stays where

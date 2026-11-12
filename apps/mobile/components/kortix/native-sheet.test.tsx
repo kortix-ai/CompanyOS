@@ -17,8 +17,11 @@ type ReactTestRenderer = {
 };
 const { act, create } = require('react-test-renderer') as {
   act: (fn: () => void) => void;
-  create: (element: React.ReactElement) => ReactTestRenderer;
+  create: (element: React.ReactElement, options?: { createNodeMock?: (element: { type: unknown }) => unknown }) => ReactTestRenderer;
 };
+
+/** The host view the native sheet measures (`measureInWindow`); set per test. */
+let viewNode: unknown = null;
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -106,7 +109,8 @@ function mount(props: Record<string, unknown> = {}, children: React.ReactNode = 
           ...props,
         },
         children ?? React.createElement(SettledProbe)
-      )
+      ),
+      { createNodeMock: (element) => (element.type === 'view' ? viewNode : null) }
     );
   });
 }
@@ -118,6 +122,7 @@ const fire = (event: string, nativeEvent: Record<string, unknown> = {}) =>
 const call = (fn: (r: Ref) => void) => act(() => fn(ref.current!));
 
 beforeEach(() => {
+  viewNode = null;
   changes = [];
   dismisses = 0;
   keyboardDismisses = 0;
@@ -406,6 +411,98 @@ describe('the content ends at the visible edge', () => {
     } finally {
       motion.reduced = false;
     }
+  });
+});
+
+describe('the measured box replaces the estimate once the sheet rests', () => {
+  // Window 800. The box reports its window frame through `measureInWindow`.
+  const avoider = () => tree.root.findAll((node) => node.type === 'keyboard-avoiding')[0];
+  const content = () => avoider().findAll((node) => node.type === 'view')[0];
+  const margin = () => (Array.isArray(content().props.style) ? Object.assign({}, ...content().props.style) : content().props.style).marginBottom;
+  const frame = { y: 0, height: 0 };
+  let measures = 0;
+  const node = { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => (measures++, cb(0, frame.y, 400, frame.height)) };
+  const frames: Array<() => void> = [];
+  const flush = () => act(() => { for (let i = 0; i < 100 && frames.length; i++) frames.shift()!(); });
+  const layout = (height: number) => act(() => avoider().props.onLayout({ nativeEvent: { layout: { height } } }));
+
+  beforeEach(() => {
+    viewNode = node;
+    measures = 0;
+    frames.length = 0;
+    (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: () => void) => frames.push(cb);
+    (globalThis as Record<string, unknown>).cancelAnimationFrame = () => {};
+  });
+
+  test('a screen-tall box at 85% ends its content at the screen edge (TestFlight 171: tabs below the screen)', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    // The sheet's top is 200pt down; its box is as tall as the window.
+    frame.y = 200;
+    frame.height = 800;
+    layout(800);
+    expect(measures).toBe(0); // not before the sheet rests
+    fire('onDidAppear');
+    flush();
+    expect(margin()).toBe(200);
+  });
+
+  test('a box sized to the visible sheet hides nothing', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    frame.y = 200;
+    frame.height = 592; // ends 8pt above the screen edge: the iOS 26 floating sheet
+    layout(592);
+    fire('onDidAppear');
+    flush();
+    expect(margin()).toBe(0);
+  });
+
+  test('it waits for the frame to hold still before it measures', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    frame.y = 400;
+    frame.height = 800;
+    layout(800);
+    fire('onDidAppear');
+    // Still moving: one frame later the sheet is higher.
+    act(() => frames.shift()!());
+    frame.y = 200;
+    flush();
+    expect(margin()).toBe(200);
+  });
+
+  test('a detent change drops the measurement and measures again at the new detent', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    frame.y = 200;
+    frame.height = 800;
+    layout(800);
+    fire('onDidAppear');
+    flush();
+    expect(margin()).toBe(200);
+    frame.y = 60;
+    fire('onDetentChanged', { index: 1 });
+    flush();
+    expect(margin()).toBe(60);
+  });
+
+  test('a content-sized sheet never measures', () => {
+    mount();
+    call((r) => r.present());
+    fire('onDidAppear');
+    flush();
+    expect(measures).toBe(0);
+  });
+});
+
+describe('nativeSheetBoxBelowScreen', () => {
+  const { nativeSheetBoxBelowScreen } = require('@/lib/ui/native-sheet') as typeof import('@/lib/ui/native-sheet');
+  test('the part of the box past the window bottom, never more than half the box', () => {
+    expect(nativeSheetBoxBelowScreen({ y: 200, height: 874, windowHeight: 874 })).toBe(200);
+    expect(nativeSheetBoxBelowScreen({ y: 200, height: 600, windowHeight: 874 })).toBe(0);
+    expect(nativeSheetBoxBelowScreen({ y: 870, height: 800, windowHeight: 874 })).toBe(400);
+    expect(nativeSheetBoxBelowScreen({ y: Number.NaN, height: 800, windowHeight: 874 })).toBe(0);
   });
 });
 

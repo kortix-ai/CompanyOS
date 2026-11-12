@@ -2480,11 +2480,6 @@
       "count": 3
     }
   },
-  "src/router/services/reservation.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/routes/platform-endpoints.ts": {
     "no-restricted-syntax": {
       "count": 4
@@ -2730,11 +2725,6 @@
   },
   "src/shared/account-limits.ts": {
     "kortix-api/layers": {
-      "count": 2
-    }
-  },
-  "src/shared/actor-context.ts": {
-    "no-console": {
       "count": 2
     }
   },

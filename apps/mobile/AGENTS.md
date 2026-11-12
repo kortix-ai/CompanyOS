@@ -34,6 +34,11 @@ and submits iOS for App Review. JS-only changes also wait for that new binary.
 This task does not authorize a production promotion or a manual submission.
 See `BUILD_GUIDE.md` for the existing release workflow.
 
+Mobile changes merged into `dev` also trigger `Mobile TestFlight`: an iOS-only
+build using the production API and the isolated `testflight-production` update
+channel. This path uploads to TestFlight without App Review or public release.
+Use `scripts/testflight-publish.mjs --dry-run` for its read-only preflight.
+
 > **Also read `design.md` in this folder before building or restyling a
 > screen.** This file says which primitive to use; `design.md` says how a
 > screen looks — the settings-screen layout (`SettingsPage` / `SettingsGroup`

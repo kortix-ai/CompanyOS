@@ -30,6 +30,7 @@ the build number (EAS keeps it remotely).
 | Profile | Backend | EAS environment | Update channel | Artifact |
 |---|---|---|---|---|
 | `prod-store` | `api.kortix.com` | `production` | `production` | App Store / Play (AAB) |
+| `prod-testflight` | `api.kortix.com` | `production` | `testflight-production` | iOS TestFlight only |
 | `prod-apk` | `api.kortix.com` | `production` | `production` | installable APK |
 | `dev-store` | `dev-api.kortix.com` | `preview` | `dev` | TestFlight / Play internal (AAB) |
 | `dev-apk` | `dev-api.kortix.com` | `preview` | `dev` | installable APK |
@@ -38,6 +39,43 @@ the build number (EAS keeps it remotely).
 `EXPO_PUBLIC_*` values come from the EAS environment only, for builds and for
 OTA updates alike: `eas env:list production`. Change them there, never in
 `eas.json`, or a build and an update of the same release disagree.
+
+## TestFlight with the production API
+
+`Mobile TestFlight` runs automatically after mobile changes merge into `dev`.
+Changes to the TestFlight workflow also trigger it. SDK or shared-package
+changes that affect mobile must include the required mobile version bump,
+which triggers this workflow. The repo-wide lockfile alone does not trigger it.
+Markdown-only and test-only changes do not trigger a build. A running build
+continues. New pushes replace the pending build with the newest commit.
+To retry manually: Actions → Mobile TestFlight → Run workflow → select `dev`.
+Each run consumes EAS iOS build quota and keeps a GitHub runner active while
+waiting. The workflow timeout is 180 minutes.
+
+The workflow builds iOS with `prod-testflight`, then uploads that exact build
+to TestFlight with EAS Submit. It checks that the production EAS environment
+points at `https://api.kortix.com/v1` and that the API answers `/health`.
+The `testflight-production` update channel separates these builds from public
+production OTA updates. The public store workflow selects only `prod-store`
+builds, so it does not reuse a TestFlight candidate from this profile.
+
+This workflow does not submit App Review, release an App Store version, upload
+Android, promote the backend, or publish an OTA. After Apple processes the
+upload, internal testers can install it through their existing TestFlight group.
+If the build is not visible, assign it to that group in App Store Connect.
+External testers can require Apple's separate Beta App Review.
+After Apple approves version X, its upload train closes. Further uploads for X
+fail; run `node apps/mobile/scripts/set-version.mjs --next` before a new build.
+
+Read-only preflight from the repo root:
+
+```sh
+node apps/mobile/scripts/testflight-publish.mjs --dry-run
+```
+
+To build and upload manually from a clean committed checkout with EAS login
+or `EXPO_TOKEN`, omit `--dry-run`. Use the dedicated command; `store-release.mjs`
+also performs public store release operations.
 
 ## Release a store version
 

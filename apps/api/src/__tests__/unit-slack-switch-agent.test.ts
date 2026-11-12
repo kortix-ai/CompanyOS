@@ -109,12 +109,39 @@ describe('Switch agent', () => {
       type: 'block_actions',
       team: { id: 'T1' },
       user: { id: 'U1' },
-      view: { id: 'V1', callback_id: 'switch_agent' },
+      view: { id: 'V1', callback_id: 'switch_agent', private_metadata: 'D0DM1' },
       actions: [{ action_id: 'set_agent_session-reviewer', value: JSON.stringify({ c: 'D0DM1', a: 'session-reviewer' }) }],
     } as any);
     expect(changes).toEqual(['session-reviewer']);
     expect(calls.map((c) => c.fn)).toEqual(['updateModal']);
     expect(calls[0]!.args[1]).toBe('V1');
     expect(texts(calls[0]!.args[2])).toContain('✓');
+  });
+
+  test('a button that names another conversation than the one Slack signed changes nothing', async () => {
+    // Clicked in C0HERE, but the button (posted by anyone) names a DM.
+    await handleBlockAction({
+      type: 'block_actions',
+      team: { id: 'T1' },
+      user: { id: 'U1' },
+      channel: { id: 'C0HERE0001' },
+      response_url: 'https://hooks.slack.com/actions/T1/1/x',
+      actions: [{ action_id: 'set_agent_session-reviewer', value: JSON.stringify({ c: 'D0SOMEONE', a: 'session-reviewer' }) }],
+    } as any);
+    // A modal whose metadata names one conversation and whose button names another.
+    await handleBlockAction({
+      type: 'block_actions',
+      team: { id: 'T1' },
+      user: { id: 'U1' },
+      view: { id: 'V1', callback_id: 'switch_agent', private_metadata: 'D0DM1' },
+      actions: [{ action_id: 'set_agent_session-reviewer', value: JSON.stringify({ c: 'D0SOMEONE', a: 'session-reviewer' }) }],
+    } as any);
+    expect(changes).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  test('the modal names the conversation it configures, for the clicks inside it', async () => {
+    await click();
+    for (const call of calls) expect((call.args[2] as any).private_metadata).toBe('D0DM1');
   });
 });

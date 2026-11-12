@@ -358,15 +358,18 @@ async function handleSetSelection(
     return;
   }
   const teamId = payload.team?.id ?? '';
-  const channelId = value.c ?? payload.channel?.id ?? '';
-  if (!teamId || !channelId) return;
-  const ctx = { teamId, channelId };
   // From the Switch agent modal: the answer replaces the modal's content.
   const modalId = payload.view?.id;
+  // The conversation Slack vouches for: the one clicked in, or the one Kortix
+  // opened the modal for (`private_metadata`; connectors cannot open views).
+  // Never the button's `value`: whoever posted the button wrote that.
+  const channelId = (modalId ? payload.view?.private_metadata : payload.channel?.id) ?? '';
+  if (!teamId || !channelId || (value.c && value.c !== channelId)) return;
+  const ctx = { teamId, channelId };
   const reply = modalId
     ? async (text: string) => {
         const token = await clickToken(teamId, inbound);
-        if (token) await updateModal(token, modalId, switchAgentModal(modalText(text)));
+        if (token) await updateModal(token, modalId, switchAgentModal(channelId, modalText(text)));
       }
     : (text: string) => respondViaUrl(payload.response_url, { response_type: 'ephemeral', replace_original: true, text });
   // A per-project app configures only channels bound to its own project.
@@ -420,10 +423,12 @@ async function handleConfigOpen(
 // (`set_agent_*`), and their answer replaces the modal's content.
 const SWITCH_AGENT_CALLBACK = 'switch_agent';
 
-function switchAgentModal(blocks: unknown[]): Record<string, unknown> {
+/** `channelId`: the conversation the modal configures, echoed back by Slack on every click in it. */
+function switchAgentModal(channelId: string, blocks: unknown[]): Record<string, unknown> {
   return {
     type: 'modal',
     callback_id: SWITCH_AGENT_CALLBACK,
+    private_metadata: channelId,
     title: { type: 'plain_text', text: 'Switch agent' },
     close: { type: 'plain_text', text: 'Done' },
     blocks,
@@ -441,17 +446,18 @@ async function clickToken(teamId: string, inbound: SlackInbound): Promise<string
 async function handleAnswerSwitchAgent(payload: SlackInteractionPayload, inbound: SlackInbound): Promise<void> {
   const teamId = payload.team?.id ?? '';
   const action = payload.actions?.[0];
-  const channelId = payload.channel?.id ?? action?.value ?? '';
+  // The conversation clicked in, as Slack signed it; the button's value only has to agree.
+  const channelId = payload.channel?.id ?? '';
   const slackUserId = payload.user?.id ?? '';
-  if (!teamId || !channelId || !payload.trigger_id) return;
+  if (!teamId || !channelId || !payload.trigger_id || (action?.value && action.value !== channelId)) return;
   const token = await clickToken(teamId, inbound);
   if (!token) return;
-  const viewId = (await openModal(token, payload.trigger_id, switchAgentModal(modalText('Loading agents…'))))?.viewId;
+  const viewId = (await openModal(token, payload.trigger_id, switchAgentModal(channelId, modalText('Loading agents…'))))?.viewId;
   if (!viewId) return;
   try {
     const selection = await currentChannelSelection({ teamId, channelId });
     if (!selection) {
-      await updateModal(token, viewId, switchAgentModal(modalText(NO_LINK_TEXT)));
+      await updateModal(token, viewId, switchAgentModal(channelId, modalText(NO_LINK_TEXT)));
       return;
     }
     const agents = await loadScopedChannelAgents({ teamId, projectId: selection.projectId, slackUserId });
@@ -459,10 +465,10 @@ async function handleAnswerSwitchAgent(payload: SlackInteractionPayload, inbound
     const lead = modalText(
       `New threads in ${where} start with the agent you pick. A thread that already runs keeps its agent.`,
     );
-    await updateModal(token, viewId, switchAgentModal(buildAgentPickerBlocks(channelId, selection.agentName, agents, lead)));
+    await updateModal(token, viewId, switchAgentModal(channelId, buildAgentPickerBlocks(channelId, selection.agentName, agents, lead)));
   } catch (err) {
     logger.warn('[slack] the agent picker did not load', { err: (err as Error)?.message });
-    await updateModal(token, viewId, switchAgentModal(modalText("⚠️ This channel's agents did not load. Try again, or run `/kortix agents`.")));
+    await updateModal(token, viewId, switchAgentModal(channelId, modalText("⚠️ This channel's agents did not load. Try again, or run `/kortix agents`.")));
   }
 }
 

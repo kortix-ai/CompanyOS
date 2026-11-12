@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SlackReadDeps, SlackView } from './slack-visibility';
 
 // The channel modules load on first use: the gateway imports this module, and
@@ -38,14 +39,16 @@ export const dbSlackReadDeps: SlackReadDeps = {
     const { loadSlackTokenForProject, slackMemberships, slackPersonForKortixUser } = await channels();
     const token = await loadSlackTokenForProject(projectId);
     if (!token) return 'no_slack';
-    // Keyed by the Kortix workspace whose token answered: two Slack apps in one
-    // Slack workspace see different conversations.
-    const bot = await cached(`bot:${projectId}:${teamId}`, () => slackMemberships(token, 'private_channel,mpim,im'));
+    // Keyed by the token that answered: two Slack apps in one Slack workspace
+    // see different conversations, and one Kortix workspace can replace the
+    // shared app with its own (or back) under the same secret.
+    const app = createHash('sha256').update(token).digest('hex').slice(0, 16);
+    const bot = await cached(`bot:${projectId}:${teamId}:${app}`, () => slackMemberships(token, 'private_channel,mpim,im'));
     if (!bot) return null;
     const person = userId ? await slackPersonForKortixUser({ teamId, userId, token, projectId }).catch(() => null) : null;
     const allowed = new Set<string>(bot.filter((c) => c.isIm && person && c.user === person).map((c) => c.id));
     if (person) {
-      const own = await cached(`person:${projectId}:${teamId}:${person}`, () => slackMemberships(token, 'private_channel,mpim', person));
+      const own = await cached(`person:${projectId}:${teamId}:${app}:${person}`, () => slackMemberships(token, 'private_channel,mpim', person));
       if (!own) return null;
       for (const c of own) allowed.add(c.id);
     }

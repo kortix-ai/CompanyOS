@@ -5,7 +5,7 @@ import { tickRunningComputeCharges } from '../billing/services/compute-metering'
 import { cleanupExpiredConnectorAttachments } from '../connectors/attachments';
 import { db } from '../shared/db';
 import { recordAuditEvent } from '../shared/audit';
-import { escalateDaytonaAuthOutage } from '../shared/daytona-auth';
+import { escalateProviderAuthOutage } from '../shared/provider-auth';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
 import { reconcileStaleBuilds } from '../snapshots/builder';
 import { reconcileSnapshotQuota } from '../snapshots/quota-gc';
@@ -410,7 +410,6 @@ function runMaintenanceSweeps() {
     // the provider (this env) with no live DB row — the leak the DB-driven
     // reaper above structurally can't see. STOP-only, label-scoped, age-gated.
     () => reapOrphanProviderBoxes().catch((err) => {
-      escalateDaytonaAuthOutage('orphan-box reaper', err);
       console.warn(
         '[project-maintenance] orphan-box reaper failed:',
         err instanceof Error ? err.message : err,
@@ -442,7 +441,8 @@ function runMaintenanceSweeps() {
     // every identity drift) before the 100/org Daytona quota fills up.
     // Pressure-gated + bounded; no-op while the ORG total is small.
     () => reconcileSnapshotQuota().catch((err) => {
-      escalateDaytonaAuthOutage('snapshot quota GC', err);
+      // The quota GC talks to Daytona only (the org snapshot limit).
+      escalateProviderAuthOutage('daytona', 'snapshot quota GC', err);
       console.warn(
         '[project-maintenance] snapshot quota GC failed:',
         err instanceof Error ? err.message : err,

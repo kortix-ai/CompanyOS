@@ -59,7 +59,7 @@ import { config, type SandboxProviderName } from '../config';
 import { logger } from '../lib/logger';
 import { getProvider, type SandboxProvider } from '../platform/providers';
 import { db } from '../shared/db';
-import { escalateDaytonaAuthOutage } from '../shared/daytona-auth';
+import { escalateProviderAuthOutage } from '../shared/provider-auth';
 import { mapWithConcurrency } from '../shared/map-with-concurrency';
 import { getSandboxProvider } from '../snapshots/providers';
 import { releaseVolumesOf } from './volumes';
@@ -445,7 +445,7 @@ export async function releaseDeploymentImage(
     return 'released';
   } catch (error) {
     if (!(error instanceof SnapshotInUseError)) {
-      escalateDaytonaAuthOutage('app image release', error);
+      escalateProviderAuthOutage(deployment.hostingProvider, 'app image release', error);
       logger.warn('[apps] image release failed; maintenance retries it', {
         deploymentId: deployment.deploymentId,
         provider: deployment.hostingProvider,
@@ -512,7 +512,7 @@ export async function removeAppRuntime(
   } catch (error) {
     const status = await provider.getStatus(runtime.externalId).catch(() => 'unknown' as const);
     if (status === 'removed') return true;
-    escalateDaytonaAuthOutage('app runtime removal', error);
+    escalateProviderAuthOutage(runtime.provider, 'app runtime removal', error);
     logger.warn('[apps] runtime removal failed; maintenance retries it', {
       runtimeId: runtime.runtimeId,
       provider: runtime.provider,

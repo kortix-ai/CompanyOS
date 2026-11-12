@@ -5,7 +5,7 @@ import { type SandboxProviderName } from '../config';
 import { logger } from '../lib/logger';
 import { clearAppCrashAlerts, raiseAppCrashAlerts } from '../projects/surface';
 import { db } from '../shared/db';
-import { escalateDaytonaAuthOutage } from '../shared/daytona-auth';
+import { escalateProviderAuthOutage } from '../shared/provider-auth';
 import { mapWithConcurrency } from '../shared/map-with-concurrency';
 import { type AppdStatus, AppHostingProvider } from './hosting';
 import { groupAlwaysOn, groupMinRunning, releaseConfigOf } from './release-config';
@@ -315,7 +315,7 @@ async function keepAlwaysOnAppsRunning(hosting: AppHostingProvider, now: Date) {
         // its idle backstop; renewing it here keeps the VM up.
         if (provider !== 'platinum') {
           await hosting.renewLifecycle(provider, runtime.externalId).catch((error) => {
-            escalateDaytonaAuthOutage('always-on lifecycle renewal', error);
+            escalateProviderAuthOutage(provider, 'always-on lifecycle renewal', error);
             logger.warn('[apps] always-on lifecycle renewal failed', { appId: app.appId, error: String(error) });
           });
         }

@@ -188,6 +188,15 @@ describe('old write and disconnect routes reach the named store', () => {
     expect(keys).toMatchObject({ store: 'named', keys: [{ value: 'xai-new' }] });
     const [ledger] = await db.select().from(llmCredentialBackfill).where(eq(llmCredentialBackfill.legacySecretId, legacyId));
     expect(ledger?.outcome).toBe('superseded');
+
+    // The link is single-use: a replay of the same token writes nothing.
+    const replay = await setupLinksPublicApp.request(`/secret/${token}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ values: { XAI_API_KEY: 'xai-replayed' } }),
+    });
+    expect(replay.status).toBe(409);
+    const after = await resolveGatewayKeyValues({ ...scope(), providerId: 'xai', name: 'XAI_API_KEY', probe: true });
+    expect(after).toMatchObject({ store: 'named', keys: [{ value: 'xai-new' }] });
   });
 
   test('DELETE /oauth/openai disconnects the named copy the backfill made, and leaves a key a person added', async () => {

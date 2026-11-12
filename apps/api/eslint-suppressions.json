@@ -3077,11 +3077,6 @@
       "count": 2
     }
   },
-  "src/worker/jobs/audit-archive.ts": {
-    "no-console": {
-      "count": 3
-    }
-  },
   "src/worker/jobs/audit-partition.ts": {
     "no-console": {
       "count": 3

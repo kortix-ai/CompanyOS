@@ -123,9 +123,11 @@ function templateGuard(flags: DeliveryFlags): string | undefined {
 }
 
 /** The header injection slot both builders write: `--inject-header`, with its
- *  optional `--template`. Undefined without `--inject-header`. */
+ *  optional `--template`. Undefined without a (non-empty) `--inject-header` —
+ *  the builders test truthiness, so an `--inject-header=` with no value is no
+ *  slot, exactly as they behaved before the helpers existed. */
 function headerSlot(flags: DeliveryFlags): SecretInjectionSlot | undefined {
-  if (flags.injectHeader === undefined) return undefined;
+  if (!flags.injectHeader) return undefined;
   return {
     kind: 'header',
     name: flags.injectHeader,

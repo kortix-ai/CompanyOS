@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -283,8 +283,6 @@ describe('characterization: tokens service-accounts / apps tables (KRTX-4807)', 
 // ── secrets delivery policy bodies, in-process with a mocked fetch ──────────
 
 const ORIGINAL_FETCH = globalThis.fetch;
-const ORIGINAL_STDOUT_WRITE = process.stdout.write;
-const ORIGINAL_STDERR_WRITE = process.stderr.write;
 
 const ENV_KEYS = [
   'KORTIX_TOKEN',
@@ -297,6 +295,8 @@ const ENV_KEYS = [
 
 let saved: Record<string, string | undefined>;
 let originalCwd: string;
+let stdoutSpy: ReturnType<typeof spyOn> | null = null;
+let stderrSpy: ReturnType<typeof spyOn> | null = null;
 let stdout = '';
 let stderr = '';
 let requests: Array<{ url: string; method: string; body: unknown }> = [];
@@ -304,14 +304,16 @@ let requests: Array<{ url: string; method: string; body: unknown }> = [];
 function captureOutput() {
   stdout = '';
   stderr = '';
-  (process.stdout as unknown as { write: (c: unknown) => boolean }).write = (c) => {
-    stdout += String(c);
+  stdoutSpy?.mockRestore();
+  stderrSpy?.mockRestore();
+  stdoutSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+    stdout += String(chunk);
     return true;
-  };
-  (process.stderr as unknown as { write: (c: unknown) => boolean }).write = (c) => {
-    stderr += String(c);
+  });
+  stderrSpy = spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    stderr += String(chunk);
     return true;
-  };
+  });
 }
 
 function json(data: unknown, status = 200): Response {
@@ -391,10 +393,10 @@ describe('characterization: the egress_policy bodies `secrets delivery` builds (
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
-    (process.stdout as unknown as { write: (c: unknown) => boolean }).write =
-      ORIGINAL_STDOUT_WRITE as unknown as (c: unknown) => boolean;
-    (process.stderr as unknown as { write: (c: unknown) => boolean }).write =
-      ORIGINAL_STDERR_WRITE as unknown as (c: unknown) => boolean;
+    stdoutSpy?.mockRestore();
+    stdoutSpy = null;
+    stderrSpy?.mockRestore();
+    stderrSpy = null;
     process.chdir(originalCwd);
     for (const key of ENV_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
@@ -471,6 +473,48 @@ describe('characterization: the egress_policy bodies `secrets delivery` builds (
     expect((put2?.body as { egress_policy: unknown }).egress_policy).toEqual({
       rules: [{ host: 'api.anthropic.com' }],
       inject: { kind: 'header', name: 'x-api-key', template: '{{secret}}' },
+      on_no_match: 'deny',
+      tls: 'terminate',
+    });
+  });
+
+  test('an empty --inject-header value is no header slot, exactly as the base built it', async () => {
+    // G9 item on the first head: the builders test TRUTHINESS of
+    // --inject-header. The `--inject-header=` (equals) form is the one input
+    // that reaches them with an empty value — takeFlagValue refuses an empty
+    // value only in the separate-token form — so an undefined check instead
+    // of a truthiness check sent an empty-name header slot. With only an
+    // empty --inject-header the broker row still takes the legacy
+    // json_body_field slot (the base's own fall-through), and an enforced
+    // policy carries no inject at all.
+    const broker = await runSecrets([
+      'delivery',
+      'ANTHROPIC_API_KEY',
+      'broker',
+      '--allow-host',
+      'api.anthropic.com',
+      '--inject-header=',
+    ]);
+    expect(broker).toBe(0);
+    const put = requests.find((r) => r.method === 'PUT');
+    expect((put?.body as { egress_policy: { inject?: unknown } }).egress_policy.inject).toEqual({
+      kind: 'json_body_field',
+    });
+
+    requests = [];
+    captureOutput();
+    const enforced = await runSecrets([
+      'delivery',
+      'ANTHROPIC_API_KEY',
+      'enforced',
+      '--allow-host',
+      'api.anthropic.com',
+      '--inject-header=',
+    ]);
+    expect(enforced).toBe(0);
+    const put2 = requests.find((r) => r.method === 'PUT');
+    expect((put2?.body as { egress_policy: Record<string, unknown> }).egress_policy).toEqual({
+      rules: [{ host: 'api.anthropic.com' }],
       on_no_match: 'deny',
       tls: 'terminate',
     });

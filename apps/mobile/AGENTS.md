@@ -261,12 +261,27 @@ a binary built without it: that binary keeps gorhom. Android keeps gorhom.
   `onDismiss` run when the native close ends (`onDismiss` / `onNativeDismiss`).
   `useCloseThen` and `useSheetOpenMove` work unchanged.
 - **Detents** (`resolveNativeDetents`): a content-sized sheet (dynamic sizing,
-  no `snapPoints` or only `'100%'`) is `fitToContents`, capped at the maximum
-  height (`maxDynamicContentSize` lowers the cap; a longer body scrolls).
-  The native side rejects `fitToContents` next to another detent, so a
-  content-sized sheet has no separate full detent: its content is already all
-  on screen. Every other sheet is its `snapPoints` as fractions plus `1`
-  (full screen); `index` keeps its meaning.
+  no `snapPoints` or only `'100%'`) is as tall as its content, capped at the
+  maximum height (`maxDynamicContentSize` lowers the cap; a longer body
+  scrolls). It mounts closed, its box lays out at the sheet's width
+  (`nativeSheetContentWidth`), and it presents at that height as one custom
+  detent (`contentDetent`); once it rests, a new content height moves the
+  detent. Never react-native-screens' `fitToContents`: its wrapper reports the
+  height only after it is mounted, so a sheet mounted open resolved height 0
+  and stood at full height, opaque and edge to edge on iOS 26 (Jay,
+  2026-11-12). A body that never lays out presents at full height after
+  400 ms. Every other sheet is its `snapPoints` as fractions plus `1` (full
+  screen); `index` keeps its meaning.
+- **Glass only below the full detent.** iOS 26 draws a sheet at its full
+  detent opaque and edge to edge; below it, the floating Liquid Glass sheet.
+  A list or a menu is content-sized (or a partial detent), never `'100%'`:
+  Recent files, the session actions, the Add sheet. A form or a document
+  viewer may stand at full height.
+- **Fills on glass.** In the iOS 26 sheet `SurfaceContext` is `'glass'`: a
+  `SettingsGroup` row takes `GLASS_ROW_SURFACE` (translucent ink, the same
+  contrast over any glass tone) and a tile or track takes `useControlFill()`.
+  Never a solid `bg-secondary` on the glass: it matched the glass in one place
+  and not the next (the model rows and the Thinking track).
 - **No native detent selection while open.** `expand()` /
   `snapToPosition('100%')` hold the sheet at full height (a content-sized sheet
   gets the maximum height as its minimum; a fixed one lists only the full

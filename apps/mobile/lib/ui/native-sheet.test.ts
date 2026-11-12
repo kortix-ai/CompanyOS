@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  contentDetent,
   detentFraction,
   hasNativeComponent,
+  nativeSheetContentWidth,
   nativeSheetHiddenBottom,
   nativeSheetMaxHeight,
   resolveNativeDetents,
@@ -151,6 +153,36 @@ describe('resolveNativeDetents', () => {
       detents: [1],
       initialIndex: 0,
     });
+  });
+});
+
+describe('contentDetent', () => {
+  test('the measured content as a share of the maximum detent, rounded up', () => {
+    expect(contentDetent(350, 700)).toBe(0.5);
+    // 443 / 700 = 0.6328…: rounded up, so the last row is never cut.
+    expect(contentDetent(443, 700)).toBe(0.633);
+  });
+
+  test('content as tall as the maximum detent, or taller, is the full detent', () => {
+    expect(contentDetent(700, 700)).toBe(1);
+    expect(contentDetent(699, 700)).toBe(1);
+    expect(contentDetent(2000, 700)).toBe(1);
+  });
+
+  test('no height or no maximum: the full detent', () => {
+    expect(contentDetent(0, 700)).toBe(1);
+    expect(contentDetent(300, 0)).toBe(1);
+    expect(contentDetent(Number.NaN, 700)).toBe(1);
+  });
+});
+
+describe('nativeSheetContentWidth', () => {
+  test('the iOS 26 glass sheet floats 8pt in from each window edge', () => {
+    expect(nativeSheetContentWidth(402, true)).toBe(386);
+  });
+
+  test('an older sheet spans the window', () => {
+    expect(nativeSheetContentWidth(402, false)).toBe(402);
   });
 });
 

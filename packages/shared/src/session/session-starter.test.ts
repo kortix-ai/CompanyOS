@@ -43,11 +43,9 @@ describe('classifySessionStarter', () => {
   });
 
   test('trigger, channel (every id), api and system keep type, id and label', () => {
-    for (const source of ['trigger:cron', 'trigger:webhook', 'trigger:api']) {
-      expect(
-        classifySessionStarter(row({ initiator: { type: 'trigger', id: 'nightly', label: 'nightly' } }), 'u1'),
-      ).toEqual({ type: 'trigger', id: 'nightly', isViewer: false, label: 'nightly' });
-    }
+    expect(
+      classifySessionStarter(row({ initiator: { type: 'trigger', id: 'nightly', label: 'nightly' } }), 'u1'),
+    ).toEqual({ type: 'trigger', id: 'nightly', isViewer: false, label: 'nightly' });
     for (const id of ['slack', 'teams', 'email', 'telegram', 'discord', 'xmpp']) {
       expect(classifySessionStarter(row({ initiator: { type: 'channel', id, label: 'Slack' } }), 'u1')).toEqual({
         type: 'channel',

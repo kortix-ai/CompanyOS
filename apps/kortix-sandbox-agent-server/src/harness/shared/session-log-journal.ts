@@ -409,6 +409,22 @@ export class SessionLogJournal {
     this.publishLive()
   }
 
+  /**
+   * A v2 subscriber that replays nothing (no cursor, or `kortix.resync`) missed the live puts of
+   * the running turn, and a client drops a delta whose message it does not hold (F-012). Put every
+   * live message again whose put went out: its text is every delta published so far, so the deltas
+   * after it extend it exactly. Other subscribers get the same record at a higher rev.
+   */
+  reliveAll(): void {
+    let due = false
+    for (const [id, row] of this.live) {
+      if (!row.sent || this.collected(id)) continue
+      row.due = true
+      due = true
+    }
+    if (due) this.publishLive()
+  }
+
   /** A live message the harness removed before the journal collected it (a retracted prompt, a revert): its tombstone, if a put went out. */
   private liveRemoved(id: unknown): void {
     const row = typeof id === 'string' ? this.live.get(id) : undefined
@@ -991,6 +1007,11 @@ export function flushSessionLogJournal(): Promise<boolean> {
 /** A live message's seq changed (a queued prompt whose turn started): the v2 stream gets it again at once. */
 export function reliveSessionLogMessage(messageId: string): void {
   active?.relive(messageId)
+}
+
+/** A v2 subscriber that replays nothing joined: the running turn's live puts go on the v2 bus again (F-012). */
+export function reliveSessionLogStream(): void {
+  active?.reliveAll()
 }
 
 /** Every daemon stop path, before the harness stops. */

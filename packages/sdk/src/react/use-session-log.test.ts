@@ -786,6 +786,34 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(state.dialect).toBe('v2');
   });
 
+  test('F-012: on v2, a turn end re-reads the newest page, so a reply whose live frames were lost converges without a reload', async () => {
+    // A session started from workspace home switches to v2 after its reply started streaming: the
+    // reply's streaming put went out before the v2 connection, so every delta after it was dropped
+    // and the transcript stayed on "Thinking" until the page was read again. The turn end is when
+    // the box (and then the API) holds the finished reply.
+    let calls = 0;
+    const turn = (token: string | null) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: token ? { turn_token: token } : null } });
+    mount({ loader: async () => { calls++; return v1Page(); } });
+    await flush();
+    expect(calls).toBe(1);
+    const v2 = joined.at(-1)!.options;
+    expect(v2.schema).toBe('v2');
+    // The state at join names the last turn that ended: nothing new, no read.
+    act(() => v2.onControl(turn('t1')));
+    act(() => v2.onControl(turn('t1')));
+    await flush();
+    expect(calls).toBe(1);
+    // A turn ends: one read of the newest page.
+    act(() => v2.onControl(turn('t2')));
+    await flush();
+    expect(calls).toBe(2);
+    // Other control frames and a repeat of the same end read nothing.
+    act(() => v2.onControl({ type: 'kortix.control.queue', cseq: 2, cepoch: 'c', at: 2, payload: {} }));
+    act(() => v2.onControl(turn('t2')));
+    await flush();
+    expect(calls).toBe(2);
+  });
+
   test('a kortix.resync on the v2 connection re-reads the page once, with no duplicate messages', async () => {
     let calls = 0;
     mount({ loader: async () => { calls++; return v1Page(); } });

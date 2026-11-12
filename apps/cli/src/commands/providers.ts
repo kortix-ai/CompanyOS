@@ -67,7 +67,10 @@ Subcommands:
                                     keeps it to you. --label names it
                                     (default "<Provider> key"). Your key
                                     with the same label gets the new value
-                                    and keeps its access.
+                                    and keeps its access. Kortix checks
+                                    the key with one small request to the
+                                    provider and says if it was refused;
+                                    a refused key stays saved.
                                     Provider → env-var mapping below.
                                     With no <key>, reads from stdin.
                                     bedrock also needs --region <region>;
@@ -212,9 +215,10 @@ type ProjectCtx = { client: ApiClient; projectId: string };
 // ── provider keys (named accounts) ────────────────────────────────────────
 // With the workspace flag `pooled_provider_secrets` on (the default since
 // 2026-10-31), the web Models panel (Models → Providers) lists only named
-// provider accounts, `kortix.account_secret_resources`. `set`, `rm` and `ls`
-// use them then, as the web and the TUI do; with the flag off they keep the
-// legacy workspace secrets (`/workspaces/:id/secrets`).
+// provider accounts, `kortix.account_secret_resources`. `set` and `rm` use
+// them then, as the web and the TUI do; with the flag off they keep the
+// legacy workspace secrets (`/workspaces/:id/secrets`). `ls` lists both,
+// always: the web dialog adds a named account whatever the flag says.
 
 /** The server's limit on a provider key's label (`secret-resources.ts` Create). */
 const LABEL_MAX = 100;
@@ -222,7 +226,7 @@ const LABEL_MAX = 100;
 /** A provider key or login as `GET /workspaces/:id/secret-resources` lists it (never its value). */
 type NamedAccount = Pick<
   AccountSecretResource,
-  'secret_id' | 'label' | 'provider_id' | 'name' | 'access_mode' | 'created_by' | 'granted_user_ids'
+  'secret_id' | 'label' | 'provider_id' | 'name' | 'access_mode' | 'created_by' | 'granted_user_ids' | 'verification'
 >;
 
 interface NamedAccounts {
@@ -239,6 +243,15 @@ interface NamedAccounts {
 async function namedAccounts(ctx: ProjectCtx): Promise<NamedAccounts | null> {
   const project = await ctx.client.get<{ experimental?: Record<string, unknown> }>(`/workspaces/${ctx.projectId}`);
   if (project.experimental?.pooled_provider_secrets !== true) return null;
+  return listNamedAccounts(ctx);
+}
+
+/**
+ * Every provider key and login the web Models panel lists, whatever the flag
+ * says: a key added in the web dialog is always a named account, so `ls`
+ * reads them with no flag check.
+ */
+async function listNamedAccounts(ctx: ProjectCtx): Promise<NamedAccounts> {
   const [me, list] = await Promise.all([
     ctx.client.get<{ user_id: string }>('/me'),
     ctx.client.get<{ secrets: NamedAccount[] }>(
@@ -515,18 +528,18 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
 
   let oauthList: OauthListResponse;
   let secrets: { items: ProjectSecret[] };
-  let named: NamedAccounts | null;
+  let named: NamedAccounts;
   try {
     [oauthList, secrets, named] = await Promise.all([
       ctx.client.get<OauthListResponse>(`/workspaces/${ctx.projectId}/oauth`),
       ctx.client.get<{ items: ProjectSecret[] }>(`/workspaces/${ctx.projectId}/secrets`),
-      namedAccounts(ctx),
+      listNamedAccounts(ctx),
     ]);
   } catch (err) {
     return surfaceApiError(err);
   }
   // Every provider key and login the Models panel lists; null-provider rows are not provider credentials.
-  const accounts = (named?.accounts ?? []).filter((a) => a.provider_id);
+  const accounts = named.accounts.filter((a) => a.provider_id);
 
   if (json) {
     emitJson({ oauth: oauthList.items, secrets: secrets.items, accounts });
@@ -562,7 +575,7 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
     process.stdout.write('\n');
   }
 
-  if (named && accounts.length > 0) {
+  if (accounts.length > 0) {
     const rows = accounts
       .map((a) => ({ provider: cliProviderName(a.provider_id!), label: a.label, access: accessText(a, named.viewerId) }))
       .sort((x, y) => x.provider.localeCompare(y.provider) || x.label.localeCompare(y.label));
@@ -585,11 +598,9 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
     }
   }
   if (keyRows.length > 0) {
-    // With provider keys on, the Models panel does not list these secrets.
+    // The Models panel does not list these secrets.
     process.stdout.write(
-      named
-        ? `  ${C.bold}API keys${C.reset} ${C.dim}(legacy workspace secrets, shared with everyone; not under Models → Providers)${C.reset}\n`
-        : `  ${C.bold}API keys${C.reset} ${C.dim}(workspace secrets, shared with everyone in this workspace)${C.reset}\n`,
+      `  ${C.bold}API keys${C.reset} ${C.dim}(legacy workspace secrets, shared with everyone; not under Models → Providers)${C.reset}\n`,
     );
     const nameW = Math.max(...keyRows.map((r) => r.provider.length), 14);
     for (const r of keyRows) {
@@ -956,10 +967,22 @@ async function saveProviderKey(ctx: ProjectCtx, named: NamedAccounts, input: Pro
       ? 'Only you can use it.'
       : `Shared with ${accessText(saved, named.viewerId)}.`;
   const others = mine.filter((a) => a.secret_id !== saved.secret_id);
+  // The API checked the key with one cheap call to the provider. A refused key
+  // stays saved: the line says what the provider said.
+  const check = saved.verification;
+  const checked = !check
+    ? ''
+    : check.status === 'verified'
+      ? `${status.ok(`${input.provider} accepted the key.`)}\n`
+      : check.status === 'invalid'
+        ? `${status.warn(`${input.provider} refused the key: ${check.message}`)}\n` +
+          `  ${C.dim}Replace it with: printf %s "$KEY" | kortix providers set ${input.provider}${input.label ? ` --label ${quoted(input.label)}` : ''}${C.reset}\n`
+        : `${status.info(`Not verified: ${check.message}`)}\n`;
   process.stdout.write(
     `\n${status.ok(`${existing ? 'Replaced the value of' : 'Saved'} ${C.bold}${quoted(saved.label)}${C.reset} (${input.envVar}) for ${C.bold}${input.provider}${C.reset}`)}\n` +
       `  ${C.dim}${who} Listed in the web under Models → Providers.${C.reset}\n` +
       `  ${C.dim}The LLM gateway uses it; the key never enters a sandbox.${C.reset}\n` +
+      checked +
       (!existing && others.length
         ? `  ${C.dim}Your other ${input.provider} key${others.length === 1 ? '' : 's'}: ${others.map((a) => quoted(a.label)).join(', ')}. ` +
           `To replace one, pass its --label.${C.reset}\n`

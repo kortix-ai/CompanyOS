@@ -128,24 +128,32 @@ describe('escalateProviderAuthOutage', () => {
     const escalated = escalateProviderAuthOutage('daytona', 'app runtime removal', daytona401(), T0);
     expect(escalated).toBe(true);
     expect(captured.length).toBe(1);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('DAYTONA_API_KEY');
-    expect(captured[0]!.context).toMatchObject({ action: 'app runtime removal' });
+    expect(event.context).toMatchObject({ action: 'app runtime removal' });
     expect(errorLogs.length).toBe(1);
-    expect(errorLogs[0]!.message).toContain('DAYTONA_API_KEY');
+    const log = errorLogs[0];
+    if (!log) throw new Error('expected one error log line');
+    expect(log.message).toContain('DAYTONA_API_KEY');
   });
 
   test("a Platinum 401 pages the PLATINUM remediation, never the Daytona one (the G9 review's repro)", () => {
     const escalated = escalateProviderAuthOutage('platinum', 'app runtime removal', platinum401(), T0);
     expect(escalated).toBe(true);
     expect(captured.length).toBe(1);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('[platinum] API rejects every call');
     expect(message).toContain('PLATINUM_API_KEY');
     expect(message).not.toContain('DAYTONA_API_KEY');
     expect(message).not.toContain('Daytona org');
-    expect(errorLogs[0]!.message).toContain('PLATINUM_API_KEY');
-    expect(errorLogs[0]!.message).not.toContain('DAYTONA_API_KEY');
+    const log = errorLogs[0];
+    if (!log) throw new Error('expected one error log line');
+    expect(log.message).toContain('PLATINUM_API_KEY');
+    expect(log.message).not.toContain('DAYTONA_API_KEY');
   });
 
   test('a failure inside the 15 min window does not escalate that provider again', () => {
@@ -199,14 +207,17 @@ describe('escalateProviderAuthOutage', () => {
     expect(escalated).toBe(true);
     expect(captured.length).toBe(1);
     expect(errorLogs.length).toBe(1);
-    for (const text of [telemetryText(captured[0]!), telemetryText(errorLogs[0]!)]) {
+    const event = captured[0];
+    const log = errorLogs[0];
+    if (!event || !log) throw new Error('expected one captured event and one error log line');
+    for (const text of [telemetryText(event), telemetryText(log)]) {
       expect(text).not.toContain('sbx-leaky-9876');
       expect(text).not.toContain('upstream response body');
       expect(text).not.toContain('DELETE /v1/sandboxes');
       expect(text).not.toContain('unauthorized');
     }
-    expect(captured[0]!.context).toMatchObject({ action: 'app runtime removal', status: 401 });
-    expect(errorLogs[0]!.context).toMatchObject({ action: 'app runtime removal', status: 401 });
+    expect(event.context).toMatchObject({ action: 'app runtime removal', status: 401 });
+    expect(log.context).toMatchObject({ action: 'app runtime removal', status: 401 });
   });
 
   test('the org out-of-credits escalation is classified from the message but never copies it', () => {
@@ -218,7 +229,10 @@ describe('escalateProviderAuthOutage', () => {
     );
     expect(escalated).toBe(true);
     expect(captured.length).toBe(1);
-    for (const text of [telemetryText(captured[0]!), telemetryText(errorLogs[0]!)]) {
+    const event = captured[0];
+    const log = errorLogs[0];
+    if (!event || !log) throw new Error('expected one captured event and one error log line');
+    for (const text of [telemetryText(event), telemetryText(log)]) {
       expect(text).not.toContain('org-leaky-4321');
       expect(text).not.toContain('Out of credits');
     }
@@ -232,7 +246,9 @@ describe('escalateProviderAuthOutage', () => {
   test('a provider outside the remediation map still escalates with a neutral line', () => {
     const escalated = escalateProviderAuthOutage('exotic', 'app runtime removal', daytona401(), T0);
     expect(escalated).toBe(true);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('[exotic] API rejects every call');
     expect(message).toContain('check the exotic provider credential');
   });
@@ -247,7 +263,9 @@ describe('removeAppRuntime escalation wire-up', () => {
     }));
     expect(gone).toBe(false);
     expect(captured.length).toBe(1);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('DAYTONA_API_KEY');
   });
 
@@ -259,7 +277,9 @@ describe('removeAppRuntime escalation wire-up', () => {
     }));
     expect(gone).toBe(false);
     expect(captured.length).toBe(1);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('PLATINUM_API_KEY');
     expect(message).not.toContain('DAYTONA_API_KEY');
   });

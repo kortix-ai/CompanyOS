@@ -68,11 +68,15 @@ describe('reconcileSnapshotQuota auth-outage escalation', () => {
     expect(result.deleted).toBe(0);
     // The fix: the failure is escalated, not swallowed.
     expect(captured.length).toBe(1);
-    const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
+    const event = captured[0];
+    if (!event) throw new Error('expected one captured event');
+    const message = event.error instanceof Error ? event.error.message : '';
     expect(message).toContain('[daytona] API rejects every call');
     expect(message).toContain('DAYTONA_API_KEY');
     expect(errorLogs.length).toBe(1);
-    expect(errorLogs[0]!.message).toContain('DAYTONA_API_KEY');
+    const log = errorLogs[0];
+    if (!log) throw new Error('expected one error log line');
+    expect(log.message).toContain('DAYTONA_API_KEY');
   });
 
   test('a referenced-name (DB) failure is not a provider auth outage and never escalates', async () => {

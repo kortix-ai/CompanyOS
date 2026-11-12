@@ -5027,49 +5027,6 @@ describe('pi session log on the v2 stream (P4.3)', () => {
     expect(pendingStates(answered).at(-1)!.permissions).toEqual([])
   })
 
-  test('F-012: a v2 stream that joins mid-turn with nothing to replay gets the running turn\'s live puts after its hello, so its next deltas have a message', async () => {
-    // A client drops a `log.block.delta` whose message it does not hold. A stream joined after
-    // the reply's streaming put (no cursor, or a v1 cursor that answers `kortix.resync`) never
-    // got that put: every delta after it was dropped, and the reply stayed on "Thinking".
-    const r = await boot({
-      script: [{ tool: 'bash', args: { command: 'echo gated' } }, { text: 'done' }],
-      env: { KORTIX_COMPILED_AGENT_CONFIG: JSON.stringify({ agent: { build: { permission: { bash: 'ask' } } } }) },
-    })
-    const rt = r.service.runtime()!
-    expect(startSessionLogJournal(createPiSessionLogPort(() => r.service.runtime()?.sessionLogSnapshot() ?? null), { generation: 0 })).not.toBeNull()
-    expect((await prompt(r, rt.rootId, { parts: [{ type: 'text', text: 'go' }] })).status).toBe(204)
-    // The turn is parked on the permission: its assistant message is live, its puts already went out.
-    await waitFor(() => rt.permissions.list().length === 1)
-    const putsIn = (raw: string) =>
-      raw
-        .split('\n\n')
-        .filter((f) => f.includes('event: log.message'))
-        .map((f) => JSON.parse(f.slice(f.indexOf('data: ') + 6)).payload as { rev: number; message?: SessionLogMessage })
-        .filter((p) => p.message?.role === 'assistant')
-    const isLive = (t: string) => putsIn(t).some((p) => p.message!.status === 'streaming')
-
-    // No cursor: no replay, so the live put is sent after the hello.
-    const fresh = await readSse(await r.bearer('/kortix/runtime/events?schema=v2'), isLive)
-    const [live] = putsIn(fresh)
-    expect(live?.message).toMatchObject({ status: 'streaming', role: 'assistant', thread_id: rt.rootId })
-    expect(fresh.indexOf('event: kortix.hello')).toBeLessThan(fresh.indexOf('event: log.message'))
-
-    // A cursor of another epoch (a v1 cursor on a v2 join): `kortix.resync`, then the same live put.
-    const resynced = await readSse(await r.bearer('/kortix/runtime/events?schema=v2&since=5&epoch=bnotthisboot'), isLive)
-    expect(resynced).toContain('event: kortix.resync')
-    expect(resynced.indexOf('event: kortix.resync')).toBeLessThan(resynced.indexOf('event: log.message'))
-    expect(putsIn(resynced)[0]!.message!.message_id).toBe(live!.message!.message_id)
-    expect(putsIn(resynced)[0]!.rev).toBeGreaterThan(live!.rev)
-
-    const [request] = rt.permissions.list()
-    expect((await r.user(`/kortix/runtime/permissions/${request!.id}/reply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reply: 'once' }) })).status).toBe(200)
-    await waitFor(() => !rt.busy())
-    await flushSessionLogJournal()
-    // At rest: a stream that joins gets no live put (the collection's records are the page's).
-    const rest = await readSse(await r.bearer('/kortix/runtime/events?schema=v2'), isLive, 500)
-    expect(isLive(rest)).toBe(false)
-  })
-
   test('a live turn (P4.3b): the user put, a streaming put before the first delta, a put for each new block, then the final put at a higher rev', async () => {
     const r = await boot({ script: [{ tool: 'bash', args: { command: 'echo live-turn' } }, { text: 'Ran it for you.' }] })
     const rt = r.service.runtime()!

@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "Posteingang",
-      "viewReview": "Review",
-      "viewNotifications": "Benachrichtigungen",
-      "viewLabel": "Posteingangsansicht",
       "description": "Neuigkeiten zu den Sitzungen, Triggern und Artefakten, die dich betreffen, aus allen Workspaces.",
       "unreadLabel": "Posteingang: {count} ungelesen",
       "unreadCount": "{count} ungelesen",

@@ -43,6 +43,39 @@ mock.module('../lib/logger', () => ({
 
 const { removeAppRuntime } = await import('./images');
 const { escalateProviderAuthOutage, __resetProviderAuthOutageForTest } = await import('../shared/provider-auth');
+import type { SandboxProvider, SandboxStatus } from '../platform/providers/contract';
+
+/**
+ * A typed provider stub for `removeAppRuntime`'s resolve callback — no casts:
+ * `remove`/`getStatus` are the members under test, and every other member
+ * throws so an unexpected call fails loudly instead of returning undefined.
+ */
+function providerStub(io: {
+  remove: SandboxProvider['remove'];
+  getStatus: SandboxProvider['getStatus'];
+}): SandboxProvider {
+  const unused = (): never => {
+    throw new Error('not used in this test');
+  };
+  return {
+    name: 'daytona',
+    provisioning: { async: false, stages: [] },
+    create: unused,
+    ensureAppRuntimeStarted: unused,
+    start: unused,
+    renewLifecycle: unused,
+    stop: unused,
+    remove: io.remove,
+    getStatus: io.getStatus,
+    resolveEndpoint: unused,
+    routeIngress: unused,
+    resolveIngress: unused,
+    ensureRunning: unused,
+    getProvisioningStatus: async (): Promise<null> => null,
+  };
+}
+
+const status = (value: SandboxStatus): SandboxProvider['getStatus'] => async () => value;
 
 /** The SDK's real 401 shape: DaytonaAuthenticationError carries statusCode (#12549's probe). */
 function daytona401(): Error {
@@ -95,10 +128,31 @@ describe('escalateProviderAuthOutage', () => {
     expect(errorLogs[0]!.message).not.toContain('DAYTONA_API_KEY');
   });
 
-  test('a failure inside the 15 min window does not escalate again', () => {
+  test('a failure inside the 15 min window does not escalate that provider again', () => {
     expect(escalateProviderAuthOutage('daytona', 'app runtime removal', daytona401(), T0)).toBe(true);
-    expect(escalateProviderAuthOutage('platinum', 'orphan-box reaper list', platinum401(), T0 + 15 * 60_000 - 1)).toBe(false);
+    expect(escalateProviderAuthOutage('daytona', 'app runtime removal', daytona401(), T0 + 15 * 60_000 - 1)).toBe(false);
     expect(captured.length).toBe(1);
+  });
+
+  test("one provider's window never suppresses the other provider's page (per-provider rate limit)", () => {
+    expect(escalateProviderAuthOutage('daytona', 'app runtime removal', daytona401(), T0)).toBe(true);
+    expect(escalateProviderAuthOutage('platinum', 'app runtime removal', platinum401(), T0 + 15 * 60_000 - 1)).toBe(true);
+    expect(captured.length).toBe(2);
+  });
+
+  test("a provider that fails on every loop pass never starves the quieter provider's page (the G9 ordered-repeat probe)", () => {
+    // Daytona fails on every ~5-min maintenance pass, so it re-escalates first
+    // each window. Under the old shared timestamp that consumption suppressed
+    // Platinum's first page forever (reviewer probe: Platinum alerts: 0).
+    let escalations = 0;
+    for (let t = T0; t <= T0 + 45 * 60_000; t += 15 * 60_000) {
+      if (escalateProviderAuthOutage('daytona', 'orphan-box reaper list', daytona401(), t)) escalations++;
+    }
+    expect(escalations).toBe(4);
+    expect(escalateProviderAuthOutage('platinum', 'app runtime removal', platinum401(), T0 + 20 * 60_000)).toBe(true);
+    const platinumPages = captured.filter((c) =>
+      c.error instanceof Error && c.error.message.includes('PLATINUM_API_KEY'));
+    expect(platinumPages.length).toBe(1);
   });
 
   test('a failure after the window escalates again', () => {
@@ -137,10 +191,10 @@ describe('escalateProviderAuthOutage', () => {
 describe('removeAppRuntime escalation wire-up', () => {
   test('a Daytona 401 during App runtime teardown escalates the outage', async () => {
     const runtime = { runtimeId: 'rt-1', provider: 'daytona', externalId: 'box-1' };
-    const gone = await removeAppRuntime(runtime, () => ({
+    const gone = await removeAppRuntime(runtime, () => providerStub({
       remove: async () => { throw daytona401(); },
       getStatus: async () => { throw daytona401(); },
-    }) as never);
+    }));
     expect(gone).toBe(false);
     expect(captured.length).toBe(1);
     const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
@@ -149,10 +203,10 @@ describe('removeAppRuntime escalation wire-up', () => {
 
   test('a Platinum 401 at the same provider-agnostic call site pages the PLATINUM remediation', async () => {
     const runtime = { runtimeId: 'rt-2', provider: 'platinum', externalId: 'vm-1' };
-    const gone = await removeAppRuntime(runtime, () => ({
+    const gone = await removeAppRuntime(runtime, () => providerStub({
       remove: async () => { throw platinum401(); },
       getStatus: async () => { throw platinum401(); },
-    }) as never);
+    }));
     expect(gone).toBe(false);
     expect(captured.length).toBe(1);
     const message = captured[0]!.error instanceof Error ? captured[0]!.error.message : '';
@@ -162,20 +216,20 @@ describe('removeAppRuntime escalation wire-up', () => {
 
   test('a removal that proves the runtime gone never escalates', async () => {
     const runtime = { runtimeId: 'rt-3', provider: 'daytona', externalId: 'box-2' };
-    const gone = await removeAppRuntime(runtime, () => ({
+    const gone = await removeAppRuntime(runtime, () => providerStub({
       remove: async () => { throw daytona401(); },
-      getStatus: async () => 'removed',
-    }) as never);
+      getStatus: status('removed'),
+    }));
     expect(gone).toBe(true);
     expect(captured.length).toBe(0);
   });
 
   test('a plain provider 502 keeps the old behavior and never escalates', async () => {
     const runtime = { runtimeId: 'rt-4', provider: 'daytona', externalId: 'box-3' };
-    const gone = await removeAppRuntime(runtime, () => ({
+    const gone = await removeAppRuntime(runtime, () => providerStub({
       remove: async () => { throw new Error('DELETE -> 502'); },
-      getStatus: async () => 'running',
-    }) as never);
+      getStatus: status('running'),
+    }));
     expect(gone).toBe(false);
     expect(captured.length).toBe(0);
   });

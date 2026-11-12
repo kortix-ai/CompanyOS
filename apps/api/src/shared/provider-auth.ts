@@ -42,15 +42,17 @@ const PROVIDER_REMEDIATION: Record<string, string> = {
   platinum: 'fix or rotate PLATINUM_API_KEY',
 };
 
-/** One escalation per process per window — enough for each error group to stay hot, not enough to spam. */
+/** One escalation per provider per window — enough for each error group to stay hot, not enough to spam. */
 const AUTH_OUTAGE_ESCALATION_INTERVAL_MS = 15 * 60_000;
 
 // Per-process by design: the worker runs as one task, and a lost timestamp
 // only re-alerts. In-memory on purpose — no DB write from an error path.
-// One timestamp across providers: a suppressed provider's next pass (the
-// loops retry every ~5 min) escalates once the window passes — a delay, never
-// a lost page.
-let lastAuthOutageEscalationAt = 0;
+// Keyed PER PROVIDER: one shared timestamp starves the quieter provider —
+// the failing one re-escalates first on every ~5-min loop pass and consumes
+// each window before the other's pass reaches it, so its page never goes
+// out (the G9 ordered-repeat probe on PR #12557: Platinum alerts: 0).
+// replica-local: an in-memory rate-limit window; a lost entry only re-alerts.
+const lastAuthOutageEscalationAt = new Map<string, number>();
 
 /**
  * Escalate a provider auth outage to the error tracker. Every call to a
@@ -75,8 +77,9 @@ export function escalateProviderAuthOutage(
   const isAuthOutage = isProviderAuthFailure(error)
     || message.toLowerCase().includes(ORG_OUT_OF_CREDITS_SUBSTRING);
   if (!isAuthOutage) return false;
-  if (now - lastAuthOutageEscalationAt < AUTH_OUTAGE_ESCALATION_INTERVAL_MS) return false;
-  lastAuthOutageEscalationAt = now;
+  const lastAt = lastAuthOutageEscalationAt.get(provider) ?? 0;
+  if (now - lastAt < AUTH_OUTAGE_ESCALATION_INTERVAL_MS) return false;
+  lastAuthOutageEscalationAt.set(provider, now);
   const remediation = PROVIDER_REMEDIATION[provider]
     ?? `check the ${provider} provider credential`;
   logger.error(`[${provider}] auth outage: every ${provider} API call is rejected; ${remediation}`, {
@@ -91,7 +94,7 @@ export function escalateProviderAuthOutage(
   return true;
 }
 
-/** Test-only: reset the escalation rate-limit window. */
+/** Test-only: reset the escalation rate-limit windows. */
 export function __resetProviderAuthOutageForTest(): void {
-  lastAuthOutageEscalationAt = 0;
+  lastAuthOutageEscalationAt.clear();
 }

@@ -219,6 +219,27 @@ export async function setDatabaseProjectFeature(
   });
 }
 
+/**
+ * Record a provider check result on one saved provider key, as
+ * `POST /v1/accounts/:accountId/secret-resources/:secretId/verify` does after
+ * the provider answers. The local profile has no provider to ask.
+ */
+export async function setDatabaseKeyVerification(
+  env: Env,
+  secretId: string,
+  status: "verified" | "invalid" | "unknown",
+  open: OpenProjectDb = openProjectDb,
+): Promise<void> {
+  return withProjectDb(env, "record a key check for", open, async (client) => {
+    await client.query(
+      `UPDATE kortix.account_secret_resources
+       SET verify_status = $2, verify_message = 'set by the test', verified_at = now()
+       WHERE secret_id = $1::uuid`,
+      [secretId, status],
+    );
+  });
+}
+
 /** Record a failed run on a trigger, as the API does when a trigger session's turn ends with an error. */
 /**
  * The session's first prompt, claimed and on its way (`running`, locked for

@@ -843,7 +843,7 @@ export function noModelAvailableBody(freeModelsOnly: boolean): { error: string; 
   };
 }
 
-/** True when the project's servable catalog (what the box registers at boot) is empty. */
+/** True when the project's servable catalog (what the box registers at boot) is empty, refused keys not counted. */
 async function projectHasNoServableModel(input: {
   projectId: string;
   accountId: string;
@@ -855,6 +855,8 @@ async function projectHasNoServableModel(input: {
     accountId: input.accountId,
     principalUserId: input.userId,
     ...(input.personalUserId !== undefined ? { personalUserId: input.personalUserId } : {}),
+    // pi would select a model of a refused key and die on the provider's 401.
+    withoutRefusedKeys: true,
   });
   return Object.keys(catalog.models ?? {}).length === 0;
 }

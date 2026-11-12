@@ -354,6 +354,28 @@ describe('ProjectLeftDrawer closes before it navigates', () => {
     flushFrame();
     expect(calls).toEqual(['close', 'route:files']);
   });
+
+  const sessionRow = (id: string) =>
+    tree.root.find(
+      (node: any) => node.type === 'Pressable' && String(node.props.accessibilityLabel).startsWith(`${id}, `)
+    );
+
+  test('a session row closes first and opens on the next frame', async () => {
+    await mount();
+    await act(async () => sessionRow('s-1').props.onPress());
+    expect(calls).toEqual(['close']);
+    flushFrame();
+    expect(calls).toEqual(['close', 'session:s-1']);
+  });
+
+  test('mixed taps before the drawer has closed open only the first: a row, a pill, another row', async () => {
+    await mount();
+    await act(async () => sessionRow('s-1').props.onPress());
+    await press('Files');
+    await act(async () => sessionRow('s-2').props.onPress());
+    flushFrame();
+    expect(calls).toEqual(['close', 'session:s-1']);
+  });
 });
 
 // KRTX-1727: the server drops rows the viewer may not see after a bounded

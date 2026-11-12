@@ -329,3 +329,22 @@ export function projectRouteAnimation(params: unknown): 'none' | 'default' {
   const value = (params as Record<string, unknown> | undefined)?.[DRAWER_SWAP_PARAM];
   return value === '1' ? 'none' : 'default';
 }
+
+/** The view a drawer page opens (`projectViewKey` of Review or Apps). */
+export function drawerPageViewKey(pageId: DrawerPageId): string {
+  return `page:${pageId}`;
+}
+
+/** The view a drawer session row opens: that session, connecting. */
+export function drawerSessionViewKey(sessionId: string): string {
+  return `connecting:${sessionId}`;
+}
+
+/**
+ * A push of the view swaps in with no slide only when the store shows the
+ * exact view a drawer tap recorded. Any other push — a composer send, a
+ * Sessions row, a notification, or a tap that moved no route — slides.
+ */
+export function drawerSwapApplies(recorded: string | null, viewKey: string | null): boolean {
+  return recorded !== null && recorded === viewKey;
+}

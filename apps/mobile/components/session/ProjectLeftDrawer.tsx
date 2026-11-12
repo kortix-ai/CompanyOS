@@ -589,12 +589,17 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     [onClose]
   );
 
-  /** Close the drawer and navigate once. Later taps are ignored until reset. */
+  /**
+   * Close the drawer and navigate once. Later taps (any row, any pill) are
+   * ignored until reset: the JS thread stays free while the drawer closes, so
+   * a second tap would otherwise queue a second navigation. `haptic: false`
+   * for a session row: its open path taps itself (ProjectScreen).
+   */
   const navigateOnce = useCallback(
-    (navigate: () => void) => {
+    (navigate: () => void, haptic = true) => {
       if (navigatingRef.current) return;
       navigatingRef.current = true;
-      haptics.tap();
+      if (haptic) haptics.tap();
       closeThen(navigate);
     },
     [closeThen]
@@ -634,13 +639,13 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   );
 
   const handleOpenProjectSession = useCallback(
-    (session: ProjectSession) => closeThen(() => onOpenProjectSession(session)),
-    [closeThen, onOpenProjectSession]
+    (session: ProjectSession) => navigateOnce(() => onOpenProjectSession(session), false),
+    [navigateOnce, onOpenProjectSession]
   );
 
   const handleOpenSubsession = useCallback(
-    (parent: ProjectSession, childId: string) => closeThen(() => onOpenSubsession(parent, childId)),
-    [closeThen, onOpenSubsession]
+    (parent: ProjectSession, childId: string) => navigateOnce(() => onOpenSubsession(parent, childId), false),
+    [navigateOnce, onOpenSubsession]
   );
 
   const toggleParent = useCallback(
@@ -854,9 +859,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   );
 
   const handleNewSession = useCallback(() => {
-    haptics.tap();
-    closeThen(onNewSession);
-  }, [closeThen, onNewSession]);
+    navigateOnce(onNewSession);
+  }, [navigateOnce, onNewSession]);
 
   // The app's one settings page (AccountPage), inside the project stack, so
   // its hamburger opens this drawer.

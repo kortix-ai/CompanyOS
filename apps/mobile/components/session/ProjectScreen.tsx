@@ -55,6 +55,9 @@ import {
 import { FloatingMenuButton } from '@/components/session/FloatingMenuButton';
 import {
   DRAWER_SWAP_PARAMS,
+  drawerPageViewKey,
+  drawerSessionViewKey,
+  drawerSwapApplies,
   pageBackMove,
   projectRouteAnimation,
   drawerSessionRowMove,
@@ -394,7 +397,14 @@ export function ProjectScreen() {
   // Left drawer open state (ProjectLeftDrawer).
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Stable handlers, so a memoized SessionPage skips parent re-renders.
-  const openDrawer = useCallback(() => setDrawerOpen(true), []);
+  // The drawer swap a tap recorded (below) and the view the store shows.
+  const drawerSwapRef = useRef<string | null>(null);
+  const viewKeyRef = useRef<string | null>(null);
+  // A drawer swap recorded by an earlier tap never outlives the next open.
+  const openDrawer = useCallback(() => {
+    drawerSwapRef.current = null;
+    setDrawerOpen(true);
+  }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   // The peek-card drawer's geometry (lib/ui/drawer-layout): the sidebar width
   // and the swipe area follow the window (rotation, iPad split view) and the
@@ -432,29 +442,25 @@ export function ProjectScreen() {
     projectId, goHome, returnToThread, drawerOpen, setDrawerOpen,
   );
   // A drawer move swaps its screen in place: no push slide under the closing
-  // drawer (`DRAWER_SWAP_PARAM`). A drawer route carries the param itself; a
-  // store change (Review, Apps, a session row) sets this flag right before
-  // it, and the home or covering route that pushes the view reads it in the
-  // same commit (`takeDrawerSwap`). The effect below clears it after every
-  // commit: child effects run first, so the route reads it before it clears,
-  // and a store change that moved no route (a thread already open swaps its
-  // content) never leaves it set for a later composer push.
-  const drawerSwapRef = useRef(false);
+  // drawer (`DRAWER_SWAP_PARAM`). A drawer route carries the param itself. A
+  // store change (Review, Apps, a session row) records the view it opens
+  // (`projectViewKey`) right before it; the home or covering route that then
+  // pushes the view swaps only when the store shows exactly that view
+  // (`takeDrawerSwap`, `drawerSwapApplies`). Read once, and dropped when the
+  // drawer opens again: a store change that moved no route (a thread already
+  // open swaps its content) never reaches a later composer or Sessions push.
   const takeDrawerSwap = useCallback(() => {
-    const swap = drawerSwapRef.current;
-    drawerSwapRef.current = false;
+    const swap = drawerSwapApplies(drawerSwapRef.current, viewKeyRef.current);
+    drawerSwapRef.current = null;
     return swap;
   }, []);
-  useEffect(() => {
-    drawerSwapRef.current = false;
-  });
   const navigateDrawerRoute = useCallback(
     (route: ProjectDrawerRoute, routeParams?: Record<string, string>) =>
       navigateProjectRoute(route, { ...routeParams, ...DRAWER_SWAP_PARAMS }),
     [navigateProjectRoute]
   );
   const openDrawerPage = useCallback((pageId: DrawerPageId) => {
-    drawerSwapRef.current = true;
+    drawerSwapRef.current = drawerPageViewKey(pageId);
     useTabStore.getState().navigateToPage(pageId);
   }, []);
 
@@ -565,14 +571,14 @@ export function ProjectScreen() {
   );
   const openSessionFromDrawer = useCallback(
     (ps: ProjectSession) => {
-      drawerSwapRef.current = true;
+      drawerSwapRef.current = drawerSessionViewKey(ps.session_id);
       openThreadFromDrawer(ps, ps.runtime_session_id ?? null);
     },
     [openThreadFromDrawer]
   );
   const openSubsessionFromDrawer = useCallback(
     (ps: ProjectSession, childId: string) => {
-      drawerSwapRef.current = true;
+      drawerSwapRef.current = drawerSessionViewKey(ps.session_id);
       openThreadFromDrawer(ps, childId);
     },
     [openThreadFromDrawer]
@@ -640,6 +646,7 @@ export function ProjectScreen() {
     activeSessionId,
     connectingSessionId: connectingProjectSessionId,
   });
+  viewKeyRef.current = viewKey;
 
   // The thread renders only once the context holds its sandbox. Until then it
   // shows the connecting view, so SessionPage never starts its sync and

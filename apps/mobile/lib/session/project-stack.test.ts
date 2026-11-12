@@ -28,6 +28,9 @@ import {
   pageBackMove,
   returnThreadForPage,
   DRAWER_SWAP_PARAMS,
+  drawerPageViewKey,
+  drawerSessionViewKey,
+  drawerSwapApplies,
   projectRouteAnimation,
 } from './project-stack';
 
@@ -434,5 +437,23 @@ describe('projectRouteAnimation', () => {
     expect(projectRouteAnimation(undefined)).toBe('default');
     expect(projectRouteAnimation({ id: 'p-1' })).toBe('default');
     expect(projectRouteAnimation({ swap: '0' })).toBe('default');
+  });
+});
+
+describe('drawerSwapApplies', () => {
+  const view = (input: Partial<Parameters<typeof projectViewKey>[0]>) =>
+    projectViewKey({ isHome: false, activePageId: null, activeSessionId: null, connectingSessionId: null, ...input });
+
+  test('the view a drawer tap recorded swaps in: Review, Apps, a session row', () => {
+    expect(drawerSwapApplies(drawerPageViewKey('page:review'), view({ activePageId: 'page:review' }))).toBe(true);
+    expect(drawerSwapApplies(drawerPageViewKey('page:apps'), view({ activePageId: 'page:apps' }))).toBe(true);
+    expect(drawerSwapApplies(drawerSessionViewKey('s-1'), view({ connectingSessionId: 's-1' }))).toBe(true);
+  });
+
+  test('any other view slides: nothing recorded, or a different target', () => {
+    expect(drawerSwapApplies(null, view({ activePageId: 'page:review' }))).toBe(false);
+    expect(drawerSwapApplies(drawerPageViewKey('page:review'), view({ activePageId: 'page:apps' }))).toBe(false);
+    expect(drawerSwapApplies(drawerSessionViewKey('s-1'), view({ connectingSessionId: 's-2' }))).toBe(false);
+    expect(drawerSwapApplies(drawerSessionViewKey('s-1'), null)).toBe(false);
   });
 });

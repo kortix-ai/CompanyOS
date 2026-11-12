@@ -84,9 +84,10 @@ export function sessionsPageRows(rows: readonly ProjectSession[], archived: bool
   return archived ? sessionsInView(rows, 'archived') : rootRowsOnly(rows);
 }
 
-/** The server rejects a `q` over 200 characters and an empty one: send neither. */
-export function searchQueryParam(text: string): string | undefined {
-  const q = text.trim();
+/** The server rejects a `q` over 200 characters and an empty one: send neither.
+ *  A null (a native input's clear on some runtimes hands null through) reads as empty. */
+export function searchQueryParam(text: string | null | undefined): string | undefined {
+  const q = typeof text === 'string' ? text.trim() : '';
   return q ? q.slice(0, 200) : undefined;
 }
 

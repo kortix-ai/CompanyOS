@@ -129,6 +129,11 @@ const KNOWN_UPWARD: string[] = [
   'internal/hooks/connectors/use-add-account.ts -> customize/sections/view/connector-connections.ts',
   'internal/hooks/connectors/use-add-managed-account.ts -> access/access/access-dialog-share.tsx',
   'internal/hooks/connectors/use-add-managed-account.ts -> customize/sections/view/connector-connections.ts',
+  // The finish-sign-in and pipedream-connect hooks settle the connection
+  // caches through the one invalidation helper (#12512's hooks, dev 2026-11-12).
+  'internal/hooks/connectors/use-finish-sign-in.ts -> customize/connectors/invalidate-connections.ts',
+  'internal/hooks/connectors/use-pipedream-connect-member.ts -> customize/connectors/invalidate-connections.ts',
+  'internal/hooks/connectors/use-pipedream-connect-project.ts -> customize/connectors/invalidate-connections.ts',
   'internal/hooks/connectors/use-tool-connect.ts -> customize/sections/connector-connection-form.ts',
   'internal/hooks/projects/use-new-project-session.ts -> session/scope/create-scoped-session.ts',
   'internal/stores/session-filter-store.ts -> workspace/sidebar/session-grouping.ts',

@@ -100,6 +100,8 @@ export const WORKSPACE_KEY_CLASSES = {
     'app_artifacts',
     'apps',
     'artifacts',
+    // The LLM credential move ledger (project-scoped, both keys NOT NULL).
+    'llm_credential_backfill',
     'change_requests',
     'connection_oauth_applications',
     'connection_oauth_sessions',
@@ -164,6 +166,8 @@ export const WORKSPACE_KEY_CLASSES = {
   project_only: [
     // A goal's event log carries project_id only (dev, 2026-11-06).
     'project_goal_events',
+    // The legacy credential move ledger (project_id only, dev 2026-11-12).
+    'legacy_credential_backfill',
     'artifact_comment_screenshot_objects',
     'artifact_comment_threads',
     'artifact_events',

@@ -65,6 +65,10 @@ const ERROR_NOISE_FILTERS = [
   join('@kortix/ui', 'internal', 'lib', 'browser-noise', 'rules', 'expected-states.ts'),
   join('app', 'sentry-ignore-errors.test.ts'),
   'sentry.client.config.ts',
+  // The schedule sheet's test asserts the sheet surfaces the wire string the
+  // API sends (`setupPauseReason`): a consumer of the format, not a billing
+  // surface (dev 2026-11-12, #12507).
+  join('@kortix/ui', 'customize', 'triggers', 'schedule', 'schedule-detail-sheet.mutations.test.tsx'),
 ];
 
 /**

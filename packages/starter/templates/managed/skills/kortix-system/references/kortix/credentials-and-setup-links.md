@@ -44,9 +44,8 @@ kortix secrets request BILLING_API_TOKEN --scope connector                  # on
 ```
 
 - **Always pass the scope you mean.** `runtime` (the default) delivers the
-  value to you as an env var: use it for "store my key" and for any key your
-  code or tools read. `connector` keeps it server-side for a connector and
-  never puts it in the sandbox. The person can change delivery later.
+  value to you as an env var. `connector` keeps it server-side, never in
+  the sandbox. The person can change delivery later.
 - One link asks for several keys. Ask for everything in one message.
 - A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
   set the names it lists, in this workspace.
@@ -68,9 +67,8 @@ kortix secrets request BILLING_API_TOKEN --scope connector                  # on
      or service account), never their own login.
    - `--owner me` (default): private to this user, used only in their own
      sessions. Use it for a person's own account.
-   - A trigger or automation (a wake-up on a new email, a scheduled run) uses
-     only shared accounts: mint the `--owner project` link for it, once. A
-     private link cannot serve it, so never mint one first.
+   - A trigger or automation uses only shared accounts: mint the
+     `--owner project` link for it, once; a private link cannot serve it.
    - Unclear? Ask. Never put a personal login in the shared slot.
 3. `kortix connectors connect <slug> [--owner project] --label "<name>"`.
    The label names the account ("Support inbox"), never `me` or an id.

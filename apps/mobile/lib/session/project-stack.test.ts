@@ -27,6 +27,8 @@ import {
   shownProjectSessionId,
   pageBackMove,
   returnThreadForPage,
+  DRAWER_SWAP_PARAMS,
+  projectRouteAnimation,
 } from './project-stack';
 
 const COVERING = [
@@ -419,5 +421,18 @@ describe('threadOpenTarget', () => {
 
   test('a pending focus for another session is ignored: the root', () => {
     expect(threadOpenTarget({ sessionId: 'ps-2', runtimeId: 'oc-other' }, 'ps-1', 'oc-root')).toBe('oc-root');
+  });
+});
+
+describe('projectRouteAnimation', () => {
+  test('a route the drawer opened swaps in with no push slide', () => {
+    expect(projectRouteAnimation(DRAWER_SWAP_PARAMS)).toBe('none');
+    expect(projectRouteAnimation({ id: 'p-1', autoFocusSearch: '1', ...DRAWER_SWAP_PARAMS })).toBe('none');
+  });
+
+  test('any other push keeps the platform slide', () => {
+    expect(projectRouteAnimation(undefined)).toBe('default');
+    expect(projectRouteAnimation({ id: 'p-1' })).toBe('default');
+    expect(projectRouteAnimation({ swap: '0' })).toBe('default');
   });
 });

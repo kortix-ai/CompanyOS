@@ -61,6 +61,9 @@ export type ProjectDrawerRoute =
   | typeof PROJECT_ACCOUNT_ROUTE
   | typeof PROJECT_INBOX_ROUTE;
 
+/** A tab-store page the drawer opens: shown in the view route, not a route of its own. */
+export type DrawerPageId = 'page:review' | 'page:apps';
+
 /**
  * The drawer opens `route`. `stack` is the project stack's route names,
  * bottom first, or null before the stack's first focus event (the stack
@@ -306,4 +309,23 @@ export function threadOpenTarget(
   rootRuntimeId: string
 ): string {
   return pending?.sessionId === sessionId ? pending.runtimeId : rootRuntimeId;
+}
+
+/**
+ * The route param that marks a drawer swap: the drawer opened this route, so
+ * the screen appears in place under the closing drawer, with no push slide.
+ * A sidebar destination is a peer of the page it replaces, not a level
+ * deeper (the Claude / ChatGPT iOS sidebar). A push from the page itself
+ * (the home bell, a composer send, a Sessions row) keeps the slide. The
+ * route keeps the param, so its pop matches its push.
+ */
+export const DRAWER_SWAP_PARAM = 'swap';
+
+/** The params a drawer swap adds to a route. */
+export const DRAWER_SWAP_PARAMS = { [DRAWER_SWAP_PARAM]: '1' } as const;
+
+/** The native-stack animation of a project route: none for a drawer swap. */
+export function projectRouteAnimation(params: unknown): 'none' | 'default' {
+  const value = (params as Record<string, unknown> | undefined)?.[DRAWER_SWAP_PARAM];
+  return value === '1' ? 'none' : 'default';
 }

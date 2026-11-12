@@ -156,17 +156,29 @@ afterEach(async () => {
   tree = undefined;
 });
 
+// Every call the drawer makes, in order: `close`, then the navigation.
+const calls: string[] = [];
 const navigated: unknown[][] = [];
 const handlers = {
-  onNewSession() {},
-  onOpenProjectSession() {},
+  onNewSession() {
+    calls.push('new-session');
+  },
+  onOpenProjectSession(session: { session_id: string }) {
+    calls.push(`session:${session.session_id}`);
+  },
   onOpenSubsession() {},
   onNavigateRoute(...args: unknown[]) {
     navigated.push(args);
+    calls.push(`route:${String(args[0])}`);
+  },
+  onOpenPage(pageId: string) {
+    calls.push(`page:${pageId}`);
   },
   onSessionActions() {},
   onOpenSwitcher() {},
-  onClose() {},
+  onClose() {
+    calls.push('close');
+  },
 };
 
 describe('ProjectLeftDrawer renders', () => {
@@ -282,6 +294,66 @@ describe('ProjectLeftDrawer renders', () => {
     expect(navPills.map((props) => props.label)).not.toContain('artifacts.title');
   });
 
+});
+
+// The drawer library starts its close in a layout effect of the commit that
+// sets `open` to false. A navigation in the same tick put the new page's mount
+// into that commit, and the drawer stayed open until the page had rendered.
+// The navigation now waits one frame: the close commits alone first.
+describe('ProjectLeftDrawer closes before it navigates', () => {
+  let frames: Array<() => void> = [];
+  let realRaf: typeof requestAnimationFrame;
+  beforeEach(() => {
+    calls.length = 0;
+    navigated.length = 0;
+    frames = [];
+    realRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as typeof requestAnimationFrame;
+  });
+  afterEach(() => {
+    globalThis.requestAnimationFrame = realRaf;
+  });
+  const flushFrame = () => {
+    const pending = frames;
+    frames = [];
+    for (const callback of pending) callback();
+  };
+  const press = async (label: string) => {
+    const pill = navPills.filter((props) => props.label === label).at(-1);
+    if (!pill) throw new Error(`no ${label} pill`);
+    await act(async () => pill.onPress());
+  };
+  const mount = async () => {
+    artifactsAvailable = true;
+    await act(async () => {
+      tree = create(React.createElement(Drawer.ProjectLeftDrawer, { projectId: 'proj', ...handlers, open: true }));
+    });
+  };
+
+  test.each([
+    ['Files', 'route:files'],
+    ['artifacts.title', 'route:artifacts'],
+    ['Search', 'route:sessions'],
+    ['Review', 'page:page:review'],
+    ['Apps', 'page:page:apps'],
+  ])('%s: the close lands in a frame of its own, the navigation in the next', async (label, move) => {
+    await mount();
+    await press(label);
+    expect(calls).toEqual(['close']);
+    flushFrame();
+    expect(calls).toEqual(['close', move]);
+  });
+
+  test('a second tap before the drawer has closed navigates once', async () => {
+    await mount();
+    await press('Files');
+    await press('Review');
+    flushFrame();
+    expect(calls).toEqual(['close', 'route:files']);
+  });
 });
 
 // KRTX-1727: the server drops rows the viewer may not see after a bounded

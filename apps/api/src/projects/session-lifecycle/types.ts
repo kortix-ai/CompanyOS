@@ -234,6 +234,8 @@ export interface StartSessionCommand {
  *                      `MAX_RUNTIME_UNREACHABLE_RETRIES`).
  *  - `no-session`    — the session does not exist, or the user deleted it.
  *                      Terminal: there is nothing to deliver to, ever.
+ *  - `stale-runtime` — the web session exists, but its computer calls an obsolete
+ *                      local API tunnel. Keep the failed prompt; start a new session.
  *  - `failed`        — a genuine delivery refusal that re-trying cannot fix.
  *                      Terminal.
  *
@@ -261,6 +263,7 @@ export const DELIVERY_FAILURE_COPY: Record<
   unreachable: "the session's machine could not be reached",
   'not-landed': 'the session accepted it but never recorded it',
   'no-session': 'that session no longer exists',
+  'stale-runtime': "this session's computer cannot reach the API. Start a new session",
   failed: 'the session refused it',
 };
 
@@ -269,6 +272,7 @@ export type SessionDeliveryOutcome =
   | 'pending'
   | 'unreachable'
   | 'no-session'
+  | 'stale-runtime'
   | 'failed'
   /** The runtime ACCEPTED the prompt and then never wrote the message. Not a
    *  retry under the same key: the proxy's dedupe claim would answer that

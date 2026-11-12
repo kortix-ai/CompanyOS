@@ -126,6 +126,10 @@ function SessionFilesBody({
   const insets = useSafeAreaInsets();
   const thread = useRuntimeThread(sessionId);
   const [query, setQuery] = React.useState('');
+  // The sheet is as tall as this list. While a search is typed it keeps the
+  // height it had before, so the sheet does not shrink and grow on every
+  // letter (or drop to one line on "No matching files" under the keyboard).
+  const [restHeight, setRestHeight] = React.useState<number | null>(null);
 
   const files = React.useMemo(() => deriveSessionFiles(thread?.messages), [thread]);
   const groups = React.useMemo(() => {
@@ -146,6 +150,10 @@ function SessionFilesBody({
         paddingTop: 4,
         paddingBottom: Math.max(insets.bottom, 16) + 8,
         gap: 16,
+        minHeight: query ? (restHeight ?? undefined) : undefined,
+      }}
+      onContentSizeChange={(_width, height) => {
+        if (!query) setRestHeight(height);
       }}>
       {files.length > 0 ? (
         <SheetTextInput

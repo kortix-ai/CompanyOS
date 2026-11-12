@@ -258,15 +258,26 @@ describe('NativeSheet', () => {
     expect(sheet().props.detents).toEqual([0.6]);
   });
 
-  test('a body that never lays out still opens, at the full detent, after 400 ms', async () => {
-    mount();
-    call((r) => r.present());
-    expect(sheet().props.isOpen).toBe(false);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-    });
-    expect(sheet().props.isOpen).toBe(true);
-    expect(sheet().props.detents).toEqual([1]);
+  test('a body that never lays out still opens, at the full detent, after 400 ms', () => {
+    // A captured timer, not the real clock.
+    const timers: { fn: () => void; ms: number }[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((fn: () => void, ms: number) => {
+      timers.push({ fn, ms });
+      return timers.length as never;
+    }) as typeof setTimeout;
+    try {
+      mount();
+      call((r) => r.present());
+      expect(sheet().props.isOpen).toBe(false);
+      const fallback = timers.find((timer) => timer.ms === 400);
+      expect(fallback).toBeDefined();
+      act(() => fallback!.fn());
+      expect(sheet().props.isOpen).toBe(true);
+      expect(sheet().props.detents).toEqual([1]);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
   });
 
   test('a content-sized sheet measures again on every present', () => {

@@ -128,10 +128,10 @@ export function detentFraction(point: string | number, maxHeight: number): numbe
  * the detent it opens at.
  *
  * - A content-sized sheet (gorhom's dynamic sizing, the default, with no
- *   `snapPoints` or only `'100%'`) is `'fitToContents'`: the sheet is as tall
- *   as its content, up to the maximum height. It has no separate full detent
- *   (see the module comment); its content is already fully visible, and a
- *   taller body scrolls inside the maximum height.
+ *   `snapPoints` or only `'100%'`) is marked `'fitToContents'`: the sheet is
+ *   as tall as its content, up to the maximum height, and has no separate
+ *   full detent. The marker never reaches the native side: `NativeSheet`
+ *   measures the body and passes one custom detent (`contentDetent`).
  * - Every other sheet lists its `snapPoints` as fractions, plus `1` (full
  *   screen) at the end, the native form of `withFullDetent`. The call site's
  *   `index` keeps pointing at the detent it named.

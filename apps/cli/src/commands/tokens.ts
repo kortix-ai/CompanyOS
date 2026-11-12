@@ -25,7 +25,6 @@ import { serviceAccounts } from './tokens-service-accounts.ts';
 //
 // Note `kortix token` (singular) is a different, unrelated command: it prints
 // the ACTIVE token's context (`whoami --token-only`).
-// the ACTIVE token's context (`whoami --token-only`).
 
 /**
  * Resolve `--expires` to the ISO-8601 instant the API stores.

@@ -21,4 +21,4 @@ set statement_timeout = '30s';
 --   [ ] Any ALTER TYPE ... ADD VALUE needs:
 -- enum-value-checked: <how you verified every env, including any faked baseline, has this value>
 
-ALTER TABLE "kortix"."chat_installs" ADD COLUMN "own_app" boolean DEFAULT false NOT NULL;
+ALTER TABLE "kortix"."chat_installs" ADD COLUMN IF NOT EXISTS "own_app" boolean DEFAULT false NOT NULL;

@@ -106,6 +106,14 @@
     "access": "Acesso",
     "actions": "Ações",
     "coolingDown": "Em espera após limite",
+    "keyVerified": "Verificada: {provider} aceitou esta chave",
+    "keyInvalid": "{provider} recusou esta chave: {message}",
+    "keyUnchecked": "Não verificada: {message}",
+    "checkKey": "Verificar novamente",
+    "savedVerified": "Chave salva e verificada",
+    "savedInvalid": "Chave salva, mas {provider} a recusou: {message}",
+    "checkError": "Não foi possível verificar a chave",
+    "openProviderInModels": "Abrir {provider} em Modelos",
     "member": "membro",
     "members": "membros",
     "actionsFor": "Ações para {label}",
@@ -174,7 +182,10 @@
     "claudeConnectFailed": "O login no Claude não terminou. Tente novamente.",
     "claudeReconnectDescription": "Entre com o Claude de novo. A conta mantém o nome, o acesso e as seleções de sessão.",
     "claudeAccountLabelPlaceholder": "ex.: Minha conta do Claude",
-    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?"
+    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?",
+    "sharedOnlyYouDescription": "Adicione chaves de API, contas do ChatGPT e contas do Claude. Só você pode usar as que adicionar. Um gestor do workspace pode compartilhar uma. Escolha quais cada sessão usa.",
+    "oauthOnlyYouDescription": "Use seu plano ChatGPT Plus ou Pro neste workspace. Só você pode usar as contas que adicionar.",
+    "claudeOauthOnlyYouDescription": "Use seu plano Claude Pro ou Max para modelos Claude neste workspace. Só você pode usar as contas que adicionar."
   },
   "secrets": {
     "undecryptable": {
@@ -26819,5 +26830,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limite os gastos do gateway deste espaço de trabalho.",
     "capMember": "Limite os gastos do gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Abrir login do {app}",
+    "checkingTitle": "Concluindo o login",
+    "checkingDescription": "O Kortix verifica seu login no {app}. Esta página se atualiza sozinha.",
+    "signInUnfinished": "Login não concluído",
+    "finishSignIn": "Concluir login",
+    "signInFinished": "Login concluído",
+    "cardHeadline": "Seu agente precisa que você faça login",
+    "cardTitle": "Conectar {app}",
+    "cardShared": "Compartilhada com o workspace",
+    "cardPrivate": "Só você",
+    "signingIn": "Conclua o login no {app} na janela que abriu.",
+    "connectedAs": "Conectado como {account}",
+    "connected": "Conectado",
+    "connect": "Conectar",
+    "cardFailed": "Não foi possível conectar {app}. Tente novamente.",
+    "blockedTitle": "Abra o {app} para fazer login",
+    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha."
   }
 }

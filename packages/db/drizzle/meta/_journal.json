@@ -1692,8 +1692,15 @@
     {
       "idx": 241,
       "version": "7",
-      "when": 1794444612837,
-      "tag": "20261112005012_chat_installs_own_app",
+      "when": 1794439520538,
+      "tag": "20261111232520_account_secret_key_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1794447584122,
+      "tag": "20261112013944_chat_installs_own_app",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,6 @@
 {
-  "id": "eb48f925-c7d3-4834-be34-804adfc17702",
-  "prevId": "01eec9ca-6315-42f2-9d10-b88688a45b03",
+  "id": "32acc7fd-baf7-4b8b-bc45-5fcec8bf2884",
+  "prevId": "7b569121-6623-433d-b599-b2770726afc4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1705,6 +1705,24 @@
         "provider_account": {
           "name": "provider_account",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verify_status": {
+          "name": "verify_status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verify_message": {
+          "name": "verify_message",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": false
         },

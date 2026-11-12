@@ -93,6 +93,8 @@ import {
   type ConnectorConfig,
   type ConnectorDraftInput,
   type ConnectorRequestAuthType,
+  connectionSignInSteps,
+  connectorAccountSignInStarted,
   createConnector,
   discoverConnectionOAuth2,
   discoverConnectionOAuth2Resource,
@@ -272,6 +274,9 @@ function ConnectionRow({
   const tSharing = useTranslations('accessSharing');
   const tComputers = useTranslations('computers');
   const tConnectorPages = useTranslations('connectorPages');
+  const tSignIn = useTranslations('connectSignIn');
+  // A sign-in someone started (an agent's link) and nobody finished.
+  const signInStarted = needsSignIn && connectorAccountSignInStarted(connection);
   const isProjectAuthorization = connection.owner_type === 'project';
   const active = connection.status === 'active';
   // Only the owner of a connection may change it: your own personal connection,
@@ -316,7 +321,7 @@ function ConnectionRow({
           {/* An account nobody has signed in yet, such as the shared one a new
               connector starts with: say so beside its Connect button. */}
           {active && needsSignIn ? (
-            <span>{tConnectorPages('notSignedIn')}</span>
+            <span>{signInStarted ? tSignIn('signInUnfinished') : tConnectorPages('notSignedIn')}</span>
           ) : null}
           {/* The upstream answered 401 to the stored credential (gateway mark;
               a new credential or an ok call clears it). */}
@@ -350,7 +355,7 @@ function ConnectionRow({
           gets its next step on the row, not behind the menu. */}
       {onConnect && mayMutate && needsSignIn ? (
         <Button size="sm" className="shrink-0" onClick={onConnect} disabled={pending || disabled}>
-          {tConnectorPages('connectAccount')}
+          {signInStarted ? tSignIn('finishSignIn') : tConnectorPages('connectAccount')}
         </Button>
       ) : null}
       <ButtonGroup className="shrink-0">
@@ -564,6 +569,33 @@ export function ConnectionsList({
   // An inbox account always has an inbox behind it: there is no empty slot.
   const slot = isEmail ? null : emptyProjectSlot(connector, allRows);
   const rows = slot ? allRows.filter((row) => row !== slot) : allRows;
+  // A managed account whose sign-in started and never finished may be done at
+  // the provider (the person used an agent's link outside Kortix). Ask once
+  // per account when the list shows it; a finished one is recorded and the
+  // row turns signed in without a click.
+  const unfinishedIds = isManagedConnectorProvider(connector.provider)
+    ? rows
+        .filter((row) => row.status === 'active' && row.authorized === false && connectorAccountSignInStarted(row))
+        .map((row) => row.connection_id)
+        .sort()
+    : [];
+  useQuery({
+    queryKey: ['connection-sign-in-check', projectId, connector.slug, unfinishedIds],
+    enabled: unfinishedIds.length > 0,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        unfinishedIds.map((connectionId) => {
+          const row = rows.find((candidate) => candidate.connection_id === connectionId)!;
+          return connectionSignInSteps(projectId, connector.slug, row).finalize();
+        }),
+      );
+      const recorded = results.some((result) => result.status === 'fulfilled' && result.value.connected);
+      if (recorded) refresh();
+      return recorded;
+    },
+  });
 
   const openCredential = onSetCredential ?? setCredentialTarget;
   // "Add account" asks the account's name and who may use it: only you,
@@ -596,7 +628,9 @@ export function ConnectionsList({
       setEmailOpen(true);
       return;
     }
-    setDraft({ ...EMPTY_NEW_ACCOUNT, label: addAccount.proposedLabel() });
+    // "Everyone in this workspace" for a person who may share, as model keys
+    // default: a trigger runs only on a shared account. "Only you" otherwise.
+    setDraft({ ...EMPTY_NEW_ACCOUNT, audience: canManageConnections ? 'project' : 'private', label: addAccount.proposedLabel() });
     setLabelEdited(false);
     setAddOpen(true);
   };

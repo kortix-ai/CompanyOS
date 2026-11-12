@@ -106,6 +106,14 @@
     "access": "Accès",
     "actions": "Actions",
     "coolingDown": "En attente après une limite",
+    "keyVerified": "Vérifiée : {provider} a accepté cette clé",
+    "keyInvalid": "{provider} a refusé cette clé : {message}",
+    "keyUnchecked": "Non vérifiée : {message}",
+    "checkKey": "Vérifier à nouveau",
+    "savedVerified": "Clé enregistrée et vérifiée",
+    "savedInvalid": "Clé enregistrée, mais {provider} l’a refusée : {message}",
+    "checkError": "La clé n’a pas pu être vérifiée",
+    "openProviderInModels": "Ouvrir {provider} dans Modèles",
     "member": "membre",
     "members": "membres",
     "actionsFor": "Actions pour {label}",
@@ -174,7 +182,10 @@
     "claudeConnectFailed": "La connexion Claude n’a pas abouti. Réessayez.",
     "claudeReconnectDescription": "Reconnectez-vous avec Claude. Le compte conserve son nom, ses accès et les sélections de session.",
     "claudeAccountLabelPlaceholder": "p. ex. Mon compte Claude",
-    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?"
+    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?",
+    "sharedOnlyYouDescription": "Ajoutez des clés API, des comptes ChatGPT et des comptes Claude. Vous seul pouvez utiliser ceux que vous ajoutez. Un gestionnaire de l'espace de travail peut en partager un. Choisissez ceux que chaque session utilise.",
+    "oauthOnlyYouDescription": "Utilisez votre forfait ChatGPT Plus ou Pro dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez.",
+    "claudeOauthOnlyYouDescription": "Utilisez votre forfait Claude Pro ou Max pour les modèles Claude dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez."
   },
   "secrets": {
     "undecryptable": {
@@ -26819,5 +26830,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Plafonnez les dépenses du gateway de cet espace de travail.",
     "capMember": "Plafonnez les dépenses du gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Ouvrir la connexion {app}",
+    "checkingTitle": "Finalisation de la connexion",
+    "checkingDescription": "Kortix vérifie votre connexion à {app}. Cette page se met à jour toute seule.",
+    "signInUnfinished": "Connexion non terminée",
+    "finishSignIn": "Terminer la connexion",
+    "signInFinished": "Connexion terminée",
+    "cardHeadline": "Votre agent a besoin que vous vous connectiez",
+    "cardTitle": "Connecter {app}",
+    "cardShared": "Partagé avec l'espace de travail",
+    "cardPrivate": "Vous seul",
+    "signingIn": "Terminez la connexion à {app} dans la fenêtre ouverte.",
+    "connectedAs": "Connecté en tant que {account}",
+    "connected": "Connecté",
+    "connect": "Connecter",
+    "cardFailed": "Impossible de connecter {app}. Réessayez.",
+    "blockedTitle": "Ouvrez {app} pour vous connecter",
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
   }
 }

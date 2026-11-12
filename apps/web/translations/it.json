@@ -106,6 +106,14 @@
     "access": "Accesso",
     "actions": "Azioni",
     "coolingDown": "In pausa dopo il limite",
+    "keyVerified": "Verificata: {provider} ha accettato questa chiave",
+    "keyInvalid": "{provider} ha rifiutato questa chiave: {message}",
+    "keyUnchecked": "Non verificata: {message}",
+    "checkKey": "Verifica di nuovo",
+    "savedVerified": "Chiave salvata e verificata",
+    "savedInvalid": "Chiave salvata, ma {provider} l’ha rifiutata: {message}",
+    "checkError": "Impossibile verificare la chiave",
+    "openProviderInModels": "Apri {provider} in Modelli",
     "member": "membro",
     "members": "membri",
     "actionsFor": "Azioni per {label}",
@@ -174,7 +182,10 @@
     "claudeConnectFailed": "L’accesso a Claude non è stato completato. Riprova.",
     "claudeReconnectDescription": "Accedi di nuovo con Claude. L’account mantiene nome, accesso e selezioni di sessione.",
     "claudeAccountLabelPlaceholder": "es. Il mio account Claude",
-    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?"
+    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?",
+    "sharedOnlyYouDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. Solo tu puoi usare quelli che aggiungi. Un responsabile del workspace può condividerne uno. Scegli quali usa ogni sessione.",
+    "oauthOnlyYouDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. Solo tu puoi usare gli account che aggiungi.",
+    "claudeOauthOnlyYouDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. Solo tu puoi usare gli account che aggiungi."
   },
   "secrets": {
     "undecryptable": {
@@ -26819,5 +26830,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limita la spesa del gateway per questo workspace.",
     "capMember": "Limita la spesa del gateway per {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Apri l'accesso a {app}",
+    "checkingTitle": "Completamento dell'accesso",
+    "checkingDescription": "Kortix verifica il tuo accesso a {app}. Questa pagina si aggiorna da sola.",
+    "signInUnfinished": "Accesso non completato",
+    "finishSignIn": "Completa l'accesso",
+    "signInFinished": "Accesso completato",
+    "cardHeadline": "Il tuo agente ha bisogno che tu acceda",
+    "cardTitle": "Connetti {app}",
+    "cardShared": "Condiviso con il workspace",
+    "cardPrivate": "Solo tu",
+    "signingIn": "Completa l'accesso a {app} nella finestra che si è aperta.",
+    "connectedAs": "Connesso come {account}",
+    "connected": "Connesso",
+    "connect": "Connetti",
+    "cardFailed": "Impossibile connettere {app}. Riprova.",
+    "blockedTitle": "Apri {app} per accedere",
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola."
   }
 }

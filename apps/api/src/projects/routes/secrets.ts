@@ -30,6 +30,7 @@ import {
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
 import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-default';
+import { verifyAndRecordAccountKey } from '../../llm-gateway/provider-verify';
 import { deleteWorkspaceProviderKeys, writeWorkspaceProviderKey } from '../../secrets/llm-credential-move';
 import { createRoute, z } from '@hono/zod-openapi';
 import { featureDisabledBody } from '../../feature-flags/gate';
@@ -364,12 +365,20 @@ export function registerSecretsRoutes(): void {
       });
       if (moved) {
         void propagateProjectSecretsToActiveSandboxes(projectId, { refreshModels: true });
-        void seedProjectDefaultModelOnConnect({
-          projectId, accountId: loaded.row.accountId, userId: loaded.userId, secretName: name,
-        });
         if (moved.created) {
           capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: moved.providerId, method: 'api_key' });
         }
+        // The same check the Models panel's save runs, off the response path:
+        // this route's older clients read no verification. The default-model
+        // seed waits for it, as on the Models panel path.
+        void verifyAndRecordAccountKey({
+          secretId: moved.secretId, accountId: loaded.row.accountId, projectId, providerId: moved.providerId, name,
+        }, loaded.userId)
+          .then((verification) => seedProjectDefaultModelOnConnect({
+            projectId, accountId: loaded.row.accountId, userId: loaded.userId, secretName: name,
+            ...(verification ? { keyCheck: verification.status } : {}),
+          }))
+          .catch(() => undefined);
         return c.json({
           identifier, name, strategy: 'broker', consumer: 'llm_gateway', configured: true,
           // Where the key went: a named account, listed in Models → Providers.

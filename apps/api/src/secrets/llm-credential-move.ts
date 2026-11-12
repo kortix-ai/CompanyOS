@@ -366,7 +366,9 @@ export async function writeWorkspaceProviderKey(input: {
     if (existing) {
       await tx.update(accountSecretResources).set({
         valueEnc: encryptAccountSecret(input.accountId, input.value), active: true,
-        cooldownUntil: null, cooldownProbeAt: null, needsReauthAt: null, updatedAt: new Date(),
+        cooldownUntil: null, cooldownProbeAt: null, needsReauthAt: null,
+        // A new value: the last check was of the old one.
+        verifyStatus: null, verifiedAt: null, verifyMessage: null, updatedAt: new Date(),
       }).where(eq(accountSecretResources.secretId, existing.secretId));
       secretId = existing.secretId;
     } else {

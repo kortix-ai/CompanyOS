@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  type ExpectedRunningAssets,
   type LegacyBootstrapDeps,
   LEGACY_BOOTSTRAP_METADATA_KEY,
   REQUIRED_RUNTIME_CAPABILITIES,
@@ -9,20 +8,14 @@ import {
 } from './legacy-runtime-bootstrap';
 
 /**
- * Every repair run ends in a verdict. Until 2026-11-11 the verdicts that end
- * BEFORE the script ran shipped no line at all: a spell where the daemon port
- * stopped answering saw `/start` request the dead-daemon relaunch a dozen
- * times in six minutes, not one `[legacy-bootstrap]` line, and the box
- * recovered on its own with nobody able to say why nothing was repaired
- * (KRTX-4756, KRTX-4754). `logSkip` ships the verdict for every pre-script
- * gate — the converged `not-legacy` answers stay silent on purpose (that is
- * the fleet's normal answer). These tests pin the contract.
+ * Pins the verdict-line contract the `every skipped repair says why (KRTX-4754)`
+ * tests in `legacy-runtime-bootstrap.test.ts` leave open: the already-staged
+ * gate's own verdict (2026-11-11: a spell where `/start` requested the
+ * dead-daemon relaunch a dozen times in six minutes shipped not one
+ * `[legacy-bootstrap]` line — this gate was the last silent one), the
+ * single-line verdicts that keep their own wording (pinned, mid-script
+ * deferral), and no second verdict on a run that reached the script.
  */
-const MANIFEST: ExpectedRunningAssets = {
-  cli_sha256: 'c'.repeat(64),
-  managed_skills_hash: 'm'.repeat(64),
-  agent_sha256: 'a'.repeat(64),
-};
 const CURRENT_HEALTH = {
   daemon: 'ok',
   harness: { id: 'pi', version: null, state: 'ok', ready: true, error: null, session: { id: null, required: false }, turn: null, details: {} },
@@ -34,9 +27,9 @@ const CURRENT_HEALTH = {
     agentSwapPending: false,
     pinned: false,
     running: {
-      cli_sha256: MANIFEST.cli_sha256,
-      managed_skills_hash: MANIFEST.managed_skills_hash,
-      agent_sha256: MANIFEST.agent_sha256,
+      cli_sha256: 'c'.repeat(64),
+      managed_skills_hash: 'm'.repeat(64),
+      agent_sha256: 'a'.repeat(64),
     },
   },
 };
@@ -102,7 +95,7 @@ const stagedRecord = {
   lastAttemptAt: new Date(0).toISOString(),
 };
 
-describe('the repair run names its verdict when it never runs the script', () => {
+describe('the verdict lines the KRTX-4754 tests leave open', () => {
   test('an already-staged gate ships its own verdict and touches nothing', async () => {
     const calls: Calls = { execs: [], patches: [] };
     const lines: Array<{ message: string; context: unknown }> = [];
@@ -120,62 +113,12 @@ describe('the repair run names its verdict when it never runs the script', () =>
     expect(calls.patches).toEqual([]);
   });
 
-  test('a busy gate ships one line with the outcome and the box', async () => {
-    const calls: Calls = { execs: [], patches: [] };
-    const lines: Array<{ message: string; context: unknown }> = [];
-    const r = await bootstrapLegacyRuntime(input(), verdictDeps({ turn: true }, calls, lines));
-    expect(r.outcome).toBe('skipped-busy');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].message).toBe('legacy runtime bootstrap skipped: skipped-busy');
-    expect(lines[0].context).toEqual({ sandboxId: 'sb1', externalId: 'sbx_1', detail: 'turn in flight' });
-  });
-
-  test('a provider the control plane cannot ask names that fact', async () => {
-    const calls: Calls = { execs: [], patches: [] };
-    const lines: Array<{ message: string; context: unknown }> = [];
-    const r = await bootstrapLegacyRuntime(
-      input(),
-      verdictDeps({ health: [null, null], providerRunning: async () => false }, calls, lines),
-    );
-    expect(r.outcome).toBe('unreachable');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].message).toBe('legacy runtime bootstrap skipped: unreachable');
-    expect(lines[0].context).toEqual({
-      sandboxId: 'sb1',
-      externalId: 'sbx_1',
-      detail: 'the provider does not report the box running',
-    });
-  });
-
-  test('an unsupported provider is skipped before any probe, and says so', async () => {
-    const calls: Calls = { execs: [], patches: [] };
-    const lines: Array<{ message: string; context: unknown }> = [];
-    const r = await bootstrapLegacyRuntime(input(null, 'unknown-provider'), verdictDeps({}, calls, lines));
-    expect(r.outcome).toBe('skipped-unsupported');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].message).toBe('legacy runtime bootstrap skipped: skipped-unsupported');
-    expect((lines[0].context as { detail?: string }).detail).toBe('provider unknown-provider');
-  });
-
-  test('a converged not-legacy answer stays silent — the fleet\'s normal answer', async () => {
-    const calls: Calls = { execs: [], patches: [] };
-    const lines: Array<{ message: string; context: unknown }> = [];
-    const r = await bootstrapLegacyRuntime(
-      input(),
-      verdictDeps({ health: [null, null] }, calls, lines),
-    );
-    expect(r.outcome).toBe('not-legacy');
-    expect(r.detail).toBe('daemon alive in the box; the ingress was unreachable');
-    expect(lines.filter((l) => l.message.includes('skipped'))).toEqual([]);
-  });
-
-  test('a completed repair logs only the terminal line, not a second verdict', async () => {
+  test('a completed repair logs only the claim and terminal lines, never a second verdict', async () => {
     const calls: Calls = { execs: [], patches: [] };
     const lines: Array<{ message: string; context: unknown }> = [];
     const r = await bootstrapLegacyRuntime(input(), verdictDeps({}, calls, lines));
     expect(r.outcome).toBe('converged');
     expect(lines.map((l) => l.message).filter((m) => m.includes('skipped'))).toEqual([]);
-    // The claim and the terminal record keep their own lines.
     expect(lines.map((l) => l.message)).toContain('legacy runtime bootstrap converged');
   });
 

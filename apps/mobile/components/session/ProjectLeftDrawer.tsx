@@ -22,15 +22,19 @@
  *   Connectors moved to project Settings → Customize
  *   (KRTX-249): a "Customize in the web app" hand-off sheet, not a drawer row.
  * - "Pinned" first (KRTX-2418): the sessions the viewer pinned, any starter
- *   and any depth, open by default, no header while empty with no next page.
+ *   and any depth, open by default.
  *   A pinned session is not repeated below, also while Pinned is collapsed.
  * - Three sections of top-level sessions, by who started the run (KRTX-639):
- *   "Sessions" (yours, open), "Shared" (other members', collapsed, no header
- *   while empty with no next page) and "Automated" (triggers, channels, API
- *   keys; collapsed). No section renders while the viewer's own list or the
- *   pinned list still loads. A page can be empty and still carry a cursor (KRTX-1727): each
- *   list reads past such pages on its own, and with no row yet and a next
- *   page the drawer offers "Show more", never "No sessions yet".
+ *   "Sessions" (yours, open), "Shared" (other members', collapsed) and
+ *   "Automated" (triggers, channels, API keys; collapsed). A section with no
+ *   row to show has no header and no "Show more", whatever its cursor; a
+ *   section's "Show more" reads pages until one adds a row it shows
+ *   (`fetchUntilShownRowsGrow`). No section renders while the viewer's own
+ *   list or the pinned list still loads. A page can be empty and still carry
+ *   a cursor (KRTX-1727): each list reads past such pages on its own, and with
+ *   no row in any list and an own next page the drawer offers "Show more",
+ *   never "No sessions yet". A side section whose loaded rows all show
+ *   elsewhere reads its next pages once on its own.
  *   Each is its own paged query (`parent=root`), newest activity first
  *   (status mark · title; the session on screen is highlighted). A parent
  *   shows its child count and a caret, collapsed by default: a tap loads its
@@ -70,7 +74,7 @@
  * Layout rules: apps/mobile/design.md → Project sidebar.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useIsFocused } from 'expo-router';
@@ -118,7 +122,7 @@ import { useRefetchOnOpen } from '@/components/session/use-refetch-on-open';
 import { useCans, useFeatureFlag, useProjectApps } from '@kortix/sdk/react';
 import { useProject, useProjectSessionsPaged } from '@/lib/projects/hooks';
 import { NAV_ACTIONS, REVIEW_ACCESS, appsRowVisible, artifactsRowVisible, navAccessAllowed } from '@/lib/session/nav-access';
-import { sessionListState, shouldLoadMoreSessions } from '@/lib/session/session-pages';
+import { fetchUntilShownRowsGrow, sessionListState, shouldLoadMoreSessions } from '@/lib/session/session-pages';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import {
   PROJECT_ACCOUNT_ROUTE,
@@ -287,6 +291,8 @@ const drawerItemKey = (item: DrawerItem) =>
     : item.kind === 'more'
       ? `more:${item.section}`
       : `${item.kind}:${item.session.session_id}`;
+/** The sections with their own Show more. */
+type SideSection = 'pinned' | 'shared' | 'automated';
 /** Pinned, Automated and Shared page size: small, they load only to show a header or a first screen. */
 const SIDE_SECTION_PAGE_SIZE = 20;
 /** Shared empty map: a fresh one per render would re-derive the lists. */
@@ -356,9 +362,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   // KRTX-2418: the viewer's pinned sessions, any starter and any depth (a pin
   // is the viewer's choice), above the three sections.
   const pinned = useProjectSessionsPaged(projectId, { poll: false, view: 'pinned', limit: SIDE_SECTION_PAGE_SIZE });
-  // Shared loads always (its header hides when it is empty with no next
-  // page); Automated only
-  // once opened: a project can hold hundreds of automated runs.
+  // Shared and Automated load always, one small page each: a section shows
+  // only when it has a row, so the drawer must know whether it has one.
   const shared = useProjectSessionsPaged(projectId, {
     poll: false,
     parent: 'root',
@@ -370,7 +375,6 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     parent: 'root',
     startedBy: 'automated',
     limit: SIDE_SECTION_PAGE_SIZE,
-    enabled: automatedOpen,
   });
   const {
     isPending: projectSessionsPending,
@@ -405,9 +409,9 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
       refetchMine(),
       refetchPinned(),
       refetchShared(),
-      automatedOpen ? refetchAutomated() : Promise.resolve(),
+      refetchAutomated(),
     ]);
-  }, [refetchMine, refetchPinned, refetchShared, refetchAutomated, automatedOpen]);
+  }, [refetchMine, refetchPinned, refetchShared, refetchAutomated]);
   // Sessions that wait on the user, newest wait first: their own group above
   // the list, from every loaded top-level row. A session not loaded yet (an
   // older page, a child) is left to the Review row's count.
@@ -427,6 +431,45 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     (rows: ProjectSession[]) => rows.filter((session) => !needsYouBySession.has(session.session_id)),
     [needsYouBySession]
   );
+  // The rows a side section shows from a list of its sessions: not in Needs
+  // you, and not claimed by an earlier section (`buildDrawerItems` order).
+  const shownCountFor = useCallback(
+    (section: SideSection) => {
+      const earlier = section === 'pinned' ? [] : [...pinnedRows, ...mineRoots, ...(section === 'automated' ? sharedRoots : [])];
+      const claimed = new Set(earlier.map((session) => session.session_id));
+      return (rows: ProjectSession[]) =>
+        withoutNeedsYou(section === 'pinned' ? sessionsInView(rows, 'pinned') : rootRowsOnly(rows)).filter(
+          (session) => !claimed.has(session.session_id)
+        ).length;
+    },
+    [withoutNeedsYou, pinnedRows, mineRoots, sharedRoots]
+  );
+  // A side section's "Show more": reads pages until the section gains a row
+  // it shows, so a press never ends with nothing new on screen. One read per
+  // section at a time: the button stays "Loading…" between its pages.
+  const [readingMore, setReadingMore] = useState<Partial<Record<SideSection, boolean>>>({});
+  const readingMoreRef = useRef<Partial<Record<SideSection, boolean>>>({});
+  const showMoreIn = useCallback(
+    (section: SideSection) => {
+      if (readingMoreRef.current[section]) return;
+      const shownRows = shownCountFor(section);
+      const [rows, fetchNext] =
+        section === 'pinned'
+          ? [pinned.sessions, fetchNextPinned]
+          : section === 'shared'
+            ? [shared.sessions, fetchNextShared]
+            : [automated.sessions, fetchNextAutomated];
+      const setReading = (value: boolean) => {
+        readingMoreRef.current = { ...readingMoreRef.current, [section]: value };
+        setReadingMore(readingMoreRef.current);
+      };
+      setReading(true);
+      void fetchUntilShownRowsGrow({ fetchNext: () => fetchNext(), shownCount: shownRows, before: shownRows(rows) }).finally(() =>
+        setReading(false)
+      );
+    },
+    [shownCountFor, pinned.sessions, shared.sessions, automated.sessions, fetchNextPinned, fetchNextShared, fetchNextAutomated]
+  );
   const isExpanded = useCallback(
     (session: ProjectSession) =>
       isParentExpanded({
@@ -441,6 +484,25 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   // drawer under the loader. Pinned waits too: it lands above every row, and
   // arriving later it would push the list down under the finger.
   const sessionsLoading = projectSessionsPending || pinned.isPending;
+  // A side section with no row to show has no header, so no Show more: when
+  // its loaded rows all sit in an earlier section or in Needs you and it has
+  // a next page, read on once on its own (the same bounded read).
+  const autoReadRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (sessionsLoading) return;
+    const sides = [
+      ['pinned', pinned],
+      ['shared', shared],
+      ['automated', automated],
+    ] as const;
+    for (const [section, query] of sides) {
+      const key = `${projectId}:${section}`;
+      if (!query.hasNextPage || query.isPending || query.isFetchingNextPage || query.isScanning) continue;
+      if (autoReadRef.current.has(key) || shownCountFor(section)(query.sessions) > 0) continue;
+      autoReadRef.current.add(key);
+      showMoreIn(section);
+    }
+  });
   const items = useMemo(
     () =>
       sessionsLoading
@@ -452,18 +514,16 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
                 title: t('sessions.pinnedSection'),
                 rows: withoutNeedsYou(pinnedRows),
                 open: sectionOpen('pinned'),
-                hidden: withoutNeedsYou(pinnedRows).length === 0 && !pinned.hasNextPage,
                 hasMore: pinned.hasNextPage,
               },
               {
                 id: 'sessions',
                 title: 'Sessions',
                 rows: withoutNeedsYou(mineRoots),
+                // A section with no row has no header (`buildDrawerItems`): the
+                // state block below (loading, error, empty) speaks for an empty
+                // own list, and Needs you for rows that wait on the user.
                 open: sectionOpen('sessions'),
-                // No bare heading over nothing: the state block below (loading,
-                // error, empty) speaks for an empty list, and Needs you for a
-                // list whose every row waits on the user.
-                hidden: withoutNeedsYou(mineRoots).length === 0,
                 hasMore: hasNextPage,
               },
               {
@@ -471,10 +531,6 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
                 title: 'Shared',
                 rows: withoutNeedsYou(sharedRoots),
                 open: sharedOpen,
-                // KRTX-1727: a page can be empty and still carry a cursor (the
-                // server drops rows the viewer may not see after a bounded
-                // scan). The section stays while it has a next page.
-                hidden: sharedRoots.length === 0 && !shared.hasNextPage,
                 hasMore: shared.hasNextPage,
               },
               {
@@ -482,7 +538,6 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
                 title: 'Automated',
                 rows: withoutNeedsYou(automatedRoots),
                 open: automatedOpen,
-                hidden: false,
                 hasMore: automated.hasNextPage,
               },
             ],
@@ -495,15 +550,19 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   // (lib/session/session-pages) so a failed fetch, or a first load paused
   // offline, never reads as "No sessions yet" (COR-146). Judged on the
   // viewer's own list; Shared and Automated add rows, never a verdict: a
-  // Shared cursor must not hide the own list's error. A next page in Shared
-  // or Automated only hides the empty flower (KRTX-1727).
+  // Shared cursor must not hide the own list's error.
   const sessionsListState = sessionListState({
     isPending: sessionsLoading,
     isError: projectSessionsErrored,
     hasSessions: pinnedRows.length > 0 || mineRoots.length > 0 || sharedRoots.length > 0 || automatedRoots.length > 0,
     hasMore: hasNextPage,
   });
-  const sideHasMore = pinned.hasNextPage || shared.hasNextPage || automated.hasNextPage;
+  // Shared and Automated still loading or reading past empty pages: no flower
+  // yet, or it would show and then give way to their header. A first read
+  // paused offline counts as settled: it may wait for a network for good.
+  const sideSettled = (query: typeof shared) =>
+    !(query.isPending && query.fetchStatus !== 'paused') && !query.isScanning;
+  const sidesSettled = sideSettled(shared) && sideSettled(automated);
   // The viewer's own list is reading a next page: the footer loader shows.
   const mineLoadingMore = isFetchingNextPage || mineScanning;
   // Only a pull shows the refresh spinner; a background poll does not.
@@ -692,13 +751,11 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
         );
       }
       if (item.kind === 'more') {
-        const [fetchingNext, fetchNext] =
-          item.section === 'pinned'
-            ? [pinnedFetchingNext, fetchNextPinned]
-            : item.section === 'shared'
-              ? [sharedFetchingNext, fetchNextShared]
-              : [automatedFetchingNext, fetchNextAutomated];
-        return <ShowMoreRow loading={fetchingNext} onPress={() => void fetchNext()} />;
+        const section = item.section === 'pinned' || item.section === 'shared' ? item.section : 'automated';
+        const fetchingNext =
+          Boolean(readingMore[section]) ||
+          (section === 'pinned' ? pinnedFetchingNext : section === 'shared' ? sharedFetchingNext : automatedFetchingNext);
+        return <ShowMoreRow loading={fetchingNext} onPress={() => showMoreIn(section)} />;
       }
       if (item.kind === 'children') {
         return (
@@ -734,9 +791,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
       pinnedFetchingNext,
       sharedFetchingNext,
       automatedFetchingNext,
-      fetchNextPinned,
-      fetchNextShared,
-      fetchNextAutomated,
+      showMoreIn,
+      readingMore,
       setChoice,
       renderChild,
       starterOf,
@@ -775,7 +831,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
             </Button>
           </View>
         </View>
-      ) : sessionsListState === 'empty' && !sideHasMore ? (
+      ) : sessionsListState === 'empty' && sidesSettled ? (
         <View className="items-center py-8" accessible accessibilityRole="image" accessibilityLabel="No sessions yet">
           <DrawerEmptyFlower color={mutedColor} />
         </View>
@@ -844,7 +900,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
       needsYouSessions,
       needsYouBySession,
       sessionsListState,
-      sideHasMore,
+      sidesSettled,
       mineLoadingMore,
       handleShowMoreSessions,
       open,

@@ -205,8 +205,9 @@ export async function loadTriggersForResponse(
       last_error: runtimeBySlug.get(spec.slug)?.lastError ?? null,
       last_attempt_at: runtimeBySlug.get(spec.slug)?.lastAttemptAt?.toISOString() ?? null,
       // The slot the scheduler claims next, jitter included (KRTX-1743).
-      next_fire_at: runtimeBySlug.get(spec.slug)?.nextFireAt?.toISOString() ?? null,
-      next_cron_at: spec.cron && !validateTriggerCron(spec.cron, spec.timezone)
+      // Null while auto-paused: the scheduler skips the slot, so no run is next.
+      next_fire_at: runtimeBySlug.get(spec.slug)?.autoPausedAt ? null : runtimeBySlug.get(spec.slug)?.nextFireAt?.toISOString() ?? null,
+      next_cron_at: spec.cron && !runtimeBySlug.get(spec.slug)?.autoPausedAt && !validateTriggerCron(spec.cron, spec.timezone)
         ? nextTriggerScheduleSlot(spec, new Date())?.toISOString() ?? null
         : null,
       // Auto-pause (KRTX-1721): set while the trigger paused itself after a

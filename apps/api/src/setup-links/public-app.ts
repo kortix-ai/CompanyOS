@@ -10,7 +10,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { requestClientKey } from '../middleware/client-ip';
-import { connectorConnections, connectors, projectSecrets, projectSessions } from '@kortix/db';
+import { accountSecretResources, connectorConnections, connectors, projectSecrets, projectSessions } from '@kortix/db';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { createRoute, z } from '@hono/zod-openapi';
 import { type Context, type Next } from 'hono';
@@ -342,6 +342,16 @@ setupLinksPublicApp.openapi(createRoute({
           isNull(projectSecrets.ownerUserId),
         )).limit(1);
       if (shared?.consumer === 'llm_gateway' && payload.uid) {
+        // Single use, as for every key: a provider key is spent once its
+        // named account was written after the link was minted.
+        const [writtenNamed] = await db.select({ id: accountSecretResources.secretId }).from(accountSecretResources)
+          .where(and(
+            eq(accountSecretResources.projectId, resolved.projectId),
+            eq(accountSecretResources.consumer, 'llm_gateway'),
+            eq(accountSecretResources.name, name),
+            gt(accountSecretResources.updatedAt, mintedAt),
+          )).limit(1);
+        if (writtenNamed) { spent++; continue; }
         providerKeys.push({ name, value });
         saved.push(name);
         continue;

@@ -31,6 +31,12 @@ export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 
 const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
 
+/** Same treatment as UUID_PATTERN: a sandbox proxy path carries the box's
+ *  `sbx_` external id, and one box per bucket would shard a fleet-wide grind
+ *  (or every polled dead box) into a warn line per box (KRTX-4768). The
+ *  printed line keeps the id. */
+const SANDBOX_EXTERNAL_ID_PATTERN = /sbx_[0-9a-z]+/gi;
+
 /**
  * The throttle bucket key for a dead-credential refusal: method, route,
  * status and a reason with every token id normalized OUT. KRTX-1564 named the
@@ -41,7 +47,9 @@ const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
  * key hides it.
  */
 export function deadCredentialLogKey(method: string, path: string, status: number, reason: string): string {
-  return `${method} ${path} ${status} ${reason}`.replace(UUID_PATTERN, ':id');
+  return `${method} ${path} ${status} ${reason}`
+    .replace(UUID_PATTERN, ':id')
+    .replace(SANDBOX_EXTERNAL_ID_PATTERN, ':sandbox');
 }
 
 const deadCredentials = new WeakSet<HTTPException>();
@@ -186,6 +194,28 @@ export function markCredentialFenceDenial(err: HTTPException): void {
 /** True for an exception `markCredentialFenceDenial` marked. */
 export function isCredentialFenceDenial(err: HTTPException): boolean {
   return credentialFenceDenials.has(err);
+}
+
+/**
+ * The 403 message `combinedAuth` throws when a valid caller is refused a
+ * preview sandbox proxy route: the sandbox's `session_sandboxes` row is gone
+ * (every session stop deletes it) or the caller is not a member of the box's
+ * account. `assertPreviewSandboxAccess` at the proxy route throws the same
+ * message with a `, userId: …, sandboxId: …` suffix, so the family matches
+ * the prefix. The web client polls the runtime surface of the session it has
+ * open every 5 s, and a box that died while its session row still reads
+ * `running` is refused forever — per-request logging turned one open tab on
+ * one dead box into 89 warn lines in an hour against a 1.58/h baseline
+ * (KRTX-4768). The response stays a plain untyped 403: the refusal is
+ * correct, and unlike a dead credential the state CAN come back (a new box
+ * on the next session open), so there is no typed stop code to add — only
+ * the line is throttled.
+ */
+export const PREVIEW_SANDBOX_DENIED_MESSAGE = 'Not authorized to access this sandbox';
+
+/** True for the plain and the route-level suffixed form of the message. */
+export function isPreviewSandboxDenied(status: number, reason: string): boolean {
+  return status === 403 && reason.startsWith(PREVIEW_SANDBOX_DENIED_MESSAGE);
 }
 
 /**

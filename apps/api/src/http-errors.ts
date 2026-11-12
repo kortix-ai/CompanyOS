@@ -37,6 +37,7 @@ import {
   isCredentialFenceDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
+  isPreviewSandboxDenied,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
 import { logWindowDecision, logWindowWarnDecision } from './shared/log-window';
@@ -401,6 +402,13 @@ function handleHttpException(
     || isAccountMfaDenial(err)
     || isCredentialFenceDenial(err)
     || isInvalidExpiredTokenRefusal(err.status, reason)
+    // The preview sandbox denial joins the same treatment (KRTX-4768): the
+    // web client polls the runtime surface of the session it has open every
+    // 5 s, and a box that died while its session row still reads `running`
+    // is refused forever — 89 warn lines in one hour against a 1.58/h
+    // baseline, one open tab. The refusal is the gate working; the LINE is
+    // the anomaly.
+    || isPreviewSandboxDenied(err.status, reason)
   ) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the

@@ -77,31 +77,6 @@
             {
               "scheme": "https",
               "host": "kortix.com",
-              "pathPrefix": "/auth/callback"
-            },
-            {
-              "scheme": "https",
-              "host": "www.kortix.com",
-              "pathPrefix": "/auth/callback"
-            },
-            {
-              "scheme": "https",
-              "host": "staging.kortix.com",
-              "pathPrefix": "/auth/callback"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "kortix.com",
               "pathPrefix": "/share"
             },
             {

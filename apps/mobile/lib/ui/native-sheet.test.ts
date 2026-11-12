@@ -109,6 +109,19 @@ describe('resolveNativeDetents', () => {
     });
   });
 
+  test('fullDetent false: the picker with tabs stops at 85% (its view ends at the visible edge)', () => {
+    expect(
+      resolveNativeDetents({ snapPoints: ['85%', '100%'], dynamicSizing: false, maxHeight, fullDetent: false }),
+    ).toEqual({ detents: [0.85], initialIndex: 0 });
+  });
+
+  test('fullDetent false on a full-screen-only sheet keeps the full detent', () => {
+    expect(resolveNativeDetents({ snapPoints: ['100%'], dynamicSizing: false, maxHeight, fullDetent: false })).toEqual({
+      detents: [1],
+      initialIndex: 0,
+    });
+  });
+
   test("a full-screen sheet ('100%', fixed) is one full detent", () => {
     expect(resolveNativeDetents({ snapPoints: ['100%'], dynamicSizing: false, maxHeight })).toEqual({
       detents: [1],

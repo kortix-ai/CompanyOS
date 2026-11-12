@@ -135,6 +135,11 @@ export function detentFraction(point: string | number, maxHeight: number): numbe
  * - Every other sheet lists its `snapPoints` as fractions, plus `1` (full
  *   screen) at the end, the native form of `withFullDetent`. The call site's
  *   `index` keeps pointing at the detent it named.
+ * - `fullDetent: false` drops the full detent, the added `1` and a listed
+ *   `'100%'`: the sheet stops at its highest partial snap point. UIKit sizes a sheet's view to its largest detent, so at a
+ *   partial detent the bottom of a full-height view lies below the screen. A
+ *   sheet with a bar pinned to its bottom (the model sheet's Agent · Model
+ *   tabs) lists only its own detent and its view ends at the visible edge.
  * - A shared value cannot be read on the JS thread: one full detent.
  */
 export function resolveNativeDetents(input: {
@@ -142,15 +147,20 @@ export function resolveNativeDetents(input: {
   dynamicSizing: boolean;
   index?: number;
   maxHeight: number;
+  /** `false`: no full detent after the snap points. Default `true`. */
+  fullDetent?: boolean;
 }): { detents: NativeDetents; initialIndex: number } {
-  const { snapPoints, dynamicSizing, maxHeight } = input;
+  const { snapPoints, dynamicSizing, maxHeight, fullDetent = true } = input;
   if (snapPoints !== undefined && !Array.isArray(snapPoints)) return { detents: [1], initialIndex: 0 };
   const points = (snapPoints ?? []) as ReadonlyArray<string | number>;
   const fractions = points.map((point) => detentFraction(point, maxHeight));
   const partial = fractions.some((fraction) => fraction !== null && fraction < 1);
   if (dynamicSizing && !partial) return { detents: 'fitToContents', initialIndex: 0 };
 
-  const sorted = [...new Set([...fractions.filter((f): f is number => f !== null), 1])].sort((a, b) => a - b);
+  const listed = fractions.filter((f): f is number => f !== null);
+  const partials = listed.filter((f) => f < 1);
+  const kept = fullDetent || partials.length === 0 ? [...listed, 1] : partials;
+  const sorted = [...new Set(kept)].sort((a, b) => a - b);
   const requested = fractions[input.index ?? 0] ?? null;
   const initialIndex = requested === null ? 0 : Math.max(0, sorted.indexOf(requested));
   return { detents: sorted, initialIndex };

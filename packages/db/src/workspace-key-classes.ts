@@ -154,6 +154,8 @@ export const WORKSPACE_KEY_CLASSES = {
     'claude_subscription_login_flows',
     'gateway_request_logs',
     'legacy_sandbox_migrations',
+    // The provider-key move's run record (2026-11-12): keeps the account it ran for.
+    'llm_credential_backfill',
     'notifications',
     'storage_charges',
     'suna_account_migrations',
@@ -164,6 +166,8 @@ export const WORKSPACE_KEY_CLASSES = {
   project_only: [
     // A goal's event log carries project_id only (dev, 2026-11-06).
     'project_goal_events',
+    // The legacy credential move's run record (2026-11-12).
+    'legacy_credential_backfill',
     'artifact_comment_screenshot_objects',
     'artifact_comment_threads',
     'artifact_events',

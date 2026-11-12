@@ -756,12 +756,12 @@ describe('an auto-paused trigger', () => {
   });
 
   test('a pause the account state caused says what ends it, and that it resumes by itself', () => {
-    const billing = mountSheet({ enabled: true, auto_paused_at: '2026-10-19T12:00:00.000Z', auto_paused_code: 'billing', auto_paused_reason: 'auto-paused: billing: Out of credits.' });
+    const billing = mountSheet({ enabled: true, auto_paused_at: '2026-10-19T12:00:00.000Z', auto_paused_code: 'billing', auto_paused_reason: 'auto-paused: billing: The wallet is empty.' });
     const billingText = JSON.stringify(billing.renderer.toJSON());
     expect(billingText).toContain('Paused: out of credits');
     expect(billingText).toContain('resumes by itself');
     // The readable sentence only: the raw reason no longer repeats under it.
-    expect(billingText).not.toContain('Out of credits.');
+    expect(billingText).not.toContain('The wallet is empty.');
     expect(billingText).not.toContain('font-mono');
     const model = mountSheet({ enabled: true, auto_paused_at: '2026-10-19T12:00:00.000Z', auto_paused_code: 'no_usable_model', auto_paused_reason: 'auto-paused: no usable model: none' });
     const modelText = JSON.stringify(model.renderer.toJSON());

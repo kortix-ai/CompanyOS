@@ -47,11 +47,16 @@
  *   • every request fast-fails (give-up 502, zero dials) — no wake either;
  *     liveness stays owned by the wake the failing attempt already fired,
  *     the relaunch flow and the reaper;
- *   • one request per probe window dials again, so a box the relaunch revived
- *     is served again within the window (its own successful answer clears the
- *     mark);
- *   • the re-probe dial timing out does NOT un-confirm: the box just proved
- *     dead again, so the mark stays and the window holds.
+ *   • one request per probe window dials again, and that request's probe call
+ *     REVALIDATES the mark on the liveness path: a dial timeout proves the
+ *     request's route silent, never the box's HTTP layer, so the old
+ *     confirmation may not ride on it — a box the relaunch revived is served
+ *     again within one probe budget even when its polled route keeps hanging,
+ *     the shape that used to suppress it forever (review finding on the
+ *     fourth cut, 2026-11-12);
+ *   • the re-probe dial timing out does NOT un-confirm by itself, and silence
+ *     on the revalidation keeps the mark and the window: a still-dead box
+ *     gains one detached probe per window and nothing else.
  *
  * Writes are exempt: a prompt delivery or upload keeps today's ladder and its
  * ambiguity guards. Connection-refused and fast edge 502/503 answers (a booting
@@ -140,8 +145,10 @@ export function dialDeadKey(sandboxId: string, port: number): string {
 
 /** Record one connect timeout for `key`. The second inside the streak window
  *  makes the box a candidate; only the HTTP probe confirms it. A timeout of an
- *  already-confirmed box does not un-confirm it: the box just proved dead
- *  again, so the mark and its probe window hold. */
+ *  already-confirmed box does not un-confirm it: the mark and its probe window
+ *  hold, and the re-probe slot's liveness revalidation
+ *  (maybeProbeDialDeadCandidate) — not the timeout — settles whether the box
+ *  is still dead. */
 export function recordDialTimeout(key: string, nowMs = Date.now()): void {
   const previous = dialDeadMarks.get(key);
   const fresh = !previous || nowMs - previous.lastAtMs > DIAL_DEAD_STREAK_WINDOW_MS;
@@ -186,10 +193,15 @@ export function shouldFailFast(key: string, nowMs = Date.now()): boolean {
 
 /** If `key` holds an unconfirmed candidate (two timeouts, no probe verdict
  *  yet), fire ONE detached HTTP probe through the ingress and confirm or clear
- *  the mark when it settles. Concurrent callers share the in-flight probe;
- *  awaiting the returned promise waits for its verdict (the request path
- *  discards it — `void`). `probeSettledAtMs` stamps the confirmed mark's probe
- *  window; the request path leaves the default (the settle instant). */
+ *  the mark when it settles. A CONFIRMED mark re-probes the same way — the
+ *  re-probe slot's request reaches this call exactly once per window, and its
+ *  verdict (not the old confirmation) settles the mark: a dial timeout proves
+ *  the request's route silent, never the box's HTTP layer, so a revived box
+ *  whose polled route keeps hanging would stay suppressed forever without the
+ *  recheck. Concurrent callers share the in-flight probe; awaiting the
+ *  returned promise waits for its verdict (the request path discards it —
+ *  `void`). `probeSettledAtMs` stamps a freshly confirmed mark's probe window;
+ *  the request path leaves the default (the settle instant). */
 export function maybeProbeDialDeadCandidate(
   key: string,
   target: DialProbeTarget,
@@ -197,17 +209,23 @@ export function maybeProbeDialDeadCandidate(
 ): Promise<void> {
   const inFlight = probesInFlight.get(key);
   if (inFlight) return inFlight;
-  if (!isDialDeadCandidate(key)) return Promise.resolve();
+  const mark = dialDeadMarks.get(key);
+  if (!mark || (!mark.confirmed && mark.timeouts < DIAL_DEAD_AFTER_TIMEOUTS)) return Promise.resolve();
   const probe = probeTarget(target)
     .then((answered) => {
-      // A concurrent dial may have answered while the probe ran — a success
-      // outranks the probe, so never re-mark a cleared key.
-      const current = dialDeadMarks.get(key);
-      if (!current || current.confirmed) return;
       if (answered) {
+        // An answer clears ANY state: a concurrent dial's success outranks the
+        // probe (never re-mark a cleared key), and the box's HTTP layer
+        // answering the liveness path outranks an old confirmation — the
+        // revived box is served again.
         dialDeadMarks.delete(key);
         return;
       }
+      const current = dialDeadMarks.get(key);
+      // Silence confirms an unconfirmed candidate. A confirmed mark keeps its
+      // existing confirmation and window (recordDialTimeout preserved them for
+      // this re-probe) — never extend, never re-mark a cleared key.
+      if (!current || current.confirmed) return;
       current.confirmed = true;
       current.probeAtMs = probeSettledAtMs + DIAL_DEAD_PROBE_SPACING_MS;
     })

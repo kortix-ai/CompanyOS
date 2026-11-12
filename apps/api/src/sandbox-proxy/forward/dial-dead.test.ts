@@ -141,8 +141,10 @@ describe('the probe slot of a confirmed mark', () => {
     recordDialTimeout(key, T0 + 1_000);
     await maybeProbeDialDeadCandidate(key, target, T0 + 1_001);
     // The window expires and hands out the re-probe slot; the re-probe dial
-    // times out too. The box just proved dead again: the mark and the window
-    // hold, so the requests after the re-probe still fail fast.
+    // times out too. The timeout alone never un-confirms: the mark and the
+    // window hold, so the requests after the re-probe still fail fast. What
+    // may clear the mark is the slot's own independent liveness revalidation
+    // (the two real-server tests below), never the timeout.
     expect(shouldFailFast(key, T0 + 1_001 + DIAL_DEAD_PROBE_SPACING_MS)).toBe(false);
     recordDialTimeout(key, T0 + 1_001 + DIAL_DEAD_PROBE_SPACING_MS + 10_000);
     expect(shouldFailFast(key, T0 + 1_001 + DIAL_DEAD_PROBE_SPACING_MS + 10_001)).toBe(true);
@@ -243,6 +245,76 @@ describe('the real HTTP probe against real servers', () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response('up', { status: 503 }) });
     try {
       expect(await probeTarget({ url: `${server.url}x`, headers: {} })).toBe(true);
+    } finally {
+      server.stop(true);
+      __resetDialDeadForTests();
+    }
+  });
+
+  // The reviewer's regression (2026-11-12, fifth cut): once confirmed, the mark
+  // must not ride on the old confirmation forever. A box the relaunch revived
+  // answers every route EXCEPT the polled one, which stays wedged — its re-probe
+  // dial then times out every window, recordDialTimeout keeps the confirmation,
+  // and (before this fix) no liveness probe ever ran again: /health served 200
+  // while every read on the port still fast-failed. The slot's probe call must
+  // revalidate the mark on the liveness path: the revived box's HTTP layer
+  // answers it, the mark clears, the siblings are served again.
+  test('a revived box clears on the re-probe slot: the slot revalidates the mark on the liveness path', async () => {
+    __resetDialDeadForTests();
+    __setDialProbeBudgetForTests(1_000);
+    let revived = false;
+    const answeredPaths: string[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        const pathname = new URL(req.url).pathname;
+        if (!revived || pathname === '/polled') return new Promise<Response>(() => {}); // dead — or the wedged polled route
+        answeredPaths.push(pathname);
+        return new Response('ok'); // the revived box's HTTP layer answers everything else
+      },
+    });
+    try {
+      // The box's whole HTTP path hangs: the streak confirms on the silent probe.
+      recordDialTimeout(key, T0);
+      recordDialTimeout(key, T0 + 1_000);
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} }, T0 + 1_001);
+      expect(shouldFailFast(key, T0 + 2_000)).toBe(true);
+      // The box revives. The window expires and hands out the re-probe slot;
+      // the slot's dial times out on the wedged route, and the slot's probe
+      // call — not the old confirmation — must settle the mark.
+      revived = true;
+      const slotAt = T0 + 1_001 + DIAL_DEAD_PROBE_SPACING_MS;
+      expect(shouldFailFast(key, slotAt)).toBe(false); // this request dials again
+      recordDialTimeout(key, slotAt + PROXY_ATTEMPT_TIMEOUT_MS); // its dial timed out on /polled
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} }, slotAt);
+      // The liveness path answered: the mark cleared, the siblings are served.
+      expect(shouldFailFast(key, slotAt + PROXY_ATTEMPT_TIMEOUT_MS + 1)).toBe(false);
+      expect(answeredPaths).toContain(DIAL_LIVENESS_PATH);
+    } finally {
+      server.stop(true);
+      __resetDialDeadForTests();
+    }
+  });
+
+  // The dead-box side of the same slot: silence on the revalidation keeps the
+  // mark and its window — a still-dead box gains one detached probe per window
+  // and nothing else.
+  test('a still-dead box keeps the mark through the slot revalidation', async () => {
+    __resetDialDeadForTests();
+    __setDialProbeBudgetForTests(1_000);
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Promise<Response>(() => {}), // accepts, never answers
+    });
+    try {
+      recordDialTimeout(key, T0);
+      recordDialTimeout(key, T0 + 1_000);
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} }, T0 + 1_001);
+      const slotAt = T0 + 1_001 + DIAL_DEAD_PROBE_SPACING_MS;
+      expect(shouldFailFast(key, slotAt)).toBe(false);
+      recordDialTimeout(key, slotAt + PROXY_ATTEMPT_TIMEOUT_MS); // the re-probe dial timed out
+      await maybeProbeDialDeadCandidate(key, { url: probeUrlOn(server.url), headers: {} }, slotAt);
+      expect(shouldFailFast(key, slotAt + PROXY_ATTEMPT_TIMEOUT_MS + 1)).toBe(true);
     } finally {
       server.stop(true);
       __resetDialDeadForTests();

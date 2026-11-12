@@ -6,7 +6,12 @@ import {
   type Artifact,
   type ProjectSession,
 } from '@kortix/sdk';
-import { useArtifact, useCachedWorkspaceSessions, useProjectSession } from '@kortix/sdk/react';
+import {
+  useArtifact,
+  useCachedWorkspaceSessions,
+  useProjectApps,
+  useProjectSession,
+} from '@kortix/sdk/react';
 import { cn } from '@kortix/ui';
 import { Button } from '@kortix/ui/button';
 import {
@@ -77,7 +82,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { AnimatePresence, motion, Reorder, useReducedMotion } from 'motion/react';
+import { Reorder } from 'motion/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   createContext,
@@ -120,19 +125,13 @@ import {
 
 /* ─── Strip ───────────────────────────────────────────────────────────────── */
 
-/** The house spring (motion.md `motion.spring`): critically damped, no bounce. */
-const TAB_SPRING = { type: 'spring', duration: 0.3, bounce: 0 } as const;
-const INSTANT = { duration: 0 } as const;
-
-/** Enter and exit, resolved with the input mode at the moment they run. */
-const TAB_VARIANTS = {
-  enter: { opacity: 0, scale: 0.96 },
-  shown: { opacity: 1, scale: 1 },
-  exit: (instant: boolean) =>
-    instant
-      ? { opacity: 0, transition: INSTANT }
-      : { opacity: 0, scale: 0.96, transition: TAB_SPRING },
-};
+/**
+ * Tabs do not animate: they open, close and switch in the frame you act in.
+ * The one motion is a short slide while you drag a tab to a new place, so the
+ * tabs it passes move aside instead of jumping under the pointer.
+ */
+const DRAG_SHIFT = { duration: 0.15, ease: 'easeOut' } as const;
+const NO_MOTION = { duration: 0 } as const;
 
 /* ─── Session signals: the sidebar's own data ─────────────────────────────── */
 
@@ -183,27 +182,11 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   const pathname = search ? `${path}?${search}` : path;
   const { state: sidebarState, isMobile } = useSidebar();
   const collapsed = isMobile || sidebarState === 'collapsed';
-  const reduceMotion = useReducedMotion();
   const project = useDesktopTabsStore((s) => s.byProject[projectId] ?? EMPTY_PROJECT_TABS);
   const update = useDesktopTabsStore((s) => s.update);
 
-  // Keyboard-driven changes render instantly (motion.md: no animation on a
-  // keystroke); pointer-driven ones get the enter/exit and reorder motion.
-  const [keyboard, setKeyboard] = useState(false);
-  useEffect(() => {
-    const onKey = () => setKeyboard(true);
-    // Back to pointer mode on the first move, so hover fades after typing.
-    const onPointer = () => setKeyboard(false);
-    window.addEventListener('keydown', onKey, { capture: true });
-    window.addEventListener('pointerdown', onPointer, { capture: true });
-    window.addEventListener('pointermove', onPointer, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener('keydown', onKey, { capture: true });
-      window.removeEventListener('pointerdown', onPointer, { capture: true });
-      window.removeEventListener('pointermove', onPointer, { capture: true });
-    };
-  }, []);
-  const instant = !!reduceMotion || keyboard;
+  // Only while a tab is being dragged do the others move with a slide.
+  const [dragging, setDragging] = useState(false);
 
   const sessionIds = project.tabs
     .map((tab) => tabRoute(tab.path, projectId))
@@ -237,6 +220,32 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     document.addEventListener('click', onClick, { capture: true });
     return () => document.removeEventListener('click', onClick, { capture: true });
   }, []);
+
+  // ⌘-click (Ctrl-click) or middle-click on a link to a page of this project:
+  // a new tab in the background, the way a browser does it. Without this the
+  // shell would hand the link to a new window or the system browser.
+  useEffect(() => {
+    const onOpenInBackground = (e: MouseEvent) => {
+      const middle = e.type === 'auxclick' && e.button === 1;
+      const modified = e.type === 'click' && e.button === 0 && (e.metaKey || e.ctrlKey);
+      if (!middle && !modified) return;
+      const anchor = (e.target as Element | null)?.closest?.('a[href]');
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.origin !== window.location.origin)
+        return;
+      const target = `${anchor.pathname}${anchor.search}`;
+      if (!tabRoute(target, projectId)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      update(projectId, (s) => openTab(s, target, null, true));
+      router.prefetch(target);
+    };
+    document.addEventListener('click', onOpenInBackground, { capture: true });
+    document.addEventListener('auxclick', onOpenInBackground, { capture: true });
+    return () => {
+      document.removeEventListener('click', onOpenInBackground, { capture: true });
+      document.removeEventListener('auxclick', onOpenInBackground, { capture: true });
+    };
+  }, [projectId, router, update]);
 
   // The window moved: the active tab follows it, or the tab already there
   // takes focus. Paths outside this project (a full-screen frame) are ignored.
@@ -381,73 +390,76 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     [activate, projectId],
   );
 
-  // Keyboard: Cmd on macOS, Ctrl elsewhere, like every desktop browser.
+  // Tab actions arrive two ways: a keystroke the page sees, and a native menu
+  // accelerator the shell sends as a command (File, Go menus). The menu path
+  // is the one that works while an artifact or App frame holds focus, where no
+  // keystroke reaches the page. One keystroke can arrive both ways, so `run`
+  // performs it once. Keys: Cmd on macOS, Ctrl elsewhere.
   // Capture phase: inner editors (the composer) must not swallow Mod+T.
   useEffect(() => {
     const mac = isMac();
-    let lastKeyClose = 0;
-    const onKey = (e: KeyboardEvent) => {
-      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!mod) return;
+    let last = { action: '', at: 0, source: '' };
+    const perform = (action: string): boolean => {
       const { tabs, activeId } = readProjectTabs(projectId);
-      if (e.code === 'KeyT' && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.shiftKey) reopen();
-        else openNew();
-        return;
+      if (action === 'new-tab') openNew();
+      else if (action === 'reopen-tab') reopen();
+      else if (action === 'next-tab') cycle(1);
+      else if (action === 'prev-tab') cycle(-1);
+      else if (action === 'close-tab') {
+        if (!activeId) return false;
+        close(activeId);
+      } else {
+        const n = Number(action.match(/^select-tab-([1-9])$/)?.[1]);
+        if (!n) return false;
+        const target = n === 9 ? tabs.at(-1) : tabs[n - 1];
+        if (!target) return false;
+        if (target.id !== activeId) activate(target.id);
       }
+      return true;
+    };
+    // The same action from the OTHER source within 500 ms is the same
+    // keystroke; from the same source it is a second press (⌘T twice = two tabs).
+    const run = (action: string, source: 'key' | 'menu'): boolean => {
+      const now = Date.now();
+      if (last.action === action && last.source !== source && now - last.at < 500) return true;
+      last = { action, at: now, source };
+      return perform(action);
+    };
+    const actionFor = (e: KeyboardEvent): string | null => {
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle on every OS.
+      if (e.code === 'Tab' && e.ctrlKey && !e.metaKey && !e.altKey) {
+        return e.shiftKey ? 'prev-tab' : 'next-tab';
+      }
+      const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!mod) return null;
+      if (e.code === 'KeyT' && !e.altKey) return e.shiftKey ? 'reopen-tab' : 'new-tab';
       if (e.altKey && !e.shiftKey && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
-        e.preventDefault();
-        cycle(e.code === 'ArrowRight' ? 1 : -1);
-        return;
+        return e.code === 'ArrowRight' ? 'next-tab' : 'prev-tab';
       }
       if (e.shiftKey && !e.altKey && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
-        e.preventDefault();
-        cycle(e.code === 'BracketRight' ? 1 : -1);
-        return;
+        return e.code === 'BracketRight' ? 'next-tab' : 'prev-tab';
       }
-      // Ctrl+Tab / Ctrl+Shift+Tab cycle on every OS.
-      if (e.altKey || e.shiftKey) return;
+      if (e.altKey || e.shiftKey) return null;
       const digit = e.code.match(/^Digit([1-9])$/)?.[1];
-      if (digit) {
-        const n = Number(digit);
-        const target = n === 9 ? tabs.at(-1) : tabs[n - 1];
-        if (!target) return;
-        e.preventDefault();
-        if (target.id !== activeId) activate(target.id);
-        return;
-      }
-      // File ▸ Close Tab owns Mod+W in the shell and sends `close-tab` below.
-      // A shell that predates the strip enables that item on session routes
-      // only, so the keystroke reaches the page elsewhere: close here too.
-      // One keystroke may arrive both ways; `lastKeyClose` lets it close once.
-      if (e.code === 'KeyW' && activeId) {
-        e.preventDefault();
-        lastKeyClose = Date.now();
-        close(activeId);
-      }
+      if (digit) return `select-tab-${digit}`;
+      if (e.code === 'KeyW') return 'close-tab';
+      return null;
     };
-    const onCtrlTab = (e: KeyboardEvent) => {
-      if (e.code !== 'Tab' || !e.ctrlKey || e.metaKey || e.altKey) return;
+    const onKey = (e: KeyboardEvent) => {
+      const action = actionFor(e);
+      if (!action) return;
+      if (!run(action, 'key')) return;
       e.preventDefault();
-      cycle(e.shiftKey ? -1 : 1);
+      e.stopPropagation();
     };
-    // File ▸ Close Tab (Mod+W) arrives as a shell command, not a keystroke.
     const onCommand = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== 'close-tab') return;
-      // File ▸ Close Tab is a keystroke the renderer may never see.
-      setKeyboard(true);
-      if (Date.now() - lastKeyClose < 500) return;
-      const { activeId } = readProjectTabs(projectId);
-      if (activeId) close(activeId);
+      const action = (event as CustomEvent<string>).detail;
+      if (typeof action === 'string') run(action, 'menu');
     };
     window.addEventListener('keydown', onKey, { capture: true });
-    window.addEventListener('keydown', onCtrlTab, { capture: true });
     window.addEventListener('kortix-desktop-command', onCommand);
     return () => {
       window.removeEventListener('keydown', onKey, { capture: true });
-      window.removeEventListener('keydown', onCtrlTab, { capture: true });
       window.removeEventListener('kortix-desktop-command', onCommand);
     };
   }, [activate, close, cycle, openNew, projectId, reopen]);
@@ -497,37 +509,30 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
           className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden px-px py-1"
         >
           <SessionSignalsContext.Provider value={signals}>
-            {/* `custom` reaches a tab after it leaves the list, so its exit uses
-              the CURRENT input mode, not the one it last rendered with. */}
-            <AnimatePresence initial={false} custom={instant}>
-              {project.tabs.map((tab) => (
-                <TabItem
-                  key={tab.id}
-                  tab={tab}
-                  projectId={projectId}
-                  active={tab.id === project.activeId}
-                  instant={instant}
-                  onActivate={activate}
-                  onClose={close}
-                  onNewToRight={newToRight}
-                  onDuplicate={duplicate}
-                  onPin={pin}
-                  onCloseOthers={closeOthersOf}
-                  onCloseToRight={closeRightOf}
-                  canReopen={project.closed.length > 0}
-                  onReopen={reopen}
-                  mod={mod}
-                  t={t}
-                />
-              ))}
-            </AnimatePresence>
+            {project.tabs.map((tab) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                projectId={projectId}
+                active={tab.id === project.activeId}
+                dragging={dragging}
+                onDragging={setDragging}
+                onActivate={activate}
+                onClose={close}
+                onNewToRight={newToRight}
+                onDuplicate={duplicate}
+                onPin={pin}
+                onCloseOthers={closeOthersOf}
+                onCloseToRight={closeRightOf}
+                canReopen={project.closed.length > 0}
+                onReopen={reopen}
+                mod={mod}
+                t={t}
+              />
+            ))}
           </SessionSignalsContext.Provider>
-          <motion.div
-            layout={instant ? false : 'position'}
-            transition={instant ? INSTANT : TAB_SPRING}
-            // Right after the last tab.
-            className="shrink-0"
-          >
+          {/* Right after the last tab. */}
+          <div className="shrink-0">
             <Hint side="bottom" label={`${t('newTab')} ${mod}T`}>
               <Button
                 type="button"
@@ -540,7 +545,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
                 <PlusIcon className="size-3.5 shrink-0" />
               </Button>
             </Hint>
-          </motion.div>
+          </div>
         </Reorder.Group>
       </div>
     </div>
@@ -555,8 +560,9 @@ interface TabItemProps {
   tab: DesktopTab;
   projectId: string;
   active: boolean;
-  /** Keyboard action or reduced motion: no enter, exit, reorder or color motion. */
-  instant: boolean;
+  /** Some tab is being dragged: tabs slide aside instead of jumping. */
+  dragging: boolean;
+  onDragging: (dragging: boolean) => void;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onNewToRight: (id: string) => void;
@@ -574,7 +580,8 @@ const TabItem = memo(function TabItem({
   tab,
   projectId,
   active,
-  instant,
+  dragging,
+  onDragging,
   onActivate,
   onClose,
   onNewToRight,
@@ -595,12 +602,9 @@ const TabItem = memo(function TabItem({
       as="div"
       value={tab.id}
       layout="position"
-      custom={instant}
-      variants={TAB_VARIANTS}
-      initial={instant ? false : 'enter'}
-      animate="shown"
-      exit="exit"
-      transition={instant ? INSTANT : TAB_SPRING}
+      transition={dragging ? DRAG_SHIFT : NO_MOTION}
+      onDragStart={() => onDragging(true)}
+      onDragEnd={() => onDragging(false)}
       whileDrag={{ zIndex: 1 }}
       className={cn(
         'relative min-w-0',
@@ -638,7 +642,7 @@ const TabItem = memo(function TabItem({
               'group/tab @container flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-sm text-xs select-none',
               'outline-none',
               // Only hover fades: losing or gaining selection is one step.
-              instant || active
+              active
                 ? 'transition-none'
                 : 'hover:duration-fast transition-none hover:transition-colors hover:ease-out',
               'focus-visible:ring-ring focus-visible:ring-2',
@@ -734,6 +738,9 @@ function TabLabel({
       <ArtifactLabel projectId={projectId} artifactId={route.artifactId} pinned={pinned} t={t} />
     );
   }
+  if (route?.kind === 'app') {
+    return <AppLabel projectId={projectId} appId={route.appId} pinned={pinned} t={t} />;
+  }
   if (route?.kind === 'agent') {
     return (
       <Label
@@ -823,6 +830,29 @@ function SessionLabel({
           <span className="bg-muted-foreground size-1.5 rounded-full" />
         )
       }
+    />
+  );
+}
+
+/** The open App's name, from the project's App list (cached by the Apps page). */
+function AppLabel({
+  projectId,
+  appId,
+  pinned,
+  t,
+}: {
+  projectId: string;
+  appId: string;
+  pinned: boolean;
+  t: Translate;
+}) {
+  const { data: apps } = useProjectApps(projectId);
+  const app = apps?.find((item) => item.app_id === appId || item.slug === appId);
+  return (
+    <Label
+      pinned={pinned}
+      title={app?.name ?? t('pages.apps')}
+      icon={<AppWindowIcon className="size-3.5 shrink-0" />}
     />
   );
 }

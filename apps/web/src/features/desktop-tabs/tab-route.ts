@@ -20,6 +20,8 @@ export type TabRoute =
   | { kind: 'dm'; agent: string }
   | { kind: 'space'; slug: string }
   | { kind: 'settings' }
+  /** The Apps page with one App open (`?app=`). */
+  | { kind: 'app'; appId: string }
   | {
       kind: 'page';
       page:
@@ -102,6 +104,10 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
       return b ? { kind: 'space', slug: decode(b) } : { kind: 'home' };
     case 'settings':
       return { kind: 'settings' };
+    case 'apps': {
+      const appId = new URLSearchParams(path.split('?')[1]?.split('#')[0] ?? '').get('app');
+      return appId ? { kind: 'app', appId } : { kind: 'page', page: 'apps' };
+    }
     default:
       if (PAGES.has(a))
         return { kind: 'page', page: a as Extract<TabRoute, { kind: 'page' }>['page'] };
@@ -121,7 +127,9 @@ export function tabGroup(route: TabRoute): string {
       return HOME_GROUP;
     case 'session':
       return `${SESSION_GROUP}${route.sessionId}`;
+    // One artifact is a document you keep open beside others, like a session.
     case 'artifact':
+      return `artifact:${route.artifactId}`;
     case 'artifacts':
       return 'artifacts';
     case 'agent':
@@ -138,6 +146,9 @@ export function tabGroup(route: TabRoute): string {
       return `space:${route.slug}`;
     case 'sessions':
       return 'sessions';
+    // The Apps tab shows the grid or one open App; both are that one tab.
+    case 'app':
+      return 'apps';
     case 'page':
       return route.page;
   }

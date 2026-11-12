@@ -81,6 +81,8 @@ describe('application menu: macOS', () => {
       '  quit',
       'File',
       '  New Session',
+      '  New Tab',
+      '  Reopen Closed Tab',
       '  Open Quick Entry',
       '  Quick Entry Shortcut',
       '    Ctrl+Shift+Space',
@@ -106,7 +108,45 @@ describe('application menu: macOS', () => {
       '  Home',
       '  -',
       '  Copy Current URL',
+      '  -',
+      '  Show Next Tab',
+      '  Show Previous Tab',
+      '  kx-go-tab-1',
+      '  kx-go-tab-2',
+      '  kx-go-tab-3',
+      '  kx-go-tab-4',
+      '  kx-go-tab-5',
+      '  kx-go-tab-6',
+      '  kx-go-tab-7',
+      '  kx-go-tab-8',
+      '  kx-go-tab-9',
       'windowMenu',
+    ]);
+  });
+
+  test('the tab items are native accelerators that hand a command to the page', () => {
+    // An artifact or App frame holds focus, and a keystroke there never
+    // reaches the page; a menu accelerator does.
+    const { menu, on } = template('darwin');
+    const byId = (id) => find(menu, (i) => i.id === id);
+    expect(byId('kx-file-new-tab').accelerator).toBe('CommandOrControl+T');
+    expect(byId('kx-file-reopen-tab').accelerator).toBe('CommandOrControl+Shift+T');
+    expect(byId('kx-go-next-tab').accelerator).toBe('Control+Tab');
+    expect(byId('kx-go-prev-tab').accelerator).toBe('Control+Shift+Tab');
+    expect(byId('kx-go-tab-9')).toMatchObject({
+      accelerator: 'CommandOrControl+9',
+      visible: false,
+      acceleratorWorksWhenHidden: true,
+    });
+    for (const id of ['kx-file-new-tab', 'kx-file-reopen-tab', 'kx-go-next-tab', 'kx-go-prev-tab', 'kx-go-tab-3']) {
+      byId(id).click();
+    }
+    expect(on.command.mock.calls.map((call) => call[0])).toEqual([
+      'new-tab',
+      'reopen-tab',
+      'next-tab',
+      'prev-tab',
+      'select-tab-3',
     ]);
   });
 });

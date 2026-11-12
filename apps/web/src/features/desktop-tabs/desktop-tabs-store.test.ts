@@ -68,6 +68,24 @@ describe('desktop tabs: navigation', () => {
     expect(activePath(s)).toBe(goal);
   });
 
+  test('an artifact opened from a session gets its own tab, and so does the next one', () => {
+    const a1 = `/workspaces/${P}/artifacts/a1`;
+    const a2 = `/workspaces/${P}/artifacts/a2`;
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, a1, g);
+    expect(paths(s)).toEqual([s1, a1]);
+    s = syncPath(s, s1, g);
+    s = syncPath(s, a2, g);
+    expect(paths(s)).toEqual([s1, a2, a1]);
+  });
+
+  test('an App opened from a session opens in the Apps tab, not over the session', () => {
+    const app = `/workspaces/${P}/apps?app=x1`;
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, app, g);
+    expect(paths(s)).toEqual([s1, app]);
+  });
+
   test('every session gets its own tab', () => {
     let s = syncPath(empty, s1, g);
     s = syncPath(s, s2, g);
@@ -115,6 +133,13 @@ describe('desktop tabs: open and close', () => {
     s = openTab(s, home);
     expect(paths(s)).toEqual([s1, home, s2]);
     expect(activePath(s)).toBe(home);
+  });
+
+  test('a background tab (⌘-click) opens beside the active one without taking focus', () => {
+    let s = syncPath(empty, s1, g);
+    s = openTab(s, s2, null, true);
+    expect(paths(s)).toEqual([s1, s2]);
+    expect(activePath(s)).toBe(s1);
   });
 
   test('closing the active tab focuses the right neighbour, then the left', () => {
@@ -255,6 +280,11 @@ describe('tabRoute', () => {
       kind: 'space',
       slug: 'équipe',
     });
+  });
+
+  test('the Apps page with an App open is that App', () => {
+    expect(tabRoute(`/workspaces/${P}/apps?app=x1`, P)).toEqual({ kind: 'app', appId: 'x1' });
+    expect(tabRoute(`/workspaces/${P}/apps`, P)).toEqual({ kind: 'page', page: 'apps' });
   });
 
   test('ignores paths outside the project', () => {

@@ -124,8 +124,16 @@ export function syncPath(
   return openTab(state, path);
 }
 
-/** Open `path` in a new tab after `afterId` (default: the active tab), and focus it. */
-export function openTab(state: ProjectTabs, path: string, afterId?: string | null): ProjectTabs {
+/**
+ * Open `path` in a new tab after `afterId` (default: the active tab), and focus
+ * it — or, with `background`, leave focus where it is (⌘-click, middle-click).
+ */
+export function openTab(
+  state: ProjectTabs,
+  path: string,
+  afterId?: string | null,
+  background = false,
+): ProjectTabs {
   const tab: DesktopTab = { id: newTabId(), path };
   const anchor = afterId ?? state.activeId;
   const idx = state.tabs.findIndex((t) => t.id === anchor);
@@ -134,7 +142,10 @@ export function openTab(state: ProjectTabs, path: string, afterId?: string | nul
   const minIdx = firstUnpinned === -1 ? state.tabs.length : firstUnpinned;
   const at = idx === -1 ? state.tabs.length : Math.max(idx + 1, minIdx);
   const tabs = [...state.tabs.slice(0, at), tab, ...state.tabs.slice(at)];
-  return withCap(tabs, tab.id, state.closed);
+  const opened = withCap(tabs, tab.id, state.closed);
+  return background && state.activeId && opened.tabs.some((t) => t.id === state.activeId)
+    ? { ...opened, activeId: state.activeId }
+    : opened;
 }
 
 /**

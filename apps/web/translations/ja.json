@@ -1640,6 +1640,7 @@
         "status": "状態",
         "subAgent": "サブエージェント",
         "spawned": "起動されたセッション",
+        "spawnedBy": "{title} から起動",
         "subAgentCount": "{count, plural, other {サブエージェント #件}}",
         "spawnedCount": "{count, plural, other {起動されたセッション #件}}",
         "created": "作成日時",
@@ -26867,8 +26868,6 @@
   },
   "desktopTabs": {
     "tabs": "開いているタブ",
-    "back": "戻る",
-    "forward": "進む",
     "newTab": "新しいタブ",
     "newTabToRight": "右に新しいタブ",
     "duplicate": "複製",

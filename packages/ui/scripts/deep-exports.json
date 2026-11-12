@@ -332,6 +332,7 @@
     "./workspace/sidebar/project-nav-items",
     "./workspace/sidebar/project-session-list",
     "./workspace/sidebar/project-sidebar",
+    "./workspace/sidebar/session-brief-hover-card",
     "./workspace/sidebar/session-section-labels",
     "./workspace/sidebar/session-source-icons",
     "./workspace/sidebar/use-workspace-directory",

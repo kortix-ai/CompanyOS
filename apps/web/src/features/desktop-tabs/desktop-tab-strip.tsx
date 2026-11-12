@@ -1,6 +1,11 @@
 'use client';
 
-import type { ProjectSession } from '@kortix/sdk';
+import {
+  directSubsessions,
+  sessionParentId,
+  type Artifact,
+  type ProjectSession,
+} from '@kortix/sdk';
 import { useArtifact, useCachedWorkspaceSessions, useProjectSession } from '@kortix/sdk/react';
 import { cn } from '@kortix/ui';
 import { Button } from '@kortix/ui/button';
@@ -12,7 +17,10 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@kortix/ui/context-menu';
+import { ProjectFilesProvider } from '@kortix/ui/files/project/context';
+import { useSessionChangeRequests } from '@kortix/ui/files/project/hooks/use-change-requests';
 import Hint from '@kortix/ui/hint';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@kortix/ui/hover-card';
 import { AgentMarkGlyph, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import {
   useSessionNeedsYouCounts,
@@ -20,17 +28,20 @@ import {
 } from '@kortix/ui/internal/hooks/use-review-session-summary';
 import { CustomizeGlyph } from '@kortix/ui/internal/layout/project-settings-nav';
 import { getSessionDisplayTitle } from '@kortix/ui/session/actions/project-session-list-helpers';
-import { sessionDisplayStatus } from '@kortix/ui/session/actions/session-label';
+import {
+  sessionDisplayStatus,
+  sessionSource,
+  type SessionDisplayStatus,
+} from '@kortix/ui/session/actions/session-label';
 import { SessionStatusMark } from '@kortix/ui/session/list/session-status-mark';
 import { useSidebar } from '@kortix/ui/sidebar';
+import { SessionBriefContent } from '@kortix/ui/workspace/sidebar/session-brief-hover-card';
 import {
   AppWindowIcon,
   BookOpenTextIcon,
   BrainIcon,
   BrowserIcon,
   CardsThreeIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
   ChartBarIcon,
   ChatsCircleIcon,
   ClockCounterClockwiseIcon,
@@ -65,6 +76,7 @@ import {
   XIcon,
   type Icon,
 } from '@phosphor-icons/react';
+import { formatDistanceToNowStrict } from 'date-fns';
 import { AnimatePresence, motion, Reorder, useReducedMotion } from 'motion/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -97,38 +109,6 @@ import {
   type DesktopTab,
 } from './desktop-tabs-store';
 import { newTabPath, tabRoute, type TabRoute } from './tab-route';
-
-/* ─── Shell history (Back / Forward) ──────────────────────────────────────── */
-
-type ShellWindow = Window & {
-  navigation?: { canGoBack: boolean; canGoForward: boolean };
-  kortixDesktop?: { navigate?: (direction: 'back' | 'forward') => Promise<boolean> };
-};
-
-function step(direction: 'back' | 'forward', router: ReturnType<typeof useRouter>) {
-  const win = window as ShellWindow;
-  // The shell's own step skips entries its navigation gate keeps out of the
-  // window (see desktop-back-button.tsx); a plain history step is the fallback.
-  if (win.kortixDesktop?.navigate) {
-    void win.kortixDesktop.navigate(direction);
-    return;
-  }
-  if (direction === 'back') router.back();
-  else router.forward();
-}
-
-function useHistoryState(pathname: string) {
-  const [state, setState] = useState({ back: false, forward: false });
-  useEffect(() => {
-    const nav = (window as ShellWindow).navigation;
-    // Read after the commit that changed the path: the entry list is current.
-    const id = requestAnimationFrame(() =>
-      setState({ back: Boolean(nav?.canGoBack), forward: Boolean(nav?.canGoForward) }),
-    );
-    return () => cancelAnimationFrame(id);
-  }, [pathname]);
-  return state;
-}
 
 /* ─── Strip ───────────────────────────────────────────────────────────────── */
 
@@ -187,7 +167,6 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   const reduceMotion = useReducedMotion();
   const project = useDesktopTabsStore((s) => s.byProject[projectId] ?? EMPTY_PROJECT_TABS);
   const update = useDesktopTabsStore((s) => s.update);
-  const history = useHistoryState(pathname);
 
   // Keyboard-driven changes render instantly (motion.md: no animation on a
   // keystroke); pointer-driven ones get the enter/exit and reorder motion.
@@ -451,11 +430,6 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   }, [activate, close, cycle, openNew, projectId, reopen]);
 
   const listRef = useRef<HTMLDivElement>(null);
-  // The active tab is always in view, also when the list scrolls.
-  useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [project.activeId, project.tabs.length]);
   const onListKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
@@ -476,35 +450,6 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
       // the shell's toggle and the macOS light-centred height (globals.css).
       className="kx-desktop-tabstrip kx-titlebar-row kx-titlebar-band-height bg-sidebar border-border flex h-10 shrink-0 items-center gap-1 border-b px-2"
     >
-      <div className="flex shrink-0 items-center">
-        <Hint side="bottom" label={t('back')}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('back')}
-            disabled={!history.back}
-            onClick={() => step('back', router)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <CaretLeftIcon className="cn-rtl-flip size-3.5 shrink-0" />
-          </Button>
-        </Hint>
-        <Hint side="bottom" label={t('forward')}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('forward')}
-            disabled={!history.forward}
-            onClick={() => step('forward', router)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <CaretRightIcon className="cn-rtl-flip size-3.5 shrink-0" />
-          </Button>
-        </Hint>
-      </div>
-
       <div
         ref={listRef}
         role="tablist"
@@ -517,11 +462,10 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
           axis="x"
           values={project.tabs.map((tab) => tab.id)}
           onReorder={(ids: string[]) => update(projectId, (s) => reorder(s, ids))}
-          // Past the point where every tab is at its minimum width the list
-          // scrolls sideways (no bar: the strip is 40px tall). `layoutScroll`
-          // keeps drag-reorder measuring correctly inside the scroller.
-          layoutScroll
-          className="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1 [&::-webkit-scrollbar]:hidden"
+          // Never scrolls: every tab shrinks to share the width, down to its
+          // icon and then less, the way a browser's tabs do. The active tab
+          // keeps room for its title and close button.
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden py-1"
         >
           <SessionSignalsContext.Provider value={signals}>
             {/* `custom` reaches a tab after it leaves the list, so its exit uses
@@ -552,8 +496,8 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
           <motion.div
             layout={instant ? false : 'position'}
             transition={instant ? INSTANT : TAB_SPRING}
-            // After the last tab; pinned to the right edge once the list scrolls.
-            className="bg-sidebar sticky right-0 shrink-0 pl-1"
+            // Right after the last tab.
+            className="shrink-0"
           >
             <Hint side="bottom" label={`${t('newTab')} ${mod}T`}>
               <Button
@@ -633,7 +577,7 @@ const TabItem = memo(function TabItem({
         'relative min-w-0',
         pinned ? 'shrink-0' : 'flex-[0_1_12.5rem]',
         // The active tab keeps room for its title and close button.
-        !pinned && (active ? 'min-w-24' : 'min-w-10'),
+        !pinned && (active ? 'min-w-24' : 'min-w-0'),
       )}
     >
       <ContextMenu>
@@ -827,17 +771,25 @@ function SessionLabel({
   // list, and the tab keeps the blue "needs you" glyph instead.
   const reviewCount = signals?.needsYou[sessionId] ?? 0;
   const waitingOn = signals?.awaitingAnswer.has(sessionId) ? 'answer' : 'review';
+  const status = session ? sessionDisplayStatus(session, reviewCount) : null;
   return (
     <Label
       pinned={pinned}
       title={session ? getSessionDisplayTitle(session) : t('session')}
       pending={!session}
-      icon={
-        session ? (
-          <SessionStatusMark
-            status={sessionDisplayStatus(session, reviewCount)}
+      card={
+        session && status ? (
+          <SessionTabCard
+            projectId={projectId}
+            session={session}
+            status={status}
             waitingOn={waitingOn}
           />
+        ) : undefined
+      }
+      icon={
+        session ? (
+          <SessionStatusMark status={status ?? 'done'} waitingOn={waitingOn} />
         ) : (
           <span className="bg-muted-foreground size-1.5 rounded-full" />
         )
@@ -874,6 +826,7 @@ function ArtifactLabel({
       pinned={pinned}
       title={artifact?.title || t('artifact')}
       pending={!artifact}
+      card={artifact ? <ArtifactTabCard artifact={artifact} /> : undefined}
       icon={<TypeIcon className="size-3.5 shrink-0" />}
     />
   );
@@ -884,38 +837,173 @@ function Label({
   title,
   pinned,
   pending,
+  card,
 }: {
   icon: ReactNode;
   title: string;
   pinned: boolean;
   pending?: boolean;
+  /** A page with more to say than its name (a session, an artifact) shows a card on hover. */
+  card?: ReactNode;
 }) {
-  // The full title on hover, for a pinned tab (icon only) and a truncated one.
-  return (
-    <Hint side="bottom" label={title}>
+  const body = (
+    <span
+      className={cn(
+        'flex min-w-0 flex-1 items-center gap-1.5',
+        // Icon only (pinned, or too narrow for text): centre it in the chip.
+        pinned ? 'justify-center' : '@max-[2.75rem]:justify-center',
+      )}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
+        {icon}
+      </span>
       <span
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-1.5',
-          // Icon only (pinned, or too narrow for text): centre it in the chip.
-          pinned ? 'justify-center' : '@max-[2.75rem]:justify-center',
+          // Truncates into the tab's fill instead of an ellipsis. Too narrow
+          // for text, the title stays the tab's accessible name.
+          'min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)] whitespace-nowrap @max-[2.75rem]:sr-only',
+          pinned && 'sr-only',
+          pending && 'text-muted-foreground',
         )}
       >
-        <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden>
-          {icon}
-        </span>
-        <span
-          className={cn(
-            // Truncates into the tab's fill instead of an ellipsis. Too narrow
-            // for text, the title stays the tab's accessible name.
-            'min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)] whitespace-nowrap @max-[2.75rem]:sr-only',
-            pinned && 'sr-only',
-            pending && 'text-muted-foreground',
-          )}
-        >
-          {title}
-        </span>
+        {title}
       </span>
+    </span>
+  );
+  if (card) {
+    return (
+      <HoverCard openDelay={400} closeDelay={150}>
+        <HoverCardTrigger asChild>{body}</HoverCardTrigger>
+        <HoverCardContent
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          className="w-72 overflow-hidden p-0"
+        >
+          {card}
+        </HoverCardContent>
+      </HoverCard>
+    );
+  }
+  // Every other page: its full title, for a pinned tab (icon only) and a truncated one.
+  return (
+    <Hint side="bottom" label={title}>
+      {body}
     </Hint>
+  );
+}
+
+/* ─── Hover cards ─────────────────────────────────────────────────────────── */
+
+/**
+ * A session tab's card: the sidebar's own session brief (status, goal, sub-
+ * agents and spawned sessions, source, labels, the change requests it opened
+ * with links into Review), plus the session that spawned it. Mounted only while
+ * the card is open, so its reads (this session's change requests, a parent not
+ * in any list) start on hover, never for every tab.
+ */
+function SessionTabCard({
+  projectId,
+  session,
+  status,
+  waitingOn,
+}: {
+  projectId: string;
+  session: ProjectSession;
+  status: SessionDisplayStatus;
+  waitingOn: 'answer' | 'review';
+}) {
+  return (
+    <ProjectFilesProvider value={{ projectId, ref: '' }}>
+      <SessionTabCardBody
+        projectId={projectId}
+        session={session}
+        status={status}
+        waitingOn={waitingOn}
+      />
+    </ProjectFilesProvider>
+  );
+}
+
+function SessionTabCardBody({
+  projectId,
+  session,
+  status,
+  waitingOn,
+}: {
+  projectId: string;
+  session: ProjectSession;
+  status: SessionDisplayStatus;
+  waitingOn: 'answer' | 'review';
+}) {
+  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const { data: crs } = useSessionChangeRequests(session.session_id);
+  const parentId = sessionParentId(session);
+  const cachedParent = useCachedWorkspaceSessions(projectId, parentId ? [parentId] : []).get(
+    parentId ?? '',
+  );
+  const ownParent = useProjectSession(projectId, parentId ?? '', {
+    enabled: !!parentId && !cachedParent,
+  });
+  const parentRow = cachedParent ?? ownParent.data;
+  return (
+    <SessionBriefContent
+      sessionId={session.session_id}
+      projectId={projectId}
+      title={getSessionDisplayTitle(session)}
+      status={status}
+      waitingOn={waitingOn}
+      createdAt={session.created_at}
+      source={sessionSource(session, tI18nComplete)}
+      changeRequests={crs?.change_requests ?? []}
+      labels={session.labels}
+      spawned={!!parentId}
+      parent={
+        parentId && parentRow
+          ? {
+              title: getSessionDisplayTitle(parentRow),
+              href: `/workspaces/${projectId}/sessions/${parentId}`,
+            }
+          : undefined
+      }
+      subagentCount={directSubsessions(session).length}
+      spawnedCount={session.child_count ?? 0}
+      onDismiss={noop}
+    />
+  );
+}
+
+const noop = () => {};
+
+/** An artifact tab's card: what it is, where it lives in Files, who can see it, when it changed. */
+function ArtifactTabCard({ artifact }: { artifact: Artifact }) {
+  const t = useTranslations('artifacts');
+  const TypeIcon = artifact.type === 'html' ? BrowserIcon : FileTextIcon;
+  return (
+    <div className="space-y-1.5 px-3.5 py-2.5">
+      <p className="text-foreground truncate text-sm font-medium">{artifact.title}</p>
+      {artifact.description ? (
+        <p className="text-muted-foreground line-clamp-2 text-xs">{artifact.description}</p>
+      ) : null}
+      <div className="text-muted-foreground flex items-center gap-2 text-xs">
+        <TypeIcon aria-hidden className="size-4 shrink-0" />
+        <span>{t(`type.${artifact.type}`)}</span>
+        <span aria-hidden>·</span>
+        <span>{t(`visibility.${artifact.visibility}`)}</span>
+      </div>
+      <div className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs">
+        <FoldersIcon aria-hidden className="size-4 shrink-0" />
+        <span className="min-w-0 truncate font-mono">{artifact.path}</span>
+      </div>
+      <div className="text-muted-foreground flex items-center gap-2 text-xs">
+        <ClockCounterClockwiseIcon aria-hidden className="size-4 shrink-0" />
+        <span suppressHydrationWarning>
+          {t('updated', {
+            time: formatDistanceToNowStrict(new Date(artifact.updated_at), { addSuffix: true }),
+          })}
+        </span>
+      </div>
+    </div>
   );
 }
 

@@ -561,6 +561,7 @@
     "./workspace/sidebar/project-nav-items": "./src/workspace/sidebar/project-nav-items.tsx",
     "./workspace/sidebar/project-session-list": "./src/workspace/sidebar/project-session-list.tsx",
     "./workspace/sidebar/project-sidebar": "./src/workspace/sidebar/project-sidebar.tsx",
+    "./workspace/sidebar/session-brief-hover-card": "./src/workspace/sidebar/session-brief-hover-card.tsx",
     "./workspace/sidebar/session-section-labels": "./src/workspace/sidebar/session-section-labels.ts",
     "./workspace/sidebar/session-source-icons": "./src/workspace/sidebar/session-source-icons.ts",
     "./workspace/sidebar/use-workspace-directory": "./src/workspace/sidebar/use-workspace-directory.ts",
@@ -2696,6 +2697,10 @@
       "./workspace/sidebar/project-sidebar": {
         "types": "./dist/workspace/sidebar/project-sidebar.d.ts",
         "import": "./dist/workspace/sidebar/project-sidebar.js"
+      },
+      "./workspace/sidebar/session-brief-hover-card": {
+        "types": "./dist/workspace/sidebar/session-brief-hover-card.d.ts",
+        "import": "./dist/workspace/sidebar/session-brief-hover-card.js"
       },
       "./workspace/sidebar/session-section-labels": {
         "types": "./dist/workspace/sidebar/session-section-labels.d.ts",

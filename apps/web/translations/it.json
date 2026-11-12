@@ -1640,6 +1640,7 @@
         "status": "Stato",
         "subAgent": "Sub-agente",
         "spawned": "Sessione avviata",
+        "spawnedBy": "Avviata da {title}",
         "subAgentCount": "{count, plural, one {# sub-agente} other {# sub-agenti}}",
         "spawnedCount": "{count, plural, one {# sessione avviata} other {# sessioni avviate}}",
         "created": "Creata",
@@ -26867,8 +26868,6 @@
   },
   "desktopTabs": {
     "tabs": "Schede aperte",
-    "back": "Indietro",
-    "forward": "Avanti",
     "newTab": "Nuova scheda",
     "newTabToRight": "Nuova scheda a destra",
     "duplicate": "Duplica",

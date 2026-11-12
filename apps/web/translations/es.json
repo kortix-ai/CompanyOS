@@ -1640,6 +1640,7 @@
         "status": "Estado",
         "subAgent": "Subagente",
         "spawned": "Sesión generada",
+        "spawnedBy": "Iniciada por {title}",
         "subAgentCount": "{count, plural, one {# subagente} other {# subagentes}}",
         "spawnedCount": "{count, plural, one {# sesión generada} other {# sesiones generadas}}",
         "created": "Creada",
@@ -26867,8 +26868,6 @@
   },
   "desktopTabs": {
     "tabs": "Pestañas abiertas",
-    "back": "Atrás",
-    "forward": "Adelante",
     "newTab": "Nueva pestaña",
     "newTabToRight": "Nueva pestaña a la derecha",
     "duplicate": "Duplicar",

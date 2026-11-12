@@ -1640,6 +1640,7 @@
         "status": "状态",
         "subAgent": "子代理",
         "spawned": "派生会话",
+        "spawnedBy": "由 {title} 启动",
         "subAgentCount": "{count, plural, other {# 个子代理}}",
         "spawnedCount": "{count, plural, other {# 个派生会话}}",
         "created": "创建时间",
@@ -26867,8 +26868,6 @@
   },
   "desktopTabs": {
     "tabs": "已打开的标签页",
-    "back": "后退",
-    "forward": "前进",
     "newTab": "新标签页",
     "newTabToRight": "在右侧新建标签页",
     "duplicate": "复制",

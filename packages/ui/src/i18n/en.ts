@@ -1137,6 +1137,7 @@ const catalog = {
         "status": "Status",
         "subAgent": "Sub-agent",
         "spawned": "Spawned session",
+        "spawnedBy": "Spawned by {title}",
         "subAgentCount": "{count, plural, one {# sub-agent} other {# sub-agents}}",
         "spawnedCount": "{count, plural, one {# spawned session} other {# spawned sessions}}",
         "created": "Created",

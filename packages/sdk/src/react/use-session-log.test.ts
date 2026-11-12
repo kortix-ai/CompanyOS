@@ -625,6 +625,22 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     };
     const held = () => (useSyncStore.getState().sessionLogs[SESSION]?.messages[page().thread_id] ?? []).map((m) => m.message_id);
 
+    test('an API page joins the snapshot stream while the box page is still pending', async () => {
+      let release = () => {};
+      mount({
+        loader: async () => page(),
+        livePage: () => new Promise((resolve) => { release = () => resolve(boxPage()); }),
+      });
+      await flush();
+      expect(joined.at(-1)?.options.schema).toBe('v2');
+      const message = { ...boxPage().messages.at(-2)!, blocks: [{ type: 'text' as const, id: 'head', text: 'Already streaming.' }] };
+      act(() => joined.at(-1)!.options.onRuntimeEvent?.({ type: 'log.message', id: 'epoch:41', properties: { rev: 123455, message } }));
+      expect(held()).toContain(message.message_id);
+      release();
+      await flush();
+      expect(joined).toHaveLength(1);
+    });
+
     test('a reload receives the streaming join put before a runtime consumer mounts', async () => {
       mount({ loader: async () => page() });
       await flush();

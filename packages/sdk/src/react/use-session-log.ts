@@ -431,11 +431,22 @@ export function useSessionLogSync(
       cancelRetry = null;
       busy = true;
       const { answer, retryAfterMs } = await load();
+      const page = answer === 'missing' ? null : answer;
+      if (stopped) return;
+      if (page) {
+        // The API page already establishes v2. Start receiving the join snapshot
+        // now; the extra box-page request must not delay a streaming answer.
+        onV2 = true;
+        onRead.current?.('page');
+        goV2();
+        await loadLive();
+        busy = false;
+        return;
+      }
       const live = await loadLive();
       busy = false;
       if (stopped) return;
-      const page = answer === 'missing' ? null : answer;
-      onV2 = !!page || live;
+      onV2 = live;
       // The box's page is a page too: a new session the API holds no log for reads as one.
       onRead.current?.(onV2 ? 'page' : answer === 'missing' ? 'missing' : 'failed');
       if (onV2) {

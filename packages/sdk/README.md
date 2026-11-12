@@ -585,8 +585,8 @@ A live read that returns no messages keeps the saved messages on screen: it mean
 lost its state, not that the conversation is empty. The first live read with messages reconciles them.
 Missing or rejected history falls back to the existing runtime path.
 An open reads the session log (`GET …/log`), on every host, with no project flag:
-`useSession`, `readSavedSessionCopy` (returned as `log`), `useSessionSync` with no `mirror` or
-with `savedChild`, and `loadSessionExportMessages`. The host applies a page it reads itself to
+`useSession`, `readSavedSessionCopy` (returned as `log`), `useSessionSync` without
+`mirror: null` or with `savedChild`, and `loadSessionExportMessages`. The host applies a page it reads itself to
 the session store and renders `useSessionLogThread`. No hook and no SDK read sends
 `GET …/transcript`, whatever the log answers. A new session's 404 with
 `code: 'session_log_missing'` keeps the session on the log with nothing in it: the runtime's rows
@@ -595,9 +595,9 @@ the copy already on screen and reads the page again after 2 s, 10 s and 30 s, or
 `Retry-After` (at most 60 s). Either is read again at the next turn end and after a stream
 reconnect. Without a log in the store, `useSession().loadOlder` pages the runtime. An export
 with no page reads the runtime, and fails when the runtime has nothing. The session-open
-snapshot (`GET …/snapshot`) asks for no v1 window (`?transcript=0`). The v1 reads
-(`getSessionTranscript`, `getSessionTranscriptSync`, `transcript`, `transcriptSync`) are
-deprecated.
+snapshot (`GET …/snapshot`) asks for no v1 window (`?transcript=0`): its `transcript` leg is
+the pointer only. The v1 transcript reads were removed in the session-log major (see
+`CHANGELOG.md`); read the log with `getSessionLogPage` (`kortix.session(p, s).log(query)`).
 
 `useSession().savedTranscript` says whether that saved conversation can show before the
 computer wakes: `loading` while a saved copy may still arrive, `shown` once messages are in
@@ -614,7 +614,8 @@ phase, once ready, and against an API that does not send it.
 
 A host that registers a saved-copy store (`setSavedCopyStore(createSavedCopyStore({ storage,
 userId }))`) gets the kept copy painted before the first frame; the server's copy reconciles
-into it by message ID. `createPersistedQueryCache` does the same for accounts, projects and
+into it by message ID. The store keeps the newest session-log page of each session
+(`SessionLogPage`, under `<namespace>.log`) and deletes the v1 copies an older SDK kept. `createPersistedQueryCache` does the same for accounts, projects and
 the paged session list. Both are per user and bounded; clear both on sign-out. Session
 states have one set of words for every host: `sessionListStatus`, `SESSION_LIST_STATUS`,
 `sessionConnectionLabel`, `SESSION_NOTICE`, and `turnRetryLabel`.

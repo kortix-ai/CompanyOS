@@ -328,13 +328,34 @@ describe('SessionChat transcript rows', () => {
     expect(markup).not.toContain('data-testid="session-busy-indicator"');
   });
 
-  test('a working session renders the busy row', () => {
+  test('a working session whose answer has no words yet renders the busy row', () => {
+    // The words arriving are the busy signal (no busy row under them,
+    // #12547); a working turn with no open text block still shows it.
     busy = true;
-    const markup = renderChat();
-    expect(markup).toContain('data-testid="session-busy-indicator"');
-    expect(markup).toContain('Thinking');
-    busy = false;
+    fixtureMessages = [
+      baseFixtureMessages[0],
+      {
+        info: {
+          id: 'assistant-fixture',
+          role: 'assistant',
+          parentID: 'user-fixture',
+          agent: 'build',
+          time: { created: 2 },
+        },
+        // No text part: the reply has not started; nothing streams.
+        parts: [],
+      },
+    ];
+    try {
+      const markup = renderChat();
+      expect(markup).toContain('data-testid="session-busy-indicator"');
+      expect(markup).toContain('Thinking');
+    } finally {
+      busy = false;
+      fixtureMessages = baseFixtureMessages;
+    }
   });
+
 
   test('a no_reply prompt shows its bubble with no Queued, Sending or Thinking', () => {
     const ask = 'Which region?';

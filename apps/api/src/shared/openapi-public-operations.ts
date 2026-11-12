@@ -9,6 +9,7 @@
 export const PUBLIC_OPERATIONS: ReadonlySet<string> = new Set([
   'get /health',
   'get /v1/health',
+  'get /v1/agent-marks/{file}',
   'get /v1/clients/mobile',
   'get /v1/system/status',
   'get /v1/system/maintenance',

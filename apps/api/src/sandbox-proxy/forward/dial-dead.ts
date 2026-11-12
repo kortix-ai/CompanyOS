@@ -23,19 +23,19 @@
  *   TCP probe of exactly the cases the streak holds is always "reachable".
  *
  * So a streak of two timeouts is only a CANDIDATE, and the mark confirms when
- * a bounded HTTP probe through the ingress — the same origin and auth headers
- * a real attempt sends, but a LIVENESS path, never the request's own route —
- * also gets no answer. The HTTP response is the one observable the edge passes
- * through from the box: any response (any status — for an unknown path usually
- * the box's own 404) proves the box's HTTP layer answers requests and clears
- * the streak; nothing within the probe budget proves it answers no request,
- * which is the dead-box shape. The path must be independent of the request's
- * route because the connect timer bounds the header phase: a probe of the
- * hung route itself would hang with it and confirm the mark against a box
- * whose other routes are healthy — one slow route would poison the whole port
- * (review finding on the third cut, 2026-11-12). The budget is longer than
- * one attempt timer so a handler that answers late is served by the probe
- * even though the attempts timed out.
+ * a bounded HTTP probe through the ingress — the same ingress base and auth
+ * headers a real attempt sends, but a LIVENESS path, never the request's own
+ * route — also gets no answer. The HTTP response is the one observable the
+ * edge passes through from the box: any response (any status — for an unknown
+ * path usually the box's own 404) proves the box's HTTP layer answers
+ * requests and clears the streak; nothing within the probe budget proves it
+ * answers no request, which is the dead-box shape. The path must be
+ * independent of the request's route because the connect timer bounds the
+ * header phase: a probe of the hung route itself would hang with it and
+ * confirm the mark against a box whose other routes are healthy — one slow
+ * route would poison the whole port (review finding on the third cut,
+ * 2026-11-12). The budget is longer than one attempt timer so a handler that
+ * answers late is served by the probe even though the attempts timed out.
  *
  * The probe runs DETACHED from the request: the confirming request keeps
  * today's ladder and its give-up, the probe settles on its own budget, and the
@@ -90,9 +90,10 @@ export const DIAL_LIVENESS_PATH = '/__kortix/dial-liveness';
  *  honest concurrent-sandbox count and exists only as a leak backstop. */
 const MAX_TRACKED = 1_000;
 
-/** The probe request: the exact URL and auth headers a real attempt sends.
- *  Without the auth headers the private edge refuses fast on its own and the
- *  answer would prove only the edge, never the box. */
+/** The probe request: the LIVENESS url on the same ingress the attempts dial
+ *  (`ingressTargetUrl(ingress, DIAL_LIVENESS_PATH)` in retry.ts), with the
+ *  attempt's auth headers. Without the auth headers the private edge refuses
+ *  fast on its own and the answer would prove only the edge, never the box. */
 export interface DialProbeTarget {
   url: string;
   headers: Record<string, string>;

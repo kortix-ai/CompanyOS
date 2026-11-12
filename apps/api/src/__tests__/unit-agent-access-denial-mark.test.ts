@@ -45,7 +45,8 @@ describe('agent-access denials are marked at the gate', () => {
     const denial = thrown as HTTPException;
     expect(denial.status).toBe(403);
     expect(isAgentAccessDenial(denial)).toBe(true);
-    const body = JSON.parse(await denial.res!.text());
+    if (!denial.res) throw new Error('the marked denial ships no response');
+    const body = JSON.parse(await denial.res.text());
     expect(body.code).toBe('no_agent_access');
     expect(body.accessible_agents).toEqual([]);
     expect(body.message).toContain('Ask a manager to grant you one');

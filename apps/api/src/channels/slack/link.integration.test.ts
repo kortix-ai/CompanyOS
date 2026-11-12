@@ -7,6 +7,8 @@
  * default Slack does not answer, so a detach falls back to the install rows.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { accountMembers, chatChannelBindings, chatInstalls, chatUserIdentities, projectSecrets, projectSessions } from '@kortix/db';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
@@ -70,16 +72,6 @@ afterAll(async () => {
   await removeSeeded([a, b, byo]);
   await db.execute(sql`delete from auth.users where id in (${MEMBER}::uuid, ${OUTSIDER}::uuid)`);
 });
-
-/** Slack's `auth.test`: the bot behind each token. */
-function botsByToken(bots: Record<string, string>) {
-  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
-    if (!String(input).endsWith('/auth.test')) return Response.json({ ok: false, error: 'not_faked' });
-    const auth = new Headers(init?.headers).get('authorization') ?? '';
-    const bot = bots[auth.replace(/^Bearer /, '')];
-    return Response.json(bot ? { ok: true, bot_id: bot } : { ok: false, error: 'invalid_auth' });
-  }) as unknown as typeof fetch;
-}
 
 const secretsOf = async (projectId: string) =>
   (
@@ -239,10 +231,8 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await slackProjectLink(byo.project_id)).toEqual({ teamId: ws });
   });
 
-  test('a shared-app install that plants a signing secret is not an own app: Slack names the same bot, so it is detached', async () => {
+  test('a planted signing secret changes nothing: a shared-app install is detached like any other', async () => {
     const ws = team('FAKE');
-    // Two shared-app installs from before the move; `b` writes the secret an
-    // own app stores, through the generic secrets path an admin can use.
     await db.insert(chatInstalls).values([
       { platform: 'slack', platformTeamId: ws, projectId: a.project_id },
       { platform: 'slack', platformTeamId: ws, projectId: b.project_id },
@@ -254,27 +244,72 @@ describe('one Slack workspace, one Kortix workspace', () => {
       .update(projectSessions)
       .set({ metadata: { source: 'slack', slack: { team_id: ws } } })
       .where(eq(projectSessions.sessionId, used));
-    botsByToken({ 'xoxb-shared-same': 'B0SHARED' });
 
     expect(await linkedSlackProject(ws)).toBe(a.project_id);
     expect(await holdsSlackWorkspace(b.project_id, ws)).toBe(false);
     expect(await installsOf(ws)).toEqual([a.project_id]);
-    expect(await secretsOf(b.project_id)).toEqual([]);
+    await db.delete(projectSecrets).where(eq(projectSecrets.projectId, b.project_id));
   });
 
-  test('an own app from before `own_app` (another bot) survives a move: not detached, its token and secret kept, no link', async () => {
-    const ws = team('LEGACYOWN');
-    await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: ws, projectId: byo.project_id });
-    await upsertSecret(byo.project_id, 'SLACK_BOT_TOKEN', 'xoxb-legacy-own');
-    await upsertSecret(byo.project_id, 'SLACK_SIGNING_SECRET', 'legacy-own');
-    botsByToken({ 'xoxb-legacy-own': 'B0OWNAPP', 'xoxb-synthetic': 'B0SHARED' });
+  test('the release backfill marks own-app installs from before `own_app` by the signing secret their install wrote', async () => {
+    const ws = team('BACKFILL');
+    await db.insert(chatInstalls).values([
+      { platform: 'slack', platformTeamId: ws, projectId: byo.project_id },
+      { platform: 'slack', platformTeamId: ws, projectId: b.project_id },
+    ]);
+    // The own-app install's row (connector-scoped, ownerless) for byo; a
+    // runtime secret with the same name for b, as any member could write.
+    await upsertSecret(byo.project_id, 'SLACK_SIGNING_SECRET', 'own');
+    await db.insert(projectSecrets).values({
+      projectId: b.project_id,
+      identifier: 'SLACK_SIGNING_SECRET',
+      name: 'SLACK_SIGNING_SECRET',
+      valueEnc: 'synthetic',
+      scope: 'runtime',
+    });
+    const migration = readFileSync(
+      join(import.meta.dir, '../../../../../packages/db/migrations/20261112040909184_chat_installs_mark_own_apps.sql'),
+      'utf8',
+    );
+    await db.execute(sql.raw(migration.replace(/^set .*$/gm, '')));
+    const ownApp = async (projectId: string) =>
+      (
+        await db
+          .select({ ownApp: chatInstalls.ownApp })
+          .from(chatInstalls)
+          .where(and(eq(chatInstalls.platformTeamId, ws), eq(chatInstalls.projectId, projectId)))
+      )[0]?.ownApp;
+    expect(await ownApp(byo.project_id)).toBe(true);
+    expect(await ownApp(b.project_id)).toBe(false);
+    // Marked, it holds its Slack workspace beside the shared app and is never detached by it.
+    expect(await holdsSlackWorkspace(byo.project_id, ws)).toBe(true);
     await shared(a.project_id, ws);
-    expect(await moveSlackLink(ws, a.project_id)).toEqual([]);
+    await moveSlackLink(ws, a.project_id);
     expect(await installsOf(ws)).toEqual([a.project_id, byo.project_id].sort());
-    expect(await secretsOf(byo.project_id)).toEqual(['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET']);
-    expect(await holdsSlackWorkspace(byo.project_id, ws)).toBe(false);
-    await db.delete(projectSecrets).where(eq(projectSecrets.projectId, byo.project_id));
+    await db.delete(projectSecrets).where(inArray(projectSecrets.projectId, [b.project_id, byo.project_id]));
     await db.delete(chatInstalls).where(and(eq(chatInstalls.platformTeamId, ws), eq(chatInstalls.projectId, byo.project_id)));
+  });
+
+  test("a detach deletes the install's Slack secrets, never a member's own secret with the same name", async () => {
+    const ws = team('MINE');
+    await shared(a.project_id, ws);
+    await moveSlackLink(ws, a.project_id);
+    await db.insert(projectSecrets).values({
+      projectId: a.project_id,
+      identifier: 'SLACK_TEAM_NAME_PERSONAL',
+      name: 'SLACK_TEAM_NAME',
+      valueEnc: 'synthetic',
+      scope: 'runtime',
+    });
+    await shared(b.project_id, ws);
+    await moveSlackLink(ws, b.project_id);
+    const left = await db
+      .select({ identifier: projectSecrets.identifier })
+      .from(projectSecrets)
+      .where(and(eq(projectSecrets.projectId, a.project_id), eq(projectSecrets.name, 'SLACK_TEAM_NAME')));
+    expect(left).toEqual([{ identifier: 'SLACK_TEAM_NAME_PERSONAL' }]);
+    expect(await secretsOf(a.project_id)).toEqual([]);
+    await db.delete(projectSecrets).where(eq(projectSecrets.projectId, a.project_id));
   });
 
   test("the linked workspace's channel settings never drive a session of another workspace's own app there", async () => {

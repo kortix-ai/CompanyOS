@@ -1,5 +1,5 @@
 import { chatInstalls, projectSecrets } from '@kortix/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import {
   deleteProjectSecrets,
@@ -84,7 +84,21 @@ export async function saveSlackInstall(input: SlackInstallInput): Promise<SlackI
  * app's install writes `SLACK_SIGNING_SECRET`.
  */
 export async function deleteSlackSecrets(projectId: string, opts: { keepSigningSecret?: boolean } = {}): Promise<void> {
-  await deleteProjectSecrets(projectId, opts.keepSigningSecret ? SLACK_KEYS.filter((k) => k !== SLACK_SIGNING_SECRET) : SLACK_KEYS);
+  const keys = opts.keepSigningSecret ? SLACK_KEYS.filter((k) => k !== SLACK_SIGNING_SECRET) : SLACK_KEYS;
+  // The rows the install wrote (`upsertSecret`) only: connector-scoped,
+  // ownerless, identifier = name. A detach runs for another Kortix workspace
+  // than the caller's, and a member's own secret with one of these names stays.
+  await db
+    .delete(projectSecrets)
+    .where(
+      and(
+        eq(projectSecrets.projectId, projectId),
+        inArray(projectSecrets.name, keys),
+        sql`${projectSecrets.identifier} = ${projectSecrets.name}`,
+        eq(projectSecrets.scope, 'connector'),
+        isNull(projectSecrets.ownerUserId),
+      ),
+    );
 }
 
 export async function deleteSlackInstall(projectId: string): Promise<void> {

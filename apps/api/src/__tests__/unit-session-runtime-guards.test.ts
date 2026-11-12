@@ -655,6 +655,21 @@ mock.module('../middleware/resolve-account', () => ({
   resolveScopedAccountId: async () => ACCOUNT_ID,
 }));
 
+// The suite's project serves no model config of its own; #12512's no-model
+// refusal (an empty servable catalog answers 409) would kill every create
+// before the guards this file exists to test. Spread the real module and
+// serve a one-model catalog, like the other unit suites do.
+const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+mock.module('../llm-gateway/models/servable-catalog', () => ({
+  ...realServableCatalog,
+  servableProjectCatalog: async () => ({
+    models: { 'synthetic-guard-model': { modelId: 'synthetic-guard-model', enabled: true } },
+    modelOverrides: {},
+    defaultModel: 'synthetic-guard-model',
+    usingDefaults: true,
+  }) as unknown as Awaited<ReturnType<typeof realServableCatalog.servableProjectCatalog>>,
+}));
+
 mockIamEngineAllowAll((action) => {
   assertedIamActions.push(action);
   if (action === deniedIamAction) {

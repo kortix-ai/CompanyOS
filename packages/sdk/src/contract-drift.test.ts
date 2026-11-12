@@ -203,13 +203,8 @@ export function contractDrift(): void {
   fits<CreateSessionPromptResult>(wire<C.CreateSessionPromptResult>());
   noPhantom<NoPhantom<CreateSessionPromptResult, C.CreateSessionPromptResult>>();
 
-  // The transcript leg is the pointer only (P8.4): the SDK never asks for a v1 window
-  // (`transcript=0`), so a contract that still lists the `requested: true` window is
-  // checked without it. Once the contract drops that window, `Exclude` removes nothing.
-  type SnapshotPointer = Omit<C.SessionSnapshot, 'transcript'> & {
-    transcript: Exclude<C.SessionSnapshot['transcript'], { requested: true }>;
-  };
-  fits<SessionOpenBundle>(wire<SnapshotPointer>());
+  // The transcript leg is the pointer only (P8.3/P8.4): the v1 window is gone on both sides.
+  fits<SessionOpenBundle>(wire<C.SessionSnapshot>());
   noPhantom<NoPhantom<SessionOpenBundle, C.SessionSnapshot>>();
   noPhantom<NoPhantom<SessionAuditAction, C.SessionAuditAction>>();
 

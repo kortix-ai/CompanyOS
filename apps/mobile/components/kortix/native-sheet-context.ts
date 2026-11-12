@@ -23,6 +23,12 @@ export interface NativeSheetApi {
    * glass (no colour to fade to: a pinned bar drops its fade there).
    */
   surface: string | null;
+  /**
+   * The sheet is as tall as its content (`contentDetent`). Its scroll views
+   * then must not grow: React Native's Yoga stretches a `flexGrow` child to a
+   * parent's `maxHeight`, so a body with a scroll view measured screen-tall.
+   */
+  contentSized: boolean;
 }
 
 export const NativeSheetContext = React.createContext<NativeSheetApi | null>(null);

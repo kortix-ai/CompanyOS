@@ -68,7 +68,7 @@ mock.module('@gorhom/bottom-sheet', () => ({
   name === 'RNSFormSheetHost';
 
 const { NativeSheet, NATIVE_SHEET_AVAILABLE } = require('./native-sheet') as typeof import('./native-sheet');
-const { SheetScrollView, SheetFooter, useSheetDismiss } = require('./sheet-parts') as typeof import('./sheet-parts');
+const { SheetScrollView, SheetFlatList, SheetFooter, useSheetDismiss } = require('./sheet-parts') as typeof import('./sheet-parts');
 const { SheetSettledContext } = require('./sheet-settled') as typeof import('./sheet-settled');
 
 type Ref = {
@@ -121,7 +121,8 @@ const fire = (event: string, nativeEvent: Record<string, unknown> = {}) =>
   act(() => sheet().props[event]({ nativeEvent }));
 const call = (fn: (r: Ref) => void) => act(() => fn(ref.current!));
 /** The content box reports its laid-out height (a content-sized sheet). */
-const layout = (height: number) => act(() => box().props.onLayout({ nativeEvent: { layout: { height } } }));
+const layout = (height: number, width = 384) =>
+  act(() => box().props.onLayout({ nativeEvent: { layout: { height, width } } }));
 
 beforeEach(() => {
   viewNode = null;
@@ -258,7 +259,7 @@ describe('NativeSheet', () => {
     expect(sheet().props.detents).toEqual([0.6]);
   });
 
-  test('a body that never lays out still opens, at the full detent, after 400 ms', () => {
+  test('a body that never lays out still opens, at the full detent, after 1 s', () => {
     // A captured timer, not the real clock.
     const timers: { fn: () => void; ms: number }[] = [];
     const realSetTimeout = globalThis.setTimeout;
@@ -272,7 +273,7 @@ describe('NativeSheet', () => {
       mount();
       call((r) => r.present());
       expect(sheet().props.isOpen).toBe(false);
-      const fallback = timers.find((timer) => timer.ms === 400);
+      const fallback = timers.find((timer) => timer.ms === 1000);
       expect(fallback).toBeDefined();
       act(() => fallback!.fn());
       expect(sheet().props.isOpen).toBe(true);
@@ -282,6 +283,22 @@ describe('NativeSheet', () => {
       globalThis.setTimeout = realSetTimeout;
       globalThis.clearTimeout = realClearTimeout;
     }
+  });
+
+  test('a layout far narrower than the sheet (before the host has its size) never moves the detent', () => {
+    mount();
+    call((r) => r.present());
+    layout(280);
+    fire('onWillAppear');
+    // The host has no width yet: rows wrap at a few points and the body is screen-tall.
+    layout(1400, 40);
+    fire('onDidAppear');
+    expect(sheet().props.detents).toEqual([0.4]);
+    layout(900, 60);
+    expect(sheet().props.detents).toEqual([0.4]);
+    // The sheet's own width (iPhone, glass inset) still follows the content.
+    layout(350, 386);
+    expect(sheet().props.detents).toEqual([0.5]);
   });
 
   test('a content-sized sheet measures again on every present', () => {
@@ -341,6 +358,37 @@ describe('NativeSheet', () => {
     const probe = tree.root.findAll((node) => node.type === 'dismiss-probe')[0];
     act(() => probe.props.dismiss());
     expect(sheet().props.isOpen).toBe(false);
+  });
+
+  test('a scroll view in a content-sized sheet does not grow: it is as tall as its content', () => {
+    // React Native's Yoga stretches a flexGrow child (a ScrollView's default)
+    // to a parent's maxHeight: the body measured screen-tall and every
+    // content-sized sheet with a scroll view opened at full height.
+    mount({}, React.createElement(SheetScrollView, { style: { paddingTop: 4 } } as never));
+    call((r) => r.present());
+    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    expect(Object.assign({}, ...[scroll.props.style].flat())).toEqual({ flexGrow: 0, paddingTop: 4 });
+  });
+
+  test('a call site style still wins over the content-sized default', () => {
+    mount({}, React.createElement(SheetScrollView, { style: { flexGrow: 1 } } as never));
+    call((r) => r.present());
+    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    expect(Object.assign({}, ...[scroll.props.style].flat()).flexGrow).toBe(1);
+  });
+
+  test('a scroll view in a fixed-detent sheet keeps its flex: it fills the sheet', () => {
+    mount({ snapPoints: ['50%'], enableDynamicSizing: false }, React.createElement(SheetScrollView));
+    call((r) => r.present());
+    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    expect(scroll.props.style).toBeUndefined();
+  });
+
+  test('a flat list in a content-sized sheet does not grow either', () => {
+    mount({}, React.createElement(SheetFlatList as never, { data: [], renderItem: () => null }));
+    call((r) => r.present());
+    const list = tree.root.findAll((node) => node.type === 'rn-flat-list')[0];
+    expect(Object.assign({}, ...[list.props.style].flat())).toEqual({ flexGrow: 0 });
   });
 
   test('a footerComponent renders as a component with the footer props', () => {

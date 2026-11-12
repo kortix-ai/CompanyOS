@@ -272,7 +272,10 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
     | string
     | undefined;
   const background = explicitBackground ?? (SYSTEM_SHEET_GLASS ? undefined : getSheetBg(colorScheme === 'dark'));
-  const api = React.useMemo<NativeSheetApi>(() => ({ dismiss, surface: background ?? null }), [dismiss, background]);
+  const api = React.useMemo<NativeSheetApi>(
+    () => ({ dismiss, surface: background ?? null, contentSized: fit }),
+    [dismiss, background, fit]
+  );
   // A content-sized detent is measured above the home indicator: UIKit puts
   // the bottom safe area under the content (\`RNSFormSheetDetentResolver.mm\`,
   // a custom detent). A body that pads \`insets.bottom\` would pad it twice, so
@@ -282,9 +285,15 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
 
   // A content-sized sheet presents once its body has a height, at that height.
   const measuring = fit && contentHeight === null;
+  const measureWidth = nativeSheetContentWidth(windowWidth, SYSTEM_SHEET_GLASS);
   const onContentLayout = fit
     ? (event: RN.LayoutChangeEvent) => {
-        const height = Math.ceil(event.nativeEvent.layout.height);
+        const { height: rawHeight, width } = event.nativeEvent.layout;
+        // After the measurement, a layout far narrower than the sheet is the
+        // host before UIKit gave it a size (rows wrap at a few points and the
+        // body reads screen-tall): it never sets the detent.
+        if (contentHeight !== null && !(width >= measureWidth * MIN_LAYOUT_WIDTH_SHARE)) return;
+        const height = Math.ceil(rawHeight);
         latestHeightRef.current = height;
         // The first layout is the measurement. After it, only a sheet at rest
         // follows its content: while UIKit presents it the box can lay out at
@@ -305,7 +314,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
         maxHeight: cap,
         minHeight: expanded ? cap : undefined,
         // Before it is presented the host has no width: measure at the sheet's.
-        ...(measuring ? { width: nativeSheetContentWidth(windowWidth, SYSTEM_SHEET_GLASS) } : null),
+        ...(measuring ? { width: measureWidth } : null),
       }
     : styles.fill;
   const body = (
@@ -384,8 +393,15 @@ const styles = { fill: { flex: 1 } } satisfies Record<string, ViewStyle>;
 /** 200 ms ease-out: the content's end moving to a new detent (SHEET_MOTION's close length, shortened for a settle). */
 const DETENT_LAYOUT = { duration: 200, update: { type: 'easeOut' as const } };
 
-/** How long a content-sized sheet waits for its body's first layout before it presents anyway. */
-const MEASURE_FALLBACK_MS = 400;
+/** How long a content-sized sheet waits for its body's first layout before it presents anyway (a slow device included). */
+const MEASURE_FALLBACK_MS = 1000;
+
+/**
+ * A layout narrower than this share of the measuring width is not the sheet's
+ * own width. The iPhone sheet is the window less 16pt; an iPad form sheet is
+ * about half the window, where UIKit ignores detents anyway.
+ */
+const MIN_LAYOUT_WIDTH_SHARE = 0.6;
 
 /** Frames the box waits for its window position to hold still (~1 s at 60 Hz). */
 const MEASURE_MAX_FRAMES = 60;

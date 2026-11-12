@@ -270,7 +270,15 @@ a binary built without it: that binary keeps gorhom. Android keeps gorhom.
   height only after it is mounted, so a sheet mounted open resolved height 0
   and stood at full height, opaque and edge to edge on iOS 26 (Jay,
   2026-11-12). A body that never lays out presents at full height after
-  400 ms. Every other sheet is its `snapPoints` as fractions plus `1` (full
+  1 s. After the measurement, a layout narrower than 60% of the measuring
+  width (the host before UIKit sized it) never moves the detent.
+- **Scroll views do not grow in a content-sized sheet.** `SheetScrollView` and
+  `SheetFlatList` there get `flexGrow: 0` (a call site's style wins).
+  React Native's `ScrollView` has `flexGrow: 1`, and React Native's Yoga
+  (`StretchFlexBasis` errata) stretches a growing child to its parent's
+  `maxHeight`: the body measured screen-tall and the sheet opened at full
+  height (1.6.33: session actions, Files → Version). A `flex: 1` view in a
+  content-sized body grows the same way: never give one a vertical flex. Every other sheet is its `snapPoints` as fractions plus `1` (full
   screen); `index` keeps its meaning.
 - **Glass only below the full detent.** iOS 26 draws a sheet at its full
   detent opaque and edge to edge; below it, the floating Liquid Glass sheet.

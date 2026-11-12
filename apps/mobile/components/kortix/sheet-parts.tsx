@@ -98,10 +98,12 @@ const NativeScrollView = React.forwardRef<React.ComponentRef<typeof Gorhom.Botto
     if (liveHeight > 0) lastOpenKeyboardHeight = liveHeight;
     const keyboardHeight = liveHeight > 0 ? liveHeight : lastOpenKeyboardHeight;
     const Scroll = keyboard.KeyboardAwareScrollView;
+    const contentSized = useNativeSheet()?.contentSized ?? false;
     return (
       <Scroll
         bottomOffset={KEYBOARD_GAP}
         {...(withoutGorhomScrollProps(props) as React.ComponentProps<typeof KeyboardAwareScrollViewType>)}
+        style={contentSizedStyle(contentSized, props.style)}
         extraKeyboardSpace={-keyboardHeight}
         ref={ref as never}
       />
@@ -109,6 +111,21 @@ const NativeScrollView = React.forwardRef<React.ComponentRef<typeof Gorhom.Botto
   }
 );
 NativeScrollView.displayName = 'NativeScrollView';
+
+/**
+ * A scroll view or list in a content-sized native sheet does not grow
+ * (`flexGrow: 0`; a call site's own style still wins). React Native's
+ * `ScrollView` has `flexGrow: 1`, and React Native's Yoga (the
+ * `StretchFlexBasis` errata) stretches a growing child to its parent's
+ * `maxHeight`: the sheet's box measured as tall as the screen, and every
+ * content-sized sheet with a scroll view opened at full height, opaque on
+ * iOS 26 (1.6.33: the session actions sheet, the Files Version sheet). It
+ * still shrinks (`flexShrink: 1`), so a body taller than the sheet scrolls.
+ */
+function contentSizedStyle(contentSized: boolean, style: unknown): ViewProps['style'] {
+  return (contentSized ? [CONTENT_SIZED_SCROLL, style] : style) as ViewProps['style'];
+}
+const CONTENT_SIZED_SCROLL = { flexGrow: 0 };
 
 /** gorhom's `BottomSheetScrollView`; `KeyboardAwareScrollView` in a native sheet. */
 export const SheetScrollView = React.forwardRef<React.ComponentRef<typeof Gorhom.BottomSheetScrollView>, ScrollProps>(
@@ -134,7 +151,12 @@ export function SheetView(props: ViewProps) {
 export function SheetFlatList<T>(props: React.ComponentProps<typeof Gorhom.BottomSheetFlatList<T>>) {
   const native = useNativeSheet();
   if (native) {
-    return <RN.FlatList<T> {...(withoutGorhomScrollProps(props) as React.ComponentProps<typeof RN.FlatList<T>>)} />;
+    return (
+      <RN.FlatList<T>
+        {...(withoutGorhomScrollProps(props) as React.ComponentProps<typeof RN.FlatList<T>>)}
+        style={contentSizedStyle(native.contentSized, props.style)}
+      />
+    );
   }
   return <Gorhom.BottomSheetFlatList<T> {...props} />;
 }

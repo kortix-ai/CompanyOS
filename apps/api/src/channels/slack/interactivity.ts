@@ -365,7 +365,7 @@ async function handleSetSelection(
   // Never the button's `value`: whoever posted the button wrote that.
   const channelId = (modalId ? payload.view?.private_metadata : payload.channel?.id) ?? '';
   if (!teamId || !channelId || (value.c && value.c !== channelId)) return;
-  const ctx = { teamId, channelId };
+  const ctx = { teamId, channelId, projectScopedProjectId: inboundProjectId(inbound) ?? undefined };
   const reply = modalId
     ? async (text: string) => {
         const token = await clickToken(teamId, inbound);
@@ -381,7 +381,7 @@ async function handleSetSelection(
   if (kind === 'model') {
     // One path for `/kortix model <id>` and the picker: checked as the person
     // who clicked, with this conversation's keys (channels/slack/model-choice.ts).
-    await reply(await applySlackModelChoice({ teamId, channelId, slackUserId, command: '/kortix' }, value.m ?? ''));
+    await reply(await applySlackModelChoice({ ...ctx, slackUserId, command: '/kortix' }, value.m ?? ''));
     return;
   }
   const requested = value.a || null;

@@ -81,7 +81,9 @@ export async function slackPrivateWrite(
   deps: SlackReadDeps,
 ): Promise<ChannelReadRefusal | null> {
   const id = normalized(input.channel);
-  if (!id || /^[DUW]/.test(id)) return null;
+  // Not a conversation id (a name Slack would resolve): refused, as a read is.
+  if (!id) return refusal(SLACK_PRIVATE_CONVERSATION, '`channel` must be one Slack conversation id, for example C0123ABCD.').refusal;
+  if (/^[DUW]/.test(id)) return null;
   const link = await deps.link(input.projectId);
   if (!link) return null;
   const view = await deps.view(input.projectId, link.teamId, input.userId);

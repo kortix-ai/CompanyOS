@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { CHANNEL_READ_SCOPES, type ChannelReadGate, type ChannelReadScope, gateChannelRead } from './channel-read-scope';
-import { SLACK_NOT_LINKED, SLACK_PRIVATE_CONVERSATION, type SlackReadDeps, type SlackView } from './slack-visibility';
+import { SLACK_NOT_LINKED, SLACK_PRIVATE_CONVERSATION, type SlackReadDeps, type SlackView, slackPrivateWrite } from './slack-visibility';
 
 const MINE = 'project-mine';
 /** G0FIN: private, the person is in it. G0EXEC: private, they are not. D0WITHME: their DM with the bot. C0PUBLIC: public. */
@@ -157,4 +157,21 @@ describe('reads decided on the answer', () => {
 test('every Slack read action has a decision here', () => {
   const kinds = new Set<ChannelReadScope>(Object.values(CHANNEL_READ_SCOPES.slack));
   for (const kind of kinds) expect(['channel', 'thread', 'channel_meta', 'channel_list', 'file', 'workspace', 'directory', 'write']).toContain(kind);
+});
+
+describe('writes into private conversations', () => {
+  const write = (channel: unknown) => slackPrivateWrite({ projectId: MINE, userId: 'user-1', channel }, deps().slack);
+
+  test('a name or a malformed id is refused, as a read is: Slack would resolve it', async () => {
+    for (const channel of ['secret-project', '#general', '', null, undefined]) {
+      expect((await write(channel))?.reason).toBe(SLACK_PRIVATE_CONVERSATION);
+    }
+  });
+
+  test('a private channel the person is in, a public one and a DM are written; another private one is refused', async () => {
+    expect(await write('G0FIN')).toBeNull();
+    expect(await write('C0PUBLIC')).toBeNull();
+    expect(await write('D0WITHSAM')).toBeNull();
+    expect((await write('G0EXEC'))?.reason).toBe(SLACK_PRIVATE_CONVERSATION);
+  });
 });

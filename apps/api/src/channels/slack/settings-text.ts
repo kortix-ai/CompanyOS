@@ -12,8 +12,14 @@ export function slackUserOf(ctx: { teamId: string; slackUserId: string }): ChatU
 }
 
 /** A Slack channel for settings. DM channel ids start with `D`. */
-export function slackSettingsChannel(ctx: { teamId: string; channelId: string }): SettingsChannel {
-  return { teamId: ctx.teamId, channelId: ctx.channelId, oneToOne: slackChannelIsDm(ctx.channelId) };
+/** `projectScopedProjectId`: the Kortix workspace whose own Slack app received the request. */
+export function slackSettingsChannel(ctx: { teamId: string; channelId: string; projectScopedProjectId?: string }): SettingsChannel {
+  return {
+    teamId: ctx.teamId,
+    channelId: ctx.channelId,
+    oneToOne: slackChannelIsDm(ctx.channelId),
+    ...(ctx.projectScopedProjectId ? { projectId: ctx.projectScopedProjectId } : {}),
+  };
 }
 
 /**
@@ -30,5 +36,7 @@ export function settingsRefusalText(reason: SettingsRefusal, command: string, no
       return "Only a workspace manager, or a workspace owner or admin, can change this channel's settings.";
     case 'no_binding':
       return noBinding;
+    case 'other_workspace':
+      return "This channel's settings belong to another Kortix workspace that runs its own Slack app here. Change them from that workspace's app.";
   }
 }

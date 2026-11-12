@@ -40,6 +40,8 @@ export interface SlackModelCtx {
   slackUserId: string;
   /** The slash command's name (`/kortix`), for the copy. */
   command: string;
+  /** The Kortix workspace whose own Slack app received the request, if any. */
+  projectScopedProjectId?: string;
 }
 
 /** Up to this many models are one button each; more become one searchable select. */
@@ -61,7 +63,7 @@ const SHARED_SCOPE_NOTE =
  * keys count, linked or not.
  */
 export async function slackModelScope(ctx: SlackModelCtx): Promise<ChannelModelScope | null> {
-  const gate = await channelModelContext({ teamId: ctx.teamId, channelId: ctx.channelId });
+  const gate = await channelModelContext({ teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId });
   if (!gate) return null;
   const sender = config.SLACK_REQUIRE_USER_IDENTITY ? ctx.slackUserId : '';
   const actor = sender
@@ -199,7 +201,7 @@ export async function buildSlackModelsResponse(ctx: SlackModelCtx): Promise<Slas
  */
 export async function applySlackModelChoice(ctx: SlackModelCtx, choice: string): Promise<string> {
   const connect = `Connect a Kortix workspace first — run \`${ctx.command}\`.`;
-  const channelCtx = { teamId: ctx.teamId, channelId: ctx.channelId };
+  const channelCtx = { teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId };
   const id = choice.trim();
   const scope = await slackModelScope(ctx);
   if (!scope) return connect;

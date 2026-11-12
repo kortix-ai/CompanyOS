@@ -36,7 +36,8 @@ export { currentChannelSelection, setChannelAgent, setChannelModel, type Channel
 /** A channel as settings see it: `oneToOne` for a DM or personal chat with the bot. */
 export type SettingsChannel = ChannelCtx & { oneToOne?: boolean };
 
-export type SettingsRefusal = 'unlinked' | 'forbidden' | 'no_binding';
+/** `other_workspace`: the channel's settings belong to another Kortix workspace (its own Slack app here). */
+export type SettingsRefusal = 'unlinked' | 'forbidden' | 'no_binding' | 'other_workspace';
 
 export type SettingsChange<Ok extends object = object, Reason extends string = never> =
   | ({ ok: true } & Ok)
@@ -64,6 +65,9 @@ export async function authorizeChannelSettings(
 export async function authorizeChannelChange(user: ChatUser, channel: SettingsChannel): Promise<SettingsChange> {
   const selection = await currentChannelSelection(channel);
   if (!selection) return { ok: false, reason: 'no_binding' };
+  // One settings row per channel: a workspace changes only its own row, never
+  // the row of another workspace that runs its own Slack app in this channel.
+  if (selection.foreignRow) return { ok: false, reason: 'other_workspace' };
   return authorizeChannelSettings(user, selection.projectId, channel);
 }
 

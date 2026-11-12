@@ -201,6 +201,8 @@ export async function recordSlackChannel(
   channelId: string,
 ): Promise<void> {
   if (!projectId || !teamId || !channelId) return;
+  // Only a workspace that holds this Slack workspace keeps settings in it.
+  if (!(await holdsSlackWorkspace(projectId, teamId))) return;
   const where = and(
     eq(chatChannelBindings.platform, 'slack'),
     eq(chatChannelBindings.platformTeamId, teamId),
@@ -219,11 +221,13 @@ export async function recordSlackChannel(
   // workspace's agents.
   const [row] = await db.select({ projectId: chatChannelBindings.projectId }).from(chatChannelBindings).where(where).limit(1);
   if (!row || row.projectId === projectId) return;
-  // One settings row per channel: the shared app's linked workspace owns it,
-  // so its agent, model and policy always apply. Any other workspace takes a
-  // row over only from one that no longer holds this Slack workspace.
-  const linkedHere = (await linkedSlackProject(teamId)) === projectId;
-  if (!linkedHere && row.projectId && (await holdsSlackWorkspace(row.projectId, teamId))) return;
+  // One settings row per channel, kept by the workspace that recorded it while
+  // it still holds this Slack workspace: an own app's row keeps its agent,
+  // model and policy beside the shared app. Each caller reads only its own
+  // row (`currentChannelSelection` with its `projectId`) and changes only its
+  // own (`other_workspace`). A row of a workspace that no longer holds this
+  // Slack workspace is taken over.
+  if (row.projectId && (await holdsSlackWorkspace(row.projectId, teamId))) return;
   await db
     .update(chatChannelBindings)
     .set({ projectId, agentName: null, model: null, conversationPolicy: 'project_open', pickerTs: null })

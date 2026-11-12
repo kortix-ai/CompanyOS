@@ -14,6 +14,9 @@ const log: SessionLog = JSON.parse(readFileSync(join(import.meta.dir, '../../../
 const ROOT = log.threads[0]!.thread_id;
 // As `fromV1` marks a converted thread; the v1 hooks read only such a thread through `toV1`.
 for (const t of log.threads) t.ext = { opencode: { version: 'kortix.transcript.v1', native_id: t.thread_id } };
+// The deltas below stream into the first text message: kortixd puts a streaming record before the
+// first delta of a message, and a finished record takes no delta (F-012).
+log.threads[0]!.messages.find((x) => x.blocks.some((b) => b.type === 'text'))!.status = 'streaming';
 const SESSION = 'kses_log_1';
 
 function page(): SessionLogPage {

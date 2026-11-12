@@ -135,9 +135,12 @@ describe('useSessionLogThread on v2: throttleMs paces the thread', () => {
   });
 
   test('KRTX-2880: N streamed deltas inside one window run the transcript selector once per flush, not once per event', async () => {
-    act(() => useSyncStore.getState().applySessionLogPage(SESSION, page()));
     const root = log.threads[0]!;
     const target = root.messages.find((m) => m.blocks.some((b) => b.type === 'text'))!;
+    // The target streams: kortixd puts a streaming record before the first delta of a message.
+    const streamed = page();
+    streamed.messages = streamed.messages.map((m) => (m.message_id === target.message_id ? { ...m, status: 'streaming' as const } : m));
+    act(() => useSyncStore.getState().applySessionLogPage(SESSION, streamed));
     const block = target.blocks.find((b) => b.type === 'text')!;
     const seen: Array<ReturnType<typeof useSessionLogThread>> = [];
     render(() => {

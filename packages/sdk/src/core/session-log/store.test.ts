@@ -194,7 +194,14 @@ describe('applySessionLogEvent', () => {
   });
 
   test('log.block.delta appends to a text or reasoning block by block id, nothing else', () => {
-    const state = loaded();
+    // kortixd puts a streaming record before the first delta of a message: the text and reasoning
+    // targets stream. A finished record takes no delta (F-012).
+    const streamed = rootMessages();
+    for (const kind of ['text', 'reasoning'] as const) {
+      const m = streamed.find((x) => x.blocks.some((b) => b.type === kind));
+      if (m) m.status = 'streaming';
+    }
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(streamed));
     const messages = state.messages[ROOT]!;
     const target = messages.find((m) => m.blocks.some((b) => b.type === 'text'))!;
     const block = target.blocks.find((b) => b.type === 'text') as TextBlock;

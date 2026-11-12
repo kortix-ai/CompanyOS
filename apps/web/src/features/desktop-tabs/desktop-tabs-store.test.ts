@@ -241,6 +241,9 @@ describe('tabRoute', () => {
     expect(tabRoute(`/workspaces/${P}/sessions\\..\\..\\other`, P)).toBeNull();
     expect(tabRoute(`/workspaces/${P}/%2e%2e/other/sessions/s1`, P)).toBeNull();
     expect(tabRoute(`/workspaces/${P}/sessions/../../other/sessions/s1`, P)).toBeNull();
+    // A raw newline would split a stored path into two.
+    expect(tabRoute(`/workspaces/${P}/sessions/x\n//evil.example/a`, P)).toBeNull();
+    expect(tabRoute(`/workspaces/${P}/sessions/x\t`, P)).toBeNull();
   });
 
   test('keeps paths with spaces and Unicode', () => {

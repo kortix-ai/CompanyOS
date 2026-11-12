@@ -267,13 +267,13 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   // does not re-run it.
   // Same guard as `go`: a stored path is prefetched only when it is a page of
   // this project.
-  const pathsKey = project.tabs
+  const prefetchPaths = project.tabs
     .filter((tab) => tab.id !== project.activeId && tabRoute(tab.path, projectId))
-    .map((tab) => tab.path)
-    .join('\n');
+    .map((tab) => tab.path);
+  // A JSON array, not a joined string: no path can split into two.
+  const pathsKey = JSON.stringify(prefetchPaths);
   useEffect(() => {
-    if (!pathsKey) return;
-    for (const path of pathsKey.split('\n')) router.prefetch(path);
+    for (const path of JSON.parse(pathsKey) as string[]) router.prefetch(path);
   }, [pathsKey, router]);
 
   // Read through a ref so every handler below stays referentially stable and

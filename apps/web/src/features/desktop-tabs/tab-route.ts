@@ -48,6 +48,9 @@ const PAGES = new Set([
   'reminders',
 ]);
 
+// A real app path is percent-encoded; a raw control character (a newline)
+// only appears in a tampered stored value.
+const CONTROL_CHAR = /[\u0000-\u001f\u007f]/;
 const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i;
 
 function decode(segment: string): string {
@@ -66,7 +69,7 @@ function projectSegments(path: string, projectId: string): string[] | null {
   // A path the browser would resolve somewhere else than the segments read
   // below: a backslash (a separator to the URL parser) or a dot segment,
   // plain or encoded (`..`, `%2e%2e`). Raw spaces and Unicode stay valid.
-  if (pathname.includes('\\')) return null;
+  if (pathname.includes('\\') || CONTROL_CHAR.test(path)) return null;
   if (pathname.split('/').some((segment) => DOT_SEGMENT.test(segment))) return null;
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] !== 'workspaces' && parts[0] !== 'projects') return null;

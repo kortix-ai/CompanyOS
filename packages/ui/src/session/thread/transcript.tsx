@@ -97,6 +97,7 @@ import type {
 } from '../turn/user-message';
 import type { TurnServedModel } from '../turn/served-model';
 import { SessionBusyIndicator } from '../status/session-busy-indicator';
+import { useAnswerStreaming } from '../turn/answer-streaming';
 import { SessionTurnMeta } from './session-turn-meta';
 import { TurnShareButton } from './turn-share';
 import {
@@ -2329,6 +2330,7 @@ function TurnFooter(
         turnError={turnError}
         tHardcodedUi={tHardcodedUi}
         hasText={model.response.trim() !== ''}
+        openText={model.openText?.block.text}
       />
     {/* ── Error (abort / failure banner) ──
         An automatic provider-error recovery chain (KRTX-2597) renders ONE
@@ -2469,6 +2471,8 @@ function TurnBusyRow(
     quietBusy?: boolean;
     /** The answer already streams text: the dots are gone (the words are the signal). */
     hasText?: boolean;
+    /** The open text block's text (`openTextBlock`): while it grows, the row hides. */
+    openText?: string;
   },
 ) {
   const { working, turnError, suppressBusyIndicator, awaitingUser, sessionId, retry, status, tHardcodedUi, quietBusy } = props;
@@ -2478,9 +2482,12 @@ function TurnBusyRow(
   const tTurn = useTranslations('sessionUi.turn');
   // The thread's computer is not up yet: the wait is a start, not work.
   const runtimeReady = useRuntimeReady();
+  // The words streaming in are the busy signal: no "Gathering thoughts..." row
+  // glued under them. It returns when the block closes or the text goes quiet.
+  const answerStreaming = useAnswerStreaming(props.openText);
   return (
     <>
-    {showTurnBusyIndicator({
+    {!(answerStreaming && !quietBusy && !retryInfo) && showTurnBusyIndicator({
       working: working && !suppressBusyIndicator,
       hasError: !!turnError,
       isRetrying: !!retryInfo,

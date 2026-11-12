@@ -355,6 +355,8 @@ export interface ProjectTrigger {
   /** Set while the trigger paused itself after a sustained run-limit breach (KRTX-1721). */
   auto_paused_at?: string | null;
   auto_paused_reason?: string | null;
+  /** `billing` or `no_usable_model`: the pause ends by itself once the account can run it. */
+  auto_paused_code?: 'billing' | 'no_usable_model' | null;
   last_fired_at: string | null;
   /** `queued`, `fired`, or `failed` (the prompt was not delivered, or its run ended with an error). */
   last_status?: string | null;

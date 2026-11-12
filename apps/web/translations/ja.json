@@ -174,7 +174,10 @@
     "claudeConnectFailed": "Claude のサインインが完了しませんでした。もう一度お試しください。",
     "claudeReconnectDescription": "もう一度 Claude でサインインします。アカウントの名前、アクセス、セッションの選択はそのまま残ります。",
     "claudeAccountLabelPlaceholder": "例: 自分の Claude アカウント",
-    "claudeDeleteAccountConfirmTitle": "この Claude アカウントを全員分削除しますか?"
+    "claudeDeleteAccountConfirmTitle": "この Claude アカウントを全員分削除しますか?",
+    "sharedOnlyYouDescription": "API キー、ChatGPT アカウント、Claude アカウントを追加します。追加したものはあなただけが使えます。ワークスペースの管理者は共有できます。各セッションで使うものを選びます。",
+    "oauthOnlyYouDescription": "このワークスペースで ChatGPT Plus または Pro プランを使います。追加したアカウントはあなただけが使えます。",
+    "claudeOauthOnlyYouDescription": "このワークスペースの Claude モデルで Claude Pro または Max プランを使います。追加したアカウントはあなただけが使えます。"
   },
   "secrets": {
     "undecryptable": {
@@ -23713,7 +23716,13 @@
   },
   "triggerAutoPause": {
     "title": "自動で一時停止しました",
-    "description": "以下の理由で実行の開始を停止しました。原因を解消してから再開してください。"
+    "description": "以下の理由で実行の開始を停止しました。原因を解消してから再開してください。",
+    "billingTitle": "一時停止中: クレジット不足",
+    "billingDescription": "実行の料金を支払えないため、実行の開始を停止しました。残高をチャージすると数分以内に自動で再開します。",
+    "modelTitle": "一時停止中: 使えるモデルがありません",
+    "modelDescription": "自動化はワークスペース全体で共有されたモデルキーとアカウントだけを使いますが、使えるものがありません。モデルで追加すると数分以内に自動で再開します。",
+    "listBilling": "クレジット不足",
+    "listModel": "モデルなし"
   },
   "featureGate": {
     "enable": "{name}を有効にする",
@@ -26813,5 +26822,24 @@
   "gatewayBudgets": {
     "capWorkspace": "このワークスペースのゲートウェイ支出に上限を設定します。",
     "capMember": "{who} のゲートウェイ支出に上限を設定します。"
+  },
+  "connectSignIn": {
+    "openSignIn": "{app} のサインインを開く",
+    "checkingTitle": "サインインを完了しています",
+    "checkingDescription": "Kortix が {app} のサインインを確認します。このページは自動で更新されます。",
+    "signInUnfinished": "サインイン未完了",
+    "finishSignIn": "サインインを完了",
+    "signInFinished": "サインインが完了しました",
+    "cardHeadline": "エージェントがあなたのサインインを待っています",
+    "cardTitle": "{app} を接続",
+    "cardShared": "ワークスペースで共有",
+    "cardPrivate": "自分のみ",
+    "signingIn": "開いたウィンドウで {app} へのサインインを完了してください。",
+    "connectedAs": "{account} として接続済み",
+    "connected": "接続済み",
+    "connect": "接続",
+    "cardFailed": "{app} を接続できませんでした。もう一度お試しください。",
+    "blockedTitle": "{app} を開いてサインイン",
+    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。"
   }
 }

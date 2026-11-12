@@ -625,6 +625,26 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     };
     const held = () => (useSyncStore.getState().sessionLogs[SESSION]?.messages[page().thread_id] ?? []).map((m) => m.message_id);
 
+    test('a reload receives the streaming join put before a runtime consumer mounts', async () => {
+      mount({ loader: async () => page() });
+      await flush();
+      const message = { ...boxPage().messages.at(-2)!, blocks: [{ type: 'text' as const, id: 'reload-head', text: 'The complete answer so far.' }] };
+      act(() => joined.at(-1)!.options.onRuntimeEvent?.({
+        type: 'log.message', id: 'epoch:42', properties: { rev: 123456, message },
+      }));
+      expect(held()).toContain('msg_box_streaming');
+      const stored = useSyncStore.getState().sessionLogs[SESSION]!.messages[page().thread_id]!.find(m => m.message_id === 'msg_box_streaming');
+      expect(stored?.blocks).toEqual(message.blocks);
+      const delta = { type: 'log.block.delta', id: 'epoch:43', properties: { thread_id: page().thread_id, message_id: message.message_id, block_id: 'reload-head', delta: ' Still streaming.' } };
+      act(() => {
+        joined.at(-1)!.options.onRuntimeEvent(delta);
+        // A full runtime consumer receives the same wire frame after mount.
+        useSyncStore.getState().applySessionLogEvent(SESSION, delta);
+      });
+      const grown = useSyncStore.getState().sessionLogs[SESSION]!.messages[page().thread_id]!.find(m => m.message_id === message.message_id);
+      expect(grown?.blocks).toEqual([{ ...message.blocks[0], text: 'The complete answer so far. Still streaming.' }]);
+    });
+
     test('a new session the API holds no log for: the box page goes in the store and the stream switches to schema v2 at once', async () => {
       let boxReads = 0;
       const state = mount({ loader: async () => { throw missing(); }, livePage: async () => { boxReads++; return boxPage(); } });

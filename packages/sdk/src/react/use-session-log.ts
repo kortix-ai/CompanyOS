@@ -403,7 +403,18 @@ export function useSessionLogSync(
       // `kortix.resync` and replays nothing, so the page is read again then, as after a reconnect.
       // `runtime: true`: the `log.*` frames ride the runtime channel. A full session already has a
       // runtime subscriber; a view (`useSessionView`) has none, and its thread froze at the first page.
-      join({ schema: 'v2', runtime: true, onConnectionChange: onReconnect(() => void reload()), onRuntimeResync: () => void reload() });
+      join({
+        schema: 'v2',
+        runtime: true,
+        // The join snapshot can precede the full runtime consumer after reload.
+        // The log owns these frames from its first subscription. Store puts and
+        // wire deltas are idempotent when another runtime consumer also sees them.
+        onRuntimeEvent: (event) => {
+          if (event.type.startsWith('log.')) store().applySessionLogEvent(sessionId, event);
+        },
+        onConnectionChange: onReconnect(() => void reload()),
+        onRuntimeResync: () => void reload(),
+      });
     };
     // A box loader that arrived after the first read: its page, and v2 if the API had none.
     readLiveRef.current = () => {

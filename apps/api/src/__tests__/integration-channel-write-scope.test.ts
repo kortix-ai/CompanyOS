@@ -35,6 +35,21 @@ const C_OTHER = `C0OTHER${RUN}`;
 const C_NOBODY = `C0NOBODY${RUN}`;
 const D_OTHER = `D0OTHERDM${RUN}`;
 const T_OTHER = '1700000100.000100';
+// A private channel the bot is in and the session's person is not.
+const G_PRIVATE = `G0PRIVATE${RUN}`;
+
+// Slack's membership lists for the private-content check (users.conversations);
+// every other request goes out unchanged.
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input);
+  if (url.startsWith('https://slack.com/api/users.conversations')) {
+    const asksForPerson = new URLSearchParams(String(init?.body ?? '')).has('user');
+    return Response.json({ ok: true, channels: asksForPerson ? [] : [{ id: G_PRIVATE, is_private: true }] });
+  }
+  if (url.startsWith('https://slack.com/api/users.lookupByEmail')) return Response.json({ ok: false, error: 'users_not_found' });
+  return realFetch(input, init);
+}) as typeof fetch;
 const T_MINE = '1700000200.000200';
 
 let mine: SeededProject;
@@ -93,6 +108,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  globalThis.fetch = realFetch;
   for (const tokenId of tokenIds) await db.execute(sql`delete from kortix.account_tokens where token_id = ${tokenId}`);
   await db.delete(chatThreads).where(inArray(chatThreads.platformTeamId, [WS, FOREIGN_WS]));
   await db.delete(chatChannelBindings).where(eq(chatChannelBindings.platformTeamId, WS));
@@ -252,6 +268,13 @@ describe('the file upload and bind-thread routes', () => {
     const anyChannel = await post('bind-thread', { session_id: mineSession, channel: C_OTHER, thread_ts: '1700000800.000800' });
     expect(anyChannel.status).toBe(200);
     expect(await anyChannel.json()).toMatchObject({ ok: true, bound: true, session_id: mineSession });
+  });
+
+  test('bind-thread: a private channel the session\'s person is not in is a 403, and no mapping is written', async () => {
+    const res = await post('bind-thread', { session_id: mineSession, channel: G_PRIVATE, thread_ts: '1700000850.000850' });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'SLACK_PRIVATE_CONVERSATION' });
+    expect(await findChatThread({ platform: 'slack', workspaceId: WS, threadId: '1700000850.000850' })).toBeNull();
   });
 
   test("bind-thread: another session's thread keeps its answer; a DM thread binds", async () => {

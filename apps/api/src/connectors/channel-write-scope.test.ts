@@ -15,7 +15,7 @@ import {
   telegramReplyRefusal,
   telegramWriteRefusal,
 } from './channel-write-scope';
-import { SLACK_NOT_LINKED } from './slack-visibility';
+import { SLACK_NOT_LINKED, SLACK_PRIVATE_CONVERSATION, type SlackReadDeps } from './slack-visibility';
 import { channelCatalog } from './channels';
 
 const MINE = 'project-mine';
@@ -31,8 +31,16 @@ function linkOf(state: SlackLinkState) {
   };
 }
 
+/** The linked Slack workspace: G0PRIVATE1 is private and the person is in it, G0EXEC private and they are not. */
+const READS: SlackReadDeps = {
+  link: async () => ({ teamId: 'T0SYNTH01' }),
+  view: async () => ({ privateIds: new Set(['G0PRIVATE1', 'G0EXEC', 'D0WITHSAM']), allowedIds: new Set(['G0PRIVATE1']), hasPerson: true }),
+};
+
 async function write(actionPath: string, args: Record<string, unknown>, state: SlackLinkState = 'linked') {
-  return (await gateChannelWrite({ projectId: MINE, platform: 'slack', actionPath, args }, linkOf(state).linkState)).refusal;
+  return (
+    await gateChannelWrite({ projectId: MINE, userId: 'user-1', platform: 'slack', actionPath, args }, linkOf(state).linkState, READS)
+  ).refusal;
 }
 
 describe('every Slack write is classified', () => {
@@ -53,7 +61,7 @@ describe('every Slack write is classified', () => {
   test('reads and other platforms are left to their own gates', async () => {
     expect(await write('get_history', { channel: 'C0ANY00001' }, 'not_linked')).toBeNull();
     expect(
-      (await gateChannelWrite({ projectId: MINE, platform: 'email', actionPath: 'send_message', args: {} }, linkOf('not_linked').linkState))
+      (await gateChannelWrite({ projectId: MINE, platform: 'email', actionPath: 'send_message', args: {} }, linkOf('not_linked').linkState, READS))
         .refusal,
     ).toBeNull();
   });
@@ -67,6 +75,38 @@ describe('Slack writes follow the link', () => {
     expect(await write('update_message', { channel: 'C0ANY00001', ts: '100.000100', text: 'edit' })).toBeNull();
     expect(await write('add_reaction', { channel: 'C0ANY00001', timestamp: '100.000100', name: 'eyes' })).toBeNull();
     expect(await write('join_channel', { channel: 'C0ANY00001' })).toBeNull();
+  });
+
+  test('private content follows the person: no post, reaction or join in a private channel the person is not in; DMs stay open', async () => {
+    for (const [action, args] of [
+      ['send_message', { channel: 'G0EXEC', text: 'hi' }],
+      ['add_reaction', { channel: 'G0EXEC', timestamp: '100.000100', name: 'eyes' }],
+      ['join_channel', { channel: 'G0EXEC' }],
+    ] as const) {
+      expect((await write(action, args))?.reason).toBe(SLACK_PRIVATE_CONVERSATION);
+    }
+    expect(await write('send_message', { channel: 'G0PRIVATE1', text: 'hi' })).toBeNull();
+    // A DM is to one person: the agent asks a teammate there.
+    expect(await write('send_message', { channel: 'D0WITHSAM', text: 'can you approve?' })).toBeNull();
+    expect(await write('send_message', { channel: 'U0SOMEONE1', text: 'can you approve?' })).toBeNull();
+  });
+
+  test('a session with no person posts only in public channels and DMs', async () => {
+    const noPerson: SlackReadDeps = { ...READS, view: async () => ({ privateIds: new Set(['G0PRIVATE1']), allowedIds: new Set(), hasPerson: false }) };
+    const gate = (channel: string) =>
+      gateChannelWrite({ projectId: MINE, userId: null, platform: 'slack', actionPath: 'send_message', args: { channel, text: 'hi' } }, linkOf('linked').linkState, noPerson);
+    expect((await gate('G0PRIVATE1')).refusal?.reason).toBe(SLACK_PRIVATE_CONVERSATION);
+    expect((await gate('C0PUBLIC01')).refusal).toBeNull();
+  });
+
+  test("when Slack cannot say what is private, a write goes ahead: it is Slack's own call with the same token", async () => {
+    const unknown: SlackReadDeps = { ...READS, view: async () => null };
+    const g = await gateChannelWrite(
+      { projectId: MINE, userId: 'user-1', platform: 'slack', actionPath: 'send_message', args: { channel: 'G0EXEC', text: 'hi' } },
+      linkOf('linked').linkState,
+      unknown,
+    );
+    expect(g.refusal).toBeNull();
   });
 
   test('a Kortix workspace that does not hold the Slack workspace writes nothing', async () => {

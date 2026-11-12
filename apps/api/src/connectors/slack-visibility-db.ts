@@ -38,12 +38,14 @@ export const dbSlackReadDeps: SlackReadDeps = {
     const { loadSlackTokenForProject, slackMemberships, slackPersonForKortixUser } = await channels();
     const token = await loadSlackTokenForProject(projectId);
     if (!token) return null;
-    const bot = await cached(`bot:${teamId}`, () => slackMemberships(token, 'private_channel,mpim,im'));
+    // Keyed by the Kortix workspace whose token answered: two Slack apps in one
+    // Slack workspace see different conversations.
+    const bot = await cached(`bot:${projectId}:${teamId}`, () => slackMemberships(token, 'private_channel,mpim,im'));
     if (!bot) return null;
     const person = userId ? await slackPersonForKortixUser({ teamId, userId, token }).catch(() => null) : null;
     const allowed = new Set<string>(bot.filter((c) => c.isIm && person && c.user === person).map((c) => c.id));
     if (person) {
-      const own = await cached(`person:${teamId}:${person}`, () => slackMemberships(token, 'private_channel,mpim', person));
+      const own = await cached(`person:${projectId}:${teamId}:${person}`, () => slackMemberships(token, 'private_channel,mpim', person));
       if (!own) return null;
       for (const c of own) allowed.add(c.id);
     }

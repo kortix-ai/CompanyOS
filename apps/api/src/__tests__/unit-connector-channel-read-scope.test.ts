@@ -85,7 +85,10 @@ function deps(opts: {
     },
     gateChannelRead: (input) => gateChannelRead(input, undefined, slackFor(linked)),
     ...(opts.writes
-      ? { gateChannelWrite: (input: Parameters<typeof gateChannelWrite>[0]) => gateChannelWrite(input, async () => (linked ? 'linked' : 'not_linked')) }
+      ? {
+          gateChannelWrite: (input: Parameters<typeof gateChannelWrite>[0]) =>
+            gateChannelWrite(input, async () => (linked ? 'linked' : 'not_linked'), slackFor(linked)),
+        }
       : {}),
     bindSlackThread: async (i) => {
       binds.push(`${i.channel}/${i.threadTs}`);

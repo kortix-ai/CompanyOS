@@ -64,6 +64,26 @@ function privateMessage(id: string, view: SlackView): string {
     : `Slack conversation ${id} is private. This session's person has no Slack account here with the same confirmed email, so it reads no private channel or DM. They link one with \`/kortix login\` in Slack.`;
 }
 
+/**
+ * Why a write into conversation `channel` must not go ahead, or null. Refused
+ * only on Slack's positive answer: the conversation is private and the
+ * person is not in it. A DM (`D…`) or a user id is to one person and stays
+ * open. When Slack cannot say, the write goes ahead: it is a Slack call with
+ * the same token, so it cannot land where Slack cannot be asked.
+ */
+export async function slackPrivateWrite(
+  input: { projectId: string; userId: string | null; channel: unknown },
+  deps: SlackReadDeps,
+): Promise<ChannelReadRefusal | null> {
+  const id = normalized(input.channel);
+  if (!id || /^[DUW]/.test(id)) return null;
+  const link = await deps.link(input.projectId);
+  if (!link) return null;
+  const view = await deps.view(input.projectId, link.teamId, input.userId);
+  if (!view || mayRead(view, id)) return null;
+  return refusal(SLACK_PRIVATE_CONVERSATION, privateMessage(id, view)).refusal;
+}
+
 /** May this read reach conversation `id`? */
 function mayRead(view: SlackView, id: string): boolean {
   return !view.privateIds.has(id) || view.allowedIds.has(id);

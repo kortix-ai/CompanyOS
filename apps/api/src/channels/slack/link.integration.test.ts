@@ -90,6 +90,23 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(aChannels).toEqual([]);
   });
 
+  test("a move in one Slack workspace leaves the detached Kortix workspace's install in another Slack workspace", async () => {
+    const x = team('SCOPEX');
+    const y = team('SCOPEY');
+    await shared(a.project_id, y);
+    await moveSlackLink(y, a.project_id);
+    // `a` installed x last, so its Slack secrets are x's.
+    await shared(a.project_id, x);
+    await moveSlackLink(x, a.project_id);
+    await shared(b.project_id, x);
+    await moveSlackLink(x, b.project_id);
+
+    expect(await installsOf(x)).toEqual([b.project_id]);
+    expect(await installsOf(y)).toEqual([a.project_id]);
+    expect(await linkedSlackProject(y)).toBe(a.project_id);
+    expect(await slackProjectLink(a.project_id)).toEqual({ teamId: y });
+  });
+
   test('several installs from before the move heal on first use: the one Slack used stays, the others are detached once', async () => {
     const ws = team('HEAL');
     await db.insert(chatInstalls).values([
@@ -119,7 +136,7 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await slackProjectLink(byo.project_id)).toEqual({ teamId: ws });
   });
 
-  test('a shared-app install that plants a signing secret is not an own app: same token, no link', async () => {
+  test('a shared-app install that plants a signing secret is not an own app: it is detached like any duplicate', async () => {
     const ws = team('FAKE');
     // Two shared-app installs from before the move; `b` writes the secret an
     // own app stores, through the generic secrets path an admin can use.
@@ -136,7 +153,8 @@ describe('one Slack workspace, one Kortix workspace', () => {
       .where(eq(projectSessions.sessionId, used));
 
     expect(await linkedSlackProject(ws)).toBe(a.project_id);
-    expect(await slackProjectLink(b.project_id)).toBeNull();
+    // The planted secret exempts nothing: `b` is detached here like any duplicate.
+    expect(await installsOf(ws)).toEqual([a.project_id]);
     expect(await holdsSlackWorkspace(b.project_id, ws)).toBe(false);
     await db.delete(projectSecrets).where(and(eq(projectSecrets.projectId, b.project_id), eq(projectSecrets.name, 'SLACK_SIGNING_SECRET')));
   });

@@ -57,7 +57,8 @@ import {
   SLACK_TS,
   noInstall,
 } from './channel-read-scope';
-import { SLACK_NOT_LINKED } from './slack-visibility';
+import { SLACK_NOT_LINKED, slackPrivateWrite, type SlackReadDeps } from './slack-visibility';
+import { dbSlackReadDeps } from './slack-visibility-db';
 
 /** Whether this project holds its Slack workspace's link (channels/slack/link.ts). */
 export type SlackLinkState = 'linked' | 'not_linked' | 'no_install';
@@ -282,6 +283,7 @@ export function telegramReplyRefusal(reply: unknown, own: string[] | null): stri
 export async function gateChannelWrite(
   input: Omit<ChannelReadInput, 'risk'>,
   linkState: (projectId: string) => Promise<SlackLinkState> = slackLinkState,
+  slackReads: SlackReadDeps = dbSlackReadDeps,
 ): Promise<ChannelWriteGate> {
   // Every Discord action, read or write: one bot token serves every project (channel-discord-scope.ts).
   if (input.platform === 'discord') {
@@ -305,12 +307,31 @@ export async function gateChannelWrite(
       `The ${input.platform === 'slack' ? 'Slack' : 'Microsoft Teams'} connector does not run write action "${input.actionPath}": it has no rule that keeps it out of other projects' conversations.`,
     );
   }
+  const channel = input.args[target.channel];
   const refusal = await slackWriteRefusal(
     input.projectId,
-    { channel: input.args[target.channel], ts: target.ts ? input.args[target.ts] : undefined, tsArg: target.ts, tsRequired: target.tsRequired },
+    { channel, ts: target.ts ? input.args[target.ts] : undefined, tsArg: target.ts, tsRequired: target.tsRequired },
     linkState,
   );
-  if (!refusal) return PASS;
-  const reason = refusal.kind === 'not_linked' ? SLACK_NOT_LINKED : CONVERSATION_NOT_IN_PROJECT;
-  return { refusal: { reason, message: refusal.message }, misfire: () => null };
+  if (refusal) {
+    const reason = refusal.kind === 'not_linked' ? SLACK_NOT_LINKED : CONVERSATION_NOT_IN_PROJECT;
+    return { refusal: { reason, message: refusal.message }, misfire: () => null };
+  }
+  const privateRefusal = await slackPrivateWriteRefusal(input.projectId, input.userId ?? null, channel, slackReads);
+  return privateRefusal ? { refusal: privateRefusal, misfire: () => null } : PASS;
+}
+
+/**
+ * Private content follows the person for writes too: a post, a file, an
+ * edit, a reaction, a join or a thread bind in a private channel or group DM
+ * needs the person the call is for in it (slack-visibility.ts
+ * `slackPrivateWrite`). Null when the write may go ahead.
+ */
+export function slackPrivateWriteRefusal(
+  projectId: string,
+  userId: string | null,
+  channel: unknown,
+  slackReads: SlackReadDeps = dbSlackReadDeps,
+): Promise<ChannelReadRefusal | null> {
+  return slackPrivateWrite({ projectId, userId, channel }, slackReads);
 }

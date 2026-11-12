@@ -50,14 +50,19 @@ interface SlackOauthInstallInput {
 
 export async function saveSlackInstall(input: SlackInstallInput): Promise<SlackInstallSummary> {
   const { projectId } = input;
+  // The workspace's own Slack app: its own bot and token (slack/link.ts).
   await db
     .insert(chatInstalls)
     .values({
       platform: 'slack',
       platformTeamId: input.teamId,
       projectId,
+      ownApp: true,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [chatInstalls.platform, chatInstalls.platformTeamId, chatInstalls.projectId],
+      set: { ownApp: true },
+    });
   await upsertSecret(projectId, SLACK_BOT_TOKEN, input.botToken);
   await upsertSecret(projectId, SLACK_SIGNING_SECRET, input.signingSecret);
   await upsertSecret(projectId, SLACK_TEAM_ID, input.teamId);
@@ -69,6 +74,11 @@ export async function saveSlackInstall(input: SlackInstallInput): Promise<SlackI
     botUserId: input.botUserId,
     installedAt: new Date().toISOString(),
   };
+}
+
+/** The Kortix workspace's Slack secrets (bot token, team, bot ids), without its install rows. */
+export async function deleteSlackSecrets(projectId: string): Promise<void> {
+  await deleteProjectSecrets(projectId, SLACK_KEYS);
 }
 
 export async function deleteSlackInstall(projectId: string): Promise<void> {
@@ -93,8 +103,12 @@ export async function saveSlackOauthInstall(
       platform: 'slack',
       platformTeamId: input.workspaceId,
       projectId: input.projectId,
+      ownApp: false,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [chatInstalls.platform, chatInstalls.platformTeamId, chatInstalls.projectId],
+      set: { ownApp: false },
+    });
   await upsertSecret(input.projectId, SLACK_BOT_TOKEN, input.botToken);
   await upsertSecret(input.projectId, SLACK_TEAM_ID, input.workspaceId);
   await upsertSecret(input.projectId, SLACK_BOT_USER_ID, input.botUserId);

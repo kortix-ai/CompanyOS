@@ -14,7 +14,7 @@ import { bindSlackThreadToSession } from '../../channels/slack/binding';
 import { downloadSlackFile, uploadSlackFile } from '../../channels/slack/file-proxy';
 import { provenSlackWorkspaces } from '../../channels/slack/inbound';
 import { SLACK_NOT_LINKED } from '../../connectors/slack-visibility';
-import { slackWriteRefusal } from '../../connectors/channel-write-scope';
+import { slackPrivateWriteRefusal, slackWriteRefusal } from '../../connectors/channel-write-scope';
 import { reconcileChannelConnectors } from '../../connectors/sync';
 import { PROJECT_ACTIONS } from '../../iam';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
@@ -363,6 +363,8 @@ export function registerChannelSlackRoutes(): void {
       // No install on record: Slack is not connected, the 404 this route always gave.
       if (refusal?.kind === 'install') return c.json({ error: refusal.message }, 404);
       if (refusal) return c.json({ error: refusal.message, reason: SLACK_NOT_LINKED }, 403);
+      const privateRefusal = await slackPrivateWriteRefusal(projectId, loaded.userId, body.channel);
+      if (privateRefusal) return c.json({ error: privateRefusal.message, reason: privateRefusal.reason }, 403);
       const result = await uploadSlackFile(projectId, {
         channel: String(body.channel ?? ''),
         filename: String(body.filename ?? ''),
@@ -502,6 +504,17 @@ export function registerChannelSlackRoutes(): void {
       if (refusal?.kind === 'invalid') return c.json({ error: refusal.message }, 400);
       if (refusal?.kind === 'not_linked') {
         return c.json({ error: refusal.message, code: 'SLACK_NOT_LINKED', reason: SLACK_NOT_LINKED, channel }, 403);
+      }
+      // A bind routes the thread's replies to this session: a private channel
+      // needs the session's person in it, as a post there does.
+      const [owner] = await db
+        .select({ createdBy: projectSessions.createdBy })
+        .from(projectSessions)
+        .where(and(eq(projectSessions.sessionId, sessionId), eq(projectSessions.projectId, projectId)))
+        .limit(1);
+      const privateRefusal = await slackPrivateWriteRefusal(projectId, owner?.createdBy ?? null, channel);
+      if (privateRefusal) {
+        return c.json({ error: privateRefusal.message, code: 'SLACK_PRIVATE_CONVERSATION', reason: privateRefusal.reason, channel }, 403);
       }
       const binding = await bindSlackThreadToSession({
         projectId,

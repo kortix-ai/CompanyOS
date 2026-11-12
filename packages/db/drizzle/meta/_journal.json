@@ -1688,6 +1688,13 @@
       "when": 1794437683132,
       "tag": "20261111225443_llm_credential_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1794444612837,
+      "tag": "20261112005012_chat_installs_own_app",
+      "breakpoints": true
     }
   ]
 }

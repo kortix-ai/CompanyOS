@@ -1,11 +1,8 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import { chatChannelBindings, chatInstalls, projectSecrets, projectSessions } from '@kortix/db';
+import { chatChannelBindings, chatInstalls, projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { logger } from '../../lib/logger';
 import { projectsView } from '../../workspaces/rows';
-
-/** The secret only a Kortix workspace's own Slack app stores (slack/installs.ts). */
-const SLACK_SIGNING_SECRET = 'SLACK_SIGNING_SECRET';
 
 /**
  * One Slack workspace, one Kortix workspace.
@@ -28,21 +25,11 @@ const SLACK_SIGNING_SECRET = 'SLACK_SIGNING_SECRET';
  *      the linked one (`slackProjectLink`), so a detach that has not run yet
  *      never lets two workspaces read with one token.
  *
- * A Kortix workspace's OWN Slack app (BYO, it stores its own signing secret)
- * has its own bot and token, so it is always linked to its Slack workspace.
- * Membership comes from `chat_installs`, which only the install paths write,
- * never from a secret a workspace admin can overwrite.
+ * A Kortix workspace's OWN Slack app (BYO) has its own bot and token, so it is
+ * always linked to its Slack workspace. Membership and the own-app flag come
+ * from `chat_installs`, which only the install paths write, never from a
+ * secret a workspace admin can write.
  */
-
-/** Does this Kortix workspace run its own Slack app (its own bot and token)? */
-export async function hasOwnSlackApp(projectId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: projectSecrets.secretId })
-    .from(projectSecrets)
-    .where(and(eq(projectSecrets.projectId, projectId), eq(projectSecrets.name, SLACK_SIGNING_SECRET)))
-    .limit(1);
-  return Boolean(row);
-}
 
 /** The active Kortix workspaces on the shared app in this Slack workspace, newest install first. */
 async function sharedInstalls(teamId: string): Promise<string[]> {
@@ -53,16 +40,9 @@ async function sharedInstalls(teamId: string): Promise<string[]> {
       projectsView,
       and(eq(projectsView.projectId, chatInstalls.projectId), eq(projectsView.status, 'active')),
     )
-    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)))
+    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId), eq(chatInstalls.ownApp, false)))
     .orderBy(desc(chatInstalls.connectedAt));
-  const ids = rows.map((r) => r.projectId);
-  if (ids.length === 0) return ids;
-  const own = await db
-    .select({ projectId: projectSecrets.projectId })
-    .from(projectSecrets)
-    .where(and(inArray(projectSecrets.projectId, ids), eq(projectSecrets.name, SLACK_SIGNING_SECRET)));
-  const byo = new Set(own.map((r) => r.projectId));
-  return ids.filter((id) => !byo.has(id));
+  return rows.map((r) => r.projectId);
 }
 
 /**
@@ -93,8 +73,15 @@ async function primaryOf(teamId: string, projectIds: string[]): Promise<string> 
  * disconnect.
  */
 async function detach(teamId: string, projectId: string, reason: string): Promise<void> {
-  const { deleteSlackInstall } = await import('./installs');
-  await deleteSlackInstall(projectId);
+  // This Slack workspace's install only: the Kortix workspace may hold other
+  // Slack workspaces. Its Slack secrets are one set per Kortix workspace; they
+  // go when they are this Slack workspace's (the install written last).
+  await db
+    .delete(chatInstalls)
+    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId), eq(chatInstalls.projectId, projectId)));
+  const { readSecret } = await import('../install-store');
+  const { deleteSlackSecrets } = await import('./installs');
+  if ((await readSecret(projectId, 'SLACK_TEAM_ID')) === teamId) await deleteSlackSecrets(projectId);
   await db
     .delete(chatChannelBindings)
     .where(
@@ -154,25 +141,9 @@ export async function slackProjectLink(projectId: string): Promise<{ teamId: str
     .orderBy(desc(chatInstalls.connectedAt))
     .limit(1);
   if (!row?.teamId) return null;
-  const linked = await linkedSlackProject(row.teamId);
-  if (linked === projectId) return { teamId: row.teamId };
-  return (await ownAppHolds(projectId, linked)) ? { teamId: row.teamId } : null;
+  return (await holdsSlackWorkspace(projectId, row.teamId)) ? { teamId: row.teamId } : null;
 }
 
-/**
- * Does this Kortix workspace's own Slack app hold its Slack workspace beside
- * the shared app's linked install? An own app stores its signing secret, but
- * a workspace admin can write a secret of that name too, so the secret alone
- * proves nothing. An own app also has its own bot token; a shared-app install
- * holds the linked workspace's token. Only a different token counts.
- */
-async function ownAppHolds(projectId: string, linked: string | null): Promise<boolean> {
-  if (!(await hasOwnSlackApp(projectId))) return false;
-  if (!linked) return true;
-  const { readSecret } = await import('../install-store');
-  const [mine, theirs] = await Promise.all([readSecret(projectId, 'SLACK_BOT_TOKEN'), readSecret(linked, 'SLACK_BOT_TOKEN')]);
-  return Boolean(mine) && mine !== theirs;
-}
 
 /**
  * Does this Kortix workspace hold THIS Slack workspace: its own Slack app is
@@ -180,13 +151,12 @@ async function ownAppHolds(projectId: string, linked: string | null): Promise<bo
  */
 export async function holdsSlackWorkspace(projectId: string, teamId: string): Promise<boolean> {
   const [row] = await db
-    .select({ id: chatInstalls.installId })
+    .select({ ownApp: chatInstalls.ownApp })
     .from(chatInstalls)
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.projectId, projectId), eq(chatInstalls.platformTeamId, teamId)))
     .limit(1);
   if (!row) return false;
-  const linked = await linkedSlackProject(teamId);
-  return linked === projectId || (await ownAppHolds(projectId, linked));
+  return row.ownApp || (await linkedSlackProject(teamId)) === projectId;
 }
 
 // Records the channel for its settings (the agent and model new threads there

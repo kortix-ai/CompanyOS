@@ -5,7 +5,7 @@
  */
 import { afterEach, expect, test } from 'bun:test';
 import React from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { type ReactTestRenderer, act, create } from 'react-test-renderer';
 
 const { useDebouncedValue } = await import('./use-debounced-value');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -43,7 +43,8 @@ test('the value lags by delayMs, a change inside the window restarts the timer, 
     act(() => {
       tree = create(<Field value="a" delayMs={250} />);
     });
-    const text = () => tree!.root.findByType('value').props.text as string;
+    const text = () =>
+      tree!.root.findAll((n) => String(n.type) === 'value')[0]!.props.text as string;
     expect(text()).toBe('a');
     const [firstId, first] = pending();
     expect(first.delayMs).toBe(250);

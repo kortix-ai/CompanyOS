@@ -49,11 +49,14 @@ async function accountRequiresMfa(accountId: string): Promise<boolean> {
   }
 }
 
-/** The confirmed Kortix user with this email, or null (none, or more than one). */
+/** The confirmed, live Kortix user with this email, or null (none, banned, deleted, or more than one). */
 async function kortixUserByEmail(email: string): Promise<string | null> {
   try {
     const rows = (await db.execute(
-      sql`SELECT id::text AS id FROM auth.users WHERE lower(email) = ${email} AND email_confirmed_at IS NOT NULL LIMIT 2`,
+      sql`SELECT id::text AS id FROM auth.users
+          WHERE lower(email) = ${email} AND email_confirmed_at IS NOT NULL
+            AND deleted_at IS NULL AND (banned_until IS NULL OR banned_until <= now())
+          LIMIT 2`,
     )) as unknown as Array<{ id: string }>;
     return rows.length === 1 ? rows[0]!.id : null;
   } catch {

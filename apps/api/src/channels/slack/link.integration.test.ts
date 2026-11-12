@@ -324,6 +324,21 @@ describe('Slack people are linked by confirmed email', () => {
     expect(await lookupChatIdentity(chatUser('slack', ws, 'U0OUT'))).toBeNull();
   });
 
+  test('a banned Kortix user is never linked by email', async () => {
+    const ws = team('BANNED');
+    await shared(a.project_id, ws);
+    await moveSlackLink(ws, a.project_id);
+    await db.execute(sql`UPDATE auth.users SET banned_until = now() + interval '1 day' WHERE id = ${MEMBER}::uuid`);
+    try {
+      slack({ U0BANNED: { email: memberEmail, confirmed: true } });
+      expect(await linkSlackPersonByEmail(chatUser('slack', ws, 'U0BANNED'), a.project_id)).toBe(false);
+      expect(await lookupChatIdentity(chatUser('slack', ws, 'U0BANNED'))).toBeNull();
+      expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic', projectId: a.project_id })).toBeNull();
+    } finally {
+      await db.execute(sql`UPDATE auth.users SET banned_until = NULL WHERE id = ${MEMBER}::uuid`);
+    }
+  });
+
   test('an account that requires MFA links nobody by email: such people keep /kortix login', async () => {
     const ws = team('MFA');
     await shared(a.project_id, ws);

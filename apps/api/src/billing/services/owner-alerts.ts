@@ -4,7 +4,7 @@
  * accept a plan. One helper for every billing alert: auto top-up turned off,
  * a member asking for credits, a trial or contract about to end.
  */
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { lookupEmailsByUserIds } from '../../accounts/core/owner-emails';
 import { config } from '../../config';
 import { accountRoleMap } from '../../iam/read-models';
@@ -40,11 +40,9 @@ export async function emailBillingManagers(
   accountId: string,
   compose: (accountName: string) => Omit<EmailMessage, 'to'>,
 ): Promise<number> {
-  let managers = [...(await accountRoleMap(accountId))]
+  const managers = [...(await accountRoleMap(accountId))]
     .filter(([, role]) => role === 'owner' || role === 'admin')
     .map(([userId]) => userId);
-  // A Suna-era account still billed has its owner only in basejump.account_user.
-  if (managers.length === 0) managers = await legacyOwners(accountId);
   if (managers.length === 0) return 0;
   const [emails, [account]] = await Promise.all([
     lookupEmailsByUserIds(managers),
@@ -55,12 +53,4 @@ export async function emailBillingManagers(
   const message = compose(account?.name?.trim() || 'your Kortix account');
   await Promise.all(recipients.map((to) => send({ ...message, to: [to] })));
   return recipients.length;
-}
-
-async function legacyOwners(accountId: string): Promise<string[]> {
-  const rows = (await db.execute(sql`
-    SELECT user_id::text AS user_id FROM basejump.account_user
-     WHERE account_id = ${accountId}::uuid AND account_role = 'owner'
-  `)) as unknown as Array<{ user_id: string }>;
-  return rows.map((row) => row.user_id);
 }

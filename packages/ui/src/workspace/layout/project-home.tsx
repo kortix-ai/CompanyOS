@@ -496,7 +496,7 @@ function ProjectHomeView({
           branch={projectRowQuery.data?.default_branch}
         />
       ) : firstChat ? (
-        <FirstChat composer={composer} />
+        <FirstChat projectId={projectId} composer={composer} />
       ) : (
         <ProjectHomeWelcomeBody
           projectId={projectId}

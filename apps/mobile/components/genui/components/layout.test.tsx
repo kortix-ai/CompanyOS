@@ -7,10 +7,13 @@
  */
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
 import React from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { type ReactTestInstance, type ReactTestRenderer, act, create } from 'react-test-renderer';
 
 type HostProps = React.PropsWithChildren<Record<string, unknown>>;
-const host = (name: string) => ({ children, ...props }: HostProps) => React.createElement(name, props, children);
+const host =
+  (name: string) =>
+  ({ children, ...props }: HostProps) =>
+    React.createElement(name, props, children);
 
 mock.module('react-native', () => ({
   View: host('view'),
@@ -26,7 +29,9 @@ mock.module('react-i18next', () => ({
     t: (_key: string, options: string | Record<string, unknown>) =>
       typeof options === 'string'
         ? options
-        : String(options.defaultValue).replace(/{{(\w+)}}/g, (_m, name: string) => String(options[name])),
+        : String(options.defaultValue).replace(/{{(\w+)}}/g, (_m, name: string) =>
+            String(options[name]),
+          ),
   }),
 }));
 mock.module('@/components/ui/icon', () => ({ Icon: host('icon') }));
@@ -61,7 +66,13 @@ afterEach(() => {
 
 const image = (id: string, src: string): import('@kortix/sdk/genui').GenuiNode =>
   ({ type: 'Image', id, props: { src, alt: id } }) as never;
-const two = () => [image('a', 'https://example.com/a.png'), image('b', 'https://example.com/b.png')];
+const two = () => [
+  image('a', 'https://example.com/a.png'),
+  image('b', 'https://example.com/b.png'),
+];
+/** The Stack node itself, the one `GenuiStack` receives. */
+const stack = (): import('@kortix/sdk/genui').GenuiNode =>
+  ({ type: 'Stack', id: 's', props: { children: two() } }) as never;
 
 const render = (element: React.ReactElement) => {
   act(() => {
@@ -69,12 +80,20 @@ const render = (element: React.ReactElement) => {
   });
   return tree!.root;
 };
-const all = (root: ReactTestInstance, type: string) => root.findAll((n) => n.type === (type as never));
+const all = (root: ReactTestInstance, type: string) =>
+  root.findAll((n) => n.type === (type as never));
 const texts = (root: ReactTestInstance) => all(root, 'text').flatMap((n) => n.children);
 
 describe('the genui image gallery', () => {
   test('one page per image, the counter follows a swipe, the label names the count', () => {
-    const root = render(<GenuiStack props={{ children: two() }} renderChild={(node) => React.createElement('genui-image', { key: node.id, node })} />);
+    const root = render(
+      <GenuiStack
+        node={stack()}
+        props={{ children: two() }}
+        streaming={false}
+        renderChild={(node) => React.createElement('genui-image', { key: node.id, node })}
+      />,
+    );
     // The pager's accessibility label is the translated "{{count}} images".
     const outer = all(root, 'view').find((n) => n.props.accessibilityLabel === '2 images')!;
     expect(outer).toBeDefined();
@@ -89,7 +108,14 @@ describe('the genui image gallery', () => {
   });
 
   test('before the layout the pager is one 280pt page-height view', () => {
-    const root = render(<GenuiStack props={{ children: two() }} renderChild={(node) => React.createElement('genui-image', { key: node.id, node })} />);
+    const root = render(
+      <GenuiStack
+        node={stack()}
+        props={{ children: two() }}
+        streaming={false}
+        renderChild={(node) => React.createElement('genui-image', { key: node.id, node })}
+      />,
+    );
     expect(all(root, 'view').filter((n) => n.props.style?.height === 280)).toHaveLength(1);
   });
 });

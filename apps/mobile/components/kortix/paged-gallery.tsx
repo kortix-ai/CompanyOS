@@ -44,7 +44,7 @@ export function PagedGallery({
     [width],
   );
   return (
-    <View onLayout={onLayout} style={{ width: '100%' }} accessibilityLabel={accessibilityLabel}>
+    <View onLayout={onLayout} accessibilityLabel={accessibilityLabel}>
       {width > 0 ? (
         <ScrollView
           horizontal

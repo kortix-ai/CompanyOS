@@ -8,7 +8,7 @@ import { useTranslations } from '../../i18n';
 import { MODEL_SELECTOR_PROVIDER_IDS, ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../lib/utils';
 import { SolidCheckIcon } from '../../internal/icons/solid-check-icon';
-import { foreignDialogOpen } from '../../lib/z-stack';
+import { foreignDialogOpen, openDialogs } from '../../lib/z-stack';
 import { Button } from '../../primitives/button';
 import { CommandGroup, CommandInput, CommandItem, CommandList } from '../../primitives/command';
 import Hint from '../../primitives/hint';
@@ -150,8 +150,12 @@ export function ModelPickerPanel({
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!onForeignDialog) return;
+    // A dialog already open when the picker opens is its host (the trigger
+    // composer, a settings modal), not one that opened over it. Counting it
+    // closed the picker ~60 ms after every open inside a modal.
+    const host = new Set<Element>(openDialogs());
     const check = () => {
-      if (foreignDialogOpen(rootRef.current)) onForeignDialog();
+      if (foreignDialogOpen(rootRef.current, host)) onForeignDialog();
     };
     const observer = new MutationObserver(check);
     observer.observe(document.body, {

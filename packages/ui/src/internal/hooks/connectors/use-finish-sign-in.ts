@@ -1,7 +1,8 @@
 'use client';
 
 import { connectionSignInSteps, type Connection } from '@kortix/sdk';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { invalidateConnections } from '../../../customize/connectors/invalidate-connections';
 import { useTranslations } from '../../../i18n';
 
 import { errorToast, successToast } from '../../../primitives/toast';
@@ -17,6 +18,7 @@ import { runConnectLinkFlow } from './use-connect-link';
  */
 export function useFinishSignIn(projectId: string, slug: string, onConnected: () => void) {
   const t = useTranslations('connectSignIn');
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (account: Pick<Connection, 'connection_id' | 'owner_type'>) => {
       const steps = connectionSignInSteps(projectId, slug, account);
@@ -27,5 +29,8 @@ export function useFinishSignIn(projectId: string, slug: string, onConnected: ()
       onConnected();
     },
     onError: (error: Error) => errorToast(error.message),
+    // Settled either way: a window closed before the provider answered still
+    // left the account row, and every list must show it without a reload.
+    onSettled: () => invalidateConnections(queryClient, projectId),
   });
 }

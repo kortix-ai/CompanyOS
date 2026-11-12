@@ -236,7 +236,7 @@ export const WORKSPACE_BINDINGS: readonly WorkspaceBindingRule[] = [
 
   // ── platform and machine surfaces ──────────────────────────────────────
   ...[
-    '/v1/admin', '/v1/connectors', '/v1/docs', '/v1/edge', '/v1/generation', '/v1/git',
+    '/v1/admin', '/v1/agent-marks', '/v1/connectors', '/v1/docs', '/v1/edge', '/v1/generation', '/v1/git',
     '/v1/health', '/v1/llm', '/v1/llm-gateway', '/v1/marketplace', '/v1/openapi.json', '/v1/ops',
     '/v1/platform', '/v1/prewarm', '/v1/public', '/v1/router', '/v1/runtime-assets', '/v1/system',
     '/v1/user-roles', '/v1/webhooks',

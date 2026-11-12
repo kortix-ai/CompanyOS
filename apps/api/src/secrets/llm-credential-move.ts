@@ -63,6 +63,8 @@ export type LlmCredentialMoveOutcome =
   | 'skipped_audience'
   /** A personal override whose owner left the account, or a row with no creator. */
   | 'skipped_no_owner'
+  /** The project has no account: no reader can reach the row. */
+  | 'skipped_no_account'
   | 'failed_undecryptable';
 
 import { BEDROCK_PROVIDER_ID, BEDROCK_REGION_NAME, WORKSPACE_KEY_LABEL } from './llm-credential-names';
@@ -170,7 +172,7 @@ async function sameValueAccount(tx: Tx, accountId: string, projectId: string, ta
   return null;
 }
 
-async function record(tx: Tx, row: LegacyRow, accountId: string, outcome: LlmCredentialMoveOutcome, accountSecretId: string | null, detail?: string) {
+async function record(tx: Tx, row: LegacyRow, accountId: string | null, outcome: LlmCredentialMoveOutcome, accountSecretId: string | null, detail?: string) {
   // `unchanged` and `recopied` keep the row's moved outcome.
   const stored = outcome === 'recopied' ? 'copied' : outcome;
   const values = {
@@ -200,7 +202,11 @@ async function planAndApply(tx: Tx, row: LegacyRow, apply: boolean): Promise<Llm
   const done = (outcome: LlmCredentialMoveOutcome, accountSecretId?: string, detail?: string): LlmCredentialMoveResult =>
     ({ ...base, outcome, ...(accountSecretId ? { accountSecretId } : {}), ...(detail ? { detail } : {}) });
   const facts = await projectFacts(tx, row.projectId);
-  if (!facts) return done('skipped_no_owner', undefined, 'project has no account');
+  if (!facts) {
+    // Recorded, so the purge's "every row has a ledger row" gate holds.
+    if (apply) await record(tx, row, null, 'skipped_no_account', null, 'project has no account');
+    return done('skipped_no_account', undefined, 'project has no account');
+  }
   const { accountId } = facts;
 
   const [ledger] = await tx.select().from(llmCredentialBackfill).where(eq(llmCredentialBackfill.legacySecretId, row.secretId)).limit(1);
@@ -366,7 +372,9 @@ export async function writeWorkspaceProviderKey(input: {
     if (existing) {
       await tx.update(accountSecretResources).set({
         valueEnc: encryptAccountSecret(input.accountId, input.value), active: true,
-        cooldownUntil: null, cooldownProbeAt: null, needsReauthAt: null, updatedAt: new Date(),
+        cooldownUntil: null, cooldownProbeAt: null, needsReauthAt: null,
+        // A new value: the last check was of the old one.
+        verifyStatus: null, verifiedAt: null, verifyMessage: null, updatedAt: new Date(),
       }).where(eq(accountSecretResources.secretId, existing.secretId));
       secretId = existing.secretId;
     } else {
@@ -428,4 +436,5 @@ export async function moveLegacyProviderKeysNamed(projectId: string, name: strin
   }
   return results;
 }
+
 

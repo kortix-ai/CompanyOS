@@ -9,6 +9,7 @@
  * Pure data and pure functions only: `bun test` cannot load native modules.
  */
 import { sessionParentId } from '@kortix/sdk';
+import { classifySessionStarter } from '@kortix/shared/session/session-starter';
 
 import type { ProjectSession } from '@/lib/projects/projects-client';
 
@@ -153,26 +154,26 @@ const CHANNEL_ICONS: Record<string, StarterIcon> = {
 };
 
 /**
- * Who started the run, from `initiator`. `null` initiator counts as a member
- * (the backfill could not classify it). "You" only when the member is the
- * viewer; an unnamed member of another account shows "Member".
+ * Who started the run, from `initiator`. The classification is shared
+ * (`@kortix/shared/session/session-starter`); this host keeps its icon table
+ * and wording. `null` initiator counts as a member (the backfill could not
+ * classify it). "You" only when the member is the viewer; an unnamed member
+ * of another account shows "Member".
  */
 export function sessionStarter(session: ProjectSession, viewerId: string | null | undefined): SessionStarter {
-  const initiator = session.initiator ?? null;
-  if (!initiator || initiator.type === 'member') {
-    const id = initiator ? initiator.id : (session.created_by ?? null);
-    if (viewerId && id === viewerId) return { type: 'member', label: 'You', icon: null };
-    return { type: 'member', label: initiator?.label?.trim() || 'Member', icon: null };
+  const core = classifySessionStarter(session, viewerId);
+  if (core.type === 'member') {
+    return { type: 'member', label: core.isViewer ? 'You' : core.label?.trim() || 'Member', icon: null };
   }
-  const label = initiator.label?.trim() || initiator.id || 'Kortix';
-  switch (initiator.type) {
+  const label = core.label?.trim() || core.id || 'Kortix';
+  switch (core.type) {
     case 'trigger': {
       const source = typeof session.metadata?.source === 'string' ? session.metadata.source : '';
       const icon: StarterIcon = source.includes('cron') ? 'clock' : source.includes('webhook') ? 'webhook' : 'lightning';
       return { type: 'trigger', label, icon };
     }
     case 'channel':
-      return { type: 'channel', label, icon: CHANNEL_ICONS[initiator.id ?? ''] ?? 'chat' };
+      return { type: 'channel', label, icon: CHANNEL_ICONS[core.id ?? ''] ?? 'chat' };
     case 'api':
       return { type: 'api', label, icon: 'key' };
     default:

@@ -413,6 +413,10 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
       label: string;
       owner_type: string;
       is_default: boolean;
+      /** `connected`: a call can run as it. `sign_in_not_finished`: its sign-in
+       *  started and did not finish; finish it, do not add another account.
+       *  Absent: `connected`. */
+      status?: 'connected' | 'sign_in_not_finished';
       /** Who the account was authorized as. `null` when unknown. */
       connected_as?: string | null;
       /** When the upstream first answered 401 to this account's stored

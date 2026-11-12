@@ -4510,6 +4510,19 @@ Later versions do not convert the v1 store. Their `kortix-migrate` step refuses 
 
 A new install updates without these steps.
 
+#### Upgrading: provider keys move to Models → Providers
+<a id="legacy-credential-backfill" />
+
+Older versions kept LLM provider keys (API keys, ChatGPT and OpenCode logins, the Bedrock region, custom provider keys) as project secrets. They now live in **Models → Providers**. From version `0.15.9`, the leader API container moves the old keys there by itself: once a few seconds after it starts, then once a day. It moves each key once, deletes nothing and never logs a value. When a pass ends, `kortix self-host logs kortix-api` shows a line that contains:
+
+```text
+[legacy-credential-backfill] done
+```
+
+The line lists how many keys it moved (`copied`), found moved before (`unchanged`) or left in place (`skipped_*`). The same pass also moves connector secrets stored in an old format and revokes connections of a retired owner type.
+
+A later version stops reading the old project-secret keys. Run `0.15.9` or later until that line appears before you move past it, or a provider key that never moved stops working. `LEGACY_CREDENTIAL_BACKFILL_MODE` controls the pass: `apply` (the self-host default), `dry_run` (log what it would move, change nothing) or `off`. Set it with `kortix self-host env set LEGACY_CREDENTIAL_BACKFILL_MODE=dry_run`.
+
 ### Operate and tune
 
 #### Settings and secrets
@@ -8499,7 +8512,7 @@ Arguments, `HeadlessAuthError` codes and limits are in [Sign users in headlessly
 | `invites(accountId)` · `cancelInvite(accountId, inviteId)` · `resendInvite(accountId, inviteId)` | Pending invites. |
 | `tokens.list(accountId?, { mine? })` · `tokens.create({ accountId?, name, expiresAt?, projectId? })` · `tokens.revoke(tokenId, accountId?)` | Personal access keys (`kortix_pat_…`). `mine: true` lists only the caller's keys. `projectId` binds the key to one workspace. |
 | `connectedApps.list()` · `connectedApps.revoke(…)` | OAuth and MCP clients the person approved, across all accounts. Route `/oauth/grants`. |
-| `secretResources.list` · `.create` · `.rotate` · `.retry` · `.remove` · `.grant` · `.revoke` · `.setAccess` | Workspace-level provider secrets and the workspaces that may use them. |
+| `secretResources.list` · `.create` · `.rotate` · `.retry` · `.verify` · `.remove` · `.grant` · `.revoke` · `.setAccess` | Workspace-level provider secrets and the workspaces that may use them. `create` and `rotate` check a provider API key against its provider with one cheap call; `verify` checks it again. Each row carries `verification` (`verified`, `invalid` or `unknown`, with the provider's message). |
 | `subscriptions.list(accountId, projectId)` · `.usage(accountId, secretId, projectId, storage)` | Read subscription usage for named accounts and existing ChatGPT logins. `storage` identifies `account_resource` or `project`; credentials stay in their original store. |
 | `branding.get(accountId)` · `.update(accountId, { app_name })` · `.uploadAsset(accountId, kind, file)` · `.removeAsset(accountId, kind)` · `.reset(accountId)` | Organization branding. `kind`: `logo`, `icon`, `favicon`, `logo_dark`, `icon_dark`, `favicon_dark`. |
 | `audit.log(accountId, filters?)` · `audit.export(accountId, { format: 'csv' \| 'jsonl', …filters })` | The audit log, filtered by workspace, session, actor, source, outcome, request, resource, action or time · the same events as a file. |

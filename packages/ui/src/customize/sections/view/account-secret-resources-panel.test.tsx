@@ -43,7 +43,10 @@ for (const key of ['Event', 'CustomEvent', 'FocusEvent', 'KeyboardEvent', 'Mouse
 const { createRoot } = await import('react-dom/client');
 
 const ME = 'user-1';
-type Row = { secret_id: string; label: string; status?: 'ok' | 'undecryptable'; created_by?: string };
+type Row = {
+  secret_id: string; label: string; status?: 'ok' | 'undecryptable'; created_by?: string;
+  verification?: { status: 'verified' | 'invalid' | 'unknown'; message: string; checked_at: string } | null;
+};
 let rows: Row[] = [];
 const rotations: Array<[string, string, string]> = [];
 const creates: Array<[string, Record<string, unknown>]> = [];
@@ -250,5 +253,23 @@ describe('a ChatGPT login Kortix cannot decrypt', () => {
     expect(login?.textContent).toContain('Undecryptable');
     expect(buttonsIn(login!)).toContain('Reconnect');
     expect(buttonsIn(login!)).not.toContain('Re-enter key');
+  });
+});
+
+describe('a provider key checked against its provider', () => {
+  const checkedAt = '2026-11-11T12:00:00.000Z';
+  test('each row says whether the provider accepted, refused or could not check the key', () => {
+    rows = [
+      { secret_id: 'good', label: 'Good', verification: { status: 'verified', message: 'The provider accepted the key.', checked_at: checkedAt } },
+      { secret_id: 'bad', label: 'Bad', verification: { status: 'invalid', message: 'invalid x-api-key', checked_at: checkedAt } },
+      { secret_id: 'maybe', label: 'Maybe', verification: { status: 'unknown', message: 'Verification timed out', checked_at: checkedAt } },
+      { secret_id: 'never', label: 'Never', verification: null },
+    ];
+    mount();
+    const [good, bad, maybe, never] = listItems();
+    expect(good?.textContent).toContain('Verified: Anthropic accepted this key');
+    expect(bad?.textContent).toContain('Anthropic refused this key: invalid x-api-key');
+    expect(maybe?.textContent).toContain('Not verified: Verification timed out');
+    expect(never?.textContent).not.toMatch(/Verified|refused|Not verified/);
   });
 });

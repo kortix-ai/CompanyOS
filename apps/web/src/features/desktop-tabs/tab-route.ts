@@ -48,6 +48,8 @@ const PAGES = new Set([
   'reminders',
 ]);
 
+const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i;
+
 function decode(segment: string): string {
   try {
     return decodeURIComponent(segment);
@@ -61,6 +63,11 @@ function projectSegments(path: string, projectId: string): string[] | null {
   // An app path only: `/workspaces/...`, never `//host` or `https://host`.
   if (!path.startsWith('/') || path.startsWith('//')) return null;
   const pathname = path.split(/[?#]/)[0] ?? '';
+  // A path the browser would resolve somewhere else than the segments read
+  // below: a backslash (a separator to the URL parser) or a dot segment,
+  // plain or encoded (`..`, `%2e%2e`). Raw spaces and Unicode stay valid.
+  if (pathname.includes('\\')) return null;
+  if (pathname.split('/').some((segment) => DOT_SEGMENT.test(segment))) return null;
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] !== 'workspaces' && parts[0] !== 'projects') return null;
   if (parts[1] !== projectId) return null;

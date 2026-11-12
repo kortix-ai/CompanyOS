@@ -228,7 +228,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
       // tab's page back.
       handoff.current = null;
       inFlight.current = null;
-      if (late.fromId) {
+      if (late.fromId && tabRoute(pathname, projectId)) {
         update(projectId, (s) => ({
           ...s,
           tabs: s.tabs.map((tab) => (tab.id === late.fromId ? { ...tab, path: pathname } : tab)),

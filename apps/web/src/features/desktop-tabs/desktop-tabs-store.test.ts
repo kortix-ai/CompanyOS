@@ -181,6 +181,21 @@ describe('tabRoute', () => {
     expect(tabRoute(`https://evil.example/workspaces/${P}`, P)).toBeNull();
     expect(tabRoute(`//evil.example/workspaces/${P}`, P)).toBeNull();
     expect(tabRoute(`javascript:alert(1)//workspaces/${P}`, P)).toBeNull();
+    // Resolves elsewhere than it reads: a backslash, an encoded dot segment.
+    expect(tabRoute(`/workspaces/${P}/sessions\\..\\..\\other`, P)).toBeNull();
+    expect(tabRoute(`/workspaces/${P}/%2e%2e/other/sessions/s1`, P)).toBeNull();
+    expect(tabRoute(`/workspaces/${P}/sessions/../../other/sessions/s1`, P)).toBeNull();
+  });
+
+  test('keeps paths with spaces and Unicode', () => {
+    expect(tabRoute(`/workspaces/${P}/admin/agents/sales bot`, P)).toEqual({
+      kind: 'agent',
+      name: 'sales bot',
+    });
+    expect(tabRoute(`/workspaces/${P}/spaces/équipe`, P)).toEqual({
+      kind: 'space',
+      slug: 'équipe',
+    });
   });
 
   test('ignores paths outside the project', () => {

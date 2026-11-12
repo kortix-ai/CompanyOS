@@ -30,8 +30,11 @@ export interface DeliveryTally {
   /** No subscription row references the delivery's external id. */
   ignored: number;
   failed: number;
-  /** An account-state refusal (billing gate, KRTX-1505): no retry can fix it, the
-   *  owner can. The first one's error and code; the ingress answers 402 for it. */
+  /** How many of `failed` were account-state refusals (billing gate, KRTX-1505):
+   *  no retry can fix one, the owner can. The ingress answers 402 only when every
+   *  failure was one — a mixed batch keeps the 500-retry contract. */
+  refused: number;
+  /** The first refusal's error and code, for the ingress's 402. */
   accountState?: { error: string; code: string };
 }
 
@@ -229,7 +232,7 @@ async function deliverToRow(
 }
 
 export async function deliverEvents(provider: string, deliveries: readonly EventDelivery[]): Promise<DeliveryTally> {
-  const tally: DeliveryTally = { fired: 0, skipped: 0, ignored: 0, failed: 0 };
+  const tally: DeliveryTally = { fired: 0, skipped: 0, ignored: 0, failed: 0, refused: 0 };
   for (const delivery of deliveries) {
     // Zero rows: an instance of another environment sharing the provider project. Never unsubscribe it.
     const rows = await store.rowsByExternalId(provider, delivery.externalId);
@@ -240,6 +243,7 @@ export async function deliverEvents(provider: string, deliveries: readonly Event
         tally[outcome] += 1;
       } else {
         tally.failed += 1;
+        tally.refused += 1;
         if (!tally.accountState) tally.accountState = { error: outcome.error, code: outcome.code };
       }
     }

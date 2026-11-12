@@ -41,6 +41,7 @@ const {
   markCredentialFenceDenial,
   markDeadCredential,
   markAgentGrantDenial,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
 } = await import('./dead-credential-log');
 const { logWindowDecision, logWindowWarnDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
@@ -540,5 +541,90 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     markCredentialFenceDenial(marked);
     expect(isCredentialFenceDenial(marked)).toBe(true);
     expect(isCredentialFenceDenial(plain)).toBe(false);
+  });
+});
+
+describe('preview sandbox denial warn is throttled at the error handler (KRTX-4768)', () => {
+  // What combinedAuth throws when a valid caller is refused a sandbox proxy
+  // route: the sandbox row is gone (the session stop deleted it) or the
+  // caller lost access. The web client's workflow poll keeps hitting the
+  // dead box's route every 5 s while its tab stays open, and per-request
+  // logging turned that poll into a warn storm (89 lines in one hour
+  // against a 1.58/h baseline, one tab on one dead box).
+  function appWithPreviewSandboxDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', () => {
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
+    });
+    return app;
+  }
+
+  test('the first refusal logs one info line; repeats inside the window are suppressed and the body is untouched', async () => {
+    resetLogWindowsForTests();
+    const app = appWithPreviewSandboxDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/p/sbx_01M768H27CG7KMXCPE764BX4KC/8000/kortix/runtime/workflows');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toEqual({
+      error: true,
+      message: PREVIEW_SANDBOX_DENIED_MESSAGE,
+      status: 403,
+    });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.message).toContain(`-> 403 [HTTPException] ${PREVIEW_SANDBOX_DENIED_MESSAGE}`);
+    expect(infos[0]?.context?.suppressed).toBe(0);
+  });
+
+  test('distinct sandbox paths and the route-level suffixed variant share one window', async () => {
+    // The bucket key must normalize the sandbox id out of the path, or every
+    // polled box opens its own bucket and the throttle stops bounding the
+    // warn lines across a fleet (the UUID treatment of KRTX-1564).
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', (c) => {
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
+    });
+    app.get('/v1/p/:sandboxId/:port/kortix/session/state', (c) => {
+      // What assertPreviewSandboxAccess throws at the proxy route.
+      throw new HTTPException(403, {
+        message: `${PREVIEW_SANDBOX_DENIED_MESSAGE}, userId: ${crypto.randomUUID()}, sandboxId: ${c.req.param('sandboxId')}`,
+      });
+    });
+    const before = logged.length;
+    for (const id of ['sbx_01M768H27CG7KMXCPE764BX4KC', 'sbx_01M764P1WMZFH1ANREWF3ZGT90']) {
+      const res = await app.request(`/v1/p/${id}/8000/kortix/runtime/workflows`);
+      expect(res.status).toBe(403);
+    }
+    const res = await app.request('/v1/p/sbx_01M75P8WFTDNS1RP08M2RHV6Z4/8000/kortix/session/state');
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    // Two sandbox paths on one route share one window; the suffixed variant
+    // lives on its own route and gets its own window — one line per route.
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(2);
+  });
+
+  test('a 403 with a different reason still logs one warn per refusal', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', () => {
+      throw new HTTPException(403, { message: 'This sandbox is suspended' });
+    });
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) {
+      const res = await app.request('/v1/p/sbx_01M768H27CG7KMXCPE764BX4KC/8000/kortix/runtime/workflows');
+      expect(res.status).toBe(403);
+    }
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
   });
 });

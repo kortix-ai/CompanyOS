@@ -105,9 +105,20 @@ export function planLocalAuditV2LedgerRepair(
 /**
  * The one catalog signature read: each section is a data row (its query and
  * its expected name list) run through the same query-then-`name`-map.
+ *
+ * `params` is the bind-value array pg receives: each row wraps its name list
+ * as ONE text[] parameter, because the SQL takes a single `$1::text[]`. A
+ * flat list throws `08P01 bind message supplies N parameters, but prepared
+ * statement "" requires 1` (the base call sites wrapped each list the same
+ * way). `local-audit-v2-ledger-repair.test.ts` pins the wrapped shape.
  */
-const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
+const SIGNATURE_QUERIES: Array<{
+  section: keyof AuditV2Signature;
+  sql: string;
+  params: string[][];
+}> = [
   {
+    section: 'tables',
     sql: `
       select relname as name
         from pg_class c
@@ -117,9 +128,10 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and relname = any($1::text[])
        order by relname
     `,
-    params: ['audit_session_sequences', 'audit_webhook_deliveries'],
+    params: [['audit_session_sequences', 'audit_webhook_deliveries']],
   },
   {
+    section: 'auditColumns',
     sql: `
       select column_name as name
         from information_schema.columns
@@ -128,9 +140,10 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and column_name = any($1::text[])
        order by column_name
     `,
-    params: AUDIT_EVENT_COLUMNS,
+    params: [AUDIT_EVENT_COLUMNS],
   },
   {
+    section: 'tunnelColumns',
     sql: `
       select column_name as name
         from information_schema.columns
@@ -139,9 +152,10 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and column_name = any($1::text[])
        order by column_name
     `,
-    params: TUNNEL_COLUMNS,
+    params: [TUNNEL_COLUMNS],
   },
   {
+    section: 'functions',
     sql: `
       select proname as name
         from pg_proc p
@@ -150,9 +164,10 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and proname = any($1::text[])
        order by proname
     `,
-    params: FUNCTIONS,
+    params: [FUNCTIONS],
   },
   {
+    section: 'triggers',
     sql: `
       select tgname as name
         from pg_trigger
@@ -160,9 +175,10 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and tgname = any($1::text[])
        order by tgname
     `,
-    params: TRIGGERS,
+    params: [TRIGGERS],
   },
   {
+    section: 'indexes',
     sql: `
       select indexname as name
         from pg_indexes
@@ -170,24 +186,32 @@ const SIGNATURE_QUERIES: Array<{ sql: string; params: readonly string[] }> = [
          and indexname = any($1::text[])
        order by indexname
     `,
-    params: INDEXES,
+    params: [INDEXES],
   },
 ];
 
 /** One query-then-map: the `name` column of every row, in query order. */
-async function namesOf(client: pg.Client, sql: string, params: readonly string[]): Promise<string[]> {
+async function namesOf(client: pg.Client, sql: string, params: string[][]): Promise<string[]> {
   const result = await client.query<{ name: string }>(sql, params);
   return result.rows.map((row) => row.name);
 }
 
-async function readSignature(client: pg.Client): Promise<AuditV2Signature> {
-  // The six reads are independent catalog lookups; Promise.all preserves the
-  // section order of SIGNATURE_QUERIES, and the pg client runs them in that
-  // order on its one connection.
-  const [tables, auditColumns, tunnelColumns, functions, triggers, indexes] = await Promise.all(
-    SIGNATURE_QUERIES.map(({ sql, params }) => namesOf(client, sql, params)),
-  );
-  return { tables, auditColumns, tunnelColumns, functions, triggers, indexes };
+export async function readSignature(client: pg.Client): Promise<AuditV2Signature> {
+  // One read at a time, in SIGNATURE_QUERIES order: the client is a single
+  // pg connection, and Promise.all over it is pg's "client is already
+  // executing a query" deprecation (removed in pg@9).
+  const signature: AuditV2Signature = {
+    tables: [],
+    auditColumns: [],
+    tunnelColumns: [],
+    functions: [],
+    triggers: [],
+    indexes: [],
+  };
+  for (const { section, sql, params } of SIGNATURE_QUERIES) {
+    signature[section] = await namesOf(client, sql, params);
+  }
+  return signature;
 }
 
 export async function repairLocalAuditV2Ledger(

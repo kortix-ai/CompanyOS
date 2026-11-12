@@ -599,6 +599,66 @@ describe('ApiClient.resolveUpstream remembers a typed refusal', () => {
     expect(calls).toBe(4);
   });
 
+  // Resolution is caller-grained beyond account and project: whose PERSONAL ChatGPT/Claude connection applies
+  // (personalUserId — the resolver reads absent as the token user and null as none), which session's provider pool is
+  // selected (sessionId) and whether a project gateway key asks (keyId) all change the answer, and a refusal can name
+  // the caller's own connection ("Your ChatGPT account "A" needs reconnection."). A refusal learned for one member
+  // must therefore never answer another member's request for the same model (Strix review of this PR, CWE-200).
+  test('the memory is per caller: one member\'s refusal never answers another member\'s request', async () => {
+    let calls = 0;
+    const c = client(async (_url, init) => {
+      calls += 1;
+      const sent = JSON.parse(String(init.body)) as { principal: { personalUserId?: string | null } };
+      const who = sent.principal.personalUserId;
+      return jsonResponse({
+        candidates: [],
+        resolutionError: {
+          code: 'provider_reauth_required',
+          message: who === null
+            ? 'No ChatGPT connection is available to this session.'
+            : `Your ChatGPT account "conn-${who}" needs reconnection.`,
+          suggestion: 'Reconnect it in your ChatGPT accounts, then retry.',
+        },
+      });
+    });
+    const owner = { ...principal, projectId: 'p1', personalUserId: 'user-a' };
+    const member = { ...principal, projectId: 'p1', personalUserId: 'user-b' };
+    // The owner's refusal names the owner's connection...
+    await expect(c.resolveUpstream(owner, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      message: 'Your ChatGPT account "conn-user-a" needs reconnection.',
+    });
+    // ...and must not answer the member's request: the member's own resolution is re-asked.
+    await expect(c.resolveUpstream(member, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      message: 'Your ChatGPT account "conn-user-b" needs reconnection.',
+    });
+    // The member's own second line is still remembered: the per-line storm fix holds per caller.
+    await expect(c.resolveUpstream(member, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      message: 'Your ChatGPT account "conn-user-b" needs reconnection.',
+    });
+    // A null personalUserId (an agent-principal session with no on-behalf-of human) is its own caller too —
+    // the resolver reads it as "no personal keys", never as the token user's.
+    await expect(c.resolveUpstream({ ...principal, projectId: 'p1', personalUserId: null }, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      message: 'No ChatGPT connection is available to this session.',
+    });
+    expect(calls).toBe(3);
+  });
+
+  // The refusal message embeds the caller-controlled model id verbatim, and the memo bounds entry COUNT (1 000),
+  // not bytes: remembering a refusal for a multi-megabyte id would pin those bytes in the gateway process until
+  // eviction. Only a plausible id — within the key's own 200-char cap — is remembered; an oversized one re-asks
+  // per request (Strix review of this PR, CWE-770).
+  test('an oversized model id is never remembered', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    const oversized = `inworld-tts-${'x'.repeat(400)}`;
+    await expect(c.resolveUpstream(principal, oversized)).rejects.toBeInstanceOf(GatewayResolutionError);
+    await expect(c.resolveUpstream(principal, oversized)).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(2);
+  });
+
   test('the memo is bounded: the oldest entry is evicted and asks the API again', async () => {
     let calls = 0;
     const c = client(async () => {

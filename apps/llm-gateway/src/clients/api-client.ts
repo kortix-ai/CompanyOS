@@ -87,8 +87,10 @@ const ADMIT_MISSING_MS = 60_000;
  * usage-limit rest); one with a retryAfterSeconds is transient and never memoized. The TTL picks a changed state up
  * without a gateway restart. */
 const REFUSAL_MEMO_MS = 5 * 60 * 1000;
-/** The refusal memo holds one entry per (account, project, model id): bounded, oldest evicted. */
+/** The refusal memo holds one entry per (account, project, caller, session, key, model id): bounded, oldest evicted. */
 const REFUSAL_MEMO_MAX = 1_000;
+/** A model id past this length is never remembered: the refusal message embeds it verbatim, so an entry must stay bytes-small. */
+const MEMOIZABLE_MODEL_MAX = 200;
 
 /** How long a private URL that did not answer is skipped for the public one. */
 const INTERNAL_DOWN_MS = 60_000;
@@ -296,9 +298,13 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     resolveUpstream: async (principal, model) => {
       // A remembered refusal answers the same typed error the API would, without the round trip — and without re-arming
       // the API's per-replica warn gate for a deployment state that has not changed. A served answer is never remembered:
-      // candidates change with plan and billing state. The key carries the project too: resolution is project-grained
-      // (a provider connects per project), like routeMemoryKey's.
-      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${model.slice(0, 200)}`;
+      // candidates change with plan and billing state. The key carries the caller too: resolution is not project-grained
+      // alone — whose personal connection applies (personalUserId, the resolver defaulting absent to the token user and
+      // reading null as none), which session's provider pool is selected (sessionId) and whether a project gateway key
+      // asks (keyId) all change the answer, and a refusal can name the caller's own connection. One member's refusal
+      // must never answer another member's request for the same model (Strix review of this PR).
+      const caller = principal.personalUserId === undefined ? principal.userId : principal.personalUserId;
+      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${caller ?? ''}\u0000${principal.sessionId ?? ''}\u0000${principal.keyId ?? ''}\u0000${model.slice(0, 200)}`;
       const remembered = refusalMemo.get(key);
       if (remembered) {
         if (Date.now() >= remembered.until) refusalMemo.delete(key);
@@ -328,7 +334,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
         // the persistent codes (a lineup without the model, a plan gate, a
         // disconnected provider) the issue's signal needs.
         const transient = error.retryAfterSeconds !== undefined;
-        if (!transient) {
+        if (!transient && model.length <= MEMOIZABLE_MODEL_MAX) {
           // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
           if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
             const oldest = refusalMemo.keys().next().value;

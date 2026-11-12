@@ -132,10 +132,10 @@ function applyDelta(state: SessionLogState, p: unknown): SessionLogState {
   const index = message.blocks.findIndex((b) => b.id === p.block_id);
   const block = message.blocks[index];
   if (!block || (block.type !== 'text' && block.type !== 'reasoning')) return state;
-  // A message the stream put and that is finished now (its final put, or a page that settled it)
-  // already holds its whole text: a delta sent before its end and applied after it (runtime
-  // frames are coalesced, control frames are not) would add that text twice (F-012).
-  if (message.status !== 'streaming' && state.revs[message.message_id] !== undefined) return state;
+  // Deltas extend a streaming record only (kortixd puts one before the first delta). A finished
+  // record (its final put, or a page) already holds its whole text: a delta sent before its end and
+  // applied after it (runtime frames are coalesced, control frames are not) would add it twice (F-012).
+  if (message.status !== 'streaming') return state;
   const blocks = message.blocks.slice();
   blocks[index] = { ...block, text: block.text + p.delta };
   const next = list.slice();

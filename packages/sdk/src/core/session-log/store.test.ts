@@ -275,6 +275,15 @@ describe('applySessionLogEvent', () => {
     expect(ids(applySessionLogEvent(after, ev('log.message', { message_id: reply!.message_id, rev: 5 })))).not.toContain(reply!.message_id);
   });
 
+  test('F-012: the streaming put was missed too: the finished page record takes no late delta', () => {
+    const [user, reply] = rootMessages();
+    const block = reply!.blocks.find((b) => b.type === 'text') as TextBlock;
+    // Every frame of the reply was missed, then the turn-end page holds it finished, with no rev.
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([user!, reply!]));
+    // A delta queued before the turn end and applied after the page changes nothing.
+    expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: block.id, delta: 'e' }))).toBe(state);
+  });
+
   test('a delta for a message the store does not hold builds no placeholder', () => {
     const state = applySessionLogEvent(EMPTY_SESSION_LOG_STATE, ev('log.block.delta', { thread_id: ROOT, message_id: 'msg_x', block_id: 'b0', delta: 'x' }));
     expect(state).toBe(EMPTY_SESSION_LOG_STATE);

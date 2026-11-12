@@ -862,6 +862,31 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(reply()).toEqual(finished);
   });
 
+  test('F-012: a turn end during a box read that then fails reads the API page, not the box again', async () => {
+    const turn = (token: string) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: { turn_token: token } } });
+    let boxReads = 0;
+    let apiReads = 0;
+    let failStale: (error: unknown) => void = () => {};
+    const livePage = () => {
+      boxReads++;
+      if (boxReads === 1) return Promise.resolve(page());
+      return new Promise((_, reject) => { failStale = reject; });
+    };
+    mount({ loader: async () => { apiReads++; return page(); }, livePage });
+    await flush();
+    const v2 = joined.at(-1)!.options;
+    act(() => v2.onControl(turn('t1')));
+    act(() => v2.onRuntimeResync());
+    await flush();
+    expect([boxReads, apiReads]).toEqual([2, 1]);
+    act(() => v2.onControl(turn('t2')));
+    // The wedged box answers 502 after the proxy budget: the turn end reads the API page once.
+    await act(async () => failStale(new Error('502')));
+    await flush();
+    expect(boxReads).toBe(2);
+    expect(apiReads).toBe(3);
+  });
+
   test('a kortix.resync on the v2 connection re-reads the page once, with no duplicate messages', async () => {
     let calls = 0;
     mount({ loader: async () => { calls++; return v1Page(); } });

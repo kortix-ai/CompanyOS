@@ -89,7 +89,8 @@ const ADMIT_MISSING_MS = 60_000;
 const REFUSAL_MEMO_MS = 5 * 60 * 1000;
 /** The refusal memo holds one entry per (account, project, caller, session, key, model id): bounded, oldest evicted. */
 const REFUSAL_MEMO_MAX = 1_000;
-/** A model id past this length is never remembered: the refusal message embeds it verbatim, so an entry must stay bytes-small. */
+/** A plausible model id: past this length the id is never remembered (the refusal message embeds it verbatim, so a memo
+ * entry must stay bytes-small) and the memo key is lossy — two longer ids share one key. */
 const MEMOIZABLE_MODEL_MAX = 200;
 
 /** How long a private URL that did not answer is skipped for the public one. */
@@ -298,13 +299,12 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     resolveUpstream: async (principal, model) => {
       // A remembered refusal answers the same typed error the API would, without the round trip — and without re-arming
       // the API's per-replica warn gate for a deployment state that has not changed. A served answer is never remembered:
-      // candidates change with plan and billing state. The key carries the caller too: resolution is not project-grained
-      // alone — whose personal connection applies (personalUserId, the resolver defaulting absent to the token user and
-      // reading null as none), which session's provider pool is selected (sessionId) and whether a project gateway key
-      // asks (keyId) all change the answer, and a refusal can name the caller's own connection. One member's refusal
-      // must never answer another member's request for the same model (Strix review of this PR).
+      // candidates change with plan and billing state. The key carries the caller (Strix review of this PR): resolution
+      // is not project-grained alone — the personal connection (personalUserId: absent = the token user, null = none),
+      // the session's provider pool (sessionId) and a project gateway key (keyId) all change the answer, and a refusal
+      // can name the caller's own connection — one member's refusal never answers another member's request.
       const caller = principal.personalUserId === undefined ? principal.userId : principal.personalUserId;
-      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${caller ?? ''}\u0000${principal.sessionId ?? ''}\u0000${principal.keyId ?? ''}\u0000${model.slice(0, 200)}`;
+      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${caller ?? ''}\u0000${principal.sessionId ?? ''}\u0000${principal.keyId ?? ''}\u0000${model.slice(0, MEMOIZABLE_MODEL_MAX)}`;
       const remembered = refusalMemo.get(key);
       if (remembered) {
         if (Date.now() >= remembered.until) refusalMemo.delete(key);

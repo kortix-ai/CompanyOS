@@ -1,7 +1,7 @@
 'use client';
 
 import { useWorkspaceModels } from '@kortix/sdk/react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Close } from '../../icons/close';
@@ -10,6 +10,7 @@ import { ClaudeCode } from '../../internal/icons/claude-code';
 import { ProviderLogo } from '../../internal/lib/provider-branding';
 import { cn } from '../../internal/lib/utils';
 import { hasRunnableSubscriptionModel, isRunnableModel } from './model-availability';
+import { ModelConnectionLayoutContext } from './model-connection-layout';
 import { useModelConnectionGate } from './use-model-connection-gate';
 
 const PLANS = [
@@ -68,6 +69,7 @@ export function ConnectPlanRows({
   dismissible: boolean;
   className?: string;
 }) {
+  const above = useContext(ModelConnectionLayoutContext) === 'above';
   const t = useTranslations('sessionUi.modelGate');
   const { canConnectProvider, openConnectProvider, modal } = useModelConnectionGate(
     undefined,
@@ -88,13 +90,13 @@ export function ConnectPlanRows({
     <>
       {modal}
       {canConnectProvider && plans.length > 0 ? (
-        <div role="group" aria-label={t('offerTitle')} className={cn('grid grid-cols-1 gap-2 sm:grid-cols-2', className)}>
+        <div role="group" aria-label={t('offerTitle')} className={cn(above ? 'grid grid-cols-1 gap-2 sm:grid-cols-2' : 'flex flex-col', className)}>
           {plans.map((plan) => (
             <div key={plan.providerId} className="group relative">
               <button
                 type="button"
                 onClick={() => openConnectProvider('providers', plan.providerId)}
-                className="hover:bg-muted/60 focus-visible:ring-kortix-base flex w-full min-w-0 items-center gap-3 min-h-11 rounded-md py-2 pr-3.5 pl-2.5 text-left transition-colors outline-none focus-visible:ring-[0.6px]"
+                className="hover:bg-muted/60 focus-visible:ring-kortix-base flex w-full min-w-0 items-center gap-3 rounded-lg py-2 pr-3.5 pl-2.5 text-left transition-colors outline-none focus-visible:ring-[0.6px]"
               >
                 {plan.providerId === 'anthropic' ? (
                   // Claude plans run through Claude Code, so the row shows its mark.
@@ -103,7 +105,7 @@ export function ConnectPlanRows({
                   <ProviderLogo providerID={plan.providerId} size="xs" className="size-5 [&_img]:size-5" />
                 )}
                 <span className="text-foreground shrink-0 text-sm">{t(plan.labelKey)}</span>
-                <span className="text-muted-foreground truncate text-xs">{t(plan.planKey)}</span>
+                <span className="text-muted-foreground truncate text-sm">{t(plan.planKey)}</span>
                 <SolidRightArrow
                   className={cn(
                     'text-muted-foreground ml-auto size-4 shrink-0 transition-opacity',
@@ -133,7 +135,7 @@ export function ConnectPlanRows({
 }
 
 /**
- * The project home's optional offer: the rows, dismissible, above the hero
+ * The project home's optional offer: the rows, dismissible, under the hero
  * composer. New projects run on Kortix models, and most people already pay
  * for ChatGPT or Claude.
  *

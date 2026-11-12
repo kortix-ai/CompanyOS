@@ -3,13 +3,14 @@
  * in a row, one per page, swiped sideways with native paging (each swipe snaps
  * to the next image), and a "2 / 5" counter under the page.
  */
-import React, { useCallback, useState } from 'react';
+import type React from 'react';
+import { useCallback, useState } from 'react';
 import {
-  ScrollView,
-  View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  ScrollView,
+  View,
 } from 'react-native';
 
 import { Text } from '@/components/ui/text';
@@ -55,7 +56,7 @@ export function PagedGallery({
           {Array.from({ length: count }, (_, index) => renderPage(index, width))}
         </ScrollView>
       ) : (
-        placeholder ?? <View style={{ height: GALLERY_PAGE_HEIGHT }} />
+        (placeholder ?? <View style={{ height: GALLERY_PAGE_HEIGHT }} />)
       )}
       <Text variant="muted" className="mt-2 self-end tabular-nums">
         {`${page + 1} / ${count}`}

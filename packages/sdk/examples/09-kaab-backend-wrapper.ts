@@ -8,7 +8,7 @@
  *
  * This example does the entire path with no browser:
  *   1. mint a CONNECTOR definition           (headless: mcp/http/openapi/graphql)
- *   2. mint a per-end-user connection (owner_type 'external' = your user)
+ *   2. mint a per-end-user connection (a project-owned connection, one label per user)
  *      + store that user's own credential + activate it            (by reference)
  *   3. start a BACKEND-origin session, binding the connection, pinning the model
  *      and agent, and narrowing secrets                              (overrides)
@@ -102,8 +102,9 @@ async function ensureConnector(kortix: ReturnType<typeof clientFor>): Promise<vo
 // ─── step 2: mint + credential + activate this user's connection ─────────────
 /** Returns the `connection_id` you bind by reference, or null if the project has
  *  no connector declared (a bare project without kortix.yaml). Idempotent per
- *  (connector, owner). `owner_type: 'external'` = your app's user, independent
- *  of any Kortix member/agent. */
+ *  (connector, owner, label): a project-owned connection with one label per end
+ *  user. Bind it by id into that user's session only (step 3). The retired
+ *  `owner_type: 'external'` is refused by the API. */
 async function ensureUserConnection(
   kortix: ReturnType<typeof clientFor>,
   endUserId: string,
@@ -113,8 +114,7 @@ async function ensureUserConnection(
   try {
     const connection = await project.connectors.connections.reconcile({
       connector_alias: CONNECTOR_SLUG,
-      owner_type: 'external',
-      owner_id: endUserId,
+      owner_type: 'project',
       label: `${CONNECTOR_SLUG} for ${endUserId}`,
     });
     // Store THAT user's own credential (never sent again; resolved server-side

@@ -200,13 +200,15 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     spyOn(projectModelAccessModule, 'getProjectGatewayResolution').mockImplementation(
       async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: true, customProviders: [] }) as never,
     );
-    const granted = spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => ['OPENAI_API_KEY']);
+    const granted = spyOn(accountResourceModule, 'listUsableGatewaySecrets').mockImplementation(async () => [
+      { secretId: 's1', providerId: 'openai', name: 'OPENAI_API_KEY', label: 'OpenAI', accessMode: 'project', verifyStatus: null },
+    ]);
 
     const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false, personalUserId: null });
     expect(result.model?.startsWith('openai/')).toBe(true);
     expect(result.source).toBe('platform');
     // A shared session counts no member grant.
-    expect(granted).toHaveBeenCalledWith('a1', 'p1', 'u1', null);
+    expect(granted).toHaveBeenCalledWith({ accountId: 'a1', projectId: 'p1', userId: 'u1', grantUserId: null });
   });
 
   // One store (2026-11-11): every writer writes named keys, so the flag no longer hides them.
@@ -219,7 +221,9 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     spyOn(projectModelAccessModule, 'getProjectGatewayResolution').mockImplementation(
       async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: false, customProviders: [] }) as never,
     );
-    const granted = spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => ['OPENAI_API_KEY']);
+    const granted = spyOn(accountResourceModule, 'listUsableGatewaySecrets').mockImplementation(async () => [
+      { secretId: 's1', providerId: 'openai', name: 'OPENAI_API_KEY', label: 'OpenAI', accessMode: 'project', verifyStatus: null },
+    ]);
 
     const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });
     expect(result.model?.startsWith('openai/')).toBe(true);
@@ -580,4 +584,60 @@ test('model validation carries prospective pool selections into credential resol
 test('existing session validation resolves that session’s pool', async () => {
   spyOn(resolveCandidatesModule, 'resolveCandidates').mockImplementation(async principal => principal.sessionId === 'pooled-session' ? [{ provider: 'anthropic' } as any] : []);
   expect(await isModelServableForAccount({ ...PRINCIPAL_BASE, freeModelsOnly: false, model: 'anthropic/claude-sonnet-4.6', sessionId: 'pooled-session' })).toBe(true);
+});
+
+// 2026-11-12 dev: a workspace whose only key was refused by its provider
+// (`verify_status = 'invalid'`) still defaulted to that provider's flagship
+// (`groq/openai/gpt-oss-20b`), so every session died on the provider's 401
+// instead of the clear 409 no_model_available. The fallback skips a provider
+// whose every usable key is refused; the gateway still serves an explicit pick.
+describe('the default fallback skips a provider whose every key the provider refused', () => {
+  type Status = 'verified' | 'invalid' | 'unknown' | null;
+  let keys: Array<{ name: string; verifyStatus: Status }> = [];
+  beforeEach(() => {
+    keys = [];
+    spyOn(runtimeModelCatalog, 'codexModelIds').mockImplementation(() => []);
+    spyOn(claudeAccountsModule, 'hasClaudeCredential').mockImplementation(async () => false);
+    spyOn(accountResourceModule, 'listUsableGatewaySecrets').mockImplementation((async () =>
+      keys.map((key, i) => ({ secretId: `s${i}`, providerId: 'groq', name: key.name, label: key.name, accessMode: 'project', verifyStatus: key.verifyStatus }))) as never);
+    spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => [...new Set(keys.map((key) => key.name))]);
+    // Request time still resolves the refused key: only the default skips it.
+    resolveCandidatesImpl = async (model) => (model.startsWith('groq/') ? [{ provider: 'groq' }] : []);
+  });
+
+  test('only a refused key: a free workspace gets no default model', async () => {
+    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }];
+    expect(await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true })).toEqual({ model: null, source: 'platform' });
+    expect(await resolveDefaultModelForPrincipal({ ...PRINCIPAL_BASE, freeModelsOnly: true })).toBeUndefined();
+  });
+
+  test('a refused key does not catch an unservable configured default', async () => {
+    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }];
+    accountDefaults = { account: null, agents: {}, projects: { p1: 'openrouter/some-model' } };
+    expect(await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false })).toEqual({ model: null, source: 'platform' });
+  });
+
+  for (const status of ['verified', 'unknown', null] as const) {
+    test(`a key checked ${status ?? 'never'} is a default`, async () => {
+      keys = [{ name: 'GROQ_API_KEY', verifyStatus: status }];
+      const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true });
+      expect(result.model?.startsWith('groq/')).toBe(true);
+    });
+  }
+
+  test('one refused key beside one unchecked key of the same provider: still a default', async () => {
+    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }, { name: 'GROQ_API_KEY', verifyStatus: 'unknown' }];
+    expect((await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true })).model?.startsWith('groq/')).toBe(true);
+  });
+
+  test('a legacy key of the refused name still counts (it carries no check)', async () => {
+    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }];
+    connectedSecretNames = ['GROQ_API_KEY'];
+    expect((await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true })).model?.startsWith('groq/')).toBe(true);
+  });
+
+  test('an explicit model on the refused key stays servable for the gateway', async () => {
+    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }];
+    expect(await isModelServableForAccount({ ...PRINCIPAL_BASE, freeModelsOnly: true, model: 'groq/openai/gpt-oss-20b' })).toBe(true);
+  });
 });

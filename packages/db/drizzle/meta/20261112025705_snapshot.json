@@ -1,6 +1,6 @@
 {
-  "id": "68012590-1ebe-4e3b-8d7d-5a48cb560dd0",
-  "prevId": "77deb193-8d12-49f2-83cf-ced956f12c62",
+  "id": "5722809d-fa41-4ff0-a9e2-1174f113f15a",
+  "prevId": "24439982-9dd8-4baa-8507-2c0e64b42755",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -17381,7 +17381,7 @@
           "name": "account_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",

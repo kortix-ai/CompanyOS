@@ -187,6 +187,8 @@ export interface UsableGatewaySecret {
   name: string;
   label: string;
   accessMode: string;
+  /** The last provider check of the key (`verify_status`): null when never checked. */
+  verifyStatus: string | null;
 }
 
 /** Which active gateway keys to read, and whose member grants count. */
@@ -215,6 +217,7 @@ function gatewaySecretRows(q: GatewaySecretQuery) {
     label: accountSecretResources.label,
     projectId: accountSecretResources.projectId,
     accessMode: accountSecretResources.accessMode,
+    verifyStatus: accountSecretResources.verifyStatus,
     grantUserId: accountSecretGrants.userId,
   }).from(accountSecretResources)
     .leftJoin(accountSecretGrants, and(
@@ -244,7 +247,10 @@ function usableRows(
     if (seen.has(row.secretId)) continue;
     if (!secretUsableInProject(row, q.projectId, personalKeyGranted(row.grantUserId, q.grantUserId))) continue;
     seen.add(row.secretId);
-    usable.push({ secretId: row.secretId, providerId: row.providerId, name: row.name, label: row.label, accessMode: row.accessMode });
+    usable.push({
+      secretId: row.secretId, providerId: row.providerId, name: row.name, label: row.label,
+      accessMode: row.accessMode, verifyStatus: row.verifyStatus,
+    });
   }
   return usable;
 }

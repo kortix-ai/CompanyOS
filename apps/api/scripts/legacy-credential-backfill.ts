@@ -5,7 +5,7 @@
  *
  *   dotenvx run -f apps/api/.env.<env> -- bun run apps/api/scripts/legacy-credential-backfill.ts                 # dry run
  *   dotenvx run -f apps/api/.env.<env> -- bun run apps/api/scripts/legacy-credential-backfill.ts --apply         # move
- *   ... --concept connector_secret_strategy|external_connection   one concept
+ *   ... --concept connector_secret_strategy|connector_secret_consumer|external_connection   one concept
  *   ... --project <uuid>                                           one project
  *   ... --verbose                                                  one line per row: concept, id, outcome
  *

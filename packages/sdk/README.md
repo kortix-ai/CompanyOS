@@ -735,17 +735,18 @@ await kortix.project(projectId).sessions.create({
 });
 ```
 
-Do not put credentials in this map. For a white-label/backend wrapper, create an
-operator-managed connection, store its credential through the dedicated
-credential endpoint, and pass only the non-secret connection id at session create:
+Do not put credentials in this map. For a white-label/backend wrapper, create a
+project-owned connection per end user (one label per user), store its credential
+through the dedicated credential endpoint, and pass only the non-secret
+connection id at session create:
 
 ```ts
 const project = kortix.project(projectId);
 const connection = await project.connectors.connections.reconcile({
   connector_alias: "customer-data",
-  owner_type: "external",
-  owner_id: wrapperUserId,
-  label: "Customer data",
+  owner_type: "project",
+  // Reconcile is idempotent per (connector, owner, label): one label per end user.
+  label: `Customer data (${wrapperUserId})`,
   metadata: { tenant_ref: wrapperTenantReference },
 });
 
@@ -787,7 +788,12 @@ await project.sessions.create({
 Member connections are owner-only even for project managers, and sessions using
 one must remain private. A service account — an agent or a trigger — never
 reaches a member connection, only the shared project one. Project defaults
-remain shared; external/agent/subject connections remain operator-managed. Every connection is project/connector scoped
+remain shared. A project-owned connection is reachable by everyone who may use
+the connector in the project, so a wrapper binds each end user's connection by id
+into that user's session only. The owner types `external`, `agent` and `subject`
+are retired: the API refuses to create them (`409
+CONNECTOR_CONNECTION_OWNER_NOT_REACHABLE`) and no session reaches an existing one.
+They stay in the `ConnectionOwnerType` union so existing code compiles. Every connection is project/connector scoped
 and resolved on every Connector request, so revocation takes effect without a
 restart. Credentials are encrypted server-side and are never returned, placed
 in `KORTIX_SESSION_CONTEXT`, or injected into the sandbox environment. Raw env

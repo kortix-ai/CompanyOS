@@ -628,3 +628,79 @@ describe('preview sandbox denial warn is throttled at the error handler (KRTX-47
     expect(warns).toHaveLength(3);
   });
 });
+
+describe('person role denial warns are throttled at the error handler (KRTX-4801)', () => {
+  // The route throws what assertAuthorized throws for a person whose role
+  // lacks the action — the #12240 assert-form gates (`resolveAdmin` and
+  // siblings). A host that renders the connect button polls
+  // GET .../connect-requests for every session it shows, and a caller whose
+  // role cannot ever act on the permission receives the same typed 403 on
+  // every poll: prod 2026-11-12, 22 warn lines in one hour on that route,
+  // 0 in the 24 h before. The mark routes the LINE through the shared window
+  // throttle; the typed 403 body — the reason, the action, and (for the
+  // role-shaped reasons) who grants it — ships untouched every time.
+  function appWithRoleDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/connectors/workspaces/:workspaceId/sessions/:sessionId/connect-requests', () => {
+      throw buildDenialError('project.connector.write', 'role');
+    });
+    return app;
+  }
+
+  test('five identical role denials log one info line; the typed 403 body names the permission every time', async () => {
+    resetLogWindowsForTests();
+    const app = appWithRoleDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/connectors/workspaces/w/sessions/s/connect-requests');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toMatchObject({
+      code: 'role',
+      action: 'project.connector.write',
+      workspace_action: 'workspace.connector.write',
+    });
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first denial line');
+    expect(first.message).toContain(
+      '-> 403 [HTTPException] You don\'t have permission to perform this action (workspace.connector.write).',
+    );
+    expect(first.context?.suppressed).toBe(0);
+  });
+
+  test('role-shaped reasons the wording branch names keep their remedy in the body and join the same throttle', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/connectors/workspaces/:workspaceId/sessions/:sessionId/connect-requests', () => {
+      throw buildDenialError('project.connector.write', 'project_role_insufficient');
+    });
+    const before = logged.length;
+    const res = await app.request('/v1/connectors/workspaces/w/sessions/s/connect-requests');
+    expect(res.status).toBe(403);
+    expect(JSON.parse(await res.text()).message).toContain('A workspace owner or admin grants');
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(1);
+  });
+
+  test('a denial whose constraint clears in-session stays per-request (sso_required)', async () => {
+    // The doctrine boundary (denial-message.ts): a remedy a caller can act on
+    // in-session — one redirect — keeps its per-request warn line.
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/plain', () => {
+      throw buildDenialError('project.connector.write', 'sso_required');
+    });
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) await app.request('/v1/plain');
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+  });
+});

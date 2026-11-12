@@ -196,6 +196,32 @@ export function isCredentialFenceDenial(err: HTTPException): boolean {
   return credentialFenceDenials.has(err);
 }
 
+// KRTX-4801: a person whose workspace role or membership lacks the action is
+// refused with the SAME typed 403 on every call — the constraint changes only
+// when a human edits their role or membership, and the body already names the
+// permission and (for the role-shaped reasons) who grants it. The #12240
+// assert-form gates (`resolveAdmin` and siblings) made exactly that refusal
+// log per request, and a host that renders the connect button polls
+// GET .../connect-requests for every session it shows: 22 warn lines in one
+// prod hour on that route, 0 in the 24 h before, forever while the caller
+// polls. The mark routes the LINE through the shared window throttle
+// without touching the response, exactly as markAgentGrantDenial does.
+const personRoleDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as a person role/membership denial: the caller's standing
+ * role or membership in the workspace lacks the action. Called by
+ * `buildDenialError`, the one constructor every such refusal throws.
+ */
+export function markPersonRoleDenial(err: HTTPException): void {
+  personRoleDenials.add(err);
+}
+
+/** True for an exception `markPersonRoleDenial` marked. */
+export function isPersonRoleDenial(err: HTTPException): boolean {
+  return personRoleDenials.has(err);
+}
+
 /**
  * The 403 message `combinedAuth` throws when a valid caller is refused a
  * preview sandbox proxy route: the sandbox's `session_sandboxes` row is gone

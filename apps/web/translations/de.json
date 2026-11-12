@@ -26716,6 +26716,10 @@
         "actsAsAgent": "Ein Agent",
         "actsAsBot": "Ein Bot",
         "actsAsMeHint": "Ihre Rolle in diesem Workspace. Der Schlüssel funktioniert nicht mehr, wenn Sie den Workspace verlassen.",
+        "worksIn": "Gilt für",
+        "worksInAll": "Alle meine Workspaces",
+        "worksInAllHint": "Wirkt wie du in jedem deiner Workspaces, mit deiner vollen Rolle. Verwalte ihn unter Einstellungen → Persönliche Keys.",
+        "worksInWorkspace": "Nur dieser Workspace",
         "actsAsAgentHint": "Genau das, was der Agent laut kortix.yaml darf. Seine Aktionen werden als Agent protokolliert, und der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "actsAsBotHint": "Ein Bot für CI oder eine Integration, mit eigener Rolle. Der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "needsPermission": "Erfordert die Berechtigung, Zugangsdaten zu verwalten",
@@ -26734,6 +26738,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Erstellt von {email}",
         "createdDescription": "{name} handelt als {actsAs}. Kortix zeigt den Schlüssel nur einmal: Kopieren Sie ihn jetzt und speichern Sie ihn als Secret.",
+        "createdPersonalDescription": "{name} wirkt wie du in jedem deiner Workspaces — verwalte ihn unter Einstellungen → Persönliche Keys. Kortix zeigt den Key einmal: kopiere ihn jetzt und hinterlege ihn als Secret.",
         "accessFullHint": "Alles, was der Prinzipal des Schlüssels in diesem Workspace darf.",
         "accessCustomHint": "Nur die Berechtigungen, die Sie auswählen. Jede muss etwas sein, das der Prinzipal des Schlüssels darf."
       },

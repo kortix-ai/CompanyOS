@@ -26716,6 +26716,10 @@
         "actsAsAgent": "Агент",
         "actsAsBot": "Бот",
         "actsAsMeHint": "Ваша улога у овом радном простору. Кључ престаје да ради када одете.",
+        "worksIn": "Važi za",
+        "worksInAll": "Svi moji radni prostori",
+        "worksInAllHint": "Deluje kao ti u svakom tvom radnom prostoru, sa tvojom punom ulogom. Upravljaj njime u Podešavanjima → Lični ključevi.",
+        "worksInWorkspace": "Samo ovaj radni prostor",
         "actsAsAgentHint": "Тачно оно што агент сме према kortix.yaml. Његове радње се бележе као агент, а кључ ради и када одете.",
         "actsAsBotHint": "Бот за CI или интеграцију, са сопственом улогом. Кључ ради и када одете.",
         "needsPermission": "Потребна је дозвола за управљање акредитивима",
@@ -26734,6 +26738,7 @@
         "rowBot": "Бот · {name}",
         "createdBy": "Направио {email}",
         "createdDescription": "{name} делује као {actsAs}. Kortix приказује кључ само једном: копирајте га сада и сачувајте као тајну.",
+        "createdPersonalDescription": "{name} deluje kao ti u svakom tvom radnom prostoru — upravljaj njime u Podešavanjima → Lični ključevi. Kortix prikazuje ključ jednom: kopiraj ga sada i sačuvaj kao tajnu.",
         "accessFullHint": "Све што принципал кључа сме у овом радном простору.",
         "accessCustomHint": "Само дозволе које изаберете. Свака мора бити нешто што принципал кључа сме."
       },

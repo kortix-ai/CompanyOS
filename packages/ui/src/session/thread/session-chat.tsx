@@ -307,6 +307,7 @@ import { useSessionHistoryViewStore } from '../../internal/stores/session-histor
 import { downloadBlob } from '../../internal/lib/utils/download';
 import { RestoreNotice, hasOutOfContext, type FullTextState } from './session-history';
 
+import { useAgentRunLayout } from './agent-run-props';
 import {
   TranscriptTurnRow,
   isAgentNoticeTurn,
@@ -2474,6 +2475,10 @@ export function SessionChat({
     () => new Set(turns.filter((turn) => isAgentNoticeTurn(turn)).map((turn) => turn.id)),
     [turns],
   );
+  // A person's agents report back as one unit: the reports and work of a run fold into one row
+  // on its last turn, and every answer stays in view under it (KRTX-4732). The main transcript
+  // only: a messages-only thread already hides notices.
+  const agentRunLayout = useAgentRunLayout(turns, transcriptRows);
   const turnRenderKeys = useMemo(() => {
     const keys = new Map<string, string>();
     const used = new Set<string>();
@@ -4878,7 +4883,10 @@ export function SessionChat({
                               key={turnRenderKeys.get(turn.id)}
                               turnId={turn.id}
                               modelOptions={modelOptions}
-                              suppressed={suppressedFailedCompaction}
+                              // An absorbed run turn keeps its viewport (keys, scroll
+                              // anchors) and draws nothing: its anchor folds it.
+                              suppressed={suppressedFailedCompaction || agentRunLayout.absorbed.has(turn.id)}
+                              {...agentRunLayout.propsOf(turn.id)}
                               continuedWith={harnessSwitches.get(turn.id)?.harness}
                               fullTextState={loaded.state[turn.id] ?? 'idle'}
                               onLoadFullText={loadFullTexts}

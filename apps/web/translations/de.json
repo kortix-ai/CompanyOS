@@ -26741,7 +26741,9 @@
       "noWorkspaceTitle": "Erstelle einen Workspace, um die CLI anzumelden",
       "noWorkspaceBody": "Die CLI meldet sich bei einem Workspace an. Erstelle einen und bestätige dann diese Anmeldung.",
       "createAction": "Workspace erstellen",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Workspaces konnten nicht geladen werden",
+      "loadFailedBody": "Diese Anmeldung benötigt deine Workspace-Liste. Mit deinem Konto ist alles in Ordnung — versuche es erneut, um fortzufahren."
     },
     "models": {
       "yourDefault": "Workspace-Standard",

@@ -87,6 +87,21 @@ export function nativeSheetHiddenBottom(input: {
   return Math.round((1 - fraction) * Math.max(0, boxHeight - bottomInset));
 }
 
+/**
+ * How many points of the content box lie below the screen, from the box's
+ * frame in window coordinates (`measureInWindow` once the sheet rests). This
+ * is the measured answer; `nativeSheetHiddenBottom` is the estimate used until
+ * it arrives. TestFlight 1.6.2 (171): the estimate left the picker's
+ * Agent · Model tabs below the screen at the 85% detent, so the box is not
+ * sized the way the estimate assumes.
+ */
+export function nativeSheetBoxBelowScreen(input: { y: number; height: number; windowHeight: number }): number {
+  const { y, height, windowHeight } = input;
+  if (!Number.isFinite(y) || !(height > 0) || !(windowHeight > 0)) return 0;
+  // Never hide the whole box: a sheet still off screen measures nothing useful.
+  return Math.round(Math.min(Math.max(0, y + height - windowHeight), height / 2));
+}
+
 /** gorhom's `snapPoints`: `'50%'`, a number in points, or a Reanimated shared value. */
 export type GorhomDetents = ReadonlyArray<string | number> | { value: unknown } | undefined;
 

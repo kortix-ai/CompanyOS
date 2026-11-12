@@ -26700,7 +26700,7 @@
       "apiKeysDescription": "Chaves para scripts, CI e integrações. Uma chave age como você, como um agente ou como um bot. As regras de cada chave estão em Segurança.",
       "keys": {
         "title": "Chaves de API",
-        "description": "Chaves para scripts, CI e integrações. Uma chave funciona apenas neste workspace e age como você, como um agente ou como um bot.",
+        "description": "Chaves para scripts, CI e integrações. Uma chave age como você, um agente ou um bot; «Funciona em» define quais workspaces ela alcança.",
         "newKey": "Nova chave",
         "count": "{count, plural, one {# chave} other {# chaves}}",
         "emptyTitle": "Nenhuma chave de API",
@@ -26710,6 +26710,10 @@
         "actsAsAgent": "Um agente",
         "actsAsBot": "Um bot",
         "actsAsMeHint": "Sua função neste workspace. A chave para de funcionar quando você sai.",
+        "worksIn": "Funciona em",
+        "worksInAll": "Todos os meus workspaces",
+        "worksInAllHint": "Age como você em todos os seus workspaces, com o seu papel completo. Gerencie em Preferências → Chaves pessoais.",
+        "worksInWorkspace": "Somente este workspace",
         "actsAsAgentHint": "Exatamente o que o agente pode fazer no kortix.yaml. As ações dele são auditadas como o agente, e a chave continua funcionando quando você sai.",
         "actsAsBotHint": "Um bot para CI ou uma integração, com sua própria função. A chave continua funcionando quando você sai.",
         "needsPermission": "Requer a permissão para gerenciar credenciais",
@@ -26728,6 +26732,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Criada por {email}",
         "createdDescription": "{name} age como {actsAs}. O Kortix mostra a chave uma única vez: copie-a agora e guarde-a como segredo.",
+        "createdPersonalDescription": "{name} age como você em todos os seus workspaces — gerencie em Preferências → Chaves pessoais. A Kortix mostra a chave uma vez: copie agora e guarde como segredo.",
         "accessFullHint": "Tudo o que o principal da chave pode fazer neste workspace.",
         "accessCustomHint": "Apenas as permissões que você escolher. Cada uma deve estar entre o que o principal da chave pode fazer."
       },

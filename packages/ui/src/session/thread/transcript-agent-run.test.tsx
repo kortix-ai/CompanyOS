@@ -111,13 +111,19 @@ describe('agent run fold (KRTX-4732)', () => {
     expect([...layout.settledLaunches]).toEqual(['launch']);
   });
 
-  test('the anchor reads as one row over one answer; the reports stay folded', () => {
+  test('the anchor reads as one row over every answer of the run; the reports stay folded', () => {
     const out = html({ ...base(anchor), agentRun: run, runTurns });
     expect(out).toContain('Worked for 5m · 3 agents');
-    expect(out).toContain('The launch post is ready.');
-    // Folded and not yet opened: no member is mounted, no report reads at the top level.
+    // Every answer stays in view, in order, the last one last: the agent may answer in full
+    // before the last report arrives.
+    const interim = out.indexOf('Got the numbers, waiting on the review.');
+    expect(interim).toBeGreaterThan(out.indexOf('Worked for 5m · 3 agents'));
+    expect(out.indexOf('The launch post is ready.')).toBeGreaterThan(interim);
+    // A report turn with no answer draws no block.
+    expect(out.match(/data-testid="agent-run-answer"/g)).toHaveLength(1);
+    // Folded and not yet opened: no report is mounted.
     expect(out).not.toContain('data-testid="agent-run-member"');
-    expect(out).not.toContain('Got the numbers, waiting on the review.');
+    expect(out).not.toContain('metrics-checker');
     expect(out).not.toContain('Worked for 6s');
   });
 
@@ -127,7 +133,7 @@ describe('agent run fold (KRTX-4732)', () => {
     expect(out).not.toContain('Got the numbers');
   });
 
-  test('opening the row shows each report and the interim words, never the relay calls', async () => {
+  test('opening the row shows each report and its work, never the relay calls', async () => {
     await act(async () => {
       mounted = create(
         <QueryClientProvider client={new QueryClient()}>
@@ -141,7 +147,6 @@ describe('agent run fold (KRTX-4732)', () => {
     expect(members).toHaveLength(2);
     const text = JSON.stringify(mounted!.toJSON());
     expect(text).toContain('metrics-checker');
-    expect(text).toContain('Got the numbers, waiting on the review.');
     expect(text).not.toContain('post-reviewer · summary');
     expect(text.toLowerCase()).not.toContain('send message');
   });

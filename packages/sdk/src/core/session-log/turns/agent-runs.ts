@@ -4,13 +4,19 @@
  * The agent hands work to colleagues, and each colleague's report arrives as its own turn (a
  * sub-agent's notice, a teammate's message, a batch of those). Drawn one by one, the internal
  * exchange buries the answer. A **run** is a sequence of those report turns with no person's
- * prompt between them. Its last turn is the **anchor**: it carries the answer. The other turns of
- * the run are **absorbed**: a host draws no row for them, and folds their reports and work into
- * the anchor's "Worked for 5m · 3 agents" row. Only the anchor's answer stays at the top level.
+ * prompt between them. Its last turn is the **anchor**: it draws the run. The other turns of the
+ * run are **absorbed**: a host draws no row for them. Their reports and work fold into the
+ * anchor's "Worked for 5m · 3 agents" row, and their answers stay in view under it, in order,
+ * above the anchor's own. The agent may answer in full before the last report arrives, so no
+ * answer is ever folded away.
  *
  * Rules (`agent-runs.test.ts`):
  * - A person's prompt ends the run. So does a report turn that needs the person (it asks a
  *   question, hands over a deliverable, or renders a card); that turn stays out of every run.
+ * - The turn where the last agent of the stretch reports ends its run: it carries the full answer.
+ *   A later notice (an agent that reports again) is a run of its own and never folds it away.
+ * - A turn whose answer renders a card, or that stopped, ends its run as its anchor.
+ * - A queued turn joins no run and ends none.
  * - Live: the anchor is working, or it has no answer yet while an agent of this stretch (started
  *   since the last person's prompt) has not reported. Only the transcript's last run can be live.
  * - Stopped: the anchor ended aborted or on an error.
@@ -50,7 +56,7 @@ export interface SessionLogAgentRun {
 export interface SessionLogAgentRuns {
   /** Every run, keyed by its anchor turn id. */
   runs: ReadonlyMap<string, SessionLogAgentRun>;
-  /** The turns a host draws no row for: they fold into their anchor. */
+  /** The turns a host draws no row for: their reports and work fold into their anchor's row, their answers stay under it. */
   absorbed: ReadonlySet<string>;
   /** Each absorbed turn's anchor. */
   anchorOf: ReadonlyMap<string, string>;
@@ -191,6 +197,7 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
       absorbed.add(turn.id);
       anchorOf.set(turn.id, anchor.id);
     }
+    previousEnd = ended(anchor);
     open = null;
   };
 
@@ -231,7 +238,10 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
     open ??= { turns: [], reporters: new Set(), startedAt: previousEnd ?? turn.user.created_at };
     open.turns.push(turn);
     for (const key of keys) open.reporters.add(key);
-    if (endsRun(turn)) close(index === lastPlaced);
+    // The turn where the last outstanding agent reports carries the full answer: the run ends there,
+    // so a later notice (an agent reporting again) cannot fold it away.
+    const allIn = stretchStarted.size > 0 && [...stretchStarted].every((id) => stretchReported.has(id));
+    if (endsRun(turn) || allIn) close(index === lastPlaced);
   });
   close(true);
 

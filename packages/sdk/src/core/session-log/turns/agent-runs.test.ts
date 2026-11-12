@@ -152,7 +152,7 @@ describe('sessionLogAgentRuns', () => {
     expect([...sessionLogAgentRuns(turns).settledLaunches]).toEqual(['launch']);
   });
 
-  test('an interim answer folds too: only the last answer of a run stays at the top level', () => {
+  test('a turn with an interim answer joins the run too: the host keeps its answer in view under the run row', () => {
     const turns = [
       launch,
       report('r1', subagentNotice(1), 2, [text('i1', 'Got the draft, waiting on the numbers.')]),
@@ -261,16 +261,19 @@ describe('sessionLogAgentRuns', () => {
     });
     const turns = [
       named,
-      // The writer messages mid-work, then its finish notice arrives: one agent, not two.
+      // The writer messages, then its finish notice arrives: one agent, not two.
       report('r1', peerMessage('draft-writer', 91), 2),
       report('r2', peerMessage('metrics-checker', 92), 3),
       report('r3', subagentNotice(1).replace(child(1), 'ses_writer'), 5, [text('f', 'Done.')]),
     ];
     const layout = sessionLogAgentRuns(turns);
-    const run = layout.runs.get('r3')!;
+    // The writer's message counts as its report: both agents are in at r2, so the run ends there.
+    const run = layout.runs.get('r2')!;
     expect(run.agents).toBe(2);
     expect(run.reported).toBe(2);
     expect(run.started).toBe(2);
+    // Its finish notice is the same agent, not a third one.
+    expect(layout.runs.get('r3')!.agents).toBe(1);
     expect([...layout.settledLaunches]).toEqual(['launch']);
   });
 
@@ -344,6 +347,22 @@ describe('sessionLogAgentRuns', () => {
     const withWorkflow = { ...launch, blocks: [...launch.blocks, { ...call('w', 'workflow'), status: 'running' } as ToolCallBlock] };
     const turns = [withWorkflow, report('r1', subagentNotice(1), 2), report('r2', subagentNotice(2), 3), report('r3', subagentNotice(3), 5, [text('f', 'Done.')])];
     expect(sessionLogAgentRuns(turns).settledLaunches.size).toBe(0);
+  });
+
+  test('the run ends where the last agent reports: a late notice after the full answer never hides it', () => {
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2),
+      report('r2', subagentNotice(2), 3),
+      report('r3', subagentNotice(3), 5, [text('f', 'All three are back: the post, the numbers, the review.')]),
+      report('late', peerMessage('checker', 2), 6, [text('n', 'Nothing changed: the answers above stand.')]),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    expect(layout.runs.get('r3')!.turns).toEqual(['r1', 'r2', 'r3']);
+    expect(layout.absorbed.has('r3')).toBe(false);
+    expect(layout.runs.get('late')!.turns).toEqual(['late']);
+    // The late run's time starts where the full answer ended, not at the launch.
+    expect(layout.runs.get('late')!.durationMs).toBe(60_000);
   });
 
   test('a transcript without agents has no runs', () => {

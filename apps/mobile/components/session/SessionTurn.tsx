@@ -166,14 +166,18 @@ interface SessionTurnProps {
   onOpenChangeRequest?: (id: string) => void;
   /**
    * This turn answers an agent run (KRTX-4732): its row reads the run's label and folds the
-   * run's other turns (`runTurns`) with its own report and work. See `lib/session/agent-runs.ts`.
+   * reports and work of the run's turns (`runTurns`, then its own). Every answer of the run stays
+   * in view under the row, in order. See `lib/session/agent-runs.ts`.
    */
   runLabel?: string;
   runTurns?: readonly SessionLogTurn[];
   /** Every agent this turn started has reported: its agent rows fold too. */
   foldStartedWork?: boolean;
-  /** Drawn inside an anchor's run fold: the report and the work, no row, no busy slot, no actions. */
-  runMember?: boolean;
+  /**
+   * A run's other turn, drawn by its anchor, with no row, busy slot or actions: `work` is its
+   * report and work, inside the run fold; `answer` is its answer and error, under the run row.
+   */
+  runMember?: 'work' | 'answer';
 }
 
 const EMPTY_QUESTIONS: QuestionRequest[] = Object.freeze([]) as unknown as QuestionRequest[];
@@ -208,7 +212,7 @@ function SessionTurnImpl({
   runLabel,
   runTurns,
   foldStartedWork = false,
-  runMember = false,
+  runMember,
 }: SessionTurnProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -251,7 +255,7 @@ function SessionTurnImpl({
     [permissions, sessionId, blocks],
   );
   // Inside an agent run the agent's relays between colleagues (`send_message`) are noise.
-  const inRun = !!runLabel || runMember;
+  const inRun = !!runLabel || !!runMember;
   const segments = useMemo(() => {
     const all = turnSegments(segmentInputBlocks(blocks, answeredById, showInlineContent), standaloneCallIds);
     return inRun ? withoutRelayCalls(all) : all;
@@ -281,10 +285,10 @@ function SessionTurnImpl({
     [segments, imageGenPaths, imageGenDigests],
   );
   // KRTX-2113: settled, the work folds behind one "Worked for" row; `null` while working.
-  // A run member never folds on its own: it is fold content already.
+  // A run member draws no row of its own: the split only says which half it draws.
   const workSplit = useMemo(
-    () => (runMember ? null : turnWorkSplit(segments, working, foldStartedWork)),
-    [segments, working, foldStartedWork, runMember],
+    () => turnWorkSplit(segments, working, foldStartedWork),
+    [segments, working, foldStartedWork],
   );
   const durationMs = useMemo(() => (workSplit ? turnDurationMs(turn) : null), [workSplit, turn]);
   // The opened "Worked for" row, kept outside the turn so a FlatList remount does not close it.
@@ -481,15 +485,17 @@ function SessionTurnImpl({
        <ImageGenDigestsContext.Provider value={imageGenDigests}>
        <ImageGenRunsContext.Provider value={imageGenRuns}>
         <View style={{ gap: SEGMENT_STACK_GAP }}>
-          {split && !runLabel && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
+          {split && !runLabel && !runMember && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
           {segments.map((segment) => {
             const isWork = split !== null && workSegments.has(segment);
-            if (isWork && !workMounted) return null;
+            if (runMember === 'answer' && isWork) return null;
+            if (runMember === 'work' && split && !isWork) return null;
+            if (isWork && !workMounted && !runMember) return null;
             const node = renderSegment(segment, isWork);
             if (!React.isValidElement(node)) return null;
             // `display: none` takes no `gap`, so a folded turn has no blank rows.
             return (
-              <View key={node.key} style={isWork && !workOpen ? HIDDEN : undefined}>
+              <View key={node.key} style={isWork && !workOpen && !runMember ? HIDDEN : undefined}>
                 {node}
               </View>
             );
@@ -613,18 +619,36 @@ function SessionTurnImpl({
     body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} />);
   }
 
-  // An agent run's anchor (KRTX-4732): one row over the answer. Opened, it shows each other turn
-  // of the run (its report and the work it led to), then this turn's own report, then its work.
-  // While the turn works, its own report stays in view under the row.
+  // A run member (KRTX-4732): its report and work in the anchor's fold, or its answer under the row.
+  if (runMember === 'work') {
+    const work = body.filter((node) => React.isValidElement(node) && node.key === 'segments');
+    return (
+      <View style={{ gap: TURN_STACK_GAP }}>
+        {userMessage}
+        {work.length > 0 ? <View className="px-4">{work}</View> : null}
+      </View>
+    );
+  }
+  if (runMember === 'answer') {
+    return body.length > 0 ? (
+      <View className="px-4" style={{ gap: TURN_STACK_GAP }}>
+        {body}
+      </View>
+    ) : null;
+  }
+
+  // An agent run's anchor (KRTX-4732): one row, then every answer of the run. Opened, the row
+  // shows each other turn's report and work, then this turn's own report, then its work. While
+  // the turn works, its own report stays in view under the row.
   const runFold = !!runLabel;
   const noticeInFold = runFold && !working;
-  const members =
+  const runMembers = (part: 'work' | 'answer') =>
     runFold && runTurns?.length
       ? runTurns.map((member) => (
           <SessionTurn
             key={member.id}
             turn={member}
-            runMember
+            runMember={part}
             sessionId={sessionId}
             permissions={permissions}
             pendingQuestions={pendingQuestions}
@@ -636,6 +660,8 @@ function SessionTurnImpl({
           />
         ))
       : null;
+  const members = runMembers('work');
+  const answers = runMembers('answer');
 
   return (
     <View style={{ gap: TURN_STACK_GAP }}>
@@ -652,6 +678,7 @@ function SessionTurnImpl({
         </View>
       ) : null}
       {noticeInFold ? null : userMessage}
+      {answers}
       {body.length > 0 ? (
         <View className="px-4" style={{ gap: TURN_STACK_GAP }}>
           {body}

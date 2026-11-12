@@ -2475,8 +2475,8 @@ export function SessionChat({
     () => new Set(turns.filter((turn) => isAgentNoticeTurn(turn)).map((turn) => turn.id)),
     [turns],
   );
-  // A person's agents report back as one unit: the turns of a run fold into the turn that
-  // answers it, and only that answer stays at the top level (KRTX-4732). The main transcript
+  // A person's agents report back as one unit: the reports and work of a run fold into one row
+  // on its last turn, and every answer stays in view under it (KRTX-4732). The main transcript
   // only: a messages-only thread already hides notices.
   const agentRunLayout = useAgentRunLayout(turns, transcriptRows);
   const turnRenderKeys = useMemo(() => {

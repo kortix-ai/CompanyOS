@@ -1,7 +1,7 @@
 /**
  * The agent runs of a transcript (`sessionLogAgentRuns`, KRTX-4732), as row props: a person's
- * agents report back as one unit, the turns of a run fold into the turn that answers it, and only
- * that answer stays at the top level. Port of apps/web `session/thread/agent-run-props.ts`.
+ * agents report back as one unit: the reports and work of a run fold into one row on its last
+ * turn, and every answer stays in view under it. Port of apps/web `session/thread/agent-run-props.ts`.
  *
  * A stream delta remakes the turn list. A row whose run did not change keeps its props object,
  * so its memoized `SessionTurn` still bails out. When no row changed, the layout object itself

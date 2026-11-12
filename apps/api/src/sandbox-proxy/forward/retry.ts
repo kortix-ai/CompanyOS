@@ -35,7 +35,7 @@ import { isProviderIngressAuthFailure } from '../provider-auth';
 import { portFailureHop } from '../proxy-hop';
 import { shouldBypassIngressCache } from '../sse-stall';
 import type { ForwardRequest, ForwardState } from './context';
-import { clearDialDead, confirmDialDeadIfUnreachable, dialDeadKey, recordDialTimeout, shouldFailFast } from './dial-dead';
+import { clearDialDead, dialDeadKey, isDialDeadCandidate, maybeProbeDialDeadCandidate, recordDialTimeout, shouldFailFast } from './dial-dead';
 import { placePromptWireId, syncEnvBeforeTurnStart } from './turn-start';
 import {
   buildUpstreamRequestHeaders,
@@ -190,12 +190,19 @@ export function reportDialDeadFastFail(sandboxId: string, port: number, now = Da
   );
 }
 
-/** The TCP probe dials the ingress host and port as-is — the transport is
- *  irrelevant to reachability, so a TLS URL is probed on its plain port. */
-function tcpProbeTarget(url: string): { hostname: string; port: number } {
-  const parsed = new URL(url);
-  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
-  return { hostname: parsed.hostname, port };
+/** Ship the ladder-stop line of an UNCONFIRMED candidate through the same
+ *  throttle: the box timed out twice, the HTTP probe has not settled yet, so
+ *  this request stops dialling without fast-failing later ones. Its own
+ *  message keeps the sweep's `marked dial-dead` line exclusive to confirmed
+ *  marks. */
+export function reportDialDeadLadderStop(sandboxId: string, port: number, now = Date.now()): void {
+  reportPortOutcome(
+    `[PREVIEW] Sandbox ${sandboxId}:${port} stopped dialling after repeated connect timeouts — HTTP probe settling the dial-dead mark`,
+    'dial-dead-stop',
+    sandboxId,
+    port,
+    now,
+  );
 }
 
 /** The shared log-noise throttle behind both settled-outcome lines. */
@@ -228,19 +235,18 @@ async function forwardAttempt(
   const { sandboxId, port, method, remainingPath, queryString, upstreamPort, record, ingressRequest, ptl, userId, serviceKey } = req;
   const dialKey = dialDeadKey(sandboxId, port);
 
-  // A confirmed dial-dead box (two connect timeouts AND a failed TCP probe)
-  // gets no dial at all — the ladder's remaining attempts would each hang the
-  // full connect timer against a box that never answers TCP (KRTX-4459). Reads
-  // fail fast to the same give-up response they would have reached ~45 s
-  // later; writes keep the ladder and its ambiguity guards. Once per probe
-  // window one request dials again (shouldFailFast renews the slot), so a
-  // revived box is served again.
+  // A confirmed dial-dead box (two connect timeouts AND an HTTP probe through
+  // the ingress that got no answer) gets no dial at all — the ladder's
+  // remaining attempts would each hang the full connect timer against a path
+  // that answers no request (KRTX-4459). Reads fail fast to the same give-up
+  // response they would have reached ~45 s later; writes keep the ladder and
+  // its ambiguity guards. Once per probe window one request dials again
+  // (shouldFailFast renews the slot), so a revived box is served again.
   if (!plan.nonReplayableWrite && shouldFailFast(dialKey)) {
     state.lastAttemptHop = portFailureHop(upstreamPort);
     reportDialDeadFastFail(sandboxId, port);
     return giveUpForward(req, state);
   }
-
   state.lastAttemptHop = 'provider_ingress';
   if (req.isSseEventStreamRequest && attempt === 0 && shouldBypassIngressCache(plan.sseStallKey)) {
     console.warn(
@@ -257,20 +263,27 @@ async function forwardAttempt(
       ? await req.prefetchedIngress
       : await resolveSandboxIngress(record, ingressRequest);
   ptl.mark('ingress');
-  // A candidate streak (two connect timeouts, not yet confirmed) asks the box's
-  // TCP layer directly: a connect that fails confirms the mark and this request
-  // joins the fast-fail; a connect that succeeds proves the port served a
-  // connection (a slow handler, not a dead box) and clears the streak, so the
-  // ladder continues as before. Writes skip the gate; the probe is shared per
-  // key, so a concurrent burst confirms on one dial.
-  if (!plan.nonReplayableWrite && (await confirmDialDeadIfUnreachable(dialKey, tcpProbeTarget(ingress.url)))) {
-    state.lastAttemptHop = portFailureHop(upstreamPort);
-    reportDialDeadFastFail(sandboxId, port);
-    return giveUpForward(req, state);
-  }
   state.lastAttemptHop = portFailureHop(upstreamPort);
   const previewUrl = ingress.url;
   const targetUrl = ingressTargetUrl(ingress, remainingPath + queryString);
+
+  // A candidate streak (two connect timeouts, not yet confirmed) asks the path's
+  // HTTP layer directly — the one observable the HTTPS provider edge passes
+  // through from the box (a TCP connect proves only the edge, and the streak
+  // only ever forms on header timeouts, so TCP is reachable for exactly the
+  // cases it holds). The probe is detached: the request keeps today's ladder,
+  // and the probe's verdict fast-fails the requests AFTER it. Writes skip it;
+  // the probe is shared per key, so a concurrent burst spawns one probe.
+  if (!plan.nonReplayableWrite) {
+    void maybeProbeDialDeadCandidate(dialKey, { url: targetUrl, headers: ingress.headers });
+    // The ladder also stops on the unconfirmed candidate: a third dial against
+    // a box that timed out twice buys another 15 s hang, and the probe settles
+    // the mark for the requests that follow.
+    if (attempt > 0 && isDialDeadCandidate(dialKey)) {
+      reportDialDeadLadderStop(sandboxId, port);
+      return giveUpForward(req, state);
+    }
+  }
 
   if (req.turnStartEnvSync) {
     const refusal = await syncEnvBeforeTurnStart(req, state, previewUrl, ingress.headers);

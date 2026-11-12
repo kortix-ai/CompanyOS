@@ -107,6 +107,26 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await slackProjectLink(a.project_id)).toEqual({ teamId: y });
   });
 
+  test('a reinstall is the newest install: a detach in another Slack workspace keeps the token it wrote', async () => {
+    const x = team('REINSTX');
+    const y = team('REINSTY');
+    await shared(a.project_id, x);
+    await moveSlackLink(x, a.project_id);
+    await shared(a.project_id, y);
+    await moveSlackLink(y, a.project_id);
+    // Reinstalling x writes x's token and makes x the newest install.
+    await shared(a.project_id, x);
+    await shared(b.project_id, y);
+    await moveSlackLink(y, b.project_id);
+
+    expect(await installsOf(x)).toEqual([a.project_id]);
+    const token = await db
+      .select({ name: projectSecrets.name })
+      .from(projectSecrets)
+      .where(and(eq(projectSecrets.projectId, a.project_id), eq(projectSecrets.name, 'SLACK_BOT_TOKEN')));
+    expect(token).toHaveLength(1);
+  });
+
   test('several installs from before the move heal on first use: the one Slack used stays, the others are detached once', async () => {
     const ws = team('HEAL');
     await db.insert(chatInstalls).values([
@@ -136,7 +156,7 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await slackProjectLink(byo.project_id)).toEqual({ teamId: ws });
   });
 
-  test('a shared-app install that plants a signing secret is not an own app: it is detached like any duplicate', async () => {
+  test('a shared-app install that plants a signing secret is not an own app: no link, nothing erased', async () => {
     const ws = team('FAKE');
     // Two shared-app installs from before the move; `b` writes the secret an
     // own app stores, through the generic secrets path an admin can use.
@@ -153,13 +173,15 @@ describe('one Slack workspace, one Kortix workspace', () => {
       .where(eq(projectSessions.sessionId, used));
 
     expect(await linkedSlackProject(ws)).toBe(a.project_id);
-    // The planted secret exempts nothing: `b` is detached here like any duplicate.
-    expect(await installsOf(ws)).toEqual([a.project_id]);
+    // The planted secret buys nothing: `b` holds no link here. Its install is
+    // kept unerased (an own app from before `own_app` looks the same) and
+    // stays refused until an own-app install marks it.
     expect(await holdsSlackWorkspace(b.project_id, ws)).toBe(false);
+    expect(await installsOf(ws)).toEqual([a.project_id, b.project_id].sort());
     await db.delete(projectSecrets).where(and(eq(projectSecrets.projectId, b.project_id), eq(projectSecrets.name, 'SLACK_SIGNING_SECRET')));
   });
 
-  test("a channel's settings row: recorded for the linked workspace, taken over from a detached one, kept for a workspace's own app", async () => {
+  test("a channel's settings row: recorded for the linked workspace, which takes it over from any other; an own app never takes it back", async () => {
     const ws = team('ROWS');
     await shared(b.project_id, ws);
     await moveSlackLink(ws, b.project_id);
@@ -183,7 +205,9 @@ describe('one Slack workspace, one Kortix workspace', () => {
     await recordSlackChannel(b.project_id, ws, 'C0OWNAPP');
     expect(await row('C0NEW')).toEqual({ projectId: b.project_id, agentName: null });
     expect(await row('C0STALE')).toEqual({ projectId: b.project_id, agentName: null });
-    expect(await row('C0OWNAPP')).toEqual({ projectId: byo.project_id, agentName: 'own-agent' });
+    expect(await row('C0OWNAPP')).toEqual({ projectId: b.project_id, agentName: null });
+    await recordSlackChannel(byo.project_id, ws, 'C0OWNAPP');
+    expect(await row('C0OWNAPP')).toEqual({ projectId: b.project_id, agentName: null });
   });
 });
 

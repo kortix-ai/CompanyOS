@@ -689,7 +689,7 @@ export interface SlackMembership {
 /**
  * The conversations of `types` the token's bot is in, or with `user`, the ones
  * that person is in among those the bot can see (`users.conversations`). Null
- * on any failure, so the caller fails closed. At most 10 pages of 1000.
+ * on any failure or past 10 pages of 1000, so the caller fails closed.
  */
 export async function slackMemberships(
   token: string,
@@ -714,7 +714,9 @@ export async function slackMemberships(
       cursor = (r.response_metadata as { next_cursor?: string } | undefined)?.next_cursor ?? '';
       if (!cursor) return out;
     }
-    return out;
+    // Past the cap the list is incomplete, and a conversation missing from it
+    // would read as public: answer "unknown" instead.
+    return null;
   } catch {
     return null;
   }

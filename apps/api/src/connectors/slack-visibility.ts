@@ -102,6 +102,26 @@ function isPrivateRecord(c: Record<string, unknown>): boolean {
 
 const PASS: ChannelReadGate = { refusal: null, answer: async (data) => ({ data }) };
 
+/** A file record without the private conversations (`groups`, `ims`, `shares.private`) `may` refuses. */
+function withoutHiddenShares(file: Record<string, unknown>, may: (id: string) => boolean): Record<string, unknown> {
+  const keep = (ids: unknown) => (Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && may(normalized(id) ?? '')) : ids);
+  const shares = isRecord(file.shares) ? file.shares : null;
+  const priv = shares && isRecord(shares.private) ? shares.private : null;
+  return {
+    ...file,
+    groups: keep(file.groups),
+    ims: keep(file.ims),
+    ...(shares
+      ? {
+          shares: {
+            ...shares,
+            ...(priv ? { private: Object.fromEntries(Object.entries(priv).filter(([id]) => may(normalized(id) ?? ''))) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 /**
  * The gate for one Slack read. `kind` is the action's entry in
  * `CHANNEL_READ_SCOPES.slack`; a write is gated in channel-write-scope.ts.
@@ -165,10 +185,14 @@ export async function gateSlackRead(
           .flatMap((v) => (Array.isArray(v) ? v : []))
           .map(normalized)
           .filter((id): id is string => !!id);
-        const open = Array.isArray(file.channels) && file.channels.length > 0;
-        if (open || closed.length === 0) return { data };
+        if (closed.length === 0) return { data };
         const v = await view();
-        if (v && closed.some((id) => mayRead(v, id))) return { data };
+        const open = Array.isArray(file.channels) && file.channels.length > 0;
+        if (v && (open || closed.some((id) => mayRead(v, id)))) {
+          // Readable, but the private conversations it is shared in that the
+          // person is not in stay out of the answer.
+          return { data: { ...data, file: withoutHiddenShares(file, (id) => mayRead(v, id)) } };
+        }
         const id = typeof file.id === 'string' ? file.id : '';
         return refusal(
           SLACK_PRIVATE_CONVERSATION,

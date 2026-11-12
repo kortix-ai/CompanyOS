@@ -61,7 +61,8 @@ export async function saveSlackInstall(input: SlackInstallInput): Promise<SlackI
     })
     .onConflictDoUpdate({
       target: [chatInstalls.platform, chatInstalls.platformTeamId, chatInstalls.projectId],
-      set: { ownApp: true },
+      // A reinstall is the newest install: it wrote the secrets (slack/link.ts).
+      set: { ownApp: true, connectedAt: new Date() },
     });
   await upsertSecret(projectId, SLACK_BOT_TOKEN, input.botToken);
   await upsertSecret(projectId, SLACK_SIGNING_SECRET, input.signingSecret);
@@ -107,7 +108,7 @@ export async function saveSlackOauthInstall(
     })
     .onConflictDoUpdate({
       target: [chatInstalls.platform, chatInstalls.platformTeamId, chatInstalls.projectId],
-      set: { ownApp: false },
+      set: { ownApp: false, connectedAt: new Date() },
     });
   await upsertSecret(input.projectId, SLACK_BOT_TOKEN, input.botToken);
   await upsertSecret(input.projectId, SLACK_TEAM_ID, input.workspaceId);

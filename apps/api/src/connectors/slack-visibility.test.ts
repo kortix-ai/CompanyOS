@@ -132,6 +132,17 @@ describe('reads decided on the answer', () => {
     expect('refusal' in (await answer(await gate('file_info', { file: 'F0SYNTH01' }, slack), file({ groups: ['G0EXEC'] })))).toBe(true);
   });
 
+  test('file_info: a file also shared in public keeps out the private conversations the person is not in', async () => {
+    const { slack } = deps();
+    const res = await answer(await gate('file_info', { file: 'F0SYNTH01' }, slack), {
+      ok: true,
+      file: { id: 'F0SYNTH01', channels: ['C0PUBLIC'], groups: ['G0FIN', 'G0EXEC'], ims: [], shares: { private: { G0FIN: [{ ts: '1.0' }], G0EXEC: [{ ts: '2.0' }] } } },
+    });
+    const file = 'data' in res ? (res.data as { file: { groups: string[]; shares: { private: Record<string, unknown> } } }).file : null;
+    expect(file?.groups).toEqual(['G0FIN']);
+    expect(Object.keys(file?.shares.private ?? {})).toEqual(['G0FIN']);
+  });
+
   test('search_messages drops matches from private conversations the person is not in', async () => {
     const { slack } = deps();
     const res = await answer(await gate('search_messages', { query: 'q4' }, slack), {

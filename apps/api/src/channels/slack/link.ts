@@ -45,6 +45,12 @@ async function sharedInstalls(teamId: string): Promise<string[]> {
   return rows.map((r) => r.projectId);
 }
 
+/** Does this Kortix workspace store a Slack signing secret, as an own-app install did before `own_app`? */
+async function mayPredateOwnAppFlag(projectId: string): Promise<boolean> {
+  const { readSecret } = await import('../install-store');
+  return Boolean(await readSecret(projectId, 'SLACK_SIGNING_SECRET'));
+}
+
 /**
  * Of several installs, the one to keep: the Kortix workspace with the most
  * recent session started from this Slack workspace, else the newest install.
@@ -120,7 +126,13 @@ export async function linkedSlackProject(teamId: string): Promise<string | null>
   if (installs.length <= 1) return installs[0] ?? null;
   const primary = await primaryOf(teamId, installs);
   for (const other of installs) {
-    if (other !== primary) await detach(teamId, other, 'one Slack workspace, one Kortix workspace');
+    if (other === primary) continue;
+    // An own-app install from before `own_app` existed reads as a shared one.
+    // It may store its own token, so it is never erased here: the gate
+    // refuses it until its own-app install runs again and marks it. A
+    // workspace that plants the secret gains nothing: it stays refused.
+    if (await mayPredateOwnAppFlag(other)) continue;
+    await detach(teamId, other, 'one Slack workspace, one Kortix workspace');
   }
   return primary;
 }
@@ -191,13 +203,16 @@ export async function recordSlackChannel(
     })
     .returning({ id: chatChannelBindings.bindingId });
   if (inserted.length > 0) return;
-  // A row left by a Kortix workspace that no longer holds this Slack
-  // workspace (or an unanswered picker of the old model) is taken over, its
-  // settings cleared: they named that workspace's agents. A row of a workspace
-  // that still holds a link (its own Slack app) stays.
+  // A row of another Kortix workspace (or an unanswered picker of the old
+  // model) is taken over with its settings cleared: they named that
+  // workspace's agents.
   const [row] = await db.select({ projectId: chatChannelBindings.projectId }).from(chatChannelBindings).where(where).limit(1);
   if (!row || row.projectId === projectId) return;
-  if (row.projectId && (await holdsSlackWorkspace(row.projectId, teamId))) return;
+  // One settings row per channel: the shared app's linked workspace owns it,
+  // so its agent, model and policy always apply. Any other workspace takes a
+  // row over only from one that no longer holds this Slack workspace.
+  const linkedHere = (await linkedSlackProject(teamId)) === projectId;
+  if (!linkedHere && row.projectId && (await holdsSlackWorkspace(row.projectId, teamId))) return;
   await db
     .update(chatChannelBindings)
     .set({ projectId, agentName: null, model: null, conversationPolicy: 'project_open', pickerTs: null })

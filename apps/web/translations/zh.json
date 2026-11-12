@@ -106,6 +106,14 @@
     "access": "访问权限",
     "actions": "操作",
     "coolingDown": "冷却中",
+    "keyVerified": "已验证：{provider} 接受了此密钥",
+    "keyInvalid": "{provider} 拒绝了此密钥：{message}",
+    "keyUnchecked": "未验证：{message}",
+    "checkKey": "重新检查",
+    "savedVerified": "密钥已保存并验证",
+    "savedInvalid": "密钥已保存，但 {provider} 拒绝了它：{message}",
+    "checkError": "无法检查该密钥",
+    "openProviderInModels": "在模型中打开 {provider}",
     "member": "成员",
     "members": "位成员",
     "actionsFor": "{label} 的操作",
@@ -177,7 +185,10 @@
     "claudeConnectFailed": "Claude 登录未完成。请重试。",
     "claudeReconnectDescription": "重新使用 Claude 登录。账号会保留名称、访问权限和会话选择。",
     "claudeAccountLabelPlaceholder": "例如：我的 Claude 账号",
-    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？"
+    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？",
+    "sharedOnlyYouDescription": "添加 API 密钥、ChatGPT 账户和 Claude 账户。你添加的只有你能使用。工作区管理员可以共享其中一个。选择每个会话使用哪些。",
+    "oauthOnlyYouDescription": "在此工作区使用你的 ChatGPT Plus 或 Pro 套餐。你添加的账户只有你能使用。",
+    "claudeOauthOnlyYouDescription": "在此工作区为 Claude 模型使用你的 Claude Pro 或 Max 套餐。你添加的账户只有你能使用。"
   },
   "secrets": {
     "undecryptable": {
@@ -2084,7 +2095,11 @@
       "claudePlan": "Pro 或 Max 套餐",
       "connectModel": "连接模型",
       "imagesUnsupported": "{model} 无法读取图片",
-      "imagesUnsupportedHint": "请移除图片或选择其他模型"
+      "imagesUnsupportedHint": "请移除图片或选择其他模型",
+      "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
+      "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
+      "noModelUpgradePlan": "升级套餐",
+      "noModelAddProviderKey": "添加提供商密钥"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -10381,6 +10396,8 @@
       "checkConnection": "请检查网络连接，然后重试。"
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "添加提供商密钥",
+      "noModelUpgradePlan": "升级套餐",
       "authEmailRateLimit": "无法发送邮件。请在大约一小时后重试。",
       "authRequestRateLimit": "请求过多。请在几分钟后重试。",
       "text03217276a5f1": "余额 {value0} 积分",
@@ -22078,6 +22095,12 @@
     "noticeSignInTitle": "登录 {name}",
     "noticeSignInBody": "Kortix 已添加 {name}。完成登录后，智能体即可使用其工具。",
     "noticeSignInAction": "登录",
+    "noticeSignInAgainTitle": "重新登录 {name}",
+    "noticeSignInAgainBody": "登录已过期或已被撤销。在你重新登录之前，代理无法使用 {name}。",
+    "noticeNoToolsTitle": "{name} 没有工具",
+    "noticeNoToolsBody": "它没有路由，因此代理没有可调用的内容。请在设置中向其路由规范添加路由。",
+    "noticeAddRoutesAction": "添加路由",
+    "statusNoTools": "无工具",
     "connectAccount": "连接",
     "notSignedIn": "未登录",
     "credentialRejected": "凭据被拒绝：请替换",
@@ -23716,7 +23739,13 @@
   },
   "triggerAutoPause": {
     "title": "已自动暂停",
-    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。"
+    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。",
+    "billingTitle": "已暂停：额度不足",
+    "billingDescription": "无法为任何运行付费，因此已停止启动运行。余额充值后几分钟内会自动恢复。",
+    "modelTitle": "已暂停：没有可用模型",
+    "modelDescription": "自动化只使用与整个工作区共享的模型密钥和账户，而目前没有可用的。在“模型”中添加一个后，几分钟内会自动恢复。",
+    "listBilling": "额度不足",
+    "listModel": "没有模型"
   },
   "featureGate": {
     "enable": "启用{name}",
@@ -26816,5 +26845,24 @@
   "gatewayBudgets": {
     "capWorkspace": "为此工作区的网关支出设置上限。",
     "capMember": "为 {who} 的网关支出设置上限。"
+  },
+  "connectSignIn": {
+    "openSignIn": "打开 {app} 登录",
+    "checkingTitle": "正在完成登录",
+    "checkingDescription": "Kortix 正在检查你的 {app} 登录。此页面会自动更新。",
+    "signInUnfinished": "登录未完成",
+    "finishSignIn": "完成登录",
+    "signInFinished": "登录已完成",
+    "cardHeadline": "你的代理需要你登录",
+    "cardTitle": "连接 {app}",
+    "cardShared": "与工作区共享",
+    "cardPrivate": "仅你自己",
+    "signingIn": "在打开的窗口中完成 {app} 登录。",
+    "connectedAs": "已连接为 {account}",
+    "connected": "已连接",
+    "connect": "连接",
+    "cardFailed": "无法连接 {app}。请重试。",
+    "blockedTitle": "打开 {app} 登录",
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
   }
 }

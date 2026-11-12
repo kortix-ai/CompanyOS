@@ -18,6 +18,7 @@ import { accountMemberRow } from '../../iam/membership-read';
 import type { TriggerFireSource } from './trigger-webhook-auth';
 import { claimTriggerCreate, releaseTriggerCreate, triggerCreateKey } from './trigger-create-claim';
 import { triggerModelRefusal } from './trigger-model-gate';
+import { pauseTriggerOnAccountRefusal } from './trigger-setup-pause';
 import { alertTriggerAutoPaused, alertTriggerThrottled, clearTriggerAlert } from './trigger-alerts';
 import { autoPauseTrigger, readTriggerAutoPause, triggerAutoPauseReason, triggerRunCapVerdict } from './trigger-run-caps';
 import { triggerChecksOverlap, triggerOverlapReason } from './trigger-overlap';
@@ -360,6 +361,18 @@ export async function fireGitTrigger(
   input: Parameters<typeof fireGitTriggerOnce>[0],
 ): ReturnType<typeof fireGitTriggerOnce> {
   const result = await fireGitTriggerOnce(input);
+  // No model or no credits: the account cannot run it, so the trigger pauses
+  // and resumes when the cause is gone (trigger-setup-pause.ts) instead of
+  // dead-lettering every slot.
+  if (result.status === 'failed' && result.errorCode) {
+    await pauseTriggerOnAccountRefusal({
+      projectId: input.project.projectId,
+      accountId: input.project.accountId,
+      slug: input.spec.slug,
+      errorCode: result.errorCode,
+      error: result.error,
+    });
+  }
   if (result.status === 'fired' || result.status === 'queued') {
     captureAccountProductEvent({
       accountId: input.project.accountId,

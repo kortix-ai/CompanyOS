@@ -106,6 +106,14 @@
     "access": "Accès",
     "actions": "Actions",
     "coolingDown": "En attente après une limite",
+    "keyVerified": "Vérifiée : {provider} a accepté cette clé",
+    "keyInvalid": "{provider} a refusé cette clé : {message}",
+    "keyUnchecked": "Non vérifiée : {message}",
+    "checkKey": "Vérifier à nouveau",
+    "savedVerified": "Clé enregistrée et vérifiée",
+    "savedInvalid": "Clé enregistrée, mais {provider} l’a refusée : {message}",
+    "checkError": "La clé n’a pas pu être vérifiée",
+    "openProviderInModels": "Ouvrir {provider} dans Modèles",
     "member": "membre",
     "members": "membres",
     "actionsFor": "Actions pour {label}",
@@ -177,7 +185,10 @@
     "claudeConnectFailed": "La connexion Claude n’a pas abouti. Réessayez.",
     "claudeReconnectDescription": "Reconnectez-vous avec Claude. Le compte conserve son nom, ses accès et les sélections de session.",
     "claudeAccountLabelPlaceholder": "p. ex. Mon compte Claude",
-    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?"
+    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?",
+    "sharedOnlyYouDescription": "Ajoutez des clés API, des comptes ChatGPT et des comptes Claude. Vous seul pouvez utiliser ceux que vous ajoutez. Un gestionnaire de l'espace de travail peut en partager un. Choisissez ceux que chaque session utilise.",
+    "oauthOnlyYouDescription": "Utilisez votre forfait ChatGPT Plus ou Pro dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez.",
+    "claudeOauthOnlyYouDescription": "Utilisez votre forfait Claude Pro ou Max pour les modèles Claude dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez."
   },
   "secrets": {
     "undecryptable": {
@@ -2084,7 +2095,11 @@
       "claudePlan": "Abonnement Pro ou Max",
       "connectModel": "Connecter un modèle",
       "imagesUnsupported": "{model} ne peut pas lire les images",
-      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle"
+      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle",
+      "noModelUpgradeReason": "Aucun modèle : passez au plan Credits ou ajoutez votre propre clé de fournisseur.",
+      "noModelKeyReason": "Aucun modèle : ajoutez votre propre clé de fournisseur.",
+      "noModelUpgradePlan": "Changer de plan",
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt enregistré",
@@ -10381,6 +10396,8 @@
       "checkConnection": "Vérifiez votre connexion, puis réessayez."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur",
+      "noModelUpgradePlan": "Changer de plan",
       "authEmailRateLimit": "Impossible d’envoyer l’e-mail. Réessaie dans environ une heure.",
       "authRequestRateLimit": "Trop de demandes. Réessaie dans quelques minutes.",
       "text03217276a5f1": "Solde {value0} crédits",
@@ -22078,6 +22095,12 @@
     "noticeSignInTitle": "Se connecter à {name}",
     "noticeSignInBody": "Kortix a ajouté {name}. Terminez la connexion pour que les agents puissent utiliser ses outils.",
     "noticeSignInAction": "Se connecter",
+    "noticeSignInAgainTitle": "Reconnectez-vous à {name}",
+    "noticeSignInAgainBody": "La connexion a expiré ou a été révoquée. Les agents ne peuvent pas utiliser {name} tant que vous ne vous reconnectez pas.",
+    "noticeNoToolsTitle": "{name} n’a aucun outil",
+    "noticeNoToolsBody": "Il n’a aucune route, les agents n’ont donc rien à appeler. Ajoutez des routes à sa spécification de routes dans Paramètres.",
+    "noticeAddRoutesAction": "Ajouter des routes",
+    "statusNoTools": "Aucun outil",
     "connectAccount": "Connecter",
     "notSignedIn": "Non connecté",
     "credentialRejected": "Identifiant refusé : remplacez-le",
@@ -23716,7 +23739,13 @@
   },
   "triggerAutoPause": {
     "title": "Mis en pause automatiquement",
-    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le."
+    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le.",
+    "billingTitle": "En pause : plus de crédits",
+    "billingDescription": "Aucune exécution ne peut être payée, il n’en lance donc plus. Il reprend tout seul quelques minutes après la recharge du solde.",
+    "modelTitle": "En pause : aucun modèle disponible",
+    "modelDescription": "Les automatisations n’utilisent que les clés de modèle et les comptes partagés avec tout l’espace de travail, et aucun n’est utilisable. Il reprend tout seul quelques minutes après l’ajout d’un modèle dans Modèles.",
+    "listBilling": "Plus de crédits",
+    "listModel": "Aucun modèle"
   },
   "featureGate": {
     "enable": "Activer {name}",
@@ -26816,5 +26845,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Plafonnez les dépenses du gateway de cet espace de travail.",
     "capMember": "Plafonnez les dépenses du gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Ouvrir la connexion {app}",
+    "checkingTitle": "Finalisation de la connexion",
+    "checkingDescription": "Kortix vérifie votre connexion à {app}. Cette page se met à jour toute seule.",
+    "signInUnfinished": "Connexion non terminée",
+    "finishSignIn": "Terminer la connexion",
+    "signInFinished": "Connexion terminée",
+    "cardHeadline": "Votre agent a besoin que vous vous connectiez",
+    "cardTitle": "Connecter {app}",
+    "cardShared": "Partagé avec l'espace de travail",
+    "cardPrivate": "Vous seul",
+    "signingIn": "Terminez la connexion à {app} dans la fenêtre ouverte.",
+    "connectedAs": "Connecté en tant que {account}",
+    "connected": "Connecté",
+    "connect": "Connecter",
+    "cardFailed": "Impossible de connecter {app}. Réessayez.",
+    "blockedTitle": "Ouvrez {app} pour vous connecter",
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
   }
 }

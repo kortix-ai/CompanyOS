@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1753,
-  "aliases": 675,
+  "count": 1755,
+  "aliases": 676,
   "routes": [
     {
       "method": "GET",
@@ -971,6 +971,11 @@
       "method": "PUT",
       "path": "/v1/accounts/:workspaceId/secret-resources/:secretId/value",
       "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/accounts/:workspaceId/secret-resources/:secretId/verify",
+      "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
     },
     {
       "method": "GET",
@@ -6997,6 +7002,10 @@
     {
       "method": "PUT",
       "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
     },
     {
       "method": "GET",

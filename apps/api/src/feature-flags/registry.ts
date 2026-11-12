@@ -106,6 +106,7 @@
  * Kortix operator on request. Their 403 says "contact Kortix" instead of
  * naming a toggle the caller cannot see (gate.ts).
  */
+import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { config } from '../config';
 import { platinumUsRegion } from '../shared/platinum-region';
 import type { FeatureFlagKey, FeatureFlagStability } from '@kortix/api-contract';
@@ -246,9 +247,13 @@ const FLAGS: readonly FeatureFlagDef[] = [
     // On by default since 2026-10-31: every project gets named provider
     // accounts, shared with the workspace by default for a person who may
     // share (2026-11-11). A project that turned it off keeps it off.
+    // Since the one-store change (llm-credential-move.ts) named accounts are
+    // where every provider key lives: the flag no longer decides where a key
+    // is saved or whether the gateway reads it. It gates per-session key
+    // selection and the named ChatGPT/Claude sign-in only.
     platformDefault: () => true,
     enforcement: 'behavioral',
-    enforcementNote: 'Session selection and provider credential resolution reject or ignore resource secrets while disabled.',
+    enforcementNote: 'Session key selection and named ChatGPT/Claude sign-ins are refused while disabled. Provider keys are saved and read as named accounts either way.',
   },
   // `pi_harness` graduated (2026-10-23): every new session runs pi; OpenCode is
   // sunset (kortixd has no OpenCode harness since 2026-10-30). No flag, no
@@ -467,7 +472,11 @@ const FLAGS: readonly FeatureFlagDef[] = [
     stability: 'experimental',
     // Off on staging and prod until the Chrome Web Store listing is public.
     available: () => config.KORTIX_CHROME_ENABLED,
-    platformDefault: () => true,
+    // Not launched (CHROME_LAUNCHED, #11436): the web has no Chrome surface, so
+    // no project gets it by default and the catalog does not offer it. An
+    // operator can still turn it on for one project (the extension's dev pairing).
+    platformDefault: () => CHROME_LAUNCHED,
+    ...(CHROME_LAUNCHED ? {} : { catalogHidden: true as const }),
     enforcement: 'routes',
     enforcementNote:
       'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +

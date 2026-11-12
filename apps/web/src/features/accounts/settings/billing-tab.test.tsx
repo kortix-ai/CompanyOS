@@ -104,7 +104,7 @@ describe('BillingTab — plan pane without a paid subscription', () => {
     memberCount = 3;
   });
 
-  test('shows the Free plan with its monthly credits and the tier select on the $200 tier', () => {
+  test('shows the Free plan with its monthly credits and the tier select on the $50 entry tier', () => {
     billingEnabled = true;
     accountStateData = freeState();
     const html = renderPlan();
@@ -112,8 +112,8 @@ describe('BillingTab — plan pane without a paid subscription', () => {
     expect(html).toContain('>Free</p>');
     expect(html).toContain('500 credits / month');
     expect(html).toContain('Monthly credits');
-    expect(html).toContain('Subscribe for $200 / month');
-    expect(html).toContain('20,000 credits / month');
+    expect(html).toContain('Subscribe for $50 / month');
+    expect(html).toContain('5,000 credits / month');
     expect(html).not.toContain('Available balance');
   });
 
@@ -121,7 +121,7 @@ describe('BillingTab — plan pane without a paid subscription', () => {
     accountStateData = freeState();
     const html = renderPlan();
     expect(html).not.toContain('Most popular');
-    expect(html).toContain('≈ 1,830 agent-computer hours a month.'); // agentHoursForCredits(20_000)
+    expect(html).toContain('≈ 460 agent-computer hours a month.'); // agentHoursForCredits(5_000)
     expect(html).not.toContain('Starter');
   });
 
@@ -181,7 +181,7 @@ describe('BillingTab — plan pane without a paid subscription', () => {
     expect(html).not.toContain('Available balance');
     expect(html).toContain('Current plan');
     expect(html).toContain('>Free</p>');
-    expect(html).toContain('Subscribe for $200 / month');
+    expect(html).toContain('Subscribe for $50 / month');
   });
 
   test('the hub wallet-first view on a plan that can purchase credits keeps the balance and top-up', () => {

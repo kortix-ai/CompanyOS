@@ -26741,7 +26741,9 @@
       "noWorkspaceTitle": "CLI にサインインするにはワークスペースを作成してください",
       "noWorkspaceBody": "CLI はワークスペースにサインインします。ワークスペースを作成してから、このサインインを承認してください。",
       "createAction": "ワークスペースを作成",
-      "workspaceLabel": "ワークスペース"
+      "workspaceLabel": "ワークスペース",
+      "loadFailedTitle": "ワークスペースを読み込めませんでした",
+      "loadFailedBody": "このサインインにはワークスペース一覧が必要です。アカウントに問題はありません。もう一度お試しください。"
     },
     "models": {
       "yourDefault": "ワークスペースの既定",

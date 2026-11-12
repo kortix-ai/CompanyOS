@@ -72,10 +72,16 @@ function CliAuthorizeInner() {
   const [typedCode, setTypedCode] = useState('');
   const [noWorkspace, setNoWorkspace] = useState(false);
   const tCli = useTranslations('workspaces.cli');
+  const tCommon = useTranslations('common');
   // A CLI login acts in a workspace: with none, the API answers 409
   // `no_workspace`. Say so up front instead of after a failed approve.
   const directory = useWorkspaceDirectory();
-  const withoutWorkspace = noWorkspace || (!directory.loading && directory.openable.length === 0);
+  // A failed list is UNKNOWN, not empty: offering workspace creation to a
+  // person whose workspaces merely failed to load is a dead end (KRTX-4788).
+  // The 409 `no_workspace` stays authoritative — it does not read the list.
+  const listFailed = directory.failedAccountIds.length > 0;
+  const withoutWorkspace =
+    noWorkspace || (!directory.loading && !listFailed && directory.openable.length === 0);
   // A CLI key acts in ONE workspace. With 2+ the person picks which; the
   // most recently opened one is preselected. The key is account-scoped, so
   // the choice is sent as the workspace's `account_id`.
@@ -123,6 +129,22 @@ function CliAuthorizeInner() {
 
   if (isLoading || !user || directory.loading) {
     return <AuthPendingScreen />;
+  }
+
+  if (listFailed && !withoutWorkspace && (userCode || (callback && state && validation.ok))) {
+    // The one way forward is a retry: approving needs a workspace, and the
+    // person may have one that this page just could not see.
+    return (
+      <AuthStatusScreen
+        title={tCli('loadFailedTitle')}
+        description={tCli('loadFailedBody')}
+        action={
+          <Button size="lg" className="w-full" onClick={directory.retryFailed}>
+            {tCommon('retry')}
+          </Button>
+        }
+      />
+    );
   }
 
   if (withoutWorkspace && (userCode || (callback && state && validation.ok))) {

@@ -83,6 +83,15 @@ describe('lastRunLabel (C09 trailing, line two)', () => {
   test('a trigger that never ran says so', () => {
     expect(lastRunLabel(ran(null), t, 'en', now)).toBe('Never run');
   });
+  test('a trigger whose every attempt failed names the failure and when, never "Never run"', () => {
+    const failed = { last_fired_at: null, event: null, last_status: 'failed', last_attempt_at: new Date(now - 5 * MIN).toISOString() } as Pick<
+      ProjectTrigger, 'last_fired_at' | 'event' | 'last_status' | 'last_attempt_at'>;
+    expect(lastRunLabel(failed, t, 'en', now)).toBe('Failed · 5m ago');
+    // A failed attempt after an older fire: the failure is the latest news.
+    expect(lastRunLabel({ ...failed, last_fired_at: new Date(now - 2 * 3_600_000).toISOString() }, t, 'en', now)).toBe('Failed · 5m ago');
+    // A fire after the failure: the fire wins.
+    expect(lastRunLabel({ ...failed, last_status: 'fired', last_fired_at: new Date(now - MIN).toISOString() }, t, 'en', now)).toBe('1m ago');
+  });
 });
 
 describe('nextRunIn (the session reminders panel keeps its narrow style)', () => {

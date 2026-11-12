@@ -190,6 +190,7 @@ export interface GatewayDeps {
   ): Promise<
     | 'connector_not_found'
     | 'connector_not_connected'
+    | 'connector_not_shared'
     | 'connector_disabled'
     | 'account_required'
     | 'computer_unpaired'

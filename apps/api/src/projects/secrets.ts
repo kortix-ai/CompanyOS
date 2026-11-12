@@ -60,7 +60,10 @@ export async function writeSharedProjectSecret(input: {
       scope: serverSide ? 'connector' : 'runtime',
       strategy: serverSide ? 'broker' : 'runtime',
       consumer: serverSide ? 'connector' : 'sandbox',
-      strategyLocked: serverSide,
+      // Connector-only is where the value starts, not a lock: the person who
+      // typed it may move it to environment delivery later. Only a model
+      // subscription credential is locked (secretStrategyLockHolds).
+      strategyLocked: false,
       createdBy: input.createdBy ?? null,
       // A value a person just typed was never exposed: it is a fresh rotation.
       rotatedAt: now,
@@ -77,7 +80,6 @@ export async function writeSharedProjectSecret(input: {
               scope: 'connector' as const,
               strategy: 'broker' as const,
               consumer: 'connector' as const,
-              strategyLocked: true,
             }
           : {}),
         rotatedAt: now,

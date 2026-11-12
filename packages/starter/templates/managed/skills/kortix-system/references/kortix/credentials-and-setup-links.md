@@ -39,12 +39,14 @@ printf '%s' "$VALUE" | kortix secrets set BILLING_API_TOKEN=- --scope connector
 ## Mint a secret link
 
 ```sh
-kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime   # your code reads them
-kortix secrets request BILLING_API_TOKEN                                  # connector (the default)
+kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime     # your code reads them (the default)
+kortix secrets request BILLING_API_TOKEN --scope connector                  # only a connector spends it
 ```
 
-- **`connector` is the default scope of `request`.** The value never reaches
-  the sandbox. Pass `--scope runtime` for a key your code or tools read.
+- **Always pass the scope you mean.** `runtime` (the default) delivers the
+  value to you as an env var: use it for "store my key" and for any key your
+  code or tools read. `connector` keeps it server-side for a connector and
+  never puts it in the sandbox. The person can change delivery later.
 - One link asks for several keys. Ask for everything in one message.
 - A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
   set the names it lists, in this workspace.
@@ -133,7 +135,7 @@ agent's trigger needs, suggest `kortix secrets share <NAME> --agent <agent>`.
 | --- | --- |
 | Store a value you have | `kortix secrets set <NAME>=- [--scope connector]` |
 | Ask for a value your code reads | `kortix secrets request <NAME…> --scope runtime` |
-| Ask for a connector's key | `kortix secrets request <NAME…>` |
+| Ask for a connector's key | `kortix secrets request <NAME…> --scope connector` |
 | Connect an app account | `kortix connectors connect <slug> [--owner project] --label "<name>"` |
 | Check a secret arrived | `kortix secrets ls` |
 | Check an app connected | `kortix connectors ls`, `kortix connectors accounts <slug>` |

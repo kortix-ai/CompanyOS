@@ -106,6 +106,7 @@
  * Kortix operator on request. Their 403 says "contact Kortix" instead of
  * naming a toggle the caller cannot see (gate.ts).
  */
+import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { config } from '../config';
 import { platinumUsRegion } from '../shared/platinum-region';
 import type { FeatureFlagKey, FeatureFlagStability } from '@kortix/api-contract';
@@ -471,7 +472,11 @@ const FLAGS: readonly FeatureFlagDef[] = [
     stability: 'experimental',
     // Off on staging and prod until the Chrome Web Store listing is public.
     available: () => config.KORTIX_CHROME_ENABLED,
-    platformDefault: () => true,
+    // Not launched (CHROME_LAUNCHED, #11436): the web has no Chrome surface, so
+    // no project gets it by default and the catalog does not offer it. An
+    // operator can still turn it on for one project (the extension's dev pairing).
+    platformDefault: () => CHROME_LAUNCHED,
+    ...(CHROME_LAUNCHED ? {} : { catalogHidden: true as const }),
     enforcement: 'routes',
     enforcementNote:
       'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +

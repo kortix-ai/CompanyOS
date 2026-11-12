@@ -352,8 +352,7 @@ describe('NativeSheet', () => {
   test('content parts render the plain part inside the native sheet', () => {
     mount({}, React.createElement(React.Fragment, null, React.createElement(SheetScrollView), React.createElement(DismissProbe)));
     call((r) => r.present());
-    // Content-sized: React Native's plain scroll view (no growing wrapper).
-    expect(tree.root.findAll((node) => node.type === 'rn-scroll-view')).toHaveLength(1);
+    expect(tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')).toHaveLength(1);
     expect(tree.root.findAll((node) => node.type === 'gorhom-scroll')).toHaveLength(0);
     fire('onWillAppear');
     // `useSheetDismiss` closes this native sheet, not a gorhom modal.
@@ -369,15 +368,35 @@ describe('NativeSheet', () => {
     // keyboard-aware scroll view: its wrapper has a fixed flexGrow 1.
     mount({}, React.createElement(SheetScrollView, { style: { paddingTop: 4 } } as never));
     call((r) => r.present());
-    expect(tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')).toHaveLength(0);
-    const scroll = tree.root.findAll((node) => node.type === 'rn-scroll-view')[0];
+    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    // `layout` mode: no wrapper with a fixed flexGrow 1 around the scroll view.
+    expect(scroll.props.mode).toBe('layout');
     expect(Object.assign({}, ...[scroll.props.style].flat())).toEqual({ flexGrow: 0, paddingTop: 4 });
+  });
+
+  test('below its full height a content-sized sheet leaves the keyboard to UIKit; at it, the scroll view keeps the space', () => {
+    mount({}, React.createElement(SheetScrollView));
+    call((r) => r.present());
+    layout(280);
+    const scroll = () => tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    // UIKit lifts the sheet: the keyboard's space is cancelled, the content height does not change.
+    expect(scroll().props.extraKeyboardSpace).toBe(-300);
+    fire('onWillAppear');
+    fire('onDidAppear');
+    // The content reaches the cap: UIKit cannot lift a full-height sheet.
+    layout(700);
+    expect(scroll().props.extraKeyboardSpace).toBe(0);
+    // expand() (Rename) holds the full height too.
+    layout(280);
+    expect(scroll().props.extraKeyboardSpace).toBe(-300);
+    call((r) => r.expand());
+    expect(scroll().props.extraKeyboardSpace).toBe(0);
   });
 
   test('a call site style still wins over the content-sized default', () => {
     mount({}, React.createElement(SheetScrollView, { style: { flexGrow: 1 } } as never));
     call((r) => r.present());
-    const scroll = tree.root.findAll((node) => node.type === 'rn-scroll-view')[0];
+    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
     expect(Object.assign({}, ...[scroll.props.style].flat()).flexGrow).toBe(1);
   });
 
@@ -386,6 +405,7 @@ describe('NativeSheet', () => {
     call((r) => r.present());
     const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
     expect(scroll.props.style).toBeUndefined();
+    expect(scroll.props.mode).toBeUndefined();
   });
 
   test('a flat list in a content-sized sheet does not grow either', () => {

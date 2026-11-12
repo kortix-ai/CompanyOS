@@ -29,6 +29,12 @@ export interface NativeSheetApi {
    * parent's `maxHeight`, so a body with a scroll view measured screen-tall.
    */
   contentSized: boolean;
+  /**
+   * A content-sized sheet stands at its full height (its content reaches the
+   * cap, or `expand()`): UIKit does not lift it above the keyboard there, so
+   * its scroll view keeps the keyboard's space itself.
+   */
+  atFullHeight: boolean;
 }
 
 export const NativeSheetContext = React.createContext<NativeSheetApi | null>(null);

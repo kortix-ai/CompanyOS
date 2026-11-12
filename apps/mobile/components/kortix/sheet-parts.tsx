@@ -98,6 +98,25 @@ const NativeScrollView = React.forwardRef<React.ComponentRef<typeof Gorhom.Botto
     if (liveHeight > 0) lastOpenKeyboardHeight = liveHeight;
     const keyboardHeight = liveHeight > 0 ? liveHeight : lastOpenKeyboardHeight;
     const Scroll = keyboard.KeyboardAwareScrollView;
+    const native = useNativeSheet();
+    if (native?.contentSized) {
+      // `layout` mode: the scroll view itself, no growing wrapper (see
+      // `contentSizedStyle`), and the keyboard's space is a spacer inside the
+      // content. Below the full height UIKit lifts the sheet, so the space is
+      // cancelled (the content height does not change and the detent stays);
+      // at the full height the scroll view keeps it and scrolls a focused
+      // field above the keyboard.
+      return (
+        <Scroll
+          bottomOffset={KEYBOARD_GAP}
+          {...(withoutGorhomScrollProps(props) as React.ComponentProps<typeof KeyboardAwareScrollViewType>)}
+          mode="layout"
+          style={contentSizedStyle(true, props.style)}
+          extraKeyboardSpace={native.atFullHeight ? 0 : -keyboardHeight}
+          ref={ref as never}
+        />
+      );
+    }
     return (
       <Scroll
         bottomOffset={KEYBOARD_GAP}
@@ -120,11 +139,10 @@ NativeScrollView.displayName = 'NativeScrollView';
  * iOS 26 (1.6.33: the session actions sheet, the Files Version sheet). It
  * still shrinks (`flexShrink: 1`), so a body taller than the sheet scrolls.
  *
- * So a content-sized sheet's `SheetScrollView` is React Native's plain
- * `ScrollView`, not `KeyboardAwareScrollView`: that one wraps its scroll view
- * in a view with a fixed `flexGrow: 1` (`ScrollViewWithBottomPadding`,
- * react-native-keyboard-controller 1.22.7) that no style reaches. UIKit lifts
- * a sheet below its full detent above the keyboard by itself.
+ * So a content-sized sheet's `SheetScrollView` is `KeyboardAwareScrollView`
+ * in `layout` mode: its default `insets` mode wraps the scroll view in a view
+ * with a fixed `flexGrow: 1` (`ScrollViewWithBottomPadding`,
+ * react-native-keyboard-controller 1.22.7) that no style reaches.
  */
 function contentSizedStyle(contentSized: boolean, style: unknown): ViewProps['style'] {
   return (contentSized ? [CONTENT_SIZED_SCROLL, style] : style) as ViewProps['style'];
@@ -135,15 +153,6 @@ const CONTENT_SIZED_SCROLL = { flexGrow: 0 };
 export const SheetScrollView = React.forwardRef<React.ComponentRef<typeof Gorhom.BottomSheetScrollView>, ScrollProps>(
   (props, ref) => {
     const native = useNativeSheet();
-    if (native?.contentSized) {
-      return (
-        <RN.ScrollView
-          {...(withoutGorhomScrollProps(props) as RN.ScrollViewProps)}
-          style={contentSizedStyle(true, props.style)}
-          ref={ref as never}
-        />
-      );
-    }
     if (native) return <NativeScrollView {...props} ref={ref} />;
     return <Gorhom.BottomSheetScrollView {...props} ref={ref} />;
   }

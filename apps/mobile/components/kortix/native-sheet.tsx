@@ -272,9 +272,10 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
     | string
     | undefined;
   const background = explicitBackground ?? (SYSTEM_SHEET_GLASS ? undefined : getSheetBg(colorScheme === 'dark'));
+  const atFullHeight = fit && (expanded || (contentHeight !== null && contentDetent(contentHeight, maxHeight) >= 1));
   const api = React.useMemo<NativeSheetApi>(
-    () => ({ dismiss, surface: background ?? null, contentSized: fit }),
-    [dismiss, background, fit]
+    () => ({ dismiss, surface: background ?? null, contentSized: fit, atFullHeight }),
+    [dismiss, background, fit, atFullHeight]
   );
   // A content-sized detent is measured above the home indicator: UIKit puts
   // the bottom safe area under the content (\`RNSFormSheetDetentResolver.mm\`,

@@ -26,6 +26,14 @@ export interface ChannelCtx {
    *  Channels API (routes/channel-bindings.ts) passes the binding's own
    *  platform so these setters stay reusable without duplicating the queries. */
   platform?: string;
+  /**
+   * The Kortix workspace the caller runs for, when it is fixed already (a
+   * session being launched or joined). A channel row of another Kortix
+   * workspace then sets nothing: one Slack workspace can run the shared app
+   * for one Kortix workspace and another's own app beside it, and each runs
+   * with its own settings.
+   */
+  projectId?: string;
 }
 
 /**
@@ -64,6 +72,11 @@ export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelS
     console.warn('[slack-selection] optional channel override columns missing; falling back to project-only routing');
     const projectId = await currentChannelProjectId(ctx);
     return projectId ? { projectId, agentName: null, sessionModel: null, conversationPolicy: null } : null;
+  }
+  // The caller runs for a Kortix workspace that is not the row's: its own
+  // defaults apply, never another workspace's agent, model or policy.
+  if (ctx.projectId && binding?.projectId !== ctx.projectId) {
+    return { projectId: ctx.projectId, agentName: null, sessionModel: null, conversationPolicy: null };
   }
   // A row of another Kortix workspace (one running its own Slack app in this
   // Slack workspace) never sets the linked workspace's agent, model or policy.

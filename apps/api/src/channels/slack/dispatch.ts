@@ -676,7 +676,7 @@ async function mayJoinSlackThread(
 ): Promise<boolean> {
   if (!config.SLACK_REQUIRE_USER_IDENTITY || opts.authorizedResume) return true;
   const selection = event.channel
-    ? await currentChannelSelection({ teamId, channelId: event.channel })
+    ? await currentChannelSelection({ teamId, channelId: event.channel, projectId })
     : null;
   return ensureSlackThreadParticipant({
     projectId,

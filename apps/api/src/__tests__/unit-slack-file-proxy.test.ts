@@ -100,12 +100,12 @@ describe('downloadSlackFile confinement', () => {
     expect(fetches).toEqual(['https://slack.com/api/files.info']);
   });
 
-  test('a Kortix workspace that does not hold the Slack workspace downloads nothing', async () => {
+  test('a Kortix workspace that does not hold the Slack workspace downloads nothing and asks Slack nothing, not even whether the file exists', async () => {
     linked = false;
     const r = await downloadSlackFile('proj-1', FILE_URL, 'user-1', slack);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.status).toBe(403);
-    expect(fetches).toEqual(['https://slack.com/api/files.info']);
+    expect(fetches).toEqual([]);
   });
 
   test('a thumbnail URL is confined by the file it belongs to', async () => {

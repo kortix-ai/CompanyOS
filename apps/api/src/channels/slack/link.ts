@@ -51,6 +51,29 @@ async function mayPredateOwnAppFlag(projectId: string): Promise<boolean> {
   return Boolean(await readSecret(projectId, 'SLACK_SIGNING_SECRET'));
 }
 
+/** The bot behind a Kortix workspace's stored Slack token (`auth.test`), or null. */
+async function storedBotId(projectId: string): Promise<string | null> {
+  const { loadSlackTokenForProject } = await import('./installs');
+  const token = await loadSlackTokenForProject(projectId);
+  if (!token) return null;
+  const { authTestBotId } = await import('../slack-api');
+  return authTestBotId(token);
+}
+
+/**
+ * Is `other` an own Slack app from before `own_app`, to be kept beside the
+ * shared app that `holder` installed? It stores a signing secret (a member
+ * can write one) AND its token is another Slack app's bot. A planted secret
+ * beside the shared token has the shared bot and is detached. When Slack does
+ * not say, the install is kept: erasing a real own app is the worse mistake,
+ * and a kept install that does not hold the link acts in nothing.
+ */
+async function isLegacyOwnApp(other: string, holder: string): Promise<boolean> {
+  if (!(await mayPredateOwnAppFlag(other))) return false;
+  const [mine, theirs] = await Promise.all([storedBotId(other), storedBotId(holder)]);
+  return !mine || !theirs || mine !== theirs;
+}
+
 /**
  * Of several installs, the one to keep: the Kortix workspace with the most
  * recent session started from this Slack workspace, else the newest install.
@@ -154,10 +177,9 @@ export async function linkedSlackProject(teamId: string): Promise<string | null>
   for (const other of installs) {
     if (other === primary) continue;
     // An own-app install from before `own_app` existed reads as a shared one.
-    // It may store its own token, so it is never erased here: the gate
-    // refuses it until its own-app install runs again and marks it. A
-    // workspace that plants the secret gains nothing: it stays refused.
-    if (flagged.has(other)) continue;
+    // It stores its own token, so it is never erased here: the gate refuses it
+    // until its own-app install runs again and marks it.
+    if (flagged.has(other) && (await isLegacyOwnApp(other, primary))) continue;
     await detach(teamId, other, 'one Slack workspace, one Kortix workspace');
   }
   return primary;
@@ -170,8 +192,16 @@ export async function linkedSlackProject(teamId: string): Promise<string | null>
  */
 export async function moveSlackLink(teamId: string, projectId: string): Promise<string[]> {
   const others = (await sharedInstalls(teamId)).filter((id) => id !== projectId);
-  for (const other of others) await detach(teamId, other, 'the Slack workspace was installed in another Kortix workspace');
-  return others;
+  const detached: string[] = [];
+  for (const other of others) {
+    // An own-app install from before `own_app` existed reads as a shared one:
+    // it is never detached, as on the heal path (`linkedSlackProject`). It
+    // does not hold the link either, so it acts in nothing until reinstalled.
+    if (await isLegacyOwnApp(other, projectId)) continue;
+    await detach(teamId, other, 'the Slack workspace was installed in another Kortix workspace');
+    detached.push(other);
+  }
+  return detached;
 }
 
 /**

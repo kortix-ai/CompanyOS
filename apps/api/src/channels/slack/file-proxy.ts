@@ -114,14 +114,17 @@ export async function downloadSlackFile(
   const token = await loadSlackTokenForProject(projectId);
   if (!token) return { ok: false, error: 'Slack not connected for this workspace', status: 404 };
 
-  const info = await getFileInfo(token, fileId);
-  if (!info.ok) return { ok: false, error: `Slack file ${fileId}: ${info.error ?? 'not found'}`, status: 404 };
+  // The link first: a Kortix workspace that does not hold the Slack workspace
+  // learns nothing from Slack, not even whether the file exists.
   const gate = await gateChannelRead(
     { projectId, userId, platform: 'slack', actionPath: 'file_info', args: { file: fileId }, risk: 'read' },
     undefined,
     slack,
   );
-  const answer = gate.refusal ? { refusal: gate.refusal } : await gate.answer(info);
+  if (gate.refusal) return { ok: false, error: gate.refusal.message, status: 403 };
+  const info = await getFileInfo(token, fileId);
+  if (!info.ok) return { ok: false, error: `Slack file ${fileId}: ${info.error ?? 'not found'}`, status: 404 };
+  const answer = await gate.answer(info);
   if ('refusal' in answer) return { ok: false, error: answer.refusal.message, status: 403 };
 
   const dl = await fetchSlackFile(parsed.href, token);

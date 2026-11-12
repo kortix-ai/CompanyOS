@@ -16,6 +16,7 @@ import { chatUser, lookupChatIdentity, revokeChatIdentity } from '../core/identi
 import { saveSlackInstall, saveSlackOauthInstall, upsertSecret } from '../install-store';
 import { linkSlackPersonByEmail, slackPersonForKortixUser } from './auto-link';
 import { holdsSlackWorkspace, linkedSlackProject, moveSlackLink, recordSlackChannel, slackProjectLink } from './link';
+import { currentChannelSelection } from './selection';
 
 const RUN = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
 const team = (name: string) => `T${name}${RUN}`;
@@ -69,6 +70,26 @@ afterAll(async () => {
   await removeSeeded([a, b, byo]);
   await db.execute(sql`delete from auth.users where id in (${MEMBER}::uuid, ${OUTSIDER}::uuid)`);
 });
+
+/** Slack's `auth.test`: the bot behind each token. */
+function botsByToken(bots: Record<string, string>) {
+  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+    if (!String(input).endsWith('/auth.test')) return Response.json({ ok: false, error: 'not_faked' });
+    const auth = new Headers(init?.headers).get('authorization') ?? '';
+    const bot = bots[auth.replace(/^Bearer /, '')];
+    return Response.json(bot ? { ok: true, bot_id: bot } : { ok: false, error: 'invalid_auth' });
+  }) as unknown as typeof fetch;
+}
+
+const secretsOf = async (projectId: string) =>
+  (
+    await db
+      .select({ name: projectSecrets.name })
+      .from(projectSecrets)
+      .where(and(eq(projectSecrets.projectId, projectId), inArray(projectSecrets.name, ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET'])))
+  )
+    .map((r) => r.name)
+    .sort();
 
 describe('one Slack workspace, one Kortix workspace', () => {
   test('installing in another Kortix workspace moves the link: the first is detached, with its token and channel settings', async () => {
@@ -176,10 +197,10 @@ describe('one Slack workspace, one Kortix workspace', () => {
     await saveSlackInstall({ projectId: byo.project_id, teamId: x, teamName: 'synthetic', botToken: 'xoxb-own', signingSecret: 'own', botUserId: 'U0OWN' });
     await shared(byo.project_id, y);
     await moveSlackLink(y, byo.project_id);
-    // Slack says the stored token is y's: the shared install wrote it last.
+    // Slack says the stored token is y's (the shared install wrote it last) and the shared app's bot.
     globalThis.fetch = (async (input: string | URL) =>
       String(input).endsWith('/auth.test')
-        ? Response.json({ ok: true, team_id: y })
+        ? Response.json({ ok: true, team_id: y, bot_id: 'B0SHARED' })
         : Response.json({ ok: false, error: 'not_faked' })) as unknown as typeof fetch;
     await shared(b.project_id, y);
     await moveSlackLink(y, b.project_id);
@@ -218,7 +239,7 @@ describe('one Slack workspace, one Kortix workspace', () => {
     expect(await slackProjectLink(byo.project_id)).toEqual({ teamId: ws });
   });
 
-  test('a shared-app install that plants a signing secret is not an own app: no link, nothing erased', async () => {
+  test('a shared-app install that plants a signing secret is not an own app: Slack names the same bot, so it is detached', async () => {
     const ws = team('FAKE');
     // Two shared-app installs from before the move; `b` writes the secret an
     // own app stores, through the generic secrets path an admin can use.
@@ -233,14 +254,51 @@ describe('one Slack workspace, one Kortix workspace', () => {
       .update(projectSessions)
       .set({ metadata: { source: 'slack', slack: { team_id: ws } } })
       .where(eq(projectSessions.sessionId, used));
+    botsByToken({ 'xoxb-shared-same': 'B0SHARED' });
 
     expect(await linkedSlackProject(ws)).toBe(a.project_id);
-    // The planted secret buys nothing: `b` holds no link here. Its install is
-    // kept unerased (an own app from before `own_app` looks the same) and
-    // stays refused until an own-app install marks it.
     expect(await holdsSlackWorkspace(b.project_id, ws)).toBe(false);
-    expect(await installsOf(ws)).toEqual([a.project_id, b.project_id].sort());
-    await db.delete(projectSecrets).where(and(eq(projectSecrets.projectId, b.project_id), eq(projectSecrets.name, 'SLACK_SIGNING_SECRET')));
+    expect(await installsOf(ws)).toEqual([a.project_id]);
+    expect(await secretsOf(b.project_id)).toEqual([]);
+  });
+
+  test('an own app from before `own_app` (another bot) survives a move: not detached, its token and secret kept, no link', async () => {
+    const ws = team('LEGACYOWN');
+    await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: ws, projectId: byo.project_id });
+    await upsertSecret(byo.project_id, 'SLACK_BOT_TOKEN', 'xoxb-legacy-own');
+    await upsertSecret(byo.project_id, 'SLACK_SIGNING_SECRET', 'legacy-own');
+    botsByToken({ 'xoxb-legacy-own': 'B0OWNAPP', 'xoxb-synthetic': 'B0SHARED' });
+    await shared(a.project_id, ws);
+    expect(await moveSlackLink(ws, a.project_id)).toEqual([]);
+    expect(await installsOf(ws)).toEqual([a.project_id, byo.project_id].sort());
+    expect(await secretsOf(byo.project_id)).toEqual(['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET']);
+    expect(await holdsSlackWorkspace(byo.project_id, ws)).toBe(false);
+    await db.delete(projectSecrets).where(eq(projectSecrets.projectId, byo.project_id));
+    await db.delete(chatInstalls).where(and(eq(chatInstalls.platformTeamId, ws), eq(chatInstalls.projectId, byo.project_id)));
+  });
+
+  test("the linked workspace's channel settings never drive a session of another workspace's own app there", async () => {
+    const ws = team('SETTINGS');
+    await shared(a.project_id, ws);
+    await moveSlackLink(ws, a.project_id);
+    await saveSlackInstall({ projectId: byo.project_id, teamId: ws, teamName: 'synthetic', botToken: 'xoxb-own', signingSecret: 'own', botUserId: 'U0OWN' });
+    expect(await currentChannelSelection({ teamId: ws, channelId: 'C0SHAREDCH' })).toMatchObject({ projectId: a.project_id });
+    await db
+      .update(chatChannelBindings)
+      .set({ agentName: 'linked-agent' })
+      .where(and(eq(chatChannelBindings.platformTeamId, ws), eq(chatChannelBindings.channelId, 'C0SHAREDCH')));
+    // The linked workspace reads its own row; the own app's dispatch reads its defaults.
+    expect(await currentChannelSelection({ teamId: ws, channelId: 'C0SHAREDCH', projectId: a.project_id })).toMatchObject({
+      projectId: a.project_id,
+      agentName: 'linked-agent',
+    });
+    expect(await currentChannelSelection({ teamId: ws, channelId: 'C0SHAREDCH', projectId: byo.project_id })).toEqual({
+      projectId: byo.project_id,
+      agentName: null,
+      sessionModel: null,
+      conversationPolicy: null,
+    });
+    await db.delete(projectSecrets).where(eq(projectSecrets.projectId, byo.project_id));
   });
 
   test("a channel's settings row: recorded for the linked workspace, which takes it over from any other; an own app never takes it back", async () => {

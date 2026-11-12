@@ -186,6 +186,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'DELETE /v1/accounts/:workspaceId/secret-resources/:secretId': { action: 'secret.account_resource.delete', title: 'Deleted pooled provider key' },
   'PUT /v1/accounts/:workspaceId/secret-resources/:secretId/access': { action: 'secret.account_resource.access.set', title: 'Set pooled provider key access' },
   'POST /v1/accounts/:workspaceId/secret-resources/:secretId/verify': { action: 'secret.account_resource.verify', title: 'Verified pooled provider key' },
+  'POST /v1/accounts/:workspaceId/secret-resources/:secretId/verify': { action: 'secret.account_resource.verify', title: 'Verified pooled provider key' },
   'POST /v1/accounts/:workspaceId/secret-resources/:secretId/retry': { action: 'secret.account_resource.retry', title: 'Retried pooled provider key after rate limit' },
   'POST /v1/accounts/:workspaceId/secret-resources/:secretId/usage': { action: 'secret.account_resource.usage.refresh', title: 'Refreshed subscription login plan usage' },
   'DELETE /v1/accounts/:workspaceId/secret-resources/:secretId/grants/:userId': { action: 'secret.account_resource.revoke', title: 'Revoked pooled provider key grant' },

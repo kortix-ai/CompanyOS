@@ -1,7 +1,9 @@
 /**
  * SessionFilesSheet — "Recent files": the files this session produced, the
  * list behind web's Outputs card (`lib/session/session-files.ts`). Opens from
- * the thread's Add sheet at full height, with a search field.
+ * the thread's Add sheet at the height of its list (up to the full height,
+ * where the list scrolls), with a search field. Not a fixed full-height
+ * sheet: on iOS 26 that is the opaque edge-to-edge sheet, not the glass one.
  *
  * Two groups: the files the user came for (shown, PDF, spreadsheet, document,
  * deck, page, image, media), then "Other files" (source, config). A row is
@@ -49,7 +51,6 @@ import {
 } from '@/lib/session/session-files';
 import { showFileTypeIcon } from './tool/shared/tool-icons';
 
-const SNAP_POINTS = ['100%'];
 /** How long Copy shows its check. */
 
 interface SessionFilesSheetProps {
@@ -78,8 +79,6 @@ export const SessionFilesSheet = React.memo(React.forwardRef<SheetRef, SessionFi
         <KortixBottomSheetModal
           ref={modalRef}
           title="Recent files"
-          snapPoints={SNAP_POINTS}
-          enableDynamicSizing={false}
           topInset={insets.top}
           enablePanDownToClose
           onDismiss={() => setOpen(false)}

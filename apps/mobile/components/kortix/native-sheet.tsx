@@ -33,8 +33,13 @@
  * - `expand()` / `snapToPosition(p)`: a content-sized sheet gets a minimum
  *   height of the maximum detent; a fixed-detent sheet lists only the full
  *   detent until `collapse()` / `snapToIndex()`.
- * - A content-sized sheet cannot list a full detent beside `fitToContents`
- *   (`lib/ui/native-sheet.ts`). It fits its content up to the maximum height.
+ * - A content-sized sheet is measured before it presents: it mounts closed,
+ *   its box lays out at the sheet's width, and it presents at that height as
+ *   one custom detent (`contentDetent`), up to the maximum height. Not
+ *   `fitToContents`: that wrapper reports its height only after it is
+ *   mounted, so a sheet mounted open resolved height 0, which falls back to
+ *   the full detent (opaque and edge to edge on iOS 26). Once it rests, a
+ *   new content height moves the detent.
  * - `backdropComponent` (the lighter backdrops), `topInset`, `handleComponent`,
  *   `animationConfigs`, `enableOverDrag`, `keyboardBehavior`,
  *   `keyboardBlurBehavior` and `android_keyboardInputMode` have no effect: the
@@ -61,8 +66,10 @@ import { useColorScheme } from 'nativewind';
 import { getSheetBg } from '@/lib/theme-colors';
 import { detentsKey } from '@/lib/ui/sheet-detents';
 import {
+  contentDetent,
   hasNativeComponent,
   nativeSheetBoxBelowScreen,
+  nativeSheetContentWidth,
   nativeSheetHiddenBottom,
   nativeSheetMaxHeight,
   resolveNativeDetents,
@@ -129,11 +136,13 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   const [detentAt, setDetentAt] = React.useState(0);
   const [settled, setSettled] = React.useState(false);
   const [data, setData] = React.useState<unknown>(undefined);
+  /** A content-sized sheet's measured body height: null until it has laid out, and it presents only then. */
+  const [contentHeight, setContentHeight] = React.useState<number | null>(null);
   // Set by `onWillAppear`: the sheet reached the screen. A dismiss before it
   // ends the sheet at once (there is no native dismissal to wait for).
   const appearedRef = React.useRef(false);
 
-  const { height: windowHeight } = RN.useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = RN.useWindowDimensions();
   // The screen's insets. A sheet opened inside a content-sized sheet reads that
   // sheet's override (bottom 0), so the outermost sheet passes the real ones down.
   const contextInsets = useSafeAreaInsets();
@@ -184,6 +193,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
       setPhaseBoth('closed');
       setSettled(false);
       setExpanded(false);
+      setContentHeight(null);
     }
     onChangeRef.current?.(-1, 0, 0 as never);
     onDismissRef.current?.();
@@ -243,6 +253,15 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
     [dismiss, maxHeight, setPhaseBoth, initialIndex, easeDetentChange]
   );
 
+  // A body that never lays out must not leave the sheet unopened: after
+  // `MEASURE_FALLBACK_MS` it presents at the full detent.
+  const waitingForHeight = fit && phase === 'open' && contentHeight === null;
+  React.useEffect(() => {
+    if (!waitingForHeight) return;
+    const timer = setTimeout(() => setContentHeight((now) => now ?? maxHeight), MEASURE_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [waitingForHeight, maxHeight]);
+
   const footerPosition = useSharedValue(0);
   const { colorScheme } = useColorScheme();
 
@@ -258,6 +277,18 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   // sheet's content reaches the screen edge and keeps the real inset.
   const contentInsets = React.useMemo(() => ({ ...insets, bottom: 0 }), [insets]);
 
+  // A content-sized sheet presents once its body has a height, at that height.
+  const measuring = fit && contentHeight === null;
+  const onContentLayout = fit
+    ? (event: RN.LayoutChangeEvent) => {
+        const height = Math.ceil(event.nativeEvent.layout.height);
+        // The first layout is the measurement. After it, only a sheet at rest
+        // follows its content: while UIKit presents it the box can lay out at
+        // a width that is not yet the sheet's (the host has no size yet).
+        if (contentHeight === null || (settled && height !== contentHeight)) setContentHeight(height);
+      }
+    : undefined;
+
   if (!FormSheet || phase === 'closed') return null;
 
   const Footer = footerComponent;
@@ -265,15 +296,22 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   // (so a long body scrolls instead of running off the sheet), and held at it
   // while expanded.
   const cap = Math.min(maxHeight, maxDynamicContentSize ?? Number.POSITIVE_INFINITY);
-  const boxStyle: ViewStyle = fit ? { maxHeight: cap, minHeight: expanded ? cap : undefined } : styles.fill;
+  const boxStyle: ViewStyle = fit
+    ? {
+        maxHeight: cap,
+        minHeight: expanded ? cap : undefined,
+        // Before it is presented the host has no width: measure at the sheet's.
+        ...(measuring ? { width: nativeSheetContentWidth(windowWidth, SYSTEM_SHEET_GLASS) } : null),
+      }
+    : styles.fill;
   const body = (
     typeof children === 'function' ? (children as (props: { data?: unknown }) => React.ReactNode)({ data }) : children
   ) as React.ReactNode;
 
   return (
     <FormSheet
-      isOpen={phase === 'open'}
-      detents={detents}
+      isOpen={phase === 'open' && !measuring}
+      detents={fit ? [contentDetent(contentHeight ?? maxHeight, maxHeight)] : detents}
       initialDetentIndex={fit ? 0 : Math.min(initialIndex, (detents as number[]).length - 1)}
       prefersGrabberVisible
       preferredCornerRadius="systemDefault"
@@ -298,7 +336,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
       onDismiss={() => finish(false)}
       onNativeDismiss={() => finish(true)}>
       <NativeSheetContext.Provider value={api}>
-        <SurfaceContext.Provider value="sheet">
+        <SurfaceContext.Provider value={background ? 'sheet' : 'glass'}>
           <SheetSettledContext.Provider value={settled}>
             {/* A sheet opened from inside another sheet's `SheetFill` must not inherit its shift. */}
             <PinnedBarShiftContext.Provider value={null}>
@@ -317,6 +355,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
                 windowHeight={windowHeight}
                 settled={settled}
                 reducedMotion={reducedMotion}
+                onContentLayout={onContentLayout}
                 style={boxStyle}>
                 {header}
                 {body}
@@ -337,6 +376,9 @@ const styles = { fill: { flex: 1 } } satisfies Record<string, ViewStyle>;
 
 /** 200 ms ease-out: the content's end moving to a new detent (SHEET_MOTION's close length, shortened for a settle). */
 const DETENT_LAYOUT = { duration: 200, update: { type: 'easeOut' as const } };
+
+/** How long a content-sized sheet waits for its body's first layout before it presents anyway. */
+const MEASURE_FALLBACK_MS = 400;
 
 /** Frames the box waits for its window position to hold still (~1 s at 60 Hz). */
 const MEASURE_MAX_FRAMES = 60;
@@ -380,10 +422,13 @@ function SheetBox({
   windowHeight,
   settled,
   reducedMotion,
+  onContentLayout,
   style,
   children,
 }: {
   fit: boolean;
+  /** A content-sized sheet's box height, for its detent. */
+  onContentLayout?: (event: RN.LayoutChangeEvent) => void;
   avoid: boolean;
   /** The detent the sheet rests at, as a fraction of the maximum detent. */
   fraction: number;
@@ -443,7 +488,12 @@ function SheetBox({
 
   // One element type per sheet (a detent change must not remount the form):
   // a fixed-detent sheet always renders the avoider and switches it with `enabled`.
-  if (fit) return <RN.View style={style}>{children}</RN.View>;
+  if (fit)
+    return (
+      <RN.View onLayout={onContentLayout} style={style}>
+        {children}
+      </RN.View>
+    );
   keyboardAvoidingView ??= (require('react-native-keyboard-controller') as typeof import('react-native-keyboard-controller'))
     .KeyboardAvoidingView;
   const Avoiding = keyboardAvoidingView;

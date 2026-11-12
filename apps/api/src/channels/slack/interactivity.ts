@@ -4,7 +4,7 @@ import { projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { config } from '../../config';
 import { loadSlackTokenForProject } from '../install-store';
-import { openModal } from '../slack-api';
+import { openModal, updateModal } from '../slack-api';
 import { spawnAgentTurn } from './dispatch';
 import { parseQuestionButton } from '../core/question-token';
 import { QUESTION_EARLIER } from './questions';
@@ -31,13 +31,17 @@ import { isAdaptedId } from '../../projects/review-adapters';
 import { decideSlackThreadJoin } from './participants';
 import { attachPendingSlackAuthResponseUrl } from './auth-resume';
 import { buildSlackLoginUrl, verifyLoginState } from './login';
-import { escapeMrkdwn, respondViaUrl, sessionWebUrl } from './util';
+import { escapeMrkdwn, respondViaUrl, sessionWebUrl, slackChannelIsDm } from './util';
 import { handleSlashCommand } from './commands';
 import { NO_LINK_TEXT, agentChangeText, currentChannelProjectId } from './settings-commands';
 import { slackSettingsChannel, slackUserOf } from './settings-text';
 import { applySlackModelChoice } from './model-choice';
 import { changeChannelAgent } from '../core/settings';
-import type { SlashCtx, SlashResponse } from './types';
+import type { SlashCtx } from './types';
+import { buildAgentPickerBlocks, loadScopedChannelAgents } from './agent-picker';
+import { currentChannelSelection } from './selection';
+import { linkedSlackProject } from './link';
+import { logger } from '../../lib/logger';
 import {
   CANONICAL_SLACK_INBOUND,
   findSlackThread,
@@ -355,8 +359,14 @@ async function handleSetSelection(
   const channelId = value.c ?? payload.channel?.id ?? '';
   if (!teamId || !channelId) return;
   const ctx = { teamId, channelId };
-  const reply = (text: string) =>
-    respondViaUrl(payload.response_url, { response_type: 'ephemeral', replace_original: true, text });
+  // From the Switch agent modal: the answer replaces the modal's content.
+  const modalId = payload.view?.id;
+  const reply = modalId
+    ? async (text: string) => {
+        const token = await clickToken(teamId, inbound);
+        if (token) await updateModal(token, modalId, switchAgentModal(modalText(text)));
+      }
+    : (text: string) => respondViaUrl(payload.response_url, { response_type: 'ephemeral', replace_original: true, text });
   // A per-project app configures only channels bound to its own project.
   if (inbound.kind === 'project' && (await currentChannelProjectId(ctx)) !== inbound.projectId) {
     await reply(OTHER_PROJECT_NOTICE);
@@ -401,30 +411,57 @@ async function handleConfigOpen(
   await respondViaUrl(payload.response_url, { ...resp, replace_original: true });
 }
 
-// "Switch agent" under an agent's answer. The same picker as `/kortix agents`,
-// posted as a NEW ephemeral message: the click came from the answer, and a
-// `replace_original` reply would overwrite the answer itself. A button needs no
-// slash command, so it works in the DM assistant pane, where Slack runs none.
+// "Switch agent" under an agent's answer: the channel's agent picker in a
+// modal. The modal opens first, from the click's single-use `trigger_id`
+// (Slack drops it after ~3 s), then shows the agents or why it cannot: a
+// click always shows something. Its buttons are the `/kortix agents` picker's
+// (`set_agent_*`), and their answer replaces the modal's content.
+const SWITCH_AGENT_CALLBACK = 'switch_agent';
+
+function switchAgentModal(blocks: unknown[]): Record<string, unknown> {
+  return {
+    type: 'modal',
+    callback_id: SWITCH_AGENT_CALLBACK,
+    title: { type: 'plain_text', text: 'Switch agent' },
+    close: { type: 'plain_text', text: 'Done' },
+    blocks,
+  };
+}
+
+const modalText = (text: string) => [{ type: 'section', text: { type: 'mrkdwn', text } }];
+
+/** The bot token of the Kortix workspace this click belongs to. */
+async function clickToken(teamId: string, inbound: SlackInbound): Promise<string | null> {
+  const projectId = inboundProjectId(inbound) ?? (await linkedSlackProject(teamId));
+  return projectId ? loadSlackTokenForProject(projectId) : null;
+}
+
 async function handleAnswerSwitchAgent(payload: SlackInteractionPayload, inbound: SlackInbound): Promise<void> {
   const teamId = payload.team?.id ?? '';
-  const channelId = payload.channel?.id ?? '';
-  const responseUrl = payload.response_url;
-  if (!teamId || !channelId || !responseUrl) return;
-  const deliver = (body: SlashResponse) =>
-    respondViaUrl(responseUrl, { ...body, response_type: 'ephemeral', replace_original: false });
-  const ctx: SlashCtx = {
-    teamId,
-    channelId,
-    slackUserId: payload.user?.id ?? '',
-    command: '/kortix',
-    responseUrl,
-    projectScopedProjectId: inboundProjectId(inbound),
-    deferredDeliver: deliver,
-  };
-  // The picker arrives through `deliver`; the synchronous "Loading agents…"
-  // ack stays unsent. A refusal (no workspace bound) comes back as blocks.
-  const resp = await handleSlashCommand('agents', '', ctx);
-  if (resp.blocks?.length) await deliver(resp);
+  const action = payload.actions?.[0];
+  const channelId = payload.channel?.id ?? action?.value ?? '';
+  const slackUserId = payload.user?.id ?? '';
+  if (!teamId || !channelId || !payload.trigger_id) return;
+  const token = await clickToken(teamId, inbound);
+  if (!token) return;
+  const viewId = (await openModal(token, payload.trigger_id, switchAgentModal(modalText('Loading agents…'))))?.viewId;
+  if (!viewId) return;
+  try {
+    const selection = await currentChannelSelection({ teamId, channelId });
+    if (!selection) {
+      await updateModal(token, viewId, switchAgentModal(modalText(NO_LINK_TEXT)));
+      return;
+    }
+    const agents = await loadScopedChannelAgents({ teamId, projectId: selection.projectId, slackUserId });
+    const where = slackChannelIsDm(channelId) ? 'this DM' : `<#${channelId}>`;
+    const lead = modalText(
+      `New threads in ${where} start with the agent you pick. A thread that already runs keeps its agent.`,
+    );
+    await updateModal(token, viewId, switchAgentModal(buildAgentPickerBlocks(channelId, selection.agentName, agents, lead)));
+  } catch (err) {
+    logger.warn('[slack] the agent picker did not load', { err: (err as Error)?.message });
+    await updateModal(token, viewId, switchAgentModal(modalText("⚠️ This channel's agents did not load. Try again, or run `/kortix agents`.")));
+  }
 }
 
 // Message shortcut ("Open in Kortix", callback_id `open_session`). Resolves the

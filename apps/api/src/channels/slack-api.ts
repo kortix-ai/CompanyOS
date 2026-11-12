@@ -547,18 +547,32 @@ export async function openModal(
   token: string,
   triggerId: string,
   view: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<{ viewId: string | null } | null> {
   try {
     const r = await slackApiCall(token, 'views.open', { trigger_id: triggerId, view });
     if (!r.ok) {
       // `expired_trigger_id` is the one worth recognising: it means the handler
       // did work before opening, not that the view was malformed.
       console.warn('[slack-api] views.open failed', { error: r.error });
-      return false;
+      return null;
     }
-    return true;
+    // The opened view's id: `updateModal` replaces its content.
+    const id = (r.view as { id?: unknown } | undefined)?.id;
+    return { viewId: typeof id === 'string' && id ? id : null };
   } catch (err) {
     console.warn('[slack-api] views.open error', err);
+    return null;
+  }
+}
+
+/** Replace an open modal's content (`views.update`). False when Slack refused it. */
+export async function updateModal(token: string, viewId: string, view: Record<string, unknown>): Promise<boolean> {
+  try {
+    const r = await slackApiCall(token, 'views.update', { view_id: viewId, view });
+    if (!r.ok) logger.warn('[slack-api] views.update failed', { error: r.error });
+    return r.ok;
+  } catch (err) {
+    logger.warn('[slack-api] views.update error', { err: (err as Error)?.message });
     return false;
   }
 }

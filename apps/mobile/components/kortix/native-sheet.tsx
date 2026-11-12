@@ -365,7 +365,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
                   reachable. A content-sized sheet is lifted by UIKit itself. */}
               <SheetBox
                 fit={fit}
-                avoid={!fit && (expanded || detentAt === (baseDetents as number[]).length - 1)}
+                avoid={!fit && (expanded || (baseDetents as number[])[detentAt] === 1)}
                 fraction={fit || expanded ? 1 : ((baseDetents as number[])[detentAt] ?? 1)}
                 maxHeight={maxHeight}
                 bottomInset={insets.bottom}

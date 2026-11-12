@@ -395,6 +395,12 @@ describe('keyboard', () => {
     expect(avoider().props.enabled).toBe(false);
   });
 
+  test('nativeFullDetent false: the one partial detent leaves the keyboard to UIKit', () => {
+    mount({ snapPoints: ['85%', '100%'], enableDynamicSizing: false, nativeFullDetent: false });
+    call((r) => r.present());
+    expect(avoider().props.enabled).toBe(false);
+  });
+
   test('at the full detent the box shrinks above the keyboard, offset by the sheet top', () => {
     mount({ snapPoints: ['50%'], enableDynamicSizing: false });
     call((r) => r.present());

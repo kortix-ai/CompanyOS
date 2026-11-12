@@ -6,7 +6,9 @@
  * `radiusMd`, the `resultFramePad` frame pad, `overflow` hidden), the neutral
  * border/popover tone, the row indent + `mt-1.5` seam, and a body scroll
  * capped at `outputMaxHeight`. Both `ToolError` branches (plain error,
- * validation issues) use the frame. The frame chain stays real
+ * validation issues) use the frame, and the card keeps its `mt-1.5` seam on
+ * the detail surfaces (activity-sheet detail body), where the inline indent
+ * is off. The frame chain stays real
  * (`shared/styles.ts`, `shared/surface.tsx`, `shared/result-card.tsx`); only
  * the render hosts are stubbed, so the assertions read the real style values.
  * Must pass unchanged before and after the refactor.
@@ -127,6 +129,7 @@ const VALIDATION_ERROR = JSON.stringify([
 ]);
 
 let mod: typeof import('./tool-error');
+const { ToolDetailContext } = await import('./shared/surface');
 beforeAll(async () => {
   mod = await import('./tool-error');
 });
@@ -214,5 +217,23 @@ describe('ToolError frame characterization', () => {
     expect(style.borderColor).toBe('bd');
     expect(style.backgroundColor).toBe('po');
     expect(texts(tree)).toContain('Required');
+  });
+
+  test('on a detail surface the seam stays and the indent drops', async () => {
+    const tree = await render(
+      React.createElement(
+        ToolDetailContext.Provider,
+        { value: 'body' },
+        React.createElement(mod.ToolError, { error: ERROR, toolName: 'bash', partId: 'p1' }),
+      ),
+    );
+    const [frame] = frames(tree);
+    if (!frame) throw new Error('no frame card');
+    const style = flatStyle(frame);
+    expect(style.borderWidth).toBe(1);
+    expect(style.borderRadius).toBe(8); // radiusMd
+    expect(style.padding).toBe(0.23 * 16); // resultFramePad
+    expect(style.marginTop).toBe(1.5 * 0.23 * 16); // mt-1.5 seam survives
+    expect(style.marginLeft).toBeFalsy(); // no row column to indent to
   });
 });

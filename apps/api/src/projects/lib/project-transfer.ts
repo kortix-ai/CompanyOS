@@ -136,6 +136,7 @@ export const PROJECT_TRANSFER_LEAVE_TABLES: Readonly<Record<string, string>> = {
   // Completed one-off migration runs — operations history, not live state.
   legacy_sandbox_migrations: 'completed ops migration run record',
   suna_account_migrations: 'completed ops migration run record',
+  llm_credential_backfill: 'completed ops migration run record',
 };
 
 /**

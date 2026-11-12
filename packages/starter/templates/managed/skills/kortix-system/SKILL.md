@@ -131,9 +131,8 @@ state. Use `git` and the file tools for files and commits.
    value on stdin: `printf '%s' "$VALUE" | kortix secrets set NAME=-`
    (`--scope connector` for a connector's key). `403`: go to step 3.
 3. You lack the value: mint a link, put the URL in your reply, end the turn.
-   A key your code reads: `kortix secrets request NAME --scope runtime`
-   (the default; `--scope connector` keeps a connector's key out of the
-   sandbox). An app account:
+   A key your code reads: `kortix secrets request NAME` (`--scope connector`
+   keeps a connector's key out of the sandbox). An app account:
    `kortix connectors connect <slug> --label "<name>"` (`--owner project` for
    a shared company account). Never ask for a key in chat.
 

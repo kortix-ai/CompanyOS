@@ -190,9 +190,11 @@ test('the trigger-runs correlated spend read is index-only with zero heap fetche
 
 test('a mass update degrades the correlated spend read to heap fetches until vacuum (KRTX-4795)', async () => {
   // The backfill's shape: a mass UPDATE writing a column the covering index
-  // does not carry. Every updated row moves, every touched page loses its
-  // all-visible bit, and the same index-only plan starts heap-fetching —
-  // per listed run, in production, over every wide row in the run's window.
+  // built for this project's shape does not carry (the backfill wrote
+  // served_model/usage_estimated). Every updated row moves, every touched
+  // page loses its all-visible bit, and the same index-only plan starts
+  // heap-fetching — per listed run, in production, over every wide row in
+  // the run's window.
   await db
     .update(gatewayRequestLogs)
     .set({ servedModel: sql`${gatewayRequestLogs.resolvedModel}` })

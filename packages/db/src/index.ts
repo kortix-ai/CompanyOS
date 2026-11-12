@@ -42,6 +42,7 @@ export {
   auditEvents,
   auditEventsAll,
   auditArchiveChunks,
+  auditArchiveParts,
   auditSessionSequences,
   usageEvents,
   gatewayRequestLogs,

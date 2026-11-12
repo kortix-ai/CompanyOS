@@ -282,6 +282,7 @@ export function ComposerCard({
 
   return (
     <ChatInputOverridesProvider enabled={chatInputEnabled}>
+    <ModelConnectionBar show={noModelsConnected} />
     <div
       ref={cardRef}
       onDragEnter={handleDragEnter}
@@ -563,13 +564,6 @@ export function ComposerCard({
         chatInput={chatInput}
       />
     )}
-
-    {/*
-      The connect prompt is NOT a tray: it is the next step, so it sits a gap
-      below everything the composer owns (card and underbar) as a row of its
-      own. See `ModelConnectionBar`.
-    */}
-    <ModelConnectionBar show={noModelsConnected} />
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the

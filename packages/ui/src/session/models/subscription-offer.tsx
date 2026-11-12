@@ -88,13 +88,13 @@ export function ConnectPlanRows({
     <>
       {modal}
       {canConnectProvider && plans.length > 0 ? (
-        <div role="group" aria-label={t('offerTitle')} className={cn('flex flex-col', className)}>
+        <div role="group" aria-label={t('offerTitle')} className={cn('grid grid-cols-1 gap-2 sm:grid-cols-2', className)}>
           {plans.map((plan) => (
             <div key={plan.providerId} className="group relative">
               <button
                 type="button"
                 onClick={() => openConnectProvider('providers', plan.providerId)}
-                className="hover:bg-muted/60 focus-visible:ring-kortix-base flex w-full min-w-0 items-center gap-3 rounded-lg py-2 pr-3.5 pl-2.5 text-left transition-colors outline-none focus-visible:ring-[0.6px]"
+                className="hover:bg-muted/60 focus-visible:ring-kortix-base flex w-full min-w-0 items-center gap-3 min-h-11 rounded-md py-2 pr-3.5 pl-2.5 text-left transition-colors outline-none focus-visible:ring-[0.6px]"
               >
                 {plan.providerId === 'anthropic' ? (
                   // Claude plans run through Claude Code, so the row shows its mark.
@@ -103,7 +103,7 @@ export function ConnectPlanRows({
                   <ProviderLogo providerID={plan.providerId} size="xs" className="size-5 [&_img]:size-5" />
                 )}
                 <span className="text-foreground shrink-0 text-sm">{t(plan.labelKey)}</span>
-                <span className="text-muted-foreground truncate text-sm">{t(plan.planKey)}</span>
+                <span className="text-muted-foreground truncate text-xs">{t(plan.planKey)}</span>
                 <SolidRightArrow
                   className={cn(
                     'text-muted-foreground ml-auto size-4 shrink-0 transition-opacity',
@@ -133,7 +133,7 @@ export function ConnectPlanRows({
 }
 
 /**
- * The project home's optional offer: the rows, dismissible, under the hero
+ * The project home's optional offer: the rows, dismissible, above the hero
  * composer. New projects run on Kortix models, and most people already pay
  * for ChatGPT or Claude.
  *

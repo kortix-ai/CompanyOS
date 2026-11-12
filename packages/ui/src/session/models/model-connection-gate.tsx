@@ -16,21 +16,10 @@ import { useModelConnectionGate } from './use-model-connection-gate';
 const BAR_ENTER = { type: 'spring', duration: 0.5, bounce: 0, delay: 0.15 } as const;
 const BAR_EXIT = { type: 'spring', duration: 0.35, bounce: 0 } as const;
 
-/**
- * No model can run: the composer shows the same "Connect ChatGPT" and "Connect
- * Claude" rows the project home offers (`ConnectPlanRows`), a gap below the
- * composer, not dismissible. Sending is already disabled by `modelUnavailable`.
- *
- * It used to be a heading ("Connect a model to start"), two bordered tiles,
- * "Use an API key" and "Upgrade". On the project home it stacked on top of the
- * optional offer and read as a block. Other providers and API keys stay one
- * click away in the model picker and the provider dialog.
- *
- * `show` must only flip on settled data (see `entitlementsPending`).
- */
+/** No runnable model: show the reason and connection actions before the composer. */
 export function ModelConnectionBar({ show }: { show: boolean }) {
   return show ? (
-    <div className="mt-4 flex flex-col gap-1">
+    <div className="mb-4 flex flex-col gap-2">
       <NoModelReason />
       <ConnectPlanRows dismissible={false} />
     </div>

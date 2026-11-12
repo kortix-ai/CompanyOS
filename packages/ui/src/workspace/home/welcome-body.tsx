@@ -1,11 +1,12 @@
 'use client';
 
+import { HomeCapabilities } from './home-capabilities';
+import { HomeRecentSessions } from './home-recent-sessions';
 import { SubscriptionOffer } from '../../session/models/subscription-offer';
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 
 import { HashIcon, XIcon } from '@phosphor-icons/react';
 
-import { SessionWelcome } from '../../session/thread/session-welcome';
 import { agentsInSpace, listSpaces } from '@kortix/sdk';
 import { useProjectConfig, useProjectName } from '@kortix/sdk/react';
 
@@ -23,42 +24,16 @@ import {
   spaceBefore,
 } from './home-greeting';
 
-/**
- * The project-home empty state: ONE centred column.
- *
- * The ask group — heading, composer, starter chips — is one block, and the
- * setup checklist is its sibling directly beneath. That is the whole layout.
- *
- * It used to be two: the ask group centred with `m-auto`, and the setup row
- * pinned to the bottom of the viewport in its own `shrink-0` band. Those two
- * had no relationship to each other and no shared alignment — the setup row
- * read as something that had fallen off the page rather than as the next
- * thing to do. One column with one gap gives the checklist a reason to be
- * where it is, and gives both blocks the same left and right edges.
- *
- * ## Where the column sits: dead centre
- *
- * `m-auto` on the column, in a scroller that is a flex column: centred on
- * both axes, the same distance from the top edge as from the bottom. #7103
- * had pinned the group to the page midline (composer's lower edge on the
- * half-way line, heading stacking up, the lower half empty ballast); Marko
- * saw it on dev and asked why it was "not dead center anymore" (2026-09-04).
- * With nothing under the composer any more the column is short, and a short
- * block reads as centred only when it IS centred — anchored to the midline
- * it sits visibly high. When the container is shorter than the column the
- * auto margins resolve to zero and the scroller scrolls from the top, so
- * nothing is ever unreachable.
- *
- * Shared by the project index page AND the instant session shell's empty
- * state, so a brand-new session opens onto the identical surface.
- */
+/** Compact home shared by the project index, first chat and instant session shell. */
 export function ProjectHomeWelcomeBody({
   projectId,
   composer,
   sentTurn,
   onPickSuggestion,
+  firstVisit = false,
 }: {
   projectId: string;
+  firstVisit?: boolean;
   /** The composer input rendered in the hero position, directly under the heading. */
   composer?: ReactNode;
   /**
@@ -91,8 +66,11 @@ export function ProjectHomeWelcomeBody({
     ? listSpaces(config).find((candidate) => candidate.name === activeSpace)
     : undefined;
   const spaceLabel = space ? space.label || space.name : null;
-  const spaceAgents = space ? agentsInSpace(space.name, config?.agents ?? []) : [];
+  const spaceAgents = space
+    ? agentsInSpace(space.name, config?.agents ?? [])
+    : [];
   const tSpaces = useTranslations('spaces');
+  const tHome = useTranslations('firstChat');
   // One word, not two. The name sits inside the sentence in `text-foreground`
   // while the rest is muted, so the fallback has to read as a NAME in that
   // slot — "this project" is a description wearing a name's highlight, and it
@@ -127,8 +105,8 @@ export function ProjectHomeWelcomeBody({
         short container scrolls the column rather than compressing it.
         `gap-10` separates the ask group from whatever a host puts beneath it.
       */}
-      <div className="m-auto flex w-full max-w-3xl shrink-0 flex-col gap-10 py-8 sm:px-4">
-        <div className="flex w-full flex-col gap-6">
+      <div className="m-auto flex w-full max-w-3xl shrink-0 flex-col gap-8 px-4 py-8">
+        <div className="flex w-full flex-col gap-4">
           {/*
               `w-full` with no `max-w`: the line runs the full column and breaks
               where the column ends, which is the composer's own right edge.
@@ -148,7 +126,10 @@ export function ProjectHomeWelcomeBody({
           {spaceLabel && !sentTurn ? (
             <div className="flex items-center gap-1 px-4">
               <Link
-                href={uiRoutes().space(projectId, space!.name) ?? uiRoutes().project(projectId)}
+                href={
+                  uiRoutes().space(projectId, space!.name) ??
+                  uiRoutes().project(projectId)
+                }
                 className="hover:bg-hover text-foreground flex min-w-0 items-center gap-1 rounded-sm px-1 text-sm font-medium transition-colors"
               >
                 <HashIcon className="text-muted-foreground size-3.5 shrink-0" />
@@ -163,7 +144,11 @@ export function ProjectHomeWelcomeBody({
                 <XIcon />
               </Button>
               {spaceAgents.length ? (
-                <span role="group" className="ml-auto flex items-center gap-1" aria-label={tSpaces('agents')}>
+                <span
+                  role="group"
+                  className="ml-auto flex items-center gap-1"
+                  aria-label={tSpaces('agents')}
+                >
                   {spaceAgents.map((name) => (
                     <Link
                       key={name}
@@ -182,14 +167,26 @@ export function ProjectHomeWelcomeBody({
             className="text-muted-foreground w-full px-4 text-2xl tracking-tight text-balance"
             hidden={!!sentTurn}
           >
-            {greeting.before}{' '}
-            <span className="text-foreground">{displayName}</span>
-            {spaceBefore(greeting.after) ? ' ' : ''}
-            {greeting.after}
+            {firstVisit ? (
+              tHome('greetingNoName')
+            ) : (
+              <>
+                {greeting.before}{' '}
+                <span className="text-foreground">{displayName}</span>
+                {spaceBefore(greeting.after) ? ' ' : ''}
+                {greeting.after}
+              </>
+            )}
           </h1>
           {space?.description && !sentTurn ? (
             <p className="text-muted-foreground w-full px-4 text-sm text-pretty">
               {space.description}
+            </p>
+          ) : null}
+
+          {firstVisit && !sentTurn ? (
+            <p className="text-muted-foreground px-4 text-sm leading-relaxed text-pretty">
+              {tHome('intro')}
             </p>
           ) : null}
 
@@ -198,25 +195,26 @@ export function ProjectHomeWelcomeBody({
               the width it will be there. */}
           {sentTurn ? <div className="w-full px-4">{sentTurn}</div> : null}
 
-          {composer ? <div className="flex w-full flex-col gap-4">{composer}</div> : null}
-          {composer && !sentTurn ? <SubscriptionOffer projectId={projectId} /> : null}
-
+          {composer && !sentTurn ? (
+            <SubscriptionOffer projectId={projectId} />
+          ) : null}
+          {composer ? (
+            <div className="flex w-full flex-col gap-4">{composer}</div>
+          ) : null}
         </div>
 
-        {/* Nothing under the composer, on purpose (Marko, 2026-09-02: "just
-            have the chat input there & that's it"). A space's room and tabs
-            live on its own page (`/spaces/<slug>`). */}
+        {!sentTurn ? (
+          <div className="space-y-5 px-4">
+            {!spaceLabel ? <HomeRecentSessions projectId={projectId} /> : null}
+            <HomeCapabilities />
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/** The wallpaper behind the hero. Pointer-transparent and inert — it is
- *  scenery, and nothing in it is reachable. */
+/** Home uses the host's plain surface; sessions can still use their wallpaper. */
 export function ProjectHomeWallpaper() {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-0" aria-hidden>
-      <SessionWelcome />
-    </div>
-  );
+  return null;
 }

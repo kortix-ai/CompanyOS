@@ -201,6 +201,7 @@ import { useLiveUpdates } from '@/hooks/useLiveUpdates';
 import { OLDER_HOLD_POSITION_MS, olderHistoryControl } from '@/lib/session/older-history';
 import { useRouter } from 'expo-router';
 import { SessionTurn } from './SessionTurn';
+import { useAgentRunLayout } from '@/lib/session/agent-runs';
 import { SessionBusyIndicator } from './session-busy-indicator';
 import { CompactionMarker } from './turn/compaction-divider';
 import { QuestionPrompt } from './QuestionPrompt';
@@ -1113,6 +1114,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => reuseStableTurns(prevTurnsRef.current, thread ? sessionLogTurns(thread, { busy: isBusy }) : EMPTY_TURNS),
     [thread, isBusy],
   );
+  // A person's agents report back as one unit: the turns of a run fold into the turn that answers it.
+  const agentRunLayout = useAgentRunLayout(turns);
   useEffect(() => {
     prevTurnsRef.current = turns;
   }, [turns]);
@@ -2022,14 +2025,17 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         });
       // The turn list is read through the ref: depending on `turns` would
       // re-render every row on each stream delta.
-      const gap = suppressed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
+      // An agent run's other turns draw nothing: the run's anchor folds them (KRTX-4732).
+      const absorbed = agentRunLayout.absorbed.has(id);
+      const gap = suppressed || absorbed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
       return (
         <View
           style={gap > 0 ? { marginTop: gap } : undefined}
           onLayout={(e) => handleTurnLayout(id, e.nativeEvent.layout.height)}>
-          {suppressed ? null : (
+          {suppressed || absorbed ? null : (
           <SessionTurn
             turn={item}
+            {...agentRunLayout.propsOf(id)}
             sessionStatus={isWorkingTurn ? sessionStatus : undefined}
             suppressBusyIndicator={isWorkingTurn && suppressWorkingBusy}
             sessionId={sessionId}
@@ -2059,7 +2065,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         </View>
       );
     },
-    [lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, openChangeRequest, sessionAuthorOf, stoppedByOf],
+    [agentRunLayout, lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, openChangeRequest, sessionAuthorOf, stoppedByOf],
   );
 
   const keyExtractor = useCallback((item: SessionLogTurn) => item.id, []);

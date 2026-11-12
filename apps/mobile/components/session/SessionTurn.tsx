@@ -74,6 +74,7 @@ import {
   textBlockRevealKey,
   turnSegments,
   turnWorkSplit,
+  withoutRelayCalls,
   type TurnSegment,
 } from '@/lib/session/turn-body';
 import { turnDurationMs } from '@/lib/session/turn-meta';
@@ -163,6 +164,16 @@ interface SessionTurnProps {
   changeRequests?: readonly ChangeItem[];
   /** Opens the review sheet for one change request. Must be stable. */
   onOpenChangeRequest?: (id: string) => void;
+  /**
+   * This turn answers an agent run (KRTX-4732): its row reads the run's label and folds the
+   * run's other turns (`runTurns`) with its own report and work. See `lib/session/agent-runs.ts`.
+   */
+  runLabel?: string;
+  runTurns?: readonly SessionLogTurn[];
+  /** Every agent this turn started has reported: its agent rows fold too. */
+  foldStartedWork?: boolean;
+  /** Drawn inside an anchor's run fold: the report and the work, no row, no busy slot, no actions. */
+  runMember?: boolean;
 }
 
 const EMPTY_QUESTIONS: QuestionRequest[] = Object.freeze([]) as unknown as QuestionRequest[];
@@ -194,6 +205,10 @@ function SessionTurnImpl({
   onScreen = true,
   changeRequests,
   onOpenChangeRequest,
+  runLabel,
+  runTurns,
+  foldStartedWork = false,
+  runMember = false,
 }: SessionTurnProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -235,10 +250,12 @@ function SessionTurnImpl({
     () => standaloneCallIdsFor(permissions, sessionId, blocks),
     [permissions, sessionId, blocks],
   );
-  const segments = useMemo(
-    () => turnSegments(segmentInputBlocks(blocks, answeredById, showInlineContent), standaloneCallIds),
-    [blocks, answeredById, showInlineContent, standaloneCallIds],
-  );
+  // Inside an agent run the agent's relays between colleagues (`send_message`) are noise.
+  const inRun = !!runLabel || runMember;
+  const segments = useMemo(() => {
+    const all = turnSegments(segmentInputBlocks(blocks, answeredById, showInlineContent), standaloneCallIds);
+    return inRun ? withoutRelayCalls(all) : all;
+  }, [blocks, answeredById, showInlineContent, standaloneCallIds, inRun]);
   // KRTX-2933: only the part that can still grow streams. A reply that ended
   // while the session still reads busy renders at once.
   const streamingTextId = useMemo(
@@ -264,7 +281,11 @@ function SessionTurnImpl({
     [segments, imageGenPaths, imageGenDigests],
   );
   // KRTX-2113: settled, the work folds behind one "Worked for" row; `null` while working.
-  const workSplit = useMemo(() => turnWorkSplit(segments, working), [segments, working]);
+  // A run member never folds on its own: it is fold content already.
+  const workSplit = useMemo(
+    () => (runMember ? null : turnWorkSplit(segments, working, foldStartedWork)),
+    [segments, working, foldStartedWork, runMember],
+  );
   const durationMs = useMemo(() => (workSplit ? turnDurationMs(turn) : null), [workSplit, turn]);
   // The opened "Worked for" row, kept outside the turn so a FlatList remount does not close it.
   const [workOpen, toggleWork] = useWorkFoldOpen(turn.id);
@@ -460,7 +481,7 @@ function SessionTurnImpl({
        <ImageGenDigestsContext.Provider value={imageGenDigests}>
        <ImageGenRunsContext.Provider value={imageGenRuns}>
         <View style={{ gap: SEGMENT_STACK_GAP }}>
-          {split && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
+          {split && !runLabel && <WorkRow key="work" durationMs={durationMs} open={workOpen} onToggle={toggleWork} />}
           {segments.map((segment) => {
             const isWork = split !== null && workSegments.has(segment);
             if (isWork && !workMounted) return null;
@@ -541,6 +562,7 @@ function SessionTurnImpl({
 
   // 4. Busy slot — retry display, then the working indicator
   if (
+    !runMember &&
     showTurnBusyIndicator({
       working: working && !suppressBusyIndicator,
       hasError: !!turnError,
@@ -582,18 +604,54 @@ function SessionTurnImpl({
 
   // 6. Change requests — what this turn left behind (web `TurnOutcomes`).
   // Gated on `!working` as on web: an outcome is a settled fact.
-  if (!working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
+  if (!runMember && !working && changeRequests && changeRequests.length > 0 && onOpenChangeRequest) {
     body.push(<SessionChangeRequests key="change-requests" items={changeRequests} onOpen={onOpenChangeRequest} />);
   }
 
   // 7. Action bar
-  if (showTurnActions({ working })) {
+  if (!runMember && showTurnActions({ working })) {
     body.push(<TurnActions key="actions" turn={turn} response={copyText} costInfo={costInfo} />);
   }
 
+  // An agent run's anchor (KRTX-4732): one row over the answer. Opened, it shows each other turn
+  // of the run (its report and the work it led to), then this turn's own report, then its work.
+  // While the turn works, its own report stays in view under the row.
+  const runFold = !!runLabel;
+  const noticeInFold = runFold && !working;
+  const members =
+    runFold && runTurns?.length
+      ? runTurns.map((member) => (
+          <SessionTurn
+            key={member.id}
+            turn={member}
+            runMember
+            sessionId={sessionId}
+            permissions={permissions}
+            pendingQuestions={pendingQuestions}
+            agentNames={agentNames}
+            onFileMention={onFileMention}
+            onSessionMention={onSessionMention}
+            onPermissionReply={onPermissionReply}
+            commands={commands}
+          />
+        ))
+      : null;
+
   return (
     <View style={{ gap: TURN_STACK_GAP }}>
-      {userMessage}
+      {runFold ? (
+        <View className="px-4">
+          <WorkRow label={runLabel} durationMs={null} open={workOpen} onToggle={toggleWork} />
+        </View>
+      ) : null}
+      {/* `display: none` takes no gap: a closed run row has no blank rows under it. */}
+      {runFold && workMounted ? (
+        <View style={workOpen ? RUN_STACK : RUN_STACK_HIDDEN}>
+          {members}
+          {noticeInFold ? userMessage : null}
+        </View>
+      ) : null}
+      {noticeInFold ? null : userMessage}
       {body.length > 0 ? (
         <View className="px-4" style={{ gap: TURN_STACK_GAP }}>
           {body}
@@ -602,5 +660,8 @@ function SessionTurnImpl({
     </View>
   );
 }
+
+const RUN_STACK = { gap: TURN_STACK_GAP };
+const RUN_STACK_HIDDEN = { ...RUN_STACK, ...HIDDEN };
 
 export const SessionTurn = React.memo(SessionTurnImpl);

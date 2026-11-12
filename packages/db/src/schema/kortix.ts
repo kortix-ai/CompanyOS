@@ -3031,6 +3031,14 @@ export const chatInstalls = kortixSchema.table(
       .notNull()
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     connectedAt: timestamp('connected_at', { withTimezone: true }).defaultNow().notNull(),
+    /**
+     * A Slack install of the Kortix workspace's OWN Slack app (its own bot and
+     * token), written only by that install path. False: the shared Kortix
+     * app, whose one token per Slack workspace belongs to one Kortix
+     * workspace (channels/slack/link.ts). Never derived from a secret a
+     * workspace admin can write.
+     */
+    ownApp: boolean('own_app').default(false).notNull(),
   },
   (table) => [
     uniqueIndex('idx_chat_installs_workspace_project').on(

@@ -47,6 +47,10 @@ describe('normalizeSessionListFilter / searchQueryParam', () => {
     });
     expect(searchQueryParam('a'.repeat(300))).toHaveLength(200);
     expect(searchQueryParam('  ')).toBeUndefined();
+    // A native input's clear can hand null/undefined through the debounced
+    // query: the server contract ("send neither for empty") reads it as empty.
+    expect(searchQueryParam(null)).toBeUndefined();
+    expect(searchQueryParam(undefined)).toBeUndefined();
   });
 });
 

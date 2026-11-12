@@ -255,6 +255,14 @@ describe('applySessionLogEvent', () => {
     expect(state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)).toEqual(reply!);
     // Its rev stays: an older streaming put that arrives late cannot revive the partial text.
     expect(applySessionLogEvent(state, ev('log.message', { rev: 2, message: streaming }))).toBe(state);
+    // A finished message never streams again (pi streams a message once): a delayed streaming put,
+    // even at a higher rev, changes nothing.
+    expect(applySessionLogEvent(state, ev('log.message', { rev: 3, message: streaming }))).toBe(state);
+    // A finished correction and a tombstone still apply.
+    const corrected = { ...reply!, blocks: [{ type: 'text', id: 'b1', text: 'corrected' } as TextBlock] };
+    const after = applySessionLogEvent(state, ev('log.message', { rev: 4, message: corrected }));
+    expect((after.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)!.blocks[0] as TextBlock).text).toBe('corrected');
+    expect(ids(applySessionLogEvent(after, ev('log.message', { message_id: reply!.message_id, rev: 5 })))).not.toContain(reply!.message_id);
   });
 
   test('a delta for a message the store does not hold builds no placeholder', () => {

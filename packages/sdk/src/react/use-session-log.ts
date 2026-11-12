@@ -385,6 +385,12 @@ export function useSessionLogSync(
     const reload = async (): Promise<void> => {
       if (!(await loadLive())) await load();
     };
+    // The re-read a turn end asks for. A box read already on the wire started before the turn
+    // ended and answers a snapshot without the finished reply: read again once it settles.
+    const reloadAfterTurnEnd = () => {
+      const stale = liveRead;
+      void (stale ? stale.then(reload, reload) : reload());
+    };
     // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
     // frame of a connection names the last end at join, which is not news.
     const endedTurn = (frame: { type: string; payload?: unknown }): boolean => {
@@ -421,7 +427,7 @@ export function useSessionLogSync(
         schema: 'v2',
         runtime: true,
         onControl: (frame) => {
-          if (endedTurn(frame)) void reload();
+          if (endedTurn(frame)) reloadAfterTurnEnd();
         },
         onConnectionChange: onReconnect(() => void reload()),
         onRuntimeResync: () => void reload(),

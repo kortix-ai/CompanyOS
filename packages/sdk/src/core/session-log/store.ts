@@ -89,6 +89,11 @@ function heldStreaming(state: SessionLogState, message: SessionLogMessage): bool
   return state.messages[message.thread_id]?.some((m) => m.message_id === message.message_id && m.status === 'streaming') ?? false;
 }
 
+/** The store holds `message`'s id as a finished record (any status but `streaming`). */
+function heldFinished(state: SessionLogState, message: SessionLogMessage): boolean {
+  return state.messages[message.thread_id]?.some((m) => m.message_id === message.message_id && m.status !== 'streaming') ?? false;
+}
+
 /**
  * `message` in its thread, by `seq`, replacing any copy of the same id. Every message enters
  * here, from a page or a frame: a shell command that exited non-zero is stored as one
@@ -109,6 +114,9 @@ function applyMessage(state: SessionLogState, p: unknown): SessionLogState {
     if (!isSessionLogMessage(p.message)) return state;
     const id = p.message.message_id;
     if ((state.revs[id] ?? -1) >= p.rev) return state;
+    // pi streams a message once, before its final record: a streaming put that reaches a finished
+    // record is a late frame, not news (F-012: a page settled it after the final put was lost).
+    if (p.message.status === 'streaming' && heldFinished(state, p.message)) return state;
     return { ...state, messages: put(without(state, id), p.message), revs: { ...state.revs, [id]: p.rev } };
   }
   if (typeof p.message_id !== 'string' || (state.revs[p.message_id] ?? -1) >= p.rev) return state;
@@ -180,7 +188,8 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     // A finished record replaces a held streaming one even though the stream put it (F-012): the
     // final record follows every streaming put of its message, and a stream that lost that final
     // put held the reply's partial text forever. Its rev stays, so a late streaming put cannot win.
-    if (state.revs[message.message_id] !== undefined && !(message.status !== 'streaming' && heldStreaming(state, message))) continue;
+    const finishesStreaming = message.status !== 'streaming' && heldStreaming(state, message);
+    if (state.revs[message.message_id] !== undefined && !finishesStreaming) continue;
     messages = put(messages, message);
   }
   const threads = { ...state.threads };

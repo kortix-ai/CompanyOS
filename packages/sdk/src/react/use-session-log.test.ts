@@ -795,7 +795,8 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     const turn = (token: string | null) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: token ? { turn_token: token } : null } });
     const finished = page().messages.findLast((m) => m.role === 'assistant')!;
     const reply = () => useSyncStore.getState().sessionLogs[SESSION]!.messages[page().thread_id]!.find((m) => m.message_id === finished.message_id)!;
-    mount({ loader: async () => { calls++; return v1Page(); } });
+    // The first page predates the reply; the page read at the turn end holds it finished.
+    mount({ loader: async () => { calls++; const p = v1Page(); return calls === 1 ? { ...p, messages: p.messages.filter((m) => m.message_id !== finished.message_id) } : p; } });
     await flush();
     expect(calls).toBe(1);
     const v2 = joined.at(-1)!.options;
@@ -813,12 +814,46 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     act(() => v2.onControl(turn('t2')));
     await flush();
     expect(calls).toBe(2);
-    expect(reply()).toEqual(finished);
+    expect(reply()).toEqual(v1Page().messages.find((m) => m.message_id === finished.message_id)!);
     // Other control frames and a repeat of the same end read nothing.
     act(() => v2.onControl({ type: 'kortix.control.queue', cseq: 2, cepoch: 'c', at: 2, payload: {} }));
     act(() => v2.onControl(turn('t2')));
     await flush();
     expect(calls).toBe(2);
+  });
+
+  test('F-012: a turn end during a box read that started before it reads the box again after that read settles', async () => {
+    // The read in flight answers a snapshot taken before the reply finished; sharing it would
+    // leave the reply streaming when the final put was lost.
+    const finished = page().messages.findLast((m) => m.role === 'assistant')!;
+    const streamingCopy = { ...structuredClone(finished), status: 'streaming' as const, completed_at: null, blocks: [{ type: 'text' as const, id: 'b_partial', text: 'partial' }] };
+    const reply = () => useSyncStore.getState().sessionLogs[SESSION]!.messages[page().thread_id]!.find((m) => m.message_id === finished.message_id)!;
+    const turn = (token: string) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: { turn_token: token } } });
+    let boxReads = 0;
+    let releaseStale: (value: unknown) => void = () => {};
+    const livePage = () => {
+      boxReads++;
+      if (boxReads === 1) return Promise.resolve(page());
+      if (boxReads === 2) return new Promise((resolve) => { releaseStale = resolve; });
+      return Promise.resolve(page());
+    };
+    mount({ loader: async () => page(), livePage });
+    await flush();
+    const v2 = joined.at(-1)!.options;
+    act(() => useSyncStore.getState().applySessionLogEvent(SESSION, { type: 'log.message', properties: { rev: 5, message: streamingCopy } }));
+    act(() => v2.onControl(turn('t1')));
+    // A resync starts a box read; the turn ends while it is on the wire.
+    act(() => v2.onRuntimeResync());
+    await flush();
+    expect(boxReads).toBe(2);
+    act(() => v2.onControl(turn('t2')));
+    await flush();
+    expect(boxReads).toBe(2);
+    // The stale read answers the streaming copy; one fresh read follows and finishes the reply.
+    await act(async () => releaseStale({ ...page(), messages: [...page().messages.filter((m) => m.message_id !== finished.message_id), streamingCopy] }));
+    await flush();
+    expect(boxReads).toBe(3);
+    expect(reply()).toEqual(finished);
   });
 
   test('a kortix.resync on the v2 connection re-reads the page once, with no duplicate messages', async () => {

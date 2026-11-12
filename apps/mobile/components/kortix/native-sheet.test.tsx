@@ -26,8 +26,10 @@ type HostProps = React.PropsWithChildren<Record<string, unknown>>;
 const host = (name: string) => ({ children, ...props }: HostProps) => React.createElement(name, props, children);
 
 let keyboardDismisses = 0;
+const layoutAnimations: unknown[] = [];
 mock.module('react-native', () => ({
   Keyboard: { dismiss: () => void keyboardDismisses++ },
+  LayoutAnimation: { configureNext: (config: unknown) => void layoutAnimations.push(config) },
   Platform: { OS: 'ios', Version: '26.0' },
   StyleSheet: { flatten: (style: unknown) => (Array.isArray(style) ? Object.assign({}, ...style) : style) },
   View: host('view'),
@@ -36,7 +38,8 @@ mock.module('react-native', () => ({
   useWindowDimensions: () => ({ width: 400, height: 800 }),
 }));
 mock.module('react-native-screens/experimental', () => ({ FormSheet: host('form-sheet') }));
-mock.module('react-native-reanimated', () => ({ useSharedValue: (value: number) => ({ value }) }));
+const motion = { reduced: false };
+mock.module('react-native-reanimated', () => ({ useSharedValue: (value: number) => ({ value }), useReducedMotion: () => motion.reduced }));
 const SafeAreaInsetsContext = React.createContext<{ top: number; bottom: number } | null>(null);
 mock.module('react-native-safe-area-context', () => ({
   SafeAreaInsetsContext,
@@ -322,6 +325,87 @@ describe('keyboard', () => {
     call((r) => r.present());
     call((r) => r.expand());
     expect(avoider().props.enabled).toBe(true);
+  });
+});
+
+describe('the content ends at the visible edge', () => {
+  // Window 800, insets 50 / 34: maximum detent 700, full-height box 734.
+  const avoider = () => tree.root.findAll((node) => node.type === 'keyboard-avoiding')[0];
+  const content = () => avoider().findAll((node) => node.type === 'view')[0];
+  const margin = () => (Array.isArray(content().props.style) ? Object.assign({}, ...content().props.style) : content().props.style).marginBottom;
+  const layout = (height: number) => act(() => avoider().props.onLayout({ nativeEvent: { layout: { height } } }));
+
+  test('a box laid out at the full detent ends the content above the part below the screen (the picker tabs)', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layout(734);
+    expect(margin()).toBe(105);
+  });
+
+  test('a box UIKit sized to the detent is left alone', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layout(0.85 * 700 + 34);
+    expect(margin()).toBe(0);
+  });
+
+  test('the full detent and expand() hide nothing', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layout(734);
+    fire('onDetentChanged', { index: 1 });
+    expect(margin()).toBe(0);
+    fire('onDetentChanged', { index: 0 });
+    expect(margin()).toBe(105);
+    call((r) => r.expand());
+    expect(margin()).toBe(0);
+  });
+
+  test('a detent change eases the content end instead of jumping', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layoutAnimations.length = 0;
+    fire('onDetentChanged', { index: 1 });
+    expect(layoutAnimations).toEqual([{ duration: 200, update: { type: 'easeOut' } }]);
+  });
+
+  test('expand() and collapse() from code ease it too; a content-sized sheet never animates', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layoutAnimations.length = 0;
+    call((r) => r.expand());
+    call((r) => r.collapse());
+    expect(layoutAnimations).toHaveLength(2);
+    act(() => tree.unmount());
+    mount();
+    call((r) => r.present());
+    layoutAnimations.length = 0;
+    call((r) => r.expand());
+    expect(layoutAnimations).toHaveLength(0);
+  });
+
+  test('no animation when the detent does not change: a repeated collapse(), the same detent reported again', () => {
+    mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+    call((r) => r.present());
+    layoutAnimations.length = 0;
+    call((r) => r.collapse());
+    fire('onDetentChanged', { index: 0 });
+    call((r) => r.snapToIndex(0));
+    expect(layoutAnimations).toHaveLength(0);
+  });
+
+  test('Reduce Motion moves the content end at once', () => {
+    motion.reduced = true;
+    try {
+      mount({ snapPoints: ['85%'], enableDynamicSizing: false });
+      call((r) => r.present());
+      layoutAnimations.length = 0;
+      fire('onDetentChanged', { index: 1 });
+      call((r) => r.expand());
+      expect(layoutAnimations).toHaveLength(0);
+    } finally {
+      motion.reduced = false;
+    }
   });
 });
 

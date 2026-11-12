@@ -242,8 +242,14 @@ a binary built without it: that binary keeps gorhom. Android keeps gorhom.
   `enablePanDownToClose={false}` is `preventNativeDismiss`;
   `enableContentPanningGesture={false}` turns off
   `prefersScrollingExpandsWhenScrolledToEdge`.
-- **Layout.** The content view IS the visible sheet and resizes with it:
-  `SheetFill` is a `flex: 1` view and a `PinnedBar` needs no shift. The title
+- **Layout.** At a partial detent the sheet's view can keep the full
+  detent's height with its bottom below the screen. `NativeSheet`'s box ends
+  the content that far up (`nativeSheetHiddenBottom`, `lib/ui/native-sheet.ts`),
+  so `flex: 1`, a `PinnedBar` (the model sheet's Agent · Model tabs) and a
+  list's last row end at the visible edge once the sheet rests (the end eases
+  there in 200 ms after a drag to a new detent; during the drag it stays where
+  it was). `SheetFill` is a `flex: 1` view and a `PinnedBar` needs no shift.
+  The title
   row sits where gorhom drew it (10pt under the top: the native grabber); an
   untitled sheet starts 24pt down, gorhom's default handle height.
 - **Keyboard.** The native sheet does not lift its content. `SheetScrollView`

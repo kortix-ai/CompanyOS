@@ -104,9 +104,8 @@ import {
 
 import { buildSessionSandboxEnvVars } from './session-sandbox-env-build';
 import { sandboxCallbackUnreachableReason, sandboxCallbackDeadTunnelReason } from './session-callback-probe';
-import { actorForUser, type Actor } from '../../iam/actor';
-import { PROJECT_ACTIONS } from '../../iam/actions';
-import { authorize } from '../../iam/authorize';
+import type { Actor } from '../../iam/actor';
+import { launcherMayReadRepository } from './launcher-repository-access';
 import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
@@ -715,10 +714,7 @@ async function resolveSessionAgent(params: {
   const repositoryAccess =
     agentGrantAllowsRepository(agentName, loadedAgents) &&
     (input.requestingPrincipalType === 'service_account' ||
-      (await authorize(actorForUser(input.userId, project.accountId), PROJECT_ACTIONS.PROJECT_FILE_READ, {
-        type: 'project',
-        id: projectId,
-      })).allowed);
+      (await launcherMayReadRepository(input.userId, project.accountId, projectId)));
 
   return { loadedAgents, projectDefaultAgent, agentName, platformMetaAgent, repositoryAccess, myKortixColleague };
 }

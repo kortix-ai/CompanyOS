@@ -57,6 +57,36 @@ export function nativeSheetMaxHeight(windowHeight: number, topInset: number, bot
   return Math.max(0, windowHeight - topInset - bottomInset - 16);
 }
 
+/**
+ * How many points of a fixed-detent sheet's content box lie below the screen
+ * at the detent `fraction`.
+ *
+ * The box is sized from the sheet controller's view. At a partial detent that
+ * view can keep the full detent's height while the sheet shows only its top:
+ * the bottom of the box (a `PinnedBar`, the Agent · Model tabs) is then off
+ * the screen. The visible sheet is `fraction` of the maximum detent plus the
+ * bottom safe area; the rest is hidden.
+ *
+ * The box height tells the two layouts apart: a box near
+ * `fraction × maxHeight + bottomInset` was already sized to the detent (0
+ * hidden), a box near `maxHeight + bottomInset` was not. The hidden part
+ * follows the measured box, not the estimate, so a small error in
+ * `nativeSheetMaxHeight` does not move the result.
+ */
+export function nativeSheetHiddenBottom(input: {
+  boxHeight: number;
+  fraction: number;
+  maxHeight: number;
+  bottomInset: number;
+}): number {
+  const { boxHeight, fraction, maxHeight, bottomInset } = input;
+  if (!(boxHeight > 0) || !(fraction > 0) || fraction >= 1) return 0;
+  const sizedToDetent = fraction * maxHeight + bottomInset;
+  const sizedToFull = maxHeight + bottomInset;
+  if (Math.abs(boxHeight - sizedToDetent) <= Math.abs(boxHeight - sizedToFull)) return 0;
+  return Math.round((1 - fraction) * Math.max(0, boxHeight - bottomInset));
+}
+
 /** gorhom's `snapPoints`: `'50%'`, a number in points, or a Reanimated shared value. */
 export type GorhomDetents = ReadonlyArray<string | number> | { value: unknown } | undefined;
 

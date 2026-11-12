@@ -54,7 +54,7 @@ import * as RN from 'react-native';
 import type { ViewStyle } from 'react-native';
 import type { BottomSheetModal, BottomSheetModalProps } from '@gorhom/bottom-sheet';
 import type { FormSheetProps } from 'react-native-screens/experimental';
-import { useSharedValue } from 'react-native-reanimated';
+import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 
@@ -62,6 +62,7 @@ import { getSheetBg } from '@/lib/theme-colors';
 import { detentsKey } from '@/lib/ui/sheet-detents';
 import {
   hasNativeComponent,
+  nativeSheetHiddenBottom,
   nativeSheetMaxHeight,
   resolveNativeDetents,
   supportsNativeSheet,
@@ -144,12 +145,29 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
     [key, enableDynamicSizing, index, maxHeight]
   );
   const fit = baseDetents === 'fitToContents';
+  // A fixed-detent sheet's content end (`SheetBox`'s hidden margin) follows
+  // its detent: ease it there instead of a jump of the bottom bar. Only when
+  // the visible fraction really changes (a configured animation that no commit
+  // uses would wait and animate an unrelated later update), and not under
+  // Reduce Motion. Every other layout change in the same commit (the call
+  // site's `onChange`, the keyboard avoider turning on) eases with it.
+  const reducedMotion = useReducedMotion();
+  const layoutRef = React.useRef({ fit, baseDetents, detentAt, expanded, reducedMotion });
+  const easeDetentChange = React.useCallback((next: { expanded: boolean; detentAt: number }) => {
+    const now = layoutRef.current;
+    if (now.fit || now.reducedMotion) return;
+    const detents = now.baseDetents as number[];
+    const fractionOf = (at: { expanded: boolean; detentAt: number }) => (at.expanded ? 1 : (detents[at.detentAt] ?? 1));
+    if (fractionOf(next) === fractionOf(now)) return;
+    RN.LayoutAnimation?.configureNext(DETENT_LAYOUT);
+  }, []);
   const detents = !fit && expanded ? [1] : baseDetents;
 
   const onChangeRef = React.useRef(onChange);
   const onDismissRef = React.useRef(onDismiss);
   React.useLayoutEffect(() => {
     onChangeRef.current = onChange;
+    layoutRef.current = { fit, baseDetents, detentAt, expanded, reducedMotion };
     onDismissRef.current = onDismiss;
   });
 
@@ -200,18 +218,28 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
         snapToIndex: (to: number) => {
           if (to < 0) dismiss();
           else {
+            easeDetentChange({ expanded: false, detentAt: to });
             setExpanded(false);
             setDetentAt(to);
           }
         },
         snapToPosition: (position: string | number) => {
           const full = typeof position === 'string' ? position.trim() === '100%' : position >= maxHeight;
-          if (full) setExpanded(true);
+          if (full) {
+            easeDetentChange({ expanded: true, detentAt: layoutRef.current.detentAt });
+            setExpanded(true);
+          }
         },
-        expand: () => setExpanded(true),
-        collapse: () => setExpanded(false),
+        expand: () => {
+          easeDetentChange({ expanded: true, detentAt: layoutRef.current.detentAt });
+          setExpanded(true);
+        },
+        collapse: () => {
+          easeDetentChange({ expanded: false, detentAt: layoutRef.current.detentAt });
+          setExpanded(false);
+        },
       }) as unknown as BottomSheetModal,
-    [dismiss, maxHeight, setPhaseBoth, initialIndex]
+    [dismiss, maxHeight, setPhaseBoth, initialIndex, easeDetentChange]
   );
 
   const footerPosition = useSharedValue(0);
@@ -262,6 +290,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
         const at = event.nativeEvent.index;
         // While expanded a fixed-detent sheet lists only the full detent.
         const reported = !fit && expanded ? (baseDetents as number[]).length - 1 : at;
+        easeDetentChange({ expanded, detentAt: reported });
         setDetentAt(reported);
         onChangeRef.current?.(reported, 0, 0 as never);
       }}
@@ -281,6 +310,9 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
               <SheetBox
                 fit={fit}
                 avoid={!fit && (expanded || detentAt === (baseDetents as number[]).length - 1)}
+                fraction={fit || expanded ? 1 : ((baseDetents as number[])[detentAt] ?? 1)}
+                maxHeight={maxHeight}
+                bottomInset={insets.bottom}
                 windowHeight={windowHeight}
                 style={boxStyle}>
                 {header}
@@ -300,6 +332,9 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
 
 const styles = { fill: { flex: 1 } } satisfies Record<string, ViewStyle>;
 
+/** 200 ms ease-out: the content's end moving to a new detent (SHEET_MOTION's close length, shortened for a settle). */
+const DETENT_LAYOUT = { duration: 200, update: { type: 'easeOut' as const } };
+
 /** The screen's real safe-area insets, carried past a content-sized sheet's bottom-0 override. */
 const ScreenInsetsContext = React.createContext<ReturnType<typeof useSafeAreaInsets> | null>(null);
 
@@ -315,16 +350,29 @@ let keyboardAvoidingView: typeof import('react-native-keyboard-controller').Keyb
  * overlap with the box. Below the full detent UIKit lifts the sheet itself, so
  * the avoider is off there (`enabled`) and never pads twice. A content-sized
  * sheet is lifted by UIKit too and keeps a plain View.
+ *
+ * At a partial detent the box can keep the full detent's height while only
+ * its top is on screen (`nativeSheetHiddenBottom`). The content then ends that
+ * much above the box's bottom, so `flex: 1`, a `PinnedBar` and a list's last
+ * row end at the visible edge, as in gorhom's `SheetFill`. Without it the
+ * picker's Agent · Model tabs sat below the screen on iOS.
  */
 function SheetBox({
   fit,
   avoid,
+  fraction,
+  maxHeight,
+  bottomInset,
   windowHeight,
   style,
   children,
 }: {
   fit: boolean;
   avoid: boolean;
+  /** The detent the sheet rests at, as a fraction of the maximum detent. */
+  fraction: number;
+  maxHeight: number;
+  bottomInset: number;
   windowHeight: number;
   style: ViewStyle;
   children: React.ReactNode;
@@ -336,6 +384,7 @@ function SheetBox({
   keyboardAvoidingView ??= (require('react-native-keyboard-controller') as typeof import('react-native-keyboard-controller'))
     .KeyboardAvoidingView;
   const Avoiding = keyboardAvoidingView;
+  const hidden = nativeSheetHiddenBottom({ boxHeight: boxHeight ?? 0, fraction, maxHeight, bottomInset });
   return (
     <Avoiding
       behavior="padding"
@@ -343,7 +392,7 @@ function SheetBox({
       keyboardVerticalOffset={boxHeight === null ? 0 : Math.max(0, windowHeight - boxHeight)}
       onLayout={(e) => setBoxHeight(e.nativeEvent.layout.height)}
       style={style}>
-      {children}
+      <RN.View style={[styles.fill, { marginBottom: hidden }]}>{children}</RN.View>
     </Avoiding>
   );
 }

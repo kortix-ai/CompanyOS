@@ -17,7 +17,7 @@ import { captureException } from '../lib/sentry';
  * hiccup, and a message that merely mentions credentials never misclassifies:
  * any unclear error keeps the caller's existing behavior.
  */
-export function providerAuthFailureStatus(err: unknown): 401 | 403 | undefined {
+function providerAuthFailureStatus(err: unknown): 401 | 403 | undefined {
   const value = err as
     | {
         status?: unknown;

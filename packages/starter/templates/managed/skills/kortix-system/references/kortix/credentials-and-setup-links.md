@@ -43,19 +43,15 @@ kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime     # yo
 kortix secrets request BILLING_API_TOKEN --scope connector                  # only a connector spends it
 ```
 
-- **Always pass the scope you mean.** `runtime` (the default) delivers the
-  value to you as an env var: use it for "store my key" and for any key your
-  code or tools read. `connector` keeps it server-side for a connector and
-  never puts it in the sandbox. The person can change delivery later.
+- **`runtime` (the default) delivers the value to you as an env var.**
+  `connector` keeps it server-side for a connector, never in the sandbox.
 - One link asks for several keys. Ask for everything in one message.
-- A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
-  set the names it lists, in this workspace.
+- A link lasts 7 days (`--expires <minutes>`, at most 30 days) and sets only its names.
 - Minting is not idempotent: every call makes a new link. A looping task
   (trigger, retry) records the link and its `expires_at`, checks whether the
   secret is set, and mints again only when the link expired.
   `kortix secrets request <names> --show` prints the saved link.
-- `withheld` in the answer names keys your agent will not receive. Relay the
-  `withheld_fix` it returns.
+- `withheld` names keys your agent will not receive: relay its `withheld_fix`.
 
 ## Mint a connect link
 

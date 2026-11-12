@@ -99,14 +99,15 @@ describe('Slack writes follow the link', () => {
     expect((await gate('C0PUBLIC01')).refusal).toBeNull();
   });
 
-  test("when Slack cannot say what is private, a write goes ahead: it is Slack's own call with the same token", async () => {
-    const unknown: SlackReadDeps = { ...READS, view: async () => null };
-    const g = await gateChannelWrite(
-      { projectId: MINE, userId: 'user-1', platform: 'slack', actionPath: 'send_message', args: { channel: 'G0EXEC', text: 'hi' } },
-      linkOf('linked').linkState,
-      unknown,
-    );
-    expect(g.refusal).toBeNull();
+  test('when Slack does not answer what is private, a write is refused as a read is; with no Slack token nothing is reachable', async () => {
+    const gate = (reads: SlackReadDeps) =>
+      gateChannelWrite(
+        { projectId: MINE, userId: 'user-1', platform: 'slack', actionPath: 'send_message', args: { channel: 'C0ANY00001', text: 'hi' } },
+        linkOf('linked').linkState,
+        reads,
+      );
+    expect((await gate({ ...READS, view: async () => null })).refusal?.reason).toBe(SLACK_PRIVATE_CONVERSATION);
+    expect((await gate({ ...READS, view: async () => 'no_slack' })).refusal).toBeNull();
   });
 
   test('a Kortix workspace that does not hold the Slack workspace writes nothing', async () => {

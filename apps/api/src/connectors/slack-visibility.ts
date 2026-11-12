@@ -38,8 +38,12 @@ export interface SlackView {
 export interface SlackReadDeps {
   /** The Slack workspace this Kortix workspace holds the link to, or null. */
   link(projectId: string): Promise<{ teamId: string } | null>;
-  /** The private conversations of the linked Slack workspace as `userId` may see them. Null when Slack cannot be asked. */
-  view(projectId: string, teamId: string, userId: string | null): Promise<SlackView | null>;
+  /**
+   * The private conversations of the linked Slack workspace as `userId` may
+   * see them. Null when Slack did not answer; `no_slack` when the Kortix
+   * workspace has no Slack token, so no conversation is reachable at all.
+   */
+  view(projectId: string, teamId: string, userId: string | null): Promise<SlackView | 'no_slack' | null>;
 }
 
 const SLACK_ID = /^[A-Za-z0-9]{2,64}$/;
@@ -65,11 +69,12 @@ function privateMessage(id: string, view: SlackView): string {
 }
 
 /**
- * Why a write into conversation `channel` must not go ahead, or null. Refused
- * only on Slack's positive answer: the conversation is private and the
- * person is not in it. A DM (`D…`) or a user id is to one person and stays
- * open. When Slack cannot say, the write goes ahead: it is a Slack call with
- * the same token, so it cannot land where Slack cannot be asked.
+ * Why a write into conversation `channel` must not go ahead, or null. A DM
+ * (`D…`) or a user id is to one person and stays open. Otherwise the
+ * conversation must be public, or private with the person in it. When Slack
+ * does not answer which conversations are private, the write is refused, as
+ * a read is. Only a Kortix workspace with no Slack token writes unchecked:
+ * no conversation is reachable without one.
  */
 export async function slackPrivateWrite(
   input: { projectId: string; userId: string | null; channel: unknown },
@@ -80,7 +85,9 @@ export async function slackPrivateWrite(
   const link = await deps.link(input.projectId);
   if (!link) return null;
   const view = await deps.view(input.projectId, link.teamId, input.userId);
-  if (!view || mayRead(view, id)) return null;
+  if (view === 'no_slack') return null;
+  if (!view) return refusal(SLACK_PRIVATE_CONVERSATION, UNKNOWN_VIEW_MESSAGE).refusal;
+  if (mayRead(view, id)) return null;
   return refusal(SLACK_PRIVATE_CONVERSATION, privateMessage(id, view)).refusal;
 }
 
@@ -110,7 +117,12 @@ export async function gateSlackRead(
   if (kind === 'directory') return PASS;
 
   let viewed: SlackView | null | undefined;
-  const view = async () => (viewed === undefined ? (viewed = await deps.view(input.projectId, link.teamId, input.userId ?? null)) : viewed);
+  const view = async (): Promise<SlackView | null> => {
+    if (viewed !== undefined) return viewed;
+    const answer = await deps.view(input.projectId, link.teamId, input.userId ?? null);
+    viewed = answer === 'no_slack' ? null : answer;
+    return viewed;
+  };
 
   if (kind === 'channel' || kind === 'thread') {
     const id = normalized(input.args.channel);

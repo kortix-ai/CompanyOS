@@ -74,14 +74,22 @@ async function primaryOf(teamId: string, projectIds: string[]): Promise<string> 
  */
 async function detach(teamId: string, projectId: string, reason: string): Promise<void> {
   // This Slack workspace's install only: the Kortix workspace may hold other
-  // Slack workspaces. Its Slack secrets are one set per Kortix workspace; they
-  // go when they are this Slack workspace's (the install written last).
+  // Slack workspaces. Its Slack secrets are one set per Kortix workspace,
+  // written by its newest install: they go when that install is this one.
+  // Decided from the install rows, never from a secret a member can write.
+  const [newest] = await db
+    .select({ teamId: chatInstalls.platformTeamId })
+    .from(chatInstalls)
+    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.projectId, projectId)))
+    .orderBy(desc(chatInstalls.connectedAt))
+    .limit(1);
   await db
     .delete(chatInstalls)
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId), eq(chatInstalls.projectId, projectId)));
-  const { readSecret } = await import('../install-store');
-  const { deleteSlackSecrets } = await import('./installs');
-  if ((await readSecret(projectId, 'SLACK_TEAM_ID')) === teamId) await deleteSlackSecrets(projectId);
+  if (newest?.teamId === teamId) {
+    const { deleteSlackSecrets } = await import('./installs');
+    await deleteSlackSecrets(projectId);
+  }
   await db
     .delete(chatChannelBindings)
     .where(

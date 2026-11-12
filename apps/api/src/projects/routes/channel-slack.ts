@@ -506,13 +506,19 @@ export function registerChannelSlackRoutes(): void {
         return c.json({ error: refusal.message, code: 'SLACK_NOT_LINKED', reason: SLACK_NOT_LINKED, channel }, 403);
       }
       // A bind routes the thread's replies to this session: a private channel
-      // needs the session's person in it, as a post there does.
-      const [owner] = await db
-        .select({ createdBy: projectSessions.createdBy })
-        .from(projectSessions)
-        .where(and(eq(projectSessions.sessionId, sessionId), eq(projectSessions.projectId, projectId)))
-        .limit(1);
-      const privateRefusal = await slackPrivateWriteRefusal(projectId, owner?.createdBy ?? null, channel);
+      // needs the caller's person in it, as a post there does. A sandbox token
+      // names only its own session, so its person is that session's; any
+      // other credential is its own user, whatever session it names.
+      let person: string | null = (c as any).get('userId') ?? null;
+      if (callerSandboxSessionId !== null) {
+        const [owner] = await db
+          .select({ createdBy: projectSessions.createdBy })
+          .from(projectSessions)
+          .where(and(eq(projectSessions.sessionId, callerSandboxSessionId), eq(projectSessions.projectId, projectId)))
+          .limit(1);
+        person = owner?.createdBy ?? null;
+      }
+      const privateRefusal = await slackPrivateWriteRefusal(projectId, person, channel);
       if (privateRefusal) {
         return c.json({ error: privateRefusal.message, code: 'SLACK_PRIVATE_CONVERSATION', reason: privateRefusal.reason, channel }, 403);
       }

@@ -34,15 +34,15 @@ async function cached<T>(key: string, load: () => Promise<T | null>): Promise<T 
 export const dbSlackReadDeps: SlackReadDeps = {
   link: async (projectId) => (await channels()).slackProjectLink(projectId),
 
-  async view(projectId, teamId, userId): Promise<SlackView | null> {
+  async view(projectId, teamId, userId): Promise<SlackView | 'no_slack' | null> {
     const { loadSlackTokenForProject, slackMemberships, slackPersonForKortixUser } = await channels();
     const token = await loadSlackTokenForProject(projectId);
-    if (!token) return null;
+    if (!token) return 'no_slack';
     // Keyed by the Kortix workspace whose token answered: two Slack apps in one
     // Slack workspace see different conversations.
     const bot = await cached(`bot:${projectId}:${teamId}`, () => slackMemberships(token, 'private_channel,mpim,im'));
     if (!bot) return null;
-    const person = userId ? await slackPersonForKortixUser({ teamId, userId, token }).catch(() => null) : null;
+    const person = userId ? await slackPersonForKortixUser({ teamId, userId, token, projectId }).catch(() => null) : null;
     const allowed = new Set<string>(bot.filter((c) => c.isIm && person && c.user === person).map((c) => c.id));
     if (person) {
       const own = await cached(`person:${projectId}:${teamId}:${person}`, () => slackMemberships(token, 'private_channel,mpim', person));

@@ -24,9 +24,28 @@ import {
  * set a member's email already controls who is in that Slack workspace, and
  * a Kortix admin chose to link it, so this trusts nothing new. The link is
  * made without a second factor: an account that requires one still asks for
- * `/kortix login` from a session that passed it (`resolveChatActor`).
+ * `/kortix login` from a session that passed it: no link is made by email in
+ * an account that requires MFA.
  * A live link to another Kortix user is never replaced (`linkChatIdentity`).
  */
+
+/**
+ * Does this account require a second factor? A link made by email carries
+ * none, and `authorize` lets a super admin past the account-MFA gate, so an
+ * email link would act at full authority there: such accounts keep
+ * `/kortix login` from a session that passed MFA.
+ */
+async function accountRequiresMfa(accountId: string): Promise<boolean> {
+  try {
+    const rows = (await db.execute(
+      sql`SELECT mfa_required AS "mfaRequired" FROM kortix.accounts WHERE account_id = ${accountId}::uuid LIMIT 1`,
+    )) as unknown as Array<{ mfaRequired: boolean }>;
+    // Unknown is treated as required: a missed link only asks for /kortix login.
+    return rows[0]?.mfaRequired !== false;
+  } catch {
+    return true;
+  }
+}
 
 /** The confirmed Kortix user with this email, or null (none, or more than one). */
 async function kortixUserByEmail(email: string): Promise<string | null> {
@@ -52,6 +71,7 @@ export async function autoLinkSlackPerson(input: {
   if (!email) return false;
   const userId = await kortixUserByEmail(email);
   if (!userId || !(await isAccountMember(userId, input.accountId))) return false;
+  if (await accountRequiresMfa(input.accountId)) return false;
   const linked = await linkChatIdentity(chatUser('slack', input.teamId, input.slackUserId), userId);
   if (linked.ok) logger.info('[slack-auto-link] linked a Slack person by confirmed email', { teamId: input.teamId });
   return linked.ok;
@@ -66,6 +86,8 @@ export async function slackPersonForKortixUser(input: {
   teamId: string;
   userId: string;
   token: string;
+  /** The Kortix workspace the link is for: no link is made in an account that requires MFA. */
+  projectId?: string;
 }): Promise<string | null> {
   const linked = await lookupChatUserForKortixUser('slack', input.teamId, input.userId);
   if (linked) return linked;
@@ -76,6 +98,11 @@ export async function slackPersonForKortixUser(input: {
   if (!email || (await kortixUserByEmail(email)) !== input.userId) return null;
   const slackUserId = await slackPersonByEmail(input.token, email);
   if (!slackUserId) return null;
+  // A requester link reads private Slack content for its person: none made
+  // without a second factor in an account that requires one.
+  const { accountKeyOfWorkspace } = await import('../../workspaces/rows');
+  const projectAccount = input.projectId ? await accountKeyOfWorkspace(input.projectId) : null;
+  if (!projectAccount || (await accountRequiresMfa(projectAccount))) return null;
   const result = await linkChatIdentity(chatUser('slack', input.teamId, slackUserId), input.userId);
   // That Slack person is linked to someone else: they are not this user here.
   return result.ok ? slackUserId : null;

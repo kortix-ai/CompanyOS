@@ -37,9 +37,10 @@ export interface ChannelCtx {
  */
 export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelSelection | null> {
   if (!ctx.channelId) return null;
+  let linked: string | null = null;
   if ((ctx.platform ?? 'slack') === 'slack') {
     const { linkedSlackProject, recordSlackChannel } = await import('./link');
-    const linked = await linkedSlackProject(ctx.teamId);
+    linked = await linkedSlackProject(ctx.teamId);
     if (linked) await recordSlackChannel(linked, ctx.teamId, ctx.channelId);
   }
   let binding: { projectId: string | null; agentName: string | null; sessionModel: string | null; conversationPolicy: string | null } | undefined;
@@ -63,6 +64,11 @@ export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelS
     console.warn('[slack-selection] optional channel override columns missing; falling back to project-only routing');
     const projectId = await currentChannelProjectId(ctx);
     return projectId ? { projectId, agentName: null, sessionModel: null, conversationPolicy: null } : null;
+  }
+  // A row of another Kortix workspace (one running its own Slack app in this
+  // Slack workspace) never sets the linked workspace's agent, model or policy.
+  if (linked && binding?.projectId !== linked) {
+    return { projectId: linked, agentName: null, sessionModel: null, conversationPolicy: null };
   }
   if (!binding?.projectId) return null;
   return {

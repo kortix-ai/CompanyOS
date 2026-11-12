@@ -438,6 +438,10 @@ export async function spawnAgentTurn(
   const teamId = envelope.team_id ?? event.team ?? '';
   const threadId = event.thread_ts ?? event.ts ?? '';
 
+  // Messages, button clicks, approvals and reviews all start turns here: only
+  // a Kortix workspace that holds this Slack workspace runs one (link.ts).
+  if (teamId && !(await holdsSlackWorkspace(projectId, teamId))) return;
+
   // Resolve who the agent runs AS. Gated by SLACK_REQUIRE_USER_IDENTITY:
   //  • ON  — every sender (first message OR follow-up, channel OR button click)
   //    must be linked to a Kortix account that is a member of this project's

@@ -226,17 +226,32 @@ describe('Slack people are linked by confirmed email', () => {
     expect(await lookupChatIdentity(chatUser('slack', ws, 'U0OUT'))).toBeNull();
   });
 
+  test('an account that requires MFA links nobody by email: such people keep /kortix login', async () => {
+    const ws = team('MFA');
+    await shared(a.project_id, ws);
+    await moveSlackLink(ws, a.project_id);
+    await db.execute(sql`UPDATE kortix.accounts SET mfa_required = true WHERE account_id = ${a.account_id}::uuid`);
+    try {
+      slack({ U0MFA: { email: memberEmail, confirmed: true } });
+      expect(await linkSlackPersonByEmail(chatUser('slack', ws, 'U0MFA'), a.project_id)).toBe(false);
+      expect(await lookupChatIdentity(chatUser('slack', ws, 'U0MFA'))).toBeNull();
+      expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic', projectId: a.project_id })).toBeNull();
+    } finally {
+      await db.execute(sql`UPDATE kortix.accounts SET mfa_required = false WHERE account_id = ${a.account_id}::uuid`);
+    }
+  });
+
   test("a Kortix user's Slack person is found by their confirmed email, and a person linked to someone else is not taken", async () => {
     const ws = team('REV');
     await shared(a.project_id, ws);
     await moveSlackLink(ws, a.project_id);
     slack({ U0MEMBER: { email: memberEmail, confirmed: true } });
-    expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic' })).toBe('U0MEMBER');
+    expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic', projectId: a.project_id })).toBe('U0MEMBER');
     // Linked now: the second lookup reads the link.
     globalThis.fetch = (async () => Response.json({ ok: false, error: 'should_not_call' })) as unknown as typeof fetch;
-    expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic' })).toBe('U0MEMBER');
+    expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic', projectId: a.project_id })).toBe('U0MEMBER');
     // OUTSIDER has the address of a Slack person already linked to MEMBER: no.
     slack({ U0MEMBER: { email: outsiderEmail, confirmed: true } });
-    expect(await slackPersonForKortixUser({ teamId: ws, userId: OUTSIDER, token: 'xoxb-synthetic' })).toBeNull();
+    expect(await slackPersonForKortixUser({ teamId: ws, userId: OUTSIDER, token: 'xoxb-synthetic', projectId: a.project_id })).toBeNull();
   });
 });

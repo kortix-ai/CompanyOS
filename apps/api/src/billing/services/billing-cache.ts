@@ -87,9 +87,17 @@ function generationOf(accountId: string): string {
   return `${globalGeneration}:${generations.get(accountId) ?? 0}`;
 }
 
+/** Past this many counters, start over: a reset only stops in-flight reads from caching. */
+const MAX_GENERATIONS = 10_000;
+
 /** Drop one account's entry and void any read of it still in flight. */
 function dropAccount(accountId: string): void {
   cache.delete(accountId);
+  if (generations.size >= MAX_GENERATIONS && !generations.has(accountId)) {
+    generations.clear();
+    globalGeneration += 1;
+    return;
+  }
   generations.set(accountId, (generations.get(accountId) ?? 0) + 1);
 }
 

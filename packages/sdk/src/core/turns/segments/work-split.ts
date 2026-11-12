@@ -23,6 +23,7 @@ import { formatDuration } from '../state';
 import { textRendersCard } from './card-text';
 import { isNoGroupActivityTool, normalizeActivityToolName } from './session-activity-groups';
 import type { ShowGroupedSegment } from './show-group';
+import { STARTED_WORK_TOOLS } from './started-work';
 
 export interface TurnWorkSplit<S extends ShowGroupedSegment = ShowGroupedSegment> {
   /** Folded behind the "Worked for" row. Never empty. */
@@ -39,7 +40,6 @@ export interface TurnWorkSplit<S extends ShowGroupedSegment = ShowGroupedSegment
  * Folded behind "Worked for", the turn would say "I asked a researcher" with
  * no researcher in sight. Reading the roster (`list_agents`) stays work.
  */
-const STARTED_WORK_TOOLS: ReadonlySet<string> = new Set(['agent', 'task', 'agent_spawn', 'workflow']);
 
 function isDeliverableSegment(segment: ShowGroupedSegment, foldStartedWork = false): boolean {
   if (segment.kind === 'show-group') return true;

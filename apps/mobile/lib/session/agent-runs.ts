@@ -3,8 +3,9 @@
  * agents report back as one unit, the turns of a run fold into the turn that answers it, and only
  * that answer stays at the top level. Port of apps/web `session/thread/agent-run-props.ts`.
  *
- * A stream delta remakes the turn list; a row whose run did not change keeps its props object,
- * so its memoized `SessionTurn` still bails out.
+ * A stream delta remakes the turn list. A row whose run did not change keeps its props object,
+ * so its memoized `SessionTurn` still bails out. When no row changed, the layout object itself
+ * is kept: the list's `renderItem` depends on it, and a new one re-renders every mounted cell.
  */
 import { sessionLogAgentRunLabel, sessionLogAgentRuns, type SessionLogTurn } from '@kortix/sdk';
 import { useMemo, useState } from 'react';
@@ -31,15 +32,21 @@ const EMPTY: AgentRunLayout = { absorbed: new Set(), propsOf: () => NONE };
 const sameTurns = (a: readonly SessionLogTurn[] | undefined, b: readonly SessionLogTurn[] | undefined) =>
   a === b || (!!a && !!b && a.length === b.length && a.every((turn, i) => turn === b[i]));
 
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((id) => b.has(id));
+
 export function useAgentRunLayout(turns: readonly SessionLogTurn[]): AgentRunLayout {
-  // The props each row got last time. A cache, not state: writing it never renders.
+  // The props each row got last time, and the layout they made. A cache, not state: writing it never renders.
   const [previous] = useState(() => new Map<string, AgentRunRowProps>());
+  const [last] = useState<{ layout: AgentRunLayout }>(() => ({ layout: EMPTY }));
   return useMemo(() => {
     const layout = sessionLogAgentRuns(turns);
     if (layout.runs.size === 0 && layout.settledLaunches.size === 0) {
       previous.clear();
+      last.layout = EMPTY;
       return EMPTY;
     }
+    const kept = last.layout;
+    let same = kept !== EMPTY && previous.size > 0 && sameSet(kept.absorbed, layout.absorbed);
     const byId = new Map(turns.map((turn) => [turn.id, turn] as const));
     const next = new Map<string, AgentRunRowProps>();
     for (const id of new Set([...layout.runs.keys(), ...layout.settledLaunches])) {
@@ -57,9 +64,12 @@ export function useAgentRunLayout(turns: readonly SessionLogTurn[]): AgentRunLay
         !!old.foldStartedWork === !!fresh.foldStartedWork &&
         sameTurns(old.runTurns, fresh.runTurns);
       next.set(id, unchanged ? old : fresh);
+      if (!unchanged) same = false;
     }
+    if (same && next.size === previous.size) return kept;
     previous.clear();
     for (const [id, props] of next) previous.set(id, props);
-    return { absorbed: layout.absorbed, propsOf: (turnId: string) => next.get(turnId) ?? NONE };
-  }, [turns, previous]);
+    last.layout = { absorbed: layout.absorbed, propsOf: (turnId: string) => next.get(turnId) ?? NONE };
+    return last.layout;
+  }, [turns, previous, last]);
 }

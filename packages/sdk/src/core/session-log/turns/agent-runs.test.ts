@@ -53,6 +53,7 @@ interface TurnSpec {
   end?: number | null;
   blocks?: SessionLogBlock[];
   live?: boolean;
+  queued?: boolean;
   status?: SessionLogTurn['status'];
 }
 
@@ -78,7 +79,7 @@ function turn(spec: TurnSpec): SessionLogTurn {
     response,
     attachments: [],
     live: spec.live ?? false,
-    queued: false,
+    queued: spec.queued ?? false,
     retrying: false,
     internal: false,
   } as SessionLogTurn;
@@ -286,6 +287,63 @@ describe('sessionLogAgentRuns', () => {
     // The launch reply ends at 09:00:06; the answer ends at 09:01:00.
     const turns = [launch, report('r1', subagentNotice(1), 0.9, [text('f', 'Done.')])];
     expect(sessionLogAgentRunLabel(sessionLogAgentRuns(turns).runs.get('r1')!)).toBe('Worked for 54s · 1 agent');
+  });
+
+  test('a queued notice joins no run: the turn that is streaming stays the anchor', () => {
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2),
+      turn({ id: 'r2', prompt: subagentNotice(2), start: 3, end: null, live: true }),
+      turn({ id: 'q3', prompt: subagentNotice(3), start: 4, end: null, queued: true }),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    expect([...layout.absorbed]).toEqual(['r1']);
+    expect(layout.runs.get('r2')!.live).toBe(true);
+    expect(layout.runs.has('q3')).toBe(false);
+  });
+
+  test('a queued person prompt leaves a working run working', () => {
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2),
+      turn({ id: 'r2', prompt: subagentNotice(2), start: 3, end: null, live: true }),
+      turn({ id: 'p3', prompt: 'Also add a hero image.', start: 4, end: null, queued: true }),
+    ];
+    const run = sessionLogAgentRuns(turns).runs.get('r2')!;
+    expect(run.live).toBe(true);
+    expect(sessionLogAgentRunLabel(run)).toBe('Working · 2 of 3 agents reported');
+  });
+
+  test('an answer that renders a card ends its run: it anchors and is never absorbed', () => {
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2),
+      report('r2', subagentNotice(2), 3, [text('c', 'Connect GitHub: /connect/ksl_x')]),
+      report('r3', subagentNotice(3), 5, [text('f', 'Done.')]),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    expect(layout.absorbed.has('r2')).toBe(false);
+    expect(layout.runs.get('r2')!.turns).toEqual(['r1', 'r2']);
+    expect(layout.runs.get('r3')!.turns).toEqual(['r3']);
+  });
+
+  test('a turn that ended on an error ends its run and anchors it as stopped', () => {
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2, [], { status: 'error' }),
+      report('r2', subagentNotice(2), 3),
+      report('r3', subagentNotice(3), 5, [text('f', 'Done.')]),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    expect(layout.absorbed.has('r1')).toBe(false);
+    expect(layout.runs.get('r1')!.stopped).toBe(true);
+    expect(layout.runs.get('r3')!.turns).toEqual(['r2', 'r3']);
+  });
+
+  test('a launch with a workflow still running is not settled', () => {
+    const withWorkflow = { ...launch, blocks: [...launch.blocks, { ...call('w', 'workflow'), status: 'running' } as ToolCallBlock] };
+    const turns = [withWorkflow, report('r1', subagentNotice(1), 2), report('r2', subagentNotice(2), 3), report('r3', subagentNotice(3), 5, [text('f', 'Done.')])];
+    expect(sessionLogAgentRuns(turns).settledLaunches.size).toBe(0);
   });
 
   test('a transcript without agents has no runs', () => {

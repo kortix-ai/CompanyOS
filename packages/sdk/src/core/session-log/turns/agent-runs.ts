@@ -23,7 +23,8 @@
 import { getChildSessionId } from '../../turns/parts';
 import { parsePeerMessagePrompt } from '../../turns/peer-message-prompt';
 import { textRendersCard } from '../../turns/segments/card-text';
-import { isNoGroupActivityTool, isQuestionTool } from '../../turns/segments/session-activity-groups';
+import { isNoGroupActivityTool, isQuestionTool, normalizeActivityToolName } from '../../turns/segments/session-activity-groups';
+import { STARTED_WORK_TOOLS } from '../../turns/segments/started-work';
 import { formatDuration } from '../../turns/state';
 import { parseNoticeBatch, parseSubagentNotice } from '../../turns/subagent-notice';
 import type { SessionLogMessage, ToolCallBlock } from '../types';
@@ -115,6 +116,20 @@ function needsPerson(turn: SessionLogTurn): boolean {
   });
 }
 
+/** The turn's answer renders a card, or the turn stopped: it must stay in view, so it anchors its run and ends it. */
+const endsRun = (turn: SessionLogTurn): boolean =>
+  turn.status === 'aborted' || turn.status === 'error' || (!!turn.response && textRendersCard(turn.response.text));
+
+/** Work the turn started that no report will close (a workflow), still running. */
+const runsUntracked = (turn: SessionLogTurn): boolean =>
+  turn.blocks.some(
+    (b) =>
+      b.type === 'tool_call' &&
+      STARTED_WORK_TOOLS.has(normalizeActivityToolName(b.name)) &&
+      !getChildSessionId(b) &&
+      (b.status === 'pending' || b.status === 'running'),
+  );
+
 /** The latest agent started under `handle` (no `findLast`: the core runs on older engines too). */
 function lastNamed(children: readonly Child[], handle: string): Child | undefined {
   for (let i = children.length - 1; i >= 0; i--) if (children[i]!.handles.includes(handle)) return children[i];
@@ -142,18 +157,24 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
   const launched: Child[] = [];
   /** Child id → the index of the turn that carried its report. */
   const reportedAt = new Map<string, number>();
-  const launches: Array<{ id: string; children: string[] }> = [];
+  const launches: Array<{ id: string; children: string[]; untracked: boolean }> = [];
   let stretchStarted = new Set<string>();
   let stretchReported = new Set<string>();
   let previousEnd: string | null = null;
   let open: OpenRun | null = null;
+  /** The last turn the thread placed: only queued turns may follow it. */
+  let lastPlaced = -1;
+  turns.forEach((t, i) => {
+    if (!t.queued) lastPlaced = i;
+  });
 
   const close = (tail: boolean) => {
     if (!open) return;
     const anchor = open.turns.at(-1)!;
     const stopped = anchor.status === 'aborted' || anchor.status === 'error';
     const waiting = [...stretchStarted].some((id) => !stretchReported.has(id));
-    const live = tail && !stopped && (anchor.live || (!anchor.response && waiting));
+    // A working anchor is live wherever it is; one still waiting on a report only at the tail.
+    const live = !stopped && (anchor.live || (tail && !anchor.response && waiting));
     const start = ms(open.startedAt);
     const end = ms(ended(anchor));
     runs.set(anchor.id, {
@@ -174,6 +195,8 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
   };
 
   turns.forEach((turn, index) => {
+    // An inbox prompt the thread has not placed yet joins no run and ends none.
+    if (turn.queued) return;
     // A notice arrives as synthetic text, so its turn is `internal`: read the prompt, not the flag.
     const reporters = turn.compaction ? null : reportersOf(turn.user);
     const children = childrenOf(turn);
@@ -182,7 +205,7 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
       close(false);
       stretchStarted = new Set(ids);
       stretchReported = new Set();
-      if (ids.length) launches.push({ id: turn.id, children: ids });
+      if (ids.length) launches.push({ id: turn.id, children: ids, untracked: runsUntracked(turn) });
       launched.push(...children);
       previousEnd = ended(turn);
       return;
@@ -208,11 +231,13 @@ export function sessionLogAgentRuns(turns: readonly SessionLogTurn[]): SessionLo
     open ??= { turns: [], reporters: new Set(), startedAt: previousEnd ?? turn.user.created_at };
     open.turns.push(turn);
     for (const key of keys) open.reporters.add(key);
+    if (endsRun(turn)) close(index === lastPlaced);
   });
   close(true);
 
   const settledLaunches = new Set<string>();
   for (const launch of launches) {
+    if (launch.untracked) continue;
     const at = launch.children.map((id) => reportedAt.get(id));
     if (at.some((i) => i === undefined)) continue;
     const last = turns[Math.max(...(at as number[]))]!;

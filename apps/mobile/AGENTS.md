@@ -1,5 +1,39 @@
 # Kortix Mobile — UI conventions (READ FIRST, ENFORCE ALWAYS)
 
+## Required version bump for agents
+
+Every task that changes mobile app code, assets, dependencies, or native
+configuration must include a mobile version bump before handoff or push:
+
+```sh
+node apps/mobile/scripts/set-version.mjs --next
+```
+
+Run it once per task, from the repo root, after syncing with `origin/dev`.
+Do not bump again for each edit, test run, or review fix in the same task.
+Documentation-only changes need no bump. Keep major and minor unchanged.
+The first bump moves a single-digit patch into two digits. Examples: `1.6.2` →
+`1.6.21`, `1.5.6` → `1.5.61` (`1.0.0` → `1.0.10`). Subsequent bumps
+increment the patch numerically: `1.5.61` → `1.5.62` → `1.5.63`;
+`1.6.29` → `1.6.30`. Use `--next` instead of choosing a patch, minor,
+or major release. A new release line needs the user's instruction.
+
+Commit all files printed by the command. It synchronizes Expo, iOS, Android,
+and `runtimeVersion`. EAS continues to increment native build numbers.
+Do not change the root `VERSION` or an SDK package version for mobile work.
+Before the final push, fetch `origin/dev`. If its version differs from the
+task's base version, sync first. Resolve version conflicts to `origin/dev`'s
+version while preserving the task's other native changes. Use the explicit
+version argument to synchronize all six fields if needed, then run `--next`
+once. Compare version components as integers, never as text.
+
+Each bumped runtime needs a new binary. OTA updates cannot reach binaries
+with the previous runtime. Once the bump reaches `prod`, the existing
+`mobile-store.yml` workflow builds on EAS, submits Android to Play production,
+and submits iOS for App Review. JS-only changes also wait for that new binary.
+This task does not authorize a production promotion or a manual submission.
+See `BUILD_GUIDE.md` for the existing release workflow.
+
 > **Also read `design.md` in this folder before building or restyling a
 > screen.** This file says which primitive to use; `design.md` says how a
 > screen looks — the settings-screen layout (`SettingsPage` / `SettingsGroup`

@@ -404,6 +404,14 @@ Record the branch, PR, local commands and output, merge SHA, deploy run,
 deployed SHA evidence, and the exact dev command or interaction in the final
 response.
 
+## Mobile versioning
+
+**Mobile changes require a version bump.** Follow `apps/mobile/AGENTS.md`:
+run `node apps/mobile/scripts/set-version.mjs --next` once per mobile task.
+For example: `1.6.2` → `1.6.21` → `1.6.22` → `1.6.23`.
+Keep major and minor unchanged. Commit every synchronized native version copy.
+This also applies when shared-package changes alter mobile behavior.
+
 ## Architecture: `@kortix/sdk` is the source of truth
 
 `@kortix/sdk` is the **single source of truth** for everything that talks to the

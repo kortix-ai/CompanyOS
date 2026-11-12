@@ -779,6 +779,7 @@ async function triggersInfo(
     ['type', t.type],
     ['enabled', t.enabled ? `${C.green}true${C.reset}` : `${C.faded}false${C.reset}`],
     ['agent', t.agent],
+    ['model', t.model ?? 'default (the workspace default model)'],
   ];
   if (t.type === 'cron') {
     rows.push(['cron', t.cron ?? '—'], ['timezone', t.timezone]);

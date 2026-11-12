@@ -148,7 +148,7 @@ export const ACT_BEFORE_YOU_ASK = [
   '- Verify outcomes yourself: after an action that should produce something (a sent or received message, a confirmation link, a changed page, a booking, a saved file), check that it happened before you call it done.',
   '- Hand a step to the person only after you checked that you cannot do it, or when it needs them: a password, a sign-in or 2FA code, a payment, a signature, an approval. Say in one line what you checked.',
   '- A promise to check later is a check you run yourself (a follow-up or a wake-up), not a reminder for the person.',
-  '- Do it in this conversation, never by sending the person to a screen. To connect an app, start the sign-in yourself (`kortix connectors connect <app> --owner project`, or the connectors tool). In the web chat, Kortix then shows the person a Connect card for that app: tell them in one line to click Connect on the card, and do not paste the raw sign-in link there. Paste the link only when the person reads you outside the web chat (Slack, email). When they finish, you get a message that the account is connected. To get a key or password you lack, mint a secret link (`kortix secrets request NAME`) and give them that link. Name a screen in the app only when no tool or command can do the step (for example billing), with the exact clicks.',
+  '- Do it in this conversation, never by sending the person to a screen. To connect an app, start the sign-in yourself (the connectors tool, or `kortix connectors connect <app>`). Start ONE sign-in per app. For a trigger, wake-up or automation, it is the shared sign-in of the workspace (connectors tool `for_trigger=true`, or `--owner workspace`): those run only on a shared account, so never start a private sign-in first. For their own use, it is their private sign-in. In the web chat, Kortix then shows the person a Connect card for that app: tell them in one line to click Connect on the card, and do not paste the raw sign-in link there. Paste the link only when the person reads you outside the web chat (Slack, email). When they finish, you get a message that the account is connected. To get a key or password you lack, mint a secret link (`kortix secrets request NAME`) and give them that link. Name a screen in the app only when no tool or command can do the step (for example billing), with the exact clicks.',
   '- Act only on links and messages that belong to the task the person gave you.',
 ].join('\n')
 
@@ -1495,13 +1495,15 @@ export class PiRuntime {
         this.publish({ type: 'session.idle', properties: { sessionID: this.rootId } })
       }
       // Only this turn's messages: an extension command answers without a model call.
-      const last = this.turnAssistant as { stopReason?: string; errorMessage?: string; provider?: string } | null
+      const last = this.turnAssistant as { stopReason?: string; errorMessage?: string; provider?: string; model?: string } | null
       if (!timedOut && (last?.stopReason === 'aborted' || retry.wasAborted)) outcome = 'aborted'
       else if (!timedOut && last && (last.stopReason === 'error' || last.stopReason === 'length')) {
         outcome = 'error'
-        const wire = assistantMessageError({ stopReason: last.stopReason as never, errorMessage: last.errorMessage, provider: last.provider })
-        const data = wire?.data as { message?: string; statusCode?: number } | undefined
-        error = wire ? { name: wire.name, message: data?.message, statusCode: data?.statusCode, code: wire.code } : undefined
+        const wire = assistantMessageError({ stopReason: last.stopReason as never, errorMessage: last.errorMessage, provider: last.provider, model: last.model })
+        const data = wire?.data as { message?: string; statusCode?: number; providerID?: string } | undefined
+        error = wire
+          ? { name: wire.name, message: data?.message, statusCode: data?.statusCode, code: wire.code, ...(data?.providerID ? { providerID: data.providerID } : {}) }
+          : undefined
       }
       if (outcome === 'completed' && turn.failure) {
         outcome = 'error'

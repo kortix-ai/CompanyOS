@@ -1813,6 +1813,7 @@
     "validateReferralCode",
     "validateToken",
     "validateWorkspaceManifest",
+    "verifyAccountSecretResource",
     "verifyEmailDomain",
     "verifyGatewayProvider",
     "verifyKortixToken",

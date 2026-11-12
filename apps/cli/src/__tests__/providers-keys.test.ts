@@ -25,6 +25,7 @@ interface Row {
   access_mode: 'project' | 'members';
   created_by: string;
   granted_user_ids: string[];
+  verification?: { status: 'verified' | 'invalid' | 'unknown'; message: string; checked_at: string } | null;
 }
 
 interface Call { method: string; path: string; search: string; body: Record<string, unknown> }
@@ -36,6 +37,8 @@ let flagOn = true;
 let rows: Row[] = [];
 let legacy: string[] = [];
 let createStatus = 201;
+/** The check the API answers on create, as `secret-resources.ts` runs it. */
+let createVerification: Row['verification'] = null;
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
@@ -77,6 +80,7 @@ beforeAll(() => {
           name: String(body.name),
           access_mode: body.access_mode as Row['access_mode'],
           granted_user_ids: [ME, ...((body.user_ids as string[]) ?? [])],
+          verification: createVerification,
         });
         rows.push(created);
         return json(created, 201);
@@ -110,6 +114,7 @@ beforeEach(() => {
   rows = [];
   legacy = [];
   createStatus = 201;
+  createVerification = null;
 });
 
 async function runCli(args: string[]) {
@@ -161,6 +166,23 @@ describe('providers set — flag on: a provider key under Models → Providers',
     expect(r.stdout).toContain('Saved "Anthropic key" (ANTHROPIC_API_KEY) for anthropic');
     expect(r.stdout).toContain('Shared with everyone in this workspace.');
     expect(r.stdout).toContain('Models → Providers');
+  });
+
+  test('a key the provider refused stays saved, and the output says what the provider said', async () => {
+    createVerification = { status: 'invalid', message: 'invalid x-api-key', checked_at: '2026-11-11T12:00:00.000Z' };
+    const r = await runCli(['set', 'anthropic', 'sk-ant-synthetic']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('Saved "Anthropic key"');
+    expect(r.stdout).toContain('anthropic refused the key: invalid x-api-key');
+    expect(r.stdout).toContain('kortix providers set anthropic');
+  });
+
+  test('a key the provider accepted says so; an unanswered check says it is not verified', async () => {
+    createVerification = { status: 'verified', message: 'The provider accepted the key.', checked_at: '2026-11-11T12:00:00.000Z' };
+    expect((await runCli(['set', 'anthropic', 'sk-ant-synthetic'])).stdout).toContain('anthropic accepted the key.');
+    rows = [];
+    createVerification = { status: 'unknown', message: 'Verification timed out', checked_at: '2026-11-11T12:00:00.000Z' };
+    expect((await runCli(['set', 'anthropic', 'sk-ant-synthetic', '--label', 'Other'])).stdout).toContain('Not verified: Verification timed out');
   });
 
   test('--private sends only-me access (members, no other user) and --label names it', async () => {
@@ -315,13 +337,17 @@ describe('providers rm and ls — provider keys', () => {
     expect((JSON.parse(j.stdout) as { accounts: Row[] }).accounts.map((a) => a.secret_id)).toEqual(['key-mine', 'key-team', 'key-priv']);
   });
 
-  test('ls with the flag off reads no provider keys', async () => {
+  // A key added in the web dialog is a named account whatever the flag says:
+  // the web lists it, so `ls` lists it too (an e2e run on dev missed one).
+  test('ls lists provider keys with the flag off too, and reads no flag', async () => {
     flagOn = false;
     rows = [mine];
-    const r = await runCli(['ls', '--json']);
+    const r = await runCli(['ls']);
     expect(r.code).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ accounts: [] });
-    expect(calls.some((c) => c.path === KEYS)).toBe(false);
+    expect(r.stdout).toMatch(/anthropic\s+Anthropic key\s+everyone in this workspace/);
+    expect(calls.some((c) => c.path === BASE && c.method === 'GET')).toBe(false);
+    const j = await runCli(['ls', '--json']);
+    expect((JSON.parse(j.stdout) as { accounts: Row[] }).accounts.map((a) => a.secret_id)).toEqual(['key-mine']);
   });
 });
 

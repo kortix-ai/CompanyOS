@@ -301,6 +301,10 @@ export async function releaseAppImage(
   const name = image.imageName;
   const fail = (error: unknown): 'pending' => {
     if (!(error instanceof SnapshotInUseError)) {
+      // The same invisible-outage family as every other `[apps] … maintenance
+      // retries it` warn: a dead provider key answers every release with a 401
+      // and this line paged nobody. The provider is the failing call's target.
+      escalateProviderAuthOutage(image.provider, 'app image release', error);
       logger.warn('[apps] shared image release failed; maintenance retries it', {
         imageName: name,
         provider: image.provider,

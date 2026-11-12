@@ -120,6 +120,8 @@ const box = () => sheet().findAll((node) => node.type === 'view')[0];
 const fire = (event: string, nativeEvent: Record<string, unknown> = {}) =>
   act(() => sheet().props[event]({ nativeEvent }));
 const call = (fn: (r: Ref) => void) => act(() => fn(ref.current!));
+/** The content box reports its laid-out height (a content-sized sheet). */
+const layout = (height: number) => act(() => box().props.onLayout({ nativeEvent: { layout: { height } } }));
 
 beforeEach(() => {
   viewNode = null;
@@ -194,6 +196,7 @@ describe('NativeSheet', () => {
   test('present() during the close keeps the body; the close still reaches the call site', () => {
     mount();
     call((r) => r.present());
+    layout(280);
     fire('onWillAppear');
     call((r) => r.dismiss());
     call((r) => r.present());
@@ -209,12 +212,90 @@ describe('NativeSheet', () => {
     expect(sheet().props.preventNativeDismiss).toBe(true);
   });
 
-  test('a content-sized sheet fits its content, capped at the maximum detent', () => {
-    // 800 window − 50 top − 34 bottom − 16 gap.
+  test('a content-sized sheet measures its content before it presents, then opens at that height', () => {
+    // 800 window − 50 top − 34 bottom − 16 gap = 700 maximum detent.
     mount();
     call((r) => r.present());
-    expect(sheet().props.detents).toBe('fitToContents');
+    // Mounted closed: UIKit resolves the detent when it presents, so the
+    // height must be known first (presented with it unknown, the sheet stood
+    // at full height, opaque on iOS 26).
+    expect(sheet().props.isOpen).toBe(false);
+    // Laid out at the glass sheet's width (400 − 2 × 8) while it measures.
+    expect(box().props.style).toEqual({ maxHeight: 700, minHeight: undefined, width: 384 });
+    layout(280);
+    expect(sheet().props.isOpen).toBe(true);
+    expect(sheet().props.detents).toEqual([0.4]);
+    expect(sheet().props.initialDetentIndex).toBe(0);
+    // Presented: the box takes the sheet's own width.
     expect(box().props.style).toEqual({ maxHeight: 700, minHeight: undefined });
+  });
+
+  test('a content-sized sheet follows its content once it rests, not during the present', () => {
+    mount();
+    call((r) => r.present());
+    layout(280);
+    // A layout while UIKit still sizes the sheet (the box not yet at the sheet's width) is ignored.
+    layout(690);
+    expect(sheet().props.detents).toEqual([0.4]);
+    fire('onWillAppear');
+    fire('onDidAppear');
+    layout(350.4);
+    expect(sheet().props.detents).toEqual([0.502]);
+    // Taller than the maximum detent: full height, the body scrolls.
+    layout(700);
+    expect(sheet().props.detents).toEqual([1]);
+  });
+
+  test('a height laid out while the sheet presents applies once it rests', () => {
+    mount();
+    call((r) => r.present());
+    layout(280);
+    fire('onWillAppear');
+    // The list loads more rows during the present.
+    layout(420);
+    expect(sheet().props.detents).toEqual([0.4]);
+    fire('onDidAppear');
+    expect(sheet().props.detents).toEqual([0.6]);
+  });
+
+  test('a body that never lays out still opens, at the full detent, after 400 ms', () => {
+    // A captured timer, not the real clock.
+    const timers: { fn: () => void; ms: number }[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    globalThis.setTimeout = ((fn: () => void, ms: number) => {
+      timers.push({ fn, ms });
+      return Symbol('timer') as never;
+    }) as unknown as typeof setTimeout;
+    globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+    try {
+      mount();
+      call((r) => r.present());
+      expect(sheet().props.isOpen).toBe(false);
+      const fallback = timers.find((timer) => timer.ms === 400);
+      expect(fallback).toBeDefined();
+      act(() => fallback!.fn());
+      expect(sheet().props.isOpen).toBe(true);
+      expect(sheet().props.detents).toEqual([1]);
+    } finally {
+      act(() => tree.unmount());
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+    }
+  });
+
+  test('a content-sized sheet measures again on every present', () => {
+    mount();
+    call((r) => r.present());
+    layout(280);
+    fire('onWillAppear');
+    fire('onDidAppear');
+    call((r) => r.dismiss());
+    fire('onDismiss');
+    call((r) => r.present());
+    expect(sheet().props.isOpen).toBe(false);
+    layout(140);
+    expect(sheet().props.detents).toEqual([0.2]);
   });
 
   test('maxDynamicContentSize lowers the cap', () => {

@@ -80,6 +80,7 @@ export function ComposerChatInput({
   onAgentSelectionChange,
   sandboxSlot,
   draftScope,
+  draftHandoffScope,
   draftActive,
   promptAttachments,
   submitLabel,
@@ -156,6 +157,7 @@ export function ComposerChatInput({
   sandboxSlot?: SessionOverrideSlot;
   /** Persist the unsent draft under this scope — see `composer/draft/`. */
   draftScope?: DraftScope | null;
+  draftHandoffScope?: import('react').RefObject<DraftScope | null>;
   draftActive?: boolean;
   /** Host-owned upload controller. See `SessionChatInputProps.promptAttachments`. */
   promptAttachments?: SessionChatInputProps['promptAttachments'];
@@ -368,6 +370,7 @@ export function ComposerChatInput({
       commands={commands || []}
       commandsResolved={commands !== undefined}
       draftScope={draftScope}
+      draftHandoffScope={draftHandoffScope}
       draftActive={draftActive}
       submitLabel={submitLabel}
       onArrowUpAtStart={onArrowUpAtStart}

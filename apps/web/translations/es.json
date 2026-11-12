@@ -3420,9 +3420,6 @@
     },
     "inbox": {
       "title": "Bandeja de entrada",
-      "viewReview": "Review",
-      "viewNotifications": "Notificaciones",
-      "viewLabel": "Vista de la bandeja de entrada",
       "description": "Novedades de las sesiones, los disparadores y los artefactos que te afectan, de todos los espacios de trabajo.",
       "unreadLabel": "Bandeja de entrada: {count} sin leer",
       "unreadCount": "{count} sin leer",
@@ -26703,7 +26700,7 @@
       "apiKeysDescription": "Claves para scripts, CI e integraciones. Una clave actúa como tú, como un agente o como un bot. Las reglas de cada clave están en Seguridad.",
       "keys": {
         "title": "Claves de API",
-        "description": "Claves para scripts, CI e integraciones. Una clave funciona solo en este espacio de trabajo y actúa como tú, como un agente o como un bot.",
+        "description": "Claves para scripts, CI e integraciones. Una clave actúa como tú, un agente o un bot; «Funciona en» define a qué espacios de trabajo llega.",
         "newKey": "Nueva clave",
         "count": "{count, plural, one {# clave} other {# claves}}",
         "emptyTitle": "No hay claves de API",
@@ -26713,6 +26710,10 @@
         "actsAsAgent": "Un agente",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Tu rol en este espacio de trabajo. La clave deja de funcionar cuando te vas.",
+        "worksIn": "Funciona en",
+        "worksInAll": "Todos mis espacios de trabajo",
+        "worksInAllHint": "Actúa como tú en todos tus espacios de trabajo, con tu rol completo. Gestiónalo en Preferencias → Claves personales.",
+        "worksInWorkspace": "Solo este espacio de trabajo",
         "actsAsAgentHint": "Exactamente lo que el agente puede hacer según kortix.yaml. Sus acciones se auditan como el agente y la clave sigue funcionando cuando te vas.",
         "actsAsBotHint": "Un bot para CI o una integración, con su propio rol. La clave sigue funcionando cuando te vas.",
         "needsPermission": "Requiere el permiso para gestionar credenciales",
@@ -26731,6 +26732,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Creada por {email}",
         "createdDescription": "{name} actúa como {actsAs}. Kortix muestra la clave una sola vez: cópiala ahora y guárdala como secreto.",
+        "createdPersonalDescription": "{name} actúa como tú en todos tus espacios de trabajo — gestiónalo en Preferencias → Claves personales. Kortix muestra la clave una vez: cópiala ahora y guárdala como secreto.",
         "accessFullHint": "Todo lo que el principal de la clave puede hacer en este espacio de trabajo.",
         "accessCustomHint": "Solo los permisos que elijas. Cada uno debe estar entre lo que el principal de la clave puede hacer."
       },

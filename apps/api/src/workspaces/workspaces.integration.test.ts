@@ -10,7 +10,7 @@
  * cleaned here. See `.agents/skills/testing/SKILL.md` "DB suites".
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { accountDeletionRequests, accountMemberships, accounts, projects } from '@kortix/db';
+import { accountDeletionRequests, accountMemberships, accounts, creditLedger, projects } from '@kortix/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '../shared/db';
@@ -57,6 +57,7 @@ function projectValues(projectId: string, accountId: string, name: string, extra
 async function cleanup(): Promise<void> {
   await db.delete(accountDeletionRequests).where(inArray(accountDeletionRequests.accountId, ACCOUNTS));
   await db.delete(accountMemberships).where(inArray(accountMemberships.accountId, ACCOUNTS));
+  await db.delete(creditLedger).where(inArray(creditLedger.accountId, ACCOUNTS));
   await db.delete(accounts).where(inArray(accounts.accountId, ACCOUNTS));
 }
 
@@ -362,5 +363,26 @@ withDb('workspaces identity', () => {
     expect(report.I9).toMatchObject({ ok: true });
     expect(report.I10).toMatchObject({ ok: true });
     expect(report.I12).toMatchObject({ ok: true });
+  });
+
+  // I10's accountIds filter compares uuid to uuid so the per-account indexes
+  // (credit_ledger alone is ~8.6M rows on prod) stay usable; this proves the
+  // filter still counts violations through real PostgreSQL.
+  test('I10 counts a credit_ledger row whose workspace_id lost its account', async () => {
+    // The stamp trigger fills workspace_id on INSERT (and UPDATE OF account_id);
+    // a plain UPDATE leaves it stale — exactly the drift I10 exists to catch.
+    const [row] = await db
+      .insert(creditLedger)
+      .values({ accountId: ONE_ACCOUNT, type: 'synthetic_stale_workspace' })
+      .returning({ id: creditLedger.id });
+    await db.execute(sql`UPDATE kortix.credit_ledger SET workspace_id = gen_random_uuid() WHERE id = ${row.id}`);
+
+    const report = await checkWorkspaceInvariants({ accountIds: ACCOUNTS });
+    expect(report.I10.ok).toBe(false);
+    expect(report.I10.violations).toBe(1);
+    expect(report.I10.sample).toEqual(['credit_ledger:1']);
+
+    await db.delete(creditLedger).where(eq(creditLedger.id, row.id));
+    expect((await checkWorkspaceInvariants({ accountIds: ACCOUNTS })).I10).toMatchObject({ ok: true });
   });
 });

@@ -128,10 +128,10 @@ export function detentFraction(point: string | number, maxHeight: number): numbe
  * the detent it opens at.
  *
  * - A content-sized sheet (gorhom's dynamic sizing, the default, with no
- *   `snapPoints` or only `'100%'`) is `'fitToContents'`: the sheet is as tall
- *   as its content, up to the maximum height. It has no separate full detent
- *   (see the module comment); its content is already fully visible, and a
- *   taller body scrolls inside the maximum height.
+ *   `snapPoints` or only `'100%'`) is marked `'fitToContents'`: the sheet is
+ *   as tall as its content, up to the maximum height, and has no separate
+ *   full detent. The marker never reaches the native side: `NativeSheet`
+ *   measures the body and passes one custom detent (`contentDetent`).
  * - Every other sheet lists its `snapPoints` as fractions, plus `1` (full
  *   screen) at the end, the native form of `withFullDetent`. The call site's
  *   `index` keeps pointing at the detent it named.
@@ -154,4 +154,35 @@ export function resolveNativeDetents(input: {
   const requested = fractions[input.index ?? 0] ?? null;
   const initialIndex = requested === null ? 0 : Math.max(0, sorted.indexOf(requested));
   return { detents: sorted, initialIndex };
+}
+
+/**
+ * The detent of a content-sized sheet: its measured content as a fraction of
+ * the maximum detent, rounded up so the last row is never cut. Content as tall
+ * as the maximum, or taller, is the full detent (the body scrolls there).
+ *
+ * `NativeSheet` presents a content-sized sheet at this custom detent instead
+ * of react-native-screens' `fitToContents`. `fitToContents` reads the content
+ * height from a wrapper view that reports it only after it is mounted, and
+ * the sheet mounts presented: UIKit resolved the detent at height 0, which
+ * falls back to the maximum. Every content-sized sheet then stood at full
+ * height, opaque and edge to edge on iOS 26 instead of the floating glass.
+ */
+export function contentDetent(contentHeight: number, maxHeight: number): number {
+  if (!(contentHeight > 0) || !(maxHeight > 0)) return 1;
+  const fraction = Math.ceil((contentHeight / maxHeight) * 1000) / 1000;
+  return fraction >= 0.995 ? 1 : fraction;
+}
+
+/** How far the iOS 26 glass sheet floats in from each window edge below its full detent. */
+export const FLOATING_SHEET_INSET = 8;
+
+/**
+ * The width a content-sized sheet's body is measured at before the sheet is
+ * presented (the native host has no size yet): the window less the glass
+ * sheet's side insets on iOS 26, the window before it. The body lays out at
+ * the sheet's real width once it is presented.
+ */
+export function nativeSheetContentWidth(windowWidth: number, glass: boolean): number {
+  return Math.max(0, windowWidth - (glass ? FLOATING_SHEET_INSET * 2 : 0));
 }

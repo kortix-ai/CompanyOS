@@ -385,6 +385,23 @@ export function useSessionLogSync(
     const reload = async (): Promise<void> => {
       if (!(await loadLive())) await load();
     };
+    // The re-read a turn end asks for. A box read already on the wire started before the turn
+    // ended and answers a snapshot without the finished reply: read again once it settles.
+    const reloadAfterTurnEnd = () => {
+      const stale = liveRead;
+      // A box read that failed reads the API's page: a wedged box must not cost two proxy budgets.
+      void (stale ? stale.then(async (ok) => void (ok ? await reload() : await load())) : reload());
+    };
+    // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
+    // frame of a connection names the last end at join, which is not news.
+    const endedTurn = (frame: { type: string; payload?: unknown }): boolean => {
+      if (frame.type !== 'kortix.control.turn') return false;
+      const payload = frame.payload as { last_ended?: { turn_token?: string } | null } | null;
+      const ended = payload?.last_ended?.turn_token ?? null;
+      const seen = lastEnded;
+      lastEnded = ended;
+      return seen !== undefined && ended !== seen;
+    };
     // Re-read after a reconnect (`up` after a drop); the first report is the connection already up.
     const onReconnect = (run: () => void) => {
       let connected = true;
@@ -403,7 +420,19 @@ export function useSessionLogSync(
       // `kortix.resync` and replays nothing, so the page is read again then, as after a reconnect.
       // `runtime: true`: the `log.*` frames ride the runtime channel. A full session already has a
       // runtime subscriber; a view (`useSessionView`) has none, and its thread froze at the first page.
-      join({ schema: 'v2', runtime: true, onConnectionChange: onReconnect(() => void reload()), onRuntimeResync: () => void reload() });
+      // A turn end reads the newest page too (F-012). A delta is dropped when the store does not
+      // hold its message, and a connection that joined after the reply's streaming put (a session
+      // that turned v2 mid-reply, a reconnect, a resync) holds none: the reply stayed on "Thinking"
+      // until a reload. At the turn end the box, and then the API, holds the finished reply.
+      join({
+        schema: 'v2',
+        runtime: true,
+        onControl: (frame) => {
+          if (endedTurn(frame)) reloadAfterTurnEnd();
+        },
+        onConnectionChange: onReconnect(() => void reload()),
+        onRuntimeResync: () => void reload(),
+      });
     };
     // A box loader that arrived after the first read: its page, and v2 if the API had none.
     readLiveRef.current = () => {
@@ -453,11 +482,8 @@ export function useSessionLogSync(
       join({
         onControl: (frame) => {
           if (frame.type !== 'kortix.control.turn') return;
-          const payload = frame.payload as { turns?: { turn_token?: string }[]; last_ended?: { turn_token?: string } | null } | null;
-          const ended = payload?.last_ended?.turn_token ?? null;
-          const seen = lastEnded;
-          lastEnded = ended;
-          if (seen !== undefined && ended !== seen) return void attempt();
+          if (endedTurn(frame)) return void attempt();
+          const payload = frame.payload as { turns?: { turn_token?: string }[] } | null;
           // A running turn (also one the state at join holds): its user message frame may have
           // passed before this tab's runtime connection, which is live-only. pi journals while a
           // turn runs, so the page holds that message after the next mid-turn post.

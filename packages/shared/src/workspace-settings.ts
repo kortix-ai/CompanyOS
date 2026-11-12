@@ -39,6 +39,7 @@ export const WORKSPACE_SETTINGS_DEFAULT_SECTION: WorkspaceSettingsSection = 'gen
 
 /** Old ids and old account-hub tabs → the section that owns them now. */
 export const WORKSPACE_SETTINGS_SECTION_ALIASES: Readonly<Record<string, WorkspaceSettingsSection>> = {
+  'audit-log': 'audit',
   access: 'members',
   'access-projects': 'members',
   settings: 'security',

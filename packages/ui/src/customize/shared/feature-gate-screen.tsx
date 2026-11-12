@@ -100,7 +100,7 @@ export function FeatureGateScreen({
             {error}
           </p>
         ) : null}
-        {projectId && !internalOnly ? (
+        {projectId && !internalOnly && !permission.isLoading && permission.allowed === true ? (
           <div className="flex shrink-0 items-center gap-2">
             <Button
               size="sm"

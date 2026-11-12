@@ -80,8 +80,14 @@ export function AskDeck({
   onOpenSession,
   empty,
   paused = false,
+  selectedAskId,
+  onClearSelection,
+  onHiddenAskIdsChange,
 }: {
   projectId: string;
+  selectedAskId?: string | null;
+  onClearSelection?: () => void;
+  onHiddenAskIdsChange?: (ids: ReadonlySet<string>) => void;
   /** The host shows something else over the deck: it draws nothing and its
    *  keys answer nothing, but stays mounted so staged answers keep Undo. */
   paused?: boolean;
@@ -98,12 +104,16 @@ export function AskDeck({
   const staged = useRef(new Map<string, Staged>());
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
 
+  useEffect(() => {
+    onHiddenAskIdsChange?.(hidden);
+  }, [hidden, onHiddenAskIdsChange]);
+
   // Connector approvals keep the full parameter review in the inbox list below.
   const deck = useMemo(
     () => deckOrder((data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind)), skipped, hidden),
     [data, skipped, hidden],
   );
-  const current = deck[0] ?? null;
+  const current = deck.find((ask) => ask.id === selectedAskId) ?? deck[0] ?? null;
 
   const send = useCallback(
     async (entry: Staged) => {
@@ -220,8 +230,14 @@ export function AskDeck({
       <AskCard
         key={current.id}
         ask={current}
-        onDecide={(verdict, answers) => decide(current, verdict, answers)}
-        onSkip={() => skip(current)}
+        onDecide={(verdict, answers) => {
+          onClearSelection?.();
+          decide(current, verdict, answers);
+        }}
+        onSkip={() => {
+          onClearSelection?.();
+          skip(current);
+        }}
         onOpenSession={onOpenSession}
       />
     </section>

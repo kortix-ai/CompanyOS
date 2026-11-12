@@ -82,6 +82,9 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   // sit beside rows that do wait, so the pane shows "Select an item" instead.
   // Same query as the deck's own: a cache hit, not a second request.
   const asks = useSessionAsks(projectId, { enabled: Boolean(projectId) });
+  const [selectedAskId, setSelectedAskId] = useState<string | null>(null);
+  const [hiddenAskIds, setHiddenAskIds] = useState<ReadonlySet<string>>(() => new Set());
+  const deckAsks = (asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind) && !hiddenAskIds.has(ask.id));
   const deckShows =
     asks.isLoading || asks.isError || (asks.data?.asks ?? []).some((ask) => DECK_KINDS.has(ask.kind));
   const qc = useQueryClient();
@@ -351,13 +354,24 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
 
   return (
     <ReviewCenter
+      sessionAsks={deckAsks}
+      selectedAskId={selectedAskId}
+      onSelectAsk={setSelectedAskId}
       needsYouDeck={
         projectId && deckShows
           ? ({ paused }) => (
               // `empty={null}`: in the 5 s Undo window after the last card,
               // the deck draws nothing (the inbox shows its own empty state)
               // rather than "Nothing waits on you" beside rows that do.
-              <AskDeck projectId={projectId} onOpenSession={openSession} empty={null} paused={paused} />
+              <AskDeck
+                projectId={projectId}
+                onOpenSession={openSession}
+                empty={null}
+                paused={paused}
+                onHiddenAskIdsChange={setHiddenAskIds}
+                selectedAskId={selectedAskId}
+                onClearSelection={() => setSelectedAskId(null)}
+              />
             )
           : undefined
       }

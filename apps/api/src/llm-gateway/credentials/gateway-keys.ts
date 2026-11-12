@@ -3,14 +3,10 @@
  * key selection: which key names a principal reaches, and the values of one
  * key name.
  *
- * The named store (`account_secret_resources`, the Models panel) serves
- * first. The legacy store (`project_secrets` with consumer `llm_gateway`) is
- * read only for rows the backfill has not moved yet: the gate is in
- * `projects/secrets/consumer-resolution.ts` (`legacySecretNotMoved`). After the
- * backfill has run in an environment the legacy branch returns nothing there,
- * except the rows the backfill skipped (`kortix.llm_credential_backfill`
- * outcome `skipped_*`). The follow-up that deletes the legacy rows deletes
- * the two `legacy*` calls below and nothing else.
+ * LLM provider keys live in one store: the named accounts
+ * (`account_secret_resources`, the Models panel). The legacy store
+ * (`project_secrets` with consumer `llm_gateway`) is retired: every row moved
+ * with `scripts/llm-credential-backfill.ts` (PR #12493) and nothing reads it.
  *
  * Every reader of provider key names or values goes through this module:
  * the gateway (`resolve-candidates.ts`), the picker (`servable-catalog.ts`),
@@ -23,10 +19,6 @@ import {
   listGrantedGatewaySecretNames,
   resolveProjectSharedProviderSecrets,
 } from '../../secrets/account-resource';
-// The module the gateway's key readers imported before this one existed: the
-// projects surface pulls the route graph into every gateway test (a moved
-// suppression, see eslint-suppressions.json).
-import { listProjectSecretNamesForConsumer, resolveProjectSecretsForConsumer } from '../../projects/secrets';
 
 /** Whose keys a read counts. */
 export interface GatewayKeyScope {
@@ -42,23 +34,16 @@ export interface GatewayKeyScope {
    * with the whole project (a shared session, a gateway API key).
    */
   grantUserId: string | null;
-  /** Whose legacy personal override counts. Absent = `grantUserId`. */
+  /** Unused since the legacy store retired; kept so callers compile unchanged. */
   legacyPersonalUserId?: string | null;
 }
 
-/** Every key name `scope` reaches, from both stores. Never reads a value; a failed read counts as none. */
+/** Every key name `scope` reaches. Never reads a value; a failed read counts as none. */
 export async function connectedGatewayKeyNames(scope: GatewayKeyScope): Promise<Set<string>> {
-  const [named, legacy] = await Promise.all([
-    scope.userId
-      ? listGrantedGatewaySecretNames(scope.accountId, scope.projectId, scope.userId, scope.grantUserId).catch(() => [] as string[])
-      : [],
-    listProjectSecretNamesForConsumer({
-      projectId: scope.projectId,
-      principalUserId: scope.legacyPersonalUserId === undefined ? scope.grantUserId : scope.legacyPersonalUserId,
-      consumer: 'llm_gateway',
-    }).catch(() => [] as string[]),
-  ]);
-  return new Set([...named, ...legacy]);
+  if (!scope.userId) return new Set();
+  const named = await listGrantedGatewaySecretNames(scope.accountId, scope.projectId, scope.userId, scope.grantUserId)
+    .catch(() => [] as string[]);
+  return new Set(named);
 }
 
 export interface GatewayKeyValue {
@@ -70,7 +55,7 @@ export interface GatewayKeyValue {
 
 export interface GatewayKeyValues {
   keys: GatewayKeyValue[];
-  /** `named`: the keys are named accounts (a 429 cools the account down); `legacy`: project secrets. */
+  /** `named`: the keys are named accounts (a 429 cools the account down). `legacy` is no longer returned. */
   store: 'named' | 'legacy' | 'none';
   /** Every usable named key is cooling down after a rate limit. */
   coolingDown: boolean;
@@ -81,7 +66,7 @@ export interface GatewayKeyValues {
 
 /**
  * The values of one provider key name for `scope`: the named keys it may use,
- * oldest first and routed per session; else the legacy values not moved yet.
+ * oldest first and routed per session.
  * A named key this API cannot decrypt is skipped.
  */
 export async function resolveGatewayKeyValues(scope: GatewayKeyScope & {
@@ -102,18 +87,6 @@ export async function resolveGatewayKeyValues(scope: GatewayKeyScope & {
     secret.value === null ? [] : [{ identifier: secret.secretId, secretId: secret.secretId, value: secret.value }]);
   const withheld = shared?.withheld ?? 0;
   if (named.length) return { keys: named, store: 'named', coolingDown: false, withheld };
-  const legacy = await resolveProjectSecretsForConsumer({
-    projectId: scope.projectId, accountId: scope.accountId,
-    sessionId: scope.sessionId, actorUserId: scope.userId ?? null,
-    principalUserId: scope.legacyPersonalUserId === undefined ? scope.grantUserId : scope.legacyPersonalUserId,
-    name: scope.name, consumer: 'llm_gateway', probe: scope.probe,
-  });
-  if (legacy.length) {
-    return {
-      keys: legacy.map((row) => ({ identifier: row.identifier, secretId: row.secretId, value: row.value })),
-      store: 'legacy', coolingDown: false, withheld,
-    };
-  }
   return {
     keys: [], store: 'none', coolingDown: shared?.coolingDown ?? false,
     ...(shared?.retryAfterSeconds !== undefined ? { retryAfterSeconds: shared.retryAfterSeconds } : {}),

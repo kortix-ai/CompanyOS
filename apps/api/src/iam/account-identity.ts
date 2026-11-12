@@ -73,107 +73,6 @@ export function accountIdentityCandidatesQuery(accountId: string, normalizedEmai
   `;
 }
 
-async function transferProviderConnections(
-  sourceUserId: string,
-  targetUserId: string,
-  accountId: string,
-): Promise<void> {
-  const sourceConnections = (await db.execute(sql`
-    SELECT DISTINCT connection.connection_id::text, connection.provider_id, connection.slot
-    FROM kortix.user_provider_connections connection
-    WHERE connection.user_id=${sourceUserId}::uuid
-      AND (
-        EXISTS (
-          SELECT 1
-          FROM kortix.project_user_provider_connections binding
-          JOIN kortix.projects project_row ON project_row.project_id=binding.project_id
-          WHERE binding.connection_id=connection.connection_id
-            AND binding.user_id=${sourceUserId}::uuid
-            AND project_row.account_id=${accountId}::uuid
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM kortix.session_user_provider_connections binding
-          JOIN kortix.project_sessions session_row ON session_row.session_id=binding.session_id
-          WHERE binding.connection_id=connection.connection_id
-            AND binding.user_id=${sourceUserId}::uuid
-            AND session_row.account_id=${accountId}::uuid
-        )
-      )
-  `)) as unknown as Array<{ connection_id: string; provider_id: string; slot: string }>;
-
-  for (const source of sourceConnections) {
-    const [existing] = (await db.execute(sql`
-      SELECT connection_id::text
-      FROM kortix.user_provider_connections
-      WHERE user_id=${targetUserId}::uuid
-        AND provider_id=${source.provider_id}
-        AND slot=${source.slot}
-      LIMIT 1
-    `)) as unknown as Array<{ connection_id: string }>;
-    const targetConnectionId = existing?.connection_id ?? crypto.randomUUID();
-    if (!existing) {
-      await db.execute(sql`
-        INSERT INTO kortix.user_provider_connections
-          (connection_id, user_id, provider_id, auth_type, slot, label, value_enc, created_at, updated_at)
-        SELECT ${targetConnectionId}::uuid, ${targetUserId}::uuid, provider_id, auth_type,
-          slot, label, value_enc, created_at, updated_at
-        FROM kortix.user_provider_connections
-        WHERE connection_id=${source.connection_id}::uuid AND user_id=${sourceUserId}::uuid
-      `);
-    }
-    await db.execute(sql`
-      INSERT INTO kortix.project_user_provider_connections
-        (project_id, user_id, provider_id, connection_id, pool, created_at)
-      SELECT project_id, ${targetUserId}::uuid, provider_id, ${targetConnectionId}::uuid, pool, created_at
-      FROM kortix.project_user_provider_connections binding
-      WHERE binding.connection_id=${source.connection_id}::uuid
-        AND binding.user_id=${sourceUserId}::uuid
-        AND EXISTS (
-          SELECT 1 FROM kortix.projects project_row
-          WHERE project_row.project_id=binding.project_id
-            AND project_row.account_id=${accountId}::uuid
-        )
-      ON CONFLICT (project_id, user_id, provider_id) DO UPDATE SET
-        pool=kortix.project_user_provider_connections.pool OR excluded.pool
-    `);
-    await db.execute(sql`
-      INSERT INTO kortix.session_user_provider_connections
-        (session_id, user_id, provider_id, connection_id)
-      SELECT session_id, ${targetUserId}::uuid, provider_id, ${targetConnectionId}::uuid
-      FROM kortix.session_user_provider_connections binding
-      WHERE binding.connection_id=${source.connection_id}::uuid
-        AND binding.user_id=${sourceUserId}::uuid
-        AND EXISTS (
-          SELECT 1 FROM kortix.project_sessions session_row
-          WHERE session_row.session_id=binding.session_id
-            AND session_row.account_id=${accountId}::uuid
-        )
-      ON CONFLICT (session_id, user_id, provider_id) DO NOTHING
-    `);
-    await db.execute(sql`
-      DELETE FROM kortix.project_user_provider_connections binding
-      WHERE binding.connection_id=${source.connection_id}::uuid
-        AND binding.user_id=${sourceUserId}::uuid
-        AND EXISTS (
-          SELECT 1 FROM kortix.projects project_row
-          WHERE project_row.project_id=binding.project_id
-            AND project_row.account_id=${accountId}::uuid
-        )
-    `);
-    await db.execute(sql`
-      DELETE FROM kortix.session_user_provider_connections binding
-      WHERE binding.connection_id=${source.connection_id}::uuid
-        AND binding.user_id=${sourceUserId}::uuid
-        AND EXISTS (
-          SELECT 1 FROM kortix.project_sessions session_row
-          WHERE session_row.session_id=binding.session_id
-            AND session_row.account_id=${accountId}::uuid
-        )
-    `);
-  }
-}
-
 /**
  * Move the source's notification rows in this account to the target
  * (KRTX-1742): inbox rows, and session and trigger watcher rows. A row the
@@ -385,7 +284,7 @@ async function reconcileOneAccountIdentity(
   `);
 
   await moveNotificationRows(accountId, sourceUserId, targetUserId);
-  await transferProviderConnections(sourceUserId, targetUserId, accountId);
+  // user_provider_connections never had a reader and holds no row: nothing to move.
   await db.execute(sql`
     UPDATE kortix.connection_credentials credential SET user_id=${targetUserId}::uuid, updated_at=now()
     FROM kortix.connectors connector_row

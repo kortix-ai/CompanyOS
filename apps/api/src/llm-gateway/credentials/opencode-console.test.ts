@@ -85,12 +85,13 @@ describe('resolveOpencodeLogin', () => {
     expect(login?.access).toBe('st_old');
   });
 
-  test('a login inside the last day is refreshed, persisted, and audited', async () => {
+  test('a login inside the last day is refreshed and audited; a project-secret row is not written back', async () => {
     writes.length = 0; audits.length = 0;
     const login = await resolveOpencodeLogin(row(Date.now() + DAY / 2),
       async () => json(200, { access_token: 'st_fresh', refresh_token: 'rt_fresh', expires_in: 2592000 }));
     expect(login).toMatchObject({ access: 'st_fresh', refresh: 'rt_fresh', orgId: 'wrk_1' });
-    expect(writes).toHaveLength(1);
+    // The legacy store is retired: no project-secret login is loaded or written.
+    expect(writes).toHaveLength(0);
     expect(audits[0]).toMatchObject({ action: 'secret.consumer.refreshed' });
   });
 

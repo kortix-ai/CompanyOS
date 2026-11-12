@@ -355,7 +355,7 @@ export function registerSecretsRoutes(): void {
     // a name the gateway reads.
     // A write with no consumer to an existing provider key row (the web
     // secrets manager, an agent) is the same provider key write.
-    const redirectProviderKey = async (): Promise<Response | null> => {
+    const redirectProviderKey = async (): Promise<Response> => {
       if (sharedWith.value && sharedWith.value.length > 0) {
         return c.json({
           error: 'A provider key is shared from Models → Providers, not with shared_with.',
@@ -365,7 +365,14 @@ export function registerSecretsRoutes(): void {
       const moved = await writeWorkspaceProviderKey({
         accountId: loaded.row.accountId, projectId, userId: loaded.userId, name, value: value!,
       });
-      if (!moved) return null;
+      // The legacy store is retired: a name no gateway reader reads has no
+      // home, so it is refused instead of written where nothing reads it.
+      if (!moved) {
+        return c.json({
+          error: `${name} is not a provider key Kortix reads. Add provider keys in Models → Providers.`,
+          code: 'provider_key_store',
+        }, 400);
+      }
       void propagateProjectSecretsToActiveSandboxes(projectId, { refreshModels: true });
       if (moved.created) {
         capturePersonEvent(c, loaded, projectId, 'provider_configured', { provider: moved.providerId, method: 'api_key' });
@@ -388,10 +395,7 @@ export function registerSecretsRoutes(): void {
         delivery_sync: null,
       }, 200);
     };
-    if (explicitConsumer === 'llm_gateway' && value !== null) {
-      const redirected = await redirectProviderKey();
-      if (redirected) return redirected;
-    }
+    if (explicitConsumer === 'llm_gateway' && value !== null) return redirectProviderKey();
 
     // The one ladder check that needs the database: a policy that parses and
     // passes the boundary rules can still claim a (host, header) destination
@@ -423,8 +427,7 @@ export function registerSecretsRoutes(): void {
       return c.json({ error: 'value is required' }, 400);
     }
     if (existing?.consumer === 'llm_gateway' && explicitConsumer === undefined && explicitStrategy === undefined && value !== null) {
-      const redirected = await redirectProviderKey();
-      if (redirected) return redirected;
+      return redirectProviderKey();
     }
     // Network-Enforced Secrets is an experimental feature (`secrets_egress`).
     // With the flag off a project cannot MOVE a secret into egress delivery — a

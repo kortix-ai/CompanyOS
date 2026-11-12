@@ -1112,15 +1112,7 @@
       "count": 1
     }
   },
-  "src/llm-gateway/credentials/gateway-keys.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
-    }
-  },
   "src/llm-gateway/credentials/opencode-console.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
-    },
     "kortix-api/replica-local": {
       "count": 1
     }

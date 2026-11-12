@@ -28,7 +28,8 @@ export function legacySecretNotMoved(secretId: SQL | typeof projectSecrets.secre
  * moved to the named store. A moved row is never decrypted or listed again.
  */
 export function projectSecretRowNotMoved(): SQL {
-  return sql`(${projectSecrets.consumer} is distinct from 'llm_gateway' or ${legacySecretNotMoved(projectSecrets.secretId)})`;
+  // The legacy store is retired: no `llm_gateway` row is read, moved or not.
+  return sql`${projectSecrets.consumer} is distinct from 'llm_gateway'`;
 }
 
 /**

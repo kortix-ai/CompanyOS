@@ -19,7 +19,8 @@ let platinumKeyReads = 0;
 const realAccountResource = await import('../../secrets/account-resource');
 mock.module('../../secrets/account-resource', () => ({
   ...realAccountResource,
-  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  // The legacy store is retired: the operator's key is a named account.
+  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, withheld: 0, secrets: [{ secretId: 'operator-key', label: 'Workspace key', value: 'operators-own-anthropic-key' }] }),
   listGrantedGatewaySecretNames: async () => [],
 }));
 mock.module('../../config', () => ({

@@ -10,7 +10,8 @@ mock.module('../repositories/project-model-access', () => ({
 const realAccountResource = await import('../secrets/account-resource');
 mock.module('../secrets/account-resource', () => ({
   ...realAccountResource,
-  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  // The legacy store is retired: the user's key is a named account.
+  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, withheld: 0, secrets: [{ secretId: 'user-key-id', label: 'Workspace key', value: 'user-key' }] }),
   listGrantedGatewaySecretNames: async () => [],
   resolveDefaultCodexAccountSecret: async () => null,
 }));

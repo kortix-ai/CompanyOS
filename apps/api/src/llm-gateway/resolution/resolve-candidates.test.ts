@@ -46,7 +46,19 @@ const resolveDefaultCodexAccountSecret = mock(async (..._args: unknown[]) => def
 // Which accounts are usable is the real SQL's job (integration-usable-gateway-
 // secrets.test.ts); here the stub answers what that read returned.
 let sharedSecrets: { coolingDown: boolean; retryAfterSeconds?: number; withheld?: number; secrets: PooledSecret[] } = { coolingDown: false, secrets: [] };
-const resolveProjectSharedProviderSecrets = mock(async (_input: unknown) => sharedSecrets);
+// The legacy store is retired, so a key a test seeds with `resolvedSecret`,
+// `secretsByName` or `resolvedSecrets` arrives as a named account.
+const seededSharedSecrets = async (input: { name: string }) => {
+  if (sharedSecrets.secrets.length > 0 || sharedSecrets.coolingDown) return sharedSecrets;
+  const seeded = resolvedSecrets.length > 0
+    ? resolvedSecrets
+    : (() => {
+        const value = input.name in secretsByName ? secretsByName[input.name] ?? null : resolvedSecret;
+        return value ? [{ identifier: input.name, value }] : [];
+      })();
+  return { ...sharedSecrets, secrets: seeded.map((row) => ({ secretId: (row as { secretId?: string }).secretId ?? row.identifier, label: 'Workspace key', value: row.value })) };
+};
+const resolveProjectSharedProviderSecrets = mock(seededSharedSecrets);
 mock.module('../../secrets/account-resource', () => ({
   resolveSessionProviderSecrets,
   resolveDefaultCodexAccountSecret,
@@ -324,21 +336,11 @@ describe('resolveCandidates — Models-panel keys without a session selection', 
     expect(resolveProjectSecretsForConsumer).not.toHaveBeenCalled();
   });
 
-  test('with no usable Models-panel key, the legacy project key serves', async () => {
-    anthropic();
-    pooledEnabled = true;
-    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
-    const candidates = await resolveCandidates(principal({ sessionId: 'session-1' }), 'anthropic/claude-sonnet-4.6');
-    expect(candidates.map((c) => [c.apiKey, c.credentialRef, c.poolSecretId])).toEqual([['legacy-value', 'legacy', undefined]]);
-  });
-
   test('a Models-panel key the API cannot read is skipped', async () => {
     anthropic();
     pooledEnabled = true;
-    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
     sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'unreadable', label: 'Old', value: null }] };
-    const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
-    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
+    await expect(resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6')).rejects.toMatchObject({ code: 'provider_not_connected' });
   });
 
   // One store (2026-11-11): every writer writes named keys, so the flag no
@@ -382,14 +384,6 @@ describe('resolveCandidates — Models-panel keys without a session selection', 
       .rejects.toMatchObject({ code: 'provider_pool_rate_limited', retryAfterSeconds: 9 });
   });
 
-  test('every Models-panel key resting: the legacy project key serves', async () => {
-    anthropic();
-    pooledEnabled = true;
-    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
-    sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
-    const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
-    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
-  });
 
   test('a key private to another member: not connected, and the error says why', async () => {
     anthropic();
@@ -608,18 +602,9 @@ describe('resolveCandidates — BYOK billing', () => {
       resolvedModel: 'eu.anthropic.claude-opus-4-8',
     });
     // The bearer token AND the region are each looked up under their own
-    // AWS-standard secret name, project-wide (shared) only — there is no
-    // per-caller/private lookup.
-    expect(getProjectSecretValueForConsumer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: 'p1',
-        name: 'AWS_BEARER_TOKEN_BEDROCK',
-        consumer: 'llm_gateway',
-      }),
-    );
-    expect(getProjectSecretValueForConsumer).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'p1', name: 'AWS_REGION', consumer: 'llm_gateway' }),
-    );
+    // AWS-standard name in the named store.
+    expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1', name: 'AWS_BEARER_TOKEN_BEDROCK' }));
+    expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1', name: 'AWS_REGION' }));
   });
 
   // The backfill moves the legacy AWS_REGION secret to a named row of provider
@@ -631,7 +616,7 @@ describe('resolveCandidates — BYOK billing', () => {
       const { name } = input as { name: string };
       return name === 'AWS_REGION'
         ? { coolingDown: false, secrets: [{ secretId: 'region-row', label: 'Bedrock region', value: 'eu-central-1' }] }
-        : { coolingDown: false, secrets: [] };
+        : { coolingDown: false, secrets: [{ secretId: 'bearer-row', label: 'Bedrock', value: 'bedrock-bearer-key' }] };
     });
     try {
       const p = principal();
@@ -641,7 +626,7 @@ describe('resolveCandidates — BYOK billing', () => {
       // The region read is a probe: it never moves the session's account pin.
       expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'amazon-bedrock', name: 'AWS_REGION', probe: true }));
     } finally {
-      resolveProjectSharedProviderSecrets.mockImplementation(async () => sharedSecrets);
+      resolveProjectSharedProviderSecrets.mockImplementation(seededSharedSecrets);
     }
   });
 

@@ -1,11 +1,8 @@
 import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
-import { accountSecretResources, projectSecrets } from '@kortix/db';
+import { accountSecretResources } from '@kortix/db';
 import { db } from '../../shared/db';
-import {
-  encryptProjectSecret,
-  resolveProjectSecretForConsumer,
-} from '../../projects/secrets';
+import { resolveProjectSecretForConsumer } from '../../projects/secrets';
 import { recordAuditEvent } from '../../shared/audit';
 import { type CodexAccountLogin, loadCodexAccountLogin } from '../../secrets/account-resource';
 import { writeRotatedAccountLogin } from './rotating-login-write';
@@ -143,12 +140,9 @@ async function refreshAndPersist(
         refreshOf: (stored) => parseCodexAuth(stored)?.refresh,
         value: JSON.stringify({ openai: next }),
       });
-    } else {
-      await db.update(projectSecrets).set({
-        valueEnc: encryptProjectSecret(projectId, JSON.stringify({ openai: next })),
-        updatedAt: new Date(),
-      }).where(eq(projectSecrets.secretId, row.secretId));
     }
+    // A legacy project-secret login is never loaded (the legacy store is
+    // retired), so there is no project row to write back.
 
     await recordAuditEvent({
       accountId: row.accountId,

@@ -1,7 +1,7 @@
 /**
- * Integration test (real local DB): every legacy credential path works for a
- * user who has only legacy data, until the follow-up removes it, and every
- * reader stops reading a legacy row once it moved.
+ * Integration test (real local DB): the legacy credential stores are retired.
+ * No reader reads a legacy LLM key, the backfill moves it to the named store,
+ * and the purge deletes legacy rows only once the backfill is current.
  *
  *   - LLM provider keys (`project_secrets`, consumer `llm_gateway`): the
  *     session env, the secrets list, the OpenCode Console refresh, the old
@@ -17,15 +17,16 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import {
-  accountMembers, accountSecretResources, connectorConnections, connectors, legacyCredentialBackfill,
+  accountMembers, accountSecretResources, claudeSubscriptionLogins, connectorConnections, connectors, legacyCredentialBackfill,
   llmCredentialBackfill, projectMembers, projectSecrets,
 } from '@kortix/db';
 import { db } from '../shared/db';
 import { encryptProjectSecret, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from '../projects/secrets';
 import { loadSecretViewsForUser } from '../projects/lib/serializers';
-import { decryptAccountSecret } from '../secrets/account-resource';
+import { decryptAccountSecret, encryptAccountSecret } from '../secrets/account-resource';
 import { backfillLegacyLlmCredentials, moveLegacyLlmCredential } from '../secrets/llm-credential-move';
 import { backfillLegacyCredentials } from '../secrets/legacy-credential-backfill';
+import { planLegacyCredentialPurge, purgeLegacyCredentials } from '../secrets/legacy-credential-purge';
 import { resolveGatewayKeyValues } from '../llm-gateway/credentials/gateway-keys';
 import { refreshRefusedOpencodeLogin } from '../llm-gateway/credentials/opencode-console';
 import { resolveCodexCredential } from '../llm-gateway/credentials/codex';
@@ -86,20 +87,19 @@ afterAll(async () => {
 });
 
 describe('a provider key a user has only as a legacy row', () => {
-  test('serves from the legacy row before the backfill and from the named account after it', async () => {
+  test('is not served until the backfill moves it, then serves from the named account', async () => {
     await legacy('GROQ_API_KEY', 'groq-legacy-only');
     const before = await resolveGatewayKeyValues({ ...scope(), providerId: 'groq', name: 'GROQ_API_KEY', probe: true });
-    expect(before).toMatchObject({ store: 'legacy', keys: [{ value: 'groq-legacy-only' }] });
+    expect(before).toMatchObject({ store: 'none', keys: [] });
 
     await backfillLegacyLlmCredentials({ apply: true, projectId });
     const after = await resolveGatewayKeyValues({ ...scope(), providerId: 'groq', name: 'GROQ_API_KEY', probe: true });
     expect(after).toMatchObject({ store: 'named', keys: [{ value: 'groq-legacy-only' }] });
   });
 
-  test('a ChatGPT login resolves from the legacy row until it moves, then only from its named account', async () => {
+  test('a ChatGPT login is never read from the legacy row; the backfill makes its named account', async () => {
     const id = await legacy('CODEX_AUTH_JSON', login('codex-legacy-access'), { identifier: `CODEX_AUTH_JSON:${OWNER}`, ownerUserId: OWNER });
-    const before = await resolveCodexCredential(projectId, OWNER, () => Promise.reject(new Error('no network in this test')), { accountId });
-    expect(before?.access).toBe('codex-legacy-access');
+    expect(await resolveCodexCredential(projectId, OWNER, () => Promise.reject(new Error('no network in this test')), { accountId })).toBeNull();
 
     const moved = await moveLegacyLlmCredential(id, { apply: true });
     expect(moved?.outcome).toBe('copied');
@@ -111,7 +111,7 @@ describe('a provider key a user has only as a legacy row', () => {
 });
 
 describe('readers outside the gateway honor the move ledger', () => {
-  test('the session env skips a moved row it cannot decrypt, and still lists an unmoved one', async () => {
+  test('the session env reads no provider key row, moved or not', async () => {
     const moved = await legacy('MISTRAL_API_KEY', 'x', { valueEnc: 'not-an-envelope' });
     await markMoved(moved, 'MISTRAL_API_KEY');
     await legacy('CEREBRAS_API_KEY', 'cerebras-unmoved');
@@ -123,25 +123,22 @@ describe('readers outside the gateway honor the move ledger', () => {
     const rows = await listResolvedProjectSecrets(projectId, OWNER);
     const byKey = new Map(rows.map((row) => [row.key, row.value]));
     expect(byKey.has('MISTRAL_API_KEY')).toBe(false);
-    expect(byKey.get('CEREBRAS_API_KEY')).toBe('cerebras-unmoved');
+    expect(byKey.has('CEREBRAS_API_KEY')).toBe(false);
     expect(byKey.get('APP_TOKEN')).toBe('app-value');
   });
 
-  test('the secrets list hides a moved row and keeps an unmoved one', async () => {
+  test('the secrets list shows no provider key row', async () => {
     const views = await loadSecretViewsForUser({ projectId, userId: OWNER, canManageShared: true });
     const names = views.map((view) => view.name);
     expect(names).not.toContain('MISTRAL_API_KEY');
-    expect(names).toContain('CEREBRAS_API_KEY');
+    expect(names).not.toContain('CEREBRAS_API_KEY');
     expect(names).toContain('APP_TOKEN');
   });
 
-  test('an OpenCode Console refresh reads a legacy login only while it has not moved', async () => {
+  test('an OpenCode Console refresh never reads a legacy login', async () => {
     const value = JSON.stringify({ type: 'oauth', access: 'oc-access', refresh: 'oc-refresh', expires: Date.now() + 3_600_000 });
     const id = await legacy('OPENCODE_API_KEY', value);
     const input = { accountId, projectId, secretId: id, userId: OWNER, sessionId: null, failedKeySha256: 'another-key' };
-    // Another request already replaced the refused key: the stored login comes back, no network.
-    expect((await refreshRefusedOpencodeLogin(input, () => Promise.reject(new Error('no network'))))?.access).toBe('oc-access');
-    await markMoved(id, 'OPENCODE_API_KEY');
     expect(await refreshRefusedOpencodeLogin(input, () => Promise.reject(new Error('no network')))).toBeNull();
   });
 });
@@ -286,5 +283,43 @@ describe('connector credentials in a legacy form', () => {
     await backfillLegacyCredentials({ apply: true, projectId: other.project_id });
     const [row] = await db.select().from(connectorConnections).where(and(eq(connectorConnections.connectionId, extra!.connectionId)));
     expect(row!.status).toBe('active');
+  });
+});
+
+describe('the purge deletes legacy rows only after the backfill', () => {
+  test('it refuses while a legacy LLM key has no ledger row, and deletes nothing', async () => {
+    const id = await legacy('DEEPINFRA_API_KEY', 'deepinfra-unseen');
+    const result = await purgeLegacyCredentials({ apply: true });
+    expect(result.refusal).toContain('not moved');
+    expect(result.deleted).toBeNull();
+    expect((await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, id))).length).toBe(1);
+  });
+
+  test('it refuses a row the named store cannot hold until the operator accepts it', async () => {
+    await backfillLegacyLlmCredentials({ apply: true });
+    const leaver = crypto.randomUUID();
+    const id = await legacy('CODEX_AUTH_JSON', login('leaver'), { identifier: `CODEX_AUTH_JSON:${leaver}`, ownerUserId: leaver, createdBy: leaver });
+    expect((await moveLegacyLlmCredential(id, { apply: true }))?.outcome).toBe('skipped_no_owner');
+    // Other tests' undecryptable rows also count as unmovable.
+    const plan = await planLegacyCredentialPurge();
+    expect(plan.refusal).toContain('cannot move');
+    expect(plan.unmovable.skipped_no_owner).toBeGreaterThanOrEqual(1);
+  });
+
+  test('with the backfill current it deletes every legacy LLM row, the Claude logins, and nothing else', async () => {
+    await db.insert(claudeSubscriptionLogins).values({ accountId, userId: OWNER, valueEnc: encryptAccountSecret(accountId, 'synthetic-claude'), source: 'pasted' });
+    const dry = await purgeLegacyCredentials({ apply: false, acceptUnmovable: true });
+    expect(dry.refusal).toBeNull();
+    expect(dry.deleted).toBeNull();
+    const result = await purgeLegacyCredentials({ apply: true, acceptUnmovable: true });
+    expect(result.deleted).toMatchObject({ llmRows: dry.deletable, claudeLogins: 1 });
+    expect(await db.select().from(projectSecrets).where(and(eq(projectSecrets.projectId, projectId), eq(projectSecrets.consumer, 'llm_gateway')))).toEqual([]);
+    // Ordinary secrets and connector secrets stay.
+    const left = await db.select({ name: projectSecrets.name }).from(projectSecrets).where(eq(projectSecrets.projectId, projectId));
+    expect(left.map((r) => r.name)).toEqual(expect.arrayContaining(['APP_TOKEN', 'LEGACY_BOT_TOKEN']));
+    // Named accounts stay and serve.
+    const keys = await resolveGatewayKeyValues({ ...scope(), providerId: 'groq', name: 'GROQ_API_KEY', probe: true });
+    expect(keys).toMatchObject({ store: 'named', keys: [{ value: 'groq-legacy-only' }] });
+    expect((await planLegacyCredentialPurge()).llmRows).toBe(0);
   });
 });

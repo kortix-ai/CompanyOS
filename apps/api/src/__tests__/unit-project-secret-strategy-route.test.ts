@@ -1174,7 +1174,10 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
     });
   });
 
-  test('creates an LLM gateway secret without a runtime delivery transition', async () => {
+  // The legacy store is retired: an `llm_gateway` write goes to the named
+  // store (integration-legacy-credential-paths.test.ts), and a name it cannot
+  // take is refused, never written as a project secret.
+  test('an LLM gateway write the named store cannot take is refused, and nothing is written', async () => {
     const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1186,23 +1189,9 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
       }),
     });
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      strategy: 'broker',
-      consumer: 'llm_gateway',
-      delivery_status: 'available',
-      egress_policy: null,
-    });
-    expect(row).toMatchObject({ strategy: 'broker', consumer: 'llm_gateway' });
-    expect(audits[0]).toMatchObject({
-      after: {
-        configured: true,
-        strategy: 'broker',
-        consumer: 'llm_gateway',
-        rotated: true,
-      },
-    });
-    expect(JSON.stringify(audits)).not.toContain('plaintext-test-value');
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'provider_key_store' });
+    expect(audits).toEqual([]);
   });
 
   // Was: 'defaults a known LLM credential to the LLM gateway'.
@@ -1235,26 +1224,6 @@ describe('POST /v1/projects/:projectId/secrets audit', () => {
     // for anything else.
     expect(row).toMatchObject({ consumer: 'sandbox' });
     expect(audits[0]).toMatchObject({ after: { configured: true, rotated: true } });
-  });
-
-  test('an explicit gateway choice is still honored for the same name', async () => {
-    const response = await buildApp().request(`/v1/projects/${PROJECT_ID}/secrets`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: 'ANTHROPIC_API_KEY',
-        value: 'plaintext-test-value',
-        strategy: 'broker',
-        consumer: 'llm_gateway',
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      strategy: 'broker',
-      consumer: 'llm_gateway',
-    });
-    expect(row).toMatchObject({ strategy: 'broker', consumer: 'llm_gateway' });
   });
 
   test('keeps an explicit runtime choice for a known LLM credential', async () => {

@@ -112,7 +112,8 @@ describe('a shared key', () => {
   });
 
   test('is copied as a workspace key with the same value, and the legacy readers stop reading it', async () => {
-    expect((await legacyValues('OPENAI_API_KEY')).map((v) => v.value)).toEqual(['sk-synthetic-openai-1']);
+    // The legacy store is retired: no reader reads a legacy row, moved or not.
+    expect(await legacyValues('OPENAI_API_KEY')).toEqual([]);
     const moved = await moveLegacyLlmCredential(legacyId, { apply: true });
     expect(moved?.outcome).toBe('copied');
     namedId = moved!.accountSecretId!;
@@ -171,10 +172,10 @@ describe('each legacy shape', () => {
     expect(grants.map((g) => g.userId)).toEqual([TEAMMATE]);
   });
 
-  test('a personal override of someone who left the account stays legacy and readable', async () => {
+  test('a personal override of someone who left the account stays legacy and is not read', async () => {
     const id = await legacy('CODEX_AUTH_JSON', '{"openai":{"access":"leaver"}}', { ownerUserId: LEAVER, createdBy: LEAVER });
     expect((await moveLegacyLlmCredential(id, { apply: true }))?.outcome).toBe('skipped_no_owner');
-    expect((await legacyValues('CODEX_AUTH_JSON', LEAVER)).map((v) => v.value)).toEqual(['{"openai":{"access":"leaver"}}']);
+    expect(await legacyValues('CODEX_AUTH_JSON', LEAVER)).toEqual([]);
   });
 
   test('Bedrock region and a custom provider key land under their provider', async () => {

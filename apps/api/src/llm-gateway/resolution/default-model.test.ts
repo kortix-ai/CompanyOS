@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import { GatewayResolutionError } from '@kortix/llm-gateway';
 import * as resolveCandidatesModule from './resolve-candidates';
 import * as modelPreferencesModule from '../../repositories/model-preferences';
-import * as secretsModule from '../../projects/secrets';
 import { runtimeModelCatalog } from '../models/runtime-catalog';
 import * as claudeAccountsModule from '../../claude-subscription/accounts';
 import * as projectModelAccessModule from '../../repositories/project-model-access';
@@ -63,7 +62,8 @@ beforeEach(() => {
   );
   spyOn(modelPreferencesModule, 'getAccountModelDefaults').mockImplementation(async () => accountDefaults);
   spyOn(modelPreferencesModule, 'getSessionAgentContext').mockImplementation(async () => null);
-  spyOn(secretsModule, 'listProjectSecretNamesForConsumer').mockImplementation(
+  // The legacy store is retired: connected key names come from the named store.
+  spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(
     async () => connectedSecretNames,
   );
 });
@@ -151,7 +151,7 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     });
     expect(result).toEqual({ model: null, source: 'platform' });
     expect(resolveCandidatesModule.resolveCandidates).not.toHaveBeenCalled();
-    expect(secretsModule.listProjectSecretNamesForConsumer).not.toHaveBeenCalled();
+    expect(accountResourceModule.listGrantedGatewaySecretNames).not.toHaveBeenCalled();
   });
 
   test('a servable configured project default is returned as-is (real source, no degrade)', async () => {
@@ -258,9 +258,7 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(shared).toEqual({ model: null, source: 'platform' });
     expect(principals[0]).toMatchObject({ userId: 'u1', personalUserId: null });
     // Only shared project keys count for the fallback provider as well.
-    expect(secretsModule.listProjectSecretNamesForConsumer).toHaveBeenCalledWith(
-      expect.objectContaining({ principalUserId: null }),
-    );
+    expect(accountResourceModule.listGrantedGatewaySecretNames).toHaveBeenCalledWith('a1', 'p1', 'u1', null);
 
     const own = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });
     expect(own).toEqual({ model: 'codex/gpt-6-astra', source: 'account' });

@@ -37,6 +37,7 @@ mock.module('react-native', () => ({
   StyleSheet: { flatten: (style: unknown) => (Array.isArray(style) ? Object.assign({}, ...style) : style) },
   View: host('view'),
   FlatList: host('rn-flat-list'),
+  ScrollView: host('rn-scroll-view'),
   TextInput: host('rn-text-input'),
   useWindowDimensions: () => ({ width: 400, height: 800 }),
 }));
@@ -351,7 +352,8 @@ describe('NativeSheet', () => {
   test('content parts render the plain part inside the native sheet', () => {
     mount({}, React.createElement(React.Fragment, null, React.createElement(SheetScrollView), React.createElement(DismissProbe)));
     call((r) => r.present());
-    expect(tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')).toHaveLength(1);
+    // Content-sized: React Native's plain scroll view (no growing wrapper).
+    expect(tree.root.findAll((node) => node.type === 'rn-scroll-view')).toHaveLength(1);
     expect(tree.root.findAll((node) => node.type === 'gorhom-scroll')).toHaveLength(0);
     fire('onWillAppear');
     // `useSheetDismiss` closes this native sheet, not a gorhom modal.
@@ -363,21 +365,23 @@ describe('NativeSheet', () => {
   test('a scroll view in a content-sized sheet does not grow: it is as tall as its content', () => {
     // React Native's Yoga stretches a flexGrow child (a ScrollView's default)
     // to a parent's maxHeight: the body measured screen-tall and every
-    // content-sized sheet with a scroll view opened at full height.
+    // content-sized sheet with a scroll view opened at full height. Not the
+    // keyboard-aware scroll view: its wrapper has a fixed flexGrow 1.
     mount({}, React.createElement(SheetScrollView, { style: { paddingTop: 4 } } as never));
     call((r) => r.present());
-    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    expect(tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')).toHaveLength(0);
+    const scroll = tree.root.findAll((node) => node.type === 'rn-scroll-view')[0];
     expect(Object.assign({}, ...[scroll.props.style].flat())).toEqual({ flexGrow: 0, paddingTop: 4 });
   });
 
   test('a call site style still wins over the content-sized default', () => {
     mount({}, React.createElement(SheetScrollView, { style: { flexGrow: 1 } } as never));
     call((r) => r.present());
-    const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];
+    const scroll = tree.root.findAll((node) => node.type === 'rn-scroll-view')[0];
     expect(Object.assign({}, ...[scroll.props.style].flat()).flexGrow).toBe(1);
   });
 
-  test('a scroll view in a fixed-detent sheet keeps its flex: it fills the sheet', () => {
+  test('a fixed-detent sheet keeps the keyboard-aware scroll view and its flex: it fills the sheet', () => {
     mount({ snapPoints: ['50%'], enableDynamicSizing: false }, React.createElement(SheetScrollView));
     call((r) => r.present());
     const scroll = tree.root.findAll((node) => node.type === 'keyboard-aware-scroll')[0];

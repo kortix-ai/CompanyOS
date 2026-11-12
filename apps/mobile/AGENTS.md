@@ -273,7 +273,10 @@ a binary built without it: that binary keeps gorhom. Android keeps gorhom.
   1 s. After the measurement, a layout narrower than 60% of the measuring
   width (the host before UIKit sized it) never moves the detent.
 - **Scroll views do not grow in a content-sized sheet.** `SheetScrollView` and
-  `SheetFlatList` there get `flexGrow: 0` (a call site's style wins).
+  `SheetFlatList` there get `flexGrow: 0` (a call site's style wins), and
+  `SheetScrollView` is React Native's plain `ScrollView`: the keyboard-aware
+  one wraps its scroll view in a view with a fixed `flexGrow: 1`. UIKit lifts
+  a sheet below its full detent above the keyboard by itself.
   React Native's `ScrollView` has `flexGrow: 1`, and React Native's Yoga
   (`StretchFlexBasis` errata) stretches a growing child to its parent's
   `maxHeight`: the body measured screen-tall and the sheet opened at full

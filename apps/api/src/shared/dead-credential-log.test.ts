@@ -38,9 +38,11 @@ const {
   isCredentialFenceDenial,
   isDeadCredential,
   isAgentGrantDenial,
+  isAgentAccessDenial,
   markCredentialFenceDenial,
   markDeadCredential,
   markAgentGrantDenial,
+  markAgentAccessDenial,
   PREVIEW_SANDBOX_DENIED_MESSAGE,
 } = await import('./dead-credential-log');
 const { logWindowDecision, logWindowWarnDecision, resetLogWindowsForTests } = await import('./log-window');
@@ -702,5 +704,102 @@ describe('person role denial warns are throttled at the error handler (KRTX-4801
     for (let i = 0; i < 3; i += 1) await app.request('/v1/plain');
     const warns = logged.slice(before).filter((l) => l.level === 'warn');
     expect(warns).toHaveLength(3);
+  });
+});
+
+describe('agent-access denials are throttled at the error handler (KRTX-4800)', () => {
+  // What projects/lib/agent-access.ts `denial()` throws for a caller whose
+  // session's agent is not theirs: the typed 403 (`no_agent_access` or
+  // `agent_not_accessible`), marked. The gate-level pin that the constructor
+  // itself marks lives in __tests__/unit-agent-access-denial-mark.test.ts;
+  // this file pins what the mark does at the error handler.
+  function agentAccessDenialLike(
+    message = "You don't have access to any agent in this project. Ask a manager to grant you one.",
+  ): HTTPException {
+    const err = new HTTPException(403, {
+      message,
+      res: new Response(
+        JSON.stringify({ error: message, message, code: 'no_agent_access', action: 'project.session.start', accessible_agents: [] }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      ),
+    });
+    markAgentAccessDenial(err);
+    return err;
+  }
+
+  function appWithAgentAccessDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/v1/workspaces/:workspaceId/sessions/:sessionId/start', () => {
+      throw agentAccessDenialLike();
+    });
+    app.post('/v1/unmarked-start', () => {
+      throw new HTTPException(403, { message: 'no access' });
+    });
+    return app;
+  }
+
+  test('an unmarked 403 still logs one warn line per refusal', () => {
+    const app = appWithAgentAccessDenial();
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) app.request('/v1/unmarked-start', { method: 'POST' });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+    for (const warn of warns) {
+      expect(warn.message).toContain('-> 403 [HTTPException] no access');
+      expect(warn.context?.suppressed).toBeUndefined();
+    }
+  });
+
+  test('five identical agent-access refusals log one info line and ship the typed body verbatim', async () => {
+    resetLogWindowsForTests();
+    const app = appWithAgentAccessDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/workspaces/w/sessions/s/start', { method: 'POST' });
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toEqual({
+      error: "You don't have access to any agent in this project. Ask a manager to grant you one.",
+      message: "You don't have access to any agent in this project. Ask a manager to grant you one.",
+      code: 'no_agent_access',
+      action: 'project.session.start',
+      accessible_agents: [],
+    });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first refusal line');
+    expect(first.message).toContain(
+      '-> 403 [HTTPException] You don\'t have access to any agent in this project. Ask a manager to grant you one.',
+    );
+    expect(first.context?.suppressed).toBe(0);
+    expect(first.context?.reason).toContain('agent in this project');
+  });
+
+  test('the named-agent form (agent_not_accessible) joins the same throttle family', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/v1/workspaces/:workspaceId/sessions/:sessionId/start', () => {
+      const err = agentAccessDenialLike(
+        "You don't have access to the legal agent — pick one of: sales.",
+      );
+      // The named-agent refusal carries code agent_not_accessible; the mark is
+      // what throttles it, so the bucket here follows the mark, not the code.
+      expect(isAgentAccessDenial(err)).toBe(true);
+      throw err;
+    });
+    const before = logged.length;
+    for (let i = 0; i < 4; i += 1) {
+      const res = await app.request('/v1/workspaces/w/sessions/s/start', { method: 'POST' });
+      expect(res.status).toBe(403);
+    }
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(1);
   });
 });

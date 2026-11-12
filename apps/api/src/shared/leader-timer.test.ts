@@ -249,14 +249,14 @@ describe('leaderTimer', () => {
     await Bun.sleep(20);
     timer.stop();
     const entry = errorLogs.find((e) => e.message.includes('tick failed'));
-    expect(entry).toBeTruthy();
+    if (!entry) throw new Error('no tick-failed log line was written');
     // The reason is IN the message (learnings 2026-09-10): Better Stack groups
     // on the message, so the sqlstate and the driver text must be in it.
-    expect(entry!.message).toContain('workspace-split');
-    expect(entry!.message).toContain('SQLSTATE 57014');
-    expect(entry!.message).toContain('canceling statement due to statement timeout');
+    expect(entry.message).toContain('workspace-split');
+    expect(entry.message).toContain('SQLSTATE 57014');
+    expect(entry.message).toContain('canceling statement due to statement timeout');
     // The wrapper's statement stays in the structured context.
-    expect(entry!.context?.error).toBe('Failed query: SELECT 1\nparams: ');
+    expect(entry.context?.error).toBe('Failed query: SELECT 1\nparams: ');
   });
 
   test('a non-database failure still names its timer', async () => {
@@ -272,8 +272,8 @@ describe('leaderTimer', () => {
     await Bun.sleep(20);
     timer.stop();
     const entry = errorLogs.find((e) => e.message.includes('tick failed'));
-    expect(entry).toBeTruthy();
-    expect(entry!.message).toContain('workspace-split');
-    expect(entry!.message).not.toContain('SQLSTATE');
+    if (!entry) throw new Error('no tick-failed log line was written');
+    expect(entry.message).toContain('workspace-split');
+    expect(entry.message).not.toContain('SQLSTATE');
   });
 });

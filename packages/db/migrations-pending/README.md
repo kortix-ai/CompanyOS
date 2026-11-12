@@ -9,29 +9,6 @@ would be dynamically imported and crash the runner.
 Nothing here is in `kortix_migrations.pgmigrations`. `pnpm migrate:status` will
 never list them. `pnpm --filter @kortix/db lint` does not scan this directory.
 
-## PARKED — `drop_legacy_suna_schemas.sql.pending`
-
-Drops every Suna-era table, view, sequence, function and type in `public`
-(64 tables, 224.6 GB on prod, 2026-11-10) and the whole `basejump` schema.
-`20261110135954872_freeze_legacy_suna_tables` already moved
-`public.contact_forms` to `kortix.contact_forms` and froze the rest against
-INSERT and UPDATE. The file's header lists the preconditions: the freeze and
-the API lead route live everywhere, one full backup per environment
-(`packages/db/scripts/backup-legacy-schemas.sh`) with a restore test, a
-decision for the paid accounts whose only owner is in `basejump`, and the
-wallet-wrapper preconditions below. Its guard refuses to run while any object
-outside `public`/`basejump` depends on them.
-
-## PARKED — `drop_public_wallet_wrappers.sql.pending`
-
-`20260925013304428_wallet_private_schema` moved the credit functions into the
-private `kortix_wallet` schema and left `public.atomic_add_credits`,
-`atomic_use_credits`, `atomic_settle_credits` and `atomic_reset_expiring_credits`
-as wrappers, so API images built before it keep working during the rollout.
-The file's header lists the two preconditions for dropping them and the tests
-to update in the same PR. Earliest: the release after the one that ships
-`20260925013304428`.
-
 ## PARKED — `20261104040701000_drop_rooms.sql.pending`
 
 The contract half of removing Rooms (2026-11): drops `kortix.rooms`,

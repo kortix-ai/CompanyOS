@@ -1,104 +1,40 @@
 -- Migration: drop_legacy_suna_schemas
 --
--- PARKED. Drops the Suna-era tables: every table, view, sequence, function and
--- type in `public` that no extension owns, and the whole `basejump` schema.
--- Prod, 2026-11-10: 64 tables, 224.6 GB (messages 115, documents 46,
--- agent_runs 28, webhook_events 18, credit_ledger 4, the rest under 3 each).
--- 20261110135954872_freeze_legacy_suna_tables already moved contact_forms to
--- kortix.contact_forms, froze every other table against INSERT and UPDATE,
--- revoked anon/authenticated, unscheduled the yearly-refill cron job and
--- dropped the welcome-email trigger.
+-- Drops the Suna-era data: every table, view, sequence, function and type in
+-- `public` that no extension owns, and the schemas `basejump`, `kortix_yolo`,
+-- `drizzle` and (staging only) `legacy_staging_prebaseline`. Prod, 2026-11-12:
+-- `public` 224.4 GB (messages 115, documents 46, agent_runs 28,
+-- webhook_events 18, the rest under 5 each), `basejump` 0.3 GB. Kortix data
+-- lives in `kortix` (plus `kortix_wallet` functions); no deployed code reads
+-- or writes these schemas.
 --
--- Why now: the legacy PostgREST surface is still live. On 2026-11-05 a new
--- sign-up enumerated the legacy RPCs with curl, created a team account through
--- rpc/create_account, and read ~4,900 pages of public.messages plus projects,
--- agent_runs and threads: the old RLS lets any role read every row of a
--- project or thread marked is_public (5,940 projects, 5,865 threads on prod).
--- The freeze migration revoked the table privileges; dropping the schemas
--- also removes the legacy RPC functions PostgREST still exposes.
+-- Preconditions (all hold, 2026-11-12):
+--   0. 20261110135954872_freeze_legacy_suna_tables is applied on dev, staging
+--      and prod (prod 2026-11-10, v0.15.5): every legacy table refuses writes,
+--      anon/authenticated lost their privileges, leads go to
+--      kortix.contact_forms.
+--   1. Backup: one full pg_dump of public + basejump + kortix_yolo + drizzle of
+--      prod in s3://kortix-prod-legacy-suna-backup/20261110/ (no expiry,
+--      versioned, SSE-KMS). The restore test passed: 77 tables, 80,467,825
+--      rows. Dev and staging get no backup (decided 2026-11-11).
+--   2. Suna-era Stripe subscriptions: no action (decided 2026-11-10). Their
+--      owners exist only in basejump.account_user, so owner-alerts loses its
+--      legacy fallback in the same change.
+--   3. The public.atomic_* wallet wrappers have no caller: the wallet calls
+--      kortix_wallet.* directly. The function loop below drops them.
+--   4. Self-host `:stable` (v0.15.6) has the migrate.ts bootstrap check on
+--      kortix.accounts (first in v0.15.4), so a later `migrate` does not
+--      re-run 0000_bootstrap.sql on a database without basejump.
 --
--- Do not move this into packages/db/migrations/ until ALL are true:
---
---   0. 20261110135954872_freeze_legacy_suna_tables is applied on every
---      environment, and the web build that writes leads through
---      POST /v1/system/demo-request is live everywhere: prod
---      public.contact_forms has no row newer than that release.
---      DONE 2026-11-11: applied on dev, staging and prod (prod 2026-11-10
---      21:35Z, release v0.15.5). The newest prod public.contact_forms row is
---      older than that release.
---   1. Backup. `packages/db/scripts/backup-legacy-schemas.sh` wrote one full
---      pg_dump of `public` + `basejump` + `kortix_yolo` + `drizzle` (no expiry: the bucket has no
---      lifecycle rule) for prod, its `pg_restore --list` shows every table,
---      and the restore test (`backup-legacy-schemas.sh verify`) passed: every
---      archive decodes, basejump restores into a scratch database, and the row
---      counts of public.messages, public.documents and basejump.account_user
---      match. Dev and staging get no backup (decided 2026-11-11).
---      DONE 2026-11-11 for prod. s3://kortix-prod-legacy-suna-backup/20261110/,
---      dumped 2026-11-10 17:11–19:27Z, before the freeze ran:
---        messages.dump.zst   23,213,868,576 bytes   1 of 1 tables
---        documents.dump.zst  16,000,287,218 bytes   1 of 1 tables
---        rest.dump.zst        3,361,379,370 bytes  62 of 62 tables
---        extra.dump.zst              29,445 bytes  13 of 13 tables
---      The restore test passed: 77 tables and 80,467,825 rows decode, and
---      every basejump, kortix_yolo and drizzle table restores with its archived
---      row count. public.messages, public.documents and basejump.account_user
---      match prod. The bucket has versioning on and SSE-KMS. Public access is
---      blocked, and its policy refuses requests without TLS.
---   2. Suna-era Stripe subscriptions. DONE: decided 2026-11-10, no action.
---      Prod has 147 kortix.credit_accounts rows with an active Stripe
---      subscription and no kortix.accounts row. Their owners have no kortix
---      membership and last signed in 2026-04-13. No usage in 90 days. These
---      billing rows live in kortix and do not need basejump. Stripe keeps
---      closing a monthly invoice for each. The ledger cannot show the amount
---      charged: invoice.paid also fires for $0 and discounted invoices. The
---      drop removes the only record of their owners (basejump.account_user,
---      kept in the backup). After it, emailBillingManagers finds no recipient
---      for them, so delete legacyOwners in the same PR. (Accounts that exist
---      in kortix without an owner or admin: 9, of which 2 have a basejump
---      owner and 0 pay.)
---   3. Wallet wrappers. The preconditions of
---      drop_public_wallet_wrappers.sql.pending hold (this file drops those
---      wrappers too); delete that file in the same PR.
---   4. Self-host. Every self-host image in use was built from a commit with
---      the migrate.ts bootstrap check on `kortix.accounts` (prod-db-slim),
---      or its next `migrate` re-runs 0000_bootstrap.sql on a database
---      without basejump.
---
--- Then: `pnpm migrate:create drop_legacy_suna_schemas`, paste the body below
--- under the generated header, delete this file, and in the same PR:
---   - remove `apiKeys` (public.api_keys) from packages/db/src/schema/public.ts,
---     its re-export in packages/db/src/index.ts, ApiKey/NewApiKey in
---     packages/db/src/types.ts, and the two assertions in
---     packages/db/src/index.test.ts. Not earlier: without the table in the
---     database, the next drizzle-kit generate puts a DROP into an unrelated
---     migration;
---   - delete `legacyOwners` and its fallback from owner-alerts.ts (precondition 2);
---   - in apps/api/src/billing/services/account-deletion.ts, drop the
---     kortix.legacy_write opt-in and the legacy branches; in
---     integration-account-deletion.test.ts, the legacy block and its
---     kortix.freeze_legacy_tables() call;
---   - drop the basejump stub note from packages/db/MIGRATIONS.md
---     ("Prerequisites") and the basejump entry of BRANCH_SCHEMAS in
---     scripts/worktree/lib/branch-db.ts;
---   - delete tests/migration/kortix-yolo-profiles-unused-indexes.test.ts
---     (it asserts kortix_yolo.profiles_role_idx survives the chain);
---   - run `pnpm test -- --db-only tests/migration` and the account-deletion
---     suite: clearLegacyAuthUserReferences already skips a missing table.
---
--- Also dropped here (user decision 2026-11-10): `kortix_yolo` (12 tables,
--- ~1.4 MB) belongs to the retired YOLO gateway (the kortix-go repo, last push
--- 2026-04-30). Its endpoint answers 410 Gone
--- (tests/unit/retired-yolo-endpoint-env.test.ts). Its last write on prod was
--- 2026-10-13 12:57Z, no code in this repo reads it (kortix.yolo_member_tokens
--- is a different table), and no session queried it on 2026-11-10. `drizzle`
--- holds one dead drizzle-kit migration ledger row (MIGRATIONS.md: legacy
--- trackers). The backup script dumps both schemas as part `extra`.
---
--- Lock and time: DROP TABLE takes ACCESS EXCLUSIVE on each legacy table only;
--- nothing live reads them. The guard below makes the migration refuse to run
--- if any object outside `public`/`basejump` still depends on them, so the
--- CASCADEs cannot remove a live object. Unlinking ~225 GB of files happens at
--- commit; no kortix table is locked meanwhile.
+-- Lock and time: DROP TABLE takes ACCESS EXCLUSIVE on each legacy table
+-- (frozen, no reader) and a short lock on auth.users for the foreign keys the
+-- legacy tables hold there. If the 2 s lock_timeout fires, the whole
+-- migration rolls back: re-run the deploy step, never raise the timeout. The
+-- guard below refuses to run if any object outside the legacy schemas still
+-- depends on them, so the CASCADEs cannot remove a live object. The files
+-- (~225 GB on prod) are unlinked at commit.
+set lock_timeout = '2s';
+set statement_timeout = '30s';
 
 -- mixed-version-safe: no deployed API or web image reads or writes public.* or basejump.* once preconditions 0 and 2 hold; account deletion's legacy branches check to_regclass and skip a missing table.
 
@@ -110,6 +46,27 @@ BEGIN
     DROP POLICY IF EXISTS "Account members can insert recording files" ON storage.objects;
     DROP POLICY IF EXISTS "Account members can update recording files" ON storage.objects;
     DROP POLICY IF EXISTS "Account members can delete recording files" ON storage.objects;
+    -- Dev only: the Suna support-ticket attachments policy reads basejump and public.support_tickets.
+    DROP POLICY IF EXISTS "Users can view their ticket attachments" ON storage.objects;
+  END IF;
+END $$;
+
+-- pg_cron jobs that call a legacy public function by its unqualified name (pg_depend does not
+-- see them). Prod has none; staging has cleanup-expired-staged-files; dev has
+-- categorize-stale-projects and generate-taxonomy-daily. After the drop they would fail every run.
+DO $$
+DECLARE
+  job text;
+  scheduled boolean;
+BEGIN
+  -- Dynamic SQL: a database without pg_cron (self-host, local) has no cron.job to plan against.
+  IF to_regclass('cron.job') IS NOT NULL THEN
+    FOREACH job IN ARRAY ARRAY['cleanup-expired-staged-files', 'categorize-stale-projects', 'generate-taxonomy-daily'] LOOP
+      EXECUTE 'SELECT EXISTS (SELECT 1 FROM cron.job WHERE jobname = $1)' INTO scheduled USING job;
+      IF scheduled THEN
+        EXECUTE 'SELECT cron.unschedule($1)' USING job;
+      END IF;
+    END LOOP;
   END IF;
 END $$;
 
@@ -153,8 +110,8 @@ BEGIN
   SELECT string_agg(DISTINCT format('%s -> %s', pg_describe_object(classid, objid, objsubid), referenced), '; ')
     INTO blockers
     FROM dep
-   WHERE referenced_schema IN ('public', 'basejump', 'kortix_yolo', 'drizzle')
-     AND coalesce(dependent_schema, '') NOT IN ('public', 'basejump', 'kortix_yolo', 'drizzle', '')
+   WHERE referenced_schema IN ('public', 'basejump', 'kortix_yolo', 'drizzle', 'legacy_staging_prebaseline')
+     AND coalesce(dependent_schema, '') NOT IN ('public', 'basejump', 'kortix_yolo', 'drizzle', 'legacy_staging_prebaseline', '')
      -- Extensions installed in public (vector, pg_trgm on prod) stay, with every object they own.
      AND NOT EXISTS (SELECT 1 FROM pg_depend e WHERE e.classid = dep.refclassid AND e.objid = dep.refobjid AND e.deptype = 'e');
   IF blockers IS NOT NULL THEN
@@ -238,6 +195,8 @@ END $$;
 DROP SCHEMA IF EXISTS basejump CASCADE;
 DROP SCHEMA IF EXISTS kortix_yolo CASCADE;
 DROP SCHEMA IF EXISTS drizzle CASCADE;
+-- Staging only: two pre-baseline Suna billing tables (~58 MB) with a foreign key into public.credit_accounts.
+DROP SCHEMA IF EXISTS legacy_staging_prebaseline CASCADE;
 
 -- The freeze has nothing left to guard.
 DROP FUNCTION IF EXISTS kortix.freeze_legacy_tables();

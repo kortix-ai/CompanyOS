@@ -337,7 +337,11 @@ function CreateWorkspaceKeyDialog({
   const selectedExpiry = expiryChoices.some((o) => o.value === expiry) ? expiry : defaultKeyExpiryOption(policy, tI18nComplete);
 
   const principal = actsAsInput(draft);
-  const ready = !!name.trim() && !!principal && !(access === 'custom' && picked.size === 0);
+  // "All my workspaces" with "You" mints a personal key: the Access select is
+  // hidden there and its state is dead, so a leftover Custom (zero picks) must
+  // not hold the gate. Only the workspace path reads access/picked.
+  const personal = draft.actsAs === 'me' && worksIn === 'all';
+  const ready = !!name.trim() && !!principal && !(!personal && access === 'custom' && picked.size === 0);
   const pickedBot = draft.actsAs === 'bot' && draft.bot && draft.bot !== NEW_BOT ? list?.bots.find((b) => b.bot_id === draft.bot) : undefined;
 
   const mutation = useMutation({
@@ -349,7 +353,7 @@ function CreateWorkspaceKeyDialog({
       // the person's full role — the Access select below is the workspace
       // path's alone. A personal key lists under Preferences → Personal keys,
       // not in this workspace's list.
-      if (draft.actsAs === 'me' && worksIn === 'all') {
+      if (personal) {
         const token = await createAccountToken({
           name: name.trim(),
           accountId,
@@ -552,13 +556,13 @@ function CreateWorkspaceKeyDialog({
                         <SelectItem value="workspace">{t('worksInWorkspace')}</SelectItem>
                       </SelectContent>
                     </Select>
-                    {worksIn === 'all' ? (
+                    {personal ? (
                       <p className="text-muted-foreground text-xs">{t('worksInAllHint')}</p>
                     ) : null}
                   </div>
                 ) : null}
 
-                {draft.actsAs === 'me' && worksIn === 'all' ? null : (
+                {personal ? null : (
                 <div className="space-y-1.5">
                   <Label htmlFor="workspace-key-access">{tWorkspaces('keyAccess')}</Label>
                   <Select value={access} onValueChange={(value) => setAccess(value as KeyAccess)} disabled={mutation.isPending}>

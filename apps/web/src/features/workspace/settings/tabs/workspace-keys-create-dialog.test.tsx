@@ -190,6 +190,48 @@ describe('CreateWorkspaceKeyDialog — where a key works (KRTX-4787)', () => {
     }
   });
 
+  test('a stale Custom access (zero picks) left by "Only this workspace" does not block the personal mint', async () => {
+    const root = await openCreateDialog();
+    try {
+      const selectByValue = (value: string) => {
+        const select = root.root.findAllByType('select').find((node) => node.props.value === value);
+        if (!select) throw new Error(`no select offering "${value}"`);
+        return select;
+      };
+      // Works in → "Only this workspace": the Access select appears.
+      await act(async () => {
+        selectByValue('all').props.onChange({ target: { value: 'workspace' } });
+      });
+      // Access → Custom, pick nothing: Create is disabled, the cause is visible.
+      await act(async () => {
+        selectByValue('full').props.onChange({ target: { value: 'custom' } });
+      });
+      // Works in → back to "All my workspaces": the Access select hides. The
+      // leftover Custom-with-zero-picks must not keep Create disabled — the
+      // control that would clear it is gone from the page.
+      await act(async () => {
+        selectByValue('workspace').props.onChange({ target: { value: 'all' } });
+      });
+      const input = root.root.findByProps({ id: 'workspace-key-name' });
+      await act(async () => {
+        input.props.onChange({ target: { value: 'setup-key' } });
+      });
+      const submit = root.root.findByProps({ type: 'submit' });
+      expect(submit.props.disabled).toBe(false);
+      const form = root.root.findByType('form');
+      await act(async () => {
+        form.props.onSubmit({ preventDefault() {} });
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(personalMints).toHaveLength(1);
+      expect(workspaceMints).toEqual([]);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   test('"Only this workspace" still mints a workspace key', async () => {
     const root = await openCreateDialog();
     try {

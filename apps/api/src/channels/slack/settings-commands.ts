@@ -141,7 +141,7 @@ export async function slashPanel(ctx: SlashCtx): Promise<SlashResponse> {
   const agent = chooseEffectiveAgent({ explicit: selection?.agentName ?? null, projectDefault: projectDefaultAgent });
 
   // Effective MODEL (channel override → project/account/platform), with source.
-  const gate = await channelModelContext(ctx);
+  const gate = await channelModelContext(slashChannel(ctx));
   let modelText = '`not configured` · platform default';
   if (gate) {
     const eff = await resolveEffectiveModel({

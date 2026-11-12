@@ -76,11 +76,10 @@ corrections, as three migrations in `packages/db/migrations/`:
    `manager` assignment for the same pair coexist (1 such pair existed on the
    local dataset). Rendering both would double-count every member list built on
    those names, so the views take the strongest role.
-3. **`kortix.sandbox_members` is NOT dropped.** It has 0 rows in every
-   environment, but `apps/api/src/router/services/member-spend.ts` still reads and
-   writes it for the per-member LLM spend cap. Dropping it would 42P01 the proxy.
-   That is a billing surface, not an RBAC one; retiring it belongs with that
-   feature, not here.
+3. **`kortix.sandbox_members` is NOT dropped here.** No code reads or writes it
+   since #12563 deleted the per-member spend cap (nothing signed the actor
+   header it needed; prod had 0 caps set). Its drop belongs with the rest of the
+   legacy `kortix.sandboxes` generation, not this RBAC cutover.
 
 ### Preconditions, and how each was met
 

@@ -541,7 +541,17 @@ function CreateWorkspaceKeyDialog({
                     <Label htmlFor="workspace-key-works-in">{t('worksIn')}</Label>
                     <Select
                       value={worksIn}
-                      onValueChange={(value) => setWorksIn(value as KeyReach)}
+                      onValueChange={(value) => {
+                        const next = value as KeyReach;
+                        setWorksIn(next);
+                        // The Access narrowing is the workspace path's alone;
+                        // moving to the personal path must not strand a hidden
+                        // "custom (0 picked)" behind a disabled Create.
+                        if (next === 'all') {
+                          setAccess('full');
+                          setPicked(new Set());
+                        }
+                      }}
                       disabled={mutation.isPending}
                     >
                       <SelectTrigger id="workspace-key-works-in" size="md" className="w-full">

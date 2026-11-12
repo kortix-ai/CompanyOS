@@ -107,7 +107,8 @@ mock.module('@kortix/ui/select', () => ({
     createElement('option', { value }, children),
   SelectLabel: Pass,
   SelectSeparator: Pass,
-  SelectTrigger: Pass,
+  SelectTrigger: ({ id, children }: { id?: string; children?: ReactNode }) =>
+    createElement('div', { 'data-trigger-id': id }, children),
   SelectValue: () => null,
 }));
 mock.module('@kortix/ui/access/access/index', () => ({ ...realAccess, CopyRow: Pass }));
@@ -145,22 +146,26 @@ async function openCreateDialog(): Promise<ReactTestRenderer> {
   return root;
 }
 
-async function fillAndSubmit(root: ReactTestRenderer, worksIn?: string): Promise<void> {
+async function fillAndSubmit(root: ReactTestRenderer, worksIn?: string, opts?: { submit?: boolean }): Promise<void> {
+  const submit = opts?.submit !== false;
   const input = root.root.findByProps({ id: 'workspace-key-name' });
   await act(async () => {
     input.props.onChange({ target: { value: 'setup-key' } });
   });
   if (worksIn !== undefined) {
-    // The "Works in" select is the one whose value names the personal scope.
+    // The "Works in" select is the one whose trigger id is workspace-key-works-in.
     const select = root.root
       .findAllByType('select')
-      .find((node) => node.props.value === 'all');
+      .find((node) =>
+        node.findAll((n) => n.props && n.props['data-trigger-id'] === 'workspace-key-works-in').length > 0,
+      );
     if (!select) throw new Error(`no "Works in" select offering "${worksIn}"`);
     await act(async () => {
       select.props.onChange({ target: { value: worksIn } });
     });
   }
   const form = root.root.findByType('form');
+  if (!submit) return;
   await act(async () => {
     form.props.onSubmit({ preventDefault() {} });
   });
@@ -198,6 +203,34 @@ describe('CreateWorkspaceKeyDialog — where a key works (KRTX-4787)', () => {
       expect(workspaceMints[0]?.workspaceId).toBe(WORKSPACE);
       expect(workspaceMints[0]?.name).toBe('setup-key');
       expect(personalMints).toEqual([]);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  test('flipping Works in back to All my workspaces clears the stale Access narrowing (KRTX-4787 review)', async () => {
+    const root = await openCreateDialog();
+    try {
+      // Choose Only this workspace + Access: Custom, leave Custom with nothing
+      // picked, then flip back to All my workspaces — no submit in between.
+      // The hidden Access narrowing must not strand the Create behind a
+      // disabled form (G9 request_changes, head 53fb232).
+      await fillAndSubmit(root, 'workspace', { submit: false });
+      // The Access select is the one whose trigger id is workspace-key-access.
+      const accessSelect = root.root
+        .findAllByType('select')
+        .find((node) =>
+          node.findAll((n) => n.props && n.props['data-trigger-id'] === 'workspace-key-access').length > 0,
+        );
+      if (!accessSelect) throw new Error('no Access select');
+      await act(async () => {
+        accessSelect.props.onChange({ target: { value: 'custom' } });
+      });
+      await fillAndSubmit(root, 'all');
+      // The personal path minted despite access === custom with 0 picked.
+      expect(personalMints).toHaveLength(1);
+      expect(personalMints[0]?.projectId).toBeUndefined();
+      expect(workspaceMints).toEqual([]);
     } finally {
       await act(async () => root.unmount());
     }

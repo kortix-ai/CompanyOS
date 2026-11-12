@@ -47,6 +47,7 @@ import {
   useGatewayCatalogSync,
 } from '@kortix/sdk/react';
 import { SidebarGlyph as PanelLeft } from '@kortix/ui/icons';
+import { DesktopTabStrip } from '@/features/desktop-tabs/desktop-tab-strip';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -263,7 +264,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             <CommandPalette />
           </CommandPaletteBoundary>
 
-          <ProjectSheelLayout>{children}</ProjectSheelLayout>
+          <ProjectSheelLayout projectId={projectId}>{children}</ProjectSheelLayout>
         </div>
 
         <SettingsPanel projectId={projectId} />
@@ -296,7 +297,13 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   );
 }
 
-const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
+const ProjectSheelLayout = ({
+  projectId,
+  children,
+}: {
+  projectId: string;
+  children: React.ReactNode;
+}) => {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave } = useSidebar();
   const isExpanded = !isMobile && state === 'expanded';
@@ -306,8 +313,13 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
   // OS title-bar band; on the web each view draws its own. Shared gate so the
   // two can never both render — see sidebar-opener.ts.
   const desktopShell = useDesktopShell();
+  // The desktop window's tab strip owns the title-bar band; every project view
+  // renders below it. Every window width, down to the 720 × 480 minimum (where
+  // the sidebar is a sheet and the shell's toggle still opens it).
+  const tabs = !!desktopShell;
   return (
     <div
+      data-kx-desktop-tabs-on={tabs ? '' : undefined}
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',
@@ -324,6 +336,7 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
           views that already own the band. CSS disables this fallback whenever
           the active view contains `.kx-titlebar-row`. */}
       <div aria-hidden="true" className="kx-project-shell-drag-region" />
+      {tabs && <DesktopTabStrip projectId={projectId} />}
       {/* Mobile: the sidebar is a sheet with no docked affordance, and view
           headers come and go (sessions render theirs only once booted) — so
           the opener lives here, always mounted, on every project view. The

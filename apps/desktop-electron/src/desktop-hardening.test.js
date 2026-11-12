@@ -152,12 +152,18 @@ describe('desktop lifecycle decisions', () => {
 });
 
 describe('native menu state', () => {
-  it('enables project actions only on a project and Close Tab only on a tab route', () => {
+  it('enables project actions and Close Tab on every project page, and nowhere else', () => {
     expect(
       menuState.menuContextForUrl?.('https://kortix.com/workspaces/project-1'),
     ).toEqual({
       inProject: true,
-      hasActiveTab: false,
+      hasActiveTab: true,
+    });
+    expect(
+      menuState.menuContextForUrl?.('https://kortix.com/workspaces/project-1/admin/models'),
+    ).toEqual({
+      inProject: true,
+      hasActiveTab: true,
     });
     expect(
       menuState.menuContextForUrl?.(

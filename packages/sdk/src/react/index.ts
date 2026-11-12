@@ -316,6 +316,7 @@ export * from './use-review-summary';
 export * from './use-notifications';
 export * from './use-session-list-state';
 export * from './session-cache-write';
+export * from './use-cached-workspace-sessions';
 export * from './invalidate-project';
 export * from './use-feature-flag';
 export * from './use-project-memory';

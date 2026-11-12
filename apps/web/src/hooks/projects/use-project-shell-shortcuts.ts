@@ -18,6 +18,15 @@ function hrefForTab(projectId: string, id: string) {
 }
 
 /**
+ * The desktop window draws its own tab strip (features/desktop-tabs), which
+ * handles Mod+T, Mod+W, Mod+Shift+T, Mod+1…9 and tab cycling itself. These
+ * session-tab shortcuts are the web's, and step aside while it is mounted.
+ */
+function desktopStripOwnsTabs(): boolean {
+  return typeof document !== 'undefined' && !!document.querySelector('[data-kx-desktop-tabs]');
+}
+
+/**
  * Project-shell keyboard shortcuts — equivalents to the legacy dashboard's
  * tab-bar shortcuts, scoped to the project's open session tabs.
  *
@@ -84,6 +93,7 @@ export function useProjectShellShortcuts({
         return;
       }
       if (command !== 'close-tab') return;
+      if (desktopStripOwnsTabs()) return;
       const session = pathname?.match(/^\/(?:workspaces|projects)\/[^/]+\/sessions\/([^/]+)/)?.[1];
       const customize = pathname?.match(/^\/(?:workspaces|projects)\/[^/]+\/customize/) ? CUSTOMIZE_TAB_ID : null;
       const activeTabId = session ?? customize;
@@ -95,6 +105,8 @@ export function useProjectShellShortcuts({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // The desktop tab strip owns every tab shortcut while it is mounted.
+      if (desktopStripOwnsTabs()) return;
       const modHeld = tabSwitchModifier === 'meta' ? e.metaKey : e.ctrlKey;
       const modOther = tabSwitchModifier === 'meta' ? e.ctrlKey : e.metaKey;
 

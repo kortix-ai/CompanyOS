@@ -390,11 +390,9 @@ setupLinksPublicApp.openapi(createRoute({
   if (providerKeys.length) {
     const accountId = await projectAccount(resolved.projectId);
     for (const key of providerKeys) {
-      const moved = accountId
-        ? await writeWorkspaceProviderKey({ accountId, projectId: resolved.projectId, userId: payload.uid!, ...key })
-        : null;
-      // A name no reader reads keeps the old write.
-      if (!moved) await writeSharedProjectSecret({ projectId: resolved.projectId, ...key, scope: payload.scope, createdBy: payload.uid });
+      // A name no gateway reader reads has no home since the legacy store
+      // retired: nothing is written for it.
+      if (accountId) await writeWorkspaceProviderKey({ accountId, projectId: resolved.projectId, userId: payload.uid!, ...key });
     }
   }
 

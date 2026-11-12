@@ -119,7 +119,8 @@ describe('resolveCodexCredential consumer boundary', () => {
         sessionId: SESSION_ID,
       }),
     ).toEqual({ access: 'new-access', accountId: undefined });
-    expect(updates.map((update) => update.table)).toEqual([projectSecrets]);
+    // The legacy store is retired: a refreshed project-secret login is not written back.
+    expect(updates.map((update) => update.table)).toEqual([]);
     expect(audits).toEqual([
       expect.objectContaining({
         action: 'secret.consumer.refreshed',

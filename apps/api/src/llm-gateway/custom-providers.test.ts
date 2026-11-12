@@ -14,12 +14,15 @@ const realSecrets = await import('../projects/secrets');
 mock.module('../projects/secrets', () => ({ ...realSecrets, resolveProjectSecretsForConsumer }));
 let modelsResponse: () => Response = () => Response.json({ data: [] });
 const safeEgressFetch = mock(async (_url: string, _init?: { headers?: Record<string, string> }) => modelsResponse());
-// No named key in this suite: the one key reader (credentials/gateway-keys.ts)
-// reads the named store first, whatever pooled_provider_secrets says.
+// The one key reader (credentials/gateway-keys.ts) reads only the named
+// store: the suite's `keys` arrive as named accounts.
 const realAccountResource = await import('../secrets/account-resource');
+const resolveProjectSharedProviderSecrets = mock(async (_input: { name: string }) => ({
+  coolingDown: false, withheld: 0, secrets: keys.map((k) => ({ secretId: k.secretId ?? k.identifier, label: 'Workspace key', value: k.value })),
+}));
 mock.module('../secrets/account-resource', () => ({
   ...realAccountResource,
-  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  resolveProjectSharedProviderSecrets,
   listGrantedGatewaySecretNames: async () => [],
 }));
 const realGuard = await import('../shared/ssrf-guard');
@@ -168,7 +171,7 @@ describe('resolveCandidates for a custom provider', () => {
       egress: { allowPrivateHosts: [] },
     });
     expect(descriptor!.omitAuthorization).toBeUndefined();
-    expect(resolveProjectSecretsForConsumer.mock.calls[0]![0]).toMatchObject({ name: 'CUSTOM_RAILWAY_API_KEY', consumer: 'llm_gateway' });
+    expect(resolveProjectSharedProviderSecrets.mock.calls.at(-1)![0]).toMatchObject({ name: 'CUSTOM_RAILWAY_API_KEY' });
   });
 
   test('without a key the request carries no Authorization header', async () => {

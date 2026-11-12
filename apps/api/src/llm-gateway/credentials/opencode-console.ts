@@ -20,15 +20,13 @@
 
 import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
-import { accountSecretResources, projectSecrets } from '@kortix/db';
+import { accountSecretResources } from '@kortix/db';
 import type { ProviderKind } from '@kortix/llm-gateway';
 import { db } from '../../shared/db';
-import { decryptProjectSecret, encryptProjectSecret } from '../../projects/secrets/envelope';
 import { decryptAccountSecret } from '../../secrets/account-resource';
 import { recordAuditEvent } from '../../shared/audit';
 import { isPermanentRefreshRejection, refreshErrorCode } from './codex-core';
 import { writeRotatedAccountLogin } from './rotating-login-write';
-import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
 
 const CONSOLE = 'https://opencode.ai/console';
 const CLIENT_ID = 'opencode-cli';
@@ -175,10 +173,6 @@ async function refreshAndPersist(row: OpencodeLoginRow, current: OpencodeLogin, 
       refreshOf: (stored) => parseOpencodeLogin(stored)?.refresh,
       value,
     });
-  } else {
-    await db.update(projectSecrets)
-      .set({ valueEnc: encryptProjectSecret(row.projectId, value), updatedAt: new Date() })
-      .where(eq(projectSecrets.secretId, row.secretId));
   }
   await recordRefreshAudit(row, 'success', res.status);
   return next;
@@ -252,20 +246,8 @@ async function loadOpencodeLoginRow(input: { accountId: string; projectId: strin
       return null;
     }
   }
-  const [secret] = await db.select({ valueEnc: projectSecrets.valueEnc })
-    .from(projectSecrets)
-    // A legacy login that moved to the named store is refreshed only there:
-    // refreshing both copies would revoke one copy's rotated refresh token.
-    .where(and(
-      eq(projectSecrets.projectId, input.projectId), eq(projectSecrets.secretId, input.secretId),
-      eq(projectSecrets.consumer, 'llm_gateway'), legacySecretNotMoved(projectSecrets.secretId),
-    )).limit(1);
-  if (!secret) return null;
-  try {
-    return { ...base, storage: 'project', value: decryptProjectSecret(input.projectId, secret.valueEnc) };
-  } catch {
-    return null;
-  }
+  // A legacy project-secret login is not read: the legacy store is retired.
+  return null;
 }
 
 function sha256(value: string): string {

@@ -9,15 +9,16 @@ import { SecretUndecryptableError } from '../../secrets/undecryptable';
 import { decryptProjectSecret } from './envelope';
 import { secretAudienceRank } from './grant-policy';
 import { accountKeyOfWorkspace } from '../../workspaces/rows';
-import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
+import { sql } from 'drizzle-orm';
 
 /**
- * A legacy `llm_gateway` row that moved to the named store
- * (`secrets/llm-credential-move.ts`) is never read again: its named account
- * serves. Every other consumer reads as before.
+ * LLM provider keys live only in the named store (`account_secret_resources`,
+ * Models → Providers). The legacy `llm_gateway` rows were moved by
+ * `scripts/llm-credential-backfill.ts` and are never read here. Every other
+ * consumer reads as before.
  */
 function notMovedFor(consumer: SecretConsumer) {
-  return consumer === 'llm_gateway' ? [legacySecretNotMoved(projectSecrets.secretId)] : [];
+  return consumer === 'llm_gateway' ? [sql`false`] : [];
 }
 
 export interface ProjectSecretConsumerRead {

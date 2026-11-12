@@ -79,12 +79,12 @@ test('usage refresh uses the same authorized project context', async () => {
   }
 });
 
-test('subscription discovery includes the active legacy store and excludes retired Claude logins', async () => {
+test('subscription discovery lists only named accounts: the legacy store and Claude logins are retired', async () => {
   const response = await app.request(`/v1/accounts/${project.account_id}/subscription-connections?project_id=${project.project_id}`);
   expect(response.status).toBe(200);
   const body = await response.json();
-  expect(body.subscriptions.map((s: { storage: string }) => s.storage).sort()).toEqual(['account_resource', 'account_resource', 'project']);
-  expect(body.subscriptions.find((s: { storage: string }) => s.storage === 'project').secret_id).toBe(LEGACY_CODEX);
+  expect(body.subscriptions.map((s: { storage: string }) => s.storage).sort()).toEqual(['account_resource', 'account_resource']);
+  expect(JSON.stringify(body)).not.toContain(LEGACY_CODEX);
   expect(JSON.stringify(body)).not.toContain('synthetic-access');
   expect(JSON.stringify(body)).not.toContain('synthetic-claude-token');
 });
@@ -98,15 +98,15 @@ test('project context cannot expose private or foreign subscriptions or bypass p
   expect((await app.request(`${path()}/${ids.claude}/usage`, { method: 'POST' })).status).toBe(403);
 });
 
-test('disconnect deletes the caller retired Claude login from storage', async () => {
+test('disconnect leaves the retired Claude login table to the purge script', async () => {
   const storedLogin = () => db.select({ userId: claudeSubscriptionLogins.userId }).from(claudeSubscriptionLogins).where(and(
     eq(claudeSubscriptionLogins.accountId, project.account_id),
     eq(claudeSubscriptionLogins.userId, MEMBER),
   ));
-  expect(await storedLogin()).toHaveLength(1);
   const disconnected = await app.request(`/v1/projects/${project.project_id}/claude-subscription`, { method: 'DELETE' });
   expect(disconnected.status).toBe(200);
-  expect(await storedLogin()).toHaveLength(0);
+  // `scripts/legacy-credential-purge.ts` empties the table; no route reads or writes it.
+  expect(await storedLogin()).toHaveLength(1);
 });
 
 test('an account owner cannot use a foreign tenant project id for subscription discovery or refresh', async () => {

@@ -340,6 +340,7 @@
       "repositoryLabel": "Repozitorijum",
       "loadingOptions": "Učitavanje opcija repozitorijuma…",
       "managedUnavailable": "Repozitorijumi kojima upravlja Kortix nisu dostupni na ovoj instanci. Administrator platforme to podešava u administratorskoj konzoli.",
+      "githubAfterCreate": "Da biste koristili svoj GitHub za sledeće radne prostore, povežite ga u Podešavanja radnog prostora › Git kada ovaj bude napravljen.",
       "installationUnreachable": "Ova GitHub veza više ne radi. Povežite je ponovo da biste izlistali repozitorijume.",
       "reconnect": "Ponovo poveži u Git podešavanjima",
       "managedImportLabel": "Uvezi postojeći upravljani repozitorijum",

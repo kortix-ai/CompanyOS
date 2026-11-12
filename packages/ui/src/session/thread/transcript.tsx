@@ -10,6 +10,7 @@
 // ============================================================================
 
 
+import { STALE_RUNTIME_DELIVERY_ERROR } from '@kortix/shared';
 import { isQuestionTool } from '@kortix/sdk';
 
 import { UnifiedMarkdown } from '../../markdown/unified-markdown';
@@ -80,6 +81,7 @@ import {
   type QueuedPromptState,
   QueuedPromptFailure,
   QueuedPromptProgress,
+  QueuedPromptRecovery,
   type QueuedPromptStatusState,
 } from '../turn/queued-prompt-bubbles';
 import { ShowGroupRenderer } from '../tool/show-group-renderer';
@@ -1636,7 +1638,7 @@ function TurnSessionReport({ report }: { report: SessionReport }) {
 /** The user side of a turn: the report card, the system-pill line, and the
  *  user bubble (hidden for notification-only turns). */
 function TurnUserBlock(
-  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
+  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'projectId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
     model: TurnModelState;
     queueTone: TurnQueueTone;
     userContent: TurnUserContentState;
@@ -1676,7 +1678,7 @@ function TurnUserBlock(
 
 /** The user message bubble — dimmed while the prompt waits in the queue. */
 function TurnUserBubble(
-  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
+  props: Pick<SessionTurnProps, 'turn' | 'author' | 'showAuthor' | 'pending' | 'interruptedBeforeRun' | 'pendingPrompt' | 'onRetryQueued' | 'onRemoveQueued' | 'queuedPromptViewer' | 'pendingAttachments' | 'uploadStatus' | 'pendingText' | 'agentNames' | 'commandMessages' | 'commands' | 'sessionId' | 'projectId' | 'ownsPlan' | 'onRewind' | 'rewindDisabled' | 'editingText' | 'editPending' | 'onEditCancel' | 'onEditSend' | 'onOpenPastedContent'> & {
     queueTone: TurnQueueTone;
     userContent: TurnUserContentState;
   },
@@ -1685,7 +1687,7 @@ function TurnUserBubble(
   const {
     turn, author, showAuthor, pending, pendingPrompt, interruptedBeforeRun,
     pendingAttachments, uploadStatus, pendingText, agentNames,
-    commandMessages, commands, sessionId, ownsPlan, onRewind, rewindDisabled,
+    commandMessages, commands, sessionId, projectId, ownsPlan, onRewind, rewindDisabled,
     editingText, editPending, onEditCancel, onEditSend,
     onRetryQueued, onRemoveQueued, queuedPromptViewer, onOpenPastedContent,
   } = props;
@@ -1727,7 +1729,9 @@ function TurnUserBubble(
           onEditSend={onEditSend}
           onOpenPastedContent={onOpenPastedContent}
           deliveryStatus={
-            queuedStatus === 'failed' ? (
+            pendingPrompt?.last_error === STALE_RUNTIME_DELIVERY_ERROR ? (
+              <QueuedPromptRecovery projectId={projectId} onRemove={onRemoveQueued && promptActions.removable ? () => onRemoveQueued(pendingPrompt.prompt_id) : undefined} />
+            ) : queuedStatus === 'failed' ? (
               <QueuedPromptFailure
                 lastError={pendingPrompt?.last_error}
                 onRetry={

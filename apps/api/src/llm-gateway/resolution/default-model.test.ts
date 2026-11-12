@@ -66,6 +66,8 @@ beforeEach(() => {
   spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(
     async () => connectedSecretNames,
   );
+  spyOn(accountResourceModule, 'listUsableGatewaySecrets').mockImplementation((async () =>
+    connectedSecretNames.map((name, i) => ({ secretId: `c${i}`, providerId: 'p', name, label: name, accessMode: 'project', verifyStatus: null }))) as never);
 });
 
 afterEach(() => {
@@ -262,7 +264,7 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(shared).toEqual({ model: null, source: 'platform' });
     expect(principals[0]).toMatchObject({ userId: 'u1', personalUserId: null });
     // Only shared project keys count for the fallback provider as well.
-    expect(accountResourceModule.listGrantedGatewaySecretNames).toHaveBeenCalledWith('a1', 'p1', 'u1', null);
+    expect(accountResourceModule.listUsableGatewaySecrets).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'a1', projectId: 'p1', userId: 'u1', grantUserId: null }));
 
     const own = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });
     expect(own).toEqual({ model: 'codex/gpt-6-astra', source: 'account' });
@@ -625,12 +627,6 @@ describe('the default fallback skips a provider whose every key the provider ref
 
   test('one refused key beside one unchecked key of the same provider: still a default', async () => {
     keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }, { name: 'GROQ_API_KEY', verifyStatus: 'unknown' }];
-    expect((await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true })).model?.startsWith('groq/')).toBe(true);
-  });
-
-  test('a legacy key of the refused name still counts (it carries no check)', async () => {
-    keys = [{ name: 'GROQ_API_KEY', verifyStatus: 'invalid' }];
-    connectedSecretNames = ['GROQ_API_KEY'];
     expect((await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: true })).model?.startsWith('groq/')).toBe(true);
   });
 

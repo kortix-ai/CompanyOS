@@ -50,25 +50,17 @@ export async function connectedGatewayKeyNames(scope: GatewayKeyScope): Promise<
 /**
  * The key names a default model may come from: every name `scope` reaches,
  * except a name whose every named key the provider refused at its last check
- * (`verify_status = 'invalid'`) and that has no legacy value. A key never
- * checked or checked `unknown` counts. The gateway's request-time candidates
- * do not use this: a model named explicitly still reaches the provider, and
- * the provider's refusal reaches the caller.
+ * (`verify_status = 'invalid'`). A key never checked or checked `unknown`
+ * counts. The gateway's request-time candidates do not use this: a model named
+ * explicitly still reaches the provider, and the provider's refusal reaches the
+ * caller.
  */
 export async function defaultableGatewayKeyNames(scope: GatewayKeyScope): Promise<Set<string>> {
-  const [named, legacy] = await Promise.all([
-    scope.userId
-      ? listUsableGatewaySecrets({
-          accountId: scope.accountId, projectId: scope.projectId, userId: scope.userId, grantUserId: scope.grantUserId,
-        }).catch(() => [])
-      : [],
-    listProjectSecretNamesForConsumer({
-      projectId: scope.projectId,
-      principalUserId: scope.legacyPersonalUserId === undefined ? scope.grantUserId : scope.legacyPersonalUserId,
-      consumer: 'llm_gateway',
-    }).catch(() => [] as string[]),
-  ]);
-  return new Set([...named.filter((key) => key.verifyStatus !== 'invalid').map((key) => key.name), ...legacy]);
+  if (!scope.userId) return new Set();
+  const named = await listUsableGatewaySecrets({
+    accountId: scope.accountId, projectId: scope.projectId, userId: scope.userId, grantUserId: scope.grantUserId,
+  }).catch(() => []);
+  return new Set(named.filter((key) => key.verifyStatus !== 'invalid').map((key) => key.name));
 }
 
 export interface GatewayKeyValue {

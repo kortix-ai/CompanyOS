@@ -196,9 +196,11 @@ export function ConnectorIntakeView({
     : connected
       ? fill(alreadyConnected ? copy.alreadyConnectedTitle : copy.connectedTitle, { app })
       : opened
-        ? returned
-          ? tSignIn('checkingTitle')
-          : copy.openedTitle
+        ? blockedUrl
+          ? tSignIn('blockedTitle', { app })
+          : returned
+            ? tSignIn('checkingTitle')
+            : copy.openedTitle
         : headline?.project
           ? fill(copy.titleToProject, { app, project: headline.project })
           : fill(copy.title, { app });
@@ -208,8 +210,10 @@ export function ConnectorIntakeView({
     : connected
       ? fill(copy.connectedDescription, { app })
       : opened
-        ? returned
-          ? tSignIn('checkingDescription', { app })
+        ? blockedUrl
+          ? tSignIn('blockedDescription')
+          : returned
+            ? tSignIn('checkingDescription', { app })
           : fill(copy.openedDescription, { app })
         : phase === 'loading'
           ? copy.loading
@@ -247,8 +251,7 @@ export function ConnectorIntakeView({
           {blockedUrl ? (
             // A click on a link is its own user activation, so this opens
             // where the blocked window did not.
-            <div className="space-y-2" data-testid="connector-intake-blocked">
-              <p className="text-muted-foreground text-xs text-pretty">{tSignIn('popupBlocked')}</p>
+            <div data-testid="connector-intake-blocked">
               <Button asChild className="w-full">
                 <a href={blockedUrl} target="_blank" rel="noopener noreferrer">
                   <ArrowSquareOutIcon className="size-4" />

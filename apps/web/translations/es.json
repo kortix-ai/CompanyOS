@@ -26818,7 +26818,6 @@
     "capMember": "Limita el gasto del gateway de {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Tu navegador bloqueó la ventana de inicio de sesión.",
     "openSignIn": "Abrir el inicio de sesión de {app}",
     "checkingTitle": "Finalizando el inicio de sesión",
     "checkingDescription": "Kortix comprueba tu inicio de sesión en {app}. Esta página se actualiza sola.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Conectado como {account}",
     "connected": "Conectado",
     "connect": "Conectar",
-    "cardFailed": "No se pudo conectar {app}. Inténtalo de nuevo."
+    "cardFailed": "No se pudo conectar {app}. Inténtalo de nuevo.",
+    "blockedTitle": "Abre {app} para iniciar sesión",
+    "blockedDescription": "Tu navegador bloqueó la ventana de inicio de sesión. Ábrela con el botón de abajo. Esta página se actualiza sola."
   }
 }

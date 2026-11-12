@@ -26818,7 +26818,6 @@
     "capMember": "Plafonnez les dépenses du gateway de {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Votre navigateur a bloqué la fenêtre de connexion.",
     "openSignIn": "Ouvrir la connexion {app}",
     "checkingTitle": "Finalisation de la connexion",
     "checkingDescription": "Kortix vérifie votre connexion à {app}. Cette page se met à jour toute seule.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Connecté en tant que {account}",
     "connected": "Connecté",
     "connect": "Connecter",
-    "cardFailed": "Impossible de connecter {app}. Réessayez."
+    "cardFailed": "Impossible de connecter {app}. Réessayez.",
+    "blockedTitle": "Ouvrez {app} pour vous connecter",
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
   }
 }

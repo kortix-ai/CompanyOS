@@ -10088,7 +10088,6 @@ const catalog = {
     "capMember": "Cap gateway spend for {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Your browser blocked the sign-in window.",
     "openSignIn": "Open {app} sign-in",
     "checkingTitle": "Finishing sign-in",
     "checkingDescription": "Kortix checks your {app} sign-in. This page updates by itself.",
@@ -10103,7 +10102,9 @@ const catalog = {
     "connectedAs": "Connected as {account}",
     "connected": "Connected",
     "connect": "Connect",
-    "cardFailed": "Could not connect {app}. Try again."
+    "cardFailed": "Could not connect {app}. Try again.",
+    "blockedTitle": "Open {app} to sign in",
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
   }
 };
 

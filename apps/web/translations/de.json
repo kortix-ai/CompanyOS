@@ -26818,7 +26818,6 @@
     "capMember": "Begrenze die Gateway-Ausgaben für {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Dein Browser hat das Anmeldefenster blockiert.",
     "openSignIn": "{app}-Anmeldung öffnen",
     "checkingTitle": "Anmeldung wird abgeschlossen",
     "checkingDescription": "Kortix prüft deine {app}-Anmeldung. Diese Seite aktualisiert sich selbst.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Verbunden als {account}",
     "connected": "Verbunden",
     "connect": "Verbinden",
-    "cardFailed": "{app} konnte nicht verbunden werden. Versuche es erneut."
+    "cardFailed": "{app} konnte nicht verbunden werden. Versuche es erneut.",
+    "blockedTitle": "{app} zur Anmeldung öffnen",
+    "blockedDescription": "Dein Browser hat das Anmeldefenster blockiert. Öffne es mit der Schaltfläche unten. Diese Seite aktualisiert sich selbst."
   }
 }

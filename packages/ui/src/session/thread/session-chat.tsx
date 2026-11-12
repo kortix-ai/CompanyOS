@@ -4148,10 +4148,10 @@ export function SessionChat({
         <SessionAccessPrompt projectId={projectId ?? ''} asks={accessAsks} onDockedChange={setAccessDocked} />
         {/* A connector sign-in the agent started: a Connect button that
             finishes it. Self-hides when nothing's pending. */}
-        {projectId ? (
+        {projectId && projectSessionId ? (
           <SessionConnectPrompt
             projectId={projectId}
-            sessionId={sessionId}
+            sessionId={projectSessionId}
             busy={effectiveBusy}
             onDockedChange={setConnectDocked}
           />
@@ -4190,6 +4190,7 @@ export function SessionChat({
       projectId,
       accessAsks,
       effectiveBusy,
+      projectSessionId,
       sessionId,
       sessionScopeAgentName,
       pendingPermissions,

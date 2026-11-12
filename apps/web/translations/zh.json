@@ -26818,7 +26818,6 @@
     "capMember": "为 {who} 的网关支出设置上限。"
   },
   "connectSignIn": {
-    "popupBlocked": "你的浏览器阻止了登录窗口。",
     "openSignIn": "打开 {app} 登录",
     "checkingTitle": "正在完成登录",
     "checkingDescription": "Kortix 正在检查你的 {app} 登录。此页面会自动更新。",
@@ -26833,6 +26832,8 @@
     "connectedAs": "已连接为 {account}",
     "connected": "已连接",
     "connect": "连接",
-    "cardFailed": "无法连接 {app}。请重试。"
+    "cardFailed": "无法连接 {app}。请重试。",
+    "blockedTitle": "打开 {app} 登录",
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
   }
 }

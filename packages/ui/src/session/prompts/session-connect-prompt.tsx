@@ -28,6 +28,7 @@ import { CheckIcon, PlugsConnectedIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from '../../i18n';
+import { cn } from '../../lib/utils';
 import { runConnectLinkFlow } from '../../internal/hooks/connectors/use-connect-link';
 import { ConnectorAppMark } from '../../markdown/setup-links/connector-handshake';
 import { Button } from '../../primitives/button';
@@ -125,12 +126,15 @@ export function SessionConnectNotice({
   onSettled: () => void;
 }) {
   const t = useTranslations('connectSignIn');
+  const allConnected = requests.every((request) => request.connected);
   return (
     // `w-full`, or the composer's `items-center` strip shrinks this to its content width.
     <div className="relative isolate z-10 w-full" data-testid="session-connect-prompt">
       <div className="text-muted-foreground flex min-h-6 items-center gap-1.5 px-3 py-1 text-xs">
-        <PlugsConnectedIcon className="text-kortix-orange size-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t('cardHeadline')}</span>
+        <PlugsConnectedIcon
+          className={cn('size-3.5 shrink-0', allConnected ? 'text-kortix-green' : 'text-kortix-orange')}
+        />
+        <span className="min-w-0 truncate">{allConnected ? t('signInFinished') : t('cardHeadline')}</span>
       </div>
       <ul className="flex flex-col gap-1 px-3 pt-0.5 pb-2.5">
         {requests.map((request) => (

@@ -16,6 +16,8 @@ import {
   pipedreamFinalizeConnection,
   reconcileConnection,
 } from '../rest/projects-client/connectors';
+import { backendApi } from '../http/api-client';
+import { unwrap } from '../rest/projects-client/shared';
 
 /** How often the finalize route is polled while the person signs in. */
 export const CONNECT_LINK_POLL_INTERVAL_MS = 2_000;
@@ -237,10 +239,31 @@ export interface ConnectionSignInDeps {
   ) => Promise<ConnectorFinalizeResult>;
 }
 
+/**
+ * A connection-scoped connect route, without the client's error toast: its 409
+ * for an effective default account is expected, and the steps then use the
+ * connector route. The caller reports any other error itself.
+ */
+async function quietConnectionRoute<T>(
+  projectId: string,
+  connectionId: string,
+  operation: 'connect' | 'connect/finalize',
+): Promise<T> {
+  return unwrap(
+    await backendApi.post<T>(
+      `/workspaces/${projectId}/connections/${connectionId}/${operation}`,
+      {},
+      { showErrors: false },
+    ),
+  );
+}
+
 /** The REST calls {@link connectionSignInSteps} makes by default. */
 export const connectionSignInRestDeps: ConnectionSignInDeps = {
-  connectConnection: (projectId, connectionId) => pipedreamConnectConnection(projectId, connectionId),
-  finalizeConnection: pipedreamFinalizeConnection,
+  connectConnection: (projectId, connectionId) =>
+    quietConnectionRoute<ConnectorConnectResult>(projectId, connectionId, 'connect'),
+  finalizeConnection: (projectId, connectionId) =>
+    quietConnectionRoute<ConnectorFinalizeResult>(projectId, connectionId, 'connect/finalize'),
   connectConnector: connectorConnect,
   finalizeConnector: connectorFinalize,
 };

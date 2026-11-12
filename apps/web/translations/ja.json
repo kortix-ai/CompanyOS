@@ -26818,7 +26818,6 @@
     "capMember": "{who} のゲートウェイ支出に上限を設定します。"
   },
   "connectSignIn": {
-    "popupBlocked": "ブラウザがサインインウィンドウをブロックしました。",
     "openSignIn": "{app} のサインインを開く",
     "checkingTitle": "サインインを完了しています",
     "checkingDescription": "Kortix が {app} のサインインを確認します。このページは自動で更新されます。",
@@ -26833,6 +26832,8 @@
     "connectedAs": "{account} として接続済み",
     "connected": "接続済み",
     "connect": "接続",
-    "cardFailed": "{app} を接続できませんでした。もう一度お試しください。"
+    "cardFailed": "{app} を接続できませんでした。もう一度お試しください。",
+    "blockedTitle": "{app} を開いてサインイン",
+    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。"
   }
 }

@@ -26818,7 +26818,6 @@
     "capMember": "Ограничи потрошњу гејтвеја за {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Pregledač je blokirao prozor za prijavu.",
     "openSignIn": "Otvori prijavu za {app}",
     "checkingTitle": "Završavanje prijave",
     "checkingDescription": "Kortix proverava tvoju prijavu za {app}. Ova stranica se sama osvežava.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Povezano kao {account}",
     "connected": "Povezano",
     "connect": "Poveži",
-    "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo."
+    "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo.",
+    "blockedTitle": "Otvori {app} za prijavu",
+    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava."
   }
 }

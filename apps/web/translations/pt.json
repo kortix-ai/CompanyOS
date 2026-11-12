@@ -26818,7 +26818,6 @@
     "capMember": "Limite os gastos do gateway de {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Seu navegador bloqueou a janela de login.",
     "openSignIn": "Abrir login do {app}",
     "checkingTitle": "Concluindo o login",
     "checkingDescription": "O Kortix verifica seu login no {app}. Esta página se atualiza sozinha.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Conectado como {account}",
     "connected": "Conectado",
     "connect": "Conectar",
-    "cardFailed": "Não foi possível conectar {app}. Tente novamente."
+    "cardFailed": "Não foi possível conectar {app}. Tente novamente.",
+    "blockedTitle": "Abra o {app} para fazer login",
+    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha."
   }
 }

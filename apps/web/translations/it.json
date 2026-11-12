@@ -26818,7 +26818,6 @@
     "capMember": "Limita la spesa del gateway per {who}."
   },
   "connectSignIn": {
-    "popupBlocked": "Il browser ha bloccato la finestra di accesso.",
     "openSignIn": "Apri l'accesso a {app}",
     "checkingTitle": "Completamento dell'accesso",
     "checkingDescription": "Kortix verifica il tuo accesso a {app}. Questa pagina si aggiorna da sola.",
@@ -26833,6 +26832,8 @@
     "connectedAs": "Connesso come {account}",
     "connected": "Connesso",
     "connect": "Connetti",
-    "cardFailed": "Impossibile connettere {app}. Riprova."
+    "cardFailed": "Impossibile connettere {app}. Riprova.",
+    "blockedTitle": "Apri {app} per accedere",
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola."
   }
 }

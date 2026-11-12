@@ -70,12 +70,30 @@ describe('kortix_agents', () => {
 
   test('create: sends the whole block in a file (the CLI refuses `--file -`) and shows every new setting', async () => {
     fakeKortix(`'agents config writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent writer"}}' >&2; exit 1 ;;
-  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'stdin.json'))}; echo '{"ok":true,"agent":"writer","block":{"description":"Writes posts","behavior":{"prompt":"You write."},"connectors":["gmail"]}}' ;;`.replaceAll('$BIN', bin))
+  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'stdin.json'))}; echo '{"ok":true,"agent":"writer","block":{"description":"Writes posts","behavior":{"prompt":"You write.","mode":"subagent","hidden":true},"connectors":["gmail"]}}' ;;`.replaceAll('$BIN', bin))
     const result = await run('kortix_agents', { action: 'create', name: 'writer', description: 'Writes posts', instructions: 'You write.', connectors: ['gmail'] })
     expect(result.card.title).toBe('Created writer')
     // The PUT schema has no top-level `description`: it lives in `behavior` with the prompt.
-    expect(JSON.parse(readFileSync(join(bin, 'stdin.json'), 'utf8'))).toEqual({ behavior: { prompt: 'You write.', description: 'Writes posts' }, connectors: ['gmail'] })
+    // KRTX-4810: an agent My Kortix creates is a subagent, hidden from the pickers, until the person promotes it.
+    expect(JSON.parse(readFileSync(join(bin, 'stdin.json'), 'utf8'))).toEqual({ behavior: { prompt: 'You write.', description: 'Writes posts', mode: 'subagent', hidden: true }, connectors: ['gmail'] })
     expect(result.card.changes).toContainEqual({ field: 'connectors', before: null, after: 'gmail' })
+    expect(result.card.changes).toContainEqual({ field: 'mode', before: null, after: 'subagent' })
+  })
+
+  test('create: the person asked for a primary agent — no subagent default, nothing hidden', async () => {
+    fakeKortix(`'agents config primary-writer --json') echo '{"kortix_error":{"kind":"failed","status":404,"message":"No agent primary-writer"}}' >&2; exit 1 ;;
+  'agents config primary-writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'primary.json'))}; echo '{"ok":true,"agent":"primary-writer","block":{}}' ;;`.replaceAll('$BIN', bin))
+    const result = await run('kortix_agents', { action: 'create', name: 'primary-writer', description: 'Writes posts', mode: 'primary' })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'primary.json'), 'utf8'))).toEqual({ behavior: { description: 'Writes posts', mode: 'primary' } })
+  })
+
+  test('update: the role defaults never fire — an existing agent keeps its declared mode and pickers choice', async () => {
+    fakeKortix(`'agents config writer --json') echo '{"block":{"behavior":{"prompt":"Old.","mode":"primary"}}}' ;;
+  'agents config writer --file '*' --json') cp "$5" ${JSON.stringify(join('$BIN', 'updated.json'))}; echo '{"ok":true,"agent":"writer","block":{"behavior":{"prompt":"New.","mode":"primary"}}}' ;;`.replaceAll('$BIN', bin))
+    const result = await run('kortix_agents', { action: 'update', name: 'writer', instructions: 'New.' })
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(readFileSync(join(bin, 'updated.json'), 'utf8'))).toEqual({ behavior: { prompt: 'New.', mode: 'primary' } })
   })
 
   test('update sends back only the keys the PUT accepts, and shows what changed', async () => {

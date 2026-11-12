@@ -37,10 +37,10 @@ interface Captured {
  *  the TTY flags ensureTTY() requires. */
 function attachTty(): Captured {
   const stdin = new PassThrough();
-  (stdin as unknown as { isTTY: boolean }).isTTY = true;
+  Object.defineProperty(stdin, 'isTTY', { value: true });
   Object.defineProperty(process, 'stdin', { value: stdin, configurable: true });
   const stdout = new PassThrough();
-  (stdout as unknown as { isTTY: boolean }).isTTY = true;
+  Object.defineProperty(stdout, 'isTTY', { value: true });
   const chunks: Buffer[] = [];
   stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
   Object.defineProperty(process, 'stdout', { value: stdout, configurable: true });

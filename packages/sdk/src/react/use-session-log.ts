@@ -385,6 +385,23 @@ export function useSessionLogSync(
     const reload = async (): Promise<void> => {
       if (!(await loadLive())) await load();
     };
+    // The re-read a turn end asks for. A box read already on the wire started before the turn
+    // ended and answers a snapshot without the finished reply: read again once it settles.
+    const reloadAfterTurnEnd = () => {
+      const stale = liveRead;
+      // A box read that failed reads the API's page: a wedged box must not cost two proxy budgets.
+      void (stale ? stale.then(async (ok) => void (ok ? await reload() : await load())) : reload());
+    };
+    // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
+    // frame of a connection names the last end at join, which is not news.
+    const endedTurn = (frame: { type: string; payload?: unknown }): boolean => {
+      if (frame.type !== 'kortix.control.turn') return false;
+      const payload = frame.payload as { last_ended?: { turn_token?: string } | null } | null;
+      const ended = payload?.last_ended?.turn_token ?? null;
+      const seen = lastEnded;
+      lastEnded = ended;
+      return seen !== undefined && ended !== seen;
+    };
     // Re-read after a reconnect (`up` after a drop); the first report is the connection already up.
     const onReconnect = (run: () => void) => {
       let connected = true;
@@ -411,6 +428,11 @@ export function useSessionLogSync(
         // wire deltas are idempotent when another runtime consumer also sees them.
         onRuntimeEvent: (event) => {
           if (event.type.startsWith('log.')) store().applySessionLogEvent(sessionId, event);
+        },
+        // A missed final record converges through the page at turn end (F-012).
+        onControl: (frame) => {
+          if (endedTurn(frame)) reloadAfterTurnEnd();
+
         },
         onConnectionChange: onReconnect(() => void reload()),
         onRuntimeResync: () => void reload(),
@@ -475,11 +497,8 @@ export function useSessionLogSync(
       join({
         onControl: (frame) => {
           if (frame.type !== 'kortix.control.turn') return;
-          const payload = frame.payload as { turns?: { turn_token?: string }[]; last_ended?: { turn_token?: string } | null } | null;
-          const ended = payload?.last_ended?.turn_token ?? null;
-          const seen = lastEnded;
-          lastEnded = ended;
-          if (seen !== undefined && ended !== seen) return void attempt();
+          if (endedTurn(frame)) return void attempt();
+          const payload = frame.payload as { turns?: { turn_token?: string }[] } | null;
           // A running turn (also one the state at join holds): its user message frame may have
           // passed before this tab's runtime connection, which is live-only. pi journals while a
           // turn runs, so the page holds that message after the next mid-turn post.

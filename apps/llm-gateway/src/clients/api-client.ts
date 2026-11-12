@@ -305,7 +305,10 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       // can name the caller's own connection — one member's refusal never answers another member's request.
       const caller = principal.personalUserId === undefined ? principal.userId : principal.personalUserId;
       const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${caller ?? ''}\u0000${principal.sessionId ?? ''}\u0000${principal.keyId ?? ''}\u0000${model.slice(0, MEMOIZABLE_MODEL_MAX)}`;
-      const remembered = refusalMemo.get(key);
+      // An oversized id is never answered from the memo either: a longer id that 200-prefix-matches a remembered one
+      // shares its key, and the entry's message names the shorter id.
+      const memoizable = model.length <= MEMOIZABLE_MODEL_MAX;
+      const remembered = memoizable && refusalMemo.get(key);
       if (remembered) {
         if (Date.now() >= remembered.until) refusalMemo.delete(key);
         else throw remembered.error;
@@ -334,7 +337,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
         // the persistent codes (a lineup without the model, a plan gate, a
         // disconnected provider) the issue's signal needs.
         const transient = error.retryAfterSeconds !== undefined;
-        if (!transient && model.length <= MEMOIZABLE_MODEL_MAX) {
+        if (!transient && memoizable) {
           // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
           if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
             const oldest = refusalMemo.keys().next().value;

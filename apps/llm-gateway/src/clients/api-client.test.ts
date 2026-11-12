@@ -659,6 +659,48 @@ describe('ApiClient.resolveUpstream remembers a typed refusal', () => {
     expect(calls).toBe(2);
   });
 
+  // The key truncates at 200 chars, so a longer id that 200-prefix-matches a remembered one shares its key — and
+  // the entry's message names the shorter id. An oversized id is never answered from the memo at all.
+  test('an oversized id is not answered from a look-alike memo entry either', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return refused();
+    });
+    const exact = 'm'.repeat(200);
+    await expect(c.resolveUpstream(principal, exact)).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(1);
+    await expect(c.resolveUpstream(principal, `${exact}tail`)).rejects.toBeInstanceOf(GatewayResolutionError);
+    expect(calls).toBe(2);
+  });
+
+  // A restSeconds-only refusal is the usage-limit rest (the client never receives restSeconds; a rest outlives the
+  // TTL): it stays remembered — the 5-min re-ask is the bound on per-line resolution. Pinned so a future edit does
+  // not silently exclude it and re-open the storm.
+  test('a restSeconds-only refusal (no client retry hint) stays remembered', async () => {
+    let calls = 0;
+    const c = client(async () => {
+      calls += 1;
+      return jsonResponse({
+        candidates: [],
+        resolutionError: {
+          code: 'provider_pool_rate_limited',
+          message: 'All ChatGPT connections reached their usage limit. The first resets in 2 hours.',
+          suggestion: 'Choose another model, or connect another ChatGPT account.',
+          restSeconds: 7200,
+        },
+      });
+    });
+    await expect(c.resolveUpstream(principal, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      code: 'provider_pool_rate_limited',
+      retryAfterSeconds: undefined,
+    });
+    await expect(c.resolveUpstream(principal, 'codex/gpt-5.6-sol')).rejects.toMatchObject({
+      code: 'provider_pool_rate_limited',
+    });
+    expect(calls).toBe(1);
+  });
+
   test('the memo is bounded: the oldest entry is evicted and asks the API again', async () => {
     let calls = 0;
     const c = client(async () => {

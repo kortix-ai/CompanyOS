@@ -2161,6 +2161,7 @@
       "agentWorkingOnFor": "trabaja en {task} · {time}",
       "somethingWrong": "Algo salió mal",
       "notSent": "No enviado",
+      "computerDisconnected": "El equipo de esta sesión está desconectado.",
       "retry": "Reintentar",
       "resume": "Reanudar",
       "agentIsWorking": "{agent} está trabajando",

@@ -420,13 +420,16 @@ export function useSessionLogSync(
       // `kortix.resync` and replays nothing, so the page is read again then, as after a reconnect.
       // `runtime: true`: the `log.*` frames ride the runtime channel. A full session already has a
       // runtime subscriber; a view (`useSessionView`) has none, and its thread froze at the first page.
-      // A turn end reads the newest page too (F-012). A delta is dropped when the store does not
-      // hold its message, and a connection that joined after the reply's streaming put (a session
-      // that turned v2 mid-reply, a reconnect, a resync) holds none: the reply stayed on "Thinking"
-      // until a reload. At the turn end the box, and then the API, holds the finished reply.
       join({
         schema: 'v2',
         runtime: true,
+        // The join snapshot can precede the full runtime consumer after reload.
+        // The log owns these frames from its first subscription. Store puts and
+        // wire deltas are idempotent when another runtime consumer also sees them.
+        onRuntimeEvent: (event) => {
+          if (event.type.startsWith('log.')) store().applySessionLogEvent(sessionId, event);
+        },
+        // A missed final record converges through the page at turn end (F-012).
         onControl: (frame) => {
           if (endedTurn(frame)) reloadAfterTurnEnd();
         },
@@ -449,11 +452,22 @@ export function useSessionLogSync(
       cancelRetry = null;
       busy = true;
       const { answer, retryAfterMs } = await load();
+      const page = answer === 'missing' ? null : answer;
+      if (stopped) return;
+      if (page) {
+        // The API page already establishes v2. Start receiving the join snapshot
+        // now; the extra box-page request must not delay a streaming answer.
+        onV2 = true;
+        onRead.current?.('page');
+        goV2();
+        await loadLive();
+        busy = false;
+        return;
+      }
       const live = await loadLive();
       busy = false;
       if (stopped) return;
-      const page = answer === 'missing' ? null : answer;
-      onV2 = !!page || live;
+      onV2 = live;
       // The box's page is a page too: a new session the API holds no log for reads as one.
       onRead.current?.(onV2 ? 'page' : answer === 'missing' ? 'missing' : 'failed');
       if (onV2) {

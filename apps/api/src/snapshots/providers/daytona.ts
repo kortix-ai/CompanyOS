@@ -81,6 +81,11 @@ function observeSnapshotState(snapshotName: string): InvalidatableObservation<Pr
           : 'missing';
       } catch (err) {
         if (isDaytonaSnapshotNotFoundError(err)) return 'missing';
+        // A dead/revoked DAYTONA_API_KEY must propagate, mirroring the Platinum
+        // adapter (isPlatinumAuthFailure): an auth failure is permanent, and
+        // degrading it to 'unknown' retries futilely behind the opaque
+        // "provider state is unknown" SnapshotBuildError that hides the 401.
+        if (isDaytonaAuthFailure(err)) throw err;
         return 'unknown';
       }
     },
@@ -302,6 +307,28 @@ class DaytonaAdapter implements SandboxProviderAdapter {
     }
     return 'unknown';
   }
+}
+
+/**
+ * True iff `err` is a genuine auth/authorization failure from the Daytona API
+ * (HTTP 401/403 — a dead/revoked `DAYTONA_API_KEY`), never a transient
+ * provider hiccup. Same narrow, status-only contract as the Platinum adapter's
+ * `isPlatinumAuthFailure`: a message that merely mentions credentials never
+ * misclassifies, and any unclear error keeps the caller's existing behavior.
+ * The SDK's own 401 error ("DaytonaAuthenticationError: Invalid credentials",
+ * statusCode 401) carries the status this reads.
+ */
+export function isDaytonaAuthFailure(err: unknown): boolean {
+  const value = err as
+    | {
+        status?: unknown;
+        statusCode?: unknown;
+        response?: { status?: unknown };
+      }
+    | null
+    | undefined;
+  const statuses = [value?.statusCode, value?.response?.status, value?.status];
+  return statuses.some((status) => status === 401 || status === 403);
 }
 
 export function isDaytonaSnapshotNotFoundError(err: unknown): boolean {

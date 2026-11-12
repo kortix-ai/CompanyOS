@@ -84,6 +84,11 @@ function without(state: SessionLogState, id: string): Record<string, SessionLogM
   return { ...state.messages, [thread]: state.messages[thread]!.filter((m) => m.message_id !== id) };
 }
 
+/** The store holds `message`'s id as a streaming record (a live put the final put has not replaced yet). */
+function heldStreaming(state: SessionLogState, message: SessionLogMessage): boolean {
+  return state.messages[message.thread_id]?.some((m) => m.message_id === message.message_id && m.status === 'streaming') ?? false;
+}
+
 /**
  * `message` in its thread, by `seq`, replacing any copy of the same id. Every message enters
  * here, from a page or a frame: a shell command that exited non-zero is stored as one
@@ -171,7 +176,11 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     if (settled.length !== held.length) messages = { ...messages, [thread]: settled };
   }
   for (const message of page.messages) {
-    if (!isSessionLogMessage(message) || state.revs[message.message_id] !== undefined) continue;
+    if (!isSessionLogMessage(message)) continue;
+    // A finished record replaces a held streaming one even though the stream put it (F-012): the
+    // final record follows every streaming put of its message, and a stream that lost that final
+    // put held the reply's partial text forever. Its rev stays, so a late streaming put cannot win.
+    if (state.revs[message.message_id] !== undefined && !(message.status !== 'streaming' && heldStreaming(state, message))) continue;
     messages = put(messages, message);
   }
   const threads = { ...state.threads };

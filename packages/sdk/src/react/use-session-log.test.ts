@@ -793,20 +793,27 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     // the box (and then the API) holds the finished reply.
     let calls = 0;
     const turn = (token: string | null) => ({ type: 'kortix.control.turn', cseq: 1, cepoch: 'c', at: 1, payload: { known: true, turns: [], last_ended: token ? { turn_token: token } : null } });
+    const finished = page().messages.findLast((m) => m.role === 'assistant')!;
+    const reply = () => useSyncStore.getState().sessionLogs[SESSION]!.messages[page().thread_id]!.find((m) => m.message_id === finished.message_id)!;
     mount({ loader: async () => { calls++; return v1Page(); } });
     await flush();
     expect(calls).toBe(1);
     const v2 = joined.at(-1)!.options;
     expect(v2.schema).toBe('v2');
+    // The stream put the reply as streaming, with partial text; its final put is lost.
+    act(() => useSyncStore.getState().applySessionLogEvent(SESSION, { type: 'log.message', properties: { rev: 5, message: { ...structuredClone(finished), status: 'streaming', completed_at: null, blocks: [{ type: 'text', id: 'b_partial', text: 'partial' }] } } }));
+    expect(reply().status).toBe('streaming');
     // The state at join names the last turn that ended: nothing new, no read.
     act(() => v2.onControl(turn('t1')));
     act(() => v2.onControl(turn('t1')));
     await flush();
     expect(calls).toBe(1);
-    // A turn ends: one read of the newest page.
+    expect(reply().status).toBe('streaming');
+    // A turn ends: one read of the newest page, and the finished reply replaces the partial one.
     act(() => v2.onControl(turn('t2')));
     await flush();
     expect(calls).toBe(2);
+    expect(reply()).toEqual(finished);
     // Other control frames and a repeat of the same end read nothing.
     act(() => v2.onControl({ type: 'kortix.control.queue', cseq: 2, cepoch: 'c', at: 2, payload: {} }));
     act(() => v2.onControl(turn('t2')));

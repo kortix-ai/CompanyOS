@@ -239,6 +239,24 @@ describe('applySessionLogEvent', () => {
     expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: 'b_gone', delta: 'x' }))).toBe(state);
   });
 
+  test('F-012: a streaming record whose final put was lost yields to the finished record of a page read at the turn end', () => {
+    const [user, reply] = rootMessages();
+    const streaming: SessionLogMessage = {
+      ...reply!, status: 'streaming', completed_at: null, finish: null,
+      blocks: [{ type: 'text', id: 'b0', text: 'partial' } as TextBlock],
+    };
+    let state = applySessionLogEvent(EMPTY_SESSION_LOG_STATE, ev('log.message', { rev: 1, message: user }));
+    state = applySessionLogEvent(state, ev('log.message', { rev: 2, message: streaming }));
+    // A page read mid-turn that still holds the streaming record changes nothing the stream holds.
+    state = applySessionLogPage(state, page([user!, { ...streaming, blocks: [{ type: 'text', id: 'b0', text: 'part' } as TextBlock] }]));
+    expect((state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)!.blocks[0] as TextBlock).text).toBe('partial');
+    // The final put never arrives; the page read at the turn end holds the finished reply.
+    state = applySessionLogPage(state, page([user!, reply!]));
+    expect(state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)).toEqual(reply!);
+    // Its rev stays: an older streaming put that arrives late cannot revive the partial text.
+    expect(applySessionLogEvent(state, ev('log.message', { rev: 2, message: streaming }))).toBe(state);
+  });
+
   test('a delta for a message the store does not hold builds no placeholder', () => {
     const state = applySessionLogEvent(EMPTY_SESSION_LOG_STATE, ev('log.block.delta', { thread_id: ROOT, message_id: 'msg_x', block_id: 'b0', delta: 'x' }));
     expect(state).toBe(EMPTY_SESSION_LOG_STATE);

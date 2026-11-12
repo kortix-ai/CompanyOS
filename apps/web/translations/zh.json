@@ -2161,6 +2161,7 @@
       "agentWorkingOnFor": "正在处理 {task} · {time}",
       "somethingWrong": "出了点问题",
       "notSent": "未发送",
+      "computerDisconnected": "此会话的计算机已断开连接。",
       "retry": "重试",
       "resume": "继续",
       "agentIsWorking": "{agent} 正在处理",

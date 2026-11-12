@@ -1558,6 +1558,7 @@ const catalog = {
       "agentWorkingOnFor": "is working on {task} · {time}",
       "somethingWrong": "Something went wrong",
       "notSent": "Not sent",
+      "computerDisconnected": "This session's computer is disconnected.",
       "retry": "Retry",
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",

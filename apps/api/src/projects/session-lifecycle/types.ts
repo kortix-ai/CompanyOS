@@ -1,3 +1,4 @@
+import { STALE_RUNTIME_DELIVERY_ERROR } from '@kortix/shared';
 import type { Actor } from '../../iam/actor';
 import type { ProjectRow, ProjectSessionRow, RequestAuditContext } from '../lib/serializers';
 import type { PromptOverridesWire, PromptPartWire } from './prompt-payload';
@@ -263,7 +264,7 @@ export const DELIVERY_FAILURE_COPY: Record<
   unreachable: "the session's machine could not be reached",
   'not-landed': 'the session accepted it but never recorded it',
   'no-session': 'that session no longer exists',
-  'stale-runtime': "this session's computer cannot reach the API. Start a new session",
+  'stale-runtime': STALE_RUNTIME_DELIVERY_ERROR,
   failed: 'the session refused it',
 };
 

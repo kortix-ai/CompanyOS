@@ -77,22 +77,22 @@ export function QueuedPromptFailure({
 }
 
 /** A failed callback path requires a new computer, not a retry on the old one. */
-export function QueuedPromptRecovery({ projectId, reason, onRemove }: {
+export function QueuedPromptRecovery({ projectId, onRemove }: {
   projectId: string;
-  reason: string;
   onRemove?: () => void;
 }) {
-  const t = useTranslations('sidebar');
+  const sidebar = useTranslations('sidebar');
+  const turn = useTranslations('sessionUi.turn');
   const common = useTranslations('common');
   return (
-    <InlineMeta>
-      <span role="status" className="text-muted-foreground text-xs">{reason}</span>
-      <Button variant="ghost" size="xs" asChild>
-        <UiLink href={newSessionHref(projectId)}>
-          {t('newSession')}
-        </UiLink>
-      </Button>
-      {onRemove && <Button type="button" variant="ghost" size="xs" onClick={onRemove}>{common('remove')}</Button>}
-    </InlineMeta>
+    <div data-queued-status="failed" className="flex flex-col items-end gap-1">
+      <span role="status" className="text-kortix-red text-xs">{turn('computerDisconnected')}</span>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="xs" asChild>
+          <UiLink href={newSessionHref(projectId)}>{sidebar('newSession')}</UiLink>
+        </Button>
+        {onRemove && <Button type="button" variant="ghost" size="xs" onClick={onRemove}>{common('remove')}</Button>}
+      </div>
+    </div>
   );
 }

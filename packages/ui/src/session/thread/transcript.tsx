@@ -10,6 +10,7 @@
 // ============================================================================
 
 
+import { STALE_RUNTIME_DELIVERY_ERROR } from '@kortix/shared';
 import { isQuestionTool } from '@kortix/sdk';
 
 import { UnifiedMarkdown } from '../../markdown/unified-markdown';
@@ -1728,8 +1729,8 @@ function TurnUserBubble(
           onEditSend={onEditSend}
           onOpenPastedContent={onOpenPastedContent}
           deliveryStatus={
-            projectId && pendingPrompt?.last_error === "this session's computer cannot reach the API. Start a new session" ? (
-              <QueuedPromptRecovery projectId={projectId} reason={pendingPrompt.last_error} onRemove={onRemoveQueued && promptActions.removable ? () => onRemoveQueued(pendingPrompt.prompt_id) : undefined} />
+            projectId && pendingPrompt?.last_error === STALE_RUNTIME_DELIVERY_ERROR ? (
+              <QueuedPromptRecovery projectId={projectId} onRemove={onRemoveQueued && promptActions.removable ? () => onRemoveQueued(pendingPrompt.prompt_id) : undefined} />
             ) : queuedStatus === 'failed' ? (
               <QueuedPromptFailure
                 lastError={pendingPrompt?.last_error}

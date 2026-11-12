@@ -160,9 +160,9 @@ describe('a box an earlier dev stack created under another quick tunnel', () => 
     });
   });
 
-  test.each(['ui'] as const)('%s preserves the failed prompt and names its stale runtime', async (source) => {
+  test('a web send preserves the failed prompt and names its stale runtime', async () => {
     await withBox(OLD_TUNNEL, 'https://new-tunnel-it.trycloudflare.com', async () => {
-      expect(await deliverThroughQueue({ ...reply(`stale-${source}`), source })).toBe('failed');
+      expect(await deliverThroughQueue({ ...reply('stale-ui'), source: 'ui' })).toBe('failed');
       const [row] = await commands();
       expect(row.last_error).toBe("this session's computer cannot reach the API. Start a new session");
       expect(row.status).toBe('dead_lettered');

@@ -2161,6 +2161,7 @@
       "agentWorkingOnFor": "arbeitet an {task} · {time}",
       "somethingWrong": "Etwas ist schiefgelaufen",
       "notSent": "Nicht gesendet",
+      "computerDisconnected": "Der Computer dieser Sitzung ist nicht verbunden.",
       "retry": "Erneut versuchen",
       "resume": "Fortsetzen",
       "agentIsWorking": "{agent} arbeitet",

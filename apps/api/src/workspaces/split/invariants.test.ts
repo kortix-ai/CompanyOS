@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 
 // The aggregation under test: one invariant's throw — a statement timeout
 // (57014) on a prod-sized expand table such as credit_ledger — must mark its
@@ -20,11 +21,14 @@ mock.module('../../shared/db', () => ({
       // I10's per-table violation count is the shape prod timed out on
       // (i6 compares names, not workspace ids).
       if (sqlText(query).includes('workspace_id IS DISTINCT FROM')) {
+        // The exact shape prod throws: drizzle's pg session wraps the driver's
+        // 57014 in a DrizzleQueryError whose own message is the whole statement
+        // plus its params — the wrapper hides the timeout.
         const timeout = new Error('canceling statement due to statement timeout') as Error & {
           code: string;
         };
         timeout.code = '57014';
-        throw timeout;
+        throw new DrizzleQueryError(sqlText(query), ['0.5'], timeout);
       }
       if (sqlText(query).includes('workspace_expand_tables')) return [{ name: 'credit_ledger' }];
       return [];
@@ -59,7 +63,13 @@ describe('checkWorkspaceInvariants degradation', () => {
       'I9',
     ]);
     expect(report.I10).toMatchObject({ ok: false, violations: 0, sample: [] });
+    // The driver's cause with its SQLSTATE reaches the report; the wrapper's
+    // SQL-and-params message never does.
     expect(report.I10.error).toContain('canceling statement due to statement timeout');
+    expect(report.I10.error).toContain('57014');
+    expect(report.I10.error).not.toContain('Failed query');
+    expect(report.I10.error).not.toContain('params:');
+    expect(report.I10.error).not.toContain('SELECT');
     // The run continued past the throwing check: I11 and I12 executed after it.
     expect(executed.some((query) => query.includes('stripe_subscription_id'))).toBe(true);
     expect(report.I11.ok).toBe(true);

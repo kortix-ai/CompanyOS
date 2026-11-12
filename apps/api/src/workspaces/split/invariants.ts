@@ -38,6 +38,7 @@
 import { sql } from 'drizzle-orm';
 import { getTableName } from 'drizzle-orm';
 import { db } from '../../shared/db';
+import { databaseErrorSummary } from '../../shared/database-errors';
 import { probeAccountSecret } from '../../secrets/account-resource';
 import { PROJECT_TRANSFER_TABLES, projectGrantCounts, reachingUsersSql, type SplitCopiedIds } from '../../projects/surface';
 
@@ -319,7 +320,10 @@ export async function checkWorkspaceInvariants(
     ok: false,
     violations: 0,
     sample: [],
-    error: (e instanceof Error ? e.message : String(e)).slice(0, 300),
+    // Drizzle wraps every driver failure in a DrizzleQueryError whose own
+    // message is the whole statement plus its params; the report wants the
+    // driver's cause, so a database error is summarized without its SQL.
+    error: (databaseErrorSummary(e) ?? (e instanceof Error ? e.message : String(e))).slice(0, 300),
   });
   return {
     I1: await i1().catch(errored),

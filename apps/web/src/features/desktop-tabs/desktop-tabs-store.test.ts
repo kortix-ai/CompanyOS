@@ -12,7 +12,7 @@ import {
   syncPath,
   type ProjectTabs,
 } from './desktop-tabs-store';
-import { tabRoute } from './tab-route';
+import { isPrototypeKey, ownEntry, tabRoute } from './tab-route';
 
 const P = 'project-1';
 const home = `/workspaces/${P}`;
@@ -202,5 +202,18 @@ describe('tabRoute', () => {
     expect(tabRoute('/workspaces/other/sessions/s1', P)).toBeNull();
     expect(tabRoute('/settings', P)).toBeNull();
     expect(tabRoute(`/workspaces/${P}/unknown`, P)).toBeNull();
+  });
+});
+
+describe('ownEntry', () => {
+  const icons = { models: 'cpu' };
+  test('a section from the URL never resolves to an Object.prototype member', () => {
+    expect(ownEntry(icons, 'models')).toBe('cpu');
+    expect(ownEntry(icons, 'constructor')).toBeUndefined();
+    expect(ownEntry(icons, 'toString')).toBeUndefined();
+    expect(ownEntry(icons, '__proto__')).toBeUndefined();
+    expect(ownEntry(icons, null)).toBeUndefined();
+    expect(isPrototypeKey('constructor')).toBe(true);
+    expect(isPrototypeKey('apiKeys')).toBe(false);
   });
 });

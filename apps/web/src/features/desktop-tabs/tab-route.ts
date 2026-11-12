@@ -110,3 +110,20 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
 export function newTabPath(projectId: string): string {
   return `/workspaces/${projectId}`;
 }
+
+/**
+ * `map[key]` for the map's OWN keys only. A section comes from the URL, so a
+ * plain lookup of `/admin/constructor` returned `Object.prototype.constructor`
+ * and the strip rendered a function as an icon.
+ */
+export function ownEntry<V>(
+  map: Readonly<Record<string, V>>,
+  key: string | null | undefined,
+): V | undefined {
+  return key != null && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+/** A key that is a property of every object (`constructor`, `toString`, `__proto__`, …). */
+export function isPrototypeKey(key: string): boolean {
+  return key in Object.prototype || key === '__proto__';
+}

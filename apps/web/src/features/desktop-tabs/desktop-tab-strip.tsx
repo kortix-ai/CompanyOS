@@ -108,7 +108,7 @@ import {
   useDesktopTabsStore,
   type DesktopTab,
 } from './desktop-tabs-store';
-import { newTabPath, tabRoute, type TabRoute } from './tab-route';
+import { isPrototypeKey, newTabPath, ownEntry, tabRoute, type TabRoute } from './tab-route';
 
 /* ─── Strip ───────────────────────────────────────────────────────────────── */
 
@@ -1081,12 +1081,14 @@ function staticLabel(
     case 'admin':
     case 'customize': {
       const section = route.section;
-      const icon = (section && ADMIN_ICONS[section]) || 'customize';
+      const icon = ownEntry(ADMIN_ICONS, section) ?? 'customize';
       if (!section) return { icon, title: t('customize') };
       // `api-keys` → `apiKeys`: the rail catalog keys are camelCase.
       const railKey = section.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-      if (tSections.has(railKey)) return { icon, title: tSections(railKey) };
-      const own = SECTION_LABEL[section];
+      if (!isPrototypeKey(railKey) && tSections.has(railKey)) {
+        return { icon, title: tSections(railKey) };
+      }
+      const own = ownEntry(SECTION_LABEL, section);
       return { icon, title: own ? t(`sections.${own}`) : t('customize') };
     }
     case 'goal':

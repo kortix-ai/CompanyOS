@@ -26741,7 +26741,9 @@
       "noWorkspaceTitle": "Créez un espace de travail pour connecter la CLI",
       "noWorkspaceBody": "La CLI se connecte à un espace de travail. Créez-en un, puis approuvez cette connexion.",
       "createAction": "Créer un espace de travail",
-      "workspaceLabel": "Espace de travail"
+      "workspaceLabel": "Espace de travail",
+      "loadFailedTitle": "Impossible de charger vos espaces de travail",
+      "loadFailedBody": "Cette connexion a besoin de votre liste d'espaces de travail. Votre compte est en bon état : réessayez pour continuer."
     },
     "models": {
       "yourDefault": "Par défaut de l'espace de travail",

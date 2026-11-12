@@ -42,6 +42,7 @@ export type SessionInvocationSource =
   | 'system:goal'
   | 'admin';
 
+/** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */
 export type QueuePolicy = 'never' | 'on_backpressure' | 'always';
 
 export type SessionLifecyclePostCreateAction =

@@ -386,6 +386,11 @@ export async function resolveProjectSharedProviderSecrets(input: Omit<GatewaySec
 }): Promise<{ coolingDown: boolean; retryAfterSeconds?: number; withheld?: number; secrets: ResolvedAccountSecret[] }> {
   const usable = await listUsableGatewaySecrets(input);
   if (!usable.length) {
+    // Only a member who may read the project learns that keys are withheld
+    // from them. Anyone else gets nothing, not even the count.
+    if (!(await memberMayReadProject(input.accountId, input.projectId, input.userId))) {
+      return { coolingDown: false, secrets: [] };
+    }
     const inProject = (await gatewaySecretRows({ ...input, grantUserId: null }))
       .filter((row) => row.projectId === null || row.projectId === input.projectId);
     return { coolingDown: false, secrets: [], withheld: inProject.length };

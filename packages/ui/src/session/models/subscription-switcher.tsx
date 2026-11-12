@@ -37,7 +37,7 @@ import {
   loginLimit,
   usageTone,
   windowLabel,
-} from '../../customize/sections/view/subscription-usage';
+} from './subscription-windows';
 import { useProviderKeyChoices } from '../overrides/provider-secret-pool-editor';
 
 /** The provider whose pooled logins pay for a subscription model. Null for every other model. */

@@ -158,6 +158,24 @@ describe('kortix_connectors', () => {
     expect(result.card.status).toBe('needs_you')
     expect(result.card.links).toEqual([{ label: 'Sign in', href: 'https://auth.example.com/connect?x=1' }])
   })
+
+  // An e2e run on dev: "watch my Gmail" posted a private card, then a shared
+  // one, because a trigger runs only on the workspace's shared sign-in.
+  test('connect for a trigger mints ONE shared sign-in, never a private one first', async () => {
+    fakeKortix(`'connectors connect gmail --owner project') echo 'Open this link to sign in: https://auth.example.com/connect?shared=1' ;;`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail', for_trigger: true })
+    expect(result.card.subtitle).toBe('Everyone in the workspace will use this sign-in, so triggers can run on it.')
+    expect(result.card.links).toEqual([{ label: 'Sign in', href: 'https://auth.example.com/connect?shared=1' }])
+    expect(argvs()).toEqual(['connectors connect gmail --owner project'])
+  })
+
+  test('connect for a trigger that the person may not share is refused, with no private card', async () => {
+    fakeKortix(`'connectors connect gmail --owner project') echo '{"kortix_error":{"kind":"denied","message":"forbidden","status":403}}' >&2; exit 1 ;;
+  ${ROSTER}`)
+    const result = await run('kortix_connectors', { action: 'connect', slug: 'gmail', for_trigger: true })
+    expect(result.card.status).toBe('denied')
+    expect(argvs().filter((line) => line.startsWith('connectors connect'))).toEqual(['connectors connect gmail --owner project'])
+  })
 })
 
 describe('kortix_schedules', () => {

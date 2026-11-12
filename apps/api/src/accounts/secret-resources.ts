@@ -275,13 +275,17 @@ export function registerSecretResourceRoutes() {
       await tx.insert(accountSecretGrants).values(userIds.map((grantee) => ({ accountId, secretId: row!.secretId, userId: grantee, grantedBy: userId })));
       return row!;
     });
-    // The first provider key of a workspace with no default model seeds one.
-    if (resource.projectId) {
-      void seedProjectDefaultModelOnConnect({ projectId: resource.projectId, accountId, userId, secretName: resource.name });
-    }
     // The key is saved first; one cheap call to the provider then says whether
     // it works. A failed check never undoes the save (`unknown`).
-    return c.json(await view(withVerification(resource, await verifyAndRecordAccountKey(resource, userId)), userId), 201);
+    const verification = await verifyAndRecordAccountKey(resource, userId);
+    // A workspace with no usable default model gets one from a key that works.
+    if (resource.projectId) {
+      void seedProjectDefaultModelOnConnect({
+        projectId: resource.projectId, accountId, userId, secretName: resource.name,
+        ...(verification ? { keyCheck: verification.status } : {}),
+      });
+    }
+    return c.json(await view(withVerification(resource, verification), userId), 201);
   });
 
   accountsRouter.openapi(createRoute({

@@ -215,9 +215,10 @@ type ProjectCtx = { client: ApiClient; projectId: string };
 // ── provider keys (named accounts) ────────────────────────────────────────
 // With the workspace flag `pooled_provider_secrets` on (the default since
 // 2026-10-31), the web Models panel (Models → Providers) lists only named
-// provider accounts, `kortix.account_secret_resources`. `set`, `rm` and `ls`
-// use them then, as the web and the TUI do; with the flag off they keep the
-// legacy workspace secrets (`/workspaces/:id/secrets`).
+// provider accounts, `kortix.account_secret_resources`. `set` and `rm` use
+// them then, as the web and the TUI do; with the flag off they keep the
+// legacy workspace secrets (`/workspaces/:id/secrets`). `ls` lists both,
+// always: the web dialog adds a named account whatever the flag says.
 
 /** The server's limit on a provider key's label (`secret-resources.ts` Create). */
 const LABEL_MAX = 100;
@@ -242,6 +243,15 @@ interface NamedAccounts {
 async function namedAccounts(ctx: ProjectCtx): Promise<NamedAccounts | null> {
   const project = await ctx.client.get<{ experimental?: Record<string, unknown> }>(`/workspaces/${ctx.projectId}`);
   if (project.experimental?.pooled_provider_secrets !== true) return null;
+  return listNamedAccounts(ctx);
+}
+
+/**
+ * Every provider key and login the web Models panel lists, whatever the flag
+ * says: a key added in the web dialog is always a named account, so `ls`
+ * reads them with no flag check.
+ */
+async function listNamedAccounts(ctx: ProjectCtx): Promise<NamedAccounts> {
   const [me, list] = await Promise.all([
     ctx.client.get<{ user_id: string }>('/me'),
     ctx.client.get<{ secrets: NamedAccount[] }>(
@@ -518,18 +528,18 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
 
   let oauthList: OauthListResponse;
   let secrets: { items: ProjectSecret[] };
-  let named: NamedAccounts | null;
+  let named: NamedAccounts;
   try {
     [oauthList, secrets, named] = await Promise.all([
       ctx.client.get<OauthListResponse>(`/workspaces/${ctx.projectId}/oauth`),
       ctx.client.get<{ items: ProjectSecret[] }>(`/workspaces/${ctx.projectId}/secrets`),
-      namedAccounts(ctx),
+      listNamedAccounts(ctx),
     ]);
   } catch (err) {
     return surfaceApiError(err);
   }
   // Every provider key and login the Models panel lists; null-provider rows are not provider credentials.
-  const accounts = (named?.accounts ?? []).filter((a) => a.provider_id);
+  const accounts = named.accounts.filter((a) => a.provider_id);
 
   if (json) {
     emitJson({ oauth: oauthList.items, secrets: secrets.items, accounts });
@@ -565,7 +575,7 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
     process.stdout.write('\n');
   }
 
-  if (named && accounts.length > 0) {
+  if (accounts.length > 0) {
     const rows = accounts
       .map((a) => ({ provider: cliProviderName(a.provider_id!), label: a.label, access: accessText(a, named.viewerId) }))
       .sort((x, y) => x.provider.localeCompare(y.provider) || x.label.localeCompare(y.label));
@@ -588,11 +598,9 @@ async function providersLs(opts: CtxOpts, json = false): Promise<number> {
     }
   }
   if (keyRows.length > 0) {
-    // With provider keys on, the Models panel does not list these secrets.
+    // The Models panel does not list these secrets.
     process.stdout.write(
-      named
-        ? `  ${C.bold}API keys${C.reset} ${C.dim}(legacy workspace secrets, shared with everyone; not under Models → Providers)${C.reset}\n`
-        : `  ${C.bold}API keys${C.reset} ${C.dim}(workspace secrets, shared with everyone in this workspace)${C.reset}\n`,
+      `  ${C.bold}API keys${C.reset} ${C.dim}(legacy workspace secrets, shared with everyone; not under Models → Providers)${C.reset}\n`,
     );
     const nameW = Math.max(...keyRows.map((r) => r.provider.length), 14);
     for (const r of keyRows) {

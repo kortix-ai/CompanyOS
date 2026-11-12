@@ -2791,9 +2791,13 @@ describe("useSyncStore — buildSessionMessages (the one shared join)", () => {
 	async function rowsCollectedAfter(sessionID: string, drop: () => void): Promise<boolean> {
 		const ref = new WeakRef(capture(sessionID).rows);
 		drop();
-		// A WeakRef target stays alive until the current job ends.
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		Bun.gc(true);
+		// A WeakRef target stays alive until the current job ends, and JSC scans
+		// the stack conservatively: a stale slot can pin the rows through one
+		// collection. Give them a few full collections, each on a fresh job.
+		for (let round = 0; round < 5 && ref.deref() !== undefined; round++) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			Bun.gc(true);
+		}
 		return ref.deref() === undefined;
 	}
 
@@ -2801,8 +2805,14 @@ describe("useSyncStore — buildSessionMessages (the one shared join)", () => {
 		const store = useSyncStore.getState();
 		store.upsertMessage("ses_1", userMessage("msg_1"));
 		store.upsertPart("msg_1", textPart("prt_1", "msg_1", "hi"), "ses_1");
-		const held = capture("ses_1");
-		expect(held.rebuild()).toBe(held.rows); // memoized while resident
+		// Memoized while resident. The check runs in its own scope: a `held`
+		// local in this test would keep the rows (and, through `rebuild`, the
+		// store arrays the memo is keyed by) reachable for the whole test, so
+		// the collection below could never take them.
+		(() => {
+			const held = capture("ses_1");
+			expect(held.rebuild()).toBe(held.rows);
+		})();
 
 		const collected = await rowsCollectedAfter("ses_1", () => {
 			useSyncStore.getState().retainSession("ses_1")();

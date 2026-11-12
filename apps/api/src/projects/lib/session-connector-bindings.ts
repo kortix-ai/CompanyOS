@@ -1079,6 +1079,9 @@ export interface EntitledConnectorConnection {
   isDefault: boolean;
   status: 'active' | 'revoked' | 'error';
   metadata: Record<string, unknown>;
+  /** Whether a call can run as it now. Set by `listEntitledConnectorConnections`;
+   *  `false` only with `includeNotConnected` (a sign-in that did not finish). */
+  connected?: boolean;
 }
 
 export async function listEntitledConnectorConnections(input: {
@@ -1097,6 +1100,10 @@ export async function listEntitledConnectorConnections(input: {
    *  skipped — the same row read twice per call was the resolution fan-out's
    *  duplicate. Mismatched hints fall back to the select, byte-identical. */
   connectorRow?: ConnectorRequirementRow | null;
+  /** Also return the reachable accounts a call cannot run as yet (sign-in not
+   *  finished), marked `connected: false`. For listings a person reads, never
+   *  for call resolution. */
+  includeNotConnected?: boolean;
 }): Promise<EntitledConnectorConnection[]> {
   const alias = canonicalConnectorAlias(input.alias);
   const actingUserId = input.actingUserId ?? '';
@@ -1216,7 +1223,8 @@ export async function listEntitledConnectorConnections(input: {
       continue;
     }
     if (connectionNeedsPrivateSession(connection.ownerType, audience) && visibility !== 'private') continue;
-    if (!(await connectorConnectionIsConnected({ connector, connection, preloaded: input.preloaded }))) continue;
+    const connected = await connectorConnectionIsConnected({ connector, connection, preloaded: input.preloaded });
+    if (!connected && !input.includeNotConnected) continue;
     entitled.push({
       connectionId: row.connectionId,
       connectorId: connector.connectorId,
@@ -1226,6 +1234,7 @@ export async function listEntitledConnectorConnections(input: {
       isDefault: row.isDefault,
       status: row.status,
       metadata: row.metadata ?? {},
+      connected,
     });
   }
   // Every member-owned row that survived the filter is the CALLER's own, so

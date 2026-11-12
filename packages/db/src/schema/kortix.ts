@@ -1448,6 +1448,32 @@ export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill
 ]);
 
 /**
+ * The audit ledger of the legacy credential moves that are not LLM keys
+ * (`apps/api/src/secrets/legacy-credential-backfill.ts`): one row per moved
+ * object and concept, with the columns it had before, so an operator can
+ * reverse one move by hand. `concept`:
+ *   - `connector_secret_strategy`: a connector secret stored with the
+ *     pre-2026-08-05 strategy `runtime`; it moves to `broker`.
+ *   - `external_connection`: a connection owned by the retired `external`
+ *     owner type; nobody can reach it, so it is revoked.
+ */
+export const legacyCredentialBackfill = kortixSchema.table('legacy_credential_backfill', {
+  concept: varchar('concept', { length: 48 }).notNull(),
+  objectId: uuid('object_id').notNull(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** `moved` (the object now has its canonical form) or `skipped_*`. */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  /** The changed columns before the move. */
+  before: jsonb('before').notNull().default({}),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.concept, table.objectId] }),
+  index('idx_legacy_credential_backfill_project').on(table.projectId),
+]);
+
+/**
  * Who can see/open a session within the org. `private` (default) = only the
  * creator; `project` = every project member (team-wide); `restricted` = the
  * creator + the members/groups in `project_session_grants`. Mirrors the secret

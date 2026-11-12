@@ -2095,7 +2095,11 @@
       "claudePlan": "Plan Pro o Max",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} no puede leer imágenes",
-      "imagesUnsupportedHint": "quítalas o elige otro modelo"
+      "imagesUnsupportedHint": "quítalas o elige otro modelo",
+      "noModelUpgradeReason": "Sin modelo: mejora al plan Credits o añade tu propia clave de proveedor.",
+      "noModelKeyReason": "Sin modelo: añade tu propia clave de proveedor.",
+      "noModelUpgradePlan": "Mejorar plan",
+      "noModelAddProviderKey": "Añadir clave de proveedor"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt guardado",
@@ -10392,6 +10396,8 @@
       "checkConnection": "Comprueba tu conexión y vuelve a intentarlo."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Añadir clave de proveedor",
+      "noModelUpgradePlan": "Mejorar plan",
       "authEmailRateLimit": "No se pudo enviar el correo. Vuelve a intentarlo en aproximadamente una hora.",
       "authRequestRateLimit": "Demasiadas solicitudes. Vuelve a intentarlo en unos minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
@@ -22089,6 +22095,12 @@
     "noticeSignInTitle": "Inicia sesión en {name}",
     "noticeSignInBody": "Kortix añadió {name}. Termina de iniciar sesión para que los agentes puedan usar sus herramientas.",
     "noticeSignInAction": "Iniciar sesión",
+    "noticeSignInAgainTitle": "Vuelve a iniciar sesión en {name}",
+    "noticeSignInAgainBody": "El inicio de sesión caducó o se revocó. Los agentes no pueden usar {name} hasta que vuelvas a iniciar sesión.",
+    "noticeNoToolsTitle": "{name} no tiene herramientas",
+    "noticeNoToolsBody": "No tiene rutas, así que los agentes no tienen nada que llamar. Añade rutas a su especificación de rutas en Ajustes.",
+    "noticeAddRoutesAction": "Añadir rutas",
+    "statusNoTools": "Sin herramientas",
     "connectAccount": "Conectar",
     "notSignedIn": "Sin iniciar sesión",
     "credentialRejected": "Credencial rechazada: reemplázala",

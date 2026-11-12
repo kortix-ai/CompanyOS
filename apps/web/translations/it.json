@@ -2095,7 +2095,11 @@
       "claudePlan": "Piano Pro o Max",
       "connectModel": "Collega modello",
       "imagesUnsupported": "{model} non può leggere le immagini",
-      "imagesUnsupportedHint": "rimuovile o scegli un altro modello"
+      "imagesUnsupportedHint": "rimuovile o scegli un altro modello",
+      "noModelUpgradeReason": "Nessun modello: passa al piano Credits o aggiungi la tua chiave del provider.",
+      "noModelKeyReason": "Nessun modello: aggiungi la tua chiave del provider.",
+      "noModelUpgradePlan": "Aggiorna piano",
+      "noModelAddProviderKey": "Aggiungi chiave del provider"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvato",
@@ -10392,6 +10396,8 @@
       "checkConnection": "Controlla la connessione, poi riprova."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "noModelUpgradePlan": "Aggiorna piano",
       "authEmailRateLimit": "Impossibile inviare l’email. Riprova tra circa un’ora.",
       "authRequestRateLimit": "Troppe richieste. Riprova tra qualche minuto.",
       "text03217276a5f1": "Saldo {value0} crediti",
@@ -22089,6 +22095,12 @@
     "noticeSignInTitle": "Accedi a {name}",
     "noticeSignInBody": "Kortix ha aggiunto {name}. Completa l'accesso perché gli agenti possano usarne gli strumenti.",
     "noticeSignInAction": "Accedi",
+    "noticeSignInAgainTitle": "Accedi di nuovo a {name}",
+    "noticeSignInAgainBody": "L’accesso è scaduto o è stato revocato. Gli agenti non possono usare {name} finché non accedi di nuovo.",
+    "noticeNoToolsTitle": "{name} non ha strumenti",
+    "noticeNoToolsBody": "Non ha route, quindi gli agenti non hanno nulla da chiamare. Aggiungi route alla sua specifica delle route in Impostazioni.",
+    "noticeAddRoutesAction": "Aggiungi route",
+    "statusNoTools": "Nessuno strumento",
     "connectAccount": "Connetti",
     "notSignedIn": "Accesso non effettuato",
     "credentialRejected": "Credenziale rifiutata: sostituiscila",

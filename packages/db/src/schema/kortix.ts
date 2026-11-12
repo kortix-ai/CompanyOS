@@ -1433,7 +1433,8 @@ export const sessionProviderSecretPools = kortixSchema.table('session_provider_s
 export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill', {
   legacySecretId: uuid('legacy_secret_id').primaryKey(),
   projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
-  accountId: uuid('account_id').notNull(),
+  /** Null only for `skipped_no_account`: the project has no account. */
+  accountId: uuid('account_id'),
   name: varchar('name', { length: 64 }).notNull(),
   /** copied | already_present | superseded | skipped_* | failed_* (see llm-credential-move.ts). */
   outcome: varchar('outcome', { length: 32 }).notNull(),
@@ -1454,6 +1455,8 @@ export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill
  * reverse one move by hand. `concept`:
  *   - `connector_secret_strategy`: a connector secret stored with the
  *     pre-2026-08-05 strategy `runtime`; it moves to `broker`.
+ *   - `connector_secret_consumer`: a connector-scope secret stamped consumer
+ *     `sandbox`; it moves to consumer `connector`, strategy `broker`.
  *   - `external_connection`: a connection owned by the retired `external`
  *     owner type; nobody can reach it, so it is revoked.
  */

@@ -9,7 +9,7 @@ import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-syn
 import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { createRoute, z } from '@hono/zod-openapi';
 import { UpdateSecretStrategyInputSchema } from '@kortix/api-contract';
-import { parseEgressPolicy } from '../../secrets/strategy';
+import { parseEgressPolicy, secretStrategyLockHolds } from '../../secrets/strategy';
 import { featureDisabledBody } from '../../feature-flags/gate';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { networkBoundaryPolicyError } from '../../secrets/network-boundary';
@@ -164,6 +164,7 @@ export function registerSecretDeliveryRoutes(): void {
         .select({
           secretId: projectSecrets.secretId,
           name: projectSecrets.name,
+          scope: projectSecrets.scope,
           strategy: projectSecrets.strategy,
           consumer: projectSecrets.consumer,
           rotatedAt: projectSecrets.rotatedAt,
@@ -202,7 +203,7 @@ export function registerSecretDeliveryRoutes(): void {
       ) {
         return c.json(featureDisabledBody('secrets_egress'), 403);
       }
-      if (existing.strategyLocked && existing.strategy !== parsed.data.strategy) {
+      if (secretStrategyLockHolds(existing) && existing.strategy !== parsed.data.strategy) {
         return c.json(
           { error: 'This secret delivery strategy is locked', code: 'secret_strategy_locked' },
           409,
@@ -245,9 +246,15 @@ export function registerSecretDeliveryRoutes(): void {
 
       const nextHandlePrefix =
         nextConsumer === 'http_broker' ? (parsed.data.handle_prefix ?? null) : null;
+      // `scope = connector` keeps a value out of every sandbox env build
+      // (projects/secrets.ts), so it holds only while a connector consumes the
+      // secret through the broker. Any other delivery moves it to `runtime`.
+      const keepsConnectorScope = parsed.data.strategy === 'broker' && nextConsumer === 'connector';
+      const nextScope = existing.scope === 'connector' && !keepsConnectorScope ? 'runtime' : existing.scope;
       const deliveryChanged =
         existing.strategy !== parsed.data.strategy ||
         existing.consumer !== nextConsumer ||
+        existing.scope !== nextScope ||
         JSON.stringify(existing.egressPolicy ?? null) !== JSON.stringify(nextPolicy) ||
         existing.handlePrefix !== nextHandlePrefix;
       let deliverySync: SecretDeliverySync | null = null;
@@ -262,8 +269,11 @@ export function registerSecretDeliveryRoutes(): void {
               .set({
                 strategy: parsed.data.strategy,
                 consumer: nextConsumer,
+                scope: nextScope,
                 egressPolicy: nextPolicy,
                 handlePrefix: nextHandlePrefix,
+                // A lock that reached this write did not bind (checked above).
+                strategyLocked: false,
                 updatedAt: changedAt,
               })
               .where(eq(projectSecrets.secretId, existing.secretId));

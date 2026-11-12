@@ -1,7 +1,7 @@
 import { getProjectGatewayResolution } from '../../repositories/project-model-access';
 import { modelAccessAllows } from '../model-access';
 import { accountMayUseManagedModels } from '../../billing/services/entitlements';
-import { connectedGatewayKeyNames, firstGatewayKeyValue } from '../credentials/gateway-keys';
+import { connectedGatewayKeyNames, defaultableGatewayKeyNames, firstGatewayKeyValue } from '../credentials/gateway-keys';
 import { getAccountModelDefaults } from '../../repositories/model-preferences';
 import { getProjectRoutingPolicy } from '../../repositories/project-routing-policies';
 import { resolveEnablement } from '../model-enablement';
@@ -58,13 +58,19 @@ export async function servableProjectCatalog(input: {
    * list its sandbox registers.
    */
   personalUserId?: string | null;
+  /**
+   * `true`: a provider whose every key the provider refused counts as not
+   * connected (`defaultableGatewayKeyNames`). For "can a session start with
+   * no model named", never for the list a box registers.
+   */
+  withoutRefusedKeys?: boolean;
 }): Promise<ServableProjectCatalog> {
   const { projectId, accountId, principalUserId } = input;
   const personalUserId = input.personalUserId === undefined ? (principalUserId ?? null) : input.personalUserId;
   const freeManagedOnly = !(await accountMayUseManagedModels(accountId));
   const keyScope = { accountId, projectId, userId: principalUserId, grantUserId: personalUserId };
   const [secretNames, defaults, routing, resolution] = await Promise.all([
-    connectedGatewayKeyNames(keyScope),
+    input.withoutRefusedKeys ? defaultableGatewayKeyNames(keyScope) : connectedGatewayKeyNames(keyScope),
     getAccountModelDefaults(accountId, projectId),
     getProjectRoutingPolicy(projectId),
     getProjectGatewayResolution(projectId),

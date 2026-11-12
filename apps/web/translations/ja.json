@@ -2095,7 +2095,11 @@
       "claudePlan": "Pro または Max プラン",
       "connectModel": "モデルを接続",
       "imagesUnsupported": "{model} は画像を読み取れません",
-      "imagesUnsupportedHint": "画像を削除するか、別のモデルを選択してください"
+      "imagesUnsupportedHint": "画像を削除するか、別のモデルを選択してください",
+      "noModelUpgradeReason": "モデルがありません: Credits プランにアップグレードするか、自分のプロバイダーキーを追加してください。",
+      "noModelKeyReason": "モデルがありません: 自分のプロバイダーキーを追加してください。",
+      "noModelUpgradePlan": "プランをアップグレード",
+      "noModelAddProviderKey": "プロバイダーキーを追加"
     },
     "providerRecovery": {
       "savedPrompt": "保存済みプロンプト",
@@ -10392,6 +10396,8 @@
       "checkConnection": "接続を確認してから、再試行してください。"
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "プロバイダーキーを追加",
+      "noModelUpgradePlan": "プランをアップグレード",
       "authEmailRateLimit": "メールを送信できませんでした。約1時間後にもう一度お試しください。",
       "authRequestRateLimit": "リクエストが多すぎます。数分後にもう一度お試しください。",
       "text03217276a5f1": "残高 {value0} クレジット",
@@ -22089,6 +22095,12 @@
     "noticeSignInTitle": "{name} にサインイン",
     "noticeSignInBody": "Kortix は {name} を追加しました。エージェントがツールを使えるよう、サインインを完了してください。",
     "noticeSignInAction": "サインイン",
+    "noticeSignInAgainTitle": "{name} に再度サインイン",
+    "noticeSignInAgainBody": "サインインの有効期限が切れたか、取り消されました。再度サインインするまで、エージェントは {name} を使用できません。",
+    "noticeNoToolsTitle": "{name} にツールがありません",
+    "noticeNoToolsBody": "ルートがないため、エージェントが呼び出せるものはありません。設定でルート仕様にルートを追加してください。",
+    "noticeAddRoutesAction": "ルートを追加",
+    "statusNoTools": "ツールなし",
     "connectAccount": "接続",
     "notSignedIn": "未サインイン",
     "credentialRejected": "認証情報が拒否されました: 置き換えてください",

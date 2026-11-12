@@ -7,7 +7,8 @@
  *   - `project_secrets` rows with consumer `llm_gateway` whose
  *     `llm_credential_backfill` outcome says they moved (`copied`,
  *     `already_present`, `superseded`) or that no reader reads them
- *     (`skipped_unread`, `skipped_inactive`), and that were not written since.
+ *     (`skipped_unread`, `skipped_inactive`, `skipped_no_account`), and that
+ *     were not written since.
  *   - every `claude_subscription_logins` row (retired 2026-11-05; no reader).
  *   - every `user_provider_connections` row and its grants (never had a reader).
  *
@@ -24,7 +25,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import { LLM_CREDENTIAL_MOVED_OUTCOMES } from './llm-credential-ledger';
 
-const DELETABLE_OUTCOMES = [...LLM_CREDENTIAL_MOVED_OUTCOMES, 'skipped_unread', 'skipped_inactive'] as const;
+// `skipped_no_account`: the project has no account, so no reader reaches the row.
+const DELETABLE_OUTCOMES = [...LLM_CREDENTIAL_MOVED_OUTCOMES, 'skipped_unread', 'skipped_inactive', 'skipped_no_account'] as const;
 const UNMOVABLE_OUTCOMES = ['skipped_audience', 'skipped_no_owner', 'failed_undecryptable'] as const;
 
 // `legacy_updated_at` is written from a JS Date (milliseconds); `updated_at`

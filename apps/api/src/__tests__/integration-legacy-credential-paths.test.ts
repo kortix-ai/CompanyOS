@@ -27,6 +27,7 @@ import { decryptAccountSecret, encryptAccountSecret } from '../secrets/account-r
 import { backfillLegacyLlmCredentials, moveLegacyLlmCredential } from '../secrets/llm-credential-move';
 import { backfillLegacyCredentials } from '../secrets/legacy-credential-backfill';
 import { planLegacyCredentialPurge, purgeLegacyCredentials } from '../secrets/legacy-credential-purge';
+import { runLegacyCredentialBackfills } from '../secrets/legacy-credential-boot';
 import { resolveGatewayKeyValues } from '../llm-gateway/credentials/gateway-keys';
 import { refreshRefusedOpencodeLogin } from '../llm-gateway/credentials/opencode-console';
 import { resolveCodexCredential } from '../llm-gateway/credentials/codex';
@@ -217,6 +218,7 @@ describe('old write and disconnect routes reach the named store', () => {
 describe('connector credentials in a legacy form', () => {
   let connectorId: string;
   let runtimeSecretId: string;
+  let sandboxStampedId: string;
   let externalId: string;
   let projectOwnedId: string;
 
@@ -231,6 +233,12 @@ describe('connector credentials in a legacy form', () => {
       scope: 'connector', strategy: 'runtime', consumer: 'connector', createdBy: OWNER,
     }).returning({ secretId: projectSecrets.secretId, updatedAt: projectSecrets.updatedAt });
     runtimeSecretId = secret!.secretId;
+    // A connector-scope row stamped consumer `sandbox` (written 2026-08-17 shape).
+    const [sandboxStamped] = await db.insert(projectSecrets).values({
+      projectId, identifier: 'LEGACY_SIGNING_SECRET', name: 'LEGACY_SIGNING_SECRET', valueEnc: encryptProjectSecret(projectId, 'signing-secret'),
+      scope: 'connector', strategy: 'runtime', consumer: 'sandbox', createdBy: OWNER,
+    }).returning({ secretId: projectSecrets.secretId });
+    sandboxStampedId = sandboxStamped!.secretId;
     const [external] = await db.insert(connectorConnections).values({
       accountId, projectId, connectorId, ownerType: 'external', ownerId: 'agentmail:synthetic-inbox', label: 'Legacy inbox', status: 'active', isDefault: true,
     }).returning({ connectionId: connectorConnections.connectionId });
@@ -245,13 +253,16 @@ describe('connector credentials in a legacy form', () => {
     projectId, accountId, actorUserId: OWNER, principalUserId: null, name: 'LEGACY_BOT_TOKEN', consumer: 'connector', probe: true,
   });
 
-  test('a legacy runtime-strategy connector secret resolves for its connector', async () => {
+  test('a legacy runtime-strategy connector secret, and a sandbox-stamped one, resolve for their connector', async () => {
     expect((await connectorValue())?.value).toBe('bot-token');
+    expect((await resolveProjectSecretForConsumer({
+      projectId, accountId, actorUserId: OWNER, principalUserId: null, name: 'LEGACY_SIGNING_SECRET', consumer: 'connector', probe: true,
+    }))?.value).toBe('signing-secret');
   });
 
   test('a dry run reports both moves and writes nothing', async () => {
     const summary = await backfillLegacyCredentials({ apply: false, projectId });
-    expect(summary.outcomes).toEqual({ connector_secret_strategy: { would_move: 1 }, external_connection: { would_move: 1 } });
+    expect(summary.outcomes).toEqual({ connector_secret_strategy: { would_move: 1 }, connector_secret_consumer: { would_move: 1 }, external_connection: { would_move: 1 } });
     const [secret] = await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, runtimeSecretId));
     expect(secret!.strategy).toBe('runtime');
     expect(await db.select().from(legacyCredentialBackfill).where(eq(legacyCredentialBackfill.projectId, projectId))).toEqual([]);
@@ -260,7 +271,13 @@ describe('connector credentials in a legacy form', () => {
   test('apply moves the secret to broker, revokes the external connection, records both, and touches nothing else', async () => {
     const [before] = await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, runtimeSecretId));
     const summary = await backfillLegacyCredentials({ apply: true, projectId });
-    expect(summary.outcomes).toEqual({ connector_secret_strategy: { moved: 1 }, external_connection: { moved: 1 } });
+    expect(summary.outcomes).toEqual({ connector_secret_strategy: { moved: 1 }, connector_secret_consumer: { moved: 1 }, external_connection: { moved: 1 } });
+    const [stamped] = await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, sandboxStampedId));
+    expect(stamped).toMatchObject({ scope: 'connector', consumer: 'connector', strategy: 'broker' });
+    const signing = await resolveProjectSecretForConsumer({
+      projectId, accountId, actorUserId: OWNER, principalUserId: null, name: 'LEGACY_SIGNING_SECRET', consumer: 'connector', probe: true,
+    });
+    expect(signing?.value).toBe('signing-secret');
 
     const [secret] = await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, runtimeSecretId));
     expect(secret).toMatchObject({ strategy: 'broker', consumer: 'connector', scope: 'connector', valueEnc: before!.valueEnc });
@@ -274,6 +291,7 @@ describe('connector credentials in a legacy form', () => {
 
     const ledger = await db.select().from(legacyCredentialBackfill).where(eq(legacyCredentialBackfill.projectId, projectId));
     expect(ledger.map((row) => [row.concept, row.objectId, row.outcome, row.before]).sort()).toEqual([
+      ['connector_secret_consumer', sandboxStampedId, 'moved', { consumer: 'sandbox', strategy: 'runtime' }],
       ['connector_secret_strategy', runtimeSecretId, 'moved', { strategy: 'runtime', strategy_locked: false }],
       ['external_connection', externalId, 'moved', { status: 'active', is_default: true }],
     ]);
@@ -281,8 +299,8 @@ describe('connector credentials in a legacy form', () => {
 
   test('a re-run finds nothing to move and keeps the ledger', async () => {
     const summary = await backfillLegacyCredentials({ apply: true, projectId });
-    expect(summary.outcomes).toEqual({ connector_secret_strategy: {}, external_connection: {} });
-    expect(summary.ledger).toEqual({ connector_secret_strategy: 1, external_connection: 1 });
+    expect(summary.outcomes).toEqual({ connector_secret_strategy: {}, connector_secret_consumer: {}, external_connection: {} });
+    expect(summary.ledger).toEqual({ connector_secret_strategy: 1, connector_secret_consumer: 1, external_connection: 1 });
   });
 
   test('a run scoped to another project touches nothing here', async () => {
@@ -330,5 +348,31 @@ describe('the purge deletes legacy rows only after the backfill', () => {
     const keys = await resolveGatewayKeyValues({ ...scope(), providerId: 'groq', name: 'GROQ_API_KEY', probe: true });
     expect(keys).toMatchObject({ store: 'named', keys: [{ value: 'groq-legacy-only' }] });
     expect((await planLegacyCredentialPurge()).llmRows).toBe(0);
+  });
+});
+
+describe('the self-host boot run of both backfills', () => {
+  test('off moves nothing; apply moves a legacy key and a connector row; a second run finds them unchanged', async () => {
+    const keyId = await legacy('PERPLEXITY_API_KEY', 'pplx-selfhost');
+    const [connectorRow] = await db.insert(projectSecrets).values({
+      projectId, identifier: 'SELFHOST_BOT_TOKEN', name: 'SELFHOST_BOT_TOKEN', valueEnc: encryptProjectSecret(projectId, 'selfhost-bot'),
+      scope: 'connector', strategy: 'runtime', consumer: 'connector', createdBy: OWNER,
+    }).returning({ secretId: projectSecrets.secretId });
+
+    expect(await runLegacyCredentialBackfills('off')).toEqual({ mode: 'off', llm: null, connector: null });
+    const ledgerOf = async (id: string) => (await db.select().from(llmCredentialBackfill).where(eq(llmCredentialBackfill.legacySecretId, id)))[0];
+    expect(await ledgerOf(keyId)).toBeUndefined();
+
+    const first = await runLegacyCredentialBackfills('apply');
+    expect(first.llm?.copied).toBeGreaterThanOrEqual(1);
+    expect((await ledgerOf(keyId))?.outcome).toBe('copied');
+    const [moved] = await db.select().from(projectSecrets).where(eq(projectSecrets.secretId, connectorRow!.secretId));
+    expect(moved!.strategy).toBe('broker');
+    const keys = await resolveGatewayKeyValues({ ...scope(), providerId: 'perplexity', name: 'PERPLEXITY_API_KEY', probe: true });
+    expect(keys).toMatchObject({ store: 'named', keys: [{ value: 'pplx-selfhost' }] });
+
+    const second = await runLegacyCredentialBackfills('apply');
+    expect(second.llm?.copied ?? 0).toBe(0);
+    expect(second.connector).toEqual({ connector_secret_strategy: {}, connector_secret_consumer: {}, external_connection: {} });
   });
 });

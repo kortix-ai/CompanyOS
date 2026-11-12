@@ -1499,7 +1499,11 @@ const catalog = {
       "claudePlan": "Pro or Max plan",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
-      "imagesUnsupportedHint": "remove them or pick another model"
+      "imagesUnsupportedHint": "remove them or pick another model",
+      "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
+      "noModelKeyReason": "No model: add your own provider key.",
+      "noModelUpgradePlan": "Upgrade plan",
+      "noModelAddProviderKey": "Add provider key"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -2705,6 +2709,8 @@ const catalog = {
       "checkConnection": "Check your connection, then retry."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Add provider key",
+      "noModelUpgradePlan": "Upgrade plan",
       "text03217276a5f1": "Balance {value0} credits",
       "text0b6a47661327": "Unknown owner",
       "text1a9030082a20": "Create skill",
@@ -6846,6 +6852,12 @@ const catalog = {
     "noticeSignInTitle": "Sign in to {name}",
     "noticeSignInBody": "Kortix added {name}. Finish signing in so agents can use its tools.",
     "noticeSignInAction": "Sign in",
+    "noticeSignInAgainTitle": "Sign in to {name} again",
+    "noticeSignInAgainBody": "Its sign-in expired or was revoked. Agents cannot use {name} until you sign in again.",
+    "noticeNoToolsTitle": "{name} has no tools",
+    "noticeNoToolsBody": "It has no routes, so agents have nothing to call. Add routes to its routes spec in Settings.",
+    "noticeAddRoutesAction": "Add routes",
+    "statusNoTools": "No tools",
     "connectAccount": "Connect",
     "notSignedIn": "Not signed in",
     "credentialRejected": "Credential rejected: replace it",

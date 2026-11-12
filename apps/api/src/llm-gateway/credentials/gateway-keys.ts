@@ -10,13 +10,14 @@
  *
  * Every reader of provider key names or values goes through this module:
  * the gateway (`resolve-candidates.ts`), the picker (`servable-catalog.ts`),
- * routing (`routing/index.ts`), default models (`default-model.ts`) and the
- * custom providers route. It reads the named store whatever the
+ * routing (`routing/index.ts`), default models (`default-model.ts`, through
+ * `defaultableGatewayKeyNames`) and the custom providers route. It reads the named store whatever the
  * `pooled_provider_secrets` flag says: every writer writes there now, so a
  * reader that skipped it would lose keys.
  */
 import {
   listGrantedGatewaySecretNames,
+  listUsableGatewaySecrets,
   resolveProjectSharedProviderSecrets,
 } from '../../secrets/account-resource';
 
@@ -44,6 +45,30 @@ export async function connectedGatewayKeyNames(scope: GatewayKeyScope): Promise<
   const named = await listGrantedGatewaySecretNames(scope.accountId, scope.projectId, scope.userId, scope.grantUserId)
     .catch(() => [] as string[]);
   return new Set(named);
+}
+
+/**
+ * The key names a default model may come from: every name `scope` reaches,
+ * except a name whose every named key the provider refused at its last check
+ * (`verify_status = 'invalid'`) and that has no legacy value. A key never
+ * checked or checked `unknown` counts. The gateway's request-time candidates
+ * do not use this: a model named explicitly still reaches the provider, and
+ * the provider's refusal reaches the caller.
+ */
+export async function defaultableGatewayKeyNames(scope: GatewayKeyScope): Promise<Set<string>> {
+  const [named, legacy] = await Promise.all([
+    scope.userId
+      ? listUsableGatewaySecrets({
+          accountId: scope.accountId, projectId: scope.projectId, userId: scope.userId, grantUserId: scope.grantUserId,
+        }).catch(() => [])
+      : [],
+    listProjectSecretNamesForConsumer({
+      projectId: scope.projectId,
+      principalUserId: scope.legacyPersonalUserId === undefined ? scope.grantUserId : scope.legacyPersonalUserId,
+      consumer: 'llm_gateway',
+    }).catch(() => [] as string[]),
+  ]);
+  return new Set([...named.filter((key) => key.verifyStatus !== 'invalid').map((key) => key.name), ...legacy]);
 }
 
 export interface GatewayKeyValue {

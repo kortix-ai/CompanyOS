@@ -2095,7 +2095,11 @@
       "claudePlan": "Abonnement Pro ou Max",
       "connectModel": "Connecter un modèle",
       "imagesUnsupported": "{model} ne peut pas lire les images",
-      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle"
+      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle",
+      "noModelUpgradeReason": "Aucun modèle : passez au plan Credits ou ajoutez votre propre clé de fournisseur.",
+      "noModelKeyReason": "Aucun modèle : ajoutez votre propre clé de fournisseur.",
+      "noModelUpgradePlan": "Changer de plan",
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt enregistré",
@@ -10392,6 +10396,8 @@
       "checkConnection": "Vérifiez votre connexion, puis réessayez."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur",
+      "noModelUpgradePlan": "Changer de plan",
       "authEmailRateLimit": "Impossible d’envoyer l’e-mail. Réessaie dans environ une heure.",
       "authRequestRateLimit": "Trop de demandes. Réessaie dans quelques minutes.",
       "text03217276a5f1": "Solde {value0} crédits",
@@ -22089,6 +22095,12 @@
     "noticeSignInTitle": "Se connecter à {name}",
     "noticeSignInBody": "Kortix a ajouté {name}. Terminez la connexion pour que les agents puissent utiliser ses outils.",
     "noticeSignInAction": "Se connecter",
+    "noticeSignInAgainTitle": "Reconnectez-vous à {name}",
+    "noticeSignInAgainBody": "La connexion a expiré ou a été révoquée. Les agents ne peuvent pas utiliser {name} tant que vous ne vous reconnectez pas.",
+    "noticeNoToolsTitle": "{name} n’a aucun outil",
+    "noticeNoToolsBody": "Il n’a aucune route, les agents n’ont donc rien à appeler. Ajoutez des routes à sa spécification de routes dans Paramètres.",
+    "noticeAddRoutesAction": "Ajouter des routes",
+    "statusNoTools": "Aucun outil",
     "connectAccount": "Connecter",
     "notSignedIn": "Non connecté",
     "credentialRejected": "Identifiant refusé : remplacez-le",

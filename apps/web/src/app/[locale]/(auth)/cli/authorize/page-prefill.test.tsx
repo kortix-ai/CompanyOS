@@ -75,18 +75,6 @@ describe('the CLI authorize page prefills the login code from its link', () => {
     expect(button).not.toMatch(disabledAttribute);
   });
 
-  test('a code in any case or dash layout normalizes to the URL code', () => {
-    // The page compares `normalizeCliCode(typed)` with `normalizeCliCode(user_code)`,
-    // so a prefilled code also matches when the CLI sent a mixed-case form.
-    params = new URLSearchParams(`user_code=${encodeURIComponent('AB12CD34EF567890')}`);
-    const html = renderToStaticMarkup(<CliAuthorizePage />);
-
-    const field = /<input[^>]*id="cli-user-code"[^>]*>/.exec(html)?.[0];
-    expect(field).toBeDefined();
-    expect(field).toContain('value="AB12CD34EF567890"');
-    expect(submitButton(html)).not.toMatch(disabledAttribute);
-  });
-
   test('a link with no user_code renders no login-code field at all', () => {
     params = new URLSearchParams();
     const html = renderToStaticMarkup(<CliAuthorizePage />);

@@ -69,6 +69,31 @@ function loadScriptTemplate(): string {
 export const LEGACY_BOOTSTRAP_METADATA_KEY = 'legacyRuntimeBootstrap';
 export const LEGACY_CHECK_METADATA_KEY = 'legacyRuntimeCheck';
 
+/**
+ * Every decision that touches nothing says why. The dead-daemon repair is
+ * requested from several places (session open, edge refusal, the reaper), and
+ * a request that silently skipped — a cooldown, a spent attempt budget, a
+ * provider that stopped answering — left a dead box unexplainable from logs:
+ * 2026-11-11, 43 relaunch requests across the day, zero repair runs, zero log
+ * lines, every UI poll of the box 502ing on the full retry budget (KRTX-4754).
+ * The converged `not-legacy` outcomes stay silent: that is the fleet's normal
+ * answer, and the probe's own skip lines would then be the reaper's per-box
+ * noise.
+ */
+function logSkip(
+  deps: LegacyBootstrapDeps,
+  input: LegacyBootstrapInput,
+  outcome: LegacyBootstrapOutcome,
+  detail?: string,
+): void {
+  // JSON.stringify drops an undefined `detail`, so the context is always one shape.
+  deps.log(`legacy runtime bootstrap skipped: ${outcome}`, {
+    sandboxId: input.sandboxId,
+    externalId: input.externalId,
+    detail,
+  });
+}
+
 /** Re-check a box that last looked current after this long. */
 export const LEGACY_CHECK_TTL_MS = 6 * 60 * 60 * 1000;
 /** Wait this long after the FIRST failed attempt before the next one. */
@@ -558,8 +583,6 @@ export type LegacyBootstrapOutcome =
   | 'skipped-unsupported'
   /** The daemon itself says it needs a human (pinned after a rollback). Never repaired, never looped — surfaced instead. */
   | 'skipped-blocked'
-  /** A staged record for this build is already waiting on the provider's next start (Daytona): the script must not run, and the record must not be touched. */
-  | 'skipped-staged'
   | 'staged'
   | 'converged'
   | 'failed';
@@ -829,12 +852,6 @@ export function describeLegacyBootstrapRetry(
   return { status: 'idle', classification, attempts, lastAttemptAt: record.lastAttemptAt, lastError: record.error ?? null, nextRetryAt: null };
 }
 
-/** Outcomes `finishBootstrap` already logged; every other outcome needs the verdict line. */
-const SCRIPT_RAN_OUTCOMES: ReadonlySet<LegacyBootstrapOutcome> = new Set(['converged', 'failed', 'staged']);
-
-/** Every outcome that reaches the verdict line is a skip; the message drops the redundant `skipped-` prefix. */
-const VERDICT_OUTCOME = (outcome: LegacyBootstrapOutcome): string => outcome.replace(/^skipped-/, '');
-
 /**
  * Decide, and when warranted do, the bootstrap for one sandbox. Pure over
  * `deps`; every side effect is injected so the policy is unit-testable and the
@@ -844,35 +861,13 @@ export async function bootstrapLegacyRuntime(
   input: LegacyBootstrapInput,
   deps: LegacyBootstrapDeps,
 ): Promise<LegacyBootstrapResult> {
-  const result = await decideBootstrap(input, deps);
-  // ONE VERDICT LINE PER RUN. Every gate before the script used to return
-  // without a line, so a repair that was requested and silently skipped left
-  // nothing behind. Prod 2026-11-11: a session's daemon port stopped answering;
-  // `/start` requested the dead-daemon relaunch a dozen times in six minutes,
-  // not one `[legacy-bootstrap]` line shipped, and the box recovered on its
-  // own — nobody could say why nothing was repaired. Name the verdict.
-  if (!SCRIPT_RAN_OUTCOMES.has(result.outcome)) {
-    deps.log(`skipped: ${VERDICT_OUTCOME(result.outcome)}`, {
-      sandboxId: input.sandboxId,
-      externalId: input.externalId,
-      provider: input.provider,
-      reason: input.reason,
-      detail: result.detail ?? null,
-      klass: result.classification?.klass ?? null,
-      staleReasons: result.classification?.staleReasons ?? [],
-    });
-  }
-  return result;
-}
-
-async function decideBootstrap(
-  input: LegacyBootstrapInput,
-  deps: LegacyBootstrapDeps,
-): Promise<LegacyBootstrapResult> {
   const nowMs = deps.now();
   const nowIso = new Date(nowMs).toISOString();
   const strategy = relaunchStrategyFor(input.provider);
-  if (!strategy) return { outcome: 'skipped-unsupported', detail: `provider ${input.provider}` };
+  if (!strategy) {
+    logSkip(deps, input, 'skipped-unsupported', `provider ${input.provider}`);
+    return { outcome: 'skipped-unsupported', detail: `provider ${input.provider}` };
+  }
 
   const record = readRecord(input.metadata);
   const check = readCheck(input.metadata);
@@ -917,7 +912,10 @@ async function decideBootstrap(
     },
     new Date(nowMs - LEGACY_BOOTSTRAP_STALE_RUNNING_MS).toISOString(),
   );
-  if (!claimed) return { outcome: 'skipped-in-progress' };
+  if (!claimed) {
+    logSkip(deps, input, 'skipped-in-progress', 'another attempt holds the claim');
+    return { outcome: 'skipped-in-progress' };
+  }
   deps.log('legacy runtime bootstrap starting', {
     sandboxId: input.sandboxId,
     externalId: input.externalId,
@@ -963,11 +961,13 @@ async function probeRuntimeForBootstrap(
   if (record?.state === 'running') {
     const startedMs = Date.parse(record.lastAttemptAt);
     if (Number.isFinite(startedMs) && nowMs - startedMs < LEGACY_BOOTSTRAP_STALE_RUNNING_MS) {
+      logSkip(deps, input, 'skipped-in-progress', `claimed ${record.lastAttemptAt}`);
       return { result: { outcome: 'skipped-in-progress' } };
     }
   }
   const manifestBuild = await deps.manifestBuild();
   if (!input.force && recentCurrentCheck(check, nowMs, manifestBuild, input.externalId)) {
+    logSkip(deps, input, 'skipped-recent-check', `checked current ${check?.at}`);
     return { result: { outcome: 'skipped-recent-check' } };
   }
 
@@ -977,7 +977,8 @@ async function probeRuntimeForBootstrap(
   const expectedRunningAssets = await deps.expectedRunningAssets?.();
   let classification = classifyDaemonHealth(health, expectedRunningAssets ?? undefined);
   if (classification.klass === 'not-ok') {
-    return { result: { outcome: 'unreachable', classification, detail: 'the daemon answered a health body that does not say ok' } };
+    logSkip(deps, input, 'unreachable', 'the daemon answered not-ok');
+    return { result: { outcome: 'unreachable', classification } };
   }
   // A DEAD DAEMON ON A RUNNING BOX. Silence alone means nothing — a stopped box
   // answers exactly the same way, and there is nothing there to repair. The
@@ -1003,13 +1004,11 @@ async function probeRuntimeForBootstrap(
       ? await deps.providerRunning().catch(() => false)
       : false;
     if (!running) {
-      return {
-        result: {
-          outcome: 'unreachable',
-          classification,
-          detail: 'daemon silent twice; the provider could not confirm the box is running',
-        },
-      };
+      // The one skip the old code returned in total silence: the provider is
+      // the ONLY thing that distinguishes a dead daemon from a stopped box,
+      // and its answer decides whether a relaunch is even attempted.
+      logSkip(deps, input, 'unreachable', 'the provider does not report the box running');
+      return { result: { outcome: 'unreachable', classification } };
     }
     // TWO SILENT READS, never one. An 8 s ingress timeout, a restarting proxy
     // or a GC pause reads exactly like a corpse, and a relaunch kills PTYs and
@@ -1029,6 +1028,10 @@ async function probeRuntimeForBootstrap(
         .exec(['bash', '-c', `curl -fsS --max-time 3 -o /dev/null ${LOOPBACK_HEALTH_URL}`], LOOPBACK_PROBE_TIMEOUT_MS)
         .catch(() => null);
       if (loopback?.exitCode === 0) {
+        deps.log('daemon answers on the box loopback; the ingress was silent, nothing to repair', {
+          sandboxId: input.sandboxId,
+          externalId: input.externalId,
+        });
         return { result: { outcome: 'not-legacy', detail: 'daemon alive in the box; the ingress was unreachable', classification } };
       }
       deadDaemonOnRunningBox = true;
@@ -1039,15 +1042,14 @@ async function probeRuntimeForBootstrap(
       });
     } else {
       classification = second;
-      if (classification.klass === 'not-ok') {
-        return { result: { outcome: 'unreachable', classification, detail: 'the second health read answered a body that does not say ok' } };
-      }
+      if (classification.klass === 'not-ok') return { result: { outcome: 'unreachable', classification } };
     }
   }
   if (!input.force && updatesItself(health, classification)) {
     // The daemon installs its own pending update (see `updatesItself`); a
     // relaunch now would race that swap. Nothing is recorded, so the next
     // pass probes again and repairs if the daemon stops converging.
+    logSkip(deps, input, 'skipped-self-updating', 'the daemon is staging its own update');
     return { result: { outcome: 'skipped-self-updating', classification } };
   }
   if (classification.klass === 'blocked' && !input.unpin) {
@@ -1062,6 +1064,10 @@ async function probeRuntimeForBootstrap(
         manifestBuild,
         externalId: input.externalId,
       } satisfies LegacyCheckRecord,
+    });
+    deps.log('daemon is pinned after a rollback — blocked, not repaired', {
+      sandboxId: input.sandboxId,
+      detail: classification.detail,
     });
     return { result: { outcome: 'skipped-blocked', detail: classification.detail.join('; '), classification } };
   }
@@ -1111,7 +1117,9 @@ async function checkBootstrapBudget(
   const attempts = sameBuild && record ? record.attempts : 0;
   if (record && sameBuild && record.state === 'failed') {
     if (attempts >= LEGACY_BOOTSTRAP_MAX_ATTEMPTS && !input.force) {
-      return { result: { outcome: 'skipped-exhausted', detail: `${attempts} attempts on build ${build}`, classification } };
+      const detail = `${attempts} attempts on build ${build}`;
+      logSkip(deps, input, 'skipped-exhausted', detail);
+      return { result: { outcome: 'skipped-exhausted', detail, classification } };
     }
     const lastMs = Date.parse(record.lastAttemptAt);
     // ESCALATING per-box backoff (30m, 60m, 120m, …, capped): a box that has
@@ -1119,6 +1127,7 @@ async function checkBootstrapBudget(
     // cadence forever — the repair-storm guard for a box that CANNOT be
     // repaired but has not yet spent its attempt budget.
     if (!input.force && Number.isFinite(lastMs) && nowMs - lastMs < legacyBootstrapCooldownMs(attempts)) {
+      logSkip(deps, input, 'skipped-cooldown', `last attempt ${record.lastAttemptAt}`);
       return { result: { outcome: 'skipped-cooldown', classification } };
     }
   }
@@ -1127,7 +1136,8 @@ async function checkBootstrapBudget(
     // to redo until a current daemon proves it or the build moves on. A box
     // with no daemon is the exception: nothing will start it again, so
     // "converges at next start" is a promise that can never be kept.
-    return { result: { outcome: 'skipped-staged', detail: 'already staged; converges at next start', classification } };
+    logSkip(deps, input, 'staged', 'already staged; converges at next start');
+    return { result: { outcome: 'staged', detail: 'already staged; converges at next start', classification } };
   }
 
   // Never under a running turn. The daemon's own turn state is the authority —
@@ -1136,7 +1146,9 @@ async function checkBootstrapBudget(
   // cannot gate its own repair.
   const turnInFlight = deadDaemonOnRunningBox ? false : await deps.fetchTurnInFlight();
   if (!runtimeIdle(turnInFlight)) {
-    return { result: { outcome: 'skipped-busy', detail: turnInFlight ? 'turn in flight' : 'runtime unreachable', classification } };
+    const detail = turnInFlight ? 'turn in flight' : 'runtime unreachable';
+    logSkip(deps, input, 'skipped-busy', detail);
+    return { result: { outcome: 'skipped-busy', detail, classification } };
   }
   return { build, attempts };
 }
@@ -1292,6 +1304,7 @@ async function settleBootstrapReport(
     // ran, so this was not an attempt: put the prior record back and the next
     // idle pass retries with no cooldown and no budget spent.
     await deps.patchMetadata({ [LEGACY_BOOTSTRAP_METADATA_KEY]: input.metadata?.[LEGACY_BOOTSTRAP_METADATA_KEY] ?? null });
+    deps.log('legacy runtime bootstrap deferred: a turn started during the repair', { sandboxId: input.sandboxId });
     return { outcome: 'skipped-busy', detail: 'a turn started during the repair; relaunch deferred', classification };
   }
   const to = { agentSha256: report.agent_sha256, entrypointSha256: report.entrypoint_sha256 };

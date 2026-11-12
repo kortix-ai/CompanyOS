@@ -1699,8 +1699,15 @@
     {
       "idx": 242,
       "version": "7",
-      "when": 1794447584122,
-      "tag": "20261112013944_chat_installs_own_app",
+      "when": 1794446896419,
+      "tag": "20261112012816_legacy_credential_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "7",
+      "when": 1794447689664,
+      "tag": "20261112014129_chat_installs_own_app",
       "breakpoints": true
     }
   ]

@@ -596,7 +596,9 @@ export function ConnectionsList({
       setEmailOpen(true);
       return;
     }
-    setDraft({ ...EMPTY_NEW_ACCOUNT, label: addAccount.proposedLabel() });
+    // "Everyone in this workspace" for a person who may share, as model keys
+    // default: a trigger runs only on a shared account. "Only you" otherwise.
+    setDraft({ ...EMPTY_NEW_ACCOUNT, audience: canManageConnections ? 'project' : 'private', label: addAccount.proposedLabel() });
     setLabelEdited(false);
     setAddOpen(true);
   };

@@ -315,13 +315,17 @@ describe('providers rm and ls — provider keys', () => {
     expect((JSON.parse(j.stdout) as { accounts: Row[] }).accounts.map((a) => a.secret_id)).toEqual(['key-mine', 'key-team', 'key-priv']);
   });
 
-  test('ls with the flag off reads no provider keys', async () => {
+  // A key added in the web dialog is a named account whatever the flag says:
+  // the web lists it, so `ls` lists it too (an e2e run on dev missed one).
+  test('ls lists provider keys with the flag off too, and reads no flag', async () => {
     flagOn = false;
     rows = [mine];
-    const r = await runCli(['ls', '--json']);
+    const r = await runCli(['ls']);
     expect(r.code).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ accounts: [] });
-    expect(calls.some((c) => c.path === KEYS)).toBe(false);
+    expect(r.stdout).toMatch(/anthropic\s+Anthropic key\s+everyone in this workspace/);
+    expect(calls.some((c) => c.path === BASE && c.method === 'GET')).toBe(false);
+    const j = await runCli(['ls', '--json']);
+    expect((JSON.parse(j.stdout) as { accounts: Row[] }).accounts.map((a) => a.secret_id)).toEqual(['key-mine']);
   });
 });
 

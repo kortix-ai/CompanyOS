@@ -6,6 +6,7 @@ import { createDatabaseSession } from '../fixtures/database-project';
 import { subscribe } from '../fixtures/billing';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
 import { log } from '../core/log';
+import { sleep } from '../core/poll';
 import type { FlowContext } from '../core/types';
 import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
@@ -957,6 +958,63 @@ flow('SEC-POOL-8', {
     (await owner.del('/v1/workspaces/:projectId/gateway/keys/:keyId', { params: { ...params, keyId } })).status([200, 404]);
   }
 }));
+
+// SEC-POOL-9 — saving a provider key never changes a working default model.
+// Two e2e runs on dev: a key saved in the Models panel set the workspace default
+// to that provider's flagship (`openrouter/…-preview:free`, `groq/…`), and
+// every new session failed. The seed runs detached after the save, so each
+// read-back waits out the save's background work before it asserts.
+flow('SEC-POOL-9', {
+  domain: 'secrets', requires: ['funded'],
+  routes: [
+    'GET /v1/workspaces/:projectId/model-defaults',
+    'POST /v1/accounts/:accountId/secret-resources',
+    'POST /v1/projects/:projectId/secrets',
+    'DELETE /v1/accounts/:accountId/secret-resources/:secretId',
+    'DELETE /v1/projects/:projectId/secrets/:name',
+  ],
+}, async (ctx) => {
+  const team = await ctx.fixtures.team();
+  const project = await team.project({ seed: true, allowAllSecrets: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: project.id };
+  const defaults = async () => (await owner.get('/v1/workspaces/:projectId/model-defaults', { params }))
+    .status(200).json<{ projectDefault: string | null; accountDefault?: string | null }>();
+  const unchanged = async (writer: string) => {
+    // The seed is fire-and-forget after the save answers: read three times over 1.5 s.
+    for (let read = 0; read < 3; read += 1) {
+      await sleep(500);
+      const now = await defaults();
+      if (now.projectDefault !== null) throw new Error(`${writer} set the project default to ${now.projectDefault}`);
+    }
+  };
+  let secretId = '';
+  try {
+    await ctx.step('a funded workspace starts on the platform default: no project default', async () => {
+      if ((await defaults()).projectDefault !== null) throw new Error('a new workspace already has a project default');
+    });
+    await ctx.step('a key saved in the Models panel (shared with everyone) leaves the default unchanged', async () => {
+      const created = await owner.post('/v1/accounts/:accountId/secret-resources', {
+        project_id: project.id, access_mode: 'project', label: 'Groq key', provider_id: 'groq',
+        name: 'GROQ_API_KEY', value: 'gsk_kortix_e2e_not_a_key', consumer: 'llm_gateway', strategy: 'broker',
+      }, { params: { accountId: team.id } });
+      created.status(201);
+      secretId = created.json<{ secret_id: string }>().secret_id;
+      await unchanged('the Models panel key save');
+    });
+    await ctx.step('a key saved through the legacy secrets route leaves the default unchanged too', async () => {
+      (await owner.post('/v1/projects/:projectId/secrets', {
+        name: 'OPENROUTER_API_KEY', value: 'sk-or-kortix-e2e-not-a-key', strategy: 'broker', consumer: 'llm_gateway',
+      }, { params })).status(200);
+      await unchanged('the legacy secrets key save');
+    });
+  } finally {
+    if (secretId) {
+      (await owner.del('/v1/accounts/:accountId/secret-resources/:secretId', { params: { accountId: team.id, secretId } })).status([200, 404]);
+    }
+    (await owner.del('/v1/projects/:projectId/secrets/:name', { params: { ...params, name: 'OPENROUTER_API_KEY' } })).status([200, 404]);
+  }
+});
 
 flow('SEC-9', {
   domain: 'secrets', requires: ['database'],

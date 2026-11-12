@@ -1,8 +1,7 @@
 /**
- * The stop-refusal guard — one home for the copies
- * `packages/ui` (`session/status/stop-refusal.ts`) and the mobile host
- * (`apps/mobile/lib/session/turn-stop.ts`) hand-maintained. Both hosts
- * re-export these, so every fix lands once.
+ * The stop-refusal guard. Both hosts (`packages/ui/src/session/status/stop-refusal.ts`,
+ * `apps/mobile/lib/session/turn-stop.ts`) re-export these, so every fix
+ * lands once.
  */
 
 /** The 403 `code` of a stop the server refused. */

@@ -46,10 +46,7 @@ import { ChannelBrandMark } from '../../turn/channel-brand';
 import { channelSendText, parseChannelSendCommand } from './channel-send';
 import { ChannelSendCard, channelSendTitle } from './channel-send-card';
 
-/**
- * `bashRowTitle` and `dedentCommand` — the row-title and dedent rules — live
- * once in `@kortix/shared/session/tool-row-text`; both hosts re-export them.
- */
+/** The row-title and dedent rules live once in `@kortix/shared/session/tool-row-text`. */
 export { bashRowTitle, dedentCommand };
 
 /**

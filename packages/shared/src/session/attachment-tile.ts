@@ -1,8 +1,8 @@
 /**
- * The pure rules of an attachment tile — one home for the copies
- * `packages/ui` (`session/composer/attachment-tile.tsx`) and the mobile host
- * (`apps/mobile/lib/session/attachment-tile.ts`) hand-maintained. Both hosts
- * re-export these, so every fix lands once.
+ * The pure rules of an attachment tile. Both hosts
+ * (`packages/ui/src/session/composer/attachment-tile.tsx`,
+ * `apps/mobile/lib/session/attachment-tile.ts`) re-export these, so every
+ * fix lands once.
  */
 
 /** What the tile prints in the file's corner. Lowercase, from the name first

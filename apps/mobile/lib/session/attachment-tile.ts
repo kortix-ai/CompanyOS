@@ -2,12 +2,8 @@
  * Attachment tile logic — a port of the pure parts of apps/web
  * `features/session/attachment-tile.tsx` and `planAttachmentGrid` in
  * `features/session/turn/user-message.tsx`. `components/session/attachment-tile.tsx`
- * owns how a tile looks.
- *
- * The five tile rules — `attachmentExtension`, `isPreviewableImage`,
- * `splitFilenameForTile`, `LONG_NAME_THRESHOLD`, `NAME_TAIL_CHARS` — live
- * once in `@kortix/shared/session/attachment-tile`; both hosts re-export
- * them.
+ * owns how a tile looks. The five tile rules live once in
+ * `@kortix/shared/session/attachment-tile`.
  */
 
 export {

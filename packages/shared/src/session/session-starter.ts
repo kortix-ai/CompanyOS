@@ -1,16 +1,13 @@
 /**
- * Who started the RUN a session belongs to — one home for the classification
- * `packages/ui` (`workspace/projects/session-starter.ts`) and the mobile host
- * (`apps/mobile/lib/session/session-tree.ts`) hand-maintained. It reads the
- * server-derived `initiator` (never from `created_by` alone: a child keeps
- * its creator's ownership but shows its run's starter). A row the backfill
- * could not classify has no initiator and reads as a member: the session's
- * creator.
- *
- * `@kortix/shared` does not depend on `@kortix/sdk`, so the input mirrors the
- * `ProjectSession` fields the classification reads. The hosts keep their
- * presentation: mobile derives its `StarterIcon` table and "You"/"Member"
- * wording, web derives its `labels.you`/`labels.unknown` and owner fallbacks.
+ * Who started the RUN a session belongs to. Both hosts
+ * (`packages/ui/src/workspace/projects/session-starter.ts`,
+ * `apps/mobile/lib/session/session-tree.ts`) derive their presentation from
+ * this classification: mobile its `StarterIcon` table and "You"/"Member"
+ * wording, web its `labels.you`/`labels.unknown` and owner fallbacks. It
+ * reads the server-derived `initiator` (never from `created_by` alone: a
+ * child keeps its creator's ownership but shows its run's starter). A row
+ * the backfill could not classify has no initiator and reads as a member:
+ * the session's creator.
  */
 
 export type SessionStarterType = 'member' | 'trigger' | 'channel' | 'api' | 'system';

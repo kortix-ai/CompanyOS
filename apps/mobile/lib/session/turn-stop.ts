@@ -15,14 +15,11 @@ import type { SessionMessageAuthors } from '@kortix/sdk';
 
 import { participantName } from './participants';
 
-/** The 403 `code` of a stop the server refused. */
-export { NOT_TURN_PROMPTER } from '@kortix/shared/session/stop-refusal';
-
 /**
- * The toast for a stop the server refused. The shared rule lives in
- * `@kortix/shared/session/stop-refusal`; both hosts re-export it.
+ * The stop-refusal guard lives once in `@kortix/shared/session/stop-refusal`;
+ * both hosts re-export it.
  */
-export { stopRefusalMessage } from '@kortix/shared/session/stop-refusal';
+export { NOT_TURN_PROMPTER, stopRefusalMessage } from '@kortix/shared/session/stop-refusal';
 
 /**
  * May the viewer stop the running turn? The server's `can_stop`, read through

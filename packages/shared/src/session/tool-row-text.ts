@@ -1,8 +1,8 @@
 /**
- * The pure text rules of the `bash` tool row — one home for the copies
- * `packages/ui` (`session/tool/tools/bash-tool.tsx`) and the mobile host
- * (`apps/mobile/lib/session/tools/files-bash.ts`) hand-maintained. Both hosts
- * re-export these, so every fix lands once.
+ * The pure text rules of the `bash` tool row. Both hosts
+ * (`packages/ui/src/session/tool/tools/bash-tool.tsx`,
+ * `apps/mobile/lib/session/tools/files-bash.ts`) re-export these, so every
+ * fix lands once.
  */
 
 /** The row title never runs past this; a trigger is one line, not a sentence. */

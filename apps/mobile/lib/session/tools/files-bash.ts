@@ -35,10 +35,7 @@ export const BASH_TEXT = {
   exitCode: 'Exit code',
 } as const;
 
-/**
- * `bashRowTitle` and `dedentCommand` — the row-title and dedent rules — live
- * once in `@kortix/shared/session/tool-row-text`; both hosts re-export them.
- */
+/** The row-title and dedent rules live once in `@kortix/shared/session/tool-row-text`. */
 export { bashRowTitle, dedentCommand } from '@kortix/shared/session/tool-row-text';
 
 /** `input.command || metadata.command || streamingInput.command`, dedented. */

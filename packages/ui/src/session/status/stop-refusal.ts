@@ -3,7 +3,6 @@
  * only reaches here when that answer was stale. The server's own words are
  * what the toast says.
  *
- * The guard itself — `NOT_TURN_PROMPTER` and `stopRefusalMessage` — lives
- * once in `@kortix/shared/session/stop-refusal`; both hosts re-export it.
+ * The guard lives once in `@kortix/shared/session/stop-refusal`.
  */
 export { NOT_TURN_PROMPTER, stopRefusalMessage } from '@kortix/shared/session/stop-refusal';

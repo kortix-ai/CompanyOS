@@ -42,11 +42,7 @@ export const TILE_SURFACE =
 export const TILE_INTERACTIVE =
   'hover:bg-accent cursor-pointer transition-colors duration-fast active:scale-[0.96]';
 
-/**
- * Which files the tile shows AS A PICTURE, what a tile prints in a file's
- * corner, and how a long name is laid out — the five tile rules live once in
- * `@kortix/shared/session/attachment-tile`; both hosts re-export them.
- */
+/** The five tile rules live once in `@kortix/shared/session/attachment-tile`. */
 export {
   LONG_NAME_THRESHOLD,
   NAME_TAIL_CHARS,

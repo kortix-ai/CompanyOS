@@ -27,6 +27,19 @@ mock.module('@/lib/use-cases-source', () => ({
   },
 }));
 
+// The home route's signed-in guard (`(home)/landing-auth-gate.tsx`) reads the
+// auth provider the root layout mounts and the app router. Supply both
+// boundaries as a signed-out visitor, the landing's audience, so the real gate
+// renders the shipped composition (its redirect is `home-auth-redirect.test.tsx`).
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({ user: null, isLoading: false, supabase: {}, bootstrapError: null, retryAuth: () => undefined }),
+}));
+const realNavigation = await import('next/navigation');
+mock.module('next/navigation', () => ({
+  ...realNavigation,
+  useRouter: () => ({ replace: () => undefined, push: () => undefined, prefetch: () => undefined, back: () => undefined, forward: () => undefined, refresh: () => undefined }),
+}));
+
 // bun hoists static imports above the mocks, so every page loads dynamically.
 const Home = (await import('./(home)/page')).default;
 const PricingPage = (await import('./pricing/page')).default;

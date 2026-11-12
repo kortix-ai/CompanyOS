@@ -1267,10 +1267,6 @@
           "name": "Secrets protégés par le réseau",
           "description": "Contrôlez les outils et destinations autorisés à recevoir les secrets de l’espace de travail."
         },
-        "pooled_provider_secrets": {
-          "name": "Secrets de fournisseur partagés",
-          "description": "Les membres connectent leurs propres abonnements ChatGPT et clés de fournisseur, les partagent si besoin et choisissent ceux que chaque session utilise."
-        },
         "reminders": {
           "name": "Boucles",
           "description": "Permet aux agents et aux personnes de planifier des points de contrôle sur une session, une fois ou de façon récurrente. Chaque déclenchement relance cette session. Ajoute les boucles à la liste des Déclencheurs, l’indicateur de boucles de la session et `kortix loop`."

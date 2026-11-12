@@ -11,6 +11,7 @@
 import { rm } from 'node:fs/promises';
 import { Image } from '@daytonaio/sdk';
 import { getDaytona, isDaytonaConfigured, listDaytonaSnapshots } from '../../shared/daytona';
+import { isDaytonaAuthFailure } from '../../shared/daytona-auth';
 import { isDaytonaRateLimitError } from '../../shared/daytona-rate-limit';
 import { withTimeout } from '../../shared/with-timeout';
 import {
@@ -309,27 +310,10 @@ class DaytonaAdapter implements SandboxProviderAdapter {
   }
 }
 
-/**
- * True iff `err` is a genuine auth/authorization failure from the Daytona API
- * (HTTP 401/403 — a dead/revoked `DAYTONA_API_KEY`), never a transient
- * provider hiccup. Same narrow, status-only contract as the Platinum adapter's
- * `isPlatinumAuthFailure`: a message that merely mentions credentials never
- * misclassifies, and any unclear error keeps the caller's existing behavior.
- * The SDK's own 401 error ("DaytonaAuthenticationError: Invalid credentials",
- * statusCode 401) carries the status this reads.
- */
-export function isDaytonaAuthFailure(err: unknown): boolean {
-  const value = err as
-    | {
-        status?: unknown;
-        statusCode?: unknown;
-        response?: { status?: unknown };
-      }
-    | null
-    | undefined;
-  const statuses = [value?.statusCode, value?.response?.status, value?.status];
-  return statuses.some((status) => status === 401 || status === 403);
-}
+// The classifier lives in shared/daytona-auth.ts (own module: shared/daytona
+// is wholesale-mocked in several suites) — the App-runtime teardown escalates
+// with it too (KRTX-4792). Re-exported here for the existing imports.
+export { isDaytonaAuthFailure };
 
 export function isDaytonaSnapshotNotFoundError(err: unknown): boolean {
   const value = err as

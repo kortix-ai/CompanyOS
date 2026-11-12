@@ -1954,7 +1954,9 @@ flow(
         .body()
         .has("$.kind", "secret")
         .has("$.names[0]", "SEC7_TEST_KEY")
-        .has("$.scope", "connector")
+        // Omitted scope is runtime now (#12512): an agent's plain mint is
+        // env delivery, not a locked connector value.
+        .has("$.scope", "runtime")
         .exists("$.url");
       const url = r.json<{ url: string }>().url;
       token = url.split("/").pop() ?? "";
@@ -2001,15 +2003,15 @@ flow(
       r.status(400);
     });
 
-    await ctx.step("runtime delivery requires an explicit scope → 200 runtime", async () => {
+    await ctx.step("connector delivery requires an explicit scope → 200 connector", async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .post(
           "/v1/projects/:projectId/secret-requests",
-          { names: ["SEC7_RUNTIME_KEY"], scope: "runtime" },
+          { names: ["SEC7_RUNTIME_KEY"], scope: "connector" },
           { params: { projectId: p.id } },
         );
-      r.status(200).body().has("$.scope", "runtime");
+      r.status(200).body().has("$.scope", "connector");
     });
 
     await ctx.step("unknown delivery scope → 400", async () => {

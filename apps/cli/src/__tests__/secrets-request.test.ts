@@ -96,7 +96,14 @@ test('request --show recovers the original link without minting and isolates cre
     expect((await run()).code).toBe(0);
     expect(statSync(cache).mode & 0o777).toBe(0o600);
     expect(minted).toBe(2);
-    expect((await run('--show', '--scope', 'runtime')).code).toBe(2);
+    // The default mint is runtime (#12512): a --show with the default scope
+    // addresses the same cache slot and recovers the same live link, without
+    // minting. A different scope is a different slot and misses on its own;
+    // --show still refuses to change expiry.
+    const shownRuntime = await run('--show', '--scope', 'runtime');
+    expect(shownRuntime.code).toBe(0);
+    expect(JSON.parse(shownRuntime.out)).toEqual(JSON.parse(original.out));
+    expect(minted).toBe(2);
     expect((await run('--show', '--expires', '5')).code).toBe(2);
     writeFileSync(
       cache,

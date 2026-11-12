@@ -30,10 +30,9 @@ printf '%s' "$VALUE" | kortix secrets set APOLLO_API_KEY=-                 # run
 printf '%s' "$VALUE" | kortix secrets set BILLING_API_TOKEN=- --scope connector
 ```
 
-- `runtime` (the default for `set`): loaded into this session's env (no
-  restart) and into later sessions of agents granted it.
-- `connector`: kept server-side, spent only by a connector.
-- An agent stores `runtime` and `connector` secrets only. Network
+- `runtime` (the default for `set`): this session's env now and later
+  sessions of granted agents; `connector` stays server-side for connectors.
+- An agent stores `runtime` and `connector` secrets only; network
   enforcement, host lists and LLM gateway keys are for people (`403`).
 
 ## Mint a secret link
@@ -43,10 +42,8 @@ kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime     # yo
 kortix secrets request BILLING_API_TOKEN --scope connector                  # only a connector spends it
 ```
 
-- **Always pass the scope you mean.** `runtime` (the default) delivers the
-  value to you as an env var: use it for "store my key" and for any key your
-  code or tools read. `connector` keeps it server-side for a connector and
-  never puts it in the sandbox. The person can change delivery later.
+- **Always pass the scope you mean:** `runtime` (the default) → env var;
+  `connector` → server-side for a connector. The person can change delivery later.
 - One link asks for several keys. Ask for everything in one message.
 - A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
   set the names it lists, in this workspace.

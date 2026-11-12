@@ -105,8 +105,7 @@ job the same way.
    wait on the outside world. Write the plan into the status file (step 4).
 2. **Delegate.** One named background agent per part (`agent` with `name`;
    a follow-up goes to the same name), a `workflow` for many parallel agents,
-   a team only when they must share a task list. A hand-off, a teammate and
-   a workflow report back by themselves: set no loop for them.
+   a team only when they must share a task list.
 3. **Set wake-ups.** For every wait on the outside world: an event that wakes
    this session when one exists, plus a fallback loop with an end date
    ("Follow-through" above).

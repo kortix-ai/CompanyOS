@@ -2092,7 +2092,11 @@
       "claudePlan": "Pro 或 Max 套餐",
       "connectModel": "连接模型",
       "imagesUnsupported": "{model} 无法读取图片",
-      "imagesUnsupportedHint": "请移除图片或选择其他模型"
+      "imagesUnsupportedHint": "请移除图片或选择其他模型",
+      "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
+      "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
+      "noModelUpgradePlan": "升级套餐",
+      "noModelAddProviderKey": "添加提供商密钥"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -10389,6 +10393,8 @@
       "checkConnection": "请检查网络连接，然后重试。"
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "添加提供商密钥",
+      "noModelUpgradePlan": "升级套餐",
       "authEmailRateLimit": "无法发送邮件。请在大约一小时后重试。",
       "authRequestRateLimit": "请求过多。请在几分钟后重试。",
       "text03217276a5f1": "余额 {value0} 积分",
@@ -22086,6 +22092,12 @@
     "noticeSignInTitle": "登录 {name}",
     "noticeSignInBody": "Kortix 已添加 {name}。完成登录后，智能体即可使用其工具。",
     "noticeSignInAction": "登录",
+    "noticeSignInAgainTitle": "重新登录 {name}",
+    "noticeSignInAgainBody": "登录已过期或已被撤销。在你重新登录之前，代理无法使用 {name}。",
+    "noticeNoToolsTitle": "{name} 没有工具",
+    "noticeNoToolsBody": "它没有路由，因此代理没有可调用的内容。请在设置中向其路由规范添加路由。",
+    "noticeAddRoutesAction": "添加路由",
+    "statusNoTools": "无工具",
     "connectAccount": "连接",
     "notSignedIn": "未登录",
     "credentialRejected": "凭据被拒绝：请替换",

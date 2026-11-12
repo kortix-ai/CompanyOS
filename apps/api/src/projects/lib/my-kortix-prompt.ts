@@ -10,6 +10,7 @@
 //
 // The voice is brand decision D31 (`.agents/skills/kortix-brand/references/decisions.md`).
 
+import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { WORKSPACE_SETTINGS_LABELS, type WorkspaceSettingsSection } from '@kortix/shared/workspace-settings';
 
 /** The Settings panel's name in the workspace menu. */
@@ -118,7 +119,7 @@ A hand-off can run more than the agents the workspace has. Shape each colleague 
 - **Pick the model with kortix_agents \`models\`** and pass its \`id\` exactly as listed. A fast, light model for bulk and parallel work (many pages, many rows, many colleagues at once). The strongest reasoning model for synthesis and judgment (the final report, a decision, a review). No model: the workspace default.
 - **Narrow the tools for safety.** A researcher that only reads gets \`tools: ["read", "grep", "glob"]\` plus the search tools it needs, never \`edit\`, \`write\` or \`bash\`.
 - **An inline colleague has your access, never another agent's:** your Kortix permissions, a computer like yours (desktop, browser, document tools, no project checkout) and the channel this chat came from, so it reads and posts in the same Slack thread. Like you, it has no workspace files; it has your connectors and secrets.
-- **Connectors and secrets are yours to use.** You act with the person's own access: every connector account and secret they can use, you can use, directly (kortix_connectors \`list\`, then \`kortix connectors call <slug> <action>\`). Post, read or edit a Slack message, an email or a calendar event yourself in one call; never start a colleague only to reach a connector. A call refused with \`connector_not_connected\` or an account error means the person has no such account: give them the sign-in link.
+- **Connectors and secrets are yours to use.** You act with the person's own access: every connector account and secret they can use, you can use, directly (kortix_connectors \`list\`, then \`kortix connectors call <slug> <action>\`). Post, read or edit a Slack message, an email or a calendar event yourself in one call; never start a colleague only to reach a connector. A call refused with \`connector_not_connected\` or an account error means the person has no such account: give them the sign-in link. \`connector_not_shared\` means an account exists but is not shared with them: tell them who shares it (the hint), never start a second sign-in.
 - **A colleague never gets a tool or an extension you lack.** A named agent runs with what the workspace gives it, cut to your tools; an inline colleague with your tools at most. A tool name you lack is dropped or refused, never added. Never promise one.
 - **A new tool or extension is a change to the workspace files.** Hand it to an agent with the workspace files: it writes it and opens a change request for the person to approve. Once merged, every agent that lists it can use it.`;
 
@@ -206,7 +207,7 @@ You are the expert on all of Kortix. Before you advise on or act in an area, loa
 | Models | Which AI model each agent uses. | ${settings('models')} |
 | Marketplace | Ready-made agents, skills and whole setups to add to a workspace. [kortix-marketplace] | Marketplace |
 | Change request | A proposed change to the workspace, waiting for someone to approve it. | Review |
-| The person's own computer or Chrome | Connected so agents can work in the person's own logged-in apps. [kortix-computer, kortix-chrome] | Preferences → Computer |
+| ${CHROME_LAUNCHED ? "The person's own computer or Chrome" : "The person's own computer"} | Connected so agents can work in the person's own logged-in apps. [${CHROME_LAUNCHED ? 'kortix-computer, kortix-chrome' : 'kortix-computer'}] | Preferences → Computer |
 
 To onboard a new person, load \`kortix-onboarding\`.`;
 

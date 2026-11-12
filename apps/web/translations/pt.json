@@ -2092,7 +2092,11 @@
       "claudePlan": "Plano Pro ou Max",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} não consegue ler imagens",
-      "imagesUnsupportedHint": "remova-as ou escolha outro modelo"
+      "imagesUnsupportedHint": "remova-as ou escolha outro modelo",
+      "noModelUpgradeReason": "Sem modelo: faça upgrade para o plano Credits ou adicione sua própria chave de provedor.",
+      "noModelKeyReason": "Sem modelo: adicione sua própria chave de provedor.",
+      "noModelUpgradePlan": "Fazer upgrade do plano",
+      "noModelAddProviderKey": "Adicionar chave do provedor"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvo",
@@ -10389,6 +10393,8 @@
       "checkConnection": "Verifique sua conexão e tente novamente."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Adicionar chave do provedor",
+      "noModelUpgradePlan": "Fazer upgrade do plano",
       "authEmailRateLimit": "Não foi possível enviar o e-mail. Tente novamente em cerca de uma hora.",
       "authRequestRateLimit": "Muitas solicitações. Tente novamente em alguns minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
@@ -22086,6 +22092,12 @@
     "noticeSignInTitle": "Entrar no {name}",
     "noticeSignInBody": "O Kortix adicionou {name}. Conclua o login para que os agentes possam usar as ferramentas.",
     "noticeSignInAction": "Entrar",
+    "noticeSignInAgainTitle": "Entre novamente em {name}",
+    "noticeSignInAgainBody": "O login expirou ou foi revogado. Os agentes não podem usar {name} até você entrar novamente.",
+    "noticeNoToolsTitle": "{name} não tem ferramentas",
+    "noticeNoToolsBody": "Não tem rotas, então os agentes não têm nada para chamar. Adicione rotas à especificação de rotas em Configurações.",
+    "noticeAddRoutesAction": "Adicionar rotas",
+    "statusNoTools": "Sem ferramentas",
     "connectAccount": "Conectar",
     "notSignedIn": "Sem login",
     "credentialRejected": "Credencial rejeitada: substitua-a",

@@ -2092,7 +2092,11 @@
       "claudePlan": "Pro ili Max plan",
       "connectModel": "Повежи модел",
       "imagesUnsupported": "{model} не може да чита слике",
-      "imagesUnsupportedHint": "уклони их или изабери други модел"
+      "imagesUnsupportedHint": "уклони их или изабери други модел",
+      "noModelUpgradeReason": "Нема модела: пређи на Credits план или додај свој кључ провајдера.",
+      "noModelKeyReason": "Нема модела: додај свој кључ провајдера.",
+      "noModelUpgradePlan": "Надогради план",
+      "noModelAddProviderKey": "Додај кључ провајдера"
     },
     "providerRecovery": {
       "savedPrompt": "Сачуван упит",
@@ -10389,6 +10393,8 @@
       "checkConnection": "Проверите везу, па покушајте поново."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Dodaj ključ provajdera",
+      "noModelUpgradePlan": "Nadogradi plan",
       "authEmailRateLimit": "Е-порука није послата. Покушај поново за око сат времена.",
       "authRequestRateLimit": "Превише захтева. Покушај поново за неколико минута.",
       "text03217276a5f1": "Стање {value0} кредита",
@@ -22086,6 +22092,12 @@
     "noticeSignInTitle": "Prijavi se na {name}",
     "noticeSignInBody": "Kortix je dodao {name}. Završi prijavu da bi agenti mogli da koriste njegove alate.",
     "noticeSignInAction": "Prijavi se",
+    "noticeSignInAgainTitle": "Ponovo se prijavi na {name}",
+    "noticeSignInAgainBody": "Prijava je istekla ili je opozvana. Agenti ne mogu da koriste {name} dok se ponovo ne prijaviš.",
+    "noticeNoToolsTitle": "{name} nema alate",
+    "noticeNoToolsBody": "Nema rute, pa agenti nemaju šta da pozovu. Dodaj rute u specifikaciju ruta u Podešavanjima.",
+    "noticeAddRoutesAction": "Dodaj rute",
+    "statusNoTools": "Nema alata",
     "connectAccount": "Poveži",
     "notSignedIn": "Nije prijavljeno",
     "credentialRejected": "Akreditiv je odbijen: zamenite ga",

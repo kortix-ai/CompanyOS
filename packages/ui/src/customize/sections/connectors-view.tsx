@@ -237,6 +237,7 @@ function ConnectionRow({
   onShare,
   onConnect,
   needsSignIn,
+  signsIn = false,
   pending,
   disabled = false,
   meta,
@@ -267,6 +268,9 @@ function ConnectionRow({
   onConnect?: () => void;
   /** Not signed in, on a connector that has a sign-in (`accountNeedsSignIn`). */
   needsSignIn: boolean;
+  /** The account signs in through a provider window (managed, one-click OAuth
+   *  MCP), so its button says "Sign in", not "Connect". */
+  signsIn?: boolean;
   pending: boolean;
   disabled?: boolean;
 }) {
@@ -355,7 +359,11 @@ function ConnectionRow({
           gets its next step on the row, not behind the menu. */}
       {onConnect && mayMutate && needsSignIn ? (
         <Button size="sm" className="shrink-0" onClick={onConnect} disabled={pending || disabled}>
-          {signInStarted ? tSignIn('finishSignIn') : tConnectorPages('connectAccount')}
+          {signInStarted
+            ? tSignIn('finishSignIn')
+            : signsIn
+              ? tConnectorPages('noticeSignInAction')
+              : tConnectorPages('connectAccount')}
         </Button>
       ) : null}
       <ButtonGroup className="shrink-0">
@@ -477,6 +485,7 @@ export function ConnectionsList({
   onStartSession,
   onSetCredential,
   onConnect,
+  signsIn = false,
   titleAddon,
   addVariant = 'secondary',
   addRequest = 0,
@@ -498,6 +507,9 @@ export function ConnectionsList({
   onSetCredential?: (target: { connectionId: string; owner: 'project' | 'me' }) => void;
   /** Sign an unsigned account in. Omitted = no Connect on the rows. */
   onConnect?: (connection: Connection) => void;
+  /** An MCP server with one-click OAuth: rows say "Sign in". A managed
+   *  provider always does. */
+  signsIn?: boolean;
   /** Bumped to open "Add account" from outside the list (a header button,
    *  or the connector page right after Install). */
   addRequest?: number;
@@ -745,6 +757,7 @@ export function ConnectionsList({
       onSetCredential={setCredential ? () => setCredential(connection) : undefined}
       onConnect={onConnect ? () => onConnect(connection) : undefined}
       needsSignIn={!isEmail && accountNeedsSignIn(connection, connector)}
+      signsIn={signsIn || isManagedConnectorProvider(connector.provider)}
       onShare={
         accountId
           ? () => {

@@ -51,6 +51,12 @@ mock.module('../../llm-gateway/models/served-managed-models', () => ({
   platformVisionModelId: () => '',
 }));
 
+// The models the box registers at boot. Empty = the box dies ("pi harness has no model").
+let catalogModels: Record<string, unknown> = { 'openai/gpt-x': {} };
+mock.module('../../llm-gateway/models/servable-catalog', () => ({
+  servableProjectCatalog: async () => ({ models: catalogModels }),
+}));
+
 import { createProjectSession } from './sessions';
 
 // My Kortix runs only when kortix.yaml turns it on. This suite characterizes the
@@ -135,6 +141,19 @@ test('an oversized initial_context is refused and inserts nothing', async () => 
 // The boot model of a session with nothing stored. The gateway refuses every
 // managed model to a FREE account, so it never boots pinned to the platform
 // default: it runs its own connected model, or none.
+test('a free-tier account with no model and an empty catalog is refused before any row: 409 no_model_available', async () => {
+  mayUseManagedModels = false;
+  catalogModels = {};
+  try {
+    const result = await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });
+    expect(result.error?.status).toBe(409);
+    expect(result.error?.body).toMatchObject({ code: 'no_model_available', plan_upgrade: true });
+    expect(inserted).toBeUndefined();
+  } finally {
+    catalogModels = { 'openai/gpt-x': {} };
+  }
+});
+
 test('a fresh free-tier account never boots pinned to a managed model', async () => {
   mayUseManagedModels = false;
   const result = await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });

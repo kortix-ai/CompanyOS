@@ -174,7 +174,10 @@
     "claudeConnectFailed": "O login no Claude não terminou. Tente novamente.",
     "claudeReconnectDescription": "Entre com o Claude de novo. A conta mantém o nome, o acesso e as seleções de sessão.",
     "claudeAccountLabelPlaceholder": "ex.: Minha conta do Claude",
-    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?"
+    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?",
+    "sharedOnlyYouDescription": "Adicione chaves de API, contas do ChatGPT e contas do Claude. Só você pode usar as que adicionar. Um gestor do workspace pode compartilhar uma. Escolha quais cada sessão usa.",
+    "oauthOnlyYouDescription": "Use seu plano ChatGPT Plus ou Pro neste workspace. Só você pode usar as contas que adicionar.",
+    "claudeOauthOnlyYouDescription": "Use seu plano Claude Pro ou Max para modelos Claude neste workspace. Só você pode usar as contas que adicionar."
   },
   "secrets": {
     "undecryptable": {
@@ -23713,7 +23716,13 @@
   },
   "triggerAutoPause": {
     "title": "Pausado automaticamente",
-    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o."
+    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o.",
+    "billingTitle": "Pausado: sem créditos",
+    "billingDescription": "Nenhuma execução pode ser paga, então parou de iniciá-las. Retoma sozinho alguns minutos depois de recarregar o saldo.",
+    "modelTitle": "Pausado: nenhum modelo disponível",
+    "modelDescription": "As automações usam só chaves de modelo e contas compartilhadas com todo o workspace, e nenhuma está disponível. Retoma sozinho alguns minutos depois que você adicionar uma em Modelos.",
+    "listBilling": "Sem créditos",
+    "listModel": "Sem modelo"
   },
   "featureGate": {
     "enable": "Ativar {name}",
@@ -26813,5 +26822,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limite os gastos do gateway deste espaço de trabalho.",
     "capMember": "Limite os gastos do gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Abrir login do {app}",
+    "checkingTitle": "Concluindo o login",
+    "checkingDescription": "O Kortix verifica seu login no {app}. Esta página se atualiza sozinha.",
+    "signInUnfinished": "Login não concluído",
+    "finishSignIn": "Concluir login",
+    "signInFinished": "Login concluído",
+    "cardHeadline": "Seu agente precisa que você faça login",
+    "cardTitle": "Conectar {app}",
+    "cardShared": "Compartilhada com o workspace",
+    "cardPrivate": "Só você",
+    "signingIn": "Conclua o login no {app} na janela que abriu.",
+    "connectedAs": "Conectado como {account}",
+    "connected": "Conectado",
+    "connect": "Conectar",
+    "cardFailed": "Não foi possível conectar {app}. Tente novamente.",
+    "blockedTitle": "Abra o {app} para fazer login",
+    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha."
   }
 }

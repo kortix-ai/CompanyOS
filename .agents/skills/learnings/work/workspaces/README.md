@@ -158,9 +158,10 @@ Order from here (each prod step needs Dimitrije's go):
 3. Build R2a (design.md §4) while the split runs; then R2b; R3 after a
    rehearsal on a restored snapshot (§5).
 
-Of the decisions below, 2 (the confirmation window) is closed by D12. Still
-open: 1, the owner email text (reviewed before `apply`, which sends it), and
-3, the soak length (decided when R2b ships).
+Of the decisions below, 2 (the confirmation window) is closed by D12, and 1
+(the owner email text) by D13 (2026-11-11, "no owner notices": the split
+sends no email and has no notice period). Still open: 3, the soak length.
+`apply` itself still needs Marko's go.
 
 ## Status (2026-11-10)
 

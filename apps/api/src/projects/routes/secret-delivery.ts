@@ -182,6 +182,15 @@ export function registerSecretDeliveryRoutes(): void {
         )
         .limit(1);
       if (!existing) return c.json({ error: 'Not found' }, 404);
+      // Provider keys live in one store, the named accounts of Models →
+      // Providers (secrets/llm-credential-move.ts). A secret is never moved
+      // into the legacy gateway delivery.
+      if (nextConsumer === 'llm_gateway' && existing.consumer !== 'llm_gateway') {
+        return c.json({
+          error: 'An LLM provider key is added in Models → Providers (or with `kortix providers set`), not by moving a secret to the gateway.',
+          code: 'provider_key_store',
+        }, 409);
+      }
       // Network-Enforced Secrets (`secrets_egress`) is experimental and off by
       // default. Moving a secret INTO egress delivery needs the flag; a secret
       // already on egress can still be edited or moved OFF it, so turning the

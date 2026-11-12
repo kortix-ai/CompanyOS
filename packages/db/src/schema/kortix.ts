@@ -1410,6 +1410,37 @@ export const sessionProviderSecretPools = kortixSchema.table('session_provider_s
 ]);
 
 /**
+ * The audit ledger of the move of LLM provider credentials from
+ * `project_secrets` (consumer `llm_gateway`) into `account_secret_resources`:
+ * one row per legacy secret the backfill (`apps/api/scripts/llm-credential-backfill.ts`)
+ * or a legacy write path looked at. `outcome` says what happened to it.
+ *
+ * A legacy secret with a `copied`, `already_present` or `superseded` row is
+ * never read again (`LLM_CREDENTIAL_MOVED_OUTCOMES`): its named account serves,
+ * and deleting that account in the Models panel does not bring the old value
+ * back. Any other outcome (or no row) keeps the legacy value readable.
+ *
+ * No FK on the two secret ids: the ledger outlives a deleted account or a
+ * deleted legacy row, so an audit can still say what moved where.
+ */
+export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill', {
+  legacySecretId: uuid('legacy_secret_id').primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull(),
+  name: varchar('name', { length: 64 }).notNull(),
+  /** copied | already_present | superseded | skipped_* | failed_* (see llm-credential-move.ts). */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  accountSecretId: uuid('account_secret_id'),
+  /** The legacy row's `updated_at` when it was copied: a later legacy write re-copies it. */
+  legacyUpdatedAt: timestamp('legacy_updated_at', { withTimezone: true }).notNull(),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_llm_credential_backfill_project').on(table.projectId),
+]);
+
+/**
  * Who can see/open a session within the org. `private` (default) = only the
  * creator; `project` = every project member (team-wide); `restricted` = the
  * creator + the members/groups in `project_session_grants`. Mirrors the secret

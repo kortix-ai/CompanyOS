@@ -876,6 +876,8 @@ async function providersSet(
       // NAME, which is a guess the server has no business making: models.dev
       // claims `GITHUB_TOKEN` for `github-copilot`, so an ordinary GitHub PAT
       // was classified as a Copilot key and withheld from the sandbox.
+      // The API files it as the workspace's named "Workspace key" (one store
+      // for provider keys); a Bedrock region lands next to its key there.
       await ctx.client.post<ProjectSecret>(`/workspaces/${ctx.projectId}/secrets`, {
         name,
         value,
@@ -888,7 +890,7 @@ async function providersSet(
   }
   process.stdout.write(
     `\n${status.ok(`Saved ${C.bold}${Object.keys(values).join(', ')}${C.reset} for ${C.bold}${provider}${C.reset}`)}\n` +
-      `  ${C.dim}Saved as a workspace secret, shared with everyone in this workspace.${C.reset}\n` +
+      `  ${C.dim}Saved as a workspace key, shared with everyone in this workspace. Listed in the web under Models → Providers.${C.reset}\n` +
       `  ${C.dim}The LLM gateway uses it; the key never enters a sandbox.${C.reset}\n\n`,
   );
   return 0;

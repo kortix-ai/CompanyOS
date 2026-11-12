@@ -19,6 +19,7 @@ import { withProjectGitAuth } from './git';
 import { type ProjectRow, deriveKortixApiRoot, normalizeBoolean, normalizeString } from './serializers';
 import { triggersPausedForProject } from './trigger-scheduler-state';
 import { readAccountAutomationPause } from '../../accounts/automation-pause';
+import { setupPauseCode } from './trigger-setup-pause';
 
 // GET /v1/projects
 
@@ -212,6 +213,9 @@ export async function loadTriggersForResponse(
       // sustained run-limit breach. `PATCH enabled: true` resumes it.
       auto_paused_at: runtimeBySlug.get(spec.slug)?.autoPausedAt?.toISOString() ?? null,
       auto_paused_reason: runtimeBySlug.get(spec.slug)?.autoPausedAt ? (runtimeBySlug.get(spec.slug)?.autoPausedReason ?? null) : null,
+      // A pause that ends by itself (trigger-setup-pause.ts): `billing` or
+      // `no_usable_model`. Null for a pause only Resume ends.
+      auto_paused_code: runtimeBySlug.get(spec.slug)?.autoPausedAt ? setupPauseCode(runtimeBySlug.get(spec.slug)?.autoPausedReason) : null,
       webhook_url: spec.type === 'webhook' ? buildPublicWebhookUrl(projectId, spec.slug) : null,
     })),
     // Server-side activation state for this project's whole trigger set. When

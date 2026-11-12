@@ -1112,6 +1112,11 @@
       "count": 1
     }
   },
+  "src/llm-gateway/credentials/gateway-keys.ts": {
+    "kortix-api/projects-surface": {
+      "count": 1
+    }
+  },
   "src/llm-gateway/credentials/opencode-console.ts": {
     "kortix-api/projects-surface": {
       "count": 1
@@ -1143,22 +1148,12 @@
       "count": 1
     }
   },
-  "src/llm-gateway/models/servable-catalog.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
-    }
-  },
   "src/llm-gateway/resolution/default-model.ts": {
     "kortix-api/projects-surface": {
-      "count": 2
+      "count": 1
     },
     "kortix-api/replica-local": {
       "count": 2
-    }
-  },
-  "src/llm-gateway/resolution/resolve-candidates.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
     }
   },
   "src/llm-gateway/sandbox-credentials.ts": {

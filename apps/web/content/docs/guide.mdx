@@ -684,6 +684,7 @@ To watch something around the clock, such as a status page or a price, an agent 
 
 - **Run limits.** A trigger starts at most 60 runs an hour unless you set another limit under **Options** → **Run limits**. You can add a daily limit too.
 - **Auto-pause.** A trigger that hits its hourly limit 2 hours in a row pauses itself. It shows **Paused** until you select **Resume**.
+- **No model or no credits.** A trigger runs without a person, so it can use only model keys and accounts shared with the whole workspace. When the workspace has none, or the wallet cannot pay for a run, the trigger pauses when you save it or at its first refused run. The list shows **No model** or **No credits**, and the trigger page says why. It resumes by itself a few minutes after you add a shared model key in **Models** or top up the wallet. A trigger you save turned off is not checked.
 - **Failures.** A failed run shows **Last run didn’t finish**. When a trigger's runs start to fail, a workspace owner's phone gets one notification.
 - **Pause everything.** **Workspace settings** → **Settings** → **Triggers** → **Pause all triggers** stops every schedule, webhook, event and loop in the workspace.
 

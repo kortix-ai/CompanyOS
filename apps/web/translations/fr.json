@@ -23713,7 +23713,13 @@
   },
   "triggerAutoPause": {
     "title": "Mis en pause automatiquement",
-    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le."
+    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le.",
+    "billingTitle": "En pause : plus de crédits",
+    "billingDescription": "Aucune exécution ne peut être payée, il n’en lance donc plus. Il reprend tout seul quelques minutes après la recharge du solde.",
+    "modelTitle": "En pause : aucun modèle disponible",
+    "modelDescription": "Les automatisations n’utilisent que les clés de modèle et les comptes partagés avec tout l’espace de travail, et aucun n’est utilisable. Il reprend tout seul quelques minutes après l’ajout d’un modèle dans Modèles.",
+    "listBilling": "Plus de crédits",
+    "listModel": "Aucun modèle"
   },
   "featureGate": {
     "enable": "Activer {name}",

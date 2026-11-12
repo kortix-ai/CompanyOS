@@ -58,6 +58,8 @@ function decode(segment: string): string {
 
 /** The project-relative segments of `path`, or null when it is not in `projectId`. */
 function projectSegments(path: string, projectId: string): string[] | null {
+  // An app path only: `/workspaces/...`, never `//host` or `https://host`.
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
   const pathname = path.split(/[?#]/)[0] ?? '';
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] !== 'workspaces' && parts[0] !== 'projects') return null;

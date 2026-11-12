@@ -177,6 +177,12 @@ describe('tabRoute', () => {
     });
   });
 
+  test('rejects anything that is not an app path of this project', () => {
+    expect(tabRoute(`https://evil.example/workspaces/${P}`, P)).toBeNull();
+    expect(tabRoute(`//evil.example/workspaces/${P}`, P)).toBeNull();
+    expect(tabRoute(`javascript:alert(1)//workspaces/${P}`, P)).toBeNull();
+  });
+
   test('ignores paths outside the project', () => {
     expect(tabRoute('/workspaces/other/sessions/s1', P)).toBeNull();
     expect(tabRoute('/settings', P)).toBeNull();

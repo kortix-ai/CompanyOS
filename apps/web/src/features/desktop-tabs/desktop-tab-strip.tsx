@@ -265,7 +265,9 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   /** Show `path` for a tab switch that `fromId` was in front of. */
   const go = useCallback(
     (path: string | null, fromId: string | null = null) => {
-      if (!path) return;
+      // Only a page of this project. Persisted tabs come back from local
+      // storage, so a stored path is never trusted as a navigation target.
+      if (!path || !tabRoute(path, projectId)) return;
       if (path !== pathnameRef.current) {
         // A newer push supersedes the pending one: the router drops it.
         handoff.current = null;
@@ -277,7 +279,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
       const pending = inFlight.current;
       handoff.current = pending ? { stalePath: pending, fromId, toPath: path } : null;
     },
-    [router],
+    [projectId, router],
   );
 
   const activate = useCallback(

@@ -58,9 +58,9 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { EmptyState } from '../../primitives/empty-state';
 import {
-  connectorConnectionQueryKeys,
   connectorSetupStatus,
 } from '../sections/connector-connection-form';
+import { connectorConnectionQueryKeys } from '../../internal/hooks/connectors/invalidate-connections';
 
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectCan } from '../../internal/lib/use-project-can';

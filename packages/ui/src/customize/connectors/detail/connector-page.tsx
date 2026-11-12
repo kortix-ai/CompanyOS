@@ -1,6 +1,5 @@
 'use client';
-import { connectorConnectionQueryKeys } from '../../sections/connector-connection-form';
-import { invalidateConnections } from '../invalidate-connections';
+import { connectorConnectionQueryKeys, invalidateConnections } from '../../../internal/hooks/connectors/invalidate-connections';
 import {
   ConnectorNoticeRow,
   NOTICE_BODY,

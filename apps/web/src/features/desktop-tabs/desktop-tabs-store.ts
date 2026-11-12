@@ -232,6 +232,47 @@ export function reorder(state: ProjectTabs, ids: string[]): ProjectTabs {
   return { ...state, tabs: pinnedFirst(tabs) };
 }
 
+/* ─── Persisted shape ───────────────────────────────────────────────────── */
+
+function cleanTab(value: unknown): DesktopTab | null {
+  if (!value || typeof value !== 'object') return null;
+  const { id, path, pinned, index } = value as Record<string, unknown>;
+  if (typeof id !== 'string' || typeof path !== 'string') return null;
+  const tab: DesktopTab = { id, path };
+  if (pinned === true) tab.pinned = true;
+  if (typeof index === 'number' && Number.isInteger(index) && index >= 0) tab.index = index;
+  return tab;
+}
+
+function cleanTabs(value: unknown): DesktopTab[] {
+  return Array.isArray(value) ? value.map(cleanTab).filter((t): t is DesktopTab => t !== null) : [];
+}
+
+/**
+ * The stored value, as read back from local storage, reduced to the shape the
+ * strip renders. Old versions, a full bucket written halfway, or a hand-edited
+ * profile can hold anything; a tab whose `path` is not a string used to throw
+ * in render and take the project shell down with it.
+ */
+export function sanitizePersisted(value: unknown): { byProject: Record<string, ProjectTabs> } {
+  const byProject: Record<string, ProjectTabs> = {};
+  const raw =
+    value && typeof value === 'object' ? (value as { byProject?: unknown }).byProject : null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { byProject };
+  for (const [projectId, entry] of Object.entries(raw)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const { tabs: rawTabs, activeId, closed } = entry as Record<string, unknown>;
+    const tabs = cleanTabs(rawTabs);
+    byProject[projectId] = {
+      tabs,
+      activeId:
+        typeof activeId === 'string' && tabs.some((t) => t.id === activeId) ? activeId : null,
+      closed: cleanTabs(closed),
+    };
+  }
+  return { byProject };
+}
+
 /* ─── Store ─────────────────────────────────────────────────────────────── */
 
 interface Store {
@@ -267,6 +308,8 @@ export const useDesktopTabsStore = create<Store>()(
       version: 1,
       storage: createSafeJSONStorage(),
       partialize: (state) => ({ byProject: pruneProjects(state.byProject) }),
+      // Never trust what comes back from storage: keep only well-formed tabs.
+      merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
     },
   ),
 );

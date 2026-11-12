@@ -8,6 +8,7 @@ import {
   openTab,
   reopenClosed,
   reorder,
+  sanitizePersisted,
   setPinned,
   syncPath,
   type ProjectTabs,
@@ -304,5 +305,40 @@ describe('ownEntry', () => {
     expect(ownEntry(icons, null)).toBeUndefined();
     expect(isPrototypeKey('constructor')).toBe(true);
     expect(isPrototypeKey('apiKeys')).toBe(false);
+  });
+});
+
+describe('sanitizePersisted', () => {
+  test('keeps well-formed tabs and drops anything malformed, so a bad blob cannot crash the shell', () => {
+    const out = sanitizePersisted({
+      byProject: {
+        p1: {
+          tabs: [
+            { id: 'a', path: '/workspaces/p1' },
+            { id: 'b', path: 42 },
+            null,
+            { id: 'c', path: '/workspaces/p1/goals', pinned: 'yes' },
+          ],
+          activeId: 'zzz',
+          closed: 'nope',
+        },
+        p2: 'garbage',
+        __proto__: { tabs: [] },
+      },
+    });
+    expect(Object.keys(out.byProject)).toEqual(['p1']);
+    expect(out.byProject.p1).toEqual({
+      tabs: [
+        { id: 'a', path: '/workspaces/p1' },
+        { id: 'c', path: '/workspaces/p1/goals' },
+      ],
+      activeId: null,
+      closed: [],
+    });
+  });
+
+  test('anything that is not the stored shape becomes empty', () => {
+    expect(sanitizePersisted(null)).toEqual({ byProject: {} });
+    expect(sanitizePersisted({ byProject: [] })).toEqual({ byProject: {} });
   });
 });

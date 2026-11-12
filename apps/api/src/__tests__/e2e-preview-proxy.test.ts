@@ -2222,6 +2222,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
       }
     });
   });
+});
 
 describe('Preview proxy: no-trailing-slash', () => {
   test('/:sandboxId/:port without a trailing slash is proxied like the root', async () => {
@@ -2374,5 +2375,4 @@ describe('Preview proxy: dead daemon on a running box', () => {
     await sendUpload(TEST_PORT);
     expect(mockDaemonRepairRequests).toEqual([]);
   });
-});
 });

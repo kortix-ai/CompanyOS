@@ -2178,9 +2178,6 @@ const catalog = {
     },
     "inbox": {
       "title": "Inbox",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",

@@ -7,12 +7,13 @@ import { AuthMobileLogo, Rise, StepHeader, SuccessStrip } from '@kortix/ui/inter
 import { OtpVerification } from '@/features/auth/phone-verification/otp-verification';
 import { PhoneInput } from '@/features/auth/phone-verification/phone-input';
 import {
+  MFA_FACTORS_QUERY_KEY,
   useCreateChallenge,
   useEnrollPhoneNumber,
-  useListFactors,
+  useMfaFactors,
   useUnenrollFactor,
   useVerifyChallenge,
-} from '@/hooks/auth';
+} from '@/hooks/account/use-mfa';
 import { performSignOut } from '@/lib/auth/perform-sign-out';
 import { useAppHome } from '@kortix/ui/internal/lib/onboarding/use-app-home';
 import { SignOutIcon as LogOut } from '@phosphor-icons/react';
@@ -50,7 +51,7 @@ export default function PhoneVerificationPage() {
   const unenrollMutation = useUnenrollFactor();
 
   // Add debugging hooks
-  const { data: factors } = useListFactors();
+  const { data: factors } = useMfaFactors();
 
   // One factor lookup on mount: a verified factor wins; else the first
   // unverified one is re-verifiable. Both arms performed the same four
@@ -129,7 +130,7 @@ export default function PhoneVerificationPage() {
         // stale, so invalidate that query; reloading the document threw away
         // the whole React tree and re-ran the Supabase session bootstrap to
         // achieve the same refetch.
-        void queryClient.invalidateQueries({ queryKey: ['phone-verification-factors'] });
+        void queryClient.invalidateQueries({ queryKey: MFA_FACTORS_QUERY_KEY });
       }
     } finally {
       setIsSubmittingPhone(false);

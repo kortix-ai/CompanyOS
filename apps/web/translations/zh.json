@@ -67,7 +67,7 @@
     "oauthWaiting": "等待授权…",
     "oauthFinishing": "已登录，正在保存你的账户…",
     "oauthExpired": "授权已超时，请重试。",
-    "oauthPrivateDescription": "在此工作区中使用您的 ChatGPT Plus 或 Pro 套餐。新账户在您共享之前仅供您自己使用。",
+    "oauthPrivateDescription": "在此工作区中使用您的 ChatGPT Plus 或 Pro 套餐。新账户与每位工作区成员共享。您可以将其设为仅自己可用。",
     "chatGptSubscription": "ChatGPT 订阅",
     "manageChatGptAccounts": "管理 ChatGPT 账户",
     "connect": "连接",
@@ -95,7 +95,7 @@
     "deleteError": "无法删除密钥",
     "accessError": "无法更改访问权限",
     "sharedTitle": "提供商连接",
-    "sharedDescription": "添加 API 密钥、ChatGPT 账号和 Claude 账号。新添加的在你共享之前仅自己可用。选择每个会话使用哪些。",
+    "sharedDescription": "添加 API 密钥、ChatGPT 账号和 Claude 账号。新添加的与每位工作区成员共享。你可以将其设为仅自己可用。选择每个会话使用哪些。",
     "legacyProjectKey": "现有工作区密钥 · 本会话未选择密钥时使用",
     "keyCount": "{count, plural, other {# 个密钥}}",
     "providerKeysFor": "{provider} API 密钥",
@@ -106,6 +106,14 @@
     "access": "访问权限",
     "actions": "操作",
     "coolingDown": "冷却中",
+    "keyVerified": "已验证：{provider} 接受了此密钥",
+    "keyInvalid": "{provider} 拒绝了此密钥：{message}",
+    "keyUnchecked": "未验证：{message}",
+    "checkKey": "重新检查",
+    "savedVerified": "密钥已保存并验证",
+    "savedInvalid": "密钥已保存，但 {provider} 拒绝了它：{message}",
+    "checkError": "无法检查该密钥",
+    "openProviderInModels": "在模型中打开 {provider}",
     "member": "成员",
     "members": "位成员",
     "actionsFor": "{label} 的操作",
@@ -145,6 +153,9 @@
     "providerKeys": "提供商密钥",
     "chooseSharedKeys": "选择此会话可以使用的共享密钥。",
     "sessionKeyPool": "会话密钥池",
+    "subscriptionSwitcher": "订阅",
+    "subscriptionSwitcherDefault": "在所有已连接的订阅之间轮换",
+    "subscriptionSwitcherUse": "在此会话中使用 {label}",
     "sharedSessionKeys": "此会话已与工作区共享，因此这里只能使用与整个工作区共享的密钥。授予您的密钥可在您的私有会话中使用。",
     "promptedSessionKeys": "另一位成员已在此会话中发送消息，因此它不再代表其所有者。这里只能使用与整个工作区共享的密钥。",
     "noPersonSessionKeys": "此会话不代表任何人：它在个人密钥出现之前或在无人值守时启动。这里只能使用与整个工作区共享的密钥。开始新会话即可使用你自己的密钥。",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Claude 账号",
     "noClaudeAccounts": "还没有 Claude 账号",
     "connectClaude": "使用 Claude 登录",
-    "claudeOauthPrivateDescription": "在此工作区的 Claude 模型中使用你的 Claude Pro 或 Max 套餐。新账号在你共享之前仅自己可用。",
+    "claudeOauthPrivateDescription": "在此工作区的 Claude 模型中使用你的 Claude Pro 或 Max 套餐。新账号与每位工作区成员共享。你可以将其设为仅自己可用。",
     "claudeOauthCreationDescription": "使用你的 Claude Pro 或 Max 账号登录。Kortix 加密保存登录凭据，且从不显示。",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "已连接 Claude 账号",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "Claude 登录未完成。请重试。",
     "claudeReconnectDescription": "重新使用 Claude 登录。账号会保留名称、访问权限和会话选择。",
     "claudeAccountLabelPlaceholder": "例如：我的 Claude 账号",
-    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？"
+    "claudeDeleteAccountConfirmTitle": "要为所有人删除此 Claude 账号吗？",
+    "sharedOnlyYouDescription": "添加 API 密钥、ChatGPT 账户和 Claude 账户。你添加的只有你能使用。工作区管理员可以共享其中一个。选择每个会话使用哪些。",
+    "oauthOnlyYouDescription": "在此工作区使用你的 ChatGPT Plus 或 Pro 套餐。你添加的账户只有你能使用。",
+    "claudeOauthOnlyYouDescription": "在此工作区为 Claude 模型使用你的 Claude Pro 或 Max 套餐。你添加的账户只有你能使用。"
   },
   "secrets": {
     "undecryptable": {
@@ -2081,7 +2095,11 @@
       "claudePlan": "Pro 或 Max 套餐",
       "connectModel": "连接模型",
       "imagesUnsupported": "{model} 无法读取图片",
-      "imagesUnsupportedHint": "请移除图片或选择其他模型"
+      "imagesUnsupportedHint": "请移除图片或选择其他模型",
+      "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
+      "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
+      "noModelUpgradePlan": "升级套餐",
+      "noModelAddProviderKey": "添加提供商密钥"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -10378,6 +10396,8 @@
       "checkConnection": "请检查网络连接，然后重试。"
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "添加提供商密钥",
+      "noModelUpgradePlan": "升级套餐",
       "authEmailRateLimit": "无法发送邮件。请在大约一小时后重试。",
       "authRequestRateLimit": "请求过多。请在几分钟后重试。",
       "text03217276a5f1": "余额 {value0} 积分",
@@ -10961,7 +10981,6 @@
       "text11b405209283": "在一个地方启动、安排、监控和停止每个代理。实时流、完整历史记录、支出，以及无需人工介入即可开始工作的触发器。",
       "text11bd22785d4b": "SAML SSO 与 SCIM 是 Enterprise 功能",
       "text11c1a5b0fa54": "智能体可以优化自己的提示词、添加技能或收紧权限规则。每一项都会成为变更请求分支上的一次提交，由人类合并。自我改进，但由人类合并。智能体绝不会合并自己的修改。",
-      "text11c520bc9f1f": "超级管理员",
       "text11d1b3d47709": "已找到",
       "text11d5959da5d3": "消息 ID",
       "text11e9a34decaa": "智能体可以安装、运行并破坏任何东西——只有提交会被保留",
@@ -11840,7 +11859,6 @@
       "text2bd873d6c734": "面包屑",
       "text2bdb956493fd": "读取 webhook 处理程序",
       "text2bde665563d3": "把没人接手的工单交给它。",
-      "text2be1f843485e": "{value0} {value1} 将被锁定，直到他们注册 MFA：",
       "text2bf4ee86ea70": "测试单点登录",
       "text2bf623481fd8": "设置你想要的默认值",
       "text2bf70270bfde": "开源的 CompanyOS：您的智能体、技能、记忆和连接器，集中在您拥有的一个仓库中。支持任何模型。可自行托管或使用云端。",
@@ -18009,7 +18027,6 @@
       "textdc6d1d15031b": "银行流水同步",
       "textdc70ef3b3338": "只有当答案能回到提问所在的位置时，连接频道才有价值。文件可以双向传递，而代理需要你做出的决定会以线程中的按钮呈现，而不是让你跳转到其他地方。",
       "textdc76dd6b1aff": "登录 Kortix CLI",
-      "textdc78f4d17256": "未启用 MFA — 他们不会被锁定，但建议让其注册：",
       "textdc7ea87fdc45": "文件，双向传递",
       "textdc8659db6d41": "Enter",
       "textdc8d7c5c602b": "源账本",
@@ -18122,7 +18139,6 @@
       "textdf964376e432": "xoxb-...",
       "textdfa16aeaca13": "该工作区的存储库托管在 {value0} 上，它不支持来自 Kortix 的协作者邀请。管理存储库所在位置的访问。",
       "textdfa2cff42f0c": "缺乏系统经验",
-      "textdfad83e7eb69": "{value0} 是此工作区的隐式管理者。",
       "textdfca5da56b8c": "区块",
       "textdfd7d37e2b63": "切换开关。",
       "textdfe0c2e802b1": "服务器错误",
@@ -21312,7 +21328,30 @@
       "text765a8cb04cf5": "LLM 预留退款",
       "texta68ee4167406": "代理",
       "texta69c4dece144": "存储",
-      "textab3aff8f7642": "充值奖励"
+      "textab3aff8f7642": "充值奖励",
+      "textc75e59f5d748": "— 项能力",
+      "text58423a0108ea": "… 项能力",
+      "textcd6f79740e17": "{count, plural, other {# 项能力}}",
+      "textd1e588d764a4": "使用方：—",
+      "text66cbb5dfa6cf": "使用方：…",
+      "text56c316b0bde4": "使用方：{value0}",
+      "textb7e3e4aa4257": "禁用",
+      "texte80e342954ec": "最近一次投递 {value0}",
+      "textf1a1b16401b1": "{count, plural, other {# 名成员将被锁定，直到其启用 MFA：}}",
+      "text18cde09c22d3": "{count, plural, other {# 名超级管理员未启用 MFA — 他们不会被锁定，但建议提醒他们启用 MFA：}}",
+      "textcf42cb2f1ca3": "Owner 在此工作区隐式拥有 Manager 权限。",
+      "textd7e2d4bc4c80": "Admin 在此工作区隐式拥有 Manager 权限。",
+      "textb9215e029e76": "Agents：全部",
+      "textd6acddc499aa": "Agents：无",
+      "text1edf7747d0b8": "Agents：{value0}/{value1}",
+      "textd526776b77df": "Agents：{value0}",
+      "text002a4fd5f747": "请输入整数分钟数，或留空。",
+      "text9b8d62603858": "{value0} 分钟（7 天）是 Kortix 允许的上限。",
+      "text4510d8593ccc": "{value0}：请输入整数天数，或留空。",
+      "textb1f8e3109f1b": "{value0}：{value1} 天是 Kortix 允许的上限。",
+      "textac20a57bfde0": "收起",
+      "text268733ac2f60": "无法更新该应用",
+      "text5d8926d4a4dd": "无法注册该应用"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -21520,6 +21559,9 @@
       "deniedDescription": "My Kortix 会收到你的答复。",
       "failed": "无法发送你的决定。请重试。"
     },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "将 Kortix 添加到主屏幕，获得全屏的应用体验。",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "在 iPhone 和 iPad 上：点按“共享”，然后选择“添加到主屏幕”。",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix 已更新。刷新以获取新版本。",
     "reviewPane": {
       "emptyTitle": "选择一个项目",
       "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
@@ -22053,6 +22095,12 @@
     "noticeSignInTitle": "登录 {name}",
     "noticeSignInBody": "Kortix 已添加 {name}。完成登录后，智能体即可使用其工具。",
     "noticeSignInAction": "登录",
+    "noticeSignInAgainTitle": "重新登录 {name}",
+    "noticeSignInAgainBody": "登录已过期或已被撤销。在你重新登录之前，代理无法使用 {name}。",
+    "noticeNoToolsTitle": "{name} 没有工具",
+    "noticeNoToolsBody": "它没有路由，因此代理没有可调用的内容。请在设置中向其路由规范添加路由。",
+    "noticeAddRoutesAction": "添加路由",
+    "statusNoTools": "无工具",
     "connectAccount": "连接",
     "notSignedIn": "未登录",
     "credentialRejected": "凭据被拒绝：请替换",
@@ -23691,7 +23739,13 @@
   },
   "triggerAutoPause": {
     "title": "已自动暂停",
-    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。"
+    "description": "由于以下原因，它已停止启动运行。解决原因后再恢复它。",
+    "billingTitle": "已暂停：额度不足",
+    "billingDescription": "无法为任何运行付费，因此已停止启动运行。余额充值后几分钟内会自动恢复。",
+    "modelTitle": "已暂停：没有可用模型",
+    "modelDescription": "自动化只使用与整个工作区共享的模型密钥和账户，而目前没有可用的。在“模型”中添加一个后，几分钟内会自动恢复。",
+    "listBilling": "额度不足",
+    "listModel": "没有模型"
   },
   "featureGate": {
     "enable": "启用{name}",
@@ -26791,5 +26845,24 @@
   "gatewayBudgets": {
     "capWorkspace": "为此工作区的网关支出设置上限。",
     "capMember": "为 {who} 的网关支出设置上限。"
+  },
+  "connectSignIn": {
+    "openSignIn": "打开 {app} 登录",
+    "checkingTitle": "正在完成登录",
+    "checkingDescription": "Kortix 正在检查你的 {app} 登录。此页面会自动更新。",
+    "signInUnfinished": "登录未完成",
+    "finishSignIn": "完成登录",
+    "signInFinished": "登录已完成",
+    "cardHeadline": "你的代理需要你登录",
+    "cardTitle": "连接 {app}",
+    "cardShared": "与工作区共享",
+    "cardPrivate": "仅你自己",
+    "signingIn": "在打开的窗口中完成 {app} 登录。",
+    "connectedAs": "已连接为 {account}",
+    "connected": "已连接",
+    "connect": "连接",
+    "cardFailed": "无法连接 {app}。请重试。",
+    "blockedTitle": "打开 {app} 登录",
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
   }
 }

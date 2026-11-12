@@ -54,6 +54,12 @@ export interface ListFactorsResponse {
   factors: FactorInfo[];
 }
 
+export interface EnrollingFactor {
+  factorId: string;
+  qr: string;
+  secret?: string;
+}
+
 export interface AALResponse {
   current_level?: string;
   next_level?: string;
@@ -179,15 +185,19 @@ function toFactorInfo(factor: {
   };
 }
 
-/** The verdict per `current -> next` AAL combination, as the AAL gate reports it. */
-const AAL_VERDICTS: Record<string, { actionRequired: string; message: string }> = {
-  'aal1 -> aal1': { actionRequired: 'none', message: 'MFA is not enrolled for this account' },
+/**
+ * The verdict per `current -> next` AAL combination, as the AAL gate reports it.
+ * `diagnostic` is the status's `message`: a log line for support, never shown in
+ * the UI (no surface renders `MFAStatus.message`), so it is not translated.
+ */
+const AAL_VERDICTS: Record<string, { actionRequired: string; diagnostic: string }> = {
+  'aal1 -> aal1': { actionRequired: 'none', diagnostic: 'MFA is not enrolled for this account' },
   'aal1 -> aal2': {
     actionRequired: 'verify_mfa',
-    message: 'MFA verification required to access full features',
+    diagnostic: 'MFA verification required to access full features',
   },
-  'aal2 -> aal2': { actionRequired: 'none', message: 'MFA is verified and active' },
-  'aal2 -> aal1': { actionRequired: 'reauthenticate', message: 'Session needs refresh due to MFA changes' },
+  'aal2 -> aal2': { actionRequired: 'none', diagnostic: 'MFA is verified and active' },
+  'aal2 -> aal1': { actionRequired: 'reauthenticate', diagnostic: 'Session needs refresh due to MFA changes' },
 };
 
 export const supabaseMFAService = {
@@ -223,6 +233,30 @@ export const supabaseMFAService = {
       console.error('❌ Enroll phone factor failed:', error);
       throw new Error(`Failed to enroll phone factor: ${toErrorMessage(error)}`);
     }
+  },
+
+  /**
+   * Enroll a new TOTP factor: the one place a TOTP factor is created.
+   */
+  async enrollTotp(): Promise<EnrollingFactor> {
+    const supabase = createClient();
+
+    // An unverified factor is an enrollment someone walked away from (a
+    // closed tab, a reload). It can never sign anyone in, and it holds the
+    // friendly name the new one wants, so clear it before starting over.
+    const { data: listed } = await supabase.auth.mfa.listFactors();
+    for (const stale of listed?.all ?? []) {
+      if (stale.factor_type === 'totp' && stale.status === 'unverified') {
+        await supabase.auth.mfa.unenroll({ factorId: stale.id });
+      }
+    }
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: `Authenticator (${new Date().toISOString().slice(0, 10)})`,
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.totp?.qr_code) throw new Error('Enrollment returned no QR code');
+    return { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
   },
 
   /**
@@ -437,9 +471,9 @@ export const supabaseMFAService = {
       const current = aalResponse.data?.currentLevel;
       const nextLevel = aalResponse.data?.nextLevel;
 
-      const { actionRequired, message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
+      const { actionRequired, diagnostic: message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
         actionRequired: 'unknown',
-        message: `Unknown AAL combination: ${current} -> ${nextLevel}`,
+        diagnostic: `Unknown AAL combination: ${current} -> ${nextLevel}`,
       };
 
       // A new user whose first session starts below aal2, or any session the

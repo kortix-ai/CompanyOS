@@ -52,7 +52,7 @@ const catalog = {
     "oauthWaiting": "Waiting for authorization…",
     "oauthFinishing": "Signed in. Saving your account…",
     "oauthExpired": "Authorization timed out. Try again.",
-    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are private to you until you share them.",
+    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "chatGptSubscription": "ChatGPT subscription",
     "manageChatGptAccounts": "Manage ChatGPT accounts",
     "connect": "Connect",
@@ -88,7 +88,7 @@ const catalog = {
     "deleteError": "Secret could not be deleted",
     "accessError": "Access could not be changed",
     "sharedTitle": "Provider connections",
-    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are private to you until you share them. Choose which ones each session uses.",
+    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are shared with every workspace member. You can make one private. Choose which ones each session uses.",
     "legacyProjectKey": "Existing workspace key · Used when this session has no key selection",
     "keyCount": "{count, plural, one {# key} other {# keys}}",
     "providerKeysFor": "{provider} API keys",
@@ -99,6 +99,14 @@ const catalog = {
     "access": "Access",
     "actions": "Actions",
     "coolingDown": "Cooling down",
+    "keyVerified": "Verified: {provider} accepted this key",
+    "keyInvalid": "{provider} refused this key: {message}",
+    "keyUnchecked": "Not verified: {message}",
+    "checkKey": "Check again",
+    "savedVerified": "Key saved and verified",
+    "savedInvalid": "Key saved, but {provider} refused it: {message}",
+    "checkError": "The key could not be checked",
+    "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
     "actionsFor": "Actions for {label}",
@@ -140,6 +148,9 @@ const catalog = {
     "providerKeys": "Provider keys",
     "chooseSharedKeys": "Choose the shared keys this session can use.",
     "sessionKeyPool": "Session key pool",
+    "subscriptionSwitcher": "Subscription",
+    "subscriptionSwitcherDefault": "Rotates through every connected subscription",
+    "subscriptionSwitcherUse": "Use {label} for this session",
     "sharedSessionKeys": "This session is shared with the workspace, so only keys shared with the whole workspace work here. Keys granted to you work in your private sessions.",
     "promptedSessionKeys": "Another member has prompted this session, so it no longer acts for its owner. Only keys shared with the whole workspace work here.",
     "noPersonSessionKeys": "This session does not act for a person: it started before personal keys existed, or unattended. Only keys shared with the whole workspace work here. Start a new session to use your own keys.",
@@ -159,7 +170,7 @@ const catalog = {
     "claudeAccounts": "Claude accounts",
     "noClaudeAccounts": "No Claude accounts yet",
     "connectClaude": "Sign in with Claude",
-    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are private to you until you share them.",
+    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "claudeOauthCreationDescription": "Sign in with your Claude Pro or Max account. Kortix stores the login encrypted and never shows it.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude account connected",
@@ -167,7 +178,10 @@ const catalog = {
     "claudeConnectFailed": "The Claude sign-in did not finish. Try again.",
     "claudeReconnectDescription": "Sign in with Claude again. The account keeps its name, access, and session selections.",
     "claudeAccountLabelPlaceholder": "e.g. My Claude account",
-    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?"
+    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?",
+    "sharedOnlyYouDescription": "Add API keys, ChatGPT accounts and Claude accounts. Only you can use the ones you add. A workspace manager can share one. Choose which ones each session uses.",
+    "oauthOnlyYouDescription": "Use your ChatGPT Plus or Pro plan in this workspace. Only you can use the accounts you add.",
+    "claudeOauthOnlyYouDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. Only you can use the accounts you add."
   },
   "secrets": {
     "undecryptable": {
@@ -1485,7 +1499,11 @@ const catalog = {
       "claudePlan": "Pro or Max plan",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
-      "imagesUnsupportedHint": "remove them or pick another model"
+      "imagesUnsupportedHint": "remove them or pick another model",
+      "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
+      "noModelKeyReason": "No model: add your own provider key.",
+      "noModelUpgradePlan": "Upgrade plan",
+      "noModelAddProviderKey": "Add provider key"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -2691,6 +2709,8 @@ const catalog = {
       "checkConnection": "Check your connection, then retry."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Add provider key",
+      "noModelUpgradePlan": "Upgrade plan",
       "text03217276a5f1": "Balance {value0} credits",
       "text0b6a47661327": "Unknown owner",
       "text1a9030082a20": "Create skill",
@@ -6832,6 +6852,12 @@ const catalog = {
     "noticeSignInTitle": "Sign in to {name}",
     "noticeSignInBody": "Kortix added {name}. Finish signing in so agents can use its tools.",
     "noticeSignInAction": "Sign in",
+    "noticeSignInAgainTitle": "Sign in to {name} again",
+    "noticeSignInAgainBody": "Its sign-in expired or was revoked. Agents cannot use {name} until you sign in again.",
+    "noticeNoToolsTitle": "{name} has no tools",
+    "noticeNoToolsBody": "It has no routes, so agents have nothing to call. Add routes to its routes spec in Settings.",
+    "noticeAddRoutesAction": "Add routes",
+    "statusNoTools": "No tools",
     "connectAccount": "Connect",
     "notSignedIn": "Not signed in",
     "credentialRejected": "Credential rejected: replace it",
@@ -7848,7 +7874,13 @@ const catalog = {
   },
   "triggerAutoPause": {
     "title": "Paused automatically",
-    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it."
+    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it.",
+    "billingTitle": "Paused: out of credits",
+    "billingDescription": "No run can be paid for, so it stopped starting runs. It resumes by itself a few minutes after the wallet is topped up.",
+    "modelTitle": "Paused: no model to run on",
+    "modelDescription": "Automations use only model keys and accounts shared with the whole workspace, and none is usable. It resumes by itself a few minutes after you add one in Models.",
+    "listBilling": "No credits",
+    "listModel": "No model"
   },
   "featureGate": {
     "enable": "Enable {name}",
@@ -10080,6 +10112,25 @@ const catalog = {
   "gatewayBudgets": {
     "capWorkspace": "Cap gateway spend for this workspace.",
     "capMember": "Cap gateway spend for {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Open {app} sign-in",
+    "checkingTitle": "Finishing sign-in",
+    "checkingDescription": "Kortix checks your {app} sign-in. This page updates by itself.",
+    "signInUnfinished": "Sign-in not finished",
+    "finishSignIn": "Finish sign-in",
+    "signInFinished": "Sign-in finished",
+    "cardHeadline": "Your agent needs you to sign in",
+    "cardTitle": "Connect {app}",
+    "cardShared": "Shared with the workspace",
+    "cardPrivate": "Only you",
+    "signingIn": "Finish signing in to {app} in the window that opened.",
+    "connectedAs": "Connected as {account}",
+    "connected": "Connected",
+    "connect": "Connect",
+    "cardFailed": "Could not connect {app}. Try again.",
+    "blockedTitle": "Open {app} to sign in",
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
   }
 };
 

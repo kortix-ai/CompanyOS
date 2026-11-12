@@ -2653,8 +2653,10 @@ permanently, so a script written against them keeps working.
 | `GET /v1/workspaces` · `POST /v1/workspaces` · `GET`/`PATCH /v1/workspaces/:workspaceId` · `/v1/workspaces/:workspaceId/tokens` | `GET`/`POST /v1/accounts` · `GET`/`PATCH /v1/accounts/:accountId` · `/v1/accounts/tokens` | Different routes with their own meaning, deprecated in `/v1/openapi.json` (`x-kortix-replaced-by` names the route to call). |
 
 **Ids.** A canonical path takes the workspace id (`workspace_id`, equal to
-`project_id`) only. An account id, an unknown id or a workspace you cannot
-read answers `404 workspace_not_found` on every sub-path. A legacy path accepts
+`project_id`) only. An account id or an unknown id answers
+`404 workspace_not_found` on every sub-path. A workspace you cannot read
+answers `403 workspace_access_denied`: ask its managers for access with
+`POST /v1/workspaces/:workspaceId/access-requests`. A legacy path accepts
 either id. Ids are case-insensitive. Every response that names a workspace
 carries `workspace_id` next to `project_id` (records, sessions, secrets, keys,
 access and member rows). `account_id` stays and is deprecated.
@@ -2721,7 +2723,8 @@ These are the codes clients branch on most. The linked section explains each fix
 | `session_sandbox_removal_pending` | `409` | A restore came before the provider confirmed the deleted session's sandbox removed, or while a sandbox that was starting at the delete can still arrive. | Retry the restore in a minute. [Computers](/docs/guide#computers) |
 | `session_purged` | `410` | The session was deleted more than 30 days ago. Its messages, files and branch are deleted. | [Computers](/docs/guide#computers) |
 | `project_archived` | `404` | The workspace was deleted. | Use another workspace. |
-| `workspace_not_found` | `404` | A canonical path named no workspace you can read: an account id, an unknown id, or no access. | [Workspace routes](#workspace-routes) |
+| `workspace_not_found` | `404` | A canonical path named no workspace: an account id, an unknown id, or a workspace being deleted. | [Workspace routes](#workspace-routes) |
+| `workspace_access_denied` | `403` | The workspace exists and you cannot read it. Ask for access with `POST /v1/workspaces/:workspaceId/access-requests`. | [Workspace routes](#workspace-routes) |
 | `workspace_setup_required` | `409` | The workspace pays but has no repository yet. | `POST /v1/workspaces/:id/setup` |
 | `workspace_deleting` | `409` | The workspace is being deleted. An owner restores it first. | `POST /v1/workspaces/:id/restore` |
 | `workspace_has_project` | `409` | The account already holds its workspace's project. The body names it (`workspace_id`). | Create another workspace: `POST /v1/workspaces`. |
@@ -4284,7 +4287,7 @@ Other rules that keep a domain clear of these filters:
 2. **Connect managed git.** Open `/admin/git`. Kortix creates and pushes every new workspace repository through this one GitHub identity. Pick **Create a GitHub App** (recommended), **Paste an existing App**, or **Use an access token**. Until it is set, Kortix cannot create workspace repositories. You can still connect an existing repository. See [Git](/docs/developers#git).
 3. **Create the team's workspace** at `/workspaces/new`. A workspace holds its people, agents, sessions, connectors, files and billing. A self-hosted instance lets only platform admins create a workspace by default (`KORTIX_RESTRICT_ACCOUNT_CREATION`); everyone else joins by invite.
 4. **Invite your team and set up SSO** in **Workspace settings** → **Members** and → **Identity**. A legacy personal account (one made at sign-up before Workspaces) cannot hold SAML SSO (`403` `sso_personal_account`); create a new workspace for the team instead.
-5. **Add a model key** in the workspace: **Customize** → **Models** → **Providers**, or `kortix providers set <provider>`. Each workspace needs its own key. A self-hosted instance has no Kortix-managed models. A workspace can connect **Platinum** as its provider with a Platinum API key. See [Connect your own provider](/docs/guide#models).
+5. **Add a model key** in the workspace: **Customize** → **Models** → **Providers**, or `kortix providers set <provider>`. Both add the key to the same Providers list. A key added with `kortix providers set` is shared with everyone in the workspace; add `--private` to keep it to you. Each workspace needs its own key. A self-hosted instance has no Kortix-managed models. A workspace can connect **Platinum** as its provider with a Platinum API key. See [Connect your own provider](/docs/guide#models).
 6. **Turn on email.** Set one connection string:
 
    ```sh
@@ -4506,6 +4509,19 @@ Later versions do not convert the v1 store. Their `kortix-migrate` step refuses 
 3. Move back to your channel: `kortix self-host update`.
 
 A new install updates without these steps.
+
+#### Upgrading: provider keys move to Models → Providers
+<a id="legacy-credential-backfill" />
+
+Older versions kept LLM provider keys (API keys, ChatGPT and OpenCode logins, the Bedrock region, custom provider keys) as project secrets. They now live in **Models → Providers**. From version `0.15.9`, the leader API container moves the old keys there by itself: once a few seconds after it starts, then once a day. It moves each key once, deletes nothing and never logs a value. When a pass ends, `kortix self-host logs kortix-api` shows a line that contains:
+
+```text
+[legacy-credential-backfill] done
+```
+
+The line lists how many keys it moved (`copied`), found moved before (`unchanged`) or left in place (`skipped_*`). The same pass also moves connector secrets stored in an old format and revokes connections of a retired owner type.
+
+A later version stops reading the old project-secret keys. Run `0.15.9` or later until that line appears before you move past it, or a provider key that never moved stops working. `LEGACY_CREDENTIAL_BACKFILL_MODE` controls the pass: `apply` (the self-host default), `dry_run` (log what it would move, change nothing) or `off`. Set it with `kortix self-host env set LEGACY_CREDENTIAL_BACKFILL_MODE=dry_run`.
 
 ### Operate and tune
 
@@ -8496,7 +8512,7 @@ Arguments, `HeadlessAuthError` codes and limits are in [Sign users in headlessly
 | `invites(accountId)` · `cancelInvite(accountId, inviteId)` · `resendInvite(accountId, inviteId)` | Pending invites. |
 | `tokens.list(accountId?, { mine? })` · `tokens.create({ accountId?, name, expiresAt?, projectId? })` · `tokens.revoke(tokenId, accountId?)` | Personal access keys (`kortix_pat_…`). `mine: true` lists only the caller's keys. `projectId` binds the key to one workspace. |
 | `connectedApps.list()` · `connectedApps.revoke(…)` | OAuth and MCP clients the person approved, across all accounts. Route `/oauth/grants`. |
-| `secretResources.list` · `.create` · `.rotate` · `.retry` · `.remove` · `.grant` · `.revoke` · `.setAccess` | Workspace-level provider secrets and the workspaces that may use them. |
+| `secretResources.list` · `.create` · `.rotate` · `.retry` · `.verify` · `.remove` · `.grant` · `.revoke` · `.setAccess` | Workspace-level provider secrets and the workspaces that may use them. `create` and `rotate` check a provider API key against its provider with one cheap call; `verify` checks it again. Each row carries `verification` (`verified`, `invalid` or `unknown`, with the provider's message). |
 | `subscriptions.list(accountId, projectId)` · `.usage(accountId, secretId, projectId, storage)` | Read subscription usage for named accounts and existing ChatGPT logins. `storage` identifies `account_resource` or `project`; credentials stay in their original store. |
 | `branding.get(accountId)` · `.update(accountId, { app_name })` · `.uploadAsset(accountId, kind, file)` · `.removeAsset(accountId, kind)` · `.reset(accountId)` | Organization branding. `kind`: `logo`, `icon`, `favicon`, `logo_dark`, `icon_dark`, `favicon_dark`. |
 | `audit.log(accountId, filters?)` · `audit.export(accountId, { format: 'csv' \| 'jsonl', …filters })` | The audit log, filtered by workspace, session, actor, source, outcome, request, resource, action or time · the same events as a file. |

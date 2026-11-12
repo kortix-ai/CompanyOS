@@ -15,8 +15,8 @@ import { posix } from 'node:path';
 
 import { sessionModelPin, toSandboxAbsolutePath } from '@kortix/sdk';
 
-import { splitHelp } from '../command-argv.ts';
 import { kortixFromAuth } from '../api/sdk.ts';
+import { splitHelp } from '../command-argv.ts';
 import { emitJson, surfaceApiError, takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { C, help, status } from '../style.ts';
 import { loadSessionForChat } from './sessions-chat.ts';

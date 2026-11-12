@@ -33,6 +33,7 @@ import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogKey,
   isAccountMfaDenial,
+  isAgentAccessDenial,
   isAgentGrantDenial,
   isCredentialFenceDenial,
   isDeadCredential,
@@ -403,9 +404,16 @@ function handleHttpException(
   // role can never act on the permission — put 22 warn lines in one prod hour
   // on GET /v1/connectors/…/connect-requests, 0 in the 24 h before, the
   // first pattern of the #12240 assert-form gates.
+  // The agent-access denial joins the same treatment (KRTX-4800): the gate's
+  // typed body already names the remedy (ask a manager to grant you one) and
+  // the agents the caller could run, and two people of one workspace kept
+  // retrying the start of a session whose agent was never granted to them —
+  // 29 warn lines in one prod hour on POST …/sessions/<session_id>/start,
+  // 0 in the 24 h before.
   if (
     isDeadCredential(err)
     || isAgentGrantDenial(err)
+    || isAgentAccessDenial(err)
     || isAccountMfaDenial(err)
     || isCredentialFenceDenial(err)
     || isPersonRoleDenial(err)

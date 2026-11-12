@@ -165,6 +165,41 @@ describe('ids and installs', () => {
   });
 });
 
+describe('where a post landed', () => {
+  const gate = (actionPath: string, args: Record<string, unknown>) =>
+    gateChannelWrite({ projectId: MINE, userId: 'user-1', platform: 'slack', actionPath, args }, linkOf('linked').linkState, READS);
+
+  test('a post that landed in the checked conversation, or a DM for a user id, stands', async () => {
+    expect((await gate('send_message', { channel: 'C0NOBODY01', text: 'hi' })).misfire({ ok: true, channel: 'C0NOBODY01', ts: '1.2' })).toBeNull();
+    expect((await gate('send_message', { channel: 'U0PERSON01', text: 'hi' })).misfire({ ok: true, channel: 'D0PERSON01', ts: '1.2' })).toBeNull();
+    expect((await gate('send_message', { channel: 'U0PERSON01', text: 'hi' })).misfire({ ok: true, channel: 'U0PERSON01', ts: '1.2' })).toBeNull();
+  });
+
+  test('a post Slack delivered elsewhere (a resolved name) is refused, with the call that takes it back', async () => {
+    const byName = await gate('send_message', { channel: 'GENERAL', text: 'hi' });
+    expect(byName.refusal).toBeNull();
+    expect(byName.misfire({ ok: true, channel: 'C0OTHER001', ts: '1700000900.000900' })).toEqual({
+      refusal: {
+        reason: CONVERSATION_NOT_IN_PROJECT,
+        message:
+          'Slack posted the message to C0OTHER001, not to GENERAL, the conversation that was checked. Address a conversation by its id.',
+      },
+      undo: { path: '/chat.delete', args: { channel: 'C0OTHER001', ts: '1700000900.000900' } },
+    });
+    // "User id" that Slack read as a channel name: it landed in a channel, not a DM.
+    expect((await gate('send_message', { channel: 'UIUX', text: 'hi' })).misfire({ ok: true, channel: 'C0UIUX0001', ts: '1.2' })?.undo)
+      .toEqual({ path: '/chat.delete', args: { channel: 'C0UIUX0001', ts: '1.2' } });
+    // An answer that names no conversation cannot be trusted or taken back.
+    expect((await gate('send_message', { channel: 'C0NOBODY01', text: 'hi' })).misfire({ ok: true })?.undo).toBeNull();
+  });
+
+  test('only a post is checked where it landed: every other write takes an id', async () => {
+    const reaction = await gate('add_reaction', { channel: 'C0ANY00001', timestamp: '1.2', name: 'eyes' });
+    expect(reaction.misfire({ ok: true, channel: 'C0ELSEWHERE' })).toBeNull();
+  });
+});
+
+
 describe('Telegram writes', () => {
   const OTHER_CHAT = 'This session answers Telegram chat 111222333 only. It does not send to, edit or delete messages in other chats.';
 

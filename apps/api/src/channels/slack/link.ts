@@ -78,11 +78,23 @@ async function primaryOf(teamId: string, projectIds: string[]): Promise<string> 
  * connector they back. Its sessions and their threads stay, as after a
  * disconnect.
  */
+/** The Slack workspace a Kortix workspace's stored bot token is for, or null (no token, or Slack did not answer). */
+async function slackTokenTeam(projectId: string): Promise<string | null> {
+  const { loadSlackTokenForProject } = await import('./installs');
+  const token = await loadSlackTokenForProject(projectId);
+  if (!token) return null;
+  const { authTestTeamId } = await import('../slack-api');
+  return authTestTeamId(token);
+}
+
 async function detach(teamId: string, projectId: string, reason: string): Promise<void> {
   // This Slack workspace's install only: the Kortix workspace may hold other
-  // Slack workspaces. Its Slack secrets are one set per Kortix workspace,
-  // written by its newest install: they go when that install is this one.
-  // Decided from the install rows, never from a secret a member can write.
+  // Slack workspaces. Its Slack secrets are one set per Kortix workspace: they
+  // go when their token is this Slack workspace's. Slack says whose it is
+  // (`auth.test`), never a secret a member can write. When Slack does not
+  // answer, the newest install decides: it wrote the token, as far as the rows
+  // know, and a wrong guess only asks for a reinstall.
+  const tokenTeam = await slackTokenTeam(projectId);
   const [newest] = await db
     .select({ teamId: chatInstalls.platformTeamId })
     .from(chatInstalls)
@@ -92,7 +104,7 @@ async function detach(teamId: string, projectId: string, reason: string): Promis
   await db
     .delete(chatInstalls)
     .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId), eq(chatInstalls.projectId, projectId)));
-  if (newest?.teamId === teamId) {
+  if ((tokenTeam ?? newest?.teamId) === teamId) {
     const { deleteSlackSecrets } = await import('./installs');
     await deleteSlackSecrets(projectId);
   }

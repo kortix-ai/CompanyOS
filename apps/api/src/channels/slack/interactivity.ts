@@ -762,6 +762,11 @@ export async function handleViewSubmission(
     if (meta.responseUrl) await respondViaUrl(meta.responseUrl, { response_type: 'ephemeral', text });
   };
 
+  // A modal opened before the Slack link moved decides nothing afterwards.
+  if (!(await holdsSlackWorkspace(meta.projectId, meta.teamId))) {
+    await notify('That review belongs to a Kortix workspace that is no longer connected to this Slack workspace.');
+    return;
+  }
   const item = await getReviewItemById(meta.reviewItemId, meta.projectId);
   if (!item) {
     await notify('That review item is no longer available.');

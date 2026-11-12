@@ -319,6 +319,28 @@ test('the launcher replies with a message: approve plus note reaches the agent',
   ]);
 });
 
+test('a reply modal opened before the Slack link moved decides nothing when submitted', async () => {
+  const executionId = await pending();
+  await click('reply', executionId, SLACK.launcher);
+  const view = modals[0] as { callback_id: string; private_metadata: string };
+  await db.delete(chatInstalls).where(eq(chatInstalls.projectId, project.project_id));
+  try {
+    await handleViewSubmission({
+      type: 'view_submission',
+      user: { id: SLACK.launcher },
+      view: {
+        callback_id: view.callback_id,
+        private_metadata: view.private_metadata,
+        state: { values: { approval_decision_block: { approval_decision_input: { selected_option: { value: 'approve' } } } } },
+      },
+    } as never);
+  } finally {
+    await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: TEAM, projectId: project.project_id });
+  }
+  expect((await loadApprovalRow(project.project_id, executionId))?.status).toBe('pending_approval');
+  expect(spawned).toHaveLength(0);
+});
+
 test('a call with nothing to review cannot be approved from the card', async () => {
   const executionId = await pending({ args_preview_complete: false });
 

@@ -452,6 +452,11 @@ export async function handleApprovalReplySubmission(
     await respond('That approval is no longer available.');
     return;
   }
+  // A modal opened before the Slack link moved decides nothing afterwards.
+  if (!(await holdsSlackWorkspace(thread.projectId, meta.teamId))) {
+    await respond('That approval belongs to a Kortix workspace that is no longer connected to this Slack workspace.');
+    return;
+  }
   const { decision, note } = readApprovalReply(payload.view ?? {});
   await applySlackApprovalDecision({
     inbound,

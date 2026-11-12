@@ -318,7 +318,29 @@ export async function gateChannelWrite(
     return { refusal: { reason, message: refusal.message }, misfire: () => null };
   }
   const privateRefusal = await slackPrivateWriteRefusal(input.projectId, input.userId ?? null, channel, slackReads);
-  return privateRefusal ? { refusal: privateRefusal, misfire: () => null } : PASS;
+  if (privateRefusal) return { refusal: privateRefusal, misfire: () => null };
+  // Slack documents names only for chat.postMessage; every other write takes an id.
+  if (input.actionPath !== 'send_message') return PASS;
+  return { refusal: null, misfire: (data) => postMisfire(channel as string, data) };
+}
+
+/**
+ * Where chat.postMessage says it posted (`channel`, `ts` of the answer) must
+ * be the conversation that was checked; for a user id, a DM. An uppercase
+ * name passes the id shape, and Slack may resolve it to another conversation.
+ */
+function postMisfire(checked: string, data: unknown): ChannelWriteMisfire | null {
+  const answer = data != null && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const landed = typeof answer.channel === 'string' ? answer.channel : null;
+  const toPerson = checked.startsWith('U') || checked.startsWith('W');
+  if (landed === checked || (toPerson && landed?.startsWith('D'))) return null;
+  return {
+    refusal: {
+      reason: CONVERSATION_NOT_IN_PROJECT,
+      message: `Slack posted the message to ${landed ?? 'a conversation it did not name'}, not to ${checked}, the conversation that was checked. Address a conversation by its id.`,
+    },
+    undo: landed && typeof answer.ts === 'string' ? { path: '/chat.delete', args: { channel: landed, ts: answer.ts } } : null,
+  };
 }
 
 /**

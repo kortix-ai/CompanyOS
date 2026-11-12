@@ -26,7 +26,9 @@ import {
  * made without a second factor: an account that requires one still asks for
  * `/kortix login` from a session that passed it: no link is made by email in
  * an account that requires MFA.
- * A live link to another Kortix user is never replaced (`linkChatIdentity`).
+ * A live link to another Kortix user is never replaced, and a link its person
+ * revoked with `/kortix logout` is never revived: only a Slack person with no
+ * link row at all is linked by email (`createOnly`).
  */
 
 /**
@@ -72,7 +74,7 @@ export async function autoLinkSlackPerson(input: {
   const userId = await kortixUserByEmail(email);
   if (!userId || !(await isAccountMember(userId, input.accountId))) return false;
   if (await accountRequiresMfa(input.accountId)) return false;
-  const linked = await linkChatIdentity(chatUser('slack', input.teamId, input.slackUserId), userId);
+  const linked = await linkChatIdentity(chatUser('slack', input.teamId, input.slackUserId), userId, { createOnly: true });
   if (linked.ok) logger.info('[slack-auto-link] linked a Slack person by confirmed email', { teamId: input.teamId });
   return linked.ok;
 }
@@ -103,8 +105,8 @@ export async function slackPersonForKortixUser(input: {
   const { accountKeyOfWorkspace } = await import('../../workspaces/rows');
   const projectAccount = input.projectId ? await accountKeyOfWorkspace(input.projectId) : null;
   if (!projectAccount || (await accountRequiresMfa(projectAccount))) return null;
-  const result = await linkChatIdentity(chatUser('slack', input.teamId, slackUserId), input.userId);
-  // That Slack person is linked to someone else: they are not this user here.
+  const result = await linkChatIdentity(chatUser('slack', input.teamId, slackUserId), input.userId, { createOnly: true });
+  // That Slack person is linked to someone else, or logged out: they are not this user here.
   return result.ok ? slackUserId : null;
 }
 
@@ -112,7 +114,8 @@ export async function slackPersonForKortixUser(input: {
  * Link an unlinked Slack person of `projectId`'s Slack workspace by confirmed
  * email. False when they are linked already (a link without a second factor
  * stays for `/kortix login`), have no matching member, or anything fails: a
- * missed link only asks them to log in, as before.
+ * missed link only asks them to log in, as before. Logged out counts as linked:
+ * they log in again with `/kortix login`.
  */
 export async function linkSlackPersonByEmail(user: ChatUser, projectId: string, accountId?: string): Promise<boolean> {
   if (user.platform !== 'slack' || !user.workspaceId || !user.platformUserId) return false;

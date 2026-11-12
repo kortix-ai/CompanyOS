@@ -3,7 +3,8 @@
  * (link.ts) and for linking Slack people by confirmed email (auto-link.ts).
  * Real: chat_installs, project_secrets, chat_channel_bindings,
  * project_sessions, chat_user_identities, account members and auth.users rows.
- * Faked: Slack's Web API (users.info, users.lookupByEmail).
+ * Faked: Slack's Web API (users.info, users.lookupByEmail, auth.test). By
+ * default Slack does not answer, so a detach falls back to the install rows.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { accountMembers, chatChannelBindings, chatInstalls, chatUserIdentities, projectSecrets, projectSessions } from '@kortix/db';
@@ -11,7 +12,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import { insertIntoView } from '../../__tests__/helpers/compat-views';
 import { removeSeeded, seedProject, seedSession, type SeededProject } from '../../__tests__/helpers/integration-fixtures';
-import { chatUser, lookupChatIdentity } from '../core/identity';
+import { chatUser, lookupChatIdentity, revokeChatIdentity } from '../core/identity';
 import { saveSlackInstall, saveSlackOauthInstall, upsertSecret } from '../install-store';
 import { linkSlackPersonByEmail, slackPersonForKortixUser } from './auto-link';
 import { holdsSlackWorkspace, linkedSlackProject, moveSlackLink, recordSlackChannel, slackProjectLink } from './link';
@@ -51,11 +52,14 @@ beforeAll(async () => {
 });
 
 const realFetch = globalThis.fetch;
+const slackSilent = (async () => Response.json({ ok: false, error: 'invalid_auth' })) as unknown as typeof fetch;
+globalThis.fetch = slackSilent;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  globalThis.fetch = slackSilent;
 });
 
 afterAll(async () => {
+  globalThis.fetch = realFetch;
   const ids = [a.project_id, b.project_id, byo.project_id];
   await db.delete(chatChannelBindings).where(inArray(chatChannelBindings.projectId, ids));
   await db.delete(chatInstalls).where(inArray(chatInstalls.projectId, ids));
@@ -125,6 +129,40 @@ describe('one Slack workspace, one Kortix workspace', () => {
       .from(projectSecrets)
       .where(and(eq(projectSecrets.projectId, a.project_id), eq(projectSecrets.name, 'SLACK_BOT_TOKEN')));
     expect(token).toHaveLength(1);
+  });
+
+  test("a detach deletes the token only when Slack says it is the detached Slack workspace's", async () => {
+    const tokenSecret = () =>
+      db
+        .select({ name: projectSecrets.name })
+        .from(projectSecrets)
+        .where(and(eq(projectSecrets.projectId, a.project_id), eq(projectSecrets.name, 'SLACK_BOT_TOKEN')));
+    const tokenIsFor = (teamId: string) => {
+      globalThis.fetch = (async (input: string | URL) =>
+        String(input).endsWith('/auth.test')
+          ? Response.json({ ok: true, team_id: teamId })
+          : Response.json({ ok: false, error: 'not_faked' })) as unknown as typeof fetch;
+    };
+    // `a` installed y, then x: x is the newest row, but the token is y's
+    // (an install from before the move fanned tokens out).
+    const x = team('OWNX');
+    const y = team('OWNY');
+    await shared(a.project_id, y);
+    await moveSlackLink(y, a.project_id);
+    await shared(a.project_id, x);
+    await moveSlackLink(x, a.project_id);
+    tokenIsFor(y);
+    await shared(b.project_id, x);
+    await moveSlackLink(x, b.project_id);
+    expect(await installsOf(x)).toEqual([b.project_id]);
+    expect(await tokenSecret()).toHaveLength(1);
+
+    // The token is the detached Slack workspace's: it goes.
+    tokenIsFor(y);
+    await shared(b.project_id, y);
+    await moveSlackLink(y, b.project_id);
+    expect(await installsOf(y)).toEqual([b.project_id]);
+    expect(await tokenSecret()).toEqual([]);
   });
 
   test('several installs from before the move heal on first use: the one Slack used stays, the others are detached once', async () => {
@@ -237,6 +275,18 @@ describe('Slack people are linked by confirmed email', () => {
     slack({ U0MEMBER: { email: memberEmail, confirmed: true } });
     expect(await linkSlackPersonByEmail(chatUser('slack', ws, 'U0MEMBER'), a.project_id)).toBe(true);
     expect((await lookupChatIdentity(chatUser('slack', ws, 'U0MEMBER')))?.userId).toBe(MEMBER);
+  });
+
+  test('a person who ran /kortix logout stays logged out: email linking never revives the link', async () => {
+    const ws = team('LOGOUT');
+    await shared(a.project_id, ws);
+    await moveSlackLink(ws, a.project_id);
+    slack({ U0LEFT: { email: memberEmail, confirmed: true } });
+    expect(await linkSlackPersonByEmail(chatUser('slack', ws, 'U0LEFT'), a.project_id)).toBe(true);
+    expect(await revokeChatIdentity(chatUser('slack', ws, 'U0LEFT'))).toBe(true);
+    expect(await linkSlackPersonByEmail(chatUser('slack', ws, 'U0LEFT'), a.project_id)).toBe(false);
+    expect(await slackPersonForKortixUser({ teamId: ws, userId: MEMBER, token: 'xoxb-synthetic', projectId: a.project_id })).toBeNull();
+    expect(await lookupChatIdentity(chatUser('slack', ws, 'U0LEFT'))).toBeNull();
   });
 
   test('an unconfirmed Slack email, or a Kortix user who is not a member, links nobody', async () => {

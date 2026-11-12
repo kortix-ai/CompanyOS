@@ -170,6 +170,16 @@ export async function authTestBotId(token: string): Promise<string | null> {
   }
 }
 
+/** The Slack workspace this token is for (`auth.test`), or null when Slack does not answer with one. */
+export async function authTestTeamId(token: string): Promise<string | null> {
+  try {
+    const r = await slackApiCall(token, 'auth.test', {});
+    return r.ok && typeof r.team_id === 'string' ? r.team_id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Posts a plain message. Returns the message ts (needed to delete it later).
 export async function postMessage(
   token: string,

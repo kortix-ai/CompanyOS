@@ -9,6 +9,8 @@
  *   | `connector_secret_strategy` | `project_secrets` consumer `connector`,       | strategy `broker` (what every     |
  *   |                             | strategy `runtime` (stamped by the            | connector and channel write makes |
  *   |                             | 2026-07-12 and 2026-08-05 migrations)         | since 2026-08-05)                 |
+ *   | `connector_secret_consumer` | `project_secrets` scope `connector`, consumer | consumer `connector`, strategy    |
+ *   |                             | `sandbox` (scope set, consumer not)           | `broker`                          |
  *   | `external_connection`       | `connector_connections` owner type `external` | revoked: the owner type retired   |
  *   |                             | (pre-account email inboxes, and per-end-user  | on 2026-10-24 and nobody can      |
  *   |                             | connections of the retired SDK mode)          | reach the row                     |
@@ -27,7 +29,7 @@ import { and, asc, eq, gt, ne, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import { revokeConnections } from '../connectors/connection-status';
 
-export const LEGACY_CREDENTIAL_CONCEPTS = ['connector_secret_strategy', 'external_connection'] as const;
+export const LEGACY_CREDENTIAL_CONCEPTS = ['connector_secret_strategy', 'connector_secret_consumer', 'external_connection'] as const;
 export type LegacyCredentialConcept = (typeof LEGACY_CREDENTIAL_CONCEPTS)[number];
 
 export type LegacyCredentialOutcome = 'moved' | 'would_move' | 'skipped_changed';
@@ -57,6 +59,16 @@ async function connectorSecretPage(projectId: string | undefined, after: string 
     )).orderBy(asc(projectSecrets.secretId)).limit(limit);
 }
 
+/** Connector-scope secret rows stamped consumer `sandbox`. */
+async function connectorConsumerPage(projectId: string | undefined, after: string | null, limit: number) {
+  return db.select({ objectId: projectSecrets.secretId, projectId: projectSecrets.projectId }).from(projectSecrets)
+    .where(and(
+      eq(projectSecrets.scope, 'connector'), eq(projectSecrets.consumer, 'sandbox'),
+      ...(projectId ? [eq(projectSecrets.projectId, projectId)] : []),
+      ...(after ? [gt(projectSecrets.secretId, after)] : []),
+    )).orderBy(asc(projectSecrets.secretId)).limit(limit);
+}
+
 async function externalConnectionPage(projectId: string | undefined, after: string | null, limit: number) {
   return db.select({ objectId: connectorConnections.connectionId, projectId: connectorConnections.projectId }).from(connectorConnections)
     .where(and(
@@ -75,6 +87,23 @@ async function moveConnectorSecret(objectId: string, apply: boolean): Promise<Le
     if (!row || row.strategy !== 'runtime') return 'skipped_changed';
     await tx.update(projectSecrets).set({ strategy: 'broker' }).where(eq(projectSecrets.secretId, objectId));
     await record(tx, 'connector_secret_strategy', objectId, row.projectId, { strategy: row.strategy, strategy_locked: row.strategyLocked });
+    return 'moved';
+  });
+}
+
+/**
+ * Move one connector-scope row stamped consumer `sandbox` to consumer
+ * `connector`, strategy `broker`. It is never delivered to a sandbox either way
+ * (session env reads scope `runtime` only); only connector readers read it.
+ */
+async function moveConnectorConsumer(objectId: string, apply: boolean): Promise<LegacyCredentialOutcome> {
+  if (!apply) return 'would_move';
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select({ projectId: projectSecrets.projectId, strategy: projectSecrets.strategy, consumer: projectSecrets.consumer, scope: projectSecrets.scope })
+      .from(projectSecrets).where(eq(projectSecrets.secretId, objectId)).limit(1).for('update');
+    if (!row || row.scope !== 'connector' || row.consumer !== 'sandbox') return 'skipped_changed';
+    await tx.update(projectSecrets).set({ consumer: 'connector', strategy: 'broker' }).where(eq(projectSecrets.secretId, objectId));
+    await record(tx, 'connector_secret_consumer', objectId, row.projectId, { consumer: row.consumer, strategy: row.strategy });
     return 'moved';
   });
 }
@@ -119,12 +148,12 @@ export async function backfillLegacyCredentials(options: {
   const pageSize = options.pageSize ?? 200;
   const concepts = options.concepts ?? LEGACY_CREDENTIAL_CONCEPTS;
   const summary: LegacyCredentialBackfillSummary = {
-    outcomes: { connector_secret_strategy: {}, external_connection: {} },
-    ledger: { connector_secret_strategy: 0, external_connection: 0 },
+    outcomes: { connector_secret_strategy: {}, connector_secret_consumer: {}, external_connection: {} },
+    ledger: { connector_secret_strategy: 0, connector_secret_consumer: 0, external_connection: 0 },
   };
   for (const concept of concepts) {
-    const page = concept === 'connector_secret_strategy' ? connectorSecretPage : externalConnectionPage;
-    const move = concept === 'connector_secret_strategy' ? moveConnectorSecret : moveExternalConnection;
+    const page = { connector_secret_strategy: connectorSecretPage, connector_secret_consumer: connectorConsumerPage, external_connection: externalConnectionPage }[concept];
+    const move = { connector_secret_strategy: moveConnectorSecret, connector_secret_consumer: moveConnectorConsumer, external_connection: moveExternalConnection }[concept];
     let after: string | null = null;
     for (;;) {
       const rows: Array<{ objectId: string; projectId: string }> = await page(options.projectId, after, pageSize);

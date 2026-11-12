@@ -1,6 +1,7 @@
 import type { RuntimeThreadStatus } from '@kortix/sdk';
 import { sleep } from '@kortix/shared/guards';
 import { kortixFromAuth } from '../api/sdk.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   emitJson,
   fail,
@@ -9,7 +10,6 @@ import {
   takeFlagBool,
   takeFlagValue,
 } from '../command-helpers.ts';
-import { splitHelp } from '../command-argv.ts';
 import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix sessions wait-for <session-id> [options]

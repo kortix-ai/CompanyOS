@@ -23716,7 +23716,13 @@
   },
   "triggerAutoPause": {
     "title": "Automatisch pausiert",
-    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort."
+    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort.",
+    "billingTitle": "Pausiert: kein Guthaben",
+    "billingDescription": "Keine Ausführung kann bezahlt werden, deshalb startet er keine mehr. Er setzt sich einige Minuten nach dem Aufladen des Guthabens selbst fort.",
+    "modelTitle": "Pausiert: kein Modell verfügbar",
+    "modelDescription": "Automationen nutzen nur Modellschlüssel und Konten, die mit dem ganzen Workspace geteilt sind, und keiner ist nutzbar. Er setzt sich einige Minuten, nachdem du unter Modelle einen hinzufügst, selbst fort.",
+    "listBilling": "Kein Guthaben",
+    "listModel": "Kein Modell"
   },
   "featureGate": {
     "enable": "{name} aktivieren",

@@ -23716,7 +23716,13 @@
   },
   "triggerAutoPause": {
     "title": "Se pausó automáticamente",
-    "description": "Dejó de iniciar ejecuciones por el motivo de abajo. Corrige la causa y luego reanúdalo."
+    "description": "Dejó de iniciar ejecuciones por el motivo de abajo. Corrige la causa y luego reanúdalo.",
+    "billingTitle": "En pausa: sin créditos",
+    "billingDescription": "No se puede pagar ninguna ejecución, así que dejó de iniciarlas. Se reanuda solo unos minutos después de recargar el saldo.",
+    "modelTitle": "En pausa: sin modelo disponible",
+    "modelDescription": "Las automatizaciones solo usan claves de modelo y cuentas compartidas con todo el espacio de trabajo, y ninguna está disponible. Se reanuda solo unos minutos después de añadir una en Modelos.",
+    "listBilling": "Sin créditos",
+    "listModel": "Sin modelo"
   },
   "featureGate": {
     "enable": "Activar {name}",

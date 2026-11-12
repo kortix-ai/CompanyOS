@@ -47,6 +47,7 @@ beforeAll(() => {
       if (path === `${BASE}/claude-subscription/login/start` && req.method === 'POST') {
         return json({ flow_id: 'flow-1', authorize_url: 'https://claude.example.test/authorize', expires_at: '2999-01-01T00:00:00.000Z' });
       }
+      if (path === `${BASE}/claude-subscription/login/complete` && req.method === 'POST') return json({ connected: true, secret_id: 'claude-2' });
       if (path === BASE) return json({ project_id: PROJECT_ID, account_id: 'acc-1' });
       return json({ error: `unexpected ${req.method} ${path}` }, 500);
     },
@@ -135,6 +136,26 @@ describe('providers login claude — who can use the new Claude account', () => 
     expect(r.writes).toEqual([['POST', `${BASE}/claude-subscription/login/start`, { sharing: { mode: 'project' } }]]);
     expect(r.stdout).toContain('The new Claude account: shared with everyone in this workspace (pass --private to keep it to you).');
     expect(r.stderr).toContain('No code entered');
+  });
+
+  test('stdin that closes at the code prompt exits 1 and says how to finish, storing nothing', async () => {
+    for (const stdin of ['', undefined]) {
+      const r = await runCli(['login', 'claude'], stdin);
+      expect(r.code).toBe(1);
+      expect(r.writes).toEqual([['POST', `${BASE}/claude-subscription/login/start`, { sharing: { mode: 'project' } }]]);
+      expect(r.stderr).toContain('stdin closed before a code arrived');
+      expect(r.stderr).toContain('--token-stdin');
+      expect(r.stdout).not.toContain('Connected your Claude subscription');
+    }
+  });
+
+  test('a piped code with no newline still completes the sign-in', async () => {
+    const r = await runCli(['login', 'claude'], 'code-from-claude');
+    expect(r.writes).toEqual([
+      ['POST', `${BASE}/claude-subscription/login/start`, { sharing: { mode: 'project' } }],
+      ['POST', `${BASE}/claude-subscription/login/complete`, { flow_id: 'flow-1', code: 'code-from-claude' }],
+    ]);
+    expect(r.code).toBe(0);
   });
 
   test('--private on another login provider is a usage error', async () => {

@@ -26,6 +26,7 @@ import {
   parseApprovalActionId,
 } from './approval-card';
 import { SLACK_STOP_ACTION, stopSlackTurn } from './stop';
+import { SLACK_SWITCH_AGENT_ACTION } from './stop-action';
 import { isAdaptedId } from '../../projects/review-adapters';
 import { decideSlackThreadJoin } from './participants';
 import { attachPendingSlackAuthResponseUrl, consumePendingSlackPickerMessage } from './auth-resume';
@@ -36,7 +37,7 @@ import { agentChangeText, currentChannelProjectId } from './settings-commands';
 import { settingsRefusalText, slackSettingsChannel, slackUserOf } from './settings-text';
 import { applySlackModelChoice } from './model-choice';
 import { changeChannelAgent, switchChannelProject } from '../core/settings';
-import type { SlashCtx } from './types';
+import type { SlashCtx, SlashResponse } from './types';
 import {
   CANONICAL_SLACK_INBOUND,
   findSlackThread,
@@ -451,6 +452,32 @@ async function handleConfigOpen(
   await respondViaUrl(payload.response_url, { ...resp, replace_original: true });
 }
 
+// "Switch agent" under an agent's answer. The same picker as `/kortix agents`,
+// posted as a NEW ephemeral message: the click came from the answer, and a
+// `replace_original` reply would overwrite the answer itself. A button needs no
+// slash command, so it works in the DM assistant pane, where Slack runs none.
+async function handleAnswerSwitchAgent(payload: SlackInteractionPayload, inbound: SlackInbound): Promise<void> {
+  const teamId = payload.team?.id ?? '';
+  const channelId = payload.channel?.id ?? '';
+  const responseUrl = payload.response_url;
+  if (!teamId || !channelId || !responseUrl) return;
+  const deliver = (body: SlashResponse) =>
+    respondViaUrl(responseUrl, { ...body, response_type: 'ephemeral', replace_original: false });
+  const ctx: SlashCtx = {
+    teamId,
+    channelId,
+    slackUserId: payload.user?.id ?? '',
+    command: '/kortix',
+    responseUrl,
+    projectScopedProjectId: inboundProjectId(inbound),
+    deferredDeliver: deliver,
+  };
+  // The picker arrives through `deliver`; the synchronous "Loading agents…"
+  // ack stays unsent. A refusal (no workspace bound) comes back as blocks.
+  const resp = await handleSlashCommand('agents', '', ctx);
+  if (resp.blocks?.length) await deliver(resp);
+}
+
 // Message shortcut ("Open in Kortix", callback_id `open_session`). Resolves the
 // thread the message lives in to its Kortix session and replies (ephemerally)
 // with a link. Unlike a slash command, a message shortcut DOES carry the
@@ -839,6 +866,12 @@ export async function handleBlockAction(
   if (action.action_id.startsWith('set_model')) {
     // A button carries its pick in `value`; the long list's select in `selected_option`.
     await handleSetSelection(payload, action.selected_option?.value ?? action.value ?? '', 'model', inbound);
+    return;
+  }
+
+  // "Switch agent" under an answer: the channel's agent picker, for the clicker only.
+  if (action.action_id === SLACK_SWITCH_AGENT_ACTION) {
+    await handleAnswerSwitchAgent(payload, inbound);
     return;
   }
 

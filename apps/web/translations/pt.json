@@ -23716,7 +23716,13 @@
   },
   "triggerAutoPause": {
     "title": "Pausado automaticamente",
-    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o."
+    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o.",
+    "billingTitle": "Pausado: sem créditos",
+    "billingDescription": "Nenhuma execução pode ser paga, então parou de iniciá-las. Retoma sozinho alguns minutos depois de recarregar o saldo.",
+    "modelTitle": "Pausado: nenhum modelo disponível",
+    "modelDescription": "As automações usam só chaves de modelo e contas compartilhadas com todo o workspace, e nenhuma está disponível. Retoma sozinho alguns minutos depois que você adicionar uma em Modelos.",
+    "listBilling": "Sem créditos",
+    "listModel": "Sem modelo"
   },
   "featureGate": {
     "enable": "Ativar {name}",

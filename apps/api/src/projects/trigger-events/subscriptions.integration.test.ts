@@ -58,6 +58,20 @@ mock.module('../../connectors/db-deps', () => ({
   },
 }));
 
+// kortix.yaml, as the git mirror reads it: only its `default_agent` matters here.
+// `Error` stands for a file that cannot be read.
+let manifestDefaultAgent: string | null | Error = null;
+let manifestReads = 0;
+const actualAgents = await import('../agents/parse');
+mock.module('../agents/parse', () => ({
+  ...actualAgents,
+  loadProjectAgents: async () => {
+    manifestReads += 1;
+    if (manifestDefaultAgent instanceof Error) throw manifestDefaultAgent;
+    return { specs: [], errors: [], defaultAgent: manifestDefaultAgent, builtinAgents: { my_kortix: false }, manifest: null };
+  },
+}));
+
 const { reconcileEventSubscriptions, reconcileEventSubscriptionsFromCatalog } = await import('./subscriptions');
 const { applyNotices, deliverEvents } = await import('./deliver');
 const { setEventSourceForTest } = await import('./registry');
@@ -191,6 +205,8 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     fireStatus = 'fired';
     leftCommand = null;
     subscribeError = null;
+    manifestDefaultAgent = null;
+    manifestReads = 0;
     setEventSourceForTest('composio', fake);
     const db = testDb();
     await db.insert(accounts).values({ accountId: ACCOUNT_ID, name: 'Event reconcile proof' });
@@ -320,6 +336,91 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     expect(row?.externalId).toBeNull();
     expect(calls).toEqual(['subscribe:EXAMPLE_NEW_MESSAGE', 'unsubscribe:ti_EXAMPLE_NEW_MESSAGE_{}']);
     clearAuthorizeCaches();
+  });
+
+  describe("a trigger with no agent runs as the project's default agent", () => {
+    const mirror = (defaultAgent: string) =>
+      testDb().update(projects).set({ metadata: { experimental: { event_triggers: true }, default_agent: defaultAgent } }).where(eq(projects.projectId, PROJECT_ID));
+
+    test("an account shared only with kortix.yaml's default_agent activates it", async () => {
+      manifestDefaultAgent = 'inbox-agent';
+      await connect();
+      await agentIdentity('inbox-agent');
+      await shareOnlyWithAgent();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none'), spec('unset', { agent: '' })]);
+      for (const slug of ['none', 'unset']) {
+        const row = await store.get(PROJECT_ID, slug);
+        expect(row).toMatchObject({ status: 'active', connectionId: CONNECTION_ID, lastError: null });
+      }
+      expect(calls).toEqual(['subscribe:EXAMPLE_NEW_MESSAGE', 'subscribe:EXAMPLE_NEW_MESSAGE']);
+      clearAuthorizeCaches();
+    });
+
+    test('kortix.yaml wins over a stale metadata mirror: the mirror agent\'s share does not count', async () => {
+      manifestDefaultAgent = 'billing-agent';
+      await mirror('inbox-agent');
+      await connect();
+      await agentIdentity('inbox-agent');
+      await shareOnlyWithAgent();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none')]);
+      expect(await status('none')).toBe('error');
+      expect((await store.get(PROJECT_ID, 'none'))?.lastError).toContain('or with the agent "billing-agent" (the workspace\'s default agent');
+      expect(calls).toEqual([]);
+      clearAuthorizeCaches();
+    });
+
+    test('the default agent with an identity but no share names itself in the error', async () => {
+      manifestDefaultAgent = 'inbox-agent';
+      await connect();
+      await agentIdentity('inbox-agent');
+      const groupId = '00000000-0000-4000-a000-000000009829';
+      await testDb().insert(accountGroups).values({ groupId, accountId: ACCOUNT_ID, name: 'Narrowed audience' });
+      await assignRole(SYSTEM_ACTOR, ACCOUNT_ID, {
+        principal: { type: 'group', id: groupId },
+        roleKey: 'agent-user',
+        scope: { type: 'project', id: PROJECT_ID },
+        object: { type: 'connection', id: CONNECTION_ID },
+      });
+      clearAuthorizeCaches();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none')]);
+      expect((await store.get(PROJECT_ID, 'none'))?.lastError).toBe(
+        'This Inbox account is shared with specific people only. Share it with everyone in the workspace or with the agent "inbox-agent" (the workspace\'s default agent, which runs this trigger) to activate this trigger.',
+      );
+      expect(calls).toEqual([]);
+      clearAuthorizeCaches();
+    });
+
+    test('with no default_agent in kortix.yaml the metadata mirror names the agent, as session creation does', async () => {
+      await mirror('inbox-agent');
+      await connect();
+      await agentIdentity('inbox-agent');
+      await shareOnlyWithAgent();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none')]);
+      expect(await status('none')).toBe('active');
+      clearAuthorizeCaches();
+    });
+
+    test('an unreadable kortix.yaml fails closed: the agent share does not count', async () => {
+      manifestDefaultAgent = new Error('git mirror unavailable');
+      await mirror('inbox-agent');
+      await connect();
+      await agentIdentity('inbox-agent');
+      await shareOnlyWithAgent();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none')]);
+      expect(await status('none')).toBe('error');
+      expect((await store.get(PROJECT_ID, 'none'))?.lastError).toBe(
+        'This Inbox account is shared with specific people only. Event triggers need an account shared with the whole project.',
+      );
+      expect(calls).toEqual([]);
+      clearAuthorizeCaches();
+    });
+
+    test('an account open to the whole workspace activates without reading kortix.yaml', async () => {
+      await connect();
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('none')]);
+      expect(await status('none')).toBe('active');
+      expect(manifestReads).toBe(0);
+    });
   });
 
   describe('account selection (two shared accounts on one connector)', () => {

@@ -26,7 +26,7 @@ import {
   takeFlagValues,
 } from '../command-helpers.ts';
 import { resolveProjectId } from '../project-link.ts';
-import { readSecret, readVisible } from '../prompts.ts';
+import { EndOfInputError, readSecret, readVisible } from '../prompts.ts';
 import { C, help, pad, status } from '../style.ts';
 import { sleep } from '@kortix/shared/guards';
 
@@ -631,6 +631,13 @@ async function claudeSharing(ctx: ProjectCtx & { auth: Auth }): Promise<ClaudeSh
   }
 }
 
+/** A prompt whose stdin closed answers '': the caller's empty-value refusal (a non-zero exit) runs. */
+const emptyOnEnd = (read: Promise<string>): Promise<string> =>
+  read.catch((err: unknown) => {
+    if (err instanceof EndOfInputError) return '';
+    throw err;
+  });
+
 const claudeSharingText = (sharing: ClaudeSharing) =>
   sharing.mode === 'project' ? 'shared with everyone in this workspace' : 'only you can use it';
 
@@ -674,7 +681,19 @@ async function claudeLogin(opts: CtxOpts, tokenStdin: boolean, forcePrivate: boo
       `  ${C.dim}Then paste the code Claude shows you.${C.reset}\n\n`,
   );
   openInBrowser(flow.authorize_url);
-  const code = (await readVisible('  Code from claude.com: ')).trim();
+  let code: string;
+  try {
+    code = (await readVisible('  Code from claude.com: ')).trim();
+  } catch (err) {
+    if (!(err instanceof EndOfInputError)) throw err;
+    // No terminal to paste into (an agent, CI, `</dev/null`): nothing is stored, so the exit code says so.
+    process.stderr.write(
+      `\n${status.err('stdin closed before a code arrived: Kortix stored no Claude login.')}\n` +
+        `  ${C.dim}Run it in a terminal and paste the code, or pipe a token made with \`claude setup-token\`:${C.reset}\n` +
+        `    printf %s "$TOKEN" | kortix providers login claude --token-stdin\n`,
+    );
+    return 1;
+  }
   if (!code) return fail('No code entered. Run the command again.');
   try {
     return done(await ctx.client.post<ClaudeConnectedResponse>(`/workspaces/${ctx.projectId}/claude-subscription/login/complete`, { flow_id: flow.flow_id, code }));
@@ -797,7 +816,7 @@ async function providersSet(
   const values: Record<string, string> = {};
   if (envVars.length === 1) {
     const envVar = envVars[0]!;
-    const value = key || (await readSecret(`Enter ${envVar} (input hidden): `));
+    const value = key || (await emptyOnEnd(readSecret(`Enter ${envVar} (input hidden): `)));
     if (!value) {
       process.stderr.write(`${status.err('Empty value — aborting.')}\n`);
       return 1;
@@ -805,14 +824,14 @@ async function providersSet(
     values[envVar] = value;
   } else {
     const [tokenVar, regionVar] = envVars; // ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_REGION']
-    const token = key || (await readSecret(`Enter ${tokenVar} (input hidden): `));
+    const token = key || (await emptyOnEnd(readSecret(`Enter ${tokenVar} (input hidden): `)));
     if (!token) {
       process.stderr.write(`${status.err('Empty value — aborting.')}\n`);
       return 1;
     }
     let region = regionFlag;
     if (!region && process.stdin.isTTY) {
-      region = await readVisible(`Enter ${regionVar} (e.g. us-east-1): `);
+      region = await emptyOnEnd(readVisible(`Enter ${regionVar} (e.g. us-east-1): `));
     }
     if (!region) {
       process.stderr.write(
@@ -857,6 +876,8 @@ async function providersSet(
       // NAME, which is a guess the server has no business making: models.dev
       // claims `GITHUB_TOKEN` for `github-copilot`, so an ordinary GitHub PAT
       // was classified as a Copilot key and withheld from the sandbox.
+      // The API files it as the workspace's named "Workspace key" (one store
+      // for provider keys); a Bedrock region lands next to its key there.
       await ctx.client.post<ProjectSecret>(`/workspaces/${ctx.projectId}/secrets`, {
         name,
         value,
@@ -869,7 +890,7 @@ async function providersSet(
   }
   process.stdout.write(
     `\n${status.ok(`Saved ${C.bold}${Object.keys(values).join(', ')}${C.reset} for ${C.bold}${provider}${C.reset}`)}\n` +
-      `  ${C.dim}Saved as a workspace secret, shared with everyone in this workspace.${C.reset}\n` +
+      `  ${C.dim}Saved as a workspace key, shared with everyone in this workspace. Listed in the web under Models → Providers.${C.reset}\n` +
       `  ${C.dim}The LLM gateway uses it; the key never enters a sandbox.${C.reset}\n\n`,
   );
   return 0;

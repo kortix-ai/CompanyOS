@@ -20,7 +20,7 @@ because secrets are sealed per account and the migrate job has no
 | Plan, ledger, lease, mode, reverse, keeper confirm | `apps/api/src/workspaces/split/split-runner.ts` |
 | Invariants I1–I12 | `apps/api/src/workspaces/split/invariants.ts` |
 | Split notice on `GET /v1/workspaces/:id` (C9) | `apps/api/src/workspaces/split/notice.ts` |
-| Owner email (C9) | `apps/api/src/workspaces/split/owner-email.ts` |
+| Owner email | none: removed 2026-11-11 (decisions.md D13, "no owner notices") |
 | Split-off billing (C6, billing stream) | `apps/api/src/billing/services/split-off-billing.ts` |
 | Rotated-login write-back (by `secret_id`) | `apps/api/src/llm-gateway/credentials/rotating-login-write.ts` |
 | Worker job (leader only) | `apps/api/src/worker/jobs/workspace-split.ts` |
@@ -115,16 +115,9 @@ that failed.
    `<run_id>:<new account id>` as its key.
 4. When it was the account's last move (no `planned`/`held`/`storage_copied`
    run, one active project left): `workspace_fill_account` for the keeper and
-   every split-off, then one outbox row per owner of the source account in
-   `kortix.workspace_split_emails` (unique key
-   `workspace-split-email:<from_account_id>:<user_id>`; members are never
-   mailed). The tick sends the rows in `apply` mode only; in `off` and
-   `dry_run` they stay `pending`, also after an operator `apply <run_id>`.
-   A claim holds a 5-minute lease; a failure retries after 2, 4, 8, 16 min
-   (5 attempts, then `failed` for an operator); a `sending` row with an
-   expired lease (a crash mid-send) is claimed again. `skipped` + `last_error`
-   says why a row sent nothing (`no_email`, `email_not_configured`,
-   `split_not_finished`, `not_an_owner`). `status` prints the counts.
+   every split-off, then `plan.account_finished_at` on each done run of the
+   account. No email and no other owner message, in any mode (decisions.md
+   D13, 2026-11-11); `kortix.workspace_split_emails` stays empty.
 5. Repair pass at `completed_at + 120 s`: the move's own idempotent UPDATEs
    again (`moveOwnedRows`), for a row a request that read the project before
    the move committed with the old account (a session create, a prompt
@@ -199,8 +192,7 @@ splits it into a fresh account (the dormant one is listed in
 1. Run `dry_run` and review `report` (aggregates only: accounts, projects to
    move, held accounts (IdP only), `rotating_logins`, `free_grant_credits_total`,
    `comp_credits_total`, `unbound_tokens_staying`, `api_keys_staying`,
-   `oauth_clients_staying`). Tell the owners of accounts with staying
-   tokens, keys or OAuth clients first (design.md §3.6).
+   `oauth_clients_staying`). No owner is told before or after (D13).
 2. Rehearse on a restored snapshot (needs Marko's approval, design.md §7 (c)).
 3. Switch to `apply`; run the invariant CLI after each batch.
 

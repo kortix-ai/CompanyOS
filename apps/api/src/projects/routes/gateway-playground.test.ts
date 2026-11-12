@@ -93,6 +93,12 @@ mock.module('../lib/access', () => ({
 class GatewayResolutionError extends Error {
   constructor(readonly code: string, message: string, readonly suggestion?: string) { super(message); }
 }
+/** A provider's HTTP refusal, as `@kortix/llm-gateway` defines it. */
+class UpstreamHttpError extends Error {
+  constructor(readonly status: number, readonly body: string) { super(`HTTP ${status}`); }
+}
+/** The next upstream call throws this instead of answering. */
+let upstreamThrows: Error | null = null;
 /** Traces the route logged. */
 const traces: Array<Record<string, unknown>> = [];
 // A refusal the next resolve throws instead of answering (no usable key).
@@ -119,20 +125,24 @@ mock.module('../../llm-gateway/models/catalog-models', () => ({
 
 mock.module('@kortix/llm-gateway', () => ({
   calculateCost: () => ({ upstreamCost: 0, finalCost: 0 }),
-  callUpstream: async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      model: 'claude-sonnet-4.6',
-      usage: { prompt_tokens: 5, completion_tokens: 5 },
-      choices: [{ message: { content: 'hi' } }],
-    }),
-  }),
+  callUpstream: async () => {
+    if (upstreamThrows) throw upstreamThrows;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        model: 'claude-sonnet-4.6',
+        usage: { prompt_tokens: 5, completion_tokens: 5 },
+        choices: [{ message: { content: 'hi' } }],
+      }),
+    };
+  },
   publicPayload: (data: unknown) => data,
   publicUpstreamError: () => null,
   shownModel: () => 'claude-sonnet-4.6',
   shownProvider: () => 'anthropic',
   GatewayResolutionError,
+  UpstreamHttpError,
 }));
 
 mock.module('../../llm-gateway/hooks', () => ({
@@ -168,6 +178,7 @@ interface PlaygroundResult {
 beforeEach(() => {
   recordUsageRejection = null;
   resolveRefusal = null;
+  upstreamThrows = null;
   traces.length = 0;
 });
 
@@ -229,5 +240,16 @@ describe('POST /:projectId/gateway/playground — a refusal before any provider 
       errorCode: 'provider_not_connected', errorMessage: 'No anthropic API key is connected for this project.',
       candidatesTried: [], metadata: { surface: 'gateway_playground' },
     });
+  });
+});
+
+describe('POST /:projectId/gateway/playground — a provider refusal', () => {
+  test('answers the provider`s message and logs it, instead of "Request failed"', async () => {
+    upstreamThrows = new UpstreamHttpError(401, JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
+    const res = await runPlayground(['anthropic/claude-sonnet-4.6']);
+    const body = (await res.json()) as { results: PlaygroundResult[] };
+    expect(body.results[0]).toMatchObject({ model: 'anthropic/claude-sonnet-4.6', ok: false, error: 'invalid x-api-key' });
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({ status: 401, ok: false, errorMessage: 'invalid x-api-key' });
   });
 });

@@ -341,6 +341,19 @@ export interface TurnEnd {
   messageId: string
   status: 'idle' | 'error'
   error?: { name: string; message?: string; statusCode?: number; code?: TurnErrorCode }
+  /** The text of the turn's last assistant message: a chat channel posts it when the agent sent no reply itself. */
+  finalText?: string
+}
+
+/** The text parts of an assistant message, joined; empty when it has none. */
+export function assistantFinalText(message: unknown): string {
+  const content = (message as { content?: unknown } | null)?.content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((c): c is { type: 'text'; text: string } => (c as { type?: unknown })?.type === 'text' && typeof (c as { text?: unknown }).text === 'string')
+    .map((c) => c.text)
+    .join('\n\n')
+    .trim()
 }
 
 export interface PiRuntimeHooks {
@@ -1516,7 +1529,15 @@ export class PiRuntime {
       // A Claude turn still waiting for tool results gets none from this turn: its idle timer starts.
       if (!abandoned) claudeSessions()?.settle(this.rootId)
       // `abandonWork` already reported the abandoned turn's end.
-      if (!abandoned) this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: outcome === 'error' ? 'error' : 'idle', ...(error ? { error } : {}) })
+      const finalText = outcome === 'completed' ? assistantFinalText(this.turnAssistant) : ''
+      if (!abandoned)
+        this.hooks.onTurnEnd?.({
+          rootId: this.rootId,
+          messageId: turn.messageId,
+          status: outcome === 'error' ? 'error' : 'idle',
+          ...(error ? { error } : {}),
+          ...(finalText ? { finalText } : {}),
+        })
     }
     if (abandoned) return
     // Started while the live model list was down: fetch it again, so the next turn runs on real limits.

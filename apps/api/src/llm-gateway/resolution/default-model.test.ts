@@ -209,17 +209,21 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(granted).toHaveBeenCalledWith('a1', 'p1', 'u1', null);
   });
 
-  test('with the flag off, a Models-panel key is not read', async () => {
+  // One store (2026-11-11): every writer writes named keys, so the flag no longer hides them.
+  test('with the flag off, a Models-panel key is still a connected provider', async () => {
     accountDefaults = { account: null, agents: {}, projects: { p1: 'openrouter/some-model' } };
-    resolveCandidatesImpl = async () => { throw new GatewayResolutionError('provider_not_connected', 'nope', 'connect it'); };
+    resolveCandidatesImpl = async (model) => {
+      if (model === 'openrouter/some-model') throw new GatewayResolutionError('provider_not_connected', 'nope', 'connect it');
+      return [{ provider: 'x' }];
+    };
     spyOn(projectModelAccessModule, 'getProjectGatewayResolution').mockImplementation(
       async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: false, customProviders: [] }) as never,
     );
     const granted = spyOn(accountResourceModule, 'listGrantedGatewaySecretNames').mockImplementation(async () => ['OPENAI_API_KEY']);
 
     const result = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });
-    expect(result).toEqual({ model: null, source: 'platform' });
-    expect(granted).not.toHaveBeenCalled();
+    expect(result.model?.startsWith('openai/')).toBe(true);
+    expect(granted).toHaveBeenCalled();
   });
 
   test('stale configured default AND nothing connected → degrades to plain platform default (unchanged pre-existing behavior), still no throw', async () => {
@@ -255,7 +259,7 @@ describe('resolveEffectiveModel — the /model-defaults GET + picker resolution 
     expect(principals[0]).toMatchObject({ userId: 'u1', personalUserId: null });
     // Only shared project keys count for the fallback provider as well.
     expect(secretsModule.listProjectSecretNamesForConsumer).toHaveBeenCalledWith(
-      expect.objectContaining({ principalUserId: undefined }),
+      expect.objectContaining({ principalUserId: null }),
     );
 
     const own = await resolveEffectiveModel({ ...PRINCIPAL_BASE, freeModelsOnly: false });

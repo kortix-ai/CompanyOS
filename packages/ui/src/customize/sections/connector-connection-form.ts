@@ -138,8 +138,6 @@ export function buildEmailConnectorConnectionSlug(baseInput: string, uniqueId: s
   return `email_${base}_${suffix}`;
 }
 
-export { connectorConnectionQueryKeys } from '../../internal/hooks/connectors/invalidate-connections';
-
 export function buildEasyConnectConnectorDraft(
   app: EasyConnectApp,
   connection: EasyConnectConnectionInput,

@@ -136,7 +136,13 @@ export const PROJECT_TRANSFER_LEAVE_TABLES: Readonly<Record<string, string>> = {
   // Completed one-off migration runs — operations history, not live state.
   legacy_sandbox_migrations: 'completed ops migration run record',
   suna_account_migrations: 'completed ops migration run record',
-  llm_credential_backfill: 'completed ops migration run record',
+  // The LLM credential move ledger: the row records that the SOURCE account's
+  // backfill copied a legacy secret into its named store. The legacy read gate
+  // (`legacySecretNotMoved`) joins the row by `legacy_secret_id` with no
+  // account filter, so the moved project's secret still resolves through the
+  // row left behind. Re-pointing `account_id` would claim the target account
+  // made the copy.
+  llm_credential_backfill: 'credential move ledger — the record of a copy into the source account\'s named store stays with the account that made it',
 };
 
 /**

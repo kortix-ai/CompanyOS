@@ -56,8 +56,12 @@
  *
  * Every action closes the drawer first, except the switcher row: it opens a
  * sheet over the drawer, and only a pick inside that sheet closes the drawer.
- * Search, Files, and Review go through `onNavigateRoute` (ProjectScreen) or
- * `useTabStore.navigateToPage`: a push over project home, or a replace of the
+ * The navigation runs one frame after the close (`closeThen`): the close
+ * then animates on the UI thread while the new page renders, instead of
+ * waiting for that render. Search, Files, Artifacts and Account go through
+ * `onNavigateRoute`, Review and Apps through `onOpenPage` (ProjectScreen):
+ * the destination swaps in under the closing drawer, with no push slide
+ * (`DRAWER_SWAP_PARAM`, lib/session/project-stack): a push over home, or a replace of the
  * screen that covers home, so the project stack stays one screen deep
  * (lib/session/project-stack). New session returns to project home and pops a
  * covering screen. A navigation guard ignores a second tap while the drawer
@@ -121,6 +125,7 @@ import {
   PROJECT_ARTIFACTS_ROUTE,
   PROJECT_FILES_ROUTE,
   PROJECT_SESSIONS_ROUTE,
+  type DrawerPageId,
   type ProjectDrawerRoute,
 } from '@/lib/session/project-stack';
 import {
@@ -135,7 +140,6 @@ import {
 import { parentKey, sectionKey, useSessionTreeStore } from '@/stores/session-tree-store';
 import { useAuthContext } from '@/contexts';
 import type { SessionNeedsYou } from '@/lib/session/needs-you';
-import { useTabStore } from '@/stores/tab-store';
 import { BUTTON_LABEL_MAX_FONT_SCALE } from '@/lib/ui/font-scale';
 import { THEME, withAlpha } from '@/lib/utils/theme';
 
@@ -252,8 +256,10 @@ export interface ProjectLeftDrawerProps {
    * `drawerThreadMove`).
    */
   onOpenSubsession: (parent: ProjectSession, childId: string) => void;
-  /** Sessions, Files, or Account: push over home, or replace the covering screen. */
+  /** Sessions, Files, Artifacts, or Account: push over home, or replace the covering screen. */
   onNavigateRoute: (route: ProjectDrawerRoute, routeParams?: Record<string, string>) => void;
+  /** Review or Apps: a tab-store page, shown in the view route. */
+  onOpenPage: (pageId: DrawerPageId) => void;
   /**
    * Long press on a session row: opens `SessionActionsSheet` over the drawer
    * (COR-140 Task 5) — the drawer does not close for it, the same exception
@@ -301,6 +307,7 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   onOpenProjectSession,
   onOpenSubsession,
   onNavigateRoute,
+  onOpenPage,
   onSessionActions,
   onOpenSwitcher,
   onClose,
@@ -565,16 +572,37 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
     [resetNavigating]
   );
 
-  /** Close the drawer and navigate once. Later taps are ignored until reset. */
-  const navigateOnce = useCallback(
+  /**
+   * Close the drawer, then run `navigate` on the next frame. The drawer
+   * library starts its close in a layout effect of the commit that sets
+   * `open` to false. Navigating in the same tick put the new page's mount
+   * (its module graph and first render) into that commit, so the drawer
+   * stayed open, frozen, until the page had rendered: up to seconds on a
+   * cold page. One frame later the close already runs on the UI thread,
+   * and the page renders while the drawer slides away.
+   */
+  const closeThen = useCallback(
     (navigate: () => void) => {
-      if (navigatingRef.current) return;
-      navigatingRef.current = true;
-      haptics.tap();
       onClose();
-      navigate();
+      requestAnimationFrame(navigate);
     },
     [onClose]
+  );
+
+  /**
+   * Close the drawer and navigate once. Later taps (any row, any pill) are
+   * ignored until reset: the JS thread stays free while the drawer closes, so
+   * a second tap would otherwise queue a second navigation. `haptic: false`
+   * for a session row: its open path taps itself (ProjectScreen).
+   */
+  const navigateOnce = useCallback(
+    (navigate: () => void, haptic = true) => {
+      if (navigatingRef.current) return;
+      navigatingRef.current = true;
+      if (haptic) haptics.tap();
+      closeThen(navigate);
+    },
+    [closeThen]
   );
 
   // ── Handlers ──
@@ -600,30 +628,24 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   // enough regardless of which project route is focused (ProjectScreen's old
   // gear button used the same call).
   const goToReview = useCallback(
-    () => navigateOnce(() => useTabStore.getState().navigateToPage('page:review')),
-    [navigateOnce]
+    () => navigateOnce(() => onOpenPage('page:review')),
+    [navigateOnce, onOpenPage]
   );
 
   // Apps is a tab-store page like Review: one entry point, the drawer pill.
   const goToApps = useCallback(
-    () => navigateOnce(() => useTabStore.getState().navigateToPage('page:apps')),
-    [navigateOnce]
+    () => navigateOnce(() => onOpenPage('page:apps')),
+    [navigateOnce, onOpenPage]
   );
 
   const handleOpenProjectSession = useCallback(
-    (session: ProjectSession) => {
-      onClose();
-      onOpenProjectSession(session);
-    },
-    [onClose, onOpenProjectSession]
+    (session: ProjectSession) => navigateOnce(() => onOpenProjectSession(session), false),
+    [navigateOnce, onOpenProjectSession]
   );
 
   const handleOpenSubsession = useCallback(
-    (parent: ProjectSession, childId: string) => {
-      onClose();
-      onOpenSubsession(parent, childId);
-    },
-    [onClose, onOpenSubsession]
+    (parent: ProjectSession, childId: string) => navigateOnce(() => onOpenSubsession(parent, childId), false),
+    [navigateOnce, onOpenSubsession]
   );
 
   const toggleParent = useCallback(
@@ -837,10 +859,8 @@ export const ProjectLeftDrawer = React.memo(function ProjectLeftDrawer({
   );
 
   const handleNewSession = useCallback(() => {
-    haptics.tap();
-    onClose();
-    onNewSession();
-  }, [onClose, onNewSession]);
+    navigateOnce(onNewSession);
+  }, [navigateOnce, onNewSession]);
 
   // The app's one settings page (AccountPage), inside the project stack, so
   // its hamburger opens this drawer.

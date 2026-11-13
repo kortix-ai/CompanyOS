@@ -128,7 +128,7 @@ function psql(url: string, sql: string, flags: string[] = []): ShResult {
 /** The query's unaligned, tuples-only output, trimmed. Throws when psql fails. */
 function psqlValue(url: string, sql: string): string {
   const r = psql(url, sql, ['-A', '-t']);
-  if (!r.ok) throw new Error(`psql: ${(r.stderr || r.stdout).trim()}`);
+  if (!r.ok) throw new Error(r.stderr.trim() || `psql exited ${r.code}`);
   return r.stdout.trim();
 }
 

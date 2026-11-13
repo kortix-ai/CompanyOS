@@ -1641,6 +1641,8 @@ function evalSourcesSchema(description: string): JsonSchemaFragment {
               properties: {
                 path: { type: 'string', description: 'A repository path: one task folder (it holds `task.toml`) or a folder of task folders.' },
                 name: { type: 'string', description: 'A dataset of the Harbor registry, such as `terminal-bench`.' },
+                git_url: { type: 'string', description: 'A public git repository (https). `path` is inside it.' },
+                git_commit_id: { type: 'string', description: 'The commit, branch or tag of `git_url`. Default: its default branch.' },
                 version: { type: ['string', 'number'], description: 'The dataset version, such as `2.0`.' },
                 task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to keep.' },
                 exclude_task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to leave out.' },

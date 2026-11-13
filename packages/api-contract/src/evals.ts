@@ -67,6 +67,10 @@ export const EvalTaskSourceSchema = z.object({
   path: z.string().min(1).max(500).nullish(),
   name: z.string().min(1).max(200).nullish(),
   version: z.string().min(1).max(60).nullish(),
+  /** A public git repository (https on github.com, gitlab.com or huggingface.co); `path` is inside it. */
+  git_url: z.string().url().max(500).nullish(),
+  /** The commit, branch or tag of `git_url`. A branch or tag is resolved to its commit when the job starts. Default: the default branch. */
+  git_commit_id: z.string().min(1).max(250).nullish(),
   /** Glob patterns of task names to keep (datasets only). */
   task_names: z.array(z.string().min(1).max(200)).max(500).nullish(),
   exclude_task_names: z.array(z.string().min(1).max(200)).max(500).nullish(),

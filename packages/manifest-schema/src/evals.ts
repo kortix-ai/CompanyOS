@@ -100,6 +100,28 @@ function normalizeSources(raw: unknown, key: string, issues: EvalConfigIssue[]):
         return;
       }
     }
+    const gitUrl = table.git_url ?? table.repo;
+    if (gitUrl !== undefined) {
+      if (typeof gitUrl !== 'string' || !/^https:\/\//.test(gitUrl)) {
+        issues.push({ path: `${at}.git_url`, message: 'must be an https URL of a public git repository.', severity: 'error' });
+        return;
+      }
+      const ref = table.git_commit_id ?? table.ref;
+      if (ref !== undefined && typeof ref !== 'string') issues.push({ path: `${at}.ref`, message: 'must be a commit, branch or tag.', severity: 'error' });
+      if (table.path !== undefined && (typeof table.path !== 'string' || table.path.startsWith('/') || table.path.split('/').includes('..'))) {
+        issues.push({ path: `${at}.path`, message: 'must be a path inside that repository (no leading `/`, no `..`).', severity: 'error' });
+        return;
+      }
+      out.push({
+        git_url: gitUrl,
+        ...(typeof ref === 'string' ? { git_commit_id: ref } : {}),
+        path: typeof table.path === 'string' ? table.path.replace(/^\.\//, '').replace(/\/+$/, '') : '',
+        ...(Array.isArray(table.task_names) ? { task_names: table.task_names } : {}),
+        ...(Array.isArray(table.exclude_task_names) ? { exclude_task_names: table.exclude_task_names } : {}),
+        ...(typeof table.n_tasks === 'number' ? { n_tasks: table.n_tasks } : {}),
+      });
+      return;
+    }
     if (!isRepoPath(table.path)) {
       issues.push({ path: `${at}.path`, message: 'must be a path inside the repository (no leading `/`, no `..`).', severity: 'error' });
       return;

@@ -58,6 +58,7 @@ import {
 } from './store';
 import { loadTask, loadTaskFolder, treeFor, type EvalTaskRef } from './task-source';
 import { readManifestEvals } from './config';
+import { readSessionLogPage } from '../session-log-read';
 
 /** The source of every session the runner creates. */
 export const EVAL_SESSION_SOURCE = 'system:eval' as const;
@@ -364,6 +365,34 @@ async function awaitAgent(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
   throw new EvalTrialError('AgentTurnFailedError', 'The instruction never reached the agent.');
 }
 
+/**
+ * The agent's last reply, as text: the text blocks of the newest assistant
+ * message of the session's main thread. Null when the log holds none yet.
+ */
+export async function finalReply(sessionId: string): Promise<string | null> {
+  const page = await readSessionLogPage({ sessionId, threadId: null, beforeSeq: null, limit: 50 }).catch(() => null);
+  if (!page || page === 'unknown_thread') return null;
+  const messages = [...((page as { messages?: Array<{ role?: string; blocks?: Array<{ type?: string; text?: unknown }> }> }).messages ?? [])].reverse();
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    const text = (message.blocks ?? []).filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text as string).join('\n\n').trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+/**
+ * Give the verifier the agent's last reply at `/logs/agent/response.md`
+ * (Harbor's agent log folder): a grader of a chat agent checks or judges
+ * what the agent answered, not only the files it left.
+ */
+async function writeFinalReply(box: Box, sessionId: string): Promise<void> {
+  const reply = await finalReply(sessionId);
+  if (reply === null) return;
+  await uploadDir(box, '/logs/agent/reply', [{ path: 'response.md', bytes: new TextEncoder().encode(reply) as Uint8Array<ArrayBuffer> }]);
+  await boxExec(box, 'mv -f /logs/agent/reply/response.md /logs/agent/response.md && rmdir /logs/agent/reply');
+}
+
 /** The agent stopped. Record its failure, then grade when the policy says so. */
 async function agentEnded(ctx: TrialContext, trial: EvalTrialRow, box: Box | null, failure: EvalTrialError | null): Promise<void> {
   const exception = failure ? toEvalException(failure, ctx.config.override_error_policy, ctx.now) : null;
@@ -381,6 +410,9 @@ async function beginVerify(ctx: TrialContext, trial: EvalTrialRow, box: Box): Pr
   await extendSandboxDeadline({ sessionId: trial.sessionId! }, RUNNER_DEADLINE_GRANT_MS);
   try {
     await boxExec(box, 'mkdir -p /logs/verifier /logs/agent && rm -f -- /logs/verifier/reward.txt /logs/verifier/reward.json');
+    if (!isEvalBuiltinAgent(trial.agent) && trial.sessionId) {
+      await writeFinalReply(box, trial.sessionId).catch((err) => logger.warn('[evals] final reply not written', { trial_id: trial.trialId, error: String(err) }));
+    }
     await uploadDir(box, '/tests', await loadTaskFolder(tree, taskRef(trial), 'tests'));
   } catch (err) {
     if (err instanceof EvalTrialError && err.type === 'TaskLoadError') throw err;
@@ -389,7 +421,15 @@ async function beginVerify(ctx: TrialContext, trial: EvalTrialRow, box: Box): Pr
   await launch(box, `verify-${trial.trialId}`, {
     command: 'bash /tests/test.sh',
     cwd: task.workdir,
-    env: { ...task.environmentEnv, ...task.verifierEnv, ...ctx.config.verifier.env },
+    env: {
+      ...task.environmentEnv,
+      ...task.verifierEnv,
+      ...ctx.config.verifier.env,
+      // Which session the agent ran in: a grader inspects its loops, child sessions and log with `kortix`.
+      ...(trial.sessionId ? { KORTIX_SESSION_ID: trial.sessionId } : {}),
+      KORTIX_EVAL_JOB_ID: ctx.job.jobId,
+      KORTIX_EVAL_TRIAL_ID: trial.trialId,
+    },
     timeoutSec: state.verifier_timeout_sec ?? task.verifierTimeoutSec,
     outputPath: '/logs/verifier/test-stdout.txt',
   });

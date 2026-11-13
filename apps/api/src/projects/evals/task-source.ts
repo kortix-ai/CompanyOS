@@ -126,6 +126,22 @@ export function gitTree(gitUrl: string, commit: string): TaskTree {
   };
 }
 
+/** A branch, tag or commit of a public repository, as a full commit SHA (`git ls-remote`). */
+export async function resolveGitRef(gitUrl: string, ref: string | null | undefined): Promise<string> {
+  const url = checkedGitUrl(gitUrl);
+  if (ref && /^[0-9a-f]{40}$/i.test(ref)) return ref.toLowerCase();
+  const wanted = ref?.trim() || 'HEAD';
+  let stdout: string;
+  try {
+    ({ stdout } = await runGit(['ls-remote', url, wanted, `refs/heads/${wanted}`, `refs/tags/${wanted}`], undefined, false, null, undefined, 'github.com', 60_000));
+  } catch (err) {
+    throw new EvalTrialError('TaskLoadError', `Could not read ${url}: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
+  }
+  const sha = stdout.split('\n').map((line) => line.split('\t')[0]?.trim()).find((value) => value && /^[0-9a-f]{40}$/.test(value));
+  if (!sha) throw new EvalTrialError('TaskLoadError', `${url} has no branch, tag or commit "${wanted}".`);
+  return sha;
+}
+
 export const treeFor = (project: GitBackedProject, commit: string, ref: EvalTaskRef): TaskTree =>
   ref.kind === 'repo' ? projectTree(project, commit) : gitTree(ref.git_url, ref.commit);
 

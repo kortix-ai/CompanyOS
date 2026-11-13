@@ -2901,6 +2901,14 @@
                           "type": "string",
                           "description": "A dataset of the Harbor registry, such as `terminal-bench`."
                         },
+                        "git_url": {
+                          "type": "string",
+                          "description": "A public git repository (https). `path` is inside it."
+                        },
+                        "git_commit_id": {
+                          "type": "string",
+                          "description": "The commit, branch or tag of `git_url`. Default: its default branch."
+                        },
                         "version": {
                           "type": [
                             "string",
@@ -2957,6 +2965,14 @@
                         "name": {
                           "type": "string",
                           "description": "A dataset of the Harbor registry, such as `terminal-bench`."
+                        },
+                        "git_url": {
+                          "type": "string",
+                          "description": "A public git repository (https). `path` is inside it."
+                        },
+                        "git_commit_id": {
+                          "type": "string",
+                          "description": "The commit, branch or tag of `git_url`. Default: its default branch."
                         },
                         "version": {
                           "type": [

@@ -8,7 +8,7 @@ import { ArtifactFramePreloader } from '@/features/artifacts/artifact-frame-prel
 import { useTranslations } from '@/i18n/use-translations';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 import { TITLEBAR_CONTROL_CLASS } from '@kortix/ui/internal/desktop/titlebar-control';
 import { PersonalOnboardingWelcome } from '@/components/projects/personal-onboarding-welcome';
@@ -25,6 +25,7 @@ import { useDesktopShell } from '@kortix/ui/internal/layout/sidebar-opener';
 import { openCommandPalette } from '@kortix/ui/internal/layout/open-command-palette';
 import { ProjectSidebar } from '@kortix/ui/workspace';
 import { WorkspaceSwitcher } from '@/features/workspace/project-sidebar/workspace-switcher';
+import { DownloadModal } from '@/features/marketing/download/download-modal';
 import { SettingsPanel } from '@/features/workspace/settings/settings-panel';
 import {
   isAccountGraduatedSection,
@@ -38,6 +39,10 @@ import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-proj
 import { cn, uiRoutes } from '@kortix/ui';
 import { BillingAccountProvider } from '@kortix/ui/internal/stores/billing-account-context';
 import { useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
+import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
+import { isBillingEnabled } from '@/lib/config';
+import { ConnectModelStep } from '@kortix/ui/session/models/connect-model-step';
+import { useWorkspaceModelGate } from '@kortix/ui/session/models/use-workspace-model-gate';
 import { getProject, getProjectDetail } from '@kortix/sdk';
 import {
   contract,
@@ -198,6 +203,11 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     }
   }, []);
 
+  // The sidebar's Download app row opens this; a stable callback keeps the
+  // sidebar from re-rendering on every shell render.
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const openDownloadApp = useCallback(() => setDownloadOpen(true), []);
+
   // New-session navigation opens the project composer. The first send creates
   // the durable session.
   const newSession = useNewProjectSession(projectId);
@@ -220,6 +230,12 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   const openTab = useProjectSessionTabsStore((s) => s.openTab);
 
+  // No workspace page opens until the viewer can run a model: a new workspace
+  // lands on "Connect a model" right after setup, and so does any workspace
+  // whose models are all gone (Free plan, nothing connected). Paid plans run
+  // on Kortix models and pass.
+  const modelGate = useWorkspaceModelGate(projectId);
+
   useLayoutEffect(() => {
     if (activeSessionId) openTab(projectId, activeSessionId);
   }, [projectId, activeSessionId, openTab]);
@@ -228,6 +244,20 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   if (authLoading || !user) {
     return <div className="bg-background min-h-screen" />;
+  }
+
+  // The same frame the access check and the route loaders paint, so a
+  // workspace that waits for its model answer shows one continuous screen.
+  if (modelGate === 'pending') return <ProjectPendingScreen />;
+
+  if (modelGate === 'blocked') {
+    return (
+      // The account the upgrade dialog and the plan check read: this workspace's.
+      <BillingAccountProvider accountId={projectAccountId ?? null} resolved={!!projectAccountId}>
+        <ConnectModelStep projectId={projectId} workspaceName={projectRow?.name} />
+        {isBillingEnabled() && <GlobalUpgradeModal />}
+      </BillingAccountProvider>
+    );
   }
 
   return (
@@ -248,6 +278,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             projectId={projectId}
             menu={<WorkspaceSwitcher projectId={projectId} />}
             onOpenSearch={openCommandPalette}
+            onOpenDownloadApp={openDownloadApp}
           />
         }
       >
@@ -260,6 +291,9 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
         </div>
 
         <SettingsPanel projectId={projectId} />
+
+        {/* Outside the sidebar: on a phone the sidebar sheet unmounts its rows. */}
+        <DownloadModal open={downloadOpen} onOpenChange={setDownloadOpen} />
 
         {/* Drive uploads report here, on every page of the project, so a batch
             started in one folder still shows its progress after the user moves

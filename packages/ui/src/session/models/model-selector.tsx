@@ -21,7 +21,6 @@ import { useProviderModalStore } from '../../internal/stores/provider-modal-stor
 import {
   type FlatModel,
   type ProviderListResponse,
-  useFeatureFlag,
   useModelAccess,
   useModelStore,
 } from '@kortix/sdk/react';
@@ -58,6 +57,7 @@ import { isClaudeSubscriptionModel, isSubscriptionModel, pickerModelName, should
 import { useModelConnectionGate } from './use-model-connection-gate';
 import { ModelPickerPanel } from './model-picker-panel';
 import { effortLabel, reasoningEffortChoices } from '../composer/reasoning-effort-selector';
+import { SubscriptionSwitcher, subscriptionProviderOf } from './subscription-switcher';
 
 // Re-export for consumers
 export { Tag };
@@ -400,7 +400,7 @@ export interface ModelSelectorProps {
   projectId?: string;
 
   /**
-   * Offer the member's own ChatGPT subscription (pooled provider secrets) at
+   * Offer the member's own ChatGPT subscription at
    * the end of the list. Only an interactive session can use a personal
    * account; a scheduled or background run cannot, so its pickers leave this off.
    */
@@ -420,7 +420,7 @@ export interface ModelSelectorProps {
    * so effort is the right-hand pane of this popover.
    *
    * Controlled/uncontrolled is decided by whether `open` is `undefined`, the
-   * same rule Radix itself uses — so every existing call site keeps its
+   * same rule the Base UI roots use — so every existing call site keeps its
    * internal state untouched.
    */
   open?: boolean;
@@ -455,8 +455,8 @@ export function ModelSelector({
   const tDefault = useTranslations('workspaces.models');
   const t = useTranslations('threads');
 
-  // Controlled when `open` is supplied, uncontrolled otherwise — Radix's own
-  // rule. `setOpen` below is the single write path every internal caller
+  // Controlled when `open` is supplied, uncontrolled otherwise — the Base UI
+  // roots' rule. `setOpen` below is the single write path every internal caller
   // already goes through (`setOpen(false)` after picking a model or a
   // default), so a controlled parent hears about those closes too rather than
   // being silently desynced from a popover that shut itself.
@@ -484,14 +484,13 @@ export function ModelSelector({
   } = useModelConnectionGate(models);
 
   const projectId = useSessionIds().projectId ?? null;
-  // Bring your own ChatGPT subscription (pooled provider secrets). Any member
+  // Bring your own ChatGPT subscription. Any member
   // connects their own account from here; Customize is not needed. Hidden when
   // a manager disabled the ChatGPT provider for the project.
   const tPooled = useTranslations('pooledSecrets');
-  const pooledSecrets = useFeatureFlag(projectId, 'pooled_provider_secrets');
   const { ProviderAccountsModal } = useUiComponents();
   const chatGptPossible =
-    !!ProviderAccountsModal && offerProviderAccounts && !!projectId && pooledSecrets.enabled;
+    !!ProviderAccountsModal && offerProviderAccounts && !!projectId;
   const modelAccess = useModelAccess(chatGptPossible ? projectId : null);
   const chatGptAvailable =
     chatGptPossible && !(modelAccess.data?.disabledProviders ?? []).includes('codex');
@@ -516,6 +515,16 @@ export function ModelSelector({
   );
   // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
   const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
+  const triggerLoading = !current && (modelsLoading || entitlementsPending);
+  const triggerLabel = triggerLoading
+    ? <span className="bg-primary/10 inline-block h-3.5 w-20 animate-pulse rounded-md" aria-hidden="true" />
+    : displayName;
+
+  // A subscription model names the login that pays for it: the picker grows a
+  // subscription pane under the list (both appearances), so switching the
+  // ChatGPT or Claude plan a turn runs on needs no trip to Customize.
+  const subscriptionProvider = current ? subscriptionProviderOf(current) : null;
+  const subscriptionNode = subscriptionProvider ? <SubscriptionSwitcher providerId={subscriptionProvider} /> : null;
 
   const effortChoices =
     appearance === 'chip'
@@ -951,6 +960,7 @@ export function ModelSelector({
     return (
       <>
         {modals}
+        <div className="flex min-h-0 flex-1 flex-col">
         {/* The popover's own list rhythm (`CommandPopoverContent`), on the host's surface. */}
         <Command
           shouldFilter={false}
@@ -965,6 +975,8 @@ export function ModelSelector({
         >
           {listBody}
         </Command>
+        {subscriptionNode}
+        </div>
       </>
     );
   }
@@ -981,21 +993,23 @@ export function ModelSelector({
             <button
               type="button"
               disabled={disabled}
+              aria-label={triggerLoading ? tModel('loading') : undefined}
               className={cn(triggerVariants(), 'h-9 w-full')}
             >
-              <span className="truncate">{displayName}</span>
+              <span className="truncate">{triggerLabel}</span>
               {disabled ? null : <ChevronDown className={cn(TRIGGER_CARET_CLASS, 'size-4')} />}
             </button>
           ) : (
           <Button
             type="button"
+            aria-label={triggerLoading ? tModel('loading') : undefined}
             variant={triggerVariant}
             size="sm"
             // `min-w-0 shrink`: in a narrow toolbar (a channel's thread panel) the
             // model name truncates; the controls beside it keep their width.
             className={cn('min-w-0 shrink rounded-lg hit-area-y-3', triggerVariant === 'ghost' && 'text-muted-foreground')}
           >
-            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
+            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{triggerLabel}</span>
             {showEffort && (
               <span className="shrink-0">
                 {currentEffort ? effortLabel(currentEffort) : t('auto')}
@@ -1024,33 +1038,36 @@ export function ModelSelector({
               : 'w-[min(28rem,calc(100vw-1.5rem))]'
           }
         >
-          <ModelPickerPanel
-            browseModels={browseModels}
-            pickableModels={pickableModels}
-            searchModels={visibleModels}
-            search={search}
-            onSearchChange={setSearch}
-            searchRight={searchRight}
-            selected={availableSelectedModel ?? null}
-            onPick={handleSelect}
-            isFavorite={pickerModelStore.isFavorite}
-            setFavorite={pickerModelStore.setFavorite}
-            loading={modelsLoading || entitlementsPending}
-            emptyState={noModelsState}
-            searchEmpty={searchEmptyState}
-            onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
-            onForeignDialog={closePicker}
-            connectLabel={tPooled('connect')}
-            effort={
-              showEffort
-                ? {
-                    choices: effortChoices,
-                    selectedVariant: reasoning?.selectedVariant,
-                    onChange: handleEffortChange,
-                  }
-                : undefined
-            }
-          />
+          <div className="flex min-w-0 flex-col">
+            <ModelPickerPanel
+              browseModels={browseModels}
+              pickableModels={pickableModels}
+              searchModels={visibleModels}
+              search={search}
+              onSearchChange={setSearch}
+              searchRight={searchRight}
+              selected={availableSelectedModel ?? null}
+              onPick={handleSelect}
+              isFavorite={pickerModelStore.isFavorite}
+              setFavorite={pickerModelStore.setFavorite}
+              loading={modelsLoading || entitlementsPending}
+              emptyState={noModelsState}
+              searchEmpty={searchEmptyState}
+              onConnectChatGpt={chatGptAvailable ? handleOpenChatGpt : undefined}
+              onForeignDialog={closePicker}
+              connectLabel={tPooled('connect')}
+              effort={
+                showEffort
+                  ? {
+                      choices: effortChoices,
+                      selectedVariant: reasoning?.selectedVariant,
+                      onChange: handleEffortChange,
+                    }
+                  : undefined
+              }
+            />
+            {subscriptionNode}
+          </div>
         </CommandPopoverContent>
       </CommandPopover>
     </>

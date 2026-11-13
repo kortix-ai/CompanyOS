@@ -62,6 +62,7 @@ const {
   compileAgentConfig,
   compileSelectedAgentConfig,
   manifestPiCodemode,
+  manifestWorkspaceSetup,
   manifestPiPackageLists,
   manifestPiPackages,
   resolveCompiledAgentConfigForSession,
@@ -295,6 +296,20 @@ agents:
     const selected = compileSelectedAgentConfig(manifest, 'reader', files);
     expect(Object.keys(selected.agent).filter((name) => !selected.agent[name]!.disable)).toEqual(['reader']);
     expect(selected.agent.reader?.prompt).toBe('Read only.');
+  });
+});
+
+describe('a program agent (`run`)', () => {
+  test('compiles its command, trimmed, and no prompt; the default model stays a model agent\'s', () => {
+    const manifest = parseYaml(`default_agent: janitor\nagents:\n  janitor:\n    run: "  pnpm tsx agents/janitor.ts  "\n    workspace:\n      setup: [pnpm install]\n  writer:\n    model: test/model\n    prompt: Be brief.\n`);
+    const compiled = compileAgentConfig(manifest, {});
+    expect(compiled.agent.janitor?.run).toBe('pnpm tsx agents/janitor.ts');
+    // A daemon older than program agents runs a model instead: it gets no tool and one line to say.
+    expect(compiled.agent.janitor?.tools).toEqual({ '*': false });
+    expect(compiled.agent.janitor?.prompt).toContain('cannot run program agents yet');
+    expect(compiled.agent.janitor?.disable).toBeUndefined();
+    expect(compiled.agent.writer?.run).toBeUndefined();
+    expect(compiled.model).toBeUndefined();
   });
 });
 
@@ -644,5 +659,39 @@ describe('compileAgentConfig — the most specific rule wins on OpenCode, whatev
     expect(permissionAction(permission, 'bash', 'ls')).toBe('ask');
     expect(permissionAction(permission, 'edit', 'apps/api/.env')).toBe('deny');
     expect(permissionAction(permission, 'read', 'x')).toBe('allow');
+  });
+});
+
+describe('manifestWorkspaceSetup', () => {
+  const raw = parseManifestText([
+    'default_agent: dev',
+    'agents:',
+    '  dev:',
+    '    prompt: hi',
+    '    workspace:',
+    '      repos:',
+    '        - {}',
+    '        - path: /workspace/web/',
+    '          sparse: [apps/web]',
+    '      setup: [pnpm install, { run: pnpm build, cwd: apps/web }]',
+    '  plain:',
+    '    prompt: hi',
+    '  machine-only:',
+    '    prompt: hi',
+    '    workspace: { sandbox: default }',
+    '',
+  ].join('\n'));
+  test('normalizes the declared clones and setup; a repo path defaults to /workspace', () => {
+    expect(manifestWorkspaceSetup(raw, 'dev')).toEqual({
+      repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
+      setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }],
+    });
+    // `default` is "no agent chosen": the manifest's default_agent answers.
+    expect(manifestWorkspaceSetup(raw, 'default')).toEqual(manifestWorkspaceSetup(raw, 'dev'));
+  });
+  test('an agent that declares no clone and no setup prepares nothing', () => {
+    expect(manifestWorkspaceSetup(raw, 'plain')).toBeNull();
+    expect(manifestWorkspaceSetup(raw, 'machine-only')).toBeNull();
+    expect(manifestWorkspaceSetup(null, 'dev')).toBeNull();
   });
 });

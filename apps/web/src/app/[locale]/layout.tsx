@@ -20,6 +20,8 @@ import { CHUNK_BOOT_RECOVERY_SCRIPT } from '@/lib/chunk-boot-recovery';
 import { DESKTOP_INIT_SCRIPT } from '@kortix/ui/internal/lib/desktop';
 import { DESKTOP_LEGACY_PATH_SCRIPT } from '@/lib/workspace-redirects';
 import { INTERFACE_THEME_INIT_SCRIPT } from '@/lib/interface-themes';
+import { ENTRY_HYDRATION_GUARD_SCRIPT } from '@/lib/auth/entry-hydration-guard';
+import { LANDING_HOLD_SCRIPT } from '@/lib/auth/landing-hold';
 import { RouterBridge } from '@/lib/navigation/router-bridge-mount';
 import '@/lib/polyfills';
 import { readInstanceBranding } from '@/lib/instance-branding-server';
@@ -44,7 +46,6 @@ import { roobertMono } from '../(system)/fonts/roobert-mono';
 import '../globals.css';
 import { ReactQueryProvider } from '../react-query-provider';
 import { GoogleTagManager } from '@/components/analytics/google-tag-manager';
-import { VisitorPixel } from '@/components/analytics/visitor-pixel';
 
 export const viewport: Viewport = {
   themeColor: [
@@ -54,6 +55,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // The keyboard resizes the viewport instead of sliding over it, so the
+  // composer rides above the keyboard on phones (KRTX-4719).
+  interactiveWidget: 'resizes-content',
 };
 
 const ROOT_METADATA: Metadata = {
@@ -278,6 +282,18 @@ export default async function RootLayout({
             before first paint so the stored palette never flashes the default. */}
         <script dangerouslySetInnerHTML={{ __html: INTERFACE_THEME_INIT_SCRIPT }} />
 
+        {/* The landing's signed-in paint hold (lib/auth/landing-hold.ts): a
+            browser with a session cookie on a landing root gets an invisible
+            document until the route's LandingAuthGate resolves — a signed-in
+            visitor never sees the marketing home, not even for a frame. */}
+        <script dangerouslySetInnerHTML={{ __html: LANDING_HOLD_SCRIPT }} />
+
+        {/* The /auth entry form's pre-hydration submit guard
+            (lib/auth/entry-hydration-guard.ts): an Enter before React
+            hydrates records the intent instead of reloading the page. Inert
+            on every page without a guarded form. */}
+        <script dangerouslySetInnerHTML={{ __html: ENTRY_HYDRATION_GUARD_SCRIPT }} />
+
         {/* Font preloading is handled automatically by next/font/local in fonts/roobert.ts */}
 
         {/* Prevent browser auto-translate (Google Translate, Chrome, etc.) from
@@ -413,9 +429,6 @@ export default async function RootLayout({
                     {process.env.NEXT_PUBLIC_GTM_ID && (
                       <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID} />
                     )}
-                    {/* Visitor pixel: production host only, never in the desktop
-                    app, after window.load — gating lives in the component. */}
-                    <VisitorPixel />
                     {/* Desktop URL prompt, analytics, trackers, localhost link
                     interceptor — each a post-hydration dynamic chunk. */}
                     <RootClientHosts vercel={process.env.VERCEL === '1'} />

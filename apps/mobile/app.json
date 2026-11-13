@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kortix",
     "slug": "kortix",
-    "version": "1.6.0",
+    "version": "1.6.36",
     "orientation": "portrait",
     "icon": "./assets/images/AppIcon-Light.png",
     "scheme": "kortix",
@@ -70,31 +70,6 @@
       },
       "package": "com.kortix.application",
       "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "kortix.com",
-              "pathPrefix": "/auth/callback"
-            },
-            {
-              "scheme": "https",
-              "host": "www.kortix.com",
-              "pathPrefix": "/auth/callback"
-            },
-            {
-              "scheme": "https",
-              "host": "staging.kortix.com",
-              "pathPrefix": "/auth/callback"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
         {
           "action": "VIEW",
           "autoVerify": true,
@@ -211,7 +186,7 @@
       }
     },
     "owner": "kortix",
-    "runtimeVersion": "1.6.0",
+    "runtimeVersion": "1.6.36",
     "updates": {
       "url": "https://u.expo.dev/9fca3cff-a291-41c9-88b9-feb8053b990f",
       "checkAutomatically": "ON_LOAD",

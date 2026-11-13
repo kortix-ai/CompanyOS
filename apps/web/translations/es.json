@@ -67,7 +67,7 @@
     "oauthWaiting": "Esperando autorización…",
     "oauthFinishing": "Sesión iniciada. Guardando tu cuenta…",
     "oauthExpired": "La autorización caducó. Inténtalo de nuevo.",
-    "oauthPrivateDescription": "Usa tu plan ChatGPT Plus o Pro en este espacio de trabajo. Las cuentas nuevas son privadas hasta que las compartas.",
+    "oauthPrivateDescription": "Usa tu plan ChatGPT Plus o Pro en este espacio de trabajo. Las cuentas nuevas se comparten con todos los miembros del espacio de trabajo. Puedes hacer privada cualquiera.",
     "chatGptSubscription": "Suscripción de ChatGPT",
     "manageChatGptAccounts": "Administrar cuentas de ChatGPT",
     "connect": "Conectar",
@@ -95,7 +95,7 @@
     "deleteError": "No se pudo eliminar el secreto",
     "accessError": "No se pudo cambiar el acceso",
     "sharedTitle": "Conexiones de proveedores",
-    "sharedDescription": "Añade claves de API, cuentas de ChatGPT y cuentas de Claude. Las nuevas son privadas hasta que las compartas. Elige cuáles usa cada sesión.",
+    "sharedDescription": "Añade claves de API, cuentas de ChatGPT y cuentas de Claude. Las nuevas se comparten con todos los miembros del espacio de trabajo. Puedes hacer privada cualquiera. Elige cuáles usa cada sesión.",
     "legacyProjectKey": "Clave de espacio de trabajo existente · Se usa cuando esta sesión no tiene claves seleccionadas",
     "keyCount": "{count, plural, one {# clave} other {# claves}}",
     "providerKeysFor": "Claves de API de {provider}",
@@ -106,16 +106,14 @@
     "access": "Acceso",
     "actions": "Acciones",
     "coolingDown": "En espera tras el límite",
-    "usageFiveHour": "5 horas",
-    "usageWeekly": "Semanal",
-    "usageWeeklyModel": "Semanal · {model}",
-    "usagePercent": "{percent} % usado",
-    "usagePercentResets": "{percent} % · se restablece {time}",
-    "usageLimitReached": "Límite alcanzado",
-    "usageLimitResets": "Límite alcanzado · se restablece {time}",
-    "usageNotSeen": "El uso aparece tras la primera solicitud",
-    "usageObserved": "Actualizado {time}",
-    "usageAriaLabel": "{window}: {percent} % usado",
+    "keyVerified": "Verificada: {provider} aceptó esta clave",
+    "keyInvalid": "{provider} rechazó esta clave: {message}",
+    "keyUnchecked": "Sin verificar: {message}",
+    "checkKey": "Comprobar de nuevo",
+    "savedVerified": "Clave guardada y verificada",
+    "savedInvalid": "Clave guardada, pero {provider} la rechazó: {message}",
+    "checkError": "No se pudo comprobar la clave",
+    "openProviderInModels": "Abrir {provider} en Modelos",
     "member": "miembro",
     "members": "miembros",
     "actionsFor": "Acciones para {label}",
@@ -155,6 +153,9 @@
     "providerKeys": "Claves de proveedor",
     "chooseSharedKeys": "Elige las claves compartidas que puede usar esta sesión.",
     "sessionKeyPool": "Grupo de claves de sesión",
+    "subscriptionSwitcher": "Suscripción",
+    "subscriptionSwitcherDefault": "Alterna entre todas las suscripciones conectadas",
+    "subscriptionSwitcherUse": "Usar {label} en esta sesión",
     "sharedSessionKeys": "Esta sesión está compartida con el espacio de trabajo, así que aquí solo funcionan las claves compartidas con todo el espacio de trabajo. Las claves que te concedieron funcionan en tus sesiones privadas.",
     "promptedSessionKeys": "Otro miembro ha escrito en esta sesión, así que ya no actúa por su propietario. Aquí solo funcionan las claves compartidas con todo el espacio de trabajo.",
     "noPersonSessionKeys": "Esta sesión no actúa por ninguna persona: empezó antes de que existieran las claves personales o sin supervisión. Aquí solo funcionan las claves compartidas con todo el espacio de trabajo. Inicia una sesión nueva para usar tus propias claves.",
@@ -176,7 +177,7 @@
     "claudeAccounts": "Cuentas de Claude",
     "noClaudeAccounts": "Aún no hay cuentas de Claude",
     "connectClaude": "Iniciar sesión con Claude",
-    "claudeOauthPrivateDescription": "Usa tu plan Claude Pro o Max para los modelos Claude de este espacio de trabajo. Las cuentas nuevas son privadas hasta que las compartas.",
+    "claudeOauthPrivateDescription": "Usa tu plan Claude Pro o Max para los modelos Claude de este espacio de trabajo. Las cuentas nuevas se comparten con todos los miembros del espacio de trabajo. Puedes hacer privada cualquiera.",
     "claudeOauthCreationDescription": "Inicia sesión con tu cuenta Claude Pro o Max. Kortix guarda el inicio de sesión cifrado y nunca lo muestra.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Cuenta de Claude conectada",
@@ -184,7 +185,10 @@
     "claudeConnectFailed": "El inicio de sesión con Claude no terminó. Inténtalo de nuevo.",
     "claudeReconnectDescription": "Vuelve a iniciar sesión con Claude. La cuenta conserva su nombre, su acceso y las selecciones de sesión.",
     "claudeAccountLabelPlaceholder": "p. ej., Mi cuenta de Claude",
-    "claudeDeleteAccountConfirmTitle": "¿Eliminar esta cuenta de Claude para todos?"
+    "claudeDeleteAccountConfirmTitle": "¿Eliminar esta cuenta de Claude para todos?",
+    "sharedOnlyYouDescription": "Añade claves de API, cuentas de ChatGPT y cuentas de Claude. Solo tú puedes usar las que añades. Un administrador del espacio de trabajo puede compartir una. Elige cuáles usa cada sesión.",
+    "oauthOnlyYouDescription": "Usa tu plan ChatGPT Plus o Pro en este espacio de trabajo. Solo tú puedes usar las cuentas que añades.",
+    "claudeOauthOnlyYouDescription": "Usa tu plan Claude Pro o Max para los modelos Claude en este espacio de trabajo. Solo tú puedes usar las cuentas que añades."
   },
   "secrets": {
     "undecryptable": {
@@ -336,6 +340,7 @@
       "repositoryLabel": "Repositorio",
       "loadingOptions": "Cargando opciones de repositorio…",
       "managedUnavailable": "Los repositorios gestionados por Kortix no están disponibles en esta instancia. Un administrador de la plataforma lo configura en la consola de administración.",
+      "githubAfterCreate": "Para usar tu propio GitHub en próximos espacios de trabajo, conéctalo en Ajustes del espacio de trabajo › Git cuando este exista.",
       "installationUnreachable": "Esta conexión de GitHub ya no funciona. Vuelve a conectarla para ver los repositorios.",
       "reconnect": "Volver a conectar en los ajustes de Git",
       "managedImportLabel": "Importar un repositorio gestionado existente",
@@ -704,6 +709,7 @@
       "gracePeriodDescription": "La eliminación se realiza en la fecha prevista. Puedes cancelarla antes.",
       "immediateLabel": "Eliminar inmediatamente",
       "immediateDescription": "Su cuenta y sus datos se eliminan de inmediato. Esto no se puede deshacer.",
+      "noWorkspaceImmediateOnly": "No perteneces a ningún espacio de trabajo, así que no hay período de gracia: tu cuenta se elimina de inmediato.",
       "typeDeleteToConfirm": "Escribe \"delete\" para confirmar",
       "keepAccount": "Mantener cuenta",
       "processing": "Procesando…",
@@ -726,7 +732,7 @@
         "left": "Sales de",
         "blockers": "Eres su único propietario y otras personas trabajan en ellos. Transfiere la propiedad o elimina el espacio de trabajo.",
         "members": "{count, plural, one {# miembro} other {# miembros}}",
-        "nothing": "No perteneces a ningún espacio de trabajo. Solo se elimina tu inicio de sesión.",
+        "nothing": "Con tu cuenta no se elimina ni se abandona ningún espacio de trabajo.",
         "blockersTitle": "Transfiérelos primero"
       }
     },
@@ -801,14 +807,8 @@
         "noResults": "No se encontraron temas"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Los pasos y el razonamiento se muestran en tiempo real mientras Kortix trabaja."
-        },
-        "minimal": {
-          "label": "Mínima",
-          "description": "Una línea de estado hasta que la expanda."
-        }
+        "normal": "Normal",
+        "minimal": "Mínima"
       },
       "wallpapers": {
         "dither": "Tramado",
@@ -1269,10 +1269,6 @@
           "name": "Secretos protegidos por la red",
           "description": "Controla qué herramientas y destinos pueden recibir los secretos del espacio de trabajo."
         },
-        "pooled_provider_secrets": {
-          "name": "Secretos de proveedor compartidos",
-          "description": "Los miembros conectan sus propias suscripciones de ChatGPT y claves de proveedor, las comparten cuando hace falta y eligen cuáles usa cada sesión."
-        },
         "reminders": {
           "name": "Bucles",
           "description": "Permite que agentes y personas programen revisiones en una sesión, una vez o de forma recurrente. Cada activación vuelve a avisar a esa sesión. Añade los bucles a la lista de Activadores, el indicador de bucles de la sesión y `kortix loop`."
@@ -1315,7 +1311,7 @@
         },
         "voice_call": {
           "name": "Llamadas de voz",
-          "description": "Llama a un agente desde su página (Personalizar → Agentes) y habla con él. Una llamada es una sesión propia de ese agente: te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de esa sesión."
+          "description": "Llama a un agente desde un cuadro de mensaje vacío, donde el botón de enviar se convierte en un botón de llamada, o desde su página (Personalizar → Agentes), y habla con él. En una sesión, la llamada va al agente de esa sesión; en el inicio del espacio de trabajo, inicia una sesión nueva. El agente te escucha, responde con voz y ve la pantalla que compartes, y la conversación es el chat de la sesión."
         },
         "shared_drives": {
           "name": "Unidades compartidas",
@@ -1332,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Con Espacios activado, un espacio puede vigilarse a sí mismo: activa Proactivo en sus detalles y un agente lee lo que pasa ahí (hilos terminados, preguntas sin responder, personas que se unen) y escribe en el chat solo cuando importa: un resultado que vale la pena compartir, una decisión que debes tomar o algo atrasado. También puede iniciar un hilo que haga el trabajo. Resumen diario opcional a las 9:00."
+        },
+        "program_agents": {
+          "name": "Agentes de programa",
+          "description": "Un agente que ejecuta tu código en lugar de un modelo. Da a un agente `run: <command>` en kortix.yaml: cada turno ejecuta ese comando en el sandbox de la sesión, con el espacio de trabajo, los secretos y los accesos del agente. El mensaje o los datos del trigger son la entrada, y lo que imprime el comando es la respuesta."
         }
       },
       "channelsSwitch": {
@@ -1393,7 +1393,15 @@
       "history": "Historial",
       "historyDescription": "El coste de cada sesión y todos los créditos añadidos o gastados.",
       "openLedger": "Abrir libro mayor",
-      "unit": "{count, plural, one {crédito} other {créditos}}"
+      "unit": "{count, plural, one {crédito} other {créditos}}",
+      "dailySpend": "Gasto diario",
+      "heatLess": "Menos",
+      "heatMore": "Más",
+      "busiestDay": "{name}: {amount} el {day}, el día de mayor gasto",
+      "noSpendInRange": "{name}: sin gasto en este período",
+      "idleWorkspaces": "{count, plural, one {# espacio de trabajo} other {# espacios de trabajo}} sin gasto en este período",
+      "showIdle": "Mostrar",
+      "hideIdle": "Ocultar"
     },
     "tokens": {
       "keyRevoked": "Clave de API revocada",
@@ -1727,7 +1735,7 @@
         "email": "Correo electrónico",
         "scheduled": "Programado",
         "webhook": "Webhook",
-        "event": "Evento de app",
+        "event": "Evento de conector",
         "manual": "Manual",
         "all": "Todos"
       },
@@ -2089,7 +2097,17 @@
       "claudePlan": "Plan Pro o Max",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} no puede leer imágenes",
-      "imagesUnsupportedHint": "quítalas o elige otro modelo"
+      "imagesUnsupportedHint": "quítalas o elige otro modelo",
+      "noModelUpgradeReason": "Sin modelo: mejora al plan Credits o añade tu propia clave de proveedor.",
+      "noModelKeyReason": "Sin modelo: añade tu propia clave de proveedor.",
+      "noModelUpgradePlan": "Mejorar plan",
+      "noModelAddProviderKey": "Añadir clave de proveedor",
+      "stepTitle": "Conecta un modelo",
+      "stepBody": "Los agentes de {workspace} necesitan un modelo para responder. Conecta tu plan de ChatGPT o Claude, o añade una clave de proveedor.",
+      "stepBodyUpgrade": "Los agentes de {workspace} necesitan un modelo para responder. Conecta tu plan de ChatGPT o Claude, añade una clave de proveedor o mejora al plan Credits para usar los modelos de Kortix.",
+      "stepBodyMember": "Los agentes de {workspace} necesitan un modelo para responder. Conecta tu propio plan de ChatGPT o Claude o tu clave de proveedor, o pide a alguien que gestione este espacio de trabajo que conecte un modelo para todos.",
+      "stepThisWorkspace": "este espacio de trabajo",
+      "stepBack": "Volver a los espacios de trabajo"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt guardado",
@@ -2154,6 +2172,7 @@
       "agentWorkingOnFor": "trabaja en {task} · {time}",
       "somethingWrong": "Algo salió mal",
       "notSent": "No enviado",
+      "computerDisconnected": "El equipo de esta sesión está desconectado.",
       "retry": "Reintentar",
       "resume": "Reanudar",
       "agentIsWorking": "{agent} está trabajando",
@@ -2334,15 +2353,15 @@
     "hintNewLine": "Pulsa Shift+Enter para una nueva línea",
     "hintSettings": "Pulsa {modifier}, para abrir los ajustes",
     "hintCompact": "Pide que se compacte la sesión cuando sea demasiado larga",
-    "queueList": "Queue List",
+    "queueList": "Mensajes en espera",
     "quoteCount": "{count, plural, one {# cita} other {# citas}}",
     "expandQuotes": "Expandir citas",
     "collapseQuotes": "Contraer citas",
     "stopUnconfirmed": "No se pudo confirmar la detención. El agente podría seguir ejecutándose. Inténtalo de nuevo.",
     "stoppedBy": "Detenido por {name}",
-    "queued": "En cola",
+    "queued": "En espera",
     "queuedFiles": "{count, plural, one {# archivo} other {# archivos}}",
-    "queuedCount": "{count} en cola",
+    "queuedCount": "{count} en espera",
     "editingQueued": "Editando",
     "queuedActions": "Acciones del mensaje",
     "steerNextStep": "Se lee en el siguiente paso",
@@ -2351,11 +2370,11 @@
     "steerFallbackUnsupported": "Espera a este turno. Esta sesión no acepta mensajes durante un turno.",
     "steerFallbackNotPrompter": "Espera a este turno. Lo inició otro miembro.",
     "steerFallbackTurnEnded": "Se ejecuta como su propio turno. El turno terminó antes.",
-    "stopAndSend": "Detener y enviar",
-    "stopAndSendFailed": "No se pudo detener y enviar ese mensaje",
+    "stopAndSend": "Enviar ahora",
+    "stopAndSendFailed": "No se pudo enviar ese mensaje ahora",
     "submitEdit": "Enviar",
-    "collapseQueue": "Contraer cola",
-    "expandQueue": "Expandir cola",
+    "collapseQueue": "Contraer mensajes en espera",
+    "expandQueue": "Expandir mensajes en espera",
     "myKortixRoutes": "Envía cada tarea al agente adecuado",
     "chatInputReset": "Reset"
   },
@@ -2714,8 +2733,8 @@
           "note": "Empieza con créditos reales de sandbox.",
           "f1": "500 créditos / mes en tu primer espacio de trabajo",
           "f2": "Sin tarjeta",
-          "f3": "Usa tu propia clave de API para cualquier modelo premium",
-          "f4": "Conecta tu suscripción de ChatGPT"
+          "f3": "Los modelos funcionan con tu propia clave de API o tu suscripción de ChatGPT",
+          "f4": "Los modelos gestionados por Kortix requieren Credits"
         },
         "credits": {
           "name": "Créditos",
@@ -3008,6 +3027,8 @@
         "title": "Revisa tu correo electrónico",
         "description": "Enviamos un enlace a <address>{email}</address>. Ábrelo para continuar.",
         "confirmDescription": "Enviamos un correo de confirmación a <address>{email}</address>. Confirma tu correo para continuar.",
+        "unknownDescription": "Enviamos un correo a <address>{email}</address> — un enlace para iniciar sesión o un enlace de confirmación para una cuenta nueva.",
+        "closedDescription": "Si <address>{email}</address> tiene una cuenta, su enlace de inicio de sesión está en camino.",
         "notReceived": "¿No recibiste el enlace?",
         "confirmNotReceived": "¿No recibiste el correo de confirmación?",
         "resendIn": "Reenviar en {seconds}",
@@ -3411,9 +3432,6 @@
     },
     "inbox": {
       "title": "Bandeja de entrada",
-      "viewReview": "Review",
-      "viewNotifications": "Notificaciones",
-      "viewLabel": "Vista de la bandeja de entrada",
       "description": "Novedades de las sesiones, los disparadores y los artefactos que te afectan, de todos los espacios de trabajo.",
       "unreadLabel": "Bandeja de entrada: {count} sin leer",
       "unreadCount": "{count} sin leer",
@@ -10384,6 +10402,8 @@
       "checkConnection": "Comprueba tu conexión y vuelve a intentarlo."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Añadir clave de proveedor",
+      "noModelUpgradePlan": "Mejorar plan",
       "authEmailRateLimit": "No se pudo enviar el correo. Vuelve a intentarlo en aproximadamente una hora.",
       "authRequestRateLimit": "Demasiadas solicitudes. Vuelve a intentarlo en unos minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
@@ -10411,7 +10431,7 @@
       "text004bad6bfbd7": "Se corrigió el reintento para aplicar espera progresiva",
       "text0050aeb4cf77": "Añade el claim de grupos",
       "text0059798b7f70": "(opcional)",
-      "text005b4c1dad87": "Buscar espacios de trabajo, cuentas, propietarios.",
+      "text005b4c1dad87": "Buscar espacios de trabajo, cuentas, propietarios o un ID",
       "text005c9bcbce1e": "Creando activador...",
       "text005dc222581c": "También ha leído el código",
       "text005ff7fe0036": "Copiar enlace de esta versión",
@@ -10967,7 +10987,6 @@
       "text11b405209283": "Un solo lugar para iniciar, programar, supervisar y detener cada agente. Streams en vivo, historial completo, gasto y activadores que comienzan el trabajo sin intervención humana.",
       "text11bd22785d4b": "SAML SSO y SCIM son funciones Enterprise",
       "text11c1a5b0fa54": "Un agente puede perfeccionar su propio prompt, añadir un skill o endurecer una regla de permisos. Cada una de esas acciones es un commit en una rama, dentro de una solicitud de cambio que fusiona una persona. Mejora autónoma, fusión humana. Un agente nunca fusiona sus propios cambios.",
-      "text11c520bc9f1f": "superadministrador",
       "text11d1b3d47709": "encontrado",
       "text11d5959da5d3": "ID del mensaje",
       "text11e9a34decaa": "El agente puede instalar, ejecutar y romper cualquier cosa; solo sobreviven los commits",
@@ -11846,7 +11865,6 @@
       "text2bd873d6c734": "Migas de pan",
       "text2bdb956493fd": "Se leyó el gestor del webhook",
       "text2bde665563d3": "Dale el ticket que nadie recogió.",
-      "text2be1f843485e": "{value0} {value1} quedará bloqueado hasta que se inscriban en MFA:",
       "text2bf4ee86ea70": "Probar inicio de sesión único",
       "text2bf623481fd8": "Configura el valor predeterminado que quieras",
       "text2bf70270bfde": "CompanyOS de código abierto: tus agentes, habilidades, memoria y conectores en un repositorio que es tuyo. Cualquier modelo. Autoalojado o en la nube.",
@@ -12597,6 +12615,7 @@
       "text41ffc5e14073": "Establecer en {value0}",
       "text420962cdca94": "El mismo espacio de trabajo, los mismos conectores, la misma memoria — y ocho trabajos distintos por debajo. Cada equipo escribe las habilidades para su propio trabajo y nadie crea un segundo sistema para hacerlo.",
       "text420aaa63cba7": "Total de la página",
+      "textbe57ff2d7907": "No atribuido a ninguna sesión",
       "text42113e7bf6fc": "Soporte de Kortix",
       "text42117ed2a1f5": "La forma habitual",
       "text421c4b1fed48": "Producto / plano de control",
@@ -18014,7 +18033,6 @@
       "textdc6d1d15031b": "sincronización bancaria",
       "textdc70ef3b3338": "Solo vale la pena conectar un canal si la respuesta llega donde se hizo la pregunta. Los archivos circulan en ambas direcciones y las decisiones que el agente necesita de ti son botones en el hilo, no un enlace a otro sitio.",
       "textdc76dd6b1aff": "Inicia sesión en la CLI de Kortix",
-      "textdc78f4d17256": "sin MFA — no perderá el acceso, pero considera pedirle que se inscriba:",
       "textdc7ea87fdc45": "Archivos, en ambas direcciones",
       "textdc8659db6d41": "Enter",
       "textdc8d7c5c602b": "Libro mayor de origen",
@@ -18127,7 +18145,6 @@
       "textdf964376e432": "xoxb-...",
       "textdfa16aeaca13": "El repositorio de este espacio de trabajo está alojado en {value0}, que no admite invitaciones de colaboradores de Kortix. Gestionar el acceso donde reside el repositorio.",
       "textdfa2cff42f0c": "Sin experiencia profunda en sistemas",
-      "textdfad83e7eb69": "{value0} son gestores implícitos en este espacio de trabajo.",
       "textdfca5da56b8c": "Sección",
       "textdfd7d37e2b63": "interruptor de la barra de herramientas.",
       "textdfe0c2e802b1": "Error del servidor",
@@ -20685,10 +20702,11 @@
       "text5f6ba69d66d1": "Habilidad eliminada",
       "textcb8d6b0c94c9": " y todos sus archivos, incluidos los cambios, y quita la habilidad de cada agente que la usa. Un commit en la rama predeterminada.",
       "cliDeviceTitle": "Autorizar Kortix CLI",
-      "cliDeviceWarning": "Aprueba solo un inicio de sesión que hayas iniciado. Escribe el código que muestra tu terminal.",
+      "cliDeviceWarning": "Aprueba solo un inicio de sesión que hayas iniciado. Comprueba que este código coincide con el que muestra tu terminal.",
       "cliDeviceCode": "Código de inicio de sesión",
       "cliDeviceApproved": "Inicio de sesión aprobado. Vuelve a tu terminal.",
       "cliDeviceAction": "Autorizar CLI",
+      "cliDeviceConfirm": "Este código coincide con mi terminal",
       "text705a7e325b66": "La app de Kortix emitió eventos",
       "text4b80152fb96b": "Se leyeron las credenciales de eventos de la app de Kortix",
       "text59374c1f1acd": "La app de Kortix programó una ejecución",
@@ -20987,7 +21005,7 @@
       "textb8a8023af3cf": "Redacta la publicación de LinkedIn de esta semana a partir de los pull requests fusionados.",
       "textb6b779e41308": "agent: marketing",
       "texta17bcc0bdbe1": "trigger: weekly-post",
-      "text313f92aeb061": "Cada operación que llega recibe un análisis completo. Los agentes la contrastan con el mandato, leen los informes y los datos de mercado, someten la tesis y el escenario bajista a pruebas de estrés y redactan el memorando de inversión. Decide el comité de inversiones.",
+      "text4c72429d7a38": "Los agentes contrastan cada operación con el mandato, someten la tesis a una prueba de estrés y redactan el memorando de inversión. El comité de inversión decide.",
       "textdc7f8ac95166": "Investigación de candidatos autónoma.",
       "textb5947f5f79c9": "Los agentes investigan candidatos para cada búsqueda y redactan un perfil de cada uno. Los consultores eligen la lista final.",
       "textc81f1483737e": "La plataforma de IA empresarial, construida a partir del código de código abierto de Kortix.",
@@ -21001,7 +21019,7 @@
       "text2eb1d24bcc04": "Los agentes diseñan rutas de fibra a partir de datos GIS e imágenes y elaboran la lista de materiales de cada ruta.",
       "textf2d996d89263": "Kortix, ejecutado en Kortix.",
       "text34ff4020f800": "Nuestra empresa es un espacio de trabajo de Kortix. Los agentes clasifican y corrigen issues, mantienen al día la evidencia SOC 2 y llevan ventas y soporte. Las personas aprueban.",
-      "textdd57f275a118": "Cada operación, evaluada por agentes.",
+      "textccf34f95f6b5": "Análisis autónomo de operaciones.",
       "textacf058bd8604": "Gestión de activos",
       "text794c7f0fc2b4": "Configúralo una vez.",
       "text9d58e473a6dc": "Compartir una sesión",
@@ -21312,7 +21330,44 @@
       "text4b892277843c": "Crear espacio de trabajo",
       "text41018e566b60": "nuevo espacio de trabajo crear añadir equipo",
       "texta99ac8f9050b": "Espacio de trabajo · Acceso",
-      "textfd8b8dae4421": "Zona de peligro"
+      "textfd8b8dae4421": "Zona de peligro",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Reembolso de retención de LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Almacenamiento",
+      "textab3aff8f7642": "Bono de recarga",
+      "textc75e59f5d748": "— capacidades",
+      "text58423a0108ea": "… capacidades",
+      "textcd6f79740e17": "{count, plural, one {# capacidad} other {# capacidades}}",
+      "textd1e588d764a4": "usado por —",
+      "text66cbb5dfa6cf": "usado por …",
+      "text56c316b0bde4": "usado por {value0}",
+      "textb7e3e4aa4257": "Desactivar",
+      "texte80e342954ec": "Última entrega {value0}",
+      "textf1a1b16401b1": "{count, plural, one {# miembro quedará bloqueado hasta que active MFA:} other {# miembros quedarán bloqueados hasta que activen MFA:}}",
+      "text18cde09c22d3": "{count, plural, one {# super-admin sin MFA — no quedará bloqueado, pero considera pedirle que active MFA:} other {# super-admins sin MFA — no quedarán bloqueados, pero considera pedirles que activen MFA:}}",
+      "textcf42cb2f1ca3": "Los Owners son Manager implícitos en este espacio de trabajo.",
+      "textd7e2d4bc4c80": "Los Admins son Manager implícitos en este espacio de trabajo.",
+      "textb9215e029e76": "Agents: todos",
+      "textd6acddc499aa": "Agents: ninguno",
+      "text1edf7747d0b8": "Agents: {value0} de {value1}",
+      "textd526776b77df": "Agents: {value0}",
+      "text002a4fd5f747": "Usa un número entero de minutos o deja el campo vacío.",
+      "text9b8d62603858": "{value0} minutos (7 días) es el máximo que Kortix permite.",
+      "text4510d8593ccc": "{value0}: usa un número entero de días o deja el campo vacío.",
+      "textb1f8e3109f1b": "{value0}: {value1} días es el máximo que Kortix permite.",
+      "textac20a57bfde0": "Ocultar",
+      "text268733ac2f60": "No se pudo actualizar esa aplicación",
+      "text5d8926d4a4dd": "No se pudo registrar esa aplicación",
+      "text30b9ce09f406": "Introduce un periodo como 15m, 1h o 1d, de al menos 1m.",
+      "text28d33d2ad989": "Elige la app a la que llamar",
+      "textd777d7805cfa": "Introduce una ruta que empiece por /",
+      "text8043e69a8dd6": "Eliminar trigger",
+      "textd6fa1626e3af": "Evento de conector creado",
+      "textccf59f978ef6": "Aún no hay eventos de conector aquí",
+      "text82cbc4a4def0": "Los eventos de conector no están configurados en esta implementación, así que ningún conector puede enviarlos todavía.",
+      "text458ceb31019b": "Triggers de eventos de conector",
+      "text27ca9df9dbaa": "Los triggers de eventos de conector están desactivados"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",
@@ -21519,6 +21574,13 @@
       "denied": "Acceso denegado",
       "deniedDescription": "My Kortix recibe tu respuesta.",
       "failed": "No se pudo enviar tu decisión. Inténtalo de nuevo."
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Añade Kortix a tu pantalla de inicio para una experiencia de app a pantalla completa.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "En iPhone y iPad: toca Compartir y luego Añadir a pantalla de inicio.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix se actualizó. Actualiza para obtener la nueva versión.",
+    "reviewPane": {
+      "emptyTitle": "Selecciona un elemento",
+      "emptyDescription": "Sus detalles se abren aquí. Pulsa J y K para recorrer la lista."
     }
   },
   "commandPalette": {
@@ -21541,11 +21603,6 @@
   "personalWelcome": {
     "dismiss": "Cerrar",
     "emailCopied": "Dirección de correo copiada"
-  },
-  "repositoryAccess": {
-    "label": "Acceso al repositorio del espacio de trabajo",
-    "enabled": "Las sesiones nuevas reciben el repositorio del espacio de trabajo. Se siguen aplicando los permisos de Git. Las sesiones existentes conservan su configuración de acceso.",
-    "disabled": "Las sesiones nuevas se ejecutan sin el repositorio del espacio de trabajo. Pueden crear archivos y usar herramientas autorizadas. Las sesiones existentes conservan su configuración de acceso."
   },
   "customProvider": {
     "intro": "Endpoints que el catálogo no incluye.",
@@ -21772,7 +21829,16 @@
     "crBranchHelp": "Se ejecuta cuando una solicitud de cambio se fusiona en esta rama, o en cualquier rama si está vacío. La instrucción puede leer <code>change_request.number</code>, <code>change_request.title</code> y <code>change_request.base_ref</code>.",
     "eventsOff": "Los eventos de conectores están en beta y desactivados en este espacio de trabajo. Actívalos en Indicadores de funcionalidad, en la administración del espacio de trabajo.",
     "noApps": "Ninguna app de este espacio de trabajo envía eventos todavía. Despliega una app que haga POST a <code>KORTIX_APP_EVENTS_URL</code> y elígela aquí.",
-    "openApps": "Abrir apps"
+    "openApps": "Abrir apps",
+    "thenLabel": "Qué hace cada ejecución",
+    "thenAgent": "Ejecutar un agente",
+    "thenApp": "Llamar a una app",
+    "targetPath": "Ruta",
+    "targetMethod": "Método",
+    "targetHelp": "Cada ejecución activa la app y envía la carga a esta ruta. No se ejecuta ningún agente.",
+    "intervalLabel": "Se repite cada",
+    "intervalHelp": "Un periodo fijo como 15m, 1h o 1d.",
+    "useCalendar": "Usar un horario de calendario"
   },
   "gatewayAccess": {
     "heroTitle": "Use los modelos de este espacio de trabajo en cualquier lugar",
@@ -22037,6 +22103,9 @@
     "addMcpUrlNamed": "Añade el conector {name}.",
     "addMcpUrlInvalid": "Introduce una URL que empiece por https://",
     "addMcpConnect": "Conectar",
+    "addMcpStageConnector": "Conectando con el servidor y cargando sus herramientas…",
+    "addMcpStageAccount": "Preparando la cuenta…",
+    "addMcpStageSignIn": "Iniciando el inicio de sesión…",
     "addMcpConnected": "{name} está conectado. Los agentes pueden usar sus herramientas.",
     "addMcpSignInFailed": "No se pudo iniciar el inicio de sesión de {name}: {reason}",
     "addMcpFailed": "No se pudo añadir el servidor MCP",
@@ -22051,6 +22120,12 @@
     "noticeSignInTitle": "Inicia sesión en {name}",
     "noticeSignInBody": "Kortix añadió {name}. Termina de iniciar sesión para que los agentes puedan usar sus herramientas.",
     "noticeSignInAction": "Iniciar sesión",
+    "noticeSignInAgainTitle": "Vuelve a iniciar sesión en {name}",
+    "noticeSignInAgainBody": "El inicio de sesión caducó o se revocó. Los agentes no pueden usar {name} hasta que vuelvas a iniciar sesión.",
+    "noticeNoToolsTitle": "{name} no tiene herramientas",
+    "noticeNoToolsBody": "No tiene rutas, así que los agentes no tienen nada que llamar. Añade rutas a su especificación de rutas en Ajustes.",
+    "noticeAddRoutesAction": "Añadir rutas",
+    "statusNoTools": "Sin herramientas",
     "connectAccount": "Conectar",
     "notSignedIn": "Sin iniciar sesión",
     "credentialRejected": "Credencial rechazada: reemplázala",
@@ -22108,7 +22183,7 @@
     "infoRunsThrough": "Proveedor",
     "infoSignsInWith": "Inicia sesión con",
     "infoCategory": "Categoría",
-    "infoAppEvents": "Eventos de la app",
+    "infoAppEvents": "Eventos",
     "infoAppEventsYes": "Compatible",
     "authOAuth": "Inicio con OAuth",
     "authApiKey": "Clave de API",
@@ -23014,7 +23089,11 @@
     "folderTree": "Carpetas",
     "treeYou": "{name} (tú)",
     "treeExpand": "Expandir {name}",
-    "treeCollapse": "Contraer {name}"
+    "treeCollapse": "Contraer {name}",
+    "emptyWorkspaces": "{count, plural, one {# espacio de trabajo no tiene} other {# espacios de trabajo no tienen}} archivos",
+    "storageMoreWorkspaces": "{count, plural, one {# espacio de trabajo más} other {# espacios de trabajo más}}",
+    "storageWorkspaceLimit": "Cada espacio de trabajo admite hasta {limit}",
+    "storageShowFewer": "Mostrar menos"
   },
   "genui": {
     "showData": "Mostrar datos",
@@ -23307,6 +23386,16 @@
         "booted": "Iniciado",
         "timezone": "Zona horaria",
         "locale": "Configuración regional",
+        "usage": "Uso de recursos de Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} de media · {peak} de pico",
+        "usageCpuHint": "De un núcleo, últimos {minutes, plural, one {# minuto} other {# minutos}}",
+        "usageMemory": "Memoria",
+        "usageMemoryPeak": "{now} · {peak} de pico",
+        "usageProcesses": "Procesos",
+        "usageProcessCount": "{count, plural, one {# proceso} other {# procesos}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "No informado: una versión anterior de la app, o la app se inició hace menos de un minuto",
         "recordingSync": "Grabación y sincronización",
         "status": "Estado",
         "lastFrame": "Último fotograma",
@@ -23423,12 +23512,16 @@
       "privacyControlsHint": "Mostrar el enmascaramiento de datos personales. Al desactivarlo se oculta; lo configurado sigue aplicándose.",
       "maskingTitle": "Enmascarado",
       "framesTitle": "Fotogramas de pantalla",
-      "interval": "Un fotograma cada",
-      "intervalHint": "Los intervalos más cortos conservan más detalle y usan más CPU y almacenamiento.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Resolución",
       "resolutionHint": "Las pantallas más grandes se reducen a esta altura. 4K conserva los detalles finos, como los planos CAD.",
-      "framesHint": "Sin valor, cada ordenador usa el suyo (una imagen cada 2 s a 1440p). Con valor, todos los ordenadores lo usan y nadie puede cambiarlo. Los clics, la escritura y el desplazamiento se graban con sus propias capturas con cualquier intervalo.",
+      "textRecognition": "Reconocimiento de texto",
+      "textRecognitionHint": "Lee el texto de la pantalla para poder buscarlo. Desactivado usa la menor CPU: la búsqueda encuentra entonces apps, títulos de ventana y URL.",
+      "textRecognitionOption": {
+        "accurate": "Preciso",
+        "fast": "Rápido",
+        "off": "Desactivado"
+      },
+      "framesHint": "Kortix Capture elige su propia frecuencia: hasta 2 imágenes por segundo mientras alguien trabaja, una cada 2 s en otro caso, y menos en un ordenador ocupado. Sin valor, cada ordenador usa 1440p y reconocimiento de texto preciso. Con valor, todos los ordenadores lo usan y nadie puede cambiarlo. Los clics, la escritura y el desplazamiento se graban con sus propias capturas.",
       "computerDecides": "Cada ordenador decide",
       "included": {
         "title": "Apps y sitios web",
@@ -23641,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Activadores",
-    "groupDescription": "Programaciones, bucles, webhooks, eventos de apps y monitores en este espacio de trabajo.",
+    "groupDescription": "Horarios, bucles, webhooks, eventos de conector y eventos de app en este espacio de trabajo.",
     "label": "Pausar todos los activadores",
-    "description": "Nada en este espacio de trabajo se ejecuta solo: ni programaciones, ni bucles, ni webhooks, ni eventos de apps, ni monitores. Ejecutar un activador a mano sigue funcionando.",
+    "description": "Nada en este espacio de trabajo se ejecuta solo: ningún horario, bucle, webhook, evento de conector ni evento de app. Ejecutar un trigger a mano sigue funcionando.",
     "readOnlyDescription": "Solo un propietario o administrador puede pausar o reanudar los activadores.",
     "pausedSince": "Pausado desde {date}.",
     "pauseTitle": "¿Pausar todos los activadores?",
@@ -23671,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Se pausó automáticamente",
-    "description": "Dejó de iniciar ejecuciones por el motivo de abajo. Corrige la causa y luego reanúdalo."
+    "description": "Dejó de iniciar ejecuciones por el motivo de abajo. Corrige la causa y luego reanúdalo.",
+    "billingTitle": "En pausa: sin créditos",
+    "billingDescription": "No se puede pagar ninguna ejecución, así que dejó de iniciarlas. Se reanuda solo unos minutos después de recargar el saldo.",
+    "modelTitle": "En pausa: sin modelo disponible",
+    "modelDescription": "Las automatizaciones solo usan claves de modelo y cuentas compartidas con todo el espacio de trabajo, y ninguna está disponible. Se reanuda solo unos minutos después de añadir una en Modelos.",
+    "listBilling": "Sin créditos",
+    "listModel": "Sin modelo"
   },
   "featureGate": {
     "enable": "Activar {name}",
@@ -24881,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programa",
+      "programCommand": "Comando",
+      "programHelp": "Cada turno ejecuta este comando en el sandbox de la sesión en lugar de un modelo. El mensaje llega por stdin y en $KORTIX_EVENT_PATH. Lo que imprime es la respuesta. Una salida distinta de cero hace fallar el turno.",
       "title": "Modelo",
       "help": "Cómo piensa este agente.",
       "projectDefault": "Predeterminado del espacio de trabajo",
@@ -26060,6 +26162,7 @@
     "call": "Llamar",
     "calling": "Llamando…",
     "start": "Iniciar una llamada de voz",
+    "inCall": "Estás en una llamada",
     "end": "Finalizar llamada",
     "connecting": "Conectando…",
     "listening": "Escuchando",
@@ -26083,7 +26186,6 @@
   "agentMounts": {
     "lead": "Carpetas de Archivos que montan las sesiones de este agente. Los cambios se aplican de inmediato a cada nueva sesión.",
     "mount": "Mount folder",
-    "repository": "Repositorio del espacio de trabajo",
     "viaAgent": "compartido con este agente",
     "viaProject": "compartido con todos en este espacio de trabajo",
     "from": "{path} · {who}",
@@ -26430,48 +26532,37 @@
     "issue": "Incidencia #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 horas",
+    "weekly": "Semanal",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "El uso de la suscripción no está disponible",
-    "disabledDescription": "Las conexiones de suscripción no están habilitadas para este espacio de trabajo.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "La hora de reinicio ya pasó · actualiza para ver el uso actual",
-    "text10": "Hora de reinicio no informada",
-    "text11": "Checking provider usage…",
-    "text12": "Aún no se ha informado de ningún uso. Actualiza después de usar esta suscripción.",
-    "text13": "No se pudo actualizar. Mostrando los últimos datos conocidos.",
-    "text14": "Esperando datos del proveedor",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Consulta los límites de tus suscripciones conectadas de ChatGPT y Claude.",
-    "text19": "No se pudo cargar el uso",
-    "text20": "Intenta cargar de nuevo tus suscripciones conectadas.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Conecta ChatGPT o Claude en Proveedores para ver el uso informado y las horas de reinicio.",
-    "text24": "Connect a subscription",
-    "text25": "El uso se comparte entre las apps que usan la misma suscripción. Se comprueba automáticamente cada minuto mientras esta pestaña esté abierta.",
-    "text26": "Los límites varían según el plan. Aquí solo aparecen las ventanas informadas por tu conexión; la falta de datos no significa uso ilimitado. Los límites de archivos no se informan. El gasto de API aparece en Costes.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Esta conexión no informa de la ventana de cinco horas.",
-    "fableIncluded": "El uso de Fable también cuenta para tu límite semanal total.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Uso adicional",
+    "apps": "Apps",
+    "codeReview": "Revisión de código",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · se restablece {time}",
+    "percentBack": "{percent}% · vuelve {time}",
+    "resetPassed": "Restablecido · actualizando",
+    "notStarted": "Sin iniciar",
+    "reconnectToSee": "Vuelve a conectar para ver el uso",
+    "availableNow": "Disponibles ahora",
+    "availableCount": "{available} de {total, plural, one {# cuenta} other {# cuentas}}",
+    "nextBack": "Próxima vuelta",
+    "rowPeak": "{window} · {percent}% usado",
+    "rowSomeLimited": "{limited} de {total} en el límite",
+    "rowAllLimited": "En el límite",
+    "rowAllLimitedBack": "En el límite · vuelve {time}",
+    "noUsageYet": "Aún no hay uso registrado.",
+    "refreshFailed": "No se pudo actualizar · se muestra el último uso conocido.",
+    "loadFailed": "No se pudo cargar el uso.",
+    "rowSomeLimitedBack": "{limited} de {total} en el límite · próxima vuelta {time}",
+    "weeklyAll": "Semanal · todos los modelos",
+    "notReported": "Sin datos"
   },
   "gatewayRouting": {
     "exceptions": "Excepciones",
@@ -26643,7 +26734,7 @@
       "apiKeysDescription": "Claves para scripts, CI e integraciones. Una clave actúa como tú, como un agente o como un bot. Las reglas de cada clave están en Seguridad.",
       "keys": {
         "title": "Claves de API",
-        "description": "Claves para scripts, CI e integraciones. Una clave funciona solo en este espacio de trabajo y actúa como tú, como un agente o como un bot.",
+        "description": "Claves para scripts, CI e integraciones. Una clave actúa como tú, un agente o un bot; «Funciona en» define a qué espacios de trabajo llega.",
         "newKey": "Nueva clave",
         "count": "{count, plural, one {# clave} other {# claves}}",
         "emptyTitle": "No hay claves de API",
@@ -26653,6 +26744,10 @@
         "actsAsAgent": "Un agente",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Tu rol en este espacio de trabajo. La clave deja de funcionar cuando te vas.",
+        "worksIn": "Funciona en",
+        "worksInAll": "Todos mis espacios de trabajo",
+        "worksInAllHint": "Actúa como tú en todos tus espacios de trabajo, con tu rol completo. Gestiónalo en Preferencias → Claves personales.",
+        "worksInWorkspace": "Solo este espacio de trabajo",
         "actsAsAgentHint": "Exactamente lo que el agente puede hacer según kortix.yaml. Sus acciones se auditan como el agente y la clave sigue funcionando cuando te vas.",
         "actsAsBotHint": "Un bot para CI o una integración, con su propio rol. La clave sigue funcionando cuando te vas.",
         "needsPermission": "Requiere el permiso para gestionar credenciales",
@@ -26671,6 +26766,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Creada por {email}",
         "createdDescription": "{name} actúa como {actsAs}. Kortix muestra la clave una sola vez: cópiala ahora y guárdala como secreto.",
+        "createdPersonalDescription": "{name} actúa como tú en todos tus espacios de trabajo — gestiónalo en Preferencias → Claves personales. Kortix muestra la clave una vez: cópiala ahora y guárdala como secreto.",
         "accessFullHint": "Todo lo que el principal de la clave puede hacer en este espacio de trabajo.",
         "accessCustomHint": "Solo los permisos que elijas. Cada uno debe estar entre lo que el principal de la clave puede hacer."
       },
@@ -26681,7 +26777,9 @@
       "noWorkspaceTitle": "Crea un espacio de trabajo para iniciar sesión en la CLI",
       "noWorkspaceBody": "La CLI inicia sesión en un espacio de trabajo. Crea uno y luego aprueba este inicio de sesión.",
       "createAction": "Crear espacio de trabajo",
-      "workspaceLabel": "Espacio de trabajo"
+      "workspaceLabel": "Espacio de trabajo",
+      "loadFailedTitle": "No se pudieron cargar tus espacios de trabajo",
+      "loadFailedBody": "Este inicio de sesión necesita tu lista de espacios de trabajo. Tu cuenta está bien: inténtalo de nuevo para continuar."
     },
     "models": {
       "yourDefault": "Predeterminado del espacio de trabajo",
@@ -26690,12 +26788,6 @@
       "setDefaultTitle": "Establecer como modelo predeterminado del espacio de trabajo",
       "setDefaultAria": "Establecer {model} como modelo predeterminado de este espacio de trabajo",
       "setWorkspaceDefault": "Establecer como predeterminado del espacio de trabajo"
-    },
-    "profile": {
-      "deleteLogin": "Eliminar mi inicio de sesión",
-      "deleteLoginDescription": "Elimina tu inicio de sesión de Kortix. No perteneces a ningún espacio de trabajo, así que no se elimina nada más.",
-      "deleteLoginTitle": "¿Eliminar tu inicio de sesión?",
-      "deleteLoginWarning": "Tu inicio de sesión se elimina de inmediato. No se puede deshacer."
     },
     "capture": {
       "noWorkspaceTitle": "Primero crea un espacio de trabajo o únete a uno.",
@@ -26707,8 +26799,7 @@
     "menu": {
       "invite": "Invitar personas a {name}",
       "leave": "Salir de {name}",
-      "invitePeople": "Invitar personas",
-      "more": "Más"
+      "invitePeople": "Invitar personas"
     },
     "roles": {
       "owner": {
@@ -26783,5 +26874,38 @@
   "gatewayBudgets": {
     "capWorkspace": "Limita el gasto del gateway de este espacio de trabajo.",
     "capMember": "Limita el gasto del gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Abrir el inicio de sesión de {app}",
+    "checkingTitle": "Finalizando el inicio de sesión",
+    "checkingDescription": "Kortix comprueba tu inicio de sesión en {app}. Esta página se actualiza sola.",
+    "signInUnfinished": "Inicio de sesión sin terminar",
+    "finishSignIn": "Terminar inicio de sesión",
+    "signInFinished": "Inicio de sesión terminado",
+    "cardHeadline": "Tu agente necesita que inicies sesión",
+    "cardTitle": "Conectar {app}",
+    "cardShared": "Compartida con el espacio de trabajo",
+    "cardPrivate": "Solo tú",
+    "signingIn": "Termina de iniciar sesión en {app} en la ventana que se abrió.",
+    "connectedAs": "Conectado como {account}",
+    "connected": "Conectado",
+    "connect": "Conectar",
+    "cardFailed": "No se pudo conectar {app}. Inténtalo de nuevo.",
+    "blockedTitle": "Abre {app} para iniciar sesión",
+    "blockedDescription": "Tu navegador bloqueó la ventana de inicio de sesión. Ábrela con el botón de abajo. Esta página se actualiza sola.",
+    "doneTitle": "{app} conectado",
+    "doneTitleNoApp": "Conectado",
+    "doneDescription": "Tu agente ya puede usar {app}.",
+    "doneClose": "Puedes cerrar esta pestaña.",
+    "doneDeniedTitle": "Inicio de sesión cancelado",
+    "doneDeniedDescription": "No permitiste el acceso en {app}. Vuelve a iniciar sesión desde Kortix para conectarlo.",
+    "doneExpiredTitle": "Este enlace de inicio de sesión caducó",
+    "doneExpiredDescription": "Ya se usó o es demasiado antiguo. Vuelve a iniciar sesión desde Kortix.",
+    "doneFailedTitle": "{app} no se conectó",
+    "doneFailedTitleNoApp": "El inicio de sesión no terminó",
+    "doneFailedDescription": "Vuelve a iniciar sesión desde Kortix. Si falla de nuevo, envía el código de abajo a soporte.",
+    "doneErrorCode": "Código de error: {code}",
+    "doneOpenKortix": "Abrir Kortix",
+    "doneFallbackApp": "la app"
   }
 }

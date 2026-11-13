@@ -63,7 +63,7 @@ import {
   RailGroup,
   SETTINGS_SIDEBAR_WIDTH_PX,
 } from '../../internal/components/nav-rail';
-import { capabilityAccess } from '../../internal/layout/project-settings-nav';
+import { adminResourceRowOpen, capabilityAccess } from '../../internal/layout/project-settings-nav';
 import { SettingsNavProvider } from '../../internal/layout/settings-nav-context';
 import { withStaleChunkRecovery } from '../../internal/lib/chunk-reload';
 import {
@@ -362,9 +362,8 @@ export function ProjectAdminDashboard({
       }
       if (isProjectAdminResource(key)) {
         const resource = PROJECT_ADMIN_RESOURCES.find((r) => r.key === key);
-        if (!resource || (!projectRowsOpen && !resource.memberOpen)) return null;
+        if (!resource || !adminResourceRowOpen(resource, projectRowsOpen, allowed)) return null;
         if (resource.host && !hostSections[resource.key as 'apps']) return null;
-        if (resource.capability && !allowed.has(resource.capability)) return null;
         if (resource.flag === 'drives' && !drivesOn) return null;
         return {
           key,

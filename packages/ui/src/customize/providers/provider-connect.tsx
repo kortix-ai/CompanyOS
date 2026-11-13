@@ -59,11 +59,20 @@ import {
 import {
   qk,
   useAccountSecretResources,
-  useFeatureFlag,
   useModelAccess,
   useProjectModelPickerCatalog,
 } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
+import { useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
+import {
+  SUBSCRIPTION_ROW,
+  SubscriptionRowMeter,
+  summarizeSubscriptions,
+  useLiveSubscriptionUsages,
+  useSubscriptionLogins,
+  useSubscriptionRowSummary,
+  type UsageTone,
+} from '../sections/view/subscription-usage';
 
 export {
   FIRST_CLASS_PROVIDER_IDS,
@@ -98,6 +107,8 @@ export interface ProviderListRow {
   via?: ConnectedVia;
   /** Inference turned off for this project; credentials are kept. */
   disabled?: boolean;
+  /** ChatGPT and Claude subscription usage across every login: the row's trailing line. */
+  usage?: { text: string; percent: number; tone: UsageTone } | null;
 }
 
 /**
@@ -187,7 +198,7 @@ export interface ProviderConnectViewProps {
   /** The provider open in the host's sheet, if any. */
   selectedId?: string | null;
   onSelect: (providerId: string) => void;
-  /** One line above the list: read-only members and pooled-keys mode only. */
+  /** One line above the list: who the keys added here are shared with. */
   note?: string;
   className?: string;
 }
@@ -228,6 +239,8 @@ function ProviderRow({
       </span>
       {row.disabled ? (
         <span className="text-muted-foreground shrink-0 text-xs">{t('turnedOff')}</span>
+      ) : row.usage ? (
+        <SubscriptionRowMeter {...row.usage} />
       ) : null}
       <CaretRightIcon
         className={cn(
@@ -378,18 +391,13 @@ export function useManagedProvider(projectId: string | null): LlmProviderEntry {
 
 /** Provider ids that hold a usable pooled (account-level) key for this project. */
 export function usePooledProviderIds(projectId: string, enabled: boolean) {
-  const pooledFlag = useFeatureFlag(enabled ? projectId : null, 'pooled_provider_secrets');
-  const pooledSecretsEnabled = pooledFlag.enabled;
   const project = useQuery({
     queryKey: qk.project.detail(projectId),
     queryFn: () => getProjectDetail(projectId),
-    enabled: enabled && pooledSecretsEnabled,
+    enabled,
   });
   const accountId = project.data?.project?.account_id;
-  const pooledResources = useAccountSecretResources(
-    enabled && pooledSecretsEnabled ? accountId : null,
-    projectId,
-  );
+  const pooledResources = useAccountSecretResources(enabled ? accountId : null, projectId);
   const pooledProviderIds = useMemo(
     () =>
       new Set(
@@ -400,12 +408,10 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
     [pooledResources.data],
   );
   return {
-    pooledSecretsEnabled,
     accountId,
     pooledProviderIds,
-    isLoading:
-      pooledFlag.isLoading || (pooledSecretsEnabled && (project.isLoading || pooledResources.isLoading)),
-    isError: pooledSecretsEnabled && (project.isError || pooledResources.isError),
+    isLoading: project.isLoading || pooledResources.isLoading,
+    isError: project.isError || pooledResources.isError,
     isFetching: project.isFetching || pooledResources.isFetching,
     refetch: () => {
       void project.refetch();
@@ -416,6 +422,7 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
 
 export interface ProviderConnectProps {
   projectId: string;
+  /** @deprecated Unused: every member sees who the keys added here are shared with. */
   canWrite?: boolean;
   /** Set while this surface is visible; drives the underlying queries. */
   enabled?: boolean;
@@ -426,22 +433,37 @@ export interface ProviderConnectProps {
 
 export function ProviderConnect({
   projectId,
-  canWrite = false,
   enabled = true,
   selectedId,
   onSelect,
   className,
 }: ProviderConnectProps) {
-  const t = useTranslations('providerSheet');
   const common = useTranslations('common');
   const tPooled = useTranslations('pooledSecrets');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const access = useModelAccess(enabled ? projectId : null);
   const managedProvider = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   useLiveLlmProviderCatalog(projectId, enabled);
   const catalogRevision = useLlmProviderCatalogRevision();
   const { connectedProviders, providerStateLoading } = useConnectedProviders(projectId, enabled);
+  const subscriptionAccountId = enabled ? pooled.accountId : null;
+  const subscriptions = useSubscriptionLogins(subscriptionAccountId, projectId);
+  const liveUsage = useLiveSubscriptionUsages(subscriptionAccountId, projectId, subscriptions.logins);
+  const rowSummary = useSubscriptionRowSummary();
+  // Each subscription login's live usage, summed per provider row (ChatGPT → OpenAI, Claude → Anthropic).
+  const now = Math.max(subscriptions.dataUpdatedAt, liveUsage.updatedAt);
+  const usageByRow = useMemo(() => {
+    const byRow = new Map<string, typeof liveUsage.usages>();
+    for (const login of liveUsage.usages) {
+      const row = SUBSCRIPTION_ROW[login.secret.provider_id ?? ''];
+      if (row) byRow.set(row, [...(byRow.get(row) ?? []), login]);
+    }
+    return new Map([...byRow].map(([row, logins]) => [row, rowSummary(summarizeSubscriptions(logins, now), now)]));
+  // `liveUsage.usages` is a fresh array each render; `now` moves with every read it holds.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, subscriptions.logins, rowSummary]);
 
   const [search, setSearch] = useState('');
   const [visibleCount, setVisibleCount] = useState(PROVIDER_PAGE_SIZE);
@@ -489,13 +511,14 @@ export function ProviderConnect({
               : 'none',
         via: connectedVia(entry.id, connectedIds),
         disabled: disabledProviders.has(entry.id),
+        usage: usageByRow.get(entry.id) ?? null,
       };
     });
     return {
       inUse: rows.filter((row) => row.status !== 'none'),
       available: rows.filter((row) => row.status === 'none'),
     };
-  }, [searchable, connectedIds, pooled.pooledProviderIds, search, access.data]);
+  }, [searchable, connectedIds, pooled.pooledProviderIds, search, access.data, usageByRow]);
 
   const searching = search.trim().length > 0;
   const limit = searching ? available.length : visibleCount;
@@ -538,13 +561,7 @@ export function ProviderConnect({
       onSearchChange={setSearch}
       selectedId={selectedId}
       onSelect={onSelect}
-      note={
-        pooled.pooledSecretsEnabled
-          ? tPooled('sharedDescription')
-          : canWrite
-            ? undefined
-            : t('readOnly')
-      }
+      note={tPooled(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')}
       className={className}
     />
   );

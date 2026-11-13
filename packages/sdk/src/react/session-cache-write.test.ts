@@ -226,6 +226,33 @@ describe('an update that changes nothing keeps the cache by reference', () => {
   });
 });
 
+// F-025: the session stream re-sends its verdicts every 20 s. A write that
+// changed nothing must not touch the entry: `setQueryData` stamps
+// `dataUpdatedAt`, which keeps a list from ever going stale and restarts its
+// `refetchInterval`, so the sidebar's 60 s poll never fired.
+describe('an update writes only the entries it changed', () => {
+  test('an entry the updater leaves alone keeps its freshness and its invalidation', () => {
+    const client = new QueryClient();
+    const untouched = qk.project.sessionsPaged('p', 'visible', { view: 'archived' });
+    const touched = qk.project.sessions('p');
+    client.setQueryData(untouched, { pages: [{ items: [row('b')], next_cursor: null }], pageParams: [null] });
+    client.setQueryData(touched, [row('a')]);
+    void client.invalidateQueries({ queryKey: untouched, refetchType: 'none' });
+    const before = client.getQueryState(untouched);
+
+    // Like every real caller: the same array when no row matches.
+    updateCachedWorkspaceSessions(client, 'p', (rows) =>
+      rows.some((s) => s.session_id === 'a') ? rename('a', 'Renamed')(rows) : rows,
+    );
+
+    expect(client.getQueryData<ProjectSession[]>(touched)?.[0]?.custom_name).toBe('Renamed');
+    const after = client.getQueryState(untouched);
+    expect(after?.dataUpdatedAt).toBe(before?.dataUpdatedAt);
+    expect(after?.dataUpdateCount).toBe(before?.dataUpdateCount);
+    expect(after?.isInvalidated).toBe(true);
+  });
+});
+
 describe('filtered list caches (KRTX-639)', () => {
   const withInitiator = (
     id: string,
@@ -279,6 +306,30 @@ describe('filtered list caches (KRTX-639)', () => {
     );
     expect(ids(qc, me)).toEqual([]);
     expect(ids(qc, auto)).toEqual(['NEW']);
+  });
+
+  // KRTX-4705: the mobile Sessions page's default list asks for person-started
+  // sessions only; a machine-started row waits for its own refetch.
+  test('a humans cache takes member-started roots, never machine-started ones', () => {
+    const qc = new QueryClient();
+    const humans = qk.project.sessionsPaged('P1', 'visible', { parent: 'root', startedBy: 'humans' });
+    qc.setQueryData(humans, pagedOf([]));
+    upsertCachedWorkspaceSession(
+      qc,
+      'P1',
+      withInitiator('NEW', { initiator: { type: 'member', id: 'u1', label: 'Ann' } }),
+    );
+    upsertCachedWorkspaceSession(
+      qc,
+      'P1',
+      withInitiator('BOT', { initiator: { type: 'trigger', id: 'nightly', label: 'nightly' } }),
+    );
+    upsertCachedWorkspaceSession(
+      qc,
+      'P1',
+      withInitiator('LEGACY', { initiator: undefined }),
+    );
+    expect(ids(qc, humans).sort()).toEqual(['LEGACY', 'NEW']);
   });
 
   test('a child lands only in its parent children cache, never a root cache', () => {

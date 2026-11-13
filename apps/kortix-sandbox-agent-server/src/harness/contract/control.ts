@@ -42,7 +42,8 @@ export interface HarnessRefreshInput {
 
 interface HarnessRefreshResult {
   ok: true
-  repo: { before: RepoInfo; after: RepoInfo }
+  /** `null` twice: the session has no checkout (a fresh boot), so the refresh was a no-op. */
+  repo: { before: RepoInfo | null; after: RepoInfo | null }
   runtime: string
   runtime_pid: number | null
 }
@@ -52,12 +53,6 @@ type HarnessAbortResult =
   | { outcome: 'not-pinned'; body: { ok: false; error: string } }
   | { outcome: 'failed'; body: { ok: false; error: string; detail?: string } }
 
-/** A queued prompt that interrupts the named turn after its running tool ends. */
-export interface HarnessAbortAfterToolInput {
-  promptId: string
-  runtimeSessionId: string
-  messageId: string
-}
 
 /** The health `config` block. */
 export interface HarnessConfigReleaseReport {
@@ -108,9 +103,6 @@ export interface HarnessControlOperations {
    */
   convergeConfig?(options?: HarnessConfigConvergeOptions): Promise<HarnessConfigConvergeResult>
   abort(): Promise<HarnessAbortResult>
-  armAbortAfterTool(input: HarnessAbortAfterToolInput): Promise<void>
-  /** Without a prompt id, disarm every pending interrupt. */
-  disarmAbortAfterTool(promptId?: string): void
 }
 
 interface HarnessControlContext {

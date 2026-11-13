@@ -140,6 +140,7 @@ export const YAML_KEY_ROW = {
   top_p: 'model',
   steps: 'model',
   options: 'model',
+  run: 'model',
   tools: 'tools',
   codemode: 'tools',
   context: 'tools',
@@ -154,15 +155,14 @@ export const YAML_KEY_ROW = {
   secrets: 'secrets',
   apps: 'apps',
   kortix_permissions: 'actions',
-  workspace: 'workspace',
   sandbox: 'workspace',
+  workspace: 'workspace',
   network_egress: 'workspace',
 } as const satisfies Record<(typeof AGENT_BLOCK_KEYS_V3)[number], AgentRailKey>;
 
 /** The editor draft's wire names for a kortix.yaml key (v2 aliases included). */
 const WIRE_KEY: Record<string, string> = {
   file: 'prompt_file',
-  repository_access: 'workspace',
   kortix_cli: 'kortix_permissions',
   connectors_personal: 'connectors_required',
 };

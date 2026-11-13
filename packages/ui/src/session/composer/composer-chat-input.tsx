@@ -30,6 +30,16 @@ export interface ComposerOptions {
 }
 
 /**
+ * The voice call this composer offers in Send's place while nothing is typed
+ * (`SessionChatInputProps.call`). `onCall` gets the composer's picks, as a send
+ * does, with the agent it shows: the call is offered only once one resolved.
+ */
+export interface ComposerChatCall {
+  onCall: (options: ComposerOptions & { agent: string }) => void;
+  inCall: boolean;
+}
+
+/**
  * The canonical "compose a first message" input: {@link SessionChatInput}
  * pre-wired with the model / agent / variant / command selectors (the
  * four catalog queries + per-session selection state). Used by the home composer
@@ -70,10 +80,12 @@ export function ComposerChatInput({
   onAgentSelectionChange,
   sandboxSlot,
   draftScope,
+  draftHandoffScope,
   draftActive,
   promptAttachments,
   submitLabel,
   onArrowUpAtStart,
+  call,
 }: {
   onSend: (
     text: string,
@@ -111,6 +123,7 @@ export function ComposerChatInput({
     id: number;
     files?: AttachedFile[];
     mode?: 'replace' | 'merge';
+    restoreDraft?: boolean;
     options?: SessionPromptOverrides | null;
     submit?: boolean | 'when-ready';
   } | null;
@@ -145,6 +158,7 @@ export function ComposerChatInput({
   sandboxSlot?: SessionOverrideSlot;
   /** Persist the unsent draft under this scope — see `composer/draft/`. */
   draftScope?: DraftScope | null;
+  draftHandoffScope?: import('react').RefObject<DraftScope | null>;
   draftActive?: boolean;
   /** Host-owned upload controller. See `SessionChatInputProps.promptAttachments`. */
   promptAttachments?: SessionChatInputProps['promptAttachments'];
@@ -152,6 +166,8 @@ export function ComposerChatInput({
   submitLabel?: SessionChatInputProps['submitLabel'];
   /** Up in an empty composer: open the latest queued message for editing. */
   onArrowUpAtStart?: SessionChatInputProps['onArrowUpAtStart'];
+  /** A voice call in Send's place while nothing is typed. See `ComposerChatCall`. */
+  call?: ComposerChatCall;
 }) {
   const contextAutoFocus = useContext(ComposerAutoFocusContext);
   const { data: rosterAgents } = useRuntimeAgents({ projectId });
@@ -355,9 +371,15 @@ export function ComposerChatInput({
       commands={commands || []}
       commandsResolved={commands !== undefined}
       draftScope={draftScope}
+      draftHandoffScope={draftHandoffScope}
       draftActive={draftActive}
       submitLabel={submitLabel}
       onArrowUpAtStart={onArrowUpAtStart}
+      call={
+        call && selectedAgentName
+          ? { inCall: call.inCall, onCall: () => call.onCall({ ...options(), agent: selectedAgentName }) }
+          : undefined
+      }
     />
   );
 }

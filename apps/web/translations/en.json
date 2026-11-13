@@ -59,7 +59,7 @@
     "oauthWaiting": "Waiting for authorization…",
     "oauthFinishing": "Signed in. Saving your account…",
     "oauthExpired": "Authorization timed out. Try again.",
-    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are private to you until you share them.",
+    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "chatGptSubscription": "ChatGPT subscription",
     "manageChatGptAccounts": "Manage ChatGPT accounts",
     "connect": "Connect",
@@ -95,7 +95,7 @@
     "deleteError": "Secret could not be deleted",
     "accessError": "Access could not be changed",
     "sharedTitle": "Provider connections",
-    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are private to you until you share them. Choose which ones each session uses.",
+    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are shared with every workspace member. You can make one private. Choose which ones each session uses.",
     "legacyProjectKey": "Existing workspace key · Used when this session has no key selection",
     "keyCount": "{count, plural, one {# key} other {# keys}}",
     "providerKeysFor": "{provider} API keys",
@@ -106,16 +106,14 @@
     "access": "Access",
     "actions": "Actions",
     "coolingDown": "Cooling down",
-    "usageFiveHour": "5-hour",
-    "usageWeekly": "Weekly",
-    "usageWeeklyModel": "Weekly · {model}",
-    "usagePercent": "{percent}% used",
-    "usagePercentResets": "{percent}% · resets {time}",
-    "usageLimitReached": "Limit reached",
-    "usageLimitResets": "Limit reached · resets {time}",
-    "usageNotSeen": "Usage appears after the first request",
-    "usageObserved": "Updated {time}",
-    "usageAriaLabel": "{window}: {percent}% used",
+    "keyVerified": "Verified: {provider} accepted this key",
+    "keyInvalid": "{provider} refused this key: {message}",
+    "keyUnchecked": "Not verified: {message}",
+    "checkKey": "Check again",
+    "savedVerified": "Key saved and verified",
+    "savedInvalid": "Key saved, but {provider} refused it: {message}",
+    "checkError": "The key could not be checked",
+    "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
     "actionsFor": "Actions for {label}",
@@ -157,6 +155,9 @@
     "providerKeys": "Provider keys",
     "chooseSharedKeys": "Choose the shared keys this session can use.",
     "sessionKeyPool": "Session key pool",
+    "subscriptionSwitcher": "Subscription",
+    "subscriptionSwitcherDefault": "Rotates through every connected subscription",
+    "subscriptionSwitcherUse": "Use {label} for this session",
     "sharedSessionKeys": "This session is shared with the workspace, so only keys shared with the whole workspace work here. Keys granted to you work in your private sessions.",
     "promptedSessionKeys": "Another member has prompted this session, so it no longer acts for its owner. Only keys shared with the whole workspace work here.",
     "noPersonSessionKeys": "This session does not act for a person: it started before personal keys existed, or unattended. Only keys shared with the whole workspace work here. Start a new session to use your own keys.",
@@ -176,7 +177,7 @@
     "claudeAccounts": "Claude accounts",
     "noClaudeAccounts": "No Claude accounts yet",
     "connectClaude": "Sign in with Claude",
-    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are private to you until you share them.",
+    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "claudeOauthCreationDescription": "Sign in with your Claude Pro or Max account. Kortix stores the login encrypted and never shows it.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude account connected",
@@ -184,7 +185,10 @@
     "claudeConnectFailed": "The Claude sign-in did not finish. Try again.",
     "claudeReconnectDescription": "Sign in with Claude again. The account keeps its name, access, and session selections.",
     "claudeAccountLabelPlaceholder": "e.g. My Claude account",
-    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?"
+    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?",
+    "sharedOnlyYouDescription": "Add API keys, ChatGPT accounts and Claude accounts. Only you can use the ones you add. A workspace manager can share one. Choose which ones each session uses.",
+    "oauthOnlyYouDescription": "Use your ChatGPT Plus or Pro plan in this workspace. Only you can use the accounts you add.",
+    "claudeOauthOnlyYouDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. Only you can use the accounts you add."
   },
   "secrets": {
     "undecryptable": {
@@ -336,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Loading repository options…",
       "managedUnavailable": "Kortix-managed repositories are not available on this instance. A platform admin sets this up in the admin console.",
+      "githubAfterCreate": "To use your own GitHub for later workspaces, connect it in Workspace settings › Git once this one exists.",
       "installationUnreachable": "This GitHub connection no longer works. Reconnect it to list repositories.",
       "reconnect": "Reconnect in Git settings",
       "managedImportLabel": "Import an existing managed repository",
@@ -526,6 +531,7 @@
       "gracePeriodDescription": "Deletion happens on the scheduled date. Cancel any time before then.",
       "immediateLabel": "Delete immediately",
       "immediateDescription": "Your account and its data are deleted right away. This cannot be undone.",
+      "noWorkspaceImmediateOnly": "You belong to no workspace, so there is no grace period: your account is deleted right away.",
       "typeDeleteToConfirm": "Type \"delete\" to confirm",
       "keepAccount": "Keep account",
       "processing": "Processing…",
@@ -548,7 +554,7 @@
         "left": "You leave",
         "blockers": "You are their only owner, and others work in them. Transfer ownership or delete the workspace.",
         "members": "{count, plural, one {# member} other {# members}}",
-        "nothing": "You belong to no workspace. Only your login is deleted.",
+        "nothing": "No workspace is deleted or left with your account.",
         "blockersTitle": "Hand these over first"
       }
     },
@@ -623,14 +629,8 @@
         "noResults": "No themes found"
       },
       "densities": {
-        "normal": {
-          "label": "Normal",
-          "description": "Steps and thinking stream live while Kortix works."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "One status line until you expand it."
-        }
+        "normal": "Normal",
+        "minimal": "Minimal"
       },
       "wallpapers": {
         "dither": "Dither",
@@ -1091,10 +1091,6 @@
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
         },
-        "pooled_provider_secrets": {
-          "name": "Pooled Provider Secrets",
-          "description": "Members connect their own ChatGPT subscriptions and provider keys, share them when needed, and choose which ones each session uses."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."
@@ -1137,7 +1133,7 @@
         },
         "voice_call": {
           "name": "Voice calls",
-          "description": "Call an agent from its page (Customize → Agents) and talk it through. A call is a session of its own on that agent: it hears you, answers in a voice and sees a screen you share, and the conversation is that session's chat."
+          "description": "Call an agent from an empty message box, where the send button becomes a call button, or from its page (Customize → Agents), and talk it through. In a session, the call goes to that session's agent; on the workspace home, it starts a new session. The agent hears you, answers in a voice and sees a screen you share, and the conversation is the session's chat."
         },
         "shared_drives": {
           "name": "Shared drives",
@@ -1154,6 +1150,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00."
+        },
+        "program_agents": {
+          "name": "Program agents",
+          "description": "An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session's sandbox, with the agent's workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply."
         }
       },
       "channelsSwitch": {
@@ -1215,7 +1215,15 @@
       "history": "History",
       "historyDescription": "What every session cost, and every credit added or spent.",
       "openLedger": "Open ledger",
-      "unit": "{count, plural, one {credit} other {credits}}"
+      "unit": "{count, plural, one {credit} other {credits}}",
+      "dailySpend": "Daily spend",
+      "heatLess": "Less",
+      "heatMore": "More",
+      "busiestDay": "{name}: {amount} on {day}, the busiest day",
+      "noSpendInRange": "{name}: no spend in this range",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspaces}} with no spend in this range",
+      "showIdle": "Show",
+      "hideIdle": "Hide"
     },
     "tokens": {
       "keyRevoked": "API key revoked",
@@ -1727,7 +1735,7 @@
         "email": "Email",
         "scheduled": "Scheduled",
         "webhook": "Webhook",
-        "event": "App event",
+        "event": "Connector event",
         "manual": "Manual",
         "all": "All"
       },
@@ -2089,7 +2097,17 @@
       "claudePlan": "Pro or Max plan",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
-      "imagesUnsupportedHint": "remove them or pick another model"
+      "imagesUnsupportedHint": "remove them or pick another model",
+      "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
+      "noModelKeyReason": "No model: add your own provider key.",
+      "noModelUpgradePlan": "Upgrade plan",
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -2154,6 +2172,7 @@
       "agentWorkingOnFor": "is working on {task} · {time}",
       "somethingWrong": "Something went wrong",
       "notSent": "Not sent",
+      "computerDisconnected": "This session's computer is disconnected.",
       "retry": "Retry",
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
@@ -2279,15 +2298,15 @@
     "title": "Threads",
     "newThread": "New Thread",
     "sendMessage": "Send message",
-    "queueList": "Queue List",
+    "queueList": "Waiting messages",
     "quoteCount": "{count, plural, one {# Quote} other {# Quotes}}",
     "expandQuotes": "Expand quotes",
     "collapseQuotes": "Collapse quotes",
     "stopUnconfirmed": "Could not confirm Stop. The agent may still be running. Try Stop again.",
     "stoppedBy": "Stopped by {name}",
-    "queued": "Queued",
+    "queued": "Waiting",
     "queuedFiles": "{count, plural, one {# file} other {# files}}",
-    "queuedCount": "{count} Queued",
+    "queuedCount": "{count} waiting",
     "editingQueued": "Editing",
     "queuedActions": "Message actions",
     "steerNextStep": "Read at next step",
@@ -2296,11 +2315,11 @@
     "steerFallbackUnsupported": "Waits for this turn. This session cannot take messages mid-turn.",
     "steerFallbackNotPrompter": "Waits for this turn. Another member started it.",
     "steerFallbackTurnEnded": "Runs as its own turn. The turn ended first.",
-    "stopAndSend": "Stop and send",
-    "stopAndSendFailed": "Could not stop and send that message",
+    "stopAndSend": "Send now",
+    "stopAndSendFailed": "Could not send that message now",
     "submitEdit": "Submit",
-    "collapseQueue": "Collapse queue",
-    "expandQueue": "Expand queue",
+    "collapseQueue": "Collapse waiting messages",
+    "expandQueue": "Expand waiting messages",
     "placeholder": "Type your message...",
     "messageInput": "Message input",
     "attachFiles": "Attach files",
@@ -2714,8 +2733,8 @@
           "note": "Start with real sandbox credits.",
           "f1": "500 credits / month on your first workspace",
           "f2": "No card needed",
-          "f3": "Bring your own API key for any premium model",
-          "f4": "Connect your ChatGPT subscription"
+          "f3": "Models run on your own API key or ChatGPT subscription",
+          "f4": "Managed models are on the Credits plan only"
         },
         "credits": {
           "name": "Credits",
@@ -3008,6 +3027,8 @@
         "title": "Check your email",
         "description": "We sent a link to <address>{email}</address>. Open it to continue.",
         "confirmDescription": "We sent a confirmation email to <address>{email}</address>. Confirm your email to continue.",
+        "unknownDescription": "We emailed <address>{email}</address> — a sign-in link, or a confirmation link for a new account.",
+        "closedDescription": "If <address>{email}</address> has an account, its sign-in link is on its way.",
         "notReceived": "Didn't receive the link?",
         "confirmNotReceived": "Didn't receive the confirmation email?",
         "resendIn": "Resend in {seconds}",
@@ -3456,9 +3477,6 @@
     },
     "inbox": {
       "title": "Inbox",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",
@@ -10429,6 +10447,8 @@
       "checkConnection": "Check your connection, then retry."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Add provider key",
+      "noModelUpgradePlan": "Upgrade plan",
       "authEmailRateLimit": "Could not send the email. Try again in about an hour.",
       "authRequestRateLimit": "Too many requests. Try again in a few minutes.",
       "text03217276a5f1": "Balance {value0} credits",
@@ -10456,7 +10476,7 @@
       "text004bad6bfbd7": "Patched the retry to back off",
       "text0050aeb4cf77": "Add the group claim",
       "text0059798b7f70": "(optional)",
-      "text005b4c1dad87": "Search workspaces, accounts, owners",
+      "text005b4c1dad87": "Search workspaces, accounts, owners or an ID",
       "text005c9bcbce1e": "Creating trigger...",
       "text005dc222581c": "It has read the codebase too",
       "text005ff7fe0036": "Copy link to this release",
@@ -11012,7 +11032,6 @@
       "text11b405209283": "One place to launch, schedule, watch, and stop every agent. Live streams, full history, spend, and triggers that start work without a human in the loop.",
       "text11bd22785d4b": "SAML SSO & SCIM are Enterprise features",
       "text11c1a5b0fa54": "An agent can sharpen its own prompt, add a skill, or tighten a permission rule. Every one of those is a commit on a branch in a change request a person merges. Self-improvement, human-merged. An agent never merges its own.",
-      "text11c520bc9f1f": "super-admin",
       "text11d1b3d47709": "sourced",
       "text11d5959da5d3": "Message ID",
       "text11e9a34decaa": "The agent can install, run and break anything — only commits survive",
@@ -11891,7 +11910,6 @@
       "text2bd873d6c734": "Breadcrumb",
       "text2bdb956493fd": "Read the webhook handler",
       "text2bde665563d3": "Give it the ticket nobody picked up.",
-      "text2be1f843485e": "{value0} {value1} will be locked out until they enrol MFA:",
       "text2bf4ee86ea70": "Test single sign-on",
       "text2bf623481fd8": "Set the default you want",
       "text2bf70270bfde": "Open-source CompanyOS: your agents, skills, memory, and connectors in one repo you own. Any model. Self-host or cloud.",
@@ -12642,6 +12660,7 @@
       "text41ffc5e14073": "Set to {value0}",
       "text420962cdca94": "The same workspace, the same connectors, the same memory — and eight different jobs underneath. Each team writes the skills for its own work, and nobody stands up a second system to do it.",
       "text420aaa63cba7": "Page total",
+      "textbe57ff2d7907": "Not attributed to a session",
       "text42113e7bf6fc": "Kortix support",
       "text42117ed2a1f5": "The usual way",
       "text421c4b1fed48": "Product / Control Plane",
@@ -18059,7 +18078,6 @@
       "textdc6d1d15031b": "bank feed sync",
       "textdc70ef3b3338": "A channel is only worth connecting if the answer arrives where the question was asked. Files go both directions, and the decisions an agent needs from you are buttons in the thread rather than a link to somewhere else.",
       "textdc76dd6b1aff": "Sign in to the Kortix CLI",
-      "textdc78f4d17256": "without MFA — they won't be locked out, but consider asking them to enrol:",
       "textdc7ea87fdc45": "Files, both directions",
       "textdc8659db6d41": "Enter",
       "textdc8d7c5c602b": "Source ledger",
@@ -18172,7 +18190,6 @@
       "textdf964376e432": "xoxb-...",
       "textdfa16aeaca13": "This workspace’s repository is hosted on {value0}, which does not support collaborator invites from Kortix. Manage access where the repository lives.",
       "textdfa2cff42f0c": "No systems depth",
-      "textdfad83e7eb69": "{value0} are implicit Manager on this workspace.",
       "textdfca5da56b8c": "Section",
       "textdfd7d37e2b63": "toggle in the toolbar.",
       "textdfe0c2e802b1": "Server error",
@@ -20730,10 +20747,11 @@
       "text5f6ba69d66d1": "Skill removed",
       "textcb8d6b0c94c9": " and every file in it, edits included, and removes the skill from every agent that lists it. One commit on the default branch.",
       "cliDeviceTitle": "Authorize Kortix CLI",
-      "cliDeviceWarning": "Approve only a login you started. Type the code your terminal shows.",
+      "cliDeviceWarning": "Approve only a login you started. Check that this code matches the one your terminal shows.",
       "cliDeviceCode": "Login code",
       "cliDeviceApproved": "Login approved. Return to your terminal.",
       "cliDeviceAction": "Authorize CLI",
+      "cliDeviceConfirm": "This code matches my terminal",
       "text705a7e325b66": "Kortix App emitted events",
       "text4b80152fb96b": "Read Kortix App event credentials",
       "text59374c1f1acd": "Kortix App scheduled a run",
@@ -20827,9 +20845,9 @@
       "text2eb1d24bcc04": "Agents design fiber routes from GIS data and imagery and build the bill of materials for each route.",
       "textf2d996d89263": "Kortix, run on Kortix.",
       "text34ff4020f800": "Our company is one Kortix workspace. Agents triage and fix issues, keep SOC 2 evidence current and run sales and support. People approve.",
-      "textdd57f275a118": "Every deal, evaluated by agents.",
+      "textccf34f95f6b5": "Autonomous deal analysis.",
       "textacf058bd8604": "Asset management",
-      "text313f92aeb061": "Every deal that comes in gets a full analysis. Agents screen it against the mandate, read the filings and market data, stress-test the thesis and the downside, and write the investment memo. The investment committee decides.",
+      "text4c72429d7a38": "Agents screen every deal against the mandate, stress-test the thesis and write the investment memo. The investment committee decides.",
       "textdc7f8ac95166": "Autonomous candidate research.",
       "textb5947f5f79c9": "Agents research candidates for every search and write a profile of each one. Consultants choose the shortlist.",
       "textc81f1483737e": "The enterprise AI platform, built from Kortix’s open-source code.",
@@ -21357,7 +21375,44 @@
       "text4b892277843c": "Create workspace",
       "text41018e566b60": "new workspace create add team",
       "texta99ac8f9050b": "Workspace · Access",
-      "textfd8b8dae4421": "Danger zone"
+      "textfd8b8dae4421": "Danger zone",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "LLM Hold Refund",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Storage",
+      "textab3aff8f7642": "Top-up Bonus",
+      "textc75e59f5d748": "— capabilities",
+      "text58423a0108ea": "… capabilities",
+      "textcd6f79740e17": "{count, plural, one {# capability} other {# capabilities}}",
+      "textd1e588d764a4": "used by —",
+      "text66cbb5dfa6cf": "used by …",
+      "text56c316b0bde4": "used by {value0}",
+      "textb7e3e4aa4257": "Disable",
+      "texte80e342954ec": "Last delivered {value0}",
+      "textf1a1b16401b1": "{count, plural, one {# member will be locked out until they enrol MFA:} other {# members will be locked out until they enrol MFA:}}",
+      "text18cde09c22d3": "{count, plural, one {# super-admin without MFA — they won't be locked out, but consider asking them to enrol:} other {# super-admins without MFA — they won't be locked out, but consider asking them to enrol:}}",
+      "textcf42cb2f1ca3": "Owners are implicit Manager on this workspace.",
+      "textd7e2d4bc4c80": "Admins are implicit Manager on this workspace.",
+      "textb9215e029e76": "Agents: all",
+      "textd6acddc499aa": "Agents: none",
+      "text1edf7747d0b8": "Agents: {value0} of {value1}",
+      "textd526776b77df": "Agents: {value0}",
+      "text002a4fd5f747": "Use a whole number of minutes, or leave it empty.",
+      "text9b8d62603858": "{value0} minutes (7 days) is the most Kortix allows.",
+      "text4510d8593ccc": "{value0}: use a whole number of days, or leave it empty.",
+      "textb1f8e3109f1b": "{value0}: {value1} days is the most Kortix allows.",
+      "textac20a57bfde0": "Hide",
+      "text268733ac2f60": "Could not update that app",
+      "text5d8926d4a4dd": "Could not register that app",
+      "text30b9ce09f406": "Enter a period such as 15m, 1h or 1d, at least 1m.",
+      "text28d33d2ad989": "Choose the App to call",
+      "textd777d7805cfa": "Enter a path that starts with /",
+      "text8043e69a8dd6": "Delete trigger",
+      "textd6fa1626e3af": "Connector event created",
+      "textccf59f978ef6": "No connector events here yet",
+      "text82cbc4a4def0": "Connector events are not set up on this deployment, so no connector can send them yet.",
+      "text458ceb31019b": "Connector event triggers",
+      "text27ca9df9dbaa": "Connector event triggers are off"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -21564,6 +21619,13 @@
       "denied": "Access denied",
       "deniedDescription": "My Kortix gets your answer.",
       "failed": "Could not send your decision. Try again."
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Add Kortix to your home screen for a full-screen, app-like experience.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "On iPhone and iPad: tap Share, then Add to Home Screen.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix was updated. Refresh to get the new version.",
+    "reviewPane": {
+      "emptyTitle": "Select an item",
+      "emptyDescription": "Its details open here. Press J and K to move through the list."
     }
   },
   "commandPalette": {
@@ -21586,11 +21648,6 @@
   "personalWelcome": {
     "dismiss": "Dismiss",
     "emailCopied": "Email address copied"
-  },
-  "repositoryAccess": {
-    "label": "Workspace repository access",
-    "enabled": "New sessions receive the workspace repository. Git permissions still apply. Existing sessions keep their access setting.",
-    "disabled": "New sessions run without the workspace repository. They can still create files and use granted tools. Existing sessions keep their access setting."
   },
   "customProvider": {
     "intro": "Endpoints the catalogue does not carry.",
@@ -21817,7 +21874,16 @@
     "crBranchHelp": "Runs when a change request merges into this branch, or into any branch when it is empty. The instruction can read <code>change_request.number</code>, <code>change_request.title</code> and <code>change_request.base_ref</code>.",
     "eventsOff": "Connector events are in beta and off for this workspace. Turn them on under Feature flags in Workspace admin.",
     "noApps": "No App in this workspace sends events yet. Deploy an App that POSTs to <code>KORTIX_APP_EVENTS_URL</code>, then pick it here.",
-    "openApps": "Open Apps"
+    "openApps": "Open Apps",
+    "thenLabel": "What a fire does",
+    "thenAgent": "Run an agent",
+    "thenApp": "Call an App",
+    "targetPath": "Path",
+    "targetMethod": "Method",
+    "targetHelp": "Each fire wakes the App and sends the payload to this path. No agent runs.",
+    "intervalLabel": "Repeats every",
+    "intervalHelp": "A fixed period such as 15m, 1h or 1d.",
+    "useCalendar": "Use a calendar schedule"
   },
   "gatewayAccess": {
     "heroTitle": "Use this workspace's models anywhere",
@@ -22037,6 +22103,9 @@
     "addMcpUrlNamed": "Adds the connector {name}.",
     "addMcpUrlInvalid": "Enter a URL that starts with https://",
     "addMcpConnect": "Connect",
+    "addMcpStageConnector": "Reaching the server and loading its tools…",
+    "addMcpStageAccount": "Preparing the account…",
+    "addMcpStageSignIn": "Starting the sign-in…",
     "addMcpConnected": "{name} is connected. Agents can use its tools.",
     "addMcpSignInFailed": "Could not start the {name} sign-in: {reason}",
     "addMcpFailed": "Could not add the MCP server",
@@ -22051,6 +22120,12 @@
     "noticeSignInTitle": "Sign in to {name}",
     "noticeSignInBody": "Kortix added {name}. Finish signing in so agents can use its tools.",
     "noticeSignInAction": "Sign in",
+    "noticeSignInAgainTitle": "Sign in to {name} again",
+    "noticeSignInAgainBody": "Its sign-in expired or was revoked. Agents cannot use {name} until you sign in again.",
+    "noticeNoToolsTitle": "{name} has no tools",
+    "noticeNoToolsBody": "It has no routes, so agents have nothing to call. Add routes to its routes spec in Settings.",
+    "noticeAddRoutesAction": "Add routes",
+    "statusNoTools": "No tools",
     "connectAccount": "Connect",
     "notSignedIn": "Not signed in",
     "credentialRejected": "Credential rejected: replace it",
@@ -22108,7 +22183,7 @@
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Signs in with",
     "infoCategory": "Category",
-    "infoAppEvents": "App events",
+    "infoAppEvents": "Events",
     "infoAppEventsYes": "Supported",
     "authOAuth": "OAuth sign-in",
     "authApiKey": "API key",
@@ -23014,7 +23089,11 @@
     "folderTree": "Folders",
     "treeYou": "{name} (You)",
     "treeExpand": "Open {name}",
-    "treeCollapse": "Close {name}"
+    "treeCollapse": "Close {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace holds} other {# workspaces hold}} no files",
+    "storageMoreWorkspaces": "{count, plural, one {# more workspace} other {# more workspaces}}",
+    "storageWorkspaceLimit": "Each workspace holds up to {limit}",
+    "storageShowFewer": "Show fewer"
   },
   "genui": {
     "showData": "Show data",
@@ -23307,6 +23386,16 @@
         "booted": "Started",
         "timezone": "Time zone",
         "locale": "Locale",
+        "usage": "Kortix Capture resource use",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} average · {peak} peak",
+        "usageCpuHint": "Of one core, last {minutes, plural, one {# minute} other {# minutes}}",
+        "usageMemory": "Memory",
+        "usageMemoryPeak": "{now} · {peak} peak",
+        "usageProcesses": "Processes",
+        "usageProcessCount": "{count, plural, one {# process} other {# processes}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Not reported: an older app version, or the app started less than a minute ago",
         "recordingSync": "Recording and sync",
         "status": "Status",
         "lastFrame": "Last frame",
@@ -23423,12 +23512,16 @@
       "privacyControlsHint": "Show personal-data masking. Turning this off hides it; what is set keeps applying.",
       "maskingTitle": "Masking",
       "framesTitle": "Screen frames",
-      "interval": "One frame every",
-      "intervalHint": "Shorter intervals keep more detail and use more CPU and storage.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Resolution",
       "resolutionHint": "Larger screens are scaled down to this height. 4K keeps fine detail, such as CAD drawings.",
-      "framesHint": "Unset, each computer uses its own (one frame every 2 s at 1440p). Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots at any interval.",
+      "textRecognition": "Text recognition",
+      "textRecognitionHint": "Reads the text on screen so it can be searched. Off uses the least CPU: search then finds apps, window titles and URLs.",
+      "textRecognitionOption": {
+        "accurate": "Accurate",
+        "fast": "Fast",
+        "off": "Off"
+      },
+      "framesHint": "Kortix Capture sets its own frame rate: up to 2 frames a second while someone works, one every 2 s otherwise, slower on a busy computer. Unset, each computer uses 1440p and accurate text recognition. Set, every computer uses it and people cannot change it. Clicks, typing and scrolling are recorded with their own screenshots.",
       "computerDecides": "Each computer decides",
       "included": {
         "title": "Apps and websites",
@@ -23641,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Triggers",
-    "groupDescription": "Schedules, loops, webhooks, app events and monitors in this workspace.",
+    "groupDescription": "Schedules, loops, webhooks, connector events and App events in this workspace.",
     "label": "Pause all triggers",
-    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, app event or monitor. Running a trigger by hand still works.",
+    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, connector event or App event. Running a trigger by hand still works.",
     "readOnlyDescription": "Only an owner or admin can pause or resume triggers.",
     "pausedSince": "Paused since {date}.",
     "pauseTitle": "Pause all triggers?",
@@ -23671,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Paused automatically",
-    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it."
+    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it.",
+    "billingTitle": "Paused: out of credits",
+    "billingDescription": "No run can be paid for, so it stopped starting runs. It resumes by itself a few minutes after the wallet is topped up.",
+    "modelTitle": "Paused: no model to run on",
+    "modelDescription": "Automations use only model keys and accounts shared with the whole workspace, and none is usable. It resumes by itself a few minutes after you add one in Models.",
+    "listBilling": "No credits",
+    "listModel": "No model"
   },
   "featureGate": {
     "enable": "Enable {name}",
@@ -24881,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Program",
+      "programCommand": "Command",
+      "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",
       "title": "Model",
       "help": "How this agent thinks.",
       "projectDefault": "Workspace default",
@@ -26015,6 +26117,7 @@
     "call": "Call",
     "calling": "Calling…",
     "start": "Start a voice call",
+    "inCall": "You are on a call",
     "end": "End call",
     "connecting": "Connecting…",
     "listening": "Listening",
@@ -26083,7 +26186,6 @@
   "agentMounts": {
     "lead": "Folders from Files this agent's sessions mount. A change applies at once and reaches every new session.",
     "mount": "Mount folder",
-    "repository": "Workspace repository",
     "viaAgent": "shared with this agent",
     "viaProject": "shared with everyone in this workspace",
     "from": "{path} · {who}",
@@ -26430,48 +26532,37 @@
     "issue": "Issue #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5-hour",
+    "weekly": "Weekly",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "Subscription usage is unavailable",
-    "disabledDescription": "Subscription connections are not enabled for this workspace.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Reset time passed · refresh for current usage",
-    "text10": "Reset time not reported",
-    "text11": "Checking provider usage…",
-    "text12": "No usage reported yet. Refresh after using this subscription.",
-    "text13": "Could not update. Showing last known data.",
-    "text14": "Waiting for provider data",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Track the limits of your connected ChatGPT and Claude subscriptions.",
-    "text19": "Usage could not load",
-    "text20": "Try loading your connected subscriptions again.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Connect ChatGPT or Claude in Providers to see reported usage and reset times.",
-    "text24": "Connect a subscription",
-    "text25": "Usage is shared across apps that use the same subscription. Checks automatically every minute while this tab is open.",
-    "text26": "Limits vary by plan. Only windows reported by your connection appear here; missing data does not mean unlimited usage. File limits are not reported. API spend appears in Costs.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Five-hour window not reported by this connection.",
-    "fableIncluded": "Fable usage also counts toward your overall weekly allowance.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Extra usage",
+    "apps": "Apps",
+    "codeReview": "Code review",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · resets {time}",
+    "percentBack": "{percent}% · back {time}",
+    "resetPassed": "Reset · updating",
+    "notStarted": "Not started",
+    "reconnectToSee": "Reconnect to see usage",
+    "availableNow": "Available now",
+    "availableCount": "{available} of {total, plural, one {# account} other {# accounts}}",
+    "nextBack": "Next back",
+    "rowPeak": "{window} · {percent}% used",
+    "rowSomeLimited": "{limited} of {total} at limit",
+    "rowAllLimited": "At limit",
+    "rowAllLimitedBack": "At limit · back {time}",
+    "noUsageYet": "No usage reported yet.",
+    "refreshFailed": "Could not refresh · showing last known usage.",
+    "loadFailed": "Usage could not load.",
+    "rowSomeLimitedBack": "{limited} of {total} at limit · next back {time}",
+    "weeklyAll": "Weekly · all models",
+    "notReported": "Not reported"
   },
   "gatewayRouting": {
     "exceptions": "Exceptions",
@@ -26643,7 +26734,7 @@
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key works in this workspace only and acts as you, an agent or a bot.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",
@@ -26653,6 +26744,10 @@
         "actsAsAgent": "An agent",
         "actsAsBot": "A bot",
         "actsAsMeHint": "Your role in this workspace. The key stops working when you leave.",
+        "worksIn": "Works in",
+        "worksInAll": "All my workspaces",
+        "worksInAllHint": "Acts as you in every workspace of yours, with your full role. Manage it under Preferences → Personal keys.",
+        "worksInWorkspace": "Only this workspace",
         "actsAsAgentHint": "Exactly what the agent may do in kortix.yaml. Its actions are audited as the agent, and the key keeps working when you leave.",
         "actsAsBotHint": "A bot for CI or an integration, with its own role. The key keeps working when you leave.",
         "needsPermission": "Needs the permission to manage credentials",
@@ -26671,6 +26766,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Created by {email}",
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
+        "createdPersonalDescription": "{name} acts as you in every workspace of yours — manage it under Preferences → Personal keys. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
       },
@@ -26681,7 +26777,9 @@
       "noWorkspaceTitle": "Create a workspace to sign in the CLI",
       "noWorkspaceBody": "The CLI signs in to a workspace. Create one, then approve this sign-in.",
       "createAction": "Create workspace",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Couldn't load your workspaces",
+      "loadFailedBody": "This sign-in needs your workspace list. Nothing is wrong with your account — try again to continue."
     },
     "models": {
       "yourDefault": "Workspace default",
@@ -26690,12 +26788,6 @@
       "setDefaultTitle": "Set as the workspace default model",
       "setDefaultAria": "Set {model} as the default model for this workspace",
       "setWorkspaceDefault": "Set as workspace default"
-    },
-    "profile": {
-      "deleteLogin": "Delete my login",
-      "deleteLoginDescription": "Deletes your Kortix login. You belong to no workspace, so nothing else is deleted.",
-      "deleteLoginTitle": "Delete your login?",
-      "deleteLoginWarning": "This deletes your login right away. This cannot be undone."
     },
     "capture": {
       "noWorkspaceTitle": "Create or join a workspace first.",
@@ -26707,8 +26799,7 @@
     "menu": {
       "invite": "Invite people to {name}",
       "leave": "Leave {name}",
-      "invitePeople": "Invite people",
-      "more": "More"
+      "invitePeople": "Invite people"
     },
     "roles": {
       "owner": {
@@ -26783,5 +26874,38 @@
   "gatewayBudgets": {
     "capWorkspace": "Cap gateway spend for this workspace.",
     "capMember": "Cap gateway spend for {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Open {app} sign-in",
+    "checkingTitle": "Finishing sign-in",
+    "checkingDescription": "Kortix checks your {app} sign-in. This page updates by itself.",
+    "signInUnfinished": "Sign-in not finished",
+    "finishSignIn": "Finish sign-in",
+    "signInFinished": "Sign-in finished",
+    "cardHeadline": "Your agent needs you to sign in",
+    "cardTitle": "Connect {app}",
+    "cardShared": "Shared with the workspace",
+    "cardPrivate": "Only you",
+    "signingIn": "Finish signing in to {app} in the window that opened.",
+    "connectedAs": "Connected as {account}",
+    "connected": "Connected",
+    "connect": "Connect",
+    "cardFailed": "Could not connect {app}. Try again.",
+    "blockedTitle": "Open {app} to sign in",
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself.",
+    "doneTitle": "{app} connected",
+    "doneTitleNoApp": "Connected",
+    "doneDescription": "Your agent can use {app} now.",
+    "doneClose": "You can close this tab.",
+    "doneDeniedTitle": "Sign-in cancelled",
+    "doneDeniedDescription": "You did not allow access on {app}. Start the sign-in again from Kortix to connect it.",
+    "doneExpiredTitle": "This sign-in link expired",
+    "doneExpiredDescription": "It was already used or is too old. Start the sign-in again from Kortix.",
+    "doneFailedTitle": "{app} did not connect",
+    "doneFailedTitleNoApp": "The sign-in did not finish",
+    "doneFailedDescription": "Start the sign-in again from Kortix. If it fails again, send the code below to support.",
+    "doneErrorCode": "Error code: {code}",
+    "doneOpenKortix": "Open Kortix",
+    "doneFallbackApp": "the app"
   }
 }

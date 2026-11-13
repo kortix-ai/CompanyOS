@@ -54,6 +54,12 @@ export function resolveDisplayedAgentName(primaryAgents: Agent[], selectedAgent:
   return current?.name ?? selectedAgent ?? primaryAgents[0]?.name;
 }
 
+/** Is the displayed agent a program agent (`run`)? Its runtime listing names provider `program`: it has no model to pick. */
+export function resolveProgramAgent(primaryAgents: Agent[], selectedAgent: string | null): boolean {
+  const name = resolveDisplayedAgentName(primaryAgents, selectedAgent);
+  return primaryAgents.find((a) => a.name === name)?.model?.providerID === 'program';
+}
+
 /** The label `AgentSelector` shows for a selection (null = nothing picked). Other surfaces that name the agent reuse it. */
 export function agentDisplayLabel(agents: Agent[], selectedAgent: string | null): string {
   const name = resolveDisplayedAgentName(composerSelectableAgents(agents), selectedAgent);
@@ -381,8 +387,8 @@ export function AgentSelector({
           It stays MOUNTED either way, just visually hidden, and that is
           deliberate: cmdk drives arrow-key navigation from a keydown handler
           on its own root, and the input is the only focusable descendant
-          inside it. Unmounting it would leave focus on the Radix content
-          wrapper — the parent — where keydown never reaches cmdk at all, so
+          inside it. Unmounting it would leave focus on the popover content
+          — the parent — where keydown never reaches cmdk at all, so
           the arrow keys would silently stop working on exactly the short
           lists this is meant to simplify.
         */}

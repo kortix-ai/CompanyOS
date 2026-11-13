@@ -339,17 +339,68 @@ export function useSessionLogSync(
       return read;
     };
     // The box's page, when the box serves one: true when it went in the store.
-    const loadLive = async (): Promise<boolean> => {
+    // A box that cannot answer holds EVERY read for the proxy's full retry budget
+    // (50 s) and then answers 502, and the stream's 45 s liveness re-fires a
+    // reconnect roughly every minute — one wedged box held ~70 of those 502s per
+    // hour while its session tab stayed open. After SESSION_LOG_LIVE_FAILURES
+    // consecutive failures the box page is skipped for SESSION_LOG_LIVE_SKIP_MS:
+    // `reload` falls back to the API page (which still answers), and a success or
+    // a different box's loader (a failover) resets the skip at once.
+    let liveLoader: unknown = null;
+    let liveFailures = 0;
+    let liveSkipUntil = 0;
+    let liveRead: Promise<boolean> | null = null;
+    const readLive = async (): Promise<boolean> => {
       const live = livePageRef.current;
       if (!live) return false;
+      if (live !== liveLoader) {
+        liveLoader = live;
+        liveFailures = 0;
+        liveSkipUntil = 0;
+      }
+      if (Date.now() < liveSkipUntil) return false;
       const page = await live({ limit: SESSION_LOG_FIRST_PAGE_LIMIT }).catch(() => null);
-      if (stopped || !page) return false;
+      if (stopped || !page) {
+        liveFailures += 1;
+        if (liveFailures >= SESSION_LOG_LIVE_FAILURES) liveSkipUntil = Date.now() + SESSION_LOG_LIVE_SKIP_MS;
+        return false;
+      }
+      liveFailures = 0;
+      liveSkipUntil = 0;
       store().applySessionLogPage(sessionId, page);
       return true;
+    };
+    // One box read on the wire at a time: a reconnect, a resync, a tab-visible signal
+    // and a turn end can fire inside the same 50 s a wedged box holds the read for,
+    // and overlapping reads would stack the proxy's full retry budget per trigger.
+    const loadLive = (): Promise<boolean> => {
+      if (!liveRead) {
+        liveRead = readLive().finally(() => {
+          liveRead = null;
+        });
+      }
+      return liveRead;
     };
     // A re-read: the box's page while the box serves one, else the API's.
     const reload = async (): Promise<void> => {
       if (!(await loadLive())) await load();
+    };
+    // The re-read a turn end asks for. A box read already on the wire started before the turn
+    // ended and answers a snapshot without the finished reply: read again once it settles.
+    const reloadAfterTurnEnd = () => {
+      const stale = liveRead;
+      // A box read that failed reads the API's page: a wedged box must not cost two proxy budgets.
+      void (stale ? stale.then(async (ok) => void (ok ? await reload() : await load())) : reload());
+    };
+    // A `kortix.control.turn` frame that reports a turn end this effect has not seen. The first
+    // frame of a connection names the last end at join, which is not news.
+    const endedTurn = (frame: { type: string; payload?: unknown }): boolean => {
+      if (frame.type !== 'kortix.control.turn') return false;
+      const payload = frame.payload as { last_ended?: { turn_token?: string } | null } | null;
+      const ended = payload?.last_ended?.turn_token ?? null;
+      const seen = lastEnded;
+      lastEnded = ended;
+      return seen !== undefined && ended !== seen;
     };
     // Re-read after a reconnect (`up` after a drop); the first report is the connection already up.
     const onReconnect = (run: () => void) => {
@@ -369,7 +420,22 @@ export function useSessionLogSync(
       // `kortix.resync` and replays nothing, so the page is read again then, as after a reconnect.
       // `runtime: true`: the `log.*` frames ride the runtime channel. A full session already has a
       // runtime subscriber; a view (`useSessionView`) has none, and its thread froze at the first page.
-      join({ schema: 'v2', runtime: true, onConnectionChange: onReconnect(() => void reload()), onRuntimeResync: () => void reload() });
+      join({
+        schema: 'v2',
+        runtime: true,
+        // The join snapshot can precede the full runtime consumer after reload.
+        // The log owns these frames from its first subscription. Store puts and
+        // wire deltas are idempotent when another runtime consumer also sees them.
+        onRuntimeEvent: (event) => {
+          if (event.type.startsWith('log.')) store().applySessionLogEvent(sessionId, event);
+        },
+        // A missed final record converges through the page at turn end (F-012).
+        onControl: (frame) => {
+          if (endedTurn(frame)) reloadAfterTurnEnd();
+        },
+        onConnectionChange: onReconnect(() => void reload()),
+        onRuntimeResync: () => void reload(),
+      });
     };
     // A box loader that arrived after the first read: its page, and v2 if the API had none.
     readLiveRef.current = () => {
@@ -386,11 +452,22 @@ export function useSessionLogSync(
       cancelRetry = null;
       busy = true;
       const { answer, retryAfterMs } = await load();
+      const page = answer === 'missing' ? null : answer;
+      if (stopped) return;
+      if (page) {
+        // The API page already establishes v2. Start receiving the join snapshot
+        // now; the extra box-page request must not delay a streaming answer.
+        onV2 = true;
+        onRead.current?.('page');
+        goV2();
+        await loadLive();
+        busy = false;
+        return;
+      }
       const live = await loadLive();
       busy = false;
       if (stopped) return;
-      const page = answer === 'missing' ? null : answer;
-      onV2 = !!page || live;
+      onV2 = live;
       // The box's page is a page too: a new session the API holds no log for reads as one.
       onRead.current?.(onV2 ? 'page' : answer === 'missing' ? 'missing' : 'failed');
       if (onV2) {
@@ -419,11 +496,8 @@ export function useSessionLogSync(
       join({
         onControl: (frame) => {
           if (frame.type !== 'kortix.control.turn') return;
-          const payload = frame.payload as { turns?: { turn_token?: string }[]; last_ended?: { turn_token?: string } | null } | null;
-          const ended = payload?.last_ended?.turn_token ?? null;
-          const seen = lastEnded;
-          lastEnded = ended;
-          if (seen !== undefined && ended !== seen) return void attempt();
+          if (endedTurn(frame)) return void attempt();
+          const payload = frame.payload as { turns?: { turn_token?: string }[] } | null;
           // A running turn (also one the state at join holds): its user message frame may have
           // passed before this tab's runtime connection, which is live-only. pi journals while a
           // turn runs, so the page holds that message after the next mid-turn post.
@@ -482,6 +556,10 @@ const SESSION_LOG_MISSING_DELAYS_MS = [3_000, 5_000, 10_000, 15_000, 30_000];
 const SESSION_LOG_MID_TURN_READ_MS = 6_000;
 /** The longest wait a `Retry-After` can set. */
 const SESSION_LOG_RETRY_MAX_MS = 60_000;
+/** Consecutive failed box-page reads before the box page is skipped for a while (`loadLive`). */
+const SESSION_LOG_LIVE_FAILURES = 3;
+/** How long a box whose page failed three times in a row is not asked again; the API page is the fallback. */
+const SESSION_LOG_LIVE_SKIP_MS = 10 * 60_000;
 
 function scheduleRetry(run: () => void, ms: number): () => void {
   const timer = setTimeout(run, ms);

@@ -29,7 +29,7 @@ import { useProjectSessionConnect } from '@/lib/session/project-connect';
 import { markComposerFocus } from '@/lib/onboarding/composer-handoff';
 import { useProjectHomeSend } from '@/components/session/use-project-home-send';
 import { useProjectStack } from '@/components/session/use-project-stack';
-import { View } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { Stack, useIsFocused, useLocalSearchParams } from 'expo-router';
 
 import { useSandboxContext } from '@/contexts/SandboxContext';
@@ -42,6 +42,7 @@ import { useTabStore, PAGE_TABS } from '@/stores/tab-store';
 import { useLastProjectStore } from '@/stores/last-project-store';
 import {
   PROJECT_ACCOUNT_ROUTE,
+  PROJECT_ARTIFACTS_ROUTE,
   PROJECT_FILES_ROUTE,
   PROJECT_HOME_ROUTE,
   PROJECT_INBOX_ROUTE,
@@ -53,12 +54,19 @@ import {
 } from '@/components/session/ProjectRoutes';
 import { FloatingMenuButton } from '@/components/session/FloatingMenuButton';
 import {
+  DRAWER_SWAP_PARAMS,
+  drawerPageViewKey,
+  drawerRowSwapKey,
+  drawerSwapApplies,
   pageBackMove,
+  projectRouteAnimation,
   drawerSessionRowMove,
   drawerThreadMove,
   shownProjectSessionId,
   projectEdgeGesture,
   projectViewKey,
+  type DrawerPageId,
+  type ProjectDrawerRoute,
   type SubPageId,
 } from '@/lib/session/project-stack';
 import { ProjectSwitcherSheet } from '@/components/projects/ProjectSwitcherSheet';
@@ -79,6 +87,7 @@ import {
   type SessionActionsSheetRef,
 } from '@/components/session/SessionActionsSheet';
 import { Drawer } from 'react-native-drawer-layout';
+import { DrawerPeekCard, useDrawerBackdropColor } from '@/components/session/DrawerPeekCard';
 import { haptics } from '@/lib/haptics';
 import {
   useProject,
@@ -86,14 +95,30 @@ import {
   useProjectSessions,
 } from '@/lib/projects/hooks';
 import { DRAWER_CLOSE, DRAWER_OPEN } from '@/lib/ui/drawer-springs';
+import type { LegacyPanGesture } from 'react-native-gesture-handler';
+import {
+  DRAWER_OPEN_ACTIVATION,
+  DRAWER_OPEN_FAIL_LEFT,
+  drawerSwipeEdgeWidth,
+  projectDrawerWidth,
+} from '@/lib/ui/drawer-layout';
 import { useReviewNeedsYou } from '@/lib/review/use-review';
 import { needsYouBySession } from '@/lib/session/needs-you';
 import { runtimeSessionsOf, sessionParentId } from '@kortix/sdk';
+import { ArtifactViewerSheet } from '@/components/artifacts/ArtifactViewerSheet';
 import { KortixProjectProvider, useNotificationInbox, useSessionsNeedingInput } from '@kortix/sdk/react';
 import { NOTIFICATION_INBOX_LIMIT } from '@/lib/notifications/inbox';
 import { carryOverLegacyKinds } from '@/lib/notifications/registration';
 import { useSavedCopy } from '@/hooks/useSavedCopy';
+import { preloadWhenIdle } from '@/lib/ui/idle-preload';
 import type { ProjectSession } from '@/lib/projects/projects-client';
+
+/**
+ * The drawer's pan gesture, as `configureGestureHandler` receives it. The
+ * library types it as gesture-handler 3's `PanGesture`, but it builds it with
+ * the builder API (`Gesture.Pan()`): at runtime it is a `LegacyPanGesture`.
+ */
+type DrawerPan = Parameters<NonNullable<React.ComponentProps<typeof Drawer>['configureGestureHandler']>>[0];
 
 // ── Tool pages (reused verbatim from the legacy page ternary) ──
 
@@ -131,10 +156,34 @@ const Pages = {
   },
 };
 
+/**
+ * The drawer's pages, most used first. Each is required on its first render,
+ * and Metro has no inline requires, so a cold page evaluated its whole module
+ * graph inside the drawer tap. ProjectScreen evaluates them in idle time
+ * once the project has settled (`preloadWhenIdle`); the tap then only
+ * renders. Static `require` strings: Metro resolves them at build time.
+ */
+const DRAWER_PAGE_MODULES: ReadonlyArray<() => unknown> = [
+  () => require('@/components/session/ProjectSessionsPage'),
+  () => require('@/components/pages/FilesNavPage'),
+  () => require('@/components/pages/ReviewPage'),
+  () => require('@/components/artifacts/ArtifactsPage'),
+  () => require('@/components/pages/AppsPage'),
+  () => require('@/components/notifications/InboxPage'),
+  () => require('@/components/settings/AccountPage'),
+];
+/** Wait this long after the project mounts: its own first render and reads come first. */
+const DRAWER_PAGE_PRELOAD_DELAY_MS = 1_500;
+
 // ─── Module-local helpers (copied verbatim from ProjectScreenLegacy) ─────────
 
 
 // ─── Main screen ────────────────────────────────────────────────────────────
+
+/** A covering route's options: a drawer swap shows it with no push slide. */
+const coveringRouteOptions = ({ route }: { route: { params?: object } }) => ({
+  animation: projectRouteAnimation(route.params),
+});
 
 /** Shared empty list: a fresh `[]` per render would re-render the thread. */
 const EMPTY_SUB_AGENTS: ProjectSession[] = [];
@@ -191,6 +240,9 @@ export function ProjectScreen() {
   const openSwitcher = useCallback(() => setSwitcherOpen(true), []);
   const closeSwitcher = useCallback(() => setSwitcherOpen(false), []);
   const { data: project } = useProject(projectId);
+
+  // The drawer's pages load in idle time, not inside the first tap on each.
+  useEffect(() => preloadWhenIdle(DRAWER_PAGE_MODULES, DRAWER_PAGE_PRELOAD_DELAY_MS), []);
 
   // This phone's opt-outs reach the user's record once (KRTX-1742). A no-op
   // after the first success (`legacyKindsMigrated`).
@@ -345,12 +397,73 @@ export function ProjectScreen() {
   // Left drawer open state (ProjectLeftDrawer).
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Stable handlers, so a memoized SessionPage skips parent re-renders.
-  const openDrawer = useCallback(() => setDrawerOpen(true), []);
+  // The drawer swap a tap recorded (below) and the view the store shows.
+  const drawerSwapRef = useRef<string | null>(null);
+  const viewKeyRef = useRef<string | null>(null);
+  // A drawer swap recorded by an earlier tap never outlives the next open.
+  const openDrawer = useCallback(() => {
+    drawerSwapRef.current = null;
+    setDrawerOpen(true);
+  }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  // The peek-card drawer's geometry (lib/ui/drawer-layout): the sidebar width
+  // and the swipe area follow the window (rotation, iPad split view) and the
+  // route on top.
+  const { width: windowWidth } = useWindowDimensions();
+  const drawerWidth = projectDrawerWidth(windowWidth);
+  const drawerBackdrop = useDrawerBackdropColor();
+  const [topRouteName, setTopRouteName] = useState<string>(PROJECT_HOME_ROUTE);
+  const drawerStyle = useMemo(
+    () => ({
+      width: drawerWidth,
+      backgroundColor: 'transparent',
+      shadowColor: 'transparent',
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
+    }),
+    [drawerWidth]
+  );
+  // Closed, the pan starts only on a rightward move: a leftward swipe on the
+  // page (a code block scrolled forward, a row's swipe action) never opens
+  // the drawer. Open, the library's default (5pt either way) closes it.
+  const configureDrawerPan = useCallback(
+    (pan: DrawerPan) =>
+      drawerOpen
+        ? pan
+        : ((pan as unknown as LegacyPanGesture)
+            .activeOffsetX([-Number.MAX_SAFE_INTEGER, DRAWER_OPEN_ACTIVATION])
+            .failOffsetX(DRAWER_OPEN_FAIL_LEFT) as unknown as DrawerPan),
+    [drawerOpen]
+  );
 
   const { topRouteRef, topNavigationRef, edgeGesture, setEdgeGesture, replaceProject, returnHome, navigateProjectRoute, openSubPage } = useProjectStack(
     projectId, goHome, returnToThread, drawerOpen, setDrawerOpen,
   );
+  // A drawer move swaps its screen in place: no push slide under the closing
+  // drawer (`DRAWER_SWAP_PARAM`). A drawer route carries the param itself. A
+  // store change (Review, Apps, a session row) records the view it opens
+  // (`projectViewKey`) right before it; the home or covering route that then
+  // pushes the view swaps only when the store shows exactly that view
+  // (`takeDrawerSwap`, `drawerSwapApplies`). Read once, and dropped when the
+  // drawer opens again: a store change that moved no route (a thread already
+  // open swaps its content) never reaches a later composer or Sessions push.
+  const takeDrawerSwap = useCallback(() => {
+    const swap = drawerSwapApplies(drawerSwapRef.current, viewKeyRef.current);
+    drawerSwapRef.current = null;
+    return swap;
+  }, []);
+  const navigateDrawerRoute = useCallback(
+    (route: ProjectDrawerRoute, routeParams?: Record<string, string>) =>
+      navigateProjectRoute(route, { ...routeParams, ...DRAWER_SWAP_PARAMS }),
+    [navigateProjectRoute]
+  );
+  const openDrawerPage = useCallback((pageId: DrawerPageId) => {
+    drawerSwapRef.current = drawerPageViewKey(pageId);
+    useTabStore.getState().navigateToPage(pageId);
+  }, []);
+
   // The switcher's "Workspace settings": the settings page, pushed as a
   // sub-page (back returns to where the user was).
   const openWorkspaceSettings = useCallback(() => openSubPage('page:settings'), [openSubPage]);
@@ -440,6 +553,9 @@ export function ProjectScreen() {
         shownSessionId: shownSessionIdRef.current,
         activeRuntimeId: shownRuntimeIdRef.current,
       });
+      // Only an open moves a route: a focus, queue or close swaps nothing, so
+      // it records no drawer swap for a later, non-drawer push to match.
+      drawerSwapRef.current = drawerRowSwapKey(move, ps.session_id);
       if (move === 'open') {
         // A sub-session row: open its parent, then show the sub-session.
         const rootId = ps.runtime_session_id;
@@ -457,11 +573,15 @@ export function ProjectScreen() {
     [handleOpenProjectSession, navigateToSession]
   );
   const openSessionFromDrawer = useCallback(
-    (ps: ProjectSession) => openThreadFromDrawer(ps, ps.runtime_session_id ?? null),
+    (ps: ProjectSession) => {
+      openThreadFromDrawer(ps, ps.runtime_session_id ?? null);
+    },
     [openThreadFromDrawer]
   );
   const openSubsessionFromDrawer = useCallback(
-    (ps: ProjectSession, childId: string) => openThreadFromDrawer(ps, childId),
+    (ps: ProjectSession, childId: string) => {
+      openThreadFromDrawer(ps, childId);
+    },
     [openThreadFromDrawer]
   );
 
@@ -488,7 +608,8 @@ export function ProjectScreen() {
         onNewSession={startNewSession}
         onOpenProjectSession={openSessionFromDrawer}
         onOpenSubsession={openSubsessionFromDrawer}
-        onNavigateRoute={navigateProjectRoute}
+        onNavigateRoute={navigateDrawerRoute}
+        onOpenPage={openDrawerPage}
         onSessionActions={openSessionActions}
         onOpenSwitcher={openSwitcher}
         onClose={closeDrawer}
@@ -506,7 +627,8 @@ export function ProjectScreen() {
       startNewSession,
       openSessionFromDrawer,
       openSubsessionFromDrawer,
-      navigateProjectRoute,
+      navigateDrawerRoute,
+      openDrawerPage,
       openSessionActions,
       openSwitcher,
       closeDrawer,
@@ -525,6 +647,7 @@ export function ProjectScreen() {
     activeSessionId,
     connectingSessionId: connectingProjectSessionId,
   });
+  viewKeyRef.current = viewKey;
 
   // The thread renders only once the context holds its sandbox. Until then it
   // shows the connecting view, so SessionPage never starts its sync and
@@ -812,6 +935,7 @@ export function ProjectScreen() {
       openProjectSession: handleOpenProjectSession,
       openDrawer,
       isDrawerOpen: drawerOpen,
+      takeDrawerSwap,
       openSessionActions,
       openSubPage,
       renderSubPage,
@@ -829,6 +953,7 @@ export function ProjectScreen() {
       handleOpenProjectSession,
       openDrawer,
       drawerOpen,
+      takeDrawerSwap,
       openSessionActions,
       openSubPage,
       renderSubPage,
@@ -844,24 +969,25 @@ export function ProjectScreen() {
         open={drawerOpen}
         onOpen={openDrawer}
         onClose={closeDrawer}
+        // The ChatGPT-style peek card (Jay, 2026-11-11): the sidebar, 82% of
+        // the window (max 360pt), on the chrome surface; the page slides
+        // right by that width and turns into a rounded card (DrawerPeekCard).
+        // The overlay is transparent: a tap on the peek strip closes.
         drawerType="slide"
-        drawerStyle={{
-          width: '100%',
-          backgroundColor: 'transparent',
-          shadowColor: 'transparent',
-          shadowOpacity: 0,
-          shadowRadius: 0,
-          shadowOffset: { width: 0, height: 0 },
-          elevation: 0,
-        }}
+        drawerStyle={drawerStyle}
+        style={{ backgroundColor: drawerBackdrop }}
         overlayStyle={{ backgroundColor: 'transparent' }}
-        // The left edge opens the drawer on every project route except a
-        // sub-page, where it is the iOS swipe-back: one edge gesture, one
-        // meaning per screen. Off while a root screen (Billing, a settings
-        // page) covers the project.
+        overlayAccessibilityLabel="Close menu"
+        // A rightward swipe opens the drawer on every project route except a
+        // sub-page, where the left edge is the iOS swipe-back: one edge
+        // gesture, one meaning per screen. Off while a root screen (Billing, a
+        // settings page) covers the project. It starts anywhere on the page,
+        // except on a thread (`view`): its left third only, so content that
+        // scrolls sideways keeps the rest (`drawerSwipeEdgeWidth`).
         swipeEnabled={isFocused && edgeGesture === 'drawer'}
-        swipeEdgeWidth={80}
+        swipeEdgeWidth={drawerSwipeEdgeWidth(topRouteName, windowWidth)}
         swipeMinDistance={30}
+        configureGestureHandler={configureDrawerPan}
         // A tap opens on the iOS sheet curve (420ms, 90% by ~154ms) and closes
         // on ease-out-quad (320ms, 80% by ~170ms); a swipe release keeps a
         // critically damped spring and its
@@ -873,6 +999,7 @@ export function ProjectScreen() {
         openSpringConfig={DRAWER_OPEN}
         closeSpringConfig={DRAWER_CLOSE}
         renderDrawerContent={renderDrawer}>
+        <DrawerPeekCard>
         {/* The SDK's project scope: its runtime hooks read this project from it. */}
         <KortixProjectProvider projectId={projectId}>
         <ProjectRouteProvider value={projectRoute}>
@@ -902,18 +1029,26 @@ export function ProjectScreen() {
                 topRouteRef.current = route.name;
                 topNavigationRef.current = routeNavigation;
                 setEdgeGesture(projectEdgeGesture(route.name));
+                setTopRouteName(route.name);
               },
             })}>
             <Stack.Screen name={PROJECT_HOME_ROUTE} />
-            <Stack.Screen name={PROJECT_VIEW_ROUTE} />
-            <Stack.Screen name={PROJECT_SESSIONS_ROUTE} />
-            <Stack.Screen name={PROJECT_FILES_ROUTE} />
-            <Stack.Screen name={PROJECT_ACCOUNT_ROUTE} />
-            <Stack.Screen name={PROJECT_INBOX_ROUTE} />
+            {/* A route the drawer opened swaps in with no push slide, and
+                leaves the same way (`projectRouteAnimation`). */}
+            <Stack.Screen name={PROJECT_VIEW_ROUTE} options={coveringRouteOptions} />
+            <Stack.Screen name={PROJECT_SESSIONS_ROUTE} options={coveringRouteOptions} />
+            <Stack.Screen name={PROJECT_FILES_ROUTE} options={coveringRouteOptions} />
+            <Stack.Screen name={PROJECT_ARTIFACTS_ROUTE} options={coveringRouteOptions} />
+            <Stack.Screen name={PROJECT_ACCOUNT_ROUTE} options={coveringRouteOptions} />
+            <Stack.Screen name={PROJECT_INBOX_ROUTE} options={coveringRouteOptions} />
             <Stack.Screen name={PROJECT_PAGE_ROUTE} options={{ gestureEnabled: true }} />
           </Stack>
         </ProjectRouteProvider>
+        {/* One artifact viewer for the project: the Artifacts page's rows and a
+            thread's artifact links open it over the screen they are on. */}
+        <ArtifactViewerSheet projectId={projectId} />
         </KortixProjectProvider>
+        </DrawerPeekCard>
       </Drawer>
 
       {/* One session actions sheet (COR-140 Task 5): the thread's "···", the

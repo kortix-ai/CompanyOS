@@ -19,7 +19,7 @@
  * the change once, in terms of sessions, and never names a cache shape.
  */
 
-import type { Query, QueryClient } from '@tanstack/react-query';
+import { notifyManager, type Query, type QueryClient } from '@tanstack/react-query';
 import { sessionParentId, type ProjectSession } from '../core/rest/projects-client/sessions';
 import { qk } from './query-keys';
 
@@ -99,6 +99,8 @@ function sessionBelongsInList(projectId: string, query: Query, session: ProjectS
   if (!filters.startedBy) return true;
   const isMember = (session.initiator?.type ?? 'member') === 'member';
   if (filters.startedBy === 'automated') return !isMember;
+  // KRTX-4705: `humans` takes every member-started row, mine or shared.
+  if (filters.startedBy === 'humans') return isMember;
   return isMember && (filters.startedBy === 'me') === (session.is_owner !== false);
 }
 
@@ -182,13 +184,21 @@ export function updateCachedWorkspaceSessions(
   projectId: string,
   update: ProjectSessionsUpdater,
 ): void {
-  queryClient.setQueriesData(
-    {
-      queryKey: qk.project.sessionsScope(projectId),
-      predicate: (query) => isSessionCacheKey(projectId, query),
-    },
-    (cached: unknown) => applyToCachedSessionShape(cached, update),
-  );
+  const entries = queryClient.getQueriesData({
+    queryKey: qk.project.sessionsScope(projectId),
+    predicate: (query) => isSessionCacheKey(projectId, query),
+  });
+  // One notification for every entry written, as `setQueriesData` gave.
+  notifyManager.batch(() => {
+    for (const [key, cached] of entries) {
+      // Only an entry the update changed is written. `setQueryData` stamps
+      // `dataUpdatedAt` even for the same object, which keeps a list from going
+      // stale and restarts its `refetchInterval` — a verdict re-sent every 20 s
+      // held off the sidebar's 60 s poll for good (F-025).
+      const next = applyToCachedSessionShape(cached, update);
+      if (next !== cached) queryClient.setQueryData(key, next);
+    }
+  });
 }
 
 /** @deprecated Use `updateCachedWorkspaceSessions`. Kept permanently. */

@@ -1,9 +1,9 @@
 # Scheduling playbook
 
 Read this when you decide whether and how to schedule work, every time you
-start something whose result comes later, and before a long job. The decision tables are in
-`SKILL.md` → `<scheduling>`; trigger fields are in `kortix/kortix-yaml.md`
-→ triggers.
+start something whose result comes later, and before a long job. The decision
+tables and `403 feature_disabled` are in `SKILL.md` → `<scheduling>`; trigger fields
+are in `kortix/kortix-yaml.md` → triggers.
 
 ## Follow-through
 
@@ -69,11 +69,6 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
 teammate or a workflow (each reports back to you by itself), for a question
 to the person in this chat (ask it now, then end the turn), or for anything
 the person said not to track.
-
-**Loops off.** `kortix loop` answers `403 feature_disabled`: tell the person
-Loops are off and that a workspace admin turns them on (`kortix workspaces
-features enable reminders`). Meanwhile, a one-off `at` trigger starts a fresh
-session at the time; put the full context in its prompt.
 
 ### Worked example: quote requests to 12 printers
 
@@ -187,6 +182,23 @@ and prompts its agent as a teammate would, or calls one of the workspace's Apps
 (`run: { app, path }`: no session, no model). A **loop** is a trigger that
 wakes the session that created it: a runtime trigger, stored in the database.
 `kortix triggers ls` lists both.
+
+## Prompt templates
+
+`run.prompt` is a template over the fire's payload. `{{ path.to.value }}`
+inserts one value (an object or list renders as JSON); `{{ payload }}`
+inserts the whole payload as JSON. The roots:
+
+| Source | Roots |
+| --- | --- |
+| every fire | `trigger` (`slug`, `type`), `fired_at` |
+| webhook | `body` (the parsed JSON body), `headers` (`content_type`, `user_agent`, `forwarded_for`) |
+| event, App event | `event` (`event.data.*`) |
+| change request | `change_request` (`number`, `title`, `base_ref`, …) |
+| manual fire (`kortix triggers fire`) | `source`, `actor`, `message`; `--payload` deep-merges over it |
+
+`kortix triggers fire <slug> --dry-run --payload '<json>'` prints the
+rendered prompt without starting anything.
 
 ## React to an outside system: the first that fits
 

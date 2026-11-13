@@ -67,7 +67,7 @@
     "oauthWaiting": "In attesa di autorizzazione…",
     "oauthFinishing": "Accesso effettuato. Salvataggio dell’account…",
     "oauthExpired": "Autorizzazione scaduta. Riprova.",
-    "oauthPrivateDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. I nuovi workspace restano privati finché non li condividi.",
+    "oauthPrivateDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. I nuovi account sono condivisi con ogni membro del workspace. Puoi renderne uno privato.",
     "chatGptSubscription": "Abbonamento ChatGPT",
     "manageChatGptAccounts": "Gestisci account ChatGPT",
     "connect": "Connetti",
@@ -95,7 +95,7 @@
     "deleteError": "Impossibile eliminare il segreto",
     "accessError": "Impossibile modificare l’accesso",
     "sharedTitle": "Connessioni ai provider",
-    "sharedDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. I nuovi restano privati finché non li condividi. Scegli quali usa ogni sessione.",
+    "sharedDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. I nuovi sono condivisi con ogni membro del workspace. Puoi renderne uno privato. Scegli quali usa ogni sessione.",
     "legacyProjectKey": "Chiave del workspace esistente · Usata quando la sessione non ha una selezione di chiavi",
     "keyCount": "{count, plural, one {# chiave} other {# chiavi}}",
     "providerKeysFor": "Chiavi API di {provider}",
@@ -106,16 +106,14 @@
     "access": "Accesso",
     "actions": "Azioni",
     "coolingDown": "In pausa dopo il limite",
-    "usageFiveHour": "5 ore",
-    "usageWeekly": "Settimanale",
-    "usageWeeklyModel": "Settimanale · {model}",
-    "usagePercent": "{percent}% usato",
-    "usagePercentResets": "{percent}% · si azzera {time}",
-    "usageLimitReached": "Limite raggiunto",
-    "usageLimitResets": "Limite raggiunto · si azzera {time}",
-    "usageNotSeen": "L’utilizzo appare dopo la prima richiesta",
-    "usageObserved": "Aggiornato {time}",
-    "usageAriaLabel": "{window}: {percent}% usato",
+    "keyVerified": "Verificata: {provider} ha accettato questa chiave",
+    "keyInvalid": "{provider} ha rifiutato questa chiave: {message}",
+    "keyUnchecked": "Non verificata: {message}",
+    "checkKey": "Verifica di nuovo",
+    "savedVerified": "Chiave salvata e verificata",
+    "savedInvalid": "Chiave salvata, ma {provider} l’ha rifiutata: {message}",
+    "checkError": "Impossibile verificare la chiave",
+    "openProviderInModels": "Apri {provider} in Modelli",
     "member": "membro",
     "members": "membri",
     "actionsFor": "Azioni per {label}",
@@ -155,6 +153,9 @@
     "providerKeys": "Chiavi fornitore",
     "chooseSharedKeys": "Scegli le chiavi condivise che questa sessione può usare.",
     "sessionKeyPool": "Pool di chiavi della sessione",
+    "subscriptionSwitcher": "Abbonamento",
+    "subscriptionSwitcherDefault": "Ruota tra tutti gli abbonamenti collegati",
+    "subscriptionSwitcherUse": "Usa {label} per questa sessione",
     "sharedSessionKeys": "Questa sessione è condivisa con il workspace, quindi qui funzionano solo le chiavi condivise con tutto il workspace. Le chiavi assegnate a te funzionano nelle tue sessioni private.",
     "promptedSessionKeys": "Un altro membro ha scritto in questa sessione, quindi non agisce più per il suo proprietario. Qui funzionano solo le chiavi condivise con tutto il workspace.",
     "noPersonSessionKeys": "Questa sessione non agisce per nessuna persona: è iniziata prima delle chiavi personali o senza supervisione. Qui funzionano solo le chiavi condivise con tutto il workspace. Avvia una nuova sessione per usare le tue chiavi.",
@@ -176,7 +177,7 @@
     "claudeAccounts": "Account Claude",
     "noClaudeAccounts": "Ancora nessun account Claude",
     "connectClaude": "Accedi con Claude",
-    "claudeOauthPrivateDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. I nuovi workspace restano privati finché non li condividi.",
+    "claudeOauthPrivateDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. I nuovi account sono condivisi con ogni membro del workspace. Puoi renderne uno privato.",
     "claudeOauthCreationDescription": "Accedi con il tuo account Claude Pro o Max. Kortix conserva l’accesso cifrato e non lo mostra mai.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Account Claude collegato",
@@ -184,7 +185,10 @@
     "claudeConnectFailed": "L’accesso a Claude non è stato completato. Riprova.",
     "claudeReconnectDescription": "Accedi di nuovo con Claude. L’account mantiene nome, accesso e selezioni di sessione.",
     "claudeAccountLabelPlaceholder": "es. Il mio account Claude",
-    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?"
+    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?",
+    "sharedOnlyYouDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. Solo tu puoi usare quelli che aggiungi. Un responsabile del workspace può condividerne uno. Scegli quali usa ogni sessione.",
+    "oauthOnlyYouDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. Solo tu puoi usare gli account che aggiungi.",
+    "claudeOauthOnlyYouDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. Solo tu puoi usare gli account che aggiungi."
   },
   "secrets": {
     "undecryptable": {
@@ -336,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Caricamento delle opzioni del repository…",
       "managedUnavailable": "I repository gestiti da Kortix non sono disponibili in questa istanza. Un amministratore della piattaforma lo configura nella console di amministrazione.",
+      "githubAfterCreate": "Per usare il tuo GitHub nei prossimi workspace, collegalo in Impostazioni workspace › Git quando questo esiste.",
       "installationUnreachable": "Questa connessione GitHub non funziona più. Ricollegala per elencare i repository.",
       "reconnect": "Ricollega nelle impostazioni Git",
       "managedImportLabel": "Importa un repository gestito esistente",
@@ -704,6 +709,7 @@
       "gracePeriodDescription": "L’eliminazione avviene alla data prevista. Puoi annullarla prima.",
       "immediateLabel": "Elimina immediatamente",
       "immediateDescription": "Il tuo account e i suoi dati verranno eliminati immediatamente. Questa operazione non può essere annullata.",
+      "noWorkspaceImmediateOnly": "Non appartieni a nessuno spazio di lavoro, quindi non c'è un periodo di attesa: il tuo account viene eliminato subito.",
       "typeDeleteToConfirm": "Digita \"delete\" per confermare",
       "keepAccount": "Mantieni l'account",
       "processing": "Elaborazione...",
@@ -726,7 +732,7 @@
         "left": "Lasci",
         "blockers": "Sei l'unico proprietario e altre persone ci lavorano. Trasferisci la proprietà o elimina il workspace.",
         "members": "{count, plural, one {# membro} other {# membri}}",
-        "nothing": "Non appartieni a nessun workspace. Viene eliminato solo il tuo accesso.",
+        "nothing": "Con il tuo account non viene eliminato né abbandonato nessuno spazio di lavoro.",
         "blockersTitle": "Trasferiscili prima"
       }
     },
@@ -801,14 +807,8 @@
         "noResults": "Nessun tema trovato"
       },
       "densities": {
-        "normal": {
-          "label": "Normale",
-          "description": "I passaggi e il ragionamento vengono mostrati in tempo reale mentre Kortix lavora."
-        },
-        "minimal": {
-          "label": "Minima",
-          "description": "Una sola riga di stato finché non la espandi."
-        }
+        "normal": "Normale",
+        "minimal": "Minima"
       },
       "wallpapers": {
         "dither": "Retino",
@@ -1269,10 +1269,6 @@
           "name": "Segreti protetti dalla rete",
           "description": "Controlla quali strumenti e destinazioni possono ricevere i segreti del workspace."
         },
-        "pooled_provider_secrets": {
-          "name": "Segreti del provider condivisi",
-          "description": "I membri collegano i propri abbonamenti ChatGPT e chiavi dei provider, li condividono quando serve e scelgono quali usa ogni sessione."
-        },
         "reminders": {
           "name": "Cicli",
           "description": "Consente ad agenti e persone di programmare controlli su una sessione, una volta o in modo ricorrente. Ogni attivazione richiama quella sessione. Aggiunge i cicli all’elenco dei Trigger, l’indicatore dei cicli della sessione e `kortix loop`."
@@ -1315,7 +1311,7 @@
         },
         "voice_call": {
           "name": "Chiamate vocali",
-          "description": "Chiama un agente dalla sua pagina (Personalizza → Agenti) e parlagli. Una chiamata è una sessione a sé di quell'agente: ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat di quella sessione."
+          "description": "Chiama un agente da una casella di messaggio vuota, dove il pulsante di invio diventa un pulsante di chiamata, o dalla sua pagina (Personalizza → Agenti), e parlagli. In una sessione la chiamata va all'agente di quella sessione; dalla home dello spazio di lavoro avvia una nuova sessione. L'agente ti sente, risponde a voce e vede lo schermo che condividi, e la conversazione è la chat della sessione."
         },
         "shared_drives": {
           "name": "Drive condivisi",
@@ -1332,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Con gli Spazi attivi, uno spazio può sorvegliarsi da solo: attiva Proattivo nei suoi dettagli e un agente legge cosa succede (thread conclusi, domande rimaste aperte, persone che entrano) e scrive in chat solo quando conta: un risultato da condividere, una decisione da prendere o qualcosa in ritardo. Può anche avviare un thread che fa il lavoro. Riepilogo giornaliero facoltativo alle 9:00."
+        },
+        "program_agents": {
+          "name": "Agenti programma",
+          "description": "Un agente che esegue il tuo codice invece di un modello. Assegna a un agente `run: <command>` in kortix.yaml: ogni turno esegue quel comando nella sandbox della sessione, con workspace, secret e accessi dell'agente. Il messaggio o i dati del trigger sono l'input, e ciò che il comando stampa è la risposta."
         }
       },
       "channelsSwitch": {
@@ -1393,7 +1393,15 @@
       "history": "Cronologia",
       "historyDescription": "Il costo di ogni sessione e tutti i crediti aggiunti o spesi.",
       "openLedger": "Apri registro",
-      "unit": "{count, plural, one {credito} other {crediti}}"
+      "unit": "{count, plural, one {credito} other {crediti}}",
+      "dailySpend": "Spesa giornaliera",
+      "heatLess": "Meno",
+      "heatMore": "Più",
+      "busiestDay": "{name}: {amount} il {day}, il giorno di spesa più alta",
+      "noSpendInRange": "{name}: nessuna spesa in questo periodo",
+      "idleWorkspaces": "{count, plural, one {# workspace} other {# workspace}} senza spesa in questo periodo",
+      "showIdle": "Mostra",
+      "hideIdle": "Nascondi"
     },
     "tokens": {
       "keyRevoked": "Chiave API revocata",
@@ -1727,7 +1735,7 @@
         "email": "E-mail",
         "scheduled": "Programmato",
         "webhook": "Webhook",
-        "event": "Evento app",
+        "event": "Evento del connettore",
         "manual": "Manuale",
         "all": "Tutti"
       },
@@ -2089,7 +2097,17 @@
       "claudePlan": "Piano Pro o Max",
       "connectModel": "Collega modello",
       "imagesUnsupported": "{model} non può leggere le immagini",
-      "imagesUnsupportedHint": "rimuovile o scegli un altro modello"
+      "imagesUnsupportedHint": "rimuovile o scegli un altro modello",
+      "noModelUpgradeReason": "Nessun modello: passa al piano Credits o aggiungi la tua chiave del provider.",
+      "noModelKeyReason": "Nessun modello: aggiungi la tua chiave del provider.",
+      "noModelUpgradePlan": "Aggiorna piano",
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "stepTitle": "Collega un modello",
+      "stepBody": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, oppure aggiungi una chiave del provider.",
+      "stepBodyUpgrade": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, aggiungi una chiave del provider, oppure passa al piano Credits per i modelli Kortix.",
+      "stepBodyMember": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude o la tua chiave del provider, oppure chiedi a chi gestisce questo workspace di collegare un modello per tutti.",
+      "stepThisWorkspace": "questo workspace",
+      "stepBack": "Torna ai workspace"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvato",
@@ -2154,6 +2172,7 @@
       "agentWorkingOnFor": "sta lavorando a {task} · {time}",
       "somethingWrong": "Qualcosa è andato storto",
       "notSent": "Non inviato",
+      "computerDisconnected": "Il computer di questa sessione è disconnesso.",
       "retry": "Riprova",
       "resume": "Riprendi",
       "agentIsWorking": "{agent} sta lavorando",
@@ -2334,15 +2353,15 @@
     "hintNewLine": "Premi Shift+Enter per una nuova riga",
     "hintSettings": "Premi {modifier}, per aprire le impostazioni",
     "hintCompact": "Chiedi di compattare la sessione quando diventa lunga",
-    "queueList": "Queue List",
+    "queueList": "Messaggi in attesa",
     "quoteCount": "{count, plural, one {# citazione} other {# citazioni}}",
     "expandQuotes": "Espandi citazioni",
     "collapseQuotes": "Comprimi citazioni",
     "stopUnconfirmed": "Impossibile confermare l’arresto. L’agente potrebbe essere ancora in esecuzione. Riprova.",
     "stoppedBy": "Interrotto da {name}",
-    "queued": "In coda",
+    "queued": "In attesa",
     "queuedFiles": "{count, plural, one {# file} other {# file}}",
-    "queuedCount": "{count} in coda",
+    "queuedCount": "{count} in attesa",
     "editingQueued": "In modifica",
     "queuedActions": "Azioni del messaggio",
     "steerNextStep": "Letto al passo successivo",
@@ -2351,11 +2370,11 @@
     "steerFallbackUnsupported": "Attende questo turno. Questa sessione non accetta messaggi durante un turno.",
     "steerFallbackNotPrompter": "Attende questo turno. Lo ha avviato un altro membro.",
     "steerFallbackTurnEnded": "Viene eseguito come turno a sé. Il turno è terminato prima.",
-    "stopAndSend": "Interrompi e invia",
-    "stopAndSendFailed": "Impossibile interrompere e inviare quel messaggio",
+    "stopAndSend": "Invia ora",
+    "stopAndSendFailed": "Impossibile inviare ora quel messaggio",
     "submitEdit": "Invia",
-    "collapseQueue": "Comprimi coda",
-    "expandQueue": "Espandi coda",
+    "collapseQueue": "Comprimi i messaggi in attesa",
+    "expandQueue": "Espandi i messaggi in attesa",
     "myKortixRoutes": "Affida ogni attività all’agente giusto",
     "chatInputReset": "Reset"
   },
@@ -2714,8 +2733,8 @@
           "note": "Inizia con veri crediti sandbox.",
           "f1": "500 crediti / mese nel tuo primo workspace",
           "f2": "Nessuna carta richiesta",
-          "f3": "Usa la tua chiave API per qualsiasi modello premium",
-          "f4": "Collega il tuo abbonamento ChatGPT"
+          "f3": "I modelli funzionano con la tua chiave API o il tuo abbonamento ChatGPT",
+          "f4": "I modelli gestiti da Kortix richiedono Credits"
         },
         "credits": {
           "name": "Crediti",
@@ -3008,6 +3027,8 @@
         "title": "Controlla la tua email",
         "description": "Abbiamo inviato un link a <address>{email}</address>. Aprilo per continuare.",
         "confirmDescription": "Abbiamo inviato un'email di conferma a <address>{email}</address>. Conferma la tua email per continuare.",
+        "unknownDescription": "Ti abbiamo inviato un'e-mail a <address>{email}</address> — un link di accesso o un link di conferma per un nuovo account.",
+        "closedDescription": "Se <address>{email}</address> ha un account, il suo link di accesso è in arrivo.",
         "notReceived": "Non hai ricevuto il link?",
         "confirmNotReceived": "Non hai ricevuto l'email di conferma?",
         "resendIn": "Invia di nuovo tra {seconds}",
@@ -3411,9 +3432,6 @@
     },
     "inbox": {
       "title": "Posta in arrivo",
-      "viewReview": "Review",
-      "viewNotifications": "Notifiche",
-      "viewLabel": "Vista della posta in arrivo",
       "description": "Aggiornamenti su sessioni, trigger e artefatti che ti riguardano, da tutti i workspace.",
       "unreadLabel": "Posta in arrivo: {count} non lette",
       "unreadCount": "{count} non lette",
@@ -10384,6 +10402,8 @@
       "checkConnection": "Controlla la connessione, poi riprova."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "noModelUpgradePlan": "Aggiorna piano",
       "authEmailRateLimit": "Impossibile inviare l’email. Riprova tra circa un’ora.",
       "authRequestRateLimit": "Troppe richieste. Riprova tra qualche minuto.",
       "text03217276a5f1": "Saldo {value0} crediti",
@@ -10411,7 +10431,7 @@
       "text004bad6bfbd7": "Retry corretto con backoff",
       "text0050aeb4cf77": "Aggiungi il claim del gruppo",
       "text0059798b7f70": "(facoltativo)",
-      "text005b4c1dad87": "Cerca workspace, workspace, proprietari",
+      "text005b4c1dad87": "Cerca workspace, account, proprietari o un ID",
       "text005c9bcbce1e": "Creazione del trigger...",
       "text005dc222581c": "Ha letto anche il codice",
       "text005ff7fe0036": "Copia il link a questa release",
@@ -10967,7 +10987,6 @@
       "text11b405209283": "Un unico luogo per avviare, programmare, monitorare e arrestare ogni agente. Stream in tempo reale, cronologia completa, spesa e trigger che avviano il lavoro senza una persona nel ciclo.",
       "text11bd22785d4b": "SAML SSO e SCIM sono funzionalità Enterprise",
       "text11c1a5b0fa54": "Un agente può perfezionare il proprio prompt, aggiungere una skill o rendere più rigida una regola di autorizzazione. Ognuna di queste azioni è un commit su un branch, in una change request che una persona unisce. Auto-miglioramento con unione umana. Un agente non unisce mai le proprie modifiche.",
-      "text11c520bc9f1f": "super-admin",
       "text11d1b3d47709": "individuato",
       "text11d5959da5d3": "ID messaggio",
       "text11e9a34decaa": "L’agente può installare, eseguire e rompere qualsiasi cosa: sopravvivono solo i commit",
@@ -11846,7 +11865,6 @@
       "text2bd873d6c734": "Breadcrumb",
       "text2bdb956493fd": "Letto il gestore del webhook",
       "text2bde665563d3": "Assegnagli il ticket che nessuno ha preso in carico.",
-      "text2be1f843485e": "{value0} {value1} verrà bloccato finché non registrerà MFA:",
       "text2bf4ee86ea70": "Testa il single sign-on",
       "text2bf623481fd8": "Imposta il valore predefinito che vuoi",
       "text2bf70270bfde": "CompanyOS open-source: i tuoi agenti, skill, memoria e connettori in un repository che è tuo. Qualsiasi modello. Self-host o cloud.",
@@ -12597,6 +12615,7 @@
       "text41ffc5e14073": "Imposta su {value0}",
       "text420962cdca94": "Lo stesso workspace, gli stessi connettori, la stessa memoria — e otto attività diverse sotto la superficie. Ogni team scrive le competenze per il proprio lavoro e nessuno crea un secondo sistema per svolgerlo.",
       "text420aaa63cba7": "Totale pagina",
+      "textbe57ff2d7907": "Non attribuito a una sessione",
       "text42113e7bf6fc": "Supporto Kortix",
       "text42117ed2a1f5": "Il metodo abituale",
       "text421c4b1fed48": "Piano di controllo del prodotto",
@@ -18014,7 +18033,6 @@
       "textdc6d1d15031b": "sincronizzazione del feed bancario",
       "textdc70ef3b3338": "Vale la pena connettere un canale solo se la risposta arriva dove è stata posta la domanda. I file viaggiano in entrambe le direzioni e le decisioni di cui l'agente ha bisogno da parte tua diventano pulsanti nel thread, non un link verso un altro posto.",
       "textdc76dd6b1aff": "Accedi alla CLI di Kortix",
-      "textdc78f4d17256": "senza MFA — non verranno bloccati, ma valuta di chiedere loro di registrarla:",
       "textdc7ea87fdc45": "File, in entrambe le direzioni",
       "textdc8659db6d41": "Invio",
       "textdc8d7c5c602b": "Registro sorgente",
@@ -18127,7 +18145,6 @@
       "textdf964376e432": "xoxb-...",
       "textdfa16aeaca13": "Il repository di questo spazio di lavoro è ospitato su {value0}, che non supporta gli inviti di collaboratori da Kortix. Gestisci l'accesso dove risiede il repository.",
       "textdfa2cff42f0c": "Nessuna esperienza approfondita nei sistemi",
-      "textdfad83e7eb69": "{value0} sono Manager impliciti in questo workspace.",
       "textdfca5da56b8c": "Sezione",
       "textdfd7d37e2b63": "interruttore nella barra degli strumenti.",
       "textdfe0c2e802b1": "Errore del server",
@@ -20685,10 +20702,11 @@
       "text5f6ba69d66d1": "Competenza rimossa",
       "textcb8d6b0c94c9": " e tutti i suoi file, modifiche incluse, e rimuove la competenza da ogni agente che la usa. Un commit sul branch predefinito.",
       "cliDeviceTitle": "Autorizza Kortix CLI",
-      "cliDeviceWarning": "Approva solo un accesso avviato da te. Digita il codice mostrato dal terminale.",
+      "cliDeviceWarning": "Approva solo un accesso avviato da te. Verifica che questo codice corrisponda a quello mostrato dal terminale.",
       "cliDeviceCode": "Codice di accesso",
       "cliDeviceApproved": "Accesso approvato. Torna al terminale.",
       "cliDeviceAction": "Autorizza CLI",
+      "cliDeviceConfirm": "Questo codice corrisponde al mio terminale",
       "text705a7e325b66": "L’app Kortix ha emesso eventi",
       "text4b80152fb96b": "Lette le credenziali degli eventi dell’app Kortix",
       "text59374c1f1acd": "L’app Kortix ha pianificato un’esecuzione",
@@ -20841,7 +20859,7 @@
       "text2eb1d24bcc04": "Gli agenti progettano i tracciati in fibra da dati GIS e immagini e preparano la distinta dei materiali di ogni tracciato.",
       "textf2d996d89263": "Kortix, eseguito su Kortix.",
       "text34ff4020f800": "La nostra azienda è un workspace Kortix. Gli agenti smistano e correggono le issue, mantengono aggiornate le evidenze SOC 2 e gestiscono vendite e supporto. Le persone approvano.",
-      "textdd57f275a118": "Ogni operazione, valutata dagli agenti.",
+      "textccf34f95f6b5": "Analisi autonoma delle operazioni.",
       "textacf058bd8604": "Gestione patrimoniale",
       "textdef8f9061294": "proposals.northwind.app",
       "text23caaccd7b6e": "Apri proposte",
@@ -20857,7 +20875,7 @@
       "text67056b928ea5": "Un unico workspace per tutta l'azienda.",
       "text5bbbe53187ad": "Accesso",
       "textc8f84c3c5378": "Directory",
-      "text313f92aeb061": "Ogni operazione in arrivo riceve un’analisi completa. Gli agenti la verificano rispetto al mandato, leggono i documenti societari e i dati di mercato, sottopongono a stress test la tesi e lo scenario peggiore e scrivono il memo d’investimento. Decide il comitato investimenti.",
+      "text4c72429d7a38": "Gli agenti verificano ogni operazione rispetto al mandato, sottopongono la tesi a uno stress test e scrivono il memo d’investimento. Il comitato d’investimento decide.",
       "textdc7f8ac95166": "Ricerca dei candidati autonoma.",
       "textb5947f5f79c9": "Gli agenti ricercano i candidati per ogni incarico e scrivono un profilo per ciascuno. I consulenti scelgono la rosa finale.",
       "textc81f1483737e": "La piattaforma di AI enterprise, costruita a partire dal codice open source di Kortix.",
@@ -21312,7 +21330,44 @@
       "text4b892277843c": "Crea workspace",
       "text41018e566b60": "nuovo workspace crea aggiungi team",
       "texta99ac8f9050b": "Workspace · Accesso",
-      "textfd8b8dae4421": "Zona pericolosa"
+      "textfd8b8dae4421": "Zona pericolosa",
+      "text674900a77b79": "LLM",
+      "text765a8cb04cf5": "Rimborso blocco LLM",
+      "texta68ee4167406": "Proxy",
+      "texta69c4dece144": "Archiviazione",
+      "textab3aff8f7642": "Bonus ricarica",
+      "textc75e59f5d748": "— capacità",
+      "text58423a0108ea": "… capacità",
+      "textcd6f79740e17": "{count, plural, one {# capacità} other {# capacità}}",
+      "textd1e588d764a4": "usato da —",
+      "text66cbb5dfa6cf": "usato da …",
+      "text56c316b0bde4": "usato da {value0}",
+      "textb7e3e4aa4257": "Disattiva",
+      "texte80e342954ec": "Ultima consegna {value0}",
+      "textf1a1b16401b1": "{count, plural, one {# membro verrà bloccato finché non attiva l'MFA:} other {# membri verranno bloccati finché non attivano l'MFA:}}",
+      "text18cde09c22d3": "{count, plural, one {# super-admin senza MFA — non verrà bloccato, ma valuta di chiedergli di attivare l'MFA:} other {# super-admin senza MFA — non verranno bloccati, ma valuta di chiedere loro di attivare l'MFA:}}",
+      "textcf42cb2f1ca3": "Gli Owner sono implicitamente Manager su questo workspace.",
+      "textd7e2d4bc4c80": "Gli Admin sono implicitamente Manager su questo workspace.",
+      "textb9215e029e76": "Agent: tutti",
+      "textd6acddc499aa": "Agent: nessuno",
+      "text1edf7747d0b8": "Agent: {value0} di {value1}",
+      "textd526776b77df": "Agent: {value0}",
+      "text002a4fd5f747": "Usa un numero intero di minuti o lascia il campo vuoto.",
+      "text9b8d62603858": "{value0} minuti (7 giorni) sono il massimo che Kortix consente.",
+      "text4510d8593ccc": "{value0}: usa un numero intero di giorni o lascia il campo vuoto.",
+      "textb1f8e3109f1b": "{value0}: {value1} giorni sono il massimo che Kortix consente.",
+      "textac20a57bfde0": "Nascondi",
+      "text268733ac2f60": "Impossibile aggiornare questa app",
+      "text5d8926d4a4dd": "Impossibile registrare questa app",
+      "text30b9ce09f406": "Inserisci un periodo come 15m, 1h o 1d, di almeno 1m.",
+      "text28d33d2ad989": "Scegli l’app da chiamare",
+      "textd777d7805cfa": "Inserisci un percorso che inizia con /",
+      "text8043e69a8dd6": "Elimina trigger",
+      "textd6fa1626e3af": "Evento del connettore creato",
+      "textccf59f978ef6": "Ancora nessun evento del connettore qui",
+      "text82cbc4a4def0": "Gli eventi del connettore non sono configurati in questa installazione, quindi nessun connettore può ancora inviarli.",
+      "text458ceb31019b": "Trigger di eventi del connettore",
+      "text27ca9df9dbaa": "I trigger di eventi del connettore sono disattivati"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",
@@ -21519,6 +21574,13 @@
       "denied": "Accesso negato",
       "deniedDescription": "My Kortix riceve la tua risposta.",
       "failed": "Impossibile inviare la tua decisione. Riprova."
+    },
+    "autoComponentsPwaPwaClientJsxTextAddKortixToYourHomeScreen83b6a02f": "Aggiungi Kortix alla schermata Home per un'esperienza a schermo intero, come un'app.",
+    "autoComponentsPwaPwaClientJsxTextOnIphoneAndIpadTapShareThenAddToHomb51e7c3a": "Su iPhone e iPad: tocca Condividi, poi Aggiungi alla schermata Home.",
+    "autoComponentsPwaPwaClientJsxTextKortixWasUpdatedRefreshToGetTheNewVeae4f0718": "Kortix è stato aggiornato. Ricarica per ottenere la nuova versione.",
+    "reviewPane": {
+      "emptyTitle": "Seleziona un elemento",
+      "emptyDescription": "I dettagli si aprono qui. Premi J e K per scorrere l’elenco."
     }
   },
   "commandPalette": {
@@ -21541,11 +21603,6 @@
   "personalWelcome": {
     "dismiss": "Chiudi",
     "emailCopied": "Indirizzo email copiato"
-  },
-  "repositoryAccess": {
-    "label": "Accesso al repository del workspace",
-    "enabled": "Le nuove sessioni ricevono il repository del workspace. Restano validi i permessi Git. Le sessioni esistenti mantengono la propria impostazione di accesso.",
-    "disabled": "Le nuove sessioni vengono eseguite senza il repository del workspace. Possono creare file e usare gli strumenti autorizzati. Le sessioni esistenti mantengono la propria impostazione di accesso."
   },
   "customProvider": {
     "intro": "Endpoint che il catalogo non include.",
@@ -21772,7 +21829,16 @@
     "crBranchHelp": "Si avvia quando una richiesta di modifica viene unita in questo branch, o in qualsiasi branch se il campo è vuoto. L’istruzione può leggere <code>change_request.number</code>, <code>change_request.title</code> e <code>change_request.base_ref</code>.",
     "eventsOff": "Gli eventi dei connettori sono in beta e disattivati per questo workspace. Attivali in Flag delle funzionalità, nell’amministrazione del workspace.",
     "noApps": "Nessuna app di questo workspace invia ancora eventi. Distribuisci un’app che fa POST a <code>KORTIX_APP_EVENTS_URL</code>, poi sceglila qui.",
-    "openApps": "Apri le app"
+    "openApps": "Apri le app",
+    "thenLabel": "Cosa fa un’attivazione",
+    "thenAgent": "Esegui un agente",
+    "thenApp": "Chiama un’app",
+    "targetPath": "Percorso",
+    "targetMethod": "Metodo",
+    "targetHelp": "Ogni attivazione riattiva l’app e invia il payload a questo percorso. Nessun agente viene eseguito.",
+    "intervalLabel": "Si ripete ogni",
+    "intervalHelp": "Un periodo fisso come 15m, 1h o 1d.",
+    "useCalendar": "Usa una pianificazione a calendario"
   },
   "gatewayAccess": {
     "heroTitle": "Usa i modelli di questo workspace ovunque",
@@ -22037,6 +22103,9 @@
     "addMcpUrlNamed": "Aggiunge il connettore {name}.",
     "addMcpUrlInvalid": "Inserisci un URL che inizia con https://",
     "addMcpConnect": "Connetti",
+    "addMcpStageConnector": "Connessione al server e caricamento dei suoi strumenti…",
+    "addMcpStageAccount": "Preparazione dell'account…",
+    "addMcpStageSignIn": "Avvio dell'accesso…",
     "addMcpConnected": "{name} è connesso. Gli agenti possono usare i suoi strumenti.",
     "addMcpSignInFailed": "Impossibile avviare l'accesso a {name}: {reason}",
     "addMcpFailed": "Impossibile aggiungere il server MCP",
@@ -22051,6 +22120,12 @@
     "noticeSignInTitle": "Accedi a {name}",
     "noticeSignInBody": "Kortix ha aggiunto {name}. Completa l'accesso perché gli agenti possano usarne gli strumenti.",
     "noticeSignInAction": "Accedi",
+    "noticeSignInAgainTitle": "Accedi di nuovo a {name}",
+    "noticeSignInAgainBody": "L’accesso è scaduto o è stato revocato. Gli agenti non possono usare {name} finché non accedi di nuovo.",
+    "noticeNoToolsTitle": "{name} non ha strumenti",
+    "noticeNoToolsBody": "Non ha route, quindi gli agenti non hanno nulla da chiamare. Aggiungi route alla sua specifica delle route in Impostazioni.",
+    "noticeAddRoutesAction": "Aggiungi route",
+    "statusNoTools": "Nessuno strumento",
     "connectAccount": "Connetti",
     "notSignedIn": "Accesso non effettuato",
     "credentialRejected": "Credenziale rifiutata: sostituiscila",
@@ -22108,7 +22183,7 @@
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Accesso con",
     "infoCategory": "Categoria",
-    "infoAppEvents": "Eventi dell’app",
+    "infoAppEvents": "Eventi",
     "infoAppEventsYes": "Supportati",
     "authOAuth": "Accesso OAuth",
     "authApiKey": "Chiave API",
@@ -23014,7 +23089,11 @@
     "folderTree": "Cartelle",
     "treeYou": "{name} (tu)",
     "treeExpand": "Espandi {name}",
-    "treeCollapse": "Comprimi {name}"
+    "treeCollapse": "Comprimi {name}",
+    "emptyWorkspaces": "{count, plural, one {# workspace non contiene} other {# workspace non contengono}} file",
+    "storageMoreWorkspaces": "{count, plural, one {Altro # workspace} other {Altri # workspace}}",
+    "storageWorkspaceLimit": "Ogni workspace può contenere fino a {limit}",
+    "storageShowFewer": "Mostra meno"
   },
   "genui": {
     "showData": "Mostra dati",
@@ -23307,6 +23386,16 @@
         "booted": "Avviato",
         "timezone": "Fuso orario",
         "locale": "Impostazioni locali",
+        "usage": "Risorse usate da Kortix Capture",
+        "usageCpu": "CPU",
+        "usageCpuValue": "{avg} in media · {peak} di picco",
+        "usageCpuHint": "Di un core, {minutes, plural, one {ultimo minuto} other {ultimi # minuti}}",
+        "usageMemory": "Memoria",
+        "usageMemoryPeak": "{now} · {peak} di picco",
+        "usageProcesses": "Processi",
+        "usageProcessCount": "{count, plural, one {# processo} other {# processi}}",
+        "usageProcessValue": "{cpu} CPU · {memory}",
+        "usageNotReported": "Non segnalato: una versione precedente dell'app, oppure l'app è partita da meno di un minuto",
         "recordingSync": "Registrazione e sincronizzazione",
         "status": "Stato",
         "lastFrame": "Ultimo fotogramma",
@@ -23423,12 +23512,16 @@
       "privacyControlsHint": "Mostra il mascheramento dei dati personali. Disattivarlo lo nasconde; ciò che è impostato continua ad applicarsi.",
       "maskingTitle": "Mascheramento",
       "framesTitle": "Fotogrammi dello schermo",
-      "interval": "Un fotogramma ogni",
-      "intervalHint": "Intervalli più brevi conservano più dettagli e usano più CPU e spazio.",
-      "intervalOption": "{seconds, number} s",
       "resolution": "Risoluzione",
       "resolutionHint": "Gli schermi più grandi vengono ridotti a questa altezza. Il 4K conserva i dettagli fini, come i disegni CAD.",
-      "framesHint": "Senza valore, ogni computer usa il proprio (un'immagine ogni 2 s a 1440p). Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate a qualsiasi intervallo.",
+      "textRecognition": "Riconoscimento del testo",
+      "textRecognitionHint": "Legge il testo sullo schermo per renderlo ricercabile. Disattivato usa meno CPU: la ricerca trova allora app, titoli delle finestre e URL.",
+      "textRecognitionOption": {
+        "accurate": "Accurato",
+        "fast": "Veloce",
+        "off": "Disattivato"
+      },
+      "framesHint": "Kortix Capture sceglie da solo la frequenza: fino a 2 immagini al secondo mentre qualcuno lavora, una ogni 2 s altrimenti, meno su un computer occupato. Senza valore, ogni computer usa 1440p e il riconoscimento del testo accurato. Con un valore, tutti i computer lo usano e nessuno può modificarlo. Clic, digitazione e scorrimento vengono registrati con le proprie schermate.",
       "computerDecides": "Decide ogni computer",
       "included": {
         "title": "App e siti web",
@@ -23641,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Trigger",
-    "groupDescription": "Pianificazioni, cicli, webhook, eventi delle app e monitor in questo workspace.",
+    "groupDescription": "Pianificazioni, loop, webhook, eventi del connettore ed eventi delle app in questo workspace.",
     "label": "Metti in pausa tutti i trigger",
-    "description": "Niente in questo workspace parte da solo: nessuna pianificazione, loop, webhook, evento di app o monitor. Avviare un trigger a mano funziona ancora.",
+    "description": "In questo workspace nulla si avvia da solo: nessuna pianificazione, loop, webhook, evento del connettore o evento dell’app. Eseguire un trigger a mano funziona ancora.",
     "readOnlyDescription": "Solo un proprietario o un amministratore può mettere in pausa o riprendere i trigger.",
     "pausedSince": "In pausa dal {date}.",
     "pauseTitle": "Mettere in pausa tutti i trigger?",
@@ -23671,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Messo in pausa automaticamente",
-    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo."
+    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo.",
+    "billingTitle": "In pausa: crediti esauriti",
+    "billingDescription": "Nessuna esecuzione può essere pagata, quindi ha smesso di avviarle. Riprende da solo pochi minuti dopo la ricarica del saldo.",
+    "modelTitle": "In pausa: nessun modello disponibile",
+    "modelDescription": "Le automazioni usano solo chiavi di modello e account condivisi con tutto il workspace, e nessuno è utilizzabile. Riprende da solo pochi minuti dopo che ne aggiungi uno in Modelli.",
+    "listBilling": "Crediti esauriti",
+    "listModel": "Nessun modello"
   },
   "featureGate": {
     "enable": "Abilita {name}",
@@ -24881,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programma",
+      "programCommand": "Comando",
+      "programHelp": "Ogni turno esegue questo comando nella sandbox della sessione invece di un modello. Il messaggio arriva su stdin e in $KORTIX_EVENT_PATH. Ciò che stampa è la risposta. Un'uscita diversa da zero fa fallire il turno.",
       "title": "Modello",
       "help": "Come ragiona questo agente.",
       "projectDefault": "Predefinito del workspace",
@@ -26060,6 +26162,7 @@
     "call": "Chiama",
     "calling": "Chiamata in corso…",
     "start": "Avvia una chiamata vocale",
+    "inCall": "Sei in una chiamata",
     "end": "Termina chiamata",
     "connecting": "Connessione…",
     "listening": "In ascolto",
@@ -26083,7 +26186,6 @@
   "agentMounts": {
     "lead": "Cartelle di File montate dalle sessioni di questo agente. Le modifiche si applicano subito a ogni nuova sessione.",
     "mount": "Mount folder",
-    "repository": "Repository del workspace",
     "viaAgent": "condiviso con questo agente",
     "viaProject": "condiviso con tutti nel workspace",
     "from": "{path} · {who}",
@@ -26430,48 +26532,37 @@
     "issue": "Problema #{number}"
   },
   "subscriptionUsage": {
-    "fiveHour": "5-hour limit",
-    "weekly": "Weekly limit",
+    "fiveHour": "5 ore",
+    "weekly": "Settimanale",
     "weeklyModel": "Weekly · {model}",
-    "reconnect": "Reconnect",
-    "disabledTitle": "L'utilizzo dell'abbonamento non è disponibile",
-    "disabledDescription": "Le connessioni agli abbonamenti non sono abilitate per questo workspace.",
-    "text0": "Reconnect needed",
-    "text1": "Inactive",
-    "text2": "Refresh failed",
-    "text3": "Awaiting usage",
-    "text4": "Limit reached",
-    "text5": "Last known usage",
-    "text6": "Usage reported",
-    "text7": "Subscription",
-    "text8": "used",
-    "text9": "Orario di reset trascorso · aggiorna per l'utilizzo attuale",
-    "text10": "Orario di reset non indicato",
-    "text11": "Checking provider usage…",
-    "text12": "Nessun utilizzo ancora segnalato. Aggiorna dopo aver usato questo abbonamento.",
-    "text13": "Impossibile aggiornare. Vengono mostrati gli ultimi dati noti.",
-    "text14": "In attesa dei dati del provider",
-    "text15": "Checking…",
-    "text16": "Refresh",
-    "text17": "Subscription usage",
-    "text18": "Tieni traccia dei limiti dei tuoi abbonamenti ChatGPT e Claude collegati.",
-    "text19": "Impossibile caricare l'utilizzo",
-    "text20": "Prova a ricaricare i tuoi abbonamenti collegati.",
-    "text21": "Retry",
-    "text22": "No connected subscriptions",
-    "text23": "Collega ChatGPT o Claude in Provider per vedere l'utilizzo segnalato e gli orari di reset.",
-    "text24": "Connect a subscription",
-    "text25": "L'utilizzo è condiviso tra le app che usano lo stesso abbonamento. Il controllo avviene automaticamente ogni minuto finché questa scheda è aperta.",
-    "text26": "I limiti variano in base al piano. Qui compaiono solo le finestre segnalate dalla tua connessione; dati mancanti non significano utilizzo illimitato. I limiti dei file non sono segnalati. La spesa API appare in Costi.",
-    "resets": "Resets {time}",
+    "inactive": "Inactive",
+    "limitReached": "Limit reached",
+    "checking": "Checking provider usage…",
+    "title": "Subscription usage",
     "observed": "Observed {time}",
     "meterLabel": "{label}: {percent}% used",
-    "refreshLabel": "Refresh {label} usage",
-    "fiveHourNotReported": "Finestra di cinque ore non segnalata da questa connessione.",
-    "fableIncluded": "L'utilizzo di Fable conta anche per la tua quota settimanale complessiva.",
-    "chatgptUsage": "ChatGPT subscription usage",
-    "claudeUsage": "Claude subscription usage",
-    "allSubscriptions": "All subscriptions"
+    "extraUsage": "Utilizzo extra",
+    "apps": "App",
+    "codeReview": "Revisione del codice",
+    "percent": "{percent}%",
+    "percentResets": "{percent}% · si azzera {time}",
+    "percentBack": "{percent}% · di nuovo {time}",
+    "resetPassed": "Azzerato · aggiornamento",
+    "notStarted": "Non iniziato",
+    "reconnectToSee": "Ricollega per vedere l'utilizzo",
+    "availableNow": "Disponibili ora",
+    "availableCount": "{available} di {total, plural, one {# account} other {# account}}",
+    "nextBack": "Prossimo ritorno",
+    "rowPeak": "{window} · {percent}% usato",
+    "rowSomeLimited": "{limited} di {total} al limite",
+    "rowAllLimited": "Al limite",
+    "rowAllLimitedBack": "Al limite · di nuovo {time}",
+    "noUsageYet": "Nessun utilizzo segnalato.",
+    "refreshFailed": "Aggiornamento non riuscito · ultimo utilizzo noto.",
+    "loadFailed": "Impossibile caricare l'utilizzo.",
+    "rowSomeLimitedBack": "{limited} di {total} al limite · prossimo ritorno {time}",
+    "weeklyAll": "Settimanale · tutti i modelli",
+    "notReported": "Non segnalato"
   },
   "gatewayRouting": {
     "exceptions": "Eccezioni",
@@ -26643,7 +26734,7 @@
       "apiKeysDescription": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, come un agente o come un bot. Le regole di ogni chiave sono in Sicurezza.",
       "keys": {
         "title": "Chiavi API",
-        "description": "Chiavi per script, CI e integrazioni. Una chiave funziona solo in questo workspace e agisce come te, come un agente o come un bot.",
+        "description": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, un agente o un bot; «Funziona in» definisce quali spazi di lavoro raggiunge.",
         "newKey": "Nuova chiave",
         "count": "{count, plural, one {# chiave} other {# chiavi}}",
         "emptyTitle": "Nessuna chiave API",
@@ -26653,6 +26744,10 @@
         "actsAsAgent": "Un agente",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Il tuo ruolo in questo workspace. La chiave smette di funzionare quando esci.",
+        "worksIn": "Funziona in",
+        "worksInAll": "Tutti i miei spazi di lavoro",
+        "worksInAllHint": "Agisce come te in ogni tuo spazio di lavoro, con il tuo ruolo completo. Gestiscila in Preferenze → Chiavi personali.",
+        "worksInWorkspace": "Solo questo spazio di lavoro",
         "actsAsAgentHint": "Esattamente ciò che l'agente può fare secondo kortix.yaml. Le sue azioni vengono registrate come l'agente e la chiave continua a funzionare quando esci.",
         "actsAsBotHint": "Un bot per la CI o un'integrazione, con il proprio ruolo. La chiave continua a funzionare quando esci.",
         "needsPermission": "Richiede il permesso di gestire le credenziali",
@@ -26671,6 +26766,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Creata da {email}",
         "createdDescription": "{name} agisce come {actsAs}. Kortix mostra la chiave una sola volta: copiala ora e salvala come segreto.",
+        "createdPersonalDescription": "{name} agisce come te in ogni tuo spazio di lavoro — gestiscila in Preferenze → Chiavi personali. Kortix mostra la chiave una sola volta: copiala ora e conservala come segreto.",
         "accessFullHint": "Tutto ciò che il principal della chiave può fare in questo workspace.",
         "accessCustomHint": "Solo i permessi che scegli. Ognuno deve rientrare in ciò che il principal della chiave può fare."
       },
@@ -26681,7 +26777,9 @@
       "noWorkspaceTitle": "Crea un workspace per accedere con la CLI",
       "noWorkspaceBody": "La CLI accede a un workspace. Creane uno, poi approva questo accesso.",
       "createAction": "Crea workspace",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Impossibile caricare i tuoi workspace",
+      "loadFailedBody": "Questo accesso richiede l'elenco dei tuoi workspace. L'account è a posto: riprova per continuare."
     },
     "models": {
       "yourDefault": "Predefinito del workspace",
@@ -26690,12 +26788,6 @@
       "setDefaultTitle": "Imposta come modello predefinito del workspace",
       "setDefaultAria": "Imposta {model} come modello predefinito di questo workspace",
       "setWorkspaceDefault": "Imposta come predefinito del workspace"
-    },
-    "profile": {
-      "deleteLogin": "Elimina il mio accesso",
-      "deleteLoginDescription": "Elimina il tuo accesso a Kortix. Non appartieni a nessun workspace, quindi non viene eliminato nient'altro.",
-      "deleteLoginTitle": "Eliminare il tuo accesso?",
-      "deleteLoginWarning": "Il tuo accesso viene eliminato subito. Non si può annullare."
     },
     "capture": {
       "noWorkspaceTitle": "Prima crea un workspace o unisciti a uno.",
@@ -26707,8 +26799,7 @@
     "menu": {
       "invite": "Invita persone in {name}",
       "leave": "Lascia {name}",
-      "invitePeople": "Invita persone",
-      "more": "Altro"
+      "invitePeople": "Invita persone"
     },
     "roles": {
       "owner": {
@@ -26783,5 +26874,38 @@
   "gatewayBudgets": {
     "capWorkspace": "Limita la spesa del gateway per questo workspace.",
     "capMember": "Limita la spesa del gateway per {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Apri l'accesso a {app}",
+    "checkingTitle": "Completamento dell'accesso",
+    "checkingDescription": "Kortix verifica il tuo accesso a {app}. Questa pagina si aggiorna da sola.",
+    "signInUnfinished": "Accesso non completato",
+    "finishSignIn": "Completa l'accesso",
+    "signInFinished": "Accesso completato",
+    "cardHeadline": "Il tuo agente ha bisogno che tu acceda",
+    "cardTitle": "Connetti {app}",
+    "cardShared": "Condiviso con il workspace",
+    "cardPrivate": "Solo tu",
+    "signingIn": "Completa l'accesso a {app} nella finestra che si è aperta.",
+    "connectedAs": "Connesso come {account}",
+    "connected": "Connesso",
+    "connect": "Connetti",
+    "cardFailed": "Impossibile connettere {app}. Riprova.",
+    "blockedTitle": "Apri {app} per accedere",
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola.",
+    "doneTitle": "{app} connesso",
+    "doneTitleNoApp": "Connesso",
+    "doneDescription": "Il tuo agente ora può usare {app}.",
+    "doneClose": "Puoi chiudere questa scheda.",
+    "doneDeniedTitle": "Accesso annullato",
+    "doneDeniedDescription": "Non hai consentito l’accesso su {app}. Riavvia l’accesso da Kortix per collegarlo.",
+    "doneExpiredTitle": "Questo link di accesso è scaduto",
+    "doneExpiredDescription": "È già stato usato o è troppo vecchio. Riavvia l’accesso da Kortix.",
+    "doneFailedTitle": "{app} non si è connesso",
+    "doneFailedTitleNoApp": "L’accesso non è stato completato",
+    "doneFailedDescription": "Riavvia l’accesso da Kortix. Se fallisce di nuovo, invia il codice qui sotto al supporto.",
+    "doneErrorCode": "Codice errore: {code}",
+    "doneOpenKortix": "Apri Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

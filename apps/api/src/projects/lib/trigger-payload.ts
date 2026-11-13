@@ -57,10 +57,15 @@ export function mergeTriggerPayload(
   return out;
 }
 
+/**
+ * Fill `{{ root.path }}` tokens from the delivery payload. `{{ payload }}` is the whole payload
+ * as JSON (a program agent reads it from stdin), unless the payload has its own `payload` key.
+ */
 export function renderPromptTemplate(template: string, payload: Record<string, unknown>) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, token: string) => {
     const [root, ...path] = token.split('.');
     if (!root) return '';
+    if (token === 'payload' && !Object.hasOwn(payload, 'payload')) return JSON.stringify(payload);
     const value = path.length === 0 ? payload[root] : valueAtPath(payload[root], path);
     return templateValue(value);
   });

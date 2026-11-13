@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   describeConfigStatus,
   describeReloadOutcome,
@@ -13,6 +14,7 @@ import {
   expandSessionIdPrefix,
   locateSessionAnywhere,
   resolveProjectContext,
+  sessionIdArgs,
   surfaceApiError,
   takeFlagBool,
   takeFlagValue,
@@ -42,6 +44,8 @@ import type { ProjectSession, ProjectSummary } from '../api/types.ts';
 import { runGit } from '../git-run.ts';
 import { type SessionStartPayload, startPollIntervalMs, startProgressTracker } from '../session-boot.ts';
 import { C, help, pad, status } from '../style.ts';
+import { agentChoiceHintFor } from './session-agent-choice.ts';
+import { machineErrors } from '../token-denial.ts';
 import { sessionWebUrl } from '../web-url.ts';
 import { openInBrowser } from '../browser.ts';
 import { runSessionsDigest } from './sessions-digest.ts';
@@ -414,10 +418,8 @@ export async function runSessions(argv: string[]): Promise<number> {
   // this a bare `--help` falls through as an ordinary positional arg — e.g.
   // `sessions info --help` would try to look up a session literally named
   // "--help" instead of showing usage.
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const json = takeFlagBool(rest, ['--json']);
   const wait = takeFlagBool(rest, ['--wait']);
   const listPreviews = takeFlagBool(rest, ['--list']);
@@ -718,7 +720,11 @@ async function sessionsNew(
   try {
     created = await ctx.client.post<ProjectSession>(`/workspaces/${ctx.projectId}/sessions`, body);
   } catch (err) {
-    return surfaceApiError(err);
+    const code = surfaceApiError(err);
+    // My Kortix names its agent: say which flag fixes it (session-agent-choice.ts).
+    const hint = agentChoiceHintFor(err);
+    if (hint && !machineErrors()) process.stderr.write(`  ${hint}\n`);
+    return code;
   }
 
   // Drive the same canonical /start lifecycle endpoint the dashboard polls.
@@ -1286,7 +1292,7 @@ async function sessionsRm(
   opts: CtxOpts,
   json = false,
 ): Promise<number> {
-  const ids = sessionIds.filter((a) => !a.startsWith('-'));
+  const ids = sessionIdArgs(sessionIds);
   if (ids.length === 0) {
     process.stderr.write(`${status.err('Pass a session id.')}\n`);
     return 2;

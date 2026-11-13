@@ -164,3 +164,40 @@ describe('attachment completion has its own request deadline', () => {
     expect(requestDeadlineMs(ctx(`${blob}/extra`, 'PUT'))).toBe(general);
   });
 });
+
+/**
+ * KRTX-4738: an App machine exec (`POST …/apps/:appId/exec`) runs one command
+ * under the caller's own timeout (`timeout_s` 1–300, default 60; the provider
+ * call aborts at `timeoutMs + 30 s`, and the SDK client waits 120 s), but the
+ * general 25 s deadline killed every exec that outlived it — prod: 4 execs
+ * against a machine that had just restarted each died at exactly 25 s while
+ * their siblings answered 178 ms–17.9 s. The route gets the same 95 s
+ * completion deadline as attachment completion: it answers before Cloudflare's
+ * 100 s proxy timeout and still bounds database waits. It is not exempt.
+ */
+describe('App machine exec has the 95 s completion deadline', () => {
+  const project = '/v1/projects/00000000-0000-4000-a000-000000000001';
+  const workspace = '/v1/workspaces/00000000-0000-4000-a000-000000000001';
+
+  test('POST exec is bounded at 95 s, under the 100 s Cloudflare proxy timeout', () => {
+    const exec = ctx(`${project}/apps/00000000-0000-4000-a000-000000000003/exec`);
+    expect(isExempt(exec)).toBe(false);
+    expect(requestDeadlineMs(exec)).toBe(95_000);
+  });
+
+  test('the /v1/workspaces alias gets the same 95 s deadline', () => {
+    expect(requestDeadlineMs(ctx(`${workspace}/apps/00000000-0000-4000-a000-000000000003/exec`))).toBe(95_000);
+  });
+
+  test('the anchoring is exact: other methods and paths keep the general deadline', () => {
+    const general = requestDeadlineMs(ctx('/v1/marketplace/items', 'GET'));
+    for (const [path, method] of [
+      [`${project}/apps/00000000-0000-4000-a000-000000000003/exec`, 'GET'],
+      [`${project}/apps/00000000-0000-4000-a000-000000000003/exec/extra`, 'POST'],
+      [`${project}/apps/00000000-0000-4000-a000-000000000003/machines`, 'POST'],
+    ] as const) {
+      expect(isExempt(ctx(path, method))).toBe(false);
+      expect(requestDeadlineMs(ctx(path, method))).toBe(general);
+    }
+  });
+});

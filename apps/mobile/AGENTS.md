@@ -1,5 +1,44 @@
 # Kortix Mobile — UI conventions (READ FIRST, ENFORCE ALWAYS)
 
+## Required version bump for agents
+
+Every task that changes mobile app code, assets, dependencies, or native
+configuration must include a mobile version bump before handoff or push:
+
+```sh
+node apps/mobile/scripts/set-version.mjs --next
+```
+
+Run it once per task, from the repo root, after syncing with `origin/dev`.
+Do not bump again for each edit, test run, or review fix in the same task.
+Documentation-only changes need no bump. Keep major and minor unchanged.
+The first bump moves a single-digit patch into two digits. Examples: `1.6.2` →
+`1.6.21`, `1.5.6` → `1.5.61` (`1.0.0` → `1.0.10`). Subsequent bumps
+increment the patch numerically: `1.5.61` → `1.5.62` → `1.5.63`;
+`1.6.29` → `1.6.30`. Use `--next` instead of choosing a patch, minor,
+or major release. A new release line needs the user's instruction.
+
+Commit all files printed by the command. It synchronizes Expo, iOS, Android,
+and `runtimeVersion`. EAS continues to increment native build numbers.
+Do not change the root `VERSION` or an SDK package version for mobile work.
+Before the final push, fetch `origin/dev`. If its version differs from the
+task's base version, sync first. Resolve version conflicts to `origin/dev`'s
+version while preserving the task's other native changes. Use the explicit
+version argument to synchronize all six fields if needed, then run `--next`
+once. Compare version components as integers, never as text.
+
+Each bumped runtime needs a new binary. OTA updates cannot reach binaries
+with the previous runtime. Once the bump reaches `prod`, the existing
+`mobile-store.yml` workflow builds on EAS, submits Android to Play production,
+and submits iOS for App Review. JS-only changes also wait for that new binary.
+This task does not authorize a production promotion or a manual submission.
+See `BUILD_GUIDE.md` for the existing release workflow.
+
+Mobile changes merged into `dev` also trigger `Mobile TestFlight`: an iOS-only
+build using the production API and the isolated `testflight-production` update
+channel. This path uploads to TestFlight without App Review or public release.
+Use `scripts/testflight-publish.mjs --dry-run` for its read-only preflight.
+
 > **Also read `design.md` in this folder before building or restyling a
 > screen.** This file says which primitive to use; `design.md` says how a
 > screen looks — the settings-screen layout (`SettingsPage` / `SettingsGroup`
@@ -45,8 +84,10 @@ Kortix-specific: 39 files, built on top of `components/ui/`. **There is no
 | File | Purpose |
 | --- | --- |
 | `avatar.tsx` | The single-prop avatar most screens use (agent/model/thread/trigger/custom). See **Avatar** section. |
-| `sheet.tsx` | `<Sheet>` bottom-sheet wrapper + `SheetHeader`/`SheetBody`, and the shared gorhom chrome — `SheetBackdrop`, `sheetHandleIndicatorStyle(isDark)`, `useSheetBackground()`. See **Bottom sheets** invariant below. |
-| `SheetInput.tsx` | Canonical pill text field for inside a bottom sheet (wraps gorhom's `BottomSheetTextInput`). |
+| `sheet.tsx` | `KortixBottomSheetModal`, `<Sheet>` bottom-sheet wrapper + `SheetHeader`/`SheetBody`, and the shared gorhom chrome — `SheetBackdrop`, `sheetHandleIndicatorStyle(isDark)`, `useSheetBackground()`. See **Bottom sheets** invariant below. |
+| `native-sheet.tsx` | `NativeSheet` — `KortixBottomSheetModal` on iOS: the system sheet (`FormSheet`, react-native-screens) behind gorhom's ref. `NATIVE_SHEET_AVAILABLE` picks it per binary. See **Native sheet on iOS** below. |
+| `sheet-parts.tsx` | The content parts of a sheet for both engines: `SheetScrollView`, `SheetView`, `SheetFlatList`, `SheetRawTextInput`, `SheetFooter`, `SheetTouchableOpacity`, `useInSheet`, `useSheetDismiss`. The ONLY place a content part comes from. |
+| `SheetInput.tsx` | Canonical pill text field for inside a bottom sheet (wraps `SheetRawTextInput`: gorhom's `BottomSheetTextInput` in a gorhom sheet, `TextInput` in the native sheet). |
 | `pill-input.tsx` | `PillInput` — the same pill on a plain `TextInput`, for full screens outside a sheet (the auth forms). Forwards its ref. Exports `usePillInputStyle`, the one source of the pill's look for both fields. |
 | `pending-confirm-dialog.tsx` | `PendingConfirmDialog` — a confirm dialog that stays open while its action is in flight: Cancel and the system dismiss are disabled until the mutation settles, and the caller decides title/description (an error replaces the question). Used by the project's archive/cancel dialogs and the scheduled plan-change card. |
 | `full-window-overlay.tsx` | `FullWindowOverlay` — gorhom's iOS full-window overlay, `React.Fragment` elsewhere. The registry overlays (dialog, alert-dialog, context-menu, popover, select) render inside it on iOS so their content clears native bars. |
@@ -55,12 +96,15 @@ Kortix-specific: 39 files, built on top of `components/ui/`. **There is no
 | `search-header.tsx` | `SearchHeader` — iOS-style search mode for a screen header: filled 40pt pill (magnifier, auto-focused field, round clear button) + Cancel. A screen swaps its header row for it (projects header search). |
 | `platform-button.tsx` | `PlatformButton` — native SwiftUI button (`@expo/ui`, plain style on the `secondary` fill; no Liquid Glass, its shadow clips) on iOS, design-system `Button` with `rounded-full` on Android. Used for the projects "New" button and the settings Go back button. Same file: `PlatformFullWidthButton` — a full-width pill (label centred, `leading` React Native element pinned to the left edge) drawn natively on iOS in the design-system variant's tokens (`default` / `outline`, `size` `lg` / `xl`), design-system `Button` elsewhere; used by the auth welcome screen's three sign-in pills. Both fall back to the design-system button when the running binary lacks the `ExpoUI` native module (OTA-safe). |
 | `KortixLogo.tsx` | Brand mark / wordmark, light and dark SVG variants. |
-| `search-list-header.tsx` | "Search input + add button" row under `PageHeader` on list pages. |
+| `search-list-header.tsx` | "Search input + add button" row under `PageHeader` on list pages (Android; iOS uses `bottom-search-bar.tsx`). |
+| `fade-edges.tsx` | `FadeEdges` — a scroll view's content fading out at its top (16pt) and bottom (24pt) edges by an alpha mask (`@react-native-masked-view`, required lazily), not a painted gradient: it reads the same on the iOS 26 sheet glass, which has no colour to fade to. Pad the content by at least the edge size. The workspace switcher's list (Jay, 2026-11-11). |
+| `native-menu-button.tsx` | `NativeMenuButton` + `NATIVE_MENU_AVAILABLE` — an icon button that opens the iOS system pull-down menu (SwiftUI `Menu` via `@expo/ui`): items are data, `action` rows (SF Symbol, `checked` draws a checkmark, `destructive`) and one level of `submenu`. Draws only the glyph in a 44pt box; the glass comes from where it sits (`PageHeader`'s right column). Not available on Android or a binary without `ExpoUI`: the caller keeps its React Native control. The Files page's View options (Jay, 2026-11-11). |
+| `bottom-search-bar.tsx` | `BottomSearchBar` + `usesBottomSearch()` + `useBottomSearchInset()` — the iOS list-page search at the bottom (Claude iOS Projects page; Jay, 2026-11-11): a `PinnedBar` row with a 44pt glass search circle (left), an optional `trailing` control (the Files version switcher) and the page's create `action` as the drawer's primary-tinted glass `lg` pill (right). The circle expands into a glass `SearchPill size="lg"` + a glass X circle riding 10pt above the keyboard (`KeyboardStickyView`, loaded on iOS only); X clears and collapses, text keeps it expanded after the keyboard closes. `fieldAtRest` (Apps) shows the full-width field at rest, with the X only while it is focused or holds text. Renders nothing on Android, where the page keeps `SearchListHeader`. Used by Sessions, Files, Schedules, Secrets, Apps, Artifacts and `/projects`. Same file: `GlassSearchField`, the expanded glass field on its own, for a search at the top of a surface (the workspace switcher sheet, under its title). See design.md → Bottom search (iOS). |
 | `page-header.tsx` | Unified top header (hamburger / title / "···" more button) for every page. |
 | `page-content.tsx` | Content area under `PageHeader` — no card framing, consistent top spacing. |
 | `composer.tsx` | The chat input of the project home and of a thread (`SessionChatInput` wraps it): one card with the text field on top and a 36pt row of add · agent chip · send `Button`s below (`icon-md` icon buttons, `sm` agent chip — `ghost`, `secondary` for "Connect model" — that opens the agent and model sheet). Page colour (`bg-background`) in both themes, hairline `border-border` in both themes, no shadow. No animated placeholder. Thread-only slots: `header` (queue, staged command), `accessory` (AutoContinue), `busy` (Stop, only with `onStop`: in a shared session a member who may not stop the running turn — `useSession().canStop` false — gets no Stop, and Send queues). See design.md → Project home. |
 | `dictation-waveform.tsx` | `DictationWaveform` — the composer's listening indicator: one bar per recogniser volume sample, newest on the right. Runs on the UI thread from a shared value. See `design.md` → Dictation. |
-| `pinned-bar.tsx` | `PinnedBar` + `usePinnedBarInset`. Inside a bottom sheet, wrap the body in `SheetFill` (`sheet.tsx`) first: gorhom's content box is taller than the visible sheet, so `bottom: 0` alone lands off-screen. Inside `SheetFill` the bar follows the visible edge by `translateY` (`PinnedBarShiftContext`) while the sheet moves. The bar holds controls pinned to the bottom of a scrolling region, floating over a fade of the surface (clear → 85% at 45% → solid), 16pt above the safe area; the content scrolls under it and pads its end by the inset. The project drawer's bottom bar as a component (Jay, 2026-09-22); used by the session file preview sheet (Download · Add to chat). Never a solid footer under a separate fade strip. **A new control added to any header or chrome row prefers this gradient-fade backdrop over a flat one** (Jay, 2026-09-22) — see design.md's "New header controls" row. |
+| `pinned-bar.tsx` | `PinnedBar` + `usePinnedBarInset`. Inside a bottom sheet, wrap the body in `SheetFill` (`sheet.tsx`) first: gorhom's content box is taller than the visible sheet, so `bottom: 0` alone lands off-screen (in the iOS native sheet the content view is the visible sheet and `SheetFill` is a plain `flex: 1` view). Inside `SheetFill` the bar follows the visible edge by `translateY` (`PinnedBarShiftContext`) while the sheet moves. The bar holds controls pinned to the bottom of a scrolling region, floating over a fade of the surface (clear → 85% at 45% → solid), 16pt above the safe area; the content scrolls under it and pads its end by the inset. The project drawer's bottom bar as a component (Jay, 2026-09-22); used by the session file preview sheet (Download · Add to chat). Never a solid footer under a separate fade strip. **A new control added to any header or chrome row prefers this gradient-fade backdrop over a flat one** (Jay, 2026-09-22) — see design.md's "New header controls" row. |
 | `animated-toggle-icon.tsx` | Cross-fade + rotate between an icon and its "X" close state, used by `PageHeader`. |
 | `kortix-loader.tsx` | Lottie brand loading spinner. |
 | `status-chip.tsx` | `StatusChip` — an informational status pill, web's `StatusBadge`: `tone` `neutral` (`bg-secondary`), `success` / `warning` / `destructive` (`bg-kortix-green/15` / `-orange/15` / `-red/15`), label in ink (`small`). Generative-UI `Badge` renders it (`components/genui/`). A status is a fact, not an error: never a solid destructive fill. `components/ui/badge.tsx` stays for filled labels such as Compare's Pick. |
@@ -166,7 +210,8 @@ change `buttonTextVariants` (and check every consumer), don't patch around it.
   it supports focus-chaining. `BottomSheetTextInput` throws outside a sheet,
   so never reuse `SheetTextInput` there.
 - Inside a bottom sheet, use `@/components/kortix/SheetInput` instead — it
-  wraps gorhom's `BottomSheetTextInput` so the keyboard behaves correctly.
+  wraps `SheetRawTextInput` (`sheet-parts.tsx`) so the keyboard behaves
+  correctly in both sheet engines.
 
 ## Avatar — two different things, don't confuse them
 
@@ -181,11 +226,99 @@ change `buttonTextVariants` (and check every consumer), don't patch around it.
 
 ## Bottom sheets
 
-RNR ships no bottom-sheet primitive. The app's sheets are `@gorhom/bottom-sheet`
-modals (74 sites in 50 files): converting them to `<Dialog>` would lose
-pan-down-to-dismiss, snap points, and keyboard-aware sizing, so they stay on
-gorhom. Its content parts (`BottomSheetView`, `BottomSheetScrollView`,
-`BottomSheetTextInput`, `BottomSheetFooter`) are still imported from gorhom.
+RNR ships no bottom-sheet primitive. Every sheet is a `KortixBottomSheetModal`
+(74 sites in 50 files). It has two engines, fixed per binary: on iOS the system
+sheet (UISheetPresentationController: the iOS 26 Liquid Glass sheet, native
+grabber, detents and pan-to-dismiss), everywhere else `@gorhom/bottom-sheet`
+modals. See **Native sheet on iOS** below.
+
+**Content parts come from `@/components/kortix/sheet-parts`, never from
+`@gorhom/bottom-sheet`** (2026-11-11). gorhom's parts (`BottomSheetScrollView`,
+`BottomSheetView`, `BottomSheetTextInput`, `BottomSheetFlatList`,
+`BottomSheetFooter`, `useBottomSheetInternal`, `useBottomSheetModal`) read
+gorhom's internal context and throw inside the native sheet. The parts module
+renders the gorhom part in a gorhom sheet and the React Native part in the
+native sheet: `SheetScrollView`, `SheetView`, `SheetFlatList`,
+`SheetRawTextInput`, `SheetFooter` (a `footerComponent` root),
+`SheetTouchableOpacity`, `useInSheet()`, `useSheetDismiss()`. They take
+gorhom's props. Outside `components/kortix/` a file imports gorhom only for its
+types (`import type { BottomSheetModal }`, the ref type);
+`components/kortix/sheet-imports.test.ts` fails on any value import
+(`app/_layout.tsx` mounts `BottomSheetModalProvider`).
+
+### Native sheet on iOS
+
+`KortixBottomSheetModal` renders `NativeSheet` (`components/kortix/native-sheet.tsx`)
+when `NATIVE_SHEET_AVAILABLE`: iOS and a binary that registered the Fabric
+component `RNSFormSheetHost` (`supportsNativeSheet` / `hasNativeComponent`,
+`lib/ui/native-sheet.ts`, read from the JSI global
+`__nativeComponentRegistry__hasComponent`). The component is compiled only
+with `RNS_GAMMA_ENABLED=1` (`ios/Podfile` line 2), and an OTA update can reach
+a binary built without it: that binary keeps gorhom. Android keeps gorhom.
+
+- **Same ref, same props.** `present()` mounts the body and opens the sheet;
+  `dismiss()` / `close()` close it; the body unmounts and `onChange(-1)` +
+  `onDismiss` run when the native close ends (`onDismiss` / `onNativeDismiss`).
+  `useCloseThen` and `useSheetOpenMove` work unchanged.
+- **Detents** (`resolveNativeDetents`): a content-sized sheet (dynamic sizing,
+  no `snapPoints` or only `'100%'`) is as tall as its content, capped at the
+  maximum height (`maxDynamicContentSize` lowers the cap; a longer body
+  scrolls). It mounts closed, its box lays out at the sheet's width
+  (`nativeSheetContentWidth`), and it presents at that height as one custom
+  detent (`contentDetent`); once it rests, a new content height moves the
+  detent. Never react-native-screens' `fitToContents`: its wrapper reports the
+  height only after it is mounted, so a sheet mounted open resolved height 0
+  and stood at full height, opaque and edge to edge on iOS 26 (Jay,
+  2026-11-12). A body that never lays out presents at full height after
+  400 ms. Every other sheet is its `snapPoints` as fractions plus `1` (full
+  screen); `index` keeps its meaning.
+- **Glass only below the full detent.** iOS 26 draws a sheet at its full
+  detent opaque and edge to edge; below it, the floating Liquid Glass sheet.
+  A list or a menu is content-sized (or a partial detent), never `'100%'`:
+  Recent files, the session actions, the Add sheet. A form or a document
+  viewer may stand at full height.
+- **Fills on glass.** In the iOS 26 sheet `SurfaceContext` is `'glass'`: a
+  `SettingsGroup` row takes `GLASS_ROW_SURFACE` (translucent ink, the same
+  contrast over any glass tone) and a tile or track takes `useControlFill()`.
+  Never a solid `bg-secondary` on the glass: it matched the glass in one place
+  and not the next (the model rows and the Thinking track).
+- **No native detent selection while open.** `expand()` /
+  `snapToPosition('100%')` hold the sheet at full height (a content-sized sheet
+  gets the maximum height as its minimum; a fixed one lists only the full
+  detent); `collapse()` / `snapToIndex(0)` undo it. Any other `snapToIndex` is
+  a no-op.
+- **Look.** The system draws the grabber, the corner radius, the dimming and
+  the motion. `backdropComponent`, `topInset`, `handleComponent`,
+  `animationConfigs`, `enableOverDrag` and the keyboard props do nothing
+  there. iOS 26 draws its glass background (the content view stays clear);
+  before 26 the sheet gets `useSheetBackground()`. An explicit
+  `backgroundStyle.backgroundColor` wins (the sandbox preview).
+  `enablePanDownToClose={false}` is `preventNativeDismiss`;
+  `enableContentPanningGesture={false}` turns off
+  `prefersScrollingExpandsWhenScrolledToEdge`.
+- **Layout.** At a partial detent the sheet's view can keep the full
+  detent's height with its bottom below the screen. `NativeSheet`'s box ends
+  the content that far up: once the sheet rests it measures its frame in the
+  window (`measureInWindow`, polled until it holds still) and trims the part
+  below the screen (`nativeSheetBoxBelowScreen`); until then, and right after
+  a detent change, it uses an estimate (`nativeSheetHiddenBottom`; both in
+  `lib/ui/native-sheet.ts`; the estimate alone left the tabs off screen in
+  TestFlight 1.6.2 (171)),
+  so `flex: 1`, a `PinnedBar` (the model sheet's Agent · Model tabs) and a
+  list's last row end at the visible edge once the sheet rests (the end eases
+  there in 200 ms after a drag to a new detent; during the drag it stays where
+  it was). `SheetFill` is a `flex: 1` view and a `PinnedBar` needs no shift.
+  The title
+  row sits where gorhom drew it (10pt under the top: the native grabber); an
+  untitled sheet starts 24pt down, gorhom's default handle height.
+- **Keyboard.** The native sheet does not lift its content. `SheetScrollView`
+  is `KeyboardAwareScrollView` there (`react-native-keyboard-controller`,
+  insets mode), so a focused field scrolls above the keyboard. A field in a
+  `SheetView` that the keyboard covers is not moved.
+- **Stacking.** A sheet opened while another is up presents from the top-most
+  presented view controller (it stacks; gorhom's "switch" has no counterpart).
+  Dialogs, popovers and toasts draw in a `FullWindowOverlay` window, above
+  every native sheet.
 
 **One sheet motion** (KRTX-2929): `SHEET_MOTION` in `components/kortix/sheet.tsx`.
 `open` is a critically damped spring (`stiffness` 256, `damping` 32, `mass` 1:
@@ -208,7 +341,12 @@ before 26 and a binary without `ExpoUI` keep the opaque capsule
 `···` (`ProjectHeaderActions`) sit on a glass circle (44pt on iOS, `HEADER_BUTTON_SIZE`) behind the unchanged
 ghost button (Jay, 2026-10-20), and so does the thread's scroll-to-bottom
 chevron above the composer (`ScrollToBottomButton` in `SessionPage.tsx`; its
-bordered `secondary` circle stays elsewhere). `PageHeader`'s right column (`rightActions` +
+bordered `secondary` circle stays elsewhere). The project drawer's bottom bar
+puts the avatar (36pt photo in a 44pt glass circle) on glass (`GlassButtons`
+in `ProjectLeftDrawer`; the bare avatar elsewhere). New session is the primary
+`lg` pill: on iOS 26 glass tinted in the primary colour (`GlassButtons
+tintColor`, black in light, white in dark), elsewhere the solid primary fill
+(Jay, 2026-11-11). `PageHeader`'s right column (`rightActions` +
 `+`) shares one glass capsule, a button group. Never the native SwiftUI glass
 button there (rejected 2026-09-17).
 Every sheet title row (`SheetTitleRow`: `KortixBottomSheetModal title`,
@@ -258,6 +396,11 @@ snap up, the keyboard lift), on settle, and during a drag only while the
 visible sheet is taller than it. A `PinnedBar` inside follows the visible edge
 by `translateY` (`sheetFillShift` through `PinnedBarShiftContext`), so the bar
 does not lag the drag.
+One exception on the iOS native sheet: `nativeFullDetent={false}` lists no
+full detent, so the sheet stops at its highest partial snap point. UIKit sizes
+a sheet's view to its largest detent; with `'100%'` listed, the model sheet's
+Agent · Model tab bar sat below the screen at 85% (2026-11-13). `PickerSheet`
+passes it while it shows `tabs`. Android (gorhom) ignores the prop.
 
 `title="…"` adds the title row in the handle area, above any content: a close
 button at the far left, the title centred (`Text variant="large"`), a spacer
@@ -282,9 +425,12 @@ row inside a sheet's content.
    backdrop opacity, a handle colour, or a background colour: that duplication
    is the drift `KortixBottomSheetModal` ended.
 
-Adoption is complete and mechanically checked. All five greps return 0:
+Adoption is complete and mechanically checked. All six greps return 0 (the
+first one lists `components/genui/components/chart-card.tsx` until its
+migration lands; `sheet-imports.test.ts` keeps it in `PENDING`):
 
 ```bash
+grep -rn "from '@gorhom/bottom-sheet'" components/ app/ lib/ --include='*.tsx' --include='*.ts' | grep -v "import type\|components/kortix/\|\.test\.\|app/_layout.tsx"
 grep -rnE "^\s*<BottomSheetModal(\s|$)" components/ app/ --include='*.tsx' | grep -v components/kortix/sheet.tsx
 grep -rn "BottomSheetBackdrop"      components/ app/ --include='*.tsx' | grep -v components/kortix/sheet.tsx
 grep -rn "handleIndicatorStyle={{"  components/ app/ --include='*.tsx'

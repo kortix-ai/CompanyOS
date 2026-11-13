@@ -7,11 +7,23 @@
  * boundaries as the PostgreSQL partitions. Rows without an account go under `_none`.
  */
 import { createHash } from 'node:crypto';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { once } from 'node:events';
+import { createGzip, gunzipSync, gzipSync } from 'node:zlib';
 
 const DAY_MS = 86_400_000;
-/** Postgres keeps this long; older weeks are archived and their partition dropped. */
-export const HOT_DAYS = 90;
+/**
+ * PostgreSQL keeps this long; older weeks are archived and their partition dropped. The audit
+ * list (GET /accounts/{id}/audit) reads PostgreSQL only, so it covers this window; the export
+ * reaches back RETENTION_DAYS through the archive. Every other window derives from this value.
+ */
+export const HOT_DAYS = 14;
+/**
+ * The oldest row a writer may still add: runtime ingestion stores an older instant as the start of
+ * today, and reconciliation never reconstructs one. A week is exported only once its END is
+ * HOT_DAYS old, so a row this old lands in a week the archive reaches at least 4 days later:
+ * no row arrives in a week after its export.
+ */
+export const LATE_ROW_MAX_AGE_DAYS = HOT_DAYS - 4;
 /** Privacy policy: application logs are kept up to 365 days. */
 export const RETENTION_DAYS = 365;
 export const ARCHIVE_PART_ROWS = 100_000;
@@ -64,6 +76,57 @@ export interface EncodedRows {
 export function encodeRows(lines: string[]): EncodedRows {
   const bytes = gzipSync(`${lines.join('\n')}\n`, { level: 9 });
   return { bytes, sha256: createHash('sha256').update(bytes).digest('hex'), rows: lines.length };
+}
+
+/** RowEncoder hands zlib ~1 MB strings: fewer round trips, and deflate's output does not depend on the split. */
+const ENCODER_BATCH_CHARS = 1 << 20;
+
+/**
+ * encodeRows, streamed: compresses lines as they arrive, on zlib's thread pool, and holds only the
+ * compressed bytes. Its bytes equal `encodeRows(lines)` (format.test.ts), so a part exported again
+ * after a restart matches the object already in S3. One 100,000-row part of ~1.3 KB rows costs
+ * ~76 MB and no event-loop block, against ~670 MB and ~0.7 s for encodeRows (2026-11-12, Bun 1.4).
+ */
+export class RowEncoder {
+  rows = 0;
+  private readonly gzip = createGzip({ level: 9 });
+  private readonly chunks: Buffer[] = [];
+  private readonly ended: Promise<unknown>;
+  private pending = '';
+
+  constructor() {
+    this.gzip.on('data', (chunk: Buffer) => this.chunks.push(chunk));
+    this.ended = once(this.gzip, 'end');
+    // finish() awaits it; an encoder that is discarded instead must not leave a rejection unhandled.
+    this.ended.catch(() => undefined);
+  }
+
+  async push(line: string): Promise<void> {
+    this.rows += 1;
+    this.pending += `${line}\n`;
+    if (this.pending.length >= ENCODER_BATCH_CHARS) await this.write();
+  }
+
+  /** Never call it on an encoder without rows: encodeRows([]) is not the empty stream. */
+  async finish(): Promise<EncodedRows> {
+    if (this.rows === 0) throw new Error('RowEncoder.finish() without rows');
+    if (this.pending) await this.write();
+    this.gzip.end();
+    await this.ended;
+    const bytes = Buffer.concat(this.chunks);
+    return { bytes, sha256: createHash('sha256').update(bytes).digest('hex'), rows: this.rows };
+  }
+
+  /** Drops the part (the export stopped before it was complete) and frees zlib's buffers. */
+  discard(): void {
+    this.gzip.destroy();
+  }
+
+  private async write(): Promise<void> {
+    const text = this.pending;
+    this.pending = '';
+    if (!this.gzip.write(text)) await once(this.gzip, 'drain');
+  }
 }
 
 export function decodeRows(bytes: Uint8Array): Array<Record<string, unknown>> {

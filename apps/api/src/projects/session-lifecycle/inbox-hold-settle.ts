@@ -29,21 +29,24 @@
  *
  * THE CONTRACT A STOP HAS WITH A QUEUED PROMPT
  *
- * Stop pauses the queue; it never throws a prompt away and never runs one
- * behind the user's back. Every prompt the Stop caught ends up in exactly one
- * of three states, and each of them delivers AT MOST ONCE more:
+ * Stop ends the running turn; it never throws a prompt away and never sends
+ * one twice. Every prompt the Stop caught ends up in exactly one of three
+ * states, and each of them delivers AT MOST ONCE more:
  *
- *  - HELD (`queued`, `result.held`) — the ordinary outcome. The prompt is on
- *    screen as "Held — stopped" with Send now / Remove.
+ *  - HELD (`queued`, `result.held`) — while this settle runs. The turn Stop
+ *    (`POST .../prompts/hold`) releases the hold once it finishes, so the
+ *    held prompts go out together as the next turn (2026-11-04: Stop sends
+ *    what waited as the next turn instead of holding it for a user action).
  *  - DELIVERED — the aborted step had already read it, so it belongs to the
  *    interrupted turn and no release may send it again.
  *  - REMOVED — the user deleted the row.
  *
- * A hold is lifted by an ACTION, never by a timer: sending anything new
- * (`POST .../prompts` → `enqueueReleasingHold`), "send now" on one row
- * (`retryInboxPrompt`), or Resume (`POST .../prompts/hold {held:false}`).
- * The drain never claims a held inbox prompt, so `INBOX_HOLD_MS` (24 h) does
- * not lift the hold either (see `INBOX_HOLD_MS`).
+ * After a turn Stop, the hold route lifts the hold when this settle ends. A
+ * computer Stop (`stop.ts`) keeps it: the box is going down. Any hold is also
+ * lifted by an ACTION: sending anything new (`POST .../prompts` →
+ * `enqueueReleasingHold`), "send now" on one row (`retryInboxPrompt`), or
+ * Resume (`POST .../prompts/hold {held:false}`). The drain never claims a held
+ * inbox prompt, so `INBOX_HOLD_MS` (24 h) does not lift the hold either.
  *
  * "Delivers at most once more" is what step 3 below buys. Without it a held
  * forwarded row is released straight back onto the queue while the runtime still
@@ -66,8 +69,11 @@ import {
 import { INBOX_HOLD_MS, inboxScope } from './inbox-rows';
 import { withNextDeliveryAttempt } from './store';
 import { onWireSql } from './delivery-state';
+import { sessionMessageIdCapability } from './inbox-admission';
 
 const TIP_LIMIT = 16;
+/** A whole-transcript read of a long session, for a steer below the tip window. */
+const FULL_LOG_TIMEOUT_MS = 10_000;
 /** How long a claimed delivery is given to land after the hold. A delivery is
  *  one proxied POST (~0.3–1.5 s); the drain's own retry budget is far longer,
  *  but a prompt that is still in flight after this is not going to land into
@@ -119,6 +125,8 @@ export interface HoldSettleDeps {
   countClaimed: (sessionId: string) => Promise<number>;
   listStopPaused: (sessionId: string) => Promise<StopPausedRow[]>;
   readTip: (sessionId: string) => Promise<PlacementTipMessage[] | null>;
+  /** The whole root transcript, for a message below the tip window. */
+  readFullLog: (sessionId: string) => Promise<PlacementTipMessage[] | null>;
   abort: (sessionId: string) => Promise<boolean>;
   removeMessage: (sessionId: string, messageId: string) => Promise<boolean>;
   /** Forwarded + stop-paused → plain queued + held (deliverable on release). */
@@ -127,6 +135,8 @@ export interface HoldSettleDeps {
   closeDelivered: (commandId: string) => Promise<void>;
   /** The turn-ledger record opened for a wire id that was taken back out. */
   closeTurn: (sessionId: string, messageId: string) => Promise<void>;
+  /** The session's runtime keeps message ids (pi); null when the box cannot be read. */
+  keepsMessageIds: (sessionId: string) => Promise<boolean | null>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
 }
@@ -159,6 +169,10 @@ export const liveHoldSettleDeps: HoldSettleDeps = {
   async readTip(sessionId) {
     const resolved = await resolveSessionRuntimeEndpoint(sessionId);
     return resolved ? readSessionMessageTip(resolved, { limit: TIP_LIMIT }) : null;
+  },
+  async readFullLog(sessionId) {
+    const resolved = await resolveSessionRuntimeEndpoint(sessionId);
+    return resolved ? readSessionMessageTip(resolved, { timeoutMs: FULL_LOG_TIMEOUT_MS }) : null;
   },
   // This abort is part of the Stop the user pressed, and it does not pass the
   // sandbox proxy that stamps `UserStop`. It also runs before the client's own
@@ -210,6 +224,7 @@ export const liveHoldSettleDeps: HoldSettleDeps = {
   async closeTurn(sessionId, messageId) {
     await closeSandboxTurnByMessageId(sessionId, messageId, 'abandoned');
   },
+  keepsMessageIds: (sessionId) => sessionMessageIdCapability(sessionId, null),
   sleep: Bun.sleep,
   now: () => Date.now(),
 };
@@ -263,11 +278,36 @@ export async function settleInboxHoldAfterStop(
     }
   }
 
-  // 3. Settle every stop-paused row by what the loop did with it.
+  // 3. Settle every stop-paused row by what the loop did with it. On a runtime
+  // that keeps message ids a steer is on the box only once a step read it, so
+  // a steer the tip lacks is unread whatever later ids say (KRTX-4864: it was
+  // closed as read and never sent).
+  const capability = stopPaused.length > 0 ? await deps.keepsMessageIds(sessionId).catch(() => null) : false;
+  // Which clock the ids follow is unknown: the ID heuristic could close a
+  // dropped steer as read, so every row stays stop-paused (duplicating, never
+  // losing).
+  if (capability === null) return out;
+  const stable = capability;
+  let fullLog: PlacementTipMessage[] | null | undefined;
   for (const row of stopPaused) {
     const ids = row.wireIds;
     if (ids.length === 0) continue;
-    const reached = ids.some((id) => reachedPlacement(tip!, id));
+    // An id absent from the tip is unread only if the whole transcript lacks
+    // it too: the tip window may just not reach back to a message read long
+    // ago, and wire-id clocks cannot tell the two apart. When the whole read
+    // fails the row stays stop-paused, the duplicating-but-never-losing path.
+    let reached = false;
+    let undecided = false;
+    for (const id of ids) {
+      if (!stable || tip.some((m) => m.id === id)) {
+        if (reachedPlacement(tip, id)) reached = true;
+        continue;
+      }
+      fullLog ??= await deps.readFullLog(sessionId).catch(() => null);
+      if (!fullLog) undecided = true;
+      else if (fullLog.some((m) => m.id === id)) reached = true;
+    }
+    if (!reached && undecided) continue;
     if (reached) {
       await deps.closeDelivered(row.commandId);
       out.closedAsInterrupted += 1;
@@ -302,16 +342,26 @@ export async function settleInboxHoldAfterStop(
   return out;
 }
 
-/** Fire-and-forget entry for the hold route. */
-export function settleInboxHoldAfterStopInBackground(sessionId: string): void {
+/**
+ * Fire-and-forget entry for the hold route. `afterSettle` runs once the rows
+ * are settled, also when the settle failed: the turn Stop releases the hold
+ * there, so what waited goes out as the next turn.
+ */
+export function settleInboxHoldAfterStopInBackground(sessionId: string, afterSettle?: () => Promise<void>): void {
   void settleInboxHoldAfterStop(sessionId)
     .then((result) => {
       if (result.reAborted || result.heldBack || result.closedAsInterrupted || result.claimedLeft) {
         logger.info('[inbox-hold] settled after stop', { session_id: sessionId, ...result });
       }
-    })
-    .catch((err) =>
+    }, (err) => {
       logger.warn('[inbox-hold] settle after stop failed', {
+        session_id: sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    })
+    .then(() => afterSettle?.())
+    .catch((err) =>
+      logger.warn('[inbox-hold] release after stop failed', {
         session_id: sessionId,
         error: err instanceof Error ? err.message : String(err),
       }),

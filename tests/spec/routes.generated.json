@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1757,
-  "aliases": 677,
+  "count": 1759,
+  "aliases": 678,
   "routes": [
     {
       "method": "GET",
@@ -973,6 +973,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
     },
     {
+      "method": "POST",
+      "path": "/v1/accounts/:workspaceId/secret-resources/:secretId/verify",
+      "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
+    },
+    {
       "method": "GET",
       "path": "/v1/accounts/:workspaceId/subscription-connections",
       "aliasOf": "/v1/workspaces/:workspaceId/subscription-connections"
@@ -1195,6 +1200,10 @@
     {
       "method": "POST",
       "path": "/v1/admin/api/sandboxes/:sessionId/migrate"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agent-marks/:file"
     },
     {
       "method": "GET",
@@ -2088,10 +2097,6 @@
     {
       "method": "GET",
       "path": "/v1/generation"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/git/:project/fast-boot-bundle"
     },
     {
       "method": "POST",
@@ -3134,11 +3139,6 @@
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/channels/slack/join",
-      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/channels/slack/mode",
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/mode"
@@ -4027,11 +4027,6 @@
       "method": "POST",
       "path": "/v1/projects/:workspaceId/sandbox-templates/:templateId/build",
       "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
-      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     },
     {
       "method": "GET",
@@ -5933,10 +5928,6 @@
       "path": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/channels/slack/mode"
     },
@@ -6965,10 +6956,6 @@
       "path": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
-    },
-    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/sandboxes"
     },
@@ -7015,6 +7002,10 @@
     {
       "method": "PUT",
       "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
     },
     {
       "method": "GET",
@@ -7707,6 +7698,24 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/managed-git/status"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     }
   ]
 }

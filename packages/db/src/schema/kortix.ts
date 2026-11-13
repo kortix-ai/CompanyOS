@@ -38,6 +38,20 @@ export const salesEventOutbox = kortixSchema.table('sales_event_outbox', {
 }, (table) => [index('sales_event_outbox_due_idx').on(table.availableAt)
   .where(sql`${table.deliveredAt} IS NULL AND ${table.deadLetterAt} IS NULL`)]);
 
+/**
+ * Lead and application submissions from the web forms (POST /v1/system/demo-request, called by
+ * apps/web /api/demo-request). Moved here from the Suna-era `public.contact_forms` (2026-11);
+ * `data` keeps the submission verbatim. The AFTER INSERT trigger `sales_demo_requested`
+ * (kortix.enqueue_demo_requested) writes the Sales outbox row in the same transaction.
+ */
+export const contactForms = kortixSchema
+  .table('contact_forms', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
+  })
+  .enableRLS();
+
 export const usedRefreshTokens = kortixSchema.table('used_refresh_tokens', {
   tokenHash: text('token_hash').primaryKey(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -1352,6 +1366,13 @@ export const accountSecretResources = kortixSchema.table('account_secret_resourc
   /** Who the stored login signs in as, when the provider says: `{ email, plan }`.
    *  Claude's profile API fills it on a usage refresh; a ChatGPT login carries it in its token. */
   providerAccount: jsonb('provider_account'),
+  /** The last check of a provider API key against its provider, run when the
+   *  key is saved or rotated and on request: `verified`, `invalid` (the
+   *  provider refused it) or `unknown` (no clean answer). NULL: never checked. */
+  verifyStatus: varchar('verify_status', { length: 16 }),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  /** The provider's words for `invalid`, or why the check had no answer. */
+  verifyMessage: varchar('verify_message', { length: 500 }),
   createdBy: uuid('created_by').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1393,6 +1414,66 @@ export const sessionProviderSecretPools = kortixSchema.table('session_provider_s
 }, (table) => [
   primaryKey({ columns: [table.sessionId, table.providerId] }),
   foreignKey({ columns: [table.sessionId], foreignColumns: [projectSessions.sessionId], name: 'session_provider_pools_session_fk' }).onDelete('cascade'),
+]);
+
+/**
+ * The audit ledger of the move of LLM provider credentials from
+ * `project_secrets` (consumer `llm_gateway`) into `account_secret_resources`:
+ * one row per legacy secret the backfill (`apps/api/scripts/llm-credential-backfill.ts`)
+ * or a legacy write path looked at. `outcome` says what happened to it.
+ *
+ * A legacy secret with a `copied`, `already_present` or `superseded` row is
+ * never read again (`LLM_CREDENTIAL_MOVED_OUTCOMES`): its named account serves,
+ * and deleting that account in the Models panel does not bring the old value
+ * back. Any other outcome (or no row) keeps the legacy value readable.
+ *
+ * No FK on the two secret ids: the ledger outlives a deleted account or a
+ * deleted legacy row, so an audit can still say what moved where.
+ */
+export const llmCredentialBackfill = kortixSchema.table('llm_credential_backfill', {
+  legacySecretId: uuid('legacy_secret_id').primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** Null only for `skipped_no_account`: the project has no account. */
+  accountId: uuid('account_id'),
+  name: varchar('name', { length: 64 }).notNull(),
+  /** copied | already_present | superseded | skipped_* | failed_* (see llm-credential-move.ts). */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  accountSecretId: uuid('account_secret_id'),
+  /** The legacy row's `updated_at` when it was copied: a later legacy write re-copies it. */
+  legacyUpdatedAt: timestamp('legacy_updated_at', { withTimezone: true }).notNull(),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_llm_credential_backfill_project').on(table.projectId),
+]);
+
+/**
+ * The audit ledger of the legacy credential moves that are not LLM keys
+ * (`apps/api/src/secrets/legacy-credential-backfill.ts`): one row per moved
+ * object and concept, with the columns it had before, so an operator can
+ * reverse one move by hand. `concept`:
+ *   - `connector_secret_strategy`: a connector secret stored with the
+ *     pre-2026-08-05 strategy `runtime`; it moves to `broker`.
+ *   - `connector_secret_consumer`: a connector-scope secret stamped consumer
+ *     `sandbox`; it moves to consumer `connector`, strategy `broker`.
+ *   - `external_connection`: a connection owned by the retired `external`
+ *     owner type; nobody can reach it, so it is revoked.
+ */
+export const legacyCredentialBackfill = kortixSchema.table('legacy_credential_backfill', {
+  concept: varchar('concept', { length: 48 }).notNull(),
+  objectId: uuid('object_id').notNull(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** `moved` (the object now has its canonical form) or `skipped_*`. */
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  /** The changed columns before the move. */
+  before: jsonb('before').notNull().default({}),
+  detail: text('detail'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.concept, table.objectId] }),
+  index('idx_legacy_credential_backfill_project').on(table.projectId),
 ]);
 
 /**
@@ -2049,6 +2130,22 @@ export const projectSessions = kortixSchema.table(
         table.createdAt.desc(),
       )
       .where(sql`(${table.metadata} ->> 'trigger_slug') is not null`),
+    // Agent-handle lookups (peer-messages `to` resolution, the team-tasks
+    // handle-taken check): without an expression index the planner filters
+    // every session of the project on the JSON extraction. Partial: only
+    // named agents carry a handle.
+    index('idx_project_sessions_project_agent_handle')
+      .on(table.projectId, sql`(${table.metadata} ->> 'agent_handle')`)
+      .where(sql`(${table.metadata} ->> 'agent_handle') is not null`),
+    // A session's multi-agent circle (peer-messages `circleOf`: lead,
+    // children, teammates) and the lead's teammate list filter on
+    // `metadata.team_lead` with NO project predicate, so the planner
+    // seq-scans the table. This is the only index that can serve the
+    // `team_lead IN (...)` arm of that OR. Partial: only teammates carry
+    // the key.
+    index('idx_project_sessions_team_lead')
+      .on(sql`(${table.metadata} ->> 'team_lead')`)
+      .where(sql`(${table.metadata} ->> 'team_lead') is not null`),
     uniqueIndex('idx_project_sessions_project_branch').on(table.projectId, table.branchName),
     uniqueIndex('idx_project_sessions_tenant_identity').on(
       table.accountId,
@@ -2934,6 +3031,14 @@ export const chatInstalls = kortixSchema.table(
       .notNull()
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     connectedAt: timestamp('connected_at', { withTimezone: true }).defaultNow().notNull(),
+    /**
+     * A Slack install of the Kortix workspace's OWN Slack app (its own bot and
+     * token), written only by that install path. False: the shared Kortix
+     * app, whose one token per Slack workspace belongs to one Kortix
+     * workspace (channels/slack/link.ts). Never derived from a secret a
+     * workspace admin can write.
+     */
+    ownApp: boolean('own_app').default(false).notNull(),
   },
   (table) => [
     uniqueIndex('idx_chat_installs_workspace_project').on(
@@ -4458,6 +4563,10 @@ export const oauthAccessTokens = kortixSchema.table(
      *  the token acts as the person in every workspace (every token issued
      *  before 2026-11-06). */
     boundWorkspaceId: uuid('bound_workspace_id'),
+    /** The second factor the minting session passed: 'aal2', or NULL for none.
+     *  Set by the Apps gate for a viewer whose App cookie a browser session at
+     *  aal2 opened. The API honors it in `account_id` only. */
+    mfaAal: text('mfa_aal'),
   },
   (table) => [
     uniqueIndex('idx_oauth_access_token_hash').on(table.tokenHash),
@@ -4866,7 +4975,46 @@ export const auditArchiveChunks = kortixSchema.table('audit_archive_chunks', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   removedAt: timestamp('removed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  /**
+   * The legacy table's share of a week while it is `exporting`: `{ rows, sum, accounts }` (counts
+   * as decimal strings). Read once per week, not once per worker life: on prod a week's tally
+   * reads ~50M rows at the archive rate cap (~2 h 50 min). Cleared when the week is archived.
+   */
+  legacyTally: jsonb('legacy_tally').$type<{ rows: string; sum: string; accounts: Array<string | null> }>(),
 });
+
+/**
+ * One row per object the archive has uploaded and verified for a week that is still `exporting`:
+ * the export's progress. A restarted export continues after the last recorded part instead of at
+ * the start of the week, and the week's totals and manifest come from these rows. Deleted when the
+ * week is archived (the manifest in S3 then lists the same objects).
+ */
+export const auditArchiveParts = kortixSchema.table(
+  'audit_archive_parts',
+  {
+    objectKey: text('object_key').primaryKey(),
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    accountId: uuid('account_id'),
+    part: integer('part').notNull(),
+    rowCount: integer('row_count').notNull(),
+    byteCount: bigint('byte_count', { mode: 'number' }).notNull(),
+    /** sha256 hex of the object bytes. */
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    /** Sum of the part's event-id checksums (up to 2^77, so numeric). */
+    checksumSum: numeric('checksum_sum').notNull(),
+    firstOccurredAt: text('first_occurred_at').notNull(),
+    lastOccurredAt: text('last_occurred_at').notNull(),
+    /** The keyset cursor a restart continues from: (last_occurred_at, last_event_id). */
+    lastEventId: uuid('last_event_id').notNull(),
+    /** The account's last part of the week: nothing of this account is left to export. */
+    accountDone: boolean('account_done').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('audit_archive_parts_week_idx').on(table.weekStart),
+    foreignKey({ name: 'audit_archive_parts_week_fk', columns: [table.weekStart], foreignColumns: [auditArchiveChunks.weekStart] }).onDelete('cascade'),
+  ],
+);
 
 /** Deprecated: nothing writes it since migration 20261001223552613 (the prepare trigger no
  *  longer allocates sequences). Kept for old rows; drop it in a later forward migration. */
@@ -4927,6 +5075,8 @@ export const usageEvents = kortixSchema.table(
       .on(table.requestId)
       .where(sql`${table.requestId} is not null`),
     index('idx_usage_events_account_time').on(table.accountId, table.createdAt),
+    // Account-agnostic time-range read of the ops overview (last 24h, all accounts).
+    index('idx_usage_events_created_at').on(table.createdAt),
     index('idx_usage_events_project_time').on(table.projectId, table.createdAt),
     index('idx_usage_events_session').on(table.sessionId),
     index('idx_usage_events_model').on(table.provider, table.model),
@@ -4937,6 +5087,28 @@ export const usageEvents = kortixSchema.table(
       .on(table.accountId, table.originRef, table.createdAt)
       .where(sql`${table.originRef} is not null`),
   ],
+);
+
+/**
+ * The first 2xx answer of an inference request that carried a client
+ * `Idempotency-Key`, shared by every gateway replica (KRTX-4612). The key is
+ * a sha256 over the credential, the wire operation, the client key and the
+ * body, so it neither exposes the credential nor matches across credentials.
+ * Rows live an hour and are deleted by the writes that follow; the gateway
+ * re-checks the caller's credential and budget before serving one.
+ */
+export const gatewayIdempotencyReplays = kortixSchema.table(
+  'gateway_idempotency_replays',
+  {
+    keyHash: varchar('key_hash', { length: 64 }).primaryKey(),
+    status: integer('status').notNull(),
+    statusText: text('status_text').notNull(),
+    headers: jsonb('headers').notNull().$type<[string, string][]>(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [index('idx_gateway_idempotency_replays_expires').on(table.expiresAt)],
 );
 
 // ─── Gateway (observability + control plane) ───────────────────────────────
@@ -6805,6 +6977,9 @@ export const accessRequests = kortixSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
+  // One waitlist row per address: the request-access endpoint replays must be
+  // idempotent (KRTX-4699). Constraint, not a performance index.
+  (table) => [uniqueIndex('idx_access_requests_email').on(table.email)],
 );
 
 // ─── Change Requests ────────────────────────────────────────────────────────

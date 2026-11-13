@@ -25,6 +25,7 @@ import {
 import { useCreateWorkspace } from '@kortix/ui/workspace/new/use-create-workspace';
 import { WorkspaceHandoff } from '@kortix/ui/workspace/new/workspace-handoff';
 import {
+  readNameParam,
   suggestWorkspaceName,
   validateWorkspaceName,
   workspaceNameMessage,
@@ -130,8 +131,14 @@ export function NewWorkspacePage() {
   // below (`effectiveAccountId`).
   const returnedAccountId = readAccountParam(new URLSearchParams(searchParams?.toString() ?? ''));
 
+  // `?name=` is the name the chooser's inline form showed when the user
+  // clicked "More options" (`withNameParam`). The URL is the same on the
+  // server and the client, so it is safe in the initializer.
+  const handedName = readNameParam(new URLSearchParams(searchParams?.toString() ?? ''));
+
   const [state, setState] = useState<NewWorkspaceFormState>(() => ({
     ...INITIAL_FORM_STATE,
+    ...(handedName ? { name: handedName } : {}),
     templateId: cloneItemId,
     ...(initialSource ? { source: initialSource } : {}),
   }));
@@ -211,6 +218,7 @@ export function NewWorkspacePage() {
       <AccountTopBar
         email={user?.email ?? null}
         name={user?.user_metadata?.name}
+        avatarUrl={user?.user_metadata?.avatar_url}
         signingOut={signingOut}
         onLogOut={() => {
           setSigningOut(true);
@@ -415,6 +423,7 @@ export function NewWorkspacePage() {
                   connectComputer={connectComputer}
                   state={state}
                   accountId={effectiveAccountId}
+                  noGitHubSourceAccount={!directory.loading && !directory.githubSourceAccount}
                   onChange={setState}
                 />
               </div>

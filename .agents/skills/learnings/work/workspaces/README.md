@@ -1,7 +1,7 @@
 ---
 title: Workspaces — one account, one project, one concept (the Slack model)
-status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); Release 2 and 3 specified in design.md, not built; the split runs in dry_run and waits for Marko's go
-owner: marko
+status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); Release 2 and 3 specified in design.md, not built; the split runs in dry_run until the sandbox-key fix is released
+owner: dimitrije (from marko, 2026-11-10)
 updated: 2026-11-10
 ---
 
@@ -134,6 +134,34 @@ Each stage is its own PR on branch `workspaces` or a sub-branch merged back.
    `projects(account_id) where status = 'active'`.
 10. **Later, separate initiative:** code repos as connected resources of a
     workspace, so a developer with 5 repos has 1 workspace, not 5.
+
+## Status (2026-11-10, evening): Release 2 and 3 handed to Dimitrije
+
+Prod, read-only, 2026-11-10 ~15:00 UTC. It corrects the table below.
+
+| Gate item | Prod now |
+|---|---|
+| 0 `split_pending` projects | 1,036 in 401 accounts. Split still `dry_run` (no `workspace_split` setting). Plan: 635 moves, 358 from 311 free accounts, 277 from 90 paying accounts (all `account_has_billing`, 0 IdP). D12 removes the paying hold |
+| 0 NULL `workspace_id` | The `workspace-id-fill` job FINISHED at 02:00 UTC (`workspace_id_fill_progress.finished_at`); nothing it can fill is left. Of the NULL `credit_ledger` rows (1% sample), ~71% belong to `split_pending` accounts (filled when they split) and ~29% to deleted accounts (no `accounts` row; they stay NULL, see design.md §2) |
+
+Found before `apply`: the split left a moved session box's legacy sandbox key
+(`kortix.api_keys`, type `sandbox`) on the source account, so the git proxy
+refused it (`403 sandbox token is not scoped to this workspace`). ~3,200 keys
+sat on the projects to move, 382 used in the last 7 days. Fixed in
+`moveProjectRows` (transfer, split, repair and reverse); proven in
+`project-transfer.integration.test.ts`.
+
+Order from here (each prod step needs Dimitrije's go):
+
+1. Release the sandbox-key fix and D12 (one release driver).
+2. `workspace_split` = `apply` on prod; `workspace-invariants` after each batch.
+3. Build R2a (design.md §4) while the split runs; then R2b; R3 after a
+   rehearsal on a restored snapshot (§5).
+
+Of the decisions below, 2 (the confirmation window) is closed by D12, and 1
+(the owner email text) by D13 (2026-11-11, "no owner notices": the split
+sends no email and has no notice period). Still open: 3, the soak length.
+`apply` itself still needs Marko's go.
 
 ## Status (2026-11-10)
 

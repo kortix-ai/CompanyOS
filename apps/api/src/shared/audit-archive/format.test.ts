@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  HOT_DAYS,
+  RowEncoder,
+  LATE_ROW_MAX_AGE_DAYS,
   archiveObjectKey,
   decodeRows,
   encodeRows,
@@ -32,12 +35,23 @@ describe('audit archive format', () => {
     expect(retainUntil('2026-09-28').toISOString()).toBe('2027-10-05T00:00:00.000Z');
   });
 
-  test('a week is ready once its END is more than 90 days old, and expired once its lock would end within a day', () => {
+  test('a week is ready once its END is more than HOT_DAYS (14) old, and expired once its lock would end within a day', () => {
+    expect(HOT_DAYS).toBe(14);
     const end = weekEnd('2026-07-06').getTime(); // 2026-07-13
-    expect(isReadyToArchive('2026-07-06', new Date(end + 90 * 86_400_000 - 1))).toBe(false);
-    expect(isReadyToArchive('2026-07-06', new Date(end + 90 * 86_400_000 + 1))).toBe(true);
+    expect(isReadyToArchive('2026-07-06', new Date(end + HOT_DAYS * 86_400_000 - 1))).toBe(false);
+    expect(isReadyToArchive('2026-07-06', new Date(end + HOT_DAYS * 86_400_000 + 1))).toBe(true);
     expect(isExpired('2026-07-06', new Date(end + 363 * 86_400_000))).toBe(false);
     expect(isExpired('2026-07-06', new Date(end + 365 * 86_400_000 - 3_600_000))).toBe(true);
+  });
+
+  test('a late row no writer may add older than LATE_ROW_MAX_AGE_DAYS lands in a week the archive has not exported', () => {
+    // The newest week that holds a row of that age is exported at the earliest when its end is
+    // HOT_DAYS old: at least 4 days after the row was written.
+    for (let hour = 0; hour < 7 * 24; hour += 1) {
+      const now = new Date(Date.UTC(2026, 10, 2) + hour * 3_600_000);
+      const oldest = new Date(now.getTime() - LATE_ROW_MAX_AGE_DAYS * 86_400_000);
+      expect(isReadyToArchive(weekStartOf(oldest), new Date(now.getTime() + 4 * 86_400_000 - 1))).toBe(false);
+    }
   });
 
   test('rows round-trip through gzip JSONL, and equal input gives equal bytes (a retry matches the stored object)', () => {
@@ -48,5 +62,30 @@ describe('audit archive format', () => {
     expect(first.sha256).toHaveLength(64);
     expect(first.bytes.equals(again.bytes)).toBe(true);
     expect(decodeRows(first.bytes)).toEqual(rows);
+  });
+
+  test('the streaming encoder writes the same bytes as encodeRows, so a resumed export matches objects already in S3', async () => {
+    // Objects are write-once (Object Lock): a part re-exported after a restart must equal the stored
+    // bytes exactly, whichever encoder wrote them. Inputs: ASCII, multi-byte UTF-8, empty lines,
+    // and a part far larger than one write batch.
+    let seed = 42;
+    const rnd = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648) / 2_147_483_648;
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789 {}":,ü✓é\\';
+    const line = (len: number) => Array.from({ length: len }, () => alphabet[Math.floor(rnd() * alphabet.length)]).join('');
+    const inputs = [
+      ['{"a":1}'],
+      ['', 'x', ''],
+      Array.from({ length: 2_000 }, () => line(Math.floor(rnd() * 900))),
+      Array.from({ length: 300 }, () => line(9_000)),
+    ];
+    for (const lines of inputs) {
+      const encoder = new RowEncoder();
+      for (const l of lines) await encoder.push(l);
+      const streamed = await encoder.finish();
+      const whole = encodeRows(lines);
+      expect(streamed.rows).toBe(lines.length);
+      expect(streamed.sha256).toBe(whole.sha256);
+      expect(Buffer.compare(streamed.bytes, whole.bytes)).toBe(0);
+    }
   });
 });

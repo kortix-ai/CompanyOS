@@ -1,7 +1,7 @@
 import { memoInRequest } from '../shared/request-memo';
-import { projectLlmRoutingPolicies, projectSecrets } from '@kortix/db';
+import { accountSecretResources, projectLlmRoutingPolicies, projectSecrets } from '@kortix/db';
+import { legacySecretNotMoved } from '../secrets/llm-credential-ledger';
 import { and, eq, isNull, like, sql } from 'drizzle-orm';
-import { resolveFeatureFlag } from '../feature-flags/registry';
 import { db } from '../shared/db';
 import { modelAccessAllows, readModelAccess, updateModelAccess, type ModelAccessChange } from '../llm-gateway/model-access';
 import {
@@ -36,7 +36,7 @@ export async function getProjectModelAccess(projectId: string) {
   return readModelAccess(await readProjectMetadata(projectId));
 }
 
-/** Read model access, the pooled flag and custom providers from one projects row (KRTX-586). */
+/** Read model access and custom providers from one projects row (KRTX-586). */
 export function getProjectGatewayResolution(projectId: string) {
   // Shared within one request: gateway admission prefetches it.
   return memoInRequest(`gateway-resolution:${projectId}`, () => readProjectGatewayResolution(projectId));
@@ -46,7 +46,6 @@ async function readProjectGatewayResolution(projectId: string) {
   const metadata = await readProjectMetadata(projectId);
   return {
     access: readModelAccess(metadata),
-    pooledEnabled: resolveFeatureFlag(metadata, 'pooled_provider_secrets'),
     customProviders: readCustomProviders(metadata),
   };
 }
@@ -86,15 +85,25 @@ export async function changeProjectModelAccess(input: {
 
 /** The project's custom providers and the names of its project-wide `CUSTOM_*_API_KEY` secrets. */
 export async function listProjectCustomProviders(projectId: string) {
-  const [[row], secrets] = await Promise.all([
+  const [[row], secrets, named] = await Promise.all([
     db.select({ metadata: projectsView.metadata }).from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1),
+    // Legacy keys the backfill has not moved yet (llm-credential-move.ts).
     db.select({ name: projectSecrets.name }).from(projectSecrets).where(and(
       eq(projectSecrets.projectId, projectId),
       isNull(projectSecrets.ownerUserId),
       like(projectSecrets.name, 'CUSTOM\\_%\\_API\\_KEY'),
+      legacySecretNotMoved(projectSecrets.secretId),
+    )),
+    // Named keys: where every write goes now.
+    db.select({ name: accountSecretResources.name }).from(accountSecretResources).where(and(
+      eq(accountSecretResources.projectId, projectId),
+      eq(accountSecretResources.consumer, 'llm_gateway'),
+      eq(accountSecretResources.active, true),
+      like(accountSecretResources.name, 'CUSTOM\\_%\\_API\\_KEY'),
     )),
   ]);
-  return { providers: readCustomProviders(row?.metadata), secretNames: secrets.map((secret) => secret.name) };
+  const secretNames = [...new Set([...secrets, ...named].map((secret) => secret.name))];
+  return { providers: readCustomProviders(row?.metadata), secretNames };
 }
 
 /**

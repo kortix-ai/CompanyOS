@@ -560,7 +560,7 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    href: '/workspaces/{projectId}/admin/models?tab=usage',
+    href: '/workspaces/{projectId}/admin/models?tab=providers&provider=openai',
     requiresProject: true,
     keywords: 'chatgpt openai codex subscription usage limits weekly allowance quota',
   },
@@ -571,7 +571,7 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    href: '/workspaces/{projectId}/admin/models?tab=usage',
+    href: '/workspaces/{projectId}/admin/models?tab=providers&provider=anthropic',
     requiresProject: true,
     keywords: 'anthropic claude code subscription usage limits weekly allowance quota fable',
   },
@@ -828,7 +828,7 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    // The Inbox's Review tab (`reviewHref`) since 2026-11-08.
+    // The workspace Review page (`reviewHref`).
     href: '/workspaces/{projectId}/inbox?view=review',
     requiresProject: true,
     keywords: 'review center inbox approvals awaiting waiting needs you outputs queue',

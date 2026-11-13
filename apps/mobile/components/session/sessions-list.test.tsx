@@ -86,6 +86,7 @@ let needsInputOptions: unknown;
 const real = new Set([
   'react',
   '@kortix/sdk',
+  '@/lib/ui/use-debounced-value',
   '@/lib/session/session-list',
   '@/lib/session/session-tree',
   '@/lib/session/session-pages',
@@ -198,6 +199,20 @@ describe('Sessions page list', () => {
     // Each row is a SettingsGroupItem that knows its place in the group.
     const items = tree.root.findAll((node: any) => node.type === 'GroupItem');
     expect(items.map((node: any) => [node.props.index, node.props.count])).toEqual([[0, 1], [0, 1], [0, 1], [0, 2], [1, 2]]);
+  });
+
+  // KRTX-4705: the default list is the sessions a person started; the machine's
+  // runs keep their own chip, so they stay reachable without flooding the list.
+  test('the default list asks for person-started sessions; the Automated chip asks for the machine runs', async () => {
+    paged = pagedOf([session('a', Date.now())]);
+    await render(React.createElement(Page.ProjectSessionsPage));
+    expect(pagedOptions).toMatchObject({ parent: 'root', startedBy: 'humans' });
+    const chip = (label: string) =>
+      tree.root.findAll((node: any) => node.type === 'Button' && textOf(node) === label);
+    await act(async () => chip('Automated')[0].props.onPress());
+    expect(pagedOptions).toMatchObject({ parent: 'root', startedBy: 'automated' });
+    await act(async () => chip('All')[0].props.onPress());
+    expect(pagedOptions).toMatchObject({ parent: 'root', startedBy: 'humans' });
   });
 
   test('one group shows no title', async () => {

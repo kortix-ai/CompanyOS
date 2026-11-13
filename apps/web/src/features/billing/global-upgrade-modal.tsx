@@ -24,7 +24,7 @@ import Hint from '@kortix/ui/hint';
 import { Copy } from '@kortix/ui/icons';
 import { useAccountMembers } from '@kortix/ui/internal/account-hub/use-account-members';
 import {
-  DEFAULT_TIER_USD,
+  ENTRY_TIER_USD,
   formatWholeUsd,
   tierForMonthlyUsd,
 } from '@kortix/ui/internal/billing/compute-pricing';
@@ -79,9 +79,8 @@ export interface UpgradePlansModalProps {
    *  `reason` (the lossy 402 code) so the modal and the gate that opened it can
    *  never disagree about the same account. */
   billingState?: BillingState;
-  balance?: number;
-  /** True while account state is doing its first load — the credit view shows a
-   *  balance skeleton instead of a misleading 0 until the real value lands. */
+  /** True while account state is doing its first load — the credit view shows
+   *  a skeleton instead of a misleading 0 until the real value lands. */
   accountLoading?: boolean;
 }
 
@@ -232,7 +231,11 @@ function UpgradePlanCard({
   const tCard = useTranslations('billing.credits.planCard');
   const tPlan = useTranslations('billing.plan');
   const locale = useLocale();
-  const [monthlyUsd, setMonthlyUsd] = useState<number>(DEFAULT_TIER_USD);
+  // The entry tier (the "From $50" the card names) until the person picks
+  // another; their pick survives closing and reopening the dialog.
+  const pickedMonthlyUsd = useUpgradeDialogStore((s) => s.pickedMonthlyUsd);
+  const setPickedMonthlyUsd = useUpgradeDialogStore((s) => s.setPickedMonthlyUsd);
+  const monthlyUsd = pickedMonthlyUsd ?? ENTRY_TIER_USD;
   const { change, isPending } = useChangeCreditPlan();
 
   if (plan.id !== 'credits') {
@@ -262,7 +265,7 @@ function UpgradePlanCard({
       priceSlot={
         <CreditLadder
           value={monthlyUsd}
-          onChange={setMonthlyUsd}
+          onChange={setPickedMonthlyUsd}
           disabled={isPending}
           stackBelowXl={false}
         />
@@ -609,12 +612,12 @@ export function GlobalUpgradeModal() {
 }
 
 function GlobalUpgradeModalContent() {
-  const { isOpen, closeUpgradeDialog, accountId, reason, hasSubscription, billingState, balance } =
+  const { isOpen, closeUpgradeDialog, accountId, reason, hasSubscription, billingState } =
     useUpgradeDialogStore();
   const { data: accountState, isLoading: accountLoading } = useAccountState({ accountId });
   const queryClient = useQueryClient();
 
-  // Pull the freshest wallet balance every time the modal opens (skip the
+  // Pull the freshest account state every time the modal opens (skip the
   // server cache) so it always matches the Plan page — never a stale/zero value
   // left over from an earlier read, and it reflects a top-up the moment it lands.
   useEffect(() => {
@@ -630,7 +633,6 @@ function GlobalUpgradeModalContent() {
         reason={reason}
         hasSubscription={hasSubscription}
         billingState={billingState}
-        balance={balance}
         accountLoading={accountLoading}
       />
     </BillingAccountProvider>

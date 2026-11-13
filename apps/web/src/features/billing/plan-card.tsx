@@ -18,7 +18,7 @@ import { Button } from '@kortix/ui/button';
 import Loading from '@kortix/ui/loading';
 import {
   CREDIT_TIERS,
-  DEFAULT_TIER_USD,
+  ENTRY_TIER_USD,
   FREE_MONTHLY_CREDITS,
   formatWholeUsd,
   isValidMonthlyUsd,
@@ -41,6 +41,7 @@ import { formatCredits } from '@kortix/shared';
 import { useState } from 'react';
 
 import { describePlanStatus } from './account-overview';
+import { PlanStatusDot, formatShortDate, usePlanStatusCopy } from './plan-status';
 
 export type PlanChangeKind = 'subscribe' | 'raise' | 'cut' | 'keep' | 'unchanged' | 'invalid';
 
@@ -77,12 +78,6 @@ export function scheduledDowngrade(
   return { monthlyUsd, effectiveAt: change.effective_date };
 }
 
-function formatShortDate(iso: string | null | undefined, locale: string): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-}
-
 /** A charge due now: cents matter here, unlike the whole-dollar plan prices. */
 function formatChargeUsd(amount: number, locale: string): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(amount);
@@ -101,21 +96,7 @@ export function PlanCard({ state }: { state: AccountState }) {
   const t = useTranslations('billing.plan');
   const tCredits = useTranslations('billing.credits');
   const locale = useLocale();
-  const planCopy = {
-    locale,
-    perMonth: (amount: string) => t('perMonth', { amount }),
-    cancels: (date: string) => t('cancels', { date }),
-    cancelsAtPeriodEnd: t('cancelsAtPeriodEnd'),
-    renews: (date: string) => t('renews', { date }),
-    active: t('active'),
-    noSubscription: t('noSubscription'),
-    graceUntil: (date: string) => t('graceUntil', { date }),
-    compedUntil: (date: string) => t('compedUntil', { date }),
-    status: (status: string) =>
-      t.has(`statuses.${status}`)
-        ? t(`statuses.${status}`)
-        : t('status', { status: status.replace(/_/g, ' ') }),
-  };
+  const planCopy = usePlanStatusCopy();
   const { name, sublabel, detail, isActive, isWindingDown } = describePlanStatus(state, planCopy);
   const credits = currentPlanCredits(state);
 
@@ -149,23 +130,13 @@ export function PlanCard({ state }: { state: AccountState }) {
           {state.credits.monthly > 0 && <CreditExpiry expiresAt={state.credits.expires_at} />}
           {state.plan_comp ? (
             <p className="text-muted-foreground mt-1.5 max-w-md text-xs text-pretty" data-testid="plan-comp-note">
-              {t('compedNote', { date: formatShortDate(state.plan_comp.until, locale) })}
+              {t('compedNote', { date: formatShortDate(state.plan_comp.until, locale) ?? '' })}
             </p>
           ) : null}
           <FreeGrantNotice state={state} className="mt-1.5 max-w-md" />
         </div>
         <span className="flex min-w-0 shrink-0 items-center gap-1.5">
-          {isActive ? (
-            // Optical, not geometric: a 6px dot centred on a 20px line box
-            // sits a hair high against the x-height of the text beside it.
-            <span
-              aria-hidden
-              className={cn(
-                'mt-px size-1.5 shrink-0 rounded-full',
-                isWindingDown ? 'bg-kortix-orange' : 'bg-kortix-green',
-              )}
-            />
-          ) : null}
+          <PlanStatusDot isActive={isActive} isWindingDown={isWindingDown} />
           <span className="text-muted-foreground truncate text-xs leading-5 first-letter:capitalize">
             {detail}
           </span>
@@ -185,26 +156,26 @@ export interface PlanPickerView {
 }
 
 /**
- * What the plan picker opens on: the amount the account pays, or the default
+ * What the plan picker opens on: the amount the account pays, or the entry
  * tier. Enterprise never changes the billing plan, so every account gets the
  * picker. A live subscription on an amount the API does not report (an
  * off-ladder legacy price) opens on the select's "choose a tier" state.
  */
 export function planPickerView(state: AccountState): PlanPickerView {
   const currentUsd = resolvedPlan(state).monthlyUsd ?? state.subscription?.monthly_usd ?? null;
-  const initialUsd = currentUsd ?? (accountHasLiveSubscription(state) ? null : DEFAULT_TIER_USD);
+  const initialUsd = currentUsd ?? (accountHasLiveSubscription(state) ? null : ENTRY_TIER_USD);
   return { currentUsd, initialUsd };
 }
 
 /**
- * The tier the out-of-credits modal opens on. No subscription: the default
+ * The tier the out-of-credits modal opens on. No subscription: the entry
  * tier. A subscriber: the smallest tier above the current one that covers this
  * period's usage with 20% to spare, so the suggestion is the account's own
  * number, not a pitch. The top tier when nothing larger fits.
  */
 export function recommendedPlanUsd(state: AccountState): number {
   const { currentUsd } = planPickerView(state);
-  if (!accountHasLiveSubscription(state) || currentUsd === null) return DEFAULT_TIER_USD;
+  if (!accountHasLiveSubscription(state) || currentUsd === null) return ENTRY_TIER_USD;
   const target = (state.usage_this_period?.total_usd ?? 0) * 1.2;
   const next = CREDIT_TIERS.find((tier) => tier.monthlyUsd > currentUsd && tier.monthlyUsd >= target);
   return next?.monthlyUsd ?? CREDIT_TIERS[CREDIT_TIERS.length - 1].monthlyUsd;
@@ -257,13 +228,14 @@ export function PlanChanger({
   }
 
   const amount = monthlyUsd !== null ? formatWholeUsd(monthlyUsd, locale) : '';
-  const renewal = formatShortDate(
-    scheduled?.effectiveAt ??
-      (state.subscription?.current_period_end
-        ? new Date(state.subscription.current_period_end * 1000).toISOString()
-        : null),
-    locale,
-  );
+  const renewal =
+    formatShortDate(
+      scheduled?.effectiveAt ??
+        (state.subscription?.current_period_end
+          ? new Date(state.subscription.current_period_end * 1000).toISOString()
+          : null),
+      locale,
+    ) ?? '';
   const due = preview.data ? formatChargeUsd(preview.data.due_now_usd, locale) : null;
   const actionDisabled =
     isPending || kind === 'invalid' || kind === 'unchanged' || (kind === 'raise' && preview.isLoading);
@@ -305,7 +277,7 @@ export function PlanChanger({
     return (
       <section className={cn('space-y-6', className)} data-testid="plan-ladder">
         <CreditLadder
-          value={monthlyUsd ?? DEFAULT_TIER_USD}
+          value={monthlyUsd ?? ENTRY_TIER_USD}
           onChange={setMonthlyUsd}
           disabled={isPending}
           stackBelowXl={false}
@@ -339,7 +311,7 @@ export function PlanChanger({
           <p className="text-foreground min-w-0 flex-1 text-xs">
             {t('scheduledNotice', {
               amount: formatWholeUsd(scheduled.monthlyUsd, locale),
-              date: formatShortDate(scheduled.effectiveAt, locale),
+              date: formatShortDate(scheduled.effectiveAt, locale) ?? '',
             })}
           </p>
           <Button

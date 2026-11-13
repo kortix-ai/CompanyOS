@@ -36,6 +36,7 @@ import { SessionPendingApprovalsIndicator } from './session-pending-approvals-in
 import { SessionGoalIndicator } from './session-goal-indicator';
 import { SessionRemindersIndicator } from './session-reminders-indicator';
 import { SessionTitleInput } from './session-title-input';
+import { SessionEmbedMenuItem } from './session-embed-menu-item';
 import { subagentTitle } from '../agents/agent-model';
 import { SubagentHoverCard } from './subagent-hover-card';
 import { Copy } from '../../icons/copy';
@@ -121,6 +122,8 @@ interface SessionSiteHeaderProps {
   leadingAction?: React.ReactNode;
   /** A subsession's parent: rendered as a "Home" breadcrumb before the name. */
   parent?: { onOpen: () => void };
+  /** The session works now: its child list polls every 5 s instead of every 30 s. */
+  live?: boolean;
 }
 
 export function SessionSiteHeader({
@@ -129,6 +132,7 @@ export function SessionSiteHeader({
   isMobileView,
   leadingAction,
   parent,
+  live = false,
 }: SessionSiteHeaderProps) {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tHardcodedUi = useTranslations('hardcodedUi');
@@ -137,7 +141,7 @@ export function SessionSiteHeader({
   const tPinArchive = useTranslations('sidebar.pinArchive');
   const localizedDevTools = useLocalizedUiCatalog(DEV_TOOLS);
   // A host that cannot reach the pty WebSocket turns the terminal off (`config.terminalEnabled`).
-  const { terminalEnabled } = useUiHostConfig();
+  const { terminalEnabled, publicSharesEnabled } = useUiHostConfig();
   // A template on a base other than Ubuntu 24.04, or an old image, has no desktop.
   const hasDesktop = useHasSessionDesktop() === true;
   const devTools = useMemo(
@@ -175,7 +179,7 @@ export function SessionSiteHeader({
   // The name edits in place: the name button swaps for a field. The menu's
   // Rename item opens the same field, so there is one rename surface.
   const [isRenaming, setIsRenaming] = useState(false);
-  // Set by the menu's Rename item. Radix returns focus to the caret trigger
+  // Set by the menu's Rename item. The menu returns focus to the caret trigger
   // when the menu closes, which would blur, and so save, the field that just
   // opened; `onCloseAutoFocus` reads this and keeps focus in the field.
   const renameFromMenu = useRef(false);
@@ -273,7 +277,8 @@ export function SessionSiteHeader({
   const subsessions = projectSession && !parent ? directSubsessions(projectSession) : [];
   const childSessions = useSessionChildren(projectId ?? '', projectSessionId ?? '', {
     enabled: isProjectSession && !parent,
-    refetchInterval: 5_000,
+    // An idle session starts no child: poll every 30 s, every 5 s while it works.
+    refetchInterval: live ? 5_000 : 30_000,
   });
   const startRename = () => {
     if (canRename) setIsRenaming(true);
@@ -351,6 +356,13 @@ export function SessionSiteHeader({
     else errorToast(tPalette('copyFailed'));
   };
 
+  // The embed snippet left the Session access dialog (KRTX-4639): a developer
+  // affordance does not belong in a permissions dialog. Its one entry point is
+  // the Embed submenu in the session menu below, gated like the dialog's
+  // section was: the same `can_manage_sharing` server verdict, and the host
+  // serves public shares at all.
+  const canEmbed = isProjectSession && canManageSharing && publicSharesEnabled;
+
   const sessionActionItems = (
     <>
       {isProjectSession && (
@@ -426,6 +438,9 @@ export function SessionSiteHeader({
             <LinkSimpleIcon />
             {tPalette('copyAction', { label: tPalette('copySessionLink') })}
           </DropdownMenuItem>
+          {canEmbed && projectId && projectSessionId && (
+            <SessionEmbedMenuItem projectId={projectId} sessionId={projectSessionId} />
+          )}
           {watching !== undefined && (
             <DropdownMenuItem className="cursor-pointer" onClick={toggleWatch}>
               {watching ? <BellSlashIcon /> : <BellIcon />}
@@ -545,7 +560,7 @@ export function SessionSiteHeader({
             instead. */}
         <div
           className={cn(
-            'flex items-center justify-between p-2 px-3.5 pt-2 pr-4',
+            'flex items-center justify-between p-2 px-3.5 pt-[max(0.5rem,env(safe-area-inset-top))] pr-4', // audit:allow device safe-area inset, not a spacing step
             // Unconditional on the shell. The LEFT indent depends on the
             // sidebar (expanded, it covers the macOS lights itself) and is
             // gated by the data attribute — but the RIGHT one does not: this
@@ -747,9 +762,10 @@ export function SessionSiteHeader({
             </DropdownMenu>
 
             {/* The one Share entry point (it left the session menu). Shown to
-                everyone in the session: the owner changes access and copies
-                the embed snippet or a public link here, everyone else reads
-                who has it. `xs` is h-7, the row's 28px control size. Below
+                everyone in the session: the owner changes access here,
+                everyone else reads who has it. The embed snippet lives in the
+                session menu (KRTX-4639), not in the access dialog. `xs` is h-7,
+                the row's 28px control size. Below
                 `md` (the same 768px as `isMobileViewport`) the label hides,
                 the button goes square like its size-7 siblings, and only then
                 the Hint names it. */}

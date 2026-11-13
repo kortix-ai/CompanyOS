@@ -196,6 +196,10 @@ export function buildServer(
     c.header('Cache-Control', 'private, no-store');
     c.header('Content-Security-Policy', "default-src 'none';frame-ancestors 'none'");
     c.header('X-Frame-Options', 'DENY');
+    // Uniform referrer policy on every origin-served response (KRTX-4702). Set only
+    // when absent, so a route can still choose a stricter value.
+    if (!c.res.headers.has('Referrer-Policy'))
+      c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     // Permissions-Policy has no wildcard directive: deny each browser capability explicitly.
     c.header(
       'Permissions-Policy',
@@ -223,7 +227,7 @@ export function buildServer(
     } catch {
       return false;
     }
-  });
+  }, { get: api.getReplay, put: api.putReplay });
   // Register fallbacks after the handlers so supported methods keep their behavior.
   const methodsByPath = new Map<string, Set<string>>();
   for (const { path, method } of app.routes) {

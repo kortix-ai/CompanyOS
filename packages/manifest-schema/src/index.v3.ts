@@ -60,13 +60,11 @@ import {
   validateTriggers,
 } from './index';
 import {
-  type AgentWorkspaceV2,
   type GrantSetV2,
   type PermissionConfigV2,
   type PiPackageEntryV2,
   isEveryGrant,
   resolveGrantSet,
-  resolveProjectRepository,
   TOOLS_SHAPE_ERROR,
   TOOLS_UNSET_WARNING,
   validateAgentMdFrontmatter,
@@ -143,6 +141,12 @@ export interface AgentBlockV3 {
   hidden?: boolean;
   prompt?: string;
   prompt_file?: string;
+  /**
+   * A program agent: the shell command each turn runs, in place of a model. The turn's prompt
+   * arrives on stdin and in `$KORTIX_EVENT_PATH`; stdout is the reply; a non-zero exit fails the
+   * turn. Excludes `model`, `prompt` and `prompt_file`.
+   */
+  run?: string;
   /** Tool policy. Omitted: `allow`. `skill` and `task` belong to `skills` / `subagents`. */
   permission?: PermissionConfigV2;
   /** Default `true`. */
@@ -161,11 +165,142 @@ export interface AgentBlockV3 {
   secrets?: GrantSetV2;
   apps?: GrantSetV2;
   kortix_permissions?: GrantSetV2;
-  workspace?: AgentWorkspaceV2;
   sandbox?: string;
+  /** What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. */
+  workspace?: AgentWorkspaceV3;
   /** The space the agent works in: a key of the top-level `spaces` map, or a bare slug. Grouping only, never a grant. */
   space?: string;
   network_egress?: { version: 1; default: 'deny'; rules: [] };
+}
+
+/** One repository a session clones into its workspace when it starts. */
+export interface AgentWorkspaceRepoV3 {
+  /** Where it goes: `/workspace` or a folder under it. Default `/workspace`. */
+  path?: string;
+  /** Monorepo subset: the folders a cone sparse-checkout keeps. */
+  sparse?: string[];
+}
+
+/**
+ * `agents.<name>.workspace`: what the agent's sessions get to work in.
+ * `sandbox` picks the machine (a `sandbox.templates` slug, same as `agents.<name>.sandbox`),
+ * `repos` are explicit clones of the workspace repository (none by default; a clone needs
+ * `workspace.gitops.read`), and `setup` runs after them. Both run in the background after
+ * the session starts: they never hold its first turn.
+ */
+export interface AgentWorkspaceV3 {
+  sandbox?: string;
+  repos?: AgentWorkspaceRepoV3[];
+  setup?: AgentWorkspaceStepV3[];
+}
+
+/**
+ * One setup step: a shell command, run in the first clone's folder (or `/workspace`), or
+ * `{ run, cwd }` with `cwd` relative to that folder or absolute under `/workspace`.
+ * Each step is its own shell: a `cd` in one does not carry to the next.
+ */
+export type AgentWorkspaceStepV3 = string | { run: string; cwd?: string };
+
+export const AGENT_WORKSPACE_KEYS_V3 = ['sandbox', 'repos', 'setup'] as const;
+const WORKSPACE_REPO_KEYS_V3 = ['path', 'sparse'];
+const WORKSPACE_ROOT = '/workspace';
+
+/** A `repos[].path`: `/workspace` itself or a folder under it, with no `..`. */
+export function workspaceRepoPathProblem(path: unknown): string | null {
+  if (path === undefined) return null;
+  if (typeof path !== 'string' || !path.trim()) return 'must be a path.';
+  const value = path.trim().replace(/\/+$/, '') || '/';
+  if (value !== WORKSPACE_ROOT && !value.startsWith(`${WORKSPACE_ROOT}/`)) return 'must be `/workspace` or a folder under it.';
+  if (value.split('/').some((part) => part === '..' || part === '.')) return 'must not contain `.` or `..`.';
+  return null;
+}
+
+/** A setup step's `cwd`: relative (no `..`), or absolute under `/workspace`. */
+export function workspaceStepCwdProblem(cwd: unknown): string | null {
+  if (cwd === undefined) return null;
+  if (typeof cwd !== 'string' || !cwd.trim()) return 'must be a folder.';
+  const value = cwd.trim();
+  if (value.startsWith('/')) return workspaceRepoPathProblem(value);
+  if (value.split('/').some((part) => part === '..')) return 'must not contain `..`.';
+  return null;
+}
+
+/** The longest `run` command: a command line, not a script. */
+export const AGENT_RUN_MAX_LENGTH = 4096;
+/** Keys a program agent refuses: it has no model and no system prompt. */
+const PROGRAM_AGENT_REFUSED_KEYS = ['model', 'prompt', 'prompt_file'] as const;
+/** Keys that only tune a model or its tools: a program agent ignores them. */
+const PROGRAM_AGENT_IGNORED_KEYS = ['variant', 'temperature', 'top_p', 'steps', 'options', 'codemode', 'context', 'skills', 'extensions', 'subagents', 'commands'] as const;
+
+/** `run`: a non-empty command line, and no model, prompt or model-only key beside it. */
+function validateProgramAgentV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
+  const run = entry.run;
+  if (run === undefined) return;
+  if (typeof run !== 'string' || !run.trim() || run.length > AGENT_RUN_MAX_LENGTH) {
+    issues.push({ path: `${where}.run`, message: `must be a shell command of 1 to ${AGENT_RUN_MAX_LENGTH} characters.`, severity: 'error' });
+    return;
+  }
+  for (const key of PROGRAM_AGENT_REFUSED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'a program agent (`run`) has no model and no prompt. Remove this key or `run`.', severity: 'error' });
+  }
+  for (const key of PROGRAM_AGENT_IGNORED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'has no effect on a program agent (`run`).', severity: 'warning' });
+  }
+}
+
+function validateAgentWorkspaceV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
+  const workspace = entry.workspace;
+  if (workspace === undefined) return;
+  const at = `${where}.workspace`;
+  const error = (path: string, message: string): void => void issues.push({ path, message, severity: 'error' });
+  if (!isTable(workspace)) return error(at, 'must be a map: { sandbox, repos, setup }.');
+  for (const key of Object.keys(workspace)) {
+    if (!(AGENT_WORKSPACE_KEYS_V3 as readonly string[]).includes(key)) error(`${at}.${key}`, `is not a workspace key (allowed: ${AGENT_WORKSPACE_KEYS_V3.join(', ')}).`);
+  }
+  const sandbox = workspace.sandbox;
+  if (sandbox !== undefined && !(typeof sandbox === 'string' && SLUG_RE.test(sandbox.trim()))) error(`${at}.sandbox`, 'must be a sandbox template slug.');
+  if (typeof sandbox === 'string' && typeof entry.sandbox === 'string' && sandbox.trim() !== entry.sandbox.trim()) {
+    error(`${at}.sandbox`, `conflicts with \`sandbox: ${entry.sandbox}\` on the agent. Keep one.`);
+  }
+  const repos = workspace.repos;
+  if (repos !== undefined) {
+    if (!Array.isArray(repos)) error(`${at}.repos`, 'must be a list.');
+    else {
+      const paths = new Set<string>();
+      repos.forEach((repo, index) => {
+        const here = `${at}.repos[${index}]`;
+        if (!isTable(repo)) return error(here, 'must be a map: { path, sparse }.');
+        for (const key of Object.keys(repo)) if (!WORKSPACE_REPO_KEYS_V3.includes(key)) error(`${here}.${key}`, `is not a repos key (allowed: ${WORKSPACE_REPO_KEYS_V3.join(', ')}).`);
+        const problem = workspaceRepoPathProblem(repo.path);
+        if (problem) error(`${here}.path`, problem);
+        const path = (typeof repo.path === 'string' ? repo.path.trim().replace(/\/+$/, '') : '') || WORKSPACE_ROOT;
+        if (paths.has(path)) error(`${here}.path`, `\`${path}\` is cloned twice.`);
+        paths.add(path);
+        const sparse = repo.sparse;
+        if (sparse !== undefined && !(Array.isArray(sparse) && sparse.length > 0 && sparse.every((dir) => typeof dir === 'string' && dir.trim() && !dir.includes('..') && !dir.startsWith('/')))) {
+          error(`${here}.sparse`, 'must be a list of repository folders, such as [apps/web].');
+        }
+      });
+    }
+  }
+  const setup = workspace.setup;
+  if (setup !== undefined) {
+    if (!Array.isArray(setup)) error(`${at}.setup`, 'must be a list of shell commands or { run, cwd } steps.');
+    else {
+      setup.forEach((step, index) => {
+        const here = `${at}.setup[${index}]`;
+        if (typeof step === 'string') {
+          if (!step.trim()) error(here, 'must be a shell command.');
+          return;
+        }
+        if (!isTable(step)) return error(here, 'must be a shell command or { run, cwd }.');
+        for (const key of Object.keys(step)) if (key !== 'run' && key !== 'cwd') error(`${here}.${key}`, 'is not a setup step key (allowed: run, cwd).');
+        if (typeof step.run !== 'string' || !step.run.trim()) error(`${here}.run`, 'must be a shell command.');
+        const problem = workspaceStepCwdProblem(step.cwd);
+        if (problem) error(`${here}.cwd`, problem);
+      });
+    }
+  }
 }
 
 /** One block of a board tab: a grid card that shows a file, an App, an
@@ -304,6 +439,7 @@ export const AGENT_BLOCK_KEYS_V3 = [
   ...BEHAVIOR_KEYS_V3,
   'prompt',
   'prompt_file',
+  'run',
   'enabled',
   'codemode',
   'context',
@@ -318,8 +454,8 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'secrets',
   'apps',
   'kortix_permissions',
-  'workspace',
   'sandbox',
+  'workspace',
   'space',
   'network_egress',
 ] as const;
@@ -334,7 +470,6 @@ const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
   env: 'use `secrets`.',
   kortix_cli: 'use `kortix_permissions`.',
   connectors_personal: 'use `connectors_required`.',
-  repository_access: 'use `workspace.project_repository`.',
 };
 
 const COMMAND_KEYS_V3 = ['description', 'prompt', 'prompt_file'];
@@ -711,6 +846,7 @@ function validateAgentBlockV3(
       issues.push({ path: `${where}.prompt_file`, message: 'must be a repository path to a .md file.', severity: 'error' });
     }
   }
+  validateProgramAgentV3(entry, where, issues);
   if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
     issues.push({ path: `${where}.enabled`, message: 'must be a boolean.', severity: 'error' });
   }
@@ -723,13 +859,15 @@ function validateAgentBlockV3(
   if (entry.sandbox !== undefined && !(typeof entry.sandbox === 'string' && SLUG_RE.test(entry.sandbox.trim()))) {
     issues.push({ path: `${where}.sandbox`, message: 'must be a sandbox template slug.', severity: 'error' });
   }
+  validateAgentWorkspaceV3(entry, where, issues);
   if (entry.space !== undefined && !(typeof entry.space === 'string' && SPACE_SLUG_RE.test(entry.space.trim()))) {
     issues.push({ path: `${where}.space`, message: 'must be a space slug (lowercase letters, digits, "-" or "_", at most 63 characters).', severity: 'error' });
   }
   validateNetworkEgressV3(entry.network_egress, `${where}.network_egress`, issues);
 
   // Grants of registered things.
-  validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
+  // A program agent (`run`) calls no tools, so an unset `tools` is not worth a warning.
+  if (entry.run === undefined || entry.tools !== undefined) validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
   validateNamedGrantV3(entry.skills, `${where}.skills`, 'skills', registry.skills, issues, true);
   validateNamedGrantV3(entry.commands, `${where}.commands`, 'commands', registry.commands, issues);
   validateNamedGrantV3(entry.extensions, `${where}.extensions`, 'extensions', registry.extensions, issues, true);
@@ -742,10 +880,6 @@ function validateAgentBlockV3(
   validateGrantList(entry.secrets, `${where}.secrets`, 'secrets', issues, false);
   validateAppGrantList(entry.apps, `${where}.apps`, issues);
   validateKortixPermissionFields(entry, where, issues);
-  if (entry.workspace !== undefined) {
-    const repository = resolveProjectRepository({ workspace: entry.workspace });
-    if (!repository.ok) issues.push({ path: `${where}.${repository.path}`, message: repository.message, severity: 'error' });
-  }
 }
 
 /**
